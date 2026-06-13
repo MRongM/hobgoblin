@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title" data-direction="b1-dark-terminal">
+  <title id="title">Hobgoblin dark terminal branch icon</title>
+  <defs>
+    <linearGradient id="tile-gradient" x1="112" y1="80" x2="912" y2="944" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#dbeafe" />
+      <stop offset="1" stop-color="#f8fafc" />
+    </linearGradient>
+    <linearGradient id="terminal-gradient" x1="168" y1="184" x2="856" y2="840" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111827" />
+      <stop offset="1" stop-color="#020617" />
+    </linearGradient>
+    <linearGradient id="branch-gradient" x1="596" y1="340" x2="788" y2="724" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#38bdf8" />
+      <stop offset="1" stop-color="#22c55e" />
+    </linearGradient>
+  </defs>
+
+  <rect x="72" y="72" width="880" height="880" rx="224" fill="url(#tile-gradient)" />
+  <rect x="138" y="196" width="748" height="660" rx="168" fill="#020617" opacity="0.18" />
+
+  <g id="terminal-window">
+    <rect x="138" y="176" width="748" height="660" rx="168" fill="url(#terminal-gradient)" />
+    <circle cx="252" cy="286" r="24" fill="#ef4444" />
+    <circle cx="340" cy="286" r="24" fill="#f59e0b" />
+    <circle cx="428" cy="286" r="24" fill="#22c55e" />
+  </g>
+
+  <g id="prompt-glyph">
+    <path d="M278 456l136 136-136 136" fill="none" stroke="#f8fafc" stroke-width="80" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+
+  <path id="terminal-baseline" d="M516 700h212" fill="none" stroke="#cbd5e1" stroke-width="68" stroke-linecap="round" />
+
+  <g id="branch-path">
+    <path d="M592 362v166c0 112 84 188 200 188" fill="none" stroke="url(#branch-gradient)" stroke-width="60" stroke-linecap="round" stroke-linejoin="round" />
+    <circle cx="592" cy="362" r="68" fill="#38bdf8" />
+    <circle cx="592" cy="362" r="32" fill="#dbeafe" />
+    <circle cx="792" cy="716" r="68" fill="#22c55e" />
+    <circle cx="792" cy="716" r="32" fill="#dcfce7" />
+  </g>
+</svg>
