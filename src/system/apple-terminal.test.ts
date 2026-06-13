@@ -20,32 +20,29 @@ describe('openRemoteInAppleTerminal', () => {
   test('opens Terminal.app with a prepared ssh command', async () => {
     const { openRemoteInAppleTerminal } = await import('#/system/apple-terminal.ts')
 
-    await expect(openRemoteInAppleTerminal('prod', '/srv/repo-feature')).resolves.toEqual({
+    await expect(openRemoteInAppleTerminal({ alias: 'prod', worktreePath: '/srv/repo-feature' })).resolves.toEqual({
       ok: true,
       message: '/srv/repo-feature',
     })
 
     expect(mocks.execa).toHaveBeenCalledWith(
       '/usr/bin/osascript',
-      [
-        '-e',
-        expect.stringContaining('tell application "Terminal"'),
-        expect.stringContaining('ssh'),
-      ],
+      ['-e', expect.stringContaining('tell application "Terminal"'), expect.stringContaining('ssh')],
       expect.objectContaining({ timeout: 10_000, forceKillAfterDelay: 500 }),
     )
     expect(mocks.execa.mock.calls[0]![1][2]).toContain('prod')
     expect(mocks.execa.mock.calls[0]![1][2]).toContain('/srv/repo-feature')
+    expect(mocks.execa.mock.calls[0]![1][2]).not.toContain('tmux')
   })
 
   test('rejects invalid remote inputs before invoking osascript', async () => {
     const { openRemoteInAppleTerminal } = await import('#/system/apple-terminal.ts')
 
-    await expect(openRemoteInAppleTerminal('bad alias', '/srv/repo')).resolves.toEqual({
+    await expect(openRemoteInAppleTerminal({ alias: 'bad alias', worktreePath: '/srv/repo' })).resolves.toEqual({
       ok: false,
       message: 'error.invalid-arguments',
     })
-    await expect(openRemoteInAppleTerminal('prod', 'relative/repo')).resolves.toEqual({
+    await expect(openRemoteInAppleTerminal({ alias: 'prod', worktreePath: 'relative/repo' })).resolves.toEqual({
       ok: false,
       message: 'error.invalid-arguments',
     })

@@ -12,6 +12,7 @@ import type { ExecResult } from '#/shared/git-types.ts'
 import type { ResolvedTerminalApp, TerminalAppAvailability, TerminalPref } from '#/shared/rpc.ts'
 import { isGhosttyInstalled, openInGhostty, openRemoteInGhostty } from '#/system/ghostty.ts'
 import { isAppleTerminalInstalled, openInAppleTerminal, openRemoteInAppleTerminal } from '#/system/apple-terminal.ts'
+import type { ExternalRemoteTerminalTarget } from '#/system/remote-terminal.ts'
 
 export interface TerminalBackend {
   /** Whether this terminal is available on the current system.
@@ -22,7 +23,7 @@ export interface TerminalBackend {
   /** Open a directory in this terminal. */
   open: (path: string) => Promise<ExecResult>
   /** Open a remote SSH workspace in this terminal. */
-  openRemote?: (alias: string, remotePath: string) => Promise<ExecResult>
+  openRemote?: (target: ExternalRemoteTerminalTarget) => Promise<ExecResult>
 }
 
 /** Concrete terminal pref values (excludes 'auto'). */
@@ -38,7 +39,10 @@ function isDarwin(): boolean {
   return process.platform === 'darwin'
 }
 
-export function resolveTerminalApp(pref: TerminalPref, availability: TerminalAppAvailability): ResolvedTerminalApp | null {
+export function resolveTerminalApp(
+  pref: TerminalPref,
+  availability: TerminalAppAvailability,
+): ResolvedTerminalApp | null {
   if (pref !== 'auto') {
     return availability[pref] ? pref : null
   }
@@ -62,7 +66,10 @@ export async function getTerminalAppAvailability(signal?: AbortSignal): Promise<
 }
 
 /** Open `path` in the terminal selected by `pref`. */
-export async function openInPreferredTerminal(path: string, pref: TerminalPref): Promise<{ ok: boolean; message: string }> {
+export async function openInPreferredTerminal(
+  path: string,
+  pref: TerminalPref,
+): Promise<{ ok: boolean; message: string }> {
   const resolved = resolveTerminalApp(pref, await getTerminalAppAvailability())
   return resolved
     ? backends[resolved].open(path)
@@ -71,12 +78,11 @@ export async function openInPreferredTerminal(path: string, pref: TerminalPref):
 
 export function openRemoteInTerminalBackend(
   backend: TerminalBackend | null,
-  alias: string,
-  remotePath: string,
+  target: ExternalRemoteTerminalTarget,
 ): Promise<ExecResult> {
   if (!backend) return Promise.resolve({ ok: false, message: 'error.terminal-not-installed' })
   return backend.openRemote
-    ? backend.openRemote(alias, remotePath)
+    ? backend.openRemote(target)
     : Promise.resolve({ ok: false, message: 'error.remote-terminal-not-supported' })
 }
 
@@ -86,7 +92,7 @@ export async function openRemoteInPreferredTerminal(
   pref: TerminalPref,
 ): Promise<ExecResult> {
   const resolved = resolveTerminalApp(pref, await getTerminalAppAvailability())
-  return await openRemoteInTerminalBackend(resolved ? backends[resolved] : null, alias, remotePath)
+  return await openRemoteInTerminalBackend(resolved ? backends[resolved] : null, { alias, worktreePath: remotePath })
 }
 
 export async function getResolvedTerminalApp(pref: TerminalPref): Promise<ResolvedTerminalApp | null> {

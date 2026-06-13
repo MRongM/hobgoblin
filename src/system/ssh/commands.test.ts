@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { buildRemoteCommandInvocation } from '#/system/ssh/commands.ts'
+import { buildRemoteCommandInvocation, buildRemoteTerminalInvocation } from '#/system/ssh/commands.ts'
 import { normalizeRemoteTarget } from '#/shared/remote-repo.ts'
 
 const TARGET = normalizeRemoteTarget({
@@ -77,6 +77,41 @@ describe('remote command scripts', () => {
     })
     expect(invocation.script).toContain('base64')
     expect(invocation.script).toContain('/srv/repo/pasted.txt')
+  })
+
+  test('renders tmux-aware managed remote terminal invocation through the ssh command adapter', () => {
+    const invocation = buildRemoteTerminalInvocation(TARGET, '/srv/repo-feature', {
+      cols: 100,
+      rows: 30,
+      terminalNumber: 2,
+    })
+
+    expect(invocation.command).toBe('ssh')
+    expect(invocation.args).toEqual([
+      '-tt',
+      '-o',
+      'StrictHostKeyChecking=yes',
+      '-o',
+      'ConnectTimeout=10',
+      '--',
+      'prod',
+      expect.stringContaining('sh -lc'),
+    ])
+    expect(invocation.script).toContain("cd '/srv/repo-feature' || exit")
+    expect(invocation.script).toContain('command -v tmux >/dev/null 2>&1')
+    expect(invocation.script).toContain("exec tmux new-session -A -s 'goblin-")
+    expect(invocation.script).toContain("-c '/srv/repo-feature'")
+    expect(invocation.script).toContain('exec "${SHELL:-/bin/sh}" -l')
+  })
+
+  test('keeps non-interactive remote command scripts out of tmux', () => {
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'gitStatus',
+      path: '/srv/repo-feature',
+    })
+
+    expect(invocation.script).toBe("git -C '/srv/repo-feature' status --porcelain -z")
+    expect(invocation.args.join(' ')).not.toContain('tmux')
   })
 
   test('renders all worktree add modes', () => {
