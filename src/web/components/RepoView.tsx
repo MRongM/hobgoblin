@@ -2,6 +2,7 @@
 // branch list + detail, while focus mode renders detail directly under
 // the toolbar with the selected-branch summary in the toolbar itself.
 
+import { useCallback, useState } from 'react'
 import { Smartphone } from 'lucide-react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useReposStore } from '#/web/stores/repos/store.ts'
@@ -12,7 +13,7 @@ import { useRepoToasts } from '#/web/hooks/useRepoToasts.tsx'
 import { useT } from '#/web/stores/i18n.ts'
 import { repoWorkspaceBehavior } from '#/web/lib/workspace-layout.ts'
 import { getRepoWorkspacePresentation } from '#/web/components/repo-workspace/model.ts'
-import { RepoExplorerPane } from '#/web/components/repo-workspace/RepoExplorerPane.tsx'
+import { RepoExplorerPane, type FileTreeRevealRequest } from '#/web/components/repo-workspace/RepoExplorerPane.tsx'
 import { UnavailableRepoView } from '#/web/components/UnavailableRepoView.tsx'
 import { useResponsiveUiMode } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
@@ -51,6 +52,10 @@ export function RepoView({ repoId }: Props) {
   const setWorkspaceLayout = useReposStore((s) => s.setWorkspaceLayout)
   const repo = useReposStore((s) => s.repos[repoId])
   useRepoToasts(repoId)
+  const [terminalRevealRequest, setTerminalRevealRequest] = useState<FileTreeRevealRequest | null>(null)
+  const handleTerminalRevealPath = useCallback((relativePath: string) => {
+    setTerminalRevealRequest((current) => ({ id: (current?.id ?? 0) + 1, relativePath }))
+  }, [])
 
   const layout = view.workspaceLayout
   const behavior = repoWorkspaceBehavior(layout, view.detailCollapsed, view.detailFocusMode)
@@ -77,6 +82,7 @@ export function RepoView({ repoId }: Props) {
         layout={layout}
         collapsed={behavior.detailCollapsed}
         detailFocusMode={behavior.detailFocusMode}
+        onRevealPath={handleTerminalRevealPath}
       />
     </RepoWorkspacePane>
   )
@@ -93,7 +99,12 @@ export function RepoView({ repoId }: Props) {
         onDetailSizeChange={(size) => setDetailPaneSize(layout, size)}
         branchPane={
           <RepoWorkspacePane>
-            <RepoExplorerPane repoId={repoId} layout={layout} showActions={behavior.branchListActionsVisible} />
+            <RepoExplorerPane
+              repoId={repoId}
+              layout={layout}
+              showActions={behavior.branchListActionsVisible}
+              revealRequest={terminalRevealRequest}
+            />
           </RepoWorkspacePane>
         }
         detailPane={detailPane}

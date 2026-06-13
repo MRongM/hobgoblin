@@ -75,6 +75,10 @@ export interface TerminalSessionBase {
   worktreePath: string
 }
 
+export interface TerminalSessionAttachHandlers {
+  onRevealPath?: (relativePath: string) => void
+}
+
 export interface TerminalRepoSnapshot {
   instanceToken: number
   branchByWorktreePath: Record<string, string>
@@ -109,7 +113,7 @@ export interface TerminalSessionContextValue {
   scrollLines: (key: string, amount: number) => void
   clearBell: (key: string) => boolean
   closeTerminalAndDismissDetailIfLast: (key: string, base: TerminalSessionBase) => void
-  attach: (descriptor: TerminalDescriptor, host: HTMLElement) => void
+  attach: (descriptor: TerminalDescriptor, host: HTMLElement, handlers?: TerminalSessionAttachHandlers) => void
   detach: (key: string, host: HTMLElement) => void
   restart: (key: string) => void
   isTerminalFocusTarget: (key: string, target: EventTarget | null) => boolean
@@ -136,7 +140,7 @@ export interface TerminalSessionReadContextValue {
 export interface ManagedTerminalSessionLike {
   descriptor: TerminalDescriptor
   updateDescriptor: (descriptor: TerminalDescriptor) => void
-  attach: (host: HTMLElement) => void
+  attach: (host: HTMLElement, handlers?: TerminalSessionAttachHandlers) => void
   detach: (host: HTMLElement, parkingRoot: HTMLElement) => void
   restart: () => void
   dispose: (options?: { closeSession?: boolean }) => void

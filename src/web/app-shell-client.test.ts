@@ -129,4 +129,24 @@ describe('app shell client', () => {
     await expect(chooseLocalRepositoryPath()).resolves.toBe('/tmp/repo')
     await expect(chooseCloneParentPath()).resolves.toBe('/tmp')
   })
+
+  test('opens paths in Finder through the renderer bridge shell', async () => {
+    const bridgeModule = await import('#/web/renderer-bridge.ts')
+    const shellOpenInFinder = vi.fn(async () => ({ ok: true, message: '/tmp/repo/README.md' }))
+    bridgeModule.setRendererBridgeForTests(
+      testBridge({
+        shell: () => ({
+          openSettingsWindow: vi.fn(),
+          openExternalUrl: vi.fn(),
+          openDirectoryDialog: vi.fn(),
+          consumeExternalOpenPaths: vi.fn(),
+          openInFinder: shellOpenInFinder,
+        }),
+      }),
+    )
+
+    const { openInFinder } = await import('#/web/app-shell-client.ts')
+    await expect(openInFinder('/tmp/repo/README.md')).resolves.toEqual({ ok: true, message: '/tmp/repo/README.md' })
+    expect(shellOpenInFinder).toHaveBeenCalledWith({ path: '/tmp/repo/README.md' })
+  })
 })

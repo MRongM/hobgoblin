@@ -17,6 +17,7 @@ import type {
   TerminalRepoIndex,
   WorktreeTerminalSnapshot,
   TerminalSessionBase,
+  TerminalSessionAttachHandlers,
   TerminalSessionSummary,
   TerminalSnapshot,
 } from '#/web/components/terminal/types.ts'
@@ -337,8 +338,8 @@ export class TerminalSessionRegistry {
     this.closeTerminal(key)
   }
 
-  attach = (descriptor: TerminalDescriptor, host: HTMLElement): void => {
-    this.ensureSession(descriptor).attach(host)
+  attach = (descriptor: TerminalDescriptor, host: HTMLElement, handlers?: TerminalSessionAttachHandlers): void => {
+    this.ensureSession(descriptor).attach(host, handlers)
   }
 
   detach = (key: string, host: HTMLElement): void => {

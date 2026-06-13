@@ -30,12 +30,12 @@ import {
   AlertDialogTitle,
 } from '#/web/components/ui/alert-dialog.tsx'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '#/web/components/ui/dropdown-menu.tsx'
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '#/web/components/ui/context-menu.tsx'
 import { Input } from '#/web/components/ui/input.tsx'
 import { cn } from '#/web/lib/cn.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
@@ -60,6 +60,7 @@ import {
 } from '#/web/components/file-tree/clipboard.ts'
 import { resolveDropTargetDirectory } from '#/web/components/file-tree/drop-target.ts'
 import type { WorktreeStatus } from '#/web/types.ts'
+import { openInFinder } from '#/web/app-shell-client.ts'
 
 const ROOT_DIR = ''
 
@@ -73,11 +74,6 @@ interface ProjectFileTreeView {
   exists: boolean
   worktreePath: string | null
   status: WorktreeStatus[]
-}
-
-interface ContextMenuPoint {
-  x: number
-  y: number
 }
 
 export interface FileTreeRevealRequest {
@@ -103,7 +99,6 @@ export function ProjectFileTree({
   const [selection, setSelection] = useState<FileTreeSelectionState>(() => ({ selected: new Set(), anchor: null }))
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null)
   const [contextNode, setContextNode] = useState<FileTreeNode | null>(null)
-  const [contextPoint, setContextPoint] = useState<ContextMenuPoint | null>(null)
   const [contextOpen, setContextOpen] = useState(false)
   const [renameNode, setRenameNode] = useState<FileTreeNode | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -157,7 +152,6 @@ export function ProjectFileTree({
     setSelection({ selected: new Set(), anchor: null })
     setFocusedNodeId(null)
     setContextNode(null)
-    setContextPoint(null)
     setContextOpen(false)
     setRenameNode(null)
     setRenameValue('')
@@ -286,19 +280,25 @@ export function ProjectFileTree({
     [flatNodeById, selection.selected],
   )
 
-  const handleContextMenu = useCallback(
-    (node: FileTreeNode, event: MouseEvent) => {
-      event.preventDefault()
+  const activateContextNode = useCallback(
+    (node: FileTreeNode) => {
       setFocusedNodeId(node.id)
       setContextNode(node)
-      setContextPoint({ x: event.clientX, y: event.clientY })
-      setContextOpen(true)
       if (!selection.selected.has(node.id)) {
         setSelection({ selected: new Set([node.id]), anchor: node.id })
       }
     },
     [selection.selected],
   )
+
+  const handleContextMenu = useCallback((node: FileTreeNode, _event: MouseEvent) => {
+    activateContextNode(node)
+  }, [activateContextNode])
+
+  const handleContextMenuOpenChange = useCallback((node: FileTreeNode, open: boolean) => {
+    setContextOpen(open)
+    if (open) activateContextNode(node)
+  }, [activateContextNode])
 
   const selectedPaths = useCallback(() => {
     return Array.from(selection.selected)
@@ -531,6 +531,7 @@ export function ProjectFileTree({
             rootNodes.map((node) => (
               <FileTreeRow
                 key={node.id}
+                repoId={repoId}
                 node={node}
                 depth={0}
                 selected={selection.selected.has(node.id)}
@@ -541,6 +542,9 @@ export function ProjectFileTree({
                 onToggle={toggleDirectory}
                 onDragStart={handleDragStart}
                 onContextMenu={handleContextMenu}
+                onContextMenuOpenChange={handleContextMenuOpenChange}
+                onBeginRename={beginRename}
+                onBeginDelete={beginDelete}
                 onKeyDown={handleKeyDown}
                 onFocus={setFocusedNodeId}
                 onDrop={handleDrop}
@@ -557,15 +561,6 @@ export function ProjectFileTree({
           )}
         </div>
       )}
-      <FileTreeContextMenu
-        repoId={repoId}
-        node={contextNode}
-        point={contextPoint}
-        open={contextOpen}
-        onOpenChange={setContextOpen}
-        onBeginRename={beginRename}
-        onBeginDelete={beginDelete}
-      />
       <FileTreeDeleteDialog
         targets={deleteTargets}
         pending={deletePending}
@@ -599,6 +594,7 @@ function useProjectFileTreeView(repoId: string): ProjectFileTreeView {
 }
 
 function FileTreeRow({
+  repoId,
   node,
   depth,
   selected,
@@ -609,6 +605,9 @@ function FileTreeRow({
   onToggle,
   onDragStart,
   onContextMenu,
+  onContextMenuOpenChange,
+  onBeginRename,
+  onBeginDelete,
   onKeyDown,
   onFocus,
   onDrop,
@@ -621,6 +620,7 @@ function FileTreeRow({
   onRenameCancel,
   onRenameSubmit,
 }: {
+  repoId: string
   node: FileTreeNode
   depth: number
   selected: boolean
@@ -631,6 +631,9 @@ function FileTreeRow({
   onToggle: (node: FileTreeNode) => void
   onDragStart: (node: FileTreeNode, event: DragEvent) => void
   onContextMenu: (node: FileTreeNode, event: MouseEvent) => void
+  onContextMenuOpenChange: (node: FileTreeNode, open: boolean) => void
+  onBeginRename: (node: FileTreeNode) => void
+  onBeginDelete: (node: FileTreeNode) => void
   onKeyDown: (node: FileTreeNode, event: KeyboardEvent) => void
   onFocus: (nodeId: string) => void
   onDrop: (node: FileTreeNode, event: DragEvent<HTMLDivElement>) => void
@@ -647,75 +650,85 @@ function FileTreeRow({
   const Icon = iconForNode(node, node.expanded === true)
   return (
     <>
-      <div
-        role="treeitem"
-        data-file-tree-node-id={node.id}
-        aria-selected={selected}
-        tabIndex={0}
-        draggable
-        onFocus={() => onFocus(node.id)}
-        onKeyDown={(event) => onKeyDown(node, event)}
-        onClick={(event) => {
-          onFocus(node.id)
-          onSelect(node, event)
-          if (expandable) onToggle(node)
-        }}
-        onDragStart={(event) => onDragStart(node, event)}
-        onDrop={(event) => onDrop(node, event)}
-        onDragOver={onDragOver}
-        onContextMenu={(event) => onContextMenu(node, event)}
-        className={cn(
-          'flex h-6 min-w-0 cursor-default select-none items-center gap-1 px-2 outline-hidden',
-          selected ? 'bg-accent text-accent-foreground' : 'text-foreground hover:bg-accent/60',
-          toneClass(node.tone),
-        )}
-        style={{ paddingLeft: `${8 + depth * 14}px` }}
-      >
-        <button
-          type="button"
-          aria-label={`Toggle ${node.name}`}
-          disabled={!expandable}
-          onClick={(event) => {
-            event.stopPropagation()
-            onToggle(node)
-          }}
-          className={cn(
-            'flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground',
-            expandable && 'hover:bg-muted hover:text-foreground',
-          )}
-        >
-          {expandable ? node.expanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" /> : null}
-        </button>
-        <Icon className="size-3.5 shrink-0" />
-        {renameNodeId === node.id ? (
-          <Input
-            aria-label="file-tree.rename-input-label"
-            value={renameValue}
-            disabled={renamePending}
-            autoFocus
-            onChange={(event) => onRenameValueChange(event.currentTarget.value)}
-            onClick={(event) => event.stopPropagation()}
-            onBlur={() => {
-              if (!renamePending) onRenameCancel()
+      <ContextMenu onOpenChange={(open) => onContextMenuOpenChange(node, open)}>
+        <ContextMenuTrigger asChild>
+          <div
+            role="treeitem"
+            data-file-tree-node-id={node.id}
+            aria-selected={selected}
+            tabIndex={0}
+            draggable
+            onFocus={() => onFocus(node.id)}
+            onKeyDown={(event) => onKeyDown(node, event)}
+            onClick={(event) => {
+              onFocus(node.id)
+              onSelect(node, event)
+              if (expandable) onToggle(node)
             }}
-            onKeyDown={(event) => {
-              event.stopPropagation()
-              if (event.key === 'Escape') {
-                event.preventDefault()
-                onRenameCancel()
-              }
-              if (event.key === 'Enter') {
-                event.preventDefault()
-                void onRenameSubmit(event.currentTarget.value)
-              }
-            }}
-            className="h-5 min-w-0 flex-1 px-1 py-0 text-xs"
-          />
-        ) : (
-          <span className="min-w-0 flex-1 truncate">{node.name}</span>
-        )}
-        {node.changeCount ? <span className="shrink-0 font-mono text-[10px] opacity-80">{node.changeCount}</span> : null}
-      </div>
+            onDragStart={(event) => onDragStart(node, event)}
+            onDrop={(event) => onDrop(node, event)}
+            onDragOver={onDragOver}
+            onContextMenu={(event) => onContextMenu(node, event)}
+            className={cn(
+              'flex h-6 min-w-0 cursor-default select-none items-center gap-1 px-2 outline-hidden',
+              selected ? 'bg-accent text-accent-foreground' : 'text-foreground hover:bg-accent/60',
+              toneClass(node.tone),
+            )}
+            style={{ paddingLeft: `${8 + depth * 14}px` }}
+          >
+            <button
+              type="button"
+              aria-label={`Toggle ${node.name}`}
+              disabled={!expandable}
+              onClick={(event) => {
+                event.stopPropagation()
+                onToggle(node)
+              }}
+              className={cn(
+                'flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground',
+                expandable && 'hover:bg-muted hover:text-foreground',
+              )}
+            >
+              {expandable ? node.expanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" /> : null}
+            </button>
+            <Icon className="size-3.5 shrink-0" />
+            {renameNodeId === node.id ? (
+              <Input
+                aria-label="file-tree.rename-input-label"
+                value={renameValue}
+                disabled={renamePending}
+                autoFocus
+                onChange={(event) => onRenameValueChange(event.currentTarget.value)}
+                onClick={(event) => event.stopPropagation()}
+                onBlur={() => {
+                  if (!renamePending) onRenameCancel()
+                }}
+                onKeyDown={(event) => {
+                  event.stopPropagation()
+                  if (event.key === 'Escape') {
+                    event.preventDefault()
+                    onRenameCancel()
+                  }
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    void onRenameSubmit(event.currentTarget.value)
+                  }
+                }}
+                className="h-5 min-w-0 flex-1 px-1 py-0 text-xs"
+              />
+            ) : (
+              <span className="min-w-0 flex-1 truncate">{node.name}</span>
+            )}
+            {node.changeCount ? <span className="shrink-0 font-mono text-[10px] opacity-80">{node.changeCount}</span> : null}
+          </div>
+        </ContextMenuTrigger>
+        <FileTreeContextMenu
+          repoId={repoId}
+          node={node}
+          onBeginRename={onBeginRename}
+          onBeginDelete={onBeginDelete}
+        />
+      </ContextMenu>
       {renameNodeId === node.id && renameError ? (
         <FileTreeIndentedMessage depth={depth + 1}>{renameError}</FileTreeIndentedMessage>
       ) : null}
@@ -726,6 +739,7 @@ function FileTreeRow({
       {node.expanded && node.children?.map((child) => (
         <FileTreeRow
           key={child.id}
+          repoId={repoId}
           node={child}
           depth={depth + 1}
           selected={selectedIds.has(child.id)}
@@ -736,6 +750,9 @@ function FileTreeRow({
           onToggle={onToggle}
           onDragStart={onDragStart}
           onContextMenu={onContextMenu}
+          onContextMenuOpenChange={onContextMenuOpenChange}
+          onBeginRename={onBeginRename}
+          onBeginDelete={onBeginDelete}
           onKeyDown={onKeyDown}
           onFocus={onFocus}
           onDrop={onDrop}
@@ -756,60 +773,51 @@ function FileTreeRow({
 function FileTreeContextMenu({
   repoId,
   node,
-  point,
-  open,
-  onOpenChange,
   onBeginRename,
   onBeginDelete,
 }: {
   repoId: string
-  node: FileTreeNode | null
-  point: ContextMenuPoint | null
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  node: FileTreeNode
   onBeginRename: (node: FileTreeNode) => void
   onBeginDelete: (node: FileTreeNode) => void
 }) {
   const t = useT()
-  const realNode = !!node && isWritableNode(node)
+  const realNode = isWritableNode(node)
+  const canRevealInFinder = realNode && !isRemoteRepoId(repoId)
   return (
-    <DropdownMenu open={open} onOpenChange={onOpenChange}>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          aria-label="file tree menu"
-          className="fixed size-0 overflow-hidden border-0 p-0"
-          style={{ left: point?.x ?? 0, top: point?.y ?? 0 }}
-        />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent side="right" align="start" sideOffset={0}>
-        <DropdownMenuItem disabled={!node} onSelect={() => void copyText(node?.absolutePath ?? '')}>
-          {t('file-tree.copy-path')}
-        </DropdownMenuItem>
-        <DropdownMenuItem disabled={!node} onSelect={() => void copyText(node?.relativePath ?? '')}>
-          {t('file-tree.copy-relative-path')}
-        </DropdownMenuItem>
-        <DropdownMenuItem disabled={!realNode} onSelect={() => node && void openNodeInEditor(repoId, node)}>
-          {t('file-tree.open-editor')}
-        </DropdownMenuItem>
-        <DropdownMenuItem disabled={!realNode} onSelect={() => node && void openNodeInTerminal(repoId, node)}>
-          {t('file-tree.open-terminal')}
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem disabled={!realNode} onSelect={() => node && onBeginRename(node)}>
-          <Pencil className="size-3.5" />
-          {t('file-tree.rename')}
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          disabled={!realNode}
-          variant="destructive"
-          onSelect={() => node && onBeginDelete(node)}
-        >
-          <Trash2 className="size-3.5" />
-          {t('file-tree.delete')}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <ContextMenuContent>
+      <ContextMenuItem onSelect={() => void copyText(node.absolutePath)}>
+        {t('file-tree.copy-path')}
+      </ContextMenuItem>
+      <ContextMenuItem onSelect={() => void copyText(node.relativePath)}>
+        {t('file-tree.copy-relative-path')}
+      </ContextMenuItem>
+      <ContextMenuItem disabled={!realNode} onSelect={() => void openNodeInEditor(repoId, node)}>
+        {t('file-tree.open-editor')}
+      </ContextMenuItem>
+      <ContextMenuItem disabled={!realNode} onSelect={() => void openNodeInTerminal(repoId, node)}>
+        {t('file-tree.open-terminal')}
+      </ContextMenuItem>
+      {canRevealInFinder ? (
+        <ContextMenuItem onSelect={() => void openInFinder(node.absolutePath)}>
+          <FolderOpen className="size-3.5" />
+          {t('worktrees.reveal-title')}
+        </ContextMenuItem>
+      ) : null}
+      <ContextMenuSeparator />
+      <ContextMenuItem disabled={!realNode} onSelect={() => onBeginRename(node)}>
+        <Pencil className="size-3.5" />
+        {t('file-tree.rename')}
+      </ContextMenuItem>
+      <ContextMenuItem
+        disabled={!realNode}
+        variant="destructive"
+        onSelect={() => onBeginDelete(node)}
+      >
+        <Trash2 className="size-3.5" />
+        {t('file-tree.delete')}
+      </ContextMenuItem>
+    </ContextMenuContent>
   )
 }
 

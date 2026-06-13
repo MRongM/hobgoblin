@@ -88,6 +88,10 @@ export async function openExternalUrl(url: string): Promise<ExecResult> {
   return await openExternalUrlWithPolicy(url, true)
 }
 
+export async function openInFinder(path: string): Promise<ExecResult> {
+  return (await nativeShell()?.openInFinder?.({ path })) ?? { ok: false, message: 'error.invalid-path' }
+}
+
 export async function chooseLocalRepositoryPath(): Promise<string | null> {
   return (await nativeShell()?.openDirectoryDialog?.({ title: 'Open Git Repository' })) ?? null
 }

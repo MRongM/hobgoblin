@@ -123,4 +123,35 @@ describe('RepoExplorerPane', () => {
     expect(container.querySelector('[data-testid="project-file-tree"]')?.getAttribute('data-reveal-path')).toBe('src/app.ts')
     await act(async () => root.unmount())
   })
+
+  test('external reveal requests switch to files with the requested path', async () => {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId="/repo" layout="top-bottom" showActions />)
+    })
+
+    const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+    await act(async () => {
+      tabs[2]?.click()
+    })
+    expect(container.querySelector('[data-testid="project-status-panel"]')).toBeTruthy()
+
+    await act(async () => {
+      root.render(
+        <RepoExplorerPane
+          repoId="/repo"
+          layout="top-bottom"
+          showActions
+          revealRequest={{ id: 1, relativePath: 'src/from-terminal.ts' }}
+        />,
+      )
+    })
+
+    expect(container.querySelector('[data-testid="project-file-tree"]')?.getAttribute('data-reveal-path')).toBe(
+      'src/from-terminal.ts',
+    )
+    await act(async () => root.unmount())
+  })
 })

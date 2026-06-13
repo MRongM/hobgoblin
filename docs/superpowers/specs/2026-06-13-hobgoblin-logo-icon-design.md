@@ -2,12 +2,13 @@
 
 ## Goal
 
-Redesign Hobgoblin's app icon and wordmark around the approved B1 + W1 direction: a dark terminal-first app icon with a small Git branch signal, paired with a clean system wordmark that keeps the app chrome restrained.
+Redesign Hobgoblin's app icon and wordmark around the approved full-bleed B1 + W1 direction: a dark terminal-first app icon with no light border outside the terminal, paired with a clean system wordmark that keeps the app chrome restrained.
 
 ## Approved Direction
 
-- Use the B1 "Dark Terminal" icon direction.
+- Use the B1 "Dark Terminal" icon direction with a full-bleed terminal edge.
 - Make the icon read first as a terminal: dark rounded terminal surface, prominent `>` prompt, and a short terminal baseline/cursor-like stroke.
+- Remove the previous light outer tile/white border; the terminal surface itself is the app icon outer shape.
 - Add a small blue-to-green Git branch curve with two nodes as a secondary signal for branch/worktree identity.
 - Keep the wordmark in the W1 "Clean System Wordmark" direction: plain `Hobgoblin`, system sans typography, no path prefix, prompt chip, mascot, or decorative lockup in the app topbar.
 - Let the icon carry the Git + terminal concept while the wordmark stays quiet and native to the desktop app.
@@ -55,6 +56,7 @@ The icon and wordmark may appear side by side in docs and About contexts, but th
 ## Acceptance Criteria
 
 - The icon reads first as a dark terminal window, not as a generic Git logo.
+- No light tile or white border appears outside the terminal surface.
 - The icon includes a `>` prompt, a terminal baseline/cursor-like stroke, and a blue-green Git branch curve with two nodes.
 - The published PNG assets are synchronized and remain 1024x1024.
 - The app topbar wordmark remains a clear `Hobgoblin` system-style text mark.

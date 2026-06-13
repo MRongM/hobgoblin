@@ -65,6 +65,16 @@ const xtermMocks = vi.hoisted(() => {
     dispose = vi.fn()
     focus = vi.fn(() => this.textarea?.focus())
     customKeyEventHandler: ((event: KeyboardEvent) => boolean) | null = null
+    bufferLines: string[] = []
+    linkProviders: Array<{ provideLinks: (line: number, cb: (links: unknown[] | undefined) => void) => void }> = []
+    buffer = {
+      active: {
+        getLine: (index: number) => {
+          const text = this.bufferLines[index]
+          return typeof text === 'string' ? { translateToString: () => text } : undefined
+        },
+      },
+    }
     _core = {
       _charSizeService: { measure: vi.fn() },
       _renderService: { clear: vi.fn() },
@@ -111,6 +121,11 @@ const xtermMocks = vi.hoisted(() => {
 
     loadAddon(addon: { activate?: (term: MockTerminal) => void }) {
       addon.activate?.(this)
+    }
+
+    registerLinkProvider(provider: { provideLinks: (line: number, cb: (links: unknown[] | undefined) => void) => void }) {
+      this.linkProviders.push(provider)
+      return { dispose: vi.fn(() => (this.linkProviders = this.linkProviders.filter((item) => item !== provider))) }
     }
 
     open(host: HTMLElement) {
@@ -788,6 +803,31 @@ describe('ManagedTerminalSession', () => {
     await Promise.resolve()
 
     expect(shellOpenExternalUrl).toHaveBeenCalledWith({ url: 'https://example.com/path', allowHttp: true })
+  })
+
+  test('reveals relative terminal path links through the current attach handler', async () => {
+    const onRevealPath = vi.fn()
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+
+    session.attach(host, { onRevealPath })
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.bufferLines[0] = 'created src/app.ts:12'
+
+    let links: Array<{ activate: (event: MouseEvent, text: string) => void; text: string }> | undefined
+    term.linkProviders[0]?.provideLinks(1, (provided: unknown[] | undefined) => {
+      links = provided as typeof links
+    })
+    links?.[0]?.activate(new MouseEvent('click'), 'src/app.ts:12')
+
+    expect(onRevealPath).toHaveBeenCalledWith('src/app.ts')
+    session.detach(host, document.createElement('div'))
+    session.dispose({ closeSession: false })
   })
 
   test('does not send unsafe web links to the app rpc', async () => {

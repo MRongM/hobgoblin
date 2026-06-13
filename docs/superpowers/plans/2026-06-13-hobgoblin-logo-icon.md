@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace Hobgoblin's current brand assets with the approved B1 dark terminal icon and W1 clean system wordmark.
+**Goal:** Replace Hobgoblin's current brand assets with the approved full-bleed B1 dark terminal icon and W1 clean system wordmark.
 
 **Architecture:** Keep one maintainable source SVG at `assets/hobgoblin-icon.svg`, then generate all published PNG assets from it while preserving existing file paths. Keep the wordmark as a focused React component that renders only the `Hobgoblin` text mark with system typography.
 
@@ -14,7 +14,7 @@
 
 ## File Structure
 
-- `assets/hobgoblin-icon.svg`: source-of-truth B1 dark terminal icon.
+- `assets/hobgoblin-icon.svg`: source-of-truth full-bleed B1 dark terminal icon.
 - `assets/icon.png`: generated 1024x1024 PNG used by in-app/About contexts.
 - `assets/icon-mac-1024.png`: generated 1024x1024 PNG used by Electron packaging.
 - `docs/goblin.png`: generated 1024x1024 PNG used by the static docs site.
@@ -44,16 +44,19 @@ const pngAssets = [
 ]
 
 describe('brand assets', () => {
-  test('keeps a source SVG for the B1 Hobgoblin terminal branch icon', () => {
+  test('keeps a source SVG for the full-bleed Hobgoblin terminal branch icon', () => {
     const svg = readFileSync('assets/hobgoblin-icon.svg', 'utf8')
 
     expect(svg).toContain('aria-labelledby="title"')
-    expect(svg).toContain('>Hobgoblin dark terminal branch icon</title>')
+    expect(svg).toContain('>Hobgoblin full-bleed dark terminal branch icon</title>')
     expect(svg).toContain('data-direction="b1-dark-terminal"')
+    expect(svg).toContain('data-edge="terminal-full-bleed"')
     expect(svg).toContain('id="terminal-window"')
     expect(svg).toContain('id="prompt-glyph"')
     expect(svg).toContain('id="terminal-baseline"')
     expect(svg).toContain('id="branch-path"')
+    expect(svg).not.toContain('id="tile-gradient"')
+    expect(svg).not.toContain('fill="url(#tile-gradient)"')
   })
 
   test('keeps published PNG icon assets at 1024px square', () => {
@@ -82,9 +85,9 @@ Run:
 bun run test src/web/brand-assets.test.ts
 ```
 
-Expected before Task 2: FAIL because the current source SVG does not contain `data-direction="b1-dark-terminal"` and the B1-specific semantic IDs.
+Expected before Task 2: FAIL because the current source SVG does not contain `data-edge="terminal-full-bleed"` and still has the old light tile.
 
-### Task 2: Create The B1 Dark Terminal Source SVG
+### Task 2: Create The Full-Bleed B1 Dark Terminal Source SVG
 
 **Files:**
 - Modify: `assets/hobgoblin-icon.svg`
@@ -95,45 +98,40 @@ Expected before Task 2: FAIL because the current source SVG does not contain `da
 Replace `assets/hobgoblin-icon.svg` with:
 
 ```svg
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title" data-direction="b1-dark-terminal">
-  <title id="title">Hobgoblin dark terminal branch icon</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title" data-direction="b1-dark-terminal" data-edge="terminal-full-bleed">
+  <title id="title">Hobgoblin full-bleed dark terminal branch icon</title>
   <defs>
-    <linearGradient id="tile-gradient" x1="112" y1="80" x2="912" y2="944" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#dbeafe" />
-      <stop offset="1" stop-color="#f8fafc" />
-    </linearGradient>
-    <linearGradient id="terminal-gradient" x1="168" y1="184" x2="856" y2="840" gradientUnits="userSpaceOnUse">
+    <linearGradient id="terminal-gradient" x1="96" y1="96" x2="928" y2="928" gradientUnits="userSpaceOnUse">
       <stop stop-color="#111827" />
       <stop offset="1" stop-color="#020617" />
     </linearGradient>
-    <linearGradient id="branch-gradient" x1="596" y1="340" x2="788" y2="724" gradientUnits="userSpaceOnUse">
+    <linearGradient id="branch-gradient" x1="630" y1="322" x2="854" y2="714" gradientUnits="userSpaceOnUse">
       <stop stop-color="#38bdf8" />
       <stop offset="1" stop-color="#22c55e" />
     </linearGradient>
   </defs>
 
-  <rect x="72" y="72" width="880" height="880" rx="224" fill="url(#tile-gradient)" />
-  <rect x="138" y="196" width="748" height="660" rx="168" fill="#020617" opacity="0.18" />
+  <rect x="64" y="88" width="896" height="872" rx="224" fill="#020617" opacity="0.24" />
 
   <g id="terminal-window">
-    <rect x="138" y="176" width="748" height="660" rx="168" fill="url(#terminal-gradient)" />
-    <circle cx="252" cy="286" r="24" fill="#ef4444" />
-    <circle cx="340" cy="286" r="24" fill="#f59e0b" />
-    <circle cx="428" cy="286" r="24" fill="#22c55e" />
+    <rect x="64" y="64" width="896" height="896" rx="224" fill="url(#terminal-gradient)" />
+    <circle cx="180" cy="188" r="24" fill="#ef4444" />
+    <circle cx="260" cy="188" r="24" fill="#f59e0b" />
+    <circle cx="340" cy="188" r="24" fill="#22c55e" />
   </g>
 
   <g id="prompt-glyph">
-    <path d="M278 456l136 136-136 136" fill="none" stroke="#f8fafc" stroke-width="80" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M230 402l152 152-152 152" fill="none" stroke="#f8fafc" stroke-width="88" stroke-linecap="round" stroke-linejoin="round" />
   </g>
 
-  <path id="terminal-baseline" d="M516 700h212" fill="none" stroke="#cbd5e1" stroke-width="68" stroke-linecap="round" />
+  <path id="terminal-baseline" d="M486 682h224" fill="none" stroke="#cbd5e1" stroke-width="70" stroke-linecap="round" />
 
   <g id="branch-path">
-    <path d="M592 362v166c0 112 84 188 200 188" fill="none" stroke="url(#branch-gradient)" stroke-width="60" stroke-linecap="round" stroke-linejoin="round" />
-    <circle cx="592" cy="362" r="68" fill="#38bdf8" />
-    <circle cx="592" cy="362" r="32" fill="#dbeafe" />
-    <circle cx="792" cy="716" r="68" fill="#22c55e" />
-    <circle cx="792" cy="716" r="32" fill="#dcfce7" />
+    <path d="M630 322v186c0 124 86 206 224 206" fill="none" stroke="url(#branch-gradient)" stroke-width="64" stroke-linecap="round" stroke-linejoin="round" />
+    <circle cx="630" cy="322" r="70" fill="#38bdf8" />
+    <circle cx="630" cy="322" r="32" fill="#dbeafe" />
+    <circle cx="854" cy="714" r="70" fill="#22c55e" />
+    <circle cx="854" cy="714" r="32" fill="#dcfce7" />
   </g>
 </svg>
 ```
@@ -162,12 +160,12 @@ Expected after replacing the SVG: PASS if the existing PNG assets are still 1024
 Run:
 
 ```bash
-mkdir -p /tmp/hobgoblin-icon-render-b1
-qlmanage -t -s 1024 -o /tmp/hobgoblin-icon-render-b1 assets/hobgoblin-icon.svg
-test -f /tmp/hobgoblin-icon-render-b1/hobgoblin-icon.svg.png
+mkdir -p /tmp/hobgoblin-icon-render-full-bleed
+qlmanage -t -s 1024 -o /tmp/hobgoblin-icon-render-full-bleed assets/hobgoblin-icon.svg
+test -f /tmp/hobgoblin-icon-render-full-bleed/hobgoblin-icon.svg.png
 ```
 
-Expected: `qlmanage` writes `/tmp/hobgoblin-icon-render-b1/hobgoblin-icon.svg.png`, and the `test -f` command exits 0.
+Expected: `qlmanage` writes `/tmp/hobgoblin-icon-render-full-bleed/hobgoblin-icon.svg.png`, and the `test -f` command exits 0.
 
 If sandboxing blocks `qlmanage` with an operation permission error, rerun the same command with elevated sandbox permissions. Do not install a new package for rasterization.
 
@@ -176,10 +174,10 @@ If sandboxing blocks `qlmanage` with an operation permission error, rerun the sa
 Run:
 
 ```bash
-cp /tmp/hobgoblin-icon-render-b1/hobgoblin-icon.svg.png assets/icon.png
-cp /tmp/hobgoblin-icon-render-b1/hobgoblin-icon.svg.png assets/icon-mac-1024.png
-cp /tmp/hobgoblin-icon-render-b1/hobgoblin-icon.svg.png docs/goblin.png
-cp /tmp/hobgoblin-icon-render-b1/hobgoblin-icon.svg.png src/web/public/goblin.png
+cp /tmp/hobgoblin-icon-render-full-bleed/hobgoblin-icon.svg.png assets/icon.png
+cp /tmp/hobgoblin-icon-render-full-bleed/hobgoblin-icon.svg.png assets/icon-mac-1024.png
+cp /tmp/hobgoblin-icon-render-full-bleed/hobgoblin-icon.svg.png docs/goblin.png
+cp /tmp/hobgoblin-icon-render-full-bleed/hobgoblin-icon.svg.png src/web/public/goblin.png
 ```
 
 Expected: all four files are replaced with the same 1024px generated PNG.
@@ -212,7 +210,7 @@ Open or view:
 open assets/icon.png
 ```
 
-Expected visual result: a light rounded app tile containing a dark terminal surface, a prominent white `>` prompt, a short gray terminal baseline, and a small blue-green Git branch curve with two nodes. At small sizes, the `>` prompt remains the dominant shape.
+Expected visual result: the dark terminal surface is the icon's outer shape with no light tile or white border outside it. The icon still contains a prominent white `>` prompt, a short gray terminal baseline, and a small blue-green Git branch curve with two nodes. At small sizes, the `>` prompt remains the dominant shape.
 
 ### Task 4: Update The W1 Clean System Wordmark
 

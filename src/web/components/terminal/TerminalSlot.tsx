@@ -27,9 +27,10 @@ interface TerminalSlotProps {
   repoRoot: string
   branch: string
   worktreePath: string
+  onRevealPath?: (relativePath: string) => void
 }
 
-export function TerminalSlot({ repoRoot, branch, worktreePath }: TerminalSlotProps) {
+export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: TerminalSlotProps) {
   const t = useT()
   const hostRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
@@ -58,9 +59,9 @@ export function TerminalSlot({ repoRoot, branch, worktreePath }: TerminalSlotPro
   useLayoutEffect(() => {
     const host = hostRef.current
     if (!host || !descriptor) return
-    attach(descriptor, host)
+    attach(descriptor, host, { onRevealPath })
     return () => detach(descriptor.key, host)
-  }, [attach, descriptor, detach])
+  }, [attach, descriptor, detach, onRevealPath])
 
   useEffect(() => {
     if (!key || typeof document === 'undefined' || !document.hasFocus()) return

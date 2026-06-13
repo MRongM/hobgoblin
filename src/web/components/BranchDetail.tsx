@@ -17,6 +17,7 @@ interface Props {
   layout?: RepoWorkspaceLayout
   collapsed?: boolean
   detailFocusMode?: boolean
+  onRevealPath?: (relativePath: string) => void
 }
 
 // Keep this equality in sync with fields read by BranchDetail children.
@@ -53,6 +54,7 @@ export function BranchDetail({
   layout = DEFAULT_WORKSPACE_LAYOUT,
   collapsed = false,
   detailFocusMode = false,
+  onRevealPath,
 }: Props) {
   const detailId = useId()
   const repo = useStoreWithEqualityFn(
@@ -116,6 +118,7 @@ export function BranchDetail({
           collapsed={collapsed}
           detailFocusMode={detailFocusMode}
           layout={layout}
+          onRevealPath={onRevealPath}
         />
       ) : (
         <>
@@ -135,6 +138,7 @@ export function BranchDetail({
               detailId={detailId}
               contentId={contentId}
               layout={layout}
+              onRevealPath={onRevealPath}
             />
           )}
         </>
@@ -152,6 +156,7 @@ interface BranchShortcutHandlerProps {
   collapsed: boolean
   detailFocusMode: boolean
   layout: RepoWorkspaceLayout
+  onRevealPath?: (relativePath: string) => void
 }
 
 function BranchShortcutHandler({
@@ -163,6 +168,7 @@ function BranchShortcutHandler({
   collapsed,
   detailFocusMode,
   layout,
+  onRevealPath,
 }: BranchShortcutHandlerProps) {
   const actions = useBranchActionItems(repo, branch)
   useBranchActionShortcutRegistry(actions)
@@ -180,7 +186,14 @@ function BranchShortcutHandler({
       />
       {actions.dialogs}
       {!collapsed && (
-        <BranchDetailContent repo={repo} detail={detail} detailId={detailId} contentId={contentId} layout={layout} />
+        <BranchDetailContent
+          repo={repo}
+          detail={detail}
+          detailId={detailId}
+          contentId={contentId}
+          layout={layout}
+          onRevealPath={onRevealPath}
+        />
       )}
     </>
   )

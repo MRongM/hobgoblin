@@ -23,6 +23,7 @@ import {
   isMacNavigatorPlatform,
   terminalInputForMacOptionArrow,
 } from '#/web/components/terminal/terminal-keyboard.ts'
+import { registerTerminalRelativePathLinkProvider } from '#/web/components/terminal/terminal-path-links.ts'
 const DEFAULT_PARKING_WIDTH = 800
 const DEFAULT_PARKING_HEIGHT = 400
 const DEFAULT_TERMINAL_COLS = 80
@@ -49,6 +50,7 @@ export class TerminalSessionView {
   private fontFitTimer: number | null = null
   private pinToBottomFrame: number | null = null
   private host: HTMLElement | null = null
+  private revealPathHandler: ((relativePath: string) => void) | null = null
   private readonly safariShiftKeyResolver = new SafariShiftKeyResolver()
 
   constructor(handlers: {
@@ -76,6 +78,10 @@ export class TerminalSessionView {
     onSearchResult: (event: ISearchResultChangeEvent) => void
     onProgress: (state: number, value: number) => void
     onOpenExternalLink: (uri: string) => void
+  }
+
+  setRevealPathHandler(handler: ((relativePath: string) => void) | null): void {
+    this.revealPathHandler = handler
   }
 
   attach(host: HTMLElement): void {
@@ -264,6 +270,7 @@ export class TerminalSessionView {
   private installOptionalAddons(term: XTermTerminal): void {
     this.installUnicode11Addon(term)
     this.installWebLinksAddon(term)
+    this.installRelativePathLinkProvider(term)
     this.installSearchAddon(term)
     this.installSerializeAddon(term)
     this.installImageAddon(term)
@@ -284,6 +291,14 @@ export class TerminalSessionView {
       term.loadAddon(new WebLinksAddon((_event, uri) => this.handlers.onOpenExternalLink(uri)))
     } catch (err) {
       console.warn('[terminal] failed to load web links addon', err)
+    }
+  }
+
+  private installRelativePathLinkProvider(term: XTermTerminal): void {
+    try {
+      this.disposables.push(registerTerminalRelativePathLinkProvider(term, () => this.revealPathHandler))
+    } catch (err) {
+      console.warn('[terminal] failed to register relative path links', err)
     }
   }
 
