@@ -100,7 +100,11 @@ class TerminalCatalog {
     const existingSessions = await this.options.manager.listSessions(input.repoRoot)
     const targetSessionKey = sessionKey(input.repoRoot, input.worktreePath, terminalId)
     const existingSession = existingSessions.find((session) => session.key === targetSessionKey)
-    const action: TerminalCatalogAction = existingSession ? (existingSession.controller ? 'restored' : 'reused') : 'created'
+    const action: TerminalCatalogAction = existingSession
+      ? existingSession.controller
+        ? 'restored'
+        : 'reused'
+      : 'created'
 
     if (isRemoteRepoId(input.repoRoot)) {
       return await this.ensureRemote(clientId, input, { terminalId, cols, rows, targetSessionKey, action })
@@ -115,7 +119,8 @@ class TerminalCatalog {
 
     const createResult = await this.ensureOrRestore(clientId, {
       ...input,
-      terminalId: input.kind === 'primary' ? 'terminal-1' : await this.nextTerminalId(input.repoRoot, input.worktreePath),
+      terminalId:
+        input.kind === 'primary' ? 'terminal-1' : await this.nextTerminalId(input.repoRoot, input.worktreePath),
     })
     if (!createResult.ok) return { ok: false, message: createResult.message }
     return {
@@ -151,15 +156,16 @@ class TerminalCatalog {
 
   async nextTerminalId(repoRoot: string, worktreePath: string): Promise<string> {
     const sessions = await this.options.manager.listSessions(repoRoot)
-    let maxIndex = 0
+    const usedIndexes = new Set<number>()
     for (const session of sessions) {
       const parsed = parseSessionKey(session.key)
       if (!parsed || parsed.repoRoot !== repoRoot || parsed.worktreePath !== worktreePath) continue
       const index = parseTerminalIdIndex(parsed.terminalId)
-      if (index === null) continue
-      if (index > maxIndex) maxIndex = index
+      if (index !== null) usedIndexes.add(index)
     }
-    return formatTerminalId(maxIndex + 1)
+    let nextIndex = 1
+    while (usedIndexes.has(nextIndex)) nextIndex += 1
+    return formatTerminalId(nextIndex)
   }
 
   private async ensureRemote(
@@ -181,9 +187,13 @@ class TerminalCatalog {
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : 'error.ssh-config-changed' }
     }
+    const terminalNumber = parseTerminalIdIndex(context.terminalId)
+    if (terminalNumber === null) return { ok: false, message: 'error.invalid-arguments' }
+
     const invocation = buildRemoteTerminalInvocation(resolved.target, input.worktreePath, {
       cols: context.cols,
       rows: context.rows,
+      terminalNumber,
     })
     const result = this.options.manager.ensureSession({
       ownerId: clientId,
