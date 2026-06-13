@@ -800,7 +800,6 @@ function FileTreeContextMenu({
       </ContextMenuItem>
       {canRevealInFinder ? (
         <ContextMenuItem onSelect={() => void openInFinder(node.absolutePath)}>
-          <FolderOpen className="size-3.5" />
           {t('worktrees.reveal-title')}
         </ContextMenuItem>
       ) : null}
