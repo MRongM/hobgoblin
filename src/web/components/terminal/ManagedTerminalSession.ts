@@ -20,6 +20,7 @@ import type {
   TerminalDescriptor,
   TerminalOwnershipViewModel,
   TerminalSearchResult,
+  TerminalSessionAttachHandlers,
 } from '#/web/components/terminal/types.ts'
 const RESIZE_DEBOUNCE_MS = 80
 const EMPTY_SEARCH_RESULT: TerminalSearchResult = { resultIndex: -1, resultCount: 0, found: false }
@@ -70,8 +71,9 @@ export class ManagedTerminalSession {
     this.descriptor = descriptor
   }
 
-  attach(host: HTMLElement): void {
+  attach(host: HTMLElement, handlers?: TerminalSessionAttachHandlers): void {
     if (this.disposed) return
+    this.view.setRevealPathHandler(handlers?.onRevealPath ?? null)
     this.view.attach(host)
     if (this.runtime.canResize()) {
       if (this.view.currentTerminal()) {
@@ -85,6 +87,7 @@ export class ManagedTerminalSession {
 
   detach(host: HTMLElement, parkingRoot: HTMLElement): void {
     this.clearTerminalFocusIfOwned()
+    this.view.setRevealPathHandler(null)
     this.view.detach(host, parkingRoot)
   }
 

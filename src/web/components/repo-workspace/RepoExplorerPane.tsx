@@ -1,5 +1,5 @@
 import { useStoreWithEqualityFn } from 'zustand/traditional'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { BranchList } from '#/web/components/BranchList.tsx'
 import { SplitPane } from '#/web/components/SplitPane.tsx'
 import { ProjectFileTree } from '#/web/components/file-tree/ProjectFileTree.tsx'
@@ -15,7 +15,7 @@ import { cn } from '#/web/lib/cn.ts'
 
 type ExplorerTab = 'files' | 'changes' | 'status'
 
-interface FileTreeRevealRequest {
+export interface FileTreeRevealRequest {
   id: number
   relativePath: string
 }
@@ -24,9 +24,10 @@ interface RepoExplorerPaneProps {
   repoId: string
   layout: RepoWorkspaceLayout
   showActions: boolean
+  revealRequest?: FileTreeRevealRequest | null
 }
 
-export function RepoExplorerPane({ repoId, layout, showActions }: RepoExplorerPaneProps) {
+export function RepoExplorerPane({ repoId, layout, showActions, revealRequest }: RepoExplorerPaneProps) {
   const { fileTreePaneSizes, setFileTreePaneSize, changeCount } = useStoreWithEqualityFn(
     useReposStore,
     (state) => {
@@ -62,6 +63,7 @@ export function RepoExplorerPane({ repoId, layout, showActions }: RepoExplorerPa
             layout={layout}
             activeTab={activeTab}
             changeCount={changeCount}
+            revealRequest={revealRequest ?? null}
             onTabChange={setActiveTab}
           />
         }
@@ -81,12 +83,14 @@ function ExplorerTabs({
   layout,
   activeTab,
   changeCount,
+  revealRequest: externalRevealRequest,
   onTabChange,
 }: {
   repoId: string
   layout: RepoWorkspaceLayout
   activeTab: ExplorerTab
   changeCount: number
+  revealRequest: FileTreeRevealRequest | null
   onTabChange: (tab: ExplorerTab) => void
 }) {
   const t = useT()
@@ -101,6 +105,12 @@ function ExplorerTabs({
     onTabChange('files')
     setRevealRequest((current) => ({ id: (current?.id ?? 0) + 1, relativePath }))
   }
+
+  useEffect(() => {
+    if (!externalRevealRequest) return
+    onTabChange('files')
+    setRevealRequest(externalRevealRequest)
+  }, [externalRevealRequest, onTabChange])
 
   return (
     <section className="flex min-h-0 flex-1 flex-col border-t border-separator/70 bg-background">

@@ -8,11 +8,17 @@ import { MainWindowNavigationProvider, type MainWindowNavigationActions } from '
 import { resetReposStore, seedRepoState, createRepoBranch } from '#/web/stores/repos/test-utils.ts'
 
 vi.mock('#/web/components/BranchDetail.tsx', () => ({
-  BranchDetail: () => <div data-testid="branch-detail" />,
+  BranchDetail: ({ onRevealPath }: { onRevealPath?: (relativePath: string) => void }) => (
+    <button type="button" data-testid="branch-detail" onClick={() => onRevealPath?.('src/from-terminal.ts')}>
+      branch detail
+    </button>
+  ),
 }))
 
 vi.mock('#/web/components/repo-workspace/RepoExplorerPane.tsx', () => ({
-  RepoExplorerPane: () => <div data-testid="repo-explorer-pane" />,
+  RepoExplorerPane: ({ revealRequest }: { revealRequest?: { relativePath: string } | null }) => (
+    <div data-testid="repo-explorer-pane" data-reveal-path={revealRequest?.relativePath ?? ''} />
+  ),
 }))
 
 const REPO_ID = '/tmp/gbl-repo-view-topbar-actions-repo'
@@ -61,6 +67,25 @@ describe('RepoView', () => {
     expect(container?.querySelector('[aria-label="branches.filter-label"]')).toBeNull()
     expect(container?.querySelector('[aria-label="branches.search-label"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="action.create-worktree-title"]')).toBeNull()
+  })
+
+  test('routes terminal reveal requests to the repository explorer', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main'), createRepoBranch('feature/a')],
+      currentBranch: 'main',
+      selectedBranch: 'feature/a',
+    })
+
+    renderRepoView()
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="branch-detail"]')?.click()
+    })
+
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-reveal-path')).toBe(
+      'src/from-terminal.ts',
+    )
   })
 })
 

@@ -24,6 +24,75 @@ afterEach(() => {
 })
 
 describe('TerminalSlot', () => {
+  test('passes reveal path handler through terminal attach', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const attach = vi.fn()
+    const onRevealPath = vi.fn()
+    const descriptor = {
+      key: 'terminal-1',
+      worktreeTerminalKey: '/repo\0/worktree',
+      terminalId: 'terminal-1',
+      index: 1,
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/worktree',
+    }
+    const worktreeSnapshot = {
+      worktreeTerminalKey: '/repo\0/worktree',
+      selectedDescriptor: descriptor,
+      sessions: [{ ...descriptor, title: 'zsh', phase: 'open' as const, selected: true, hasBell: false }],
+      count: 1,
+    }
+    const snapshot = { phase: 'open' as const, message: null, processName: 'zsh' }
+    const context: TerminalSessionContextValue = {
+      createTerminal: vi.fn(async () => 'terminal-1'),
+      selectTerminal: vi.fn(),
+      scrollToBottom: vi.fn(),
+      scrollLines: vi.fn(),
+      clearBell: vi.fn(() => false),
+      closeTerminalAndDismissDetailIfLast: vi.fn(() => []),
+      attach,
+      detach: vi.fn(),
+      restart: vi.fn(),
+      isTerminalFocusTarget: vi.fn(() => false),
+      findNext: vi.fn(() => ({ resultIndex: -1, resultCount: 0, found: false })),
+      findPrevious: vi.fn(() => ({ resultIndex: -1, resultCount: 0, found: false })),
+      clearSearch: vi.fn(),
+      writeInput: vi.fn(),
+      takeover: vi.fn(),
+      reorderSessions: vi.fn(async () => true),
+      serialize: vi.fn(() => ''),
+    }
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+
+    await act(async () => {
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" onRevealPath={onRevealPath} />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    })
+
+    try {
+      expect(attach).toHaveBeenCalledWith(descriptor, expect.any(HTMLElement), { onRevealPath })
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
   test('renders mirror attach banner and triggers takeover', async () => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const container = document.createElement('div')

@@ -14,6 +14,7 @@ interface Props {
   detailId: string
   contentId: string
   layout: RepoWorkspaceLayout
+  onRevealPath?: (relativePath: string) => void
 }
 
 interface TabPanelProps {
@@ -25,7 +26,7 @@ interface TabPanelProps {
 
 type BranchDetailBranch = NonNullable<SelectedBranchDetailPresentation['branch']>
 
-export function BranchDetailContent({ repo, detail, detailId, contentId }: Props) {
+export function BranchDetailContent({ repo, detail, detailId, contentId, onRevealPath }: Props) {
   const t = useT()
   const setDetailTab = useReposStore((s) => s.setDetailTab)
   const { branch } = detail
@@ -41,7 +42,7 @@ export function BranchDetailContent({ repo, detail, detailId, contentId }: Props
   return (
     <div id={contentId} className="flex min-h-0 flex-1 flex-col">
       {activeTab === 'terminal' && branch.worktree?.path && (
-        <BranchTerminalTab detailId={detailId} repoId={repo.id} branch={branch} />
+        <BranchTerminalTab detailId={detailId} repoId={repo.id} branch={branch} onRevealPath={onRevealPath} />
       )}
     </div>
   )
@@ -65,15 +66,17 @@ function BranchTerminalTab({
   detailId,
   repoId,
   branch,
+  onRevealPath,
 }: {
   detailId: string
   repoId: string
   branch: BranchDetailBranch
+  onRevealPath?: (relativePath: string) => void
 }) {
   if (!branch.worktree?.path) return null
   return (
     <BranchTabPanel detailId={detailId} tabId="terminal">
-      <TerminalSlot repoRoot={repoId} branch={branch.name} worktreePath={branch.worktree?.path} />
+      <TerminalSlot repoRoot={repoId} branch={branch.name} worktreePath={branch.worktree?.path} onRevealPath={onRevealPath} />
     </BranchTabPanel>
   )
 }

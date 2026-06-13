@@ -30,6 +30,7 @@ const transferRepositoryFiles = vi.fn(async (_input: unknown) => ({
 }))
 const renameRepositoryFileTreeEntry = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
 const deleteRepositoryFileTreeEntries = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
+const openInFinder = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
 
 vi.mock('#/web/repo-client.ts', () => ({
   getRepositoryFileTree: (...args: GetRepositoryFileTreeArgs) => getRepositoryFileTree(...args),
@@ -42,6 +43,7 @@ vi.mock('#/web/repo-client.ts', () => ({
 
 vi.mock('#/web/app-shell-client.ts', () => ({
   pathForDroppedFile: (file: File) => `/tmp/${file.name}`,
+  openInFinder: (path: string) => openInFinder(path),
 }))
 
 vi.mock('#/web/remote-client.ts', () => ({
@@ -63,6 +65,7 @@ beforeEach(() => {
   transferRepositoryFiles.mockClear()
   renameRepositoryFileTreeEntry.mockClear()
   deleteRepositoryFileTreeEntries.mockClear()
+  openInFinder.mockClear()
   resetReposStore()
   container = document.createElement('div')
   document.body.appendChild(container)
@@ -99,7 +102,7 @@ describe('ProjectFileTree', () => {
     expect(container?.textContent).toContain('file-tree.no-worktree-title')
   })
 
-  test('opens the row context menu at the pointer position', async () => {
+  test('opens the row context menu through the row context trigger', async () => {
     seedRepoWithSelectedBranch({ hasWorktree: true })
 
     await render(<ProjectFileTree repoId="/repo" />)
@@ -117,11 +120,9 @@ describe('ProjectFileTree', () => {
     })
 
     const menu = document.body.querySelector<HTMLElement>('[role="menu"]')
-    const trigger = container?.querySelector<HTMLButtonElement>('button[aria-label="file tree menu"]')
     expect(menu).not.toBeNull()
-    expect(trigger?.style.left).toBe('140px')
-    expect(trigger?.style.top).toBe('90px')
-    expect(menu?.getAttribute('data-side')).toBe('right')
+    expect(container?.querySelector('button[aria-label="file tree menu"]')).toBeNull()
+    expect(menu?.textContent).toContain('file-tree.copy-path')
   })
 
   test('reveals a requested changed file by expanding parents and selecting the file', async () => {
@@ -225,6 +226,44 @@ describe('ProjectFileTree', () => {
     expect(document.body.textContent).toContain('file-tree.delete')
   })
 
+  test('opens a local file tree node in Finder from the context menu', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const row = treeItemByText('README.md')
+    await act(async () => {
+      row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+      await Promise.resolve()
+    })
+
+    const revealItem = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+      item.textContent?.includes('worktrees.reveal-title'),
+    )
+    if (!revealItem) throw new Error('missing Finder menu item')
+
+    await act(async () => {
+      revealItem.click()
+      await Promise.resolve()
+    })
+
+    expect(openInFinder).toHaveBeenCalledWith('/repo/README.md')
+  })
+
+  test('does not show Finder action for remote file tree nodes', async () => {
+    seedRepoWithSelectedBranch({ repoId: 'ssh-config://prod/repo', hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="ssh-config://prod/repo" />)
+
+    const row = treeItemByText('README.md')
+    await act(async () => {
+      row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).not.toContain('worktrees.reveal-title')
+  })
+
   test('starts rename from Enter and submits the new basename', async () => {
     seedRepoWithSelectedBranch({ hasWorktree: true })
 
@@ -292,8 +331,9 @@ describe('ProjectFileTree', () => {
   })
 })
 
-function seedRepoWithSelectedBranch(options: { hasWorktree: boolean }) {
-  const repo = emptyRepo('/repo', 'repo')
+function seedRepoWithSelectedBranch(options: { repoId?: string; hasWorktree: boolean }) {
+  const repoId = options.repoId ?? '/repo'
+  const repo = emptyRepo(repoId, 'repo')
   repo.data.branches = [
     createRepoBranch('main', options.hasWorktree ? { worktree: { path: '/repo' } } : {}),
   ]
@@ -302,9 +342,9 @@ function seedRepoWithSelectedBranch(options: { hasWorktree: boolean }) {
   repo.data.statusLoaded = true
   repo.ui.selectedBranch = 'main'
   useReposStore.setState({
-    repos: { '/repo': repo },
-    activeId: '/repo',
-    order: ['/repo'],
+    repos: { [repoId]: repo },
+    activeId: repoId,
+    order: [repoId],
     sessionReady: true,
   })
 }
