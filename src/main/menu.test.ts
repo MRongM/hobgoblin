@@ -43,7 +43,7 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('electron', () => ({
   app: {
-    name: 'Goblin',
+    name: 'Hobgoblin',
     getPath: mocks.appGetPath,
   },
   BrowserWindow: {
@@ -190,7 +190,7 @@ describe('app menu actions', () => {
     const { buildAppMenu } = await import('#/main/menu.ts')
 
     buildAppMenu()
-    clickMenuItem('Goblin', 'menu.app.settings')
+    clickMenuItem('Hobgoblin', 'menu.app.settings')
     await Promise.resolve()
 
     expect(mocks.sendRendererEffectIntent).toHaveBeenCalledWith(mocks.win, {
@@ -203,7 +203,7 @@ describe('app menu actions', () => {
     const { buildAppMenu } = await import('#/main/menu.ts')
 
     buildAppMenu()
-    clickNestedMenuItem('Goblin', 'settings.appearance', 'settings.appearance.dark')
+    clickNestedMenuItem('Hobgoblin', 'settings.appearance', 'settings.appearance.dark')
     await Promise.resolve()
 
     expect(mocks.sendRendererEffectIntent).toHaveBeenCalledWith(mocks.win, {
@@ -216,7 +216,7 @@ describe('app menu actions', () => {
     const { buildAppMenu } = await import('#/main/menu.ts')
 
     buildAppMenu()
-    clickNestedMenuItem('Goblin', 'settings.lang', 'settings.lang.ko')
+    clickNestedMenuItem('Hobgoblin', 'settings.lang', 'settings.lang.ko')
     await Promise.resolve()
 
     expect(mocks.sendRendererEffectIntent).toHaveBeenCalledWith(mocks.win, {

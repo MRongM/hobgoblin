@@ -79,7 +79,7 @@ function parsePort(value: string | undefined): number | null {
 }
 
 async function chooseEmbeddedServerPort(host: string): Promise<number> {
-  const preferredPort = parsePort(process.env.GOBLIN_SERVER_PORT) ?? 32100
+  const preferredPort = parsePort(process.env.GOBLIN_SERVER_PORT) ?? 32200
   return await reserveAvailablePort(host, preferredPort, 'Failed to allocate dev embedded server port')
 }
 

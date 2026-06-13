@@ -1,4 +1,4 @@
-# Goblin Design Notes
+# Hobgoblin Design Notes
 
 Use these docs for app-level product and architecture decisions:
 

@@ -52,7 +52,7 @@ afterEach(() => {
 })
 
 describe('ProjectChangesPanel', () => {
-  test('renders selected worktree changes with a commit entry', async () => {
+  test('renders selected worktree changes with typed status markers and a commit entry', async () => {
     seedRepoState({
       id: REPO_ID,
       branches: [createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } })],
@@ -63,7 +63,11 @@ describe('ProjectChangesPanel', () => {
           path: WORKTREE_PATH,
           branch: 'feature/worktree',
           isMain: true,
-          entries: [{ x: 'M', y: ' ', path: 'src/app.ts' }],
+          entries: [
+            { x: '?', y: '?', path: 'src/new.ts' },
+            { x: 'D', y: ' ', path: 'src/deleted.ts' },
+            { x: 'M', y: ' ', path: 'src/modified.ts' },
+          ],
         },
       ],
     })
@@ -72,7 +76,17 @@ describe('ProjectChangesPanel', () => {
       root!.render(<ProjectChangesPanel repoId={REPO_ID} />)
     })
 
-    expect(container?.querySelector('[aria-label="src/app.ts"]')).toBeTruthy()
+    const newMarker = container?.querySelector('[aria-label="N new"]')
+    const deletedMarker = container?.querySelector('[aria-label="D deleted"]')
+    const modifiedMarker = container?.querySelector('[aria-label="M modified"]')
+
+    expect(newMarker?.textContent).toBe('N')
+    expect(newMarker?.className).toContain('text-success')
+    expect(deletedMarker?.textContent).toBe('D')
+    expect(deletedMarker?.className).toContain('text-danger')
+    expect(modifiedMarker?.textContent).toBe('M')
+    expect(modifiedMarker?.className).toContain('text-warning')
+    expect(container?.querySelector('[aria-label="src/modified.ts"]')).toBeTruthy()
     expect(container?.querySelector('button[aria-label="action.commit-title"]')).toBeTruthy()
     expect(container?.textContent).not.toContain('action.merge')
   })
@@ -100,6 +114,7 @@ describe('ProjectChangesPanel', () => {
 
     const pathButton = container?.querySelector<HTMLButtonElement>('button[aria-label="src/app.ts"]')
     expect(pathButton).toBeTruthy()
+    expect(pathButton?.className).toContain('underline')
 
     await act(async () => {
       pathButton?.click()

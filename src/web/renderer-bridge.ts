@@ -81,27 +81,27 @@ function electronBridge(): RendererBridge {
     },
     invokeRpc(request) {
       const bridge = readNativeBridge()
-      if (!bridge) throw new Error('Goblin bridge is unavailable')
+      if (!bridge) throw new Error('Hobgoblin bridge is unavailable')
       return bridge.invokeRpc(request)
     },
     abortRpc(requestId) {
       const bridge = readNativeBridge()
-      if (!bridge) throw new Error('Goblin bridge is unavailable')
+      if (!bridge) throw new Error('Hobgoblin bridge is unavailable')
       return bridge.abortRpc(requestId)
     },
     onRpcEvent(cb) {
       const bridge = readNativeBridge()
-      if (!bridge) throw new Error('Goblin bridge is unavailable')
+      if (!bridge) throw new Error('Hobgoblin bridge is unavailable')
       return bridge.onEvent(cb)
     },
     onEffectIntent(cb) {
       const bridge = readNativeBridge()
-      if (!bridge) throw new Error('Goblin bridge is unavailable')
+      if (!bridge) throw new Error('Hobgoblin bridge is unavailable')
       return bridge.onIntent?.(cb) ?? (() => {})
     },
     pathForFile(file) {
       const bridge = readNativeBridge()
-      if (!bridge) throw new Error('Goblin bridge is unavailable')
+      if (!bridge) throw new Error('Hobgoblin bridge is unavailable')
       return bridge.pathForFile(file)
     },
     shell() {

@@ -36,13 +36,13 @@ describe('serverDataDir', () => {
     const { serverDataDir } = await import('#/server/common/data-dir.ts')
     const dir = serverDataDir()
     if (process.platform === 'darwin') {
-      expect(dir).toBe('/Users/tester/Library/Application Support/Goblin')
+      expect(dir).toBe('/Users/tester/Library/Application Support/Hobgoblin')
       return
     }
     if (process.platform === 'win32') {
-      expect(dir).toBe('C:\\Users\\tester\\AppData\\Local\\Goblin')
+      expect(dir).toBe('C:\\Users\\tester\\AppData\\Local\\Hobgoblin')
       return
     }
-    expect(dir).toBe('/home/tester/.local/state/goblin')
+    expect(dir).toBe('/home/tester/.local/state/hobgoblin')
   })
 })

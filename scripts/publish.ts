@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// Publish a GitHub release for Goblin. Builds macOS (.dmg for arm64 and x64),
+// Publish a GitHub release for Hobgoblin. Builds macOS (.dmg for arm64 and x64),
 // tags the current commit with the package.json version, and uploads every
 // artifact via `gh release create`.
 //
@@ -14,7 +14,7 @@ const repoRoot = path.resolve(import.meta.dirname, '..')
 process.chdir(repoRoot)
 $.cwd(repoRoot)
 
-const APP_NAME = 'Goblin'
+const APP_NAME = 'Hobgoblin'
 
 const { values } = parseArgs({
   options: {

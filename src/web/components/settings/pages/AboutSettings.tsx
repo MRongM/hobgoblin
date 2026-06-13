@@ -14,7 +14,7 @@ export function AboutSettings() {
   return (
     <SettingsCard as="ul">
       <SettingsListItem as="li" size="xl">
-        <img src={appIconUrl} alt="Goblin" className="size-8 shrink-0 rounded-lg" />
+        <img src={appIconUrl} alt="Hobgoblin" className="size-8 shrink-0 rounded-lg" />
         <div className="min-w-0 flex-1">
           <span className="truncate text-sm font-medium text-foreground">{t('about.app')}</span>
         </div>

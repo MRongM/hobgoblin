@@ -1,7 +1,7 @@
 // English dictionary. Keep keys in sync with zh.ts, ko.ts, and ja.ts.
 //
 // Style: terse, sentence case for buttons/menu items, period-terminated
-// sentences for hints. Brand names (Goblin / GitHub / Finder) are not
+// sentences for hints. Brand names (Hobgoblin / GitHub / Finder) are not
 // translated.
 
 export const en = {
@@ -145,11 +145,11 @@ export const en = {
   'repo-tabs.open-remote-diagnostics-copy-ssh-command': 'Copy SSH command',
   'repo-tabs.open-remote-diagnostics-copy-details': 'Copy details',
   'repo-tabs.open-remote-connect-via-ssh': 'Connect via system SSH',
-  'repo-tabs.open-remote-config-only-hint': 'Goblin only opens SSH remotes from aliases defined in ~/.ssh/config.',
+  'repo-tabs.open-remote-config-only-hint': 'Hobgoblin only opens SSH remotes from aliases defined in ~/.ssh/config.',
   'repo-tabs.open-remote-include-manual-hint':
     'An Include directive was detected, so the alias list may be incomplete. Enter an SSH alias manually; suggestions only come from the current file.',
   'repo-tabs.open-remote-config-required': 'Add a concrete Host entry to ~/.ssh/config before opening a remote repository.',
-  'repo-tabs.open-remote-config-drift-hint': 'Goblin follows ~/.ssh/config on every open and reconnect. If the alias is removed or can no longer be resolved, the repo is marked as config drifted.',
+  'repo-tabs.open-remote-config-drift-hint': 'Hobgoblin follows ~/.ssh/config on every open and reconnect. If the alias is removed or can no longer be resolved, the repo is marked as config drifted.',
   'repo-tabs.open-remote-open-ssh-settings': 'Open SSH settings',
   'repo-tabs.open-remote-ssh-config': 'SSH Config',
   'repo-tabs.open-remote-manual': 'Manual',
@@ -166,19 +166,19 @@ export const en = {
   'repo-tabs.tooltip.no-remotes': 'No remotes',
   'repo-unavailable.title': 'Repository path unavailable',
   'repo-unavailable.body':
-    'Goblin cannot read this path as a Git repository. Restore the folder or recreate .git, then retry.',
+    'Hobgoblin cannot read this path as a Git repository. Restore the folder or recreate .git, then retry.',
   'repo-unavailable.remote-body':
-    'Goblin could not reconnect to this SSH repository. Verify the SSH alias, network access, and remote path, then retry.',
+    'Hobgoblin could not reconnect to this SSH repository. Verify the SSH alias, network access, and remote path, then retry.',
   'repo-unavailable.remote-connect-failed':
-    'Goblin could not establish a usable SSH session for this repository. Verify authentication, host reachability, and host key trust, then retry.',
+    'Hobgoblin could not establish a usable SSH session for this repository. Verify authentication, host reachability, and host key trust, then retry.',
   'repo-unavailable.remote-config-changed':
     'The saved SSH alias can no longer be resolved from your current SSH config. Review the alias and reconnect.',
   'repo-unavailable.remote-home-unavailable':
-    'Goblin could not resolve the remote home directory for this SSH target. Check the login shell and SSH config, then retry.',
+    'Hobgoblin could not resolve the remote home directory for this SSH target. Check the login shell and SSH config, then retry.',
   'repo-unavailable.remote-path-missing':
-    'Goblin connected to the SSH target, but the saved remote path no longer exists. Update the remote path and reconnect.',
+    'Hobgoblin connected to the SSH target, but the saved remote path no longer exists. Update the remote path and reconnect.',
   'repo-unavailable.remote-not-a-repo':
-    'Goblin connected to the SSH target, but the saved path is no longer a Git repository. Check the path or reconnect to a different repository.',
+    'Hobgoblin connected to the SSH target, but the saved path is no longer a Git repository. Check the path or reconnect to a different repository.',
   'repo-unavailable.path': 'Path',
   'repo-unavailable.reason': 'Reason',
   'repo-unavailable.retry': 'Check again',
@@ -193,7 +193,7 @@ export const en = {
 
   // ---- Drag and drop ------------------------------------------------------
   'drop.title': 'Drop to open local repository',
-  'drop.body': 'Drop a Git repository folder anywhere in Goblin.',
+  'drop.body': 'Drop a Git repository folder anywhere in Hobgoblin.',
   'drop.open-failed': 'Could not open local repository',
 
   // ---- Detail tabs --------------------------------------------------------
@@ -562,15 +562,15 @@ export const en = {
   'settings.terminal-notifications-test': 'Test system notifications',
   'settings.terminal-notifications-test-hint': 'Send a test notification to verify system notifications are working.',
   'settings.terminal-notifications-test-button': 'Show test notification',
-  'settings.terminal-notifications-test-title': 'Goblin test notification',
+  'settings.terminal-notifications-test-title': 'Hobgoblin test notification',
   'settings.terminal-notifications-test-body': 'Notifications are working correctly.',
   'settings.terminal-notifications-test-sent': 'Test notification sent',
   'settings.terminal-notifications-test-failed': 'Unable to show test notification',
   'settings.terminal-notifications-test-failed-hint':
-    'Go to System Settings → Notifications → Goblin and make sure notifications are allowed.',
+    'Go to System Settings → Notifications → Hobgoblin and make sure notifications are allowed.',
   'settings.group.general': 'General',
   'settings.github.title': 'GitHub',
-  'settings.github.body': 'Goblin uses GitHub CLI (`gh`) for GitHub access.',
+  'settings.github.body': 'Hobgoblin uses GitHub CLI (`gh`) for GitHub access.',
   'settings.github.cli-label': 'GitHub CLI',
   'settings.github.status-available': 'available',
   'settings.github.status-unavailable': 'unavailable',
@@ -602,8 +602,8 @@ export const en = {
   'settings.nav.lan': 'LAN',
   'settings.lan.title': 'LAN',
   'settings.lan.enabled': 'Allow LAN access',
-  'settings.lan.enabled-hint': 'Allow other devices on your local network to access Goblin.',
-  'settings.lan.restart-hint': 'This setting takes effect after restarting Goblin.',
+  'settings.lan.enabled-hint': 'Allow other devices on your local network to access Hobgoblin.',
+  'settings.lan.restart-hint': 'This setting takes effect after restarting Hobgoblin.',
   'settings.lan.access': 'Access URLs',
   'settings.about': 'About',
   'settings.terminal': 'Terminal',
@@ -618,7 +618,7 @@ export const en = {
   'settings.apps.group.terminals': 'Terminals',
   'settings.apps.group.editors': 'Editors',
   'settings.apps.detection': 'Detection',
-  'settings.apps.detection-hint': 'Shows which external tools Goblin can currently access.',
+  'settings.apps.detection-hint': 'Shows which external tools Hobgoblin can currently access.',
   'settings.apps.redetect': 'Redetect',
   'settings.apps.tool.gh.title': 'GitHub CLI',
   'settings.apps.tool.gh.command': 'gh',
@@ -638,8 +638,8 @@ export const en = {
   'settings.fetch-hint': 'Fetches the active repository in the background.',
   'settings.general.open-from-terminal-title': 'Open from Terminal',
   'settings.general.open-from-terminal-body':
-    'On macOS, you can open a local repository directly in Goblin from Terminal or scripts.',
-  'settings.general.open-from-terminal-command': 'open -b goblin.app /path/to/repo',
+    'On macOS, you can open a local repository directly in Hobgoblin from Terminal or scripts.',
+  'settings.general.open-from-terminal-command': 'open -b hobgoblin.app /path/to/repo',
   'settings.fetch.off': 'Off',
   'settings.fetch.30s': '30 sec',
   'settings.fetch.1m': '1 min',
@@ -651,11 +651,11 @@ export const en = {
   'settings.ssh.body':
     'Use Host aliases from ~/.ssh/config to open remote repositories.',
   'settings.ssh.config-file-label': 'Configuration file',
-  'settings.ssh.config-file-hint': 'Goblin reads SSH aliases from this file.',
+  'settings.ssh.config-file-hint': 'Hobgoblin reads SSH aliases from this file.',
   'settings.ssh.path-format-label': 'Path format',
   'settings.ssh.path-format-hint': 'Supports absolute paths and home-relative paths.',
   'settings.ssh.rules':
-    'Rules: Goblin re-resolves the alias from ~/.ssh/config every time; if the alias is removed or can no longer be resolved, the repository is marked as config drifted.',
+    'Rules: Hobgoblin re-resolves the alias from ~/.ssh/config every time; if the alias is removed or can no longer be resolved, the repository is marked as config drifted.',
   'settings.ssh.example':
     'Host my-server\n' +
     '  HostName example.com\n' +
@@ -675,7 +675,7 @@ export const en = {
   'settings.global-shortcut-conflict': 'Registration failed. It may be in use.',
   'settings.global-shortcut-invalid': 'Use Command, Control, or Option with a key.',
   'settings.open-github': 'Open project on GitHub',
-  'about.app': 'Goblin',
+  'about.app': 'Hobgoblin',
   'about.version': 'Version',
   'about.build': 'Build',
   'about.build.unknown': 'dev',
@@ -704,7 +704,7 @@ export const en = {
   'help.row.checkout': 'Activate selection',
   'help.row.open-local-repo': 'Open local repository',
   'help.row.clone-repo': 'Clone repository',
-  'help.row.activate-window': 'Show Goblin window',
+  'help.row.activate-window': 'Show Hobgoblin window',
   'help.row.close-repo': 'Close current tab',
   'help.row.close-window': 'Close window',
   'help.row.refresh': 'Sync Repository',

@@ -7,7 +7,7 @@ import { app } from 'electron'
 import { reserveAvailablePort } from '#/system/port-allocation.ts'
 
 const DEFAULT_HOST = '127.0.0.1'
-const DEFAULT_PORT = 32100
+const DEFAULT_PORT = 32200
 const HEALTH_PATH = '/api/health'
 const SERVER_READY_TIMEOUT_MS = 8_000
 const SERVER_STOP_TIMEOUT_MS = 5_000

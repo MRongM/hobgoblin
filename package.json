@@ -1,8 +1,8 @@
 {
-  "name": "goblin",
-  "productName": "Goblin",
+  "name": "hobgoblin",
+  "productName": "Hobgoblin",
   "version": "0.1.0",
-  "description": "Goblin — Git Branch List, desktop edition",
+  "description": "Hobgoblin - Git Branch List, desktop edition",
   "private": true,
   "type": "module",
   "main": "src/main/main.ts",

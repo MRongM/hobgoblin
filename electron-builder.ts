@@ -1,8 +1,8 @@
 import type { Configuration } from 'electron-builder'
 
 const config: Configuration = {
-  appId: 'goblin.app',
-  productName: 'Goblin',
+  appId: 'hobgoblin.app',
+  productName: 'Hobgoblin',
   icon: 'assets/icon-mac-1024.png',
   directories: {
     output: 'release',
@@ -26,7 +26,7 @@ const config: Configuration = {
   mac: {
     category: 'public.app-category.developer-tools',
     extendInfo: {
-      // Required for macOS to show Goblin in System Settings → Notifications
+      // Required for macOS to show Hobgoblin in System Settings → Notifications
       // and to allow Banner/Alert style notifications. Without this key the
       // app either won't appear in the notification list at all, or will be
       // locked to the silent "None" style with no user-visible controls.
@@ -49,8 +49,8 @@ const config: Configuration = {
     ],
     identity: null,
     // Force arch into the filename. electron-builder's default omits the
-    // suffix on x64, which would make `Goblin-0.1.0.dmg` (intel) and
-    // `Goblin-0.1.0-arm64.dmg` (apple silicon) sort next to each other in
+    // suffix on x64, which would make `Hobgoblin-0.1.0.dmg` (intel) and
+    // `Hobgoblin-0.1.0-arm64.dmg` (apple silicon) sort next to each other in
     // releases with no hint of which is which.
     artifactName: '${productName}-${version}-${arch}.${ext}',
   },

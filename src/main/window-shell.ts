@@ -124,7 +124,7 @@ export function configureTrustedRendererWindow(win: BrowserWindow, logLabel: str
 }
 
 export function allowRendererWindowEntryUrl(win: BrowserWindow, value: string): void {
-  // Scope trust per BrowserWindow, not just per app origin. Once Goblin has
+  // Scope trust per BrowserWindow, not just per app origin. Once Hobgoblin has
   // multiple renderer surfaces, a globally-trusted URL set is too broad.
   allowTrustedAppUrlForWebContents(win.webContents, value)
 }

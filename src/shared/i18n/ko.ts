@@ -1,6 +1,6 @@
 // 한국어 사전. en.ts 와 키가 1:1 로 일치해야 합니다.
 // 스타일: 간결한 어휘, 버튼/메뉴는 종결어미 없이, 안내 문장은 평어.
-// 브랜드명(Goblin / GitHub / Finder)은 번역하지 않음.
+// 브랜드명(Hobgoblin / GitHub / Finder)은 번역하지 않음.
 
 import type { DictKey } from '#/shared/i18n/en.ts'
 
@@ -138,11 +138,11 @@ export const ko: Record<DictKey, string> = {
   'repo-tabs.open-remote-diagnostics-copy-ssh-command': 'SSH 명령 복사',
   'repo-tabs.open-remote-diagnostics-copy-details': '세부 정보 복사',
   'repo-tabs.open-remote-connect-via-ssh': '시스템 SSH 로 연결',
-  'repo-tabs.open-remote-config-only-hint': 'Goblin 은 ~/.ssh/config 에 정의된 별칭으로만 SSH 원격 리포지토리를 엽니다.',
+  'repo-tabs.open-remote-config-only-hint': 'Hobgoblin 은 ~/.ssh/config 에 정의된 별칭으로만 SSH 원격 리포지토리를 엽니다.',
   'repo-tabs.open-remote-include-manual-hint':
     'Include 지시어가 감지되어 별칭 목록이 불완전할 수 있습니다. SSH 별칭을 직접 입력하세요. 제안은 현재 파일 기준입니다.',
   'repo-tabs.open-remote-config-required': '~/.ssh/config 에 구체적인 Host 항목을 추가한 뒤 원격 리포지토리를 여세요.',
-  'repo-tabs.open-remote-config-drift-hint': 'Goblin 은 매번 ~/.ssh/config 를 다시 읽습니다. 별칭이 삭제되었거나 더 이상 해석되지 않으면 설정 표류로 표시합니다.',
+  'repo-tabs.open-remote-config-drift-hint': 'Hobgoblin 은 매번 ~/.ssh/config 를 다시 읽습니다. 별칭이 삭제되었거나 더 이상 해석되지 않으면 설정 표류로 표시합니다.',
   'repo-tabs.open-remote-open-ssh-settings': 'SSH 설정 열기',
   'repo-tabs.open-remote-ssh-config': 'SSH 설정',
   'repo-tabs.open-remote-manual': '수동 입력',
@@ -159,19 +159,19 @@ export const ko: Record<DictKey, string> = {
   'repo-tabs.tooltip.no-remotes': '원격 없음',
   'repo-unavailable.title': '리포지토리 경로를 사용할 수 없음',
   'repo-unavailable.body':
-    'Goblin 이 이 경로를 Git 리포지토리로 읽을 수 없습니다. 폴더를 복원하거나 .git 을 다시 만든 뒤 재시도하세요.',
+    'Hobgoblin 이 이 경로를 Git 리포지토리로 읽을 수 없습니다. 폴더를 복원하거나 .git 을 다시 만든 뒤 재시도하세요.',
   'repo-unavailable.remote-body':
-    'Goblin 이 이 SSH 리포지토리에 다시 연결하지 못했습니다. SSH 별칭, 네트워크 연결, 원격 경로를 확인한 뒤 다시 시도하세요.',
+    'Hobgoblin 이 이 SSH 리포지토리에 다시 연결하지 못했습니다. SSH 별칭, 네트워크 연결, 원격 경로를 확인한 뒤 다시 시도하세요.',
   'repo-unavailable.remote-connect-failed':
-    'Goblin 이 이 리포지토리에 사용할 수 있는 SSH 세션을 만들지 못했습니다. 인증, 호스트 연결 상태, 호스트 키 신뢰를 확인한 뒤 다시 시도하세요.',
+    'Hobgoblin 이 이 리포지토리에 사용할 수 있는 SSH 세션을 만들지 못했습니다. 인증, 호스트 연결 상태, 호스트 키 신뢰를 확인한 뒤 다시 시도하세요.',
   'repo-unavailable.remote-config-changed':
     '저장된 SSH 별칭을 현재 SSH 설정에서 더 이상 해석할 수 없습니다. 별칭 설정을 확인한 뒤 다시 연결하세요.',
   'repo-unavailable.remote-home-unavailable':
-    'Goblin 이 이 SSH 대상의 원격 홈 디렉터리를 확인하지 못했습니다. 로그인 셸과 SSH 설정을 확인한 뒤 다시 시도하세요.',
+    'Hobgoblin 이 이 SSH 대상의 원격 홈 디렉터리를 확인하지 못했습니다. 로그인 셸과 SSH 설정을 확인한 뒤 다시 시도하세요.',
   'repo-unavailable.remote-path-missing':
-    'Goblin 이 SSH 대상에는 연결했지만 저장된 원격 경로가 더 이상 존재하지 않습니다. 원격 경로를 수정한 뒤 다시 연결하세요.',
+    'Hobgoblin 이 SSH 대상에는 연결했지만 저장된 원격 경로가 더 이상 존재하지 않습니다. 원격 경로를 수정한 뒤 다시 연결하세요.',
   'repo-unavailable.remote-not-a-repo':
-    'Goblin 이 SSH 대상에는 연결했지만 저장된 경로가 더 이상 Git 리포지토리가 아닙니다. 경로를 확인하거나 다른 리포지토리에 다시 연결하세요.',
+    'Hobgoblin 이 SSH 대상에는 연결했지만 저장된 경로가 더 이상 Git 리포지토리가 아닙니다. 경로를 확인하거나 다른 리포지토리에 다시 연결하세요.',
   'repo-unavailable.path': '경로',
   'repo-unavailable.reason': '이유',
   'repo-unavailable.retry': '다시 확인',
@@ -184,7 +184,7 @@ export const ko: Record<DictKey, string> = {
 
   // ---- Drag and drop -----------------------------------------------------
   'drop.title': '놓아서 로컬 리포지토리 열기',
-  'drop.body': 'Git 리포지토리 폴더를 Goblin 어디에나 놓으세요.',
+  'drop.body': 'Git 리포지토리 폴더를 Hobgoblin 어디에나 놓으세요.',
   'drop.open-failed': '로컬 리포지토리를 열 수 없음',
 
   // ---- Detail tabs -------------------------------------------------------
@@ -554,14 +554,14 @@ export const ko: Record<DictKey, string> = {
   'settings.terminal-notifications-test': '시스템 알림 테스트',
   'settings.terminal-notifications-test-hint': '테스트 알림을 보내 시스템 알림이 정상적으로 작동하는지 확인합니다.',
   'settings.terminal-notifications-test-button': '테스트 알림 표시',
-  'settings.terminal-notifications-test-title': 'Goblin 테스트 알림',
+  'settings.terminal-notifications-test-title': 'Hobgoblin 테스트 알림',
   'settings.terminal-notifications-test-body': '이 알림이 보이면 알림이 정상적으로 작동하고 있습니다.',
   'settings.terminal-notifications-test-sent': '테스트 알림을 보냈습니다',
   'settings.terminal-notifications-test-failed': '테스트 알림을 표시할 수 없습니다',
-  'settings.terminal-notifications-test-failed-hint': '시스템 설정 → 알림 → Goblin으로 이동하여 알림이 허용되어 있는지 확인하세요.',
+  'settings.terminal-notifications-test-failed-hint': '시스템 설정 → 알림 → Hobgoblin으로 이동하여 알림이 허용되어 있는지 확인하세요.',
   'settings.group.general': '일반',
   'settings.github.title': 'GitHub',
-  'settings.github.body': 'Goblin은 GitHub 접근에 GitHub CLI (`gh`)를 사용합니다.',
+  'settings.github.body': 'Hobgoblin은 GitHub 접근에 GitHub CLI (`gh`)를 사용합니다.',
   'settings.github.cli-label': 'GitHub CLI',
   'settings.github.status-available': '사용 가능',
   'settings.github.status-unavailable': '사용 불가',
@@ -593,8 +593,8 @@ export const ko: Record<DictKey, string> = {
   'settings.nav.lan': 'LAN',
   'settings.lan.title': 'LAN',
   'settings.lan.enabled': 'LAN 접근 허용',
-  'settings.lan.enabled-hint': '로컬 네트워크의 다른 기기가 Goblin에 접근할 수 있도록 허용합니다.',
-  'settings.lan.restart-hint': '이 설정은 Goblin을 다시 시작한 후에 적용됩니다.',
+  'settings.lan.enabled-hint': '로컬 네트워크의 다른 기기가 Hobgoblin에 접근할 수 있도록 허용합니다.',
+  'settings.lan.restart-hint': '이 설정은 Hobgoblin을 다시 시작한 후에 적용됩니다.',
   'settings.lan.access': '접근 URL',
   'settings.about': '정보',
   'settings.terminal': '터미널',
@@ -609,7 +609,7 @@ export const ko: Record<DictKey, string> = {
   'settings.apps.group.terminals': '터미널',
   'settings.apps.group.editors': '에디터',
   'settings.apps.detection': '감지',
-  'settings.apps.detection-hint': 'Goblin 이 현재 접근할 수 있는 외부 도구를 표시합니다.',
+  'settings.apps.detection-hint': 'Hobgoblin 이 현재 접근할 수 있는 외부 도구를 표시합니다.',
   'settings.apps.redetect': '다시 감지',
   'settings.apps.tool.gh.title': 'GitHub CLI',
   'settings.apps.tool.gh.command': 'gh',
@@ -629,8 +629,8 @@ export const ko: Record<DictKey, string> = {
   'settings.fetch-hint': '활성 리포지토리를 백그라운드에서 가져옵니다.',
   'settings.general.open-from-terminal-title': '터미널에서 열기',
   'settings.general.open-from-terminal-body':
-    'macOS에서는 터미널이나 스크립트에서 로컬 리포지토리 경로를 Goblin으로 바로 열 수 있습니다.',
-  'settings.general.open-from-terminal-command': 'open -b goblin.app /path/to/repo',
+    'macOS에서는 터미널이나 스크립트에서 로컬 리포지토리 경로를 Hobgoblin으로 바로 열 수 있습니다.',
+  'settings.general.open-from-terminal-command': 'open -b hobgoblin.app /path/to/repo',
   'settings.fetch.off': '끄기',
   'settings.fetch.30s': '30 초',
   'settings.fetch.1m': '1 분',
@@ -641,11 +641,11 @@ export const ko: Record<DictKey, string> = {
   'settings.ssh.title': 'SSH',
   'settings.ssh.body': '~/.ssh/config 의 Host 별칭으로 원격 리포지토리를 엽니다.',
   'settings.ssh.config-file-label': '구성 파일',
-  'settings.ssh.config-file-hint': 'Goblin 은 여기서 SSH 별칭을 읽습니다.',
+  'settings.ssh.config-file-hint': 'Hobgoblin 은 여기서 SSH 별칭을 읽습니다.',
   'settings.ssh.path-format-label': '경로 형식',
   'settings.ssh.path-format-hint': '절대 경로와 홈 상대 경로를 지원합니다.',
   'settings.ssh.rules':
-    '규칙: Goblin 은 매번 ~/.ssh/config 에서 별칭을 다시 해석합니다. 별칭이 삭제되었거나 더 이상 해석되지 않으면 설정 표류로 표시합니다.',
+    '규칙: Hobgoblin 은 매번 ~/.ssh/config 에서 별칭을 다시 해석합니다. 별칭이 삭제되었거나 더 이상 해석되지 않으면 설정 표류로 표시합니다.',
   'settings.ssh.example':
     'Host my-server\n' +
     '  HostName example.com\n' +
@@ -665,7 +665,7 @@ export const ko: Record<DictKey, string> = {
   'settings.global-shortcut-conflict': '등록 실패. 사용 중일 수 있습니다.',
   'settings.global-shortcut-invalid': 'Command, Control 또는 Option과 키를 함께 사용하세요.',
   'settings.open-github': 'GitHub에서 프로젝트 열기',
-  'about.app': 'Goblin',
+  'about.app': 'Hobgoblin',
   'about.version': '버전',
   'about.build': '빌드',
   'about.build.unknown': 'dev',
@@ -694,7 +694,7 @@ export const ko: Record<DictKey, string> = {
   'help.row.checkout': '선택 실행',
   'help.row.open-local-repo': '로컬 리포지토리 열기',
   'help.row.clone-repo': '리포지토리 클론',
-  'help.row.activate-window': 'Goblin 창 보이기',
+  'help.row.activate-window': 'Hobgoblin 창 보이기',
   'help.row.close-repo': '현재 탭 닫기',
   'help.row.close-window': '창 닫기',
   'help.row.refresh': '리포지토리 동기화',

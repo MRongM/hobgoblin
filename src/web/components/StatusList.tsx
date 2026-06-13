@@ -14,22 +14,31 @@ function isUnmergedStatus(entry: StatusEntry): boolean {
   return entry.x === 'U' || entry.y === 'U' || (entry.x === entry.y && (entry.x === 'A' || entry.x === 'D'))
 }
 
-function statusCodeClass(entry: StatusEntry, column: 'x' | 'y'): string {
-  const code = column === 'x' ? entry.x : entry.y
-  if (code === ' ' || !code) return 'text-transparent'
-  if (code === '!') return 'text-muted-foreground'
-  if (code === '?' || isUnmergedStatus(entry)) return 'text-danger'
-  return column === 'x' ? 'text-success' : 'text-danger'
+function hasStatusCode(entry: StatusEntry, code: string): boolean {
+  return entry.x === code || entry.y === code
+}
+
+function statusDisplay(entry: StatusEntry): { code: string; label: string; className: string } {
+  if (isUnmergedStatus(entry)) return { code: 'U', label: 'U unmerged', className: 'text-danger' }
+  if (hasStatusCode(entry, '?') || hasStatusCode(entry, 'A')) {
+    return { code: 'N', label: 'N new', className: 'text-success' }
+  }
+  if (hasStatusCode(entry, 'D')) return { code: 'D', label: 'D deleted', className: 'text-danger' }
+  if (hasStatusCode(entry, 'M')) return { code: 'M', label: 'M modified', className: 'text-warning' }
+  if (hasStatusCode(entry, '!')) return { code: '!', label: '! ignored', className: 'text-muted-foreground' }
+
+  const fallback = entry.x.trim() || entry.y.trim() || ' '
+  return { code: fallback, label: `${entry.x}${entry.y}`, className: 'text-muted-foreground' }
 }
 
 function StatusCode({ entry }: { entry: StatusEntry }) {
+  const display = statusDisplay(entry)
   return (
     <span
-      className="inline-grid w-[2ch] shrink-0 grid-cols-[1ch_1ch] font-mono text-sm leading-none"
-      aria-label={`${entry.x}${entry.y}`}
+      className={`inline-flex w-[2ch] shrink-0 justify-center font-mono text-sm font-semibold leading-none ${display.className}`}
+      aria-label={display.label}
     >
-      <span className={statusCodeClass(entry, 'x')}>{entry.x === ' ' ? '\u00a0' : entry.x}</span>
-      <span className={statusCodeClass(entry, 'y')}>{entry.y === ' ' ? '\u00a0' : entry.y}</span>
+      {display.code === ' ' ? '\u00a0' : display.code}
     </span>
   )
 }
@@ -63,7 +72,7 @@ export function StatusList({
                   type="button"
                   aria-label={entry.path}
                   onClick={() => onPathClick(entry.path)}
-                  className="min-w-0 truncate text-left text-foreground hover:text-brand-text"
+                  className="min-w-0 truncate text-left text-foreground underline decoration-border underline-offset-2 hover:text-brand-text hover:decoration-brand-text"
                 >
                   <FilePathText path={entry.path} />
                 </button>

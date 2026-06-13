@@ -114,8 +114,7 @@ describe('desktop identity', () => {
   })
 
   test('updates lockfile workspace identity without changing dependency versions', () => {
-    const lockfile = readJson<{ workspaces: { '': { name: string } } }>('bun.lock')
-    expect(lockfile.workspaces[''].name).toBe('hobgoblin')
+    expect(readText('bun.lock')).toContain('"workspaces": {\n    "": {\n      "name": "hobgoblin",')
   })
 })
 ```
@@ -351,7 +350,7 @@ test('uses Hobgoblin in user-visible product copy', () => {
 
     for (const [key, value] of Object.entries(dict)) {
       expect(value, `${lang}.${key}`).not.toContain('Goblin')
-      expect(value, `${lang}.${key}`).not.toContain('goblin.app')
+      expect(value, `${lang}.${key}`).not.toMatch(/(^|[^a-z])goblin\.app\b/)
     }
   }
 })

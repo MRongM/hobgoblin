@@ -1,4 +1,4 @@
-// In-app Goblin wordmark. Plain typography — set in the theme
+// In-app Hobgoblin wordmark. Plain typography — set in the theme
 // foreground colour at a regular weight, sitting in the macOS
 // title bar like a native window title.
 //
@@ -15,7 +15,7 @@ interface Props {
 export function Logo({ size = 13, className }: Props) {
   return (
     <span
-      aria-label="Goblin"
+      aria-label="Hobgoblin"
       className={cn('inline-flex items-baseline align-middle select-none text-foreground', className)}
       style={{
         fontFamily: 'var(--font-sans)',
@@ -25,7 +25,7 @@ export function Logo({ size = 13, className }: Props) {
         lineHeight: 1,
       }}
     >
-      Goblin
+      Hobgoblin
     </span>
   )
 }
