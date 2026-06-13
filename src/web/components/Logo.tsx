@@ -1,8 +1,8 @@
-// In-app Hobgoblin wordmark. Plain typography — set in the theme
-// foreground colour at a regular weight, sitting in the macOS
-// title bar like a native window title.
+// In-app Hobgoblin wordmark. Clean system typography set in the theme
+// foreground colour, sitting in the macOS title bar like a native window title.
 //
-// Uses the project's `--font-sans` stack at weight 500.
+// The app icon carries the Git + terminal identity; this wordmark stays
+// restrained and text-only.
 
 import { cn } from '#/web/lib/cn.ts'
 
@@ -19,9 +19,9 @@ export function Logo({ size = 13, className }: Props) {
       className={cn('inline-flex items-baseline align-middle select-none text-foreground', className)}
       style={{
         fontFamily: 'var(--font-sans)',
-        fontWeight: 500,
+        fontWeight: 600,
         fontSize: `${size}px`,
-        letterSpacing: `${size * 0.02}px`,
+        letterSpacing: '0px',
         lineHeight: 1,
       }}
     >

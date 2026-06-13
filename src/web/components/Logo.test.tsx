@@ -24,12 +24,15 @@ afterEach(() => {
 })
 
 describe('Logo', () => {
-  test('renders the Hobgoblin wordmark with an accessible label', () => {
+  test('renders the clean Hobgoblin wordmark with an accessible label', () => {
     render(<Logo />)
 
     const logo = document.body.querySelector('[aria-label="Hobgoblin"]')
     expect(logo).toBeInstanceOf(HTMLSpanElement)
     expect(logo?.textContent).toBe('Hobgoblin')
+    expect(logo?.querySelector('svg')).toBeNull()
+    expect(logo?.getAttribute('style')).toContain('font-weight: 600')
+    expect(logo?.getAttribute('style')).toContain('letter-spacing: 0px')
   })
 })
 
