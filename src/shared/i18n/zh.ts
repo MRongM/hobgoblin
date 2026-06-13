@@ -346,7 +346,7 @@ export const zh: Record<DictKey, string> = {
   'terminal.bell-unread-count': '{count} 个未读终端提醒',
 
   // ---- Worktree row actions (used by branch rows that have a worktree) --
-  'worktrees.reveal-title': '在访达中显示',
+  'worktrees.reveal-title': '在本地显示',
   'worktrees.open-in-terminal-title': '在终端中打开',
   'worktrees.open-in-terminal-label': '终端',
   'worktrees.open-in-editor-title': '在编辑器中打开',
