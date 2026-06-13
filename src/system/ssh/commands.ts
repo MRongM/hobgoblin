@@ -1,7 +1,12 @@
 import path from 'node:path'
 import { execa, ExecaError } from 'execa'
-import { FILE_TRANSFER_MAX_FILE_BYTES, FILE_TRANSFER_MAX_TOTAL_BYTES, FILE_TREE_MAX_ENTRIES } from '#/shared/file-tree.ts'
+import {
+  FILE_TRANSFER_MAX_FILE_BYTES,
+  FILE_TRANSFER_MAX_TOTAL_BYTES,
+  FILE_TREE_MAX_ENTRIES,
+} from '#/shared/file-tree.ts'
 import { FIELD_SEP } from '#/system/git/parsers.ts'
+import { buildManagedRemoteTerminalInvocation } from '#/system/remote-terminal.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import type { CreateWorktreeInput } from '#/shared/worktree-create.ts'
 
@@ -99,13 +104,30 @@ export function buildRemoteCommandInvocation(
 export function buildRemoteTerminalInvocation(
   target: RemoteRepoTarget,
   remotePath: string,
-  _size: { cols: number; rows: number },
+  options: { cols: number; rows: number; terminalNumber: number },
 ): RemoteCommandInvocation {
-  const script = `cd ${shellQuote(remotePath)} && exec "\${SHELL:-/bin/sh}" -l`
-  const args = ['-tt', '-o', 'StrictHostKeyChecking=yes', '-o', `ConnectTimeout=${SSH_CONNECT_TIMEOUT_SEC}`]
-  const destination = target.alias
-  args.push('--', destination, `sh -lc ${shellQuote(script)}`)
-  return { command: 'ssh', args, script }
+  const invocation = buildManagedRemoteTerminalInvocation(
+    {
+      alias: target.alias,
+      endpoint: {
+        user: target.user,
+        host: target.host,
+        port: target.port,
+      },
+      repoPath: target.remotePath,
+      worktreePath: remotePath,
+      terminalNumber: options.terminalNumber,
+    },
+    {
+      sshOptions: ['-o', 'StrictHostKeyChecking=yes', '-o', `ConnectTimeout=${SSH_CONNECT_TIMEOUT_SEC}`],
+    },
+  )
+  if (!invocation) throw new Error('Invalid remote terminal invocation')
+  return {
+    command: invocation.command,
+    args: invocation.args,
+    script: invocation.script,
+  }
 }
 
 export async function runRemoteCommand(
@@ -304,9 +326,7 @@ function scriptForCommand(command: RemoteCommandKind): string {
     case 'gitWorktreeRemove':
       return `git -C ${shellQuote(command.path)} worktree remove -- ${shellQuote(command.worktreePath)}`
     case 'gitBranchDelete':
-      return `git -C ${shellQuote(command.path)} branch ${command.force ? '-D' : '-d'} -- ${shellQuote(
-        command.branch,
-      )}`
+      return `git -C ${shellQuote(command.path)} branch ${command.force ? '-D' : '-d'} -- ${shellQuote(command.branch)}`
     case 'gitUpstream':
       return `git -C ${shellQuote(command.path)} rev-parse --abbrev-ref ${shellQuote(`${command.branch}@{u}`)}`
     case 'gitIsAncestor':
@@ -323,7 +343,8 @@ function scriptForCommand(command: RemoteCommandKind): string {
 }
 
 function shellQuote(value: string): string {
-  if (value.includes('\0')) throw new Error(`Refusing to quote NUL-containing string for remote command: ${path.basename(value)}`)
+  if (value.includes('\0'))
+    throw new Error(`Refusing to quote NUL-containing string for remote command: ${path.basename(value)}`)
   return `'${value.replace(/'/g, `'\\''`)}'`
 }
 
@@ -411,7 +432,9 @@ function remoteDeleteFileTreeScript(command: Extract<RemoteCommandKind, { type: 
   ].join('\n')
 }
 
-function remoteFileTransferInventoryScript(command: Extract<RemoteCommandKind, { type: 'fileTransferInventory' }>): string {
+function remoteFileTransferInventoryScript(
+  command: Extract<RemoteCommandKind, { type: 'fileTransferInventory' }>,
+): string {
   return [
     "python3 - <<'PY'",
     '# fileTransferInventory',
@@ -494,7 +517,13 @@ function remoteFileTransferInventoryScript(command: Extract<RemoteCommandKind, {
 function remoteWorktreeAddArgs(input: CreateWorktreeInput): string {
   switch (input.mode.kind) {
     case 'newBranch':
-      return ['-b', shellQuote(input.mode.newBranch), '--', shellQuote(input.worktreePath), shellQuote(input.mode.baseRef)].join(' ')
+      return [
+        '-b',
+        shellQuote(input.mode.newBranch),
+        '--',
+        shellQuote(input.worktreePath),
+        shellQuote(input.mode.baseRef),
+      ].join(' ')
     case 'existingBranch':
       return ['--', shellQuote(input.worktreePath), shellQuote(input.mode.branch)].join(' ')
     case 'trackRemoteBranch':

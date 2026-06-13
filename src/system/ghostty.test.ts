@@ -30,7 +30,7 @@ describe('openRemoteInGhostty', () => {
     const { openRemoteInGhostty } = await import('#/system/ghostty.ts')
     mocks.execa.mockResolvedValueOnce({ stdout: 'opened' })
 
-    await expect(openRemoteInGhostty('prod', '/srv/repo-feature')).resolves.toEqual({
+    await expect(openRemoteInGhostty({ alias: 'prod', worktreePath: '/srv/repo-feature' })).resolves.toEqual({
       ok: true,
       message: '/srv/repo-feature',
     })
@@ -42,6 +42,7 @@ describe('openRemoteInGhostty', () => {
     )
     expect(mocks.execa.mock.calls[0]![1][2]).toContain('prod')
     expect(mocks.execa.mock.calls[0]![1][2]).toContain('/srv/repo-feature')
+    expect(mocks.execa.mock.calls[0]![1][2]).not.toContain('tmux')
   })
 
   test('cold-starts Ghostty with ssh as the initial command when it is not running', async () => {
@@ -49,37 +50,28 @@ describe('openRemoteInGhostty', () => {
     mocks.execa.mockResolvedValueOnce({ stdout: 'not-running' })
     mocks.execa.mockReturnValueOnce(childProcessPromise())
 
-    await expect(openRemoteInGhostty('prod', '/srv/repo-feature')).resolves.toEqual({
+    await expect(openRemoteInGhostty({ alias: 'prod', worktreePath: '/srv/repo-feature' })).resolves.toEqual({
       ok: true,
       message: '/srv/repo-feature',
     })
 
     expect(mocks.execa).toHaveBeenLastCalledWith(
       'open',
-      [
-        '-na',
-        'Ghostty.app',
-        '--args',
-        '-e',
-        'ssh',
-        '-tt',
-        '--',
-        'prod',
-        expect.stringContaining('sh -lc'),
-      ],
+      ['-na', 'Ghostty.app', '--args', '-e', 'ssh', '-tt', '--', 'prod', expect.stringContaining('sh -lc')],
       expect.objectContaining({ detached: true, stdio: 'ignore', cleanup: false }),
     )
     expect(mocks.execa.mock.calls[1]![1][8]).toContain('/srv/repo-feature')
+    expect(mocks.execa.mock.calls[1]![1][8]).not.toContain('tmux')
   })
 
   test('rejects invalid remote inputs before launching Ghostty', async () => {
     const { openRemoteInGhostty } = await import('#/system/ghostty.ts')
 
-    await expect(openRemoteInGhostty('bad alias', '/srv/repo')).resolves.toEqual({
+    await expect(openRemoteInGhostty({ alias: 'bad alias', worktreePath: '/srv/repo' })).resolves.toEqual({
       ok: false,
       message: 'error.invalid-arguments',
     })
-    await expect(openRemoteInGhostty('prod', 'relative/repo')).resolves.toEqual({
+    await expect(openRemoteInGhostty({ alias: 'prod', worktreePath: 'relative/repo' })).resolves.toEqual({
       ok: false,
       message: 'error.invalid-arguments',
     })
@@ -91,7 +83,7 @@ describe('openRemoteInGhostty', () => {
     mocks.existsSync.mockReturnValue(false)
     const { openRemoteInGhostty } = await import('#/system/ghostty.ts')
 
-    await expect(openRemoteInGhostty('prod', '/srv/repo')).resolves.toEqual({
+    await expect(openRemoteInGhostty({ alias: 'prod', worktreePath: '/srv/repo' })).resolves.toEqual({
       ok: false,
       message: 'error.ghostty-not-installed',
     })

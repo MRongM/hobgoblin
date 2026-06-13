@@ -31,7 +31,18 @@ function makeRepoIndex(): TerminalRepoIndex {
   }
 }
 
-function makeServerSession(sessionId: string, terminalId: string, overrides: Partial<{ controller: { attachmentId: string; status: 'connected' | 'grace' }; processName: string; canonicalTitle: string | null; cols: number; rows: number; displayOrder: number }> = {}) {
+function makeServerSession(
+  sessionId: string,
+  terminalId: string,
+  overrides: Partial<{
+    controller: { attachmentId: string; status: 'connected' | 'grace' }
+    processName: string
+    canonicalTitle: string | null
+    cols: number
+    rows: number
+    displayOrder: number
+  }> = {},
+) {
   return {
     sessionId,
     key: `${REPO_ROOT}\0${WORKTREE_PATH}\0${terminalId}`,
@@ -226,7 +237,11 @@ describe('TerminalSessionRegistry', () => {
       // Second reconcile: terminal-1 removed, terminal-2 is controller
       registry.reconcileServerSessions(
         REPO_ROOT,
-        [makeServerSession('session-2', 'terminal-2', { controller: { attachmentId: 'attachment_local', status: 'connected' } })],
+        [
+          makeServerSession('session-2', 'terminal-2', {
+            controller: { attachmentId: 'attachment_local', status: 'connected' },
+          }),
+        ],
         'attachment_local',
         new Map(),
       )
@@ -255,6 +270,83 @@ describe('TerminalSessionRegistry', () => {
       ;(registry as any).removeSession(activeKey, { dispose: false, closeSession: false })
 
       expect(registry.worktreeSnapshot(WORKTREE_KEY).selectedDescriptor?.terminalId).toBe('terminal-1')
+    })
+  })
+
+  describe('terminal display titles', () => {
+    test('prefixes compact and full canonical titles with the terminal sequence number', () => {
+      registry.setRepoIndex(makeRepoIndex())
+
+      registry.reconcileServerSessions(
+        REPO_ROOT,
+        [
+          makeServerSession('session-2', 'terminal-2', {
+            canonicalTitle: '~/repo/app \u2014 npm run dev',
+            processName: 'node',
+          }),
+        ],
+        'attachment_local',
+        new Map(),
+      )
+
+      const summary = registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]
+      expect(summary).toMatchObject({
+        terminalId: 'terminal-2',
+        index: 2,
+        title: '#2 app \u00b7 npm run dev',
+        fullTitle: '#2 ~/repo/app \u2014 npm run dev',
+        originalTitle: '~/repo/app \u2014 npm run dev',
+      })
+    })
+
+    test('prefixes process fallback titles with the terminal sequence number', () => {
+      registry.setRepoIndex(makeRepoIndex())
+
+      registry.reconcileServerSessions(
+        REPO_ROOT,
+        [
+          makeServerSession('session-1', 'terminal-1', {
+            canonicalTitle: null,
+            processName: '/bin/zsh',
+          }),
+        ],
+        'attachment_local',
+        new Map(),
+      )
+
+      const summary = registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]
+      expect(summary).toMatchObject({
+        terminalId: 'terminal-1',
+        index: 1,
+        title: '#1 zsh',
+        fullTitle: '#1 /bin/zsh',
+        originalTitle: null,
+      })
+    })
+
+    test('prefixes empty title fallback with the terminal sequence number', () => {
+      registry.setRepoIndex(makeRepoIndex())
+
+      registry.reconcileServerSessions(
+        REPO_ROOT,
+        [
+          makeServerSession('session-3', 'terminal-3', {
+            canonicalTitle: null,
+            processName: '',
+          }),
+        ],
+        'attachment_local',
+        new Map(),
+      )
+
+      const summary = registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]
+      expect(summary).toMatchObject({
+        terminalId: 'terminal-3',
+        index: 3,
+        title: '#3 terminal 3',
+        fullTitle: '#3 terminal 3',
+        originalTitle: null,
+      })
     })
   })
 
