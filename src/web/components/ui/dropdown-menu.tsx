@@ -3,11 +3,11 @@ import { CheckIcon, ChevronRightIcon, CircleIcon } from 'lucide-react'
 import { DropdownMenu as DropdownMenuPrimitive } from 'radix-ui'
 import { cn } from '#/web/lib/cn.ts'
 
-// Known issue: in Goblin's frameless window, title-bar drag regions
+// Known issue: in Hobgoblin's frameless window, title-bar drag regions
 // (`-webkit-app-region: drag`) swallow pointer events, so clicking a draggable
 // topbar gap will not behave like a normal "outside click" for dropdown
 // dismissal. Keep this file as a thin Radix/shadcn-style primitive wrapper;
-// do not bake Goblin-specific drag-region workarounds into this shared
+// do not bake Hobgoblin-specific drag-region workarounds into this shared
 // component.
 function DropdownMenu({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
   return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />

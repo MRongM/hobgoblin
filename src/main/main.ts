@@ -103,7 +103,7 @@ async function startEmbeddedServerForMainProcess(): Promise<void> {
   } catch (err) {
     console.warn('[server] failed to start embedded server', err)
     const message = err instanceof Error ? err.message : String(err)
-    dialog.showErrorBox('Goblin failed to start', `Embedded web server failed to start.\n\n${message}`)
+    dialog.showErrorBox('Hobgoblin failed to start', `Embedded web server failed to start.\n\n${message}`)
     throw err
   }
 }

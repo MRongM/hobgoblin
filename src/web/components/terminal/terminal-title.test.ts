@@ -15,7 +15,7 @@ describe('compactTerminalTitle', () => {
   })
 
   test('extracts the basename from paths that contain spaces', () => {
-    expect(compactTerminalTitle('~/Library/Application Support/Goblin')).toBe('Goblin')
+    expect(compactTerminalTitle('~/Library/Application Support/Hobgoblin')).toBe('Hobgoblin')
   })
 
   test('shortens long commands even when they only contain one or two tokens', () => {

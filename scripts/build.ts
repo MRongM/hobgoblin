@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
-// Build and package Goblin.
-//   default → Goblin.app under release/mac*/ (via electron-builder mac dmg+dir)
+// Build and package Hobgoblin.
+//   default → Hobgoblin.app under release/mac*/ (via electron-builder mac dmg+dir)
 //   install → builds the `dir` target only (no dmg packaging) and moves
-//             Goblin.app into ~/Applications, closing any running instance
+//             Hobgoblin.app into ~/Applications, closing any running instance
 //             first. macOS-only.
 //
 // Usage: ./scripts/build.ts [install|i] [--clean]
@@ -17,8 +17,8 @@ const repoRoot = path.resolve(import.meta.dirname, '..')
 process.chdir(repoRoot)
 $.cwd(repoRoot)
 
-const APP_NAME = 'Goblin'
-const APP_ID = 'goblin.app'
+const APP_NAME = 'Hobgoblin'
+const APP_ID = 'hobgoblin.app'
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
@@ -125,7 +125,7 @@ if (shouldInstall) {
 
   console.log(`Installing ${APP_NAME}.app to ~/Applications...`)
 
-  // Close a running Goblin.app before replacing it. Relative path because
+  // Close a running Hobgoblin.app before replacing it. Relative path because
   // scripts/ sits outside src/ and isn't covered by the `#/` alias.
   await closeRunningApp()
 
@@ -142,7 +142,7 @@ if (shouldInstall) {
   // without re-signing the app appears as "Electron" in notification settings
   // and the NSUserNotificationAlertStyle plist key has no effect.
   // Re-signing with --identifier forces the correct bundle ID and binds the
-  // Info.plist so notifications work and Goblin appears in System Settings.
+  // Info.plist so notifications work and Hobgoblin appears in System Settings.
   console.log('Re-signing with correct bundle identifier...')
   await $`codesign --force --deep --sign - --identifier ${APP_ID} ${destApp}`
   console.log('Re-signed.')

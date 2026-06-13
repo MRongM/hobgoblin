@@ -249,7 +249,7 @@ export function createServerTerminalBridge(options: {
       })
     },
     sendTestNotification() {
-      return options.sendTestNotification?.() ?? showBrowserNotification('Goblin', 'Test notification')
+      return options.sendTestNotification?.() ?? showBrowserNotification('Hobgoblin', 'Test notification')
     },
     setBadge(count) {
       options.setBadge?.(count)

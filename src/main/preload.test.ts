@@ -160,7 +160,7 @@ describe('preload goblinNative bridge', () => {
   test('forwards native terminal notification calls to their IPC channels', async () => {
     const { goblinNative, invocations, sends, ipcRenderer } = loadPreload()
 
-    await goblinNative.terminal.notifyBell({ sessionId: 'term_1', title: 'Goblin', body: 'Bell', repoRoot: '/repo' })
+    await goblinNative.terminal.notifyBell({ sessionId: 'term_1', title: 'Hobgoblin', body: 'Bell', repoRoot: '/repo' })
     await goblinNative.terminal.sendTestNotification()
     goblinNative.terminal.setBadge(2)
 

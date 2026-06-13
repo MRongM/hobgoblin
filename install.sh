@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-APP_NAME=Goblin
+APP_NAME=Hobgoblin
 DEST="$HOME/Applications"
 BINARY_PATH_FRAGMENT="/$APP_NAME.app/Contents/MacOS/"
 WAS_RUNNING=false

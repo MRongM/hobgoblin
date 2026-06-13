@@ -44,6 +44,29 @@ describe('settings routes', () => {
     vi.clearAllMocks()
   })
 
+  test('reports the Hobgoblin default server port when no override is configured', async () => {
+    const previousHost = process.env.GOBLIN_SERVER_HOST
+    const previousPort = process.env.GOBLIN_SERVER_PORT
+    delete process.env.GOBLIN_SERVER_HOST
+    delete process.env.GOBLIN_SERVER_PORT
+    try {
+      const { createSettingsRoutes } = await import('#/server/routes/settings.ts')
+      const app = createSettingsRoutes(createServerSettingsState())
+      const response = await app.request(new Request('http://127.0.0.1:32200/lan'))
+
+      await expect(response.json()).resolves.toMatchObject({
+        host: '127.0.0.1',
+        port: 32200,
+        lanUrls: [],
+      })
+    } finally {
+      if (previousHost === undefined) delete process.env.GOBLIN_SERVER_HOST
+      else process.env.GOBLIN_SERVER_HOST = previousHost
+      if (previousPort === undefined) delete process.env.GOBLIN_SERVER_PORT
+      else process.env.GOBLIN_SERVER_PORT = previousPort
+    }
+  })
+
   test('delegates prefs writes to the settings write-path application layer', async () => {
     mocks.applyServerSettingsPrefsWrite.mockResolvedValue({
       ok: true,

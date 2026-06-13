@@ -33,6 +33,7 @@ async function reserveTestPort(): Promise<number> {
 
 describe('embedded server port selection', () => {
   test('parses configured ports and falls back to the default port for invalid values', () => {
+    expect(DEFAULT_EMBEDDED_SERVER_PORT).toBe(32200)
     expect(parseServerPort('32123')).toBe(32123)
     expect(parseServerPort(undefined)).toBe(DEFAULT_EMBEDDED_SERVER_PORT)
     expect(parseServerPort('0')).toBe(DEFAULT_EMBEDDED_SERVER_PORT)

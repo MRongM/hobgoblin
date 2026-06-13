@@ -36,7 +36,7 @@ export function createSettingsRoutes(settingsState: ServerSettingsState) {
   app.get('/prefs', async (c) => c.json(await getServerSettingsPrefs()))
   app.get('/lan', async (c) => {
     const host = process.env.GOBLIN_SERVER_HOST?.trim() || '127.0.0.1'
-    const port = Number(process.env.GOBLIN_SERVER_PORT) || 32100
+    const port = Number(process.env.GOBLIN_SERVER_PORT) || 32200
     const lanUrls = host === '0.0.0.0' ? getLanUrls(port) : isLanAddress(host) ? [`http://${host}:${port}`] : []
     return c.json({ host, port, lanUrls } satisfies LanInfo)
   })

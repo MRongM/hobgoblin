@@ -7,7 +7,7 @@ import { createServerRuntime } from '#/server/runtime.ts'
 import { resolveTerminalWorkerEntry } from '#/server/terminal/terminal-worker-entry.ts'
 
 const DEFAULT_HOST = '127.0.0.1'
-const DEFAULT_PORT = 32100
+const DEFAULT_PORT = 32200
 const SHUTDOWN_SOCKET_GRACE_MS = 150
 const SHUTDOWN_TIMEOUT_MS = 1_000
 

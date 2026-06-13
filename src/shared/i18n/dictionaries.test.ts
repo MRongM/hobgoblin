@@ -52,4 +52,19 @@ describe('i18n dictionaries', () => {
     expect(ko['repo-tabs.open-remote-path-label']).toBe('원격 경로')
     expect(ja['repo-tabs.open-remote-path-label']).toBe('リモートパス')
   })
+
+  test('uses Hobgoblin in user-visible product copy', () => {
+    for (const [lang, dict] of Object.entries(dicts)) {
+      expect(dict['about.app'], `${lang}.about.app`).toBe('Hobgoblin')
+      expect(
+        dict['settings.general.open-from-terminal-command'],
+        `${lang}.settings.general.open-from-terminal-command`,
+      ).toBe('open -b hobgoblin.app /path/to/repo')
+
+      for (const [key, value] of Object.entries(dict)) {
+        expect(value, `${lang}.${key}`).not.toContain('Goblin')
+        expect(value, `${lang}.${key}`).not.toMatch(/(^|[^a-z])goblin\.app\b/)
+      }
+    }
+  })
 })
