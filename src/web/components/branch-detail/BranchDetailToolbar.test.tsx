@@ -1,0 +1,354 @@
+// @vitest-environment jsdom
+
+import { act } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { BranchDetailToolbar } from '#/web/components/branch-detail/BranchDetailToolbar.tsx'
+import { getSelectedBranchDetailPresentation } from '#/web/components/branch-detail/model.ts'
+import { TerminalSessionContext, TerminalSessionReadContext } from '#/web/components/terminal/terminal-session-context.ts'
+import type { TerminalSessionContextValue, TerminalSessionReadContextValue, TerminalSessionSummary, TerminalDescriptor, WorktreeTerminalSnapshot } from '#/web/components/terminal/types.ts'
+import { MainWindowNavigationProvider, type MainWindowNavigationActions } from '#/web/main-window-navigation.tsx'
+import { emptyRendererBridgeBootstrap, setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
+import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
+import { DEFAULT_WORKSPACE_LAYOUT } from '#/shared/workspace-layout.ts'
+import type { RendererBridge } from '#/web/renderer-bridge-types.ts'
+import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
+
+let compactUi = false
+
+vi.mock('#/web/hooks/useResponsiveUiMode.tsx', () => ({
+  useIsCompactUi: () => compactUi,
+}))
+
+vi.stubGlobal('requestAnimationFrame', ((cb: FrameRequestCallback) => {
+  cb(0)
+  return 1
+}) as typeof requestAnimationFrame)
+
+const REPO_ID = '/tmp/gbl-branch-detail-toolbar-repo'
+const WORKTREE_PATH = '/tmp/gbl-branch-detail-toolbar-worktree'
+  compactUi = false
+
+let container: HTMLDivElement | null = null
+let root: Root | null = null
+let queryClient: QueryClient | null = null
+const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+
+beforeEach(() => {
+  reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
+  resetReposStore()
+  setRendererBridgeForTests(null)
+})
+
+afterEach(() => {
+  act(() => {
+    root?.unmount()
+  })
+  container?.remove()
+  root = null
+  container = null
+  queryClient = null
+  setRendererBridgeForTests(null)
+  reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
+})
+
+describe('BranchDetailToolbar', () => {
+  test('does not render a status detail tab', async () => {
+    const { container: c } = renderToolbar({ terminalCount: 0, navigation: navigationWith({}) })
+
+    expect(c.textContent).not.toContain('tab.status')
+    expect(c.querySelector(`[role="tab"][id$="-status-tab"]`)).toBeNull()
+  })
+
+  test('renders terminal area without moved status or changes tabs', () => {
+    const { container: c } = renderToolbar({ terminalCount: 0, changeCount: 3, navigation: navigationWith({}) })
+
+    expect(c.querySelector('#detail-status-tab')).toBeNull()
+    expect(c.querySelector('#detail-changes-tab')).toBeNull()
+    // useT is mocked to return the i18n key, so we assert against the key here.
+    expect(c.querySelector('#detail-terminal-tab')?.textContent).toContain('terminal.label')
+  })
+
+  test('clicking the new-terminal button navigates and creates a terminal', async () => {
+    const showRepoDetailTab = vi.fn()
+    const { terminalTab, mocks } = renderToolbar({
+      terminalCount: 0,
+      navigation: navigationWith({ showRepoDetailTab }),
+    })
+
+    act(() => {
+      terminalTab.click()
+    })
+    await flush()
+
+    expect(showRepoDetailTab).toHaveBeenCalledWith(REPO_ID, 'terminal')
+    expect(mocks.createTerminal).toHaveBeenCalledTimes(1)
+  })
+
+  test('clicking a selected session tab when not in terminal panel navigates to terminal', async () => {
+    const showRepoDetailTab = vi.fn()
+    const { terminalTab, mocks } = renderToolbar({
+      terminalCount: 2,
+      navigation: navigationWith({ showRepoDetailTab }),
+    })
+
+    act(() => {
+      terminalTab.click()
+    })
+    await flush()
+
+    expect(showRepoDetailTab).toHaveBeenCalledWith(REPO_ID, 'terminal')
+    expect(mocks.createTerminal).not.toHaveBeenCalled()
+    expect(mocks.selectTerminal).toHaveBeenCalledWith(`${REPO_ID}\0${WORKTREE_PATH}`, 't1')
+  })
+
+  test('clicking a selected session tab in terminal panel scrolls to bottom', async () => {
+    const showRepoDetailTab = vi.fn()
+    const { terminalTab, mocks } = renderToolbar({
+      terminalCount: 2,
+      detailTab: 'terminal',
+      navigation: navigationWith({ showRepoDetailTab }),
+    })
+
+    act(() => {
+      terminalTab.click()
+    })
+    await flush()
+
+    expect(showRepoDetailTab).not.toHaveBeenCalled()
+    expect(mocks.createTerminal).not.toHaveBeenCalled()
+    expect(mocks.selectTerminal).not.toHaveBeenCalled()
+    expect(mocks.scrollToBottom).toHaveBeenCalledWith('t1')
+  })
+
+  test('clicking an unselected session tab navigates and selects it', async () => {
+    const showRepoDetailTab = vi.fn()
+    const { container: c, mocks } = renderToolbar({
+      terminalCount: 2,
+      navigation: navigationWith({ showRepoDetailTab }),
+    })
+
+    const unselectedTab = c.querySelector<HTMLButtonElement>('[data-terminal-tab-tooltip-id="t2"] button[role="tab"]')
+    expect(unselectedTab).not.toBeNull()
+
+    act(() => {
+      unselectedTab?.click()
+    })
+    await flush()
+
+    expect(showRepoDetailTab).toHaveBeenCalledWith(REPO_ID, 'terminal')
+    expect(mocks.createTerminal).not.toHaveBeenCalled()
+    expect(mocks.selectTerminal).toHaveBeenCalledWith(`${REPO_ID}\0${WORKTREE_PATH}`, 't2')
+  })
+
+  test('does not show branch actions in the detail bar (actions moved to branch rows)', () => {
+    const { container: c } = renderToolbar({
+      terminalCount: 0,
+      navigation: navigationWith({}),
+    })
+
+    expect(c.querySelector('button[aria-label="action.menu"]')).toBeNull()
+    expect(c.querySelector('[data-testid="branch-detail-toolbar-divider"]')).toBeNull()
+  })
+
+  test('keeps terminal focus when pressing End on the compact terminal tab', async () => {
+    compactUi = true
+    const showRepoDetailTab = vi.fn()
+    const { container: c } = renderToolbar({
+      terminalCount: 2,
+      detailTab: 'terminal',
+      navigation: navigationWith({ showRepoDetailTab }),
+    })
+
+    const terminalTab = c.querySelector<HTMLButtonElement>('#detail-terminal-tab')
+    expect(terminalTab).not.toBeNull()
+
+    act(() => {
+      terminalTab?.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }))
+    })
+    await flush()
+
+    expect(showRepoDetailTab).not.toHaveBeenCalled()
+    expect(document.activeElement?.id).toBe('detail-terminal-tab')
+  })
+
+  test('keeps terminal focus when keyboard navigation leaves terminal tabs', async () => {
+    const showRepoDetailTab = vi.fn()
+    const { container: c } = renderToolbar({
+      terminalCount: 2,
+      detailTab: 'terminal',
+      navigation: navigationWith({ showRepoDetailTab }),
+    })
+
+    const terminalTab = c.querySelector<HTMLButtonElement>('#detail-terminal-tab')
+    if (!terminalTab) throw new Error('missing terminal tab')
+
+    act(() => {
+      terminalTab.focus()
+      terminalTab.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }))
+    })
+    await flush()
+    expect(showRepoDetailTab).not.toHaveBeenCalledWith(REPO_ID, 'status')
+    expect(document.activeElement).toBe(terminalTab)
+  })
+})
+
+function renderToolbar(options: {
+  terminalCount: number
+  changeCount?: number
+  navigation: MainWindowNavigationActions
+  detailTab?: 'status' | 'changes' | 'terminal'
+  detailFocusMode?: boolean
+  collapsed?: boolean
+  layout?: RepoWorkspaceLayout
+}): {
+  container: HTMLDivElement
+  terminalTab: HTMLButtonElement
+  mocks: {
+    createTerminal: ReturnType<typeof vi.fn>
+    selectTerminal: ReturnType<typeof vi.fn>
+    scrollToBottom: ReturnType<typeof vi.fn>
+    showRepoDetailTab: ReturnType<typeof vi.fn>
+  }
+} {
+  const repo = seedRepoState({
+    id: REPO_ID,
+    branches: [createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } })],
+    selectedBranch: 'feature/worktree',
+    detailTab: options.detailTab ?? 'status',
+    status:
+      options.changeCount && options.changeCount > 0
+        ? [
+            {
+              path: WORKTREE_PATH,
+              branch: 'feature/worktree',
+              isMain: false,
+              entries: Array.from({ length: options.changeCount }, (_, index) => ({
+                x: 'M',
+                y: ' ',
+                path: `src/file-${index}.ts`,
+              })),
+            },
+          ]
+        : [],
+    statusLoaded: true,
+  })
+  const detail = getSelectedBranchDetailPresentation(repo)
+  const sessions: TerminalSessionSummary[] = Array.from({ length: options.terminalCount }, (_, index) => ({
+    key: `t${index + 1}`,
+    worktreeTerminalKey: `${REPO_ID}\0${WORKTREE_PATH}`,
+    terminalId: `t${index + 1}`,
+    index: index + 1,
+    title: `term-${index + 1}`,
+    fullTitle: `full-term-${index + 1}`,
+    phase: 'open' as const,
+    selected: index === 0,
+    hasBell: false,
+  }))
+  const selectedDescriptor: TerminalDescriptor | null = sessions[0]
+    ? {
+        key: sessions[0].key,
+        worktreeTerminalKey: sessions[0].worktreeTerminalKey,
+        terminalId: sessions[0].terminalId,
+        index: sessions[0].index,
+        repoRoot: REPO_ID,
+        branch: 'feature/worktree',
+        worktreePath: WORKTREE_PATH,
+      }
+    : null
+  const worktreeSnapshot: WorktreeTerminalSnapshot = {
+    worktreeTerminalKey: `${REPO_ID}\0${WORKTREE_PATH}`,
+    selectedDescriptor,
+    sessions,
+    count: options.terminalCount,
+  }
+  const terminalSnapshot = { phase: 'opening' as const, message: null, processName: 'terminal' }
+  const readContext: TerminalSessionReadContextValue = {
+    worktreeSnapshot: () => worktreeSnapshot,
+    subscribeWorktree: () => () => {},
+    repoSyncReady: () => false,
+    subscribeRepoSync: () => () => {},
+    snapshot: () => terminalSnapshot,
+    subscribeSnapshot: () => () => {},
+  }
+  const createTerminal = vi.fn(async () => 'key')
+  const selectTerminal = vi.fn()
+  const scrollToBottom = vi.fn()
+  const showRepoDetailTab = vi.fn(options.navigation.showRepoDetailTab)
+  const commandContext: TerminalSessionContextValue = {
+    createTerminal,
+    selectTerminal,
+    scrollToBottom,
+    scrollLines: vi.fn(),
+    clearBell: vi.fn(() => false),
+    closeTerminalAndDismissDetailIfLast: vi.fn(() => []),
+    attach: vi.fn(),
+    detach: vi.fn(),
+    restart: vi.fn(),
+    isTerminalFocusTarget: vi.fn(() => false),
+    findNext: vi.fn(() => ({ resultIndex: -1, resultCount: 0, found: false })),
+    findPrevious: vi.fn(() => ({ resultIndex: -1, resultCount: 0, found: false })),
+    clearSearch: vi.fn(),
+    writeInput: vi.fn(),
+    takeover: vi.fn(),
+    reorderSessions: vi.fn(async () => true),
+    serialize: vi.fn(() => ''),
+  }
+
+  container = document.createElement('div')
+  document.body.appendChild(container)
+  root = createRoot(container)
+  queryClient = new QueryClient()
+  act(() => {
+    root!.render(
+      <QueryClientProvider client={queryClient!}>
+        <MainWindowNavigationProvider value={options.navigation}>
+          <TerminalSessionContext.Provider value={commandContext}>
+            <TerminalSessionReadContext.Provider value={readContext}>
+              <BranchDetailToolbar
+                repo={repo}
+                detail={detail}
+                detailId="detail"
+                contentId="content"
+                collapsed={options.collapsed ?? false}
+                detailFocusMode={options.detailFocusMode ?? false}
+                layout={options.layout ?? DEFAULT_WORKSPACE_LAYOUT}
+              />
+            </TerminalSessionReadContext.Provider>
+          </TerminalSessionContext.Provider>
+        </MainWindowNavigationProvider>
+      </QueryClientProvider>,
+    )
+  })
+
+  const tab = container.querySelector<HTMLButtonElement>('#detail-terminal-tab')
+  if (!tab) throw new Error('missing terminal tab')
+  return {
+    container,
+    terminalTab: tab,
+    mocks: {
+      createTerminal,
+      selectTerminal,
+      scrollToBottom,
+      showRepoDetailTab,
+    },
+  }
+}
+
+function navigationWith(overrides: Partial<MainWindowNavigationActions>): MainWindowNavigationActions {
+  return {
+    activateRepo: () => {},
+    closeRepo: () => {},
+    cycleRepo: () => {},
+    selectRepoBranch: () => {},
+    showRepoDetailTab: () => {},
+    showRepoBranchDetailTab: () => {},
+    openSettings: () => {},
+    ...overrides,
+  }
+}
+
+async function flush() {
+  await new Promise((resolve) => setTimeout(resolve, 0))
+}
