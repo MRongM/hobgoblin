@@ -4,16 +4,23 @@ import { act } from 'react'
 import type { ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { CommitDialog } from '#/web/components/branch-list/BranchWriteDialogs.tsx'
+import {
+  CommitDialog,
+  CreateBranchDialog,
+  PullRemoteBranchDialog,
+} from '#/web/components/branch-list/BranchWriteDialogs.tsx'
+import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 
 const mocks = vi.hoisted(() => ({
   getCommitMessageProviders: vi.fn(),
   generateRepositoryCommitMessage: vi.fn(),
+  getRepositoryRemoteBranches: vi.fn(),
 }))
 
 vi.mock('#/web/repo-client.ts', () => ({
   getCommitMessageProviders: mocks.getCommitMessageProviders,
   generateRepositoryCommitMessage: mocks.generateRepositoryCommitMessage,
+  getRepositoryRemoteBranches: mocks.getRepositoryRemoteBranches,
 }))
 
 let container: HTMLDivElement | null = null
@@ -25,6 +32,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   mocks.getCommitMessageProviders.mockResolvedValue({ codex: false, claude: false })
   mocks.generateRepositoryCommitMessage.mockResolvedValue({ ok: true, message: 'feat: generated message' })
+  mocks.getRepositoryRemoteBranches.mockResolvedValue([])
 })
 
 afterEach(() => {
@@ -97,6 +105,80 @@ describe('CommitDialog AI generation', () => {
   })
 })
 
+describe('CreateBranchDialog', () => {
+  test('submits a typed branch name from the selected base branch', async () => {
+    const onCreate = vi.fn(async () => {})
+
+    render(
+      <CreateBranchDialog
+        open
+        branch={repoBranch('feature/base')}
+        allBranches={[repoBranch('feature/base')]}
+        busy={false}
+        onClose={vi.fn()}
+        onCreate={onCreate}
+      />,
+    )
+
+    setInputValue('#create-branch-name', 'feature/new')
+    clickButtonByText('action.create-branch-confirm')
+    await flush()
+
+    expect(onCreate).toHaveBeenCalledWith('feature/new')
+  })
+
+  test('rejects duplicate branch names before submit', async () => {
+    const onCreate = vi.fn(async () => {})
+
+    render(
+      <CreateBranchDialog
+        open
+        branch={repoBranch('feature/base')}
+        allBranches={[repoBranch('feature/base'), repoBranch('feature/existing')]}
+        busy={false}
+        onClose={vi.fn()}
+        onCreate={onCreate}
+      />,
+    )
+
+    setInputValue('#create-branch-name', 'feature/existing')
+
+    expect(document.body.textContent).toContain('action.create-worktree-branch-exists')
+    expect(buttonByText('action.create-branch-confirm').disabled).toBe(true)
+    expect(onCreate).not.toHaveBeenCalled()
+  })
+})
+
+describe('PullRemoteBranchDialog', () => {
+  test('loads remote refs filters duplicates and submits tracking branch input', async () => {
+    mocks.getRepositoryRemoteBranches.mockResolvedValueOnce(['origin/feature/existing', 'origin/feature/new'])
+    const onTrack = vi.fn(async () => {})
+
+    render(
+      <PullRemoteBranchDialog
+        open
+        repoId="/repo"
+        allBranches={[repoBranch('feature/existing')]}
+        busy={false}
+        onClose={vi.fn()}
+        onTrack={onTrack}
+      />,
+    )
+    await flush()
+    await flush()
+
+    expect(input('#pull-remote-local-branch').value).toBe('feature/new')
+
+    clickButtonByText('action.pull-remote-branch-confirm')
+    await flush()
+
+    expect(onTrack).toHaveBeenCalledWith({
+      localBranch: 'feature/new',
+      remoteRef: 'origin/feature/new',
+    })
+  })
+})
+
 function render(element: ReactNode) {
   if (!container) {
     container = document.createElement('div')
@@ -112,6 +194,25 @@ function textarea(selector: string): HTMLTextAreaElement {
   const element = document.body.querySelector(selector)
   if (!(element instanceof HTMLTextAreaElement)) throw new Error(`Missing textarea: ${selector}`)
   return element
+}
+
+function input(selector: string): HTMLInputElement {
+  const element = document.body.querySelector(selector)
+  if (!(element instanceof HTMLInputElement)) throw new Error(`Missing input: ${selector}`)
+  return element
+}
+
+function repoBranch(name: string): RepoBranchState {
+  return {
+    name,
+    isCurrent: false,
+    ahead: 0,
+    behind: 0,
+    lastCommitHash: 'abc1234',
+    lastCommitMessage: 'message',
+    lastCommitDate: '2024-01-01T00:00:00.000Z',
+    lastCommitAuthor: 'dev',
+  }
 }
 
 function queryButtonByText(text: string): HTMLButtonElement | null {
@@ -141,6 +242,16 @@ function buttonByProvider(provider: 'codex' | 'claude'): HTMLButtonElement {
 function setTextareaValue(selector: string, value: string) {
   const element = textarea(selector)
   const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')
+  descriptor?.set?.call(element, value)
+  act(() => {
+    element.dispatchEvent(new Event('input', { bubbles: true }))
+    element.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+}
+
+function setInputValue(selector: string, value: string) {
+  const element = input(selector)
+  const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
   descriptor?.set?.call(element, value)
   act(() => {
     element.dispatchEvent(new Event('input', { bubbles: true }))

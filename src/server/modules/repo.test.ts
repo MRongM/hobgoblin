@@ -8,6 +8,10 @@ const mocks = vi.hoisted(() => ({
   checkoutRemoteBranch: vi.fn(),
   commitAllChanges: vi.fn(),
   commitRemoteChanges: vi.fn(),
+  createBranch: vi.fn(),
+  createRemoteBranch: vi.fn(),
+  createRemoteTrackingBranch: vi.fn(),
+  createTrackingBranch: vi.fn(),
   createWorktree: vi.fn(),
   deleteBranch: vi.fn(),
   deleteLocalFileTreeEntries: vi.fn(),
@@ -54,6 +58,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('#/system/git/branches.ts', () => ({
   checkoutBranch: mocks.checkoutBranch,
+  createBranch: mocks.createBranch,
+  createTrackingBranch: mocks.createTrackingBranch,
   deleteBranch: mocks.deleteBranch,
   deleteUpstreamBranch: mocks.deleteUpstreamBranch,
   getBranches: mocks.getBranches,
@@ -141,6 +147,8 @@ vi.mock('#/system/ssh/diagnostics.ts', () => ({
 vi.mock('#/system/ssh/git.ts', () => ({
   checkoutRemoteBranch: mocks.checkoutRemoteBranch,
   commitRemoteChanges: mocks.commitRemoteChanges,
+  createRemoteBranch: mocks.createRemoteBranch,
+  createRemoteTrackingBranch: mocks.createRemoteTrackingBranch,
   createRemoteWorktree: vi.fn(),
   deleteRemoteBranch: mocks.deleteRemoteBranch,
   deleteRemoteFileTreeEntries: mocks.deleteRemoteFileTreeEntries,
@@ -188,6 +196,10 @@ beforeEach(() => {
   mocks.checkoutRemoteBranch.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.commitAllChanges.mockResolvedValue({ ok: true, message: 'committed local' })
   mocks.commitRemoteChanges.mockResolvedValue({ ok: true, message: 'committed remote' })
+  mocks.createBranch.mockResolvedValue({ ok: true, message: 'created local' })
+  mocks.createRemoteBranch.mockResolvedValue({ ok: true, message: 'created remote' })
+  mocks.createRemoteTrackingBranch.mockResolvedValue({ ok: true, message: 'tracked remote' })
+  mocks.createTrackingBranch.mockResolvedValue({ ok: true, message: 'tracked local' })
   mocks.mergeBranch.mockResolvedValue({ ok: true, message: 'merged local' })
   mocks.mergeRemoteBranch.mockResolvedValue({ ok: true, message: 'merged remote' })
   mocks.pullBranch.mockResolvedValue({ ok: true, message: 'ok' })
@@ -470,6 +482,45 @@ describe('repo mutation invalidation publishing', () => {
     expect(mocks.createWorktree).toHaveBeenCalledWith(
       '/tmp/repo',
       { worktreePath: '/tmp/repo-feature', mode: { kind: 'existingBranch', branch: 'feature/a' } },
+      undefined,
+    )
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: '/tmp/repo',
+      query: 'repo-snapshot',
+      sourceToken: 'repo_branch_test',
+    })
+  })
+
+  test('createRepositoryBranch creates a local branch and publishes source-token invalidation', async () => {
+    const { createRepositoryBranch } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await createRepositoryBranch('/tmp/repo', 'feature/new', 'main', undefined, 'repo_branch_test')
+
+    expect(result).toEqual({ ok: true, message: 'created local' })
+    expect(mocks.createBranch).toHaveBeenCalledWith('/tmp/repo', 'feature/new', 'main', undefined)
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: '/tmp/repo',
+      query: 'repo-snapshot',
+      sourceToken: 'repo_branch_test',
+    })
+  })
+
+  test('trackRepositoryRemoteBranch creates a local tracking branch and publishes source-token invalidation', async () => {
+    const { trackRepositoryRemoteBranch } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await trackRepositoryRemoteBranch(
+      '/tmp/repo',
+      'feature/new',
+      'origin/feature/new',
+      undefined,
+      'repo_branch_test',
+    )
+
+    expect(result).toEqual({ ok: true, message: 'tracked local' })
+    expect(mocks.createTrackingBranch).toHaveBeenCalledWith(
+      '/tmp/repo',
+      'feature/new',
+      'origin/feature/new',
       undefined,
     )
     expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({

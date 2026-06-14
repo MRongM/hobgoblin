@@ -2,6 +2,8 @@ import { describe, expect, test, vi } from 'vitest'
 import {
   checkoutRemoteBranch,
   commitRemoteChanges,
+  createRemoteBranch,
+  createRemoteTrackingBranch,
   createRemoteWorktree,
   deleteRemoteBranch,
   deleteRemoteFileTreeEntries,
@@ -315,6 +317,57 @@ describe('remote git helpers', () => {
     })
 
     expect(result).toEqual({ ok: false, message: 'error.invalid-path' })
+    expect(run).not.toHaveBeenCalled()
+  })
+
+  test('createRemoteBranch runs branch creation in the remote repo', async () => {
+    const run = vi.fn(async () => okRemoteResult('created'))
+
+    const result = await createRemoteBranch(TARGET, {
+      branch: 'feature/new',
+      baseBranch: 'main',
+      run: run as any,
+    })
+
+    expect(result).toEqual({ ok: true, message: 'created' })
+    expect(run).toHaveBeenCalledWith(
+      { type: 'gitBranchCreate', path: '/srv/repo', branch: 'feature/new', baseBranch: 'main' },
+      TARGET,
+      { signal: undefined, timeoutMs: 180_000 },
+    )
+  })
+
+  test('createRemoteTrackingBranch runs tracking branch creation in the remote repo', async () => {
+    const run = vi.fn(async () => okRemoteResult('tracked'))
+
+    const result = await createRemoteTrackingBranch(TARGET, {
+      localBranch: 'feature/new',
+      remoteRef: 'origin/feature/new',
+      run: run as any,
+    })
+
+    expect(result).toEqual({ ok: true, message: 'tracked' })
+    expect(run).toHaveBeenCalledWith(
+      { type: 'gitBranchTrackRemote', path: '/srv/repo', localBranch: 'feature/new', remoteRef: 'origin/feature/new' },
+      TARGET,
+      { signal: undefined, timeoutMs: 180_000 },
+    )
+  })
+
+  test('remote branch creation rejects invalid branch refs before running remote commands', async () => {
+    const run = vi.fn()
+
+    await expect(createRemoteBranch(TARGET, { branch: '-bad', baseBranch: 'main', run: run as any })).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+    await expect(
+      createRemoteTrackingBranch(TARGET, { localBranch: 'feature/new', remoteRef: 'origin/HEAD', run: run as any }),
+    ).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+
     expect(run).not.toHaveBeenCalled()
   })
 
