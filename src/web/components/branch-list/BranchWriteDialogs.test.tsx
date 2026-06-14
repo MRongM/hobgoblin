@@ -63,6 +63,20 @@ describe('CommitDialog AI generation', () => {
     expect(mocks.generateRepositoryCommitMessage).toHaveBeenCalledWith('/repo', '/repo', 'codex', expect.any(AbortSignal))
   })
 
+  test('shows raw provider errors without translating them as generic failures', async () => {
+    mocks.getCommitMessageProviders.mockResolvedValueOnce({ codex: true, claude: false })
+    mocks.generateRepositoryCommitMessage.mockResolvedValueOnce({ ok: false, message: 'Codex auth token expired' })
+
+    render(<CommitDialog open repoId="/repo" worktreePath="/repo" onClose={vi.fn()} onCommit={vi.fn()} />)
+    await flush()
+
+    clickButtonByProvider('codex')
+    await flush()
+
+    expect(document.body.textContent).toContain('Codex auth token expired')
+    expect(document.body.textContent).not.toContain('error.commit-message-failed')
+  })
+
   test('asks before replacing an existing commit message', async () => {
     mocks.getCommitMessageProviders.mockResolvedValueOnce({ codex: true, claude: true })
     mocks.generateRepositoryCommitMessage.mockResolvedValueOnce({ ok: true, message: 'fix: generated replacement' })

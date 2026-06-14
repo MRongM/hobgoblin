@@ -67,8 +67,20 @@ describe('commit message AI providers', () => {
     expect(mocks.execa).not.toHaveBeenCalled()
   })
 
-  test('invokes codex in non-interactive read-only mode', async () => {
-    mocks.execa.mockResolvedValueOnce({ exitCode: 0, stdout: 'feat: add generated summary', stderr: '' })
+  test('invokes codex in JSONL non-interactive read-only mode', async () => {
+    mocks.execa.mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: [
+        JSON.stringify({ type: 'thread.started', thread_id: 'thread_1' }),
+        JSON.stringify({ type: 'turn.started' }),
+        JSON.stringify({
+          type: 'item.completed',
+          item: { id: 'item_1', type: 'agent_message', text: 'feat: add generated summary' },
+        }),
+        JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 10, output_tokens: 6 } }),
+      ].join('\n'),
+      stderr: '',
+    })
     const { generateCommitMessageFromPatch } = await import('#/system/commit-message-ai.ts')
 
     await expect(generateCommitMessageFromPatch('codex', 'diff --git a/a b/a\n+hello\n', { cwd: '/repo' })).resolves.toEqual({
@@ -78,13 +90,62 @@ describe('commit message AI providers', () => {
 
     expect(mocks.execa).toHaveBeenCalledWith(
       'codex',
-      ['exec', '--ephemeral', '--sandbox', 'read-only', '--color', 'never', '-'],
+      ['exec', '--json', expect.stringContaining('Return only the commit message.')],
       expect.objectContaining({
         cwd: '/repo',
-        input: expect.stringContaining('Return only the commit message.'),
         reject: false,
+        stdin: 'ignore',
       }),
     )
+    expect(mocks.execa.mock.calls[0]![2]).not.toHaveProperty('input')
+  })
+
+  test('uses the final non-empty codex agent message from JSONL output', async () => {
+    mocks.execa.mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: [
+        JSON.stringify({
+          type: 'item.completed',
+          item: { id: 'item_1', type: 'agent_message', text: 'draft: first message' },
+        }),
+        JSON.stringify({
+          type: 'item.completed',
+          item: { id: 'item_2', type: 'tool_call', text: 'ignored tool text' },
+        }),
+        'not-json',
+        JSON.stringify({
+          type: 'item.completed',
+          item: { id: 'item_3', type: 'agent_message', text: 'fix: parse codex jsonl' },
+        }),
+      ].join('\n'),
+      stderr: '',
+    })
+
+    const { generateCommitMessageFromPatch } = await import('#/system/commit-message-ai.ts')
+
+    await expect(generateCommitMessageFromPatch('codex', 'diff --git a/a b/a\n+hello\n')).resolves.toEqual({
+      ok: true,
+      message: 'fix: parse codex jsonl',
+    })
+  })
+
+  test('returns empty-output when codex JSONL has no agent message', async () => {
+    mocks.execa.mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: [
+        JSON.stringify({ type: 'thread.started', thread_id: 'thread_1' }),
+        JSON.stringify({ type: 'turn.started' }),
+        JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 10, output_tokens: 0 } }),
+      ].join('\n'),
+      stderr: '',
+    })
+
+    const { generateCommitMessageFromPatch } = await import('#/system/commit-message-ai.ts')
+
+    await expect(generateCommitMessageFromPatch('codex', 'diff --git a/a b/a\n+hello\n')).resolves.toEqual({
+      ok: false,
+      message: 'error.commit-message-empty-output',
+    })
   })
 
   test('generates with a resolved user install executable when direct PATH lookup fails', async () => {
@@ -95,10 +156,17 @@ describe('commit message AI providers', () => {
       throw Object.assign(new Error('missing'), { code: 'ENOENT' })
     })
     mocks.execa
-      .mockRejectedValueOnce(Object.assign(new Error('missing'), { code: 'ENOENT' }))
+      .mockResolvedValueOnce({ failed: true, code: 'ENOENT', stdout: '', stderr: '' })
       .mockResolvedValueOnce({ exitCode: 1, stdout: '' })
       .mockResolvedValueOnce({ exitCode: 0 })
-      .mockResolvedValueOnce({ exitCode: 0, stdout: 'feat: use resolved codex', stderr: '' })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: JSON.stringify({
+          type: 'item.completed',
+          item: { id: 'item_1', type: 'agent_message', text: 'feat: use resolved codex' },
+        }),
+        stderr: '',
+      })
 
     const { generateCommitMessageFromPatch } = await import('#/system/commit-message-ai.ts')
 
@@ -109,14 +177,15 @@ describe('commit message AI providers', () => {
 
     expect(mocks.execa).toHaveBeenLastCalledWith(
       codexPath,
-      ['exec', '--ephemeral', '--sandbox', 'read-only', '--color', 'never', '-'],
+      ['exec', '--json', expect.stringContaining('Return only the commit message.')],
       expect.objectContaining({
         cwd: '/repo',
         env: expect.objectContaining({ PATH: expect.stringContaining('/Users/test/.nvm/versions/node/v22.16.0/bin') }),
-        input: expect.stringContaining('Return only the commit message.'),
         reject: false,
+        stdin: 'ignore',
       }),
     )
+    expect(mocks.execa.mock.calls.at(-1)![2]).not.toHaveProperty('input')
   })
 
   test('invokes claude with print mode and tools disabled', async () => {
@@ -146,14 +215,21 @@ describe('commit message AI providers', () => {
     })
     const { generateCommitMessageFromPatch } = await import('#/system/commit-message-ai.ts')
 
-    await expect(generateCommitMessageFromPatch('codex', 'diff --git a/a b/a\n+hello\n')).resolves.toEqual({
+    await expect(generateCommitMessageFromPatch('claude', 'diff --git a/a b/a\n+hello\n')).resolves.toEqual({
       ok: true,
       message: 'feat: generate commit messages\n\nAdd Codex and Claude buttons.',
     })
   })
 
   test('omits binary patch payloads and caps prompt size before invoking providers', async () => {
-    mocks.execa.mockResolvedValueOnce({ exitCode: 0, stdout: 'chore: summarize large change', stderr: '' })
+    mocks.execa.mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: JSON.stringify({
+        type: 'item.completed',
+        item: { id: 'item_1', type: 'agent_message', text: 'chore: summarize large change' },
+      }),
+      stderr: '',
+    })
     const binaryPayload = 'A'.repeat(200_000)
     const patch = [
       'diff --git a/assets/icon.png b/assets/icon.png',
@@ -175,11 +251,11 @@ describe('commit message AI providers', () => {
       message: 'chore: summarize large change',
     })
 
-    const input = mocks.execa.mock.calls[0]![2].input as string
-    expect(input).toContain('[binary diff omitted: assets/icon.png]')
-    expect(input).toContain('diff --git a/src/example.ts b/src/example.ts')
-    expect(input).not.toContain(binaryPayload)
-    expect(input.length).toBeLessThan(130_000)
+    const prompt = mocks.execa.mock.calls[0]![1][2] as string
+    expect(prompt).toContain('[binary diff omitted: assets/icon.png]')
+    expect(prompt).toContain('diff --git a/src/example.ts b/src/example.ts')
+    expect(prompt).not.toContain(binaryPayload)
+    expect(prompt.length).toBeLessThan(130_000)
   })
 
   test('maps timeout and empty output to stable error keys', async () => {
@@ -205,6 +281,16 @@ describe('commit message AI providers', () => {
     await expect(generateCommitMessageFromPatch('claude', 'diff --git a/a b/a\n+hello\n')).resolves.toEqual({
       ok: false,
       message: 'not logged in',
+    })
+  })
+
+  test('returns provider stdout for non-timeout failures when stderr is empty', async () => {
+    mocks.execa.mockResolvedValueOnce({ exitCode: 1, stdout: 'Codex auth token expired', stderr: '' })
+    const { generateCommitMessageFromPatch } = await import('#/system/commit-message-ai.ts')
+
+    await expect(generateCommitMessageFromPatch('codex', 'diff --git a/a b/a\n+hello\n')).resolves.toEqual({
+      ok: false,
+      message: 'Codex auth token expired',
     })
   })
 })

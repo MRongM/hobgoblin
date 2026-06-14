@@ -13,14 +13,26 @@ const GENERATION_TIMEOUT_MS = 60_000
 const MAX_OUTPUT_LENGTH = 2_000
 const MAX_DIFF_PROMPT_LENGTH = 120_000
 
-const PROVIDER_COMMANDS: Record<CommitMessageProvider, { command: string; args: string[] }> = {
+type ProviderOutputMode = 'text' | 'codex-jsonl'
+
+interface ProviderCommand {
+  command: string
+  args: (prompt: string) => string[]
+  input?: (prompt: string) => string
+  outputMode: ProviderOutputMode
+}
+
+const PROVIDER_COMMANDS: Record<CommitMessageProvider, ProviderCommand> = {
   codex: {
     command: 'codex',
-    args: ['exec', '--ephemeral', '--sandbox', 'read-only', '--color', 'never', '-'],
+    args: (prompt) => ['exec', '--json', prompt],
+    outputMode: 'codex-jsonl',
   },
   claude: {
     command: 'claude',
-    args: ['--print', '--output-format', 'text', '--tools', '', '--no-session-persistence'],
+    args: () => ['--print', '--output-format', 'text', '--tools', '', '--no-session-persistence'],
+    input: (prompt) => prompt,
+    outputMode: 'text',
   },
 }
 
@@ -46,17 +58,32 @@ export async function generateCommitMessageFromPatch(
   const prompt = buildCommitMessagePrompt(patch)
 
   try {
-    return mapGenerationResult(await runGenerationCommand(command.command, command.args, prompt, options), options?.signal)
+    const result = await runGenerationCommand(command.command, command.args(prompt), command.input?.(prompt), options)
+    if (isCommandNotFound(result)) return await generateWithResolvedExecutable(provider, command, prompt, options)
+    return mapGenerationResult(result, command.outputMode, options?.signal)
   } catch (err) {
     if (isCommandNotFound(err)) {
-      const executable = await resolveProviderExecutable(provider, options?.signal, { skipDirect: true })
-      if (!executable) return { ok: false, message: 'error.commit-message-provider-unavailable' }
-      try {
-        return mapGenerationResult(await runGenerationCommand(executable, command.args, prompt, options), options?.signal)
-      } catch (fallbackErr) {
-        return mapGenerationError(fallbackErr, options?.signal)
-      }
+      return await generateWithResolvedExecutable(provider, command, prompt, options)
     }
+    return mapGenerationError(err, options?.signal)
+  }
+}
+
+async function generateWithResolvedExecutable(
+  provider: CommitMessageProvider,
+  command: ProviderCommand,
+  prompt: string,
+  options?: GenerateCommitMessageOptions,
+): Promise<CommitMessageGenerationResult> {
+  const executable = await resolveProviderExecutable(provider, options?.signal, { skipDirect: true })
+  if (!executable) return { ok: false, message: 'error.commit-message-provider-unavailable' }
+  try {
+    return mapGenerationResult(
+      await runGenerationCommand(executable, command.args(prompt), command.input?.(prompt), options),
+      command.outputMode,
+      options?.signal,
+    )
+  } catch (err) {
     return mapGenerationError(err, options?.signal)
   }
 }
@@ -64,14 +91,15 @@ export async function generateCommitMessageFromPatch(
 async function runGenerationCommand(
   executable: string,
   args: string[],
-  prompt: string,
+  input: string | undefined,
   options?: GenerateCommitMessageOptions,
 ) {
   const env = envForExecutable(executable)
   return await execa(executable, args, {
     ...(options?.cwd ? { cwd: options.cwd } : {}),
     ...(env ? { env } : {}),
-    input: prompt,
+    ...(input !== undefined ? { input } : {}),
+    ...(input === undefined ? { stdin: 'ignore' as const } : {}),
     timeout: GENERATION_TIMEOUT_MS,
     cancelSignal: options?.signal,
     forceKillAfterDelay: 500,
@@ -82,16 +110,20 @@ async function runGenerationCommand(
 
 function mapGenerationResult(
   result: Awaited<ReturnType<typeof runGenerationCommand>>,
+  outputMode: ProviderOutputMode,
   signal?: AbortSignal,
 ): CommitMessageGenerationResult {
   if (signal?.aborted || result.isCanceled) return { ok: false, message: 'cancelled' }
   if (result.timedOut) return { ok: false, message: 'error.commit-message-timeout' }
   if (result.exitCode !== 0) {
-    const failure = `${result.stderr ?? result.stdout ?? ''}`.trim()
+    const failure = `${result.stderr ?? ''}`.trim() || `${result.stdout ?? ''}`.trim()
     return { ok: false, message: failure || 'error.commit-message-failed' }
   }
 
-  const message = normalizeProviderOutput(result.stdout)
+  const message =
+    outputMode === 'codex-jsonl'
+      ? parseCodexJsonlMessage(result.stdout)
+      : normalizeProviderOutput(result.stdout)
   if (!message) return { ok: false, message: 'error.commit-message-empty-output' }
   return { ok: true, message }
 }
@@ -270,6 +302,37 @@ function normalizeProviderOutput(output: string): string {
   message = message.replace(/^commit message\s*:\s*/i, '').trim()
   message = message.replace(/^["'`]+|["'`]+$/g, '').trim()
   return message.slice(0, MAX_OUTPUT_LENGTH).trim()
+}
+
+function parseCodexJsonlMessage(output: string): string {
+  let lastMessage = ''
+  for (const line of output.split(/\r?\n/)) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(trimmed)
+    } catch {
+      continue
+    }
+
+    if (!isCodexAgentMessageEvent(parsed)) continue
+    const text = parsed.item.text.trim()
+    if (text) lastMessage = text
+  }
+  return normalizeProviderOutput(lastMessage)
+}
+
+function isCodexAgentMessageEvent(
+  value: unknown,
+): value is { type: 'item.completed'; item: { type: 'agent_message'; text: string } } {
+  if (typeof value !== 'object' || value === null) return false
+  const event = value as { type?: unknown; item?: unknown }
+  if (event.type !== 'item.completed') return false
+  if (typeof event.item !== 'object' || event.item === null) return false
+  const item = event.item as { type?: unknown; text?: unknown }
+  return item.type === 'agent_message' && typeof item.text === 'string'
 }
 
 function hasTruthyProperty(value: unknown, property: string): boolean {
