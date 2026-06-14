@@ -8,6 +8,7 @@ import {
   probeRepository,
 } from '#/web/repo-client.ts'
 import { resolveRemoteRepositoryTarget } from '#/web/remote-client.ts'
+import { stopPortForwardSessionsForRepo } from '#/web/port-forwarding-client.ts'
 import { recordRecentRepo } from '#/web/settings-write-paths.ts'
 import type { OpenRepoResult, ReposGet, ReposSet, ReposStore } from '#/web/stores/repos/types.ts'
 import { nextActiveRepoIdAfterWorkspaceClose } from '#/web/open-workspace-state.ts'
@@ -212,6 +213,9 @@ export function createRuntimeRepoLifecycleActions(set: ReposSet, get: ReposGet):
 
     closeRepo(id: string) {
       disposeRepoRuntime(id)
+      void stopPortForwardSessionsForRepo(id).catch(() => {
+        /* port-forward cleanup is best-effort; server shutdown also stops active forwards */
+      })
       // Tell main to abort any cancellable network op for this repo —
       // otherwise a `git push` started right before the user closed the
       // tab keeps running for up to the network timeout, charged to a

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { normalizeRemoteTarget, remoteRepoSessionEntry } from '#/shared/remote-repo.ts'
+import { emptyRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { BranchSnapshotInfo } from '#/web/types.ts'
 import {
@@ -10,6 +11,14 @@ import {
   REPO_B,
   resetLifecycleTest,
 } from '#/web/stores/repos/lifecycle-test-utils.ts'
+
+const mocks = vi.hoisted(() => ({
+  stopPortForwardSessionsForRepo: vi.fn(async () => ({ ok: true, stopped: [] })),
+}))
+
+vi.mock('#/web/port-forwarding-client.ts', () => ({
+  stopPortForwardSessionsForRepo: mocks.stopPortForwardSessionsForRepo,
+}))
 
 beforeEach(resetLifecycleTest)
 
@@ -139,5 +148,20 @@ describe('repo lifecycle', () => {
     expect(result).toEqual({ ok: true, id: target!.id })
     expect(useReposStore.getState().repos[target!.id]?.remote.target).toEqual(target)
     expect(calls.recent).toEqual([remoteRepoSessionEntry(target!)])
+  })
+
+  test('closeRepo requests port-forward cleanup for the closed repo', () => {
+    const repoId = 'ssh-config://prod/srv/repo'
+    useReposStore.setState({
+      repos: {
+        [repoId]: emptyRepo(repoId, 'prod:repo'),
+      },
+      order: [repoId],
+      activeId: repoId,
+    })
+
+    useReposStore.getState().closeRepo(repoId)
+
+    expect(mocks.stopPortForwardSessionsForRepo).toHaveBeenCalledWith(repoId)
   })
 })

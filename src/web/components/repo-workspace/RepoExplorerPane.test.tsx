@@ -29,6 +29,10 @@ vi.mock('#/web/components/repo-workspace/ProjectStatusPanel.tsx', () => ({
   ProjectStatusPanel: () => <div data-testid="project-status-panel" />,
 }))
 
+vi.mock('#/web/components/repo-workspace/ProjectPortsPanel.tsx', () => ({
+  ProjectPortsPanel: ({ repoId }: { repoId: string }) => <div data-testid="project-ports-panel" data-repo-id={repoId} />,
+}))
+
 vi.mock('#/web/components/SplitPane.tsx', () => ({
   SplitPane: ({ before, after, orientation }: { before: React.ReactNode; after: React.ReactNode; orientation: string }) => (
     <div data-testid="split-pane" data-orientation={orientation}>
@@ -75,7 +79,7 @@ describe('RepoExplorerPane', () => {
     await act(async () => root.unmount())
   })
 
-  test('switches the explorer area between file, changes, and status tabs', async () => {
+  test('switches the explorer area between file, changes, status, and ports tabs', async () => {
     const container = document.createElement('div')
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -84,7 +88,7 @@ describe('RepoExplorerPane', () => {
     })
 
     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['file-tree.title', 'tab.changes', 'tab.status'])
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['file-tree.title', 'tab.changes', 'tab.status', 'ports.title'])
     expect(container.querySelector('[data-testid="project-file-tree"]')).toBeTruthy()
 
     await act(async () => {
@@ -101,6 +105,15 @@ describe('RepoExplorerPane', () => {
     expect(container.querySelector('[data-testid="project-file-tree"]')).toBeNull()
     expect(container.querySelector('[data-testid="project-changes-panel"]')).toBeNull()
     expect(container.querySelector('[data-testid="project-status-panel"]')).toBeTruthy()
+
+    await act(async () => {
+      tabs[3]?.click()
+    })
+
+    expect(container.querySelector('[data-testid="project-file-tree"]')).toBeNull()
+    expect(container.querySelector('[data-testid="project-changes-panel"]')).toBeNull()
+    expect(container.querySelector('[data-testid="project-status-panel"]')).toBeNull()
+    expect(container.querySelector('[data-testid="project-ports-panel"]')?.getAttribute('data-repo-id')).toBe('/repo')
     await act(async () => root.unmount())
   })
 

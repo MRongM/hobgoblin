@@ -4,6 +4,7 @@ import type { ServerTerminalHost } from '#/server/terminal/terminal-host.ts'
 const mocks = vi.hoisted(() => ({
   createApp: vi.fn(() => ({ fetch: vi.fn() })),
   stopBackgroundSync: vi.fn(),
+  shutdownPortForwarding: vi.fn(),
   workerHostCtor: vi.fn(),
 }))
 
@@ -13,6 +14,10 @@ vi.mock('#/server/app-factory.ts', () => ({
 
 vi.mock('#/server/modules/background-sync.ts', () => ({
   stopBackgroundSync: mocks.stopBackgroundSync,
+}))
+
+vi.mock('#/server/modules/port-forwarding.ts', () => ({
+  shutdownPortForwarding: mocks.shutdownPortForwarding,
 }))
 
 vi.mock('#/server/terminal/terminal-worker-host.ts', () => ({
@@ -91,7 +96,7 @@ describe('server runtime', () => {
     })
   })
 
-  test('shutdown is idempotent and stops background sync before terminal host teardown', async () => {
+  test('shutdown is idempotent and stops background sync, port forwarding, and terminal host teardown', async () => {
     const { createServerRuntime } = await import('#/server/runtime.ts')
     const events: string[] = []
     const terminalHost = {
@@ -101,6 +106,9 @@ describe('server runtime', () => {
     } as unknown as ServerTerminalHost
     mocks.stopBackgroundSync.mockImplementation(() => {
       events.push('background-sync')
+    })
+    mocks.shutdownPortForwarding.mockImplementation(() => {
+      events.push('port-forwarding')
     })
 
     const runtime = createServerRuntime({
@@ -114,7 +122,8 @@ describe('server runtime', () => {
     runtime.shutdown()
 
     expect(mocks.stopBackgroundSync).toHaveBeenCalledTimes(1)
+    expect(mocks.shutdownPortForwarding).toHaveBeenCalledTimes(1)
     expect(terminalHost.shutdown).toHaveBeenCalledTimes(1)
-    expect(events).toEqual(['background-sync', 'terminal'])
+    expect(events).toEqual(['background-sync', 'port-forwarding', 'terminal'])
   })
 })

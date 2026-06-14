@@ -4,6 +4,7 @@ import { BranchList } from '#/web/components/BranchList.tsx'
 import { SplitPane } from '#/web/components/SplitPane.tsx'
 import { ProjectFileTree } from '#/web/components/file-tree/ProjectFileTree.tsx'
 import { ProjectChangesPanel } from '#/web/components/repo-workspace/ProjectChangesPanel.tsx'
+import { ProjectPortsPanel } from '#/web/components/repo-workspace/ProjectPortsPanel.tsx'
 import { ProjectStatusPanel } from '#/web/components/repo-workspace/ProjectStatusPanel.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
@@ -13,7 +14,7 @@ import { Badge } from '#/web/components/ui/badge.tsx'
 import { useT } from '#/web/stores/i18n.ts'
 import { cn } from '#/web/lib/cn.ts'
 
-type ExplorerTab = 'files' | 'changes' | 'status'
+type ExplorerTab = 'files' | 'changes' | 'status' | 'ports'
 
 export interface FileTreeRevealRequest {
   id: number
@@ -99,6 +100,7 @@ function ExplorerTabs({
     { id: 'files' as const, label: t('file-tree.title') },
     { id: 'changes' as const, label: t('tab.changes') },
     { id: 'status' as const, label: t('tab.status') },
+    { id: 'ports' as const, label: t('ports.title') },
   ]
 
   function handleRevealPath(relativePath: string) {
@@ -155,8 +157,10 @@ function ExplorerTabs({
           <ProjectFileTree repoId={repoId} revealRequest={revealRequest} />
         ) : activeTab === 'changes' ? (
           <ProjectChangesPanel repoId={repoId} onRevealPath={handleRevealPath} />
-        ) : (
+        ) : activeTab === 'status' ? (
           <ProjectStatusPanel repoId={repoId} layout={layout} />
+        ) : (
+          <ProjectPortsPanel repoId={repoId} />
         )}
       </div>
     </section>
