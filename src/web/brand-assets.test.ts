@@ -22,12 +22,18 @@ describe('brand assets', () => {
     expect(svg).toContain('>Hobgoblin full-bleed dark terminal branch icon</title>')
     expect(svg).toContain('data-direction="b1-dark-terminal"')
     expect(svg).toContain('data-edge="terminal-full-bleed"')
+    expect(svg).toContain('data-window-controls="none"')
+    expect(svg).toContain('data-foreground-scale="0.85"')
+    expect(svg).toContain('data-foreground-shift="-26,-36"')
+    expect(svg).toContain('data-branch-shift-y="72"')
     expect(svg).toContain('id="terminal-window"')
     expect(svg).toContain('id="prompt-glyph"')
     expect(svg).toContain('id="terminal-baseline"')
     expect(svg).toContain('id="branch-path"')
     expect(svg).not.toContain('id="tile-gradient"')
     expect(svg).not.toContain('fill="url(#tile-gradient)"')
+    expect(svg).not.toContain('#ef4444')
+    expect(svg).not.toContain('#f59e0b')
   })
 
   test('keeps published PNG icon assets at 1024px square', () => {
@@ -48,6 +54,7 @@ describe('brand assets', () => {
       expect(readPixel(png, 1023, 0)).toEqual(expect.objectContaining({ transparent: true }))
       expect(readPixel(png, 0, 1023)).toEqual(expect.objectContaining({ transparent: true }))
       expect(readPixel(png, 1023, 1023)).toEqual(expect.objectContaining({ transparent: true }))
+      expect(readForegroundBounds(png)).toEqual(expect.objectContaining({ wide: true, tall: true, compact: true }))
     }
   })
 })
@@ -73,5 +80,40 @@ function readPixel(
     dark: rgba[0] < 64 && rgba[1] < 80 && rgba[2] < 110 && rgba[3] === 255,
     transparent: rgba[3] === 0,
     rgba,
+  }
+}
+
+function readForegroundBounds(png: { width: number; height: number; data: Uint8Array }): {
+  wide: boolean
+  tall: boolean
+  compact: boolean
+  bounds: { width: number; height: number }
+} {
+  let minX = png.width
+  let minY = png.height
+  let maxX = -1
+  let maxY = -1
+  for (let y = 0; y < png.height; y += 1) {
+    for (let x = 0; x < png.width; x += 1) {
+      const offset = (y * png.width + x) * 4
+      const r = png.data[offset] ?? 0
+      const g = png.data[offset + 1] ?? 0
+      const b = png.data[offset + 2] ?? 0
+      const a = png.data[offset + 3] ?? 0
+      const isBackground = r < 30 && g < 40 && b < 70
+      if (a === 0 || isBackground) continue
+      minX = Math.min(minX, x)
+      minY = Math.min(minY, y)
+      maxX = Math.max(maxX, x)
+      maxY = Math.max(maxY, y)
+    }
+  }
+  const width = maxX - minX + 1
+  const height = maxY - minY + 1
+  return {
+    wide: width >= 780,
+    tall: height >= 600,
+    compact: width <= 830 && height <= 650,
+    bounds: { width, height },
   }
 }

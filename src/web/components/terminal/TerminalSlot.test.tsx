@@ -347,7 +347,7 @@ describe('TerminalSlot', () => {
           files: [],
           getData: (type: string) =>
             type === GOBLIN_FILE_PATHS_MIME
-              ? serializeGoblinFilePathDragPayload(['/repo/a file.ts', '/repo/b.ts'])
+              ? serializeGoblinFilePathDragPayload(['/worktree/a file.ts', '/worktree/b.ts'])
               : '',
         },
       })
@@ -355,7 +355,7 @@ describe('TerminalSlot', () => {
         container.querySelector('.goblin-terminal-slot')?.dispatchEvent(event)
       })
 
-      expect(writeInput).toHaveBeenCalledWith('terminal-1', "'/repo/a file.ts' /repo/b.ts")
+      expect(writeInput).toHaveBeenCalledWith('terminal-1', "'a file.ts' b.ts")
     } finally {
       await act(async () => root.unmount())
       container.remove()
