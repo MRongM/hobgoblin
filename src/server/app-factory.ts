@@ -7,6 +7,7 @@ import { cors } from 'hono/cors'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { createInternalAuthMiddleware } from '#/server/common/auth.ts'
 import { createHealthRoutes } from '#/server/routes/health.ts'
+import { createPortForwardingRoutes } from '#/server/routes/port-forwarding.ts'
 import { createRemoteRoutes } from '#/server/routes/remote.ts'
 import { createRealtimeRoutes } from '#/server/routes/realtime.ts'
 import { createRepoRoutes } from '#/server/routes/repo.ts'
@@ -106,9 +107,11 @@ export function createApp(options: ServerAppOptions): Hono {
   app.use('/api/settings/*', createInternalAuthMiddleware(options.internalSecret))
   app.use('/api/remote/*', createInternalAuthMiddleware(options.internalSecret))
   app.use('/api/repo/*', createInternalAuthMiddleware(options.internalSecret))
+  app.use('/api/port-forwarding/*', createInternalAuthMiddleware(options.internalSecret))
   app.route('/api/settings', createSettingsRoutes(settingsState))
   app.route('/api/remote', createRemoteRoutes())
   app.route('/api/repo', createRepoRoutes())
+  app.route('/api/port-forwarding', createPortForwardingRoutes())
   app.route('/ws', createRealtimeRoutes({ internalSecret: options.internalSecret, terminalHost: options.terminalHost }))
   app.get('/', async (c) => {
     try {

@@ -1,6 +1,7 @@
 import type { Hono } from 'hono'
 import { createApp, type ServerAppOptions } from '#/server/app-factory.ts'
 import { stopBackgroundSync } from '#/server/modules/background-sync.ts'
+import { shutdownPortForwarding } from '#/server/modules/port-forwarding.ts'
 import type { ServerTerminalHost } from '#/server/terminal/terminal-host.ts'
 import { WorkerBackedTerminalHost } from '#/server/terminal/terminal-worker-host.ts'
 
@@ -27,6 +28,7 @@ export function createServerRuntime(options: ServerRuntimeOptions): ServerRuntim
       if (stopped) return
       stopped = true
       stopBackgroundSync()
+      shutdownPortForwarding()
       terminalHost.shutdown()
     },
   }
