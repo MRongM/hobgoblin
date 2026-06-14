@@ -1,11 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title" data-direction="b1-dark-terminal" data-edge="terminal-full-bleed">
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title" data-direction="b1-dark-terminal" data-edge="terminal-full-bleed" data-window-controls="none" data-foreground-scale="0.85" data-foreground-shift="-26,-36" data-branch-shift-y="72">
   <title id="title">Hobgoblin full-bleed dark terminal branch icon</title>
   <defs>
     <linearGradient id="terminal-gradient" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
       <stop stop-color="#111827" />
       <stop offset="1" stop-color="#020617" />
     </linearGradient>
-    <linearGradient id="branch-gradient" x1="630" y1="322" x2="854" y2="714" gradientUnits="userSpaceOnUse">
+    <linearGradient id="branch-gradient" x1="650" y1="310" x2="926" y2="820" gradientUnits="userSpaceOnUse">
       <stop stop-color="#38bdf8" />
       <stop offset="1" stop-color="#22c55e" />
     </linearGradient>
@@ -15,22 +15,21 @@
 
   <g id="terminal-window">
     <rect width="1024" height="1024" rx="232" fill="url(#terminal-gradient)" />
-    <circle cx="128" cy="136" r="24" fill="#ef4444" />
-    <circle cx="208" cy="136" r="24" fill="#f59e0b" />
-    <circle cx="288" cy="136" r="24" fill="#22c55e" />
   </g>
 
-  <g id="prompt-glyph">
-    <path d="M210 382l160 160-160 160" fill="none" stroke="#f8fafc" stroke-width="88" stroke-linecap="round" stroke-linejoin="round" />
-  </g>
+  <g id="foreground-mark" transform="translate(-26 -36) translate(512 512) scale(0.85) translate(-512 -512)">
+    <g id="prompt-glyph">
+      <path d="M148 332l274 274-274 274" fill="none" stroke="#f8fafc" stroke-width="118" stroke-linecap="round" stroke-linejoin="round" />
+    </g>
 
-  <path id="terminal-baseline" d="M484 690h236" fill="none" stroke="#cbd5e1" stroke-width="70" stroke-linecap="round" />
+    <path id="terminal-baseline" d="M502 760h292" fill="none" stroke="#cbd5e1" stroke-width="86" stroke-linecap="round" />
 
-  <g id="branch-path">
-    <path d="M640 312v196c0 128 88 214 226 214" fill="none" stroke="url(#branch-gradient)" stroke-width="64" stroke-linecap="round" stroke-linejoin="round" />
-    <circle cx="640" cy="312" r="70" fill="#38bdf8" />
-    <circle cx="640" cy="312" r="32" fill="#dbeafe" />
-    <circle cx="866" cy="722" r="70" fill="#22c55e" />
-    <circle cx="866" cy="722" r="32" fill="#dcfce7" />
+    <g id="branch-path" transform="translate(0 72)">
+      <path d="M650 238v300c0 146 102 222 276 222" fill="none" stroke="url(#branch-gradient)" stroke-width="76" stroke-linecap="round" stroke-linejoin="round" />
+      <circle cx="650" cy="238" r="94" fill="#38bdf8" />
+      <circle cx="650" cy="238" r="42" fill="#dbeafe" />
+      <circle cx="926" cy="760" r="94" fill="#22c55e" />
+      <circle cx="926" cy="760" r="42" fill="#dcfce7" />
+    </g>
   </g>
 </svg>

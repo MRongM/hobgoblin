@@ -178,12 +178,12 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
       event.preventDefault()
       setDragOver(false)
       if (!key) return
-      const paths = pathsForDrop(event)
+      const paths = pathsForDrop(event, worktreePath)
       if (paths.length === 0) return
       const escaped = paths.map(shellEscapePath).join(' ')
       writeInput(key, escaped)
     },
-    [key, writeInput],
+    [key, worktreePath, writeInput],
   )
 
   const progress = snapshot.progress
@@ -345,11 +345,25 @@ function hasPathDrop(event: DragEvent<HTMLDivElement>): boolean {
   return event.dataTransfer.types.includes(GOBLIN_FILE_PATHS_MIME) || event.dataTransfer.types.includes('Files')
 }
 
-function pathsForDrop(event: DragEvent<HTMLDivElement>): string[] {
+function pathsForDrop(event: DragEvent<HTMLDivElement>, worktreePath: string): string[] {
   if (event.dataTransfer.types.includes(GOBLIN_FILE_PATHS_MIME)) {
-    return parseGoblinFilePathDragPayload(event.dataTransfer.getData(GOBLIN_FILE_PATHS_MIME))
+    return parseGoblinFilePathDragPayload(event.dataTransfer.getData(GOBLIN_FILE_PATHS_MIME)).map((path) =>
+      pathForTerminalDrop(path, worktreePath),
+    )
   }
   return Array.from(event.dataTransfer.files)
     .map((file) => pathForDroppedFile(file))
     .filter((path) => path.length > 0)
+}
+
+function pathForTerminalDrop(path: string, worktreePath: string): string {
+  const root = stripTrailingPathSeparators(worktreePath)
+  if (!root) return path
+  if (path === root) return '.'
+  const prefix = `${root}/`
+  return path.startsWith(prefix) ? path.slice(prefix.length) : path
+}
+
+function stripTrailingPathSeparators(path: string): string {
+  return path.replace(/[\\/]+$/u, '')
 }
