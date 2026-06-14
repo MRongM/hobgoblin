@@ -44,6 +44,8 @@ export type RemoteCommandKind =
   | { type: 'gitPullCurrent'; path: string }
   | { type: 'gitCommitAll'; path: string; message: string }
   | { type: 'gitMerge'; path: string; branch: string }
+  | { type: 'gitBranchCreate'; path: string; branch: string; baseBranch: string }
+  | { type: 'gitBranchTrackRemote'; path: string; localBranch: string; remoteRef: string }
   | { type: 'gitFetchBranch'; path: string; remote: string; remoteBranch: string; branch: string }
   | { type: 'gitPush'; path: string; remote: string; branch: string; targetBranch: string; setUpstream: boolean }
   | { type: 'gitRemoteBranches'; path: string }
@@ -305,6 +307,10 @@ function scriptForCommand(command: RemoteCommandKind): string {
       ].join(' && ')
     case 'gitMerge':
       return `git -C ${shellQuote(command.path)} merge -- ${shellQuote(command.branch)}`
+    case 'gitBranchCreate':
+      return `git -C ${shellQuote(command.path)} branch -- ${shellQuote(command.branch)} ${shellQuote(command.baseBranch)}`
+    case 'gitBranchTrackRemote':
+      return `git -C ${shellQuote(command.path)} branch --track -- ${shellQuote(command.localBranch)} ${shellQuote(command.remoteRef)}`
     case 'gitFetchBranch':
       return `git -C ${shellQuote(command.path)} fetch -- ${shellQuote(command.remote)} ${shellQuote(
         `${command.remoteBranch}:${command.branch}`,

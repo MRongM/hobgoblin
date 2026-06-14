@@ -5,6 +5,8 @@ export type RepoBranchAction =
   | { kind: 'pull'; branch: string; worktreePath?: string }
   | { kind: 'push'; branch: string }
   | { kind: 'createWorktree'; input: CreateWorktreeInput }
+  | { kind: 'createBranch'; branch: string; baseBranch: string }
+  | { kind: 'trackRemoteBranch'; localBranch: string; remoteRef: string }
   | { kind: 'deleteBranch'; branch: string; force?: boolean; alsoDeleteUpstream?: boolean }
   | {
       kind: 'removeWorktree'
