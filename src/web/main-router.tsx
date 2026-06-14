@@ -42,6 +42,12 @@ const settingsGeneralRoute = createRoute({
   component: SettingsGeneralRoute,
 })
 
+const settingsTerminalRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings/terminal',
+  component: SettingsTerminalRoute,
+})
+
 const settingsShortcutsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/shortcuts',
@@ -100,6 +106,7 @@ const mainRouteTree = rootRoute.addChildren([
   workspaceRoute,
   settingsIndexRoute,
   settingsGeneralRoute,
+  settingsTerminalRoute,
   settingsShortcutsRoute,
   settingsNotificationsRoute,
   settingsSshRoute,
@@ -135,6 +142,10 @@ function WorkspaceRoute() {
 
 function SettingsGeneralRoute() {
   return <SettingsRoutePage settingsPage="general" />
+}
+
+function SettingsTerminalRoute() {
+  return <SettingsRoutePage settingsPage="terminal" />
 }
 
 function SettingsShortcutsRoute() {

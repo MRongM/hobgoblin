@@ -113,6 +113,10 @@
   background: var(--goblin-terminal-background, var(--color-terminal-background)) !important;
 }
 
+.goblin-terminal-slot:has(.goblin-terminal-custom-buttons) .goblin-managed-terminal-frame {
+  padding-bottom: 48px;
+}
+
 .goblin-terminal-slot__search {
   display: flex;
   max-width: calc(100% - 20px);
@@ -192,6 +196,35 @@
   color: var(--color-muted-foreground);
   font-size: 12px;
   font-weight: 500;
+}
+
+.goblin-terminal-custom-buttons {
+  position: absolute;
+  right: var(--goblin-terminal-overlay-offset);
+  bottom: var(--goblin-terminal-overlay-offset);
+  left: var(--goblin-terminal-overlay-offset);
+  z-index: 2;
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--goblin-terminal-float-radius);
+  background: color-mix(in srgb, var(--color-popover) 94%, transparent);
+  padding: 5px;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.goblin-terminal-custom-buttons__button {
+  max-width: 180px;
+  min-width: 0;
+  flex: 0 0 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .goblin-terminal-slot__host--hidden {

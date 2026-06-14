@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   getRemoteInfo: vi.fn(),
   getRemoteTrackingBranches: vi.fn(),
   getUpstream: vi.fn(),
+  getWorktreePatch: vi.fn(),
   getWorktrees: vi.fn(),
   isAncestor: vi.fn(),
   fetchAll: vi.fn(),
@@ -47,6 +48,8 @@ const mocks = vi.hoisted(() => ({
   runServerCancellable: vi.fn(),
   setBackgroundSyncRepos: vi.fn(),
   publishRepoQueryInvalidation: vi.fn(),
+  probeCommitMessageProviders: vi.fn(),
+  generateCommitMessageFromPatch: vi.fn(),
 }))
 
 vi.mock('#/system/git/branches.ts', () => ({
@@ -69,6 +72,15 @@ vi.mock('#/system/git/helper.ts', () => ({
 
 vi.mock('#/system/git/commit.ts', () => ({
   commitAllChanges: mocks.commitAllChanges,
+}))
+
+vi.mock('#/system/git/patch.ts', () => ({
+  getWorktreePatch: mocks.getWorktreePatch,
+}))
+
+vi.mock('#/system/commit-message-ai.ts', () => ({
+  probeCommitMessageProviders: mocks.probeCommitMessageProviders,
+  generateCommitMessageFromPatch: mocks.generateCommitMessageFromPatch,
 }))
 
 vi.mock('#/system/git/merge.ts', () => ({
@@ -209,10 +221,13 @@ beforeEach(() => {
   mocks.getRepoName.mockResolvedValue('repo')
   mocks.getRepoRoot.mockResolvedValue('/tmp/repo')
   mocks.getWorktrees.mockResolvedValue([])
+  mocks.getWorktreePatch.mockResolvedValue('diff --git a/a b/a\n+hello\n')
   mocks.getRemoteTrackingBranches.mockResolvedValue([])
   mocks.getDefaultBranch.mockResolvedValue('main')
   mocks.getUpstream.mockResolvedValue(null)
   mocks.isAncestor.mockResolvedValue(true)
+  mocks.probeCommitMessageProviders.mockResolvedValue({ codex: true, claude: false })
+  mocks.generateCommitMessageFromPatch.mockResolvedValue({ ok: true, message: 'feat: generated message' })
 })
 
 afterEach(() => {
@@ -299,6 +314,50 @@ describe('getRepositoryPullRequests', () => {
       { branch: 'feature/b', pullRequest: pullRequest(4) },
     ])
     expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
+  })
+})
+
+describe('commit message AI read paths', () => {
+  test('probes commit message provider availability without publishing invalidation', async () => {
+    mocks.probeCommitMessageProviders.mockResolvedValueOnce({ codex: true, claude: true })
+    const { getCommitMessageProviders } = await import('#/server/modules/repo-read-paths.ts')
+
+    await expect(getCommitMessageProviders()).resolves.toEqual({ codex: true, claude: true })
+    expect(mocks.probeCommitMessageProviders).toHaveBeenCalledWith(undefined)
+    expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
+  })
+
+  test('generates commit messages from the current local worktree patch', async () => {
+    mocks.getWorktrees.mockResolvedValueOnce([
+      { path: '/tmp/repo', branch: 'main', isBare: false, isPrimary: true, isDirty: true, changeCount: 1 },
+    ])
+    mocks.getWorktreePatch.mockResolvedValueOnce('diff --git a/a b/a\n+hello\n')
+
+    const { generateRepositoryCommitMessage } = await import('#/server/modules/repo-read-paths.ts')
+    await expect(generateRepositoryCommitMessage('/tmp/repo', '/tmp/repo', 'codex')).resolves.toEqual({
+      ok: true,
+      message: 'feat: generated message',
+    })
+
+    expect(mocks.getWorktreePatch).toHaveBeenCalledWith('/tmp/repo', { signal: undefined })
+    expect(mocks.generateCommitMessageFromPatch).toHaveBeenCalledWith(
+      'codex',
+      'diff --git a/a b/a\n+hello\n',
+      { cwd: '/tmp/repo', signal: undefined },
+    )
+    expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
+  })
+
+  test('rejects unknown commit message providers before reading the patch', async () => {
+    const { generateRepositoryCommitMessage } = await import('#/server/modules/repo-read-paths.ts')
+
+    await expect(generateRepositoryCommitMessage('/tmp/repo', '/tmp/repo', 'unknown')).resolves.toEqual({
+      ok: false,
+      message: 'error.commit-message-provider-unavailable',
+    })
+
+    expect(mocks.getWorktreePatch).not.toHaveBeenCalled()
+    expect(mocks.generateCommitMessageFromPatch).not.toHaveBeenCalled()
   })
 })
 

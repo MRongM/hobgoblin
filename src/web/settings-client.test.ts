@@ -89,6 +89,7 @@ describe('settings-client', () => {
           globalShortcutRegistered: false,
           terminalApp: 'auto',
           editorApp: 'auto',
+          terminalCustomButtons: [],
           lanEnabled: false,
           session: {
             openRepos: [],
@@ -126,6 +127,7 @@ describe('settings-client', () => {
           globalShortcut: 'CommandOrControl+Shift+G',
           terminalApp: 'auto',
           editorApp: 'auto',
+          terminalCustomButtons: [],
           lanEnabled: false,
         },
       }),
@@ -247,6 +249,7 @@ describe('settings-client', () => {
             globalShortcut: 'CommandOrControl+Shift+G',
             terminalApp: 'auto',
             editorApp: 'auto',
+            terminalCustomButtons: [],
             lanEnabled: false,
           },
           i18n: { lang: 'ja', pref: 'ja', dict: { hello: 'こんにちは' } },
@@ -413,6 +416,7 @@ describe('settings-client', () => {
           globalShortcut: 'CommandOrControl+Shift+G',
           terminalApp: 'ghostty',
           editorApp: 'auto',
+          terminalCustomButtons: [],
           lanEnabled: false,
         },
         externalApps: {
@@ -465,6 +469,7 @@ describe('settings-client', () => {
           globalShortcut: 'CommandOrControl+Shift+G',
           terminalApp: 'auto',
           editorApp: 'cursor',
+          terminalCustomButtons: [],
           lanEnabled: false,
         },
         externalApps: {

@@ -40,6 +40,7 @@ function settingsPrefs(overrides: Partial<SettingsPrefs> = {}): SettingsPrefs {
     globalShortcut: '',
     terminalApp: 'auto',
     editorApp: 'auto',
+    terminalCustomButtons: [],
     lanEnabled: false,
     ...overrides,
   }

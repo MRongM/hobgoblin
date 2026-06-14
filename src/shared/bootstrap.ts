@@ -1,4 +1,4 @@
-import type { EditorPref, I18nSnapshot, TerminalPref } from '#/shared/rpc.ts'
+import type { EditorPref, I18nSnapshot, TerminalCustomButton, TerminalPref } from '#/shared/rpc.ts'
 
 export type RendererRuntimeKind = 'electron' | 'web'
 export type RendererNativeCapability =
@@ -35,6 +35,7 @@ export interface InitialSettingsSnapshot {
   globalShortcutRegistered: boolean
   terminalApp: TerminalPref
   editorApp: EditorPref
+  terminalCustomButtons: TerminalCustomButton[]
   lanEnabled: boolean
 }
 

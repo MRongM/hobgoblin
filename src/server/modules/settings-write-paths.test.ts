@@ -55,6 +55,7 @@ describe('settings write paths', () => {
       globalShortcut: 'CommandOrControl+Shift+G',
       terminalApp: 'auto',
       editorApp: 'auto',
+      terminalCustomButtons: [],
       lanEnabled: false,
     } as const
     const i18nSnapshot = resolveI18nSnapshot('ja', 'ja-JP,ja;q=0.9,en;q=0.8')
@@ -89,6 +90,7 @@ describe('settings write paths', () => {
       globalShortcut: 'CommandOrControl+Shift+G',
       terminalApp: 'ghostty',
       editorApp: 'cursor',
+      terminalCustomButtons: [],
       lanEnabled: false,
     } as const
     const externalApps = {

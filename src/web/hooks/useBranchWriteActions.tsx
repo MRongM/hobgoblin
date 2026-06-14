@@ -131,6 +131,8 @@ export function useBranchWriteActions(repo: BranchActionRepo, branch: RepoBranch
       />
       <CommitDialog
         open={commitDialog.open}
+        repoId={repo.id}
+        worktreePath={worktreePath ?? ''}
         onClose={commitDialog.close}
         onCommit={handleCommit}
       />

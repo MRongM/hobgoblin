@@ -1,4 +1,15 @@
-export const SETTINGS_PAGES = ['general', 'shortcuts', 'notifications', 'ssh', 'sync', 'apps', 'github', 'lan', 'about'] as const
+export const SETTINGS_PAGES = [
+  'general',
+  'terminal',
+  'shortcuts',
+  'notifications',
+  'ssh',
+  'sync',
+  'apps',
+  'github',
+  'lan',
+  'about',
+] as const
 
 export type SettingsPage = (typeof SETTINGS_PAGES)[number]
 
@@ -8,6 +19,7 @@ export function isSettingsPage(value: string | null | undefined): value is Setti
 
 export const SETTINGS_PAGE_CONFIG = {
   general: { titleKey: 'settings.group.general', labelKey: 'settings.group.general' },
+  terminal: { titleKey: 'settings.terminal-custom-buttons.title', labelKey: 'settings.nav.terminal' },
   shortcuts: { titleKey: 'settings.shortcuts', labelKey: 'settings.nav.shortcuts' },
   notifications: { titleKey: 'settings.nav.notifications', labelKey: 'settings.nav.notifications' },
   ssh: { titleKey: 'settings.ssh.title', labelKey: 'settings.nav.ssh' },

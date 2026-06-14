@@ -23,6 +23,7 @@ import {
 } from '#/web/components/terminal/terminal-session-store.ts'
 import { MobileTerminalToolbar } from '#/web/components/terminal/mobile-terminal-toolbar.tsx'
 import { isMobileDevice } from '#/web/components/terminal/mobile-detection.ts'
+import { useRuntimeTerminalCustomButtons } from '#/web/runtime-settings-terminal-buttons.ts'
 interface TerminalSlotProps {
   repoRoot: string
   branch: string
@@ -55,6 +56,7 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
   const key = descriptor?.key ?? null
   const snapshot = useTerminalSnapshot(key)
   const hasSessions = useWorktreeTerminalCount(terminalWorktreeKey) > 0
+  const terminalCustomButtons = useRuntimeTerminalCustomButtons()
 
   useLayoutEffect(() => {
     const host = hostRef.current
@@ -190,6 +192,9 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
   const attachment = snapshot.attachment
   const isController = hasSessions && snapshot.phase === 'open' && attachment?.role === 'controller'
   const isReadonly = hasSessions && snapshot.phase === 'open' && (attachment?.role === 'viewer' || attachment?.role === 'unowned')
+  const visibleCustomButtons = isController
+    ? terminalCustomButtons.filter((button) => button.label.trim() && button.value.trim())
+    : []
   const readonlyBadge = attachment?.role === 'viewer' ? t('terminal.mirror-controlled') : t('terminal.unowned')
   const progressVariant =
     progress?.state === 2 ? 'error' : progress?.state === 4 ? 'warning' : progress?.state === 3 ? 'indeterminate' : ''
@@ -259,6 +264,23 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
           />
         )}
       </div>
+      {key && visibleCustomButtons.length > 0 && (
+        <div className="goblin-terminal-custom-buttons" aria-label={t('terminal.custom-buttons')}>
+          {visibleCustomButtons.map((button, index) => (
+            <Button
+              key={`${index}:${button.label}:${button.value}`}
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="goblin-terminal-custom-buttons__button"
+              title={button.value}
+              onClick={() => writeInput(key, `${button.value}\r`)}
+            >
+              {button.label}
+            </Button>
+          ))}
+        </div>
+      )}
       {isReadonly && (
         <ViewerOverlay
           badge={readonlyBadge}

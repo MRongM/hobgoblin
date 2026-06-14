@@ -39,6 +39,8 @@ beforeEach(() => {
     globalShortcut: 'CommandOrControl+Shift+G',
     terminalApp: 'auto',
     editorApp: 'vscode',
+    terminalCustomButtons: [],
+    lanEnabled: false,
   })
   mocks.resolveRemoteTarget.mockResolvedValue({
     target: {

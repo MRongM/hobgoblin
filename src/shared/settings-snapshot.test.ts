@@ -25,6 +25,7 @@ describe('settings snapshot partitions', () => {
           globalShortcut: 'CommandOrControl+Shift+K',
           terminalApp: 'ghostty',
           editorApp: 'cursor',
+          terminalCustomButtons: [{ label: 'status', value: 'git status --short' }],
           lanEnabled: true,
         },
         globalShortcutRegistered: true,
@@ -43,6 +44,7 @@ describe('settings snapshot partitions', () => {
       globalShortcutRegistered: true,
       terminalApp: 'ghostty',
       editorApp: 'cursor',
+      terminalCustomButtons: [{ label: 'status', value: 'git status --short' }],
       lanEnabled: true,
     })
   })
@@ -72,6 +74,7 @@ describe('settings snapshot partitions', () => {
         globalShortcut: 'CommandOrControl+Shift+G',
         terminalApp: 'auto',
         editorApp: 'auto',
+        terminalCustomButtons: [{ label: 'status', value: 'git status --short' }],
         lanEnabled: false,
       },
       globalShortcutRegistered: false,
@@ -89,6 +92,7 @@ describe('settings snapshot partitions', () => {
 
     expect(runtimeSettingsSnapshotFromSettingsSnapshot(snapshot)).toMatchObject({
       globalShortcutRegistered: false,
+      terminalCustomButtons: [{ label: 'status', value: 'git status --short' }],
     })
     expect(runtimeRecentReposStateFromSettingsSnapshot(snapshot)).toEqual({
       recentRepos: [{ kind: 'local', id: '/tmp/repo-b' }],

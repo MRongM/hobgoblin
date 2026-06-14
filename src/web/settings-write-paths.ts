@@ -4,6 +4,7 @@ import type {
   EditorPref,
   GlobalShortcutState,
   SessionState,
+  TerminalCustomButton,
   TerminalAppState,
   TerminalPref,
 } from '#/shared/rpc.ts'
@@ -21,6 +22,7 @@ import {
   setSettingsFetchInterval,
   setShortcutsDisabled,
   setSwapCloseShortcuts,
+  setTerminalCustomButtons,
   setTerminalNotificationsEnabled,
   setToggleDetailOnActionBarBlankClick,
 } from '#/web/settings-client.ts'
@@ -106,6 +108,14 @@ export async function setEditorAppPreference(pref: EditorPref): Promise<EditorAp
   updateExternalAppsCache(mainWindowQueryClient, (current) => ({ ...current, editor: state }))
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, editorApp: state.pref }))
   return state
+}
+
+export async function setTerminalCustomButtonsPreference(
+  buttons: TerminalCustomButton[],
+): Promise<TerminalCustomButton[]> {
+  const terminalCustomButtons = await setTerminalCustomButtons(buttons)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, terminalCustomButtons }))
+  return terminalCustomButtons
 }
 
 export async function refreshExternalAppsDetection(): Promise<void> {

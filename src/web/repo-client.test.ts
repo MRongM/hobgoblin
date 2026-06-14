@@ -236,6 +236,49 @@ describe('repo-client', () => {
     )
   })
 
+  test('requests commit message provider availability', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ codex: true, claude: false }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { getCommitMessageProviders } = await import('#/web/repo-client.ts')
+    await expect(getCommitMessageProviders()).resolves.toEqual({ codex: true, claude: false })
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:32100/api/repo/commit-message-providers',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
+        body: JSON.stringify({}),
+      }),
+    )
+  })
+
+  test('requests generated commit messages through the embedded server', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, message: 'feat: generated message' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { generateRepositoryCommitMessage } = await import('#/web/repo-client.ts')
+    await expect(generateRepositoryCommitMessage('/repo', '/repo', 'codex')).resolves.toEqual({
+      ok: true,
+      message: 'feat: generated message',
+    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:32100/api/repo/generate-commit-message',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
+        body: JSON.stringify({ repoId: '/repo', worktreePath: '/repo', provider: 'codex' }),
+      }),
+    )
+  })
+
   test('requests repository file transfer', async () => {
     installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
     const fetchMock = vi.fn(async () => ({

@@ -1,5 +1,6 @@
 import { openExternalUrl } from '#/web/app-shell-client.ts'
 import { postServerJson } from '#/web/lib/server-fetch.ts'
+import type { CommitMessageGenerationResult, CommitMessageProvider, CommitMessageProviderAvailability } from '#/shared/commit-message-ai.ts'
 import type { RepoFileTransferRequest, RepoFileTransferResult, RepoFileTreeResult } from '#/shared/file-tree.ts'
 import type { CloneRepoResult, PullRequestEntry, RepoSnapshot } from '#/shared/rpc.ts'
 import type { ExecResult, PullRequestFetchMode, WorktreeStatus } from '#/shared/git-types.ts'
@@ -125,6 +126,19 @@ export async function removeRepositoryWorktree(
 
 export async function getRepositoryPatch(cwd: string, worktreePath: string, signal?: AbortSignal): Promise<ExecResult> {
   return await postServerJson('/api/repo/patch', { cwd, worktreePath }, { signal })
+}
+
+export async function getCommitMessageProviders(signal?: AbortSignal): Promise<CommitMessageProviderAvailability> {
+  return await postServerJson('/api/repo/commit-message-providers', {}, { signal })
+}
+
+export async function generateRepositoryCommitMessage(
+  repoId: string,
+  worktreePath: string,
+  provider: CommitMessageProvider,
+  signal?: AbortSignal,
+): Promise<CommitMessageGenerationResult> {
+  return await postServerJson('/api/repo/generate-commit-message', { repoId, worktreePath, provider }, { signal })
 }
 
 export async function getRepositoryFileTree(

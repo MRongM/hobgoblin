@@ -41,6 +41,7 @@ function defaultRpcResult(path: string, input?: unknown) {
       globalShortcutRegistered: true,
       terminalApp: 'auto',
       editorApp: 'auto',
+      terminalCustomButtons: [],
       lanEnabled: false,
       session: {
         openRepos: [],
@@ -88,13 +89,23 @@ const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENV
 const testWindow = window as unknown as { goblinNative?: unknown; __GOBLIN_BOOTSTRAP__?: unknown }
 const sendTestNotification = vi.fn(async () => true)
 const invokeRpc = vi.fn(async ({ path, input }: { path: string; input?: unknown }) => defaultRpcResult(path, input))
-const fetchMock = vi.fn(async (input: string | URL) => {
+const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
   const url = new URL(typeof input === 'string' ? input : input.toString())
   let result: unknown = null
   if (url.pathname === '/api/settings/github-cli/refresh') result = defaultRpcResult('githubCli.refresh')
   else if (url.pathname === '/api/settings/github-cli') {
     result = defaultRpcResult('githubCli.get', { hosts: url.searchParams.getAll('host') })
   } else if (url.pathname === '/api/settings') result = defaultRpcResult('settings.get')
+  else if (url.pathname === '/api/settings/prefs') {
+    const body = JSON.parse(String(init?.body ?? '{}')) as { settings?: Record<string, unknown> }
+    result = {
+      ok: true,
+      settings: {
+        ...defaultRpcResult('settings.get'),
+        ...(body.settings ?? {}),
+      },
+    }
+  }
   else if (url.pathname === '/api/settings/external-apps') result = defaultRpcResult('externalApps.get')
   return {
     ok: true,
@@ -128,6 +139,7 @@ beforeEach(() => {
       globalShortcutRegistered: true,
       terminalApp: 'auto',
       editorApp: 'auto',
+      terminalCustomButtons: [],
       lanEnabled: false,
     },
     initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' },
@@ -146,6 +158,7 @@ beforeEach(() => {
       globalShortcutRegistered: true,
       terminalApp: 'auto',
       editorApp: 'auto',
+      terminalCustomButtons: [],
       lanEnabled: false,
     },
     initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' },
@@ -306,6 +319,40 @@ describe('SettingsSurface', () => {
     expect(document.body.textContent).toContain('settings.ssh.body')
     expect(document.body.textContent).toContain('settings.ssh.example')
   })
+
+  test('edits terminal custom buttons from settings', async () => {
+    await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
+
+    await act(async () => {
+      buttonByText('settings.terminal-custom-buttons.add').click()
+      await Promise.resolve()
+    })
+
+    const labelInput = document.getElementById('terminal-custom-button-label-0')
+    const valueInput = document.getElementById('terminal-custom-button-value-0')
+    if (!(labelInput instanceof HTMLInputElement) || !(valueInput instanceof HTMLTextAreaElement)) {
+      throw new Error('Missing terminal custom button fields')
+    }
+
+    await act(async () => {
+      setInputValue(labelInput, 'status')
+      setTextAreaValue(valueInput, 'git status --short')
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      buttonByText('settings.terminal-custom-buttons.save').click()
+      await Promise.resolve()
+    })
+
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [url, options] = call as unknown as [unknown, RequestInit | undefined]
+        if (new URL(String(url)).pathname !== '/api/settings/prefs') return false
+        return String(options?.body ?? '').includes('terminalCustomButtons')
+      }),
+    ).toBe(true)
+  })
 })
 
 async function render(element: React.ReactNode) {
@@ -343,6 +390,18 @@ function buttonByText(text: string): HTMLButtonElement {
   const match = buttons.find((button) => button.textContent?.includes(text))
   if (!(match instanceof HTMLButtonElement)) throw new Error(`Missing button with text: ${text}`)
   return match
+}
+
+function setInputValue(input: HTMLInputElement, value: string) {
+  const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
+  descriptor?.set?.call(input, value)
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
+function setTextAreaValue(textarea: HTMLTextAreaElement, value: string) {
+  const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')
+  descriptor?.set?.call(textarea, value)
+  textarea.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
 function switchById(id: string): HTMLButtonElement {

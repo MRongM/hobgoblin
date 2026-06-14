@@ -1,7 +1,16 @@
 import { DEFAULT_GLOBAL_SHORTCUT } from '#/shared/accelerator.ts'
 import { DEFAULT_COLOR_THEME, type ColorTheme } from '#/shared/color-theme.ts'
 import type { InitialSettingsSnapshot } from '#/shared/bootstrap.ts'
-import type { EditorPref, LangPref, SessionState, SettingsPrefs, SettingsSnapshot, TerminalPref, ThemePref } from '#/shared/rpc.ts'
+import type {
+  EditorPref,
+  LangPref,
+  SessionState,
+  SettingsPrefs,
+  SettingsSnapshot,
+  TerminalCustomButton,
+  TerminalPref,
+  ThemePref,
+} from '#/shared/rpc.ts'
 import {
   DEFAULT_DETAIL_COLLAPSED,
   DEFAULT_DETAIL_FOCUS_MODE,
@@ -22,6 +31,7 @@ export const DEFAULT_SWAP_CLOSE_SHORTCUTS = false
 export const DEFAULT_TOGGLE_DETAIL_ON_ACTION_BAR_BLANK_CLICK = false
 export const DEFAULT_TERMINAL_APP: TerminalPref = 'auto'
 export const DEFAULT_EDITOR_APP: EditorPref = 'auto'
+export const DEFAULT_TERMINAL_CUSTOM_BUTTONS: TerminalCustomButton[] = []
 export const DEFAULT_LAN_ENABLED = false
 
 export function defaultSessionState(): SessionState {
@@ -52,6 +62,7 @@ export function defaultSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): Se
     globalShortcut: overrides.globalShortcut ?? DEFAULT_GLOBAL_SHORTCUT,
     terminalApp: overrides.terminalApp ?? DEFAULT_TERMINAL_APP,
     editorApp: overrides.editorApp ?? DEFAULT_EDITOR_APP,
+    terminalCustomButtons: overrides.terminalCustomButtons ?? DEFAULT_TERMINAL_CUSTOM_BUTTONS,
     lanEnabled: overrides.lanEnabled ?? DEFAULT_LAN_ENABLED,
  }
 }
@@ -78,6 +89,7 @@ export function initialSettingsFromSnapshot(snapshot: Pick<
   | 'globalShortcutRegistered'
   | 'terminalApp'
   | 'editorApp'
+  | 'terminalCustomButtons'
   | 'lanEnabled'
 >): InitialSettingsSnapshot {
   return {
@@ -91,6 +103,7 @@ export function initialSettingsFromSnapshot(snapshot: Pick<
     globalShortcutRegistered: snapshot.globalShortcutRegistered,
     terminalApp: snapshot.terminalApp,
     editorApp: snapshot.editorApp,
+    terminalCustomButtons: snapshot.terminalCustomButtons,
     lanEnabled: snapshot.lanEnabled,
   }
 }
