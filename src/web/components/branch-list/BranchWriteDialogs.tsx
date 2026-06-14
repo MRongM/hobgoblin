@@ -4,14 +4,19 @@ import { COMMIT_MESSAGE_PROVIDERS, type CommitMessageProvider, type CommitMessag
 import { Button } from '#/web/components/ui/button.tsx'
 import { DialogFooter } from '#/web/components/ui/dialog.tsx'
 import { FormDialog } from '#/web/components/ui/form-dialog.tsx'
-import { Field, FieldLabel } from '#/web/components/ui/field.tsx'
+import { Field, FieldDescription, FieldError, FieldLabel } from '#/web/components/ui/field.tsx'
+import { Input } from '#/web/components/ui/input.tsx'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/web/components/ui/select.tsx'
 import { DialogError } from '#/web/components/ui/dialog-error.tsx'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
-import { generateRepositoryCommitMessage, getCommitMessageProviders } from '#/web/repo-client.ts'
+import { generateRepositoryCommitMessage, getCommitMessageProviders, getRepositoryRemoteBranches } from '#/web/repo-client.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useAsyncPending } from '#/web/hooks/useAsyncPending.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
+import {
+  branchNameValidationKey,
+  remoteTrackingBranchChoices,
+} from '#/web/components/branch-list/branch-create-model.ts'
 
 // ── Checkout-to dialog ────────────────────────────────────────────────────────
 
@@ -170,6 +175,256 @@ export function MergeDialog({ open, branch, allBranches, onClose, onMerge }: Mer
           <Button type="submit" size="sm" disabled={!selected || isPending}>
             {isPending && <Loader2 className="animate-spin" />}
             {t('action.merge-confirm')}
+          </Button>
+        </DialogFooter>
+      </form>
+    </FormDialog>
+  )
+}
+
+// ── Create branch dialog ─────────────────────────────────────────────────────
+
+interface CreateBranchDialogProps {
+  open: boolean
+  branch: RepoBranchState
+  allBranches: RepoBranchState[]
+  busy: boolean
+  onClose: () => void
+  onCreate: (branchName: string) => Promise<void>
+}
+
+export function CreateBranchDialog({
+  open,
+  branch,
+  allBranches,
+  busy,
+  onClose,
+  onCreate,
+}: CreateBranchDialogProps) {
+  const t = useT()
+  const [branchName, setBranchName] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const { isPending, run } = useAsyncPending<'createBranch'>()
+  const pending = busy || isPending
+  const validationKey = branchNameValidationKey(branchName, allBranches)
+
+  useEffect(() => {
+    if (!open) {
+      setBranchName('')
+      setError(null)
+    }
+  }, [open])
+
+  async function handleConfirm() {
+    if (validationKey || pending) return
+    setError(null)
+    await run('createBranch', async () => {
+      try {
+        await onCreate(branchName.trim())
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err))
+      }
+    })
+  }
+
+  return (
+    <FormDialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o && !pending) onClose()
+      }}
+      title={t('action.create-branch-title')}
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          void handleConfirm()
+        }}
+        className="space-y-4"
+      >
+        <Field>
+          <FieldLabel htmlFor="create-branch-base">{t('action.create-branch-base-label')}</FieldLabel>
+          <Input id="create-branch-base" value={branch.name} readOnly className="font-mono text-xs" />
+        </Field>
+        <Field data-invalid={validationKey ? true : undefined}>
+          <FieldLabel htmlFor="create-branch-name">{t('action.create-branch-name-label')}</FieldLabel>
+          <Input
+            id="create-branch-name"
+            autoFocus
+            value={branchName}
+            onChange={(e) => setBranchName(e.target.value)}
+            placeholder={t('action.create-worktree-branch-placeholder')}
+            aria-invalid={!!validationKey}
+          />
+          <FieldError reserveHeight aria-live="polite" aria-atomic="true">
+            {validationKey ? t(validationKey) : ''}
+          </FieldError>
+        </Field>
+        {error && <DialogError>{error}</DialogError>}
+        <DialogFooter>
+          <Button type="button" variant="outline" size="sm" disabled={pending} onClick={onClose}>
+            {t('dialog.cancel')}
+          </Button>
+          <Button type="submit" size="sm" disabled={!!validationKey || pending}>
+            {pending && <Loader2 className="animate-spin" />}
+            {t('action.create-branch-confirm')}
+          </Button>
+        </DialogFooter>
+      </form>
+    </FormDialog>
+  )
+}
+
+// ── Pull remote branch dialog ────────────────────────────────────────────────
+
+interface PullRemoteBranchDialogProps {
+  open: boolean
+  repoId: string
+  allBranches: RepoBranchState[]
+  busy: boolean
+  onClose: () => void
+  onTrack: (input: { localBranch: string; remoteRef: string }) => Promise<void>
+}
+
+export function PullRemoteBranchDialog({
+  open,
+  repoId,
+  allBranches,
+  busy,
+  onClose,
+  onTrack,
+}: PullRemoteBranchDialogProps) {
+  const t = useT()
+  const [remoteRefs, setRemoteRefs] = useState<string[]>([])
+  const [remoteRef, setRemoteRef] = useState('')
+  const [localBranch, setLocalBranch] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const { isPending, run } = useAsyncPending<'trackRemoteBranch'>()
+  const choices = remoteTrackingBranchChoices(remoteRefs, allBranches)
+  const selected = choices.find((choice) => choice.remoteRef === remoteRef) ?? choices[0]
+  const effectiveRemoteRef = selected?.remoteRef ?? ''
+  const effectiveLocalBranch = localBranch.trim() || selected?.defaultLocalBranch || ''
+  const validationKey = branchNameValidationKey(effectiveLocalBranch, allBranches)
+  const pending = busy || isPending
+
+  useEffect(() => {
+    if (!open) {
+      setRemoteRefs([])
+      setRemoteRef('')
+      setLocalBranch('')
+      setLoading(false)
+      setLoadFailed(false)
+      setError(null)
+      return
+    }
+
+    const ctrl = new AbortController()
+    setLoading(true)
+    setLoadFailed(false)
+    void getRepositoryRemoteBranches(repoId, ctrl.signal)
+      .then((refs) => {
+        if (!ctrl.signal.aborted) setRemoteRefs(refs)
+      })
+      .catch(() => {
+        if (!ctrl.signal.aborted) {
+          setRemoteRefs([])
+          setLoadFailed(true)
+        }
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setLoading(false)
+      })
+    return () => ctrl.abort()
+  }, [open, repoId])
+
+  useEffect(() => {
+    if (!open || !selected) return
+    if (!remoteRef) setRemoteRef(selected.remoteRef)
+    if (!localBranch.trim()) setLocalBranch(selected.defaultLocalBranch)
+  }, [localBranch, open, remoteRef, selected])
+
+  async function handleConfirm() {
+    if (!effectiveRemoteRef || validationKey || pending) return
+    setError(null)
+    await run('trackRemoteBranch', async () => {
+      try {
+        await onTrack({ localBranch: effectiveLocalBranch, remoteRef: effectiveRemoteRef })
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err))
+      }
+    })
+  }
+
+  return (
+    <FormDialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o && !pending) onClose()
+      }}
+      title={t('action.pull-remote-branch-title')}
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          void handleConfirm()
+        }}
+        className="space-y-4"
+      >
+        <Field>
+          <FieldLabel htmlFor="pull-remote-ref">{t('action.pull-remote-branch-remote-label')}</FieldLabel>
+          <Select
+            value={effectiveRemoteRef}
+            onValueChange={(next) => {
+              const nextChoice = choices.find((choice) => choice.remoteRef === next)
+              setRemoteRef(next)
+              setLocalBranch(nextChoice?.defaultLocalBranch ?? '')
+            }}
+            disabled={choices.length === 0 || loading}
+          >
+            <SelectTrigger id="pull-remote-ref" className="w-full">
+              <SelectValue placeholder={t('action.create-worktree-remote-placeholder')} />
+            </SelectTrigger>
+            <SelectContent>
+              {choices.map((choice) => (
+                <SelectItem key={choice.remoteRef} value={choice.remoteRef} textValue={choice.remoteRef}>
+                  <span className="truncate">{choice.remoteRef}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <FieldDescription reserveHeight aria-live="polite" aria-atomic="true">
+            {loading
+              ? t('action.create-worktree-remote-loading')
+              : loadFailed
+                ? t('action.pull-remote-branch-load-failed')
+                : choices.length === 0
+                  ? t('action.create-worktree-remote-empty')
+                  : ''}
+          </FieldDescription>
+        </Field>
+        <Field data-invalid={validationKey ? true : undefined}>
+          <FieldLabel htmlFor="pull-remote-local-branch">{t('action.create-worktree-local-branch-label')}</FieldLabel>
+          <Input
+            id="pull-remote-local-branch"
+            value={localBranch}
+            onChange={(e) => setLocalBranch(e.target.value)}
+            placeholder={selected?.defaultLocalBranch || t('action.create-worktree-local-branch-placeholder')}
+            aria-invalid={!!validationKey}
+          />
+          <FieldError reserveHeight aria-live="polite" aria-atomic="true">
+            {validationKey ? t(validationKey) : ''}
+          </FieldError>
+        </Field>
+        {error && <DialogError>{error}</DialogError>}
+        <DialogFooter>
+          <Button type="button" variant="outline" size="sm" disabled={pending} onClick={onClose}>
+            {t('dialog.cancel')}
+          </Button>
+          <Button type="submit" size="sm" disabled={!effectiveRemoteRef || !!validationKey || pending || loading}>
+            {pending && <Loader2 className="animate-spin" />}
+            {t('action.pull-remote-branch-confirm')}
           </Button>
         </DialogFooter>
       </form>

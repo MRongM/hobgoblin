@@ -27,6 +27,8 @@ export type RepoEventAction =
   | { kind: 'pull'; branch: string }
   | { kind: 'push'; branch: string }
   | { kind: 'createWorktree'; branch: string; worktreePath: string }
+  | { kind: 'createBranch'; branch: string; baseBranch: string }
+  | { kind: 'trackRemoteBranch'; branch: string; remoteRef: string }
   | { kind: 'deleteBranch'; branch: string }
   | { kind: 'removeWorktree'; branch: string; worktreePath: string; alsoDeleteBranch: boolean }
 
