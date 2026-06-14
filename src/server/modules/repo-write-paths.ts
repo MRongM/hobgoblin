@@ -277,6 +277,40 @@ export async function createRepositoryWorktree(
   })
 }
 
+export async function createRepositoryBranch(
+  cwd: string,
+  branch: string,
+  baseBranch: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  if (!isValidRepoLocator(cwd)) return { ok: false, message: 'error.invalid-arguments' }
+  return await runWithRepoBackend(cwd, async (backend) => {
+    return await publishSnapshotInvalidationAfterMutation(
+      cwd,
+      await backend.createBranch(branch, baseBranch, signal),
+      sourceToken,
+    )
+  })
+}
+
+export async function trackRepositoryRemoteBranch(
+  cwd: string,
+  localBranch: string,
+  remoteRef: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  if (!isValidRepoLocator(cwd)) return { ok: false, message: 'error.invalid-arguments' }
+  return await runWithRepoBackend(cwd, async (backend) => {
+    return await publishSnapshotInvalidationAfterMutation(
+      cwd,
+      await backend.trackRemoteBranch(localBranch, remoteRef, signal),
+      sourceToken,
+    )
+  })
+}
+
 function isWorktreePathInputAbsolute(input: CreateWorktreeInput): boolean {
   return isAbsoluteWorktreePath(typeof input.worktreePath === 'string' ? input.worktreePath.trim() : '')
 }

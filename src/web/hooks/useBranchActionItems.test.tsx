@@ -161,6 +161,8 @@ describe('useBranchActionItems', () => {
       'push',
       'createWorktree',
       'sync',
+      'createBranch',
+      'pullRemoteBranch',
       'checkoutTo',
       'merge',
       'commit',

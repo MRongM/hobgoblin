@@ -11,6 +11,8 @@ export type BranchActionItemId =
   | 'terminal'
   | 'editor'
   | 'createWorktree'
+  | 'createBranch'
+  | 'pullRemoteBranch'
   | 'deleteBranch'
   | 'removeWorktree'
   | 'checkoutTo'
@@ -41,6 +43,10 @@ export function branchActionItemIdFromKind(kind: RepoBranchActionKind): BranchAc
       return 'pull'
     case 'push':
       return 'push'
+    case 'createBranch':
+      return 'createBranch'
+    case 'trackRemoteBranch':
+      return 'pullRemoteBranch'
     case 'deleteBranch':
       return 'deleteBranch'
     case 'removeWorktree':

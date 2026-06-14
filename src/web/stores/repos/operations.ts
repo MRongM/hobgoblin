@@ -13,6 +13,8 @@ export type RepoBranchActionReason =
   | 'branch:pull'
   | 'branch:push'
   | 'branch:createWorktree'
+  | 'branch:createBranch'
+  | 'branch:trackRemoteBranch'
   | 'branch:deleteBranch'
   | 'branch:removeWorktree'
 export type RepoPullRequestReason = 'summary' | 'full'

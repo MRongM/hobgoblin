@@ -520,6 +520,12 @@ describe('runBranchAction', () => {
       createNewBranchWorktreeAction(),
       'repo.createWorktree',
     ],
+    ['createBranch', { kind: 'createBranch', branch: 'feature/new', baseBranch: 'feature/a' }, 'repo.createBranch'],
+    [
+      'trackRemoteBranch',
+      { kind: 'trackRemoteBranch', localBranch: 'feature/new', remoteRef: 'origin/feature/new' },
+      'repo.trackRemoteBranch',
+    ],
     ['deleteBranch', { kind: 'deleteBranch', branch: 'feature/a' }, 'repo.deleteBranch'],
     [
       'removeWorktree',
@@ -608,6 +614,46 @@ describe('runBranchAction', () => {
     expect(repoOperation(REPO_ID, 'branchAction').target).toBeNull()
   })
 
+  test('tracks create branch operation state while the action is running', async () => {
+    let release!: () => void
+    installGoblinTestBridge({
+      'repo.createBranch': () =>
+        new Promise((resolve) => {
+          release = () => resolve({ ok: true, message: 'ok' })
+        }),
+      'repo.snapshot': async () => ({
+        branches: [createBranchSnapshot('feature/a'), createBranchSnapshot('feature/new')],
+        current: 'feature/a',
+      }),
+      'repo.status': async () => [],
+      'repo.pullRequests': async () => [],
+    })
+
+    const work = useReposStore
+      .getState()
+      .runBranchAction(REPO_ID, { kind: 'createBranch', branch: 'feature/new', baseBranch: 'feature/a' })
+    const running = useReposStore.getState().repos[REPO_ID]
+
+    expect(running?.operations.branchAction).toMatchObject({
+      phase: 'running',
+      reason: 'branch:createBranch',
+      target: 'feature/new',
+    })
+    expect(repoOperation(REPO_ID, 'branchAction').phase).toBe('running')
+    expect(repoOperation(REPO_ID, 'branchAction').target).toBe('feature/new')
+
+    release()
+    await work
+
+    const settled = useReposStore.getState().repos[REPO_ID]
+    expect(settled?.operations.branchAction).toMatchObject({
+      phase: 'idle',
+      target: null,
+    })
+    expect(repoOperation(REPO_ID, 'branchAction').phase).toBe('idle')
+    expect(repoOperation(REPO_ID, 'branchAction').target).toBeNull()
+  })
+
   test('submitBranchAction starts create worktree without waiting for completion', async () => {
     let release!: () => void
     installGoblinTestBridge({
@@ -654,6 +700,34 @@ describe('runBranchAction', () => {
         kind: 'createWorktree',
         branch: 'feature/new',
         worktreePath: '/tmp/gbl-branch-actions-test-worktree',
+      },
+    })
+  })
+
+  test('records track remote branch metadata on result events', async () => {
+    installGoblinTestBridge({
+      'repo.trackRemoteBranch': async () => ({ ok: true, message: 'ok' }),
+      'repo.snapshot': async () => ({
+        branches: [createBranchSnapshot('feature/a'), createBranchSnapshot('feature/new')],
+        current: 'feature/a',
+      }),
+      'repo.status': async () => [],
+      'repo.pullRequests': async () => [],
+    })
+
+    await useReposStore.getState().runBranchAction(
+      REPO_ID,
+      { kind: 'trackRemoteBranch', localBranch: 'feature/new', remoteRef: 'origin/feature/new' },
+      { token: 1 },
+    )
+
+    expect(useReposStore.getState().repos[REPO_ID]?.events.at(-1)).toMatchObject({
+      kind: 'result',
+      result: { ok: true, message: 'ok' },
+      action: {
+        kind: 'trackRemoteBranch',
+        branch: 'feature/new',
+        remoteRef: 'origin/feature/new',
       },
     })
   })

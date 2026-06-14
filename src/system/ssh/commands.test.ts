@@ -163,4 +163,24 @@ describe('remote command scripts', () => {
 
     expect(invocation.script).toBe("git -C '/srv/repo-feature' merge -- 'feature/user'\\''s-work'")
   })
+
+  test('renders quoted remote branch creation commands', () => {
+    expect(
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'gitBranchCreate',
+        path: '/srv/repo',
+        branch: "feature/user's-work",
+        baseBranch: 'main',
+      }).script,
+    ).toBe("git -C '/srv/repo' branch -- 'feature/user'\\''s-work' 'main'")
+
+    expect(
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'gitBranchTrackRemote',
+        path: '/srv/repo',
+        localBranch: 'feature/new',
+        remoteRef: 'origin/feature/new',
+      }).script,
+    ).toBe("git -C '/srv/repo' branch --track -- 'feature/new' 'origin/feature/new'")
+  })
 })
