@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // Build and package Hobgoblin.
-//   default → Hobgoblin.app under release/mac*/ (via electron-builder mac dmg+dir)
+//   default → host-arch .dmg and Hobgoblin.app under release/mac*/
 //   install → builds the `dir` target only (no dmg packaging) and moves
 //             Hobgoblin.app into ~/Applications, closing any running instance
 //             first. macOS-only.
@@ -20,7 +20,7 @@ $.cwd(repoRoot)
 const APP_NAME = 'Hobgoblin'
 const APP_ID = 'hobgoblin.app'
 
-const { positionals, values } = parseArgs({
+const { positionals } = parseArgs({
   allowPositionals: true,
   options: {
     clean: { type: 'boolean', default: false },
@@ -28,7 +28,6 @@ const { positionals, values } = parseArgs({
 })
 const mode = positionals[0]
 const shouldInstall = mode === 'install' || mode === 'i'
-const shouldClean = values.clean ?? false
 
 async function findBuiltApp(): Promise<string | null> {
   // mac dir target emits one directory per declared arch (`mac-arm64`,
@@ -44,22 +43,9 @@ async function findBuiltApp(): Promise<string | null> {
 // after a successful install is run below.
 rmSync(path.join(repoRoot, 'release'), { recursive: true, force: true })
 
-if (shouldClean) {
-  const caches = [
-    path.join(os.homedir(), 'Library/Caches/electron'),
-    path.join(os.homedir(), 'Library/Caches/electron-builder'),
-  ]
-  for (const cacheDir of caches) {
-    if (existsSync(cacheDir)) {
-      rmSync(cacheDir, { recursive: true, force: true })
-      console.log(`Cleaned cache: ${cacheDir}`)
-    }
-  }
-}
-
 await $`bun install`
 if (process.platform === 'darwin') {
-  const ptySpawnHelperArches = shouldInstall ? [process.arch] : ['arm64', 'x64']
+  const ptySpawnHelperArches = [process.arch]
   const ptySpawnHelpers = ptySpawnHelperArches.map((arch) =>
     path.join(repoRoot, 'node_modules/node-pty/prebuilds', `darwin-${arch}`, 'spawn-helper'),
   )
@@ -94,21 +80,11 @@ if (!existsSync(terminalWorkerDistEntry)) {
   console.error(`Error: server build artifact missing: ${terminalWorkerDistEntry}`)
   process.exit(1)
 }
-// `dir` target skips dmg packaging — faster, and `install` only needs the .app.
-// In install mode we also pin to the host arch so we don't waste time
-// cross-building the other architecture's binaries when we're going to
-// throw them away.
+// `dir` target skips dmg packaging for install. Every build mode pins to the
+// host arch so local builds don't waste time cross-building unused artifacts.
 const archFlag = process.arch === 'arm64' ? '--arm64' : '--x64'
-const builderArgs = shouldInstall ? ['--mac', 'dir', archFlag] : ['--mac']
-if (shouldInstall) {
-  await $`bun run build:electron -- ${builderArgs}`
-} else {
-  // Build each arch serially to avoid proper-lockfile races in dmg-builder
-  // when electron-builder parallelises multiple macOS architectures.
-  for (const arch of ['arm64', 'x64']) {
-    await $`bun run build:electron -- --mac dmg --${arch}`
-  }
-}
+const builderArgs = ['--mac', shouldInstall ? 'dir' : 'dmg', archFlag]
+await $`bun run build:electron -- ${builderArgs}`
 
 const srcApp = await findBuiltApp()
 if (!srcApp) {

@@ -53,6 +53,25 @@ describe('TopbarRepoControls', () => {
     expect(container?.textContent).not.toContain('action.create-worktree')
   })
 
+  test('places sync and create worktree before branch filters', () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main'), createRepoBranch('feature/a')],
+      currentBranch: 'main',
+      selectedBranch: 'feature/a',
+    })
+
+    renderControls(navigationWith({}))
+
+    const sync = requiredElement('button[aria-label="action.refresh"]')
+    const createWorktree = requiredElement('button[aria-label="action.create-worktree-title"]')
+    const branchFilter = requiredElement('[aria-label="branches.filter-label"]')
+    const branchSearch = requiredElement('[aria-label="branches.search-label"]')
+    expect(isBefore(sync, branchFilter)).toBe(true)
+    expect(isBefore(createWorktree, branchFilter)).toBe(true)
+    expect(isBefore(createWorktree, branchSearch)).toBe(true)
+  })
+
   test('hides layout control in compact mode', () => {
     seedRepoState({
       id: REPO_ID,
@@ -125,4 +144,14 @@ function createMatchMedia(small: boolean): typeof window.matchMedia {
     removeEventListener: vi.fn(),
     dispatchEvent: vi.fn(),
   })) as typeof window.matchMedia
+}
+
+function requiredElement(selector: string): Element {
+  const element = container?.querySelector(selector)
+  if (!element) throw new Error(`Missing element: ${selector}`)
+  return element
+}
+
+function isBefore(a: Element, b: Element): boolean {
+  return !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
 }

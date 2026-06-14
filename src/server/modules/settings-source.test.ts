@@ -38,6 +38,7 @@ test('initializes server-settings.json with defaults when no persisted settings 
     globalShortcut: 'Alt+G',
     terminalApp: 'auto',
     editorApp: 'auto',
+    terminalCustomButtons: [],
     lanEnabled: false,
   })
   expect(await mod.getServerSessionState()).toMatchObject({
@@ -73,6 +74,12 @@ test('persists updates and notifies subscribers from the server settings store',
     globalShortcut: 'CommandOrControl+Alt+G',
     terminalApp: 'ghostty',
     editorApp: 'cursor',
+    terminalCustomButtons: [
+      { label: ' status ', value: ' git status --short\n' },
+      { label: '', value: 'ignored' },
+      { label: 'empty', value: '   ' },
+      { label: 'test', value: 'bun run test' },
+    ],
     lanEnabled: false,
   })
   await mod.setServerSessionState({
@@ -102,6 +109,10 @@ test('persists updates and notifies subscribers from the server settings store',
     globalShortcut: 'Alt+G',
     terminalApp: 'ghostty',
     editorApp: 'cursor',
+    terminalCustomButtons: [
+      { label: 'status', value: ' git status --short\n' },
+      { label: 'test', value: 'bun run test' },
+    ],
     lanEnabled: false,
   })
   expect(await reloaded.getServerSessionState()).toMatchObject({
@@ -110,4 +121,23 @@ test('persists updates and notifies subscribers from the server settings store',
     selectedTerminalByWorktree: { '/repo-b\0/worktree': '/repo-b\0/worktree\0terminal-2' },
   })
   expect(await reloaded.getServerRecentRepos()).toEqual([{ kind: 'local', id: '/repo-b' }])
+})
+
+test('limits persisted terminal custom buttons to 20 valid entries', async () => {
+  tmp = mkdtempSync(path.join(os.tmpdir(), 'gbl-server-settings-'))
+  previousDataDir = process.env.GOBLIN_SERVER_DATA_DIR
+  process.env.GOBLIN_SERVER_DATA_DIR = tmp
+
+  const mod = await import('#/server/modules/settings-source.ts')
+  await mod.updateServerSettingsPrefs({
+    terminalCustomButtons: Array.from({ length: 25 }, (_, index) => ({
+      label: `button-${index}`,
+      value: `echo ${index}`,
+    })),
+  })
+
+  const prefs = await mod.getServerSettingsPrefs()
+  expect(prefs.terminalCustomButtons).toHaveLength(20)
+  expect(prefs.terminalCustomButtons[0]).toEqual({ label: 'button-0', value: 'echo 0' })
+  expect(prefs.terminalCustomButtons[19]).toEqual({ label: 'button-19', value: 'echo 19' })
 })

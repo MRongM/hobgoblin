@@ -39,6 +39,7 @@ function defaultArgv() {
       globalShortcutRegistered: false,
       terminalApp: 'auto',
       editorApp: 'cursor',
+      terminalCustomButtons: [],
       lanEnabled: false,
     },
     server: null,

@@ -11,6 +11,11 @@ export type ResolvedEditorApp = Exclude<EditorPref, 'auto'>
 export type TerminalAppAvailability = Record<ResolvedTerminalApp, boolean>
 export type EditorAppAvailability = Record<ResolvedEditorApp, boolean>
 
+export interface TerminalCustomButton {
+  label: string
+  value: string
+}
+
 export interface SettingsPrefs {
   theme: ThemePref
   colorTheme: ColorTheme
@@ -24,5 +29,6 @@ export interface SettingsPrefs {
   globalShortcut: string
   terminalApp: TerminalPref
   editorApp: EditorPref
+  terminalCustomButtons: TerminalCustomButton[]
   lanEnabled: boolean
 }

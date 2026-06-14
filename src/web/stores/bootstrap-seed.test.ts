@@ -41,6 +41,7 @@ describe('renderer bootstrap seeding', () => {
         globalShortcutRegistered: true,
         terminalApp: 'ghostty',
         editorApp: 'cursor',
+        terminalCustomButtons: [],
         lanEnabled: false,
       },
     })

@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { toSafeRepoLocator, toSafeSessionRepoEntry } from '#/shared/input-validation.ts'
 import { serverDataFile } from '#/server/common/data-dir.ts'
-import type { EditorPref, LangPref, SessionState, SettingsPrefs, TerminalPref, ThemePref } from '#/shared/rpc.ts'
+import type { EditorPref, LangPref, SessionState, SettingsPrefs, TerminalCustomButton, TerminalPref, ThemePref } from '#/shared/rpc.ts'
 import {
   DEFAULT_DETAIL_COLLAPSED,
   effectiveDetailCollapsed,
@@ -45,6 +45,7 @@ interface ServerSettingsData {
   globalShortcut: string
   terminalApp: TerminalPref
   editorApp: EditorPref
+  terminalCustomButtons: TerminalCustomButton[]
   lanEnabled: boolean
   session: SessionState
   recentRepos: RepoSessionEntry[]
@@ -55,6 +56,7 @@ export type ServerSettingsPrefsPatch = Partial<SettingsPrefs>
 let cachedFetchIntervalSec = DEFAULT_FETCH_INTERVAL_SEC
 let settingsPromise: Promise<ServerSettingsData> | null = null
 const listeners = new Set<FetchIntervalListener>()
+const MAX_TERMINAL_CUSTOM_BUTTONS = 20
 
 function normalizeFetchInterval(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value)
@@ -88,6 +90,21 @@ function normalizeTerminalNotificationsEnabled(value: unknown): boolean {
   return value === true
 }
 
+function normalizeTerminalCustomButtons(value: unknown): TerminalCustomButton[] {
+  if (!Array.isArray(value)) return []
+  const normalized: TerminalCustomButton[] = []
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue
+    const button = item as Partial<TerminalCustomButton>
+    if (typeof button.label !== 'string' || typeof button.value !== 'string') continue
+    const label = button.label.trim()
+    if (!label || button.value.trim().length === 0) continue
+    normalized.push({ label, value: button.value })
+    if (normalized.length >= MAX_TERMINAL_CUSTOM_BUTTONS) break
+  }
+  return normalized
+}
+
 function normalizeLanEnabled(value: unknown): boolean {
   return value === true
 }
@@ -106,6 +123,7 @@ function settingsPrefsFromData(data: ServerSettingsData): SettingsPrefs {
     globalShortcut: data.globalShortcut,
     terminalApp: data.terminalApp,
     editorApp: data.editorApp,
+    terminalCustomButtons: data.terminalCustomButtons,
     lanEnabled: data.lanEnabled,
   }
 }
@@ -189,6 +207,7 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       globalShortcut: normalizeGlobalShortcut(parsed.globalShortcut),
       terminalApp: normalizeTerminalPref(parsed.terminalApp),
       editorApp: normalizeEditorPref(parsed.editorApp),
+      terminalCustomButtons: normalizeTerminalCustomButtons(parsed.terminalCustomButtons),
       lanEnabled: normalizeLanEnabled(parsed.lanEnabled),
       session: normalizeSession(parsed.session),
       recentRepos: normalizeRecentRepos(parsed.recentRepos),
@@ -267,6 +286,10 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     patch.globalShortcut === undefined ? data.globalShortcut : normalizeGlobalShortcut(patch.globalShortcut)
   const nextTerminalApp = patch.terminalApp === undefined ? data.terminalApp : normalizeTerminalPref(patch.terminalApp)
   const nextEditorApp = patch.editorApp === undefined ? data.editorApp : normalizeEditorPref(patch.editorApp)
+  const nextTerminalCustomButtons =
+    patch.terminalCustomButtons === undefined
+      ? data.terminalCustomButtons
+      : normalizeTerminalCustomButtons(patch.terminalCustomButtons)
   const nextLanEnabled = patch.lanEnabled === undefined ? data.lanEnabled : normalizeLanEnabled(patch.lanEnabled)
   const changed =
     data.lang !== nextLang ||
@@ -281,6 +304,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     data.globalShortcut !== nextGlobalShortcut ||
     data.terminalApp !== nextTerminalApp ||
     data.editorApp !== nextEditorApp ||
+    JSON.stringify(data.terminalCustomButtons) !== JSON.stringify(nextTerminalCustomButtons) ||
     data.lanEnabled !== nextLanEnabled
   data.lang = nextLang
   data.theme = nextTheme
@@ -294,6 +318,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   data.globalShortcut = nextGlobalShortcut
   data.terminalApp = nextTerminalApp
   data.editorApp = nextEditorApp
+  data.terminalCustomButtons = nextTerminalCustomButtons
   data.lanEnabled = nextLanEnabled
   if (changed) await writeServerSettingsFile(data)
   if (cachedFetchIntervalSec !== nextFetchIntervalSec) {

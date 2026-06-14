@@ -1,5 +1,7 @@
 import { runWithRepoBackend } from '#/server/modules/repo-backend.ts'
 import { getRepositoryFileTree as getRepositoryFileTreeRead } from '#/server/modules/repo-file-tree.ts'
+import { generateCommitMessageFromPatch, probeCommitMessageProviders } from '#/system/commit-message-ai.ts'
+import { isCommitMessageProvider, type CommitMessageGenerationResult, type CommitMessageProviderAvailability } from '#/shared/commit-message-ai.ts'
 import type { RepoFileTreeResult } from '#/shared/file-tree.ts'
 import { type ExecResult, type PullRequestFetchMode, type WorktreeStatus } from '#/shared/git-types.ts'
 import type { ProbeResult, PullRequestEntry, RepoSnapshot } from '#/shared/rpc.ts'
@@ -40,6 +42,25 @@ export async function getRepositoryPullRequests(
 
 export async function getRepositoryPatch(cwd: string, worktreePath: string, signal?: AbortSignal): Promise<ExecResult> {
   return await runWithRepoBackend(cwd, async (backend) => await backend.getPatch(worktreePath, signal))
+}
+
+export async function getCommitMessageProviders(signal?: AbortSignal): Promise<CommitMessageProviderAvailability> {
+  return await probeCommitMessageProviders(signal)
+}
+
+export async function generateRepositoryCommitMessage(
+  cwd: string,
+  worktreePath: string,
+  provider: unknown,
+  signal?: AbortSignal,
+): Promise<CommitMessageGenerationResult> {
+  if (!isCommitMessageProvider(provider)) return { ok: false, message: 'error.commit-message-provider-unavailable' }
+  return await runWithRepoBackend(cwd, async (backend) => {
+    const patch = await backend.getPatch(worktreePath, signal)
+    if (!patch.ok) return patch
+    const generationCwd = backend.kind === 'local' ? worktreePath : undefined
+    return await generateCommitMessageFromPatch(provider, patch.message, { cwd: generationCwd, signal })
+  })
 }
 
 export async function getRepositoryFileTree(

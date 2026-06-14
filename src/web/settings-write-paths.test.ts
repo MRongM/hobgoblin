@@ -5,7 +5,7 @@ import { defaultSettingsSnapshot, defaultSessionState } from '#/shared/settings-
 import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
 import { externalAppsQueryKey, githubCliQueryKey, lanInfoQueryKey, settingsSnapshotQueryKey } from '#/web/settings-query-cache.ts'
 import type { RepoSessionEntry } from '#/shared/remote-repo.ts'
-import type { GitHubCliState } from '#/shared/rpc.ts'
+import type { GitHubCliState, TerminalCustomButton } from '#/shared/rpc.ts'
 
 type AddRecentRepoResult = {
   recentRepos: RepoSessionEntry[]
@@ -46,6 +46,7 @@ const appDataClientMocks = vi.hoisted(() => ({
   setSettingsFetchInterval: vi.fn(async (sec) => sec),
   setShortcutsDisabled: vi.fn(async () => {}),
   setSwapCloseShortcuts: vi.fn(async () => {}),
+  setTerminalCustomButtons: vi.fn(async (buttons: TerminalCustomButton[]) => buttons),
   setTerminalNotificationsEnabled: vi.fn(async () => {}),
   setToggleDetailOnActionBarBlankClick: vi.fn(async () => {}),
 }))
@@ -64,6 +65,7 @@ vi.mock('#/web/settings-client.ts', () => ({
   setSettingsFetchInterval: appDataClientMocks.setSettingsFetchInterval,
   setShortcutsDisabled: appDataClientMocks.setShortcutsDisabled,
   setSwapCloseShortcuts: appDataClientMocks.setSwapCloseShortcuts,
+  setTerminalCustomButtons: appDataClientMocks.setTerminalCustomButtons,
   setTerminalNotificationsEnabled: appDataClientMocks.setTerminalNotificationsEnabled,
   setToggleDetailOnActionBarBlankClick: appDataClientMocks.setToggleDetailOnActionBarBlankClick,
 }))
@@ -112,6 +114,8 @@ describe('settings write paths', () => {
     appDataClientMocks.setShortcutsDisabled.mockResolvedValue(undefined)
     appDataClientMocks.setSwapCloseShortcuts.mockReset()
     appDataClientMocks.setSwapCloseShortcuts.mockResolvedValue(undefined)
+    appDataClientMocks.setTerminalCustomButtons.mockReset()
+    appDataClientMocks.setTerminalCustomButtons.mockImplementation(async (buttons: TerminalCustomButton[]) => buttons)
     appDataClientMocks.setTerminalNotificationsEnabled.mockReset()
     appDataClientMocks.setTerminalNotificationsEnabled.mockResolvedValue(undefined)
     appDataClientMocks.setToggleDetailOnActionBarBlankClick.mockReset()
@@ -215,5 +219,18 @@ describe('settings write paths', () => {
     expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({ lanEnabled: true })
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: lanInfoQueryKey() })
     invalidateSpy.mockRestore()
+  })
+
+  test('setTerminalCustomButtonsPreference updates runtime settings cache', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    const buttons = [{ label: 'status', value: 'git status --short' }]
+    const { setTerminalCustomButtonsPreference } = await import('#/web/settings-write-paths.ts')
+
+    await setTerminalCustomButtonsPreference(buttons)
+
+    expect(appDataClientMocks.setTerminalCustomButtons).toHaveBeenCalledWith(buttons)
+    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
+      terminalCustomButtons: buttons,
+    })
   })
 })

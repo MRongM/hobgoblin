@@ -38,8 +38,8 @@ export function TopbarRepoControls({ repoId }: Props) {
 
   return (
     <div className="flex h-full shrink-0 items-center gap-1">
-      {focusMode ? <FocusBranchControls repoId={repoId} /> : <BranchFilterControls repoId={repoId} />}
       <RepoToolbarActions repoId={repoId} compact />
+      {focusMode ? <FocusBranchControls repoId={repoId} /> : <BranchFilterControls repoId={repoId} />}
       <WorkspaceLayoutControlConnected />
     </div>
   )

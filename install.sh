@@ -24,6 +24,11 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+ELECTRON_CACHE="${ELECTRON_CACHE:-$HOME/Library/Caches/electron}"
+electron_config_cache="${electron_config_cache:-$HOME/Library/Caches/electron}"
+ELECTRON_BUILDER_CACHE="${ELECTRON_BUILDER_CACHE:-$HOME/Library/Caches/electron-builder}"
+export ELECTRON_CACHE electron_config_cache ELECTRON_BUILDER_CACHE
+
 # Go through bun to match `package.json`'s `build` script — the build
 # script itself shells out to `bun install` / `bun run ...`, so requiring
 # bun here keeps the toolchain assumption in one place.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// Publish a GitHub release for Hobgoblin. Builds macOS (.dmg for arm64 and x64),
+// Publish a GitHub release for Hobgoblin. Builds a host-arch macOS .dmg,
 // tags the current commit with the package.json version, and uploads every
 // artifact via `gh release create`.
 //
@@ -84,8 +84,7 @@ try {
   console.log(`Building ${tag} (macOS) ...`)
   await $`bun scripts/build.ts`
 
-  // Two dmgs (arm64 + x64) per electron-builder.ts mac.target config.
-  const dmgSrcs = await findAll(`release/${APP_NAME}-${version}-*.dmg`, `${APP_NAME} .dmg`, 2)
+  const dmgSrcs = await findAll(`release/${APP_NAME}-${version}-*.dmg`, `${APP_NAME} .dmg`, 1)
   const dmgs = dmgSrcs.map((src) => {
     const dest = path.join(stash, path.basename(src))
     renameSync(src, dest)

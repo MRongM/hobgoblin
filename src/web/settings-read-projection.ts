@@ -90,6 +90,11 @@ export function readRuntimeGeneralSettings(data: RuntimeSettingsSnapshot | undef
   }
 }
 
+export function readRuntimeTerminalCustomButtons(data: RuntimeSettingsSnapshot | undefined) {
+  const fallback = fallbackInitialSettings()
+  return data?.terminalCustomButtons ?? fallback?.terminalCustomButtons ?? []
+}
+
 export function readRuntimeLanSettings(data: RuntimeSettingsSnapshot | undefined) {
   const fallback = fallbackInitialSettings()
   return {

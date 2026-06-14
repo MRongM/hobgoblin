@@ -8,6 +8,7 @@ import { LanSettings } from '#/web/components/settings/pages/LanSettings.tsx'
 import { NotificationSettings } from '#/web/components/settings/pages/NotificationSettings.tsx'
 import { SshRemoteSettings } from '#/web/components/settings/pages/SshRemoteSettings.tsx'
 import { SyncSettings } from '#/web/components/settings/pages/SyncSettings.tsx'
+import { TerminalSettings } from '#/web/components/settings/pages/TerminalSettings.tsx'
 import { useT } from '#/web/stores/i18n.ts'
 import type { SettingsPage } from '#/shared/rpc.ts'
 interface SettingsSurfaceProps {
@@ -23,6 +24,7 @@ export function SettingsSurface({ page, onPageChange, topInset = 0, autoFocusSel
     <SettingsLayout page={page} onPageChange={onPageChange} topInset={topInset} autoFocusSelected={autoFocusSelected}>
       <>
         {page === 'general' && <GeneralSettings />}
+        {page === 'terminal' && <TerminalSettings />}
         {page === 'github' && <GitHubSettings />}
         {page === 'apps' && <ExternalAppSettings />}
         {page === 'sync' && <SyncSettings />}

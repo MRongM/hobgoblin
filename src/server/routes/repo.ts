@@ -2,6 +2,8 @@ import { Hono } from 'hono'
 import { getBackgroundSyncRepos, setBackgroundSyncRepos } from '#/server/modules/background-sync.ts'
 import { transferRepositoryFiles } from '#/server/modules/repo-file-transfer.ts'
 import {
+  generateRepositoryCommitMessage,
+  getCommitMessageProviders,
   getRepositoryFileTree,
   getRepositoryPatch,
   getRepositoryPullRequests,
@@ -68,6 +70,27 @@ export function createRepoRoutes() {
     const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
     const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
     return c.json(await jsonOr(() => getRepositoryPatch(cwd, worktreePath, c.req.raw.signal), { ok: false, message: 'error.failed-read-repo' }, 'patch'))
+  })
+  app.post('/commit-message-providers', async (c) => {
+    return c.json(
+      await jsonOr(
+        () => getCommitMessageProviders(c.req.raw.signal),
+        { codex: false, claude: false },
+        'commit-message-providers',
+      ),
+    )
+  })
+  app.post('/generate-commit-message', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    return c.json(
+      await jsonOr(
+        () => generateRepositoryCommitMessage(repoId, worktreePath, body?.provider, c.req.raw.signal),
+        { ok: false, message: 'error.failed-read-repo' },
+        'generate-commit-message',
+      ),
+    )
   })
   app.post('/file-tree', async (c) => {
     const body = await c.req.json().catch(() => null)

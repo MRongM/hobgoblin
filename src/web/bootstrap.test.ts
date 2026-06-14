@@ -49,6 +49,7 @@ describe('renderer bootstrap', () => {
       globalShortcutRegistered: false,
       terminalApp: 'auto',
       editorApp: 'windsurf',
+      terminalCustomButtons: [],
       lanEnabled: false,
     }
     const bootstrap: RendererBootstrapSnapshot = electronBootstrap({

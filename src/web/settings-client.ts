@@ -15,6 +15,7 @@ import type {
   SettingsPrefs,
   SettingsPrefsUpdateResponse,
   SettingsSnapshot,
+  TerminalCustomButton,
   TerminalAppState,
   TerminalPref,
   ThemePref,
@@ -184,4 +185,9 @@ export async function setPreferredTerminalApp(pref: TerminalPref): Promise<Termi
 export async function setPreferredEditorApp(pref: EditorPref): Promise<EditorAppState> {
   const result = await updateSettingsPrefsPatch({ editorApp: pref })
   return result.externalApps?.editor ?? (await getExternalAppsSnapshot()).editor
+}
+
+export async function setTerminalCustomButtons(buttons: TerminalCustomButton[]): Promise<TerminalCustomButton[]> {
+  const result = await updateSettingsPrefsPatch({ terminalCustomButtons: buttons })
+  return result.settings.terminalCustomButtons
 }

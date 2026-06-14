@@ -1,20 +1,13 @@
 #!/usr/bin/env bun
 // Download Electron zip from npmmirror to the local Electron cache.
-// Usage: ./scripts/download-electron-cache.ts [--clean]
+// Usage: ./scripts/download-electron-cache.ts
 import { $ } from 'bun'
-import { rmSync } from 'node:fs'
+import { existsSync, mkdirSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { parseArgs } from 'node:util'
 
 const repoRoot = path.resolve(import.meta.dirname, '..')
 process.chdir(repoRoot)
-
-const { values } = parseArgs({
-  options: {
-    clean: { type: 'boolean' },
-  },
-})
 
 interface PackageJson {
   devDependencies?: Record<string, string>
@@ -39,16 +32,13 @@ const zipName = `electron-v${version}-${platform}-${arch}.zip`
 const zipPath = path.join(cacheDir, zipName)
 const url = `https://npmmirror.com/mirrors/electron/v${version}/${zipName}`
 
-if (values.clean) {
-  console.log('Cleaning Electron caches...')
-  rmSync(path.join(os.homedir(), 'Library/Caches/electron'), { recursive: true, force: true })
-  rmSync(path.join(os.homedir(), 'Library/Caches/electron-builder'), { recursive: true, force: true })
-} else {
-  rmSync(zipPath, { force: true })
+if (existsSync(zipPath)) {
+  console.log(`Already cached: ${zipPath}`)
+  process.exit(0)
 }
 
 console.log(`Creating cache dir: ${cacheDir}`)
-await $`mkdir -p ${cacheDir}`
+mkdirSync(cacheDir, { recursive: true })
 
 console.log(`Downloading Electron ${version} (${arch})...`)
 console.log(`URL: ${url}`)

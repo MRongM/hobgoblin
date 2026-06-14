@@ -23,7 +23,7 @@ describe('brand assets', () => {
     expect(svg).toContain('data-direction="b1-dark-terminal"')
     expect(svg).toContain('data-edge="terminal-full-bleed"')
     expect(svg).toContain('data-window-controls="none"')
-    expect(svg).toContain('data-foreground-scale="0.85"')
+    expect(svg).toContain('data-foreground-scale="0.8"')
     expect(svg).toContain('data-foreground-shift="-26,-36"')
     expect(svg).toContain('data-branch-shift-y="72"')
     expect(svg).toContain('id="terminal-window"')
@@ -111,9 +111,9 @@ function readForegroundBounds(png: { width: number; height: number; data: Uint8A
   const width = maxX - minX + 1
   const height = maxY - minY + 1
   return {
-    wide: width >= 780,
-    tall: height >= 600,
-    compact: width <= 830 && height <= 650,
+    wide: width >= 735,
+    tall: height >= 570,
+    compact: width <= 780 && height <= 610,
     bounds: { width, height },
   }
 }
