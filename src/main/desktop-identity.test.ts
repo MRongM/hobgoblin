@@ -25,7 +25,8 @@ describe('desktop identity', () => {
   })
 
   test('keeps desktop install and release scripts pointed at Hobgoblin only', () => {
-    expect(readText('install.sh')).toContain('APP_NAME=Hobgoblin')
+    expect(readText('install.ts')).toContain('/Hobgoblin.app/Contents/MacOS/')
+    expect(readText('install.ts')).not.toContain('Goblin.app')
 
     const buildScript = readText('scripts/build.ts')
     expect(buildScript).toContain("const APP_NAME = 'Hobgoblin'")

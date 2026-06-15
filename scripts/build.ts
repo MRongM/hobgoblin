@@ -32,8 +32,33 @@ const { values, positionals } = parseArgs({
 const mode = positionals[0]
 const shouldInstall = mode === 'install' || mode === 'i'
 const shouldClean = values.clean === true
-const shouldRunTypecheck = values.typecheck === true || (!shouldInstall && values['skip-typecheck'] !== true)
-const shouldForceInstall = values['force-install'] === true
+
+// install.ts forwards --full as SKIP_TYPECHECK=0 / SKIP_REBUILD=0; honor
+// the same env vars here so the install.ts fast-path / full-path semantics
+// work end-to-end. CLI flags (--typecheck, --skip-typecheck, --force-install)
+// take precedence over the env vars; when neither is set, install mode keeps
+// its skip-typecheck fast path.
+const envSkipTypecheck = process.env.SKIP_TYPECHECK
+const envSkipRebuild = process.env.SKIP_REBUILD
+const truthy = (v: string | undefined) => v === '1' || v === 'true'
+
+let shouldRunTypecheck: boolean
+if (values.typecheck === true) {
+  shouldRunTypecheck = true
+} else if (envSkipTypecheck !== undefined) {
+  shouldRunTypecheck = !truthy(envSkipTypecheck)
+} else {
+  shouldRunTypecheck = !shouldInstall && values['skip-typecheck'] !== true
+}
+
+let shouldForceInstall: boolean
+if (values['force-install'] === true) {
+  shouldForceInstall = true
+} else if (envSkipRebuild !== undefined) {
+  shouldForceInstall = !truthy(envSkipRebuild)
+} else {
+  shouldForceInstall = false
+}
 
 async function findBuiltApp(): Promise<string | null> {
   // mac dir target emits one directory per declared arch (`mac-arm64`,

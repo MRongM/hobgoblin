@@ -906,4 +906,27 @@ describe('repo mutation invalidation publishing', () => {
       query: 'repo-snapshot',
     })
   })
+
+  test('checkoutWorktreeBranch switches remote worktrees through the SSH backend and publishes invalidation', async () => {
+    const { checkoutWorktreeBranch } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await checkoutWorktreeBranch(
+      'ssh-config://prod/srv/repo',
+      '/data/deer-flow-bugfix_409',
+      'feat/agent-task',
+    )
+
+    expect(result).toEqual({ ok: true, message: 'ok' })
+    expect(mocks.checkoutBranch).not.toHaveBeenCalled()
+    expect(mocks.checkoutRemoteBranch).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
+      'feat/agent-task',
+      '/data/deer-flow-bugfix_409',
+      { signal: undefined },
+    )
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: 'ssh-config://prod/srv/repo',
+      query: 'repo-snapshot',
+    })
+  })
 })

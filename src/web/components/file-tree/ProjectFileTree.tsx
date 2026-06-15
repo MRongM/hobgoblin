@@ -45,6 +45,7 @@ import {
   buildGoblinFilePathDragPayload,
   mergeDirectoryEntries,
   nextFileTreeSelection,
+  parentDirectoryPath,
   resolveFileTreePasteTarget,
   visibleFileTreeNodeIds,
   type FileTreeNode,
@@ -1006,19 +1007,20 @@ async function copyPaths(paths: string[]) {
 }
 
 async function openNodeInEditor(repoId: string, node: FileTreeNode) {
-  if (isRemoteRepoId(repoId)) await openRemoteRepositoryEditor(repoId, node.absolutePath)
-  else await openRepositoryEditor(node.absolutePath)
+  const editorPath = editorPathForNode(node)
+  if (isRemoteRepoId(repoId)) await openRemoteRepositoryEditor(repoId, editorPath)
+  else await openRepositoryEditor(editorPath)
 }
 
 async function openNodeInTerminal(repoId: string, node: FileTreeNode) {
-  const terminalPath = node.kind === 'directory' ? node.absolutePath : parentPath(node.absolutePath)
+  const terminalPath = node.kind === 'directory' ? node.absolutePath : parentDirectoryPath(node.absolutePath)
   if (isRemoteRepoId(repoId)) await openRemoteRepositoryTerminal(repoId, terminalPath)
   else await openRepositoryTerminal(terminalPath)
 }
 
-function parentPath(value: string): string {
-  const slash = Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'))
-  return slash > 0 ? value.slice(0, slash) : value
+function editorPathForNode(node: FileTreeNode): string {
+  if (node.kind === 'directory' || (node.kind === 'symlink' && node.targetKind === 'directory')) return node.absolutePath
+  return parentDirectoryPath(node.absolutePath)
 }
 
 function isWritableNode(node: FileTreeNode): boolean {

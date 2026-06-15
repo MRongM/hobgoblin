@@ -4,23 +4,31 @@ import { describe, expect, test } from 'vitest'
 
 const repoRoot = path.resolve(import.meta.dirname, '../..')
 
-describe('install.sh', () => {
-  test('defaults Electron caches from HOME and exports them to the build script', () => {
-    const script = readFileSync(path.join(repoRoot, 'install.sh'), 'utf8')
+describe('install.ts', () => {
+  test('forwards --clean to the build script as the only passthrough', () => {
+    const script = readFileSync(path.join(repoRoot, 'install.ts'), 'utf8')
 
-    expect(script).toContain('ELECTRON_CACHE="${ELECTRON_CACHE:-$HOME/Library/Caches/electron}"')
-    expect(script).toContain('electron_config_cache="${electron_config_cache:-$HOME/Library/Caches/electron}"')
-    expect(script).toContain('ELECTRON_BUILDER_CACHE="${ELECTRON_BUILDER_CACHE:-$HOME/Library/Caches/electron-builder}"')
-    expect(script).toContain('export ELECTRON_CACHE electron_config_cache ELECTRON_BUILDER_CACHE')
+    // The other install flags in build.ts (--typecheck, --skip-typecheck,
+    // --force-install) are translated into env vars inside this script;
+    // only --clean is forwarded as a CLI flag.
+    expect(script).toContain("if (values.clean) passthrough.push('--clean')")
+    expect(script).toContain("spawnSync('bun', ['scripts/build.ts', 'install', ...passthrough]")
   })
 
-  test('forwards install build flags to the build script', () => {
-    const script = readFileSync(path.join(repoRoot, 'install.sh'), 'utf8')
+  test('--full translates to SKIP_TYPECHECK=0 and SKIP_REBUILD=0 env vars', () => {
+    const script = readFileSync(path.join(repoRoot, 'install.ts'), 'utf8')
 
-    expect(script).toContain('--typecheck')
-    expect(script).toContain('--skip-typecheck')
-    expect(script).toContain('--force-install')
-    expect(script).toContain('EXTRA_ARGS+=("$1")')
-    expect(script).toContain('bun scripts/build.ts install ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}')
+    expect(script).toContain("if (values.full) {")
+    expect(script).toContain("env.SKIP_TYPECHECK = '0'")
+    expect(script).toContain("env.SKIP_REBUILD = '0'")
+  })
+
+  test('--npmmirror sets both ELECTRON_MIRROR and ELECTRON_BUILDER_BINARIES_MIRROR env vars', () => {
+    const script = readFileSync(path.join(repoRoot, 'install.ts'), 'utf8')
+
+    expect(script).toContain("NPM_MIRROR_ELECTRON = 'https://npmmirror.com/mirrors/electron/'")
+    expect(script).toContain("NPM_MIRROR_BINARIES = 'https://npmmirror.com/mirrors/electron-builder-binaries/'")
+    expect(script).toContain('env.ELECTRON_MIRROR = NPM_MIRROR_ELECTRON')
+    expect(script).toContain('env.ELECTRON_BUILDER_BINARIES_MIRROR = NPM_MIRROR_BINARIES')
   })
 })

@@ -31,6 +31,8 @@ const transferRepositoryFiles = vi.fn(async (_input: unknown) => ({
 }))
 const renameRepositoryFileTreeEntry = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
 const deleteRepositoryFileTreeEntries = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
+const openRepositoryEditor = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
+const openRepositoryTerminal = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
 const openInFinder = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
 const readSystemClipboardFilePaths = vi.fn(async () => ['/tmp/report.pdf'])
 
@@ -38,8 +40,8 @@ vi.mock('#/web/repo-client.ts', () => ({
   getRepositoryFileTree: (...args: GetRepositoryFileTreeArgs) => getRepositoryFileTree(...args),
   renameRepositoryFileTreeEntry: (...args: unknown[]) => renameRepositoryFileTreeEntry(...args),
   deleteRepositoryFileTreeEntries: (...args: unknown[]) => deleteRepositoryFileTreeEntries(...args),
-  openRepositoryEditor: vi.fn(async () => ({ ok: true, message: '' })),
-  openRepositoryTerminal: vi.fn(async () => ({ ok: true, message: '' })),
+  openRepositoryEditor: (path: string) => openRepositoryEditor(path),
+  openRepositoryTerminal: (path: string) => openRepositoryTerminal(path),
   transferRepositoryFiles: (input: unknown) => transferRepositoryFiles(input),
 }))
 
@@ -68,6 +70,8 @@ beforeEach(() => {
   transferRepositoryFiles.mockClear()
   renameRepositoryFileTreeEntry.mockClear()
   deleteRepositoryFileTreeEntries.mockClear()
+  openRepositoryEditor.mockClear()
+  openRepositoryTerminal.mockClear()
   openInFinder.mockClear()
   readSystemClipboardFilePaths.mockClear()
   readSystemClipboardFilePaths.mockResolvedValue(['/tmp/report.pdf'])
@@ -365,6 +369,54 @@ describe('ProjectFileTree', () => {
     })
 
     expect(openInFinder).toHaveBeenCalledWith('/repo/README.md')
+  })
+
+  test('opens the selected local file parent directory in the editor from the context menu', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const row = treeItemByText('README.md')
+    await act(async () => {
+      row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+      await Promise.resolve()
+    })
+
+    const openEditorItem = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+      item.textContent?.includes('file-tree.open-editor'),
+    )
+    if (!openEditorItem) throw new Error('missing editor menu item')
+
+    await act(async () => {
+      openEditorItem.click()
+      await Promise.resolve()
+    })
+
+    expect(openRepositoryEditor).toHaveBeenCalledWith('/repo')
+  })
+
+  test('opens the selected local directory in the editor from the context menu', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const row = treeItemByText('src')
+    await act(async () => {
+      row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+      await Promise.resolve()
+    })
+
+    const openEditorItem = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+      item.textContent?.includes('file-tree.open-editor'),
+    )
+    if (!openEditorItem) throw new Error('missing editor menu item')
+
+    await act(async () => {
+      openEditorItem.click()
+      await Promise.resolve()
+    })
+
+    expect(openRepositoryEditor).toHaveBeenCalledWith('/repo/src')
   })
 
   test('does not show Finder action for remote file tree nodes', async () => {

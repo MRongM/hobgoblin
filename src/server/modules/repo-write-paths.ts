@@ -3,7 +3,6 @@ import { publishRepoQueryInvalidation } from '#/server/modules/invalidation-brok
 import { resolveRemoteRepoTarget, resolveRepoBackend, runWithRepoBackend } from '#/server/modules/repo-backend.ts'
 import { getServerSettingsPrefs } from '#/server/modules/settings-source.ts'
 import { cloneRepository as cloneGitRepository } from '#/system/git/clone.ts'
-import { checkoutBranch } from '#/system/git/branches.ts'
 import { resetHardToPreviousCommit } from '#/system/git/reset.ts'
 import { deleteLocalFileTreeEntries, renameLocalFileTreeEntry } from '#/system/file-tree/local.ts'
 import { deleteRemoteFileTreeEntries, renameRemoteFileTreeEntry } from '#/system/ssh/git.ts'
@@ -405,10 +404,16 @@ export async function checkoutWorktreeBranch(
   signal?: AbortSignal,
   sourceToken?: string,
 ): Promise<ExecResult> {
-  if (!isValidCwd(worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
-  const result = await checkoutBranch(worktreePath, branch, signal)
-  if (result.ok) publishRepoSnapshotInvalidation(repoId, sourceToken)
-  return result
+  if (!isValidRepoLocator(repoId) || !isAbsoluteWorktreePath(worktreePath)) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  return await runWithRepoBackend(repoId, async (backend) => {
+    return await publishSnapshotInvalidationAfterMutation(
+      repoId,
+      await backend.checkoutWorktree(worktreePath, branch, signal),
+      sourceToken,
+    )
+  })
 }
 
 export async function commitRepositoryChanges(
