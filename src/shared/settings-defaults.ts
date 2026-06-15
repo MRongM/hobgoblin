@@ -31,6 +31,8 @@ export const DEFAULT_SWAP_CLOSE_SHORTCUTS = false
 export const DEFAULT_TOGGLE_DETAIL_ON_ACTION_BAR_BLANK_CLICK = false
 export const DEFAULT_TERMINAL_APP: TerminalPref = 'auto'
 export const DEFAULT_EDITOR_APP: EditorPref = 'auto'
+export const DEFAULT_TERMINAL_EXTERNAL_INPUT_ENABLED = false
+export const DEFAULT_TERMINAL_CUSTOM_BUTTONS_VISIBLE = true
 export const DEFAULT_TERMINAL_CUSTOM_BUTTONS: TerminalCustomButton[] = []
 export const DEFAULT_LAN_ENABLED = false
 
@@ -62,6 +64,10 @@ export function defaultSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): Se
     globalShortcut: overrides.globalShortcut ?? DEFAULT_GLOBAL_SHORTCUT,
     terminalApp: overrides.terminalApp ?? DEFAULT_TERMINAL_APP,
     editorApp: overrides.editorApp ?? DEFAULT_EDITOR_APP,
+    terminalExternalInputEnabled:
+      overrides.terminalExternalInputEnabled ?? DEFAULT_TERMINAL_EXTERNAL_INPUT_ENABLED,
+    terminalCustomButtonsVisible:
+      overrides.terminalCustomButtonsVisible ?? DEFAULT_TERMINAL_CUSTOM_BUTTONS_VISIBLE,
     terminalCustomButtons: overrides.terminalCustomButtons ?? DEFAULT_TERMINAL_CUSTOM_BUTTONS,
     lanEnabled: overrides.lanEnabled ?? DEFAULT_LAN_ENABLED,
  }
@@ -89,6 +95,8 @@ export function initialSettingsFromSnapshot(snapshot: Pick<
   | 'globalShortcutRegistered'
   | 'terminalApp'
   | 'editorApp'
+  | 'terminalExternalInputEnabled'
+  | 'terminalCustomButtonsVisible'
   | 'terminalCustomButtons'
   | 'lanEnabled'
 >): InitialSettingsSnapshot {
@@ -103,6 +111,8 @@ export function initialSettingsFromSnapshot(snapshot: Pick<
     globalShortcutRegistered: snapshot.globalShortcutRegistered,
     terminalApp: snapshot.terminalApp,
     editorApp: snapshot.editorApp,
+    terminalExternalInputEnabled: snapshot.terminalExternalInputEnabled,
+    terminalCustomButtonsVisible: snapshot.terminalCustomButtonsVisible,
     terminalCustomButtons: snapshot.terminalCustomButtons,
     lanEnabled: snapshot.lanEnabled,
   }

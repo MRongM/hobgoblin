@@ -22,6 +22,7 @@ export async function fetchServerJson<T>(path: string, init?: RequestInit): Prom
   const server = requireEmbeddedServer()
   const response = await fetch(new URL(path, resolveApiBaseUrl(server.url)).toString(), {
     ...init,
+    cache: init?.cache ?? 'no-store',
     headers: {
       'x-goblin-internal-secret': server.secret,
       ...(init?.headers ?? {}),

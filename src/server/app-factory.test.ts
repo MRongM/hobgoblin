@@ -102,6 +102,7 @@ describe('server app html bootstrap', () => {
 
     const html = await response.text()
     expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('no-store')
     expect(html).toContain('<script id="goblin-bootstrap" type="application/json">')
     expect(html).toContain('"secret"')
     expect(html).toContain('"lang":"zh"')
@@ -144,9 +145,25 @@ describe('server app html bootstrap', () => {
       const response = await app.request(new Request(`http://127.0.0.1:32100${path}`))
       const html = await response.text()
       expect(response.status).toBe(200)
+      expect(response.headers.get('cache-control')).toBe('no-store')
       expect(html).toContain('<script id="goblin-bootstrap" type="application/json">')
       expect(html).toContain('"secret"')
       expect(html).toContain('<base href="http://127.0.0.1:32100/">')
     }
+  })
+
+  test('marks api responses as non-cacheable', async () => {
+    const { createApp } = await import('#/server/app-factory.ts')
+    const app = createApp({
+      version: '0.1.0',
+      startedAt: Date.now(),
+      internalSecret: 'secret',
+      terminalHost: terminalHostStub,
+    })
+
+    const response = await app.request(new Request('http://127.0.0.1:32100/api/health'))
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('no-store')
   })
 })

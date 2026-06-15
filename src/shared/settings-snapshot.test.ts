@@ -25,7 +25,9 @@ describe('settings snapshot partitions', () => {
           globalShortcut: 'CommandOrControl+Shift+K',
           terminalApp: 'ghostty',
           editorApp: 'cursor',
-          terminalCustomButtons: [{ label: 'status', value: 'git status --short' }],
+          terminalExternalInputEnabled: true,
+          terminalCustomButtonsVisible: false,
+          terminalCustomButtons: [{ label: 'status', value: 'git status --short', action: 'input' }],
           lanEnabled: true,
         },
         globalShortcutRegistered: true,
@@ -44,7 +46,9 @@ describe('settings snapshot partitions', () => {
       globalShortcutRegistered: true,
       terminalApp: 'ghostty',
       editorApp: 'cursor',
-      terminalCustomButtons: [{ label: 'status', value: 'git status --short' }],
+      terminalExternalInputEnabled: true,
+      terminalCustomButtonsVisible: false,
+      terminalCustomButtons: [{ label: 'status', value: 'git status --short', action: 'input' }],
       lanEnabled: true,
     })
   })
@@ -74,7 +78,9 @@ describe('settings snapshot partitions', () => {
         globalShortcut: 'CommandOrControl+Shift+G',
         terminalApp: 'auto',
         editorApp: 'auto',
-        terminalCustomButtons: [{ label: 'status', value: 'git status --short' }],
+        terminalExternalInputEnabled: false,
+        terminalCustomButtonsVisible: true,
+        terminalCustomButtons: [{ label: 'status', value: 'git status --short', action: 'execute' }],
         lanEnabled: false,
       },
       globalShortcutRegistered: false,
@@ -92,7 +98,9 @@ describe('settings snapshot partitions', () => {
 
     expect(runtimeSettingsSnapshotFromSettingsSnapshot(snapshot)).toMatchObject({
       globalShortcutRegistered: false,
-      terminalCustomButtons: [{ label: 'status', value: 'git status --short' }],
+      terminalExternalInputEnabled: false,
+      terminalCustomButtonsVisible: true,
+      terminalCustomButtons: [{ label: 'status', value: 'git status --short', action: 'execute' }],
     })
     expect(runtimeRecentReposStateFromSettingsSnapshot(snapshot)).toEqual({
       recentRepos: [{ kind: 'local', id: '/tmp/repo-b' }],
