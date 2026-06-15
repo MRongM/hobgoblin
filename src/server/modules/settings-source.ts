@@ -2,7 +2,16 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { toSafeRepoLocator, toSafeSessionRepoEntry } from '#/shared/input-validation.ts'
 import { serverDataFile } from '#/server/common/data-dir.ts'
-import type { EditorPref, LangPref, SessionState, SettingsPrefs, TerminalCustomButton, TerminalPref, ThemePref } from '#/shared/rpc.ts'
+import type {
+  EditorPref,
+  LangPref,
+  SessionState,
+  SettingsPrefs,
+  TerminalCustomButton,
+  TerminalCustomButtonAction,
+  TerminalPref,
+  ThemePref,
+} from '#/shared/rpc.ts'
 import {
   DEFAULT_DETAIL_COLLAPSED,
   effectiveDetailCollapsed,
@@ -45,6 +54,8 @@ interface ServerSettingsData {
   globalShortcut: string
   terminalApp: TerminalPref
   editorApp: EditorPref
+  terminalExternalInputEnabled: boolean
+  terminalCustomButtonsVisible: boolean
   terminalCustomButtons: TerminalCustomButton[]
   lanEnabled: boolean
   session: SessionState
@@ -90,6 +101,18 @@ function normalizeTerminalNotificationsEnabled(value: unknown): boolean {
   return value === true
 }
 
+function normalizeTerminalExternalInputEnabled(value: unknown): boolean {
+  return value === true
+}
+
+function normalizeTerminalCustomButtonsVisible(value: unknown): boolean {
+  return value !== false
+}
+
+function normalizeTerminalCustomButtonAction(value: unknown): TerminalCustomButtonAction {
+  return value === 'input' ? 'input' : 'execute'
+}
+
 function normalizeTerminalCustomButtons(value: unknown): TerminalCustomButton[] {
   if (!Array.isArray(value)) return []
   const normalized: TerminalCustomButton[] = []
@@ -99,7 +122,7 @@ function normalizeTerminalCustomButtons(value: unknown): TerminalCustomButton[] 
     if (typeof button.label !== 'string' || typeof button.value !== 'string') continue
     const label = button.label.trim()
     if (!label || button.value.trim().length === 0) continue
-    normalized.push({ label, value: button.value })
+    normalized.push({ label, value: button.value, action: normalizeTerminalCustomButtonAction(button.action) })
     if (normalized.length >= MAX_TERMINAL_CUSTOM_BUTTONS) break
   }
   return normalized
@@ -123,6 +146,8 @@ function settingsPrefsFromData(data: ServerSettingsData): SettingsPrefs {
     globalShortcut: data.globalShortcut,
     terminalApp: data.terminalApp,
     editorApp: data.editorApp,
+    terminalExternalInputEnabled: data.terminalExternalInputEnabled,
+    terminalCustomButtonsVisible: data.terminalCustomButtonsVisible,
     terminalCustomButtons: data.terminalCustomButtons,
     lanEnabled: data.lanEnabled,
   }
@@ -207,6 +232,8 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       globalShortcut: normalizeGlobalShortcut(parsed.globalShortcut),
       terminalApp: normalizeTerminalPref(parsed.terminalApp),
       editorApp: normalizeEditorPref(parsed.editorApp),
+      terminalExternalInputEnabled: normalizeTerminalExternalInputEnabled(parsed.terminalExternalInputEnabled),
+      terminalCustomButtonsVisible: normalizeTerminalCustomButtonsVisible(parsed.terminalCustomButtonsVisible),
       terminalCustomButtons: normalizeTerminalCustomButtons(parsed.terminalCustomButtons),
       lanEnabled: normalizeLanEnabled(parsed.lanEnabled),
       session: normalizeSession(parsed.session),
@@ -286,6 +313,14 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     patch.globalShortcut === undefined ? data.globalShortcut : normalizeGlobalShortcut(patch.globalShortcut)
   const nextTerminalApp = patch.terminalApp === undefined ? data.terminalApp : normalizeTerminalPref(patch.terminalApp)
   const nextEditorApp = patch.editorApp === undefined ? data.editorApp : normalizeEditorPref(patch.editorApp)
+  const nextTerminalExternalInputEnabled =
+    patch.terminalExternalInputEnabled === undefined
+      ? data.terminalExternalInputEnabled
+      : normalizeTerminalExternalInputEnabled(patch.terminalExternalInputEnabled)
+  const nextTerminalCustomButtonsVisible =
+    patch.terminalCustomButtonsVisible === undefined
+      ? data.terminalCustomButtonsVisible
+      : normalizeTerminalCustomButtonsVisible(patch.terminalCustomButtonsVisible)
   const nextTerminalCustomButtons =
     patch.terminalCustomButtons === undefined
       ? data.terminalCustomButtons
@@ -304,6 +339,8 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     data.globalShortcut !== nextGlobalShortcut ||
     data.terminalApp !== nextTerminalApp ||
     data.editorApp !== nextEditorApp ||
+    data.terminalExternalInputEnabled !== nextTerminalExternalInputEnabled ||
+    data.terminalCustomButtonsVisible !== nextTerminalCustomButtonsVisible ||
     JSON.stringify(data.terminalCustomButtons) !== JSON.stringify(nextTerminalCustomButtons) ||
     data.lanEnabled !== nextLanEnabled
   data.lang = nextLang
@@ -318,6 +355,8 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   data.globalShortcut = nextGlobalShortcut
   data.terminalApp = nextTerminalApp
   data.editorApp = nextEditorApp
+  data.terminalExternalInputEnabled = nextTerminalExternalInputEnabled
+  data.terminalCustomButtonsVisible = nextTerminalCustomButtonsVisible
   data.terminalCustomButtons = nextTerminalCustomButtons
   data.lanEnabled = nextLanEnabled
   if (changed) await writeServerSettingsFile(data)

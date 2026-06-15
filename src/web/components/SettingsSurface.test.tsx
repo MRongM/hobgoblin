@@ -323,6 +323,10 @@ describe('SettingsSurface', () => {
   test('edits terminal custom buttons from settings', async () => {
     await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
 
+    expect(document.body.textContent).toContain('settings.terminal-input.title')
+    expect(document.body.textContent).toContain('settings.terminal-external-input')
+    expect(document.body.textContent).toContain('settings.terminal-custom-buttons.visible')
+
     await act(async () => {
       buttonByText('settings.terminal-custom-buttons.add').click()
       await Promise.resolve()
@@ -330,9 +334,11 @@ describe('SettingsSurface', () => {
 
     const labelInput = document.getElementById('terminal-custom-button-label-0')
     const valueInput = document.getElementById('terminal-custom-button-value-0')
+    const actionTrigger = document.getElementById('terminal-custom-button-action-0')
     if (!(labelInput instanceof HTMLInputElement) || !(valueInput instanceof HTMLTextAreaElement)) {
       throw new Error('Missing terminal custom button fields')
     }
+    expect(actionTrigger).toBeTruthy()
 
     await act(async () => {
       setInputValue(labelInput, 'status')
@@ -349,7 +355,36 @@ describe('SettingsSurface', () => {
       fetchMock.mock.calls.some((call) => {
         const [url, options] = call as unknown as [unknown, RequestInit | undefined]
         if (new URL(String(url)).pathname !== '/api/settings/prefs') return false
-        return String(options?.body ?? '').includes('terminalCustomButtons')
+        return (
+          String(options?.body ?? '').includes('terminalCustomButtons') &&
+          String(options?.body ?? '').includes('"action":"execute"')
+        )
+      }),
+    ).toBe(true)
+  })
+
+  test('toggles terminal external input and custom button visibility from settings', async () => {
+    await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
+
+    const externalInputSwitch = switchById('settings-terminal-external-input')
+    const buttonsVisibleSwitch = switchById('settings-terminal-custom-buttons-visible')
+
+    await act(async () => {
+      externalInputSwitch.click()
+      buttonsVisibleSwitch.click()
+      await Promise.resolve()
+    })
+
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [, options] = call as unknown as [unknown, RequestInit | undefined]
+        return String(options?.body ?? '').includes('terminalExternalInputEnabled')
+      }),
+    ).toBe(true)
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [, options] = call as unknown as [unknown, RequestInit | undefined]
+        return String(options?.body ?? '').includes('terminalCustomButtonsVisible')
       }),
     ).toBe(true)
   })

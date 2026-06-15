@@ -53,6 +53,12 @@ describe('i18n dictionaries', () => {
     expect(ja['repo-tabs.open-remote-path-label']).toBe('リモートパス')
   })
 
+  test('distinguishes Chinese pull and remote tracking branch actions', () => {
+    expect(zh['action.pull-remote']).toBe('拉取上游')
+    expect(zh['action.pull-remote-branch']).toBe('从远程新建分支')
+    expect(zh['action.pull-remote-branch-title']).toBe('从远程分支创建本地分支')
+  })
+
   test('uses Hobgoblin in user-visible product copy', () => {
     for (const [lang, dict] of Object.entries(dicts)) {
       expect(dict['about.app'], `${lang}.about.app`).toBe('Hobgoblin')

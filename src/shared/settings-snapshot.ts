@@ -25,6 +25,8 @@ export function buildRuntimeSettingsSnapshot(input: {
     globalShortcutRegistered: input.globalShortcutRegistered,
     terminalApp: input.prefs.terminalApp,
     editorApp: input.prefs.editorApp,
+    terminalExternalInputEnabled: input.prefs.terminalExternalInputEnabled,
+    terminalCustomButtonsVisible: input.prefs.terminalCustomButtonsVisible,
     terminalCustomButtons: input.prefs.terminalCustomButtons,
     lanEnabled: input.prefs.lanEnabled,
   }
@@ -70,6 +72,8 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     | 'globalShortcutRegistered'
     | 'terminalApp'
     | 'editorApp'
+    | 'terminalExternalInputEnabled'
+    | 'terminalCustomButtonsVisible'
     | 'terminalCustomButtons'
     | 'lanEnabled'
   >,
@@ -88,6 +92,8 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     globalShortcutRegistered: snapshot.globalShortcutRegistered,
     terminalApp: snapshot.terminalApp,
     editorApp: snapshot.editorApp,
+    terminalExternalInputEnabled: snapshot.terminalExternalInputEnabled,
+    terminalCustomButtonsVisible: snapshot.terminalCustomButtonsVisible,
     terminalCustomButtons: snapshot.terminalCustomButtons,
     lanEnabled: snapshot.lanEnabled,
   }

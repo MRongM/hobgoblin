@@ -2,7 +2,7 @@ import { access, readFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { cors } from 'hono/cors'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { createInternalAuthMiddleware } from '#/server/common/auth.ts'
@@ -92,9 +92,18 @@ async function renderRendererIndexHtml(
   return injectBootstrapIntoHtml(await readFile(WEB_INDEX_HTML, 'utf8'), bootstrap)
 }
 
+function noStoreHtml(c: Context, html: string): Response {
+  c.header('Cache-Control', 'no-store')
+  return c.html(html)
+}
+
 export function createApp(options: ServerAppOptions): Hono {
   const settingsState = createServerSettingsState()
   const app = new Hono()
+  app.use('/api/*', async (c, next) => {
+    c.header('Cache-Control', 'no-store')
+    await next()
+  })
   app.use(
     '/api/*',
     cors({
@@ -115,36 +124,28 @@ export function createApp(options: ServerAppOptions): Hono {
   app.route('/ws', createRealtimeRoutes({ internalSecret: options.internalSecret, terminalHost: options.terminalHost }))
   app.get('/', async (c) => {
     try {
-      return c.html(
-        await renderRendererIndexHtml(c.req.url, options.internalSecret, c.req.header('accept-language') ?? null),
-      )
+      return noStoreHtml(c, await renderRendererIndexHtml(c.req.url, options.internalSecret, c.req.header('accept-language') ?? null))
     } catch {
       return c.text('Not Found', 404)
     }
   })
   app.get('/index.html', async (c) => {
     try {
-      return c.html(
-        await renderRendererIndexHtml(c.req.url, options.internalSecret, c.req.header('accept-language') ?? null),
-      )
+      return noStoreHtml(c, await renderRendererIndexHtml(c.req.url, options.internalSecret, c.req.header('accept-language') ?? null))
     } catch {
       return c.text('Not Found', 404)
     }
   })
   app.get('/settings', async (c) => {
     try {
-      return c.html(
-        await renderRendererIndexHtml(c.req.url, options.internalSecret, c.req.header('accept-language') ?? null),
-      )
+      return noStoreHtml(c, await renderRendererIndexHtml(c.req.url, options.internalSecret, c.req.header('accept-language') ?? null))
     } catch {
       return c.text('Not Found', 404)
     }
   })
   app.get('/settings/*', async (c) => {
     try {
-      return c.html(
-        await renderRendererIndexHtml(c.req.url, options.internalSecret, c.req.header('accept-language') ?? null),
-      )
+      return noStoreHtml(c, await renderRendererIndexHtml(c.req.url, options.internalSecret, c.req.header('accept-language') ?? null))
     } catch {
       return c.text('Not Found', 404)
     }
@@ -152,9 +153,7 @@ export function createApp(options: ServerAppOptions): Hono {
   app.use('/*', serveStatic({ root: WEB_DIST_DIR }))
   app.get('*', async (c) => {
     try {
-      return c.html(
-        await renderRendererIndexHtml(c.req.url, options.internalSecret, c.req.header('accept-language') ?? null),
-      )
+      return noStoreHtml(c, await renderRendererIndexHtml(c.req.url, options.internalSecret, c.req.header('accept-language') ?? null))
     } catch {
       return c.text('Not Found', 404)
     }

@@ -45,6 +45,8 @@ describe('native shell projection helpers', () => {
         globalShortcut: 'Alt+K',
         terminalApp: 'auto',
         editorApp: 'auto',
+        terminalExternalInputEnabled: false,
+        terminalCustomButtonsVisible: true,
         terminalCustomButtons: [],
         lanEnabled: false,
       }),

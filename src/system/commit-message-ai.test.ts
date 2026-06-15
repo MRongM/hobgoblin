@@ -67,7 +67,7 @@ describe('commit message AI providers', () => {
     expect(mocks.execa).not.toHaveBeenCalled()
   })
 
-  test('invokes codex in JSONL non-interactive read-only mode', async () => {
+  test('invokes codex in JSONL non-interactive read-only mode without requiring a Git worktree', async () => {
     mocks.execa.mockResolvedValueOnce({
       exitCode: 0,
       stdout: [
@@ -90,7 +90,14 @@ describe('commit message AI providers', () => {
 
     expect(mocks.execa).toHaveBeenCalledWith(
       'codex',
-      ['exec', '--json', expect.stringContaining('Return only the commit message.')],
+      [
+        'exec',
+        '--json',
+        '--sandbox',
+        'read-only',
+        '--skip-git-repo-check',
+        expect.stringContaining('Return only the commit message.'),
+      ],
       expect.objectContaining({
         cwd: '/repo',
         reject: false,
@@ -177,7 +184,14 @@ describe('commit message AI providers', () => {
 
     expect(mocks.execa).toHaveBeenLastCalledWith(
       codexPath,
-      ['exec', '--json', expect.stringContaining('Return only the commit message.')],
+      [
+        'exec',
+        '--json',
+        '--sandbox',
+        'read-only',
+        '--skip-git-repo-check',
+        expect.stringContaining('Return only the commit message.'),
+      ],
       expect.objectContaining({
         cwd: '/repo',
         env: expect.objectContaining({ PATH: expect.stringContaining('/Users/test/.nvm/versions/node/v22.16.0/bin') }),
@@ -251,7 +265,7 @@ describe('commit message AI providers', () => {
       message: 'chore: summarize large change',
     })
 
-    const prompt = mocks.execa.mock.calls[0]![1][2] as string
+    const prompt = mocks.execa.mock.calls[0]![1].at(-1) as string
     expect(prompt).toContain('[binary diff omitted: assets/icon.png]')
     expect(prompt).toContain('diff --git a/src/example.ts b/src/example.ts')
     expect(prompt).not.toContain(binaryPayload)

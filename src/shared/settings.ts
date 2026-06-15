@@ -11,9 +11,12 @@ export type ResolvedEditorApp = Exclude<EditorPref, 'auto'>
 export type TerminalAppAvailability = Record<ResolvedTerminalApp, boolean>
 export type EditorAppAvailability = Record<ResolvedEditorApp, boolean>
 
+export type TerminalCustomButtonAction = 'execute' | 'input'
+
 export interface TerminalCustomButton {
   label: string
   value: string
+  action?: TerminalCustomButtonAction
 }
 
 export interface SettingsPrefs {
@@ -29,6 +32,8 @@ export interface SettingsPrefs {
   globalShortcut: string
   terminalApp: TerminalPref
   editorApp: EditorPref
+  terminalExternalInputEnabled: boolean
+  terminalCustomButtonsVisible: boolean
   terminalCustomButtons: TerminalCustomButton[]
   lanEnabled: boolean
 }
