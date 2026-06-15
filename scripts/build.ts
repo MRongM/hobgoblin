@@ -5,9 +5,9 @@
 //             Hobgoblin.app into ~/Applications, closing any running instance
 //             first. macOS-only.
 //
-// Usage: ./scripts/build.ts [install|i] [--clean]
+// Usage: ./scripts/build.ts [install|i] [--clean] [--typecheck] [--skip-typecheck] [--force-install]
 import { $ } from 'bun'
-import { chmodSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { parseArgs } from 'node:util'
@@ -20,14 +20,20 @@ $.cwd(repoRoot)
 const APP_NAME = 'Hobgoblin'
 const APP_ID = 'hobgoblin.app'
 
-const { positionals } = parseArgs({
+const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
     clean: { type: 'boolean', default: false },
+    typecheck: { type: 'boolean', default: false },
+    'skip-typecheck': { type: 'boolean', default: false },
+    'force-install': { type: 'boolean', default: false },
   },
 })
 const mode = positionals[0]
 const shouldInstall = mode === 'install' || mode === 'i'
+const shouldClean = values.clean === true
+const shouldRunTypecheck = values.typecheck === true || (!shouldInstall && values['skip-typecheck'] !== true)
+const shouldForceInstall = values['force-install'] === true
 
 async function findBuiltApp(): Promise<string | null> {
   // mac dir target emits one directory per declared arch (`mac-arm64`,
@@ -38,12 +44,38 @@ async function findBuiltApp(): Promise<string | null> {
   return existsSync(candidate) ? candidate : null
 }
 
+function newestMtime(paths: string[]): number {
+  let newest = 0
+  for (const filePath of paths) {
+    if (!existsSync(filePath)) continue
+    newest = Math.max(newest, statSync(filePath).mtimeMs)
+  }
+  return newest
+}
+
+function shouldRunBunInstall(): boolean {
+  if (shouldClean || shouldForceInstall) return true
+
+  const nodeModulesDir = path.join(repoRoot, 'node_modules')
+  if (!existsSync(nodeModulesDir)) return true
+
+  const dependencyInputs = [path.join(repoRoot, 'package.json'), path.join(repoRoot, 'bun.lock')]
+  return newestMtime(dependencyInputs) > statSync(nodeModulesDir).mtimeMs
+}
+
 // Clear any prior build output so `findBuiltApp` can't pick up a stale
 // artifact if electron-builder fails partway through. A matching rm
 // after a successful install is run below.
 rmSync(path.join(repoRoot, 'release'), { recursive: true, force: true })
+if (shouldClean) {
+  rmSync(path.join(repoRoot, 'dist'), { recursive: true, force: true })
+}
 
-await $`bun install`
+if (shouldRunBunInstall()) {
+  await $`bun install`
+} else {
+  console.log('Skipping bun install (node_modules is up to date).')
+}
 if (process.platform === 'darwin') {
   const ptySpawnHelperArches = [process.arch]
   const ptySpawnHelpers = ptySpawnHelperArches.map((arch) =>
@@ -58,7 +90,11 @@ if (process.platform === 'darwin') {
     chmodSync(helper, 0o755)
   }
 }
-await $`bun run typecheck`
+if (shouldRunTypecheck) {
+  await $`bun run typecheck`
+} else {
+  console.log('Skipping typecheck for fast install.')
+}
 // Renderer bundle MUST exist before electron-builder packs it (the
 // `files` glob in electron-builder.ts expects `dist/web/`).
 await $`bun run build:web`
@@ -83,7 +119,8 @@ if (!existsSync(terminalWorkerDistEntry)) {
 // `dir` target skips dmg packaging for install. Every build mode pins to the
 // host arch so local builds don't waste time cross-building unused artifacts.
 const archFlag = process.arch === 'arm64' ? '--arm64' : '--x64'
-const builderArgs = ['--mac', shouldInstall ? 'dir' : 'dmg', archFlag]
+const electronBuilderConfigArgs = shouldInstall ? ['--config.npmRebuild=false'] : []
+const builderArgs = ['--mac', shouldInstall ? 'dir' : 'dmg', archFlag, ...electronBuilderConfigArgs]
 await $`bun run build:electron -- ${builderArgs}`
 
 const srcApp = await findBuiltApp()

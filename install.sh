@@ -10,11 +10,11 @@ if pgrep -f "$BINARY_PATH_FRAGMENT" > /dev/null; then
   WAS_RUNNING=true
 fi
 
-# Collect flags (e.g. --clean) to forward to the build script.
+# Collect build flags to forward to the build script.
 EXTRA_ARGS=()
 while [ $# -gt 0 ]; do
   case "$1" in
-    --clean)
+    --clean|--typecheck|--skip-typecheck|--force-install)
       EXTRA_ARGS+=("$1")
       shift
       ;;
