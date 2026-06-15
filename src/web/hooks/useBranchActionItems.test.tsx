@@ -171,6 +171,51 @@ describe('useBranchActionItems', () => {
     expect(groups.mainItems.find((item) => item.id === 'pull')?.label).toBe('action.pull-remote')
   })
 
+  test('places discard changes below delete branch in the destructive group', async () => {
+    mocks.useBranchActions.mockReturnValue({
+      blocked: false,
+      busyAction: null,
+      capabilities: {
+        isCurrent: false,
+        checkedOutInAnotherWorktree: false,
+        canRemoveWorktree: false,
+        isRegularBranch: true,
+        canCopyPatch: false,
+        canPull: false,
+        canPush: false,
+        canOpenRemote: false,
+        canOpenTerminal: false,
+        canOpenEditor: false,
+      },
+      actions: {
+        copyPatch: vi.fn(),
+        checkout: vi.fn(),
+        pull: vi.fn(),
+        push: vi.fn(),
+        openTerminal: vi.fn(),
+        openEditor: vi.fn(),
+        openRemote: vi.fn(),
+        requestDeleteBranch: vi.fn(),
+        requestRemoveWorktree: vi.fn(),
+      },
+      dialogs: null,
+    })
+    const branch = createRepoBranch('feature/deleteable', { worktree: { path: '/tmp/repo-feature' } })
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      branches: [branch],
+    })
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.ts')
+    const groups = await renderItemGroups(useItems, repo, branch)
+
+    expect(groups.destructiveItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
+      'deleteBranch',
+      'resetHard',
+    ])
+    expect(groups.destructiveItems.find((item) => item.id === 'resetHard')?.label).toBe('action.reset-hard')
+  })
+
   test('disables non-target branch actions without showing push loading', async () => {
     mocks.useRuntimeExternalAppSettings.mockReturnValue({
       terminalApp: 'auto',
