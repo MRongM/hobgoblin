@@ -46,6 +46,7 @@ describe('native shell projection helpers', () => {
         terminalApp: 'auto',
         editorApp: 'auto',
         terminalExternalInputEnabled: false,
+        remoteTerminalTmuxEnabled: false,
         terminalCustomButtonsVisible: true,
         terminalCustomButtons: [],
         lanEnabled: false,

@@ -106,7 +106,7 @@ export function buildRemoteCommandInvocation(
 export function buildRemoteTerminalInvocation(
   target: RemoteRepoTarget,
   remotePath: string,
-  options: { cols: number; rows: number; terminalNumber: number },
+  options: { cols: number; rows: number; terminalNumber: number; useTmux?: boolean },
 ): RemoteCommandInvocation {
   const invocation = buildManagedRemoteTerminalInvocation(
     {
@@ -122,6 +122,7 @@ export function buildRemoteTerminalInvocation(
     },
     {
       sshOptions: ['-o', 'StrictHostKeyChecking=yes', '-o', `ConnectTimeout=${SSH_CONNECT_TIMEOUT_SEC}`],
+      useTmux: options.useTmux === true,
     },
   )
   if (!invocation) throw new Error('Invalid remote terminal invocation')

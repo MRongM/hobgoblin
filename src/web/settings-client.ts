@@ -191,6 +191,10 @@ export async function setTerminalExternalInputEnabled(enabled: boolean): Promise
   await updateSettingsPrefsPatch({ terminalExternalInputEnabled: enabled })
 }
 
+export async function setRemoteTerminalTmuxEnabled(enabled: boolean): Promise<void> {
+  await updateSettingsPrefsPatch({ remoteTerminalTmuxEnabled: enabled })
+}
+
 export async function setTerminalCustomButtonsVisible(visible: boolean): Promise<void> {
   await updateSettingsPrefsPatch({ terminalCustomButtonsVisible: visible })
 }

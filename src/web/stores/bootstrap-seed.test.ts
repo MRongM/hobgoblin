@@ -42,6 +42,7 @@ describe('renderer bootstrap seeding', () => {
         terminalApp: 'ghostty',
         editorApp: 'cursor',
         terminalExternalInputEnabled: false,
+        remoteTerminalTmuxEnabled: false,
         terminalCustomButtonsVisible: true,
         terminalCustomButtons: [],
         lanEnabled: false,

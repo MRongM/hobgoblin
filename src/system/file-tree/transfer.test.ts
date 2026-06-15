@@ -35,7 +35,7 @@ describe('local file transfer', () => {
       sourceRootPath: root,
       targetRootPath: root,
       targetDirPath: join(root, 'dest'),
-      paths: [join(root, 'src')],
+      items: [{ path: join(root, 'src') }],
     })
 
     expect(result.ok).toBe(true)
@@ -71,10 +71,48 @@ describe('local file transfer', () => {
       sourceRootPath: root,
       targetRootPath: root,
       targetDirPath: root,
-      paths: [outside],
+      items: [{ path: outside }],
     })
 
     expect(result).toEqual({ ok: false, message: 'error.file-transfer-source-outside-worktree' })
+  })
+
+  test('uses destinationName when copying local paths to a local target', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goblin-file-transfer-'))
+    await mkdir(join(root, 'dest'))
+    await writeFile(join(root, 'report.pdf'), 'pdf')
+
+    const result = await copyLocalPathsToLocalTarget({
+      sourceRootPath: root,
+      targetRootPath: root,
+      targetDirPath: join(root, 'dest'),
+      items: [{ path: join(root, 'report.pdf'), destinationName: 'pasted-a8f31c9d.pdf' }],
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.copied).toEqual([
+      expect.objectContaining({
+        sourcePath: join(root, 'report.pdf'),
+        destinationPath: join(root, 'dest', 'pasted-a8f31c9d.pdf'),
+        kind: 'file',
+      }),
+    ])
+    await expect(readFile(join(root, 'dest', 'pasted-a8f31c9d.pdf'), 'utf8')).resolves.toBe('pdf')
+  })
+
+  test('rejects invalid destinationName before writing local copies', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goblin-file-transfer-'))
+    await writeFile(join(root, 'report.pdf'), 'pdf')
+
+    const result = await copyLocalPathsToLocalTarget({
+      sourceRootPath: root,
+      targetRootPath: root,
+      targetDirPath: root,
+      items: [{ path: join(root, 'report.pdf'), destinationName: '../report.pdf' }],
+    })
+
+    expect(result).toEqual({ ok: false, message: 'error.invalid-arguments' })
   })
 
   test('counts symlinks without following them outside the source root', async () => {

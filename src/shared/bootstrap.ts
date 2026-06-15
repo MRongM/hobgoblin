@@ -8,6 +8,7 @@ export type RendererNativeCapability =
   | 'open-directory-dialog'
   | 'consume-external-open-paths'
   | 'open-in-finder'
+  | 'clipboard-file-paths'
   | 'terminal-notifications'
   | 'terminal-badge'
 
@@ -19,6 +20,7 @@ export const ELECTRON_RENDERER_CAPABILITIES = [
   'open-directory-dialog',
   'consume-external-open-paths',
   'open-in-finder',
+  'clipboard-file-paths',
   'terminal-notifications',
   'terminal-badge',
 ] as const satisfies readonly RendererNativeCapability[]
@@ -36,6 +38,7 @@ export interface InitialSettingsSnapshot {
   terminalApp: TerminalPref
   editorApp: EditorPref
   terminalExternalInputEnabled: boolean
+  remoteTerminalTmuxEnabled: boolean
   terminalCustomButtonsVisible: boolean
   terminalCustomButtons: TerminalCustomButton[]
   lanEnabled: boolean

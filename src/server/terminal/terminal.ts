@@ -1,4 +1,5 @@
 import { isValidRepoLocator } from '#/shared/input-validation.ts'
+import { getServerSettingsPrefs } from '#/server/modules/settings-source.ts'
 import {
   TerminalSessionManager,
   isValidTerminalSessionId,
@@ -87,6 +88,9 @@ const catalog = createTerminalCatalog({
   isValidClientId: isValidTerminalClientId,
   isValidTerminalId,
   manager,
+  async remoteTerminalTmuxEnabled() {
+    return (await getServerSettingsPrefs()).remoteTerminalTmuxEnabled
+  },
   attachmentIsConnected(clientId, attachmentId) {
     return broker.attachmentIsConnected(clientId, attachmentId)
   },

@@ -52,6 +52,10 @@ export function pathForDroppedFile(file: File): string {
   }
 }
 
+export async function readSystemClipboardFilePaths(): Promise<string[]> {
+  return (await nativeShell()?.readClipboardFilePaths?.()) ?? []
+}
+
 function isAllowedExternalUrl(url: string, allowHttp: boolean): boolean {
   try {
     const parsed = new URL(url)

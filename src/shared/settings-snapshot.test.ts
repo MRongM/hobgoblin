@@ -26,6 +26,7 @@ describe('settings snapshot partitions', () => {
           terminalApp: 'ghostty',
           editorApp: 'cursor',
           terminalExternalInputEnabled: true,
+          remoteTerminalTmuxEnabled: true,
           terminalCustomButtonsVisible: false,
           terminalCustomButtons: [{ label: 'status', value: 'git status --short', action: 'input' }],
           lanEnabled: true,
@@ -47,6 +48,7 @@ describe('settings snapshot partitions', () => {
       terminalApp: 'ghostty',
       editorApp: 'cursor',
       terminalExternalInputEnabled: true,
+      remoteTerminalTmuxEnabled: true,
       terminalCustomButtonsVisible: false,
       terminalCustomButtons: [{ label: 'status', value: 'git status --short', action: 'input' }],
       lanEnabled: true,
@@ -79,6 +81,7 @@ describe('settings snapshot partitions', () => {
         terminalApp: 'auto',
         editorApp: 'auto',
         terminalExternalInputEnabled: false,
+        remoteTerminalTmuxEnabled: false,
         terminalCustomButtonsVisible: true,
         terminalCustomButtons: [{ label: 'status', value: 'git status --short', action: 'execute' }],
         lanEnabled: false,
@@ -99,6 +102,7 @@ describe('settings snapshot partitions', () => {
     expect(runtimeSettingsSnapshotFromSettingsSnapshot(snapshot)).toMatchObject({
       globalShortcutRegistered: false,
       terminalExternalInputEnabled: false,
+      remoteTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
       terminalCustomButtons: [{ label: 'status', value: 'git status --short', action: 'execute' }],
     })

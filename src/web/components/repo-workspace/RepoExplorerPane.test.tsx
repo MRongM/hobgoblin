@@ -79,7 +79,7 @@ describe('RepoExplorerPane', () => {
     await act(async () => root.unmount())
   })
 
-  test('switches the explorer area between file, changes, status, and ports tabs', async () => {
+  test('switches the local explorer area between file, changes, and status tabs', async () => {
     const container = document.createElement('div')
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -88,7 +88,7 @@ describe('RepoExplorerPane', () => {
     })
 
     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['file-tree.title', 'tab.changes', 'tab.status', 'ports.title'])
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['file-tree.title', 'tab.changes', 'tab.status'])
     expect(container.querySelector('[data-testid="project-file-tree"]')).toBeTruthy()
 
     await act(async () => {
@@ -105,6 +105,20 @@ describe('RepoExplorerPane', () => {
     expect(container.querySelector('[data-testid="project-file-tree"]')).toBeNull()
     expect(container.querySelector('[data-testid="project-changes-panel"]')).toBeNull()
     expect(container.querySelector('[data-testid="project-status-panel"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="project-ports-panel"]')).toBeNull()
+    await act(async () => root.unmount())
+  })
+
+  test('keeps the ports tab available for remote repositories', async () => {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId="ssh-config://prod/srv/repo" layout="top-bottom" showActions />)
+    })
+
+    const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['file-tree.title', 'tab.changes', 'tab.status', 'ports.title'])
 
     await act(async () => {
       tabs[3]?.click()
@@ -113,7 +127,9 @@ describe('RepoExplorerPane', () => {
     expect(container.querySelector('[data-testid="project-file-tree"]')).toBeNull()
     expect(container.querySelector('[data-testid="project-changes-panel"]')).toBeNull()
     expect(container.querySelector('[data-testid="project-status-panel"]')).toBeNull()
-    expect(container.querySelector('[data-testid="project-ports-panel"]')?.getAttribute('data-repo-id')).toBe('/repo')
+    expect(container.querySelector('[data-testid="project-ports-panel"]')?.getAttribute('data-repo-id')).toBe(
+      'ssh-config://prod/srv/repo',
+    )
     await act(async () => root.unmount())
   })
 

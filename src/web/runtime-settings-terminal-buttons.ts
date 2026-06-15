@@ -6,6 +6,7 @@ import {
 } from '#/web/settings-read-projection.ts'
 import {
   runSettingsControllerAction,
+  setRemoteTerminalTmuxEnabledPreference,
   setTerminalCustomButtonsPreference,
   setTerminalCustomButtonsVisiblePreference,
   setTerminalExternalInputEnabledPreference,
@@ -24,6 +25,11 @@ export function useTerminalCustomButtonsController() {
     async setTerminalExternalInputEnabled(enabled: boolean): Promise<void> {
       await runSettingsControllerAction('terminal external input update', async () => {
         await setTerminalExternalInputEnabledPreference(enabled)
+      })
+    },
+    async setRemoteTerminalTmuxEnabled(enabled: boolean): Promise<void> {
+      await runSettingsControllerAction('remote terminal tmux update', async () => {
+        await setRemoteTerminalTmuxEnabledPreference(enabled)
       })
     },
     async setTerminalCustomButtonsVisible(visible: boolean): Promise<void> {

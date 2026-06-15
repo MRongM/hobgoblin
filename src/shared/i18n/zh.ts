@@ -306,6 +306,7 @@ export const zh: Record<DictKey, string> = {
   'file-tree.retry': '重试',
   'file-tree.copy-path': '复制路径',
   'file-tree.copy-relative-path': '复制相对路径',
+  'file-tree.paste': '粘贴',
   'file-tree.open-editor': '在编辑器中打开',
   'file-tree.open-terminal': '在终端中打开',
   'file-tree.rename': '重命名',
@@ -643,6 +644,8 @@ export const zh: Record<DictKey, string> = {
   'settings.terminal-input.hint': '使用外部输入框增强编辑能力，同时保留原生终端输入。',
   'settings.terminal-external-input': '外部输入框',
   'settings.terminal-external-input-hint': '在可控制终端底部显示单行命令输入框。',
+  'settings.terminal-remote-tmux': '远程终端使用 tmux',
+  'settings.terminal-remote-tmux-hint': '开启后，应用内远程终端会连接到可恢复的 tmux 会话；关闭后直接启动远端登录 shell。',
   'settings.terminal-custom-buttons.title': '自定义终端按钮',
   'settings.terminal-custom-buttons.hint':
     '在终端底部显示按钮栏。按钮可配置为直接执行，或填入外部输入框后再编辑发送。',

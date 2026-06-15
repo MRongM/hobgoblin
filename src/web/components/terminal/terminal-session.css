@@ -12,7 +12,7 @@
   --goblin-terminal-float-padding: 6px 8px;
   --goblin-terminal-float-radius: 8px;
   --goblin-terminal-control-radius: 6px;
-  --goblin-terminal-bottom-dock-height: 80px;
+  --goblin-terminal-bottom-dock-height: 44px;
 }
 
 .goblin-terminal-slot__host {
@@ -269,6 +269,7 @@
 
 .goblin-terminal-external-input__control {
   display: block;
+  height: 26px;
   min-height: 26px;
   max-height: min(32vh, 220px);
   min-width: 0;

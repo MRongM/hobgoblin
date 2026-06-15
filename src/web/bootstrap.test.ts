@@ -50,6 +50,7 @@ describe('renderer bootstrap', () => {
       terminalApp: 'auto',
       editorApp: 'windsurf',
       terminalExternalInputEnabled: false,
+      remoteTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
       terminalCustomButtons: [],
       lanEnabled: false,

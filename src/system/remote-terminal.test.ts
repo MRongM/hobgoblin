@@ -68,8 +68,20 @@ describe('buildManagedRemoteTerminalSessionName', () => {
 })
 
 describe('buildManagedRemoteTerminalInvocation', () => {
-  test('builds a tmux-first ssh invocation with native shell fallback', () => {
+  test('builds a plain ssh invocation by default', () => {
     const invocation = buildManagedRemoteTerminalInvocation(BASE_MANAGED_TARGET)
+
+    expect(invocation).not.toBeNull()
+    expect(invocation?.command).toBe('ssh')
+    expect(invocation?.args).toEqual(['-tt', '--', 'prod', expect.stringContaining('sh -lc')])
+    expect(invocation?.script).toContain("cd '/srv/repo-feature' || exit")
+    expect(invocation?.script).toContain('exec "${SHELL:-/bin/sh}" -l')
+    expect(invocation?.script).not.toContain('tmux')
+    expect(invocation?.shellCommand).not.toContain('tmux')
+  })
+
+  test('builds a tmux-first ssh invocation with native shell fallback when enabled', () => {
+    const invocation = buildManagedRemoteTerminalInvocation(BASE_MANAGED_TARGET, { useTmux: true })
 
     expect(invocation).not.toBeNull()
     expect(invocation?.command).toBe('ssh')
@@ -104,7 +116,7 @@ describe('buildManagedRemoteTerminalInvocation', () => {
     const invocation = buildManagedRemoteTerminalInvocation({
       ...BASE_MANAGED_TARGET,
       worktreePath: "/srv/repo's-feature",
-    })
+    }, { useTmux: true })
 
     expect(invocation).not.toBeNull()
     expect(invocation?.script).toContain("cd '/srv/repo'\\''s-feature' || exit")

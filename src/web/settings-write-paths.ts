@@ -19,6 +19,7 @@ import {
   setLanEnabled,
   setPreferredEditorApp,
   setPreferredTerminalApp,
+  setRemoteTerminalTmuxEnabled,
   setSettingsFetchInterval,
   setShortcutsDisabled,
   setSwapCloseShortcuts,
@@ -117,6 +118,14 @@ export async function setTerminalExternalInputEnabledPreference(enabled: boolean
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
     ...current,
     terminalExternalInputEnabled: enabled,
+  }))
+}
+
+export async function setRemoteTerminalTmuxEnabledPreference(enabled: boolean): Promise<void> {
+  await setRemoteTerminalTmuxEnabled(enabled)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
+    ...current,
+    remoteTerminalTmuxEnabled: enabled,
   }))
 }
 

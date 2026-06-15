@@ -199,6 +199,34 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
     },
     [key, worktreePath, writeInput],
   )
+  const handleExternalInputDragOver = useCallback((event: DragEvent<HTMLTextAreaElement>) => {
+    if (!hasPathDrop(event)) return
+    event.preventDefault()
+    event.stopPropagation()
+    event.dataTransfer.dropEffect = 'copy'
+  }, [])
+  const handleExternalInputDrop = useCallback(
+    (event: DragEvent<HTMLTextAreaElement>) => {
+      if (!hasPathDrop(event)) return
+      event.preventDefault()
+      event.stopPropagation()
+      const paths = pathsForDrop(event, worktreePath)
+      if (paths.length === 0) return
+      const text = paths.map(shellEscapePath).join(' ')
+      const textarea = externalInputRef.current
+      const selectionStart = textarea?.selectionStart ?? externalInputValue.length
+      const selectionEnd = textarea?.selectionEnd ?? selectionStart
+      const next = insertExternalInputText(externalInputValue, selectionStart, selectionEnd, text)
+      setExternalInputValue(next.value)
+      queueMicrotask(() => {
+        const input = externalInputRef.current
+        if (!input) return
+        input.focus({ preventScroll: true })
+        input.setSelectionRange(next.cursor, next.cursor)
+      })
+    },
+    [externalInputValue, worktreePath],
+  )
 
   const showExternalInput = isController && terminalExternalInputEnabled && !!key
   const visibleCustomButtons = isController && terminalCustomButtonsVisible
@@ -352,6 +380,8 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
               resizeLabel={t('terminal.external-input-resize')}
               onChange={setExternalInputValue}
               onSubmit={submitExternalInput}
+              onDragOver={handleExternalInputDragOver}
+              onDrop={handleExternalInputDrop}
             />
           )}
         </div>
@@ -438,11 +468,11 @@ function shellEscapePath(path: string): string {
   return "'" + path.replace(/'/g, "'\\''") + "'"
 }
 
-function hasPathDrop(event: DragEvent<HTMLDivElement>): boolean {
+function hasPathDrop(event: DragEvent<HTMLElement>): boolean {
   return event.dataTransfer.types.includes(GOBLIN_FILE_PATHS_MIME) || event.dataTransfer.types.includes('Files')
 }
 
-function pathsForDrop(event: DragEvent<HTMLDivElement>, worktreePath: string): string[] {
+function pathsForDrop(event: DragEvent<HTMLElement>, worktreePath: string): string[] {
   if (event.dataTransfer.types.includes(GOBLIN_FILE_PATHS_MIME)) {
     return parseGoblinFilePathDragPayload(event.dataTransfer.getData(GOBLIN_FILE_PATHS_MIME)).map((path) =>
       pathForTerminalDrop(path, worktreePath),
@@ -463,4 +493,30 @@ function pathForTerminalDrop(path: string, worktreePath: string): string {
 
 function stripTrailingPathSeparators(path: string): string {
   return path.replace(/[\\/]+$/u, '')
+}
+
+function insertExternalInputText(
+  value: string,
+  selectionStart: number,
+  selectionEnd: number,
+  text: string,
+): { value: string; cursor: number } {
+  const start = clampSelectionIndex(selectionStart, value.length)
+  const end = clampSelectionIndex(selectionEnd, value.length)
+  const from = Math.min(start, end)
+  const to = Math.max(start, end)
+  const before = value.slice(0, from)
+  const after = value.slice(to)
+  const prefix = before.length > 0 && !/\s$/u.test(before) ? ' ' : ''
+  const suffix = after.length > 0 && !/^\s/u.test(after) ? ' ' : ''
+  const inserted = `${prefix}${text}${suffix}`
+  return {
+    value: `${before}${inserted}${after}`,
+    cursor: before.length + inserted.length,
+  }
+}
+
+function clampSelectionIndex(value: number, length: number): number {
+  if (!Number.isFinite(value)) return length
+  return Math.max(0, Math.min(length, Math.trunc(value)))
 }

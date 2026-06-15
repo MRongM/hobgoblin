@@ -28,6 +28,7 @@ export interface RemoteTerminalInvocation {
 
 export interface RemoteTerminalInvocationOptions {
   sshOptions?: readonly string[]
+  useTmux?: boolean
 }
 
 export function buildManagedRemoteTerminalSessionName(target: ManagedRemoteTerminalTarget): string {
@@ -59,14 +60,10 @@ export function buildManagedRemoteTerminalInvocation(
     return null
   }
 
-  const sessionName = buildManagedRemoteTerminalSessionName(target)
-  const script = [
-    `cd ${shellQuote(target.worktreePath)} || exit`,
-    'if command -v tmux >/dev/null 2>&1; then',
-    `  exec tmux new-session -A -s ${shellQuote(sessionName)} -c ${shellQuote(target.worktreePath)}`,
-    'fi',
-    'exec "${SHELL:-/bin/sh}" -l',
-  ].join('\n')
+  const script =
+    options.useTmux === true
+      ? buildTmuxRemoteLoginShellScript(target)
+      : buildPlainRemoteLoginShellScript(target.worktreePath)
   return buildSshInvocation(target.alias, script, options)
 }
 
@@ -76,8 +73,23 @@ export function buildExternalRemoteTerminalInvocation(
 ): RemoteTerminalInvocation | null {
   if (!isSafeRemoteAlias(target.alias) || !isSafeRemoteAbsolutePath(target.worktreePath)) return null
 
-  const script = [`cd ${shellQuote(target.worktreePath)} || exit`, 'exec "${SHELL:-/bin/sh}" -l'].join('\n')
+  const script = buildPlainRemoteLoginShellScript(target.worktreePath)
   return buildSshInvocation(target.alias, script, options)
+}
+
+function buildPlainRemoteLoginShellScript(worktreePath: string): string {
+  return [`cd ${shellQuote(worktreePath)} || exit`, 'exec "${SHELL:-/bin/sh}" -l'].join('\n')
+}
+
+function buildTmuxRemoteLoginShellScript(target: ManagedRemoteTerminalTarget): string {
+  const sessionName = buildManagedRemoteTerminalSessionName(target)
+  return [
+    `cd ${shellQuote(target.worktreePath)} || exit`,
+    'if command -v tmux >/dev/null 2>&1; then',
+    `  exec tmux new-session -A -s ${shellQuote(sessionName)} -c ${shellQuote(target.worktreePath)}`,
+    'fi',
+    'exec "${SHELL:-/bin/sh}" -l',
+  ].join('\n')
 }
 
 function buildSshInvocation(

@@ -53,9 +53,14 @@ export interface RepoFileTransferFileTreeSource {
   paths: string[]
 }
 
+export interface RepoFileTransferLocalPathItem {
+  path: string
+  destinationName?: string
+}
+
 export interface RepoFileTransferLocalPathsSource {
   kind: 'localPaths'
-  paths: string[]
+  items: RepoFileTransferLocalPathItem[]
 }
 
 export interface RepoFileTransferUploadedItem {
@@ -130,11 +135,29 @@ export function isRepoFileTransferRequest(value: unknown): value is RepoFileTran
       isStringArray(source.paths)
     )
   }
-  if (source.kind === 'localPaths') return isStringArray(source.paths)
+  if (source.kind === 'localPaths') return Array.isArray(source.items) && source.items.every(isRepoFileTransferLocalPathItem)
   if (source.kind === 'uploadedItems') {
     return Array.isArray(source.items) && source.items.every(isRepoFileTransferUploadedItem)
   }
   return false
+}
+
+export function isValidFileTransferDestinationName(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    !value.includes('\0') &&
+    !value.includes('/') &&
+    !value.includes('\\')
+  )
+}
+
+function isRepoFileTransferLocalPathItem(value: unknown): value is RepoFileTransferLocalPathItem {
+  return (
+    isRecord(value) &&
+    typeof value.path === 'string' &&
+    (value.destinationName === undefined || isValidFileTransferDestinationName(value.destinationName))
+  )
 }
 
 function isRepoFileTransferUploadedItem(value: unknown): value is RepoFileTransferUploadedItem {

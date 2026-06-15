@@ -79,7 +79,7 @@ describe('remote command scripts', () => {
     expect(invocation.script).toContain('/srv/repo/pasted.txt')
   })
 
-  test('renders tmux-aware managed remote terminal invocation through the ssh command adapter', () => {
+  test('renders plain managed remote terminal invocation through the ssh command adapter by default', () => {
     const invocation = buildRemoteTerminalInvocation(TARGET, '/srv/repo-feature', {
       cols: 100,
       rows: 30,
@@ -98,6 +98,18 @@ describe('remote command scripts', () => {
       expect.stringContaining('sh -lc'),
     ])
     expect(invocation.script).toContain("cd '/srv/repo-feature' || exit")
+    expect(invocation.script).toContain('exec "${SHELL:-/bin/sh}" -l')
+    expect(invocation.script).not.toContain('tmux')
+  })
+
+  test('renders tmux-aware managed remote terminal invocation through the ssh command adapter when enabled', () => {
+    const invocation = buildRemoteTerminalInvocation(TARGET, '/srv/repo-feature', {
+      cols: 100,
+      rows: 30,
+      terminalNumber: 2,
+      useTmux: true,
+    })
+
     expect(invocation.script).toContain('command -v tmux >/dev/null 2>&1')
     expect(invocation.script).toContain("exec tmux new-session -A -s 'goblin-")
     expect(invocation.script).toContain("-c '/srv/repo-feature'")
