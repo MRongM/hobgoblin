@@ -5,9 +5,12 @@ const css = readFileSync(new URL('./terminal-session.css', import.meta.url), 'ut
 
 describe('terminal session CSS layout contract', () => {
   test('keeps the taller external input matched with terminal bottom padding', () => {
-    expect(css).toContain('padding-bottom: 104px;')
-    expect(css).toContain('padding-bottom: 66px;')
-    expect(css).toContain('min-height: 44px;')
-    expect(css).toContain('padding: 8px 12px;')
+    expect(css).toContain('--goblin-terminal-bottom-dock-height:')
+    expect(css).toContain('padding-bottom: calc(var(--goblin-terminal-bottom-dock-height) + 24px);')
+    expect(css).toContain('resize: none;')
+    expect(css).toContain('.goblin-terminal-external-input__resize')
+    expect(css).toContain('top: 4px;')
+    expect(css).toContain('right: 4px;')
+    expect(css).toContain('min-height: 26px;')
   })
 })

@@ -359,6 +359,7 @@ export const ja: Record<DictKey, string> = {
   'terminal.custom-buttons': 'カスタムターミナルボタン',
   'terminal.external-input-placeholder': 'ターミナルコマンド入力',
   'terminal.external-input-send': 'ターミナル入力を送信',
+  'terminal.external-input-resize': 'ターミナル入力の高さを変更',
   'terminal.mirror-controlled': '現在このターミナルは別のウィンドウまたはタブが操作しています。',
   'terminal.unowned': '現在このターミナルを操作しているウィンドウはありません。',
   'terminal.takeover': 'ターミナルを引き継ぐ',

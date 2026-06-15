@@ -341,6 +341,7 @@ export const zh: Record<DictKey, string> = {
   'terminal.custom-buttons': '自定义终端按钮',
   'terminal.external-input-placeholder': '终端命令输入',
   'terminal.external-input-send': '发送终端输入',
+  'terminal.external-input-resize': '调整终端输入框高度',
   'terminal.mirror-controlled': '其他窗口或标签页正在控制终端',
   'terminal.unowned': '当前终端没有控制者',
   'terminal.takeover': '接管',
