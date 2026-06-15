@@ -17,7 +17,7 @@ One workspace for Git branches and worktrees.
 ## Build & install (macOS)
 
 ```sh
-./install.sh
+bun run install:app
 ```
 
 Builds a host-architecture `.app` and installs it to `~/Applications`.

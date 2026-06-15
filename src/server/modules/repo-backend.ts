@@ -73,6 +73,7 @@ export interface RepoBackend {
   getRemoteBranches(signal?: AbortSignal): Promise<string[]>
   fetch(signal: AbortSignal): Promise<{ ok: boolean; message: string }>
   checkout(branch: string, signal?: AbortSignal): Promise<ExecResult>
+  checkoutWorktree(worktreePath: string, branch: string, signal?: AbortSignal): Promise<ExecResult>
   pull(branch: string, worktreePath?: string, signal?: AbortSignal): Promise<ExecResult>
   push(branch: string, signal?: AbortSignal): Promise<ExecResult>
   commitAll(worktreePath: string, message: string, signal?: AbortSignal): Promise<ExecResult>
@@ -255,6 +256,10 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       return await checkoutBranch(repoId, branch, signal)
     },
+    async checkoutWorktree(worktreePath, branch, signal) {
+      if (!isValidCwd(worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
+      return await checkoutBranch(worktreePath, branch, signal)
+    },
     async pull(branch, worktreePath, signal) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       return await pullBranch(repoId, branch, worktreePath, signal)
@@ -370,6 +375,9 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
     },
     async checkout(branch, signal) {
       return await checkoutRemoteBranch(target, branch, undefined, { signal })
+    },
+    async checkoutWorktree(worktreePath, branch, signal) {
+      return await checkoutRemoteBranch(target, branch, worktreePath, { signal })
     },
     async pull(branch, worktreePath, signal) {
       return await pullRemoteBranch(target, branch, worktreePath, { signal })
