@@ -5,6 +5,7 @@ import type {
   GlobalShortcutState,
   SessionState,
   TerminalCustomButton,
+  TerminalCustomButtonSize,
   TerminalAppState,
   TerminalPref,
 } from '#/shared/rpc.ts'
@@ -14,17 +15,22 @@ import {
   refreshExternalAppsSnapshot,
   refreshGitHubCliState,
   saveSession,
+  setFileTreeFontSize,
   setGlobalShortcut,
   setGlobalShortcutDisabled,
   setLanEnabled,
   setPreferredEditorApp,
   setPreferredTerminalApp,
+  setRemoteTerminalTmuxEnabled,
   setSettingsFetchInterval,
   setShortcutsDisabled,
   setSwapCloseShortcuts,
+  setTemporaryFilesDirectory,
   setTerminalCustomButtons,
+  setTerminalCustomButtonSize,
   setTerminalCustomButtonsVisible,
   setTerminalExternalInputEnabled,
+  setTerminalFontSize,
   setTerminalNotificationsEnabled,
   setToggleDetailOnActionBarBlankClick,
 } from '#/web/settings-client.ts'
@@ -88,6 +94,14 @@ export async function setToggleDetailOnActionBarBlankClickPreference(enabled: bo
   }))
 }
 
+export async function setTemporaryFilesDirectoryPreference(path: string): Promise<void> {
+  await setTemporaryFilesDirectory(path)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
+    ...current,
+    temporaryFilesDirectory: path,
+  }))
+}
+
 export async function setGlobalShortcutPreference(accelerator: string): Promise<GlobalShortcutState> {
   const state = await setGlobalShortcut(accelerator)
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
@@ -112,6 +126,18 @@ export async function setEditorAppPreference(pref: EditorPref): Promise<EditorAp
   return state
 }
 
+export async function setFileTreeFontSizePreference(fontSize: number): Promise<number> {
+  const fileTreeFontSize = await setFileTreeFontSize(fontSize)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, fileTreeFontSize }))
+  return fileTreeFontSize
+}
+
+export async function setTerminalFontSizePreference(fontSize: number): Promise<number> {
+  const terminalFontSize = await setTerminalFontSize(fontSize)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, terminalFontSize }))
+  return terminalFontSize
+}
+
 export async function setTerminalExternalInputEnabledPreference(enabled: boolean): Promise<void> {
   await setTerminalExternalInputEnabled(enabled)
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
@@ -120,11 +146,27 @@ export async function setTerminalExternalInputEnabledPreference(enabled: boolean
   }))
 }
 
+export async function setRemoteTerminalTmuxEnabledPreference(enabled: boolean): Promise<void> {
+  await setRemoteTerminalTmuxEnabled(enabled)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
+    ...current,
+    remoteTerminalTmuxEnabled: enabled,
+  }))
+}
+
 export async function setTerminalCustomButtonsVisiblePreference(visible: boolean): Promise<void> {
   await setTerminalCustomButtonsVisible(visible)
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
     ...current,
     terminalCustomButtonsVisible: visible,
+  }))
+}
+
+export async function setTerminalCustomButtonSizePreference(size: TerminalCustomButtonSize): Promise<void> {
+  await setTerminalCustomButtonSize(size)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
+    ...current,
+    terminalCustomButtonSize: size,
   }))
 }
 

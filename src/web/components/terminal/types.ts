@@ -140,6 +140,7 @@ export interface TerminalSessionReadContextValue {
 export interface ManagedTerminalSessionLike {
   descriptor: TerminalDescriptor
   updateDescriptor: (descriptor: TerminalDescriptor) => void
+  setFontSize: (fontSize: number) => void
   attach: (host: HTMLElement, handlers?: TerminalSessionAttachHandlers) => void
   detach: (host: HTMLElement, parkingRoot: HTMLElement) => void
   restart: () => void

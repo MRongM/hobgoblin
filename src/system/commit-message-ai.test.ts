@@ -67,6 +67,31 @@ describe('commit message AI providers', () => {
     expect(mocks.execa).not.toHaveBeenCalled()
   })
 
+  test('asks providers to write generated commit messages in English', async () => {
+    mocks.execa
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: JSON.stringify({
+          type: 'item.completed',
+          item: { id: 'item_1', type: 'agent_message', text: 'feat: add generated summary' },
+        }),
+        stderr: '',
+      })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'fix: handle dialog state', stderr: '' })
+
+    const { generateCommitMessageFromPatch } = await import('#/system/commit-message-ai.ts')
+
+    await generateCommitMessageFromPatch('codex', 'diff --git a/a b/a\n+hello\n')
+    await generateCommitMessageFromPatch('claude', 'diff --git a/a b/a\n+hello\n')
+
+    expect(mocks.execa.mock.calls[0]![1].at(-1)).toEqual(
+      expect.stringContaining('Write the commit message in English.'),
+    )
+    expect(mocks.execa.mock.calls[1]![2]).toEqual(
+      expect.objectContaining({ input: expect.stringContaining('Write the commit message in English.') }),
+    )
+  })
+
   test('invokes codex in JSONL non-interactive read-only mode without requiring a Git worktree', async () => {
     mocks.execa.mockResolvedValueOnce({
       exitCode: 0,

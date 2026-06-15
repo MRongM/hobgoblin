@@ -35,11 +35,16 @@ test('initializes server-settings.json with defaults when no persisted settings 
     globalShortcutDisabled: false,
     swapCloseShortcuts: false,
     toggleDetailOnActionBarBlankClick: false,
+    temporaryFilesDirectory: '',
     globalShortcut: 'Alt+G',
     terminalApp: 'auto',
     editorApp: 'auto',
+    fileTreeFontSize: 14,
+    terminalFontSize: 14,
     terminalExternalInputEnabled: false,
+    remoteTerminalTmuxEnabled: false,
     terminalCustomButtonsVisible: true,
+    terminalCustomButtonSize: 'medium',
     terminalCustomButtons: [],
     lanEnabled: false,
   })
@@ -73,11 +78,16 @@ test('persists updates and notifies subscribers from the server settings store',
     globalShortcutDisabled: true,
     swapCloseShortcuts: true,
     toggleDetailOnActionBarBlankClick: true,
+    temporaryFilesDirectory: path.join(tmp, 'terminal-paste'),
     globalShortcut: 'CommandOrControl+Alt+G',
     terminalApp: 'ghostty',
     editorApp: 'cursor',
+    fileTreeFontSize: 13.4,
+    terminalFontSize: 15.6,
     terminalExternalInputEnabled: true,
+    remoteTerminalTmuxEnabled: true,
     terminalCustomButtonsVisible: false,
+    terminalCustomButtonSize: 'large',
     terminalCustomButtons: [
       { label: ' status ', value: ' git status --short\n', action: 'input' },
       { label: '', value: 'ignored', action: 'execute' },
@@ -85,7 +95,7 @@ test('persists updates and notifies subscribers from the server settings store',
       { label: 'test', value: 'bun run test', action: 'bad-value' as never },
     ],
     lanEnabled: false,
-  })
+  } as Parameters<typeof mod.updateServerSettingsPrefs>[0] & { terminalCustomButtonSize: string })
   await mod.setServerSessionState({
     ...defaultSessionState(),
     openRepos: [{ kind: 'local', id: '/repo-b' }],
@@ -110,11 +120,16 @@ test('persists updates and notifies subscribers from the server settings store',
     globalShortcutDisabled: true,
     swapCloseShortcuts: true,
     toggleDetailOnActionBarBlankClick: true,
+    temporaryFilesDirectory: path.join(tmp, 'terminal-paste'),
     globalShortcut: 'Alt+G',
     terminalApp: 'ghostty',
     editorApp: 'cursor',
+    fileTreeFontSize: 13,
+    terminalFontSize: 16,
     terminalExternalInputEnabled: true,
+    remoteTerminalTmuxEnabled: true,
     terminalCustomButtonsVisible: false,
+    terminalCustomButtonSize: 'large',
     terminalCustomButtons: [
       { label: 'status', value: ' git status --short\n', action: 'input' },
       { label: 'test', value: 'bun run test', action: 'execute' },
@@ -127,6 +142,21 @@ test('persists updates and notifies subscribers from the server settings store',
     selectedTerminalByWorktree: { '/repo-b\0/worktree': '/repo-b\0/worktree\0terminal-2' },
   })
   expect(await reloaded.getServerRecentRepos()).toEqual([{ kind: 'local', id: '/repo-b' }])
+})
+
+test('normalizes invalid temporary file directories to the default project tmp mode', async () => {
+  tmp = mkdtempSync(path.join(os.tmpdir(), 'gbl-server-settings-'))
+  previousDataDir = process.env.GOBLIN_SERVER_DATA_DIR
+  process.env.GOBLIN_SERVER_DATA_DIR = tmp
+
+  const mod = await import('#/server/modules/settings-source.ts')
+  await mod.updateServerSettingsPrefs({
+    temporaryFilesDirectory: ' relative/tmp ',
+  } as Parameters<typeof mod.updateServerSettingsPrefs>[0] & { temporaryFilesDirectory: string })
+
+  expect(await mod.getServerSettingsPrefs()).toMatchObject({
+    temporaryFilesDirectory: '',
+  })
 })
 
 test('limits persisted terminal custom buttons to 20 valid entries', async () => {

@@ -6,6 +6,8 @@ import {
   SHELL_OPEN_DIRECTORY_DIALOG_CHANNEL,
   SHELL_OPEN_EXTERNAL_URL_CHANNEL,
   SHELL_OPEN_SETTINGS_WINDOW_CHANNEL,
+  SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,
+  SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL,
 } from '#/shared/ipc-channels.ts'
 
 const {
@@ -14,12 +16,16 @@ const {
   showOpenDialog,
   sendRendererEffectIntent,
   activateMainWindow,
+  readClipboardFilePathsFromSystem,
+  saveClipboardBinaryFilesToTemp,
 } = vi.hoisted(() => ({
   ipcHandlers: new Map<string, (_event: unknown, input: any) => unknown>(),
   browserWindowFromWebContents: vi.fn(),
   showOpenDialog: vi.fn(),
   sendRendererEffectIntent: vi.fn(),
   activateMainWindow: vi.fn(),
+  readClipboardFilePathsFromSystem: vi.fn(),
+  saveClipboardBinaryFilesToTemp: vi.fn(),
 }))
 
 vi.mock('electron', () => ({
@@ -40,6 +46,14 @@ vi.mock('#/main/window.ts', () => ({
 
 vi.mock('#/main/renderer-surface-events.ts', () => ({
   sendRendererEffectIntent,
+}))
+
+vi.mock('#/main/clipboard-file-paths.ts', () => ({
+  readClipboardFilePathsFromSystem,
+}))
+
+vi.mock('#/main/clipboard-binary-temp-files.ts', () => ({
+  saveClipboardBinaryFilesToTemp,
 }))
 
 const trustedSender = { id: 1, once: vi.fn() }
@@ -64,6 +78,8 @@ describe('shell bridge IPC', () => {
     expect(ipcHandlers.has(SHELL_OPEN_EXTERNAL_URL_CHANNEL)).toBe(true)
     expect(ipcHandlers.has(SHELL_OPEN_DIRECTORY_DIALOG_CHANNEL)).toBe(true)
     expect(ipcHandlers.has(SHELL_CONSUME_EXTERNAL_OPEN_PATHS_CHANNEL)).toBe(true)
+    expect(ipcHandlers.has(SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL)).toBe(true)
+    expect(ipcHandlers.has(SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL)).toBe(true)
   })
 
   test('parents directory dialogs to the sender window', async () => {
@@ -102,6 +118,58 @@ describe('shell bridge IPC', () => {
 
     expect(result).toBeNull()
     expect(showOpenDialog).not.toHaveBeenCalled()
+  })
+
+  test('reads clipboard file paths for trusted senders', async () => {
+    readClipboardFilePathsFromSystem.mockReturnValue(['/Users/test/report.pdf'])
+
+    const result = await invoke(SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL)
+
+    expect(result).toEqual(['/Users/test/report.pdf'])
+    expect(readClipboardFilePathsFromSystem).toHaveBeenCalled()
+  })
+
+  test('returns no clipboard file paths for untrusted senders', async () => {
+    readClipboardFilePathsFromSystem.mockReturnValue(['/Users/test/report.pdf'])
+
+    const result = await invokeWithEvent(SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL, undefined, {
+      sender: { id: 99, once: vi.fn() },
+      senderFrame: { url: 'https://example.com/' },
+    } as any)
+
+    expect(result).toEqual([])
+  })
+
+  test('saves clipboard binary files for trusted senders', async () => {
+    saveClipboardBinaryFilesToTemp.mockResolvedValue({ ok: true, paths: ['/repo/tmp/pasted.png'] })
+
+    const input = {
+      worktreePath: '/repo',
+      temporaryFilesDirectory: '',
+      files: [{ name: 'image.png', type: 'image/png', bytes: new ArrayBuffer(3) }],
+    }
+    const result = await invoke(SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL, input)
+
+    expect(result).toEqual({ ok: true, paths: ['/repo/tmp/pasted.png'] })
+    expect(saveClipboardBinaryFilesToTemp).toHaveBeenCalledWith(input)
+  })
+
+  test('rejects clipboard binary saves for untrusted senders', async () => {
+    const result = await invokeWithEvent(
+      SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL,
+      {
+        worktreePath: '/repo',
+        temporaryFilesDirectory: '',
+        files: [],
+      },
+      {
+        sender: { id: 99, once: vi.fn() },
+        senderFrame: { url: 'https://example.com/' },
+      } as any,
+    )
+
+    expect(result).toEqual({ ok: false, message: 'error.invalid-path' })
+    expect(saveClipboardBinaryFilesToTemp).not.toHaveBeenCalled()
   })
 })
 

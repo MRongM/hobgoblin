@@ -95,10 +95,29 @@ describe('transferRepositoryFiles', () => {
       repoId: root,
       worktreePath: root,
       targetDirPath: outside,
-      source: { kind: 'localPaths', paths: [root] },
+      source: { kind: 'localPaths', items: [{ path: root }] },
     })
 
     expect(result).toEqual({ ok: false, message: 'error.file-transfer-target-outside-worktree' })
+  })
+
+  test('uses local path destinationName when copying to a local target', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goblin-server-transfer-'))
+    await mkdir(join(root, 'docs'))
+    await writeFile(join(root, 'report.pdf'), 'hello')
+
+    const result = await transferRepositoryFiles({
+      repoId: root,
+      worktreePath: root,
+      targetDirPath: join(root, 'docs'),
+      source: {
+        kind: 'localPaths',
+        items: [{ path: join(root, 'report.pdf'), destinationName: 'pasted-a8f31c9d.pdf' }],
+      },
+    })
+
+    expect(result.ok).toBe(true)
+    await expect(readFile(join(root, 'docs', 'pasted-a8f31c9d.pdf'), 'utf8')).resolves.toBe('hello')
   })
 
   test('writes uploaded items to a remote target', async () => {
@@ -155,5 +174,27 @@ describe('transferRepositoryFiles', () => {
     expect(inventoryRemoteFileTransfer).toHaveBeenCalledWith(REMOTE_TARGET, '/srv/repo', ['/srv/repo/a.txt'])
     expect(readRemoteFileBase64).toHaveBeenCalledWith(REMOTE_TARGET, '/srv/repo/a.txt')
     expect(writeRemoteFileBase64).toHaveBeenCalledWith(REMOTE_TARGET, '/srv/repo/docs/a.txt', bytesBase64)
+  })
+
+  test('uses local path destinationName when copying to a remote target', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goblin-server-transfer-'))
+    await writeFile(join(root, 'report.pdf'), 'hello')
+
+    const result = await transferRepositoryFiles({
+      repoId: REMOTE_ID,
+      worktreePath: '/srv/repo',
+      targetDirPath: '/srv/repo/docs',
+      source: {
+        kind: 'localPaths',
+        items: [{ path: join(root, 'report.pdf'), destinationName: 'pasted-a8f31c9d.pdf' }],
+      },
+    })
+
+    expect(result.ok).toBe(true)
+    expect(writeRemoteFileBase64).toHaveBeenCalledWith(
+      REMOTE_TARGET,
+      '/srv/repo/docs/pasted-a8f31c9d.pdf',
+      Buffer.from('hello').toString('base64'),
+    )
   })
 })

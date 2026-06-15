@@ -4,6 +4,7 @@ import { BranchList } from '#/web/components/BranchList.tsx'
 import { SplitPane } from '#/web/components/SplitPane.tsx'
 import { ProjectFileTree } from '#/web/components/file-tree/ProjectFileTree.tsx'
 import { ProjectChangesPanel } from '#/web/components/repo-workspace/ProjectChangesPanel.tsx'
+import { ProjectHistoryPanel } from '#/web/components/repo-workspace/ProjectHistoryPanel.tsx'
 import { ProjectPortsPanel } from '#/web/components/repo-workspace/ProjectPortsPanel.tsx'
 import { ProjectStatusPanel } from '#/web/components/repo-workspace/ProjectStatusPanel.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
@@ -14,8 +15,9 @@ import { Badge } from '#/web/components/ui/badge.tsx'
 import { ToolbarTabStrip, ToolbarTabStripBody } from '#/web/components/tab-strip/ToolbarTabStrip.tsx'
 import { useT } from '#/web/stores/i18n.ts'
 import { cn } from '#/web/lib/cn.ts'
+import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 
-type ExplorerTab = 'files' | 'changes' | 'status' | 'ports'
+type ExplorerTab = 'files' | 'changes' | 'status' | 'history' | 'ports'
 
 export interface FileTreeRevealRequest {
   id: number
@@ -97,12 +99,15 @@ function ExplorerTabs({
 }) {
   const t = useT()
   const [revealRequest, setRevealRequest] = useState<FileTreeRevealRequest | null>(null)
+  const isRemoteRepo = isRemoteRepoId(repoId)
+  const activeVisibleTab = activeTab === 'ports' && !isRemoteRepo ? 'files' : activeTab
   const tabs = [
     { id: 'files' as const, label: t('file-tree.title') },
     { id: 'changes' as const, label: t('tab.changes') },
     { id: 'status' as const, label: t('tab.status') },
-    { id: 'ports' as const, label: t('ports.title') },
-  ]
+    { id: 'history' as const, label: t('tab.history') },
+    ...(isRemoteRepo ? [{ id: 'ports' as const, label: t('ports.title') }] : []),
+  ] satisfies { id: ExplorerTab; label: string }[]
 
   function handleRevealPath(relativePath: string) {
     onTabChange('files')
@@ -129,7 +134,7 @@ function ExplorerTabs({
               aria-orientation="horizontal"
             >
               {tabs.map((tab) => {
-                const selected = activeTab === tab.id
+                const selected = activeVisibleTab === tab.id
                 return (
                   <Button
                     key={tab.id}
@@ -161,16 +166,18 @@ function ExplorerTabs({
         />
       </Toolbar>
       <div
-        id={`repo-explorer-${activeTab}-panel`}
+        id={`repo-explorer-${activeVisibleTab}-panel`}
         role="tabpanel"
         className="flex min-h-0 flex-1 flex-col"
       >
-        {activeTab === 'files' ? (
+        {activeVisibleTab === 'files' ? (
           <ProjectFileTree repoId={repoId} revealRequest={revealRequest} />
-        ) : activeTab === 'changes' ? (
+        ) : activeVisibleTab === 'changes' ? (
           <ProjectChangesPanel repoId={repoId} onRevealPath={handleRevealPath} />
-        ) : activeTab === 'status' ? (
+        ) : activeVisibleTab === 'status' ? (
           <ProjectStatusPanel repoId={repoId} layout={layout} />
+        ) : activeVisibleTab === 'history' ? (
+          <ProjectHistoryPanel repoId={repoId} onRevealPath={handleRevealPath} />
         ) : (
           <ProjectPortsPanel repoId={repoId} />
         )}

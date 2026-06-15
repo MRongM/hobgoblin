@@ -4,6 +4,10 @@
 
 export type {
   BranchSnapshotInfo,
+  CommitDetail,
+  CommitFileChange,
+  CommitFileChangeStatus,
+  CommitHistoryEntry,
   GitRemoteInfo,
   StatusEntry,
   WorktreeStatus,

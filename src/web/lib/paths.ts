@@ -55,10 +55,58 @@ export function formatRepoLocator(path: string, target?: RemoteRepoTarget): stri
   return target ? remoteTargetSubtitle(target) : tildify(path)
 }
 
-export function formatWorktreePath(path: string, target?: RemoteRepoTarget): string {
+export function formatWorktreePath(path: string, target?: RemoteRepoTarget, repoRoot?: string): string {
+  const relativePath = repoRoot ? relativeDisplayPath(repoRoot, path) : null
+  if (relativePath) return relativePath
   return target ? remoteWorktreePathLabel(target, path) : tildify(path)
 }
 
-export function formatWorktreeListPath(path: string, target?: RemoteRepoTarget): string {
+export function formatWorktreeListPath(path: string, target?: RemoteRepoTarget, repoRoot?: string): string {
+  const relativePath = repoRoot ? relativeDisplayPath(repoRoot, path) : null
+  if (relativePath) return relativePath
   return target ? path : tildify(path)
+}
+
+function relativeDisplayPath(fromPath: string, toPath: string): string | null {
+  const posix = relativePosixPath(fromPath, toPath)
+  if (posix) return posix
+  return relativeWindowsPath(fromPath, toPath)
+}
+
+function relativePosixPath(fromPath: string, toPath: string): string | null {
+  if (!fromPath.startsWith('/') || !toPath.startsWith('/')) return null
+  const fromParts = posixPathParts(fromPath)
+  const toParts = posixPathParts(toPath)
+  return relativeParts(fromParts, toParts, '/')
+}
+
+function posixPathParts(value: string): string[] {
+  return value.split('/').filter(Boolean)
+}
+
+function relativeWindowsPath(fromPath: string, toPath: string): string | null {
+  const from = windowsPathParts(fromPath)
+  const to = windowsPathParts(toPath)
+  if (!from || !to || from.drive !== to.drive) return null
+  return relativeParts(from.parts, to.parts, '\\')
+}
+
+function windowsPathParts(value: string): { drive: string; parts: string[] } | null {
+  const match = /^([A-Za-z]):[/\\]*(.*)$/.exec(value)
+  if (!match) return null
+  return {
+    drive: match[1]!.toUpperCase(),
+    parts: match[2]!.split(/[/\\]+/).filter(Boolean),
+  }
+}
+
+function relativeParts(fromParts: string[], toParts: string[], separator: string): string {
+  let common = 0
+  while (common < fromParts.length && common < toParts.length && fromParts[common] === toParts[common]) {
+    common += 1
+  }
+
+  const up = Array.from({ length: fromParts.length - common }, () => '..')
+  const down = toParts.slice(common)
+  return [...up, ...down].join(separator) || '.'
 }

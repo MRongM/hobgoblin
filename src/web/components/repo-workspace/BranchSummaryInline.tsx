@@ -50,7 +50,10 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
   const isWorktree = hasWorktree && !isCurrent
   const worktreeState = getBranchWorktreeState(repo, branch)
   const worktreeDirty = worktreeState?.dirty ?? false
-  const worktreePath = branch.worktree?.path ? formatWorktreeListPath(branch.worktree.path, repo.remote?.target) : null
+  const repoRoot = repo.remote?.target?.remotePath ?? repo.id
+  const worktreePath = branch.worktree?.path
+    ? formatWorktreeListPath(branch.worktree.path, repo.remote?.target, repoRoot)
+    : null
   const terminalWorktreeKey = branch.worktree?.path ? worktreeTerminalKey(repo.id, branch.worktree.path) : null
   const hasTerminalBell = useWorktreeTerminalHasBell(terminalWorktreeKey)
   const terminalBellLabel = t('terminal.bell-unread')

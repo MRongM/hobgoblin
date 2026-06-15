@@ -10,6 +10,10 @@ import type { I18nSnapshot, RpcEvent, RpcRequest, SettingsPage } from '#/shared/
 import type { RendererEffectIntent } from '#/shared/renderer-effect-intents.ts'
 import type { ExecResult } from '#/shared/git-types.ts'
 import type { TerminalMutationResult, TerminalNotifyBellInput } from '#/shared/terminal.ts'
+import type {
+  SaveClipboardBinaryFilesInput,
+  SaveClipboardBinaryFilesResult,
+} from '#/shared/clipboard-binary-temp-files.ts'
 
 interface GoblinNativeBridge {
   runtime: RendererRuntimeSnapshot
@@ -28,6 +32,8 @@ interface GoblinNativeBridge {
     openDirectoryDialog: (input?: { title?: string }) => Promise<string | null>
     consumeExternalOpenPaths: () => Promise<string[]>
     openInFinder: (input: { path: string }) => Promise<ExecResult>
+    readClipboardFilePaths?: () => Promise<string[]>
+    saveClipboardBinaryFiles?: (input: SaveClipboardBinaryFilesInput) => Promise<SaveClipboardBinaryFilesResult>
   }
   terminal: {
     notifyBell: (input: TerminalNotifyBellInput) => Promise<TerminalMutationResult>

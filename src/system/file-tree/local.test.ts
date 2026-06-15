@@ -4,8 +4,10 @@ import { basename, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, test } from 'vitest'
 import {
+  createLocalFileTreeDirectory,
   deleteLocalFileTreeEntries,
   listLocalFileTreeDirectory,
+  moveLocalFileTreeEntries,
   pathInsideRoot,
   renameLocalFileTreeEntry,
 } from '#/system/file-tree/local.ts'
@@ -116,6 +118,42 @@ describe('renameLocalFileTreeEntry', () => {
   })
 })
 
+describe('createLocalFileTreeDirectory', () => {
+  test('creates one directory inside an existing worktree directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goblin-file-tree-create-dir-'))
+    const srcPath = join(root, 'src')
+    await mkdir(srcPath)
+
+    const result = await createLocalFileTreeDirectory(root, srcPath, 'components')
+
+    expect(result).toEqual({ ok: true, message: '' })
+    expect(existsSync(join(srcPath, 'components'))).toBe(true)
+  })
+
+  test('rejects basename values that would create outside the parent directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goblin-file-tree-create-dir-'))
+
+    await expect(createLocalFileTreeDirectory(root, root, '../escape')).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+    await expect(createLocalFileTreeDirectory(root, root, 'nested/folder')).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+  })
+
+  test('rejects destination overwrite', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goblin-file-tree-create-dir-'))
+    await mkdir(join(root, 'existing'))
+
+    await expect(createLocalFileTreeDirectory(root, root, 'existing')).resolves.toEqual({
+      ok: false,
+      message: 'error.file-exists',
+    })
+  })
+})
+
 describe('deleteLocalFileTreeEntries', () => {
   test('deletes files and directories inside the worktree', async () => {
     const root = await mkdtemp(join(tmpdir(), 'goblin-file-tree-delete-'))
@@ -151,5 +189,65 @@ describe('deleteLocalFileTreeEntries', () => {
       message: 'error.delete-root-forbidden',
     })
     expect(existsSync(root)).toBe(true)
+  })
+})
+
+describe('moveLocalFileTreeEntries', () => {
+  test('moves files and directories into a target directory without overwriting', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goblin-file-tree-move-'))
+    const docsPath = join(root, 'docs')
+    const srcPath = join(root, 'src')
+    const filePath = join(root, 'README.md')
+    await mkdir(docsPath)
+    await mkdir(srcPath)
+    await writeFile(filePath, 'hello')
+    await writeFile(join(srcPath, 'index.ts'), 'export {}')
+
+    const result = await moveLocalFileTreeEntries(root, [filePath, srcPath], docsPath)
+
+    expect(result).toEqual({ ok: true, message: '' })
+    expect(existsSync(filePath)).toBe(false)
+    expect(existsSync(srcPath)).toBe(false)
+    await expect(readFile(join(docsPath, 'README.md'), 'utf8')).resolves.toBe('hello')
+    await expect(readFile(join(docsPath, 'src', 'index.ts'), 'utf8')).resolves.toBe('export {}')
+  })
+
+  test('rejects target conflicts before moving anything', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goblin-file-tree-move-'))
+    const docsPath = join(root, 'docs')
+    const filePath = join(root, 'README.md')
+    await mkdir(docsPath)
+    await writeFile(filePath, 'hello')
+    await writeFile(join(docsPath, 'README.md'), 'existing')
+
+    const result = await moveLocalFileTreeEntries(root, [filePath], docsPath)
+
+    expect(result).toEqual({ ok: false, message: 'error.file-exists' })
+    await expect(readFile(filePath, 'utf8')).resolves.toBe('hello')
+    await expect(readFile(join(docsPath, 'README.md'), 'utf8')).resolves.toBe('existing')
+  })
+
+  test('rejects moving a directory into itself or a descendant', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goblin-file-tree-move-'))
+    const srcPath = join(root, 'src')
+    const nestedPath = join(srcPath, 'nested')
+    await mkdir(nestedPath, { recursive: true })
+
+    const result = await moveLocalFileTreeEntries(root, [srcPath], nestedPath)
+
+    expect(result).toEqual({ ok: false, message: 'error.invalid-path' })
+    expect(existsSync(srcPath)).toBe(true)
+    expect(existsSync(nestedPath)).toBe(true)
+  })
+
+  test('rejects worktree root move', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goblin-file-tree-move-'))
+    const docsPath = join(root, 'docs')
+    await mkdir(docsPath)
+
+    await expect(moveLocalFileTreeEntries(root, [root], docsPath)).resolves.toEqual({
+      ok: false,
+      message: 'error.delete-root-forbidden',
+    })
   })
 })

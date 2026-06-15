@@ -3,10 +3,19 @@ import { publishRepoQueryInvalidation } from '#/server/modules/invalidation-brok
 import { resolveRemoteRepoTarget, resolveRepoBackend, runWithRepoBackend } from '#/server/modules/repo-backend.ts'
 import { getServerSettingsPrefs } from '#/server/modules/settings-source.ts'
 import { cloneRepository as cloneGitRepository } from '#/system/git/clone.ts'
-import { checkoutBranch } from '#/system/git/branches.ts'
 import { resetHardToPreviousCommit } from '#/system/git/reset.ts'
-import { deleteLocalFileTreeEntries, renameLocalFileTreeEntry } from '#/system/file-tree/local.ts'
-import { deleteRemoteFileTreeEntries, renameRemoteFileTreeEntry } from '#/system/ssh/git.ts'
+import {
+  createLocalFileTreeDirectory,
+  deleteLocalFileTreeEntries,
+  moveLocalFileTreeEntries,
+  renameLocalFileTreeEntry,
+} from '#/system/file-tree/local.ts'
+import {
+  createRemoteFileTreeDirectory,
+  deleteRemoteFileTreeEntries,
+  moveRemoteFileTreeEntries,
+  renameRemoteFileTreeEntry,
+} from '#/system/ssh/git.ts'
 import { openInPreferredEditor } from '#/system/editors.ts'
 import { openInPreferredTerminal } from '#/system/terminals.ts'
 import { type ExecResult } from '#/shared/git-types.ts'
@@ -384,6 +393,21 @@ export async function renameRepositoryFileTreeEntry(
   return result
 }
 
+export async function createRepositoryFileTreeDirectory(
+  repoId: string,
+  worktreePath: string,
+  parentDirPath: string,
+  name: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  const result = isRemoteRepoId(repoId)
+    ? await createRemoteFileTreeDirectory(await resolveRemoteRepoTarget(repoId), worktreePath, parentDirPath, name, { signal })
+    : await createLocalFileTreeDirectory(worktreePath, parentDirPath, name)
+  if (result.ok) publishRepoSnapshotInvalidation(repoId, sourceToken)
+  return result
+}
+
 export async function deleteRepositoryFileTreeEntries(
   repoId: string,
   worktreePath: string,
@@ -398,6 +422,21 @@ export async function deleteRepositoryFileTreeEntries(
   return result
 }
 
+export async function moveRepositoryFileTreeEntries(
+  repoId: string,
+  worktreePath: string,
+  paths: string[],
+  targetDirPath: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  const result = isRemoteRepoId(repoId)
+    ? await moveRemoteFileTreeEntries(await resolveRemoteRepoTarget(repoId), worktreePath, paths, targetDirPath, { signal })
+    : await moveLocalFileTreeEntries(worktreePath, paths, targetDirPath)
+  if (result.ok) publishRepoSnapshotInvalidation(repoId, sourceToken)
+  return result
+}
+
 export async function checkoutWorktreeBranch(
   repoId: string,
   worktreePath: string,
@@ -405,10 +444,16 @@ export async function checkoutWorktreeBranch(
   signal?: AbortSignal,
   sourceToken?: string,
 ): Promise<ExecResult> {
-  if (!isValidCwd(worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
-  const result = await checkoutBranch(worktreePath, branch, signal)
-  if (result.ok) publishRepoSnapshotInvalidation(repoId, sourceToken)
-  return result
+  if (!isValidRepoLocator(repoId) || !isAbsoluteWorktreePath(worktreePath)) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  return await runWithRepoBackend(repoId, async (backend) => {
+    return await publishSnapshotInvalidationAfterMutation(
+      repoId,
+      await backend.checkoutWorktree(worktreePath, branch, signal),
+      sourceToken,
+    )
+  })
 }
 
 export async function commitRepositoryChanges(

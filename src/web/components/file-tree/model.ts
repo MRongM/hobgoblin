@@ -196,3 +196,23 @@ export function generatedPasteFileName(mimeType: string | undefined, now = new D
   if (mimeType?.startsWith('image/')) return `pasted-image-${stamp}.png`
   return `pasted-text-${stamp}.txt`
 }
+
+export function generatedRandomPasteFileName(sourcePath: string, randomHex = randomHex8()): string {
+  const sourceName = sourcePath.split(/[\\/]/).pop() ?? ''
+  const dot = sourceName.lastIndexOf('.')
+  const extension = dot > 0 && dot < sourceName.length - 1 ? sourceName.slice(dot) : ''
+  return `pasted-${randomHex}${extension}`
+}
+
+function randomHex8(): string {
+  const bytes = new Uint8Array(4)
+  const cryptoApi = globalThis.crypto
+  if (cryptoApi?.getRandomValues) {
+    cryptoApi.getRandomValues(bytes)
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256)
+    }
+  }
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+}

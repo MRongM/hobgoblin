@@ -4,7 +4,7 @@ import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { DetailTab, RepoState } from '#/web/stores/repos/types.ts'
 import { createRepoBranch as branch, installGoblinTestBridge, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import type { BranchSnapshotInfo } from '#/web/types.ts'
-import { DEFAULT_DETAIL_PANE_SIZES } from '#/shared/workspace-layout.ts'
+import { DEFAULT_DETAIL_PANE_SIZES, DEFAULT_FILE_TREE_PANE_SIZES } from '#/shared/workspace-layout.ts'
 const REPO_ID = '/tmp/gbl-selection-test-repo'
 const rpcHandlers: Record<string, (input: any) => unknown> = {}
 
@@ -364,7 +364,7 @@ describe('setDetailTab', () => {
       return []
     }
     seedRepo({ selectedBranch: 'feature/worktree', detailTab: 'terminal' })
-    useReposStore.setState({ detailCollapsed: false })
+    useReposStore.setState({ workspaceLayout: 'top-bottom', detailCollapsed: false })
 
     useReposStore
       .getState()
@@ -416,6 +416,7 @@ describe('setDetailTab', () => {
 
 describe('setWorkspaceLayout', () => {
   test('allows detail collapse changes in top-bottom layout', () => {
+    useReposStore.getState().setWorkspaceLayout('top-bottom')
     useReposStore.getState().setDetailCollapsed(false)
     expect(useReposStore.getState().detailCollapsed).toBe(false)
 
@@ -467,6 +468,7 @@ describe('setWorkspaceLayout', () => {
 
 describe('setDetailFocusMode', () => {
   test('enables focus mode and expands detail in top-bottom layout', () => {
+    useReposStore.getState().setWorkspaceLayout('top-bottom')
     useReposStore.getState().setDetailCollapsed(true)
 
     useReposStore.getState().setDetailFocusMode(true)
@@ -476,6 +478,7 @@ describe('setDetailFocusMode', () => {
   })
 
   test('keeps focus mode when detail is collapsed', () => {
+    useReposStore.getState().setWorkspaceLayout('top-bottom')
     useReposStore.getState().setDetailFocusMode(true)
 
     useReposStore.getState().setDetailCollapsed(true)
@@ -485,6 +488,7 @@ describe('setDetailFocusMode', () => {
   })
 
   test('exits focus mode without expanding a collapsed detail panel', () => {
+    useReposStore.getState().setWorkspaceLayout('top-bottom')
     useReposStore.getState().setDetailFocusMode(true)
     useReposStore.getState().setDetailCollapsed(true)
 
@@ -495,6 +499,7 @@ describe('setDetailFocusMode', () => {
   })
 
   test('re-expands into focus mode when focus is enabled while collapsed', () => {
+    useReposStore.getState().setWorkspaceLayout('top-bottom')
     useReposStore.getState().setDetailFocusMode(true)
     useReposStore.getState().setDetailCollapsed(true)
 
@@ -505,6 +510,7 @@ describe('setDetailFocusMode', () => {
   })
 
   test('exits focus mode when switching to left-right layout', () => {
+    useReposStore.getState().setWorkspaceLayout('top-bottom')
     useReposStore.getState().setDetailFocusMode(true)
 
     useReposStore.getState().setWorkspaceLayout('left-right')
@@ -524,6 +530,7 @@ describe('setDetailFocusMode', () => {
 
   test('preserves focus preference when filtering leaves no selected branch', () => {
     seedRepo({ selectedBranch: 'main', branches: [branch('main')] })
+    useReposStore.getState().setWorkspaceLayout('top-bottom')
     useReposStore.getState().setDetailFocusMode(true)
 
     useReposStore.getState().setBranchViewMode(REPO_ID, 'worktrees')
@@ -568,18 +575,20 @@ describe('setFileTreePaneSize', () => {
 describe('resetLayout', () => {
   test('restores the initial workspace layout defaults', () => {
     useReposStore.setState({
-      workspaceLayout: 'left-right',
-      detailCollapsed: false,
+      workspaceLayout: 'top-bottom',
+      detailCollapsed: true,
       detailFocusMode: true,
       detailPaneSizes: { 'top-bottom': 35, 'left-right': 70 },
+      fileTreePaneSizes: { 'top-bottom': 42, 'left-right': 38 },
     })
 
     useReposStore.getState().resetLayout()
 
-    expect(useReposStore.getState().workspaceLayout).toBe('top-bottom')
-    expect(useReposStore.getState().detailCollapsed).toBe(true)
+    expect(useReposStore.getState().workspaceLayout).toBe('left-right')
+    expect(useReposStore.getState().detailCollapsed).toBe(false)
     expect(useReposStore.getState().detailFocusMode).toBe(false)
     expect(useReposStore.getState().detailPaneSizes).toBe(DEFAULT_DETAIL_PANE_SIZES)
+    expect(useReposStore.getState().fileTreePaneSizes).toBe(DEFAULT_FILE_TREE_PANE_SIZES)
   })
 
   test('is idempotent when layout is already at defaults', () => {

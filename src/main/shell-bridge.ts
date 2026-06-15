@@ -1,5 +1,7 @@
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { activateMainWindow, getMainWindow } from '#/main/window.ts'
+import { saveClipboardBinaryFilesToTemp } from '#/main/clipboard-binary-temp-files.ts'
+import { readClipboardFilePathsFromSystem } from '#/main/clipboard-file-paths.ts'
 import { consumeExternalOpenPaths } from '#/main/external-open.ts'
 import { focusedRegisteredSurface } from '#/main/window-registry.ts'
 import { sendRendererEffectIntent } from '#/main/renderer-surface-events.ts'
@@ -13,7 +15,13 @@ import {
   SHELL_OPEN_EXTERNAL_URL_CHANNEL,
   SHELL_OPEN_IN_FINDER_CHANNEL,
   SHELL_OPEN_SETTINGS_WINDOW_CHANNEL,
+  SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,
+  SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL,
 } from '#/shared/ipc-channels.ts'
+import type {
+  SaveClipboardBinaryFilesInput,
+  SaveClipboardBinaryFilesResult,
+} from '#/shared/clipboard-binary-temp-files.ts'
 
 function callerWindow(event: Electron.IpcMainInvokeEvent): BrowserWindow | null {
   return BrowserWindow.fromWebContents(event.sender) ?? focusedRegisteredSurface()?.window ?? getMainWindow() ?? null
@@ -57,6 +65,19 @@ export function wireShellBridgeIpc(): void {
   ipcMain.handle(
     SHELL_CONSUME_EXTERNAL_OPEN_PATHS_CHANNEL,
     async (event): Promise<string[]> => (isTrustedIpcEvent(event) ? consumeExternalOpenPaths() : []),
+  )
+
+  ipcMain.handle(
+    SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,
+    async (event): Promise<string[]> => (isTrustedIpcEvent(event) ? readClipboardFilePathsFromSystem() : []),
+  )
+
+  ipcMain.handle(
+    SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL,
+    async (event, input?: SaveClipboardBinaryFilesInput): Promise<SaveClipboardBinaryFilesResult> => {
+      if (!isTrustedIpcEvent(event)) return { ok: false, message: 'error.invalid-path' }
+      return await saveClipboardBinaryFilesToTemp(input as SaveClipboardBinaryFilesInput)
+    },
   )
 
   ipcMain.handle(

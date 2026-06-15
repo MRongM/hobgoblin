@@ -2,10 +2,16 @@ import { describe, expect, test } from 'vitest'
 import {
   DEFAULT_DETAIL_PANE_SIZES,
   DEFAULT_FILE_TREE_PANE_SIZES,
+  DEFAULT_WORKSPACE_LAYOUT,
   normalizeWorkspaceSessionLayoutState,
 } from '#/shared/workspace-layout.ts'
 
 describe('normalizeWorkspaceSessionLayoutState', () => {
+  test('defaults to left-right layout with the file tree taking two thirds', () => {
+    expect(DEFAULT_WORKSPACE_LAYOUT).toBe('left-right')
+    expect(DEFAULT_FILE_TREE_PANE_SIZES).toEqual({ 'top-bottom': 66.7, 'left-right': 66.7 })
+  })
+
   test('disables detail focus mode and collapse when the layout does not support them', () => {
     expect(
       normalizeWorkspaceSessionLayoutState({
@@ -34,8 +40,8 @@ describe('normalizeWorkspaceSessionLayoutState', () => {
         fileTreePaneSizes: { 'left-right': 'bad' },
       }),
     ).toEqual({
-      workspaceLayout: 'top-bottom',
-      detailCollapsed: true,
+      workspaceLayout: 'left-right',
+      detailCollapsed: false,
       detailFocusMode: false,
       detailPaneSizes: DEFAULT_DETAIL_PANE_SIZES,
       fileTreePaneSizes: DEFAULT_FILE_TREE_PANE_SIZES,

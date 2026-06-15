@@ -8,6 +8,7 @@ import { GitHubMark } from '#/web/components/GitHubMark.tsx'
 import {
   AppWindow,
   Bell,
+  FolderTree,
   Globe,
   Info,
   Keyboard,
@@ -20,6 +21,7 @@ import {
 import { getInitialBootstrap } from '#/web/bootstrap.ts'
 const SETTINGS_PAGE_ICONS = {
   general: Settings2,
+  files: FolderTree,
   terminal: TerminalSquare,
   shortcuts: Keyboard,
   notifications: Bell,

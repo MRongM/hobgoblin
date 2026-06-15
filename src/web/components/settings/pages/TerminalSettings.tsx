@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Plus, Save, Trash2 } from 'lucide-react'
-import type { TerminalCustomButton } from '#/shared/rpc.ts'
+import {
+  MAX_TERMINAL_FONT_SIZE,
+  MIN_TERMINAL_FONT_SIZE,
+} from '#/shared/settings.ts'
+import type { TerminalCustomButton, TerminalCustomButtonSize } from '#/shared/rpc.ts'
 import { Button } from '#/web/components/ui/button.tsx'
 import { Input } from '#/web/components/ui/input.tsx'
 import { Switch } from '#/web/components/ui/switch.tsx'
@@ -9,6 +13,7 @@ import {
   SettingsGroup,
   SettingsList,
   SettingsListItem,
+  SettingsNumberInput,
   SettingsRow,
   SettingsSelect,
 } from '#/web/components/settings/SettingsPrimitives.tsx'
@@ -16,6 +21,7 @@ import {
   useRuntimeTerminalSettings,
   useTerminalCustomButtonsController,
 } from '#/web/runtime-settings-terminal-buttons.ts'
+import { useFontSettingsController } from '#/web/runtime-settings-fonts.ts'
 import { useT } from '#/web/stores/i18n.ts'
 
 type EditableTerminalCustomButton = TerminalCustomButton & {
@@ -45,13 +51,25 @@ function validButtons(rows: EditableTerminalCustomButton[]): TerminalCustomButto
 
 export function TerminalSettings() {
   const t = useT()
-  const { terminalCustomButtons: buttons, terminalExternalInputEnabled, terminalCustomButtonsVisible } =
-    useRuntimeTerminalSettings()
+  const {
+    terminalCustomButtons: buttons,
+    terminalExternalInputEnabled,
+    remoteTerminalTmuxEnabled,
+    terminalCustomButtonsVisible,
+    terminalCustomButtonSize,
+    terminalFontSize,
+  } = useRuntimeTerminalSettings()
   const initialRows = useMemo(() => editableFromButtons(buttons), [buttons])
   const [rows, setRows] = useState<EditableTerminalCustomButton[]>(initialRows)
   const [dirty, setDirty] = useState(false)
-  const { setTerminalCustomButtons, setTerminalExternalInputEnabled, setTerminalCustomButtonsVisible } =
-    useTerminalCustomButtonsController()
+  const {
+    setTerminalCustomButtons,
+    setTerminalExternalInputEnabled,
+    setRemoteTerminalTmuxEnabled,
+    setTerminalCustomButtonsVisible,
+    setTerminalCustomButtonSize,
+  } = useTerminalCustomButtonsController()
+  const { setTerminalFontSize } = useFontSettingsController()
 
   useEffect(() => {
     if (dirty) return
@@ -72,6 +90,24 @@ export function TerminalSettings() {
 
   return (
     <>
+      <SettingsGroup label={t('settings.terminal-font.title')}>
+        <SettingsList>
+          <SettingsRow
+            controlId="settings-terminal-font-size"
+            label={t('settings.terminal-font-size')}
+            hint={t('settings.terminal-font-size-hint')}
+            control={
+              <SettingsNumberInput
+                id="settings-terminal-font-size"
+                min={MIN_TERMINAL_FONT_SIZE}
+                max={MAX_TERMINAL_FONT_SIZE}
+                value={terminalFontSize}
+                onChange={(fontSize) => void setTerminalFontSize(fontSize)}
+              />
+            }
+          />
+        </SettingsList>
+      </SettingsGroup>
       <SettingsGroup label={t('settings.terminal-input.title')} hint={t('settings.terminal-input.hint')}>
         <SettingsList>
           <SettingsRow
@@ -84,6 +120,19 @@ export function TerminalSettings() {
                 checked={terminalExternalInputEnabled}
                 onCheckedChange={(enabled) => void setTerminalExternalInputEnabled(enabled)}
                 aria-label={t('settings.terminal-external-input')}
+              />
+            }
+          />
+          <SettingsRow
+            controlId="settings-terminal-remote-tmux"
+            label={t('settings.terminal-remote-tmux')}
+            hint={t('settings.terminal-remote-tmux-hint')}
+            control={
+              <Switch
+                id="settings-terminal-remote-tmux"
+                checked={remoteTerminalTmuxEnabled}
+                onCheckedChange={(enabled) => void setRemoteTerminalTmuxEnabled(enabled)}
+                aria-label={t('settings.terminal-remote-tmux')}
               />
             }
           />
@@ -118,6 +167,23 @@ export function TerminalSettings() {
                 checked={terminalCustomButtonsVisible}
                 onCheckedChange={(visible) => void setTerminalCustomButtonsVisible(visible)}
                 aria-label={t('settings.terminal-custom-buttons.visible')}
+              />
+            }
+          />
+          <SettingsRow
+            controlId="settings-terminal-custom-button-size"
+            label={t('settings.terminal-custom-buttons.size')}
+            hint={t('settings.terminal-custom-buttons.size-hint')}
+            control={
+              <SettingsSelect<TerminalCustomButtonSize>
+                id="settings-terminal-custom-button-size"
+                value={terminalCustomButtonSize}
+                options={[
+                  { value: 'small', label: t('settings.terminal-custom-buttons.size-small') },
+                  { value: 'medium', label: t('settings.terminal-custom-buttons.size-medium') },
+                  { value: 'large', label: t('settings.terminal-custom-buttons.size-large') },
+                ]}
+                onChange={(size) => void setTerminalCustomButtonSize(size)}
               />
             }
           />

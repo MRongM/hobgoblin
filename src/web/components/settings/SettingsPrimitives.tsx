@@ -1,4 +1,5 @@
 import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react'
+import { Input } from '#/web/components/ui/input.tsx'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/web/components/ui/select.tsx'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { cn } from '#/web/lib/cn.ts'
@@ -138,5 +139,37 @@ export function SettingsSelect<T extends string | number>({ id, value, options, 
         ))}
       </SelectContent>
     </Select>
+  )
+}
+
+export function SettingsNumberInput({
+  id,
+  value,
+  min,
+  max,
+  step = 1,
+  onChange,
+}: {
+  id: string
+  value: number
+  min: number
+  max: number
+  step?: number
+  onChange: (value: number) => void
+}) {
+  return (
+    <Input
+      id={id}
+      type="number"
+      min={min}
+      max={max}
+      step={step}
+      value={value}
+      className="h-8 w-24 px-2 text-xs"
+      onChange={(event) => {
+        const next = event.currentTarget.valueAsNumber
+        if (Number.isFinite(next)) onChange(next)
+      }}
+    />
   )
 }

@@ -1,6 +1,7 @@
 import { SettingsLayout } from '#/web/components/settings/SettingsLayout.tsx'
 import { AboutSettings } from '#/web/components/settings/pages/AboutSettings.tsx'
 import { ExternalAppSettings } from '#/web/components/settings/pages/ExternalAppSettings.tsx'
+import { FileAreaSettings } from '#/web/components/settings/pages/FileAreaSettings.tsx'
 import { GeneralSettings } from '#/web/components/settings/pages/GeneralSettings.tsx'
 import { GitHubSettings } from '#/web/components/settings/pages/GitHubSettings.tsx'
 import { KeyboardShortcutSettings } from '#/web/components/settings/pages/KeyboardShortcutSettings.tsx'
@@ -24,6 +25,7 @@ export function SettingsSurface({ page, onPageChange, topInset = 0, autoFocusSel
     <SettingsLayout page={page} onPageChange={onPageChange} topInset={topInset} autoFocusSelected={autoFocusSelected}>
       <>
         {page === 'general' && <GeneralSettings />}
+        {page === 'files' && <FileAreaSettings />}
         {page === 'terminal' && <TerminalSettings />}
         {page === 'github' && <GitHubSettings />}
         {page === 'apps' && <ExternalAppSettings />}
