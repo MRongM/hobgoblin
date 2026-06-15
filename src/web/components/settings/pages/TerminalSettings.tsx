@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Plus, Save, Trash2 } from 'lucide-react'
+import {
+  MAX_TERMINAL_FONT_SIZE,
+  MIN_TERMINAL_FONT_SIZE,
+} from '#/shared/settings.ts'
 import type { TerminalCustomButton } from '#/shared/rpc.ts'
 import { Button } from '#/web/components/ui/button.tsx'
 import { Input } from '#/web/components/ui/input.tsx'
@@ -9,6 +13,7 @@ import {
   SettingsGroup,
   SettingsList,
   SettingsListItem,
+  SettingsNumberInput,
   SettingsRow,
   SettingsSelect,
 } from '#/web/components/settings/SettingsPrimitives.tsx'
@@ -16,6 +21,7 @@ import {
   useRuntimeTerminalSettings,
   useTerminalCustomButtonsController,
 } from '#/web/runtime-settings-terminal-buttons.ts'
+import { useFontSettingsController } from '#/web/runtime-settings-fonts.ts'
 import { useT } from '#/web/stores/i18n.ts'
 
 type EditableTerminalCustomButton = TerminalCustomButton & {
@@ -50,6 +56,7 @@ export function TerminalSettings() {
     terminalExternalInputEnabled,
     remoteTerminalTmuxEnabled,
     terminalCustomButtonsVisible,
+    terminalFontSize,
   } = useRuntimeTerminalSettings()
   const initialRows = useMemo(() => editableFromButtons(buttons), [buttons])
   const [rows, setRows] = useState<EditableTerminalCustomButton[]>(initialRows)
@@ -60,6 +67,7 @@ export function TerminalSettings() {
     setRemoteTerminalTmuxEnabled,
     setTerminalCustomButtonsVisible,
   } = useTerminalCustomButtonsController()
+  const { setTerminalFontSize } = useFontSettingsController()
 
   useEffect(() => {
     if (dirty) return
@@ -80,6 +88,24 @@ export function TerminalSettings() {
 
   return (
     <>
+      <SettingsGroup label={t('settings.terminal-font.title')}>
+        <SettingsList>
+          <SettingsRow
+            controlId="settings-terminal-font-size"
+            label={t('settings.terminal-font-size')}
+            hint={t('settings.terminal-font-size-hint')}
+            control={
+              <SettingsNumberInput
+                id="settings-terminal-font-size"
+                min={MIN_TERMINAL_FONT_SIZE}
+                max={MAX_TERMINAL_FONT_SIZE}
+                value={terminalFontSize}
+                onChange={(fontSize) => void setTerminalFontSize(fontSize)}
+              />
+            }
+          />
+        </SettingsList>
+      </SettingsGroup>
       <SettingsGroup label={t('settings.terminal-input.title')} hint={t('settings.terminal-input.hint')}>
         <SettingsList>
           <SettingsRow

@@ -12,6 +12,12 @@ import type {
   ThemePref,
 } from '#/shared/rpc.ts'
 import {
+  MAX_FILE_TREE_FONT_SIZE,
+  MAX_TERMINAL_FONT_SIZE,
+  MIN_FILE_TREE_FONT_SIZE,
+  MIN_TERMINAL_FONT_SIZE,
+} from '#/shared/settings.ts'
+import {
   DEFAULT_DETAIL_COLLAPSED,
   DEFAULT_DETAIL_FOCUS_MODE,
   DEFAULT_DETAIL_PANE_SIZES,
@@ -31,6 +37,8 @@ export const DEFAULT_SWAP_CLOSE_SHORTCUTS = false
 export const DEFAULT_TOGGLE_DETAIL_ON_ACTION_BAR_BLANK_CLICK = false
 export const DEFAULT_TERMINAL_APP: TerminalPref = 'auto'
 export const DEFAULT_EDITOR_APP: EditorPref = 'auto'
+export const DEFAULT_FILE_TREE_FONT_SIZE = 12
+export const DEFAULT_TERMINAL_FONT_SIZE = 14
 export const DEFAULT_TERMINAL_EXTERNAL_INPUT_ENABLED = false
 export const DEFAULT_REMOTE_TERMINAL_TMUX_ENABLED = false
 export const DEFAULT_TERMINAL_CUSTOM_BUTTONS_VISIBLE = true
@@ -65,6 +73,8 @@ export function defaultSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): Se
     globalShortcut: overrides.globalShortcut ?? DEFAULT_GLOBAL_SHORTCUT,
     terminalApp: overrides.terminalApp ?? DEFAULT_TERMINAL_APP,
     editorApp: overrides.editorApp ?? DEFAULT_EDITOR_APP,
+    fileTreeFontSize: overrides.fileTreeFontSize ?? DEFAULT_FILE_TREE_FONT_SIZE,
+    terminalFontSize: overrides.terminalFontSize ?? DEFAULT_TERMINAL_FONT_SIZE,
     terminalExternalInputEnabled:
       overrides.terminalExternalInputEnabled ?? DEFAULT_TERMINAL_EXTERNAL_INPUT_ENABLED,
     remoteTerminalTmuxEnabled:
@@ -98,6 +108,8 @@ export function initialSettingsFromSnapshot(snapshot: Pick<
   | 'globalShortcutRegistered'
   | 'terminalApp'
   | 'editorApp'
+  | 'fileTreeFontSize'
+  | 'terminalFontSize'
   | 'terminalExternalInputEnabled'
   | 'remoteTerminalTmuxEnabled'
   | 'terminalCustomButtonsVisible'
@@ -115,6 +127,8 @@ export function initialSettingsFromSnapshot(snapshot: Pick<
     globalShortcutRegistered: snapshot.globalShortcutRegistered,
     terminalApp: snapshot.terminalApp,
     editorApp: snapshot.editorApp,
+    fileTreeFontSize: snapshot.fileTreeFontSize,
+    terminalFontSize: snapshot.terminalFontSize,
     terminalExternalInputEnabled: snapshot.terminalExternalInputEnabled,
     remoteTerminalTmuxEnabled: snapshot.remoteTerminalTmuxEnabled,
     terminalCustomButtonsVisible: snapshot.terminalCustomButtonsVisible,
@@ -128,4 +142,10 @@ export function defaultInitialSettingsSnapshot(overrides: Partial<InitialSetting
 }
 
 export { DEFAULT_COLOR_THEME, DEFAULT_GLOBAL_SHORTCUT }
+export {
+  MAX_FILE_TREE_FONT_SIZE,
+  MAX_TERMINAL_FONT_SIZE,
+  MIN_FILE_TREE_FONT_SIZE,
+  MIN_TERMINAL_FONT_SIZE,
+}
 export type { ColorTheme }

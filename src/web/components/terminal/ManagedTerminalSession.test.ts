@@ -594,9 +594,32 @@ describe('ManagedTerminalSession', () => {
     expect(xtermMocks.terminals[0]!.options.allowProposedApi).toBe(true)
     expect(xtermMocks.terminals[0]!.options.cursorStyle).toBe('bar')
     expect(xtermMocks.terminals[0]!.options.fontFamily).toContain('Maple Mono NF CN')
+    expect(xtermMocks.terminals[0]!.options.fontSize).toBe(14)
     expect(xtermMocks.terminals[0]!.options.rescaleOverlappingGlyphs).toBe(true)
     expect(terminalCalls.restart).not.toHaveBeenCalled()
     expect(session.snapshot().phase).toBe('open')
+  })
+
+  test('updates xterm font size and refits the terminal', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    const fitAddon = xtermMocks.fitAddons[0]!
+    term.refresh.mockClear()
+    fitAddon.fit.mockClear()
+
+    session.setFontSize(16)
+
+    expect(term.options.fontSize).toBe(16)
+    expect(fitAddon.fit).toHaveBeenCalledTimes(1)
+    expect(term.refresh).toHaveBeenCalledWith(0, Math.max(0, term.rows - 1))
   })
 
   test('remeasures and refits after fonts finish loading', async () => {

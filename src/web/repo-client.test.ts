@@ -427,4 +427,34 @@ describe('repo-client', () => {
       }),
     )
   })
+
+  test('requests file tree move through the embedded server', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, message: '' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { moveRepositoryFileTreeEntries } = await import('#/web/repo-client.ts')
+    await expect(
+      moveRepositoryFileTreeEntries('/repo', '/repo', ['/repo/README.md', '/repo/src'], '/repo/docs'),
+    ).resolves.toEqual({
+      ok: true,
+      message: '',
+    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:32100/api/repo/file-tree/move',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
+        body: JSON.stringify({
+          repoId: '/repo',
+          worktreePath: '/repo',
+          paths: ['/repo/README.md', '/repo/src'],
+          targetDirPath: '/repo/docs',
+        }),
+      }),
+    )
+  })
 })

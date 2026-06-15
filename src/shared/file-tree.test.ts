@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import {
+  isRepoFileMoveRequest,
   isRepoFileTransferRequest,
   isValidFileTransferDestinationName,
 } from '#/shared/file-tree.ts'
@@ -43,5 +44,29 @@ describe('file transfer request validation', () => {
     expect(isValidFileTransferDestinationName('nested/report.pdf')).toBe(false)
     expect(isValidFileTransferDestinationName('nested\\report.pdf')).toBe(false)
     expect(isValidFileTransferDestinationName('bad\0name')).toBe(false)
+  })
+})
+
+describe('file move request validation', () => {
+  test('accepts move requests with source paths and a target directory', () => {
+    expect(
+      isRepoFileMoveRequest({
+        repoId: '/repo',
+        worktreePath: '/repo',
+        paths: ['/repo/README.md', '/repo/src'],
+        targetDirPath: '/repo/docs',
+      }),
+    ).toBe(true)
+  })
+
+  test('rejects empty move source lists', () => {
+    expect(
+      isRepoFileMoveRequest({
+        repoId: '/repo',
+        worktreePath: '/repo',
+        paths: [],
+        targetDirPath: '/repo/docs',
+      }),
+    ).toBe(false)
   })
 })

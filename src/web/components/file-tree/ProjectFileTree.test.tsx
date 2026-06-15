@@ -11,24 +11,27 @@ import { createRepoBranch, resetReposStore } from '#/web/stores/repos/test-utils
 
 type GetRepositoryFileTreeArgs = [repoId: string, worktreePath: string, dirPath: string, signal?: AbortSignal]
 
-const getRepositoryFileTree = vi.fn(async (_repoId: string, _worktreePath: string, dirPath: string, _signal?: AbortSignal) => ({
-  ok: true as const,
-  worktreePath: '/repo',
-  dirPath,
-  entries:
-    dirPath === '/repo/src'
-      ? [{ name: 'app.ts', absolutePath: '/repo/src/app.ts', relativePath: 'src/app.ts', kind: 'file' as const }]
-      : [
-          { name: 'src', absolutePath: '/repo/src', relativePath: 'src', kind: 'directory' as const },
-          { name: 'README.md', absolutePath: '/repo/README.md', relativePath: 'README.md', kind: 'file' as const },
-        ],
-}))
+const getRepositoryFileTree = vi.fn(
+  async (_repoId: string, _worktreePath: string, dirPath: string, _signal?: AbortSignal) => ({
+    ok: true as const,
+    worktreePath: '/repo',
+    dirPath,
+    entries:
+      dirPath === '/repo/src'
+        ? [{ name: 'app.ts', absolutePath: '/repo/src/app.ts', relativePath: 'src/app.ts', kind: 'file' as const }]
+        : [
+            { name: 'src', absolutePath: '/repo/src', relativePath: 'src', kind: 'directory' as const },
+            { name: 'README.md', absolutePath: '/repo/README.md', relativePath: 'README.md', kind: 'file' as const },
+          ],
+  }),
+)
 const transferRepositoryFiles = vi.fn(async (_input: unknown) => ({
   ok: true as const,
   copied: [{ destinationPath: '/repo/docs/README.md', kind: 'file' as const }],
   renamed: [],
   failed: [],
 }))
+const moveRepositoryFileTreeEntries = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
 const renameRepositoryFileTreeEntry = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
 const deleteRepositoryFileTreeEntries = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
 const openRepositoryEditor = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
@@ -40,6 +43,7 @@ vi.mock('#/web/repo-client.ts', () => ({
   getRepositoryFileTree: (...args: GetRepositoryFileTreeArgs) => getRepositoryFileTree(...args),
   renameRepositoryFileTreeEntry: (...args: unknown[]) => renameRepositoryFileTreeEntry(...args),
   deleteRepositoryFileTreeEntries: (...args: unknown[]) => deleteRepositoryFileTreeEntries(...args),
+  moveRepositoryFileTreeEntries: (...args: unknown[]) => moveRepositoryFileTreeEntries(...args),
   openRepositoryEditor: (path: string) => openRepositoryEditor(path),
   openRepositoryTerminal: (path: string) => openRepositoryTerminal(path),
   transferRepositoryFiles: (input: unknown) => transferRepositoryFiles(input),
@@ -60,6 +64,10 @@ vi.mock('#/web/stores/i18n.ts', () => ({
   useT: () => (key: string) => key,
 }))
 
+vi.mock('#/web/runtime-settings-fonts.ts', () => ({
+  useRuntimeFontSettings: () => ({ fileTreeFontSize: 12, terminalFontSize: 14 }),
+}))
+
 let container: HTMLDivElement | null = null
 let root: Root | null = null
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -68,6 +76,7 @@ beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   getRepositoryFileTree.mockClear()
   transferRepositoryFiles.mockClear()
+  moveRepositoryFileTreeEntries.mockClear()
   renameRepositoryFileTreeEntry.mockClear()
   deleteRepositoryFileTreeEntries.mockClear()
   openRepositoryEditor.mockClear()
@@ -123,13 +132,15 @@ describe('ProjectFileTree', () => {
 
     const row = treeItemByText('README.md')
     await act(async () => {
-      row.dispatchEvent(new MouseEvent('contextmenu', {
-        bubbles: true,
-        cancelable: true,
-        button: 2,
-        clientX: 140,
-        clientY: 90,
-      }))
+      row.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          bubbles: true,
+          cancelable: true,
+          button: 2,
+          clientX: 140,
+          clientY: 90,
+        }),
+      )
       await Promise.resolve()
     })
 
@@ -256,6 +267,49 @@ describe('ProjectFileTree', () => {
     })
   })
 
+  test('moves internally dragged file tree paths onto a directory target', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const file = treeItemByText('README.md')
+    const directory = treeItemByText('src')
+    const dataTransfer = createDataTransfer()
+    await act(async () => {
+      file.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      dragStart(file, dataTransfer)
+      dropWithDataTransfer(directory, dataTransfer)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(moveRepositoryFileTreeEntries).toHaveBeenCalledWith('/repo', '/repo', ['/repo/README.md'], '/repo/src')
+    expect(transferRepositoryFiles).not.toHaveBeenCalled()
+  })
+
+  test('undoes the last internal file tree move with Ctrl+Z', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const file = treeItemByText('README.md')
+    const directory = treeItemByText('src')
+    const dataTransfer = createDataTransfer()
+    await act(async () => {
+      file.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      dragStart(file, dataTransfer)
+      dropWithDataTransfer(directory, dataTransfer)
+      await Promise.resolve()
+      await Promise.resolve()
+      directory.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'z', ctrlKey: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(moveRepositoryFileTreeEntries).toHaveBeenNthCalledWith(1, '/repo', '/repo', ['/repo/README.md'], '/repo/src')
+    expect(moveRepositoryFileTreeEntries).toHaveBeenNthCalledWith(2, '/repo', '/repo', ['/repo/src/README.md'], '/repo')
+  })
+
   test('pastes system clipboard files from a directory context menu into that directory', async () => {
     seedRepoWithSelectedBranch({ hasWorktree: true })
 
@@ -277,6 +331,22 @@ describe('ProjectFileTree', () => {
         ],
       },
     })
+  })
+
+  test('undoes the last file tree paste with Ctrl+Z', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const directory = treeItemByText('src')
+    await clickContextMenuItem(directory, 'file-tree.paste')
+    await act(async () => {
+      directory.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'z', ctrlKey: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(deleteRepositoryFileTreeEntries).toHaveBeenCalledWith('/repo', '/repo', ['/repo/docs/README.md'])
   })
 
   test('pastes system clipboard files from a file context menu into the parent directory', async () => {
@@ -345,6 +415,24 @@ describe('ProjectFileTree', () => {
 
     expect(document.body.textContent).toContain('file-tree.rename')
     expect(document.body.textContent).toContain('file-tree.delete')
+  })
+
+  test('renders a prefix icon for each row context menu item', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const row = treeItemByText('README.md')
+    await act(async () => {
+      row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+      await Promise.resolve()
+    })
+
+    const items = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+    expect(items.length).toBeGreaterThan(0)
+    for (const item of items) {
+      expect(item.firstElementChild?.tagName.toLowerCase()).toBe('svg')
+    }
   })
 
   test('opens a local file tree node in Finder from the context menu', async () => {
@@ -456,11 +544,48 @@ describe('ProjectFileTree', () => {
       await Promise.resolve()
     })
 
-    expect(renameRepositoryFileTreeEntry).toHaveBeenCalledWith(
+    expect(renameRepositoryFileTreeEntry).toHaveBeenCalledWith('/repo', '/repo', '/repo/README.md', 'README-renamed.md')
+  })
+
+  test('undoes the last file tree rename with Ctrl+Z', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const row = treeItemByText('README.md')
+    await act(async () => {
+      row.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      row.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }))
+      await Promise.resolve()
+    })
+
+    const input = container?.querySelector<HTMLInputElement>('input[aria-label="file-tree.rename-input-label"]')
+    if (!input) throw new Error('missing rename input')
+
+    await act(async () => {
+      input.value = 'README-renamed.md'
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }))
+      await Promise.resolve()
+      await Promise.resolve()
+      row.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'z', ctrlKey: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(renameRepositoryFileTreeEntry).toHaveBeenNthCalledWith(
+      1,
       '/repo',
       '/repo',
       '/repo/README.md',
       'README-renamed.md',
+    )
+    expect(renameRepositoryFileTreeEntry).toHaveBeenNthCalledWith(
+      2,
+      '/repo',
+      '/repo',
+      '/repo/README-renamed.md',
+      'README.md',
     )
   })
 
@@ -503,9 +628,7 @@ describe('ProjectFileTree', () => {
 function seedRepoWithSelectedBranch(options: { repoId?: string; hasWorktree: boolean }) {
   const repoId = options.repoId ?? '/repo'
   const repo = emptyRepo(repoId, 'repo')
-  repo.data.branches = [
-    createRepoBranch('main', options.hasWorktree ? { worktree: { path: '/repo' } } : {}),
-  ]
+  repo.data.branches = [createRepoBranch('main', options.hasWorktree ? { worktree: { path: '/repo' } } : {})]
   repo.data.currentBranch = 'main'
   repo.data.status = []
   repo.data.statusLoaded = true
@@ -545,6 +668,37 @@ function dropFiles(target: HTMLElement, files: File[]) {
       dropEffect: 'copy',
     },
   })
+  target.dispatchEvent(event)
+}
+
+function createDataTransfer(): DataTransfer {
+  const values = new Map<string, string>()
+  const dataTransfer = {
+    files: [],
+    get types() {
+      return Array.from(values.keys())
+    },
+    dropEffect: 'none',
+    effectAllowed: 'none',
+    setData(type: string, value: string) {
+      values.set(type, value)
+    },
+    getData(type: string) {
+      return values.get(type) ?? ''
+    },
+  }
+  return dataTransfer as unknown as DataTransfer
+}
+
+function dragStart(target: HTMLElement, dataTransfer: DataTransfer) {
+  const event = new Event('dragstart', { bubbles: true, cancelable: true }) as DragEvent
+  Object.defineProperty(event, 'dataTransfer', { value: dataTransfer })
+  target.dispatchEvent(event)
+}
+
+function dropWithDataTransfer(target: HTMLElement, dataTransfer: DataTransfer) {
+  const event = new Event('drop', { bubbles: true, cancelable: true }) as DragEvent
+  Object.defineProperty(event, 'dataTransfer', { value: dataTransfer })
   target.dispatchEvent(event)
 }
 

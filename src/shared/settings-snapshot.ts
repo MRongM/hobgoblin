@@ -25,6 +25,8 @@ export function buildRuntimeSettingsSnapshot(input: {
     globalShortcutRegistered: input.globalShortcutRegistered,
     terminalApp: input.prefs.terminalApp,
     editorApp: input.prefs.editorApp,
+    fileTreeFontSize: input.prefs.fileTreeFontSize,
+    terminalFontSize: input.prefs.terminalFontSize,
     terminalExternalInputEnabled: input.prefs.terminalExternalInputEnabled,
     remoteTerminalTmuxEnabled: input.prefs.remoteTerminalTmuxEnabled,
     terminalCustomButtonsVisible: input.prefs.terminalCustomButtonsVisible,
@@ -73,6 +75,8 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     | 'globalShortcutRegistered'
     | 'terminalApp'
     | 'editorApp'
+    | 'fileTreeFontSize'
+    | 'terminalFontSize'
     | 'terminalExternalInputEnabled'
     | 'remoteTerminalTmuxEnabled'
     | 'terminalCustomButtonsVisible'
@@ -94,6 +98,8 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     globalShortcutRegistered: snapshot.globalShortcutRegistered,
     terminalApp: snapshot.terminalApp,
     editorApp: snapshot.editorApp,
+    fileTreeFontSize: snapshot.fileTreeFontSize,
+    terminalFontSize: snapshot.terminalFontSize,
     terminalExternalInputEnabled: snapshot.terminalExternalInputEnabled,
     remoteTerminalTmuxEnabled: snapshot.remoteTerminalTmuxEnabled,
     terminalCustomButtonsVisible: snapshot.terminalCustomButtonsVisible,

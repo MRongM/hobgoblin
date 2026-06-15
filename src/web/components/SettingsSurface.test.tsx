@@ -41,6 +41,11 @@ function defaultRpcResult(path: string, input?: unknown) {
       globalShortcutRegistered: true,
       terminalApp: 'auto',
       editorApp: 'auto',
+      fileTreeFontSize: 12,
+      terminalFontSize: 14,
+      terminalExternalInputEnabled: false,
+      remoteTerminalTmuxEnabled: false,
+      terminalCustomButtonsVisible: true,
       terminalCustomButtons: [],
       lanEnabled: false,
       session: {
@@ -139,6 +144,11 @@ beforeEach(() => {
       globalShortcutRegistered: true,
       terminalApp: 'auto',
       editorApp: 'auto',
+      fileTreeFontSize: 12,
+      terminalFontSize: 14,
+      terminalExternalInputEnabled: false,
+      remoteTerminalTmuxEnabled: false,
+      terminalCustomButtonsVisible: true,
       terminalCustomButtons: [],
       lanEnabled: false,
     },
@@ -158,6 +168,11 @@ beforeEach(() => {
       globalShortcutRegistered: true,
       terminalApp: 'auto',
       editorApp: 'auto',
+      fileTreeFontSize: 12,
+      terminalFontSize: 14,
+      terminalExternalInputEnabled: false,
+      remoteTerminalTmuxEnabled: false,
+      terminalCustomButtonsVisible: true,
       terminalCustomButtons: [],
       lanEnabled: false,
     },
@@ -318,6 +333,44 @@ describe('SettingsSurface', () => {
     expect(document.body.textContent).toContain('settings.ssh.title')
     expect(document.body.textContent).toContain('settings.ssh.body')
     expect(document.body.textContent).toContain('settings.ssh.example')
+  })
+
+  test('edits file tree font size from settings', async () => {
+    await render(<SettingsSurface page="files" onPageChange={() => {}} />)
+
+    const input = document.getElementById('settings-file-tree-font-size')
+    if (!(input instanceof HTMLInputElement)) throw new Error('Missing file tree font size input')
+
+    await act(async () => {
+      setInputValue(input, '13')
+      await Promise.resolve()
+    })
+
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [, options] = call as unknown as [unknown, RequestInit | undefined]
+        return String(options?.body ?? '').includes('"fileTreeFontSize":13')
+      }),
+    ).toBe(true)
+  })
+
+  test('edits terminal font size from settings', async () => {
+    await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
+
+    const input = document.getElementById('settings-terminal-font-size')
+    if (!(input instanceof HTMLInputElement)) throw new Error('Missing terminal font size input')
+
+    await act(async () => {
+      setInputValue(input, '16')
+      await Promise.resolve()
+    })
+
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [, options] = call as unknown as [unknown, RequestInit | undefined]
+        return String(options?.body ?? '').includes('"terminalFontSize":16')
+      }),
+    ).toBe(true)
   })
 
   test('edits terminal custom buttons from settings', async () => {

@@ -37,6 +37,8 @@ export interface InitialSettingsSnapshot {
   globalShortcutRegistered: boolean
   terminalApp: TerminalPref
   editorApp: EditorPref
+  fileTreeFontSize: number
+  terminalFontSize: number
   terminalExternalInputEnabled: boolean
   remoteTerminalTmuxEnabled: boolean
   terminalCustomButtonsVisible: boolean

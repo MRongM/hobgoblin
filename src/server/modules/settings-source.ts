@@ -24,6 +24,7 @@ import { isColorTheme, type ColorTheme } from '#/shared/color-theme.ts'
 import {
   DEFAULT_COLOR_THEME,
   DEFAULT_EDITOR_APP,
+  DEFAULT_FILE_TREE_FONT_SIZE,
   DEFAULT_FETCH_INTERVAL_SEC,
   DEFAULT_GLOBAL_SHORTCUT,
   DEFAULT_GLOBAL_SHORTCUT_DISABLED,
@@ -32,10 +33,15 @@ import {
   DEFAULT_SHORTCUTS_DISABLED,
   DEFAULT_SWAP_CLOSE_SHORTCUTS,
   DEFAULT_TERMINAL_APP,
+  DEFAULT_TERMINAL_FONT_SIZE,
   DEFAULT_TERMINAL_NOTIFICATIONS_ENABLED,
   DEFAULT_THEME_PREF,
   DEFAULT_TOGGLE_DETAIL_ON_ACTION_BAR_BLANK_CLICK,
+  MAX_FILE_TREE_FONT_SIZE,
   MAX_RECENT_REPOS,
+  MAX_TERMINAL_FONT_SIZE,
+  MIN_FILE_TREE_FONT_SIZE,
+  MIN_TERMINAL_FONT_SIZE,
   defaultSessionState,
   defaultSettingsPrefs,
 } from '#/shared/settings-defaults.ts'
@@ -54,6 +60,8 @@ interface ServerSettingsData {
   globalShortcut: string
   terminalApp: TerminalPref
   editorApp: EditorPref
+  fileTreeFontSize: number
+  terminalFontSize: number
   terminalExternalInputEnabled: boolean
   remoteTerminalTmuxEnabled: boolean
   terminalCustomButtonsVisible: boolean
@@ -96,6 +104,27 @@ function normalizeEditorPref(value: unknown): EditorPref {
   return value === 'auto' || value === 'vscode' || value === 'cursor' || value === 'windsurf'
     ? value
     : DEFAULT_EDITOR_APP
+}
+
+function normalizeFontSize(value: unknown, options: { min: number; max: number; fallback: number }): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return options.fallback
+  return Math.max(options.min, Math.min(options.max, Math.round(value)))
+}
+
+function normalizeFileTreeFontSize(value: unknown): number {
+  return normalizeFontSize(value, {
+    min: MIN_FILE_TREE_FONT_SIZE,
+    max: MAX_FILE_TREE_FONT_SIZE,
+    fallback: DEFAULT_FILE_TREE_FONT_SIZE,
+  })
+}
+
+function normalizeTerminalFontSize(value: unknown): number {
+  return normalizeFontSize(value, {
+    min: MIN_TERMINAL_FONT_SIZE,
+    max: MAX_TERMINAL_FONT_SIZE,
+    fallback: DEFAULT_TERMINAL_FONT_SIZE,
+  })
 }
 
 function normalizeTerminalNotificationsEnabled(value: unknown): boolean {
@@ -151,6 +180,8 @@ function settingsPrefsFromData(data: ServerSettingsData): SettingsPrefs {
     globalShortcut: data.globalShortcut,
     terminalApp: data.terminalApp,
     editorApp: data.editorApp,
+    fileTreeFontSize: data.fileTreeFontSize,
+    terminalFontSize: data.terminalFontSize,
     terminalExternalInputEnabled: data.terminalExternalInputEnabled,
     remoteTerminalTmuxEnabled: data.remoteTerminalTmuxEnabled,
     terminalCustomButtonsVisible: data.terminalCustomButtonsVisible,
@@ -238,6 +269,8 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       globalShortcut: normalizeGlobalShortcut(parsed.globalShortcut),
       terminalApp: normalizeTerminalPref(parsed.terminalApp),
       editorApp: normalizeEditorPref(parsed.editorApp),
+      fileTreeFontSize: normalizeFileTreeFontSize(parsed.fileTreeFontSize),
+      terminalFontSize: normalizeTerminalFontSize(parsed.terminalFontSize),
       terminalExternalInputEnabled: normalizeTerminalExternalInputEnabled(parsed.terminalExternalInputEnabled),
       remoteTerminalTmuxEnabled: normalizeRemoteTerminalTmuxEnabled(parsed.remoteTerminalTmuxEnabled),
       terminalCustomButtonsVisible: normalizeTerminalCustomButtonsVisible(parsed.terminalCustomButtonsVisible),
@@ -320,6 +353,10 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     patch.globalShortcut === undefined ? data.globalShortcut : normalizeGlobalShortcut(patch.globalShortcut)
   const nextTerminalApp = patch.terminalApp === undefined ? data.terminalApp : normalizeTerminalPref(patch.terminalApp)
   const nextEditorApp = patch.editorApp === undefined ? data.editorApp : normalizeEditorPref(patch.editorApp)
+  const nextFileTreeFontSize =
+    patch.fileTreeFontSize === undefined ? data.fileTreeFontSize : normalizeFileTreeFontSize(patch.fileTreeFontSize)
+  const nextTerminalFontSize =
+    patch.terminalFontSize === undefined ? data.terminalFontSize : normalizeTerminalFontSize(patch.terminalFontSize)
   const nextTerminalExternalInputEnabled =
     patch.terminalExternalInputEnabled === undefined
       ? data.terminalExternalInputEnabled
@@ -350,6 +387,8 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     data.globalShortcut !== nextGlobalShortcut ||
     data.terminalApp !== nextTerminalApp ||
     data.editorApp !== nextEditorApp ||
+    data.fileTreeFontSize !== nextFileTreeFontSize ||
+    data.terminalFontSize !== nextTerminalFontSize ||
     data.terminalExternalInputEnabled !== nextTerminalExternalInputEnabled ||
     data.remoteTerminalTmuxEnabled !== nextRemoteTerminalTmuxEnabled ||
     data.terminalCustomButtonsVisible !== nextTerminalCustomButtonsVisible ||
@@ -367,6 +406,8 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   data.globalShortcut = nextGlobalShortcut
   data.terminalApp = nextTerminalApp
   data.editorApp = nextEditorApp
+  data.fileTreeFontSize = nextFileTreeFontSize
+  data.terminalFontSize = nextTerminalFontSize
   data.terminalExternalInputEnabled = nextTerminalExternalInputEnabled
   data.remoteTerminalTmuxEnabled = nextRemoteTerminalTmuxEnabled
   data.terminalCustomButtonsVisible = nextTerminalCustomButtonsVisible

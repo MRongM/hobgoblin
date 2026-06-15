@@ -25,6 +25,7 @@ export type RemoteCommandKind =
   | { type: 'listDirectoryEntries'; worktreePath: string; dirPath: string }
   | { type: 'renameFileTreeEntry'; worktreePath: string; oldPath: string; newName: string }
   | { type: 'deleteFileTreeEntries'; worktreePath: string; paths: string[] }
+  | { type: 'moveFileTreeEntries'; worktreePath: string; paths: string[]; targetDirPath: string }
   | { type: 'fileTransferInventory'; rootPath: string; paths: string[] }
   | { type: 'fileTransferReadBase64'; path: string }
   | { type: 'fileTransferWriteBase64'; targetPath: string }
@@ -234,6 +235,8 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return remoteRenameFileTreeScript(command)
     case 'deleteFileTreeEntries':
       return remoteDeleteFileTreeScript(command)
+    case 'moveFileTreeEntries':
+      return remoteMoveFileTreeScript(command)
     case 'fileTransferInventory':
       return remoteFileTransferInventoryScript(command)
     case 'fileTransferReadBase64':
@@ -428,6 +431,53 @@ function remoteDeleteFileTreeScript(command: Extract<RemoteCommandKind, { type: 
     '            shutil.rmtree(target)',
     '        else:',
     '            os.remove(target)',
+    '    finish(True)',
+    'except FileNotFoundError:',
+    '    finish(False, "error.path-not-found")',
+    'except PermissionError:',
+    '    finish(False, "error.path-permission-denied")',
+    'except OSError:',
+    '    finish(False, "error.failed-read-repo")',
+    'PY',
+  ].join('\n')
+}
+
+function remoteMoveFileTreeScript(command: Extract<RemoteCommandKind, { type: 'moveFileTreeEntries' }>): string {
+  return [
+    "python3 - <<'PY'",
+    ...remoteFileTreePreamble(command.worktreePath),
+    `paths = ${pythonJson(command.paths)}`,
+    `target_dir = ${pythonString(command.targetDirPath)}`,
+    'if not isinstance(paths, list) or len(paths) == 0:',
+    '    finish(False, "error.invalid-arguments")',
+    'if not isinstance(target_dir, str) or not target_dir or "\\x00" in target_dir:',
+    '    finish(False, "error.invalid-arguments")',
+    'target_dir = os.path.normpath(target_dir)',
+    'if not os.path.isabs(target_dir):',
+    '    finish(False, "error.invalid-arguments")',
+    'if not inside_root(target_dir):',
+    '    finish(False, "error.invalid-path")',
+    'if not os.path.isdir(target_dir):',
+    '    finish(False, "error.path-not-directory")',
+    'targets = [writable_target(item) for item in paths]',
+    'seen = set()',
+    'moves = []',
+    'for source in targets:',
+    '    destination = os.path.normpath(os.path.join(target_dir, os.path.basename(source)))',
+    '    if destination == source:',
+    '        continue',
+    '    if not inside_root(destination):',
+    '        finish(False, "error.invalid-path")',
+    '    if os.path.isdir(source) and not os.path.islink(source):',
+    "        if target_dir == source or target_dir.startswith(source.rstrip('/') + '/'):",
+    '            finish(False, "error.invalid-path")',
+    '    if destination in seen or os.path.lexists(destination):',
+    '        finish(False, "error.file-exists")',
+    '    seen.add(destination)',
+    '    moves.append((source, destination))',
+    'try:',
+    '    for source, destination in moves:',
+    '        os.rename(source, destination)',
     '    finish(True)',
     'except FileNotFoundError:',
     '    finish(False, "error.path-not-found")',

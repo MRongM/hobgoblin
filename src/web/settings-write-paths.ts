@@ -14,6 +14,7 @@ import {
   refreshExternalAppsSnapshot,
   refreshGitHubCliState,
   saveSession,
+  setFileTreeFontSize,
   setGlobalShortcut,
   setGlobalShortcutDisabled,
   setLanEnabled,
@@ -26,6 +27,7 @@ import {
   setTerminalCustomButtons,
   setTerminalCustomButtonsVisible,
   setTerminalExternalInputEnabled,
+  setTerminalFontSize,
   setTerminalNotificationsEnabled,
   setToggleDetailOnActionBarBlankClick,
 } from '#/web/settings-client.ts'
@@ -111,6 +113,18 @@ export async function setEditorAppPreference(pref: EditorPref): Promise<EditorAp
   updateExternalAppsCache(mainWindowQueryClient, (current) => ({ ...current, editor: state }))
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, editorApp: state.pref }))
   return state
+}
+
+export async function setFileTreeFontSizePreference(fontSize: number): Promise<number> {
+  const fileTreeFontSize = await setFileTreeFontSize(fontSize)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, fileTreeFontSize }))
+  return fileTreeFontSize
+}
+
+export async function setTerminalFontSizePreference(fontSize: number): Promise<number> {
+  const terminalFontSize = await setTerminalFontSize(fontSize)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, terminalFontSize }))
+  return terminalFontSize
 }
 
 export async function setTerminalExternalInputEnabledPreference(enabled: boolean): Promise<void> {

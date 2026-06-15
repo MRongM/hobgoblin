@@ -354,6 +354,23 @@ export async function deleteRemoteFileTreeEntries(
   return remoteFileTreeMutationResult(result)
 }
 
+export async function moveRemoteFileTreeEntries(
+  target: RemoteRepoTarget,
+  worktreePath: string,
+  paths: string[],
+  targetDirPath: string,
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<ExecResult> {
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const result = await run(
+    { type: 'moveFileTreeEntries', worktreePath, paths, targetDirPath },
+    target,
+    { signal: options.signal },
+  )
+  if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
+  return remoteFileTreeMutationResult(result)
+}
+
 export async function fetchRemoteRepository(
   target: RemoteRepoTarget,
   options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},

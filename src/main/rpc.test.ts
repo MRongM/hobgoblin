@@ -40,6 +40,8 @@ function settingsPrefs(overrides: Partial<SettingsPrefs> = {}): SettingsPrefs {
     globalShortcut: '',
     terminalApp: 'auto',
     editorApp: 'auto',
+    fileTreeFontSize: 12,
+    terminalFontSize: 14,
     terminalExternalInputEnabled: false,
     remoteTerminalTmuxEnabled: false,
     terminalCustomButtonsVisible: true,
