@@ -123,6 +123,24 @@ function renderList() {
 }
 
 describe('BranchList worktree drag ordering', () => {
+  test('renders worktree paths relative to the repository root', () => {
+    seedRepoState({
+      id: REPO_ID,
+      branchViewMode: 'all',
+      branches: [
+        createRepoBranch('main', { worktree: { path: REPO_ID } }),
+        createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } }),
+      ],
+      currentBranch: 'main',
+      selectedBranch: 'feature/a',
+    })
+
+    renderList()
+
+    expect(container?.textContent).toContain('../worktree-a')
+    expect(container?.textContent).not.toContain('/tmp/worktree-a')
+  })
+
   test('shows drag handles only in worktrees view without search', () => {
     seedWorktreeRepo('worktrees')
 

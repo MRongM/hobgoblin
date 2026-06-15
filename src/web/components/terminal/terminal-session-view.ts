@@ -24,6 +24,7 @@ import {
   terminalInputForMacOptionArrow,
 } from '#/web/components/terminal/terminal-keyboard.ts'
 import { registerTerminalRelativePathLinkProvider } from '#/web/components/terminal/terminal-path-links.ts'
+import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
 const DEFAULT_PARKING_WIDTH = 800
 const DEFAULT_PARKING_HEIGHT = 400
 const DEFAULT_TERMINAL_COLS = 80
@@ -51,16 +52,21 @@ export class TerminalSessionView {
   private pinToBottomFrame: number | null = null
   private host: HTMLElement | null = null
   private revealPathHandler: ((relativePath: string) => void) | null = null
+  private fontSize: number
   private readonly safariShiftKeyResolver = new SafariShiftKeyResolver()
 
-  constructor(handlers: {
-    onInput: (data: string) => void
-    onBell: () => void
-    onResize: (size: { cols: number; rows: number }) => void
-    onSearchResult: (event: ISearchResultChangeEvent) => void
-    onProgress: (state: number, value: number) => void
-    onOpenExternalLink: (uri: string) => void
-  }) {
+  constructor(
+    handlers: {
+      onInput: (data: string) => void
+      onBell: () => void
+      onResize: (size: { cols: number; rows: number }) => void
+      onSearchResult: (event: ISearchResultChangeEvent) => void
+      onProgress: (state: number, value: number) => void
+      onOpenExternalLink: (uri: string) => void
+    },
+    options: { fontSize?: number } = {},
+  ) {
+    this.fontSize = options.fontSize ?? DEFAULT_TERMINAL_FONT_SIZE
     this.frame = document.createElement('div')
     this.frame.className = 'goblin-managed-terminal-frame'
     this.xtermHost = document.createElement('div')
@@ -82,6 +88,15 @@ export class TerminalSessionView {
 
   setRevealPathHandler(handler: ((relativePath: string) => void) | null): void {
     this.revealPathHandler = handler
+  }
+
+  setFontSize(fontSize: number): void {
+    if (this.fontSize === fontSize) return
+    this.fontSize = fontSize
+    const term = this.term
+    if (!term) return
+    term.options.fontSize = fontSize
+    this.fitForFontLoad(term)
   }
 
   attach(host: HTMLElement): void {
@@ -133,7 +148,7 @@ export class TerminalSessionView {
       cursorBlink: true,
       cursorStyle: 'bar',
       fontFamily: TERMINAL_FONT_FAMILY,
-      fontSize: 14,
+      fontSize: this.fontSize,
       lineHeight: 1.35,
       minimumContrastRatio: 4.5,
       scrollback: 10_000,

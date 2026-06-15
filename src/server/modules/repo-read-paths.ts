@@ -3,7 +3,7 @@ import { getRepositoryFileTree as getRepositoryFileTreeRead } from '#/server/mod
 import { generateCommitMessageFromPatch, probeCommitMessageProviders } from '#/system/commit-message-ai.ts'
 import { isCommitMessageProvider, type CommitMessageGenerationResult, type CommitMessageProviderAvailability } from '#/shared/commit-message-ai.ts'
 import type { RepoFileTreeResult } from '#/shared/file-tree.ts'
-import { type ExecResult, type PullRequestFetchMode, type WorktreeStatus } from '#/shared/git-types.ts'
+import { type CommitDetail, type CommitHistoryEntry, type ExecResult, type PullRequestFetchMode, type WorktreeStatus } from '#/shared/git-types.ts'
 import type { ProbeResult, PullRequestEntry, RepoSnapshot } from '#/shared/rpc.ts'
 
 export async function probeRepository(cwd: string): Promise<ProbeResult> {
@@ -38,6 +38,23 @@ export async function getRepositoryPullRequests(
   const prs = await runWithRepoBackend(cwd, async (backend) => await backend.getPullRequests(branchNames, { mode, signal: options?.signal }))
   if (!prs) return null
   return prs
+}
+
+export async function getRepositoryHistory(
+  cwd: string,
+  branch: string,
+  input: { limit: number; skip: number },
+  signal?: AbortSignal,
+): Promise<CommitHistoryEntry[]> {
+  return signal?.aborted ? [] : await runWithRepoBackend(cwd, async (backend) => await backend.getHistory(branch, input, signal))
+}
+
+export async function getRepositoryCommitDetail(
+  cwd: string,
+  commit: string,
+  signal?: AbortSignal,
+): Promise<CommitDetail | null> {
+  return signal?.aborted ? null : await runWithRepoBackend(cwd, async (backend) => await backend.getCommitDetail(commit, signal))
 }
 
 export async function getRepositoryPatch(cwd: string, worktreePath: string, signal?: AbortSignal): Promise<ExecResult> {

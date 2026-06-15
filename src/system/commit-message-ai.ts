@@ -243,6 +243,7 @@ function buildCommitMessagePrompt(patch: string): string {
   return [
     'Write a concise Git commit message for the following uncommitted diff.',
     'Return only the commit message.',
+    'Write the commit message in English.',
     'Use Conventional Commits style when it fits the change.',
     'Use a short subject line and add a body only when it clarifies important details.',
     '',

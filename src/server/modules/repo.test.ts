@@ -10,9 +10,11 @@ const mocks = vi.hoisted(() => ({
   commitRemoteChanges: vi.fn(),
   createBranch: vi.fn(),
   createRemoteBranch: vi.fn(),
+  createRemoteFileTreeDirectory: vi.fn(),
   createRemoteTrackingBranch: vi.fn(),
   createTrackingBranch: vi.fn(),
   createWorktree: vi.fn(),
+  createLocalFileTreeDirectory: vi.fn(),
   deleteBranch: vi.fn(),
   deleteLocalFileTreeEntries: vi.fn(),
   deleteRemoteBranch: vi.fn(),
@@ -24,6 +26,8 @@ const mocks = vi.hoisted(() => ({
   isGitRepo: vi.fn(),
   getBranches: vi.fn(),
   getBranchPullRequests: vi.fn(),
+  getCommitDetail: vi.fn(),
+  getCommitHistory: vi.fn(),
   getCurrentBranch: vi.fn(),
   getDefaultBranch: vi.fn(),
   getRepoName: vi.fn(),
@@ -38,8 +42,12 @@ const mocks = vi.hoisted(() => ({
   fetchRemoteRepository: vi.fn(),
   getBackgroundSyncRepos: vi.fn(),
   getRemoteBrowserUrl: vi.fn(),
+  getRemoteCommitDetail: vi.fn(),
+  getRemoteHistory: vi.fn(),
   mergeBranch: vi.fn(),
   mergeRemoteBranch: vi.fn(),
+  moveLocalFileTreeEntries: vi.fn(),
+  moveRemoteFileTreeEntries: vi.fn(),
   pullBranch: vi.fn(),
   pullRemoteBranch: vi.fn(),
   pushBranch: vi.fn(),
@@ -78,6 +86,11 @@ vi.mock('#/system/git/helper.ts', () => ({
 
 vi.mock('#/system/git/commit.ts', () => ({
   commitAllChanges: mocks.commitAllChanges,
+}))
+
+vi.mock('#/system/git/history.ts', () => ({
+  getCommitDetail: mocks.getCommitDetail,
+  getCommitHistory: mocks.getCommitHistory,
 }))
 
 vi.mock('#/system/git/patch.ts', () => ({
@@ -127,7 +140,9 @@ vi.mock('#/system/git/worktrees.ts', () => ({
 }))
 
 vi.mock('#/system/file-tree/local.ts', () => ({
+  createLocalFileTreeDirectory: mocks.createLocalFileTreeDirectory,
   deleteLocalFileTreeEntries: mocks.deleteLocalFileTreeEntries,
+  moveLocalFileTreeEntries: mocks.moveLocalFileTreeEntries,
   renameLocalFileTreeEntry: mocks.renameLocalFileTreeEntry,
 }))
 
@@ -148,12 +163,15 @@ vi.mock('#/system/ssh/git.ts', () => ({
   checkoutRemoteBranch: mocks.checkoutRemoteBranch,
   commitRemoteChanges: mocks.commitRemoteChanges,
   createRemoteBranch: mocks.createRemoteBranch,
+  createRemoteFileTreeDirectory: mocks.createRemoteFileTreeDirectory,
   createRemoteTrackingBranch: mocks.createRemoteTrackingBranch,
   createRemoteWorktree: vi.fn(),
   deleteRemoteBranch: mocks.deleteRemoteBranch,
   deleteRemoteFileTreeEntries: mocks.deleteRemoteFileTreeEntries,
   fetchRemoteRepository: mocks.fetchRemoteRepository,
   getRemoteBrowserUrl: mocks.getRemoteBrowserUrl,
+  getRemoteCommitDetail: mocks.getRemoteCommitDetail,
+  getRemoteHistory: mocks.getRemoteHistory,
   getRemotePatch: vi.fn(),
   getRemoteTrackingBranches: mocks.getRemoteTrackingBranches,
   getRemoteLog: vi.fn(),
@@ -162,6 +180,7 @@ vi.mock('#/system/ssh/git.ts', () => ({
   pullRemoteBranch: mocks.pullRemoteBranch,
   pushRemoteBranch: mocks.pushRemoteBranch,
   mergeRemoteBranch: mocks.mergeRemoteBranch,
+  moveRemoteFileTreeEntries: mocks.moveRemoteFileTreeEntries,
   renameRemoteFileTreeEntry: mocks.renameRemoteFileTreeEntry,
   removeRemoteWorktree: mocks.removeRemoteWorktree,
 }))
@@ -197,11 +216,15 @@ beforeEach(() => {
   mocks.commitAllChanges.mockResolvedValue({ ok: true, message: 'committed local' })
   mocks.commitRemoteChanges.mockResolvedValue({ ok: true, message: 'committed remote' })
   mocks.createBranch.mockResolvedValue({ ok: true, message: 'created local' })
+  mocks.createLocalFileTreeDirectory.mockResolvedValue({ ok: true, message: '' })
+  mocks.createRemoteFileTreeDirectory.mockResolvedValue({ ok: true, message: '' })
   mocks.createRemoteBranch.mockResolvedValue({ ok: true, message: 'created remote' })
   mocks.createRemoteTrackingBranch.mockResolvedValue({ ok: true, message: 'tracked remote' })
   mocks.createTrackingBranch.mockResolvedValue({ ok: true, message: 'tracked local' })
   mocks.mergeBranch.mockResolvedValue({ ok: true, message: 'merged local' })
   mocks.mergeRemoteBranch.mockResolvedValue({ ok: true, message: 'merged remote' })
+  mocks.moveLocalFileTreeEntries.mockResolvedValue({ ok: true, message: '' })
+  mocks.moveRemoteFileTreeEntries.mockResolvedValue({ ok: true, message: '' })
   mocks.pullBranch.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.pullRemoteBranch.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.pushBranch.mockResolvedValue({ ok: true, message: 'ok' })
@@ -218,6 +241,44 @@ beforeEach(() => {
   mocks.removeWorktree.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.removeRemoteWorktree.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.getRemoteBrowserUrl.mockResolvedValue(null)
+  mocks.getCommitHistory.mockResolvedValue([
+    {
+      hash: 'abc123456789',
+      shortHash: 'abc1234',
+      subject: 'feat: local',
+      author: 'Alice',
+      date: '2026-06-15T09:00:00+08:00',
+      parents: [],
+    },
+  ])
+  mocks.getCommitDetail.mockResolvedValue({
+    hash: 'abc123456789',
+    shortHash: 'abc1234',
+    subject: 'feat: local',
+    author: 'Alice',
+    date: '2026-06-15T09:00:00+08:00',
+    parents: [],
+    files: [],
+  })
+  mocks.getRemoteHistory.mockResolvedValue([
+    {
+      hash: 'def123456789',
+      shortHash: 'def1234',
+      subject: 'feat: remote',
+      author: 'Bob',
+      date: '2026-06-15T09:00:00+08:00',
+      parents: [],
+    },
+  ])
+  mocks.getRemoteCommitDetail.mockResolvedValue({
+    hash: 'def123456789',
+    shortHash: 'def1234',
+    subject: 'feat: remote',
+    author: 'Bob',
+    date: '2026-06-15T09:00:00+08:00',
+    parents: [],
+    files: [],
+  })
   mocks.resolveRemoteTarget.mockResolvedValue({
     target: {
       id: 'ssh-config://prod/srv/repo',
@@ -326,6 +387,48 @@ describe('getRepositoryPullRequests', () => {
       { branch: 'feature/b', pullRequest: pullRequest(4) },
     ])
     expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
+  })
+})
+
+describe('repository history read paths', () => {
+  test('getRepositoryHistory delegates to local backend history reads', async () => {
+    const { getRepositoryHistory } = await import('#/server/modules/repo-read-paths.ts')
+
+    await expect(getRepositoryHistory('/tmp/repo', 'feature/history', { limit: 100, skip: 0 })).resolves.toEqual([
+      {
+        hash: 'abc123456789',
+        shortHash: 'abc1234',
+        subject: 'feat: local',
+        author: 'Alice',
+        date: '2026-06-15T09:00:00+08:00',
+        parents: [],
+      },
+    ])
+    expect(mocks.getCommitHistory).toHaveBeenCalledWith(
+      '/tmp/repo',
+      'feature/history',
+      { limit: 100, skip: 0 },
+      { signal: undefined },
+    )
+  })
+
+  test('getRepositoryCommitDetail delegates to remote backend detail reads', async () => {
+    const { getRepositoryCommitDetail } = await import('#/server/modules/repo-read-paths.ts')
+
+    await expect(getRepositoryCommitDetail('ssh-config://prod/srv/repo', 'def1234')).resolves.toEqual({
+      hash: 'def123456789',
+      shortHash: 'def1234',
+      subject: 'feat: remote',
+      author: 'Bob',
+      date: '2026-06-15T09:00:00+08:00',
+      parents: [],
+      files: [],
+    })
+    expect(mocks.getRemoteCommitDetail).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
+      'def1234',
+      { signal: undefined },
+    )
   })
 })
 
@@ -598,6 +701,80 @@ describe('repo mutation invalidation publishing', () => {
       expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
       '/srv/repo',
       ['/srv/repo/src'],
+      { signal: undefined },
+    )
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: 'ssh-config://prod/srv/repo',
+      query: 'repo-snapshot',
+    })
+  })
+
+  test('moveRepositoryFileTreeEntries publishes snapshot invalidation after local success', async () => {
+    const { moveRepositoryFileTreeEntries } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await moveRepositoryFileTreeEntries('/tmp/repo', '/tmp/repo', ['/tmp/repo/README.md'], '/tmp/repo/docs')
+
+    expect(result).toEqual({ ok: true, message: '' })
+    expect(mocks.moveLocalFileTreeEntries).toHaveBeenCalledWith('/tmp/repo', ['/tmp/repo/README.md'], '/tmp/repo/docs')
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: '/tmp/repo',
+      query: 'repo-snapshot',
+    })
+  })
+
+  test('moveRepositoryFileTreeEntries dispatches remote repos to the SSH helper', async () => {
+    const { moveRepositoryFileTreeEntries } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await moveRepositoryFileTreeEntries(
+      'ssh-config://prod/srv/repo',
+      '/srv/repo',
+      ['/srv/repo/README.md'],
+      '/srv/repo/docs',
+    )
+
+    expect(result).toEqual({ ok: true, message: '' })
+    expect(mocks.moveRemoteFileTreeEntries).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
+      '/srv/repo',
+      ['/srv/repo/README.md'],
+      '/srv/repo/docs',
+      { signal: undefined },
+    )
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: 'ssh-config://prod/srv/repo',
+      query: 'repo-snapshot',
+    })
+  })
+
+  test('createRepositoryFileTreeDirectory publishes snapshot invalidation after local success', async () => {
+    const { createRepositoryFileTreeDirectory } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await createRepositoryFileTreeDirectory('/tmp/repo', '/tmp/repo', '/tmp/repo/src', 'components')
+
+    expect(result).toEqual({ ok: true, message: '' })
+    expect(mocks.createLocalFileTreeDirectory).toHaveBeenCalledWith('/tmp/repo', '/tmp/repo/src', 'components')
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: '/tmp/repo',
+      query: 'repo-snapshot',
+    })
+  })
+
+  test('createRepositoryFileTreeDirectory dispatches remote repos to the SSH helper', async () => {
+    const { createRepositoryFileTreeDirectory } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await createRepositoryFileTreeDirectory(
+      'ssh-config://prod/srv/repo',
+      '/srv/repo',
+      '/srv/repo/src',
+      'components',
+    )
+
+    expect(result).toEqual({ ok: true, message: '' })
+    expect(mocks.createRemoteFileTreeDirectory).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
+      '/srv/repo',
+      '/srv/repo/src',
+      'components',
       { signal: undefined },
     )
     expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
@@ -899,6 +1076,29 @@ describe('repo mutation invalidation publishing', () => {
       expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
       '/data/deer-flow-release-release_20260609',
       'feature/coop_agentrun',
+      { signal: undefined },
+    )
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: 'ssh-config://prod/srv/repo',
+      query: 'repo-snapshot',
+    })
+  })
+
+  test('checkoutWorktreeBranch switches remote worktrees through the SSH backend and publishes invalidation', async () => {
+    const { checkoutWorktreeBranch } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await checkoutWorktreeBranch(
+      'ssh-config://prod/srv/repo',
+      '/data/deer-flow-bugfix_409',
+      'feat/agent-task',
+    )
+
+    expect(result).toEqual({ ok: true, message: 'ok' })
+    expect(mocks.checkoutBranch).not.toHaveBeenCalled()
+    expect(mocks.checkoutRemoteBranch).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
+      'feat/agent-task',
+      '/data/deer-flow-bugfix_409',
       { signal: undefined },
     )
     expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({

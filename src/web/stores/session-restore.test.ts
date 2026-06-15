@@ -32,6 +32,11 @@ function installBridge(sessionOverrides: Record<string, unknown> = {}) {
             globalShortcutRegistered: false,
             terminalApp: 'auto',
             editorApp: 'auto',
+            fileTreeFontSize: 12,
+            terminalFontSize: 14,
+            terminalExternalInputEnabled: false,
+            remoteTerminalTmuxEnabled: false,
+            terminalCustomButtonsVisible: true,
             terminalCustomButtons: [],
             lanEnabled: false,
             session: {
@@ -108,7 +113,7 @@ describe('session restore store', () => {
     expect(useSessionRestoreStore.getState().consumeBootSessionSnapshot()).toMatchObject({
       openRepos: [],
       activeRepo: null,
-      workspaceLayout: 'top-bottom',
+      workspaceLayout: 'left-right',
     })
   })
 })

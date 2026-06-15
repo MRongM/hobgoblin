@@ -15,6 +15,7 @@ import { openExternalUrl } from '#/web/app-shell-client.ts'
 import { TerminalSessionRuntime } from '#/web/components/terminal/terminal-session-runtime.ts'
 import { TerminalSessionView } from '#/web/components/terminal/terminal-session-view.ts'
 import { readOrCreateWebTerminalAttachmentId } from '#/web/renderer-terminal-bridge.ts'
+import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
 import type {
   TerminalBellEvent,
   TerminalDescriptor,
@@ -53,6 +54,7 @@ export class ManagedTerminalSession {
     descriptor: TerminalDescriptor,
     notify: (reason: TerminalNotifyReason) => void,
     onBell: ((descriptor: TerminalDescriptor, event: TerminalBellEvent) => void) | null = null,
+    fontSize = DEFAULT_TERMINAL_FONT_SIZE,
   ) {
     this.descriptor = descriptor
     this.notify = notify
@@ -64,11 +66,15 @@ export class ManagedTerminalSession {
       onSearchResult: (event) => this.updateSearchResult(event),
       onProgress: (state, value) => this.updateProgress(state, value),
       onOpenExternalLink: (uri) => this.openExternalLink(uri),
-    })
+    }, { fontSize })
   }
 
   updateDescriptor(descriptor: TerminalDescriptor): void {
     this.descriptor = descriptor
+  }
+
+  setFontSize(fontSize: number): void {
+    this.view.setFontSize(fontSize)
   }
 
   attach(host: HTMLElement, handlers?: TerminalSessionAttachHandlers): void {

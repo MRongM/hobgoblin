@@ -86,7 +86,7 @@ describe('ProjectChangesPanel', () => {
     expect(deletedMarker?.className).toContain('text-danger')
     expect(modifiedMarker?.textContent).toBe('M')
     expect(modifiedMarker?.className).toContain('text-warning')
-    expect(container?.querySelector('[aria-label="src/modified.ts"]')).toBeTruthy()
+    expect(container?.textContent).toContain('modified.ts')
     expect(container?.querySelector('button[aria-label="action.commit-title"]')).toBeTruthy()
     expect(container?.textContent).not.toContain('action.merge')
   })
@@ -121,5 +121,47 @@ describe('ProjectChangesPanel', () => {
     })
 
     expect(onRevealPath).toHaveBeenCalledWith('src/app.ts')
+  })
+
+  test('defaults changed files to a folder hierarchy and keeps reveal clicks', async () => {
+    const onRevealPath = vi.fn()
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } })],
+      selectedBranch: 'feature/worktree',
+      statusLoaded: true,
+      status: [
+        {
+          path: WORKTREE_PATH,
+          branch: 'feature/worktree',
+          isMain: true,
+          entries: [
+            { x: 'M', y: ' ', path: 'src/app.ts' },
+            { x: '?', y: '?', path: 'src/components/Button.tsx' },
+            { x: 'D', y: ' ', path: 'README.md' },
+          ],
+        },
+      ],
+    })
+
+    await act(async () => {
+      root!.render(<ProjectChangesPanel repoId={REPO_ID} onRevealPath={onRevealPath} />)
+    })
+
+    expect(container?.querySelector('[data-file-folder-path="src"]')).toBeTruthy()
+    expect(container?.querySelector('[data-file-folder-path="src/components"]')).toBeTruthy()
+    expect(container?.textContent).toContain('Button.tsx')
+    expect(
+      container?.querySelector('[data-testid="project-changes-action-bar"] button[aria-label="file-list.view-list"]'),
+    ).toBeTruthy()
+    expect(
+      container?.querySelector('[data-testid="project-changes-action-bar"] button[aria-label="file-list.view-tree"]'),
+    ).toBeTruthy()
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('button[aria-label="src/components/Button.tsx"]')?.click()
+    })
+
+    expect(onRevealPath).toHaveBeenCalledWith('src/components/Button.tsx')
   })
 })

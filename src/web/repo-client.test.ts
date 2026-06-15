@@ -427,4 +427,129 @@ describe('repo-client', () => {
       }),
     )
   })
+
+  test('requests file tree move through the embedded server', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, message: '' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { moveRepositoryFileTreeEntries } = await import('#/web/repo-client.ts')
+    await expect(
+      moveRepositoryFileTreeEntries('/repo', '/repo', ['/repo/README.md', '/repo/src'], '/repo/docs'),
+    ).resolves.toEqual({
+      ok: true,
+      message: '',
+    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:32100/api/repo/file-tree/move',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
+        body: JSON.stringify({
+          repoId: '/repo',
+          worktreePath: '/repo',
+          paths: ['/repo/README.md', '/repo/src'],
+          targetDirPath: '/repo/docs',
+        }),
+      }),
+    )
+  })
+
+  test('requests file tree directory creation through the embedded server', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, message: '' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { createRepositoryFileTreeDirectory } = await import('#/web/repo-client.ts')
+    await expect(createRepositoryFileTreeDirectory('/repo', '/repo', '/repo/src', 'components')).resolves.toEqual({
+      ok: true,
+      message: '',
+    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:32100/api/repo/file-tree/create-directory',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
+        body: JSON.stringify({
+          repoId: '/repo',
+          worktreePath: '/repo',
+          parentDirPath: '/repo/src',
+          name: 'components',
+        }),
+      }),
+    )
+  })
+
+  test('requests repository history and commit detail', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            hash: 'abc123456789',
+            shortHash: 'abc1234',
+            subject: 'feat: history',
+            author: 'Alice',
+            date: '2026-06-15T09:00:00+08:00',
+            parents: [],
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          hash: 'abc123456789',
+          shortHash: 'abc1234',
+          subject: 'feat: history',
+          author: 'Alice',
+          date: '2026-06-15T09:00:00+08:00',
+          parents: [],
+          files: [],
+        }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { getRepositoryCommitDetail, getRepositoryHistory } = await import('#/web/repo-client.ts')
+    await expect(getRepositoryHistory('/repo', 'feature/history', { limit: 100, skip: 0 })).resolves.toEqual([
+      {
+        hash: 'abc123456789',
+        shortHash: 'abc1234',
+        subject: 'feat: history',
+        author: 'Alice',
+        date: '2026-06-15T09:00:00+08:00',
+        parents: [],
+      },
+    ])
+    await expect(getRepositoryCommitDetail('/repo', 'abc1234')).resolves.toEqual({
+      hash: 'abc123456789',
+      shortHash: 'abc1234',
+      subject: 'feat: history',
+      author: 'Alice',
+      date: '2026-06-15T09:00:00+08:00',
+      parents: [],
+      files: [],
+    })
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'http://127.0.0.1:32100/api/repo/history',
+      expect.objectContaining({
+        body: JSON.stringify({ repoId: '/repo', branch: 'feature/history', limit: 100, skip: 0 }),
+      }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'http://127.0.0.1:32100/api/repo/commit-detail',
+      expect.objectContaining({
+        body: JSON.stringify({ repoId: '/repo', commit: 'abc1234' }),
+      }),
+    )
+  })
 })

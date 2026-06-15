@@ -4,46 +4,57 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { ProjectFileTree } from '#/web/components/file-tree/ProjectFileTree.tsx'
+import { writeInternalFileTreeClipboard } from '#/web/components/file-tree/clipboard.ts'
 import { emptyRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { createRepoBranch, resetReposStore } from '#/web/stores/repos/test-utils.ts'
 
 type GetRepositoryFileTreeArgs = [repoId: string, worktreePath: string, dirPath: string, signal?: AbortSignal]
 
-const getRepositoryFileTree = vi.fn(async (_repoId: string, _worktreePath: string, dirPath: string, _signal?: AbortSignal) => ({
-  ok: true as const,
-  worktreePath: '/repo',
-  dirPath,
-  entries:
-    dirPath === '/repo/src'
-      ? [{ name: 'app.ts', absolutePath: '/repo/src/app.ts', relativePath: 'src/app.ts', kind: 'file' as const }]
-      : [
-          { name: 'src', absolutePath: '/repo/src', relativePath: 'src', kind: 'directory' as const },
-          { name: 'README.md', absolutePath: '/repo/README.md', relativePath: 'README.md', kind: 'file' as const },
-        ],
-}))
+const getRepositoryFileTree = vi.fn(
+  async (_repoId: string, _worktreePath: string, dirPath: string, _signal?: AbortSignal) => ({
+    ok: true as const,
+    worktreePath: '/repo',
+    dirPath,
+    entries:
+      dirPath === '/repo/src'
+        ? [{ name: 'app.ts', absolutePath: '/repo/src/app.ts', relativePath: 'src/app.ts', kind: 'file' as const }]
+        : [
+            { name: 'src', absolutePath: '/repo/src', relativePath: 'src', kind: 'directory' as const },
+            { name: 'README.md', absolutePath: '/repo/README.md', relativePath: 'README.md', kind: 'file' as const },
+          ],
+  }),
+)
 const transferRepositoryFiles = vi.fn(async (_input: unknown) => ({
   ok: true as const,
   copied: [{ destinationPath: '/repo/docs/README.md', kind: 'file' as const }],
   renamed: [],
   failed: [],
 }))
+const moveRepositoryFileTreeEntries = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
 const renameRepositoryFileTreeEntry = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
 const deleteRepositoryFileTreeEntries = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
+const createRepositoryFileTreeDirectory = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
+const openRepositoryEditor = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
+const openRepositoryTerminal = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
 const openInFinder = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
+const readSystemClipboardFilePaths = vi.fn(async () => ['/tmp/report.pdf'])
 
 vi.mock('#/web/repo-client.ts', () => ({
   getRepositoryFileTree: (...args: GetRepositoryFileTreeArgs) => getRepositoryFileTree(...args),
+  createRepositoryFileTreeDirectory: (...args: unknown[]) => createRepositoryFileTreeDirectory(...args),
   renameRepositoryFileTreeEntry: (...args: unknown[]) => renameRepositoryFileTreeEntry(...args),
   deleteRepositoryFileTreeEntries: (...args: unknown[]) => deleteRepositoryFileTreeEntries(...args),
-  openRepositoryEditor: vi.fn(async () => ({ ok: true, message: '' })),
-  openRepositoryTerminal: vi.fn(async () => ({ ok: true, message: '' })),
+  moveRepositoryFileTreeEntries: (...args: unknown[]) => moveRepositoryFileTreeEntries(...args),
+  openRepositoryEditor: (path: string) => openRepositoryEditor(path),
+  openRepositoryTerminal: (path: string) => openRepositoryTerminal(path),
   transferRepositoryFiles: (input: unknown) => transferRepositoryFiles(input),
 }))
 
 vi.mock('#/web/app-shell-client.ts', () => ({
   pathForDroppedFile: (file: File) => `/tmp/${file.name}`,
   openInFinder: (path: string) => openInFinder(path),
+  readSystemClipboardFilePaths: () => readSystemClipboardFilePaths(),
 }))
 
 vi.mock('#/web/remote-client.ts', () => ({
@@ -55,6 +66,10 @@ vi.mock('#/web/stores/i18n.ts', () => ({
   useT: () => (key: string) => key,
 }))
 
+vi.mock('#/web/runtime-settings-fonts.ts', () => ({
+  useRuntimeFontSettings: () => ({ fileTreeFontSize: 12, terminalFontSize: 14 }),
+}))
+
 let container: HTMLDivElement | null = null
 let root: Root | null = null
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -63,9 +78,20 @@ beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   getRepositoryFileTree.mockClear()
   transferRepositoryFiles.mockClear()
+  moveRepositoryFileTreeEntries.mockClear()
   renameRepositoryFileTreeEntry.mockClear()
   deleteRepositoryFileTreeEntries.mockClear()
+  createRepositoryFileTreeDirectory.mockClear()
+  openRepositoryEditor.mockClear()
+  openRepositoryTerminal.mockClear()
   openInFinder.mockClear()
+  readSystemClipboardFilePaths.mockClear()
+  readSystemClipboardFilePaths.mockResolvedValue(['/tmp/report.pdf'])
+  writeInternalFileTreeClipboard({ repoId: '', worktreePath: '', paths: [] })
+  Object.defineProperty(globalThis.navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: vi.fn(async () => undefined) },
+  })
   resetReposStore()
   container = document.createElement('div')
   document.body.appendChild(container)
@@ -109,13 +135,15 @@ describe('ProjectFileTree', () => {
 
     const row = treeItemByText('README.md')
     await act(async () => {
-      row.dispatchEvent(new MouseEvent('contextmenu', {
-        bubbles: true,
-        cancelable: true,
-        button: 2,
-        clientX: 140,
-        clientY: 90,
-      }))
+      row.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          bubbles: true,
+          cancelable: true,
+          button: 2,
+          clientX: 140,
+          clientY: 90,
+        }),
+      )
       await Promise.resolve()
     })
 
@@ -123,6 +151,37 @@ describe('ProjectFileTree', () => {
     expect(menu).not.toBeNull()
     expect(container?.querySelector('button[aria-label="file tree menu"]')).toBeNull()
     expect(menu?.textContent).toContain('file-tree.copy-path')
+  })
+
+  test('copies all selected absolute paths from the context menu', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const directory = treeItemByText('src')
+    const file = treeItemByText('README.md')
+    await act(async () => {
+      directory.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      file.dispatchEvent(new MouseEvent('click', { bubbles: true, metaKey: true }))
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      file.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+      await Promise.resolve()
+    })
+
+    const copyPathItem = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+      item.textContent?.includes('file-tree.copy-path'),
+    )
+    if (!copyPathItem) throw new Error('missing copy path menu item')
+
+    await act(async () => {
+      copyPathItem.click()
+      await Promise.resolve()
+    })
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('/repo/src\n/repo/README.md')
   })
 
   test('reveals a requested changed file by expanding parents and selecting the file', async () => {
@@ -207,7 +266,197 @@ describe('ProjectFileTree', () => {
       repoId: '/repo',
       worktreePath: '/repo',
       targetDirPath: '/repo/src',
-      source: { kind: 'localPaths', paths: ['/tmp/local.txt'] },
+      source: { kind: 'localPaths', items: [{ path: '/tmp/local.txt' }] },
+    })
+  })
+
+  test('moves internally dragged file tree paths onto a directory target', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const file = treeItemByText('README.md')
+    const directory = treeItemByText('src')
+    const dataTransfer = createDataTransfer()
+    await act(async () => {
+      file.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      dragStart(file, dataTransfer)
+      dropWithDataTransfer(directory, dataTransfer)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(moveRepositoryFileTreeEntries).toHaveBeenCalledWith('/repo', '/repo', ['/repo/README.md'], '/repo/src')
+    expect(transferRepositoryFiles).not.toHaveBeenCalled()
+  })
+
+  test('undoes the last internal file tree move with Ctrl+Z', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const file = treeItemByText('README.md')
+    const directory = treeItemByText('src')
+    const dataTransfer = createDataTransfer()
+    await act(async () => {
+      file.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      dragStart(file, dataTransfer)
+      dropWithDataTransfer(directory, dataTransfer)
+      await Promise.resolve()
+      await Promise.resolve()
+      directory.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'z', ctrlKey: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(moveRepositoryFileTreeEntries).toHaveBeenNthCalledWith(1, '/repo', '/repo', ['/repo/README.md'], '/repo/src')
+    expect(moveRepositoryFileTreeEntries).toHaveBeenNthCalledWith(2, '/repo', '/repo', ['/repo/src/README.md'], '/repo')
+  })
+
+  test('pastes system clipboard files from a directory context menu into that directory', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    await clickContextMenuItem(treeItemByText('src'), 'file-tree.paste')
+
+    expect(transferRepositoryFiles).toHaveBeenCalledWith({
+      repoId: '/repo',
+      worktreePath: '/repo',
+      targetDirPath: '/repo/src',
+      source: {
+        kind: 'localPaths',
+        items: [
+          {
+            path: '/tmp/report.pdf',
+            destinationName: expect.stringMatching(/^pasted-[0-9a-f]{8}\.pdf$/),
+          },
+        ],
+      },
+    })
+  })
+
+  test('undoes the last file tree paste with Ctrl+Z', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const directory = treeItemByText('src')
+    await clickContextMenuItem(directory, 'file-tree.paste')
+    await act(async () => {
+      directory.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'z', ctrlKey: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(deleteRepositoryFileTreeEntries).toHaveBeenCalledWith('/repo', '/repo', ['/repo/docs/README.md'])
+  })
+
+  test('pastes system clipboard files from a file context menu into the parent directory', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    await clickContextMenuItem(treeItemByText('README.md'), 'file-tree.paste')
+
+    expect(transferRepositoryFiles).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetDirPath: '/repo',
+      }),
+    )
+  })
+
+  test('pastes system clipboard files from the empty file tree area into the worktree root', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const emptyArea = container?.querySelector<HTMLElement>('[data-testid="file-tree-empty-context-target"]')
+    if (!emptyArea) throw new Error('missing empty context target')
+    await clickContextMenuItem(emptyArea, 'file-tree.paste')
+
+    expect(transferRepositoryFiles).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetDirPath: '/repo',
+      }),
+    )
+  })
+
+  test('creates a folder from a directory context menu and refreshes that directory', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    await clickContextMenuItem(treeItemByText('src'), 'file-tree.new-folder')
+
+    const input = container?.querySelector<HTMLInputElement>('input[aria-label="file-tree.new-folder-input-label"]')
+    if (!input) throw new Error('missing new folder input')
+
+    await act(async () => {
+      input.value = 'components'
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(createRepositoryFileTreeDirectory).toHaveBeenCalledWith('/repo', '/repo', '/repo/src', 'components')
+    expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', '/repo/src', undefined)
+  })
+
+  test('refreshes the worktree root from the file tree toolbar', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+    getRepositoryFileTree.mockClear()
+
+    const refreshButton = container?.querySelector<HTMLButtonElement>('button[aria-label="file-tree.refresh"]')
+    if (!refreshButton) throw new Error('missing refresh button')
+
+    await act(async () => {
+      refreshButton.click()
+      await Promise.resolve()
+    })
+
+    expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', '/repo', undefined)
+  })
+
+  test('uses the same action bar chrome as the changes panel toolbar', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const refreshButton = container?.querySelector<HTMLButtonElement>('button[aria-label="file-tree.refresh"]')
+    const toolbar = refreshButton?.parentElement
+    if (!toolbar) throw new Error('missing file tree toolbar')
+
+    expect(toolbar.className).toContain('min-h-8')
+    expect(toolbar.className).toContain('justify-end')
+    expect(toolbar.className).toContain('border-separator/70')
+    expect(toolbar.className).toContain('bg-card')
+    expect(toolbar.className).toContain('px-2')
+  })
+
+  test('context menu paste prefers the internal file tree clipboard over system clipboard files', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const file = treeItemByText('README.md')
+    await act(async () => {
+      file.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      file.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'c', metaKey: true }))
+      await Promise.resolve()
+    })
+
+    await clickContextMenuItem(treeItemByText('src'), 'file-tree.paste')
+
+    expect(readSystemClipboardFilePaths).not.toHaveBeenCalled()
+    expect(transferRepositoryFiles).toHaveBeenCalledWith({
+      repoId: '/repo',
+      worktreePath: '/repo',
+      targetDirPath: '/repo/src',
+      source: { kind: 'fileTreePaths', repoId: '/repo', worktreePath: '/repo', paths: ['/repo/README.md'] },
     })
   })
 
@@ -224,6 +473,24 @@ describe('ProjectFileTree', () => {
 
     expect(document.body.textContent).toContain('file-tree.rename')
     expect(document.body.textContent).toContain('file-tree.delete')
+  })
+
+  test('renders a prefix icon for each row context menu item', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const row = treeItemByText('README.md')
+    await act(async () => {
+      row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+      await Promise.resolve()
+    })
+
+    const items = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+    expect(items.length).toBeGreaterThan(0)
+    for (const item of items) {
+      expect(item.firstElementChild?.tagName.toLowerCase()).toBe('svg')
+    }
   })
 
   test('opens a local file tree node in Finder from the context menu', async () => {
@@ -248,6 +515,54 @@ describe('ProjectFileTree', () => {
     })
 
     expect(openInFinder).toHaveBeenCalledWith('/repo/README.md')
+  })
+
+  test('opens the selected local file parent directory in the editor from the context menu', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const row = treeItemByText('README.md')
+    await act(async () => {
+      row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+      await Promise.resolve()
+    })
+
+    const openEditorItem = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+      item.textContent?.includes('file-tree.open-editor'),
+    )
+    if (!openEditorItem) throw new Error('missing editor menu item')
+
+    await act(async () => {
+      openEditorItem.click()
+      await Promise.resolve()
+    })
+
+    expect(openRepositoryEditor).toHaveBeenCalledWith('/repo')
+  })
+
+  test('opens the selected local directory in the editor from the context menu', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const row = treeItemByText('src')
+    await act(async () => {
+      row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+      await Promise.resolve()
+    })
+
+    const openEditorItem = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+      item.textContent?.includes('file-tree.open-editor'),
+    )
+    if (!openEditorItem) throw new Error('missing editor menu item')
+
+    await act(async () => {
+      openEditorItem.click()
+      await Promise.resolve()
+    })
+
+    expect(openRepositoryEditor).toHaveBeenCalledWith('/repo/src')
   })
 
   test('does not show Finder action for remote file tree nodes', async () => {
@@ -287,11 +602,48 @@ describe('ProjectFileTree', () => {
       await Promise.resolve()
     })
 
-    expect(renameRepositoryFileTreeEntry).toHaveBeenCalledWith(
+    expect(renameRepositoryFileTreeEntry).toHaveBeenCalledWith('/repo', '/repo', '/repo/README.md', 'README-renamed.md')
+  })
+
+  test('undoes the last file tree rename with Ctrl+Z', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const row = treeItemByText('README.md')
+    await act(async () => {
+      row.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      row.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }))
+      await Promise.resolve()
+    })
+
+    const input = container?.querySelector<HTMLInputElement>('input[aria-label="file-tree.rename-input-label"]')
+    if (!input) throw new Error('missing rename input')
+
+    await act(async () => {
+      input.value = 'README-renamed.md'
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }))
+      await Promise.resolve()
+      await Promise.resolve()
+      row.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'z', ctrlKey: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(renameRepositoryFileTreeEntry).toHaveBeenNthCalledWith(
+      1,
       '/repo',
       '/repo',
       '/repo/README.md',
       'README-renamed.md',
+    )
+    expect(renameRepositoryFileTreeEntry).toHaveBeenNthCalledWith(
+      2,
+      '/repo',
+      '/repo',
+      '/repo/README-renamed.md',
+      'README.md',
     )
   })
 
@@ -334,9 +686,7 @@ describe('ProjectFileTree', () => {
 function seedRepoWithSelectedBranch(options: { repoId?: string; hasWorktree: boolean }) {
   const repoId = options.repoId ?? '/repo'
   const repo = emptyRepo(repoId, 'repo')
-  repo.data.branches = [
-    createRepoBranch('main', options.hasWorktree ? { worktree: { path: '/repo' } } : {}),
-  ]
+  repo.data.branches = [createRepoBranch('main', options.hasWorktree ? { worktree: { path: '/repo' } } : {})]
   repo.data.currentBranch = 'main'
   repo.data.status = []
   repo.data.statusLoaded = true
@@ -377,4 +727,51 @@ function dropFiles(target: HTMLElement, files: File[]) {
     },
   })
   target.dispatchEvent(event)
+}
+
+function createDataTransfer(): DataTransfer {
+  const values = new Map<string, string>()
+  const dataTransfer = {
+    files: [],
+    get types() {
+      return Array.from(values.keys())
+    },
+    dropEffect: 'none',
+    effectAllowed: 'none',
+    setData(type: string, value: string) {
+      values.set(type, value)
+    },
+    getData(type: string) {
+      return values.get(type) ?? ''
+    },
+  }
+  return dataTransfer as unknown as DataTransfer
+}
+
+function dragStart(target: HTMLElement, dataTransfer: DataTransfer) {
+  const event = new Event('dragstart', { bubbles: true, cancelable: true }) as DragEvent
+  Object.defineProperty(event, 'dataTransfer', { value: dataTransfer })
+  target.dispatchEvent(event)
+}
+
+function dropWithDataTransfer(target: HTMLElement, dataTransfer: DataTransfer) {
+  const event = new Event('drop', { bubbles: true, cancelable: true }) as DragEvent
+  Object.defineProperty(event, 'dataTransfer', { value: dataTransfer })
+  target.dispatchEvent(event)
+}
+
+async function clickContextMenuItem(row: HTMLElement, label: string) {
+  await act(async () => {
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+    await Promise.resolve()
+  })
+  const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) =>
+    candidate.textContent?.includes(label),
+  )
+  if (!item) throw new Error(`missing context menu item: ${label}`)
+  await act(async () => {
+    item.click()
+    await Promise.resolve()
+    await Promise.resolve()
+  })
 }

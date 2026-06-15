@@ -1,5 +1,6 @@
 export const SETTINGS_PAGES = [
   'general',
+  'files',
   'terminal',
   'shortcuts',
   'notifications',
@@ -19,6 +20,7 @@ export function isSettingsPage(value: string | null | undefined): value is Setti
 
 export const SETTINGS_PAGE_CONFIG = {
   general: { titleKey: 'settings.group.general', labelKey: 'settings.group.general' },
+  files: { titleKey: 'settings.files.title', labelKey: 'settings.nav.files' },
   terminal: { titleKey: 'settings.terminal-custom-buttons.title', labelKey: 'settings.nav.terminal' },
   shortcuts: { titleKey: 'settings.shortcuts', labelKey: 'settings.nav.shortcuts' },
   notifications: { titleKey: 'settings.nav.notifications', labelKey: 'settings.nav.notifications' },

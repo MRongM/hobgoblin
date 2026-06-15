@@ -3,7 +3,7 @@ import { postServerJson } from '#/web/lib/server-fetch.ts'
 import type { CommitMessageGenerationResult, CommitMessageProvider, CommitMessageProviderAvailability } from '#/shared/commit-message-ai.ts'
 import type { RepoFileTransferRequest, RepoFileTransferResult, RepoFileTreeResult } from '#/shared/file-tree.ts'
 import type { CloneRepoResult, PullRequestEntry, RepoSnapshot } from '#/shared/rpc.ts'
-import type { ExecResult, PullRequestFetchMode, WorktreeStatus } from '#/shared/git-types.ts'
+import type { CommitDetail, CommitHistoryEntry, ExecResult, PullRequestFetchMode, WorktreeStatus } from '#/shared/git-types.ts'
 import type { ProbeResult } from '#/shared/rpc.ts'
 import type { CreateWorktreeInput } from '#/shared/worktree-create.ts'
 
@@ -30,6 +30,23 @@ export async function getRepositorySnapshot(cwd: string, signal?: AbortSignal): 
 
 export async function getRepositoryStatus(cwd: string, signal?: AbortSignal): Promise<WorktreeStatus[]> {
   return await postServerJson('/api/repo/status', { cwd }, { signal })
+}
+
+export async function getRepositoryHistory(
+  repoId: string,
+  branch: string,
+  input: { limit: number; skip: number },
+  signal?: AbortSignal,
+): Promise<CommitHistoryEntry[]> {
+  return await postServerJson('/api/repo/history', { repoId, branch, limit: input.limit, skip: input.skip }, { signal })
+}
+
+export async function getRepositoryCommitDetail(
+  repoId: string,
+  commit: string,
+  signal?: AbortSignal,
+): Promise<CommitDetail | null> {
+  return await postServerJson('/api/repo/commit-detail', { repoId, commit }, { signal })
 }
 
 export async function getRepositoryPullRequests(
@@ -179,12 +196,30 @@ export async function renameRepositoryFileTreeEntry(
   return await postServerJson('/api/repo/file-tree/rename', { repoId, worktreePath, oldPath, newName })
 }
 
+export async function createRepositoryFileTreeDirectory(
+  repoId: string,
+  worktreePath: string,
+  parentDirPath: string,
+  name: string,
+): Promise<ExecResult> {
+  return await postServerJson('/api/repo/file-tree/create-directory', { repoId, worktreePath, parentDirPath, name })
+}
+
 export async function deleteRepositoryFileTreeEntries(
   repoId: string,
   worktreePath: string,
   paths: string[],
 ): Promise<ExecResult> {
   return await postServerJson('/api/repo/file-tree/delete', { repoId, worktreePath, paths })
+}
+
+export async function moveRepositoryFileTreeEntries(
+  repoId: string,
+  worktreePath: string,
+  paths: string[],
+  targetDirPath: string,
+): Promise<ExecResult> {
+  return await postServerJson('/api/repo/file-tree/move', { repoId, worktreePath, paths, targetDirPath })
 }
 
 export async function transferRepositoryFiles(input: RepoFileTransferRequest): Promise<RepoFileTransferResult> {

@@ -1,4 +1,14 @@
-import { forwardRef, useCallback, useRef, useState, type KeyboardEvent, type PointerEvent, type Ref } from 'react'
+import {
+  forwardRef,
+  useCallback,
+  useRef,
+  useState,
+  type DragEvent,
+  type ClipboardEvent,
+  type KeyboardEvent,
+  type PointerEvent,
+  type Ref,
+} from 'react'
 import { SendHorizontal } from 'lucide-react'
 import { Button } from '#/web/components/ui/button.tsx'
 
@@ -12,10 +22,23 @@ interface TerminalExternalInputProps {
   resizeLabel: string
   onChange: (value: string) => void
   onSubmit: (value: string) => void
+  onPaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void
+  onDragOver?: (event: DragEvent<HTMLTextAreaElement>) => void
+  onDrop?: (event: DragEvent<HTMLTextAreaElement>) => void
 }
 
 export const TerminalExternalInput = forwardRef<HTMLTextAreaElement, TerminalExternalInputProps>(
-  function TerminalExternalInput({ value, placeholder, submitLabel, resizeLabel, onChange, onSubmit }, ref) {
+  function TerminalExternalInput({
+    value,
+    placeholder,
+    submitLabel,
+    resizeLabel,
+    onChange,
+    onSubmit,
+    onPaste,
+    onDragOver,
+    onDrop,
+  }, ref) {
     const textareaRef = useRef<HTMLTextAreaElement | null>(null)
     const dragRef = useRef<{ startY: number; startHeight: number } | null>(null)
     const [height, setHeight] = useState<number | null>(null)
@@ -28,6 +51,12 @@ export const TerminalExternalInput = forwardRef<HTMLTextAreaElement, TerminalExt
     )
 
     function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+      if (event.key.toLowerCase() === 'c' && event.ctrlKey && !event.altKey && !event.metaKey && value.length > 0) {
+        event.preventDefault()
+        event.stopPropagation()
+        onChange('')
+        return
+      }
       if (event.key !== 'Enter' || event.shiftKey) return
       event.preventDefault()
       onSubmit(value)
@@ -71,7 +100,7 @@ export const TerminalExternalInput = forwardRef<HTMLTextAreaElement, TerminalExt
         >
           <span aria-hidden="true" />
         </button>
-        <span className="goblin-terminal-external-input__prefix">$</span>
+        <span className="goblin-terminal-external-input__prefix">&gt;</span>
         <textarea
           ref={setTextareaRef}
           className="goblin-terminal-external-input__control"
@@ -83,6 +112,9 @@ export const TerminalExternalInput = forwardRef<HTMLTextAreaElement, TerminalExt
           style={height === null ? undefined : { height: `${height}px` }}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={onPaste}
+          onDragOver={onDragOver}
+          onDrop={onDrop}
         />
         <Button
           type="button"

@@ -16,6 +16,7 @@ import type {
   SettingsPrefsUpdateResponse,
   SettingsSnapshot,
   TerminalCustomButton,
+  TerminalCustomButtonSize,
   TerminalAppState,
   TerminalPref,
   ThemePref,
@@ -172,6 +173,10 @@ export async function setToggleDetailOnActionBarBlankClick(enabled: boolean): Pr
   await updateSettingsPrefsPatch({ toggleDetailOnActionBarBlankClick: enabled })
 }
 
+export async function setTemporaryFilesDirectory(path: string): Promise<void> {
+  await updateSettingsPrefsPatch({ temporaryFilesDirectory: path })
+}
+
 export async function setGlobalShortcut(accelerator: string): Promise<GlobalShortcutState> {
   if (!canUseGlobalShortcutSettings()) throw new Error('Global shortcut unavailable')
   return await invokeNativeRpcPath<GlobalShortcutState>('settings.setGlobalShortcut', { accelerator })
@@ -187,12 +192,30 @@ export async function setPreferredEditorApp(pref: EditorPref): Promise<EditorApp
   return result.externalApps?.editor ?? (await getExternalAppsSnapshot()).editor
 }
 
+export async function setFileTreeFontSize(fontSize: number): Promise<number> {
+  const result = await updateSettingsPrefsPatch({ fileTreeFontSize: fontSize })
+  return result.settings.fileTreeFontSize
+}
+
+export async function setTerminalFontSize(fontSize: number): Promise<number> {
+  const result = await updateSettingsPrefsPatch({ terminalFontSize: fontSize })
+  return result.settings.terminalFontSize
+}
+
 export async function setTerminalExternalInputEnabled(enabled: boolean): Promise<void> {
   await updateSettingsPrefsPatch({ terminalExternalInputEnabled: enabled })
 }
 
+export async function setRemoteTerminalTmuxEnabled(enabled: boolean): Promise<void> {
+  await updateSettingsPrefsPatch({ remoteTerminalTmuxEnabled: enabled })
+}
+
 export async function setTerminalCustomButtonsVisible(visible: boolean): Promise<void> {
   await updateSettingsPrefsPatch({ terminalCustomButtonsVisible: visible })
+}
+
+export async function setTerminalCustomButtonSize(size: TerminalCustomButtonSize): Promise<void> {
+  await updateSettingsPrefsPatch({ terminalCustomButtonSize: size })
 }
 
 export async function setTerminalCustomButtons(buttons: TerminalCustomButton[]): Promise<TerminalCustomButton[]> {

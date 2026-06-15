@@ -1,6 +1,10 @@
 import { getInitialBootstrap } from '#/web/bootstrap.ts'
 import type { SettingsPage } from '#/shared/rpc.ts'
 import type { ExecResult } from '#/shared/git-types.ts'
+import type {
+  SaveClipboardBinaryFilesInput,
+  SaveClipboardBinaryFilesResult,
+} from '#/shared/clipboard-binary-temp-files.ts'
 import { getRendererBridge } from '#/web/renderer-bridge.ts'
 const PROJECT_GITHUB_URL = 'https://github.com/nano-props/goblin'
 
@@ -49,6 +53,19 @@ export function pathForDroppedFile(file: File): string {
     return getRendererBridge().pathForFile(file)
   } catch {
     return ''
+  }
+}
+
+export async function readSystemClipboardFilePaths(): Promise<string[]> {
+  return (await nativeShell()?.readClipboardFilePaths?.()) ?? []
+}
+
+export async function saveClipboardBinaryFilesFromPaste(
+  input: SaveClipboardBinaryFilesInput,
+): Promise<SaveClipboardBinaryFilesResult> {
+  return (await nativeShell()?.saveClipboardBinaryFiles?.(input)) ?? {
+    ok: false,
+    message: 'error.unsupported-native-bridge',
   }
 }
 

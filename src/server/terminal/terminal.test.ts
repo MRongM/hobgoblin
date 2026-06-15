@@ -17,6 +17,14 @@ import {
   writeServerTerminal,
 } from '#/server/terminal/terminal.ts'
 
+const settingsSourceMocks = vi.hoisted(() => ({
+  getServerSettingsPrefs: vi.fn(async () => ({ remoteTerminalTmuxEnabled: false })),
+}))
+
+vi.mock('#/server/modules/settings-source.ts', () => ({
+  getServerSettingsPrefs: settingsSourceMocks.getServerSettingsPrefs,
+}))
+
 vi.mock('#/system/git/worktrees.ts', () => ({
   getWorktrees: vi.fn(async () => [{ path: '/repo-linked', branch: 'feature', isBare: false, isPrimary: false }]),
 }))
@@ -95,6 +103,7 @@ beforeEach(() => {
   mockPtys.length = 0
   vi.clearAllMocks()
   vi.mocked(spawn).mockClear()
+  settingsSourceMocks.getServerSettingsPrefs.mockResolvedValue({ remoteTerminalTmuxEnabled: false })
 })
 
 async function createTerminalSession(
@@ -153,7 +162,45 @@ describe('server terminal sessions', () => {
     unregisterTerminalSocket('client_1', 'attachment_a', socket)
   })
 
-  test('creates remote terminal sessions with a tmux-aware ssh command', async () => {
+  test('creates remote terminal sessions with a plain ssh command by default', async () => {
+    const result = await createServerTerminal('client_1', {
+      repoRoot: 'ssh-config://prod/srv/repo',
+      branch: 'feature',
+      worktreePath: '/srv/repo-feature',
+      kind: 'additional',
+      cols: 100,
+      rows: 30,
+    })
+
+    expect(result.ok).toBe(true)
+    expect(spawn).toHaveBeenCalledWith(
+      'ssh',
+      [
+        '-tt',
+        '-o',
+        'StrictHostKeyChecking=yes',
+        '-o',
+        'ConnectTimeout=10',
+        '--',
+        'prod',
+        expect.stringContaining('exec "${SHELL:-/bin/sh}" -l'),
+      ],
+      expect.objectContaining({
+        cwd: process.cwd(),
+        cols: 100,
+        rows: 30,
+      }),
+    )
+    const args = vi.mocked(spawn).mock.calls[0]![1] as string[]
+    expect(args[7]).toContain('/srv/repo-feature')
+    expect(args[7]).not.toContain('tmux')
+    expect(args[7]).not.toContain('alice@example.com')
+    expect(args[7]).not.toContain('/srv/repo\u0000')
+  })
+
+  test('creates remote terminal sessions with a tmux-aware ssh command when enabled', async () => {
+    settingsSourceMocks.getServerSettingsPrefs.mockResolvedValue({ remoteTerminalTmuxEnabled: true })
+
     const result = await createServerTerminal('client_1', {
       repoRoot: 'ssh-config://prod/srv/repo',
       branch: 'feature',

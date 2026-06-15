@@ -1,4 +1,4 @@
-import type { TerminalCustomButton } from '#/shared/rpc.ts'
+import type { TerminalCustomButton, TerminalCustomButtonSize } from '#/shared/rpc.ts'
 import {
   readRuntimeTerminalCustomButtons,
   readRuntimeTerminalSettings,
@@ -6,7 +6,9 @@ import {
 } from '#/web/settings-read-projection.ts'
 import {
   runSettingsControllerAction,
+  setRemoteTerminalTmuxEnabledPreference,
   setTerminalCustomButtonsPreference,
+  setTerminalCustomButtonSizePreference,
   setTerminalCustomButtonsVisiblePreference,
   setTerminalExternalInputEnabledPreference,
 } from '#/web/settings-write-paths.ts'
@@ -26,9 +28,19 @@ export function useTerminalCustomButtonsController() {
         await setTerminalExternalInputEnabledPreference(enabled)
       })
     },
+    async setRemoteTerminalTmuxEnabled(enabled: boolean): Promise<void> {
+      await runSettingsControllerAction('remote terminal tmux update', async () => {
+        await setRemoteTerminalTmuxEnabledPreference(enabled)
+      })
+    },
     async setTerminalCustomButtonsVisible(visible: boolean): Promise<void> {
       await runSettingsControllerAction('terminal custom buttons visibility update', async () => {
         await setTerminalCustomButtonsVisiblePreference(visible)
+      })
+    },
+    async setTerminalCustomButtonSize(size: TerminalCustomButtonSize): Promise<void> {
+      await runSettingsControllerAction('terminal custom button size update', async () => {
+        await setTerminalCustomButtonSizePreference(size)
       })
     },
     async setTerminalCustomButtons(buttons: TerminalCustomButton[]): Promise<void> {

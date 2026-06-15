@@ -95,6 +95,8 @@ vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
       this.descriptor = descriptor
     }
 
+    setFontSize() {}
+
     attach() {}
 
     detach() {
@@ -203,6 +205,16 @@ vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
 
   return { ManagedTerminalSession }
 })
+
+vi.mock('#/web/runtime-settings-terminal-buttons.ts', () => ({
+  useRuntimeTerminalSettings: () => ({
+    terminalExternalInputEnabled: false,
+    remoteTerminalTmuxEnabled: false,
+    terminalCustomButtonsVisible: true,
+    terminalCustomButtons: [],
+    terminalFontSize: 14,
+  }),
+}))
 
 const REPO_ID = '/tmp/gbl-terminal-provider-repo'
 const WORKTREE_PATH = '/tmp/gbl-terminal-provider-worktree'

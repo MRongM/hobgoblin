@@ -67,10 +67,13 @@ interface TerminalCatalogManager {
   closeSession(sessionId: string): void
 }
 
+type MaybePromise<T> = T | Promise<T>
+
 interface TerminalCatalogOptions {
   isValidClientId(value: unknown): value is string
   isValidTerminalId(value: unknown): value is string
   manager: TerminalCatalogManager
+  remoteTerminalTmuxEnabled(): MaybePromise<boolean>
   attachmentIsConnected(clientId: string, attachmentId?: string): boolean | undefined
   broadcastSessionsChanged(repoRoot: string): void
   withSessionSnapshot(
@@ -189,11 +192,13 @@ class TerminalCatalog {
     }
     const terminalNumber = parseTerminalIdIndex(context.terminalId)
     if (terminalNumber === null) return { ok: false, message: 'error.invalid-arguments' }
+    const useTmux = (await this.options.remoteTerminalTmuxEnabled()) === true
 
     const invocation = buildRemoteTerminalInvocation(resolved.target, input.worktreePath, {
       cols: context.cols,
       rows: context.rows,
       terminalNumber,
+      useTmux,
     })
     const result = this.options.manager.ensureSession({
       ownerId: clientId,

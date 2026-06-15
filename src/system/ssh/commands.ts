@@ -23,8 +23,10 @@ export type RemoteCommandKind =
   | { type: 'testDirectory'; path: string }
   | { type: 'listDirectories'; path: string; limit?: number }
   | { type: 'listDirectoryEntries'; worktreePath: string; dirPath: string }
+  | { type: 'createFileTreeDirectory'; worktreePath: string; parentDirPath: string; name: string }
   | { type: 'renameFileTreeEntry'; worktreePath: string; oldPath: string; newName: string }
   | { type: 'deleteFileTreeEntries'; worktreePath: string; paths: string[] }
+  | { type: 'moveFileTreeEntries'; worktreePath: string; paths: string[]; targetDirPath: string }
   | { type: 'fileTransferInventory'; rootPath: string; paths: string[] }
   | { type: 'fileTransferReadBase64'; path: string }
   | { type: 'fileTransferWriteBase64'; targetPath: string }
@@ -36,6 +38,10 @@ export type RemoteCommandKind =
   | { type: 'gitWorktreeList'; path: string }
   | { type: 'gitStatus'; path: string }
   | { type: 'gitLog'; path: string; branch: string; count?: number; skip?: number }
+  | { type: 'gitHistory'; path: string; branch: string; limit?: number; skip?: number }
+  | { type: 'gitCommitMetadata'; path: string; commit: string }
+  | { type: 'gitCommitNameStatus'; path: string; commit: string }
+  | { type: 'gitCommitNumstat'; path: string; commit: string }
   | { type: 'gitFetchAll'; path: string }
   | { type: 'gitFetchRemote'; path: string; remote: string }
   | { type: 'gitStatusAll'; path: string }
@@ -106,7 +112,7 @@ export function buildRemoteCommandInvocation(
 export function buildRemoteTerminalInvocation(
   target: RemoteRepoTarget,
   remotePath: string,
-  options: { cols: number; rows: number; terminalNumber: number },
+  options: { cols: number; rows: number; terminalNumber: number; useTmux?: boolean },
 ): RemoteCommandInvocation {
   const invocation = buildManagedRemoteTerminalInvocation(
     {
@@ -122,6 +128,7 @@ export function buildRemoteTerminalInvocation(
     },
     {
       sshOptions: ['-o', 'StrictHostKeyChecking=yes', '-o', `ConnectTimeout=${SSH_CONNECT_TIMEOUT_SEC}`],
+      useTmux: options.useTmux === true,
     },
   )
   if (!invocation) throw new Error('Invalid remote terminal invocation')
@@ -231,8 +238,12 @@ function scriptForCommand(command: RemoteCommandKind): string {
       ].join('\n')
     case 'renameFileTreeEntry':
       return remoteRenameFileTreeScript(command)
+    case 'createFileTreeDirectory':
+      return remoteCreateFileTreeDirectoryScript(command)
     case 'deleteFileTreeEntries':
       return remoteDeleteFileTreeScript(command)
+    case 'moveFileTreeEntries':
+      return remoteMoveFileTreeScript(command)
     case 'fileTransferInventory':
       return remoteFileTransferInventoryScript(command)
     case 'fileTransferReadBase64':
@@ -292,6 +303,27 @@ function scriptForCommand(command: RemoteCommandKind): string {
         '--',
       ].join(' ')
     }
+    case 'gitHistory': {
+      const limit = Math.max(1, Math.min(200, Math.floor(command.limit ?? 100)))
+      const skip = Math.max(0, Math.floor(command.skip ?? 0))
+      const format = ['%H', '%h', '%s', '%an', '%aI', '%P'].join(FIELD_SEP)
+      return [
+        `git -C ${shellQuote(command.path)} log`,
+        `--format=${shellQuote(format)}`,
+        `--max-count=${limit}`,
+        `--skip=${skip}`,
+        shellQuote(command.branch),
+        '--',
+      ].join(' ')
+    }
+    case 'gitCommitMetadata': {
+      const format = ['%H', '%h', '%s', '%an', '%aI', '%P'].join(FIELD_SEP)
+      return `git -C ${shellQuote(command.path)} show -s --format=${shellQuote(format)} ${shellQuote(command.commit)}`
+    }
+    case 'gitCommitNameStatus':
+      return `git -C ${shellQuote(command.path)} diff-tree --no-commit-id --name-status -r -M -C --root -z ${shellQuote(command.commit)}`
+    case 'gitCommitNumstat':
+      return `git -C ${shellQuote(command.path)} diff-tree --no-commit-id --numstat -r -M -C --root -z ${shellQuote(command.commit)}`
     case 'gitCheckout':
       return `git -C ${shellQuote(command.path)} switch -- ${shellQuote(command.branch)}`
     case 'gitFetchAll':
@@ -413,6 +445,43 @@ function remoteRenameFileTreeScript(command: Extract<RemoteCommandKind, { type: 
   ].join('\n')
 }
 
+function remoteCreateFileTreeDirectoryScript(command: Extract<RemoteCommandKind, { type: 'createFileTreeDirectory' }>): string {
+  return [
+    "python3 - <<'PY'",
+    ...remoteFileTreePreamble(command.worktreePath),
+    `parent_dir = ${pythonString(command.parentDirPath)}`,
+    `name = ${pythonString(command.name)}`,
+    'if not isinstance(parent_dir, str) or not parent_dir or "\\x00" in parent_dir:',
+    '    finish(False, "error.invalid-arguments")',
+    'parent_dir = os.path.normpath(parent_dir)',
+    'if not os.path.isabs(parent_dir):',
+    '    finish(False, "error.invalid-arguments")',
+    'if not inside_root(parent_dir):',
+    '    finish(False, "error.invalid-path")',
+    'if not os.path.isdir(parent_dir):',
+    '    finish(False, "error.path-not-directory")',
+    'if not isinstance(name, str) or not name or name in (".", "..") or "/" in name or "\\x00" in name:',
+    '    finish(False, "error.invalid-arguments")',
+    'target = os.path.normpath(os.path.join(parent_dir, name))',
+    'if not inside_root(target):',
+    '    finish(False, "error.invalid-path")',
+    'if os.path.lexists(target):',
+    '    finish(False, "error.file-exists")',
+    'try:',
+    '    os.mkdir(target)',
+    '    finish(True)',
+    'except FileExistsError:',
+    '    finish(False, "error.file-exists")',
+    'except FileNotFoundError:',
+    '    finish(False, "error.path-not-found")',
+    'except PermissionError:',
+    '    finish(False, "error.path-permission-denied")',
+    'except OSError:',
+    '    finish(False, "error.failed-read-repo")',
+    'PY',
+  ].join('\n')
+}
+
 function remoteDeleteFileTreeScript(command: Extract<RemoteCommandKind, { type: 'deleteFileTreeEntries' }>): string {
   return [
     "python3 - <<'PY'",
@@ -427,6 +496,53 @@ function remoteDeleteFileTreeScript(command: Extract<RemoteCommandKind, { type: 
     '            shutil.rmtree(target)',
     '        else:',
     '            os.remove(target)',
+    '    finish(True)',
+    'except FileNotFoundError:',
+    '    finish(False, "error.path-not-found")',
+    'except PermissionError:',
+    '    finish(False, "error.path-permission-denied")',
+    'except OSError:',
+    '    finish(False, "error.failed-read-repo")',
+    'PY',
+  ].join('\n')
+}
+
+function remoteMoveFileTreeScript(command: Extract<RemoteCommandKind, { type: 'moveFileTreeEntries' }>): string {
+  return [
+    "python3 - <<'PY'",
+    ...remoteFileTreePreamble(command.worktreePath),
+    `paths = ${pythonJson(command.paths)}`,
+    `target_dir = ${pythonString(command.targetDirPath)}`,
+    'if not isinstance(paths, list) or len(paths) == 0:',
+    '    finish(False, "error.invalid-arguments")',
+    'if not isinstance(target_dir, str) or not target_dir or "\\x00" in target_dir:',
+    '    finish(False, "error.invalid-arguments")',
+    'target_dir = os.path.normpath(target_dir)',
+    'if not os.path.isabs(target_dir):',
+    '    finish(False, "error.invalid-arguments")',
+    'if not inside_root(target_dir):',
+    '    finish(False, "error.invalid-path")',
+    'if not os.path.isdir(target_dir):',
+    '    finish(False, "error.path-not-directory")',
+    'targets = [writable_target(item) for item in paths]',
+    'seen = set()',
+    'moves = []',
+    'for source in targets:',
+    '    destination = os.path.normpath(os.path.join(target_dir, os.path.basename(source)))',
+    '    if destination == source:',
+    '        continue',
+    '    if not inside_root(destination):',
+    '        finish(False, "error.invalid-path")',
+    '    if os.path.isdir(source) and not os.path.islink(source):',
+    "        if target_dir == source or target_dir.startswith(source.rstrip('/') + '/'):",
+    '            finish(False, "error.invalid-path")',
+    '    if destination in seen or os.path.lexists(destination):',
+    '        finish(False, "error.file-exists")',
+    '    seen.add(destination)',
+    '    moves.append((source, destination))',
+    'try:',
+    '    for source, destination in moves:',
+    '        os.rename(source, destination)',
     '    finish(True)',
     'except FileNotFoundError:',
     '    finish(False, "error.path-not-found")',

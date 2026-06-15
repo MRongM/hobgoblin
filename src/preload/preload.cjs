@@ -17,6 +17,8 @@ const IPC = {
     openDirectoryDialog: 'goblin:shell-open-directory-dialog',
     consumeExternalOpenPaths: 'goblin:shell-consume-external-open-paths',
     openInFinder: 'goblin:shell-open-in-finder',
+    readClipboardFilePaths: 'goblin:shell-read-clipboard-file-paths',
+    saveClipboardBinaryFiles: 'goblin:shell-save-clipboard-binary-files',
   },
   terminal: {
     notifyBell: 'goblin:terminal-notify-bell',
@@ -152,6 +154,8 @@ contextBridge.exposeInMainWorld('goblinNative', {
     openDirectoryDialog: (input) => safeInvoke(IPC.shell.openDirectoryDialog, input),
     consumeExternalOpenPaths: () => safeInvoke(IPC.shell.consumeExternalOpenPaths),
     openInFinder: (input) => safeInvoke(IPC.shell.openInFinder, input),
+    readClipboardFilePaths: () => safeInvoke(IPC.shell.readClipboardFilePaths),
+    saveClipboardBinaryFiles: (input) => safeInvoke(IPC.shell.saveClipboardBinaryFiles, input),
   },
   terminal: {
     notifyBell: (input) => safeInvoke(IPC.terminal.notifyBell, input),

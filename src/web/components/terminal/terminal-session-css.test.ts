@@ -13,4 +13,15 @@ describe('terminal session CSS layout contract', () => {
     expect(css).toContain('right: 4px;')
     expect(css).toContain('min-height: 26px;')
   })
+
+  test('keeps the external input compact before manual resize', () => {
+    expect(css).toContain('--goblin-terminal-bottom-dock-height: 44px;')
+    expect(css).toContain('height: 26px;')
+  })
+
+  test('centers the external input row and default text line', () => {
+    expect(css).toContain('align-items: center;')
+    expect(css).toContain('box-sizing: border-box;')
+    expect(css).toContain('padding: 4px 0;')
+  })
 })

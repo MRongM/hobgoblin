@@ -16,6 +16,7 @@ import { TerminalSessionRegistry } from '#/web/components/terminal/TerminalSessi
 import { setTerminalSessionCommandBridge } from '#/web/components/terminal/terminal-session-command-bridge.ts'
 import { repoIndexEqual, repoIndexFromRepos } from '#/web/components/terminal/terminal-repo-index.ts'
 import { RepoSyncTracker } from '#/web/components/terminal/repo-sync-tracker.ts'
+import { useRuntimeTerminalSettings } from '#/web/runtime-settings-terminal-buttons.ts'
 import type { TerminalSessionContextValue, TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
 
 interface TerminalSessionProviderProps {
@@ -27,6 +28,7 @@ interface TerminalSessionProviderProps {
 
 export function TerminalSessionProvider({ currentRepoId, children, syncTracker: syncTrackerProp }: TerminalSessionProviderProps) {
   const repoIndex = useStoreWithEqualityFn(useReposStore, (s) => repoIndexFromRepos(s.repos), repoIndexEqual)
+  const { terminalFontSize } = useRuntimeTerminalSettings()
   const currentRepoInstanceToken = currentRepoId ? (repoIndex[currentRepoId]?.instanceToken ?? null) : null
   const selectedTerminalByWorktree = useReposStore((s) => s.selectedTerminalByWorktree)
   const setSelectedTerminal = useReposStore((s) => s.setSelectedTerminal)
@@ -99,6 +101,11 @@ export function TerminalSessionProvider({ currentRepoId, children, syncTracker: 
   useEffect(() => {
     registry.setParkingRoot(parkingRootRef.current)
   })
+
+  // Font settings
+  useEffect(() => {
+    registry.setFontSize(terminalFontSize)
+  }, [registry, terminalFontSize])
 
   // Registry lifecycle (event listeners + bridge + destroy)
   useEffect(() => {

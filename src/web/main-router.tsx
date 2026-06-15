@@ -42,6 +42,12 @@ const settingsGeneralRoute = createRoute({
   component: SettingsGeneralRoute,
 })
 
+const settingsFilesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings/files',
+  component: SettingsFilesRoute,
+})
+
 const settingsTerminalRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/terminal',
@@ -106,6 +112,7 @@ const mainRouteTree = rootRoute.addChildren([
   workspaceRoute,
   settingsIndexRoute,
   settingsGeneralRoute,
+  settingsFilesRoute,
   settingsTerminalRoute,
   settingsShortcutsRoute,
   settingsNotificationsRoute,
@@ -142,6 +149,10 @@ function WorkspaceRoute() {
 
 function SettingsGeneralRoute() {
   return <SettingsRoutePage settingsPage="general" />
+}
+
+function SettingsFilesRoute() {
+  return <SettingsRoutePage settingsPage="files" />
 }
 
 function SettingsTerminalRoute() {

@@ -26,6 +26,7 @@ const appDataClientMocks = vi.hoisted(() => ({
     hosts: {},
   })),
   saveSession: vi.fn(async (session) => session),
+  setFileTreeFontSize: vi.fn(async (fontSize: number) => fontSize),
   setGlobalShortcut: vi.fn(async (accelerator) => ({ accelerator, registered: true })),
   setGlobalShortcutDisabled: vi.fn(async () => {}),
   setLanEnabled: vi.fn(async () => {}),
@@ -46,9 +47,13 @@ const appDataClientMocks = vi.hoisted(() => ({
   setSettingsFetchInterval: vi.fn(async (sec) => sec),
   setShortcutsDisabled: vi.fn(async () => {}),
   setSwapCloseShortcuts: vi.fn(async () => {}),
+  setTemporaryFilesDirectory: vi.fn(async () => {}),
+  setRemoteTerminalTmuxEnabled: vi.fn(async () => {}),
+  setTerminalCustomButtonSize: vi.fn(async () => {}),
   setTerminalCustomButtons: vi.fn(async (buttons: TerminalCustomButton[]) => buttons),
   setTerminalCustomButtonsVisible: vi.fn(async () => {}),
   setTerminalExternalInputEnabled: vi.fn(async () => {}),
+  setTerminalFontSize: vi.fn(async (fontSize: number) => fontSize),
   setTerminalNotificationsEnabled: vi.fn(async () => {}),
   setToggleDetailOnActionBarBlankClick: vi.fn(async () => {}),
 }))
@@ -59,6 +64,7 @@ vi.mock('#/web/settings-client.ts', () => ({
   refreshExternalAppsSnapshot: appDataClientMocks.refreshExternalAppsSnapshot,
   refreshGitHubCliState: appDataClientMocks.refreshGitHubCliState,
   saveSession: appDataClientMocks.saveSession,
+  setFileTreeFontSize: appDataClientMocks.setFileTreeFontSize,
   setGlobalShortcut: appDataClientMocks.setGlobalShortcut,
   setGlobalShortcutDisabled: appDataClientMocks.setGlobalShortcutDisabled,
   setLanEnabled: appDataClientMocks.setLanEnabled,
@@ -67,9 +73,13 @@ vi.mock('#/web/settings-client.ts', () => ({
   setSettingsFetchInterval: appDataClientMocks.setSettingsFetchInterval,
   setShortcutsDisabled: appDataClientMocks.setShortcutsDisabled,
   setSwapCloseShortcuts: appDataClientMocks.setSwapCloseShortcuts,
+  setTemporaryFilesDirectory: appDataClientMocks.setTemporaryFilesDirectory,
+  setRemoteTerminalTmuxEnabled: appDataClientMocks.setRemoteTerminalTmuxEnabled,
+  setTerminalCustomButtonSize: appDataClientMocks.setTerminalCustomButtonSize,
   setTerminalCustomButtons: appDataClientMocks.setTerminalCustomButtons,
   setTerminalCustomButtonsVisible: appDataClientMocks.setTerminalCustomButtonsVisible,
   setTerminalExternalInputEnabled: appDataClientMocks.setTerminalExternalInputEnabled,
+  setTerminalFontSize: appDataClientMocks.setTerminalFontSize,
   setTerminalNotificationsEnabled: appDataClientMocks.setTerminalNotificationsEnabled,
   setToggleDetailOnActionBarBlankClick: appDataClientMocks.setToggleDetailOnActionBarBlankClick,
 }))
@@ -90,6 +100,8 @@ describe('settings write paths', () => {
     appDataClientMocks.refreshGitHubCliState.mockResolvedValue({ available: false, version: null, detectedAt: 0, hosts: {} })
     appDataClientMocks.saveSession.mockReset()
     appDataClientMocks.saveSession.mockImplementation(async (session) => session)
+    appDataClientMocks.setFileTreeFontSize.mockReset()
+    appDataClientMocks.setFileTreeFontSize.mockImplementation(async (fontSize: number) => fontSize)
     appDataClientMocks.setGlobalShortcut.mockReset()
     appDataClientMocks.setGlobalShortcut.mockImplementation(async (accelerator) => ({ accelerator, registered: true }))
     appDataClientMocks.setGlobalShortcutDisabled.mockReset()
@@ -118,12 +130,20 @@ describe('settings write paths', () => {
     appDataClientMocks.setShortcutsDisabled.mockResolvedValue(undefined)
     appDataClientMocks.setSwapCloseShortcuts.mockReset()
     appDataClientMocks.setSwapCloseShortcuts.mockResolvedValue(undefined)
+    appDataClientMocks.setTemporaryFilesDirectory.mockReset()
+    appDataClientMocks.setTemporaryFilesDirectory.mockResolvedValue(undefined)
+    appDataClientMocks.setRemoteTerminalTmuxEnabled.mockReset()
+    appDataClientMocks.setRemoteTerminalTmuxEnabled.mockResolvedValue(undefined)
+    appDataClientMocks.setTerminalCustomButtonSize.mockReset()
+    appDataClientMocks.setTerminalCustomButtonSize.mockResolvedValue(undefined)
     appDataClientMocks.setTerminalCustomButtons.mockReset()
     appDataClientMocks.setTerminalCustomButtons.mockImplementation(async (buttons: TerminalCustomButton[]) => buttons)
     appDataClientMocks.setTerminalCustomButtonsVisible.mockReset()
     appDataClientMocks.setTerminalCustomButtonsVisible.mockResolvedValue(undefined)
     appDataClientMocks.setTerminalExternalInputEnabled.mockReset()
     appDataClientMocks.setTerminalExternalInputEnabled.mockResolvedValue(undefined)
+    appDataClientMocks.setTerminalFontSize.mockReset()
+    appDataClientMocks.setTerminalFontSize.mockImplementation(async (fontSize: number) => fontSize)
     appDataClientMocks.setTerminalNotificationsEnabled.mockReset()
     appDataClientMocks.setTerminalNotificationsEnabled.mockResolvedValue(undefined)
     appDataClientMocks.setToggleDetailOnActionBarBlankClick.mockReset()
@@ -229,6 +249,18 @@ describe('settings write paths', () => {
     invalidateSpy.mockRestore()
   })
 
+  test('setTemporaryFilesDirectoryPreference updates runtime settings cache', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    const { setTemporaryFilesDirectoryPreference } = await import('#/web/settings-write-paths.ts')
+
+    await setTemporaryFilesDirectoryPreference('/Users/test/project/tmp')
+
+    expect(appDataClientMocks.setTemporaryFilesDirectory).toHaveBeenCalledWith('/Users/test/project/tmp')
+    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
+      temporaryFilesDirectory: '/Users/test/project/tmp',
+    })
+  })
+
   test('setTerminalCustomButtonsPreference updates runtime settings cache', async () => {
     mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
     const buttons = [{ label: 'status', value: 'git status --short' }]
@@ -239,6 +271,22 @@ describe('settings write paths', () => {
     expect(appDataClientMocks.setTerminalCustomButtons).toHaveBeenCalledWith(buttons)
     expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
       terminalCustomButtons: buttons,
+    })
+  })
+
+  test('setTerminalCustomButtonSizePreference updates runtime settings cache', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    const { setTerminalCustomButtonSizePreference } = (await import(
+      '#/web/settings-write-paths.ts'
+    )) as typeof import('#/web/settings-write-paths.ts') & {
+      setTerminalCustomButtonSizePreference: (size: 'small' | 'medium' | 'large') => Promise<void>
+    }
+
+    await setTerminalCustomButtonSizePreference('large')
+
+    expect(appDataClientMocks.setTerminalCustomButtonSize).toHaveBeenCalledWith('large')
+    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
+      terminalCustomButtonSize: 'large',
     })
   })
 
@@ -254,6 +302,30 @@ describe('settings write paths', () => {
     })
   })
 
+  test('setFileTreeFontSizePreference updates runtime settings cache', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    const { setFileTreeFontSizePreference } = await import('#/web/settings-write-paths.ts')
+
+    await setFileTreeFontSizePreference(13)
+
+    expect(appDataClientMocks.setFileTreeFontSize).toHaveBeenCalledWith(13)
+    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
+      fileTreeFontSize: 13,
+    })
+  })
+
+  test('setTerminalFontSizePreference updates runtime settings cache', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    const { setTerminalFontSizePreference } = await import('#/web/settings-write-paths.ts')
+
+    await setTerminalFontSizePreference(16)
+
+    expect(appDataClientMocks.setTerminalFontSize).toHaveBeenCalledWith(16)
+    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
+      terminalFontSize: 16,
+    })
+  })
+
   test('setTerminalCustomButtonsVisiblePreference updates runtime settings cache', async () => {
     mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
     const { setTerminalCustomButtonsVisiblePreference } = await import('#/web/settings-write-paths.ts')
@@ -263,6 +335,18 @@ describe('settings write paths', () => {
     expect(appDataClientMocks.setTerminalCustomButtonsVisible).toHaveBeenCalledWith(false)
     expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
       terminalCustomButtonsVisible: false,
+    })
+  })
+
+  test('setRemoteTerminalTmuxEnabledPreference updates runtime settings cache', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    const { setRemoteTerminalTmuxEnabledPreference } = await import('#/web/settings-write-paths.ts')
+
+    await setRemoteTerminalTmuxEnabledPreference(true)
+
+    expect(appDataClientMocks.setRemoteTerminalTmuxEnabled).toHaveBeenCalledWith(true)
+    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
+      remoteTerminalTmuxEnabled: true,
     })
   })
 })
