@@ -38,6 +38,8 @@ test('initializes server-settings.json with defaults when no persisted settings 
     globalShortcut: 'Alt+G',
     terminalApp: 'auto',
     editorApp: 'auto',
+    terminalExternalInputEnabled: false,
+    terminalCustomButtonsVisible: true,
     terminalCustomButtons: [],
     lanEnabled: false,
   })
@@ -74,11 +76,13 @@ test('persists updates and notifies subscribers from the server settings store',
     globalShortcut: 'CommandOrControl+Alt+G',
     terminalApp: 'ghostty',
     editorApp: 'cursor',
+    terminalExternalInputEnabled: true,
+    terminalCustomButtonsVisible: false,
     terminalCustomButtons: [
-      { label: ' status ', value: ' git status --short\n' },
-      { label: '', value: 'ignored' },
-      { label: 'empty', value: '   ' },
-      { label: 'test', value: 'bun run test' },
+      { label: ' status ', value: ' git status --short\n', action: 'input' },
+      { label: '', value: 'ignored', action: 'execute' },
+      { label: 'empty', value: '   ', action: 'input' },
+      { label: 'test', value: 'bun run test', action: 'bad-value' as never },
     ],
     lanEnabled: false,
   })
@@ -109,9 +113,11 @@ test('persists updates and notifies subscribers from the server settings store',
     globalShortcut: 'Alt+G',
     terminalApp: 'ghostty',
     editorApp: 'cursor',
+    terminalExternalInputEnabled: true,
+    terminalCustomButtonsVisible: false,
     terminalCustomButtons: [
-      { label: 'status', value: ' git status --short\n' },
-      { label: 'test', value: 'bun run test' },
+      { label: 'status', value: ' git status --short\n', action: 'input' },
+      { label: 'test', value: 'bun run test', action: 'execute' },
     ],
     lanEnabled: false,
   })
@@ -138,6 +144,6 @@ test('limits persisted terminal custom buttons to 20 valid entries', async () =>
 
   const prefs = await mod.getServerSettingsPrefs()
   expect(prefs.terminalCustomButtons).toHaveLength(20)
-  expect(prefs.terminalCustomButtons[0]).toEqual({ label: 'button-0', value: 'echo 0' })
-  expect(prefs.terminalCustomButtons[19]).toEqual({ label: 'button-19', value: 'echo 19' })
+  expect(prefs.terminalCustomButtons[0]).toEqual({ label: 'button-0', value: 'echo 0', action: 'execute' })
+  expect(prefs.terminalCustomButtons[19]).toEqual({ label: 'button-19', value: 'echo 19', action: 'execute' })
 })

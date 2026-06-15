@@ -187,6 +187,14 @@ export async function setPreferredEditorApp(pref: EditorPref): Promise<EditorApp
   return result.externalApps?.editor ?? (await getExternalAppsSnapshot()).editor
 }
 
+export async function setTerminalExternalInputEnabled(enabled: boolean): Promise<void> {
+  await updateSettingsPrefsPatch({ terminalExternalInputEnabled: enabled })
+}
+
+export async function setTerminalCustomButtonsVisible(visible: boolean): Promise<void> {
+  await updateSettingsPrefsPatch({ terminalCustomButtonsVisible: visible })
+}
+
 export async function setTerminalCustomButtons(buttons: TerminalCustomButton[]): Promise<TerminalCustomButton[]> {
   const result = await updateSettingsPrefsPatch({ terminalCustomButtons: buttons })
   return result.settings.terminalCustomButtons

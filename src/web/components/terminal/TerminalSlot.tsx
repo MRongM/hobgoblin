@@ -4,6 +4,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type CSSProperties,
   type DragEvent,
   type FocusEvent,
   type KeyboardEvent,
@@ -23,7 +24,8 @@ import {
 } from '#/web/components/terminal/terminal-session-store.ts'
 import { MobileTerminalToolbar } from '#/web/components/terminal/mobile-terminal-toolbar.tsx'
 import { isMobileDevice } from '#/web/components/terminal/mobile-detection.ts'
-import { useRuntimeTerminalCustomButtons } from '#/web/runtime-settings-terminal-buttons.ts'
+import { useRuntimeTerminalSettings } from '#/web/runtime-settings-terminal-buttons.ts'
+import { TerminalExternalInput } from '#/web/components/terminal/terminal-external-input.tsx'
 interface TerminalSlotProps {
   repoRoot: string
   branch: string
@@ -35,8 +37,12 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
   const t = useT()
   const hostRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const externalInputRef = useRef<HTMLTextAreaElement | null>(null)
+  const bottomDockRef = useRef<HTMLDivElement | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const [externalInputValue, setExternalInputValue] = useState('')
+  const [bottomDockHeight, setBottomDockHeight] = useState<number | null>(null)
   const context = useTerminalSessionContext()
   const {
     clearBell,
@@ -56,7 +62,13 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
   const key = descriptor?.key ?? null
   const snapshot = useTerminalSnapshot(key)
   const hasSessions = useWorktreeTerminalCount(terminalWorktreeKey) > 0
-  const terminalCustomButtons = useRuntimeTerminalCustomButtons()
+  const { terminalExternalInputEnabled, terminalCustomButtonsVisible, terminalCustomButtons } =
+    useRuntimeTerminalSettings()
+  const progress = snapshot.progress
+  const attachment = snapshot.attachment
+  const isController = hasSessions && snapshot.phase === 'open' && attachment?.role === 'controller'
+  const isReadonly =
+    hasSessions && snapshot.phase === 'open' && (attachment?.role === 'viewer' || attachment?.role === 'unowned')
 
   useLayoutEffect(() => {
     const host = hostRef.current
@@ -188,19 +200,57 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
     [key, worktreePath, writeInput],
   )
 
-  const progress = snapshot.progress
-  const attachment = snapshot.attachment
-  const isController = hasSessions && snapshot.phase === 'open' && attachment?.role === 'controller'
-  const isReadonly = hasSessions && snapshot.phase === 'open' && (attachment?.role === 'viewer' || attachment?.role === 'unowned')
-  const visibleCustomButtons = isController
+  const showExternalInput = isController && terminalExternalInputEnabled && !!key
+  const visibleCustomButtons = isController && terminalCustomButtonsVisible
     ? terminalCustomButtons.filter((button) => button.label.trim() && button.value.trim())
     : []
+  const hasBottomDock = showExternalInput || visibleCustomButtons.length > 0
+  useLayoutEffect(() => {
+    if (!hasBottomDock) {
+      setBottomDockHeight(null)
+      return
+    }
+    const dock = bottomDockRef.current
+    if (!dock) return
+
+    const updateDockHeight = () => {
+      const next = Math.ceil(dock.getBoundingClientRect().height)
+      if (next <= 0) return
+      setBottomDockHeight((current) => (current === next ? current : next))
+    }
+
+    updateDockHeight()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(updateDockHeight)
+    observer.observe(dock)
+    return () => observer.disconnect()
+  }, [hasBottomDock, showExternalInput, visibleCustomButtons.length])
   const readonlyBadge = attachment?.role === 'viewer' ? t('terminal.mirror-controlled') : t('terminal.unowned')
   const progressVariant =
     progress?.state === 2 ? 'error' : progress?.state === 4 ? 'warning' : progress?.state === 3 ? 'indeterminate' : ''
+  const submitExternalInput = useCallback(
+    (value: string) => {
+      if (!key || value.trim().length === 0) return
+      writeInput(key, `${value}\r`)
+      setExternalInputValue('')
+    },
+    [key, writeInput],
+  )
+  const fillExternalInput = useCallback((value: string) => {
+    setExternalInputValue(value)
+    queueMicrotask(() => {
+      externalInputRef.current?.focus({ preventScroll: true })
+      externalInputRef.current?.setSelectionRange(value.length, value.length)
+    })
+  }, [])
+  const slotStyle =
+    bottomDockHeight === null
+      ? undefined
+      : ({ '--goblin-terminal-bottom-dock-height': `${bottomDockHeight}px` } as CSSProperties)
 
   return (
     <div
+      style={slotStyle}
       className="goblin-terminal-slot focus-visible:outline-none"
       tabIndex={-1}
       onFocusCapture={handleFocus}
@@ -264,21 +314,46 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
           />
         )}
       </div>
-      {key && visibleCustomButtons.length > 0 && (
-        <div className="goblin-terminal-custom-buttons" aria-label={t('terminal.custom-buttons')}>
-          {visibleCustomButtons.map((button, index) => (
-            <Button
-              key={`${index}:${button.label}:${button.value}`}
-              type="button"
-              size="sm"
-              variant="secondary"
-              className="goblin-terminal-custom-buttons__button"
-              title={button.value}
-              onClick={() => writeInput(key, `${button.value}\r`)}
-            >
-              {button.label}
-            </Button>
-          ))}
+      {key && hasBottomDock && (
+        <div ref={bottomDockRef} className="goblin-terminal-bottom-dock">
+          {visibleCustomButtons.length > 0 && (
+            <div className="goblin-terminal-custom-buttons" aria-label={t('terminal.custom-buttons')}>
+              {visibleCustomButtons.map((button, index) => {
+                const action = button.action === 'input' ? 'input' : 'execute'
+                return (
+                  <Button
+                    key={`${index}:${button.label}:${button.value}:${action}`}
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="goblin-terminal-custom-buttons__button"
+                    title={button.value}
+                    onClick={() => {
+                      if (action === 'input') {
+                        if (showExternalInput) fillExternalInput(button.value)
+                        else writeInput(key, button.value)
+                      } else {
+                        writeInput(key, `${button.value}\r`)
+                      }
+                    }}
+                  >
+                    {button.label}
+                  </Button>
+                )
+              })}
+            </div>
+          )}
+          {showExternalInput && (
+            <TerminalExternalInput
+              ref={externalInputRef}
+              value={externalInputValue}
+              placeholder={t('terminal.external-input-placeholder')}
+              submitLabel={t('terminal.external-input-send')}
+              resizeLabel={t('terminal.external-input-resize')}
+              onChange={setExternalInputValue}
+              onSubmit={submitExternalInput}
+            />
+          )}
         </div>
       )}
       {isReadonly && (

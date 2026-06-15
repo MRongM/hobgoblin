@@ -23,6 +23,8 @@ import {
   setShortcutsDisabled,
   setSwapCloseShortcuts,
   setTerminalCustomButtons,
+  setTerminalCustomButtonsVisible,
+  setTerminalExternalInputEnabled,
   setTerminalNotificationsEnabled,
   setToggleDetailOnActionBarBlankClick,
 } from '#/web/settings-client.ts'
@@ -108,6 +110,22 @@ export async function setEditorAppPreference(pref: EditorPref): Promise<EditorAp
   updateExternalAppsCache(mainWindowQueryClient, (current) => ({ ...current, editor: state }))
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, editorApp: state.pref }))
   return state
+}
+
+export async function setTerminalExternalInputEnabledPreference(enabled: boolean): Promise<void> {
+  await setTerminalExternalInputEnabled(enabled)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
+    ...current,
+    terminalExternalInputEnabled: enabled,
+  }))
+}
+
+export async function setTerminalCustomButtonsVisiblePreference(visible: boolean): Promise<void> {
+  await setTerminalCustomButtonsVisible(visible)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
+    ...current,
+    terminalCustomButtonsVisible: visible,
+  }))
 }
 
 export async function setTerminalCustomButtonsPreference(

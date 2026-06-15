@@ -342,12 +342,23 @@ export class ManagedTerminalSession {
         this.queueResize(term.cols, term.rows)
       }
     }
+    const replay = result.snapshot ?? result.replay
+    const replaySeq = result.snapshotSeq ?? result.replaySeq
+    const replayTruncated = preloaded || !!result.snapshot ? true : result.replayTruncated
+    const hydratedSnapshot = this.hydratedSnapshot
+    const skipDuplicatePreloadedSnapshot =
+      preloaded &&
+      !!hydratedSnapshot &&
+      typeof result.snapshot === 'string' &&
+      typeof result.snapshotSeq === 'number' &&
+      result.snapshotSeq === hydratedSnapshot.snapshotSeq &&
+      result.snapshot === hydratedSnapshot.snapshot
     await this.replayActiveView(
       token,
       term,
-      result.snapshot ?? result.replay,
-      result.snapshotSeq ?? result.replaySeq,
-      preloaded || !!result.snapshot ? true : result.replayTruncated,
+      skipDuplicatePreloadedSnapshot ? '' : replay,
+      replaySeq,
+      skipDuplicatePreloadedSnapshot ? false : replayTruncated,
     )
     this.guardStart(token, term)
   }

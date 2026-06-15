@@ -49,6 +49,8 @@ describe('renderer bootstrap', () => {
       globalShortcutRegistered: false,
       terminalApp: 'auto',
       editorApp: 'windsurf',
+      terminalExternalInputEnabled: false,
+      terminalCustomButtonsVisible: true,
       terminalCustomButtons: [],
       lanEnabled: false,
     }

@@ -55,7 +55,11 @@ const xtermMocks = vi.hoisted(() => {
       scrollOnUserInput?: boolean
     }
     element: HTMLDivElement | null = null
-    modes = { applicationCursorKeysMode: false }
+    modes = {
+      applicationCursorKeysMode: false,
+      bracketedPasteMode: false,
+      mouseTrackingMode: false,
+    }
     refresh = vi.fn()
     write = vi.fn((_data: string, callback?: () => void) => {
       if (callback) queueMicrotask(callback)
@@ -69,6 +73,9 @@ const xtermMocks = vi.hoisted(() => {
     linkProviders: Array<{ provideLinks: (line: number, cb: (links: unknown[] | undefined) => void) => void }> = []
     buffer = {
       active: {
+        type: 'normal',
+        cursorX: 4,
+        cursorY: 2,
         getLine: (index: number) => {
           const text = this.bufferLines[index]
           return typeof text === 'string' ? { translateToString: () => text } : undefined
@@ -1043,6 +1050,38 @@ describe('ManagedTerminalSession', () => {
     expect(term.reset).toHaveBeenCalled()
     expect(term.write).toHaveBeenNthCalledWith(1, 'hydrated-screen', expect.any(Function))
     expect(terminalCalls.attach).toHaveBeenCalled()
+  })
+
+  test('does not rewrite the same server snapshot after preloading it', async () => {
+    terminalCalls.attach.mockResolvedValueOnce(
+      attachResult('session-1', {
+        snapshot: 'hydrated-screen',
+        snapshotSeq: 5,
+      }),
+    )
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+
+    session.hydrate({
+      sessionId: 'session-remote',
+      processName: 'node',
+      role: 'controller',
+      controllerStatus: 'connected',
+      canonicalCols: 120,
+      canonicalRows: 40,
+      snapshot: 'hydrated-screen',
+      snapshotSeq: 5,
+    })
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    expect(term.reset).toHaveBeenCalledTimes(1)
+    expect(term.write).toHaveBeenCalledTimes(1)
+    expect(term.write).toHaveBeenNthCalledWith(1, 'hydrated-screen', expect.any(Function))
   })
 
   test('resets an existing terminal view when hydrate switches to a different session id', async () => {
