@@ -11,8 +11,9 @@ import {
   type KeyboardEvent,
 } from 'react'
 import { Button } from '#/web/components/ui/button.tsx'
-import { GOBLIN_FILE_PATHS_MIME, parseGoblinFilePathDragPayload } from '#/shared/file-tree.ts'
+import { GOBLIN_FILE_PATHS_MIME, parseGoblinFilePathDragPayload, type RepoFileTransferUploadedItem } from '#/shared/file-tree.ts'
 import type { ClipboardBinaryFilePayload } from '#/shared/clipboard-binary-temp-files.ts'
+import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { setTerminalFocused } from '#/web/terminal-focus.ts'
 import {
@@ -20,6 +21,7 @@ import {
   readSystemClipboardFilePaths,
   saveClipboardBinaryFilesFromPaste,
 } from '#/web/app-shell-client.ts'
+import { transferRepositoryFiles } from '#/web/repo-client.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { useTerminalSessionContext } from '#/web/components/terminal/terminal-session-context.ts'
@@ -164,12 +166,12 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
       const files = binaryPasteFiles(event.clipboardData)
       event.preventDefault()
       event.stopPropagation()
-      void resolvePastedFilePaths(files, { worktreePath, temporaryFilesDirectory }).then((paths) => {
+      void resolvePastedFilePaths(files, { repoRoot, worktreePath, temporaryFilesDirectory }).then((paths) => {
         if (paths.length === 0) return
         writeInput(key, paths.map(shellEscapePath).join(' '))
       })
     },
-    [isController, key, temporaryFilesDirectory, worktreePath, writeInput],
+    [isController, key, repoRoot, temporaryFilesDirectory, worktreePath, writeInput],
   )
   const handleSearchChange = useCallback(
     (value: string) => {
@@ -265,6 +267,7 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
       const selectionStart = textarea?.selectionStart ?? externalInputValue.length
       const selectionEnd = textarea?.selectionEnd ?? selectionStart
       void savePastedFilesIntoExternalInput(files, {
+        repoRoot,
         worktreePath,
         temporaryFilesDirectory,
         externalInputValue,
@@ -274,7 +277,7 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
         focusInput: () => externalInputRef.current,
       })
     },
-    [externalInputValue, temporaryFilesDirectory, worktreePath],
+    [externalInputValue, repoRoot, temporaryFilesDirectory, worktreePath],
   )
 
   const showExternalInput = isController && terminalExternalInputEnabled && !!key
@@ -551,12 +554,14 @@ function isExternalInputPasteTarget(target: EventTarget | null, input: HTMLTextA
 }
 
 interface ResolvePastedFilePathsOptions {
+  repoRoot: string
   worktreePath: string
   temporaryFilesDirectory: string
 }
 
 async function resolvePastedFilePaths(files: File[], options: ResolvePastedFilePathsOptions): Promise<string[]> {
   const sourcePaths = await readSystemClipboardFilePaths()
+  if (isRemoteRepoId(options.repoRoot)) return await resolveRemotePastedFilePaths(files, sourcePaths, options)
   if (sourcePaths.length > 0) {
     const result = await saveClipboardBinaryFilesFromPaste({
       worktreePath: options.worktreePath,
@@ -574,6 +579,43 @@ async function resolvePastedFilePaths(files: File[], options: ResolvePastedFileP
     files: payload,
   })
   return result.ok ? result.paths : []
+}
+
+async function resolveRemotePastedFilePaths(
+  files: File[],
+  sourcePaths: string[],
+  options: ResolvePastedFilePathsOptions,
+): Promise<string[]> {
+  const targetDirPath = remoteTerminalPasteTargetDir(options.worktreePath)
+  if (sourcePaths.length > 0) {
+    const result = await transferRepositoryFiles({
+      repoId: options.repoRoot,
+      worktreePath: options.worktreePath,
+      targetDirPath,
+      source: {
+        kind: 'localPaths',
+        items: sourcePaths.map((path) => ({ path })),
+      },
+    })
+    return result.ok ? result.copied.map((entry) => entry.destinationPath) : []
+  }
+  if (files.length === 0) return []
+  const items = await Promise.all(files.map(fileToUploadedItem))
+  const result = await transferRepositoryFiles({
+    repoId: options.repoRoot,
+    worktreePath: options.worktreePath,
+    targetDirPath,
+    source: {
+      kind: 'uploadedItems',
+      items,
+    },
+  })
+  return result.ok ? result.copied.map((entry) => entry.destinationPath) : []
+}
+
+function remoteTerminalPasteTargetDir(worktreePath: string): string {
+  const normalized = worktreePath.replace(/\/+$/u, '')
+  return normalized ? `${normalized}/tmp` : '/tmp'
 }
 
 interface SavePastedFilesIntoExternalInputOptions extends ResolvePastedFilePathsOptions {
@@ -612,6 +654,22 @@ async function fileToClipboardPayload(file: File): Promise<ClipboardBinaryFilePa
     type: file.type,
     bytes: await file.arrayBuffer(),
   }
+}
+
+async function fileToUploadedItem(file: File): Promise<RepoFileTransferUploadedItem> {
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  return {
+    name: file.name || 'pasted.bin',
+    mimeType: file.type || undefined,
+    bytesBase64: bytesToBase64(bytes),
+    byteLength: bytes.byteLength,
+  }
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary)
 }
 
 function pathForTerminalDrop(path: string, worktreePath: string): string {

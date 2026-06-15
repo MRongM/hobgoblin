@@ -4,6 +4,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { GOBLIN_FILE_PATHS_MIME, serializeGoblinFilePathDragPayload } from '#/shared/file-tree.ts'
+import { normalizeRemoteRepoId } from '#/shared/remote-repo.ts'
 import { TerminalSlot } from '#/web/components/terminal/TerminalSlot.tsx'
 import {
   TerminalSessionContext,
@@ -24,6 +25,14 @@ vi.mock('#/web/app-shell-client.ts', () => ({
   pathForDroppedFile: () => '',
   readSystemClipboardFilePaths: appShellMocks.readSystemClipboardFilePaths,
   saveClipboardBinaryFilesFromPaste: appShellMocks.saveClipboardBinaryFilesFromPaste,
+}))
+
+const repoClientMocks = vi.hoisted(() => ({
+  transferRepositoryFiles: vi.fn(),
+}))
+
+vi.mock('#/web/repo-client.ts', () => ({
+  transferRepositoryFiles: repoClientMocks.transferRepositoryFiles,
 }))
 
 const runtimeSettingsMocks = vi.hoisted(() => ({
@@ -54,8 +63,11 @@ afterEach(() => {
   appShellMocks.readSystemClipboardFilePaths.mockReset()
   appShellMocks.readSystemClipboardFilePaths.mockResolvedValue([])
   appShellMocks.saveClipboardBinaryFilesFromPaste.mockReset()
+  repoClientMocks.transferRepositoryFiles.mockReset()
   document.body.innerHTML = ''
 })
+
+const REMOTE_REPO_ID = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/repo' })
 
 describe('TerminalSlot', () => {
   test('passes reveal path handler through terminal attach', async () => {
@@ -921,6 +933,151 @@ describe('TerminalSlot', () => {
     }
   })
 
+  test('uploads system clipboard file paths to remote tmp and writes remote paths into the active terminal', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    appShellMocks.readSystemClipboardFilePaths.mockResolvedValue(['/Users/test/Desktop/report.pdf'])
+    repoClientMocks.transferRepositoryFiles.mockResolvedValue({
+      ok: true,
+      copied: [{ destinationPath: '/srv/repo-feature/tmp/report.pdf', kind: 'file' }],
+      renamed: [],
+      failed: [],
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const writeInput = vi.fn()
+    const { worktreeSnapshot, snapshot } = controllerFixture('controller', {
+      repoRoot: REMOTE_REPO_ID,
+      worktreePath: '/srv/repo-feature',
+    })
+    const context = terminalContext({ writeInput })
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+
+    await act(async () => {
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot={REMOTE_REPO_ID} branch="feature" worktreePath="/srv/repo-feature" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      expect(host).toBeInstanceOf(HTMLDivElement)
+      const event = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', {
+        value: {
+          getData: () => '',
+          files: [],
+          items: [],
+        },
+      })
+
+      await act(async () => {
+        host?.dispatchEvent(event)
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      expect(event.defaultPrevented).toBe(true)
+      expect(appShellMocks.saveClipboardBinaryFilesFromPaste).not.toHaveBeenCalled()
+      expect(repoClientMocks.transferRepositoryFiles).toHaveBeenCalledWith({
+        repoId: REMOTE_REPO_ID,
+        worktreePath: '/srv/repo-feature',
+        targetDirPath: '/srv/repo-feature/tmp',
+        source: {
+          kind: 'localPaths',
+          items: [{ path: '/Users/test/Desktop/report.pdf' }],
+        },
+      })
+      expect(writeInput).toHaveBeenCalledWith('terminal-1', '/srv/repo-feature/tmp/report.pdf')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('uploads binary paste files to remote tmp and inserts remote paths into external input', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    runtimeSettingsMocks.terminalExternalInputEnabled = true
+    repoClientMocks.transferRepositoryFiles.mockResolvedValue({
+      ok: true,
+      copied: [{ destinationPath: '/srv/repo-feature/tmp/image.png', kind: 'file' }],
+      renamed: [],
+      failed: [],
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const { worktreeSnapshot, snapshot } = controllerFixture('controller', {
+      repoRoot: REMOTE_REPO_ID,
+      worktreePath: '/srv/repo-feature',
+    })
+    const context = terminalContext()
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+
+    await act(async () => {
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot={REMOTE_REPO_ID} branch="feature" worktreePath="/srv/repo-feature" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    })
+
+    try {
+      const input = container.querySelector('.goblin-terminal-external-input__control') as HTMLTextAreaElement | null
+      expect(input).toBeInstanceOf(HTMLTextAreaElement)
+      const event = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', {
+        value: {
+          getData: () => '',
+          files: [new File([new Uint8Array([1, 2, 3])], 'image.png', { type: 'image/png' })],
+          items: [],
+        },
+      })
+
+      await act(async () => {
+        input?.dispatchEvent(event)
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      expect(event.defaultPrevented).toBe(true)
+      expect(appShellMocks.saveClipboardBinaryFilesFromPaste).not.toHaveBeenCalled()
+      expect(repoClientMocks.transferRepositoryFiles).toHaveBeenCalledWith({
+        repoId: REMOTE_REPO_ID,
+        worktreePath: '/srv/repo-feature',
+        targetDirPath: '/srv/repo-feature/tmp',
+        source: {
+          kind: 'uploadedItems',
+          items: [{ name: 'image.png', mimeType: 'image/png', bytesBase64: 'AQID', byteLength: 3 }],
+        },
+      })
+      expect(input?.value).toBe('/srv/repo-feature/tmp/image.png')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
   test('clears external input on ctrl c without submitting', async () => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     runtimeSettingsMocks.terminalExternalInputEnabled = true
@@ -1349,18 +1506,24 @@ describe('TerminalSlot', () => {
 
 })
 
-function controllerFixture(role: 'controller' | 'viewer' = 'controller') {
+function controllerFixture(
+  role: 'controller' | 'viewer' = 'controller',
+  options: { repoRoot?: string; worktreePath?: string; branch?: string } = {},
+) {
+  const repoRoot = options.repoRoot ?? '/repo'
+  const worktreePath = options.worktreePath ?? '/worktree'
+  const branch = options.branch ?? 'feature'
   const descriptor = {
     key: 'terminal-1',
-    worktreeTerminalKey: '/repo\0/worktree',
+    worktreeTerminalKey: `${repoRoot}\0${worktreePath}`,
     terminalId: 'terminal-1',
     index: 1,
-    repoRoot: '/repo',
-    branch: 'feature',
-    worktreePath: '/worktree',
+    repoRoot,
+    branch,
+    worktreePath,
   }
   const worktreeSnapshot = {
-    worktreeTerminalKey: '/repo\0/worktree',
+    worktreeTerminalKey: `${repoRoot}\0${worktreePath}`,
     selectedDescriptor: descriptor,
     sessions: [{ ...descriptor, title: 'zsh', phase: 'open' as const, selected: true, hasBell: false }],
     count: 1,
