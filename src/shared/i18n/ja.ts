@@ -324,6 +324,7 @@ export const ja: Record<DictKey, string> = {
   'file-tree.retry': '再試行',
   'file-tree.copy-path': 'パスをコピー',
   'file-tree.copy-relative-path': '相対パスをコピー',
+  'file-tree.paste': '貼り付け',
   'file-tree.open-editor': 'エディタで開く',
   'file-tree.open-terminal': 'ターミナルで開く',
   'file-tree.rename': '名前を変更',
@@ -667,6 +668,9 @@ export const ja: Record<DictKey, string> = {
   'settings.terminal-input.hint': 'ネイティブターミナル入力を置き換えず、外部入力ボックスを使用します。',
   'settings.terminal-external-input': '外部入力ボックス',
   'settings.terminal-external-input-hint': '操作可能なターミナル下部に単一行のコマンド入力を表示します。',
+  'settings.terminal-remote-tmux': 'リモートターミナルで tmux を使用',
+  'settings.terminal-remote-tmux-hint':
+    '有効にすると、アプリ内のリモートターミナルは再開可能な tmux セッションに接続します。無効にすると、リモートログインシェルを直接起動します。',
   'settings.terminal-custom-buttons.title': 'カスタムターミナルボタン',
   'settings.terminal-custom-buttons.hint':
     'ターミナル下部にボタンバーを表示します。ボタンはすぐに実行するか、外部入力ボックスへ入力できます。',

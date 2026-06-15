@@ -325,6 +325,7 @@ export const en = {
   'file-tree.retry': 'Retry',
   'file-tree.copy-path': 'Copy path',
   'file-tree.copy-relative-path': 'Copy relative path',
+  'file-tree.paste': 'Paste',
   'file-tree.open-editor': 'Open in editor',
   'file-tree.open-terminal': 'Open in terminal',
   'file-tree.rename': 'Rename',
@@ -669,6 +670,9 @@ export const en = {
   'settings.terminal-external-input': 'External input box',
   'settings.terminal-external-input-hint':
     'Show a single-line command input at the bottom of writable terminal sessions.',
+  'settings.terminal-remote-tmux': 'Use tmux for remote terminals',
+  'settings.terminal-remote-tmux-hint':
+    'When enabled, in-app remote terminals attach to resumable tmux sessions. When disabled, they start a remote login shell directly.',
   'settings.terminal-custom-buttons.title': 'Custom terminal buttons',
   'settings.terminal-custom-buttons.hint':
     'Show a terminal bottom button bar. Buttons can run immediately or fill the external input box for editing.',

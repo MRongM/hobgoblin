@@ -99,6 +99,8 @@ export function readRuntimeTerminalSettings(data: RuntimeSettingsSnapshot | unde
   return {
     terminalExternalInputEnabled:
       data?.terminalExternalInputEnabled ?? fallback?.terminalExternalInputEnabled ?? false,
+    remoteTerminalTmuxEnabled:
+      data?.remoteTerminalTmuxEnabled ?? fallback?.remoteTerminalTmuxEnabled ?? false,
     terminalCustomButtonsVisible:
       data?.terminalCustomButtonsVisible ?? fallback?.terminalCustomButtonsVisible ?? true,
     terminalCustomButtons: data?.terminalCustomButtons ?? fallback?.terminalCustomButtons ?? [],

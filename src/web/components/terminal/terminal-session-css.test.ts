@@ -13,4 +13,9 @@ describe('terminal session CSS layout contract', () => {
     expect(css).toContain('right: 4px;')
     expect(css).toContain('min-height: 26px;')
   })
+
+  test('keeps the external input compact before manual resize', () => {
+    expect(css).toContain('--goblin-terminal-bottom-dock-height: 44px;')
+    expect(css).toContain('height: 26px;')
+  })
 })

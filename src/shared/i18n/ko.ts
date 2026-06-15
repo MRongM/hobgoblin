@@ -316,6 +316,7 @@ export const ko: Record<DictKey, string> = {
   'file-tree.retry': '다시 시도',
   'file-tree.copy-path': '경로 복사',
   'file-tree.copy-relative-path': '상대 경로 복사',
+  'file-tree.paste': '붙여넣기',
   'file-tree.open-editor': '편집기에서 열기',
   'file-tree.open-terminal': '터미널에서 열기',
   'file-tree.rename': '이름 바꾸기',
@@ -659,6 +660,9 @@ export const ko: Record<DictKey, string> = {
   'settings.terminal-input.hint': '기본 터미널 입력을 대체하지 않고 외부 입력 상자를 사용합니다.',
   'settings.terminal-external-input': '외부 입력 상자',
   'settings.terminal-external-input-hint': '제어 가능한 터미널 하단에 한 줄 명령 입력을 표시합니다.',
+  'settings.terminal-remote-tmux': '원격 터미널에서 tmux 사용',
+  'settings.terminal-remote-tmux-hint':
+    '켜면 앱 내 원격 터미널이 재개 가능한 tmux 세션에 연결됩니다. 끄면 원격 로그인 셸을 직접 시작합니다.',
   'settings.terminal-custom-buttons.title': '사용자 지정 터미널 버튼',
   'settings.terminal-custom-buttons.hint':
     '터미널 하단 버튼 막대를 표시합니다. 버튼은 즉시 실행하거나 외부 입력 상자에 채울 수 있습니다.',

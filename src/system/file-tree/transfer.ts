@@ -3,6 +3,7 @@ import path from 'node:path'
 import {
   FILE_TRANSFER_MAX_FILE_BYTES,
   FILE_TRANSFER_MAX_TOTAL_BYTES,
+  isValidFileTransferDestinationName,
   type RepoFileTransferCopiedEntry,
   type RepoFileTransferFailedEntry,
   type RepoFileTransferRenamedEntry,
@@ -16,11 +17,16 @@ export interface LocalInventoryOptions {
   paths: string[]
 }
 
+export interface LocalCopyItem {
+  path: string
+  destinationName?: string
+}
+
 export interface LocalCopyOptions {
   sourceRootPath: string
   targetRootPath: string
   targetDirPath: string
-  paths: string[]
+  items: LocalCopyItem[]
 }
 
 export interface LocalUploadOptions {
@@ -74,6 +80,10 @@ export function decodeUploadedItem(item: Pick<RepoFileTransferUploadedItem, 'byt
   return buffer.byteLength === item.byteLength ? buffer : null
 }
 
+export function localCopyItemsFromPaths(paths: string[]): LocalCopyItem[] {
+  return paths.map((sourcePath) => ({ path: sourcePath }))
+}
+
 export async function inventoryLocalTransfer(options: LocalInventoryOptions): Promise<LocalInventoryResult> {
   const root = path.resolve(options.rootPath)
   const entries: LocalInventoryEntry[] = []
@@ -101,19 +111,26 @@ export async function copyLocalPathsToLocalTarget(options: LocalCopyOptions): Pr
   const targetRoot = path.resolve(options.targetRootPath)
   const targetDir = path.resolve(options.targetDirPath)
   if (!pathInsideRoot(targetRoot, targetDir)) return { ok: false, message: 'error.file-transfer-target-outside-worktree' }
-  const inventory = await inventoryLocalTransfer({ rootPath: options.sourceRootPath, paths: options.paths })
+  for (const item of options.items) {
+    if (item.destinationName !== undefined && !isValidFileTransferDestinationName(item.destinationName)) {
+      return { ok: false, message: 'error.invalid-arguments' }
+    }
+  }
+  const sourcePaths = options.items.map((item) => item.path)
+  const inventory = await inventoryLocalTransfer({ rootPath: options.sourceRootPath, paths: sourcePaths })
   if (!inventory.ok) return inventory
   await fs.mkdir(targetDir, { recursive: true })
   const existingNames = new Set(await fs.readdir(targetDir).catch(() => []))
   const copied: RepoFileTransferCopiedEntry[] = []
   const renamed: RepoFileTransferRenamedEntry[] = []
   const failed: RepoFileTransferFailedEntry[] = []
-  for (const sourcePath of options.paths) {
-    const name = path.basename(sourcePath)
-    const destinationName = uniqueCopyName(existingNames, name)
+  for (const item of options.items) {
+    const sourcePath = item.path
+    const requestedName = item.destinationName ?? path.basename(sourcePath)
+    const destinationName = uniqueCopyName(existingNames, requestedName)
     existingNames.add(destinationName)
     const destinationPath = path.join(targetDir, destinationName)
-    if (destinationName !== name) renamed.push({ requestedName: name, destinationName, destinationPath })
+    if (destinationName !== requestedName) renamed.push({ requestedName, destinationName, destinationPath })
     try {
       await copyPath(sourcePath, destinationPath)
       copied.push({ sourcePath, destinationPath, kind: (await kindOf(sourcePath)) ?? 'file' })

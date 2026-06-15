@@ -41,6 +41,7 @@ function settingsPrefs(overrides: Partial<SettingsPrefs> = {}): SettingsPrefs {
     terminalApp: 'auto',
     editorApp: 'auto',
     terminalExternalInputEnabled: false,
+    remoteTerminalTmuxEnabled: false,
     terminalCustomButtonsVisible: true,
     terminalCustomButtons: [],
     lanEnabled: false,

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ClipboardEvent, DragEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
-import { ChevronDown, ChevronRight, File, FileSymlink, Folder, FolderOpen, Pencil, RefreshCw, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, ClipboardPaste, File, FileSymlink, Folder, FolderOpen, Pencil, RefreshCw, Trash2 } from 'lucide-react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import {
   GOBLIN_FILE_PATHS_MIME,
@@ -56,11 +56,12 @@ import {
   readInternalFileTreeClipboard,
   sourceFromClipboardEvent,
   sourceFromDroppedFiles,
+  sourceFromSystemClipboardPaths,
   writeInternalFileTreeClipboard,
 } from '#/web/components/file-tree/clipboard.ts'
 import { resolveDropTargetDirectory } from '#/web/components/file-tree/drop-target.ts'
 import type { WorktreeStatus } from '#/web/types.ts'
-import { openInFinder } from '#/web/app-shell-client.ts'
+import { openInFinder, readSystemClipboardFilePaths } from '#/web/app-shell-client.ts'
 
 const ROOT_DIR = ''
 
@@ -306,6 +307,17 @@ export function ProjectFileTree({
       .filter((path): path is string => !!path)
   }, [flatNodeById, selection.selected])
 
+  const contextTargets = useCallback(
+    (node: FileTreeNode) => {
+      if (!selection.selected.has(node.id)) return [node]
+      const targets = Array.from(selection.selected)
+        .map((id) => flatNodeById.get(id))
+        .filter((target): target is FileTreeNode => !!target)
+      return targets.length > 0 ? targets : [node]
+    },
+    [flatNodeById, selection.selected],
+  )
+
   const realSelectedNodes = useMemo(
     () =>
       Array.from(selection.selected)
@@ -445,6 +457,22 @@ export function ProjectFileTree({
     [loadDirectory, repoId, worktreePath],
   )
 
+  const sourceForContextPaste = useCallback(async () => {
+    const internal = readInternalFileTreeClipboard()
+    if (internal) return internal
+    return sourceFromSystemClipboardPaths(await readSystemClipboardFilePaths())
+  }, [])
+
+  const runContextPaste = useCallback(
+    async (node: FileTreeNode | null) => {
+      if (!worktreePath) return
+      const source = await sourceForContextPaste()
+      if (!source) return
+      await runTransfer(resolveFileTreePasteTarget(worktreePath, node), source)
+    },
+    [runTransfer, sourceForContextPaste, worktreePath],
+  )
+
   const handleKeyDown = useCallback(
     (node: FileTreeNode, event: KeyboardEvent) => {
       if (event.key === 'Enter' && isWritableNode(node)) {
@@ -522,42 +550,57 @@ export function ProjectFileTree({
           </div>
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto py-1 text-xs">
+        <div className="flex min-h-0 flex-1 flex-col overflow-auto py-1 text-xs">
           {rootState?.loading && !rootState.entries ? (
             <FileTreeMessage>{t('file-tree.loading')}</FileTreeMessage>
           ) : rootState?.error && !rootState.entries ? (
             <FileTreeError message={t(rootState.error)} onRetry={() => void loadDirectory(ROOT_DIR, worktreePath)} />
           ) : (
-            rootNodes.map((node) => (
-              <FileTreeRow
-                key={node.id}
-                repoId={repoId}
-                node={node}
-                depth={0}
-                selected={selection.selected.has(node.id)}
-                selectedIds={selection.selected}
-                directories={directories}
-                directoryState={directories[node.relativePath]}
-                onSelect={handleSelect}
-                onToggle={toggleDirectory}
-                onDragStart={handleDragStart}
-                onContextMenu={handleContextMenu}
-                onContextMenuOpenChange={handleContextMenuOpenChange}
-                onBeginRename={beginRename}
-                onBeginDelete={beginDelete}
-                onKeyDown={handleKeyDown}
-                onFocus={setFocusedNodeId}
-                onDrop={handleDrop}
-                onDragOver={handleDragOver}
-                renameNodeId={renameNode?.id ?? null}
-                renameValue={renameValue}
-                renamePending={renamePending}
-                renameError={renameError}
-                onRenameValueChange={setRenameValue}
-                onRenameCancel={cancelRename}
-                onRenameSubmit={submitRename}
-              />
-            ))
+            <>
+              {rootNodes.map((node) => (
+                <FileTreeRow
+                  key={node.id}
+                  repoId={repoId}
+                  node={node}
+                  depth={0}
+                  selected={selection.selected.has(node.id)}
+                  selectedIds={selection.selected}
+                  directories={directories}
+                  directoryState={directories[node.relativePath]}
+                  onSelect={handleSelect}
+                  onToggle={toggleDirectory}
+                  onDragStart={handleDragStart}
+                  onContextMenu={handleContextMenu}
+                  onContextMenuOpenChange={handleContextMenuOpenChange}
+                  contextTargets={contextTargets}
+                  onBeginRename={beginRename}
+                  onBeginDelete={beginDelete}
+                  onKeyDown={handleKeyDown}
+                  onFocus={setFocusedNodeId}
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onPaste={runContextPaste}
+                  renameNodeId={renameNode?.id ?? null}
+                  renameValue={renameValue}
+                  renamePending={renamePending}
+                  renameError={renameError}
+                  onRenameValueChange={setRenameValue}
+                  onRenameCancel={cancelRename}
+                  onRenameSubmit={submitRename}
+                />
+              ))}
+              <ContextMenu>
+                <ContextMenuTrigger asChild>
+                  <div
+                    className="min-h-6 flex-1"
+                    data-testid="file-tree-empty-context-target"
+                    onDrop={(event) => handleDrop(null, event)}
+                    onDragOver={handleDragOver}
+                  />
+                </ContextMenuTrigger>
+                <FileTreeEmptyContextMenu onPaste={() => void runContextPaste(null)} />
+              </ContextMenu>
+            </>
           )}
         </div>
       )}
@@ -606,12 +649,14 @@ function FileTreeRow({
   onDragStart,
   onContextMenu,
   onContextMenuOpenChange,
+  contextTargets,
   onBeginRename,
   onBeginDelete,
   onKeyDown,
   onFocus,
   onDrop,
   onDragOver,
+  onPaste,
   renameNodeId,
   renameValue,
   renamePending,
@@ -632,12 +677,14 @@ function FileTreeRow({
   onDragStart: (node: FileTreeNode, event: DragEvent) => void
   onContextMenu: (node: FileTreeNode, event: MouseEvent) => void
   onContextMenuOpenChange: (node: FileTreeNode, open: boolean) => void
+  contextTargets: (node: FileTreeNode) => FileTreeNode[]
   onBeginRename: (node: FileTreeNode) => void
   onBeginDelete: (node: FileTreeNode) => void
   onKeyDown: (node: FileTreeNode, event: KeyboardEvent) => void
   onFocus: (nodeId: string) => void
   onDrop: (node: FileTreeNode, event: DragEvent<HTMLDivElement>) => void
   onDragOver: (event: DragEvent<HTMLDivElement>) => void
+  onPaste: (node: FileTreeNode | null) => void
   renameNodeId: string | null
   renameValue: string
   renamePending: boolean
@@ -725,8 +772,10 @@ function FileTreeRow({
         <FileTreeContextMenu
           repoId={repoId}
           node={node}
+          targets={contextTargets(node)}
           onBeginRename={onBeginRename}
           onBeginDelete={onBeginDelete}
+          onPaste={onPaste}
         />
       </ContextMenu>
       {renameNodeId === node.id && renameError ? (
@@ -751,12 +800,14 @@ function FileTreeRow({
           onDragStart={onDragStart}
           onContextMenu={onContextMenu}
           onContextMenuOpenChange={onContextMenuOpenChange}
+          contextTargets={contextTargets}
           onBeginRename={onBeginRename}
           onBeginDelete={onBeginDelete}
           onKeyDown={onKeyDown}
           onFocus={onFocus}
           onDrop={onDrop}
           onDragOver={onDragOver}
+          onPaste={onPaste}
           renameNodeId={renameNodeId}
           renameValue={renameValue}
           renamePending={renamePending}
@@ -773,24 +824,32 @@ function FileTreeRow({
 function FileTreeContextMenu({
   repoId,
   node,
+  targets,
   onBeginRename,
   onBeginDelete,
+  onPaste,
 }: {
   repoId: string
   node: FileTreeNode
+  targets: FileTreeNode[]
   onBeginRename: (node: FileTreeNode) => void
   onBeginDelete: (node: FileTreeNode) => void
+  onPaste: (node: FileTreeNode | null) => void
 }) {
   const t = useT()
   const realNode = isWritableNode(node)
   const canRevealInFinder = realNode && !isRemoteRepoId(repoId)
   return (
     <ContextMenuContent>
-      <ContextMenuItem onSelect={() => void copyText(node.absolutePath)}>
+      <ContextMenuItem onSelect={() => void copyPaths(targets.map((target) => target.absolutePath))}>
         {t('file-tree.copy-path')}
       </ContextMenuItem>
-      <ContextMenuItem onSelect={() => void copyText(node.relativePath)}>
+      <ContextMenuItem onSelect={() => void copyPaths(targets.map((target) => target.relativePath))}>
         {t('file-tree.copy-relative-path')}
+      </ContextMenuItem>
+      <ContextMenuItem onSelect={() => void onPaste(node)}>
+        <ClipboardPaste className="size-3.5" />
+        {t('file-tree.paste')}
       </ContextMenuItem>
       <ContextMenuItem disabled={!realNode} onSelect={() => void openNodeInEditor(repoId, node)}>
         {t('file-tree.open-editor')}
@@ -815,6 +874,18 @@ function FileTreeContextMenu({
       >
         <Trash2 className="size-3.5" />
         {t('file-tree.delete')}
+      </ContextMenuItem>
+    </ContextMenuContent>
+  )
+}
+
+function FileTreeEmptyContextMenu({ onPaste }: { onPaste: () => void }) {
+  const t = useT()
+  return (
+    <ContextMenuContent>
+      <ContextMenuItem onSelect={onPaste}>
+        <ClipboardPaste className="size-3.5" />
+        {t('file-tree.paste')}
       </ContextMenuItem>
     </ContextMenuContent>
   )
@@ -928,6 +999,10 @@ function flattenNodes(nodes: FileTreeNode[]): FileTreeNode[] {
 async function copyText(value: string) {
   if (!value) return
   await navigator.clipboard?.writeText(value)
+}
+
+async function copyPaths(paths: string[]) {
+  await copyText(paths.join('\n'))
 }
 
 async function openNodeInEditor(repoId: string, node: FileTreeNode) {

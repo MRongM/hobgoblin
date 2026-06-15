@@ -13,6 +13,7 @@ import { Button } from '#/web/components/ui/button.tsx'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { useT } from '#/web/stores/i18n.ts'
 import { cn } from '#/web/lib/cn.ts'
+import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 
 type ExplorerTab = 'files' | 'changes' | 'status' | 'ports'
 
@@ -96,12 +97,14 @@ function ExplorerTabs({
 }) {
   const t = useT()
   const [revealRequest, setRevealRequest] = useState<FileTreeRevealRequest | null>(null)
+  const isRemoteRepo = isRemoteRepoId(repoId)
+  const activeVisibleTab = activeTab === 'ports' && !isRemoteRepo ? 'files' : activeTab
   const tabs = [
     { id: 'files' as const, label: t('file-tree.title') },
     { id: 'changes' as const, label: t('tab.changes') },
     { id: 'status' as const, label: t('tab.status') },
-    { id: 'ports' as const, label: t('ports.title') },
-  ]
+    ...(isRemoteRepo ? [{ id: 'ports' as const, label: t('ports.title') }] : []),
+  ] satisfies { id: ExplorerTab; label: string }[]
 
   function handleRevealPath(relativePath: string) {
     onTabChange('files')
@@ -119,7 +122,7 @@ function ExplorerTabs({
       <Toolbar className="h-8 px-2" variant="detail">
         <div className="flex h-full min-w-0 items-center gap-1" role="tablist" aria-label={t('file-tree.title')}>
           {tabs.map((tab) => {
-            const selected = activeTab === tab.id
+            const selected = activeVisibleTab === tab.id
             return (
               <Button
                 key={tab.id}
@@ -149,15 +152,15 @@ function ExplorerTabs({
         </div>
       </Toolbar>
       <div
-        id={`repo-explorer-${activeTab}-panel`}
+        id={`repo-explorer-${activeVisibleTab}-panel`}
         role="tabpanel"
         className="flex min-h-0 flex-1 flex-col"
       >
-        {activeTab === 'files' ? (
+        {activeVisibleTab === 'files' ? (
           <ProjectFileTree repoId={repoId} revealRequest={revealRequest} />
-        ) : activeTab === 'changes' ? (
+        ) : activeVisibleTab === 'changes' ? (
           <ProjectChangesPanel repoId={repoId} onRevealPath={handleRevealPath} />
-        ) : activeTab === 'status' ? (
+        ) : activeVisibleTab === 'status' ? (
           <ProjectStatusPanel repoId={repoId} layout={layout} />
         ) : (
           <ProjectPortsPanel repoId={repoId} />

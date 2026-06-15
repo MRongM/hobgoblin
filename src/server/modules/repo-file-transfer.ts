@@ -19,7 +19,9 @@ import {
   copyLocalPathsToLocalTarget,
   decodeUploadedItem,
   inventoryLocalTransfer,
+  localCopyItemsFromPaths,
   uniqueCopyName,
+  type LocalCopyItem,
   writeUploadedItemsToLocalTarget,
 } from '#/system/file-tree/transfer.ts'
 import {
@@ -53,14 +55,14 @@ async function transferLocalTarget(input: RepoFileTransferRequest): Promise<Repo
         sourceRootPath: input.source.worktreePath,
         targetRootPath: input.worktreePath,
         targetDirPath: input.targetDirPath,
-        paths: input.source.paths,
+        items: localCopyItemsFromPaths(input.source.paths),
       })
     case 'localPaths':
       return await copyLocalPathsToLocalTarget({
-        sourceRootPath: commonAbsolutePathAncestor(input.source.paths),
+        sourceRootPath: commonAbsolutePathAncestor(input.source.items.map((item) => item.path)),
         targetRootPath: input.worktreePath,
         targetDirPath: input.targetDirPath,
-        paths: input.source.paths,
+        items: input.source.items,
       })
     case 'uploadedItems':
       return await writeUploadedItemsToLocalTarget({
@@ -89,15 +91,15 @@ async function transferRemoteTarget(input: RepoFileTransferRequest): Promise<Rep
         input.targetDirPath,
         prepared.existingNames,
         input.source.worktreePath,
-        input.source.paths,
+        localCopyItemsFromPaths(input.source.paths),
       )
     case 'localPaths':
       return await copyLocalPathsToRemoteTarget(
         target,
         input.targetDirPath,
         prepared.existingNames,
-        commonAbsolutePathAncestor(input.source.paths),
-        input.source.paths,
+        commonAbsolutePathAncestor(input.source.items.map((item) => item.path)),
+        input.source.items,
       )
     case 'uploadedItems':
       return await writeUploadedItemsToRemoteTarget(target, input.targetDirPath, prepared.existingNames, input.source.items)
@@ -149,15 +151,16 @@ async function copyLocalPathsToRemoteTarget(
   targetDirPath: string,
   existingNames: Set<string>,
   sourceRootPath: string,
-  paths: string[],
+  items: LocalCopyItem[],
 ): Promise<RepoFileTransferResult> {
-  const inventory = await inventoryLocalTransfer({ rootPath: sourceRootPath, paths })
+  const inventory = await inventoryLocalTransfer({ rootPath: sourceRootPath, paths: items.map((item) => item.path) })
   if (!inventory.ok) return inventory
   const copied: RepoFileTransferCopiedEntry[] = []
   const renamed: RepoFileTransferRenamedEntry[] = []
   const failed: RepoFileTransferFailedEntry[] = []
-  for (const sourcePath of paths) {
-    const requestedName = path.basename(sourcePath)
+  for (const item of items) {
+    const sourcePath = item.path
+    const requestedName = item.destinationName ?? path.basename(sourcePath)
     const destinationName = uniqueCopyName(existingNames, requestedName)
     existingNames.add(destinationName)
     const destinationPath = path.posix.join(targetDirPath, destinationName)

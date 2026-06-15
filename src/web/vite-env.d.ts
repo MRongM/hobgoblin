@@ -28,6 +28,7 @@ interface GoblinNativeBridge {
     openDirectoryDialog: (input?: { title?: string }) => Promise<string | null>
     consumeExternalOpenPaths: () => Promise<string[]>
     openInFinder: (input: { path: string }) => Promise<ExecResult>
+    readClipboardFilePaths?: () => Promise<string[]>
   }
   terminal: {
     notifyBell: (input: TerminalNotifyBellInput) => Promise<TerminalMutationResult>

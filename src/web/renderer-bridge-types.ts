@@ -53,6 +53,7 @@ export interface RendererShellBridge {
   openDirectoryDialog: (input?: { title?: string }) => Promise<string | null>
   consumeExternalOpenPaths: () => Promise<string[]>
   openInFinder: (input: { path: string }) => Promise<ExecResult>
+  readClipboardFilePaths?: () => Promise<string[]>
 }
 
 export interface RendererBridge {

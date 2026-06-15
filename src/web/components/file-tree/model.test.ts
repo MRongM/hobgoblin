@@ -4,6 +4,7 @@ import {
   buildFileTreeStatusIndex,
   buildGoblinFilePathDragPayload,
   generatedPasteFileName,
+  generatedRandomPasteFileName,
   mergeDirectoryEntries,
   nextFileTreeSelection,
   parentDirectoryPath,
@@ -89,6 +90,13 @@ describe('file tree model', () => {
     expect(generatedPasteFileName('image/jpeg', date)).toBe('pasted-image-20260613-070809.jpg')
     expect(generatedPasteFileName('image/webp', date)).toBe('pasted-image-20260613-070809.webp')
     expect(generatedPasteFileName('text/plain', date)).toBe('pasted-text-20260613-070809.txt')
+  })
+
+  test('generates random paste filenames while preserving extensions', () => {
+    expect(generatedRandomPasteFileName('/tmp/report.pdf', 'a8f31c9d')).toBe('pasted-a8f31c9d.pdf')
+    expect(generatedRandomPasteFileName('/tmp/LICENSE', '4b91d0aa')).toBe('pasted-4b91d0aa')
+    expect(generatedRandomPasteFileName('C:\\Users\\test\\archive.tar.gz', '12345678')).toBe('pasted-12345678.gz')
+    expect(generatedRandomPasteFileName('/tmp/.env', 'abcdef12')).toBe('pasted-abcdef12')
   })
 })
 

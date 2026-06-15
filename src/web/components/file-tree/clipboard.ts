@@ -6,7 +6,7 @@ import {
   type RepoFileTransferUploadedItem,
 } from '#/shared/file-tree.ts'
 import { pathForDroppedFile } from '#/web/app-shell-client.ts'
-import { generatedPasteFileName } from '#/web/components/file-tree/model.ts'
+import { generatedPasteFileName, generatedRandomPasteFileName } from '#/web/components/file-tree/model.ts'
 
 export interface FileTreeClipboardSelection {
   repoId: string
@@ -38,7 +38,8 @@ export function readInternalFileTreeClipboard(): RepoFileTransferFileTreeSource 
 export async function sourceFromClipboardEvent(event: ClipboardEvent): Promise<RepoFileTransferSource | null> {
   const files = Array.from(event.clipboardData?.files ?? [])
   const localPaths = files.map((file) => pathForDroppedFile(file)).filter((path) => path.length > 0)
-  if (localPaths.length > 0) return { kind: 'localPaths', paths: localPaths }
+  const systemFileSource = sourceFromSystemClipboardPaths(localPaths)
+  if (systemFileSource) return systemFileSource
 
   const items = Array.from(event.clipboardData?.items ?? [])
   const uploaded: RepoFileTransferUploadedItem[] = []
@@ -71,7 +72,14 @@ export async function sourceFromClipboardEvent(event: ClipboardEvent): Promise<R
 
 export function sourceFromDroppedFiles(files: File[]): RepoFileTransferSource | null {
   const paths = files.map((file) => pathForDroppedFile(file)).filter((path) => path.length > 0)
-  return paths.length > 0 ? { kind: 'localPaths', paths } : null
+  return paths.length > 0 ? { kind: 'localPaths', items: paths.map((path) => ({ path })) } : null
+}
+
+export function sourceFromSystemClipboardPaths(paths: string[]): RepoFileTransferSource | null {
+  const items = paths
+    .filter((path) => path.length > 0)
+    .map((path) => ({ path, destinationName: generatedRandomPasteFileName(path) }))
+  return items.length > 0 ? { kind: 'localPaths', items } : null
 }
 
 async function uploadedItemFromFile(file: File): Promise<RepoFileTransferUploadedItem> {

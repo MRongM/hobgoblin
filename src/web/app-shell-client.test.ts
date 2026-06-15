@@ -27,6 +27,7 @@ function testBridge(overrides: Partial<RendererBridge> = {}): RendererBridge {
       if (capability === 'open-directory-dialog') return nativeShell?.openDirectoryDialog !== undefined
       if (capability === 'consume-external-open-paths') return nativeShell?.consumeExternalOpenPaths !== undefined
       if (capability === 'open-in-finder') return nativeShell?.openInFinder !== undefined
+      if (capability === 'clipboard-file-paths') return nativeShell?.readClipboardFilePaths !== undefined
       return false
     },
     getBootstrap: () => ({
@@ -148,5 +149,30 @@ describe('app shell client', () => {
     const { openInFinder } = await import('#/web/app-shell-client.ts')
     await expect(openInFinder('/tmp/repo/README.md')).resolves.toEqual({ ok: true, message: '/tmp/repo/README.md' })
     expect(shellOpenInFinder).toHaveBeenCalledWith({ path: '/tmp/repo/README.md' })
+  })
+
+  test('reads system clipboard file paths through the native shell', async () => {
+    const bridgeModule = await import('#/web/renderer-bridge.ts')
+    const readClipboardFilePaths = vi.fn(async () => ['/Users/test/report.pdf'])
+    bridgeModule.setRendererBridgeForTests(
+      testBridge({
+        shell: () => ({
+          openSettingsWindow: vi.fn(),
+          openExternalUrl: vi.fn(),
+          openDirectoryDialog: vi.fn(),
+          consumeExternalOpenPaths: vi.fn(),
+          openInFinder: vi.fn(),
+          readClipboardFilePaths,
+        }),
+      }),
+    )
+
+    const { readSystemClipboardFilePaths } = await import('#/web/app-shell-client.ts')
+    await expect(readSystemClipboardFilePaths()).resolves.toEqual(['/Users/test/report.pdf'])
+  })
+
+  test('returns an empty clipboard file path list without a native shell', async () => {
+    const { readSystemClipboardFilePaths } = await import('#/web/app-shell-client.ts')
+    await expect(readSystemClipboardFilePaths()).resolves.toEqual([])
   })
 })

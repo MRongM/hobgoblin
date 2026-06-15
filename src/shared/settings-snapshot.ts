@@ -26,6 +26,7 @@ export function buildRuntimeSettingsSnapshot(input: {
     terminalApp: input.prefs.terminalApp,
     editorApp: input.prefs.editorApp,
     terminalExternalInputEnabled: input.prefs.terminalExternalInputEnabled,
+    remoteTerminalTmuxEnabled: input.prefs.remoteTerminalTmuxEnabled,
     terminalCustomButtonsVisible: input.prefs.terminalCustomButtonsVisible,
     terminalCustomButtons: input.prefs.terminalCustomButtons,
     lanEnabled: input.prefs.lanEnabled,
@@ -73,6 +74,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     | 'terminalApp'
     | 'editorApp'
     | 'terminalExternalInputEnabled'
+    | 'remoteTerminalTmuxEnabled'
     | 'terminalCustomButtonsVisible'
     | 'terminalCustomButtons'
     | 'lanEnabled'
@@ -93,6 +95,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     terminalApp: snapshot.terminalApp,
     editorApp: snapshot.editorApp,
     terminalExternalInputEnabled: snapshot.terminalExternalInputEnabled,
+    remoteTerminalTmuxEnabled: snapshot.remoteTerminalTmuxEnabled,
     terminalCustomButtonsVisible: snapshot.terminalCustomButtonsVisible,
     terminalCustomButtons: snapshot.terminalCustomButtons,
     lanEnabled: snapshot.lanEnabled,

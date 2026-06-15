@@ -55,6 +55,7 @@ interface ServerSettingsData {
   terminalApp: TerminalPref
   editorApp: EditorPref
   terminalExternalInputEnabled: boolean
+  remoteTerminalTmuxEnabled: boolean
   terminalCustomButtonsVisible: boolean
   terminalCustomButtons: TerminalCustomButton[]
   lanEnabled: boolean
@@ -105,6 +106,10 @@ function normalizeTerminalExternalInputEnabled(value: unknown): boolean {
   return value === true
 }
 
+function normalizeRemoteTerminalTmuxEnabled(value: unknown): boolean {
+  return value === true
+}
+
 function normalizeTerminalCustomButtonsVisible(value: unknown): boolean {
   return value !== false
 }
@@ -147,6 +152,7 @@ function settingsPrefsFromData(data: ServerSettingsData): SettingsPrefs {
     terminalApp: data.terminalApp,
     editorApp: data.editorApp,
     terminalExternalInputEnabled: data.terminalExternalInputEnabled,
+    remoteTerminalTmuxEnabled: data.remoteTerminalTmuxEnabled,
     terminalCustomButtonsVisible: data.terminalCustomButtonsVisible,
     terminalCustomButtons: data.terminalCustomButtons,
     lanEnabled: data.lanEnabled,
@@ -233,6 +239,7 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       terminalApp: normalizeTerminalPref(parsed.terminalApp),
       editorApp: normalizeEditorPref(parsed.editorApp),
       terminalExternalInputEnabled: normalizeTerminalExternalInputEnabled(parsed.terminalExternalInputEnabled),
+      remoteTerminalTmuxEnabled: normalizeRemoteTerminalTmuxEnabled(parsed.remoteTerminalTmuxEnabled),
       terminalCustomButtonsVisible: normalizeTerminalCustomButtonsVisible(parsed.terminalCustomButtonsVisible),
       terminalCustomButtons: normalizeTerminalCustomButtons(parsed.terminalCustomButtons),
       lanEnabled: normalizeLanEnabled(parsed.lanEnabled),
@@ -317,6 +324,10 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     patch.terminalExternalInputEnabled === undefined
       ? data.terminalExternalInputEnabled
       : normalizeTerminalExternalInputEnabled(patch.terminalExternalInputEnabled)
+  const nextRemoteTerminalTmuxEnabled =
+    patch.remoteTerminalTmuxEnabled === undefined
+      ? data.remoteTerminalTmuxEnabled
+      : normalizeRemoteTerminalTmuxEnabled(patch.remoteTerminalTmuxEnabled)
   const nextTerminalCustomButtonsVisible =
     patch.terminalCustomButtonsVisible === undefined
       ? data.terminalCustomButtonsVisible
@@ -340,6 +351,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     data.terminalApp !== nextTerminalApp ||
     data.editorApp !== nextEditorApp ||
     data.terminalExternalInputEnabled !== nextTerminalExternalInputEnabled ||
+    data.remoteTerminalTmuxEnabled !== nextRemoteTerminalTmuxEnabled ||
     data.terminalCustomButtonsVisible !== nextTerminalCustomButtonsVisible ||
     JSON.stringify(data.terminalCustomButtons) !== JSON.stringify(nextTerminalCustomButtons) ||
     data.lanEnabled !== nextLanEnabled
@@ -356,6 +368,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   data.terminalApp = nextTerminalApp
   data.editorApp = nextEditorApp
   data.terminalExternalInputEnabled = nextTerminalExternalInputEnabled
+  data.remoteTerminalTmuxEnabled = nextRemoteTerminalTmuxEnabled
   data.terminalCustomButtonsVisible = nextTerminalCustomButtonsVisible
   data.terminalCustomButtons = nextTerminalCustomButtons
   data.lanEnabled = nextLanEnabled

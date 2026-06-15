@@ -363,14 +363,16 @@ describe('SettingsSurface', () => {
     ).toBe(true)
   })
 
-  test('toggles terminal external input and custom button visibility from settings', async () => {
+  test('toggles terminal external input, remote tmux, and custom button visibility from settings', async () => {
     await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
 
     const externalInputSwitch = switchById('settings-terminal-external-input')
+    const remoteTmuxSwitch = switchById('settings-terminal-remote-tmux')
     const buttonsVisibleSwitch = switchById('settings-terminal-custom-buttons-visible')
 
     await act(async () => {
       externalInputSwitch.click()
+      remoteTmuxSwitch.click()
       buttonsVisibleSwitch.click()
       await Promise.resolve()
     })
@@ -379,6 +381,12 @@ describe('SettingsSurface', () => {
       fetchMock.mock.calls.some((call) => {
         const [, options] = call as unknown as [unknown, RequestInit | undefined]
         return String(options?.body ?? '').includes('terminalExternalInputEnabled')
+      }),
+    ).toBe(true)
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [, options] = call as unknown as [unknown, RequestInit | undefined]
+        return String(options?.body ?? '').includes('remoteTerminalTmuxEnabled')
       }),
     ).toBe(true)
     expect(

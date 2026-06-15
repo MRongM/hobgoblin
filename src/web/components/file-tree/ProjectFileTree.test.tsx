@@ -4,6 +4,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { ProjectFileTree } from '#/web/components/file-tree/ProjectFileTree.tsx'
+import { writeInternalFileTreeClipboard } from '#/web/components/file-tree/clipboard.ts'
 import { emptyRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { createRepoBranch, resetReposStore } from '#/web/stores/repos/test-utils.ts'
@@ -31,6 +32,7 @@ const transferRepositoryFiles = vi.fn(async (_input: unknown) => ({
 const renameRepositoryFileTreeEntry = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
 const deleteRepositoryFileTreeEntries = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
 const openInFinder = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
+const readSystemClipboardFilePaths = vi.fn(async () => ['/tmp/report.pdf'])
 
 vi.mock('#/web/repo-client.ts', () => ({
   getRepositoryFileTree: (...args: GetRepositoryFileTreeArgs) => getRepositoryFileTree(...args),
@@ -44,6 +46,7 @@ vi.mock('#/web/repo-client.ts', () => ({
 vi.mock('#/web/app-shell-client.ts', () => ({
   pathForDroppedFile: (file: File) => `/tmp/${file.name}`,
   openInFinder: (path: string) => openInFinder(path),
+  readSystemClipboardFilePaths: () => readSystemClipboardFilePaths(),
 }))
 
 vi.mock('#/web/remote-client.ts', () => ({
@@ -66,6 +69,13 @@ beforeEach(() => {
   renameRepositoryFileTreeEntry.mockClear()
   deleteRepositoryFileTreeEntries.mockClear()
   openInFinder.mockClear()
+  readSystemClipboardFilePaths.mockClear()
+  readSystemClipboardFilePaths.mockResolvedValue(['/tmp/report.pdf'])
+  writeInternalFileTreeClipboard({ repoId: '', worktreePath: '', paths: [] })
+  Object.defineProperty(globalThis.navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: vi.fn(async () => undefined) },
+  })
   resetReposStore()
   container = document.createElement('div')
   document.body.appendChild(container)
@@ -123,6 +133,37 @@ describe('ProjectFileTree', () => {
     expect(menu).not.toBeNull()
     expect(container?.querySelector('button[aria-label="file tree menu"]')).toBeNull()
     expect(menu?.textContent).toContain('file-tree.copy-path')
+  })
+
+  test('copies all selected absolute paths from the context menu', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const directory = treeItemByText('src')
+    const file = treeItemByText('README.md')
+    await act(async () => {
+      directory.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      file.dispatchEvent(new MouseEvent('click', { bubbles: true, metaKey: true }))
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      file.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+      await Promise.resolve()
+    })
+
+    const copyPathItem = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+      item.textContent?.includes('file-tree.copy-path'),
+    )
+    if (!copyPathItem) throw new Error('missing copy path menu item')
+
+    await act(async () => {
+      copyPathItem.click()
+      await Promise.resolve()
+    })
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('/repo/src\n/repo/README.md')
   })
 
   test('reveals a requested changed file by expanding parents and selecting the file', async () => {
@@ -207,7 +248,83 @@ describe('ProjectFileTree', () => {
       repoId: '/repo',
       worktreePath: '/repo',
       targetDirPath: '/repo/src',
-      source: { kind: 'localPaths', paths: ['/tmp/local.txt'] },
+      source: { kind: 'localPaths', items: [{ path: '/tmp/local.txt' }] },
+    })
+  })
+
+  test('pastes system clipboard files from a directory context menu into that directory', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    await clickContextMenuItem(treeItemByText('src'), 'file-tree.paste')
+
+    expect(transferRepositoryFiles).toHaveBeenCalledWith({
+      repoId: '/repo',
+      worktreePath: '/repo',
+      targetDirPath: '/repo/src',
+      source: {
+        kind: 'localPaths',
+        items: [
+          {
+            path: '/tmp/report.pdf',
+            destinationName: expect.stringMatching(/^pasted-[0-9a-f]{8}\.pdf$/),
+          },
+        ],
+      },
+    })
+  })
+
+  test('pastes system clipboard files from a file context menu into the parent directory', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    await clickContextMenuItem(treeItemByText('README.md'), 'file-tree.paste')
+
+    expect(transferRepositoryFiles).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetDirPath: '/repo',
+      }),
+    )
+  })
+
+  test('pastes system clipboard files from the empty file tree area into the worktree root', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const emptyArea = container?.querySelector<HTMLElement>('[data-testid="file-tree-empty-context-target"]')
+    if (!emptyArea) throw new Error('missing empty context target')
+    await clickContextMenuItem(emptyArea, 'file-tree.paste')
+
+    expect(transferRepositoryFiles).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetDirPath: '/repo',
+      }),
+    )
+  })
+
+  test('context menu paste prefers the internal file tree clipboard over system clipboard files', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const file = treeItemByText('README.md')
+    await act(async () => {
+      file.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      file.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'c', metaKey: true }))
+      await Promise.resolve()
+    })
+
+    await clickContextMenuItem(treeItemByText('src'), 'file-tree.paste')
+
+    expect(readSystemClipboardFilePaths).not.toHaveBeenCalled()
+    expect(transferRepositoryFiles).toHaveBeenCalledWith({
+      repoId: '/repo',
+      worktreePath: '/repo',
+      targetDirPath: '/repo/src',
+      source: { kind: 'fileTreePaths', repoId: '/repo', worktreePath: '/repo', paths: ['/repo/README.md'] },
     })
   })
 
@@ -377,4 +494,20 @@ function dropFiles(target: HTMLElement, files: File[]) {
     },
   })
   target.dispatchEvent(event)
+}
+
+async function clickContextMenuItem(row: HTMLElement, label: string) {
+  await act(async () => {
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+    await Promise.resolve()
+  })
+  const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) =>
+    candidate.textContent?.includes(label),
+  )
+  if (!item) throw new Error(`missing context menu item: ${label}`)
+  await act(async () => {
+    item.click()
+    await Promise.resolve()
+    await Promise.resolve()
+  })
 }

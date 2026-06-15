@@ -45,13 +45,21 @@ function validButtons(rows: EditableTerminalCustomButton[]): TerminalCustomButto
 
 export function TerminalSettings() {
   const t = useT()
-  const { terminalCustomButtons: buttons, terminalExternalInputEnabled, terminalCustomButtonsVisible } =
-    useRuntimeTerminalSettings()
+  const {
+    terminalCustomButtons: buttons,
+    terminalExternalInputEnabled,
+    remoteTerminalTmuxEnabled,
+    terminalCustomButtonsVisible,
+  } = useRuntimeTerminalSettings()
   const initialRows = useMemo(() => editableFromButtons(buttons), [buttons])
   const [rows, setRows] = useState<EditableTerminalCustomButton[]>(initialRows)
   const [dirty, setDirty] = useState(false)
-  const { setTerminalCustomButtons, setTerminalExternalInputEnabled, setTerminalCustomButtonsVisible } =
-    useTerminalCustomButtonsController()
+  const {
+    setTerminalCustomButtons,
+    setTerminalExternalInputEnabled,
+    setRemoteTerminalTmuxEnabled,
+    setTerminalCustomButtonsVisible,
+  } = useTerminalCustomButtonsController()
 
   useEffect(() => {
     if (dirty) return
@@ -84,6 +92,19 @@ export function TerminalSettings() {
                 checked={terminalExternalInputEnabled}
                 onCheckedChange={(enabled) => void setTerminalExternalInputEnabled(enabled)}
                 aria-label={t('settings.terminal-external-input')}
+              />
+            }
+          />
+          <SettingsRow
+            controlId="settings-terminal-remote-tmux"
+            label={t('settings.terminal-remote-tmux')}
+            hint={t('settings.terminal-remote-tmux-hint')}
+            control={
+              <Switch
+                id="settings-terminal-remote-tmux"
+                checked={remoteTerminalTmuxEnabled}
+                onCheckedChange={(enabled) => void setRemoteTerminalTmuxEnabled(enabled)}
+                aria-label={t('settings.terminal-remote-tmux')}
               />
             }
           />

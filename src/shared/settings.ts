@@ -33,6 +33,7 @@ export interface SettingsPrefs {
   terminalApp: TerminalPref
   editorApp: EditorPref
   terminalExternalInputEnabled: boolean
+  remoteTerminalTmuxEnabled: boolean
   terminalCustomButtonsVisible: boolean
   terminalCustomButtons: TerminalCustomButton[]
   lanEnabled: boolean

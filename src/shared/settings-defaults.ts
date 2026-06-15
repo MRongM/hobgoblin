@@ -32,6 +32,7 @@ export const DEFAULT_TOGGLE_DETAIL_ON_ACTION_BAR_BLANK_CLICK = false
 export const DEFAULT_TERMINAL_APP: TerminalPref = 'auto'
 export const DEFAULT_EDITOR_APP: EditorPref = 'auto'
 export const DEFAULT_TERMINAL_EXTERNAL_INPUT_ENABLED = false
+export const DEFAULT_REMOTE_TERMINAL_TMUX_ENABLED = false
 export const DEFAULT_TERMINAL_CUSTOM_BUTTONS_VISIBLE = true
 export const DEFAULT_TERMINAL_CUSTOM_BUTTONS: TerminalCustomButton[] = []
 export const DEFAULT_LAN_ENABLED = false
@@ -66,6 +67,8 @@ export function defaultSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): Se
     editorApp: overrides.editorApp ?? DEFAULT_EDITOR_APP,
     terminalExternalInputEnabled:
       overrides.terminalExternalInputEnabled ?? DEFAULT_TERMINAL_EXTERNAL_INPUT_ENABLED,
+    remoteTerminalTmuxEnabled:
+      overrides.remoteTerminalTmuxEnabled ?? DEFAULT_REMOTE_TERMINAL_TMUX_ENABLED,
     terminalCustomButtonsVisible:
       overrides.terminalCustomButtonsVisible ?? DEFAULT_TERMINAL_CUSTOM_BUTTONS_VISIBLE,
     terminalCustomButtons: overrides.terminalCustomButtons ?? DEFAULT_TERMINAL_CUSTOM_BUTTONS,
@@ -96,6 +99,7 @@ export function initialSettingsFromSnapshot(snapshot: Pick<
   | 'terminalApp'
   | 'editorApp'
   | 'terminalExternalInputEnabled'
+  | 'remoteTerminalTmuxEnabled'
   | 'terminalCustomButtonsVisible'
   | 'terminalCustomButtons'
   | 'lanEnabled'
@@ -112,6 +116,7 @@ export function initialSettingsFromSnapshot(snapshot: Pick<
     terminalApp: snapshot.terminalApp,
     editorApp: snapshot.editorApp,
     terminalExternalInputEnabled: snapshot.terminalExternalInputEnabled,
+    remoteTerminalTmuxEnabled: snapshot.remoteTerminalTmuxEnabled,
     terminalCustomButtonsVisible: snapshot.terminalCustomButtonsVisible,
     terminalCustomButtons: snapshot.terminalCustomButtons,
     lanEnabled: snapshot.lanEnabled,
