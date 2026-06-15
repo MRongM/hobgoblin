@@ -360,6 +360,7 @@ export const en = {
   'terminal.custom-buttons': 'Custom terminal buttons',
   'terminal.external-input-placeholder': 'Terminal command input',
   'terminal.external-input-send': 'Send terminal input',
+  'terminal.external-input-resize': 'Resize terminal input',
   'terminal.mirror-controlled': 'Another window or tab is currently controlling this terminal.',
   'terminal.unowned': 'This terminal currently has no controller.',
   'terminal.takeover': 'Take over terminal',

@@ -12,7 +12,7 @@
   --goblin-terminal-float-padding: 6px 8px;
   --goblin-terminal-float-radius: 8px;
   --goblin-terminal-control-radius: 6px;
-
+  --goblin-terminal-bottom-dock-height: 80px;
 }
 
 .goblin-terminal-slot__host {
@@ -114,12 +114,7 @@
 }
 
 .goblin-terminal-slot:has(.goblin-terminal-bottom-dock) .goblin-managed-terminal-frame {
-  padding-bottom: 104px;
-}
-
-.goblin-terminal-slot:has(.goblin-terminal-external-input):not(:has(.goblin-terminal-custom-buttons))
-  .goblin-managed-terminal-frame {
-  padding-bottom: 66px;
+  padding-bottom: calc(var(--goblin-terminal-bottom-dock-height) + 24px);
 }
 
 .goblin-terminal-slot__search {
@@ -243,9 +238,10 @@
 }
 
 .goblin-terminal-external-input {
+  position: relative;
   display: flex;
   min-height: 44px;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
   border: 1px solid var(--color-border);
   border-radius: var(--goblin-terminal-float-radius);
@@ -264,20 +260,59 @@
 
 .goblin-terminal-external-input__prefix {
   flex: 0 0 auto;
+  align-self: flex-start;
   color: var(--color-muted-foreground);
   font-family: var(--font-mono);
   font-size: 12px;
+  line-height: 26px;
 }
 
 .goblin-terminal-external-input__control {
+  display: block;
+  min-height: 26px;
+  max-height: min(32vh, 220px);
   min-width: 0;
   flex: 1;
+  resize: none;
+  overflow: auto;
   border: 0;
   outline: none;
   background: transparent;
   color: var(--color-foreground);
   font-family: var(--font-mono);
   font-size: 12px;
+  line-height: 18px;
+}
+
+.goblin-terminal-external-input__resize {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 14px;
+  height: 14px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: ns-resize;
+  opacity: 0.65;
+}
+
+.goblin-terminal-external-input__resize:hover {
+  opacity: 1;
+}
+
+.goblin-terminal-external-input__resize span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0,
+    transparent 3px,
+    var(--color-muted-foreground) 3px,
+    var(--color-muted-foreground) 4px
+  );
+  clip-path: polygon(100% 0, 100% 100%, 0 0);
 }
 
 .goblin-terminal-external-input__control::placeholder {

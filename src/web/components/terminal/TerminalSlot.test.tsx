@@ -453,14 +453,14 @@ describe('TerminalSlot', () => {
 
     try {
       const input = container.querySelector('.goblin-terminal-external-input__control')
-      expect(input).toBeInstanceOf(HTMLInputElement)
+      expect(input).toBeInstanceOf(HTMLTextAreaElement)
       await act(async () => {
-        setInputValue(input as HTMLInputElement, 'git status --short')
+        setInputValue(input as HTMLTextAreaElement, 'git status --short')
         input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
       })
 
       expect(writeInput).toHaveBeenCalledWith('terminal-1', 'git status --short\r')
-      expect((input as HTMLInputElement).value).toBe('')
+      expect((input as HTMLTextAreaElement).value).toBe('')
     } finally {
       await act(async () => root.unmount())
       container.remove()
@@ -497,17 +497,17 @@ describe('TerminalSlot', () => {
 
     try {
       const input = container.querySelector('.goblin-terminal-external-input__control')
-      expect(input).toBeInstanceOf(HTMLInputElement)
+      expect(input).toBeInstanceOf(HTMLTextAreaElement)
       const sendButton = container.querySelector('button[aria-label="terminal.external-input-send"]')
       expect(sendButton).toBeInstanceOf(HTMLButtonElement)
 
       await act(async () => {
-        setInputValue(input as HTMLInputElement, 'git status --short')
+        setInputValue(input as HTMLTextAreaElement, 'git status --short')
         sendButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
       })
 
       expect(writeInput).toHaveBeenCalledWith('terminal-1', 'git status --short\r')
-      expect((input as HTMLInputElement).value).toBe('')
+      expect((input as HTMLTextAreaElement).value).toBe('')
     } finally {
       await act(async () => root.unmount())
       container.remove()
@@ -544,14 +544,14 @@ describe('TerminalSlot', () => {
 
     try {
       const input = container.querySelector('.goblin-terminal-external-input__control')
-      expect(input).toBeInstanceOf(HTMLInputElement)
+      expect(input).toBeInstanceOf(HTMLTextAreaElement)
       await act(async () => {
-        setInputValue(input as HTMLInputElement, '   ')
+        setInputValue(input as HTMLTextAreaElement, '   ')
         input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
       })
 
       expect(writeInput).not.toHaveBeenCalled()
-      expect((input as HTMLInputElement).value).toBe('   ')
+      expect((input as HTMLTextAreaElement).value).toBe('   ')
     } finally {
       await act(async () => root.unmount())
       container.remove()
@@ -594,7 +594,7 @@ describe('TerminalSlot', () => {
         await Promise.resolve()
       })
 
-      const input = container.querySelector('.goblin-terminal-external-input__control') as HTMLInputElement | null
+      const input = container.querySelector('.goblin-terminal-external-input__control') as HTMLTextAreaElement | null
       expect(input?.value).toBe('git commit -m ""')
       expect(writeInput).not.toHaveBeenCalled()
     } finally {
@@ -641,6 +641,148 @@ describe('TerminalSlot', () => {
       })
 
       expect(writeInput).toHaveBeenCalledWith('terminal-1', 'git commit -m ""')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('submits multiline external input from the send button', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    runtimeSettingsMocks.terminalExternalInputEnabled = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const writeInput = vi.fn()
+    const { worktreeSnapshot, snapshot } = controllerFixture()
+    const context = terminalContext({ writeInput })
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+
+    await act(async () => {
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    })
+
+    try {
+      const input = container.querySelector('.goblin-terminal-external-input__control')
+      expect(input).toBeInstanceOf(HTMLTextAreaElement)
+      const sendButton = container.querySelector('button[aria-label="terminal.external-input-send"]')
+      expect(sendButton).toBeInstanceOf(HTMLButtonElement)
+
+      await act(async () => {
+        setInputValue(input as HTMLTextAreaElement, 'cat <<EOF\nhello\nEOF')
+        sendButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+
+      expect(writeInput).toHaveBeenCalledWith('terminal-1', 'cat <<EOF\nhello\nEOF\r')
+      expect((input as HTMLTextAreaElement).value).toBe('')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('keeps multiline external input editable on shift enter', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    runtimeSettingsMocks.terminalExternalInputEnabled = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const writeInput = vi.fn()
+    const { worktreeSnapshot, snapshot } = controllerFixture()
+    const context = terminalContext({ writeInput })
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+
+    await act(async () => {
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    })
+
+    try {
+      const input = container.querySelector('.goblin-terminal-external-input__control')
+      expect(input).toBeInstanceOf(HTMLTextAreaElement)
+
+      await act(async () => {
+        setInputValue(input as HTMLTextAreaElement, 'cat <<EOF')
+        input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true }))
+      })
+
+      expect(writeInput).not.toHaveBeenCalled()
+      expect((input as HTMLTextAreaElement).value).toBe('cat <<EOF')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('resizes external input from the top-right handle', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    runtimeSettingsMocks.terminalExternalInputEnabled = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const { worktreeSnapshot, snapshot } = controllerFixture()
+    const context = terminalContext()
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+
+    await act(async () => {
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    })
+
+    try {
+      const input = container.querySelector('.goblin-terminal-external-input__control') as HTMLTextAreaElement | null
+      const handle = container.querySelector('.goblin-terminal-external-input__resize') as HTMLButtonElement | null
+      expect(input).toBeInstanceOf(HTMLTextAreaElement)
+      expect(handle).toBeInstanceOf(HTMLButtonElement)
+      Object.defineProperty(input, 'getBoundingClientRect', {
+        configurable: true,
+        value: () => ({ height: 44, width: 300, top: 0, right: 300, bottom: 44, left: 0, x: 0, y: 0, toJSON: () => ({}) }),
+      })
+
+      await act(async () => {
+        handle?.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 1, clientY: 100, bubbles: true }))
+        handle?.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, clientY: 70, bubbles: true }))
+        handle?.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1, clientY: 70, bubbles: true }))
+      })
+
+      expect(input?.style.height).toBe('74px')
     } finally {
       await act(async () => root.unmount())
       container.remove()
@@ -810,8 +952,9 @@ function terminalContext(overrides: Partial<TerminalSessionContextValue> = {}): 
   }
 }
 
-function setInputValue(input: HTMLInputElement, value: string) {
-  const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
+function setInputValue(input: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  const prototype = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+  const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value')
   descriptor?.set?.call(input, value)
   input.dispatchEvent(new Event('input', { bubbles: true }))
 }

@@ -351,6 +351,7 @@ export const ko: Record<DictKey, string> = {
   'terminal.custom-buttons': '사용자 지정 터미널 버튼',
   'terminal.external-input-placeholder': '터미널 명령 입력',
   'terminal.external-input-send': '터미널 입력 보내기',
+  'terminal.external-input-resize': '터미널 입력 높이 조절',
   'terminal.mirror-controlled': '다른 창이나 탭이 현재 이 터미널을 제어하고 있습니다.',
   'terminal.unowned': '현재 이 터미널을 제어하는 창이 없습니다.',
   'terminal.takeover': '터미널 제어 가져오기',
