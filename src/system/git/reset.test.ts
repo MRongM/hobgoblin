@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { resetHardToPreviousCommit } from '#/system/git/reset.ts'
+import { resetHardToCurrentHead } from '#/system/git/reset.ts'
 
 const gitResultWithOptionsMock = vi.hoisted(() => vi.fn())
 
@@ -13,29 +13,29 @@ vi.mock('#/system/git/helper.ts', async () => {
   }
 })
 
-describe('resetHardToPreviousCommit', () => {
+describe('resetHardToCurrentHead', () => {
   beforeEach(() => {
     gitResultWithOptionsMock.mockReset()
-    gitResultWithOptionsMock.mockResolvedValue({ ok: true, message: 'HEAD is now at abc1234 previous commit' })
+    gitResultWithOptionsMock.mockResolvedValue({ ok: true, message: 'HEAD is now at abc1234 current commit' })
   })
 
-  test('calls git reset --hard HEAD~1 with correct cwd', async () => {
+  test('calls git reset --hard with correct cwd', async () => {
     const signal = new AbortController().signal
-    await resetHardToPreviousCommit('/repo/worktree', signal)
+    await resetHardToCurrentHead('/repo/worktree', signal)
 
     expect(gitResultWithOptionsMock).toHaveBeenCalledWith(
-      '/repo/worktree', { signal }, 'reset', '--hard', 'HEAD~1',
+      '/repo/worktree', { signal }, 'reset', '--hard',
     )
   })
 
   test('passes through success result', async () => {
-    const result = await resetHardToPreviousCommit('/repo/worktree')
-    expect(result).toEqual({ ok: true, message: 'HEAD is now at abc1234 previous commit' })
+    const result = await resetHardToCurrentHead('/repo/worktree')
+    expect(result).toEqual({ ok: true, message: 'HEAD is now at abc1234 current commit' })
   })
 
   test('passes through git error', async () => {
     gitResultWithOptionsMock.mockResolvedValue({ ok: false, message: 'fatal: ambiguous argument' })
-    const result = await resetHardToPreviousCommit('/repo/worktree')
+    const result = await resetHardToCurrentHead('/repo/worktree')
     expect(result).toEqual({ ok: false, message: 'fatal: ambiguous argument' })
   })
 })
