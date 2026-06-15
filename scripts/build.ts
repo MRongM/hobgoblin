@@ -63,91 +63,138 @@ function shouldRunBunInstall(): boolean {
   return newestMtime(dependencyInputs) > statSync(nodeModulesDir).mtimeMs
 }
 
-// Clear any prior build output so `findBuiltApp` can't pick up a stale
-// artifact if electron-builder fails partway through. A matching rm
-// after a successful install is run below.
-rmSync(path.join(repoRoot, 'release'), { recursive: true, force: true })
-if (shouldClean) {
-  rmSync(path.join(repoRoot, 'dist'), { recursive: true, force: true })
-}
+class BuildScriptFailure extends Error {
+  exitCode: number
 
-if (shouldRunBunInstall()) {
-  await $`bun install`
-} else {
-  console.log('Skipping bun install (node_modules is up to date).')
-}
-if (process.platform === 'darwin') {
-  const ptySpawnHelperArches = [process.arch]
-  const ptySpawnHelpers = ptySpawnHelperArches.map((arch) =>
-    path.join(repoRoot, 'node_modules/node-pty/prebuilds', `darwin-${arch}`, 'spawn-helper'),
-  )
-  const missingPtySpawnHelpers = ptySpawnHelpers.filter((helper) => !existsSync(helper))
-  if (missingPtySpawnHelpers.length > 0) {
-    console.error(`Error: missing node-pty darwin spawn-helper(s): ${missingPtySpawnHelpers.join(', ')}`)
-    process.exit(1)
-  }
-  for (const helper of ptySpawnHelpers) {
-    chmodSync(helper, 0o755)
+  constructor(exitCode = 1) {
+    super('build script failed')
+    this.exitCode = exitCode
   }
 }
-if (shouldRunTypecheck) {
-  await $`bun run typecheck`
-} else {
-  console.log('Skipping typecheck for fast install.')
+
+function fail(message: string): never {
+  console.error(message)
+  throw new BuildScriptFailure()
 }
-// Renderer bundle MUST exist before electron-builder packs it (the
-// `files` glob in electron-builder.ts expects `dist/web/`).
-await $`bun run build:web`
-await $`bun run build:server`
-const webDist = path.join(repoRoot, 'dist/web')
-for (const artifact of [path.join(webDist, 'index.html'), path.join(webDist, 'boot.js')]) {
-  if (!existsSync(artifact)) {
-    console.error(`Error: web build artifact missing: ${artifact}`)
-    process.exit(1)
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)}ms`
+  return `${(ms / 1000).toFixed(2)}s`
+}
+
+async function timeStep<T>(
+  label: string,
+  action: () => T | Promise<T>,
+  options: { skipped?: boolean } = {},
+): Promise<T> {
+  const startedAt = Date.now()
+  try {
+    return await action()
+  } finally {
+    const duration = formatDuration(Date.now() - startedAt)
+    const detail = options.skipped === true ? `skipped in ${duration}` : duration
+    console.log(`[timing] ${label}: ${detail}`)
   }
 }
-const serverDistEntry = path.join(repoRoot, 'dist/server/main.js')
-if (!existsSync(serverDistEntry)) {
-  console.error(`Error: server build artifact missing: ${serverDistEntry}`)
-  process.exit(1)
-}
-const terminalWorkerDistEntry = path.join(repoRoot, 'dist/server/terminal-worker.js')
-if (!existsSync(terminalWorkerDistEntry)) {
-  console.error(`Error: server build artifact missing: ${terminalWorkerDistEntry}`)
-  process.exit(1)
-}
-// `dir` target skips dmg packaging for install. Every build mode pins to the
-// host arch so local builds don't waste time cross-building unused artifacts.
-const archFlag = process.arch === 'arm64' ? '--arm64' : '--x64'
-const electronBuilderConfigArgs = shouldInstall ? ['--config.npmRebuild=false'] : []
-const builderArgs = ['--mac', shouldInstall ? 'dir' : 'dmg', archFlag, ...electronBuilderConfigArgs]
-await $`bun run build:electron -- ${builderArgs}`
 
-const srcApp = await findBuiltApp()
-if (!srcApp) {
-  console.error(`Error: could not find built ${APP_NAME}.app under release/`)
-  process.exit(1)
-}
-console.log(`Built: ${path.relative(repoRoot, srcApp)}`)
+async function main(): Promise<void> {
+  // Clear any prior build output so `findBuiltApp` can't pick up a stale
+  // artifact if electron-builder fails partway through. A matching rm
+  // after a successful install is run below.
+  await timeStep('prepare output', () => {
+    rmSync(path.join(repoRoot, 'release'), { recursive: true, force: true })
+    if (shouldClean) {
+      rmSync(path.join(repoRoot, 'dist'), { recursive: true, force: true })
+    }
+  })
 
-if (shouldInstall) {
+  const needsBunInstall = await timeStep('bun install check', () => shouldRunBunInstall())
+  if (needsBunInstall) {
+    await timeStep('bun install', () => $`bun install`)
+  } else {
+    await timeStep('bun install', () => {
+      console.log('Skipping bun install (node_modules is up to date).')
+    }, { skipped: true })
+  }
+
+  await timeStep('node-pty helper check', () => {
+    if (process.platform !== 'darwin') return
+
+    const ptySpawnHelperArches = [process.arch]
+    const ptySpawnHelpers = ptySpawnHelperArches.map((arch) =>
+      path.join(repoRoot, 'node_modules/node-pty/prebuilds', `darwin-${arch}`, 'spawn-helper'),
+    )
+    const missingPtySpawnHelpers = ptySpawnHelpers.filter((helper) => !existsSync(helper))
+    if (missingPtySpawnHelpers.length > 0) {
+      fail(`Error: missing node-pty darwin spawn-helper(s): ${missingPtySpawnHelpers.join(', ')}`)
+    }
+    for (const helper of ptySpawnHelpers) {
+      chmodSync(helper, 0o755)
+    }
+  })
+
+  if (shouldRunTypecheck) {
+    await timeStep('typecheck', () => $`bun run typecheck`)
+  } else {
+    await timeStep('typecheck', () => {
+      console.log('Skipping typecheck for fast install.')
+    }, { skipped: true })
+  }
+
+  // Renderer bundle MUST exist before electron-builder packs it (the
+  // `files` glob in electron-builder.ts expects `dist/web/`).
+  await timeStep('build:web', () => $`bun run build:web`)
+  await timeStep('build:server', () => $`bun run build:server`)
+  await timeStep('artifact check', () => {
+    const webDist = path.join(repoRoot, 'dist/web')
+    for (const artifact of [path.join(webDist, 'index.html'), path.join(webDist, 'boot.js')]) {
+      if (!existsSync(artifact)) {
+        fail(`Error: web build artifact missing: ${artifact}`)
+      }
+    }
+    const serverDistEntry = path.join(repoRoot, 'dist/server/main.js')
+    if (!existsSync(serverDistEntry)) {
+      fail(`Error: server build artifact missing: ${serverDistEntry}`)
+    }
+    const terminalWorkerDistEntry = path.join(repoRoot, 'dist/server/terminal-worker.js')
+    if (!existsSync(terminalWorkerDistEntry)) {
+      fail(`Error: server build artifact missing: ${terminalWorkerDistEntry}`)
+    }
+  })
+
+  // `dir` target skips dmg packaging for install. Every build mode pins to the
+  // host arch so local builds don't waste time cross-building unused artifacts.
+  const archFlag = process.arch === 'arm64' ? '--arm64' : '--x64'
+  const electronBuilderConfigArgs = shouldInstall ? ['--config.npmRebuild=false'] : []
+  const builderArgs = ['--mac', shouldInstall ? 'dir' : 'dmg', archFlag, ...electronBuilderConfigArgs]
+  await timeStep('electron-builder', () => $`bun run build:electron -- ${builderArgs}`)
+
+  const srcApp = await findBuiltApp()
+  if (!srcApp) {
+    fail(`Error: could not find built ${APP_NAME}.app under release/`)
+  }
+  console.log(`Built: ${path.relative(repoRoot, srcApp)}`)
+
+  if (!shouldInstall) return
+
   if (process.platform !== 'darwin') {
-    console.error('install mode is macOS-only')
-    process.exit(1)
+    fail('install mode is macOS-only')
   }
 
   console.log(`Installing ${APP_NAME}.app to ~/Applications...`)
 
   // Close a running Hobgoblin.app before replacing it. Relative path because
   // scripts/ sits outside src/ and isn't covered by the `#/` alias.
-  await closeRunningApp()
+  await timeStep('close running app', () => closeRunningApp())
 
   const appsDir = path.join(os.homedir(), 'Applications')
-  mkdirSync(appsDir, { recursive: true })
   const destApp = path.join(appsDir, `${APP_NAME}.app`)
-  rmSync(destApp, { recursive: true, force: true })
-  renameSync(srcApp, destApp)
-  console.log(`Installed: ${destApp}`)
+  await timeStep('install app', () => {
+    mkdirSync(appsDir, { recursive: true })
+    rmSync(destApp, { recursive: true, force: true })
+    renameSync(srcApp, destApp)
+    console.log(`Installed: ${destApp}`)
+  })
 
   // electron-builder's ad-hoc signature (identity: null) uses the Electron
   // binary identifier and does not bind Info.plist. macOS Notification Center
@@ -157,9 +204,24 @@ if (shouldInstall) {
   // Re-signing with --identifier forces the correct bundle ID and binds the
   // Info.plist so notifications work and Hobgoblin appears in System Settings.
   console.log('Re-signing with correct bundle identifier...')
-  await $`codesign --force --deep --sign - --identifier ${APP_ID} ${destApp}`
+  await timeStep('codesign', () => $`codesign --force --deep --sign - --identifier ${APP_ID} ${destApp}`)
   console.log('Re-signed.')
 
-  rmSync(path.join(repoRoot, 'release'), { recursive: true, force: true })
-  console.log('Done.')
+  await timeStep('cleanup release', () => {
+    rmSync(path.join(repoRoot, 'release'), { recursive: true, force: true })
+    console.log('Done.')
+  })
+}
+
+const totalStartedAt = Date.now()
+try {
+  await main()
+} catch (error) {
+  if (error instanceof BuildScriptFailure) {
+    process.exitCode = error.exitCode
+  } else {
+    throw error
+  }
+} finally {
+  console.log(`[timing] total: ${formatDuration(Date.now() - totalStartedAt)}`)
 }

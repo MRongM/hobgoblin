@@ -117,6 +117,22 @@ describe('RepoExplorerPane', () => {
     await act(async () => root.unmount())
   })
 
+  test('uses the shared scroll row contract so all explorer tabs remain reachable', async () => {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId="/repo" layout="top-bottom" showActions />)
+    })
+
+    const tablist = container.querySelector<HTMLElement>('[role="tablist"]')
+    expect(tablist?.className).toContain('w-max')
+    expect(tablist?.className).toContain('min-w-full')
+    expect(tablist?.getAttribute('aria-orientation')).toBe('horizontal')
+    expect(container.querySelectorAll('[role="tab"]').length).toBe(4)
+    await act(async () => root.unmount())
+  })
+
   test('changed file clicks switch back to files with a reveal request', async () => {
     const container = document.createElement('div')
     document.body.appendChild(container)
