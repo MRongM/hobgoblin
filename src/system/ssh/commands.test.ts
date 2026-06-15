@@ -59,6 +59,22 @@ describe('remote command scripts', () => {
     expect(invocation.args).toContain(TARGET.alias)
   })
 
+  test('builds a fixed remote move command with JSON encoded paths and target directory', () => {
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'moveFileTreeEntries',
+      worktreePath: '/srv/repo',
+      paths: ['/srv/repo/README.md', "/srv/repo/src/old 'name'.ts"],
+      targetDirPath: '/srv/repo/docs',
+    })
+
+    expect(invocation.script).toContain('python3')
+    expect(invocation.script).toContain('os.rename')
+    expect(invocation.script).toContain('"/srv/repo/README.md"')
+    expect(invocation.script).toContain("old 'name'.ts")
+    expect(invocation.script).toContain('"/srv/repo/docs"')
+    expect(invocation.args).toContain(TARGET.alias)
+  })
+
   test('builds quoted remote file inventory command', () => {
     const invocation = buildRemoteCommandInvocation(TARGET, {
       type: 'fileTransferInventory',

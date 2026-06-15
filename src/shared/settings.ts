@@ -11,6 +11,11 @@ export type ResolvedEditorApp = Exclude<EditorPref, 'auto'>
 export type TerminalAppAvailability = Record<ResolvedTerminalApp, boolean>
 export type EditorAppAvailability = Record<ResolvedEditorApp, boolean>
 
+export const MIN_FILE_TREE_FONT_SIZE = 10
+export const MAX_FILE_TREE_FONT_SIZE = 18
+export const MIN_TERMINAL_FONT_SIZE = 10
+export const MAX_TERMINAL_FONT_SIZE = 24
+
 export type TerminalCustomButtonAction = 'execute' | 'input'
 
 export interface TerminalCustomButton {
@@ -32,6 +37,8 @@ export interface SettingsPrefs {
   globalShortcut: string
   terminalApp: TerminalPref
   editorApp: EditorPref
+  fileTreeFontSize: number
+  terminalFontSize: number
   terminalExternalInputEnabled: boolean
   remoteTerminalTmuxEnabled: boolean
   terminalCustomButtonsVisible: boolean

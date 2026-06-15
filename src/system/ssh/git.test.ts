@@ -12,6 +12,7 @@ import {
   inventoryRemoteFileTransfer,
   listRemoteFileTreeDirectory,
   mergeRemoteBranch,
+  moveRemoteFileTreeEntries,
   pullRemoteBranch,
   fetchRemoteRepository,
   pushRemoteBranch,
@@ -199,6 +200,30 @@ describe('remote git helpers', () => {
     const result = await deleteRemoteFileTreeEntries(TARGET, '/srv/repo', ['/srv/repo'], { run: run as any })
 
     expect(result).toEqual({ ok: false, message: 'error.delete-root-forbidden' })
+  })
+
+  test('moveRemoteFileTreeEntries returns parsed success and passes fixed command input', async () => {
+    const run = vi.fn(async () => ({ ok: true, stdout: '{"ok":true,"message":""}', stderr: '' }))
+
+    const result = await moveRemoteFileTreeEntries(
+      TARGET,
+      '/srv/repo',
+      ['/srv/repo/README.md'],
+      '/srv/repo/docs',
+      { run: run as any },
+    )
+
+    expect(result).toEqual({ ok: true, message: '' })
+    expect(run).toHaveBeenCalledWith(
+      {
+        type: 'moveFileTreeEntries',
+        worktreePath: '/srv/repo',
+        paths: ['/srv/repo/README.md'],
+        targetDirPath: '/srv/repo/docs',
+      },
+      TARGET,
+      { signal: undefined },
+    )
   })
 
   test('deleteRemoteBranch allows safe delete when branch is merged into current HEAD without upstream', async () => {

@@ -187,6 +187,16 @@ export async function setPreferredEditorApp(pref: EditorPref): Promise<EditorApp
   return result.externalApps?.editor ?? (await getExternalAppsSnapshot()).editor
 }
 
+export async function setFileTreeFontSize(fontSize: number): Promise<number> {
+  const result = await updateSettingsPrefsPatch({ fileTreeFontSize: fontSize })
+  return result.settings.fileTreeFontSize
+}
+
+export async function setTerminalFontSize(fontSize: number): Promise<number> {
+  const result = await updateSettingsPrefsPatch({ terminalFontSize: fontSize })
+  return result.settings.terminalFontSize
+}
+
 export async function setTerminalExternalInputEnabled(enabled: boolean): Promise<void> {
   await updateSettingsPrefsPatch({ terminalExternalInputEnabled: enabled })
 }

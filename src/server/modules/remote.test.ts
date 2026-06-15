@@ -39,6 +39,11 @@ beforeEach(() => {
     globalShortcut: 'CommandOrControl+Shift+G',
     terminalApp: 'auto',
     editorApp: 'vscode',
+    fileTreeFontSize: 12,
+    terminalFontSize: 14,
+    terminalExternalInputEnabled: false,
+    remoteTerminalTmuxEnabled: false,
+    terminalCustomButtonsVisible: true,
     terminalCustomButtons: [],
     lanEnabled: false,
   })

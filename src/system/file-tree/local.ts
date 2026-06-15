@@ -41,6 +41,15 @@ function isValidFileTreeBasename(value: string): boolean {
   )
 }
 
+function isDirectoryStat(value: unknown): value is { isDirectory(): boolean } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'isDirectory' in value &&
+    typeof value.isDirectory === 'function'
+  )
+}
+
 async function pathExists(value: string): Promise<boolean> {
   try {
     await fs.access(value, fsConstants.F_OK)
@@ -148,6 +157,62 @@ export async function deleteLocalFileTreeEntries(
     for (const target of targets) {
       await fs.rm(target, { recursive: true, force: false })
     }
+    return { ok: true, message: '' }
+  } catch (err) {
+    return { ok: false, message: classifyFsWriteError(err) }
+  }
+}
+
+export async function moveLocalFileTreeEntries(
+  worktreePath: string,
+  paths: string[],
+  targetDirPath: string,
+): Promise<ExecResult> {
+  if (
+    !isAbsolutePathInput(worktreePath) ||
+    !isAbsolutePathInput(targetDirPath) ||
+    paths.length === 0 ||
+    paths.some((item) => !isAbsolutePathInput(item))
+  ) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+
+  const root = path.resolve(worktreePath)
+  const targetDir = path.resolve(targetDirPath)
+  if (!pathInsideRoot(root, targetDir)) return { ok: false, message: 'error.invalid-path' }
+  const targetStat = await fs.stat(targetDir).catch((err: unknown) => err)
+  if (!isDirectoryStat(targetStat)) {
+    return { ok: false, message: classifyFsWriteError(targetStat) }
+  }
+  if (!targetStat.isDirectory()) return { ok: false, message: 'error.path-not-directory' }
+
+  const seenDestinations = new Set<string>()
+  const moves: Array<{ source: string; destination: string }> = []
+  for (const item of paths) {
+    const source = path.resolve(item)
+    if (!pathInsideRoot(root, source)) return { ok: false, message: 'error.invalid-path' }
+    if (source === root) return { ok: false, message: 'error.delete-root-forbidden' }
+
+    const sourceStat = await fs.lstat(source).catch((err: unknown) => err)
+    if (!isDirectoryStat(sourceStat)) {
+      return { ok: false, message: classifyFsWriteError(sourceStat) }
+    }
+
+    if (sourceStat.isDirectory() && pathInsideRoot(source, targetDir)) {
+      return { ok: false, message: 'error.invalid-path' }
+    }
+
+    const destination = path.join(targetDir, path.basename(source))
+    if (!pathInsideRoot(root, destination)) return { ok: false, message: 'error.invalid-path' }
+    if (destination === source) continue
+    if (seenDestinations.has(destination)) return { ok: false, message: 'error.file-exists' }
+    seenDestinations.add(destination)
+    if (await pathExists(destination)) return { ok: false, message: 'error.file-exists' }
+    moves.push({ source, destination })
+  }
+
+  try {
+    for (const move of moves) await fs.rename(move.source, move.destination)
     return { ok: true, message: '' }
   } catch (err) {
     return { ok: false, message: classifyFsWriteError(err) }

@@ -34,6 +34,11 @@ describe('server settings snapshot runtime state', () => {
       globalShortcut: 'Alt+G',
       terminalApp: 'auto',
       editorApp: 'auto',
+      fileTreeFontSize: 12,
+      terminalFontSize: 14,
+      terminalExternalInputEnabled: false,
+      remoteTerminalTmuxEnabled: false,
+      terminalCustomButtonsVisible: true,
       terminalCustomButtons: [],
       lanEnabled: false,
     })

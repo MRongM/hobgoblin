@@ -12,6 +12,7 @@ import type {
   TerminalSessionSummary as ServerTerminalSessionSummary,
 } from '#/shared/terminal.ts'
 import { branchForTerminalWorktree } from '#/web/components/terminal/terminal-repo-index.ts'
+import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
 import type {
   TerminalDescriptor,
   TerminalRepoIndex,
@@ -54,6 +55,7 @@ export class TerminalSessionRegistry {
   private readonly worktreeListeners = new Map<string, Set<() => void>>()
   private readonly snapshotListeners = new Map<string, Set<() => void>>()
   private readonly displayOrderByKey = new Map<string, number>()
+  private terminalFontSize = DEFAULT_TERMINAL_FONT_SIZE
   private readonly bellController = createTerminalBellController(
     (key) => {
       if (key) {
@@ -79,6 +81,12 @@ export class TerminalSessionRegistry {
 
   setParkingRoot(root: HTMLDivElement | null): void {
     this.parkingRoot = root
+  }
+
+  setFontSize(fontSize: number): void {
+    if (this.terminalFontSize === fontSize) return
+    this.terminalFontSize = fontSize
+    for (const session of this.sessions.values()) session.setFontSize(fontSize)
   }
 
   destroy(): void {
@@ -585,6 +593,7 @@ export class TerminalSessionRegistry {
       descriptor,
       (reason) => this.notifySession(descriptor.key, reason),
       this.bellController.handleBell,
+      this.terminalFontSize,
     )
     this.sessions.set(descriptor.key, session)
     this.syncSessionIdIndex(descriptor.key, session.currentSessionId())

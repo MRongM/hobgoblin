@@ -87,6 +87,13 @@ export interface RepoFileTransferRequest {
   source: RepoFileTransferSource
 }
 
+export interface RepoFileMoveRequest {
+  repoId: string
+  worktreePath: string
+  paths: string[]
+  targetDirPath: string
+}
+
 export interface RepoFileTransferCopiedEntry {
   sourcePath?: string
   destinationPath: string
@@ -140,6 +147,17 @@ export function isRepoFileTransferRequest(value: unknown): value is RepoFileTran
     return Array.isArray(source.items) && source.items.every(isRepoFileTransferUploadedItem)
   }
   return false
+}
+
+export function isRepoFileMoveRequest(value: unknown): value is RepoFileMoveRequest {
+  return (
+    isRecord(value) &&
+    typeof value.repoId === 'string' &&
+    typeof value.worktreePath === 'string' &&
+    isStringArray(value.paths) &&
+    value.paths.length > 0 &&
+    typeof value.targetDirPath === 'string'
+  )
 }
 
 export function isValidFileTransferDestinationName(value: unknown): value is string {

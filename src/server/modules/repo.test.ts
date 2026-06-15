@@ -40,6 +40,8 @@ const mocks = vi.hoisted(() => ({
   getRemoteBrowserUrl: vi.fn(),
   mergeBranch: vi.fn(),
   mergeRemoteBranch: vi.fn(),
+  moveLocalFileTreeEntries: vi.fn(),
+  moveRemoteFileTreeEntries: vi.fn(),
   pullBranch: vi.fn(),
   pullRemoteBranch: vi.fn(),
   pushBranch: vi.fn(),
@@ -128,6 +130,7 @@ vi.mock('#/system/git/worktrees.ts', () => ({
 
 vi.mock('#/system/file-tree/local.ts', () => ({
   deleteLocalFileTreeEntries: mocks.deleteLocalFileTreeEntries,
+  moveLocalFileTreeEntries: mocks.moveLocalFileTreeEntries,
   renameLocalFileTreeEntry: mocks.renameLocalFileTreeEntry,
 }))
 
@@ -162,6 +165,7 @@ vi.mock('#/system/ssh/git.ts', () => ({
   pullRemoteBranch: mocks.pullRemoteBranch,
   pushRemoteBranch: mocks.pushRemoteBranch,
   mergeRemoteBranch: mocks.mergeRemoteBranch,
+  moveRemoteFileTreeEntries: mocks.moveRemoteFileTreeEntries,
   renameRemoteFileTreeEntry: mocks.renameRemoteFileTreeEntry,
   removeRemoteWorktree: mocks.removeRemoteWorktree,
 }))
@@ -202,6 +206,8 @@ beforeEach(() => {
   mocks.createTrackingBranch.mockResolvedValue({ ok: true, message: 'tracked local' })
   mocks.mergeBranch.mockResolvedValue({ ok: true, message: 'merged local' })
   mocks.mergeRemoteBranch.mockResolvedValue({ ok: true, message: 'merged remote' })
+  mocks.moveLocalFileTreeEntries.mockResolvedValue({ ok: true, message: '' })
+  mocks.moveRemoteFileTreeEntries.mockResolvedValue({ ok: true, message: '' })
   mocks.pullBranch.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.pullRemoteBranch.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.pushBranch.mockResolvedValue({ ok: true, message: 'ok' })
@@ -598,6 +604,43 @@ describe('repo mutation invalidation publishing', () => {
       expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
       '/srv/repo',
       ['/srv/repo/src'],
+      { signal: undefined },
+    )
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: 'ssh-config://prod/srv/repo',
+      query: 'repo-snapshot',
+    })
+  })
+
+  test('moveRepositoryFileTreeEntries publishes snapshot invalidation after local success', async () => {
+    const { moveRepositoryFileTreeEntries } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await moveRepositoryFileTreeEntries('/tmp/repo', '/tmp/repo', ['/tmp/repo/README.md'], '/tmp/repo/docs')
+
+    expect(result).toEqual({ ok: true, message: '' })
+    expect(mocks.moveLocalFileTreeEntries).toHaveBeenCalledWith('/tmp/repo', ['/tmp/repo/README.md'], '/tmp/repo/docs')
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: '/tmp/repo',
+      query: 'repo-snapshot',
+    })
+  })
+
+  test('moveRepositoryFileTreeEntries dispatches remote repos to the SSH helper', async () => {
+    const { moveRepositoryFileTreeEntries } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await moveRepositoryFileTreeEntries(
+      'ssh-config://prod/srv/repo',
+      '/srv/repo',
+      ['/srv/repo/README.md'],
+      '/srv/repo/docs',
+    )
+
+    expect(result).toEqual({ ok: true, message: '' })
+    expect(mocks.moveRemoteFileTreeEntries).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
+      '/srv/repo',
+      ['/srv/repo/README.md'],
+      '/srv/repo/docs',
       { signal: undefined },
     )
     expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({

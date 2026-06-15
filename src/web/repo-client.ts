@@ -187,6 +187,15 @@ export async function deleteRepositoryFileTreeEntries(
   return await postServerJson('/api/repo/file-tree/delete', { repoId, worktreePath, paths })
 }
 
+export async function moveRepositoryFileTreeEntries(
+  repoId: string,
+  worktreePath: string,
+  paths: string[],
+  targetDirPath: string,
+): Promise<ExecResult> {
+  return await postServerJson('/api/repo/file-tree/move', { repoId, worktreePath, paths, targetDirPath })
+}
+
 export async function transferRepositoryFiles(input: RepoFileTransferRequest): Promise<RepoFileTransferResult> {
   return await postServerJson('/api/repo/file-transfer', input)
 }

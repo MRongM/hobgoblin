@@ -25,6 +25,7 @@ import {
   fetchRepository,
   getRepositoryRemoteBranches,
   mergeRepositoryBranch,
+  moveRepositoryFileTreeEntries,
   openRepositoryEditor,
   openRepositoryRemote,
   openRepositoryTerminal,
@@ -135,6 +136,23 @@ export function createRepoRoutes() {
         () => deleteRepositoryFileTreeEntries(repoId, worktreePath, paths, c.req.raw.signal, sourceToken),
         { ok: false, message: 'error.failed-read-repo' },
         'file-tree-delete',
+      ),
+    )
+  })
+  app.post('/file-tree/move', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const paths = Array.isArray(body?.paths)
+      ? body.paths.filter((item: unknown): item is string => typeof item === 'string')
+      : []
+    const targetDirPath = typeof body?.targetDirPath === 'string' ? body.targetDirPath : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => moveRepositoryFileTreeEntries(repoId, worktreePath, paths, targetDirPath, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'file-tree-move',
       ),
     )
   })

@@ -49,6 +49,8 @@ describe('renderer bootstrap', () => {
       globalShortcutRegistered: false,
       terminalApp: 'auto',
       editorApp: 'windsurf',
+      fileTreeFontSize: 12,
+      terminalFontSize: 14,
       terminalExternalInputEnabled: false,
       remoteTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,

@@ -40,6 +40,8 @@ function defaultArgv() {
       globalShortcutRegistered: false,
       terminalApp: 'auto',
       editorApp: 'cursor',
+      fileTreeFontSize: 12,
+      terminalFontSize: 14,
       terminalExternalInputEnabled: false,
       remoteTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,

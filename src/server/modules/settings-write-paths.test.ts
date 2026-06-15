@@ -55,6 +55,11 @@ describe('settings write paths', () => {
       globalShortcut: 'CommandOrControl+Shift+G',
       terminalApp: 'auto',
       editorApp: 'auto',
+      fileTreeFontSize: 12,
+      terminalFontSize: 14,
+      terminalExternalInputEnabled: false,
+      remoteTerminalTmuxEnabled: false,
+      terminalCustomButtonsVisible: true,
       terminalCustomButtons: [],
       lanEnabled: false,
     } as const
@@ -90,6 +95,11 @@ describe('settings write paths', () => {
       globalShortcut: 'CommandOrControl+Shift+G',
       terminalApp: 'ghostty',
       editorApp: 'cursor',
+      fileTreeFontSize: 12,
+      terminalFontSize: 14,
+      terminalExternalInputEnabled: false,
+      remoteTerminalTmuxEnabled: false,
+      terminalCustomButtonsVisible: true,
       terminalCustomButtons: [],
       lanEnabled: false,
     } as const

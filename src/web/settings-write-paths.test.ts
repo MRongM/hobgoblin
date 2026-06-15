@@ -26,6 +26,7 @@ const appDataClientMocks = vi.hoisted(() => ({
     hosts: {},
   })),
   saveSession: vi.fn(async (session) => session),
+  setFileTreeFontSize: vi.fn(async (fontSize: number) => fontSize),
   setGlobalShortcut: vi.fn(async (accelerator) => ({ accelerator, registered: true })),
   setGlobalShortcutDisabled: vi.fn(async () => {}),
   setLanEnabled: vi.fn(async () => {}),
@@ -50,6 +51,7 @@ const appDataClientMocks = vi.hoisted(() => ({
   setTerminalCustomButtons: vi.fn(async (buttons: TerminalCustomButton[]) => buttons),
   setTerminalCustomButtonsVisible: vi.fn(async () => {}),
   setTerminalExternalInputEnabled: vi.fn(async () => {}),
+  setTerminalFontSize: vi.fn(async (fontSize: number) => fontSize),
   setTerminalNotificationsEnabled: vi.fn(async () => {}),
   setToggleDetailOnActionBarBlankClick: vi.fn(async () => {}),
 }))
@@ -60,6 +62,7 @@ vi.mock('#/web/settings-client.ts', () => ({
   refreshExternalAppsSnapshot: appDataClientMocks.refreshExternalAppsSnapshot,
   refreshGitHubCliState: appDataClientMocks.refreshGitHubCliState,
   saveSession: appDataClientMocks.saveSession,
+  setFileTreeFontSize: appDataClientMocks.setFileTreeFontSize,
   setGlobalShortcut: appDataClientMocks.setGlobalShortcut,
   setGlobalShortcutDisabled: appDataClientMocks.setGlobalShortcutDisabled,
   setLanEnabled: appDataClientMocks.setLanEnabled,
@@ -72,6 +75,7 @@ vi.mock('#/web/settings-client.ts', () => ({
   setTerminalCustomButtons: appDataClientMocks.setTerminalCustomButtons,
   setTerminalCustomButtonsVisible: appDataClientMocks.setTerminalCustomButtonsVisible,
   setTerminalExternalInputEnabled: appDataClientMocks.setTerminalExternalInputEnabled,
+  setTerminalFontSize: appDataClientMocks.setTerminalFontSize,
   setTerminalNotificationsEnabled: appDataClientMocks.setTerminalNotificationsEnabled,
   setToggleDetailOnActionBarBlankClick: appDataClientMocks.setToggleDetailOnActionBarBlankClick,
 }))
@@ -92,6 +96,8 @@ describe('settings write paths', () => {
     appDataClientMocks.refreshGitHubCliState.mockResolvedValue({ available: false, version: null, detectedAt: 0, hosts: {} })
     appDataClientMocks.saveSession.mockReset()
     appDataClientMocks.saveSession.mockImplementation(async (session) => session)
+    appDataClientMocks.setFileTreeFontSize.mockReset()
+    appDataClientMocks.setFileTreeFontSize.mockImplementation(async (fontSize: number) => fontSize)
     appDataClientMocks.setGlobalShortcut.mockReset()
     appDataClientMocks.setGlobalShortcut.mockImplementation(async (accelerator) => ({ accelerator, registered: true }))
     appDataClientMocks.setGlobalShortcutDisabled.mockReset()
@@ -128,6 +134,8 @@ describe('settings write paths', () => {
     appDataClientMocks.setTerminalCustomButtonsVisible.mockResolvedValue(undefined)
     appDataClientMocks.setTerminalExternalInputEnabled.mockReset()
     appDataClientMocks.setTerminalExternalInputEnabled.mockResolvedValue(undefined)
+    appDataClientMocks.setTerminalFontSize.mockReset()
+    appDataClientMocks.setTerminalFontSize.mockImplementation(async (fontSize: number) => fontSize)
     appDataClientMocks.setTerminalNotificationsEnabled.mockReset()
     appDataClientMocks.setTerminalNotificationsEnabled.mockResolvedValue(undefined)
     appDataClientMocks.setToggleDetailOnActionBarBlankClick.mockReset()
@@ -255,6 +263,30 @@ describe('settings write paths', () => {
     expect(appDataClientMocks.setTerminalExternalInputEnabled).toHaveBeenCalledWith(true)
     expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
       terminalExternalInputEnabled: true,
+    })
+  })
+
+  test('setFileTreeFontSizePreference updates runtime settings cache', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    const { setFileTreeFontSizePreference } = await import('#/web/settings-write-paths.ts')
+
+    await setFileTreeFontSizePreference(13)
+
+    expect(appDataClientMocks.setFileTreeFontSize).toHaveBeenCalledWith(13)
+    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
+      fileTreeFontSize: 13,
+    })
+  })
+
+  test('setTerminalFontSizePreference updates runtime settings cache', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    const { setTerminalFontSizePreference } = await import('#/web/settings-write-paths.ts')
+
+    await setTerminalFontSizePreference(16)
+
+    expect(appDataClientMocks.setTerminalFontSize).toHaveBeenCalledWith(16)
+    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
+      terminalFontSize: 16,
     })
   })
 
