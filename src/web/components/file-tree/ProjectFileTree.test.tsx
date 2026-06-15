@@ -421,6 +421,22 @@ describe('ProjectFileTree', () => {
     expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', '/repo', undefined)
   })
 
+  test('uses the same action bar chrome as the changes panel toolbar', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const refreshButton = container?.querySelector<HTMLButtonElement>('button[aria-label="file-tree.refresh"]')
+    const toolbar = refreshButton?.parentElement
+    if (!toolbar) throw new Error('missing file tree toolbar')
+
+    expect(toolbar.className).toContain('min-h-8')
+    expect(toolbar.className).toContain('justify-end')
+    expect(toolbar.className).toContain('border-separator/70')
+    expect(toolbar.className).toContain('bg-card')
+    expect(toolbar.className).toContain('px-2')
+  })
+
   test('context menu paste prefers the internal file tree clipboard over system clipboard files', async () => {
     seedRepoWithSelectedBranch({ hasWorktree: true })
 

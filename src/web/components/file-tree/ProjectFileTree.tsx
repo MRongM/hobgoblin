@@ -1371,7 +1371,7 @@ function FileTreeToolbar({
 }) {
   const t = useT()
   return (
-    <div className="flex h-7 shrink-0 items-center gap-1 border-b border-border px-2">
+    <div className="flex min-h-8 shrink-0 items-center justify-end gap-1 border-b border-separator/70 bg-card px-2">
       <Button
         type="button"
         size="icon-xs"
