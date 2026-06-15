@@ -6,7 +6,15 @@
 // from each git command.
 
 import { describe, expect, test } from 'vitest'
-import { FIELD_SEP, parseBranches, parseLog, parseStatus, parseWorktrees } from '#/system/git/parsers.ts'
+import {
+  FIELD_SEP,
+  parseBranches,
+  parseCommitFileChanges,
+  parseCommitHistory,
+  parseLog,
+  parseStatus,
+  parseWorktrees,
+} from '#/system/git/parsers.ts'
 
 const SEP = FIELD_SEP
 
@@ -120,6 +128,76 @@ describe('parseLog', () => {
   test('subjects with embedded spaces survive', () => {
     const out = ['h', 'sh', 'feat(scope): hello world', 'a', 'd'].join(SEP)
     expect(parseLog(out)[0]?.message).toBe('feat(scope): hello world')
+  })
+})
+
+describe('parseCommitHistory', () => {
+  test('parses parents for regular and merge commits', () => {
+    const out = [
+      ['abc123456789', 'abc1234', 'feat: history', 'Alice', '2026-06-15T09:00:00+08:00', 'def456 ghi789'].join(SEP),
+      ['def456789012', 'def4567', 'fix: unicode 中文', 'Bob Smith', '2026-06-14T09:00:00+08:00', ''].join(SEP),
+    ].join('\n')
+
+    expect(parseCommitHistory(out)).toEqual([
+      {
+        hash: 'abc123456789',
+        shortHash: 'abc1234',
+        subject: 'feat: history',
+        author: 'Alice',
+        date: '2026-06-15T09:00:00+08:00',
+        parents: ['def456', 'ghi789'],
+      },
+      {
+        hash: 'def456789012',
+        shortHash: 'def4567',
+        subject: 'fix: unicode 中文',
+        author: 'Bob Smith',
+        date: '2026-06-14T09:00:00+08:00',
+        parents: [],
+      },
+    ])
+  })
+})
+
+describe('parseCommitFileChanges', () => {
+  test('merges name-status and numstat records including rename, copy, and binary stats', () => {
+    const nameStatus = [
+      'A',
+      'src/new.ts',
+      'M',
+      'src/edit.ts',
+      'D',
+      'src/deleted.ts',
+      'R050',
+      'src/old name.ts',
+      'src/new name.ts',
+      'C100',
+      'src/source.ts',
+      'src/copied.ts',
+      'X',
+      'assets/logo.png',
+    ].join('\0') + '\0'
+    const numstat = [
+      '10\t0\tsrc/new.ts',
+      '2\t3\tsrc/edit.ts',
+      '0\t8\tsrc/deleted.ts',
+      '1\t1\t',
+      'src/old name.ts',
+      'src/new name.ts',
+      '5\t0\t',
+      'src/source.ts',
+      'src/copied.ts',
+      '-\t-\tassets/logo.png',
+    ].join('\0') + '\0'
+
+    expect(parseCommitFileChanges(nameStatus, numstat)).toEqual([
+      { path: 'src/new.ts', status: 'added', additions: 10, deletions: 0 },
+      { path: 'src/edit.ts', status: 'modified', additions: 2, deletions: 3 },
+      { path: 'src/deleted.ts', status: 'deleted', additions: 0, deletions: 8 },
+      { path: 'src/new name.ts', oldPath: 'src/old name.ts', status: 'renamed', additions: 1, deletions: 1 },
+      { path: 'src/copied.ts', oldPath: 'src/source.ts', status: 'copied', additions: 5, deletions: 0 },
+      { path: 'assets/logo.png', status: 'unknown', additions: 0, deletions: 0 },
+    ])
   })
 })
 

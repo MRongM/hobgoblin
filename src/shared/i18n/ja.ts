@@ -145,21 +145,25 @@ export const ja: Record<DictKey, string> = {
   'repo-tabs.open-remote-diagnostics-copy-ssh-command': 'SSH コマンドをコピー',
   'repo-tabs.open-remote-diagnostics-copy-details': '詳細をコピー',
   'repo-tabs.open-remote-connect-via-ssh': 'システム SSH で接続',
-  'repo-tabs.open-remote-config-only-hint': 'Hobgoblin は ~/.ssh/config に定義された別名からのみ SSH リモートを開きます。',
+  'repo-tabs.open-remote-config-only-hint':
+    'Hobgoblin は ~/.ssh/config に定義された別名からのみ SSH リモートを開きます。',
   'repo-tabs.open-remote-include-manual-hint':
     'Include ディレクティブが見つかったため、別名一覧は不完全な可能性があります。SSH エイリアスを手動で入力してください。候補は現在のファイルだけを元にしています。',
-  'repo-tabs.open-remote-config-required': '~/.ssh/config に具体的な Host エントリを追加してからリモートリポジトリを開いてください。',
+  'repo-tabs.open-remote-config-required':
+    '~/.ssh/config に具体的な Host エントリを追加してからリモートリポジトリを開いてください。',
   'repo-tabs.open-remote-config-drift-hint':
     'Hobgoblin は接続のたびに ~/.ssh/config を再解決します。別名が削除されたり解決できなくなった場合は設定ドリフトとして扱います。',
   'repo-tabs.open-remote-open-ssh-settings': 'SSH 設定を開く',
   'repo-tabs.open-remote-ssh-config': 'SSH 設定',
   'repo-tabs.open-remote-manual': '手動入力',
   'repo-tabs.open-remote-no-ssh-hosts': '~/.ssh/config に SSH ホストが見つかりません',
-  'repo-tabs.open-remote-no-ssh-hosts-help': '`Host my-server` のような具体的な Host ブロックを追加してから、このダイアログを開き直してください。',
+  'repo-tabs.open-remote-no-ssh-hosts-help':
+    '`Host my-server` のような具体的な Host ブロックを追加してから、このダイアログを開き直してください。',
   'repo-tabs.open-remote-path-preview': '{path} を開きます',
   'repo-tabs.open-remote-path-preview-expanded': '{input} を開きます\n展開後のパス: {expanded}',
   'repo-tabs.open-remote-diagnostics-idle-detail': '接続テストを実行してこのターゲットを確認してください。',
-  'repo-tabs.open-remote-private-key-hint': 'システム SSH を使用します。鍵が ssh-agent に追加されていることを確認するか、鍵のパスを指定してください。',
+  'repo-tabs.open-remote-private-key-hint':
+    'システム SSH を使用します。鍵が ssh-agent に追加されていることを確認するか、鍵のパスを指定してください。',
   'repo-tabs.open-remote-port-error': '無効なポート',
   'repo-tabs.open-remote-path-required': 'パスを入力してください',
   'repo-tabs.open-remote-path-absolute': 'パスは / または ~/ で始まる必要があります',
@@ -200,6 +204,7 @@ export const ja: Record<DictKey, string> = {
   'tab.branch-detail': 'ブランチ詳細',
   'tab.status': 'ステータス',
   'tab.changes': '変更',
+  'tab.history': 'History',
   'tab.log': 'ログ',
   'tab.terminal': 'ターミナル',
   'tab.fetching': 'fetch 中',
@@ -325,11 +330,14 @@ export const ja: Record<DictKey, string> = {
   'file-tree.copy-path': 'パスをコピー',
   'file-tree.copy-relative-path': '相対パスをコピー',
   'file-tree.paste': '貼り付け',
+  'file-tree.new-folder': '新しいフォルダ',
+  'file-tree.refresh': '更新',
   'file-tree.open-editor': 'エディタで開く',
   'file-tree.open-terminal': 'ターミナルで開く',
   'file-tree.rename': '名前を変更',
   'file-tree.delete': '削除',
   'file-tree.rename-input-label': '新しい名前',
+  'file-tree.new-folder-input-label': 'フォルダ名',
   'file-tree.delete-confirm-title': '完全に削除しますか？',
   'file-tree.delete-confirm-single-body': '{name} を完全に削除します。',
   'file-tree.delete-confirm-multiple-body': '選択した {count} 件を完全に削除します。',
@@ -350,7 +358,8 @@ export const ja: Record<DictKey, string> = {
   'ports.start': '転送',
   'ports.loading': 'ポートを読み込み中',
   'ports.empty': '有効なポート転送はありません',
-  'ports.non-loopback-warning': 'このバインドホストでは、同じネットワーク上の他のデバイスに転送ポートが公開される可能性があります。',
+  'ports.non-loopback-warning':
+    'このバインドホストでは、同じネットワーク上の他のデバイスに転送ポートが公開される可能性があります。',
   'ports.open': 'ローカル URL を開く',
   'ports.copy': 'ローカル URL をコピー',
   'ports.stop': '転送を停止',
@@ -436,7 +445,8 @@ export const ja: Record<DictKey, string> = {
   'action.commit-replace-message-confirm': '置き換え',
   'action.reset-hard': '前のコミットにリセット',
   'action.confirm-reset-hard-title': '前のコミットにリセットしますか？',
-  'action.confirm-reset-hard-body': 'git reset --hard HEAD~1 を実行し、最後のコミットの全変更を破棄します。この操作は取り消せません。',
+  'action.confirm-reset-hard-body':
+    'git reset --hard HEAD~1 を実行し、最後のコミットの全変更を破棄します。この操作は取り消せません。',
   'action.confirm-reset-hard-confirm': 'リセット',
   'action.checkout-loading': 'チェックアウト中…',
   'action.checkout-queued': 'チェックアウト待機中…',
@@ -611,6 +621,10 @@ export const ja: Record<DictKey, string> = {
   'settings.action-bar-blank-toggle': 'アクションバーの空白で詳細を折りたたむ/展開',
   'settings.action-bar-blank-toggle-hint':
     '上下レイアウトでのみ有効です。アクションバーの空白をクリックして詳細を表示/非表示にします。',
+  'settings.temporary-files-directory': '一時ファイルディレクトリ',
+  'settings.temporary-files-directory-hint':
+    'ターミナルでバイナリを貼り付けたときに作成するファイルに使用します。空の場合は現在のプロジェクトの tmp フォルダを使用します。',
+  'settings.temporary-files-directory-placeholder': '現在のプロジェクトの tmp フォルダ',
   'settings.terminal-notifications': 'ターミナルベル通知',
   'settings.terminal-notifications-hint': 'バックグラウンドのターミナルベルでシステム通知を表示します。',
   'settings.terminal-notifications-test': 'システム通知をテスト',
@@ -620,7 +634,8 @@ export const ja: Record<DictKey, string> = {
   'settings.terminal-notifications-test-body': 'この通知が届いていれば、通知は正常に機能しています。',
   'settings.terminal-notifications-test-sent': 'テスト通知を送信しました',
   'settings.terminal-notifications-test-failed': 'テスト通知を表示できません',
-  'settings.terminal-notifications-test-failed-hint': 'システム設定 → 通知 → Hobgoblin を開き、通知が許可されているか確認してください。',
+  'settings.terminal-notifications-test-failed-hint':
+    'システム設定 → 通知 → Hobgoblin を開き、通知が許可されているか確認してください。',
   'settings.group.general': '一般',
   'settings.github.title': 'GitHub',
   'settings.github.body': 'Hobgoblin は GitHub へのアクセスに GitHub CLI (`gh`) を使用します。',
@@ -635,7 +650,8 @@ export const ja: Record<DictKey, string> = {
   'settings.github.login-hint': 'GitHub.com は `gh auth login`、GitHub Enterprise は `--hostname` を追加して使います。',
   'settings.github.login-example': 'gh auth login\n\ngh auth login --hostname github.example.com',
   'settings.github.detected-hosts': '検出された hosts',
-  'settings.github.detected-hosts-hint': 'ここでは、現在開いているリポジトリで実際に使われている GitHub / GitHub Enterprise hosts だけを確認します。',
+  'settings.github.detected-hosts-hint':
+    'ここでは、現在開いているリポジトリで実際に使われている GitHub / GitHub Enterprise hosts だけを確認します。',
   'settings.github.no-hosts': '現在 gh でログイン済みの GitHub host はありません。',
   'settings.github.host-status': 'Host 状態',
   'settings.github.auth-signed-in': 'ログイン済み',
@@ -662,6 +678,9 @@ export const ja: Record<DictKey, string> = {
   'settings.lan.access': 'アクセスURL',
   'settings.about': '情報',
   'settings.files.title': 'ファイル領域',
+  'settings.files.layout.title': 'レイアウト',
+  'settings.files.height-ratio': '高さの比率',
+  'settings.files.height-ratio-hint': 'プロジェクトエクスプローラーでファイル領域が占める割合を調整します。',
   'settings.files.font.title': 'フォント',
   'settings.files.font-size': 'フォントサイズ',
   'settings.files.font-size-hint': 'プロジェクトファイルツリーのフォントサイズを調整します。',
@@ -683,7 +702,13 @@ export const ja: Record<DictKey, string> = {
   'settings.terminal-custom-buttons.hint':
     'ターミナル下部にボタンバーを表示します。ボタンはすぐに実行するか、外部入力ボックスへ入力できます。',
   'settings.terminal-custom-buttons.visible': 'カスタムボタンを表示',
-  'settings.terminal-custom-buttons.visible-hint': '設定済みボタンを削除せず、ターミナルのボタンバーを表示または非表示にします。',
+  'settings.terminal-custom-buttons.visible-hint':
+    '設定済みボタンを削除せず、ターミナルのボタンバーを表示または非表示にします。',
+  'settings.terminal-custom-buttons.size': 'ボタンサイズ',
+  'settings.terminal-custom-buttons.size-hint': 'ターミナル内に表示するカスタムボタンのサイズを調整します。',
+  'settings.terminal-custom-buttons.size-small': '小',
+  'settings.terminal-custom-buttons.size-medium': '中',
+  'settings.terminal-custom-buttons.size-large': '大',
   'settings.terminal-custom-buttons.add': '追加',
   'settings.terminal-custom-buttons.save': '保存',
   'settings.terminal-custom-buttons.empty': 'カスタムボタンは設定されていません。',
@@ -733,8 +758,7 @@ export const ja: Record<DictKey, string> = {
   'settings.fetch.5m': '5 分',
   'settings.fetch.15m': '15 分',
   'settings.ssh.title': 'SSH',
-  'settings.ssh.body':
-    '~/.ssh/config の Host 別名でリモートリポジトリを開きます。',
+  'settings.ssh.body': '~/.ssh/config の Host 別名でリモートリポジトリを開きます。',
   'settings.ssh.config-file-label': '設定ファイル',
   'settings.ssh.config-file-hint': 'Hobgoblin はこのファイルから SSH 別名を読み取ります。',
   'settings.ssh.path-format-label': 'パス形式',
@@ -801,6 +825,22 @@ export const ja: Record<DictKey, string> = {
   // ---- Generic dialog ----------------------------------------------------
   'dialog.cancel': 'キャンセル',
   'dialog.close': '閉じる (Esc)',
+
+  // ---- File lists --------------------------------------------------------
+  'file-list.view-mode': 'ファイル一覧表示',
+  'file-list.view-list': 'リスト表示',
+  'file-list.view-tree': 'フォルダ表示',
+
+  // ---- History ----------------------------------------------------------
+  'history.no-branch': 'Select a branch to view history.',
+  'history.empty-title': 'No commits',
+  'history.empty-body': 'This branch has no commits to show.',
+  'history.load-error': 'Failed to load history',
+  'history.detail-empty': 'Select a commit',
+  'history.detail-loading': 'Loading commit',
+  'history.detail-error': 'Failed to load commit',
+  'history.load-more': 'Load more',
+  'history.parents': 'Parents',
 
   // ---- Commit detail -----------------------------------------------------
   'commit.parent': '親コミット',

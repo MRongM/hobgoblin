@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   type DragEvent,
+  type ClipboardEvent,
   type KeyboardEvent,
   type PointerEvent,
   type Ref,
@@ -21,6 +22,7 @@ interface TerminalExternalInputProps {
   resizeLabel: string
   onChange: (value: string) => void
   onSubmit: (value: string) => void
+  onPaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void
   onDragOver?: (event: DragEvent<HTMLTextAreaElement>) => void
   onDrop?: (event: DragEvent<HTMLTextAreaElement>) => void
 }
@@ -33,6 +35,7 @@ export const TerminalExternalInput = forwardRef<HTMLTextAreaElement, TerminalExt
     resizeLabel,
     onChange,
     onSubmit,
+    onPaste,
     onDragOver,
     onDrop,
   }, ref) {
@@ -97,7 +100,7 @@ export const TerminalExternalInput = forwardRef<HTMLTextAreaElement, TerminalExt
         >
           <span aria-hidden="true" />
         </button>
-        <span className="goblin-terminal-external-input__prefix">$</span>
+        <span className="goblin-terminal-external-input__prefix">&gt;</span>
         <textarea
           ref={setTextareaRef}
           className="goblin-terminal-external-input__control"
@@ -109,6 +112,7 @@ export const TerminalExternalInput = forwardRef<HTMLTextAreaElement, TerminalExt
           style={height === null ? undefined : { height: `${height}px` }}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={onPaste}
           onDragOver={onDragOver}
           onDrop={onDrop}
         />

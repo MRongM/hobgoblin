@@ -4,7 +4,9 @@ import { transferRepositoryFiles } from '#/server/modules/repo-file-transfer.ts'
 import {
   generateRepositoryCommitMessage,
   getCommitMessageProviders,
+  getRepositoryCommitDetail,
   getRepositoryFileTree,
+  getRepositoryHistory,
   getRepositoryPatch,
   getRepositoryPullRequests,
   getRepositorySnapshot,
@@ -19,6 +21,7 @@ import {
   cloneRepository,
   commitRepositoryChanges,
   createRepositoryBranch,
+  createRepositoryFileTreeDirectory,
   createRepositoryWorktree,
   deleteRepositoryFileTreeEntries,
   deleteRepositoryBranch,
@@ -48,6 +51,11 @@ export function createRepoRoutes() {
       return fallback
     }
   }
+  function boundedInt(value: unknown, fallback: number, min: number, max: number): number {
+    const parsed = typeof value === 'number' ? Math.floor(value) : Number.NaN
+    if (!Number.isFinite(parsed)) return fallback
+    return Math.max(min, Math.min(max, parsed))
+  }
   app.post('/probe', async (c) => {
     const body = await c.req.json().catch(() => null)
     const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
@@ -62,6 +70,20 @@ export function createRepoRoutes() {
     const body = await c.req.json().catch(() => null)
     const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
     return c.json(await jsonOr(() => getRepositoryStatus(cwd, c.req.raw.signal), [], 'status'))
+  })
+  app.post('/history', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const branch = typeof body?.branch === 'string' ? body.branch : ''
+    const limit = boundedInt(body?.limit, 100, 1, 200)
+    const skip = boundedInt(body?.skip, 0, 0, Number.MAX_SAFE_INTEGER)
+    return c.json(await jsonOr(() => getRepositoryHistory(repoId, branch, { limit, skip }, c.req.raw.signal), [], 'history'))
+  })
+  app.post('/commit-detail', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const commit = typeof body?.commit === 'string' ? body.commit : ''
+    return c.json(await jsonOr(() => getRepositoryCommitDetail(repoId, commit, c.req.raw.signal), null, 'commit-detail'))
   })
   app.post('/remote-branches', async (c) => {
     const body = await c.req.json().catch(() => null)
@@ -120,6 +142,21 @@ export function createRepoRoutes() {
         () => renameRepositoryFileTreeEntry(repoId, worktreePath, oldPath, newName, c.req.raw.signal, sourceToken),
         { ok: false, message: 'error.failed-read-repo' },
         'file-tree-rename',
+      ),
+    )
+  })
+  app.post('/file-tree/create-directory', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const parentDirPath = typeof body?.parentDirPath === 'string' ? body.parentDirPath : ''
+    const name = typeof body?.name === 'string' ? body.name : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => createRepositoryFileTreeDirectory(repoId, worktreePath, parentDirPath, name, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'file-tree-create-directory',
       ),
     )
   })

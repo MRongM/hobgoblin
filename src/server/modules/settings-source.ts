@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { toSafeRepoLocator, toSafeSessionRepoEntry } from '#/shared/input-validation.ts'
+import { isValidAbsolutePath, toSafeRepoLocator, toSafeSessionRepoEntry } from '#/shared/input-validation.ts'
 import { serverDataFile } from '#/server/common/data-dir.ts'
 import type {
   EditorPref,
@@ -9,6 +9,7 @@ import type {
   SettingsPrefs,
   TerminalCustomButton,
   TerminalCustomButtonAction,
+  TerminalCustomButtonSize,
   TerminalPref,
   ThemePref,
 } from '#/shared/rpc.ts'
@@ -33,6 +34,7 @@ import {
   DEFAULT_SHORTCUTS_DISABLED,
   DEFAULT_SWAP_CLOSE_SHORTCUTS,
   DEFAULT_TERMINAL_APP,
+  DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
   DEFAULT_TERMINAL_FONT_SIZE,
   DEFAULT_TERMINAL_NOTIFICATIONS_ENABLED,
   DEFAULT_THEME_PREF,
@@ -57,6 +59,7 @@ interface ServerSettingsData {
   globalShortcutDisabled: boolean
   swapCloseShortcuts: boolean
   toggleDetailOnActionBarBlankClick: boolean
+  temporaryFilesDirectory: string
   globalShortcut: string
   terminalApp: TerminalPref
   editorApp: EditorPref
@@ -65,6 +68,7 @@ interface ServerSettingsData {
   terminalExternalInputEnabled: boolean
   remoteTerminalTmuxEnabled: boolean
   terminalCustomButtonsVisible: boolean
+  terminalCustomButtonSize: TerminalCustomButtonSize
   terminalCustomButtons: TerminalCustomButton[]
   lanEnabled: boolean
   session: SessionState
@@ -131,6 +135,12 @@ function normalizeTerminalNotificationsEnabled(value: unknown): boolean {
   return value === true
 }
 
+function normalizeTemporaryFilesDirectory(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  const trimmed = value.trim()
+  return isValidAbsolutePath(trimmed) ? trimmed : ''
+}
+
 function normalizeTerminalExternalInputEnabled(value: unknown): boolean {
   return value === true
 }
@@ -141,6 +151,12 @@ function normalizeRemoteTerminalTmuxEnabled(value: unknown): boolean {
 
 function normalizeTerminalCustomButtonsVisible(value: unknown): boolean {
   return value !== false
+}
+
+function normalizeTerminalCustomButtonSize(value: unknown): TerminalCustomButtonSize {
+  return value === 'small' || value === 'medium' || value === 'large'
+    ? value
+    : DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE
 }
 
 function normalizeTerminalCustomButtonAction(value: unknown): TerminalCustomButtonAction {
@@ -177,6 +193,7 @@ function settingsPrefsFromData(data: ServerSettingsData): SettingsPrefs {
     globalShortcutDisabled: data.globalShortcutDisabled,
     swapCloseShortcuts: data.swapCloseShortcuts,
     toggleDetailOnActionBarBlankClick: data.toggleDetailOnActionBarBlankClick,
+    temporaryFilesDirectory: data.temporaryFilesDirectory,
     globalShortcut: data.globalShortcut,
     terminalApp: data.terminalApp,
     editorApp: data.editorApp,
@@ -185,6 +202,7 @@ function settingsPrefsFromData(data: ServerSettingsData): SettingsPrefs {
     terminalExternalInputEnabled: data.terminalExternalInputEnabled,
     remoteTerminalTmuxEnabled: data.remoteTerminalTmuxEnabled,
     terminalCustomButtonsVisible: data.terminalCustomButtonsVisible,
+    terminalCustomButtonSize: data.terminalCustomButtonSize,
     terminalCustomButtons: data.terminalCustomButtons,
     lanEnabled: data.lanEnabled,
   }
@@ -266,6 +284,7 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       globalShortcutDisabled: parsed.globalShortcutDisabled === true,
       swapCloseShortcuts: parsed.swapCloseShortcuts === true,
       toggleDetailOnActionBarBlankClick: parsed.toggleDetailOnActionBarBlankClick === true,
+      temporaryFilesDirectory: normalizeTemporaryFilesDirectory(parsed.temporaryFilesDirectory),
       globalShortcut: normalizeGlobalShortcut(parsed.globalShortcut),
       terminalApp: normalizeTerminalPref(parsed.terminalApp),
       editorApp: normalizeEditorPref(parsed.editorApp),
@@ -274,6 +293,7 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       terminalExternalInputEnabled: normalizeTerminalExternalInputEnabled(parsed.terminalExternalInputEnabled),
       remoteTerminalTmuxEnabled: normalizeRemoteTerminalTmuxEnabled(parsed.remoteTerminalTmuxEnabled),
       terminalCustomButtonsVisible: normalizeTerminalCustomButtonsVisible(parsed.terminalCustomButtonsVisible),
+      terminalCustomButtonSize: normalizeTerminalCustomButtonSize(parsed.terminalCustomButtonSize),
       terminalCustomButtons: normalizeTerminalCustomButtons(parsed.terminalCustomButtons),
       lanEnabled: normalizeLanEnabled(parsed.lanEnabled),
       session: normalizeSession(parsed.session),
@@ -349,6 +369,10 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     patch.toggleDetailOnActionBarBlankClick === undefined
       ? data.toggleDetailOnActionBarBlankClick
       : patch.toggleDetailOnActionBarBlankClick === true
+  const nextTemporaryFilesDirectory =
+    patch.temporaryFilesDirectory === undefined
+      ? data.temporaryFilesDirectory
+      : normalizeTemporaryFilesDirectory(patch.temporaryFilesDirectory)
   const nextGlobalShortcut =
     patch.globalShortcut === undefined ? data.globalShortcut : normalizeGlobalShortcut(patch.globalShortcut)
   const nextTerminalApp = patch.terminalApp === undefined ? data.terminalApp : normalizeTerminalPref(patch.terminalApp)
@@ -369,6 +393,10 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     patch.terminalCustomButtonsVisible === undefined
       ? data.terminalCustomButtonsVisible
       : normalizeTerminalCustomButtonsVisible(patch.terminalCustomButtonsVisible)
+  const nextTerminalCustomButtonSize =
+    patch.terminalCustomButtonSize === undefined
+      ? data.terminalCustomButtonSize
+      : normalizeTerminalCustomButtonSize(patch.terminalCustomButtonSize)
   const nextTerminalCustomButtons =
     patch.terminalCustomButtons === undefined
       ? data.terminalCustomButtons
@@ -384,6 +412,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     data.globalShortcutDisabled !== nextGlobalShortcutDisabled ||
     data.swapCloseShortcuts !== nextSwapCloseShortcuts ||
     data.toggleDetailOnActionBarBlankClick !== nextToggleDetailOnActionBarBlankClick ||
+    data.temporaryFilesDirectory !== nextTemporaryFilesDirectory ||
     data.globalShortcut !== nextGlobalShortcut ||
     data.terminalApp !== nextTerminalApp ||
     data.editorApp !== nextEditorApp ||
@@ -392,6 +421,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     data.terminalExternalInputEnabled !== nextTerminalExternalInputEnabled ||
     data.remoteTerminalTmuxEnabled !== nextRemoteTerminalTmuxEnabled ||
     data.terminalCustomButtonsVisible !== nextTerminalCustomButtonsVisible ||
+    data.terminalCustomButtonSize !== nextTerminalCustomButtonSize ||
     JSON.stringify(data.terminalCustomButtons) !== JSON.stringify(nextTerminalCustomButtons) ||
     data.lanEnabled !== nextLanEnabled
   data.lang = nextLang
@@ -403,6 +433,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   data.globalShortcutDisabled = nextGlobalShortcutDisabled
   data.swapCloseShortcuts = nextSwapCloseShortcuts
   data.toggleDetailOnActionBarBlankClick = nextToggleDetailOnActionBarBlankClick
+  data.temporaryFilesDirectory = nextTemporaryFilesDirectory
   data.globalShortcut = nextGlobalShortcut
   data.terminalApp = nextTerminalApp
   data.editorApp = nextEditorApp
@@ -411,6 +442,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   data.terminalExternalInputEnabled = nextTerminalExternalInputEnabled
   data.remoteTerminalTmuxEnabled = nextRemoteTerminalTmuxEnabled
   data.terminalCustomButtonsVisible = nextTerminalCustomButtonsVisible
+  data.terminalCustomButtonSize = nextTerminalCustomButtonSize
   data.terminalCustomButtons = nextTerminalCustomButtons
   data.lanEnabled = nextLanEnabled
   if (changed) await writeServerSettingsFile(data)

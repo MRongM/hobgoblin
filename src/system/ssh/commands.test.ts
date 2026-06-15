@@ -75,6 +75,21 @@ describe('remote command scripts', () => {
     expect(invocation.args).toContain(TARGET.alias)
   })
 
+  test('builds a fixed remote create directory command with JSON encoded inputs', () => {
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'createFileTreeDirectory',
+      worktreePath: '/srv/repo',
+      parentDirPath: "/srv/repo/src with 'quote'",
+      name: 'components',
+    })
+
+    expect(invocation.script).toContain('python3')
+    expect(invocation.script).toContain('os.mkdir')
+    expect(invocation.script).toContain('src with')
+    expect(invocation.script).toContain('components')
+    expect(invocation.args).toContain(TARGET.alias)
+  })
+
   test('builds quoted remote file inventory command', () => {
     const invocation = buildRemoteCommandInvocation(TARGET, {
       type: 'fileTransferInventory',
@@ -210,5 +225,47 @@ describe('remote command scripts', () => {
         remoteRef: 'origin/feature/new',
       }).script,
     ).toBe("git -C '/srv/repo' branch --track -- 'feature/new' 'origin/feature/new'")
+  })
+
+  test('builds structured git history command', () => {
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'gitHistory',
+      path: '/srv/repo',
+      branch: 'feature/history',
+      limit: 500,
+      skip: -1,
+    })
+
+    expect(invocation.script).toContain("git -C '/srv/repo' log")
+    expect(invocation.script).toContain('--max-count=200')
+    expect(invocation.script).toContain('--skip=0')
+    expect(invocation.script).toContain("'feature/history'")
+    expect(invocation.script).toContain('%P')
+  })
+
+  test('builds structured git commit detail commands', () => {
+    expect(
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'gitCommitMetadata',
+        path: '/srv/repo',
+        commit: 'abc1234',
+      }).script,
+    ).toContain("git -C '/srv/repo' show -s")
+
+    expect(
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'gitCommitNameStatus',
+        path: '/srv/repo',
+        commit: 'abc1234',
+      }).script,
+    ).toContain('diff-tree --no-commit-id --name-status -r -M -C --root -z')
+
+    expect(
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'gitCommitNumstat',
+        path: '/srv/repo',
+        commit: 'abc1234',
+      }).script,
+    ).toContain('diff-tree --no-commit-id --numstat -r -M -C --root -z')
   })
 })

@@ -4,7 +4,7 @@ import {
   MAX_TERMINAL_FONT_SIZE,
   MIN_TERMINAL_FONT_SIZE,
 } from '#/shared/settings.ts'
-import type { TerminalCustomButton } from '#/shared/rpc.ts'
+import type { TerminalCustomButton, TerminalCustomButtonSize } from '#/shared/rpc.ts'
 import { Button } from '#/web/components/ui/button.tsx'
 import { Input } from '#/web/components/ui/input.tsx'
 import { Switch } from '#/web/components/ui/switch.tsx'
@@ -56,6 +56,7 @@ export function TerminalSettings() {
     terminalExternalInputEnabled,
     remoteTerminalTmuxEnabled,
     terminalCustomButtonsVisible,
+    terminalCustomButtonSize,
     terminalFontSize,
   } = useRuntimeTerminalSettings()
   const initialRows = useMemo(() => editableFromButtons(buttons), [buttons])
@@ -66,6 +67,7 @@ export function TerminalSettings() {
     setTerminalExternalInputEnabled,
     setRemoteTerminalTmuxEnabled,
     setTerminalCustomButtonsVisible,
+    setTerminalCustomButtonSize,
   } = useTerminalCustomButtonsController()
   const { setTerminalFontSize } = useFontSettingsController()
 
@@ -165,6 +167,23 @@ export function TerminalSettings() {
                 checked={terminalCustomButtonsVisible}
                 onCheckedChange={(visible) => void setTerminalCustomButtonsVisible(visible)}
                 aria-label={t('settings.terminal-custom-buttons.visible')}
+              />
+            }
+          />
+          <SettingsRow
+            controlId="settings-terminal-custom-button-size"
+            label={t('settings.terminal-custom-buttons.size')}
+            hint={t('settings.terminal-custom-buttons.size-hint')}
+            control={
+              <SettingsSelect<TerminalCustomButtonSize>
+                id="settings-terminal-custom-button-size"
+                value={terminalCustomButtonSize}
+                options={[
+                  { value: 'small', label: t('settings.terminal-custom-buttons.size-small') },
+                  { value: 'medium', label: t('settings.terminal-custom-buttons.size-medium') },
+                  { value: 'large', label: t('settings.terminal-custom-buttons.size-large') },
+                ]}
+                onChange={(size) => void setTerminalCustomButtonSize(size)}
               />
             }
           />

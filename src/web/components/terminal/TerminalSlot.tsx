@@ -4,6 +4,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type ClipboardEvent,
   type CSSProperties,
   type DragEvent,
   type FocusEvent,
@@ -11,9 +12,14 @@ import {
 } from 'react'
 import { Button } from '#/web/components/ui/button.tsx'
 import { GOBLIN_FILE_PATHS_MIME, parseGoblinFilePathDragPayload } from '#/shared/file-tree.ts'
+import type { ClipboardBinaryFilePayload } from '#/shared/clipboard-binary-temp-files.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { setTerminalFocused } from '#/web/terminal-focus.ts'
-import { pathForDroppedFile } from '#/web/app-shell-client.ts'
+import {
+  pathForDroppedFile,
+  readSystemClipboardFilePaths,
+  saveClipboardBinaryFilesFromPaste,
+} from '#/web/app-shell-client.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { useTerminalSessionContext } from '#/web/components/terminal/terminal-session-context.ts'
@@ -62,8 +68,13 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
   const key = descriptor?.key ?? null
   const snapshot = useTerminalSnapshot(key)
   const hasSessions = useWorktreeTerminalCount(terminalWorktreeKey) > 0
-  const { terminalExternalInputEnabled, terminalCustomButtonsVisible, terminalCustomButtons } =
-    useRuntimeTerminalSettings()
+  const {
+    terminalExternalInputEnabled,
+    temporaryFilesDirectory,
+    terminalCustomButtonsVisible,
+    terminalCustomButtonSize,
+    terminalCustomButtons,
+  } = useRuntimeTerminalSettings()
   const progress = snapshot.progress
   const attachment = snapshot.attachment
   const isController = hasSessions && snapshot.phase === 'open' && attachment?.role === 'controller'
@@ -143,6 +154,22 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
       }
     },
     [closeSearch, searchOpen],
+  )
+  const handlePasteCapture = useCallback(
+    (event: ClipboardEvent<HTMLDivElement>) => {
+      if (!key || !isController) return
+      if (isExternalInputPasteTarget(event.target, externalInputRef.current)) return
+      if (event.clipboardData.getData('text/plain').length > 0) return
+
+      const files = binaryPasteFiles(event.clipboardData)
+      event.preventDefault()
+      event.stopPropagation()
+      void resolvePastedFilePaths(files, { worktreePath, temporaryFilesDirectory }).then((paths) => {
+        if (paths.length === 0) return
+        writeInput(key, paths.map(shellEscapePath).join(' '))
+      })
+    },
+    [isController, key, temporaryFilesDirectory, worktreePath, writeInput],
   )
   const handleSearchChange = useCallback(
     (value: string) => {
@@ -227,6 +254,28 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
     },
     [externalInputValue, worktreePath],
   )
+  const handleExternalInputPaste = useCallback(
+    (event: ClipboardEvent<HTMLTextAreaElement>) => {
+      if (event.clipboardData.getData('text/plain').length > 0) return
+      const files = binaryPasteFiles(event.clipboardData)
+
+      event.preventDefault()
+      event.stopPropagation()
+      const textarea = externalInputRef.current
+      const selectionStart = textarea?.selectionStart ?? externalInputValue.length
+      const selectionEnd = textarea?.selectionEnd ?? selectionStart
+      void savePastedFilesIntoExternalInput(files, {
+        worktreePath,
+        temporaryFilesDirectory,
+        externalInputValue,
+        selectionStart,
+        selectionEnd,
+        setExternalInputValue,
+        focusInput: () => externalInputRef.current,
+      })
+    },
+    [externalInputValue, temporaryFilesDirectory, worktreePath],
+  )
 
   const showExternalInput = isController && terminalExternalInputEnabled && !!key
   const visibleCustomButtons = isController && terminalCustomButtonsVisible
@@ -284,6 +333,7 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
       onFocusCapture={handleFocus}
       onBlurCapture={handleBlur}
       onKeyDownCapture={handleKeyDownCapture}
+      onPasteCapture={handlePasteCapture}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -352,9 +402,12 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
                   <Button
                     key={`${index}:${button.label}:${button.value}:${action}`}
                     type="button"
-                    size="sm"
+                    size={terminalCustomButtonSize === 'large' ? 'default' : 'sm'}
                     variant="secondary"
-                    className="goblin-terminal-custom-buttons__button"
+                    className={cn(
+                      'goblin-terminal-custom-buttons__button',
+                      `goblin-terminal-custom-buttons__button--${terminalCustomButtonSize}`,
+                    )}
                     title={button.value}
                     onClick={() => {
                       if (action === 'input') {
@@ -380,6 +433,7 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
               resizeLabel={t('terminal.external-input-resize')}
               onChange={setExternalInputValue}
               onSubmit={submitExternalInput}
+              onPaste={handleExternalInputPaste}
               onDragOver={handleExternalInputDragOver}
               onDrop={handleExternalInputDrop}
             />
@@ -481,6 +535,83 @@ function pathsForDrop(event: DragEvent<HTMLElement>, worktreePath: string): stri
   return Array.from(event.dataTransfer.files)
     .map((file) => pathForDroppedFile(file))
     .filter((path) => path.length > 0)
+}
+
+function binaryPasteFiles(data: DataTransfer): File[] {
+  const directFiles = Array.from(data.files).filter((file) => file.size > 0)
+  if (directFiles.length > 0) return directFiles
+  return Array.from(data.items)
+    .filter((item) => item.kind === 'file')
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => !!file && file.size > 0)
+}
+
+function isExternalInputPasteTarget(target: EventTarget | null, input: HTMLTextAreaElement | null): boolean {
+  return !!input && target instanceof Node && input.contains(target)
+}
+
+interface ResolvePastedFilePathsOptions {
+  worktreePath: string
+  temporaryFilesDirectory: string
+}
+
+async function resolvePastedFilePaths(files: File[], options: ResolvePastedFilePathsOptions): Promise<string[]> {
+  const sourcePaths = await readSystemClipboardFilePaths()
+  if (sourcePaths.length > 0) {
+    const result = await saveClipboardBinaryFilesFromPaste({
+      worktreePath: options.worktreePath,
+      temporaryFilesDirectory: options.temporaryFilesDirectory,
+      files: [],
+      sourcePaths,
+    })
+    return result.ok ? result.paths : []
+  }
+  if (files.length === 0) return []
+  const payload = await Promise.all(files.map(fileToClipboardPayload))
+  const result = await saveClipboardBinaryFilesFromPaste({
+    worktreePath: options.worktreePath,
+    temporaryFilesDirectory: options.temporaryFilesDirectory,
+    files: payload,
+  })
+  return result.ok ? result.paths : []
+}
+
+interface SavePastedFilesIntoExternalInputOptions extends ResolvePastedFilePathsOptions {
+  externalInputValue: string
+  selectionStart: number
+  selectionEnd: number
+  setExternalInputValue: (value: string) => void
+  focusInput: () => HTMLTextAreaElement | null
+}
+
+async function savePastedFilesIntoExternalInput(
+  files: File[],
+  options: SavePastedFilesIntoExternalInputOptions,
+): Promise<void> {
+  const paths = await resolvePastedFilePaths(files, options)
+  if (paths.length === 0) return
+  const text = paths.map(shellEscapePath).join(' ')
+  const next = insertExternalInputText(
+    options.externalInputValue,
+    options.selectionStart,
+    options.selectionEnd,
+    text,
+  )
+  options.setExternalInputValue(next.value)
+  queueMicrotask(() => {
+    const input = options.focusInput()
+    if (!input) return
+    input.focus({ preventScroll: true })
+    input.setSelectionRange(next.cursor, next.cursor)
+  })
+}
+
+async function fileToClipboardPayload(file: File): Promise<ClipboardBinaryFilePayload> {
+  return {
+    name: file.name,
+    type: file.type,
+    bytes: await file.arrayBuffer(),
+  }
 }
 
 function pathForTerminalDrop(path: string, worktreePath: string): string {

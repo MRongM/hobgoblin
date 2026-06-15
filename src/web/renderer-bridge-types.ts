@@ -3,6 +3,10 @@ import type { RpcEvent, RpcRequest, SettingsPage } from '#/shared/rpc.ts'
 import type { RendererEffectIntent } from '#/shared/renderer-effect-intents.ts'
 import type { ExecResult } from '#/shared/git-types.ts'
 import type {
+  SaveClipboardBinaryFilesInput,
+  SaveClipboardBinaryFilesResult,
+} from '#/shared/clipboard-binary-temp-files.ts'
+import type {
   TerminalCatalogMutationResult,
   TerminalAttachInput,
   TerminalAttachResult,
@@ -54,6 +58,7 @@ export interface RendererShellBridge {
   consumeExternalOpenPaths: () => Promise<string[]>
   openInFinder: (input: { path: string }) => Promise<ExecResult>
   readClipboardFilePaths?: () => Promise<string[]>
+  saveClipboardBinaryFiles?: (input: SaveClipboardBinaryFilesInput) => Promise<SaveClipboardBinaryFilesResult>
 }
 
 export interface RendererBridge {

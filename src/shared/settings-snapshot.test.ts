@@ -22,6 +22,7 @@ describe('settings snapshot partitions', () => {
           globalShortcutDisabled: false,
           swapCloseShortcuts: true,
           toggleDetailOnActionBarBlankClick: true,
+          temporaryFilesDirectory: '/Users/test/tmp',
           globalShortcut: 'CommandOrControl+Shift+K',
           terminalApp: 'ghostty',
           editorApp: 'cursor',
@@ -30,6 +31,7 @@ describe('settings snapshot partitions', () => {
           terminalExternalInputEnabled: true,
           remoteTerminalTmuxEnabled: true,
           terminalCustomButtonsVisible: false,
+          terminalCustomButtonSize: 'large',
           terminalCustomButtons: [{ label: 'status', value: 'git status --short', action: 'input' }],
           lanEnabled: true,
         },
@@ -45,6 +47,7 @@ describe('settings snapshot partitions', () => {
       globalShortcutDisabled: false,
       swapCloseShortcuts: true,
       toggleDetailOnActionBarBlankClick: true,
+      temporaryFilesDirectory: '/Users/test/tmp',
       globalShortcut: 'CommandOrControl+Shift+K',
       globalShortcutRegistered: true,
       terminalApp: 'ghostty',
@@ -54,6 +57,7 @@ describe('settings snapshot partitions', () => {
       terminalExternalInputEnabled: true,
       remoteTerminalTmuxEnabled: true,
       terminalCustomButtonsVisible: false,
+      terminalCustomButtonSize: 'large',
       terminalCustomButtons: [{ label: 'status', value: 'git status --short', action: 'input' }],
       lanEnabled: true,
     })
@@ -81,6 +85,7 @@ describe('settings snapshot partitions', () => {
         globalShortcutDisabled: true,
         swapCloseShortcuts: false,
         toggleDetailOnActionBarBlankClick: false,
+        temporaryFilesDirectory: '',
         globalShortcut: 'CommandOrControl+Shift+G',
         terminalApp: 'auto',
         editorApp: 'auto',
@@ -89,6 +94,7 @@ describe('settings snapshot partitions', () => {
         terminalExternalInputEnabled: false,
         remoteTerminalTmuxEnabled: false,
         terminalCustomButtonsVisible: true,
+        terminalCustomButtonSize: 'medium',
         terminalCustomButtons: [{ label: 'status', value: 'git status --short', action: 'execute' }],
         lanEnabled: false,
       },
@@ -107,9 +113,11 @@ describe('settings snapshot partitions', () => {
 
     expect(runtimeSettingsSnapshotFromSettingsSnapshot(snapshot)).toMatchObject({
       globalShortcutRegistered: false,
+      temporaryFilesDirectory: '',
       terminalExternalInputEnabled: false,
       remoteTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
+      terminalCustomButtonSize: 'medium',
       terminalCustomButtons: [{ label: 'status', value: 'git status --short', action: 'execute' }],
     })
     expect(runtimeRecentReposStateFromSettingsSnapshot(snapshot)).toEqual({

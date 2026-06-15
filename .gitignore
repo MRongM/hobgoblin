@@ -11,3 +11,4 @@ release
 
 android/
 .idea
+tmp/

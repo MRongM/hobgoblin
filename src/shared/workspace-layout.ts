@@ -4,14 +4,14 @@ export type WorkspaceLayout = (typeof WORKSPACE_LAYOUTS)[number]
 export type WorkspaceLayoutAxis = 'rows' | 'columns'
 export type WorkspaceDetailPaneSizes = Record<WorkspaceLayout, number>
 
-export const DEFAULT_WORKSPACE_LAYOUT: WorkspaceLayout = 'top-bottom'
-export const DEFAULT_DETAIL_COLLAPSED = true
+export const DEFAULT_WORKSPACE_LAYOUT: WorkspaceLayout = 'left-right'
+export const DEFAULT_DETAIL_COLLAPSED = false
 export const DEFAULT_DETAIL_FOCUS_MODE = false
 export const DEFAULT_DETAIL_PANE_SIZES: WorkspaceDetailPaneSizes = { 'top-bottom': 61.8, 'left-right': 61.8 }
-export const DEFAULT_FILE_TREE_PANE_SIZES: WorkspaceDetailPaneSizes = { 'top-bottom': 38.2, 'left-right': 38.2 }
+export const DEFAULT_FILE_TREE_PANE_SIZES: WorkspaceDetailPaneSizes = { 'top-bottom': 66.7, 'left-right': 66.7 }
 
-const MIN_DETAIL_PANE_SIZE = 10
-const MAX_DETAIL_PANE_SIZE = 90
+export const MIN_WORKSPACE_PANE_SIZE = 10
+export const MAX_WORKSPACE_PANE_SIZE = 90
 
 const WORKSPACE_LAYOUT_META = {
   'top-bottom': { axis: 'rows', detailCollapseAllowed: true },
@@ -39,7 +39,7 @@ export function effectiveDetailCollapsed(layout: WorkspaceLayout, detailCollapse
 
 function normalizePaneSize(layout: WorkspaceLayout, value: unknown, defaults: WorkspaceDetailPaneSizes): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return defaults[layout]
-  return Math.max(MIN_DETAIL_PANE_SIZE, Math.min(MAX_DETAIL_PANE_SIZE, Math.round(value * 10) / 10))
+  return Math.max(MIN_WORKSPACE_PANE_SIZE, Math.min(MAX_WORKSPACE_PANE_SIZE, Math.round(value * 10) / 10))
 }
 
 function normalizePaneSizes(value: unknown, defaults: WorkspaceDetailPaneSizes): WorkspaceDetailPaneSizes {

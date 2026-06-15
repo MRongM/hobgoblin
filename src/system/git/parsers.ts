@@ -6,7 +6,15 @@
 // JSDoc comment; if a callsite changes the command (different format
 // string, removed flag), the parser must be updated in lockstep.
 
-import type { BranchSnapshotInfo, LogEntry, StatusEntry, WorktreeInfo } from '#/shared/git-types.ts'
+import type {
+  BranchSnapshotInfo,
+  CommitFileChange,
+  CommitFileChangeStatus,
+  CommitHistoryEntry,
+  LogEntry,
+  StatusEntry,
+  WorktreeInfo,
+} from '#/shared/git-types.ts'
 
 /** ASCII Unit Separator. Safe against subjects / author names / paths
  *  containing it. Used by both the branch and log format strings. */
@@ -114,6 +122,116 @@ export function parseLog(output: string): LogEntry[] {
         date: parts[4] ?? '',
       }
     })
+}
+
+/**
+ * Parse `git log --format=<%H, %h, %s, %an, %aI, %P joined by FIELD_SEP>`.
+ */
+export function parseCommitHistory(output: string): CommitHistoryEntry[] {
+  if (!output) return []
+  return output
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const parts = line.split(FIELD_SEP)
+      const parents = (parts[5] ?? '')
+        .split(' ')
+        .map((part) => part.trim())
+        .filter(Boolean)
+      return {
+        hash: parts[0] ?? '',
+        shortHash: parts[1] ?? '',
+        subject: parts[2] ?? '',
+        author: parts[3] ?? '',
+        date: parts[4] ?? '',
+        parents,
+      }
+    })
+}
+
+interface ParsedNameStatusChange {
+  path: string
+  oldPath?: string
+  status: CommitFileChangeStatus
+}
+
+interface ParsedNumstatChange {
+  path: string
+  oldPath?: string
+  additions: number
+  deletions: number
+}
+
+function statusFromNameStatus(code: string): CommitFileChangeStatus {
+  const kind = code[0] ?? ''
+  if (kind === 'A') return 'added'
+  if (kind === 'M') return 'modified'
+  if (kind === 'D') return 'deleted'
+  if (kind === 'R') return 'renamed'
+  if (kind === 'C') return 'copied'
+  return 'unknown'
+}
+
+function parseNumstatCount(value: string | undefined): number {
+  if (!value || value === '-') return 0
+  const parsed = Number.parseInt(value, 10)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
+}
+
+export function parseCommitNameStatus(output: string): ParsedNameStatusChange[] {
+  const records = output.split('\0').filter(Boolean)
+  const changes: ParsedNameStatusChange[] = []
+  for (let i = 0; i < records.length; i += 1) {
+    const code = records[i] ?? ''
+    const status = statusFromNameStatus(code)
+    if (status === 'renamed' || status === 'copied') {
+      const oldPath = records[i + 1] ?? ''
+      const newPath = records[i + 2] ?? ''
+      i += 2
+      if (newPath) changes.push({ path: newPath, oldPath, status })
+      continue
+    }
+    const filePath = records[i + 1] ?? ''
+    i += 1
+    if (filePath) changes.push({ path: filePath, status })
+  }
+  return changes
+}
+
+export function parseCommitNumstat(output: string): ParsedNumstatChange[] {
+  const records = output.split('\0').filter(Boolean)
+  const changes: ParsedNumstatChange[] = []
+  for (let i = 0; i < records.length; i += 1) {
+    const head = records[i] ?? ''
+    const parts = head.split('\t')
+    const additions = parseNumstatCount(parts[0])
+    const deletions = parseNumstatCount(parts[1])
+    const inlinePath = parts[2] ?? ''
+    if (inlinePath) {
+      changes.push({ path: inlinePath, additions, deletions })
+      continue
+    }
+    const oldPath = records[i + 1] ?? ''
+    const newPath = records[i + 2] ?? ''
+    i += 2
+    if (newPath) changes.push({ path: newPath, oldPath, additions, deletions })
+  }
+  return changes
+}
+
+export function parseCommitFileChanges(nameStatusOutput: string, numstatOutput: string): CommitFileChange[] {
+  const statusEntries = parseCommitNameStatus(nameStatusOutput)
+  const statByPath = new Map(parseCommitNumstat(numstatOutput).map((entry) => [entry.path, entry]))
+  return statusEntries.map((entry) => {
+    const stats = statByPath.get(entry.path)
+    return {
+      path: entry.path,
+      status: entry.status,
+      additions: stats?.additions ?? 0,
+      deletions: stats?.deletions ?? 0,
+      ...(entry.oldPath ? { oldPath: entry.oldPath } : {}),
+    }
+  })
 }
 
 /**

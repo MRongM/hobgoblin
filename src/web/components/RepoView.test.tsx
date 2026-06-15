@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { RepoView } from '#/web/components/RepoView.tsx'
 import { MainWindowNavigationProvider, type MainWindowNavigationActions } from '#/web/main-window-navigation.tsx'
 import { resetReposStore, seedRepoState, createRepoBranch } from '#/web/stores/repos/test-utils.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
 
 vi.mock('#/web/components/BranchDetail.tsx', () => ({
   BranchDetail: ({ onRevealPath }: { onRevealPath?: (relativePath: string) => void }) => (
@@ -60,6 +61,7 @@ describe('RepoView', () => {
       currentBranch: 'main',
       selectedBranch: 'feature/a',
     })
+    useReposStore.setState({ workspaceLayout: 'top-bottom', detailCollapsed: true })
 
     renderRepoView()
 
@@ -76,6 +78,7 @@ describe('RepoView', () => {
       currentBranch: 'main',
       selectedBranch: 'feature/a',
     })
+    useReposStore.setState({ workspaceLayout: 'top-bottom', detailCollapsed: true })
 
     renderRepoView()
 

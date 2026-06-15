@@ -140,6 +140,35 @@ export async function renameLocalFileTreeEntry(
   }
 }
 
+export async function createLocalFileTreeDirectory(
+  worktreePath: string,
+  parentDirPath: string,
+  name: string,
+): Promise<ExecResult> {
+  if (!isAbsolutePathInput(worktreePath) || !isAbsolutePathInput(parentDirPath) || !isValidFileTreeBasename(name)) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  const root = path.resolve(worktreePath)
+  const parentDir = path.resolve(parentDirPath)
+  if (!pathInsideRoot(root, parentDir)) return { ok: false, message: 'error.invalid-path' }
+  const parentStat = await fs.stat(parentDir).catch((err: unknown) => err)
+  if (!isDirectoryStat(parentStat)) {
+    return { ok: false, message: classifyFsWriteError(parentStat) }
+  }
+  if (!parentStat.isDirectory()) return { ok: false, message: 'error.path-not-directory' }
+
+  const target = path.join(parentDir, name)
+  if (!pathInsideRoot(root, target)) return { ok: false, message: 'error.invalid-path' }
+  if (await pathExists(target)) return { ok: false, message: 'error.file-exists' }
+
+  try {
+    await fs.mkdir(target)
+    return { ok: true, message: '' }
+  } catch (err) {
+    return { ok: false, message: classifyFsWriteError(err) }
+  }
+}
+
 export async function deleteLocalFileTreeEntries(
   worktreePath: string,
   paths: string[],

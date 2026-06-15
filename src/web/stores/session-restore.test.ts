@@ -113,7 +113,7 @@ describe('session restore store', () => {
     expect(useSessionRestoreStore.getState().consumeBootSessionSnapshot()).toMatchObject({
       openRepos: [],
       activeRepo: null,
-      workspaceLayout: 'top-bottom',
+      workspaceLayout: 'left-right',
     })
   })
 })

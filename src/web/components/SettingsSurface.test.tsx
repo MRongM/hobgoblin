@@ -6,6 +6,8 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { SettingsSurface } from '#/web/components/SettingsSurface.tsx'
 import { setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
+import { resetReposStore } from '#/web/stores/repos/test-utils.ts'
 
 const toastMocks = vi.hoisted(() => ({
   success: vi.fn(),
@@ -37,6 +39,7 @@ function defaultRpcResult(path: string, input?: unknown) {
       globalShortcutDisabled: false,
       swapCloseShortcuts: false,
       toggleDetailOnActionBarBlankClick: false,
+      temporaryFilesDirectory: '',
       globalShortcut: 'CommandOrControl+Shift+G',
       globalShortcutRegistered: true,
       terminalApp: 'auto',
@@ -46,6 +49,7 @@ function defaultRpcResult(path: string, input?: unknown) {
       terminalExternalInputEnabled: false,
       remoteTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
+      terminalCustomButtonSize: 'medium',
       terminalCustomButtons: [],
       lanEnabled: false,
       session: {
@@ -120,6 +124,7 @@ const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
 
 beforeEach(() => {
   setRendererBridgeForTests(null)
+  resetReposStore()
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   sendTestNotification.mockClear()
   toastMocks.success.mockClear()
@@ -140,6 +145,7 @@ beforeEach(() => {
       globalShortcutDisabled: false,
       swapCloseShortcuts: false,
       toggleDetailOnActionBarBlankClick: false,
+      temporaryFilesDirectory: '',
       globalShortcut: 'CommandOrControl+Shift+G',
       globalShortcutRegistered: true,
       terminalApp: 'auto',
@@ -149,6 +155,7 @@ beforeEach(() => {
       terminalExternalInputEnabled: false,
       remoteTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
+      terminalCustomButtonSize: 'medium',
       terminalCustomButtons: [],
       lanEnabled: false,
     },
@@ -164,6 +171,7 @@ beforeEach(() => {
       globalShortcutDisabled: false,
       swapCloseShortcuts: false,
       toggleDetailOnActionBarBlankClick: false,
+      temporaryFilesDirectory: '',
       globalShortcut: 'CommandOrControl+Shift+G',
       globalShortcutRegistered: true,
       terminalApp: 'auto',
@@ -173,6 +181,7 @@ beforeEach(() => {
       terminalExternalInputEnabled: false,
       remoteTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
+      terminalCustomButtonSize: 'medium',
       terminalCustomButtons: [],
       lanEnabled: false,
     },
@@ -354,6 +363,41 @@ describe('SettingsSurface', () => {
     ).toBe(true)
   })
 
+  test('edits the file area height ratio from settings', async () => {
+    await render(<SettingsSurface page="files" onPageChange={() => {}} />)
+
+    const input = document.getElementById('settings-file-tree-pane-size')
+    if (!(input instanceof HTMLInputElement)) throw new Error('Missing file tree pane size input')
+
+    await act(async () => {
+      setInputValue(input, '72.5')
+      await Promise.resolve()
+    })
+
+    expect(useReposStore.getState().fileTreePaneSizes['left-right']).toBe(72.5)
+  })
+
+  test('updates the temporary files directory from general settings', async () => {
+    await render(<SettingsSurface page="general" onPageChange={() => {}} />)
+
+    const input = document.getElementById('settings-temporary-files-directory')
+    if (!(input instanceof HTMLInputElement)) throw new Error('Missing temporary files directory input')
+
+    await act(async () => {
+      setInputValue(input, '/Users/test/project/tmp')
+      await Promise.resolve()
+    })
+
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [url, options] = call as unknown as [unknown, RequestInit | undefined]
+        if (new URL(String(url)).pathname !== '/api/settings/prefs') return false
+        const body = JSON.parse(String(options?.body ?? '{}')) as { settings?: Record<string, unknown> }
+        return body.settings?.temporaryFilesDirectory === '/Users/test/project/tmp'
+      }),
+    ).toBe(true)
+  })
+
   test('edits terminal font size from settings', async () => {
     await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
 
@@ -414,6 +458,14 @@ describe('SettingsSurface', () => {
         )
       }),
     ).toBe(true)
+  })
+
+  test('shows terminal custom button size control from settings', async () => {
+    await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
+
+    const trigger = document.getElementById('settings-terminal-custom-button-size')
+    expect(trigger).toBeInstanceOf(HTMLElement)
+    expect(trigger?.textContent).toContain('settings.terminal-custom-buttons.size-medium')
   })
 
   test('toggles terminal external input, remote tmux, and custom button visibility from settings', async () => {

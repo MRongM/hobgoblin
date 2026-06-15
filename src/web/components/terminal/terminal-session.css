@@ -237,11 +237,30 @@
   white-space: nowrap;
 }
 
+.goblin-terminal-custom-buttons__button--small {
+  height: 22px;
+  max-width: 150px;
+  gap: 4px;
+  padding-inline: 7px;
+  font-size: 11px;
+}
+
+.goblin-terminal-custom-buttons__button--medium {
+  height: 24px;
+}
+
+.goblin-terminal-custom-buttons__button--large {
+  height: 30px;
+  max-width: 220px;
+  padding-inline: 12px;
+  font-size: 13px;
+}
+
 .goblin-terminal-external-input {
   position: relative;
   display: flex;
   min-height: 44px;
-  align-items: flex-end;
+  align-items: center;
   gap: 8px;
   border: 1px solid var(--color-border);
   border-radius: var(--goblin-terminal-float-radius);
@@ -259,16 +278,19 @@
 }
 
 .goblin-terminal-external-input__prefix {
+  display: flex;
   flex: 0 0 auto;
-  align-self: flex-start;
+  align-items: center;
+  height: 26px;
   color: var(--color-muted-foreground);
   font-family: var(--font-mono);
   font-size: 12px;
-  line-height: 26px;
+  line-height: 1;
 }
 
 .goblin-terminal-external-input__control {
   display: block;
+  box-sizing: border-box;
   height: 26px;
   min-height: 26px;
   max-height: min(32vh, 220px);
@@ -283,6 +305,7 @@
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 18px;
+  padding: 4px 0;
 }
 
 .goblin-terminal-external-input__resize {
@@ -322,6 +345,7 @@
 
 .goblin-terminal-external-input__send {
   flex: 0 0 auto;
+  align-self: center;
   color: var(--color-muted-foreground);
 }
 

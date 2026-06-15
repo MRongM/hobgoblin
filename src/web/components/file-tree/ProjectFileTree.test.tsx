@@ -34,6 +34,7 @@ const transferRepositoryFiles = vi.fn(async (_input: unknown) => ({
 const moveRepositoryFileTreeEntries = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
 const renameRepositoryFileTreeEntry = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
 const deleteRepositoryFileTreeEntries = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
+const createRepositoryFileTreeDirectory = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
 const openRepositoryEditor = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
 const openRepositoryTerminal = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
 const openInFinder = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
@@ -41,6 +42,7 @@ const readSystemClipboardFilePaths = vi.fn(async () => ['/tmp/report.pdf'])
 
 vi.mock('#/web/repo-client.ts', () => ({
   getRepositoryFileTree: (...args: GetRepositoryFileTreeArgs) => getRepositoryFileTree(...args),
+  createRepositoryFileTreeDirectory: (...args: unknown[]) => createRepositoryFileTreeDirectory(...args),
   renameRepositoryFileTreeEntry: (...args: unknown[]) => renameRepositoryFileTreeEntry(...args),
   deleteRepositoryFileTreeEntries: (...args: unknown[]) => deleteRepositoryFileTreeEntries(...args),
   moveRepositoryFileTreeEntries: (...args: unknown[]) => moveRepositoryFileTreeEntries(...args),
@@ -79,6 +81,7 @@ beforeEach(() => {
   moveRepositoryFileTreeEntries.mockClear()
   renameRepositoryFileTreeEntry.mockClear()
   deleteRepositoryFileTreeEntries.mockClear()
+  createRepositoryFileTreeDirectory.mockClear()
   openRepositoryEditor.mockClear()
   openRepositoryTerminal.mockClear()
   openInFinder.mockClear()
@@ -377,6 +380,45 @@ describe('ProjectFileTree', () => {
         targetDirPath: '/repo',
       }),
     )
+  })
+
+  test('creates a folder from a directory context menu and refreshes that directory', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    await clickContextMenuItem(treeItemByText('src'), 'file-tree.new-folder')
+
+    const input = container?.querySelector<HTMLInputElement>('input[aria-label="file-tree.new-folder-input-label"]')
+    if (!input) throw new Error('missing new folder input')
+
+    await act(async () => {
+      input.value = 'components'
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(createRepositoryFileTreeDirectory).toHaveBeenCalledWith('/repo', '/repo', '/repo/src', 'components')
+    expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', '/repo/src', undefined)
+  })
+
+  test('refreshes the worktree root from the file tree toolbar', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+    getRepositoryFileTree.mockClear()
+
+    const refreshButton = container?.querySelector<HTMLButtonElement>('button[aria-label="file-tree.refresh"]')
+    if (!refreshButton) throw new Error('missing refresh button')
+
+    await act(async () => {
+      refreshButton.click()
+      await Promise.resolve()
+    })
+
+    expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', '/repo', undefined)
   })
 
   test('context menu paste prefers the internal file tree clipboard over system clipboard files', async () => {

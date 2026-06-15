@@ -15,6 +15,7 @@ import {
   isAncestor,
   isGitRepo,
 } from '#/system/git/branches.ts'
+import { getCommitDetail as getLocalCommitDetail, getCommitHistory as getLocalCommitHistory } from '#/system/git/history.ts'
 import { fetchAll, getBrowserRemoteUrl, getRemoteInfo, pickPreferredRemote, pullBranch, pushBranch } from '#/system/git/remote.ts'
 import { getRemoteTrackingBranches as getLocalRemoteTrackingBranches } from '#/system/git/remote-refs.ts'
 import { getWorkingStatus } from '#/system/git/status.ts'
@@ -22,7 +23,14 @@ import { createWorktree, getWorktrees, removeWorktree } from '#/system/git/workt
 import { getWorktreePatch } from '#/system/git/patch.ts'
 import { commitAllChanges } from '#/system/git/commit.ts'
 import { mergeBranch } from '#/system/git/merge.ts'
-import { type ExecResult, type PullRequestFetchMode, type PullRequestInfo, type WorktreeStatus } from '#/shared/git-types.ts'
+import {
+  type CommitDetail,
+  type CommitHistoryEntry,
+  type ExecResult,
+  type PullRequestFetchMode,
+  type PullRequestInfo,
+  type WorktreeStatus,
+} from '#/shared/git-types.ts'
 import { resolveKnownWorktree, resolveRemovableWorktree } from '#/shared/worktree-guards.ts'
 import { isValidCwd } from '#/shared/input-validation.ts'
 import { validateBranchDeletionPolicy, validateCreateWorktreeInput, validateRemovableWorktreeState } from '#/shared/repo-action-policy.ts'
@@ -37,6 +45,8 @@ import {
   deleteRemoteBranch,
   fetchRemoteRepository,
   getRemoteBrowserUrl,
+  getRemoteCommitDetail,
+  getRemoteHistory,
   getRemotePatch,
   getRemoteSnapshot,
   getRemoteStatus,
@@ -70,6 +80,8 @@ export interface RepoBackend {
     branches?: string[],
     options?: { mode?: PullRequestFetchMode; signal?: AbortSignal },
   ): Promise<PullRequestEntry[] | null>
+  getHistory(branch: string, input: { limit: number; skip: number }, signal?: AbortSignal): Promise<CommitHistoryEntry[]>
+  getCommitDetail(commit: string, signal?: AbortSignal): Promise<CommitDetail | null>
   getRemoteBranches(signal?: AbortSignal): Promise<string[]>
   fetch(signal: AbortSignal): Promise<{ ok: boolean; message: string }>
   checkout(branch: string, signal?: AbortSignal): Promise<ExecResult>
@@ -242,6 +254,18 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       const prs = await getBranchPullRequests(repoId, branchSet, { mode: options?.mode, signal: options?.signal })
       return pullRequestEntries(prs)
     },
+    async getHistory(branch, input, signal) {
+      if (!isValidCwd(repoId)) return []
+      const available = await probeGitRepository(repoId)
+      if (!available.ok) throw new Error(available.message)
+      return await getLocalCommitHistory(repoId, branch, input, { signal })
+    },
+    async getCommitDetail(commit, signal) {
+      if (!isValidCwd(repoId)) return null
+      const available = await probeGitRepository(repoId)
+      if (!available.ok) throw new Error(available.message)
+      return await getLocalCommitDetail(repoId, commit, { signal })
+    },
     async getRemoteBranches(signal) {
       if (!isValidCwd(repoId)) return []
       return await getLocalRemoteTrackingBranches(repoId, signal)
@@ -366,6 +390,12 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
         signal: options?.signal,
       })
       return pullRequestEntries(prs)
+    },
+    async getHistory(branch, input, signal) {
+      return await getRemoteHistory(target, branch, input, { signal })
+    },
+    async getCommitDetail(commit, signal) {
+      return await getRemoteCommitDetail(target, commit, { signal })
     },
     async getRemoteBranches(signal) {
       return await getSshRemoteTrackingBranches(target, { signal })

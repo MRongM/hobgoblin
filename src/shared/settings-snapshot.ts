@@ -21,6 +21,7 @@ export function buildRuntimeSettingsSnapshot(input: {
     globalShortcutDisabled: input.prefs.globalShortcutDisabled,
     swapCloseShortcuts: input.prefs.swapCloseShortcuts,
     toggleDetailOnActionBarBlankClick: input.prefs.toggleDetailOnActionBarBlankClick,
+    temporaryFilesDirectory: input.prefs.temporaryFilesDirectory,
     globalShortcut: input.prefs.globalShortcut,
     globalShortcutRegistered: input.globalShortcutRegistered,
     terminalApp: input.prefs.terminalApp,
@@ -30,6 +31,7 @@ export function buildRuntimeSettingsSnapshot(input: {
     terminalExternalInputEnabled: input.prefs.terminalExternalInputEnabled,
     remoteTerminalTmuxEnabled: input.prefs.remoteTerminalTmuxEnabled,
     terminalCustomButtonsVisible: input.prefs.terminalCustomButtonsVisible,
+    terminalCustomButtonSize: input.prefs.terminalCustomButtonSize,
     terminalCustomButtons: input.prefs.terminalCustomButtons,
     lanEnabled: input.prefs.lanEnabled,
   }
@@ -71,6 +73,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     | 'globalShortcutDisabled'
     | 'swapCloseShortcuts'
     | 'toggleDetailOnActionBarBlankClick'
+    | 'temporaryFilesDirectory'
     | 'globalShortcut'
     | 'globalShortcutRegistered'
     | 'terminalApp'
@@ -80,6 +83,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     | 'terminalExternalInputEnabled'
     | 'remoteTerminalTmuxEnabled'
     | 'terminalCustomButtonsVisible'
+    | 'terminalCustomButtonSize'
     | 'terminalCustomButtons'
     | 'lanEnabled'
   >,
@@ -94,6 +98,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     globalShortcutDisabled: snapshot.globalShortcutDisabled,
     swapCloseShortcuts: snapshot.swapCloseShortcuts,
     toggleDetailOnActionBarBlankClick: snapshot.toggleDetailOnActionBarBlankClick,
+    temporaryFilesDirectory: snapshot.temporaryFilesDirectory,
     globalShortcut: snapshot.globalShortcut,
     globalShortcutRegistered: snapshot.globalShortcutRegistered,
     terminalApp: snapshot.terminalApp,
@@ -103,6 +108,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     terminalExternalInputEnabled: snapshot.terminalExternalInputEnabled,
     remoteTerminalTmuxEnabled: snapshot.remoteTerminalTmuxEnabled,
     terminalCustomButtonsVisible: snapshot.terminalCustomButtonsVisible,
+    terminalCustomButtonSize: snapshot.terminalCustomButtonSize,
     terminalCustomButtons: snapshot.terminalCustomButtons,
     lanEnabled: snapshot.lanEnabled,
   }

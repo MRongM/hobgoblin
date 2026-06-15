@@ -4,6 +4,7 @@ import { BranchList } from '#/web/components/BranchList.tsx'
 import { SplitPane } from '#/web/components/SplitPane.tsx'
 import { ProjectFileTree } from '#/web/components/file-tree/ProjectFileTree.tsx'
 import { ProjectChangesPanel } from '#/web/components/repo-workspace/ProjectChangesPanel.tsx'
+import { ProjectHistoryPanel } from '#/web/components/repo-workspace/ProjectHistoryPanel.tsx'
 import { ProjectPortsPanel } from '#/web/components/repo-workspace/ProjectPortsPanel.tsx'
 import { ProjectStatusPanel } from '#/web/components/repo-workspace/ProjectStatusPanel.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
@@ -15,7 +16,7 @@ import { useT } from '#/web/stores/i18n.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 
-type ExplorerTab = 'files' | 'changes' | 'status' | 'ports'
+type ExplorerTab = 'files' | 'changes' | 'status' | 'history' | 'ports'
 
 export interface FileTreeRevealRequest {
   id: number
@@ -103,6 +104,7 @@ function ExplorerTabs({
     { id: 'files' as const, label: t('file-tree.title') },
     { id: 'changes' as const, label: t('tab.changes') },
     { id: 'status' as const, label: t('tab.status') },
+    { id: 'history' as const, label: t('tab.history') },
     ...(isRemoteRepo ? [{ id: 'ports' as const, label: t('ports.title') }] : []),
   ] satisfies { id: ExplorerTab; label: string }[]
 
@@ -162,6 +164,8 @@ function ExplorerTabs({
           <ProjectChangesPanel repoId={repoId} onRevealPath={handleRevealPath} />
         ) : activeVisibleTab === 'status' ? (
           <ProjectStatusPanel repoId={repoId} layout={layout} />
+        ) : activeVisibleTab === 'history' ? (
+          <ProjectHistoryPanel repoId={repoId} onRevealPath={handleRevealPath} />
         ) : (
           <ProjectPortsPanel repoId={repoId} />
         )}

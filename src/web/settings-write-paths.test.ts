@@ -47,7 +47,9 @@ const appDataClientMocks = vi.hoisted(() => ({
   setSettingsFetchInterval: vi.fn(async (sec) => sec),
   setShortcutsDisabled: vi.fn(async () => {}),
   setSwapCloseShortcuts: vi.fn(async () => {}),
+  setTemporaryFilesDirectory: vi.fn(async () => {}),
   setRemoteTerminalTmuxEnabled: vi.fn(async () => {}),
+  setTerminalCustomButtonSize: vi.fn(async () => {}),
   setTerminalCustomButtons: vi.fn(async (buttons: TerminalCustomButton[]) => buttons),
   setTerminalCustomButtonsVisible: vi.fn(async () => {}),
   setTerminalExternalInputEnabled: vi.fn(async () => {}),
@@ -71,7 +73,9 @@ vi.mock('#/web/settings-client.ts', () => ({
   setSettingsFetchInterval: appDataClientMocks.setSettingsFetchInterval,
   setShortcutsDisabled: appDataClientMocks.setShortcutsDisabled,
   setSwapCloseShortcuts: appDataClientMocks.setSwapCloseShortcuts,
+  setTemporaryFilesDirectory: appDataClientMocks.setTemporaryFilesDirectory,
   setRemoteTerminalTmuxEnabled: appDataClientMocks.setRemoteTerminalTmuxEnabled,
+  setTerminalCustomButtonSize: appDataClientMocks.setTerminalCustomButtonSize,
   setTerminalCustomButtons: appDataClientMocks.setTerminalCustomButtons,
   setTerminalCustomButtonsVisible: appDataClientMocks.setTerminalCustomButtonsVisible,
   setTerminalExternalInputEnabled: appDataClientMocks.setTerminalExternalInputEnabled,
@@ -126,8 +130,12 @@ describe('settings write paths', () => {
     appDataClientMocks.setShortcutsDisabled.mockResolvedValue(undefined)
     appDataClientMocks.setSwapCloseShortcuts.mockReset()
     appDataClientMocks.setSwapCloseShortcuts.mockResolvedValue(undefined)
+    appDataClientMocks.setTemporaryFilesDirectory.mockReset()
+    appDataClientMocks.setTemporaryFilesDirectory.mockResolvedValue(undefined)
     appDataClientMocks.setRemoteTerminalTmuxEnabled.mockReset()
     appDataClientMocks.setRemoteTerminalTmuxEnabled.mockResolvedValue(undefined)
+    appDataClientMocks.setTerminalCustomButtonSize.mockReset()
+    appDataClientMocks.setTerminalCustomButtonSize.mockResolvedValue(undefined)
     appDataClientMocks.setTerminalCustomButtons.mockReset()
     appDataClientMocks.setTerminalCustomButtons.mockImplementation(async (buttons: TerminalCustomButton[]) => buttons)
     appDataClientMocks.setTerminalCustomButtonsVisible.mockReset()
@@ -241,6 +249,18 @@ describe('settings write paths', () => {
     invalidateSpy.mockRestore()
   })
 
+  test('setTemporaryFilesDirectoryPreference updates runtime settings cache', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    const { setTemporaryFilesDirectoryPreference } = await import('#/web/settings-write-paths.ts')
+
+    await setTemporaryFilesDirectoryPreference('/Users/test/project/tmp')
+
+    expect(appDataClientMocks.setTemporaryFilesDirectory).toHaveBeenCalledWith('/Users/test/project/tmp')
+    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
+      temporaryFilesDirectory: '/Users/test/project/tmp',
+    })
+  })
+
   test('setTerminalCustomButtonsPreference updates runtime settings cache', async () => {
     mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
     const buttons = [{ label: 'status', value: 'git status --short' }]
@@ -251,6 +271,22 @@ describe('settings write paths', () => {
     expect(appDataClientMocks.setTerminalCustomButtons).toHaveBeenCalledWith(buttons)
     expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
       terminalCustomButtons: buttons,
+    })
+  })
+
+  test('setTerminalCustomButtonSizePreference updates runtime settings cache', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    const { setTerminalCustomButtonSizePreference } = (await import(
+      '#/web/settings-write-paths.ts'
+    )) as typeof import('#/web/settings-write-paths.ts') & {
+      setTerminalCustomButtonSizePreference: (size: 'small' | 'medium' | 'large') => Promise<void>
+    }
+
+    await setTerminalCustomButtonSizePreference('large')
+
+    expect(appDataClientMocks.setTerminalCustomButtonSize).toHaveBeenCalledWith('large')
+    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
+      terminalCustomButtonSize: 'large',
     })
   })
 

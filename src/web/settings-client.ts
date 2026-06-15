@@ -16,6 +16,7 @@ import type {
   SettingsPrefsUpdateResponse,
   SettingsSnapshot,
   TerminalCustomButton,
+  TerminalCustomButtonSize,
   TerminalAppState,
   TerminalPref,
   ThemePref,
@@ -172,6 +173,10 @@ export async function setToggleDetailOnActionBarBlankClick(enabled: boolean): Pr
   await updateSettingsPrefsPatch({ toggleDetailOnActionBarBlankClick: enabled })
 }
 
+export async function setTemporaryFilesDirectory(path: string): Promise<void> {
+  await updateSettingsPrefsPatch({ temporaryFilesDirectory: path })
+}
+
 export async function setGlobalShortcut(accelerator: string): Promise<GlobalShortcutState> {
   if (!canUseGlobalShortcutSettings()) throw new Error('Global shortcut unavailable')
   return await invokeNativeRpcPath<GlobalShortcutState>('settings.setGlobalShortcut', { accelerator })
@@ -207,6 +212,10 @@ export async function setRemoteTerminalTmuxEnabled(enabled: boolean): Promise<vo
 
 export async function setTerminalCustomButtonsVisible(visible: boolean): Promise<void> {
   await updateSettingsPrefsPatch({ terminalCustomButtonsVisible: visible })
+}
+
+export async function setTerminalCustomButtonSize(size: TerminalCustomButtonSize): Promise<void> {
+  await updateSettingsPrefsPatch({ terminalCustomButtonSize: size })
 }
 
 export async function setTerminalCustomButtons(buttons: TerminalCustomButton[]): Promise<TerminalCustomButton[]> {

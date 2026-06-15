@@ -4,7 +4,11 @@ import { externalAppsQueryKey, settingsSnapshotQueryKey, useSettingsSnapshotQuer
 import type { ExternalAppsSnapshot, RuntimeRecentReposState, RuntimeSettingsSnapshot, SettingsSnapshot } from '#/shared/rpc.ts'
 import type { EditorPref, TerminalPref } from '#/shared/rpc.ts'
 import { runtimeRecentReposStateFromSettingsSnapshot, runtimeSettingsSnapshotFromSettingsSnapshot } from '#/shared/settings-snapshot.ts'
-import { DEFAULT_FILE_TREE_FONT_SIZE, DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
+import {
+  DEFAULT_FILE_TREE_FONT_SIZE,
+  DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
+  DEFAULT_TERMINAL_FONT_SIZE,
+} from '#/shared/settings-defaults.ts'
 
 export function fallbackInitialSettings() {
   return getInitialBootstrap().initialSettings
@@ -88,6 +92,7 @@ export function readRuntimeGeneralSettings(data: RuntimeSettingsSnapshot | undef
   return {
     toggleDetailOnActionBarBlankClick:
       data?.toggleDetailOnActionBarBlankClick ?? fallback?.toggleDetailOnActionBarBlankClick ?? false,
+    temporaryFilesDirectory: data?.temporaryFilesDirectory ?? fallback?.temporaryFilesDirectory ?? '',
   }
 }
 
@@ -114,8 +119,11 @@ export function readRuntimeTerminalSettings(data: RuntimeSettingsSnapshot | unde
       data?.terminalExternalInputEnabled ?? fallback?.terminalExternalInputEnabled ?? false,
     remoteTerminalTmuxEnabled:
       data?.remoteTerminalTmuxEnabled ?? fallback?.remoteTerminalTmuxEnabled ?? false,
+    temporaryFilesDirectory: data?.temporaryFilesDirectory ?? fallback?.temporaryFilesDirectory ?? '',
     terminalCustomButtonsVisible:
       data?.terminalCustomButtonsVisible ?? fallback?.terminalCustomButtonsVisible ?? true,
+    terminalCustomButtonSize:
+      data?.terminalCustomButtonSize ?? fallback?.terminalCustomButtonSize ?? DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
     terminalCustomButtons: data?.terminalCustomButtons ?? fallback?.terminalCustomButtons ?? [],
   }
 }
