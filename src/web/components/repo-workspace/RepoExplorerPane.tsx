@@ -11,6 +11,7 @@ import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { Toolbar } from '#/web/components/Layout.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { Badge } from '#/web/components/ui/badge.tsx'
+import { ToolbarTabStrip, ToolbarTabStripBody } from '#/web/components/tab-strip/ToolbarTabStrip.tsx'
 import { useT } from '#/web/stores/i18n.ts'
 import { cn } from '#/web/lib/cn.ts'
 
@@ -117,36 +118,47 @@ function ExplorerTabs({
   return (
     <section className="flex min-h-0 flex-1 flex-col border-t border-separator/70 bg-background">
       <Toolbar className="h-8 px-2" variant="detail">
-        <div className="flex h-full min-w-0 items-center gap-1" role="tablist" aria-label={t('file-tree.title')}>
-          {tabs.map((tab) => {
-            const selected = activeTab === tab.id
-            return (
-              <Button
-                key={tab.id}
-                type="button"
-                variant="ghost"
-                role="tab"
-                aria-selected={selected}
-                aria-controls={`repo-explorer-${tab.id}-panel`}
-                tabIndex={selected ? 0 : -1}
-                onClick={() => onTabChange(tab.id)}
-                className={cn(
-                  'h-7 gap-1.5 border px-2.5 text-sm font-normal',
-                  selected
-                    ? 'border-transparent bg-selected text-selected-foreground'
-                    : 'border-separator text-muted-foreground hover:bg-accent/50 hover:text-foreground',
-                )}
-              >
-                {tab.label}
-                {tab.id === 'changes' && changeCount > 0 && (
-                  <Badge variant="attention" className="font-normal font-mono tabular-nums">
-                    {changeCount}
-                  </Badge>
-                )}
-              </Button>
-            )
-          })}
-        </div>
+        <ToolbarTabStrip
+          compact={false}
+          compactContent={null}
+          scrollContent={
+            <ToolbarTabStripBody
+              scroll
+              role="tablist"
+              aria-label={t('file-tree.title')}
+              aria-orientation="horizontal"
+            >
+              {tabs.map((tab) => {
+                const selected = activeTab === tab.id
+                return (
+                  <Button
+                    key={tab.id}
+                    type="button"
+                    variant="ghost"
+                    role="tab"
+                    aria-selected={selected}
+                    aria-controls={`repo-explorer-${tab.id}-panel`}
+                    tabIndex={selected ? 0 : -1}
+                    onClick={() => onTabChange(tab.id)}
+                    className={cn(
+                      'h-7 gap-1.5 border px-2.5 text-sm font-normal',
+                      selected
+                        ? 'border-transparent bg-selected text-selected-foreground'
+                        : 'border-separator text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+                    )}
+                  >
+                    {tab.label}
+                    {tab.id === 'changes' && changeCount > 0 && (
+                      <Badge variant="attention" className="font-normal font-mono tabular-nums">
+                        {changeCount}
+                      </Badge>
+                    )}
+                  </Button>
+                )
+              })}
+            </ToolbarTabStripBody>
+          }
+        />
       </Toolbar>
       <div
         id={`repo-explorer-${activeTab}-panel`}
