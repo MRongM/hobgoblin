@@ -18,6 +18,7 @@ import type { SelectedBranchDetail } from '#/web/components/branch-detail/model.
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { repoWorkspaceBehavior } from '#/web/lib/workspace-layout.ts'
 interface Props {
+  repoRoot: string
   detail: SelectedBranchDetail
   layout: RepoWorkspaceLayout
 }
@@ -65,7 +66,7 @@ function SyncValue({
   )
 }
 
-export function BranchStatus({ detail, layout }: Props) {
+export function BranchStatus({ repoRoot, detail, layout }: Props) {
   const t = useT()
   const lang = useI18nStore((s) => s.lang)
   const compact = useIsCompactUi()
@@ -74,7 +75,9 @@ export function BranchStatus({ detail, layout }: Props) {
   if (!branch) return <EmptyState title={t('branches.empty')} />
 
   const protectedBranch = PROTECTED_BRANCHES.has(branch.name)
-  const worktreePath = branch.worktree?.path ? formatWorktreePath(branch.worktree?.path, detail.remoteTarget) : ''
+  const worktreePath = branch.worktree?.path
+    ? formatWorktreePath(branch.worktree?.path, detail.remoteTarget, repoRoot)
+    : ''
   const worktreeChangeCount = detail.worktreeState?.changeCount ?? statusCount
   const pullRequest =
     branch.pullRequest && branchPullRequestBelongsToBranch(branch, branch.pullRequest) ? branch.pullRequest : undefined

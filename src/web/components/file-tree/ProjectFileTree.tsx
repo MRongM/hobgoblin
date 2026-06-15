@@ -9,6 +9,7 @@ import {
   File,
   FileSymlink,
   Folder,
+  FolderPlus,
   FolderOpen,
   Pencil,
   RefreshCw,
@@ -26,6 +27,7 @@ import {
 import { isRemoteRepoId } from '#/shared/rpc.ts'
 import { openRemoteRepositoryEditor, openRemoteRepositoryTerminal } from '#/web/remote-client.ts'
 import {
+  createRepositoryFileTreeDirectory,
   deleteRepositoryFileTreeEntries,
   getRepositoryFileTree,
   moveRepositoryFileTreeEntries,
@@ -87,6 +89,11 @@ interface DirectoryState {
   entries?: RepoFileTreeEntry[]
   loading: boolean
   error: string | null
+}
+
+interface CreateDirectoryTarget {
+  parentRelativePath: string
+  parentAbsolutePath: string
 }
 
 interface ProjectFileTreeView {
@@ -154,6 +161,10 @@ export function ProjectFileTree({
   const [deleteTargets, setDeleteTargets] = useState<FileTreeNode[]>([])
   const [deletePending, setDeletePending] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [createDirectoryTarget, setCreateDirectoryTarget] = useState<CreateDirectoryTarget | null>(null)
+  const [createDirectoryName, setCreateDirectoryName] = useState('')
+  const [createDirectoryPending, setCreateDirectoryPending] = useState(false)
+  const [createDirectoryError, setCreateDirectoryError] = useState<string | null>(null)
 
   useEffect(() => {
     activeWorktreeRef.current = worktreePath
@@ -209,6 +220,10 @@ export function ProjectFileTree({
     setDeleteTargets([])
     setDeletePending(false)
     setDeleteError(null)
+    setCreateDirectoryTarget(null)
+    setCreateDirectoryName('')
+    setCreateDirectoryPending(false)
+    setCreateDirectoryError(null)
     if (!worktreePath) return
     const controller = new AbortController()
     void loadDirectory(ROOT_DIR, worktreePath, controller.signal)
@@ -431,6 +446,107 @@ export function ProjectFileTree({
       await refreshDirectoryPath(parentDirectoryPath(absolutePath))
     },
     [refreshDirectoryPath],
+  )
+
+  const rootCreateDirectoryTarget = useCallback((): CreateDirectoryTarget | null => {
+    if (!worktreePath) return null
+    return { parentRelativePath: ROOT_DIR, parentAbsolutePath: worktreePath }
+  }, [worktreePath])
+
+  const createDirectoryTargetForNode = useCallback(
+    (node: FileTreeNode | null): CreateDirectoryTarget | null => {
+      if (!worktreePath || !node) return rootCreateDirectoryTarget()
+      if (isExpandableNode(node)) {
+        return { parentRelativePath: node.relativePath, parentAbsolutePath: node.absolutePath }
+      }
+      return {
+        parentRelativePath: parentRelativePathForNode(node),
+        parentAbsolutePath: parentAbsolutePathForNode(worktreePath, node),
+      }
+    },
+    [rootCreateDirectoryTarget, worktreePath],
+  )
+
+  const beginCreateDirectory = useCallback(
+    (target: CreateDirectoryTarget | null) => {
+      if (!target) return
+      setCreateDirectoryTarget(target)
+      setCreateDirectoryName('')
+      setCreateDirectoryError(null)
+      setContextOpen(false)
+      if (target.parentRelativePath) {
+        setExpandedDirs((current) => new Set(current).add(target.parentRelativePath))
+      }
+      const state = directoriesRef.current[target.parentRelativePath]
+      if (!state?.entries && !state?.loading) {
+        void loadDirectory(target.parentRelativePath, target.parentAbsolutePath)
+      }
+    },
+    [loadDirectory],
+  )
+
+  const beginCreateDirectoryForNode = useCallback(
+    (node: FileTreeNode | null) => {
+      beginCreateDirectory(createDirectoryTargetForNode(node))
+    },
+    [beginCreateDirectory, createDirectoryTargetForNode],
+  )
+
+  const cancelCreateDirectory = useCallback(() => {
+    if (createDirectoryPending) return
+    setCreateDirectoryTarget(null)
+    setCreateDirectoryName('')
+    setCreateDirectoryError(null)
+  }, [createDirectoryPending])
+
+  const submitCreateDirectory = useCallback(
+    async (value = createDirectoryName) => {
+      if (!worktreePath || !createDirectoryTarget) return
+      const name = value.trim()
+      if (!name) {
+        setCreateDirectoryError('error.invalid-arguments')
+        return
+      }
+      setCreateDirectoryPending(true)
+      setCreateDirectoryError(null)
+      const result = await createRepositoryFileTreeDirectory(
+        repoId,
+        worktreePath,
+        createDirectoryTarget.parentAbsolutePath,
+        name,
+      )
+      setCreateDirectoryPending(false)
+      if (!result.ok) {
+        setCreateDirectoryError(result.message)
+        return
+      }
+
+      const newRelativePath = createDirectoryTarget.parentRelativePath
+        ? `${createDirectoryTarget.parentRelativePath}/${name}`
+        : name
+      setCreateDirectoryTarget(null)
+      setCreateDirectoryName('')
+      setCreateDirectoryError(null)
+      await loadDirectory(createDirectoryTarget.parentRelativePath, createDirectoryTarget.parentAbsolutePath)
+      setSelection({ selected: new Set([newRelativePath]), anchor: newRelativePath })
+      setFocusedNodeId(newRelativePath)
+    },
+    [createDirectoryName, createDirectoryTarget, loadDirectory, repoId, worktreePath],
+  )
+
+  const refreshTreeDirectory = useCallback(
+    (target: CreateDirectoryTarget | null) => {
+      if (!target) return
+      void loadDirectory(target.parentRelativePath, target.parentAbsolutePath)
+    },
+    [loadDirectory],
+  )
+
+  const refreshDirectoryForContextNode = useCallback(
+    (node: FileTreeNode | null) => {
+      refreshTreeDirectory(createDirectoryTargetForNode(node))
+    },
+    [createDirectoryTargetForNode, refreshTreeDirectory],
   )
 
   const cancelRename = useCallback(() => {
@@ -790,58 +906,88 @@ export function ProjectFileTree({
           </div>
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col overflow-auto py-1 text-[length:var(--goblin-file-tree-font-size)]">
-          {rootState?.loading && !rootState.entries ? (
-            <FileTreeMessage>{t('file-tree.loading')}</FileTreeMessage>
-          ) : rootState?.error && !rootState.entries ? (
-            <FileTreeError message={t(rootState.error)} onRetry={() => void loadDirectory(ROOT_DIR, worktreePath)} />
-          ) : (
-            <>
-              {rootNodes.map((node) => (
-                <FileTreeRow
-                  key={node.id}
-                  repoId={repoId}
-                  node={node}
-                  depth={0}
-                  selected={selection.selected.has(node.id)}
-                  selectedIds={selection.selected}
-                  directories={directories}
-                  directoryState={directories[node.relativePath]}
-                  onSelect={handleSelect}
-                  onToggle={toggleDirectory}
-                  onDragStart={handleDragStart}
-                  onContextMenu={handleContextMenu}
-                  onContextMenuOpenChange={handleContextMenuOpenChange}
-                  contextTargets={contextTargets}
-                  onBeginRename={beginRename}
-                  onBeginDelete={beginDelete}
-                  onKeyDown={handleKeyDown}
-                  onFocus={setFocusedNodeId}
-                  onDrop={handleDrop}
-                  onDragOver={handleDragOver}
-                  onPaste={runContextPaste}
-                  renameNodeId={renameNode?.id ?? null}
-                  renameValue={renameValue}
-                  renamePending={renamePending}
-                  renameError={renameError}
-                  onRenameValueChange={setRenameValue}
-                  onRenameCancel={cancelRename}
-                  onRenameSubmit={submitRename}
-                />
-              ))}
-              <ContextMenu>
-                <ContextMenuTrigger asChild>
-                  <div
-                    className="min-h-6 flex-1"
-                    data-testid="file-tree-empty-context-target"
-                    onDrop={(event) => handleDrop(null, event)}
-                    onDragOver={handleDragOver}
+        <div className="flex min-h-0 flex-1 flex-col text-[length:var(--goblin-file-tree-font-size)]">
+          <FileTreeToolbar
+            onCreateDirectory={() => beginCreateDirectory(rootCreateDirectoryTarget())}
+            onRefresh={() => refreshTreeDirectory(rootCreateDirectoryTarget())}
+          />
+          <div className="min-h-0 flex-1 overflow-auto py-1">
+            {rootState?.loading && !rootState.entries ? (
+              <FileTreeMessage>{t('file-tree.loading')}</FileTreeMessage>
+            ) : rootState?.error && !rootState.entries ? (
+              <FileTreeError message={t(rootState.error)} onRetry={() => void loadDirectory(ROOT_DIR, worktreePath)} />
+            ) : (
+              <>
+                {createDirectoryTarget?.parentRelativePath === ROOT_DIR ? (
+                  <FileTreeCreateDirectoryRow
+                    depth={0}
+                    value={createDirectoryName}
+                    pending={createDirectoryPending}
+                    error={createDirectoryError}
+                    onValueChange={setCreateDirectoryName}
+                    onCancel={cancelCreateDirectory}
+                    onSubmit={submitCreateDirectory}
                   />
-                </ContextMenuTrigger>
-                <FileTreeEmptyContextMenu onPaste={() => void runContextPaste(null)} />
-              </ContextMenu>
-            </>
-          )}
+                ) : null}
+                {rootNodes.map((node) => (
+                  <FileTreeRow
+                    key={node.id}
+                    repoId={repoId}
+                    node={node}
+                    depth={0}
+                    selected={selection.selected.has(node.id)}
+                    selectedIds={selection.selected}
+                    directories={directories}
+                    directoryState={directories[node.relativePath]}
+                    onSelect={handleSelect}
+                    onToggle={toggleDirectory}
+                    onDragStart={handleDragStart}
+                    onContextMenu={handleContextMenu}
+                    onContextMenuOpenChange={handleContextMenuOpenChange}
+                    contextTargets={contextTargets}
+                    onBeginRename={beginRename}
+                    onBeginDelete={beginDelete}
+                    onBeginCreateDirectory={beginCreateDirectoryForNode}
+                    onRefresh={refreshDirectoryForContextNode}
+                    onKeyDown={handleKeyDown}
+                    onFocus={setFocusedNodeId}
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
+                    onPaste={runContextPaste}
+                    renameNodeId={renameNode?.id ?? null}
+                    renameValue={renameValue}
+                    renamePending={renamePending}
+                    renameError={renameError}
+                    onRenameValueChange={setRenameValue}
+                    onRenameCancel={cancelRename}
+                    onRenameSubmit={submitRename}
+                    createDirectoryParentRelativePath={createDirectoryTarget?.parentRelativePath ?? null}
+                    createDirectoryName={createDirectoryName}
+                    createDirectoryPending={createDirectoryPending}
+                    createDirectoryError={createDirectoryError}
+                    onCreateDirectoryNameChange={setCreateDirectoryName}
+                    onCreateDirectoryCancel={cancelCreateDirectory}
+                    onCreateDirectorySubmit={submitCreateDirectory}
+                  />
+                ))}
+                <ContextMenu>
+                  <ContextMenuTrigger asChild>
+                    <div
+                      className="min-h-6 flex-1"
+                      data-testid="file-tree-empty-context-target"
+                      onDrop={(event) => handleDrop(null, event)}
+                      onDragOver={handleDragOver}
+                    />
+                  </ContextMenuTrigger>
+                  <FileTreeEmptyContextMenu
+                    onCreateDirectory={() => beginCreateDirectory(rootCreateDirectoryTarget())}
+                    onRefresh={() => refreshTreeDirectory(rootCreateDirectoryTarget())}
+                    onPaste={() => void runContextPaste(null)}
+                  />
+                </ContextMenu>
+              </>
+            )}
+          </div>
         </div>
       )}
       <FileTreeDeleteDialog
@@ -892,6 +1038,8 @@ function FileTreeRow({
   contextTargets,
   onBeginRename,
   onBeginDelete,
+  onBeginCreateDirectory,
+  onRefresh,
   onKeyDown,
   onFocus,
   onDrop,
@@ -904,6 +1052,13 @@ function FileTreeRow({
   onRenameValueChange,
   onRenameCancel,
   onRenameSubmit,
+  createDirectoryParentRelativePath,
+  createDirectoryName,
+  createDirectoryPending,
+  createDirectoryError,
+  onCreateDirectoryNameChange,
+  onCreateDirectoryCancel,
+  onCreateDirectorySubmit,
 }: {
   repoId: string
   node: FileTreeNode
@@ -920,6 +1075,8 @@ function FileTreeRow({
   contextTargets: (node: FileTreeNode) => FileTreeNode[]
   onBeginRename: (node: FileTreeNode) => void
   onBeginDelete: (node: FileTreeNode) => void
+  onBeginCreateDirectory: (node: FileTreeNode | null) => void
+  onRefresh: (node: FileTreeNode | null) => void
   onKeyDown: (node: FileTreeNode, event: KeyboardEvent) => void
   onFocus: (nodeId: string) => void
   onDrop: (node: FileTreeNode, event: DragEvent<HTMLDivElement>) => void
@@ -932,6 +1089,13 @@ function FileTreeRow({
   onRenameValueChange: (value: string) => void
   onRenameCancel: () => void
   onRenameSubmit: (value?: string) => void
+  createDirectoryParentRelativePath: string | null
+  createDirectoryName: string
+  createDirectoryPending: boolean
+  createDirectoryError: string | null
+  onCreateDirectoryNameChange: (value: string) => void
+  onCreateDirectoryCancel: () => void
+  onCreateDirectorySubmit: (value?: string) => void
 }) {
   const expandable = isExpandableNode(node)
   const Icon = iconForNode(node, node.expanded === true)
@@ -1028,6 +1192,8 @@ function FileTreeRow({
           targets={contextTargets(node)}
           onBeginRename={onBeginRename}
           onBeginDelete={onBeginDelete}
+          onBeginCreateDirectory={onBeginCreateDirectory}
+          onRefresh={onRefresh}
           onPaste={onPaste}
         />
       </ContextMenu>
@@ -1039,6 +1205,17 @@ function FileTreeRow({
       ) : null}
       {node.expanded && directoryState?.error ? (
         <FileTreeIndentedMessage depth={depth + 1}>{directoryState.error}</FileTreeIndentedMessage>
+      ) : null}
+      {node.expanded && createDirectoryParentRelativePath === node.relativePath ? (
+        <FileTreeCreateDirectoryRow
+          depth={depth + 1}
+          value={createDirectoryName}
+          pending={createDirectoryPending}
+          error={createDirectoryError}
+          onValueChange={onCreateDirectoryNameChange}
+          onCancel={onCreateDirectoryCancel}
+          onSubmit={onCreateDirectorySubmit}
+        />
       ) : null}
       {node.expanded &&
         node.children?.map((child) => (
@@ -1059,6 +1236,8 @@ function FileTreeRow({
             contextTargets={contextTargets}
             onBeginRename={onBeginRename}
             onBeginDelete={onBeginDelete}
+            onBeginCreateDirectory={onBeginCreateDirectory}
+            onRefresh={onRefresh}
             onKeyDown={onKeyDown}
             onFocus={onFocus}
             onDrop={onDrop}
@@ -1071,6 +1250,13 @@ function FileTreeRow({
             onRenameValueChange={onRenameValueChange}
             onRenameCancel={onRenameCancel}
             onRenameSubmit={onRenameSubmit}
+            createDirectoryParentRelativePath={createDirectoryParentRelativePath}
+            createDirectoryName={createDirectoryName}
+            createDirectoryPending={createDirectoryPending}
+            createDirectoryError={createDirectoryError}
+            onCreateDirectoryNameChange={onCreateDirectoryNameChange}
+            onCreateDirectoryCancel={onCreateDirectoryCancel}
+            onCreateDirectorySubmit={onCreateDirectorySubmit}
           />
         ))}
     </>
@@ -1083,6 +1269,8 @@ function FileTreeContextMenu({
   targets,
   onBeginRename,
   onBeginDelete,
+  onBeginCreateDirectory,
+  onRefresh,
   onPaste,
 }: {
   repoId: string
@@ -1090,6 +1278,8 @@ function FileTreeContextMenu({
   targets: FileTreeNode[]
   onBeginRename: (node: FileTreeNode) => void
   onBeginDelete: (node: FileTreeNode) => void
+  onBeginCreateDirectory: (node: FileTreeNode | null) => void
+  onRefresh: (node: FileTreeNode | null) => void
   onPaste: (node: FileTreeNode | null) => void
 }) {
   const t = useT()
@@ -1108,6 +1298,14 @@ function FileTreeContextMenu({
       <ContextMenuItem onSelect={() => void onPaste(node)}>
         <ClipboardPaste className="size-3.5" />
         {t('file-tree.paste')}
+      </ContextMenuItem>
+      <ContextMenuItem disabled={!realNode} onSelect={() => onBeginCreateDirectory(node)}>
+        <FolderPlus className="size-3.5" />
+        {t('file-tree.new-folder')}
+      </ContextMenuItem>
+      <ContextMenuItem disabled={!realNode} onSelect={() => onRefresh(node)}>
+        <RefreshCw className="size-3.5" />
+        {t('file-tree.refresh')}
       </ContextMenuItem>
       <ContextMenuItem disabled={!realNode} onSelect={() => void openNodeInEditor(repoId, node)}>
         <Code2 className="size-3.5" />
@@ -1136,15 +1334,117 @@ function FileTreeContextMenu({
   )
 }
 
-function FileTreeEmptyContextMenu({ onPaste }: { onPaste: () => void }) {
+function FileTreeEmptyContextMenu({
+  onCreateDirectory,
+  onRefresh,
+  onPaste,
+}: {
+  onCreateDirectory: () => void
+  onRefresh: () => void
+  onPaste: () => void
+}) {
   const t = useT()
   return (
     <ContextMenuContent>
+      <ContextMenuItem onSelect={onCreateDirectory}>
+        <FolderPlus className="size-3.5" />
+        {t('file-tree.new-folder')}
+      </ContextMenuItem>
+      <ContextMenuItem onSelect={onRefresh}>
+        <RefreshCw className="size-3.5" />
+        {t('file-tree.refresh')}
+      </ContextMenuItem>
       <ContextMenuItem onSelect={onPaste}>
         <ClipboardPaste className="size-3.5" />
         {t('file-tree.paste')}
       </ContextMenuItem>
     </ContextMenuContent>
+  )
+}
+
+function FileTreeToolbar({
+  onCreateDirectory,
+  onRefresh,
+}: {
+  onCreateDirectory: () => void
+  onRefresh: () => void
+}) {
+  const t = useT()
+  return (
+    <div className="flex h-7 shrink-0 items-center gap-1 border-b border-border px-2">
+      <Button
+        type="button"
+        size="icon-xs"
+        variant="ghost"
+        aria-label={t('file-tree.new-folder')}
+        title={t('file-tree.new-folder')}
+        onClick={onCreateDirectory}
+      >
+        <FolderPlus className="size-3.5" />
+      </Button>
+      <Button
+        type="button"
+        size="icon-xs"
+        variant="ghost"
+        aria-label={t('file-tree.refresh')}
+        title={t('file-tree.refresh')}
+        onClick={onRefresh}
+      >
+        <RefreshCw className="size-3.5" />
+      </Button>
+    </div>
+  )
+}
+
+function FileTreeCreateDirectoryRow({
+  depth,
+  value,
+  pending,
+  error,
+  onValueChange,
+  onCancel,
+  onSubmit,
+}: {
+  depth: number
+  value: string
+  pending: boolean
+  error: string | null
+  onValueChange: (value: string) => void
+  onCancel: () => void
+  onSubmit: (value?: string) => void
+}) {
+  const t = useT()
+  return (
+    <>
+      <div
+        className="flex h-6 min-w-0 cursor-default select-none items-center gap-1 px-2 text-foreground"
+        style={{ paddingLeft: `${8 + depth * 14}px` }}
+      >
+        <span className="flex size-4 shrink-0 items-center justify-center" />
+        <Folder className="size-3.5 shrink-0" />
+        <Input
+          aria-label={t('file-tree.new-folder-input-label')}
+          value={value}
+          disabled={pending}
+          autoFocus
+          onChange={(event) => onValueChange(event.currentTarget.value)}
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => {
+            event.stopPropagation()
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              onCancel()
+            }
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              void onSubmit(event.currentTarget.value)
+            }
+          }}
+          className="h-5 min-w-0 flex-1 px-1 py-0 text-[length:var(--goblin-file-tree-font-size)]"
+        />
+      </div>
+      {error ? <FileTreeIndentedMessage depth={depth + 1}>{t(error)}</FileTreeIndentedMessage> : null}
+    </>
   )
 }
 

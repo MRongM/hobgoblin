@@ -29,6 +29,14 @@ vi.mock('#/web/components/repo-workspace/ProjectStatusPanel.tsx', () => ({
   ProjectStatusPanel: () => <div data-testid="project-status-panel" />,
 }))
 
+vi.mock('#/web/components/repo-workspace/ProjectHistoryPanel.tsx', () => ({
+  ProjectHistoryPanel: ({ onRevealPath }: { onRevealPath?: (path: string) => void }) => (
+    <button type="button" data-testid="project-history-panel" onClick={() => onRevealPath?.('src/from-history.ts')}>
+      history
+    </button>
+  ),
+}))
+
 vi.mock('#/web/components/repo-workspace/ProjectPortsPanel.tsx', () => ({
   ProjectPortsPanel: ({ repoId }: { repoId: string }) => <div data-testid="project-ports-panel" data-repo-id={repoId} />,
 }))
@@ -88,7 +96,7 @@ describe('RepoExplorerPane', () => {
     })
 
     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['file-tree.title', 'tab.changes', 'tab.status'])
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['file-tree.title', 'tab.changes', 'tab.status', 'tab.history'])
     expect(container.querySelector('[data-testid="project-file-tree"]')).toBeTruthy()
 
     await act(async () => {
@@ -118,10 +126,10 @@ describe('RepoExplorerPane', () => {
     })
 
     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['file-tree.title', 'tab.changes', 'tab.status', 'ports.title'])
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['file-tree.title', 'tab.changes', 'tab.status', 'tab.history', 'ports.title'])
 
     await act(async () => {
-      tabs[3]?.click()
+      tabs[4]?.click()
     })
 
     expect(container.querySelector('[data-testid="project-file-tree"]')).toBeNull()
@@ -150,6 +158,26 @@ describe('RepoExplorerPane', () => {
     })
 
     expect(container.querySelector('[data-testid="project-file-tree"]')?.getAttribute('data-reveal-path')).toBe('src/app.ts')
+    await act(async () => root.unmount())
+  })
+
+  test('history file clicks switch back to files with a reveal request', async () => {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId="/repo" layout="top-bottom" showActions />)
+    })
+
+    const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+    await act(async () => {
+      tabs[3]?.click()
+    })
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="project-history-panel"]')?.click()
+    })
+
+    expect(container.querySelector('[data-testid="project-file-tree"]')?.getAttribute('data-reveal-path')).toBe('src/from-history.ts')
     await act(async () => root.unmount())
   })
 

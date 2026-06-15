@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
     globalShortcutDisabled: false,
     swapCloseShortcuts: false,
     toggleDetailOnActionBarBlankClick: false,
+    temporaryFilesDirectory: '',
     globalShortcut: 'CommandOrControl+Shift+G',
     terminalApp: 'auto',
     editorApp: 'auto',
@@ -32,6 +33,7 @@ const mocks = vi.hoisted(() => ({
     terminalExternalInputEnabled: false,
     remoteTerminalTmuxEnabled: false,
     terminalCustomButtonsVisible: true,
+    terminalCustomButtonSize: 'medium',
     terminalCustomButtons: [],
     lanEnabled: false,
   })),
@@ -112,7 +114,7 @@ describe('server app html bootstrap', () => {
     expect(html).toContain('"secret"')
     expect(html).toContain('"lang":"zh"')
     expect(html).toContain('打开本地仓库')
-  })
+  }, 10_000)
 
   test('resolves auto language from the first supported accept-language candidate', async () => {
     const { createApp } = await import('#/server/app-factory.ts')

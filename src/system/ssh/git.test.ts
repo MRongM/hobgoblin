@@ -3,11 +3,14 @@ import {
   checkoutRemoteBranch,
   commitRemoteChanges,
   createRemoteBranch,
+  createRemoteFileTreeDirectory,
   createRemoteTrackingBranch,
   createRemoteWorktree,
   deleteRemoteBranch,
   deleteRemoteFileTreeEntries,
   getRemoteBrowserUrl,
+  getRemoteCommitDetail,
+  getRemoteHistory,
   getRemoteSnapshot,
   inventoryRemoteFileTransfer,
   listRemoteFileTreeDirectory,
@@ -86,6 +89,46 @@ describe('remote git helpers', () => {
       hasBrowserRemote: true,
       browserRemoteProvider: 'gitlab',
       hasGitHubRemote: false,
+    })
+  })
+
+  test('reads structured remote history', async () => {
+    const run = vi.fn(async () =>
+      okRemoteResult('abc123456789\x1fabc1234\x1ffeat: remote history\x1fAlice\x1f2026-06-15T09:00:00+08:00\x1fdef456'),
+    )
+
+    await expect(getRemoteHistory(TARGET, 'feature/history', { limit: 100, skip: 20 }, { run: run as any })).resolves.toEqual([
+      {
+        hash: 'abc123456789',
+        shortHash: 'abc1234',
+        subject: 'feat: remote history',
+        author: 'Alice',
+        date: '2026-06-15T09:00:00+08:00',
+        parents: ['def456'],
+      },
+    ])
+    expect(run).toHaveBeenCalledWith(
+      { type: 'gitHistory', path: '/srv/repo', branch: 'feature/history', limit: 100, skip: 20 },
+      TARGET,
+      { signal: undefined },
+    )
+  })
+
+  test('reads structured remote commit detail', async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce(okRemoteResult('abc123456789\x1fabc1234\x1ffeat: detail\x1fAlice\x1f2026-06-15T09:00:00+08:00\x1fdef456'))
+      .mockResolvedValueOnce(okRemoteResult('M\0src/app.ts\0'))
+      .mockResolvedValueOnce(okRemoteResult('4\t2\tsrc/app.ts\0'))
+
+    await expect(getRemoteCommitDetail(TARGET, 'abc1234', { run: run as any })).resolves.toEqual({
+      hash: 'abc123456789',
+      shortHash: 'abc1234',
+      subject: 'feat: detail',
+      author: 'Alice',
+      date: '2026-06-15T09:00:00+08:00',
+      parents: ['def456'],
+      files: [{ path: 'src/app.ts', status: 'modified', additions: 4, deletions: 2 }],
     })
   })
 
@@ -220,6 +263,30 @@ describe('remote git helpers', () => {
         worktreePath: '/srv/repo',
         paths: ['/srv/repo/README.md'],
         targetDirPath: '/srv/repo/docs',
+      },
+      TARGET,
+      { signal: undefined },
+    )
+  })
+
+  test('createRemoteFileTreeDirectory returns parsed success and passes fixed command input', async () => {
+    const run = vi.fn(async () => ({ ok: true, stdout: '{"ok":true,"message":""}', stderr: '' }))
+
+    const result = await createRemoteFileTreeDirectory(
+      TARGET,
+      '/srv/repo',
+      '/srv/repo/src',
+      'components',
+      { run: run as any },
+    )
+
+    expect(result).toEqual({ ok: true, message: '' })
+    expect(run).toHaveBeenCalledWith(
+      {
+        type: 'createFileTreeDirectory',
+        worktreePath: '/srv/repo',
+        parentDirPath: '/srv/repo/src',
+        name: 'components',
       },
       TARGET,
       { signal: undefined },

@@ -15,6 +15,7 @@ import {
   SHELL_OPEN_IN_FINDER_CHANNEL,
   SHELL_OPEN_SETTINGS_WINDOW_CHANNEL,
   SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,
+  SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL,
   TERMINAL_NOTIFY_BELL_CHANNEL,
   TERMINAL_SEND_TEST_NOTIFICATION_CHANNEL,
   TERMINAL_SET_BADGE_CHANNEL,
@@ -36,6 +37,7 @@ function defaultArgv() {
       globalShortcutDisabled: false,
       swapCloseShortcuts: false,
       toggleDetailOnActionBarBlankClick: false,
+      temporaryFilesDirectory: '',
       globalShortcut: 'CommandOrControl+Shift+G',
       globalShortcutRegistered: false,
       terminalApp: 'auto',
@@ -45,6 +47,7 @@ function defaultArgv() {
       terminalExternalInputEnabled: false,
       remoteTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
+      terminalCustomButtonSize: 'medium',
       terminalCustomButtons: [],
       lanEnabled: false,
     },
@@ -155,6 +158,11 @@ describe('preload goblinNative bridge', () => {
     await goblinNative.shell.consumeExternalOpenPaths()
     await goblinNative.shell.openInFinder({ path: '/repo' })
     await goblinNative.shell.readClipboardFilePaths()
+    await goblinNative.shell.saveClipboardBinaryFiles({
+      worktreePath: '/repo',
+      temporaryFilesDirectory: '',
+      files: [{ name: 'image.png', type: 'image/png', bytes: new ArrayBuffer(3) }],
+    })
 
     expect(invocations.map((entry) => entry.channel)).toEqual([
       SHELL_OPEN_SETTINGS_WINDOW_CHANNEL,
@@ -163,6 +171,7 @@ describe('preload goblinNative bridge', () => {
       SHELL_CONSUME_EXTERNAL_OPEN_PATHS_CHANNEL,
       SHELL_OPEN_IN_FINDER_CHANNEL,
       SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,
+      SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL,
     ])
   })
 

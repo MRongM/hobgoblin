@@ -122,7 +122,7 @@ describe('BranchRow', () => {
     expect(document.body.textContent).toContain('有改动')
   })
 
-  test('shows the formatted worktree directory for linked branches', () => {
+  test('shows the relative worktree directory for linked branches', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
 
@@ -140,7 +140,8 @@ describe('BranchRow', () => {
       </ul>,
     )
 
-    expect(document.body.textContent).toContain('/tmp/worktree-a')
+    expect(document.body.textContent).toContain('../worktree-a')
+    expect(document.body.textContent).not.toContain('/tmp/worktree-a')
   })
 
   test('shows an unread terminal bell marker for linked worktrees', () => {
@@ -165,7 +166,7 @@ describe('BranchRow', () => {
     expect(document.body.querySelector('[aria-label="终端有未读提醒"]')).not.toBeNull()
   })
 
-  test('shows only the path for remote worktree directories', () => {
+  test('shows only the relative path for remote worktree directories', () => {
     const repo = emptyRepo('ssh-config://prod/srv/repo', 'repo')
     repo.remote.target = {
       id: 'ssh-config://prod/srv/repo',
@@ -192,7 +193,8 @@ describe('BranchRow', () => {
       </ul>,
     )
 
-    expect(document.body.textContent).toContain('/srv/repo-feature')
+    expect(document.body.textContent).toContain('../repo-feature')
+    expect(document.body.textContent).not.toContain('/srv/repo-feature')
     expect(document.body.textContent).not.toContain('tester@192.0.2.10')
   })
 

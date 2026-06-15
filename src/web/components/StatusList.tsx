@@ -1,5 +1,12 @@
 import { EmptyState } from '#/web/components/Layout.tsx'
 import { FilePathText } from '#/web/components/FilePathText.tsx'
+import {
+  FILE_TREE_FILE_NAME_CLASS,
+  FilePathTreeList,
+  fileTreeRowPadding,
+  type FilePathTreeFileRow,
+} from '#/web/components/FilePathTreeList.tsx'
+import type { FileListViewMode } from '#/web/components/FileListViewModeControl.tsx'
 import { useT } from '#/web/stores/i18n.ts'
 import type { StatusEntry, WorktreeStatus } from '#/web/types.ts'
 
@@ -7,6 +14,7 @@ interface Props {
   status: WorktreeStatus[]
   emptyTitleKey?: string
   emptyBodyKey?: string
+  viewMode?: FileListViewMode
   onPathClick?: (path: string) => void
 }
 
@@ -31,7 +39,7 @@ function statusDisplay(entry: StatusEntry): { code: string; label: string; class
   return { code: fallback, label: `${entry.x}${entry.y}`, className: 'text-muted-foreground' }
 }
 
-function StatusCode({ entry }: { entry: StatusEntry }) {
+export function StatusCode({ entry }: { entry: StatusEntry }) {
   const display = statusDisplay(entry)
   return (
     <span
@@ -47,6 +55,7 @@ export function StatusList({
   status,
   emptyTitleKey = 'status.clean-title',
   emptyBodyKey = 'status.clean-body',
+  viewMode = 'list',
   onPathClick,
 }: Props) {
   const t = useT()
@@ -60,29 +69,91 @@ export function StatusList({
   return (
     <>
       {dirtyWorktrees.map((wt) => (
-        <ul key={wt.path} className="py-1.5 tracking-wider" style={{ fontFamily: 'var(--font-mono)' }}>
-          {wt.entries.map((entry) => (
-            <li
-              key={`${wt.path}-${entry.path}`}
-              className="grid grid-cols-[2ch_minmax(0,1fr)] items-center gap-3 px-1.5"
-            >
-              <StatusCode entry={entry} />
-              {onPathClick ? (
-                <button
-                  type="button"
-                  aria-label={entry.path}
-                  onClick={() => onPathClick(entry.path)}
-                  className="min-w-0 truncate text-left text-foreground underline decoration-border underline-offset-2 hover:text-brand-text hover:decoration-brand-text"
-                >
-                  <FilePathText path={entry.path} />
-                </button>
-              ) : (
-                <FilePathText path={entry.path} />
-              )}
-            </li>
-          ))}
-        </ul>
+        <StatusWorktreeList key={wt.path} worktree={wt} viewMode={viewMode} onPathClick={onPathClick} />
       ))}
     </>
+  )
+}
+
+function StatusWorktreeList({
+  worktree,
+  viewMode,
+  onPathClick,
+}: {
+  worktree: WorktreeStatus
+  viewMode: FileListViewMode
+  onPathClick?: (path: string) => void
+}) {
+  if (viewMode === 'tree') {
+    return (
+      <FilePathTreeList
+        items={worktree.entries}
+        getPath={(entry) => entry.path}
+        className="py-1.5 tracking-wider"
+        renderFile={(row) => (
+          <StatusTreeFileRow key={`${worktree.path}-${row.path}`} row={row} onPathClick={onPathClick} />
+        )}
+      />
+    )
+  }
+
+  return (
+    <ul className="py-1.5 tracking-wider" style={{ fontFamily: 'var(--font-mono)' }}>
+      {worktree.entries.map((entry) => (
+        <li
+          key={`${worktree.path}-${entry.path}`}
+          className="grid grid-cols-[2ch_minmax(0,1fr)] items-center gap-3 px-1.5"
+        >
+          <StatusCode entry={entry} />
+          {onPathClick ? (
+            <button
+              type="button"
+              aria-label={entry.path}
+              onClick={() => onPathClick(entry.path)}
+              className="min-w-0 truncate text-left text-foreground underline decoration-border underline-offset-2 hover:text-brand-text hover:decoration-brand-text"
+            >
+              <FilePathText path={entry.path} />
+            </button>
+          ) : (
+            <FilePathText path={entry.path} />
+          )}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function StatusTreeFileRow({
+  row,
+  onPathClick,
+}: {
+  row: FilePathTreeFileRow<StatusEntry>
+  onPathClick?: (path: string) => void
+}) {
+  const content = (
+    <span className={FILE_TREE_FILE_NAME_CLASS} title={row.path}>
+      {row.name}
+    </span>
+  )
+
+  return (
+    <li
+      className="grid min-h-6 grid-cols-[2ch_minmax(0,1fr)] items-center gap-3 pr-1.5 tracking-wider"
+      style={{ paddingLeft: fileTreeRowPadding(row.depth) }}
+    >
+      <StatusCode entry={row.item} />
+      {onPathClick ? (
+        <button
+          type="button"
+          aria-label={row.path}
+          onClick={() => onPathClick(row.path)}
+          className="min-w-0 truncate text-left underline decoration-border underline-offset-2 hover:text-brand-text hover:decoration-brand-text"
+        >
+          {content}
+        </button>
+      ) : (
+        content
+      )}
+    </li>
   )
 }

@@ -1,0 +1,135 @@
+import { beforeEach, describe, expect, test, vi } from 'vitest'
+
+const mocks = vi.hoisted(() => ({
+  getRepositoryCommitDetail: vi.fn(),
+  getRepositoryHistory: vi.fn(),
+}))
+
+vi.mock('#/server/modules/repo-read-paths.ts', () => ({
+  generateRepositoryCommitMessage: vi.fn(),
+  getCommitMessageProviders: vi.fn(async () => ({ codex: false, claude: false })),
+  getRepositoryCommitDetail: mocks.getRepositoryCommitDetail,
+  getRepositoryFileTree: vi.fn(),
+  getRepositoryHistory: mocks.getRepositoryHistory,
+  getRepositoryPatch: vi.fn(),
+  getRepositoryPullRequests: vi.fn(),
+  getRepositorySnapshot: vi.fn(),
+  getRepositoryStatus: vi.fn(),
+  probeRepository: vi.fn(),
+}))
+
+vi.mock('#/server/modules/repo-write-paths.ts', () => ({
+  abortCloneOperation: vi.fn(),
+  abortRepositoryOperation: vi.fn(),
+  checkoutRepositoryBranch: vi.fn(),
+  checkoutWorktreeBranch: vi.fn(),
+  cloneRepository: vi.fn(),
+  commitRepositoryChanges: vi.fn(),
+  createRepositoryBranch: vi.fn(),
+  createRepositoryWorktree: vi.fn(),
+  deleteRepositoryBranch: vi.fn(),
+  deleteRepositoryFileTreeEntries: vi.fn(),
+  fetchRepository: vi.fn(),
+  getRepositoryRemoteBranches: vi.fn(),
+  mergeRepositoryBranch: vi.fn(),
+  moveRepositoryFileTreeEntries: vi.fn(),
+  openRepositoryEditor: vi.fn(),
+  openRepositoryRemote: vi.fn(),
+  openRepositoryTerminal: vi.fn(),
+  pullRepositoryBranch: vi.fn(),
+  pushRepositoryBranch: vi.fn(),
+  renameRepositoryFileTreeEntry: vi.fn(),
+  removeRepositoryWorktree: vi.fn(),
+  resetRepositoryHard: vi.fn(),
+  trackRepositoryRemoteBranch: vi.fn(),
+}))
+
+vi.mock('#/server/modules/repo-file-transfer.ts', () => ({
+  transferRepositoryFiles: vi.fn(),
+}))
+
+vi.mock('#/server/modules/background-sync.ts', () => ({
+  getBackgroundSyncRepos: vi.fn(() => []),
+  setBackgroundSyncRepos: vi.fn(),
+}))
+
+vi.mock('#/server/modules/settings-source.ts', () => ({
+  getServerFetchIntervalSec: vi.fn(async () => 0),
+}))
+
+describe('repo routes', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.getRepositoryHistory.mockResolvedValue([
+      {
+        hash: 'abc123456789',
+        shortHash: 'abc1234',
+        subject: 'feat: route',
+        author: 'Alice',
+        date: '2026-06-15T09:00:00+08:00',
+        parents: [],
+      },
+    ])
+    mocks.getRepositoryCommitDetail.mockResolvedValue({
+      hash: 'abc123456789',
+      shortHash: 'abc1234',
+      subject: 'feat: route',
+      author: 'Alice',
+      date: '2026-06-15T09:00:00+08:00',
+      parents: [],
+      files: [],
+    })
+  })
+
+  test('serves repository history with normalized body values', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/history', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ repoId: '/repo', branch: 'feature/history', limit: 500, skip: -2 }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual([
+      {
+        hash: 'abc123456789',
+        shortHash: 'abc1234',
+        subject: 'feat: route',
+        author: 'Alice',
+        date: '2026-06-15T09:00:00+08:00',
+        parents: [],
+      },
+    ])
+    expect(mocks.getRepositoryHistory).toHaveBeenCalledWith(
+      '/repo',
+      'feature/history',
+      { limit: 200, skip: 0 },
+      expect.any(AbortSignal),
+    )
+  })
+
+  test('serves repository commit detail', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/commit-detail', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ repoId: '/repo', commit: 'abc1234' }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      hash: 'abc123456789',
+      shortHash: 'abc1234',
+      subject: 'feat: route',
+      author: 'Alice',
+      date: '2026-06-15T09:00:00+08:00',
+      parents: [],
+      files: [],
+    })
+    expect(mocks.getRepositoryCommitDetail).toHaveBeenCalledWith('/repo', 'abc1234', expect.any(AbortSignal))
+  })
+})

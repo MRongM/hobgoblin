@@ -76,6 +76,9 @@ function FocusBranchControls({ repoId }: Props) {
                 status: repo.data.status,
                 worktreesByPath: repo.data.worktreesByPath,
               },
+              remote: {
+                target: repo.remote.target,
+              },
             }
           : null,
       }
@@ -86,7 +89,8 @@ function FocusBranchControls({ repoId }: Props) {
       a.selectedBranchData === b.selectedBranchData &&
       a.summaryRepo?.data.currentBranch === b.summaryRepo?.data.currentBranch &&
       a.summaryRepo?.data.status === b.summaryRepo?.data.status &&
-      a.summaryRepo?.data.worktreesByPath === b.summaryRepo?.data.worktreesByPath,
+      a.summaryRepo?.data.worktreesByPath === b.summaryRepo?.data.worktreesByPath &&
+      a.summaryRepo?.remote?.target === b.summaryRepo?.remote?.target,
   )
 
   return (

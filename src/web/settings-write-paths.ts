@@ -5,6 +5,7 @@ import type {
   GlobalShortcutState,
   SessionState,
   TerminalCustomButton,
+  TerminalCustomButtonSize,
   TerminalAppState,
   TerminalPref,
 } from '#/shared/rpc.ts'
@@ -24,7 +25,9 @@ import {
   setSettingsFetchInterval,
   setShortcutsDisabled,
   setSwapCloseShortcuts,
+  setTemporaryFilesDirectory,
   setTerminalCustomButtons,
+  setTerminalCustomButtonSize,
   setTerminalCustomButtonsVisible,
   setTerminalExternalInputEnabled,
   setTerminalFontSize,
@@ -91,6 +94,14 @@ export async function setToggleDetailOnActionBarBlankClickPreference(enabled: bo
   }))
 }
 
+export async function setTemporaryFilesDirectoryPreference(path: string): Promise<void> {
+  await setTemporaryFilesDirectory(path)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
+    ...current,
+    temporaryFilesDirectory: path,
+  }))
+}
+
 export async function setGlobalShortcutPreference(accelerator: string): Promise<GlobalShortcutState> {
   const state = await setGlobalShortcut(accelerator)
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
@@ -148,6 +159,14 @@ export async function setTerminalCustomButtonsVisiblePreference(visible: boolean
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
     ...current,
     terminalCustomButtonsVisible: visible,
+  }))
+}
+
+export async function setTerminalCustomButtonSizePreference(size: TerminalCustomButtonSize): Promise<void> {
+  await setTerminalCustomButtonSize(size)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
+    ...current,
+    terminalCustomButtonSize: size,
   }))
 }
 

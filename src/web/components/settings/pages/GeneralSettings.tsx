@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react'
 import { Laptop, Moon, Sun } from 'lucide-react'
+import { Input } from '#/web/components/ui/input.tsx'
 import { Switch } from '#/web/components/ui/switch.tsx'
 import {
   SettingsGroup,
@@ -25,8 +26,8 @@ export function GeneralSettings() {
   const setColorTheme = useThemeStore((s) => s.setColorTheme)
   const langPref = useI18nStore((s) => s.pref)
   const setLangPref = useI18nStore((s) => s.setPref)
-  const { toggleDetailOnActionBarBlankClick } = useRuntimeGeneralSettings()
-  const { setToggleDetailOnActionBarBlankClick } = useGeneralSettingsController()
+  const { toggleDetailOnActionBarBlankClick, temporaryFilesDirectory } = useRuntimeGeneralSettings()
+  const { setToggleDetailOnActionBarBlankClick, setTemporaryFilesDirectory } = useGeneralSettingsController()
   const appearanceOptions: { value: ThemePref; labelKey: string; icon: ReactNode }[] = [
     { value: 'auto', labelKey: 'settings.appearance.auto', icon: <Laptop className="size-4" /> },
     { value: 'light', labelKey: 'settings.appearance.light', icon: <Sun className="size-4" /> },
@@ -93,6 +94,21 @@ export function GeneralSettings() {
                 checked={toggleDetailOnActionBarBlankClick}
                 onCheckedChange={(enabled) => void setToggleDetailOnActionBarBlankClick(enabled)}
                 aria-label={t('settings.action-bar-blank-toggle')}
+              />
+            }
+          />
+          <SettingsRow
+            controlId="settings-temporary-files-directory"
+            label={t('settings.temporary-files-directory')}
+            hint={t('settings.temporary-files-directory-hint')}
+            control={
+              <Input
+                id="settings-temporary-files-directory"
+                value={temporaryFilesDirectory}
+                placeholder={t('settings.temporary-files-directory-placeholder')}
+                className="h-8 w-64 max-w-full px-2 text-xs"
+                onChange={(event) => void setTemporaryFilesDirectory(event.currentTarget.value)}
+                aria-label={t('settings.temporary-files-directory')}
               />
             }
           />

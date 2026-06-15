@@ -4,6 +4,7 @@ import { basename, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, test } from 'vitest'
 import {
+  createLocalFileTreeDirectory,
   deleteLocalFileTreeEntries,
   listLocalFileTreeDirectory,
   moveLocalFileTreeEntries,
@@ -113,6 +114,42 @@ describe('renameLocalFileTreeEntry', () => {
     await expect(renameLocalFileTreeEntry(root, root, 'renamed-root')).resolves.toEqual({
       ok: false,
       message: 'error.delete-root-forbidden',
+    })
+  })
+})
+
+describe('createLocalFileTreeDirectory', () => {
+  test('creates one directory inside an existing worktree directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goblin-file-tree-create-dir-'))
+    const srcPath = join(root, 'src')
+    await mkdir(srcPath)
+
+    const result = await createLocalFileTreeDirectory(root, srcPath, 'components')
+
+    expect(result).toEqual({ ok: true, message: '' })
+    expect(existsSync(join(srcPath, 'components'))).toBe(true)
+  })
+
+  test('rejects basename values that would create outside the parent directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goblin-file-tree-create-dir-'))
+
+    await expect(createLocalFileTreeDirectory(root, root, '../escape')).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+    await expect(createLocalFileTreeDirectory(root, root, 'nested/folder')).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+  })
+
+  test('rejects destination overwrite', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goblin-file-tree-create-dir-'))
+    await mkdir(join(root, 'existing'))
+
+    await expect(createLocalFileTreeDirectory(root, root, 'existing')).resolves.toEqual({
+      ok: false,
+      message: 'error.file-exists',
     })
   })
 })

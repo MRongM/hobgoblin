@@ -93,7 +93,7 @@ export function ProjectStatusPanel({ repoId, layout }: ProjectStatusPanelProps) 
 
   return (
     <ScrollPane>
-      <BranchStatus detail={detail} layout={layout} />
+      <BranchStatus repoRoot={repo.remote.target?.remotePath ?? repo.id} detail={detail} layout={layout} />
     </ScrollPane>
   )
 }

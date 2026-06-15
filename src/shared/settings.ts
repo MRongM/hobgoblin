@@ -17,6 +17,7 @@ export const MIN_TERMINAL_FONT_SIZE = 10
 export const MAX_TERMINAL_FONT_SIZE = 24
 
 export type TerminalCustomButtonAction = 'execute' | 'input'
+export type TerminalCustomButtonSize = 'small' | 'medium' | 'large'
 
 export interface TerminalCustomButton {
   label: string
@@ -34,6 +35,7 @@ export interface SettingsPrefs {
   globalShortcutDisabled: boolean
   swapCloseShortcuts: boolean
   toggleDetailOnActionBarBlankClick: boolean
+  temporaryFilesDirectory: string
   globalShortcut: string
   terminalApp: TerminalPref
   editorApp: EditorPref
@@ -42,6 +44,7 @@ export interface SettingsPrefs {
   terminalExternalInputEnabled: boolean
   remoteTerminalTmuxEnabled: boolean
   terminalCustomButtonsVisible: boolean
+  terminalCustomButtonSize: TerminalCustomButtonSize
   terminalCustomButtons: TerminalCustomButton[]
   lanEnabled: boolean
 }

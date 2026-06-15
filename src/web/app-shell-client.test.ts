@@ -28,6 +28,7 @@ function testBridge(overrides: Partial<RendererBridge> = {}): RendererBridge {
       if (capability === 'consume-external-open-paths') return nativeShell?.consumeExternalOpenPaths !== undefined
       if (capability === 'open-in-finder') return nativeShell?.openInFinder !== undefined
       if (capability === 'clipboard-file-paths') return nativeShell?.readClipboardFilePaths !== undefined
+      if (capability === 'clipboard-binary-temp-files') return nativeShell?.saveClipboardBinaryFiles !== undefined
       return false
     },
     getBootstrap: () => ({
@@ -174,5 +175,45 @@ describe('app shell client', () => {
   test('returns an empty clipboard file path list without a native shell', async () => {
     const { readSystemClipboardFilePaths } = await import('#/web/app-shell-client.ts')
     await expect(readSystemClipboardFilePaths()).resolves.toEqual([])
+  })
+
+  test('saves clipboard binary files through the native shell', async () => {
+    const bridgeModule = await import('#/web/renderer-bridge.ts')
+    const saveClipboardBinaryFiles = vi.fn(async () => ({ ok: true as const, paths: ['/repo/tmp/pasted.png'] }))
+    bridgeModule.setRendererBridgeForTests(
+      testBridge({
+        shell: () => ({
+          openSettingsWindow: vi.fn(),
+          openExternalUrl: vi.fn(),
+          openDirectoryDialog: vi.fn(),
+          consumeExternalOpenPaths: vi.fn(),
+          openInFinder: vi.fn(),
+          saveClipboardBinaryFiles,
+        }),
+      }),
+    )
+
+    const { saveClipboardBinaryFilesFromPaste } = await import('#/web/app-shell-client.ts')
+    const input = {
+      worktreePath: '/repo',
+      temporaryFilesDirectory: '',
+      files: [{ name: 'image.png', type: 'image/png', bytes: new ArrayBuffer(3) }],
+    }
+    await expect(saveClipboardBinaryFilesFromPaste(input)).resolves.toEqual({
+      ok: true,
+      paths: ['/repo/tmp/pasted.png'],
+    })
+    expect(saveClipboardBinaryFiles).toHaveBeenCalledWith(input)
+  })
+
+  test('returns an error for clipboard binary saves without a native shell', async () => {
+    const { saveClipboardBinaryFilesFromPaste } = await import('#/web/app-shell-client.ts')
+    await expect(
+      saveClipboardBinaryFilesFromPaste({
+        worktreePath: '/repo',
+        temporaryFilesDirectory: '',
+        files: [],
+      }),
+    ).resolves.toEqual({ ok: false, message: 'error.unsupported-native-bridge' })
   })
 })

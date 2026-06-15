@@ -1,4 +1,10 @@
-import type { EditorPref, I18nSnapshot, TerminalCustomButton, TerminalPref } from '#/shared/rpc.ts'
+import type {
+  EditorPref,
+  I18nSnapshot,
+  TerminalCustomButton,
+  TerminalCustomButtonSize,
+  TerminalPref,
+} from '#/shared/rpc.ts'
 
 export type RendererRuntimeKind = 'electron' | 'web'
 export type RendererNativeCapability =
@@ -9,6 +15,7 @@ export type RendererNativeCapability =
   | 'consume-external-open-paths'
   | 'open-in-finder'
   | 'clipboard-file-paths'
+  | 'clipboard-binary-temp-files'
   | 'terminal-notifications'
   | 'terminal-badge'
 
@@ -21,6 +28,7 @@ export const ELECTRON_RENDERER_CAPABILITIES = [
   'consume-external-open-paths',
   'open-in-finder',
   'clipboard-file-paths',
+  'clipboard-binary-temp-files',
   'terminal-notifications',
   'terminal-badge',
 ] as const satisfies readonly RendererNativeCapability[]
@@ -33,6 +41,7 @@ export interface InitialSettingsSnapshot {
   globalShortcutDisabled: boolean
   swapCloseShortcuts: boolean
   toggleDetailOnActionBarBlankClick: boolean
+  temporaryFilesDirectory: string
   globalShortcut: string
   globalShortcutRegistered: boolean
   terminalApp: TerminalPref
@@ -42,6 +51,7 @@ export interface InitialSettingsSnapshot {
   terminalExternalInputEnabled: boolean
   remoteTerminalTmuxEnabled: boolean
   terminalCustomButtonsVisible: boolean
+  terminalCustomButtonSize: TerminalCustomButtonSize
   terminalCustomButtons: TerminalCustomButton[]
   lanEnabled: boolean
 }

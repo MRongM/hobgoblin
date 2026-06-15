@@ -109,6 +109,35 @@ export interface LogEntry {
   date: string
 }
 
+export interface CommitHistoryEntry {
+  hash: string
+  shortHash: string
+  subject: string
+  author: string
+  date: string
+  parents: string[]
+}
+
+export type CommitFileChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed' | 'copied' | 'unknown'
+
+export interface CommitFileChange {
+  path: string
+  status: CommitFileChangeStatus
+  additions: number
+  deletions: number
+  oldPath?: string
+}
+
+export interface CommitDetail {
+  hash: string
+  shortHash: string
+  subject: string
+  author: string
+  date: string
+  parents: string[]
+  files: CommitFileChange[]
+}
+
 export interface GitRemoteInfo {
   name: string
   fetchUrl: string

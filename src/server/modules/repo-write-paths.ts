@@ -4,8 +4,18 @@ import { resolveRemoteRepoTarget, resolveRepoBackend, runWithRepoBackend } from 
 import { getServerSettingsPrefs } from '#/server/modules/settings-source.ts'
 import { cloneRepository as cloneGitRepository } from '#/system/git/clone.ts'
 import { resetHardToPreviousCommit } from '#/system/git/reset.ts'
-import { deleteLocalFileTreeEntries, moveLocalFileTreeEntries, renameLocalFileTreeEntry } from '#/system/file-tree/local.ts'
-import { deleteRemoteFileTreeEntries, moveRemoteFileTreeEntries, renameRemoteFileTreeEntry } from '#/system/ssh/git.ts'
+import {
+  createLocalFileTreeDirectory,
+  deleteLocalFileTreeEntries,
+  moveLocalFileTreeEntries,
+  renameLocalFileTreeEntry,
+} from '#/system/file-tree/local.ts'
+import {
+  createRemoteFileTreeDirectory,
+  deleteRemoteFileTreeEntries,
+  moveRemoteFileTreeEntries,
+  renameRemoteFileTreeEntry,
+} from '#/system/ssh/git.ts'
 import { openInPreferredEditor } from '#/system/editors.ts'
 import { openInPreferredTerminal } from '#/system/terminals.ts'
 import { type ExecResult } from '#/shared/git-types.ts'
@@ -379,6 +389,21 @@ export async function renameRepositoryFileTreeEntry(
   const result = isRemoteRepoId(repoId)
     ? await renameRemoteFileTreeEntry(await resolveRemoteRepoTarget(repoId), worktreePath, oldPath, newName, { signal })
     : await renameLocalFileTreeEntry(worktreePath, oldPath, newName)
+  if (result.ok) publishRepoSnapshotInvalidation(repoId, sourceToken)
+  return result
+}
+
+export async function createRepositoryFileTreeDirectory(
+  repoId: string,
+  worktreePath: string,
+  parentDirPath: string,
+  name: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  const result = isRemoteRepoId(repoId)
+    ? await createRemoteFileTreeDirectory(await resolveRemoteRepoTarget(repoId), worktreePath, parentDirPath, name, { signal })
+    : await createLocalFileTreeDirectory(worktreePath, parentDirPath, name)
   if (result.ok) publishRepoSnapshotInvalidation(repoId, sourceToken)
   return result
 }

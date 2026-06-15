@@ -45,6 +45,7 @@ describe('renderer bootstrap', () => {
       globalShortcutDisabled: false,
       swapCloseShortcuts: false,
       toggleDetailOnActionBarBlankClick: false,
+      temporaryFilesDirectory: '',
       globalShortcut: 'CommandOrControl+Shift+G',
       globalShortcutRegistered: false,
       terminalApp: 'auto',
@@ -54,6 +55,7 @@ describe('renderer bootstrap', () => {
       terminalExternalInputEnabled: false,
       remoteTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
+      terminalCustomButtonSize: 'medium',
       terminalCustomButtons: [],
       lanEnabled: false,
     }

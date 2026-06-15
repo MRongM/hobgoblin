@@ -154,6 +154,7 @@ export function BranchList({ repoId, showActions = true }: Props) {
 
   if (!repo) return null
 
+  const repoRoot = repo.remote.target?.remotePath ?? repo.id
   const branches = visibleBranches({
     branches: repo.data.branches,
     viewMode: repo.ui.branchViewMode,
@@ -173,7 +174,9 @@ export function BranchList({ repoId, showActions = true }: Props) {
     ? []
     : Object.values(repo.data.worktreesByPath)
         .filter((worktree) => worktree.isDetached)
-        .filter((worktree) => detachedWorktreeMatchesSearch(worktree, branchSearchQuery, repo.remote.target))
+        .filter((worktree) =>
+          detachedWorktreeMatchesSearch(worktree, branchSearchQuery, repoRoot, repo.remote.target),
+        )
   useEffect(() => {
     if (!openActionMenu) return
     if (openActionMenu.repoId !== repoId || !showActions || !branches.some((branch) => branch.name === openActionMenu.branch)) {
@@ -241,6 +244,7 @@ export function BranchList({ repoId, showActions = true }: Props) {
             <DetachedWorktreeRow
               key={worktree.path}
               worktree={worktree}
+              repoRoot={repoRoot}
               remoteTarget={repo.remote.target}
             />
           ))}
@@ -281,23 +285,26 @@ function SortableBranchRow(props: ComponentProps<typeof BranchRow> & { id: strin
 function detachedWorktreeMatchesSearch(
   worktree: RepoWorktreeState,
   searchQuery: string,
+  repoRoot: string,
   remoteTarget?: RemoteRepoTarget,
 ): boolean {
   const query = searchQuery.trim().toLowerCase()
   if (!query) return true
-  const displayPath = formatWorktreeListPath(worktree.path, remoteTarget).toLowerCase()
+  const displayPath = formatWorktreeListPath(worktree.path, remoteTarget, repoRoot).toLowerCase()
   return displayPath.includes(query) || (worktree.head ?? '').toLowerCase().includes(query)
 }
 
 function DetachedWorktreeRow({
   worktree,
+  repoRoot,
   remoteTarget,
 }: {
   worktree: RepoWorktreeState
+  repoRoot: string
   remoteTarget?: RemoteRepoTarget
 }) {
   const t = useT()
-  const displayPath = formatWorktreeListPath(worktree.path, remoteTarget)
+  const displayPath = formatWorktreeListPath(worktree.path, remoteTarget, repoRoot)
   const head = worktree.head ? worktree.head.slice(0, 12) : t('branches.detached-head')
   const dirty = worktree.isDirty || (worktree.changeCount ?? 0) > 0
   const title = [

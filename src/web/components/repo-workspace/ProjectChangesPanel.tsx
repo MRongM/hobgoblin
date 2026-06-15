@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { FolderTree } from 'lucide-react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
+import { FileListViewModeControl, type FileListViewMode } from '#/web/components/FileListViewModeControl.tsx'
 import { BranchActionControls } from '#/web/components/BranchActionControls.tsx'
 import { EmptyState, ScrollPane } from '#/web/components/Layout.tsx'
 import { StatusListSkeleton } from '#/web/components/Skeleton.tsx'
@@ -49,6 +51,7 @@ export function ProjectChangesPanel({
   onRevealPath?: (relativePath: string) => void
 }) {
   const t = useT()
+  const [fileViewMode, setFileViewMode] = useState<FileListViewMode>('tree')
   const repo = useStoreWithEqualityFn(
     useReposStore,
     (state) => {
@@ -102,7 +105,14 @@ export function ProjectChangesPanel({
 
   return (
     <section className="flex min-h-0 flex-1 flex-col">
-      <ProjectChangesActionBar repo={repo} branch={detail.branch} disableCommit={!hasChanges} />
+      <ProjectChangesActionBar
+        repo={repo}
+        branch={detail.branch}
+        disableCommit={!hasChanges}
+        showFileViewMode={hasChanges}
+        fileViewMode={fileViewMode}
+        onFileViewModeChange={setFileViewMode}
+      />
       <ProjectChangesContent
         repo={repo}
         branch={detail.branch}
@@ -110,6 +120,7 @@ export function ProjectChangesPanel({
         statusLoading={detail.loading.status}
         statusError={detail.errors.status}
         statusStale={detail.stale.status}
+        fileViewMode={fileViewMode}
         onRevealPath={onRevealPath}
       />
     </section>
@@ -120,26 +131,38 @@ function ProjectChangesActionBar({
   repo,
   branch,
   disableCommit,
+  showFileViewMode,
+  fileViewMode,
+  onFileViewModeChange,
 }: {
   repo: BranchDetailRepo
   branch: ProjectChangesBranch
   disableCommit: boolean
+  showFileViewMode: boolean
+  fileViewMode: FileListViewMode
+  onFileViewModeChange: (mode: FileListViewMode) => void
 }) {
   const actions = useBranchActionItems(repo, branch)
   const commitItem = actions.mainItems.find((item) => item.id === 'commit' && item.visible)
-  if (!commitItem) return <>{actions.dialogs}</>
+  if (!commitItem && !showFileViewMode) return <>{actions.dialogs}</>
 
-  const commitActions: BranchActionItemGroups = {
-    patchItems: [],
-    mainItems: [{ ...commitItem, disabled: commitItem.disabled || disableCommit }],
-    externalItems: [],
-    destructiveItems: [],
-    dialogs: actions.dialogs,
-  }
+  const commitActions: BranchActionItemGroups | null = commitItem
+    ? {
+        patchItems: [],
+        mainItems: [{ ...commitItem, disabled: commitItem.disabled || disableCommit }],
+        externalItems: [],
+        destructiveItems: [],
+        dialogs: actions.dialogs,
+      }
+    : null
 
   return (
-    <div className="flex min-h-8 shrink-0 items-center justify-end border-b border-separator/70 bg-card px-2">
-      <BranchActionControls actions={commitActions} variant="bar" />
+    <div
+      data-testid="project-changes-action-bar"
+      className="flex min-h-8 shrink-0 items-center justify-end gap-1 border-b border-separator/70 bg-card px-2"
+    >
+      {commitActions && <BranchActionControls actions={commitActions} variant="bar" />}
+      {showFileViewMode && <FileListViewModeControl value={fileViewMode} onChange={onFileViewModeChange} />}
       {actions.dialogs}
     </div>
   )
@@ -152,6 +175,7 @@ function ProjectChangesContent({
   statusLoading,
   statusError,
   statusStale,
+  fileViewMode,
   onRevealPath,
 }: {
   repo: Pick<BranchDetailRepo, 'data'>
@@ -160,6 +184,7 @@ function ProjectChangesContent({
   statusLoading: boolean
   statusError: string | null
   statusStale: boolean
+  fileViewMode: FileListViewMode
   onRevealPath?: (relativePath: string) => void
 }) {
   const t = useT()
@@ -182,7 +207,7 @@ function ProjectChangesContent({
       {statusStale && statusError && <StaleStatusNotice message={statusError} />}
       {totalEntries > 0 ? (
         <ScrollPane>
-          <StatusList status={selectedStatus} onPathClick={onRevealPath} />
+          <StatusList status={selectedStatus} viewMode={fileViewMode} onPathClick={onRevealPath} />
         </ScrollPane>
       ) : (
         <StatusList status={selectedStatus} onPathClick={onRevealPath} />

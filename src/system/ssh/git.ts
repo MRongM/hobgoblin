@@ -1,6 +1,6 @@
 import path from 'node:path'
 import type { RepoFileTreeEntry, RepoFileTreeResult } from '#/shared/file-tree.ts'
-import { parseBranches, parseLog, parseStatus, parseWorktrees } from '#/system/git/parsers.ts'
+import { parseBranches, parseCommitFileChanges, parseCommitHistory, parseLog, parseStatus, parseWorktrees } from '#/system/git/parsers.ts'
 import { markDefaultBranch, prioritizeDefaultBranch } from '#/system/git/branches.ts'
 import {
   getBrowserRemoteUrlForRemotes,
@@ -20,7 +20,18 @@ import {
   type RemoteCommandKind,
   type RemoteCommandResult,
 } from '#/system/ssh/commands.ts'
-import { type BranchSnapshotInfo, type ExecResult, type GitRemoteInfo, type LogEntry, type RepoRemoteInfo, type WorktreeInfo, type WorktreeStatus } from '#/shared/git-types.ts'
+import {
+  GIT_HASH_RE,
+  type BranchSnapshotInfo,
+  type CommitDetail,
+  type CommitHistoryEntry,
+  type ExecResult,
+  type GitRemoteInfo,
+  type LogEntry,
+  type RepoRemoteInfo,
+  type WorktreeInfo,
+  type WorktreeStatus,
+} from '#/shared/git-types.ts'
 import { validateBranchDeletionPolicy, validateRemovableWorktreeState } from '#/shared/repo-action-policy.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import { isRemoteTrackingRef, parseRemoteTrackingRefs, type CreateWorktreeInput } from '#/shared/worktree-create.ts'
@@ -142,6 +153,41 @@ export async function getRemoteLog(
   })
   if (!result.ok || options.signal?.aborted) return []
   return parseLog(result.stdout)
+}
+
+export async function getRemoteHistory(
+  target: RemoteRepoTarget,
+  branch: string,
+  input: { limit: number; skip: number },
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<CommitHistoryEntry[]> {
+  if (!isSafeBranchName(branch)) return []
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const result = await run(
+    { type: 'gitHistory', path: target.remotePath, branch, limit: input.limit, skip: input.skip },
+    target,
+    { signal: options.signal },
+  )
+  if (!result.ok || options.signal?.aborted) return []
+  return parseCommitHistory(result.stdout)
+}
+
+export async function getRemoteCommitDetail(
+  target: RemoteRepoTarget,
+  commit: string,
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<CommitDetail | null> {
+  if (!GIT_HASH_RE.test(commit)) return null
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const [metadata, nameStatus, numstat] = await Promise.all([
+    run({ type: 'gitCommitMetadata', path: target.remotePath, commit }, target, { signal: options.signal }),
+    run({ type: 'gitCommitNameStatus', path: target.remotePath, commit }, target, { signal: options.signal }),
+    run({ type: 'gitCommitNumstat', path: target.remotePath, commit }, target, { signal: options.signal }),
+  ])
+  if (options.signal?.aborted || !metadata.ok || !nameStatus.ok || !numstat.ok) return null
+  const [entry] = parseCommitHistory(metadata.stdout)
+  if (!entry) return null
+  return { ...entry, files: parseCommitFileChanges(nameStatus.stdout, numstat.stdout) }
 }
 
 export async function getRemotePatch(
@@ -331,6 +377,23 @@ export async function renameRemoteFileTreeEntry(
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
   const result = await run(
     { type: 'renameFileTreeEntry', worktreePath, oldPath, newName },
+    target,
+    { signal: options.signal },
+  )
+  if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
+  return remoteFileTreeMutationResult(result)
+}
+
+export async function createRemoteFileTreeDirectory(
+  target: RemoteRepoTarget,
+  worktreePath: string,
+  parentDirPath: string,
+  name: string,
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<ExecResult> {
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const result = await run(
+    { type: 'createFileTreeDirectory', worktreePath, parentDirPath, name },
     target,
     { signal: options.signal },
   )

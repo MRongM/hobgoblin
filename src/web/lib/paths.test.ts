@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'vitest'
-import { defaultWorktreePath, joinPath, parentDir, tildifyPath, untildifyPath } from '#/web/lib/paths.ts'
+import {
+  defaultWorktreePath,
+  formatWorktreeListPath,
+  formatWorktreePath,
+  joinPath,
+  parentDir,
+  tildifyPath,
+  untildifyPath,
+} from '#/web/lib/paths.ts'
 
 describe('tildifyPath', () => {
   test('shortens paths inside home', () => {
@@ -76,5 +84,20 @@ describe('defaultWorktreePath', () => {
 
   test('keeps Windows drive root repo defaults absolute', () => {
     expect(defaultWorktreePath('C:\\', 'feature/x')).toBe('C:\\worktree-feature-x')
+  })
+})
+
+describe('formatWorktreeListPath', () => {
+  test('shows worktree paths relative to the repository root when a root is provided', () => {
+    expect(formatWorktreeListPath('/tmp/repo', undefined, '/tmp/repo')).toBe('.')
+    expect(formatWorktreeListPath('/tmp/repo/packages/app', undefined, '/tmp/repo')).toBe('packages/app')
+    expect(formatWorktreeListPath('/tmp/repo-feature', undefined, '/tmp/repo')).toBe('../repo-feature')
+  })
+})
+
+describe('formatWorktreePath', () => {
+  test('keeps copy-safe path formatting relative only when a repository root is provided', () => {
+    expect(formatWorktreePath('/tmp/repo-feature', undefined, '/tmp/repo')).toBe('../repo-feature')
+    expect(formatWorktreePath('/tmp/repo-feature')).toBe('/tmp/repo-feature')
   })
 })
