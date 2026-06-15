@@ -77,8 +77,9 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
   const disabled = blocked
   const busy = (id: BranchActionItemId) => busyAction === id
   const phase = branchActionDisplayPhase(repo, branch.name)
-  const createWorktreeBusy =
-    repo.operations.branchAction.phase !== 'idle' && repo.operations.branchAction.reason === 'branch:createWorktree'
+  const createWorktreePhase =
+    repo.operations.branchAction.reason === 'branch:createWorktree' ? branchActionDisplayPhase(repo, branch.name) : null
+  const createWorktreeBusy = createWorktreePhase !== null
   const syncBusy = repo.operations.manualRefresh.phase !== 'idle' || repo.operations.fetch.phase !== 'idle'
   const branchActionLabel = (
     id: BranchActionItemId,
@@ -88,7 +89,7 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
   ): string => {
     const itemBusy = busy(id) || (id === 'createWorktree' && createWorktreeBusy)
     if (!itemBusy) return t(idleKey)
-    const itemPhase = id === 'createWorktree' ? repo.operations.branchAction.phase : phase
+    const itemPhase = id === 'createWorktree' ? createWorktreePhase : phase
     if (itemPhase === 'queued' && queuedKey) return t(queuedKey)
     return t(loadingKey)
   }

@@ -20,14 +20,23 @@ vi.mock('#/web/app-shell-client.ts', () => ({
 }))
 
 const runtimeSettingsMocks = vi.hoisted(() => ({
-  terminalCustomButtons: [] as { label: string; value: string }[],
+  terminalExternalInputEnabled: false,
+  terminalCustomButtonsVisible: true,
+  terminalCustomButtons: [] as { label: string; value: string; action?: 'execute' | 'input' }[],
 }))
 
 vi.mock('#/web/runtime-settings-terminal-buttons.ts', () => ({
   useRuntimeTerminalCustomButtons: () => runtimeSettingsMocks.terminalCustomButtons,
+  useRuntimeTerminalSettings: () => ({
+    terminalExternalInputEnabled: runtimeSettingsMocks.terminalExternalInputEnabled,
+    terminalCustomButtonsVisible: runtimeSettingsMocks.terminalCustomButtonsVisible,
+    terminalCustomButtons: runtimeSettingsMocks.terminalCustomButtons,
+  }),
 }))
 
 afterEach(() => {
+  runtimeSettingsMocks.terminalExternalInputEnabled = false
+  runtimeSettingsMocks.terminalCustomButtonsVisible = true
   runtimeSettingsMocks.terminalCustomButtons = []
   document.body.innerHTML = ''
 })
@@ -414,6 +423,301 @@ describe('TerminalSlot', () => {
     }
   })
 
+  test('renders external input when enabled for writable controller sessions', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    runtimeSettingsMocks.terminalExternalInputEnabled = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const writeInput = vi.fn()
+    const { worktreeSnapshot, snapshot } = controllerFixture()
+    const context = terminalContext({ writeInput })
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+
+    await act(async () => {
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    })
+
+    try {
+      const input = container.querySelector('.goblin-terminal-external-input__control')
+      expect(input).toBeInstanceOf(HTMLInputElement)
+      await act(async () => {
+        setInputValue(input as HTMLInputElement, 'git status --short')
+        input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      })
+
+      expect(writeInput).toHaveBeenCalledWith('terminal-1', 'git status --short\r')
+      expect((input as HTMLInputElement).value).toBe('')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('submits external input from the send button', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    runtimeSettingsMocks.terminalExternalInputEnabled = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const writeInput = vi.fn()
+    const { worktreeSnapshot, snapshot } = controllerFixture()
+    const context = terminalContext({ writeInput })
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+
+    await act(async () => {
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    })
+
+    try {
+      const input = container.querySelector('.goblin-terminal-external-input__control')
+      expect(input).toBeInstanceOf(HTMLInputElement)
+      const sendButton = container.querySelector('button[aria-label="terminal.external-input-send"]')
+      expect(sendButton).toBeInstanceOf(HTMLButtonElement)
+
+      await act(async () => {
+        setInputValue(input as HTMLInputElement, 'git status --short')
+        sendButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+
+      expect(writeInput).toHaveBeenCalledWith('terminal-1', 'git status --short\r')
+      expect((input as HTMLInputElement).value).toBe('')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('does not submit empty external input', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    runtimeSettingsMocks.terminalExternalInputEnabled = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const writeInput = vi.fn()
+    const { worktreeSnapshot, snapshot } = controllerFixture()
+    const context = terminalContext({ writeInput })
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+
+    await act(async () => {
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    })
+
+    try {
+      const input = container.querySelector('.goblin-terminal-external-input__control')
+      expect(input).toBeInstanceOf(HTMLInputElement)
+      await act(async () => {
+        setInputValue(input as HTMLInputElement, '   ')
+        input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      })
+
+      expect(writeInput).not.toHaveBeenCalled()
+      expect((input as HTMLInputElement).value).toBe('   ')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('fills external input from input-mode custom button', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    runtimeSettingsMocks.terminalExternalInputEnabled = true
+    runtimeSettingsMocks.terminalCustomButtons = [{ label: 'commit', value: 'git commit -m ""', action: 'input' }]
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const writeInput = vi.fn()
+    const { worktreeSnapshot, snapshot } = controllerFixture()
+    const context = terminalContext({ writeInput })
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+
+    await act(async () => {
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    })
+
+    try {
+      const button = Array.from(container.querySelectorAll('button')).find((node) => node.textContent === 'commit')
+      await act(async () => {
+        button?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        await Promise.resolve()
+      })
+
+      const input = container.querySelector('.goblin-terminal-external-input__control') as HTMLInputElement | null
+      expect(input?.value).toBe('git commit -m ""')
+      expect(writeInput).not.toHaveBeenCalled()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('sends input-mode custom button text without enter when external input is unavailable', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    runtimeSettingsMocks.terminalCustomButtons = [{ label: 'commit', value: 'git commit -m ""', action: 'input' }]
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const writeInput = vi.fn()
+    const { worktreeSnapshot, snapshot } = controllerFixture()
+    const context = terminalContext({ writeInput })
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+
+    await act(async () => {
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    })
+
+    try {
+      const button = Array.from(container.querySelectorAll('button')).find((node) => node.textContent === 'commit')
+      expect(button).toBeInstanceOf(HTMLButtonElement)
+      expect(container.querySelector('.goblin-terminal-external-input__control')).toBeNull()
+
+      await act(async () => {
+        button?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+
+      expect(writeInput).toHaveBeenCalledWith('terminal-1', 'git commit -m ""')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('hides custom terminal buttons when visibility is disabled', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    runtimeSettingsMocks.terminalCustomButtonsVisible = false
+    runtimeSettingsMocks.terminalCustomButtons = [{ label: 'status', value: 'git status --short' }]
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const { worktreeSnapshot, snapshot } = controllerFixture()
+    const context = terminalContext()
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+
+    await act(async () => {
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    })
+
+    try {
+      expect(container.querySelector('.goblin-terminal-custom-buttons')).toBeNull()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('does not render external input for readonly sessions', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    runtimeSettingsMocks.terminalExternalInputEnabled = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const { worktreeSnapshot, snapshot } = controllerFixture('viewer')
+    const context = terminalContext()
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+
+    await act(async () => {
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    })
+
+    try {
+      expect(container.querySelector('.goblin-terminal-external-input__control')).toBeNull()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
   test('does not render custom terminal buttons for readonly sessions', async () => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     runtimeSettingsMocks.terminalCustomButtons = [{ label: 'status', value: 'git status --short' }]
@@ -448,6 +752,7 @@ describe('TerminalSlot', () => {
       container.remove()
     }
   })
+
 })
 
 function controllerFixture(role: 'controller' | 'viewer' = 'controller') {
@@ -503,4 +808,10 @@ function terminalContext(overrides: Partial<TerminalSessionContextValue> = {}): 
     serialize: vi.fn(() => ''),
     ...overrides,
   }
+}
+
+function setInputValue(input: HTMLInputElement, value: string) {
+  const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
+  descriptor?.set?.call(input, value)
+  input.dispatchEvent(new Event('input', { bubbles: true }))
 }

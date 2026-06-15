@@ -47,6 +47,8 @@ const appDataClientMocks = vi.hoisted(() => ({
   setShortcutsDisabled: vi.fn(async () => {}),
   setSwapCloseShortcuts: vi.fn(async () => {}),
   setTerminalCustomButtons: vi.fn(async (buttons: TerminalCustomButton[]) => buttons),
+  setTerminalCustomButtonsVisible: vi.fn(async () => {}),
+  setTerminalExternalInputEnabled: vi.fn(async () => {}),
   setTerminalNotificationsEnabled: vi.fn(async () => {}),
   setToggleDetailOnActionBarBlankClick: vi.fn(async () => {}),
 }))
@@ -66,6 +68,8 @@ vi.mock('#/web/settings-client.ts', () => ({
   setShortcutsDisabled: appDataClientMocks.setShortcutsDisabled,
   setSwapCloseShortcuts: appDataClientMocks.setSwapCloseShortcuts,
   setTerminalCustomButtons: appDataClientMocks.setTerminalCustomButtons,
+  setTerminalCustomButtonsVisible: appDataClientMocks.setTerminalCustomButtonsVisible,
+  setTerminalExternalInputEnabled: appDataClientMocks.setTerminalExternalInputEnabled,
   setTerminalNotificationsEnabled: appDataClientMocks.setTerminalNotificationsEnabled,
   setToggleDetailOnActionBarBlankClick: appDataClientMocks.setToggleDetailOnActionBarBlankClick,
 }))
@@ -116,6 +120,10 @@ describe('settings write paths', () => {
     appDataClientMocks.setSwapCloseShortcuts.mockResolvedValue(undefined)
     appDataClientMocks.setTerminalCustomButtons.mockReset()
     appDataClientMocks.setTerminalCustomButtons.mockImplementation(async (buttons: TerminalCustomButton[]) => buttons)
+    appDataClientMocks.setTerminalCustomButtonsVisible.mockReset()
+    appDataClientMocks.setTerminalCustomButtonsVisible.mockResolvedValue(undefined)
+    appDataClientMocks.setTerminalExternalInputEnabled.mockReset()
+    appDataClientMocks.setTerminalExternalInputEnabled.mockResolvedValue(undefined)
     appDataClientMocks.setTerminalNotificationsEnabled.mockReset()
     appDataClientMocks.setTerminalNotificationsEnabled.mockResolvedValue(undefined)
     appDataClientMocks.setToggleDetailOnActionBarBlankClick.mockReset()
@@ -231,6 +239,30 @@ describe('settings write paths', () => {
     expect(appDataClientMocks.setTerminalCustomButtons).toHaveBeenCalledWith(buttons)
     expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
       terminalCustomButtons: buttons,
+    })
+  })
+
+  test('setTerminalExternalInputEnabledPreference updates runtime settings cache', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    const { setTerminalExternalInputEnabledPreference } = await import('#/web/settings-write-paths.ts')
+
+    await setTerminalExternalInputEnabledPreference(true)
+
+    expect(appDataClientMocks.setTerminalExternalInputEnabled).toHaveBeenCalledWith(true)
+    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
+      terminalExternalInputEnabled: true,
+    })
+  })
+
+  test('setTerminalCustomButtonsVisiblePreference updates runtime settings cache', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    const { setTerminalCustomButtonsVisiblePreference } = await import('#/web/settings-write-paths.ts')
+
+    await setTerminalCustomButtonsVisiblePreference(false)
+
+    expect(appDataClientMocks.setTerminalCustomButtonsVisible).toHaveBeenCalledWith(false)
+    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
+      terminalCustomButtonsVisible: false,
     })
   })
 })

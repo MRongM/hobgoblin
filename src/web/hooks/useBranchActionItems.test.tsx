@@ -170,6 +170,127 @@ describe('useBranchActionItems', () => {
     expect(groups.externalItems.filter((item) => item.visible).map((item) => item.id)).toEqual(['terminal', 'editor', 'remote'])
     expect(groups.mainItems.find((item) => item.id === 'pull')?.label).toBe('action.pull-remote')
   })
+
+  test('disables non-target branch actions without showing push loading', async () => {
+    mocks.useRuntimeExternalAppSettings.mockReturnValue({
+      terminalApp: 'auto',
+      resolvedTerminalApp: 'iterm',
+      terminalAvailable: true,
+      editorApp: 'vscode',
+      resolvedEditorApp: 'vscode',
+      editorAvailable: true,
+    })
+    mocks.useBranchActions.mockReturnValue({
+      blocked: true,
+      busyAction: null,
+      capabilities: {
+        isCurrent: false,
+        checkedOutInAnotherWorktree: true,
+        canRemoveWorktree: false,
+        isRegularBranch: false,
+        canCopyPatch: false,
+        canPull: true,
+        canPush: true,
+        canOpenRemote: true,
+        canOpenTerminal: true,
+        canOpenEditor: true,
+      },
+      actions: {
+        copyPatch: vi.fn(),
+        checkout: vi.fn(),
+        pull: vi.fn(),
+        push: vi.fn(),
+        openTerminal: vi.fn(),
+        openEditor: vi.fn(),
+        openRemote: vi.fn(),
+        requestDeleteBranch: vi.fn(),
+        requestRemoveWorktree: vi.fn(),
+      },
+      dialogs: null,
+    })
+    const branch = createRepoBranch('feature/other', {
+      tracking: 'origin/feature/other',
+      worktree: { path: '/tmp/repo-other' },
+    })
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      branches: [branch, createRepoBranch('feature/pushing', { tracking: 'origin/feature/pushing' })],
+      remote: { hasRemotes: true, hasBrowserRemote: true, hasGitHubRemote: true },
+    })
+    repo.operations.branchAction = {
+      operationId: 1,
+      phase: 'running',
+      reason: 'branch:push',
+      target: 'feature/pushing',
+      startedAt: 123,
+      settledAt: null,
+      error: null,
+    }
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.ts')
+    const groups = await renderItemGroups(useItems, repo, branch)
+    const visibleItems = [...groups.mainItems, ...groups.externalItems, ...groups.destructiveItems].filter(
+      (item) => item.visible,
+    )
+
+    expect(visibleItems.every((item) => item.disabled)).toBe(true)
+    expect(visibleItems.some((item) => item.busy)).toBe(false)
+    expect(groups.mainItems.find((item) => item.id === 'push')?.label).toBe('action.push')
+  })
+
+  test('does not show create-worktree loading on non-target branches', async () => {
+    mocks.useBranchActions.mockReturnValue({
+      blocked: true,
+      busyAction: null,
+      capabilities: {
+        isCurrent: false,
+        checkedOutInAnotherWorktree: false,
+        canRemoveWorktree: false,
+        isRegularBranch: true,
+        canCopyPatch: false,
+        canPull: false,
+        canPush: true,
+        canOpenRemote: false,
+        canOpenTerminal: false,
+        canOpenEditor: false,
+      },
+      actions: {
+        copyPatch: vi.fn(),
+        checkout: vi.fn(),
+        pull: vi.fn(),
+        push: vi.fn(),
+        openTerminal: vi.fn(),
+        openEditor: vi.fn(),
+        openRemote: vi.fn(),
+        requestDeleteBranch: vi.fn(),
+        requestRemoveWorktree: vi.fn(),
+      },
+      dialogs: null,
+    })
+    const branch = createRepoBranch('feature/other')
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      branches: [branch, createRepoBranch('feature/new-worktree')],
+      remote: { hasRemotes: true },
+    })
+    repo.operations.branchAction = {
+      operationId: 1,
+      phase: 'running',
+      reason: 'branch:createWorktree',
+      target: 'feature/new-worktree',
+      startedAt: 123,
+      settledAt: null,
+      error: null,
+    }
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.ts')
+    const groups = await renderItemGroups(useItems, repo, branch)
+    const createWorktree = groups.mainItems.find((item) => item.id === 'createWorktree')
+
+    expect(createWorktree?.disabled).toBe(true)
+    expect(createWorktree?.busy).toBe(false)
+    expect(createWorktree?.label).toBe('action.create-worktree')
+  })
 })
 
 async function renderItems(

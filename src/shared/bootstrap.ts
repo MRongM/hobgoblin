@@ -35,6 +35,8 @@ export interface InitialSettingsSnapshot {
   globalShortcutRegistered: boolean
   terminalApp: TerminalPref
   editorApp: EditorPref
+  terminalExternalInputEnabled: boolean
+  terminalCustomButtonsVisible: boolean
   terminalCustomButtons: TerminalCustomButton[]
   lanEnabled: boolean
 }

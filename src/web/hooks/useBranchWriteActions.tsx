@@ -36,6 +36,7 @@ export function useBranchWriteActions(repo: BranchActionRepo, branch: RepoBranch
 
   const worktreePath = branch.worktree?.path
   const hasWorktree = !!worktreePath
+  const branchActionBusy = repo.operations.branchAction.phase !== 'idle'
 
   const checkoutToDialog = useRetainedDialogState<string>()
   const mergeDialog = useRetainedDialogState<string>()
@@ -101,7 +102,7 @@ export function useBranchWriteActions(repo: BranchActionRepo, branch: RepoBranch
       id: 'createBranch',
       label: t('action.create-branch'),
       title: t('action.create-branch-title'),
-      disabled: false,
+      disabled: branchActionBusy,
       visible: true,
       icon: createElement(GitBranch),
       onSelect: () => createBranchDialog.openWith(''),
@@ -110,7 +111,7 @@ export function useBranchWriteActions(repo: BranchActionRepo, branch: RepoBranch
       id: 'pullRemoteBranch',
       label: t('action.pull-remote-branch'),
       title: t('action.pull-remote-branch-title'),
-      disabled: repo.remote.hasRemotes === false,
+      disabled: repo.remote.hasRemotes === false || branchActionBusy,
       visible: repo.remote.hasRemotes !== false,
       icon: createElement(RadioTower),
       onSelect: () => pullRemoteBranchDialog.openWith(''),
@@ -119,7 +120,7 @@ export function useBranchWriteActions(repo: BranchActionRepo, branch: RepoBranch
       id: 'checkoutTo',
       label: t('action.checkout-to'),
       title: t('action.checkout-to-title'),
-      disabled: false,
+      disabled: branchActionBusy,
       visible: hasWorktree,
       icon: createElement(GitBranch),
       onSelect: () => checkoutToDialog.openWith(''),
@@ -128,7 +129,7 @@ export function useBranchWriteActions(repo: BranchActionRepo, branch: RepoBranch
       id: 'merge',
       label: t('action.merge'),
       title: t('action.merge-title'),
-      disabled: false,
+      disabled: branchActionBusy,
       visible: hasWorktree,
       icon: createElement(GitMerge),
       onSelect: () => mergeDialog.openWith(''),
@@ -137,7 +138,7 @@ export function useBranchWriteActions(repo: BranchActionRepo, branch: RepoBranch
       id: 'commit',
       label: t('action.commit'),
       title: t('action.commit-title'),
-      disabled: false,
+      disabled: branchActionBusy,
       visible: hasWorktree,
       icon: createElement(SendHorizontal),
       onSelect: () => commitDialog.openWith(''),
@@ -148,7 +149,7 @@ export function useBranchWriteActions(repo: BranchActionRepo, branch: RepoBranch
     {
       id: 'resetHard',
       label: t('action.reset-hard'),
-      disabled: false,
+      disabled: branchActionBusy,
       visible: hasWorktree,
       destructive: true,
       icon: createElement(RotateCcw),

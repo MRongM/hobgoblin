@@ -91,8 +91,18 @@ export function readRuntimeGeneralSettings(data: RuntimeSettingsSnapshot | undef
 }
 
 export function readRuntimeTerminalCustomButtons(data: RuntimeSettingsSnapshot | undefined) {
+  return readRuntimeTerminalSettings(data).terminalCustomButtons
+}
+
+export function readRuntimeTerminalSettings(data: RuntimeSettingsSnapshot | undefined) {
   const fallback = fallbackInitialSettings()
-  return data?.terminalCustomButtons ?? fallback?.terminalCustomButtons ?? []
+  return {
+    terminalExternalInputEnabled:
+      data?.terminalExternalInputEnabled ?? fallback?.terminalExternalInputEnabled ?? false,
+    terminalCustomButtonsVisible:
+      data?.terminalCustomButtonsVisible ?? fallback?.terminalCustomButtonsVisible ?? true,
+    terminalCustomButtons: data?.terminalCustomButtons ?? fallback?.terminalCustomButtons ?? [],
+  }
 }
 
 export function readRuntimeLanSettings(data: RuntimeSettingsSnapshot | undefined) {
