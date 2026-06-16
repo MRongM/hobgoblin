@@ -4,7 +4,7 @@ import {
   buildFileTreeStatusIndex,
   buildGoblinFilePathDragPayload,
   generatedPasteFileName,
-  generatedRandomPasteFileName,
+  generatedTimestampedPasteFileName,
   mergeDirectoryEntries,
   nextFileTreeSelection,
   parentDirectoryPath,
@@ -92,11 +92,12 @@ describe('file tree model', () => {
     expect(generatedPasteFileName('text/plain', date)).toBe('pasted-text-20260613-070809.txt')
   })
 
-  test('generates random paste filenames while preserving extensions', () => {
-    expect(generatedRandomPasteFileName('/tmp/report.pdf', 'a8f31c9d')).toBe('pasted-a8f31c9d.pdf')
-    expect(generatedRandomPasteFileName('/tmp/LICENSE', '4b91d0aa')).toBe('pasted-4b91d0aa')
-    expect(generatedRandomPasteFileName('C:\\Users\\test\\archive.tar.gz', '12345678')).toBe('pasted-12345678.gz')
-    expect(generatedRandomPasteFileName('/tmp/.env', 'abcdef12')).toBe('pasted-abcdef12')
+  test('appends timestamped paste filenames while preserving extensions', () => {
+    const date = new Date('2026-06-13T07:08:09Z')
+    expect(generatedTimestampedPasteFileName('/tmp/report.pdf', date)).toBe('report-20260613-070809.pdf')
+    expect(generatedTimestampedPasteFileName('/tmp/LICENSE', date)).toBe('LICENSE-20260613-070809')
+    expect(generatedTimestampedPasteFileName('C:\\Users\\test\\archive.tar.gz', date)).toBe('archive.tar-20260613-070809.gz')
+    expect(generatedTimestampedPasteFileName('/tmp/.env', date)).toBe('.env-20260613-070809')
   })
 })
 

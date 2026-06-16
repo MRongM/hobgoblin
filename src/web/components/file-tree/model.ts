@@ -182,7 +182,23 @@ export function resolveFileTreePasteTarget(worktreePath: string, node: FileTreeN
 }
 
 export function generatedPasteFileName(mimeType: string | undefined, now = new Date()): string {
-  const stamp = [
+  const stamp = pasteTimestamp(now)
+  if (mimeType === 'image/jpeg') return `pasted-image-${stamp}.jpg`
+  if (mimeType === 'image/webp') return `pasted-image-${stamp}.webp`
+  if (mimeType?.startsWith('image/')) return `pasted-image-${stamp}.png`
+  return `pasted-text-${stamp}.txt`
+}
+
+export function generatedTimestampedPasteFileName(sourcePath: string, now = new Date()): string {
+  const sourceName = sourcePath.split(/[\\/]/).pop() ?? ''
+  const dot = sourceName.lastIndexOf('.')
+  const extension = dot > 0 && dot < sourceName.length - 1 ? sourceName.slice(dot) : ''
+  const baseName = extension ? sourceName.slice(0, -extension.length) : sourceName
+  return `${baseName || 'pasted'}-${pasteTimestamp(now)}${extension}`
+}
+
+function pasteTimestamp(now: Date): string {
+  return [
     now.getUTCFullYear(),
     String(now.getUTCMonth() + 1).padStart(2, '0'),
     String(now.getUTCDate()).padStart(2, '0'),
@@ -191,28 +207,4 @@ export function generatedPasteFileName(mimeType: string | undefined, now = new D
     String(now.getUTCMinutes()).padStart(2, '0'),
     String(now.getUTCSeconds()).padStart(2, '0'),
   ].join('')
-  if (mimeType === 'image/jpeg') return `pasted-image-${stamp}.jpg`
-  if (mimeType === 'image/webp') return `pasted-image-${stamp}.webp`
-  if (mimeType?.startsWith('image/')) return `pasted-image-${stamp}.png`
-  return `pasted-text-${stamp}.txt`
-}
-
-export function generatedRandomPasteFileName(sourcePath: string, randomHex = randomHex8()): string {
-  const sourceName = sourcePath.split(/[\\/]/).pop() ?? ''
-  const dot = sourceName.lastIndexOf('.')
-  const extension = dot > 0 && dot < sourceName.length - 1 ? sourceName.slice(dot) : ''
-  return `pasted-${randomHex}${extension}`
-}
-
-function randomHex8(): string {
-  const bytes = new Uint8Array(4)
-  const cryptoApi = globalThis.crypto
-  if (cryptoApi?.getRandomValues) {
-    cryptoApi.getRandomValues(bytes)
-  } else {
-    for (let index = 0; index < bytes.length; index += 1) {
-      bytes[index] = Math.floor(Math.random() * 256)
-    }
-  }
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
 }

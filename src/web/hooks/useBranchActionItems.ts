@@ -177,7 +177,7 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
       busy: createWorktreeBusy,
       visible: true,
       icon: createElement(FolderPlus),
-      onSelect: () => createWorktreeDialog.openWith(''),
+      onSelect: () => createWorktreeDialog.openWith(branch.name),
     },
     {
       id: 'sync',
@@ -285,6 +285,7 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
       writeActions.dialogs,
       createElement(CreateWorktreeDialogConnected, {
         repoId: repo.id,
+        defaultBranch: createWorktreeDialog.payload ?? undefined,
         open: createWorktreeDialog.open,
         onClose: createWorktreeDialog.close,
         onCreate: handleCreateWorktree,
@@ -295,16 +296,18 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
 
 function CreateWorktreeDialogConnected({
   repoId,
+  defaultBranch,
   open,
   onClose,
   onCreate,
 }: {
   repoId: string
+  defaultBranch?: string
   open: boolean
   onClose: () => void
   onCreate: (request: CreateWorktreeRequest) => void | Promise<void>
 }) {
   const repo = useReposStore((s) => s.repos[repoId])
   if (!repo) return null
-  return createElement(CreateWorktreeDialog, { open, repo, onClose, onCreate })
+  return createElement(CreateWorktreeDialog, { open, repo, defaultBranch, onClose, onCreate })
 }
