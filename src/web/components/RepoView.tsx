@@ -1,6 +1,5 @@
-// Active-repo body. The repo toolbar stays on top; split layouts render
-// branch list + detail, while focus mode renders detail directly under
-// the toolbar with the selected-branch summary in the toolbar itself.
+// Active-repo body. Split layouts render the branch area plus detail,
+// while focus mode renders detail directly under the global topbar.
 
 import { useCallback, useState } from 'react'
 import { Smartphone } from 'lucide-react'

@@ -4,8 +4,10 @@ import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { RepoExplorerPane } from '#/web/components/repo-workspace/RepoExplorerPane.tsx'
+import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+const REPO_ID = '/repo'
 
 vi.mock('#/web/components/BranchList.tsx', () => ({
   BranchList: () => <div data-testid="branch-list" />,
@@ -38,11 +40,21 @@ vi.mock('#/web/components/repo-workspace/ProjectHistoryPanel.tsx', () => ({
 }))
 
 vi.mock('#/web/components/repo-workspace/ProjectPortsPanel.tsx', () => ({
-  ProjectPortsPanel: ({ repoId }: { repoId: string }) => <div data-testid="project-ports-panel" data-repo-id={repoId} />,
+  ProjectPortsPanel: ({ repoId }: { repoId: string }) => (
+    <div data-testid="project-ports-panel" data-repo-id={repoId} />
+  ),
 }))
 
 vi.mock('#/web/components/SplitPane.tsx', () => ({
-  SplitPane: ({ before, after, orientation }: { before: React.ReactNode; after: React.ReactNode; orientation: string }) => (
+  SplitPane: ({
+    before,
+    after,
+    orientation,
+  }: {
+    before: React.ReactNode
+    after: React.ReactNode
+    orientation: string
+  }) => (
     <div data-testid="split-pane" data-orientation={orientation}>
       {before}
       {after}
@@ -52,6 +64,7 @@ vi.mock('#/web/components/SplitPane.tsx', () => ({
 
 beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
+  resetReposStore()
 })
 
 afterEach(() => {
@@ -60,6 +73,30 @@ afterEach(() => {
 })
 
 describe('RepoExplorerPane', () => {
+  test('places branch controls above the branch list', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main'), createRepoBranch('feature/a')],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
+    })
+
+    const branchToolbar = container.querySelector('[data-testid="branch-area-toolbar"]')
+    const branchList = container.querySelector('[data-testid="branch-list"]')
+    expect(branchToolbar).toBeTruthy()
+    expect(branchToolbar?.querySelector('[aria-label="branches.filter-label"]')).toBeTruthy()
+    expect(branchToolbar?.querySelector('[aria-label="branches.search-label"]')).toBeTruthy()
+    expect(branchList).toBeTruthy()
+    expect(branchToolbar!.compareDocumentPosition(branchList!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await act(async () => root.unmount())
+  })
+
   test('keeps branch list beside file tree in top-bottom workspace layout', async () => {
     const container = document.createElement('div')
     document.body.appendChild(container)
@@ -126,7 +163,13 @@ describe('RepoExplorerPane', () => {
     })
 
     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['file-tree.title', 'tab.changes', 'tab.status', 'tab.history', 'ports.title'])
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'file-tree.title',
+      'tab.changes',
+      'tab.status',
+      'tab.history',
+      'ports.title',
+    ])
 
     await act(async () => {
       tabs[4]?.click()
@@ -157,7 +200,9 @@ describe('RepoExplorerPane', () => {
       container.querySelector<HTMLButtonElement>('[data-testid="project-changes-panel"]')?.click()
     })
 
-    expect(container.querySelector('[data-testid="project-file-tree"]')?.getAttribute('data-reveal-path')).toBe('src/app.ts')
+    expect(container.querySelector('[data-testid="project-file-tree"]')?.getAttribute('data-reveal-path')).toBe(
+      'src/app.ts',
+    )
     await act(async () => root.unmount())
   })
 
@@ -177,7 +222,9 @@ describe('RepoExplorerPane', () => {
       container.querySelector<HTMLButtonElement>('[data-testid="project-history-panel"]')?.click()
     })
 
-    expect(container.querySelector('[data-testid="project-file-tree"]')?.getAttribute('data-reveal-path')).toBe('src/from-history.ts')
+    expect(container.querySelector('[data-testid="project-file-tree"]')?.getAttribute('data-reveal-path')).toBe(
+      'src/from-history.ts',
+    )
     await act(async () => root.unmount())
   })
 

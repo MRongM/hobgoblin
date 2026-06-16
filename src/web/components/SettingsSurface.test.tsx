@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act } from 'react'
+import { act, type ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
@@ -12,6 +12,12 @@ import { resetReposStore } from '#/web/stores/repos/test-utils.ts'
 const toastMocks = vi.hoisted(() => ({
   success: vi.fn(),
   error: vi.fn(),
+}))
+
+type TestDragEndEvent = { active: { id: string }; over: { id: string } | null }
+
+const dndState = vi.hoisted(() => ({
+  lastDragEnd: null as ((event: TestDragEndEvent) => void) | null,
 }))
 
 function defaultRpcResult(path: string, input?: unknown) {
@@ -92,6 +98,41 @@ vi.mock('sonner', () => ({
   },
 }))
 
+vi.mock('@dnd-kit/core', async () => {
+  const actual = await vi.importActual<typeof import('@dnd-kit/core')>('@dnd-kit/core')
+  return {
+    ...actual,
+    DndContext: ({ children, onDragEnd }: { children: ReactNode; onDragEnd: (event: TestDragEndEvent) => void }) => {
+      dndState.lastDragEnd = onDragEnd
+      return <>{children}</>
+    },
+    PointerSensor: vi.fn(),
+    KeyboardSensor: vi.fn(),
+    closestCenter: vi.fn(),
+    useSensor: () => ({}),
+    useSensors: () => [],
+  }
+})
+
+vi.mock('@dnd-kit/sortable', async () => {
+  const actual = await vi.importActual<typeof import('@dnd-kit/sortable')>('@dnd-kit/sortable')
+  return {
+    ...actual,
+    SortableContext: ({ children }: { children: ReactNode }) => <>{children}</>,
+    rectSortingStrategy: vi.fn(),
+    sortableKeyboardCoordinates: vi.fn(),
+    useSortable: ({ id }: { id: string }) => ({
+      attributes: { 'data-sortable-id': id },
+      listeners: {},
+      setNodeRef: vi.fn(),
+      setActivatorNodeRef: vi.fn(),
+      transform: null,
+      transition: undefined,
+      isDragging: false,
+    }),
+  }
+})
+
 let container: HTMLDivElement | null = null
 let root: Root | null = null
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -126,6 +167,7 @@ beforeEach(() => {
   setRendererBridgeForTests(null)
   resetReposStore()
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
+  dndState.lastDragEnd = null
   sendTestNotification.mockClear()
   toastMocks.success.mockClear()
   toastMocks.error.mockClear()
@@ -460,6 +502,67 @@ describe('SettingsSurface', () => {
     ).toBe(true)
   })
 
+  test('reorders terminal custom buttons with move buttons before saving', async () => {
+    await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
+    await addTerminalCustomButton('alpha', 'echo alpha')
+    await addTerminalCustomButton('beta', 'echo beta')
+    await addTerminalCustomButton('gamma', 'echo gamma')
+
+    await act(async () => {
+      buttonsByLabel('settings.terminal-custom-buttons.move-down')[0]?.click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonsByLabel('settings.terminal-custom-buttons.move-up')[2]?.click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText('settings.terminal-custom-buttons.save').click()
+      await Promise.resolve()
+    })
+
+    expect(terminalCustomButtonLabelsFromPayload()).toEqual(['beta', 'gamma', 'alpha'])
+  })
+
+  test('disables terminal custom button move controls at list boundaries', async () => {
+    await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
+    await addTerminalCustomButton('alpha', 'echo alpha')
+    await addTerminalCustomButton('beta', 'echo beta')
+
+    const moveUpButtons = buttonsByLabel('settings.terminal-custom-buttons.move-up')
+    const moveDownButtons = buttonsByLabel('settings.terminal-custom-buttons.move-down')
+
+    expect(moveUpButtons).toHaveLength(2)
+    expect(moveDownButtons).toHaveLength(2)
+    expect(moveUpButtons[0]?.disabled).toBe(true)
+    expect(moveUpButtons[1]?.disabled).toBe(false)
+    expect(moveDownButtons[0]?.disabled).toBe(false)
+    expect(moveDownButtons[1]?.disabled).toBe(true)
+  })
+
+  test('reorders terminal custom buttons from drag end before saving', async () => {
+    await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
+    await addTerminalCustomButton('alpha', 'echo alpha')
+    await addTerminalCustomButton('beta', 'echo beta')
+    await addTerminalCustomButton('gamma', 'echo gamma')
+
+    const sortableHandles = Array.from(document.body.querySelectorAll('[data-sortable-id]'))
+    const firstId = sortableHandles[0]?.getAttribute('data-sortable-id')
+    const thirdId = sortableHandles[2]?.getAttribute('data-sortable-id')
+    if (!firstId || !thirdId) throw new Error('Missing sortable ids for custom terminal buttons')
+
+    await act(async () => {
+      dndState.lastDragEnd?.({ active: { id: firstId }, over: { id: thirdId } })
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText('settings.terminal-custom-buttons.save').click()
+      await Promise.resolve()
+    })
+
+    expect(terminalCustomButtonLabelsFromPayload()).toEqual(['beta', 'gamma', 'alpha'])
+  })
+
   test('shows terminal custom button size control from settings', async () => {
     await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
 
@@ -538,6 +641,50 @@ function buttonByText(text: string): HTMLButtonElement {
   const match = buttons.find((button) => button.textContent?.includes(text))
   if (!(match instanceof HTMLButtonElement)) throw new Error(`Missing button with text: ${text}`)
   return match
+}
+
+async function addTerminalCustomButton(label: string, value: string) {
+  await act(async () => {
+    buttonByText('settings.terminal-custom-buttons.add').click()
+    await Promise.resolve()
+  })
+
+  const index = document.querySelectorAll('[id^="terminal-custom-button-label-"]').length - 1
+  const labelInput = document.getElementById(`terminal-custom-button-label-${index}`)
+  const valueInput = document.getElementById(`terminal-custom-button-value-${index}`)
+  if (!(labelInput instanceof HTMLInputElement) || !(valueInput instanceof HTMLTextAreaElement)) {
+    throw new Error(`Missing terminal custom button fields at index ${index}`)
+  }
+
+  await act(async () => {
+    setInputValue(labelInput, label)
+    setTextAreaValue(valueInput, value)
+    await Promise.resolve()
+  })
+}
+
+function buttonsByLabel(label: string): HTMLButtonElement[] {
+  return Array.from(document.body.querySelectorAll(`button[aria-label="${label}"]`)).filter(
+    (button): button is HTMLButtonElement => button instanceof HTMLButtonElement,
+  )
+}
+
+function lastTerminalCustomButtonsPayload(): unknown[] {
+  const matchingCalls = fetchMock.mock.calls.filter((call) => {
+    const [url] = call as unknown as [unknown, RequestInit | undefined]
+    return new URL(String(url)).pathname === '/api/settings/prefs'
+  })
+  const [, options] = matchingCalls[matchingCalls.length - 1] as unknown as [unknown, RequestInit | undefined]
+  const body = JSON.parse(String(options?.body ?? '{}')) as {
+    settings?: { terminalCustomButtons?: unknown[] }
+  }
+  return body.settings?.terminalCustomButtons ?? []
+}
+
+function terminalCustomButtonLabelsFromPayload() {
+  return lastTerminalCustomButtonsPayload().map((button) =>
+    typeof button === 'object' && button && 'label' in button ? String(button.label) : '',
+  )
 }
 
 function setInputValue(input: HTMLInputElement, value: string) {
