@@ -43,9 +43,10 @@ function SelectTrigger({
 function SelectContent({
   className,
   children,
+  header,
   position = 'popper',
   ...props
-}: React.ComponentProps<typeof SelectPrimitive.Content>) {
+}: React.ComponentProps<typeof SelectPrimitive.Content> & { header?: React.ReactNode }) {
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content
@@ -60,6 +61,16 @@ function SelectContent({
         {...props}
       >
         <SelectScrollUpButton />
+        {header && (
+          <div
+            data-slot="select-content-header"
+            className="border-border bg-popover sticky top-0 z-10 border-b p-1"
+            onKeyDown={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            {header}
+          </div>
+        )}
         <SelectPrimitive.Viewport
           className={cn(
             'p-1',

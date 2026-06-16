@@ -38,3 +38,20 @@ export function remoteTrackingBranchChoices(
     return [{ remoteRef, defaultLocalBranch }]
   })
 }
+
+export function remoteRefMatchesQuery(remoteRef: string, query: string): boolean {
+  const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  if (tokens.length === 0) return true
+  const normalized = remoteRef.toLowerCase()
+  return tokens.every((token) => fuzzyTokenMatches(normalized, token))
+}
+
+function fuzzyTokenMatches(value: string, token: string): boolean {
+  let offset = 0
+  for (const char of token) {
+    const next = value.indexOf(char, offset)
+    if (next === -1) return false
+    offset = next + 1
+  }
+  return true
+}

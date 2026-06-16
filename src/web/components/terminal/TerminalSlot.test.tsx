@@ -996,7 +996,12 @@ describe('TerminalSlot', () => {
         targetDirPath: '/srv/repo-feature/tmp',
         source: {
           kind: 'localPaths',
-          items: [{ path: '/Users/test/Desktop/report.pdf' }],
+          items: [
+            {
+              path: '/Users/test/Desktop/report.pdf',
+              destinationName: expect.stringMatching(/^report-20\d{6}-\d{6}\.pdf$/),
+            },
+          ],
         },
       })
       expect(writeInput).toHaveBeenCalledWith('terminal-1', '/srv/repo-feature/tmp/report.pdf')
@@ -1068,7 +1073,14 @@ describe('TerminalSlot', () => {
         targetDirPath: '/srv/repo-feature/tmp',
         source: {
           kind: 'uploadedItems',
-          items: [{ name: 'image.png', mimeType: 'image/png', bytesBase64: 'AQID', byteLength: 3 }],
+          items: [
+            {
+              name: expect.stringMatching(/^image-20\d{6}-\d{6}\.png$/),
+              mimeType: 'image/png',
+              bytesBase64: 'AQID',
+              byteLength: 3,
+            },
+          ],
         },
       })
       expect(input?.value).toBe('/srv/repo-feature/tmp/image.png')

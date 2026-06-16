@@ -329,7 +329,7 @@ describe('ProjectFileTree', () => {
         items: [
           {
             path: '/tmp/report.pdf',
-            destinationName: expect.stringMatching(/^pasted-[0-9a-f]{8}\.pdf$/),
+            destinationName: expect.stringMatching(/^report-20\d{6}-\d{6}\.pdf$/),
           },
         ],
       },

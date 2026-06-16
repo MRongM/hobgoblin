@@ -6,7 +6,7 @@ import {
   type RepoFileTransferUploadedItem,
 } from '#/shared/file-tree.ts'
 import { pathForDroppedFile } from '#/web/app-shell-client.ts'
-import { generatedPasteFileName, generatedRandomPasteFileName } from '#/web/components/file-tree/model.ts'
+import { generatedPasteFileName, generatedTimestampedPasteFileName } from '#/web/components/file-tree/model.ts'
 
 export interface FileTreeClipboardSelection {
   repoId: string
@@ -78,14 +78,15 @@ export function sourceFromDroppedFiles(files: File[]): RepoFileTransferSource | 
 export function sourceFromSystemClipboardPaths(paths: string[]): RepoFileTransferSource | null {
   const items = paths
     .filter((path) => path.length > 0)
-    .map((path) => ({ path, destinationName: generatedRandomPasteFileName(path) }))
+    .map((path) => ({ path, destinationName: generatedTimestampedPasteFileName(path) }))
   return items.length > 0 ? { kind: 'localPaths', items } : null
 }
 
 async function uploadedItemFromFile(file: File): Promise<RepoFileTransferUploadedItem> {
   const bytes = new Uint8Array(await file.arrayBuffer())
+  const name = file.name || generatedPasteFileName(file.type)
   return {
-    name: file.name || generatedPasteFileName(file.type),
+    name: file.name ? generatedTimestampedPasteFileName(file.name) : name,
     mimeType: file.type || undefined,
     bytesBase64: bytesToBase64(bytes),
     byteLength: bytes.byteLength,

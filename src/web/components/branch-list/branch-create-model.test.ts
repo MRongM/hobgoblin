@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'vitest'
-import { branchNameValidationKey, remoteTrackingBranchChoices } from '#/web/components/branch-list/branch-create-model.ts'
+import {
+  branchNameValidationKey,
+  remoteRefMatchesQuery,
+  remoteTrackingBranchChoices,
+} from '#/web/components/branch-list/branch-create-model.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 
 function branch(name: string): RepoBranchState {
@@ -34,5 +38,11 @@ describe('branch create model', () => {
         branches,
       ),
     ).toEqual([{ remoteRef: 'origin/feature/new', defaultLocalBranch: 'feature/new' }])
+  })
+
+  test('matches remote refs with case-insensitive fuzzy tokens', () => {
+    expect(remoteRefMatchesQuery('origin/bugfix/login-flow', 'fix login')).toBe(true)
+    expect(remoteRefMatchesQuery('origin/feature/APIClient', 'api cli')).toBe(true)
+    expect(remoteRefMatchesQuery('origin/feature/APIClient', 'login')).toBe(false)
   })
 })
