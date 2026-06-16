@@ -123,7 +123,7 @@ function renderList() {
 }
 
 describe('BranchList worktree drag ordering', () => {
-  test('renders worktree paths as project directory names', () => {
+  test('renders branch names first and worktree paths as project directory names', () => {
     seedRepoState({
       id: REPO_ID,
       branchViewMode: 'all',
@@ -137,6 +137,10 @@ describe('BranchList worktree drag ordering', () => {
 
     renderList()
 
+    expect(Array.from(container?.querySelectorAll('.text-sm.font-medium') ?? []).map((node) => node.textContent)).toEqual([
+      'main',
+      'feature/a',
+    ])
     expect(container?.textContent).toContain('worktree-a')
     expect(container?.querySelector('[aria-label="worktree-a"]')).not.toBeNull()
     expect(container?.textContent).not.toContain('../worktree-a')

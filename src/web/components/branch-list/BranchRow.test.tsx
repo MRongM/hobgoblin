@@ -122,7 +122,7 @@ describe('BranchRow', () => {
     expect(document.body.textContent).toContain('有改动')
   })
 
-  test('shows the project directory name for linked branch worktree paths', () => {
+  test('shows the branch name first and the project directory name as secondary worktree text', () => {
     const repo = emptyRepo('/Users/test/Desktop/src/tries/2026-06-13-hobgoblin/hobgoblin-feat-optimize', 'repo')
     const branch = createRepoBranch('feature/a', {
       worktree: { path: '/Users/test/Desktop/src/tries/2026-06-13-hobgoblin/hobgoblin-feat-optimize' },
@@ -142,6 +142,7 @@ describe('BranchRow', () => {
       </ul>,
     )
 
+    expect(document.body.querySelector('.text-sm.font-medium')?.textContent).toBe('feature/a')
     expect(document.body.querySelector('[aria-label="hobgoblin-feat-optimize"]')).not.toBeNull()
     expect(document.body.textContent).toContain('hobgoblin-feat-optimize')
     expect(document.body.textContent).not.toContain(
@@ -171,6 +172,7 @@ describe('BranchRow', () => {
     )
 
     const text = document.body.textContent ?? ''
+    expect(document.body.querySelector('.text-sm.font-medium')?.textContent).toBe('feature/a')
     expect(text).toContain('worktree-a')
     expect(text).not.toContain('Add workspace branch summary')
     expect(text).not.toContain('../worktree-a')
@@ -226,6 +228,7 @@ describe('BranchRow', () => {
       </ul>,
     )
 
+    expect(document.body.querySelector('.text-sm.font-medium')?.textContent).toBe('feature/a')
     expect(document.body.querySelector('[aria-label="repo-feature"]')).not.toBeNull()
     expect(document.body.textContent).toContain('repo-feature')
     expect(document.body.textContent).not.toContain('/srv/repo-feature')
