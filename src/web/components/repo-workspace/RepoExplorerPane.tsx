@@ -1,5 +1,6 @@
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useEffect, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { BranchList } from '#/web/components/BranchList.tsx'
 import { SplitPane } from '#/web/components/SplitPane.tsx'
 import { ProjectFileTree } from '#/web/components/file-tree/ProjectFileTree.tsx'
@@ -17,6 +18,7 @@ import { ToolbarTabStrip, ToolbarTabStripBody } from '#/web/components/tab-strip
 import { useT } from '#/web/stores/i18n.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
+import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 
 type ExplorerTab = 'files' | 'changes' | 'status' | 'history' | 'ports'
 
@@ -114,9 +116,13 @@ function ExplorerTabs({
   onTabChange: (tab: ExplorerTab) => void
 }) {
   const t = useT()
+  const { fileTreeTopbarFontSize } = useRuntimeFontSettings()
   const [revealRequest, setRevealRequest] = useState<FileTreeRevealRequest | null>(null)
   const isRemoteRepo = isRemoteRepoId(repoId)
   const activeVisibleTab = activeTab === 'ports' && !isRemoteRepo ? 'files' : activeTab
+  const toolbarStyle = {
+    '--goblin-file-tree-topbar-font-size': `${fileTreeTopbarFontSize}px`,
+  } as CSSProperties
   const tabs = [
     { id: 'files' as const, label: t('file-tree.title') },
     { id: 'changes' as const, label: t('tab.changes') },
@@ -138,7 +144,7 @@ function ExplorerTabs({
 
   return (
     <section className="flex min-h-0 flex-1 flex-col border-t border-separator/70 bg-background">
-      <Toolbar className="h-8 px-2" variant="detail">
+      <Toolbar data-testid="repo-explorer-toolbar" className="px-2" variant="detail" style={toolbarStyle}>
         <ToolbarTabStrip
           compact={false}
           compactContent={null}
@@ -162,7 +168,7 @@ function ExplorerTabs({
                     tabIndex={selected ? 0 : -1}
                     onClick={() => onTabChange(tab.id)}
                     className={cn(
-                      'h-7 gap-1.5 border px-2.5 text-sm font-normal',
+                      'h-7 gap-1.5 border px-2.5 text-[length:var(--goblin-file-tree-topbar-font-size)] font-normal',
                       selected
                         ? 'border-transparent bg-selected text-selected-foreground'
                         : 'border-separator text-muted-foreground hover:bg-accent/50 hover:text-foreground',

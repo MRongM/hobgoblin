@@ -43,6 +43,7 @@ describe('renderer bootstrap seeding', () => {
         terminalApp: 'ghostty',
         editorApp: 'cursor',
         fileTreeFontSize: 12,
+        fileTreeTopbarFontSize: 13,
         terminalFontSize: 14,
         terminalExternalInputEnabled: false,
         remoteTerminalTmuxEnabled: false,

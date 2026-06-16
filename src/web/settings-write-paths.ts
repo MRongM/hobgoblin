@@ -16,6 +16,7 @@ import {
   refreshGitHubCliState,
   saveSession,
   setFileTreeFontSize,
+  setFileTreeTopbarFontSize,
   setGlobalShortcut,
   setGlobalShortcutDisabled,
   setLanEnabled,
@@ -130,6 +131,12 @@ export async function setFileTreeFontSizePreference(fontSize: number): Promise<n
   const fileTreeFontSize = await setFileTreeFontSize(fontSize)
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, fileTreeFontSize }))
   return fileTreeFontSize
+}
+
+export async function setFileTreeTopbarFontSizePreference(fontSize: number): Promise<number> {
+  const fileTreeTopbarFontSize = await setFileTreeTopbarFontSize(fontSize)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, fileTreeTopbarFontSize }))
+  return fileTreeTopbarFontSize
 }
 
 export async function setTerminalFontSizePreference(fontSize: number): Promise<number> {
