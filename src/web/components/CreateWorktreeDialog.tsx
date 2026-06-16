@@ -262,11 +262,12 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, onClose, onCre
 
         {mode === 'newBranch' && (
           <>
-            <Field data-invalid={baseError ? true : undefined}>
+            <Field className="mt-2" data-invalid={baseError ? true : undefined}>
               <FieldLabel htmlFor="cwt-base">{t('action.create-worktree-base-label')}</FieldLabel>
               <Select value={base} onValueChange={setBase}>
                 <SelectTrigger
                   id="cwt-base"
+                  size="sm"
                   className="w-full"
                   aria-invalid={!!baseError}
                   aria-describedby={baseError ? 'cwt-base-error' : undefined}
@@ -305,6 +306,7 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, onClose, onCre
                 placeholder={t('action.create-worktree-branch-placeholder')}
                 aria-invalid={!!branchError}
                 aria-describedby={branchError ? 'cwt-branch-error' : undefined}
+                className="h-8"
               />
               <FieldError id="cwt-branch-error" reserveHeight aria-live="polite" aria-atomic="true">
                 {branchError}
@@ -314,11 +316,12 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, onClose, onCre
         )}
 
         {mode === 'existingBranch' && (
-          <Field data-invalid={existingBranchError ? true : undefined}>
+          <Field className="mt-2" data-invalid={existingBranchError ? true : undefined}>
             <FieldLabel htmlFor="cwt-existing-branch">{t('action.create-worktree-existing-label')}</FieldLabel>
             <Select value={existingBranch} onValueChange={setExistingBranch}>
               <SelectTrigger
                 id="cwt-existing-branch"
+                size="sm"
                 className="w-full"
                 aria-invalid={!!existingBranchError}
                 aria-describedby={existingBranchError ? 'cwt-existing-branch-error' : undefined}
@@ -341,7 +344,7 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, onClose, onCre
 
         {mode === 'trackRemoteBranch' && (
           <>
-            <Field>
+            <Field className="mt-2">
               <FieldLabel htmlFor="cwt-remote-ref">{t('action.create-worktree-remote-label')}</FieldLabel>
               <Select
                 value={selectedRemoteRef}
@@ -351,7 +354,12 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, onClose, onCre
                 }}
                 disabled={visibleRemoteBranches.length === 0}
               >
-                <SelectTrigger id="cwt-remote-ref" className="w-full" aria-label={t('action.create-worktree-remote-label')}>
+                <SelectTrigger
+                  id="cwt-remote-ref"
+                  size="sm"
+                  className="w-full"
+                  aria-label={t('action.create-worktree-remote-label')}
+                >
                   <SelectValue placeholder={t('action.create-worktree-remote-placeholder')} />
                 </SelectTrigger>
                 <SelectContent
@@ -394,6 +402,7 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, onClose, onCre
                 placeholder={derivedLocalBranch || t('action.create-worktree-local-branch-placeholder')}
                 aria-invalid={!!localBranchError}
                 aria-describedby={localBranchError ? 'cwt-local-branch-error' : undefined}
+                className="h-8"
               />
               <FieldError id="cwt-local-branch-error" reserveHeight aria-live="polite" aria-atomic="true">
                 {localBranchError}
@@ -403,7 +412,7 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, onClose, onCre
         )}
 
         {mode === 'detached' && (
-          <Field data-invalid={detachedRefError ? true : undefined}>
+          <Field className="mt-2" data-invalid={detachedRefError ? true : undefined}>
             <FieldLabel htmlFor="cwt-detached-ref">{t('action.create-worktree-ref-label')}</FieldLabel>
             <Input
               id="cwt-detached-ref"
@@ -412,6 +421,7 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, onClose, onCre
               placeholder={t('action.create-worktree-ref-placeholder')}
               aria-invalid={!!detachedRefError}
               aria-describedby={detachedRefError ? 'cwt-detached-ref-error' : undefined}
+              className="h-8"
             />
             <FieldError id="cwt-detached-ref-error" reserveHeight aria-live="polite" aria-atomic="true">
               {detachedRefError}
@@ -428,7 +438,7 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, onClose, onCre
             onChange={(e) => setWorktreePath(e.target.value)}
             placeholder={displayDefaultPath}
             aria-describedby="cwt-path-hint"
-            className="font-mono text-xs"
+            className="h-8 font-mono text-xs"
             list={pathSuggestions.length > 0 ? 'create-worktree-path-suggestions' : undefined}
           />
           {pathSuggestions.length > 0 && (
