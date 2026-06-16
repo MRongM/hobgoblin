@@ -34,6 +34,7 @@ import { MobileTerminalToolbar } from '#/web/components/terminal/mobile-terminal
 import { isMobileDevice } from '#/web/components/terminal/mobile-detection.ts'
 import { useRuntimeTerminalSettings } from '#/web/runtime-settings-terminal-buttons.ts'
 import { TerminalExternalInput } from '#/web/components/terminal/terminal-external-input.tsx'
+import { generatedPasteFileName, generatedTimestampedPasteFileName } from '#/web/components/file-tree/model.ts'
 interface TerminalSlotProps {
   repoRoot: string
   branch: string
@@ -594,7 +595,7 @@ async function resolveRemotePastedFilePaths(
       targetDirPath,
       source: {
         kind: 'localPaths',
-        items: sourcePaths.map((path) => ({ path })),
+        items: sourcePaths.map((path) => ({ path, destinationName: generatedTimestampedPasteFileName(path) })),
       },
     })
     return result.ok ? result.copied.map((entry) => entry.destinationPath) : []
@@ -658,8 +659,9 @@ async function fileToClipboardPayload(file: File): Promise<ClipboardBinaryFilePa
 
 async function fileToUploadedItem(file: File): Promise<RepoFileTransferUploadedItem> {
   const bytes = new Uint8Array(await file.arrayBuffer())
+  const name = file.name || generatedPasteFileName(file.type)
   return {
-    name: file.name || 'pasted.bin',
+    name: file.name ? generatedTimestampedPasteFileName(file.name) : name,
     mimeType: file.type || undefined,
     bytesBase64: bytesToBase64(bytes),
     byteLength: bytes.byteLength,

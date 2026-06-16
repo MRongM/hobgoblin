@@ -4,7 +4,7 @@ import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { cn } from '#/web/lib/cn.ts'
 import { formatRelativeTimeOrNull } from '#/web/lib/dates.ts'
-import { formatWorktreeListPath } from '#/web/lib/paths.ts'
+import { formatWorktreeListPath, lastPathSegment } from '#/web/lib/paths.ts'
 import { getBranchWorktreeState, type BranchWorktreeRepo } from '#/web/stores/repos/worktree-state.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
@@ -52,7 +52,7 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
   const worktreeDirty = worktreeState?.dirty ?? false
   const repoRoot = repo.remote?.target?.remotePath ?? repo.id
   const worktreePath = branch.worktree?.path
-    ? formatWorktreeListPath(branch.worktree.path, repo.remote?.target, repoRoot)
+    ? lastPathSegment(branch.worktree.path) || formatWorktreeListPath(branch.worktree.path, repo.remote?.target, repoRoot)
     : null
   const terminalWorktreeKey = branch.worktree?.path ? worktreeTerminalKey(repo.id, branch.worktree.path) : null
   const hasTerminalBell = useWorktreeTerminalHasBell(terminalWorktreeKey)

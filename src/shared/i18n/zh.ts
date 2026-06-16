@@ -405,6 +405,8 @@ export const zh: Record<DictKey, string> = {
   'action.pull-remote-branch-remote-label': '远程分支',
   'action.pull-remote-branch-load-failed': '无法加载远程分支。',
   'action.pull-remote-branch-confirm': '创建跟踪分支',
+  'action.remote-branch-search-label': '搜索远程分支',
+  'action.remote-branch-search-placeholder': '输入以筛选远程分支',
   'action.checkout-to': '切换分支',
   'action.checkout-to-title': '切换分支',
   'action.checkout-to-label': '分支',

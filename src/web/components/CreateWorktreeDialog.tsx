@@ -27,6 +27,7 @@ import { cn } from '#/web/lib/cn.ts'
 import { validateBranchName } from '#/shared/refnames.ts'
 import { isResolvableRemotePathInput } from '#/shared/remote-repo.ts'
 import { deriveLocalBranchFromRemoteRef, type CreateWorktreeInput } from '#/shared/worktree-create.ts'
+import { remoteRefMatchesQuery } from '#/web/components/branch-list/branch-create-model.ts'
 
 type CreateWorktreeDialogMode = CreateWorktreeInput['mode']['kind']
 
@@ -44,11 +45,12 @@ export interface CreateWorktreeRequest {
 interface Props {
   open: boolean
   repo: RepoState
+  defaultBranch?: string
   onClose: () => void
   onCreate: (request: CreateWorktreeRequest) => void | Promise<void>
 }
 
-export function CreateWorktreeDialog({ open, repo, onClose, onCreate }: Props) {
+export function CreateWorktreeDialog({ open, repo, defaultBranch, onClose, onCreate }: Props) {
   const t = useT()
   const compact = useIsCompactUi()
 
@@ -61,7 +63,10 @@ export function CreateWorktreeDialog({ open, repo, onClose, onCreate }: Props) {
   const [detachedRef, setDetachedRef] = useState('')
   const [worktreePath, setWorktreePath] = useState('')
   const [remoteBranches, setRemoteBranches] = useState<string[]>([])
+  const [remoteBranchQuery, setRemoteBranchQuery] = useState('')
   const [remoteBranchesLoading, setRemoteBranchesLoading] = useState(false)
+  const localBranchNames = repo.data.branches.map((b) => b.name)
+  const hasLocalBranch = (name: string) => localBranchNames.includes(name)
 
   // Reset on the rising edge of `open` only. Listing repo.data.branches /
   // repo.data.currentBranch in the deps would re-fire on every snapshot
@@ -69,7 +74,8 @@ export function CreateWorktreeDialog({ open, repo, onClose, onCreate }: Props) {
   // Snapshot the initial base via a ref so the open-edge handler
   // reads the current value without taking a dep on it.
   const initialBaseRef = useRef('')
-  initialBaseRef.current = repo.data.currentBranch || repo.data.branches[0]?.name || ''
+  const fallbackBase = repo.data.currentBranch || repo.data.branches[0]?.name || ''
+  initialBaseRef.current = defaultBranch && hasLocalBranch(defaultBranch) ? defaultBranch : fallbackBase
   useEffect(() => {
     if (!open) return
     const initialBase = initialBaseRef.current
@@ -82,6 +88,7 @@ export function CreateWorktreeDialog({ open, repo, onClose, onCreate }: Props) {
     setDetachedRef('')
     setWorktreePath('')
     setRemoteBranches([])
+    setRemoteBranchQuery('')
     setRemoteBranchesLoading(false)
   }, [open])
 
@@ -104,12 +111,10 @@ export function CreateWorktreeDialog({ open, repo, onClose, onCreate }: Props) {
   }, [mode, open, remoteBranches.length, repo.id])
 
   const remoteTarget = repo.remote.target
-  const localBranchNames = repo.data.branches.map((b) => b.name)
-  const hasLocalBranch = (name: string) => localBranchNames.includes(name)
-
+  const visibleRemoteBranches = remoteBranches.filter((ref) => remoteRefMatchesQuery(ref, remoteBranchQuery))
   const branchTrimmed = branch.trim()
   const detachedRefTrimmed = detachedRef.trim()
-  const selectedRemoteRef = remoteRef || remoteBranches[0] || ''
+  const selectedRemoteRef = remoteRef && visibleRemoteBranches.includes(remoteRef) ? remoteRef : visibleRemoteBranches[0] || ''
   const derivedLocalBranch = deriveLocalBranchFromRemoteRef(selectedRemoteRef) ?? ''
   const trackLocalBranch = localBranch.trim() || derivedLocalBranch
   const pathName = worktreePathName({ mode, branchTrimmed, existingBranch, trackLocalBranch, detachedRefTrimmed })
@@ -166,6 +171,14 @@ export function CreateWorktreeDialog({ open, repo, onClose, onCreate }: Props) {
   const validPath = remoteTarget ? isResolvableRemotePathInput(effectivePath) : effectivePath.length > 0
   const input = buildInput()
   const canSubmit = !!input && validPath && !branchActionBusy
+
+  useEffect(() => {
+    if (!open || mode !== 'trackRemoteBranch') return
+    if (selectedRemoteRef && remoteRef !== selectedRemoteRef) {
+      setRemoteRef(selectedRemoteRef)
+      setLocalBranch('')
+    }
+  }, [mode, open, remoteRef, selectedRemoteRef])
 
   function buildInput(): CreateWorktreeInput | null {
     if (!validPath) return null
@@ -336,13 +349,27 @@ export function CreateWorktreeDialog({ open, repo, onClose, onCreate }: Props) {
                   setRemoteRef(next)
                   setLocalBranch('')
                 }}
-                disabled={remoteBranches.length === 0}
+                disabled={visibleRemoteBranches.length === 0}
               >
-                <SelectTrigger id="cwt-remote-ref" className="w-full">
+                <SelectTrigger id="cwt-remote-ref" className="w-full" aria-label={t('action.create-worktree-remote-label')}>
                   <SelectValue placeholder={t('action.create-worktree-remote-placeholder')} />
                 </SelectTrigger>
-                <SelectContent>
-                  {remoteBranches.map((ref) => (
+                <SelectContent
+                  header={
+                    <Input
+                      id="cwt-remote-ref-filter"
+                      autoFocus
+                      value={remoteBranchQuery}
+                      onChange={(e) => setRemoteBranchQuery(e.target.value)}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      placeholder={t('action.remote-branch-search-placeholder')}
+                      aria-label={t('action.remote-branch-search-label')}
+                      disabled={remoteBranchesLoading || remoteBranches.length === 0}
+                      className="h-8"
+                    />
+                  }
+                >
+                  {visibleRemoteBranches.map((ref) => (
                     <SelectItem key={ref} value={ref} textValue={ref}>
                       <span className="truncate">{ref}</span>
                     </SelectItem>
@@ -352,7 +379,7 @@ export function CreateWorktreeDialog({ open, repo, onClose, onCreate }: Props) {
               <FieldDescription reserveHeight aria-live="polite" aria-atomic="true">
                 {remoteBranchesLoading
                   ? t('action.create-worktree-remote-loading')
-                  : remoteBranches.length === 0
+                  : remoteBranches.length === 0 || visibleRemoteBranches.length === 0
                     ? t('action.create-worktree-remote-empty')
                     : ''}
               </FieldDescription>

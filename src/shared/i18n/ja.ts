@@ -422,6 +422,8 @@ export const ja: Record<DictKey, string> = {
   'action.pull-remote-branch-remote-label': 'リモートブランチ',
   'action.pull-remote-branch-load-failed': 'リモートブランチを読み込めませんでした。',
   'action.pull-remote-branch-confirm': '追跡ブランチを作成',
+  'action.remote-branch-search-label': 'リモートブランチを検索',
+  'action.remote-branch-search-placeholder': '入力してリモートブランチを絞り込み',
   'action.checkout-to': 'ブランチを切り替え',
   'action.checkout-to-title': 'ブランチを切り替え',
   'action.checkout-to-label': 'ブランチ',

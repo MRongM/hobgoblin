@@ -177,6 +177,42 @@ describe('PullRemoteBranchDialog', () => {
       remoteRef: 'origin/feature/new',
     })
   })
+
+  test('filters remote refs locally with fuzzy search before submit', async () => {
+    mocks.getRepositoryRemoteBranches.mockResolvedValueOnce(['origin/feature/api-client', 'origin/bugfix/login-flow'])
+    const onTrack = vi.fn(async () => {})
+
+    render(
+      <PullRemoteBranchDialog
+        open
+        repoId="/repo"
+        allBranches={[]}
+        busy={false}
+        onClose={vi.fn()}
+        onTrack={onTrack}
+      />,
+    )
+    await flush()
+    await flush()
+
+    expect(input('#pull-remote-local-branch').value).toBe('feature/api-client')
+
+    openSelect('#pull-remote-ref')
+    expect(input('#pull-remote-ref-filter').closest('[data-slot="select-content"]')).not.toBeNull()
+
+    setInputValue('#pull-remote-ref-filter', 'fix login')
+    await flush()
+
+    expect(input('#pull-remote-local-branch').value).toBe('bugfix/login-flow')
+
+    clickButtonByText('action.pull-remote-branch-confirm')
+    await flush()
+
+    expect(onTrack).toHaveBeenCalledWith({
+      localBranch: 'bugfix/login-flow',
+      remoteRef: 'origin/bugfix/login-flow',
+    })
+  })
 })
 
 function render(element: ReactNode) {
@@ -199,6 +235,12 @@ function textarea(selector: string): HTMLTextAreaElement {
 function input(selector: string): HTMLInputElement {
   const element = document.body.querySelector(selector)
   if (!(element instanceof HTMLInputElement)) throw new Error(`Missing input: ${selector}`)
+  return element
+}
+
+function button(selector: string): HTMLButtonElement {
+  const element = document.body.querySelector(selector)
+  if (!(element instanceof HTMLButtonElement)) throw new Error(`Missing button: ${selector}`)
   return element
 }
 
@@ -263,6 +305,16 @@ function clickButtonByText(text: string) {
   const element = buttonByText(text)
   act(() => {
     element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
+}
+
+function openSelect(selector: string) {
+  const element = button(selector)
+  if (!Element.prototype.scrollIntoView) {
+    Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() })
+  }
+  act(() => {
+    element.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
   })
 }
 

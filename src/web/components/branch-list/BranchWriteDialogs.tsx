@@ -15,6 +15,7 @@ import { useAsyncPending } from '#/web/hooks/useAsyncPending.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import {
   branchNameValidationKey,
+  remoteRefMatchesQuery,
   remoteTrackingBranchChoices,
 } from '#/web/components/branch-list/branch-create-model.ts'
 
@@ -297,13 +298,15 @@ export function PullRemoteBranchDialog({
   const t = useT()
   const [remoteRefs, setRemoteRefs] = useState<string[]>([])
   const [remoteRef, setRemoteRef] = useState('')
+  const [remoteRefQuery, setRemoteRefQuery] = useState('')
   const [localBranch, setLocalBranch] = useState('')
   const [loading, setLoading] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { isPending, run } = useAsyncPending<'trackRemoteBranch'>()
   const choices = remoteTrackingBranchChoices(remoteRefs, allBranches)
-  const selected = choices.find((choice) => choice.remoteRef === remoteRef) ?? choices[0]
+  const visibleChoices = choices.filter((choice) => remoteRefMatchesQuery(choice.remoteRef, remoteRefQuery))
+  const selected = visibleChoices.find((choice) => choice.remoteRef === remoteRef) ?? visibleChoices[0]
   const effectiveRemoteRef = selected?.remoteRef ?? ''
   const effectiveLocalBranch = localBranch.trim() || selected?.defaultLocalBranch || ''
   const validationKey = branchNameValidationKey(effectiveLocalBranch, allBranches)
@@ -313,6 +316,7 @@ export function PullRemoteBranchDialog({
     if (!open) {
       setRemoteRefs([])
       setRemoteRef('')
+      setRemoteRefQuery('')
       setLocalBranch('')
       setLoading(false)
       setLoadFailed(false)
@@ -340,8 +344,17 @@ export function PullRemoteBranchDialog({
   }, [open, repoId])
 
   useEffect(() => {
-    if (!open || !selected) return
-    if (!remoteRef) setRemoteRef(selected.remoteRef)
+    if (!open) return
+    if (!selected) {
+      if (remoteRef) setRemoteRef('')
+      if (localBranch) setLocalBranch('')
+      return
+    }
+    if (remoteRef !== selected.remoteRef) {
+      setRemoteRef(selected.remoteRef)
+      setLocalBranch(selected.defaultLocalBranch)
+      return
+    }
     if (!localBranch.trim()) setLocalBranch(selected.defaultLocalBranch)
   }, [localBranch, open, remoteRef, selected])
 
@@ -381,13 +394,27 @@ export function PullRemoteBranchDialog({
               setRemoteRef(next)
               setLocalBranch(nextChoice?.defaultLocalBranch ?? '')
             }}
-            disabled={choices.length === 0 || loading}
+            disabled={visibleChoices.length === 0 || loading}
           >
-            <SelectTrigger id="pull-remote-ref" className="w-full">
+            <SelectTrigger id="pull-remote-ref" className="w-full" aria-label={t('action.pull-remote-branch-remote-label')}>
               <SelectValue placeholder={t('action.create-worktree-remote-placeholder')} />
             </SelectTrigger>
-            <SelectContent>
-              {choices.map((choice) => (
+            <SelectContent
+              header={
+                <Input
+                  id="pull-remote-ref-filter"
+                  autoFocus
+                  value={remoteRefQuery}
+                  onChange={(e) => setRemoteRefQuery(e.target.value)}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  placeholder={t('action.remote-branch-search-placeholder')}
+                  aria-label={t('action.remote-branch-search-label')}
+                  disabled={choices.length === 0 || loading}
+                  className="h-8"
+                />
+              }
+            >
+              {visibleChoices.map((choice) => (
                 <SelectItem key={choice.remoteRef} value={choice.remoteRef} textValue={choice.remoteRef}>
                   <span className="truncate">{choice.remoteRef}</span>
                 </SelectItem>
@@ -399,7 +426,7 @@ export function PullRemoteBranchDialog({
               ? t('action.create-worktree-remote-loading')
               : loadFailed
                 ? t('action.pull-remote-branch-load-failed')
-                : choices.length === 0
+                : choices.length === 0 || visibleChoices.length === 0
                   ? t('action.create-worktree-remote-empty')
                   : ''}
           </FieldDescription>
