@@ -6,6 +6,7 @@ import type { EditorPref, TerminalPref } from '#/shared/rpc.ts'
 import { runtimeRecentReposStateFromSettingsSnapshot, runtimeSettingsSnapshotFromSettingsSnapshot } from '#/shared/settings-snapshot.ts'
 import {
   DEFAULT_FILE_TREE_FONT_SIZE,
+  DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
   DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
   DEFAULT_TERMINAL_FONT_SIZE,
 } from '#/shared/settings-defaults.ts'
@@ -101,6 +102,8 @@ export function readRuntimeFontSettings(data: RuntimeSettingsSnapshot | undefine
   return {
     fileTreeFontSize:
       data?.fileTreeFontSize ?? fallback?.fileTreeFontSize ?? DEFAULT_FILE_TREE_FONT_SIZE,
+    fileTreeTopbarFontSize:
+      data?.fileTreeTopbarFontSize ?? fallback?.fileTreeTopbarFontSize ?? DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
     terminalFontSize:
       data?.terminalFontSize ?? fallback?.terminalFontSize ?? DEFAULT_TERMINAL_FONT_SIZE,
   }

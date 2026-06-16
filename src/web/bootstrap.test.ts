@@ -51,6 +51,7 @@ describe('renderer bootstrap', () => {
       terminalApp: 'auto',
       editorApp: 'windsurf',
       fileTreeFontSize: 12,
+      fileTreeTopbarFontSize: 13,
       terminalFontSize: 14,
       terminalExternalInputEnabled: false,
       remoteTerminalTmuxEnabled: false,

@@ -26,6 +26,7 @@ import {
   DEFAULT_COLOR_THEME,
   DEFAULT_EDITOR_APP,
   DEFAULT_FILE_TREE_FONT_SIZE,
+  DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
   DEFAULT_FETCH_INTERVAL_SEC,
   DEFAULT_GLOBAL_SHORTCUT,
   DEFAULT_GLOBAL_SHORTCUT_DISABLED,
@@ -40,9 +41,11 @@ import {
   DEFAULT_THEME_PREF,
   DEFAULT_TOGGLE_DETAIL_ON_ACTION_BAR_BLANK_CLICK,
   MAX_FILE_TREE_FONT_SIZE,
+  MAX_FILE_TREE_TOPBAR_FONT_SIZE,
   MAX_RECENT_REPOS,
   MAX_TERMINAL_FONT_SIZE,
   MIN_FILE_TREE_FONT_SIZE,
+  MIN_FILE_TREE_TOPBAR_FONT_SIZE,
   MIN_TERMINAL_FONT_SIZE,
   defaultSessionState,
   defaultSettingsPrefs,
@@ -64,6 +67,7 @@ interface ServerSettingsData {
   terminalApp: TerminalPref
   editorApp: EditorPref
   fileTreeFontSize: number
+  fileTreeTopbarFontSize: number
   terminalFontSize: number
   terminalExternalInputEnabled: boolean
   remoteTerminalTmuxEnabled: boolean
@@ -120,6 +124,14 @@ function normalizeFileTreeFontSize(value: unknown): number {
     min: MIN_FILE_TREE_FONT_SIZE,
     max: MAX_FILE_TREE_FONT_SIZE,
     fallback: DEFAULT_FILE_TREE_FONT_SIZE,
+  })
+}
+
+function normalizeFileTreeTopbarFontSize(value: unknown): number {
+  return normalizeFontSize(value, {
+    min: MIN_FILE_TREE_TOPBAR_FONT_SIZE,
+    max: MAX_FILE_TREE_TOPBAR_FONT_SIZE,
+    fallback: DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
   })
 }
 
@@ -198,6 +210,7 @@ function settingsPrefsFromData(data: ServerSettingsData): SettingsPrefs {
     terminalApp: data.terminalApp,
     editorApp: data.editorApp,
     fileTreeFontSize: data.fileTreeFontSize,
+    fileTreeTopbarFontSize: data.fileTreeTopbarFontSize,
     terminalFontSize: data.terminalFontSize,
     terminalExternalInputEnabled: data.terminalExternalInputEnabled,
     remoteTerminalTmuxEnabled: data.remoteTerminalTmuxEnabled,
@@ -289,6 +302,7 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       terminalApp: normalizeTerminalPref(parsed.terminalApp),
       editorApp: normalizeEditorPref(parsed.editorApp),
       fileTreeFontSize: normalizeFileTreeFontSize(parsed.fileTreeFontSize),
+      fileTreeTopbarFontSize: normalizeFileTreeTopbarFontSize(parsed.fileTreeTopbarFontSize),
       terminalFontSize: normalizeTerminalFontSize(parsed.terminalFontSize),
       terminalExternalInputEnabled: normalizeTerminalExternalInputEnabled(parsed.terminalExternalInputEnabled),
       remoteTerminalTmuxEnabled: normalizeRemoteTerminalTmuxEnabled(parsed.remoteTerminalTmuxEnabled),
@@ -379,6 +393,10 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   const nextEditorApp = patch.editorApp === undefined ? data.editorApp : normalizeEditorPref(patch.editorApp)
   const nextFileTreeFontSize =
     patch.fileTreeFontSize === undefined ? data.fileTreeFontSize : normalizeFileTreeFontSize(patch.fileTreeFontSize)
+  const nextFileTreeTopbarFontSize =
+    patch.fileTreeTopbarFontSize === undefined
+      ? data.fileTreeTopbarFontSize
+      : normalizeFileTreeTopbarFontSize(patch.fileTreeTopbarFontSize)
   const nextTerminalFontSize =
     patch.terminalFontSize === undefined ? data.terminalFontSize : normalizeTerminalFontSize(patch.terminalFontSize)
   const nextTerminalExternalInputEnabled =
@@ -417,6 +435,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     data.terminalApp !== nextTerminalApp ||
     data.editorApp !== nextEditorApp ||
     data.fileTreeFontSize !== nextFileTreeFontSize ||
+    data.fileTreeTopbarFontSize !== nextFileTreeTopbarFontSize ||
     data.terminalFontSize !== nextTerminalFontSize ||
     data.terminalExternalInputEnabled !== nextTerminalExternalInputEnabled ||
     data.remoteTerminalTmuxEnabled !== nextRemoteTerminalTmuxEnabled ||
@@ -438,6 +457,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   data.terminalApp = nextTerminalApp
   data.editorApp = nextEditorApp
   data.fileTreeFontSize = nextFileTreeFontSize
+  data.fileTreeTopbarFontSize = nextFileTreeTopbarFontSize
   data.terminalFontSize = nextTerminalFontSize
   data.terminalExternalInputEnabled = nextTerminalExternalInputEnabled
   data.remoteTerminalTmuxEnabled = nextRemoteTerminalTmuxEnabled

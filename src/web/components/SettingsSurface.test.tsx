@@ -51,6 +51,7 @@ function defaultRpcResult(path: string, input?: unknown) {
       terminalApp: 'auto',
       editorApp: 'auto',
       fileTreeFontSize: 12,
+      fileTreeTopbarFontSize: 13,
       terminalFontSize: 14,
       terminalExternalInputEnabled: false,
       remoteTerminalTmuxEnabled: false,
@@ -193,6 +194,7 @@ beforeEach(() => {
       terminalApp: 'auto',
       editorApp: 'auto',
       fileTreeFontSize: 12,
+      fileTreeTopbarFontSize: 13,
       terminalFontSize: 14,
       terminalExternalInputEnabled: false,
       remoteTerminalTmuxEnabled: false,
@@ -219,6 +221,7 @@ beforeEach(() => {
       terminalApp: 'auto',
       editorApp: 'auto',
       fileTreeFontSize: 12,
+      fileTreeTopbarFontSize: 13,
       terminalFontSize: 14,
       terminalExternalInputEnabled: false,
       remoteTerminalTmuxEnabled: false,
@@ -401,6 +404,25 @@ describe('SettingsSurface', () => {
       fetchMock.mock.calls.some((call) => {
         const [, options] = call as unknown as [unknown, RequestInit | undefined]
         return String(options?.body ?? '').includes('"fileTreeFontSize":13')
+      }),
+    ).toBe(true)
+  })
+
+  test('edits file area topbar font size from settings', async () => {
+    await render(<SettingsSurface page="files" onPageChange={() => {}} />)
+
+    const input = document.getElementById('settings-file-tree-topbar-font-size')
+    if (!(input instanceof HTMLInputElement)) throw new Error('Missing file tree topbar font size input')
+
+    await act(async () => {
+      setInputValue(input, '12')
+      await Promise.resolve()
+    })
+
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [, options] = call as unknown as [unknown, RequestInit | undefined]
+        return String(options?.body ?? '').includes('"fileTreeTopbarFontSize":12')
       }),
     ).toBe(true)
   })

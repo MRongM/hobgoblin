@@ -197,6 +197,11 @@ export async function setFileTreeFontSize(fontSize: number): Promise<number> {
   return result.settings.fileTreeFontSize
 }
 
+export async function setFileTreeTopbarFontSize(fontSize: number): Promise<number> {
+  const result = await updateSettingsPrefsPatch({ fileTreeTopbarFontSize: fontSize })
+  return result.settings.fileTreeTopbarFontSize
+}
+
 export async function setTerminalFontSize(fontSize: number): Promise<number> {
   const result = await updateSettingsPrefsPatch({ terminalFontSize: fontSize })
   return result.settings.terminalFontSize

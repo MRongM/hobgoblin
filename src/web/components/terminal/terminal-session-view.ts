@@ -149,7 +149,7 @@ export class TerminalSessionView {
       cursorStyle: 'bar',
       fontFamily: TERMINAL_FONT_FAMILY,
       fontSize: this.fontSize,
-      lineHeight: 1.35,
+      lineHeight: 1,
       minimumContrastRatio: 4.5,
       scrollback: 10_000,
       macOptionIsMeta: true,

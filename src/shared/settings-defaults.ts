@@ -14,8 +14,10 @@ import type {
 } from '#/shared/rpc.ts'
 import {
   MAX_FILE_TREE_FONT_SIZE,
+  MAX_FILE_TREE_TOPBAR_FONT_SIZE,
   MAX_TERMINAL_FONT_SIZE,
   MIN_FILE_TREE_FONT_SIZE,
+  MIN_FILE_TREE_TOPBAR_FONT_SIZE,
   MIN_TERMINAL_FONT_SIZE,
 } from '#/shared/settings.ts'
 import {
@@ -40,6 +42,7 @@ export const DEFAULT_TEMPORARY_FILES_DIRECTORY = ''
 export const DEFAULT_TERMINAL_APP: TerminalPref = 'auto'
 export const DEFAULT_EDITOR_APP: EditorPref = 'auto'
 export const DEFAULT_FILE_TREE_FONT_SIZE = 14
+export const DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE = 13
 export const DEFAULT_TERMINAL_FONT_SIZE = 14
 export const DEFAULT_TERMINAL_EXTERNAL_INPUT_ENABLED = false
 export const DEFAULT_REMOTE_TERMINAL_TMUX_ENABLED = false
@@ -79,6 +82,7 @@ export function defaultSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): Se
     terminalApp: overrides.terminalApp ?? DEFAULT_TERMINAL_APP,
     editorApp: overrides.editorApp ?? DEFAULT_EDITOR_APP,
     fileTreeFontSize: overrides.fileTreeFontSize ?? DEFAULT_FILE_TREE_FONT_SIZE,
+    fileTreeTopbarFontSize: overrides.fileTreeTopbarFontSize ?? DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
     terminalFontSize: overrides.terminalFontSize ?? DEFAULT_TERMINAL_FONT_SIZE,
     terminalExternalInputEnabled:
       overrides.terminalExternalInputEnabled ?? DEFAULT_TERMINAL_EXTERNAL_INPUT_ENABLED,
@@ -117,6 +121,7 @@ export function initialSettingsFromSnapshot(snapshot: Pick<
   | 'terminalApp'
   | 'editorApp'
   | 'fileTreeFontSize'
+  | 'fileTreeTopbarFontSize'
   | 'terminalFontSize'
   | 'terminalExternalInputEnabled'
   | 'remoteTerminalTmuxEnabled'
@@ -138,6 +143,7 @@ export function initialSettingsFromSnapshot(snapshot: Pick<
     terminalApp: snapshot.terminalApp,
     editorApp: snapshot.editorApp,
     fileTreeFontSize: snapshot.fileTreeFontSize,
+    fileTreeTopbarFontSize: snapshot.fileTreeTopbarFontSize,
     terminalFontSize: snapshot.terminalFontSize,
     terminalExternalInputEnabled: snapshot.terminalExternalInputEnabled,
     remoteTerminalTmuxEnabled: snapshot.remoteTerminalTmuxEnabled,
@@ -155,8 +161,10 @@ export function defaultInitialSettingsSnapshot(overrides: Partial<InitialSetting
 export { DEFAULT_COLOR_THEME, DEFAULT_GLOBAL_SHORTCUT }
 export {
   MAX_FILE_TREE_FONT_SIZE,
+  MAX_FILE_TREE_TOPBAR_FONT_SIZE,
   MAX_TERMINAL_FONT_SIZE,
   MIN_FILE_TREE_FONT_SIZE,
+  MIN_FILE_TREE_TOPBAR_FONT_SIZE,
   MIN_TERMINAL_FONT_SIZE,
 }
 export type { ColorTheme }

@@ -66,24 +66,42 @@ describe('ProjectPortsPanel', () => {
   test('renders remote form and loads sessions', async () => {
     seedRepo('ssh-config://prod/srv/repo')
     const { container, root } = await render('ssh-config://prod/srv/repo')
+    expect(container.querySelector('input[name="localPort"]')).toBeTruthy()
     expect(container.querySelector('input[name="remotePort"]')).toBeTruthy()
+    expect(container.querySelector('input[name="localBindHost"]')).toBeNull()
+    expect(container.querySelector('input[name="remoteHost"]')).toBeNull()
+    expect(container.querySelector('[role="switch"]')).toBeTruthy()
     expect(mocks.listPortForwardSessions).toHaveBeenCalledWith('ssh-config://prod/srv/repo', expect.any(AbortSignal))
     await act(async () => root.unmount())
   })
 
-  test('shows warning for non-loopback bind host', async () => {
+  test('shows warning when LAN access is enabled', async () => {
     seedRepo('ssh-config://prod/srv/repo')
     const { container, root } = await render('ssh-config://prod/srv/repo')
-    setInputValue(container, 'localBindHost', '0.0.0.0')
+    expect(container.textContent).not.toContain('ports.non-loopback-warning')
+    await toggleLanAccess(container)
     expect(container.textContent).toContain('ports.non-loopback-warning')
+    await act(async () => root.unmount())
+  })
+
+  test('defaults remote port from local port until remote port is edited', async () => {
+    seedRepo('ssh-config://prod/srv/repo')
+    const { container, root } = await render('ssh-config://prod/srv/repo')
+
+    await fill(container, 'localPort', '3000')
+    expect(inputValue(container, 'remotePort')).toBe('3000')
+
+    await fill(container, 'remotePort', '5173')
+    await fill(container, 'localPort', '4000')
+    expect(inputValue(container, 'remotePort')).toBe('5173')
+
     await act(async () => root.unmount())
   })
 
   test('starts a port forward from form values', async () => {
     seedRepo('ssh-config://prod/srv/repo')
     const { container, root } = await render('ssh-config://prod/srv/repo')
-    await fill(container, 'remotePort', '3000')
-    await fill(container, 'remoteHost', 'localhost')
+    await fill(container, 'localPort', '3000')
     await act(async () => {
       container
         .querySelector<HTMLButtonElement>('[data-testid="ports-start"]')
@@ -94,9 +112,35 @@ describe('ProjectPortsPanel', () => {
         {
           repoId: 'ssh-config://prod/srv/repo',
           localBindHost: '127.0.0.1',
-          localPort: null,
-          remoteHost: 'localhost',
+          localPort: 3000,
+          remoteHost: '127.0.0.1',
           remotePort: 3000,
+        },
+        expect.any(AbortSignal),
+      )
+    })
+    await act(async () => root.unmount())
+  })
+
+  test('starts a port forward bound to all interfaces when LAN access is enabled', async () => {
+    seedRepo('ssh-config://prod/srv/repo')
+    const { container, root } = await render('ssh-config://prod/srv/repo')
+    await fill(container, 'localPort', '3000')
+    await fill(container, 'remotePort', '5173')
+    await toggleLanAccess(container)
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="ports-start"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    await vi.waitFor(() => {
+      expect(mocks.startPortForwardSession).toHaveBeenCalledWith(
+        {
+          repoId: 'ssh-config://prod/srv/repo',
+          localBindHost: '0.0.0.0',
+          localPort: 3000,
+          remoteHost: '127.0.0.1',
+          remotePort: 5173,
         },
         expect.any(AbortSignal),
       )
@@ -152,6 +196,20 @@ function seedRepo(repoId: string): void {
 
 async function fill(container: HTMLElement, name: string, value: string): Promise<void> {
   setInputValue(container, name, value)
+}
+
+function inputValue(container: HTMLElement, name: string): string {
+  const input = container.querySelector<HTMLInputElement>(`input[name="${name}"]`)
+  if (!input) throw new Error(`missing ${name} input`)
+  return input.value
+}
+
+async function toggleLanAccess(container: HTMLElement): Promise<void> {
+  const toggle = container.querySelector<HTMLElement>('[role="switch"]')
+  if (!toggle) throw new Error('missing LAN access switch')
+  await act(async () => {
+    toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
 }
 
 function setInputValue(container: HTMLElement, name: string, value: string): void {
