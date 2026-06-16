@@ -27,6 +27,7 @@ export function buildRuntimeSettingsSnapshot(input: {
     terminalApp: input.prefs.terminalApp,
     editorApp: input.prefs.editorApp,
     fileTreeFontSize: input.prefs.fileTreeFontSize,
+    fileTreeTopbarFontSize: input.prefs.fileTreeTopbarFontSize,
     terminalFontSize: input.prefs.terminalFontSize,
     terminalExternalInputEnabled: input.prefs.terminalExternalInputEnabled,
     remoteTerminalTmuxEnabled: input.prefs.remoteTerminalTmuxEnabled,
@@ -79,6 +80,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     | 'terminalApp'
     | 'editorApp'
     | 'fileTreeFontSize'
+    | 'fileTreeTopbarFontSize'
     | 'terminalFontSize'
     | 'terminalExternalInputEnabled'
     | 'remoteTerminalTmuxEnabled'
@@ -104,6 +106,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     terminalApp: snapshot.terminalApp,
     editorApp: snapshot.editorApp,
     fileTreeFontSize: snapshot.fileTreeFontSize,
+    fileTreeTopbarFontSize: snapshot.fileTreeTopbarFontSize,
     terminalFontSize: snapshot.terminalFontSize,
     terminalExternalInputEnabled: snapshot.terminalExternalInputEnabled,
     remoteTerminalTmuxEnabled: snapshot.remoteTerminalTmuxEnabled,

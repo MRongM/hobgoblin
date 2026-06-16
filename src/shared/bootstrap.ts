@@ -47,6 +47,7 @@ export interface InitialSettingsSnapshot {
   terminalApp: TerminalPref
   editorApp: EditorPref
   fileTreeFontSize: number
+  fileTreeTopbarFontSize: number
   terminalFontSize: number
   terminalExternalInputEnabled: boolean
   remoteTerminalTmuxEnabled: boolean
