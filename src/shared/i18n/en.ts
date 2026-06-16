@@ -422,6 +422,8 @@ export const en = {
   'action.pull-remote-branch-remote-label': 'Remote branch',
   'action.pull-remote-branch-load-failed': 'Could not load remote branches.',
   'action.pull-remote-branch-confirm': 'Create tracking branch',
+  'action.remote-branch-search-label': 'Search remote branches',
+  'action.remote-branch-search-placeholder': 'Type to filter remote branches',
   'action.checkout-to': 'Switch Branch',
   'action.checkout-to-title': 'Switch branch',
   'action.checkout-to-label': 'Branch',

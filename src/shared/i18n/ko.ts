@@ -413,6 +413,8 @@ export const ko: Record<DictKey, string> = {
   'action.pull-remote-branch-remote-label': '원격 브랜치',
   'action.pull-remote-branch-load-failed': '원격 브랜치를 불러올 수 없습니다.',
   'action.pull-remote-branch-confirm': '추적 브랜치 만들기',
+  'action.remote-branch-search-label': '원격 브랜치 검색',
+  'action.remote-branch-search-placeholder': '입력하여 원격 브랜치 필터',
   'action.checkout-to': '브랜치 전환',
   'action.checkout-to-title': '브랜치 전환',
   'action.checkout-to-label': '브랜치',

@@ -6,6 +6,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { normalizeRemoteTarget } from '#/shared/remote-repo.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { useBranchActionItems } from '#/web/hooks/useBranchActionItems.ts'
 
 const mocks = vi.hoisted(() => ({
@@ -336,6 +337,42 @@ describe('useBranchActionItems', () => {
     expect(createWorktree?.busy).toBe(false)
     expect(createWorktree?.label).toBe('action.create-worktree')
   })
+
+  test('opens create-worktree with the selected branch as the default base', async () => {
+    const submitBranchAction = vi.fn()
+    useReposStore.setState({ submitBranchAction })
+    const current = createRepoBranch('main', { isCurrent: true })
+    const branch = createRepoBranch('feature/base')
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      branches: [current, branch],
+      currentBranch: 'main',
+      selectedBranch: branch.name,
+    })
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.ts')
+    const groups = await renderItemGroups(useItems, repo, branch)
+    const createWorktree = groups.mainItems.find((item) => item.id === 'createWorktree')
+    if (!createWorktree) throw new Error('missing create-worktree action')
+
+    await act(async () => {
+      await createWorktree.onSelect()
+    })
+    setInputValue('#cwt-branch', 'feature/new')
+    clickButton('button[type="submit"]')
+
+    expect(submitBranchAction).toHaveBeenCalledWith(
+      '/tmp/repo',
+      {
+        kind: 'createWorktree',
+        input: {
+          worktreePath: '/tmp/repo-feature-new',
+          mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'feature/base' },
+        },
+      },
+      { token: repo.instanceToken, refreshOnError: false },
+    )
+  })
 })
 
 async function renderItems(
@@ -376,5 +413,34 @@ function ItemsHarness({
   React.useEffect(() => {
     onReady(items)
   }, [items, onReady])
-  return null
+  return <>{items.dialogs}</>
+}
+
+function input(selector: string): HTMLInputElement {
+  const element = document.body.querySelector(selector)
+  if (!(element instanceof HTMLInputElement)) throw new Error(`Missing input: ${selector}`)
+  return element
+}
+
+function button(selector: string): HTMLButtonElement {
+  const element = document.body.querySelector(selector)
+  if (!(element instanceof HTMLButtonElement)) throw new Error(`Missing button: ${selector}`)
+  return element
+}
+
+function setInputValue(selector: string, value: string) {
+  const element = input(selector)
+  const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
+  descriptor?.set?.call(element, value)
+  act(() => {
+    element.dispatchEvent(new Event('input', { bubbles: true }))
+    element.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+}
+
+function clickButton(selector: string) {
+  const element = button(selector)
+  act(() => {
+    element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
 }

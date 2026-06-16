@@ -66,6 +66,32 @@ describe('CreateWorktreeDialog', () => {
     deferred.resolve()
   })
 
+  test('uses the selected branch as the default new-worktree base', () => {
+    const onClose = vi.fn()
+    const onCreate = vi.fn(async () => {})
+
+    render(
+      <CreateWorktreeDialog
+        open
+        repo={createRepo()}
+        defaultBranch="feature/base"
+        onClose={onClose}
+        onCreate={onCreate}
+      />,
+    )
+
+    setInputValue('#cwt-branch', 'feature/new')
+    click('button[type="submit"]')
+
+    expect(onCreate).toHaveBeenCalledWith({
+      input: {
+        worktreePath: '/tmp/goblin-repo-feature-new',
+        mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'feature/base' },
+      },
+    })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
   test('closes immediately even when create resolves with a failure result later', async () => {
     const onClose = vi.fn()
     const deferred = createDeferred<void>()
@@ -159,6 +185,47 @@ describe('CreateWorktreeDialog', () => {
     })
     expect(onClose).toHaveBeenCalledTimes(1)
   })
+
+  test('filters remote branches locally before creating a tracking worktree', async () => {
+    const onClose = vi.fn()
+    const onCreate = vi.fn(async () => {})
+    testWindow.goblinNative = {
+      ...(testWindow.goblinNative as object),
+      initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' },
+    }
+    const jsonMock = vi.fn(async () => ['origin/feature/api-client', 'origin/bugfix/login-flow'])
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: jsonMock,
+      })),
+    )
+
+    render(<CreateWorktreeDialog open repo={createRepo()} onClose={onClose} onCreate={onCreate} />)
+
+    clickButtonByText('action.create-worktree-mode-remote')
+    await waitForAssertion(() => {
+      expect(input('#cwt-local-branch').placeholder).toBe('feature/api-client')
+    })
+
+    openSelect('#cwt-remote-ref')
+    expect(input('#cwt-remote-ref-filter').closest('[data-slot="select-content"]')).not.toBeNull()
+
+    setInputValue('#cwt-remote-ref-filter', 'fix login')
+    await waitForAssertion(() => {
+      expect(input('#cwt-local-branch').placeholder).toBe('bugfix/login-flow')
+    })
+    click('button[type="submit"]')
+
+    expect(onCreate).toHaveBeenCalledWith({
+      input: {
+        worktreePath: '/tmp/goblin-repo-bugfix-login-flow',
+        mode: { kind: 'trackRemoteBranch', remoteRef: 'origin/bugfix/login-flow', localBranch: 'bugfix/login-flow' },
+      },
+    })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
 })
 
 function createRepo(): RepoState {
@@ -247,6 +314,16 @@ function click(selector: string) {
   const element = button(selector)
   act(() => {
     element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
+}
+
+function openSelect(selector: string) {
+  const element = button(selector)
+  if (!Element.prototype.scrollIntoView) {
+    Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() })
+  }
+  act(() => {
+    element.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
   })
 }
 

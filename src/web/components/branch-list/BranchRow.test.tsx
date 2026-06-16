@@ -122,9 +122,11 @@ describe('BranchRow', () => {
     expect(document.body.textContent).toContain('有改动')
   })
 
-  test('shows the relative worktree directory for linked branches', () => {
-    const repo = emptyRepo('/tmp/repo', 'repo')
-    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+  test('shows the project directory name for linked branch worktree paths', () => {
+    const repo = emptyRepo('/Users/test/Desktop/src/tries/2026-06-13-hobgoblin/hobgoblin-feat-optimize', 'repo')
+    const branch = createRepoBranch('feature/a', {
+      worktree: { path: '/Users/test/Desktop/src/tries/2026-06-13-hobgoblin/hobgoblin-feat-optimize' },
+    })
 
     render(
       <ul>
@@ -140,8 +142,39 @@ describe('BranchRow', () => {
       </ul>,
     )
 
-    expect(document.body.textContent).toContain('../worktree-a')
-    expect(document.body.textContent).not.toContain('/tmp/worktree-a')
+    expect(document.body.querySelector('[aria-label="hobgoblin-feat-optimize"]')).not.toBeNull()
+    expect(document.body.textContent).toContain('hobgoblin-feat-optimize')
+    expect(document.body.textContent).not.toContain(
+      '/Users/test/Desktop/src/tries/2026-06-13-hobgoblin/hobgoblin-feat-optimize',
+    )
+  })
+
+  test('does not render the recent commit summary line for worktree rows', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', {
+      lastCommitMessage: 'Add workspace branch summary',
+      worktree: { path: '/tmp/worktree-a' },
+    })
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+    )
+
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('worktree-a')
+    expect(text).not.toContain('Add workspace branch summary')
+    expect(text).not.toContain('../worktree-a')
+    expect(document.body.querySelector('[aria-label="worktree-a"]')).not.toBeNull()
   })
 
   test('shows an unread terminal bell marker for linked worktrees', () => {
@@ -166,7 +199,7 @@ describe('BranchRow', () => {
     expect(document.body.querySelector('[aria-label="终端有未读提醒"]')).not.toBeNull()
   })
 
-  test('shows only the relative path for remote worktree directories', () => {
+  test('shows only the directory name for remote worktree paths', () => {
     const repo = emptyRepo('ssh-config://prod/srv/repo', 'repo')
     repo.remote.target = {
       id: 'ssh-config://prod/srv/repo',
@@ -193,7 +226,8 @@ describe('BranchRow', () => {
       </ul>,
     )
 
-    expect(document.body.textContent).toContain('../repo-feature')
+    expect(document.body.querySelector('[aria-label="repo-feature"]')).not.toBeNull()
+    expect(document.body.textContent).toContain('repo-feature')
     expect(document.body.textContent).not.toContain('/srv/repo-feature')
     expect(document.body.textContent).not.toContain('tester@192.0.2.10')
   })
