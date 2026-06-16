@@ -79,21 +79,21 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
     .join(', ')
 
   return (
-    <div title={title} className={cn('flex min-w-0 flex-col gap-0.5', className)}>
-      <div className="flex min-w-0 items-center gap-2">
+    <div title={title} className={cn('flex min-w-0 flex-col gap-px', className)}>
+      <div className="flex min-w-0 items-center gap-1.5">
         <span className="flex w-4 shrink-0 items-center justify-center">
           {isCurrent ? (
-            <Check size={14} className="text-success" />
+            <Check size={13} className="text-success" />
           ) : isWorktree ? (
-            <FolderTree size={14} className={worktreeDirty ? 'text-attention' : 'text-brand-text'} />
+            <FolderTree size={13} className={worktreeDirty ? 'text-attention' : 'text-brand-text'} />
           ) : (
-            <GitBranch size={14} className={selected ? 'text-selected-muted-foreground' : 'text-muted-foreground'} />
+            <GitBranch size={13} className={selected ? 'text-selected-muted-foreground' : 'text-muted-foreground'} />
           )}
         </span>
-        <span className="flex min-w-0 items-center gap-2 overflow-hidden">
+        <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
           <span
             className={cn(
-              'shrink-0 truncate text-sm font-medium',
+              'shrink-0 truncate text-sm leading-4 font-medium',
               selected ? 'text-selected-foreground' : 'text-foreground',
             )}
           >
@@ -140,7 +140,7 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
             {commitMeta && (
               <span
                 className={cn(
-                  'min-w-0 truncate whitespace-nowrap text-[11px] leading-none',
+                  'min-h-4 min-w-0 truncate whitespace-nowrap text-[11px] leading-4',
                   selected ? 'text-selected-muted-foreground/90' : 'text-muted-foreground/85',
                 )}
                 title={commitMeta}
@@ -156,7 +156,7 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
           title={worktreePath}
           aria-label={worktreePath}
           className={cn(
-            'block min-w-0 truncate pl-6 font-mono text-[11px] leading-none',
+            'block min-w-0 truncate pl-[22px] font-mono text-[11px] leading-3',
             selected ? 'text-selected-muted-foreground/90' : 'text-muted-foreground/85',
           )}
         >

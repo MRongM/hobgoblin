@@ -90,6 +90,8 @@ describe('RepoExplorerPane', () => {
     const branchToolbar = container.querySelector('[data-testid="branch-area-toolbar"]')
     const branchList = container.querySelector('[data-testid="branch-list"]')
     expect(branchToolbar).toBeTruthy()
+    expect(branchToolbar?.className).toContain('h-9')
+    expect(branchToolbar?.className).not.toContain('h-8')
     expect(branchToolbar?.querySelector('[aria-label="branches.filter-label"]')).toBeTruthy()
     expect(branchToolbar?.querySelector('[aria-label="branches.search-label"]')).toBeTruthy()
     expect(branchList).toBeTruthy()
