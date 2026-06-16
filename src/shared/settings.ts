@@ -13,6 +13,8 @@ export type EditorAppAvailability = Record<ResolvedEditorApp, boolean>
 
 export const MIN_FILE_TREE_FONT_SIZE = 10
 export const MAX_FILE_TREE_FONT_SIZE = 18
+export const MIN_FILE_TREE_TOPBAR_FONT_SIZE = 10
+export const MAX_FILE_TREE_TOPBAR_FONT_SIZE = 18
 export const MIN_TERMINAL_FONT_SIZE = 10
 export const MAX_TERMINAL_FONT_SIZE = 24
 
@@ -40,6 +42,7 @@ export interface SettingsPrefs {
   terminalApp: TerminalPref
   editorApp: EditorPref
   fileTreeFontSize: number
+  fileTreeTopbarFontSize: number
   terminalFontSize: number
   terminalExternalInputEnabled: boolean
   remoteTerminalTmuxEnabled: boolean

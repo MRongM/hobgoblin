@@ -4,6 +4,7 @@ import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { Badge, type BadgeVariant } from '#/web/components/ui/badge.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { Input } from '#/web/components/ui/input.tsx'
+import { Switch } from '#/web/components/ui/switch.tsx'
 import { openExternalUrl } from '#/web/app-shell-client.ts'
 import {
   listPortForwardSessions,
@@ -25,13 +26,17 @@ interface PortsPanelView {
   isRemote: boolean
 }
 
+const LOOPBACK_BIND_HOST = '127.0.0.1'
+const LAN_BIND_HOST = '0.0.0.0'
+const REMOTE_LOOPBACK_HOST = '127.0.0.1'
+
 export function ProjectPortsPanel({ repoId }: { repoId: string }) {
   const t = useT()
   const view = usePortsPanelView(repoId)
-  const [localBindHost, setLocalBindHost] = useState('127.0.0.1')
+  const [allowLanAccess, setAllowLanAccess] = useState(false)
   const [localPort, setLocalPort] = useState('')
-  const [remoteHost, setRemoteHost] = useState('127.0.0.1')
   const [remotePort, setRemotePort] = useState('')
+  const [remotePortFollowsLocal, setRemotePortFollowsLocal] = useState(true)
   const [sessions, setSessions] = useState<PortForwardSessionSnapshot[]>([])
   const [loading, setLoading] = useState(false)
   const [pending, setPending] = useState(false)
@@ -64,14 +69,25 @@ export function ProjectPortsPanel({ repoId }: { repoId: string }) {
     }
   }, [loadSessions])
 
-  const nonLoopback = useMemo(() => localBindHost.trim().length > 0 && !isLoopbackBindHost(localBindHost), [localBindHost])
+  const localBindHost = allowLanAccess ? LAN_BIND_HOST : LOOPBACK_BIND_HOST
+  const nonLoopback = useMemo(() => !isLoopbackBindHost(localBindHost), [localBindHost])
+
+  function handleLocalPortChange(value: string) {
+    setLocalPort(value)
+    if (remotePortFollowsLocal) setRemotePort(value)
+  }
+
+  function handleRemotePortChange(value: string) {
+    setRemotePort(value)
+    setRemotePortFollowsLocal(false)
+  }
 
   async function handleStart() {
     const normalized = normalizePortForwardStartRequest({
       repoId,
       localBindHost,
-      localPort: localPort.trim() ? Number(localPort) : null,
-      remoteHost,
+      localPort: Number(localPort),
+      remoteHost: REMOTE_LOOPBACK_HOST,
       remotePort: Number(remotePort),
     })
     if (!normalized.ok) {
@@ -101,32 +117,29 @@ export function ProjectPortsPanel({ repoId }: { repoId: string }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto bg-background p-3 text-xs">
-      <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_7rem_minmax(0,1fr)_7rem_auto]">
-        <Input
-          name="localBindHost"
-          value={localBindHost}
-          onChange={(event) => setLocalBindHost(event.currentTarget.value)}
-          aria-label={t('ports.local-bind-host')}
-        />
+      <div className="grid items-center gap-2 md:grid-cols-[7rem_7rem_minmax(12rem,1fr)_auto]">
         <Input
           name="localPort"
           value={localPort}
-          onChange={(event) => setLocalPort(event.currentTarget.value)}
-          placeholder={t('ports.local-port-placeholder')}
+          onChange={(event) => handleLocalPortChange(event.currentTarget.value)}
+          placeholder={t('ports.local-port')}
           aria-label={t('ports.local-port')}
-        />
-        <Input
-          name="remoteHost"
-          value={remoteHost}
-          onChange={(event) => setRemoteHost(event.currentTarget.value)}
-          aria-label={t('ports.remote-host')}
         />
         <Input
           name="remotePort"
           value={remotePort}
-          onChange={(event) => setRemotePort(event.currentTarget.value)}
+          onChange={(event) => handleRemotePortChange(event.currentTarget.value)}
+          placeholder={t('ports.remote-port')}
           aria-label={t('ports.remote-port')}
         />
+        <label className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+          <Switch
+            checked={allowLanAccess}
+            onCheckedChange={setAllowLanAccess}
+            aria-label={t('ports.allow-lan-access')}
+          />
+          <span className="truncate">{t('ports.allow-lan-access')}</span>
+        </label>
         <Button data-testid="ports-start" type="button" disabled={pending} onClick={handleStart}>
           <Play className="size-3.5" />
           {t('ports.start')}

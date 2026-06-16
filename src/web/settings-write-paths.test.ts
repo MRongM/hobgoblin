@@ -27,6 +27,7 @@ const appDataClientMocks = vi.hoisted(() => ({
   })),
   saveSession: vi.fn(async (session) => session),
   setFileTreeFontSize: vi.fn(async (fontSize: number) => fontSize),
+  setFileTreeTopbarFontSize: vi.fn(async (fontSize: number) => fontSize),
   setGlobalShortcut: vi.fn(async (accelerator) => ({ accelerator, registered: true })),
   setGlobalShortcutDisabled: vi.fn(async () => {}),
   setLanEnabled: vi.fn(async () => {}),
@@ -65,6 +66,7 @@ vi.mock('#/web/settings-client.ts', () => ({
   refreshGitHubCliState: appDataClientMocks.refreshGitHubCliState,
   saveSession: appDataClientMocks.saveSession,
   setFileTreeFontSize: appDataClientMocks.setFileTreeFontSize,
+  setFileTreeTopbarFontSize: appDataClientMocks.setFileTreeTopbarFontSize,
   setGlobalShortcut: appDataClientMocks.setGlobalShortcut,
   setGlobalShortcutDisabled: appDataClientMocks.setGlobalShortcutDisabled,
   setLanEnabled: appDataClientMocks.setLanEnabled,
@@ -102,6 +104,8 @@ describe('settings write paths', () => {
     appDataClientMocks.saveSession.mockImplementation(async (session) => session)
     appDataClientMocks.setFileTreeFontSize.mockReset()
     appDataClientMocks.setFileTreeFontSize.mockImplementation(async (fontSize: number) => fontSize)
+    appDataClientMocks.setFileTreeTopbarFontSize.mockReset()
+    appDataClientMocks.setFileTreeTopbarFontSize.mockImplementation(async (fontSize: number) => fontSize)
     appDataClientMocks.setGlobalShortcut.mockReset()
     appDataClientMocks.setGlobalShortcut.mockImplementation(async (accelerator) => ({ accelerator, registered: true }))
     appDataClientMocks.setGlobalShortcutDisabled.mockReset()
@@ -311,6 +315,18 @@ describe('settings write paths', () => {
     expect(appDataClientMocks.setFileTreeFontSize).toHaveBeenCalledWith(13)
     expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
       fileTreeFontSize: 13,
+    })
+  })
+
+  test('setFileTreeTopbarFontSizePreference updates runtime settings cache', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    const { setFileTreeTopbarFontSizePreference } = await import('#/web/settings-write-paths.ts')
+
+    await setFileTreeTopbarFontSizePreference(12)
+
+    expect(appDataClientMocks.setFileTreeTopbarFontSize).toHaveBeenCalledWith(12)
+    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
+      fileTreeTopbarFontSize: 12,
     })
   })
 

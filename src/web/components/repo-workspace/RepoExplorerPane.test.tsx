@@ -8,6 +8,15 @@ import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/r
 
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 const REPO_ID = '/repo'
+const runtimeFontSettings = vi.hoisted(() => ({
+  fileTreeFontSize: 12,
+  fileTreeTopbarFontSize: 13,
+  terminalFontSize: 14,
+}))
+
+vi.mock('#/web/runtime-settings-fonts.ts', () => ({
+  useRuntimeFontSettings: () => runtimeFontSettings,
+}))
 
 vi.mock('#/web/components/BranchList.tsx', () => ({
   BranchList: () => <div data-testid="branch-list" />,
@@ -96,6 +105,31 @@ describe('RepoExplorerPane', () => {
     expect(branchToolbar?.querySelector('[aria-label="branches.search-label"]')).toBeTruthy()
     expect(branchList).toBeTruthy()
     expect(branchToolbar!.compareDocumentPosition(branchList!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await act(async () => root.unmount())
+  })
+
+  test('matches file and branch toolbar height while using the configured file topbar font size', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main')],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
+    })
+
+    const branchToolbar = container.querySelector('[data-testid="branch-area-toolbar"]')
+    const explorerToolbar = container.querySelector<HTMLElement>('[data-testid="repo-explorer-toolbar"]')
+    const firstTab = container.querySelector<HTMLButtonElement>('[role="tab"]')
+    expect(branchToolbar?.className).toContain('h-9')
+    expect(explorerToolbar?.className).toContain('h-9')
+    expect(explorerToolbar?.className).not.toContain('h-8')
+    expect(explorerToolbar?.style.getPropertyValue('--goblin-file-tree-topbar-font-size')).toBe('13px')
+    expect(firstTab?.className).toContain('text-[length:var(--goblin-file-tree-topbar-font-size)]')
     await act(async () => root.unmount())
   })
 
