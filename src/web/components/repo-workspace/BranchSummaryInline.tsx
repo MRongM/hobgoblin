@@ -54,7 +54,6 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
   const worktreePath = branch.worktree?.path
     ? lastPathSegment(branch.worktree.path) || formatWorktreeListPath(branch.worktree.path, repo.remote?.target, repoRoot)
     : null
-  const branchLabel = worktreePath ?? branch.name
   const terminalWorktreeKey = branch.worktree?.path ? worktreeTerminalKey(repo.id, branch.worktree.path) : null
   const hasTerminalBell = useWorktreeTerminalHasBell(terminalWorktreeKey)
   const terminalBellLabel = t('terminal.bell-unread')
@@ -65,7 +64,6 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
       : commitTime
     : null
   const title = [
-    branchLabel !== branch.name ? branchLabel : null,
     branch.name,
     isCurrent ? t('branch-status.current') : null,
     branch.isDefault ? t('branches.default') : null,
@@ -99,7 +97,7 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
               selected ? 'text-selected-foreground' : 'text-foreground',
             )}
           >
-            {branchLabel}
+            {branch.name}
           </span>
           {hasTerminalBell && <TerminalBellDot label={terminalBellLabel} />}
           <span
