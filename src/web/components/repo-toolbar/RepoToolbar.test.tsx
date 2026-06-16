@@ -34,7 +34,7 @@ afterEach(() => {
 })
 
 describe('TopbarRepoControls', () => {
-  test('shows icon-only non-focus controls for an active repo', () => {
+  test('shows icon-only repo controls for an active repo', () => {
     seedRepoState({
       id: REPO_ID,
       branches: [createRepoBranch('main'), createRepoBranch('feature/a')],
@@ -44,16 +44,16 @@ describe('TopbarRepoControls', () => {
 
     renderControls(navigationWith({}))
 
-    expect(container?.querySelector('[aria-label="branches.filter-label"]')).not.toBeNull()
-    expect(container?.querySelector('[aria-label="branches.search-label"]')).not.toBeNull()
     expect(container?.querySelector('button[aria-label="action.refresh"]')).not.toBeNull()
     expect(container?.querySelector('button[aria-label="action.create-worktree-title"]')).not.toBeNull()
     expect(container?.querySelector('[aria-label="workspace.layout-label"]')).not.toBeNull()
+    expect(container?.querySelector('[aria-label="branches.filter-label"]')).toBeNull()
+    expect(container?.querySelector('[aria-label="branches.search-label"]')).toBeNull()
     expect(container?.textContent).not.toContain('action.refresh')
     expect(container?.textContent).not.toContain('action.create-worktree')
   })
 
-  test('places sync and create worktree before branch filters', () => {
+  test('places repo controls before workspace layout', () => {
     seedRepoState({
       id: REPO_ID,
       branches: [createRepoBranch('main'), createRepoBranch('feature/a')],
@@ -65,11 +65,9 @@ describe('TopbarRepoControls', () => {
 
     const sync = requiredElement('button[aria-label="action.refresh"]')
     const createWorktree = requiredElement('button[aria-label="action.create-worktree-title"]')
-    const branchFilter = requiredElement('[aria-label="branches.filter-label"]')
-    const branchSearch = requiredElement('[aria-label="branches.search-label"]')
-    expect(isBefore(sync, branchFilter)).toBe(true)
-    expect(isBefore(createWorktree, branchFilter)).toBe(true)
-    expect(isBefore(createWorktree, branchSearch)).toBe(true)
+    const layout = requiredElement('[aria-label="workspace.layout-label"]')
+    expect(isBefore(sync, layout)).toBe(true)
+    expect(isBefore(createWorktree, layout)).toBe(true)
   })
 
   test('hides layout control in compact mode', () => {

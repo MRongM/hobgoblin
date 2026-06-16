@@ -8,10 +8,11 @@ import { compositeFocusRing } from '#/web/components/ui/focus.ts'
 interface Props {
   value: string
   disabled?: boolean
+  className?: string
   onChange: (value: string) => void
 }
 
-export function BranchSearchInput({ value, disabled = false, onChange }: Props) {
+export function BranchSearchInput({ value, disabled = false, className, onChange }: Props) {
   const t = useT()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [open, setOpen] = useState(false)
@@ -43,6 +44,7 @@ export function BranchSearchInput({ value, disabled = false, onChange }: Props) 
         expanded ? 'w-52' : 'w-7',
         !expanded && !disabled && 'hover:bg-control-hover',
         disabled && 'cursor-not-allowed opacity-50',
+        className,
       )}
     >
       <Search

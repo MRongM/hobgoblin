@@ -8,8 +8,6 @@ import {
   DropdownMenuTrigger,
 } from '#/web/components/ui/dropdown-menu.tsx'
 import { BranchActionControls } from '#/web/components/BranchActionControls.tsx'
-import { BranchSearchInput } from '#/web/components/repo-toolbar/BranchSearchInput.tsx'
-import { BranchViewModeControl } from '#/web/components/repo-toolbar/BranchViewModeControl.tsx'
 import { RepoToolbarActions } from '#/web/components/repo-toolbar/RepoToolbarActions.tsx'
 import { WorkspaceLayoutControl } from '#/web/components/repo-toolbar/WorkspaceLayoutControl.tsx'
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
@@ -19,7 +17,7 @@ import { useBranchActionShortcutRegistry } from '#/web/hooks/useBranchActionShor
 import { visibleBranches } from '#/web/stores/repos/branch-view-mode.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
-import type { BranchViewMode, RepoBranchState } from '#/web/stores/repos/types.ts'
+import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 import { repoWorkspaceBehavior } from '#/web/lib/workspace-layout.ts'
 
@@ -39,7 +37,7 @@ export function TopbarRepoControls({ repoId }: Props) {
   return (
     <div className="flex h-full shrink-0 items-center gap-1">
       <RepoToolbarActions repoId={repoId} compact />
-      {focusMode ? <FocusBranchControls repoId={repoId} /> : <BranchFilterControls repoId={repoId} />}
+      {focusMode && <FocusBranchControls repoId={repoId} />}
       <WorkspaceLayoutControlConnected />
     </div>
   )
@@ -142,38 +140,6 @@ function FocusBranchActions({ repoId, branch }: { repoId: string; branch: RepoBr
   )
 }
 
-function BranchFilterControls({ repoId }: Props) {
-  const { branchCount, branchViewMode, branchSearchQuery } = useStoreWithEqualityFn(
-    useReposStore,
-    (s) => ({
-      branchCount: s.repos[repoId]?.data.branches.length ?? 0,
-      branchViewMode: s.repos[repoId]?.ui.branchViewMode ?? 'all',
-      branchSearchQuery: s.branchSearchQueries[repoId] ?? '',
-    }),
-    (a, b) =>
-      a.branchCount === b.branchCount &&
-      a.branchViewMode === b.branchViewMode &&
-      a.branchSearchQuery === b.branchSearchQuery,
-  )
-  const setBranchViewMode = useReposStore((s) => s.setBranchViewMode)
-  const setBranchSearchQuery = useReposStore((s) => s.setBranchSearchQuery)
-
-  return (
-    <div className="flex h-full shrink-0 items-center gap-1">
-      <BranchViewModeControl
-        value={branchViewMode as BranchViewMode}
-        disabled={branchCount === 0}
-        onChange={(viewMode) => setBranchViewMode(repoId, viewMode)}
-      />
-      <BranchSearchInput
-        value={branchSearchQuery}
-        disabled={branchCount === 0}
-        onChange={(query) => setBranchSearchQuery(repoId, query)}
-      />
-    </div>
-  )
-}
-
 function BranchSelector({
   repoId,
   branches,
@@ -216,9 +182,7 @@ function BranchSelector({
             disabled={branch.name === selectedBranch}
             onSelect={() => navigation.selectRepoBranch(repoId, branch.name)}
           >
-            <span className={branch.name === selectedBranch ? 'text-muted-foreground' : undefined}>
-              {branch.name}
-            </span>
+            <span className={branch.name === selectedBranch ? 'text-muted-foreground' : undefined}>{branch.name}</span>
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>

@@ -7,6 +7,7 @@ import { ProjectChangesPanel } from '#/web/components/repo-workspace/ProjectChan
 import { ProjectHistoryPanel } from '#/web/components/repo-workspace/ProjectHistoryPanel.tsx'
 import { ProjectPortsPanel } from '#/web/components/repo-workspace/ProjectPortsPanel.tsx'
 import { ProjectStatusPanel } from '#/web/components/repo-workspace/ProjectStatusPanel.tsx'
+import { BranchFilterControls } from '#/web/components/repo-toolbar/BranchFilterControls.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { Toolbar } from '#/web/components/Layout.tsx'
@@ -59,7 +60,7 @@ export function RepoExplorerPane({ repoId, layout, showActions, revealRequest }:
     <div data-file-tree-layout={layout} className="flex min-h-0 min-w-0 flex-1">
       <SplitPane
         orientation={splitOrientation}
-        before={<BranchList repoId={repoId} showActions={showActions} />}
+        before={<BranchArea repoId={repoId} showActions={showActions} />}
         after={
           <ExplorerTabs
             repoId={repoId}
@@ -78,6 +79,21 @@ export function RepoExplorerPane({ repoId, layout, showActions, revealRequest }:
         className="flex-1"
       />
     </div>
+  )
+}
+
+function BranchArea({ repoId, showActions }: { repoId: string; showActions: boolean }) {
+  return (
+    <section className="flex min-h-0 flex-1 flex-col">
+      <Toolbar data-testid="branch-area-toolbar" className="h-8 px-2" variant="detail">
+        <BranchFilterControls
+          repoId={repoId}
+          className="h-full min-w-0 flex-1 gap-1"
+          searchClassName="max-w-[calc(100%_-_5.5rem)]"
+        />
+      </Toolbar>
+      <BranchList repoId={repoId} showActions={showActions} />
+    </section>
   )
 }
 
@@ -153,11 +169,7 @@ function ExplorerTabs({
           })}
         </div>
       </Toolbar>
-      <div
-        id={`repo-explorer-${activeVisibleTab}-panel`}
-        role="tabpanel"
-        className="flex min-h-0 flex-1 flex-col"
-      >
+      <div id={`repo-explorer-${activeVisibleTab}-panel`} role="tabpanel" className="flex min-h-0 flex-1 flex-col">
         {activeVisibleTab === 'files' ? (
           <ProjectFileTree repoId={repoId} revealRequest={revealRequest} />
         ) : activeVisibleTab === 'changes' ? (
