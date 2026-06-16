@@ -86,7 +86,7 @@ export function RepoExplorerPane({ repoId, layout, showActions, revealRequest }:
 function BranchArea({ repoId, showActions }: { repoId: string; showActions: boolean }) {
   return (
     <section className="flex min-h-0 flex-1 flex-col">
-      <Toolbar data-testid="branch-area-toolbar" className="h-8 px-2" variant="detail">
+      <Toolbar data-testid="branch-area-toolbar" className="px-2" variant="detail">
         <BranchFilterControls
           repoId={repoId}
           className="h-full min-w-0 flex-1 gap-1"
