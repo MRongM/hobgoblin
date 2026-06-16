@@ -92,6 +92,13 @@ describe('CreateWorktreeDialog', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  test('renders the base branch selector compactly with mode-field spacing', () => {
+    render(<CreateWorktreeDialog open repo={createRepo()} onClose={vi.fn()} onCreate={vi.fn(async () => {})} />)
+
+    expect(document.querySelector('#cwt-base')?.getAttribute('data-size')).toBe('sm')
+    expect(document.querySelector('#cwt-base')?.closest('[data-slot="field"]')?.className).toContain('mt-2')
+  })
+
   test('closes immediately even when create resolves with a failure result later', async () => {
     const onClose = vi.fn()
     const deferred = createDeferred<void>()

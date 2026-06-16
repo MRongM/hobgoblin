@@ -63,7 +63,7 @@ export function BranchRow({
       onClick={() => onSelectBranch(branch.name)}
       onDoubleClick={() => onOpenBranchStatus(branch.name)}
       className={cn(
-        'relative grid min-h-9 items-stretch cursor-pointer',
+        'relative grid min-h-8 items-stretch cursor-pointer',
         dragHandle
           ? showActions
             ? 'grid-cols-[2rem_minmax(0,1fr)_auto]'
@@ -77,7 +77,7 @@ export function BranchRow({
       )}
     >
       {dragHandle && (
-        <div className="relative z-20 flex items-center justify-center py-1.5 pl-2">
+        <div className="relative z-20 flex items-center justify-center py-1 pl-2">
           <button
             ref={dragHandle.ref}
             type="button"
@@ -101,11 +101,11 @@ export function BranchRow({
           </button>
         </div>
       )}
-      <div className="pointer-events-none relative z-10 flex min-w-0 items-center px-4 py-1.5">
+      <div className="pointer-events-none relative z-10 flex min-w-0 items-center px-4 py-1">
         <BranchSummaryInline repo={repo} branch={branch} selected={isSelected} />
       </div>
       {showActions && (
-        <div className="pointer-events-none relative z-20 flex shrink-0 items-center py-1.5 pr-4">
+        <div className="pointer-events-none relative z-20 flex shrink-0 items-center py-1 pr-4">
           <div className="pointer-events-auto">
             <BranchActionsMenu
               repo={repo}

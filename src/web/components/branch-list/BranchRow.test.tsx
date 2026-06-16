@@ -257,6 +257,71 @@ describe('BranchRow', () => {
     expect(document.body.textContent).not.toContain('no worktree')
   })
 
+  test('uses compact row height and content padding', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+    )
+
+    const row = document.querySelector('li')
+    const content = row?.querySelector('.pointer-events-none')
+
+    expect(row?.className).toContain('min-h-8')
+    expect(row?.className).not.toContain('min-h-9')
+    expect(content?.className).toContain('py-1')
+    expect(content?.className).not.toContain('py-1.5')
+  })
+
+  test('gives post-badge commit metadata enough vertical room', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    repo.data.worktreesByPath['/tmp/worktree-a'] = {
+      path: '/tmp/worktree-a',
+      branch: 'feature/a',
+      isMain: false,
+      isDirty: true,
+    }
+    const branch = createRepoBranch('feature/a', {
+      lastCommitAuthor: 'MRongM',
+      lastCommitDate: new Date().toISOString(),
+      worktree: { path: '/tmp/worktree-a' },
+    })
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+    )
+
+    const commitMeta = Array.from(document.querySelectorAll('span')).find(
+      (node) => node.textContent?.includes('MRongM ·') && node.className.includes('text-[11px]'),
+    )
+
+    expect(document.body.textContent).toContain('有改动')
+    expect(commitMeta?.className).toContain('min-h-4')
+    expect(commitMeta?.className).toContain('leading-4')
+    expect(commitMeta?.className).not.toContain('leading-none')
+  })
+
   test('renders an isolated drag handle when drag props are provided', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
