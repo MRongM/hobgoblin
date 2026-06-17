@@ -36,6 +36,7 @@ import { validateBranchDeletionPolicy, validateRemovableWorktreeState } from '#/
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import { isRemoteTrackingRef, parseRemoteTrackingRefs, type CreateWorktreeInput } from '#/shared/worktree-create.ts'
 import { isSafeBranchName } from '#/shared/refnames.ts'
+import { hasUnmergedStatusEntries } from '#/shared/git-conflicts.ts'
 
 type RemoteGitRunner = (
   command: RemoteCommandKind,
@@ -577,7 +578,13 @@ export async function mergeRemoteBranch(
     target,
     { signal: options.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
   )
-  return remoteExecResult(result)
+  const execResult = remoteExecResult(result)
+  if (execResult.ok || options.signal?.aborted) return execResult
+  const status = await run({ type: 'gitStatus', path: known.path }, target, { signal: options.signal })
+  if (options.signal?.aborted || !status.ok) return execResult
+  return hasUnmergedStatusEntries(parseStatus(status.stdout))
+    ? { ...execResult, reason: 'merge-conflict' }
+    : execResult
 }
 
 export async function resetRemoteHard(

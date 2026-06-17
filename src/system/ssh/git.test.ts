@@ -526,6 +526,49 @@ describe('remote git helpers', () => {
     expect(run).not.toHaveBeenCalled()
   })
 
+  test('mergeRemoteBranch marks failed merge as merge-conflict when remote status has unmerged entries', async () => {
+    const run = vi.fn(async (command: { type: string }) => {
+      switch (command.type) {
+        case 'gitWorktreeList':
+          return okRemoteResult('worktree /srv/repo\nHEAD f00ba4\nbranch refs/heads/main\n')
+        case 'gitMerge':
+          return { ok: false, stdout: '', stderr: 'CONFLICT (content)', message: 'CONFLICT (content)' }
+        case 'gitStatus':
+          return okRemoteResult('UU src/app.ts\0')
+        default:
+          return okRemoteResult('')
+      }
+    })
+
+    const result = await mergeRemoteBranch(TARGET, '/srv/repo', 'feature/test', { run: run as any })
+
+    expect(result).toEqual({ ok: false, message: 'CONFLICT (content)', reason: 'merge-conflict' })
+    expect(run).toHaveBeenCalledWith(
+      { type: 'gitStatus', path: '/srv/repo' },
+      TARGET,
+      { signal: undefined },
+    )
+  })
+
+  test('mergeRemoteBranch keeps non-conflict merge failures unclassified', async () => {
+    const run = vi.fn(async (command: { type: string }) => {
+      switch (command.type) {
+        case 'gitWorktreeList':
+          return okRemoteResult('worktree /srv/repo\nHEAD f00ba4\nbranch refs/heads/main\n')
+        case 'gitMerge':
+          return { ok: false, stdout: '', stderr: 'fatal: bad revision', message: 'fatal: bad revision' }
+        case 'gitStatus':
+          return okRemoteResult(' M src/app.ts\0')
+        default:
+          return okRemoteResult('')
+      }
+    })
+
+    const result = await mergeRemoteBranch(TARGET, '/srv/repo', 'feature/test', { run: run as any })
+
+    expect(result).toEqual({ ok: false, message: 'fatal: bad revision' })
+  })
+
   test('resetRemoteHard resets inside a known remote worktree', async () => {
     const run = vi.fn(async (command: { type: string }) => {
       switch (command.type) {

@@ -34,6 +34,7 @@ export interface BranchActionItemGroups {
   externalItems: BranchActionItem[]
   destructiveItems: BranchActionItem[]
   dialogs: ReactNode
+  inlinePanel?: ReactNode
 }
 
 export function visibleBranchActionItems({
@@ -291,6 +292,7 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
         onCreate: handleCreateWorktree,
       }),
     ),
+    inlinePanel: writeActions.inlinePanel,
   }
 }
 
