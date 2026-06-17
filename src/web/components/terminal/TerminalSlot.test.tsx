@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest'
 import { GOBLIN_FILE_PATHS_MIME, serializeGoblinFilePathDragPayload } from '#/shared/file-tree.ts'
 import { normalizeRemoteRepoId } from '#/shared/remote-repo.ts'
 import { TerminalSlot } from '#/web/components/terminal/TerminalSlot.tsx'
+import { fillTerminalExternalInput } from '#/web/components/terminal/terminal-external-input-fill.ts'
 import {
   TerminalSessionContext,
   TerminalSessionReadContext,
@@ -529,6 +530,94 @@ describe('TerminalSlot', () => {
 
       expect(writeInput).toHaveBeenCalledWith('terminal-1', 'git status --short\r')
       expect((input as HTMLTextAreaElement).value).toBe('')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('fills terminal external input without writing to the PTY', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    runtimeSettingsMocks.terminalExternalInputEnabled = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const writeInput = vi.fn()
+    const { worktreeSnapshot, snapshot } = controllerFixture()
+    const context = terminalContext({ writeInput })
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+
+    await act(async () => {
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    })
+
+    try {
+      const filled = fillTerminalExternalInput('/repo\u0000/worktree', 'codex exec "resolve conflicts"')
+      await act(async () => {
+        await Promise.resolve()
+      })
+
+      const input = container.querySelector('.goblin-terminal-external-input__control')
+      expect(filled).toBe(true)
+      expect(input).toBeInstanceOf(HTMLTextAreaElement)
+      expect((input as HTMLTextAreaElement).value).toBe('codex exec "resolve conflicts"')
+      expect(writeInput).not.toHaveBeenCalled()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('does not register external input fill when external input is disabled', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    runtimeSettingsMocks.terminalExternalInputEnabled = false
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const writeInput = vi.fn()
+    const { worktreeSnapshot, snapshot } = controllerFixture()
+    const context = terminalContext({ writeInput })
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+
+    await act(async () => {
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    })
+
+    try {
+      expect(container.querySelector('.goblin-terminal-external-input__control')).toBeNull()
+      expect(fillTerminalExternalInput('/repo\u0000/worktree', 'codex exec')).toBe(false)
+      await act(async () => {
+        await Promise.resolve()
+      })
+
+      expect(container.querySelector('.goblin-terminal-external-input__control')).toBeNull()
+      expect(writeInput).not.toHaveBeenCalled()
     } finally {
       await act(async () => root.unmount())
       container.remove()

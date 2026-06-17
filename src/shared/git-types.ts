@@ -157,9 +157,12 @@ export interface RepoRemoteInfo {
 
 export const GIT_HASH_RE = /^[0-9a-fA-F]{7,64}$/
 
+export type GitFailureReason = 'merge-conflict'
+
 export interface ExecResult {
   ok: boolean
   message: string
+  reason?: GitFailureReason
 }
 
 /** Branch names we treat as protected — direct push/delete/etc. require
