@@ -34,6 +34,7 @@ import { MobileTerminalToolbar } from '#/web/components/terminal/mobile-terminal
 import { isMobileDevice } from '#/web/components/terminal/mobile-detection.ts'
 import { useRuntimeTerminalSettings } from '#/web/runtime-settings-terminal-buttons.ts'
 import { TerminalExternalInput } from '#/web/components/terminal/terminal-external-input.tsx'
+import { setTerminalExternalInputFillHandler } from '#/web/components/terminal/terminal-external-input-fill.ts'
 import { generatedPasteFileName, generatedTimestampedPasteFileName } from '#/web/components/file-tree/model.ts'
 interface TerminalSlotProps {
   repoRoot: string
@@ -324,6 +325,13 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
       externalInputRef.current?.setSelectionRange(value.length, value.length)
     })
   }, [])
+  useEffect(() => {
+    if (!showExternalInput) return
+    return setTerminalExternalInputFillHandler(terminalWorktreeKey, (value) => {
+      fillExternalInput(value)
+      return true
+    })
+  }, [fillExternalInput, showExternalInput, terminalWorktreeKey])
   const slotStyle =
     bottomDockHeight === null
       ? undefined

@@ -2,6 +2,7 @@ import { setTerminalFocused } from '#/web/terminal-focus.ts'
 import { ManagedTerminalSession } from '#/web/components/terminal/ManagedTerminalSession.ts'
 import { createTerminalBellController } from '#/web/components/terminal/terminal-bell-controller.ts'
 import { terminalDescriptor } from '#/web/components/terminal/terminal-descriptor.ts'
+import { fillTerminalExternalInput } from '#/web/components/terminal/terminal-external-input-fill.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { compactTerminalProcessName, compactTerminalTitle } from '#/web/components/terminal/terminal-title.ts'
 import { terminalBridge } from '#/web/terminal.ts'
@@ -402,6 +403,10 @@ export class TerminalSessionRegistry {
 
   writeInput = (key: string, data: string): void => {
     this.sessions.get(key)?.writeInput(data)
+  }
+
+  fillExternalInput = (worktreeTerminalKey: string, value: string): boolean => {
+    return fillTerminalExternalInput(worktreeTerminalKey, value)
   }
 
   takeover = (key: string): void => {

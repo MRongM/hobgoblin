@@ -115,15 +115,19 @@ export function ProjectPortsPanel({ repoId }: { repoId: string }) {
     )
   }
 
+  const lanAccessLabel = t('ports.allow-lan-access')
+  const startLabel = t('ports.start')
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto bg-background p-3 text-xs">
-      <div className="grid items-center gap-2 md:grid-cols-[7rem_7rem_minmax(12rem,1fr)_auto]">
+      <div className="grid items-center gap-1.5 md:grid-cols-[5.5rem_5.5rem_auto_auto]">
         <Input
           name="localPort"
           value={localPort}
           onChange={(event) => handleLocalPortChange(event.currentTarget.value)}
           placeholder={t('ports.local-port')}
           aria-label={t('ports.local-port')}
+          className="h-7 px-2 py-1 text-xs"
         />
         <Input
           name="remotePort"
@@ -131,18 +135,27 @@ export function ProjectPortsPanel({ repoId }: { repoId: string }) {
           onChange={(event) => handleRemotePortChange(event.currentTarget.value)}
           placeholder={t('ports.remote-port')}
           aria-label={t('ports.remote-port')}
+          className="h-7 px-2 py-1 text-xs"
         />
-        <label className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+        <label className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" title={lanAccessLabel}>
           <Switch
             checked={allowLanAccess}
             onCheckedChange={setAllowLanAccess}
-            aria-label={t('ports.allow-lan-access')}
+            aria-label={lanAccessLabel}
+            title={lanAccessLabel}
           />
-          <span className="truncate">{t('ports.allow-lan-access')}</span>
+          <span className="text-[11px] leading-none">{t('ports.lan-short')}</span>
         </label>
-        <Button data-testid="ports-start" type="button" disabled={pending} onClick={handleStart}>
+        <Button
+          data-testid="ports-start"
+          type="button"
+          size="icon-sm"
+          disabled={pending}
+          aria-label={startLabel}
+          title={startLabel}
+          onClick={handleStart}
+        >
           <Play className="size-3.5" />
-          {t('ports.start')}
         </Button>
       </div>
       {nonLoopback ? (
@@ -172,7 +185,7 @@ function PortForwardSessionRow({
   const t = useT()
   const canUseUrl = !!session.localUrl && session.status === 'active'
   return (
-    <div className="flex min-w-0 items-center gap-2 rounded border border-separator px-2 py-1.5">
+    <div className="flex min-w-0 items-center gap-1.5 rounded border border-separator px-1.5 py-1">
       <div className="min-w-0 flex-1">
         <div className="truncate font-mono text-[11px]">
           {session.localBindHost}:{session.actualLocalPort ?? session.requestedLocalPort ?? session.remotePort} -&gt;{' '}
@@ -184,7 +197,7 @@ function PortForwardSessionRow({
       <Button
         data-testid={`ports-open-${session.id}`}
         type="button"
-        size="icon-sm"
+        size="icon-xs"
         variant="ghost"
         aria-label={t('ports.open')}
         title={t('ports.open')}
@@ -196,7 +209,7 @@ function PortForwardSessionRow({
       <Button
         data-testid={`ports-copy-${session.id}`}
         type="button"
-        size="icon-sm"
+        size="icon-xs"
         variant="ghost"
         aria-label={t('ports.copy')}
         title={t('ports.copy')}
@@ -208,7 +221,7 @@ function PortForwardSessionRow({
       <Button
         data-testid={`ports-stop-${session.id}`}
         type="button"
-        size="icon-sm"
+        size="icon-xs"
         variant="ghost"
         aria-label={t('ports.stop')}
         title={t('ports.stop')}

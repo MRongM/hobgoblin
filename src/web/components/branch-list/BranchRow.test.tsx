@@ -39,8 +39,20 @@ vi.mock('#/web/stores/i18n.ts', () => ({
   },
 }))
 
+vi.mock('#/web/hooks/useBranchActionItems.ts', () => ({
+  useBranchActionItems: () => ({
+    patchItems: [],
+    mainItems: [],
+    externalItems: [],
+    destructiveItems: [],
+    dialogs: null,
+    inlinePanel: <div data-testid="inline-commit-form">inline commit</div>,
+  }),
+}))
+
 vi.mock('#/web/components/BranchActionsMenu.tsx', () => ({
   BranchActionsMenu: () => null,
+  BranchActionsDropdown: () => <button type="button" aria-label="action.menu">...</button>,
 }))
 
 let container: HTMLDivElement | null = null
@@ -347,6 +359,28 @@ describe('BranchRow', () => {
 
     const handle = document.querySelector('[aria-label="重新排序工作树"]')
     expect(handle?.getAttribute('aria-label')).toBe('重新排序工作树')
+  })
+
+  test('renders inline action panel below the branch row content', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+        />
+      </ul>,
+    )
+
+    const panel = document.body.querySelector('[data-testid="inline-commit-form"]')
+    expect(panel).not.toBeNull()
+    expect(panel?.parentElement?.className).toContain('col-span-full')
   })
 })
 
