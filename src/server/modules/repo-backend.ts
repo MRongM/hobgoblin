@@ -23,6 +23,7 @@ import { createWorktree, getWorktrees, removeWorktree } from '#/system/git/workt
 import { getWorktreePatch } from '#/system/git/patch.ts'
 import { commitAllChanges } from '#/system/git/commit.ts'
 import { mergeBranch } from '#/system/git/merge.ts'
+import { resetHardToCurrentHead } from '#/system/git/reset.ts'
 import {
   type CommitDetail,
   type CommitHistoryEntry,
@@ -54,6 +55,7 @@ import {
   mergeRemoteBranch,
   pullRemoteBranch,
   pushRemoteBranch,
+  resetRemoteHard,
   removeRemoteWorktree,
 } from '#/system/ssh/git.ts'
 import { getBranchPullRequests, getBranchPullRequestsForRepoRef } from '#/system/git/pull-requests.ts'
@@ -90,6 +92,7 @@ export interface RepoBackend {
   push(branch: string, signal?: AbortSignal): Promise<ExecResult>
   commitAll(worktreePath: string, message: string, signal?: AbortSignal): Promise<ExecResult>
   merge(worktreePath: string, branch: string, signal?: AbortSignal): Promise<ExecResult>
+  resetHard(worktreePath: string, signal?: AbortSignal): Promise<ExecResult>
   createBranch(branch: string, baseBranch: string, signal?: AbortSignal): Promise<ExecResult>
   trackRemoteBranch(localBranch: string, remoteRef: string, signal?: AbortSignal): Promise<ExecResult>
   createWorktree(input: CreateWorktreeInput, signal?: AbortSignal): Promise<ExecResult>
@@ -300,6 +303,10 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       if (!isValidCwd(worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
       return await mergeBranch(worktreePath, branch, signal)
     },
+    async resetHard(worktreePath, signal) {
+      if (!isValidCwd(worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
+      return await resetHardToCurrentHead(worktreePath, signal)
+    },
     async createBranch(branch, baseBranch, signal) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       return await createLocalBranch(repoId, branch, baseBranch, signal)
@@ -420,6 +427,9 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
     },
     async merge(worktreePath, branch, signal) {
       return await mergeRemoteBranch(target, worktreePath, branch, { signal })
+    },
+    async resetHard(worktreePath, signal) {
+      return await resetRemoteHard(target, worktreePath, { signal })
     },
     async createBranch(branch, baseBranch, signal) {
       return await createRemoteBranch(target, { branch, baseBranch, signal })

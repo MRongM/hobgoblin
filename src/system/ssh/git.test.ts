@@ -20,6 +20,7 @@ import {
   fetchRemoteRepository,
   pushRemoteBranch,
   readRemoteFileBase64,
+  resetRemoteHard,
   remoteExecResult,
   renameRemoteFileTreeEntry,
   removeRemoteWorktree,
@@ -520,6 +521,37 @@ describe('remote git helpers', () => {
     const run = vi.fn()
 
     const result = await mergeRemoteBranch(TARGET, 'relative/repo', 'feature/test', { run: run as any })
+
+    expect(result).toEqual({ ok: false, message: 'error.invalid-path' })
+    expect(run).not.toHaveBeenCalled()
+  })
+
+  test('resetRemoteHard resets inside a known remote worktree', async () => {
+    const run = vi.fn(async (command: { type: string }) => {
+      switch (command.type) {
+        case 'gitWorktreeList':
+          return okRemoteResult('worktree /srv/repo\nHEAD f00ba4\nbranch refs/heads/main\n')
+        case 'gitResetHard':
+          return okRemoteResult('HEAD is now at f00ba4 main')
+        default:
+          return okRemoteResult('')
+      }
+    })
+
+    const result = await resetRemoteHard(TARGET, '/srv/repo', { run: run as any })
+
+    expect(result).toEqual({ ok: true, message: 'HEAD is now at f00ba4 main' })
+    expect(run).toHaveBeenCalledWith(
+      { type: 'gitResetHard', path: '/srv/repo' },
+      TARGET,
+      { signal: undefined, timeoutMs: 180_000 },
+    )
+  })
+
+  test('resetRemoteHard rejects relative worktree paths before running remote commands', async () => {
+    const run = vi.fn()
+
+    const result = await resetRemoteHard(TARGET, 'relative/repo', { run: run as any })
 
     expect(result).toEqual({ ok: false, message: 'error.invalid-path' })
     expect(run).not.toHaveBeenCalled()

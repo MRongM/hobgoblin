@@ -62,6 +62,8 @@ const mocks = vi.hoisted(() => ({
   publishRepoQueryInvalidation: vi.fn(),
   probeCommitMessageProviders: vi.fn(),
   generateCommitMessageFromPatch: vi.fn(),
+  resetHardToCurrentHead: vi.fn(),
+  resetRemoteHard: vi.fn(),
 }))
 
 vi.mock('#/system/git/branches.ts', () => ({
@@ -86,6 +88,10 @@ vi.mock('#/system/git/helper.ts', () => ({
 
 vi.mock('#/system/git/commit.ts', () => ({
   commitAllChanges: mocks.commitAllChanges,
+}))
+
+vi.mock('#/system/git/reset.ts', () => ({
+  resetHardToCurrentHead: mocks.resetHardToCurrentHead,
 }))
 
 vi.mock('#/system/git/history.ts', () => ({
@@ -183,6 +189,7 @@ vi.mock('#/system/ssh/git.ts', () => ({
   moveRemoteFileTreeEntries: mocks.moveRemoteFileTreeEntries,
   renameRemoteFileTreeEntry: mocks.renameRemoteFileTreeEntry,
   removeRemoteWorktree: mocks.removeRemoteWorktree,
+  resetRemoteHard: mocks.resetRemoteHard,
 }))
 
 vi.mock('#/system/git/pull-requests.ts', () => ({
@@ -240,6 +247,8 @@ beforeEach(() => {
   mocks.renameRemoteFileTreeEntry.mockResolvedValue({ ok: true, message: '' })
   mocks.removeWorktree.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.removeRemoteWorktree.mockResolvedValue({ ok: true, message: 'ok' })
+  mocks.resetHardToCurrentHead.mockResolvedValue({ ok: true, message: 'reset local' })
+  mocks.resetRemoteHard.mockResolvedValue({ ok: true, message: 'reset remote' })
   mocks.getRemoteBrowserUrl.mockResolvedValue(null)
   mocks.getCommitHistory.mockResolvedValue([
     {
@@ -777,6 +786,24 @@ describe('repo mutation invalidation publishing', () => {
       'components',
       { signal: undefined },
     )
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: 'ssh-config://prod/srv/repo',
+      query: 'repo-snapshot',
+    })
+  })
+
+  test('resetRepositoryHard dispatches remote repos through the backend', async () => {
+    const { resetRepositoryHard } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await resetRepositoryHard('ssh-config://prod/srv/repo', '/srv/repo')
+
+    expect(result).toEqual({ ok: true, message: 'reset remote' })
+    expect(mocks.resetRemoteHard).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
+      '/srv/repo',
+      { signal: undefined },
+    )
+    expect(mocks.resetHardToCurrentHead).not.toHaveBeenCalled()
     expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
       repoId: 'ssh-config://prod/srv/repo',
       query: 'repo-snapshot',
