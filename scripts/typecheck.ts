@@ -5,8 +5,8 @@ import path from 'node:path'
 const repoRoot = path.resolve(import.meta.dirname, '..')
 const HEARTBEAT_MS = 3_000
 const PROJECTS = ['tsconfig.main.json', 'tsconfig.web.json', 'tsconfig.test.json'] as const
-const tscBin = path.join(repoRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'tsc.cmd' : 'tsc')
 const bunBin = process.execPath
+const tscScript = path.join(repoRoot, 'node_modules', 'typescript', 'bin', 'tsc')
 
 function runArchitectureCheck(): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -34,7 +34,7 @@ function runArchitectureCheck(): Promise<void> {
 function runTypeScript(project: (typeof PROJECTS)[number], index: number): Promise<void> {
   return new Promise((resolve, reject) => {
     console.log(`[typecheck] [${index + 1}/${PROJECTS.length}] starting ${project}`)
-    const child = spawn(tscBin, ['--noEmit', '-p', project], {
+    const child = spawn(bunBin, [tscScript, '--noEmit', '-p', project], {
       cwd: repoRoot,
       stdio: 'inherit',
     })

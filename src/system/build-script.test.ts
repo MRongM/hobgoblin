@@ -159,7 +159,9 @@ describe('desktop build scripts', () => {
     expect(releaseScript).toContain("path.join(repoRoot, 'release', expectedArtifactName(version, platform, arch))")
     expect(releaseScript).toContain('bun run build:web')
     expect(releaseScript).toContain('bun run build:server')
+    expect(releaseScript).toContain("const publishArgs = ['--publish', 'never']")
     expect(releaseScript).toContain('bun run build:electron')
+    expect(releaseScript).toContain('bun run build:electron -- ${platformArgs} ${archFlag} ${publishArgs}')
   })
 
   test('desktop release packaging config includes Windows x64 NSIS output', () => {

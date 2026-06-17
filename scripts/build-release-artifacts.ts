@@ -93,7 +93,8 @@ assertFileExists('dist/server/terminal-worker.js')
 
 const platformArgs = platform === 'macos' ? ['--mac', 'dmg'] : ['--win', 'nsis']
 const archFlag = arch === 'arm64' ? '--arm64' : '--x64'
-await $`bun run build:electron -- ${platformArgs} ${archFlag}`
+const publishArgs = ['--publish', 'never']
+await $`bun run build:electron -- ${platformArgs} ${archFlag} ${publishArgs}`
 
 const artifactPath = path.join(repoRoot, 'release', expectedArtifactName(version, platform, arch))
 if (!existsSync(artifactPath)) {
