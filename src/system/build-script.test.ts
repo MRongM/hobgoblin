@@ -126,6 +126,8 @@ describe('desktop build scripts', () => {
     expect(workflow).toContain('build-macos:')
     expect(workflow).toContain('build-windows:')
     expect(workflow).toContain('publish:')
+    expect((workflow.match(/actions\/setup-node@v4/g) ?? []).length).toBe(3)
+    expect((workflow.match(/node-version: 24/g) ?? []).length).toBe(3)
     expect(workflow).toContain('bun-version: 1.3.11')
     expect(workflow).toContain('bun install --frozen-lockfile')
     expect(workflow).toContain('bun run typecheck')
