@@ -5,10 +5,11 @@ import type { ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
-  CommitDialog,
   CreateBranchDialog,
+  MergeDialog,
   PullRemoteBranchDialog,
 } from '#/web/components/branch-list/BranchWriteDialogs.tsx'
+import { InlineCommitForm } from '#/web/components/branch-list/InlineCommitForm.tsx'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 
 const mocks = vi.hoisted(() => ({
@@ -17,10 +18,22 @@ const mocks = vi.hoisted(() => ({
   getRepositoryRemoteBranches: vi.fn(),
 }))
 
+const mergeAiMocks = vi.hoisted(() => ({
+  actions: [
+    { provider: 'codex', label: 'Codex', title: 'AI handoff', disabled: false, pending: false, onSelect: vi.fn() },
+    { provider: 'claude', label: 'Claude', title: 'AI handoff', disabled: false, pending: false, onSelect: vi.fn() },
+  ],
+  error: null as string | null,
+}))
+
 vi.mock('#/web/repo-client.ts', () => ({
   getCommitMessageProviders: mocks.getCommitMessageProviders,
   generateRepositoryCommitMessage: mocks.generateRepositoryCommitMessage,
   getRepositoryRemoteBranches: mocks.getRepositoryRemoteBranches,
+}))
+
+vi.mock('#/web/hooks/useMergeConflictAiActions.ts', () => ({
+  useMergeConflictAiActions: () => mergeAiMocks,
 }))
 
 let container: HTMLDivElement | null = null
@@ -46,11 +59,11 @@ afterEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
 })
 
-describe('CommitDialog AI generation', () => {
+describe('InlineCommitForm AI generation', () => {
   test('shows only available commit message providers', async () => {
     mocks.getCommitMessageProviders.mockResolvedValueOnce({ codex: true, claude: false })
 
-    render(<CommitDialog open repoId="/repo" worktreePath="/repo" onClose={vi.fn()} onCommit={vi.fn()} />)
+    render(<InlineCommitForm repoId="/repo" worktreePath="/repo" onClose={vi.fn()} onCommit={vi.fn()} />)
     await flush()
 
     expect(buttonByProvider('codex')).not.toBeNull()
@@ -61,13 +74,13 @@ describe('CommitDialog AI generation', () => {
     mocks.getCommitMessageProviders.mockResolvedValueOnce({ codex: true, claude: true })
     mocks.generateRepositoryCommitMessage.mockResolvedValueOnce({ ok: true, message: 'feat: generated message' })
 
-    render(<CommitDialog open repoId="/repo" worktreePath="/repo" onClose={vi.fn()} onCommit={vi.fn()} />)
+    render(<InlineCommitForm repoId="/repo" worktreePath="/repo" onClose={vi.fn()} onCommit={vi.fn()} />)
     await flush()
 
     clickButtonByProvider('codex')
     await flush()
 
-    expect(textarea('#commit-message').value).toBe('feat: generated message')
+    expect(textarea('#inline-commit-message').value).toBe('feat: generated message')
     expect(mocks.generateRepositoryCommitMessage).toHaveBeenCalledWith('/repo', '/repo', 'codex', expect.any(AbortSignal))
   })
 
@@ -75,7 +88,7 @@ describe('CommitDialog AI generation', () => {
     mocks.getCommitMessageProviders.mockResolvedValueOnce({ codex: true, claude: false })
     mocks.generateRepositoryCommitMessage.mockResolvedValueOnce({ ok: false, message: 'Codex auth token expired' })
 
-    render(<CommitDialog open repoId="/repo" worktreePath="/repo" onClose={vi.fn()} onCommit={vi.fn()} />)
+    render(<InlineCommitForm repoId="/repo" worktreePath="/repo" onClose={vi.fn()} onCommit={vi.fn()} />)
     await flush()
 
     clickButtonByProvider('codex')
@@ -89,19 +102,122 @@ describe('CommitDialog AI generation', () => {
     mocks.getCommitMessageProviders.mockResolvedValueOnce({ codex: true, claude: true })
     mocks.generateRepositoryCommitMessage.mockResolvedValueOnce({ ok: true, message: 'fix: generated replacement' })
 
-    render(<CommitDialog open repoId="/repo" worktreePath="/repo" onClose={vi.fn()} onCommit={vi.fn()} />)
+    render(<InlineCommitForm repoId="/repo" worktreePath="/repo" onClose={vi.fn()} onCommit={vi.fn()} />)
     await flush()
-    setTextareaValue('#commit-message', 'manual message')
+    setTextareaValue('#inline-commit-message', 'manual message')
 
     clickButtonByProvider('claude')
     await flush()
 
-    expect(textarea('#commit-message').value).toBe('manual message')
+    expect(textarea('#inline-commit-message').value).toBe('manual message')
     expect(document.body.textContent).toContain('action.commit-replace-message-title')
 
     clickButtonByText('action.commit-replace-message-confirm')
 
-    expect(textarea('#commit-message').value).toBe('fix: generated replacement')
+    expect(textarea('#inline-commit-message').value).toBe('fix: generated replacement')
+  })
+
+  test('submits trimmed commit message and closes after success', async () => {
+    const onCommit = vi.fn(async () => {})
+    const onClose = vi.fn()
+
+    render(<InlineCommitForm repoId="/repo" worktreePath="/repo" onClose={onClose} onCommit={onCommit} />)
+    await flush()
+    setTextareaValue('#inline-commit-message', '  feat: inline commit  ')
+    clickButtonByText('action.commit-confirm')
+    await flush()
+
+    expect(onCommit).toHaveBeenCalledWith('feat: inline commit')
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  test('keeps message visible when commit fails', async () => {
+    const onCommit = vi.fn(async () => {
+      throw new Error('nothing to commit')
+    })
+    const onClose = vi.fn()
+
+    render(<InlineCommitForm repoId="/repo" worktreePath="/repo" onClose={onClose} onCommit={onCommit} />)
+    await flush()
+    setTextareaValue('#inline-commit-message', 'feat: inline commit')
+    clickButtonByText('action.commit-confirm')
+    await flush()
+
+    expect(textarea('#inline-commit-message').value).toBe('feat: inline commit')
+    expect(document.body.textContent).toContain('nothing to commit')
+    expect(onClose).not.toHaveBeenCalled()
+  })
+})
+
+describe('MergeDialog AI handoff', () => {
+  test('does not show AI buttons for ordinary merge errors', async () => {
+    render(
+      <MergeDialog
+        open
+        repoId="/repo"
+        worktreePath="/repo"
+        branch={repoBranch('feature/current')}
+        allBranches={[repoBranch('feature/current'), repoBranch('main')]}
+        onClose={vi.fn()}
+        onMerge={async () => ({ ok: false, message: 'fatal: bad revision' })}
+      />,
+    )
+
+    selectFirstMergeCandidate()
+    clickButtonByText('action.merge-confirm')
+    await flush()
+
+    expect(document.body.textContent).toContain('fatal: bad revision')
+    expect(queryButtonByText('Codex')).toBeNull()
+  })
+
+  test('shows AI buttons for merge conflict errors', async () => {
+    render(
+      <MergeDialog
+        open
+        repoId="/repo"
+        worktreePath="/repo"
+        branch={repoBranch('feature/current')}
+        allBranches={[repoBranch('feature/current'), repoBranch('main')]}
+        onClose={vi.fn()}
+        onMerge={async () => ({ ok: false, message: 'CONFLICT (content)', reason: 'merge-conflict' })}
+      />,
+    )
+
+    selectFirstMergeCandidate()
+    clickButtonByText('action.merge-confirm')
+    await flush()
+
+    expect(document.body.textContent).toContain('CONFLICT (content)')
+    expect(buttonByText('Codex')).not.toBeNull()
+    expect(buttonByText('Claude')).not.toBeNull()
+  })
+
+  test('keeps long merge errors inside a bounded scroll area', async () => {
+    const longError = Array.from({ length: 30 }, (_, index) => `CONFLICT (content): file-${index}.ts`).join('\n')
+
+    render(
+      <MergeDialog
+        open
+        repoId="/repo"
+        worktreePath="/repo"
+        branch={repoBranch('feature/current')}
+        allBranches={[repoBranch('feature/current'), repoBranch('main')]}
+        onClose={vi.fn()}
+        onMerge={async () => ({ ok: false, message: longError, reason: 'merge-conflict' })}
+      />,
+    )
+
+    selectFirstMergeCandidate()
+    clickButtonByText('action.merge-confirm')
+    await flush()
+
+    const scrollArea = document.body.querySelector('[data-slot="merge-dialog-error-scroll"]')
+
+    expect(scrollArea).not.toBeNull()
+    expect(scrollArea?.className).toContain('max-h-')
+    expect(document.body.textContent).toContain('CONFLICT (content): file-0.ts')
+    expect(document.body.textContent).toContain('CONFLICT (content): file-29.ts')
   })
 })
 
@@ -315,6 +431,15 @@ function openSelect(selector: string) {
   }
   act(() => {
     element.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+  })
+}
+
+function selectFirstMergeCandidate() {
+  openSelect('#merge-select')
+  const item = document.body.querySelector<HTMLElement>('[role="option"]')
+  if (!item) throw new Error('Missing merge candidate option')
+  act(() => {
+    item.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   })
 }
 

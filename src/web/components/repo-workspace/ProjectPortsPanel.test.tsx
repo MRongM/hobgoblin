@@ -70,7 +70,11 @@ describe('ProjectPortsPanel', () => {
     expect(container.querySelector('input[name="remotePort"]')).toBeTruthy()
     expect(container.querySelector('input[name="localBindHost"]')).toBeNull()
     expect(container.querySelector('input[name="remoteHost"]')).toBeNull()
-    expect(container.querySelector('[role="switch"]')).toBeTruthy()
+    const lanSwitch = container.querySelector<HTMLElement>('[role="switch"]')
+    expect(lanSwitch).toBeTruthy()
+    expect(lanSwitch?.getAttribute('aria-label')).toBe('ports.allow-lan-access')
+    expect(lanSwitch?.getAttribute('title')).toBe('ports.allow-lan-access')
+    expect(container.textContent).toContain('ports.lan-short')
     expect(mocks.listPortForwardSessions).toHaveBeenCalledWith('ssh-config://prod/srv/repo', expect.any(AbortSignal))
     await act(async () => root.unmount())
   })
@@ -102,10 +106,12 @@ describe('ProjectPortsPanel', () => {
     seedRepo('ssh-config://prod/srv/repo')
     const { container, root } = await render('ssh-config://prod/srv/repo')
     await fill(container, 'localPort', '3000')
+    const startButton = container.querySelector<HTMLButtonElement>('[data-testid="ports-start"]')
+    expect(startButton?.getAttribute('aria-label')).toBe('ports.start')
+    expect(startButton?.getAttribute('title')).toBe('ports.start')
+    expect(startButton?.textContent).not.toContain('ports.start')
     await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>('[data-testid="ports-start"]')
-        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      startButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
     await vi.waitFor(() => {
       expect(mocks.startPortForwardSession).toHaveBeenCalledWith(

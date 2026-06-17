@@ -1,16 +1,17 @@
 import { createElement } from 'react'
 import type { ReactNode } from 'react'
 import { GitBranch, GitMerge, RadioTower, RotateCcw, SendHorizontal } from 'lucide-react'
+import type { ExecResult } from '#/shared/git-types.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useRetainedDialogState } from '#/web/hooks/useRetainedDialogState.ts'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import {
   CheckoutToDialog,
-  CommitDialog,
   CreateBranchDialog,
   MergeDialog,
   PullRemoteBranchDialog,
 } from '#/web/components/branch-list/BranchWriteDialogs.tsx'
+import { InlineCommitForm } from '#/web/components/branch-list/InlineCommitForm.tsx'
 import {
   checkoutBranchInWorktree,
   commitRepositoryChanges,
@@ -26,6 +27,7 @@ interface BranchWriteActions {
   mainItems: BranchActionItem[]
   destructiveItems: BranchActionItem[]
   dialogs: ReactNode
+  inlinePanel?: ReactNode
 }
 
 export function useBranchWriteActions(repo: BranchActionRepo, branch: RepoBranchState): BranchWriteActions {
@@ -40,7 +42,7 @@ export function useBranchWriteActions(repo: BranchActionRepo, branch: RepoBranch
 
   const checkoutToDialog = useRetainedDialogState<string>()
   const mergeDialog = useRetainedDialogState<string>()
-  const commitDialog = useRetainedDialogState<string>()
+  const inlineCommit = useRetainedDialogState<string>()
   const createBranchDialog = useRetainedDialogState<string>()
   const pullRemoteBranchDialog = useRetainedDialogState<string>()
   const resetDialog = useRetainedDialogState<string>()
@@ -59,12 +61,12 @@ export function useBranchWriteActions(repo: BranchActionRepo, branch: RepoBranch
     checkoutToDialog.close()
   }
 
-  async function handleMerge(sourceBranch: string) {
-    if (!worktreePath) return
+  async function handleMerge(sourceBranch: string): Promise<ExecResult> {
+    if (!worktreePath) return { ok: false, message: 'error.invalid-arguments' }
     const result = await mergeRepositoryBranch(repo.id, worktreePath, sourceBranch)
     setLastResult(repo.id, result, repo.instanceToken)
-    if (!result.ok) throw new Error(result.message)
-    mergeDialog.close()
+    if (result.ok) mergeDialog.close()
+    return result
   }
 
   async function handleCommit(message: string) {
@@ -72,7 +74,6 @@ export function useBranchWriteActions(repo: BranchActionRepo, branch: RepoBranch
     const result = await commitRepositoryChanges(repo.id, worktreePath, message)
     setLastResult(repo.id, result, repo.instanceToken)
     if (!result.ok) throw new Error(result.message)
-    commitDialog.close()
   }
 
   async function handleCreateBranch(newBranch: string) {
@@ -141,7 +142,7 @@ export function useBranchWriteActions(repo: BranchActionRepo, branch: RepoBranch
       disabled: branchActionBusy,
       visible: hasWorktree,
       icon: createElement(SendHorizontal),
-      onSelect: () => commitDialog.openWith(''),
+      onSelect: () => inlineCommit.openWith(worktreePath ?? ''),
     },
   ]
 
@@ -184,17 +185,12 @@ export function useBranchWriteActions(repo: BranchActionRepo, branch: RepoBranch
       />
       <MergeDialog
         open={mergeDialog.open}
+        repoId={repo.id}
+        worktreePath={worktreePath ?? ''}
         branch={branch}
         allBranches={allBranches}
         onClose={mergeDialog.close}
         onMerge={handleMerge}
-      />
-      <CommitDialog
-        open={commitDialog.open}
-        repoId={repo.id}
-        worktreePath={worktreePath ?? ''}
-        onClose={commitDialog.close}
-        onCommit={handleCommit}
       />
       <ConfirmDialog
         open={resetDialog.open}
@@ -208,5 +204,15 @@ export function useBranchWriteActions(repo: BranchActionRepo, branch: RepoBranch
     </>
   )
 
-  return { mainItems, destructiveItems, dialogs }
+  const inlinePanel =
+    inlineCommit.open && worktreePath ? (
+      <InlineCommitForm
+        repoId={repo.id}
+        worktreePath={worktreePath}
+        onClose={inlineCommit.close}
+        onCommit={handleCommit}
+      />
+    ) : null
+
+  return { mainItems, destructiveItems, dialogs, inlinePanel }
 }
