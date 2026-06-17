@@ -32,6 +32,7 @@ describe('workspace commands', () => {
       createTerminal,
       selectTerminal: vi.fn(),
       fillExternalInput: vi.fn(() => false),
+      writeInput: vi.fn(),
     })
     const navigation = navigationWith()
     const setDetailCollapsed = vi.fn((collapsed: boolean) => useReposStore.getState().setDetailCollapsed(collapsed))
@@ -76,6 +77,7 @@ describe('workspace commands', () => {
       createTerminal,
       selectTerminal: vi.fn(),
       fillExternalInput: vi.fn(() => false),
+      writeInput: vi.fn(),
     })
     const navigation = navigationWith()
     const setDetailCollapsed = vi.fn((collapsed: boolean) => useReposStore.getState().setDetailCollapsed(collapsed))
@@ -125,6 +127,7 @@ describe('workspace commands', () => {
       createTerminal: vi.fn(async () => 'terminal-3'),
       selectTerminal,
       fillExternalInput: vi.fn(() => false),
+      writeInput: vi.fn(),
     })
     const navigation = navigationWith()
     const setDetailCollapsed = vi.fn((collapsed: boolean) => useReposStore.getState().setDetailCollapsed(collapsed))

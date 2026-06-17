@@ -8,6 +8,7 @@ interface TerminalSessionCommandBridge {
   createTerminal: (base: TerminalSessionBase) => Promise<string>
   selectTerminal: (worktreeTerminalKey: string, key: string) => void
   fillExternalInput: (worktreeTerminalKey: string, value: string) => boolean
+  writeInput: (key: string, data: string) => void
 }
 
 let bridge: TerminalSessionCommandBridge | null = null

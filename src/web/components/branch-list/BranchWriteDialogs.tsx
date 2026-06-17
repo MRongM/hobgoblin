@@ -162,16 +162,17 @@ export function MergeDialog({ open, repoId, worktreePath, branch, allBranches, o
       title={t('action.merge-title')}
     >
       <form
+        data-slot="merge-dialog-form"
         onSubmit={(e) => {
           e.preventDefault()
           void handleConfirm()
         }}
-        className="space-y-4"
+        className="min-w-0 space-y-4"
       >
-        <Field>
+        <Field data-slot="merge-dialog-branch-field" className="min-w-0">
           <FieldLabel htmlFor="merge-select">{t('action.merge-label')}</FieldLabel>
           <Select value={selected} onValueChange={setSelected}>
-            <SelectTrigger id="merge-select" className="w-full">
+            <SelectTrigger id="merge-select" className="min-w-0 w-full">
               <SelectValue placeholder={t('action.merge-placeholder')} />
             </SelectTrigger>
             <SelectContent>
@@ -185,7 +186,7 @@ export function MergeDialog({ open, repoId, worktreePath, branch, allBranches, o
         </Field>
         {error && <MergeDialogError>{error}</MergeDialogError>}
         {errorReason === 'merge-conflict' && (
-          <MergeConflictAiActions repoId={repoId} branch={branch.name} worktreePath={worktreePath} />
+          <MergeConflictAiActions repoId={repoId} branch={branch.name} worktreePath={worktreePath} onClose={onClose} />
         )}
         <DialogFooter>
           <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={onClose}>
@@ -203,7 +204,7 @@ export function MergeDialog({ open, repoId, worktreePath, branch, allBranches, o
 
 function MergeDialogError({ children }: { children: string }) {
   return (
-    <DialogError data-slot="merge-dialog-error" className="overflow-hidden p-0">
+    <DialogError data-slot="merge-dialog-error" className="min-w-0 max-w-full overflow-hidden p-0">
       <ScrollArea
         data-slot="merge-dialog-error-scroll"
         className="max-h-40 w-full max-w-full min-w-0"
@@ -221,10 +222,12 @@ function MergeConflictAiActions({
   repoId,
   branch,
   worktreePath,
+  onClose,
 }: {
   repoId: string
   branch: string
   worktreePath: string
+  onClose: () => void
 }) {
   const t = useT()
   const navigation = useMainWindowNavigation()
@@ -239,7 +242,10 @@ function MergeConflictAiActions({
   if (mergeConflictAi.actions.length === 0) return null
 
   return (
-    <div className="rounded-md border border-border bg-muted/35 p-2">
+    <div
+      data-slot="merge-conflict-ai-actions"
+      className="min-w-0 max-w-full rounded-md border border-border bg-muted/35 p-2"
+    >
       <div className="mb-2 text-xs font-medium text-muted-foreground">{t('action.merge-conflict-ai-title')}</div>
       <div className="flex flex-wrap gap-2">
         {mergeConflictAi.actions.map((action) => (
@@ -250,7 +256,11 @@ function MergeConflictAiActions({
             size="sm"
             title={action.title}
             disabled={action.disabled}
-            onClick={() => void action.onSelect()}
+            onClick={() => {
+              void action.onSelect().then((ok) => {
+                if (ok) onClose()
+              })
+            }}
           >
             {action.pending && <Loader2 className="animate-spin" />}
             {action.label}

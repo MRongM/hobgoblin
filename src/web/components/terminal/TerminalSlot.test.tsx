@@ -610,7 +610,13 @@ describe('TerminalSlot', () => {
     })
 
     try {
+      expect(container.querySelector('.goblin-terminal-external-input__control')).toBeNull()
       expect(fillTerminalExternalInput('/repo\u0000/worktree', 'codex exec')).toBe(false)
+      await act(async () => {
+        await Promise.resolve()
+      })
+
+      expect(container.querySelector('.goblin-terminal-external-input__control')).toBeNull()
       expect(writeInput).not.toHaveBeenCalled()
     } finally {
       await act(async () => root.unmount())

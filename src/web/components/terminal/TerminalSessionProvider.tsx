@@ -127,6 +127,7 @@ export function TerminalSessionProvider({ currentRepoId, children, syncTracker: 
       createTerminal: registry.createTerminal,
       selectTerminal: registry.selectTerminal,
       fillExternalInput: registry.fillExternalInput,
+      writeInput: registry.writeInput,
     })
 
     return () => {

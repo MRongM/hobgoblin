@@ -20,8 +20,22 @@ const mocks = vi.hoisted(() => ({
 
 const mergeAiMocks = vi.hoisted(() => ({
   actions: [
-    { provider: 'codex', label: 'Codex', title: 'AI handoff', disabled: false, pending: false, onSelect: vi.fn() },
-    { provider: 'claude', label: 'Claude', title: 'AI handoff', disabled: false, pending: false, onSelect: vi.fn() },
+    {
+      provider: 'codex',
+      label: 'Codex',
+      title: 'AI handoff',
+      disabled: false,
+      pending: false,
+      onSelect: vi.fn(async () => true),
+    },
+    {
+      provider: 'claude',
+      label: 'Claude',
+      title: 'AI handoff',
+      disabled: false,
+      pending: false,
+      onSelect: vi.fn(async () => true),
+    },
   ],
   error: null as string | null,
 }))
@@ -213,11 +227,44 @@ describe('MergeDialog AI handoff', () => {
     await flush()
 
     const scrollArea = document.body.querySelector('[data-slot="merge-dialog-error-scroll"]')
+    const form = document.body.querySelector('[data-slot="merge-dialog-form"]')
+    const field = document.body.querySelector('[data-slot="merge-dialog-branch-field"]')
+    const error = document.body.querySelector('[data-slot="merge-dialog-error"]')
+    const aiPanel = document.body.querySelector('[data-slot="merge-conflict-ai-actions"]')
 
     expect(scrollArea).not.toBeNull()
     expect(scrollArea?.className).toContain('max-h-')
+    expect(form?.className).toContain('min-w-0')
+    expect(field?.className).toContain('min-w-0')
+    expect(error?.className).toContain('min-w-0')
+    expect(aiPanel?.className).toContain('min-w-0')
     expect(document.body.textContent).toContain('CONFLICT (content): file-0.ts')
     expect(document.body.textContent).toContain('CONFLICT (content): file-29.ts')
+  })
+
+  test('closes after a successful AI handoff', async () => {
+    const onClose = vi.fn()
+
+    render(
+      <MergeDialog
+        open
+        repoId="/repo"
+        worktreePath="/repo"
+        branch={repoBranch('feature/current')}
+        allBranches={[repoBranch('feature/current'), repoBranch('main')]}
+        onClose={onClose}
+        onMerge={async () => ({ ok: false, message: 'CONFLICT (content)', reason: 'merge-conflict' })}
+      />,
+    )
+
+    selectFirstMergeCandidate()
+    clickButtonByText('action.merge-confirm')
+    await flush()
+    clickButtonByText('Codex')
+    await flush()
+
+    expect(mergeAiMocks.actions[0]!.onSelect).toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalled()
   })
 })
 
