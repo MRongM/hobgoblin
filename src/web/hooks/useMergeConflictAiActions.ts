@@ -7,7 +7,6 @@ import {
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { readTerminalSessionCommandBridge } from '#/web/components/terminal/terminal-session-command-bridge.ts'
 import { getCommitMessageProviders } from '#/web/repo-client.ts'
-import { useRuntimeTerminalSettings } from '#/web/runtime-settings-terminal-buttons.ts'
 import { useT } from '#/web/stores/i18n.ts'
 
 interface MergeConflictAiActionsInput {
@@ -24,7 +23,7 @@ interface MergeConflictAiAction {
   title: string
   disabled: boolean
   pending: boolean
-  onSelect: () => Promise<void>
+  onSelect: () => Promise<boolean>
 }
 
 const EMPTY_PROVIDERS: CommitMessageProviderAvailability = { codex: false, claude: false }
@@ -34,7 +33,6 @@ export function useMergeConflictAiActions(input: MergeConflictAiActionsInput): {
   error: string | null
 } {
   const t = useT()
-  const { terminalExternalInputEnabled } = useRuntimeTerminalSettings()
   const [providers, setProviders] = useState<CommitMessageProviderAvailability>(EMPTY_PROVIDERS)
   const [pending, setPending] = useState<CommitMessageProvider | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -55,26 +53,29 @@ export function useMergeConflictAiActions(input: MergeConflictAiActionsInput): {
     return COMMIT_MESSAGE_PROVIDERS.filter((provider) => providers[provider]).map((provider) => ({
       provider,
       label: t(`action.merge-conflict-ai-${provider}`),
-      title: terminalExternalInputEnabled
-        ? t('action.merge-conflict-ai-title')
-        : t('action.merge-conflict-ai-external-input-required'),
-      disabled: !terminalExternalInputEnabled || pending !== null,
+      title: t('action.merge-conflict-ai-title'),
+      disabled: pending !== null,
       pending: pending === provider,
       onSelect: async () => {
-        if (!terminalExternalInputEnabled || pending !== null) return
+        if (pending !== null) return false
         setPending(provider)
         setError(null)
         try {
           const ok = await prefillMergeConflictCommand(input, provider)
-          if (!ok) setError(t('action.merge-conflict-ai-prefill-failed'))
+          if (!ok) {
+            setError(t('action.merge-conflict-ai-prefill-failed'))
+            return false
+          }
+          return true
         } catch (err) {
           setError(err instanceof Error ? err.message : String(err))
+          return false
         } finally {
           setPending(null)
         }
       },
     }))
-  }, [input, pending, providers, t, terminalExternalInputEnabled])
+  }, [input, pending, providers, t])
 
   return { actions, error }
 }
@@ -90,15 +91,23 @@ async function prefillMergeConflictCommand(
   input.setDetailCollapsed(false)
 
   const snapshot = bridge.worktreeSnapshot(scope)
-  const key = snapshot.selectedDescriptor?.key ?? snapshot.sessions[0]?.key ?? null
+  let key = snapshot.selectedDescriptor?.key ?? snapshot.sessions[0]?.key ?? null
   if (key) {
     bridge.selectTerminal(scope, key)
   } else {
-    await bridge.createTerminal({ repoRoot: input.repoId, branch: input.branch, worktreePath: input.worktreePath })
+    key = await bridge.createTerminal({
+      repoRoot: input.repoId,
+      branch: input.branch,
+      worktreePath: input.worktreePath,
+    })
   }
 
   await Promise.resolve()
-  return bridge.fillExternalInput(scope, buildMergeConflictAiCommand(provider))
+  const command = buildMergeConflictAiCommand(provider)
+  if (bridge.fillExternalInput(scope, command)) return true
+  if (!key) return false
+  bridge.writeInput(key, command)
+  return true
 }
 
 export function buildMergeConflictAiCommand(provider: CommitMessageProvider): string {
