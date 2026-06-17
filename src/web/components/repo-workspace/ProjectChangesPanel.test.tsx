@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { ProjectChangesPanel } from '#/web/components/repo-workspace/ProjectChangesPanel.tsx'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
+import { InlineCommitDraftProvider } from '#/web/components/branch-list/InlineCommitDraftProvider.tsx'
 
 const REPO_ID = '/tmp/gbl-project-changes-repo'
 const WORKTREE_PATH = '/tmp/gbl-project-changes-repo'
@@ -13,9 +14,22 @@ const mocks = vi.hoisted(() => ({
   useRuntimeExternalAppSettings: vi.fn(),
 }))
 
+const repoClientMocks = vi.hoisted(() => ({
+  getCommitMessageProviders: vi.fn(),
+  generateRepositoryCommitMessage: vi.fn(),
+}))
+
 vi.mock('#/web/runtime-settings-external-apps.ts', () => ({
   useRuntimeExternalAppSettings: mocks.useRuntimeExternalAppSettings,
 }))
+vi.mock('#/web/repo-client.ts', async () => {
+  const actual = await vi.importActual<typeof import('#/web/repo-client.ts')>('#/web/repo-client.ts')
+  return {
+    ...actual,
+    getCommitMessageProviders: repoClientMocks.getCommitMessageProviders,
+    generateRepositoryCommitMessage: repoClientMocks.generateRepositoryCommitMessage,
+  }
+})
 
 vi.mock('#/web/stores/i18n.ts', () => ({
   useT: () => (key: string) => key,
@@ -36,6 +50,8 @@ beforeEach(() => {
     resolvedEditorApp: 'vscode',
     editorAvailable: false,
   })
+  repoClientMocks.getCommitMessageProviders.mockResolvedValue({ codex: false, claude: false })
+  repoClientMocks.generateRepositoryCommitMessage.mockResolvedValue({ ok: true, message: 'feat: generated message' })
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -73,7 +89,11 @@ describe('ProjectChangesPanel', () => {
     })
 
     await act(async () => {
-      root!.render(<ProjectChangesPanel repoId={REPO_ID} />)
+      root!.render(
+        <InlineCommitDraftProvider>
+          <ProjectChangesPanel repoId={REPO_ID} />
+        </InlineCommitDraftProvider>,
+      )
     })
 
     const newMarker = container?.querySelector('[aria-label="N new"]')
@@ -109,7 +129,11 @@ describe('ProjectChangesPanel', () => {
     })
 
     await act(async () => {
-      root!.render(<ProjectChangesPanel repoId={REPO_ID} onRevealPath={onRevealPath} />)
+      root!.render(
+        <InlineCommitDraftProvider>
+          <ProjectChangesPanel repoId={REPO_ID} onRevealPath={onRevealPath} />
+        </InlineCommitDraftProvider>,
+      )
     })
 
     const pathButton = container?.querySelector<HTMLButtonElement>('button[aria-label="src/app.ts"]')
@@ -145,7 +169,11 @@ describe('ProjectChangesPanel', () => {
     })
 
     await act(async () => {
-      root!.render(<ProjectChangesPanel repoId={REPO_ID} onRevealPath={onRevealPath} />)
+      root!.render(
+        <InlineCommitDraftProvider>
+          <ProjectChangesPanel repoId={REPO_ID} onRevealPath={onRevealPath} />
+        </InlineCommitDraftProvider>,
+      )
     })
 
     expect(container?.querySelector('[data-file-folder-path="src"]')).toBeTruthy()

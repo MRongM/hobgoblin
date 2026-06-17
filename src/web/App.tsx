@@ -29,6 +29,7 @@ import { RepoView } from '#/web/components/RepoView.tsx'
 import { RepoWorkspaceSkeleton } from '#/web/components/Skeleton.tsx'
 import { RepoDropOverlay } from '#/web/components/RepoDropOverlay.tsx'
 import { TerminalSessionProvider } from '#/web/components/terminal/TerminalSessionProvider.tsx'
+import { InlineCommitDraftProvider } from '#/web/components/branch-list/InlineCommitDraftProvider.tsx'
 import { useT } from '#/web/stores/i18n.ts'
 import { useKeyboard } from '#/web/hooks/useKeyboard.ts'
 import { useMainWindowShellState } from '#/web/hooks/useMainWindowShellState.ts'
@@ -105,20 +106,22 @@ export function App({
   return (
     <ErrorBoundary>
       <TerminalSessionProvider currentRepoId={visibleRepoId}>
-        <MainWindowNavigationProvider value={navigation}>
-          <MainWindowViewport
-            routeSettingsPage={routeSettingsPage}
-            onRouteSettingsPageChange={onRouteSettingsPageChange}
-            openSettings={openSettings}
-            visibleRepoId={visibleRepoId}
-            sessionReady={sessionReady}
-            workspaceLayout={workspaceLayout}
-            detailCollapsed={workspaceBehavior.detailCollapsed}
-            detailFocusMode={workspaceBehavior.detailFocusMode}
-            overlays={overlays}
-            repoDrop={repoDrop}
-          />
-        </MainWindowNavigationProvider>
+        <InlineCommitDraftProvider>
+          <MainWindowNavigationProvider value={navigation}>
+            <MainWindowViewport
+              routeSettingsPage={routeSettingsPage}
+              onRouteSettingsPageChange={onRouteSettingsPageChange}
+              openSettings={openSettings}
+              visibleRepoId={visibleRepoId}
+              sessionReady={sessionReady}
+              workspaceLayout={workspaceLayout}
+              detailCollapsed={workspaceBehavior.detailCollapsed}
+              detailFocusMode={workspaceBehavior.detailFocusMode}
+              overlays={overlays}
+              repoDrop={repoDrop}
+            />
+          </MainWindowNavigationProvider>
+        </InlineCommitDraftProvider>
       </TerminalSessionProvider>
     </ErrorBoundary>
   )
