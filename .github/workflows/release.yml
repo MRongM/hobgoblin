@@ -1,0 +1,159 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    name: Build macOS ${{ matrix.arch }}
+    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, x64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Build release artifact
+        run: bun scripts/build-release-artifacts.ts --platform macos --arch ${{ matrix.arch }}
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hobgoblin-macos-${{ matrix.arch }}
+          path: release/Hobgoblin-*-${{ matrix.arch }}.dmg
+          if-no-files-found: error
+
+  build-windows:
+    name: Build Windows x64
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Build release artifact
+        run: bun scripts/build-release-artifacts.ts --platform windows --arch x64
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hobgoblin-windows-x64
+          path: release/Hobgoblin-*-x64.exe
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-macos, build-windows]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Resolve package version
+        id: version
+        shell: bash
+        run: |
+          VERSION="$(bun -e "const pkg = await Bun.file('package.json').json(); console.log(pkg.version)")"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid package.json version: $VERSION" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Validate release assets
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          EXPECTED=(
+            "Hobgoblin-${VERSION}-arm64.dmg"
+            "Hobgoblin-${VERSION}-x64.dmg"
+            "Hobgoblin-${VERSION}-x64.exe"
+          )
+
+          for asset in "${EXPECTED[@]}"; do
+            if [[ ! -f "release-assets/$asset" ]]; then
+              echo "Missing release asset: $asset" >&2
+              find release-assets -maxdepth 2 -type f -print >&2
+              exit 1
+            fi
+          done
+
+      - name: Write release notes
+        shell: bash
+        run: |
+          cat > release-notes.md <<'NOTES'
+          Unsigned builds.
+
+          macOS: Gatekeeper may block unsigned downloads. After installing, run:
+
+          ```sh
+          xattr -dr com.apple.quarantine /Applications/Hobgoblin.app
+          ```
+
+          Or right-click the app, choose Open, then confirm Open.
+
+          Windows: SmartScreen may warn on unsigned installers. Continue only if you trust this GitHub Release source.
+          NOTES
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TAG" --notes-file release-notes.md
+          else
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes-file release-notes.md
+          fi
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ steps.version.outputs.tag }}"
+          gh release upload "$TAG" \
+            "release-assets/Hobgoblin-${VERSION}-arm64.dmg" \
+            "release-assets/Hobgoblin-${VERSION}-x64.dmg" \
+            "release-assets/Hobgoblin-${VERSION}-x64.exe" \
+            --clobber

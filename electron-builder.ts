@@ -54,6 +54,15 @@ const config: Configuration = {
     // releases with no hint of which is which.
     artifactName: '${productName}-${version}-${arch}.${ext}',
   },
+  win: {
+    target: [{ target: 'nsis', arch: ['x64'] }],
+    artifactName: '${productName}-${version}-${arch}.${ext}',
+  },
+  nsis: {
+    oneClick: false,
+    perMachine: false,
+    allowToChangeInstallationDirectory: true,
+  },
 }
 
 export default config
