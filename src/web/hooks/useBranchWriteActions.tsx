@@ -13,6 +13,11 @@ import {
 } from '#/web/components/branch-list/BranchWriteDialogs.tsx'
 import { InlineCommitForm } from '#/web/components/branch-list/InlineCommitForm.tsx'
 import {
+  useInlineCommitDraft,
+  useInlineCommitDraftActions,
+  useInlineCommitMessageProviders,
+} from '#/web/components/branch-list/InlineCommitDraftProvider.tsx'
+import {
   checkoutBranchInWorktree,
   commitRepositoryChanges,
   mergeRepositoryBranch,
@@ -39,10 +44,12 @@ export function useBranchWriteActions(repo: BranchActionRepo, branch: RepoBranch
   const worktreePath = branch.worktree?.path
   const hasWorktree = !!worktreePath
   const branchActionBusy = repo.operations.branchAction.phase !== 'idle'
+  const inlineCommitDraft = useInlineCommitDraft(repo.id, worktreePath)
+  const inlineCommitDraftActions = useInlineCommitDraftActions()
+  const availableCommitMessageProviders = useInlineCommitMessageProviders()
 
   const checkoutToDialog = useRetainedDialogState<string>()
   const mergeDialog = useRetainedDialogState<string>()
-  const inlineCommit = useRetainedDialogState<string>()
   const createBranchDialog = useRetainedDialogState<string>()
   const pullRemoteBranchDialog = useRetainedDialogState<string>()
   const resetDialog = useRetainedDialogState<string>()
@@ -142,7 +149,9 @@ export function useBranchWriteActions(repo: BranchActionRepo, branch: RepoBranch
       disabled: branchActionBusy,
       visible: hasWorktree,
       icon: createElement(SendHorizontal),
-      onSelect: () => inlineCommit.openWith(worktreePath ?? ''),
+      onSelect: () => {
+        if (worktreePath) inlineCommitDraftActions.openDraft(repo.id, worktreePath)
+      },
     },
   ]
 
@@ -205,11 +214,27 @@ export function useBranchWriteActions(repo: BranchActionRepo, branch: RepoBranch
   )
 
   const inlinePanel =
-    inlineCommit.open && worktreePath ? (
+    inlineCommitDraft?.open && worktreePath ? (
       <InlineCommitForm
-        repoId={repo.id}
-        worktreePath={worktreePath}
-        onClose={inlineCommit.close}
+        message={inlineCommitDraft.message}
+        error={inlineCommitDraft.error}
+        availableProviders={availableCommitMessageProviders}
+        generating={inlineCommitDraft.generating}
+        pendingGeneratedMessage={inlineCommitDraft.pendingGeneratedMessage}
+        onMessageChange={(message) => inlineCommitDraftActions.setMessage(repo.id, worktreePath, message)}
+        onErrorChange={(error) => inlineCommitDraftActions.setError(repo.id, worktreePath, error)}
+        onGenerate={(provider) =>
+          inlineCommitDraftActions.generateMessage({
+            repoId: repo.id,
+            worktreePath,
+            provider,
+          })
+        }
+        onApplyPendingGeneratedMessage={() => inlineCommitDraftActions.applyPendingGeneratedMessage(repo.id, worktreePath)}
+        onClearPendingGeneratedMessage={() =>
+          inlineCommitDraftActions.clearPendingGeneratedMessage(repo.id, worktreePath)
+        }
+        onClose={() => inlineCommitDraftActions.clearDraft(repo.id, worktreePath)}
         onCommit={handleCommit}
       />
     ) : null
