@@ -7,11 +7,17 @@ import { createRoot, type Root } from 'react-dom/client'
 import { normalizeRemoteTarget } from '#/shared/remote-repo.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
+import { InlineCommitDraftProvider } from '#/web/components/branch-list/InlineCommitDraftProvider.tsx'
 import type { useBranchActionItems } from '#/web/hooks/useBranchActionItems.ts'
 
 const mocks = vi.hoisted(() => ({
   useRuntimeExternalAppSettings: vi.fn(),
   useBranchActions: vi.fn(),
+}))
+
+const repoClientMocks = vi.hoisted(() => ({
+  getCommitMessageProviders: vi.fn(),
+  generateRepositoryCommitMessage: vi.fn(),
 }))
 
 let container: HTMLDivElement
@@ -30,6 +36,14 @@ vi.mock('#/web/stores/i18n.ts', () => ({
 vi.mock('#/web/hooks/useBranchActions.tsx', () => ({
   useBranchActions: mocks.useBranchActions,
 }))
+vi.mock('#/web/repo-client.ts', async () => {
+  const actual = await vi.importActual<typeof import('#/web/repo-client.ts')>('#/web/repo-client.ts')
+  return {
+    ...actual,
+    getCommitMessageProviders: repoClientMocks.getCommitMessageProviders,
+    generateRepositoryCommitMessage: repoClientMocks.generateRepositoryCommitMessage,
+  }
+})
 
 describe('useBranchActionItems', () => {
   beforeEach(() => {
@@ -73,6 +87,8 @@ describe('useBranchActionItems', () => {
       },
       dialogs: null,
     })
+    repoClientMocks.getCommitMessageProviders.mockResolvedValue({ codex: false, claude: false })
+    repoClientMocks.generateRepositoryCommitMessage.mockResolvedValue({ ok: true, message: 'feat: generated message' })
   })
 
   afterEach(async () => {
@@ -338,6 +354,25 @@ describe('useBranchActionItems', () => {
     expect(createWorktree?.label).toBe('action.create-worktree')
   })
 
+  test('commit action opens provider-backed inline commit panel for the worktree', async () => {
+    const branch = createRepoBranch('feature/commit', { worktree: { path: '/tmp/repo-feature' } })
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      branches: [branch],
+    })
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.ts')
+    const groups = await renderItemGroups(useItems, repo, branch)
+    const commit = groups.mainItems.find((item) => item.id === 'commit')
+    if (!commit) throw new Error('missing commit action')
+
+    await act(async () => {
+      await commit.onSelect()
+    })
+
+    expect(document.body.querySelector('#inline-commit-message')).not.toBeNull()
+  })
+
   test('opens create-worktree with the selected branch as the default base', async () => {
     const submitBranchAction = vi.fn()
     useReposStore.setState({ submitBranchAction })
@@ -392,7 +427,11 @@ async function renderItemGroups(
   let groups: ReturnType<typeof useBranchActionItems> | null = null
   root = createRoot(container)
   await act(async () => {
-    root!.render(<ItemsHarness useItems={useItems} repo={repo} branch={branch} onReady={(items) => (groups = items)} />)
+    root!.render(
+      <InlineCommitDraftProvider>
+        <ItemsHarness useItems={useItems} repo={repo} branch={branch} onReady={(items) => (groups = items)} />
+      </InlineCommitDraftProvider>,
+    )
   })
   if (!groups) throw new Error('items were not rendered')
   return groups
@@ -413,7 +452,12 @@ function ItemsHarness({
   React.useEffect(() => {
     onReady(items)
   }, [items, onReady])
-  return <>{items.dialogs}</>
+  return (
+    <>
+      {items.inlinePanel}
+      {items.dialogs}
+    </>
+  )
 }
 
 function input(selector: string): HTMLInputElement {

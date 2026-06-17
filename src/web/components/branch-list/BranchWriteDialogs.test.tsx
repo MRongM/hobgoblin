@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act } from 'react'
+import { act, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
@@ -73,55 +73,57 @@ afterEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
 })
 
-describe('InlineCommitForm AI generation', () => {
-  test('shows only available commit message providers', async () => {
-    mocks.getCommitMessageProviders.mockResolvedValueOnce({ codex: true, claude: false })
-
-    render(<InlineCommitForm repoId="/repo" worktreePath="/repo" onClose={vi.fn()} onCommit={vi.fn()} />)
-    await flush()
+describe('InlineCommitForm', () => {
+  test('shows only available commit message providers', () => {
+    render(
+      <InlineCommitFormHarness
+        availableProviders={['codex']}
+        onCommit={vi.fn(async () => {})}
+      />,
+    )
 
     expect(buttonByProvider('codex')).not.toBeNull()
     expect(queryButtonByProvider('claude')).toBeNull()
   })
 
-  test('fills an empty commit message from the selected provider', async () => {
-    mocks.getCommitMessageProviders.mockResolvedValueOnce({ codex: true, claude: true })
-    mocks.generateRepositoryCommitMessage.mockResolvedValueOnce({ ok: true, message: 'feat: generated message' })
+  test('requests generation from the selected provider', async () => {
+    const onGenerate = vi.fn(async () => {})
 
-    render(<InlineCommitForm repoId="/repo" worktreePath="/repo" onClose={vi.fn()} onCommit={vi.fn()} />)
-    await flush()
+    render(
+      <InlineCommitFormHarness
+        availableProviders={['codex', 'claude']}
+        onGenerate={onGenerate}
+        onCommit={vi.fn(async () => {})}
+      />,
+    )
 
     clickButtonByProvider('codex')
     await flush()
 
-    expect(textarea('#inline-commit-message').value).toBe('feat: generated message')
-    expect(mocks.generateRepositoryCommitMessage).toHaveBeenCalledWith('/repo', '/repo', 'codex', expect.any(AbortSignal))
+    expect(onGenerate).toHaveBeenCalledWith('codex')
   })
 
-  test('shows raw provider errors without translating them as generic failures', async () => {
-    mocks.getCommitMessageProviders.mockResolvedValueOnce({ codex: true, claude: false })
-    mocks.generateRepositoryCommitMessage.mockResolvedValueOnce({ ok: false, message: 'Codex auth token expired' })
-
-    render(<InlineCommitForm repoId="/repo" worktreePath="/repo" onClose={vi.fn()} onCommit={vi.fn()} />)
-    await flush()
-
-    clickButtonByProvider('codex')
-    await flush()
+  test('shows raw controlled provider errors', () => {
+    render(
+      <InlineCommitFormHarness
+        availableProviders={['codex']}
+        initialError="Codex auth token expired"
+        onCommit={vi.fn(async () => {})}
+      />,
+    )
 
     expect(document.body.textContent).toContain('Codex auth token expired')
-    expect(document.body.textContent).not.toContain('error.commit-message-failed')
   })
 
-  test('asks before replacing an existing commit message', async () => {
-    mocks.getCommitMessageProviders.mockResolvedValueOnce({ codex: true, claude: true })
-    mocks.generateRepositoryCommitMessage.mockResolvedValueOnce({ ok: true, message: 'fix: generated replacement' })
-
-    render(<InlineCommitForm repoId="/repo" worktreePath="/repo" onClose={vi.fn()} onCommit={vi.fn()} />)
-    await flush()
-    setTextareaValue('#inline-commit-message', 'manual message')
-
-    clickButtonByProvider('claude')
-    await flush()
+  test('asks before applying a pending generated replacement', () => {
+    render(
+      <InlineCommitFormHarness
+        availableProviders={['codex', 'claude']}
+        initialMessage="manual message"
+        initialPendingGeneratedMessage="fix: generated replacement"
+        onCommit={vi.fn(async () => {})}
+      />,
+    )
 
     expect(textarea('#inline-commit-message').value).toBe('manual message')
     expect(document.body.textContent).toContain('action.commit-replace-message-title')
@@ -135,9 +137,7 @@ describe('InlineCommitForm AI generation', () => {
     const onCommit = vi.fn(async () => {})
     const onClose = vi.fn()
 
-    render(<InlineCommitForm repoId="/repo" worktreePath="/repo" onClose={onClose} onCommit={onCommit} />)
-    await flush()
-    setTextareaValue('#inline-commit-message', '  feat: inline commit  ')
+    render(<InlineCommitFormHarness initialMessage="  feat: inline commit  " onClose={onClose} onCommit={onCommit} />)
     clickButtonByText('action.commit-confirm')
     await flush()
 
@@ -151,9 +151,7 @@ describe('InlineCommitForm AI generation', () => {
     })
     const onClose = vi.fn()
 
-    render(<InlineCommitForm repoId="/repo" worktreePath="/repo" onClose={onClose} onCommit={onCommit} />)
-    await flush()
-    setTextareaValue('#inline-commit-message', 'feat: inline commit')
+    render(<InlineCommitFormHarness initialMessage="feat: inline commit" onClose={onClose} onCommit={onCommit} />)
     clickButtonByText('action.commit-confirm')
     await flush()
 
@@ -377,6 +375,49 @@ describe('PullRemoteBranchDialog', () => {
     })
   })
 })
+
+function InlineCommitFormHarness({
+  availableProviders = [],
+  initialMessage = '',
+  initialError = null,
+  initialPendingGeneratedMessage = null,
+  onClose = vi.fn(),
+  onCommit,
+  onGenerate = vi.fn(async () => {}),
+}: {
+  availableProviders?: Array<'codex' | 'claude'>
+  initialMessage?: string
+  initialError?: string | null
+  initialPendingGeneratedMessage?: string | null
+  onClose?: () => void
+  onCommit: (message: string) => Promise<void>
+  onGenerate?: (provider: 'codex' | 'claude') => Promise<void>
+}) {
+  const [message, setMessage] = useState(initialMessage)
+  const [error, setError] = useState<string | null>(initialError)
+  const [pendingGeneratedMessage, setPendingGeneratedMessage] = useState<string | null>(initialPendingGeneratedMessage)
+  return (
+    <InlineCommitForm
+      message={message}
+      error={error}
+      availableProviders={availableProviders}
+      generating={null}
+      pendingGeneratedMessage={pendingGeneratedMessage}
+      onMessageChange={setMessage}
+      onErrorChange={setError}
+      onGenerate={onGenerate}
+      onApplyPendingGeneratedMessage={() => {
+        if (!pendingGeneratedMessage) return
+        setMessage(pendingGeneratedMessage)
+        setPendingGeneratedMessage(null)
+        setError(null)
+      }}
+      onClearPendingGeneratedMessage={() => setPendingGeneratedMessage(null)}
+      onClose={onClose}
+      onCommit={onCommit}
+    />
+  )
+}
 
 function render(element: ReactNode) {
   if (!container) {

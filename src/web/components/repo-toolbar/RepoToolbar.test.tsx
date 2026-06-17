@@ -8,8 +8,23 @@ import { TopbarRepoControls } from '#/web/components/topbar/TopbarRepoControls.t
 import { MainWindowNavigationProvider, type MainWindowNavigationActions } from '#/web/main-window-navigation.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { resetReposStore, seedRepoState, createRepoBranch } from '#/web/stores/repos/test-utils.ts'
+import { InlineCommitDraftProvider } from '#/web/components/branch-list/InlineCommitDraftProvider.tsx'
 
 const REPO_ID = '/tmp/gbl-topbar-controls-repo'
+
+const repoClientMocks = vi.hoisted(() => ({
+  getCommitMessageProviders: vi.fn(),
+  generateRepositoryCommitMessage: vi.fn(),
+}))
+
+vi.mock('#/web/repo-client.ts', async () => {
+  const actual = await vi.importActual<typeof import('#/web/repo-client.ts')>('#/web/repo-client.ts')
+  return {
+    ...actual,
+    getCommitMessageProviders: repoClientMocks.getCommitMessageProviders,
+    generateRepositoryCommitMessage: repoClientMocks.generateRepositoryCommitMessage,
+  }
+})
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -20,6 +35,8 @@ beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   resetReposStore()
   window.matchMedia = createMatchMedia(false)
+  repoClientMocks.getCommitMessageProviders.mockResolvedValue({ codex: false, claude: false })
+  repoClientMocks.generateRepositoryCommitMessage.mockResolvedValue({ ok: true, message: 'feat: generated message' })
 })
 
 afterEach(() => {
@@ -110,9 +127,11 @@ function renderControls(navigation: MainWindowNavigationActions) {
   act(() => {
     root!.render(
       <QueryClientProvider client={queryClient!}>
-        <MainWindowNavigationProvider value={navigation}>
-          <TopbarRepoControls repoId={REPO_ID} />
-        </MainWindowNavigationProvider>
+        <InlineCommitDraftProvider>
+          <MainWindowNavigationProvider value={navigation}>
+            <TopbarRepoControls repoId={REPO_ID} />
+          </MainWindowNavigationProvider>
+        </InlineCommitDraftProvider>
       </QueryClientProvider>,
     )
   })
