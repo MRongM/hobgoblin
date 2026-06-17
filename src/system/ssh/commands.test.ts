@@ -207,6 +207,15 @@ describe('remote command scripts', () => {
     expect(invocation.script).toBe("git -C '/srv/repo-feature' merge -- 'feature/user'\\''s-work'")
   })
 
+  test('renders quoted remote hard reset command', () => {
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'gitResetHard',
+      path: "/srv/repo-feature/user's-work",
+    })
+
+    expect(invocation.script).toBe("git -C '/srv/repo-feature/user'\\''s-work' reset --hard")
+  })
+
   test('renders quoted remote branch creation commands', () => {
     expect(
       buildRemoteCommandInvocation(TARGET, {

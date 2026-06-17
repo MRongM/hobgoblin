@@ -3,7 +3,6 @@ import { publishRepoQueryInvalidation } from '#/server/modules/invalidation-brok
 import { resolveRemoteRepoTarget, resolveRepoBackend, runWithRepoBackend } from '#/server/modules/repo-backend.ts'
 import { getServerSettingsPrefs } from '#/server/modules/settings-source.ts'
 import { cloneRepository as cloneGitRepository } from '#/system/git/clone.ts'
-import { resetHardToCurrentHead } from '#/system/git/reset.ts'
 import {
   createLocalFileTreeDirectory,
   deleteLocalFileTreeEntries,
@@ -500,8 +499,14 @@ export async function resetRepositoryHard(
   signal?: AbortSignal,
   sourceToken?: string,
 ): Promise<ExecResult> {
-  if (!isValidCwd(worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
-  const result = await resetHardToCurrentHead(worktreePath, signal)
-  if (result.ok) publishRepoSnapshotInvalidation(repoId, sourceToken)
-  return result
+  if (!isValidRepoLocator(repoId) || !isAbsoluteWorktreePath(worktreePath)) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  return await runWithRepoBackend(repoId, async (backend) => {
+    return await publishSnapshotInvalidationAfterMutation(
+      repoId,
+      await backend.resetHard(worktreePath, signal),
+      sourceToken,
+    )
+  })
 }
