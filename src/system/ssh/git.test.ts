@@ -8,6 +8,7 @@ import {
   createRemoteWorktree,
   deleteRemoteBranch,
   deleteRemoteFileTreeEntries,
+  discardRemoteChangesForPaths,
   getRemoteBrowserUrl,
   getRemoteCommitDetail,
   getRemoteHistory,
@@ -595,6 +596,37 @@ describe('remote git helpers', () => {
     const run = vi.fn()
 
     const result = await resetRemoteHard(TARGET, 'relative/repo', { run: run as any })
+
+    expect(result).toEqual({ ok: false, message: 'error.invalid-path' })
+    expect(run).not.toHaveBeenCalled()
+  })
+
+  test('discardRemoteChangesForPaths discards paths inside a known remote worktree', async () => {
+    const run = vi.fn(async (command: { type: string }) => {
+      switch (command.type) {
+        case 'gitWorktreeList':
+          return okRemoteResult('worktree /srv/repo\nHEAD f00ba4\nbranch refs/heads/main\n')
+        case 'gitDiscardChanges':
+          return okRemoteResult('')
+        default:
+          return okRemoteResult('')
+      }
+    })
+
+    const result = await discardRemoteChangesForPaths(TARGET, '/srv/repo', ['src/app.ts', 'docs'], { run: run as any })
+
+    expect(result).toEqual({ ok: true, message: 'ok' })
+    expect(run).toHaveBeenCalledWith(
+      { type: 'gitDiscardChanges', path: '/srv/repo', paths: ['src/app.ts', 'docs'] },
+      TARGET,
+      { signal: undefined, timeoutMs: 180_000 },
+    )
+  })
+
+  test('discardRemoteChangesForPaths rejects relative worktree paths before running remote commands', async () => {
+    const run = vi.fn()
+
+    const result = await discardRemoteChangesForPaths(TARGET, 'relative/repo', ['src/app.ts'], { run: run as any })
 
     expect(result).toEqual({ ok: false, message: 'error.invalid-path' })
     expect(run).not.toHaveBeenCalled()

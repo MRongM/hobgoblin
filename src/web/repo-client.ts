@@ -289,3 +289,11 @@ export async function resetRepositoryHard(
 ): Promise<ExecResult> {
   return postServerJson('/api/repo/reset-hard', { repoId, worktreePath })
 }
+
+export async function discardRepositoryChanges(
+  repoId: string,
+  worktreePath: string,
+  paths: string[],
+): Promise<ExecResult> {
+  return postServerJson('/api/repo/discard-changes', { repoId, worktreePath, paths })
+}

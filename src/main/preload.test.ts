@@ -12,6 +12,7 @@ import {
   SHELL_CONSUME_EXTERNAL_OPEN_PATHS_CHANNEL,
   SHELL_OPEN_DIRECTORY_DIALOG_CHANNEL,
   SHELL_OPEN_EXTERNAL_URL_CHANNEL,
+  SHELL_OPEN_FILE_DIALOG_CHANNEL,
   SHELL_OPEN_IN_FINDER_CHANNEL,
   SHELL_OPEN_SETTINGS_WINDOW_CHANNEL,
   SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,
@@ -156,6 +157,7 @@ describe('preload goblinNative bridge', () => {
     await goblinNative.shell.openSettingsWindow({ page: 'about' })
     await goblinNative.shell.openExternalUrl({ url: 'https://example.com', allowHttp: false })
     await goblinNative.shell.openDirectoryDialog({ title: 'Open Git Repository' })
+    await goblinNative.shell.openFileDialog({ title: 'Upload files' })
     await goblinNative.shell.consumeExternalOpenPaths()
     await goblinNative.shell.openInFinder({ path: '/repo' })
     await goblinNative.shell.readClipboardFilePaths()
@@ -169,6 +171,7 @@ describe('preload goblinNative bridge', () => {
       SHELL_OPEN_SETTINGS_WINDOW_CHANNEL,
       SHELL_OPEN_EXTERNAL_URL_CHANNEL,
       SHELL_OPEN_DIRECTORY_DIALOG_CHANNEL,
+      SHELL_OPEN_FILE_DIALOG_CHANNEL,
       SHELL_CONSUME_EXTERNAL_OPEN_PATHS_CHANNEL,
       SHELL_OPEN_IN_FINDER_CHANNEL,
       SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,

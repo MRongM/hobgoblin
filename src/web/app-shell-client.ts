@@ -32,6 +32,14 @@ export function hasNativeDirectoryPicker(): boolean {
   }
 }
 
+export function hasNativeFilePicker(): boolean {
+  try {
+    return getRendererBridge().hasCapability('open-file-dialog')
+  } catch {
+    return false
+  }
+}
+
 export function canOpenAppSettings(): boolean {
   try {
     return getRendererBridge().hasCapability('open-settings-window')
@@ -119,6 +127,10 @@ export async function chooseCloneParentPath(): Promise<string | null> {
 
 export async function chooseFileTreeDownloadDirectory(): Promise<string | null> {
   return (await nativeShell()?.openDirectoryDialog?.({ title: 'Download files' })) ?? null
+}
+
+export async function chooseFileTreeUploadFiles(): Promise<string[]> {
+  return (await nativeShell()?.openFileDialog?.({ title: 'Upload files' })) ?? []
 }
 
 export async function consumeExternalOpenPaths(): Promise<string[]> {

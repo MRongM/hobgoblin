@@ -2,6 +2,11 @@ import { execa } from 'execa'
 import { access, readdir } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import {
+  formatCommitMessageContext,
+  isEmptyCommitMessageContext,
+  type CommitMessageContext,
+} from '#/system/git/commit-message-context.ts'
 import type {
   CommitMessageGenerationResult,
   CommitMessageProvider,
@@ -64,6 +69,27 @@ export async function generateCommitMessageFromPatch(
   } catch (err) {
     if (isCommandNotFound(err)) {
       return await generateWithResolvedExecutable(provider, command, prompt, options)
+    }
+    return mapGenerationError(err, options?.signal)
+  }
+}
+
+export async function generateCodexCommitMessageFromContext(
+  context: CommitMessageContext,
+  options?: GenerateCommitMessageOptions,
+): Promise<CommitMessageGenerationResult> {
+  if (isEmptyCommitMessageContext(context)) return { ok: false, message: 'error.commit-message-empty-patch' }
+
+  const command = PROVIDER_COMMANDS.codex
+  const prompt = buildCodexCommitMessagePrompt(context)
+
+  try {
+    const result = await runGenerationCommand(command.command, command.args(prompt), command.input?.(prompt), options)
+    if (isCommandNotFound(result)) return await generateWithResolvedExecutable('codex', command, prompt, options)
+    return mapGenerationResult(result, command.outputMode, options?.signal)
+  } catch (err) {
+    if (isCommandNotFound(err)) {
+      return await generateWithResolvedExecutable('codex', command, prompt, options)
     }
     return mapGenerationError(err, options?.signal)
   }
@@ -249,6 +275,25 @@ function buildCommitMessagePrompt(patch: string): string {
     '',
     'Diff:',
     readablePatch,
+  ].join('\n')
+}
+
+function buildCodexCommitMessagePrompt(context: CommitMessageContext): string {
+  return [
+    'Write a complete Git commit message in English.',
+    'Return only the commit message.',
+    'Prefer Conventional Commits style when it fits.',
+    'Use an imperative subject line.',
+    'Use a subject line, a blank line, then 2 to 4 concise body bullets when there is enough signal.',
+    'For a truly trivial change, a single subject line is acceptable.',
+    'Mention concrete changed areas and user-visible impact only when visible from the context.',
+    'Mention tests or verification only when the context shows test changes or verification artifacts.',
+    'Do not invent ticket numbers, issue links, reviewers, benchmarks, or behavior not visible in the context.',
+    'Do not mention Codex or this prompt.',
+    'Do not use Markdown fences.',
+    '',
+    'Commit context:',
+    formatCommitMessageContext(context),
   ].join('\n')
 }
 

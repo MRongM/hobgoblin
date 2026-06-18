@@ -332,4 +332,68 @@ describe('commit message AI providers', () => {
       message: 'Codex auth token expired',
     })
   })
+
+  test('generates Codex messages from lightweight context with a detailed English prompt', async () => {
+    mocks.execa.mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: JSON.stringify({
+        type: 'item.completed',
+        item: {
+          id: 'item_1',
+          type: 'agent_message',
+          text: 'feat: improve commit message generation\n\n- Use compact Git context for Codex prompts.\n- Include enough detail for useful commit bodies.',
+        },
+      }),
+      stderr: '',
+    })
+
+    const { generateCodexCommitMessageFromContext } = await import('#/system/commit-message-ai.ts')
+
+    await expect(
+      generateCodexCommitMessageFromContext(
+        {
+          status: ['M  src/system/commit-message-ai.ts'],
+          stat: ' src/system/commit-message-ai.ts | 20 +++++++++++++++-----',
+          diff: 'diff --git a/src/system/commit-message-ai.ts b/src/system/commit-message-ai.ts\n+new prompt',
+          untracked: '',
+          omitted: [],
+          truncated: false,
+        },
+        { cwd: '/repo/worktree' },
+      ),
+    ).resolves.toEqual({
+      ok: true,
+      message:
+        'feat: improve commit message generation\n\n- Use compact Git context for Codex prompts.\n- Include enough detail for useful commit bodies.',
+    })
+
+    const prompt = mocks.execa.mock.calls[0]![1].at(-1) as string
+    expect(prompt).toContain('Write a complete Git commit message in English.')
+    expect(prompt).toContain('Prefer Conventional Commits style when it fits.')
+    expect(prompt).toContain('Use a subject line, a blank line, then 2 to 4 concise body bullets')
+    expect(prompt).toContain('Do not invent ticket numbers, issue links, reviewers, benchmarks, or behavior not visible')
+    expect(prompt).toContain('Changed files:')
+    expect(prompt).toContain('Tracked text diff:')
+    expect(prompt).not.toContain('add a body only when it clarifies important details')
+  })
+
+  test('rejects empty lightweight context before invoking Codex', async () => {
+    const { generateCodexCommitMessageFromContext } = await import('#/system/commit-message-ai.ts')
+
+    await expect(
+      generateCodexCommitMessageFromContext({
+        status: [],
+        stat: '',
+        diff: '',
+        untracked: '',
+        omitted: [],
+        truncated: false,
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      message: 'error.commit-message-empty-patch',
+    })
+
+    expect(mocks.execa).not.toHaveBeenCalled()
+  })
 })

@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 const repoClientMocks = vi.hoisted(() => ({
+  discardRepositoryChanges: vi.fn(),
   getCommitMessageProviders: vi.fn(),
   generateRepositoryCommitMessage: vi.fn(),
 }))
@@ -26,6 +27,7 @@ vi.mock('#/web/repo-client.ts', async () => {
   const actual = await vi.importActual<typeof import('#/web/repo-client.ts')>('#/web/repo-client.ts')
   return {
     ...actual,
+    discardRepositoryChanges: repoClientMocks.discardRepositoryChanges,
     getCommitMessageProviders: repoClientMocks.getCommitMessageProviders,
     generateRepositoryCommitMessage: repoClientMocks.generateRepositoryCommitMessage,
   }
@@ -52,6 +54,7 @@ beforeEach(() => {
   })
   repoClientMocks.getCommitMessageProviders.mockResolvedValue({ codex: false, claude: false })
   repoClientMocks.generateRepositoryCommitMessage.mockResolvedValue({ ok: true, message: 'feat: generated message' })
+  repoClientMocks.discardRepositoryChanges.mockResolvedValue({ ok: true, message: '' })
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -66,6 +69,18 @@ afterEach(() => {
   container = null
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
 })
+
+function changeSelectionToggle(): HTMLButtonElement {
+  const toggle = container?.querySelector<HTMLButtonElement>('button[aria-label="changes.selection-toggle-title"]')
+  expect(toggle).toBeTruthy()
+  return toggle!
+}
+
+async function enableChangeSelection(): Promise<void> {
+  await act(async () => {
+    changeSelectionToggle().click()
+  })
+}
 
 describe('ProjectChangesPanel', () => {
   test('renders selected worktree changes with typed status markers and a commit entry', async () => {
@@ -191,5 +206,180 @@ describe('ProjectChangesPanel', () => {
     })
 
     expect(onRevealPath).toHaveBeenCalledWith('src/components/Button.tsx')
+  })
+
+  test('hides selection controls by default and shows them from the pre-commit toggle', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } })],
+      selectedBranch: 'feature/worktree',
+      statusLoaded: true,
+      status: [
+        {
+          path: WORKTREE_PATH,
+          branch: 'feature/worktree',
+          isMain: true,
+          entries: [
+            { x: 'M', y: ' ', path: 'src/app.ts' },
+            { x: '?', y: '?', path: 'src/components/Button.tsx' },
+          ],
+        },
+      ],
+    })
+
+    await act(async () => {
+      root!.render(
+        <InlineCommitDraftProvider>
+          <ProjectChangesPanel repoId={REPO_ID} />
+        </InlineCommitDraftProvider>,
+      )
+    })
+
+    const actionBar = container?.querySelector('[data-testid="project-changes-action-bar"]')
+    const toggle = changeSelectionToggle()
+    const commitButton = actionBar?.querySelector<HTMLButtonElement>('button[aria-label="action.commit-title"]')
+    expect(commitButton).toBeTruthy()
+    expect(toggle.compareDocumentPosition(commitButton!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(container?.querySelector('button[aria-label="changes.select-file:src/app.ts"]')).toBeNull()
+    expect(container?.querySelector('button[aria-label="changes.select-folder:src"]')).toBeNull()
+    expect(container?.textContent).not.toContain('changes.selected-count')
+
+    await enableChangeSelection()
+
+    expect(container?.querySelector('button[aria-label="changes.select-file:src/app.ts"]')).toBeTruthy()
+    expect(container?.querySelector('button[aria-label="changes.select-folder:src"]')).toBeTruthy()
+  })
+
+  test('discards a selected changed file after confirmation and clears selection on success', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } })],
+      selectedBranch: 'feature/worktree',
+      statusLoaded: true,
+      status: [
+        {
+          path: WORKTREE_PATH,
+          branch: 'feature/worktree',
+          isMain: true,
+          entries: [{ x: 'M', y: ' ', path: 'src/app.ts' }],
+        },
+      ],
+    })
+
+    await act(async () => {
+      root!.render(
+        <InlineCommitDraftProvider>
+          <ProjectChangesPanel repoId={REPO_ID} />
+        </InlineCommitDraftProvider>,
+      )
+    })
+
+    await enableChangeSelection()
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('button[aria-label="changes.select-file:src/app.ts"]')?.click()
+    })
+
+    expect(container?.textContent).toContain('changes.selected-count')
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('button[aria-label="changes.discard-selected"]')?.click()
+    })
+    expect(document.body.textContent).toContain('changes.discard-confirm-file-title')
+
+    await act(async () => {
+      Array.from(document.body.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent?.includes('changes.discard-confirm-confirm'))
+        ?.click()
+    })
+
+    expect(repoClientMocks.discardRepositoryChanges).toHaveBeenCalledWith(REPO_ID, WORKTREE_PATH, ['src/app.ts'])
+    expect(container?.textContent).not.toContain('changes.selected-count')
+  })
+
+  test('discards a selected changed folder as one pathspec target', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } })],
+      selectedBranch: 'feature/worktree',
+      statusLoaded: true,
+      status: [
+        {
+          path: WORKTREE_PATH,
+          branch: 'feature/worktree',
+          isMain: true,
+          entries: [
+            { x: 'M', y: ' ', path: 'src/app.ts' },
+            { x: '?', y: '?', path: 'src/components/Button.tsx' },
+            { x: 'D', y: ' ', path: 'README.md' },
+          ],
+        },
+      ],
+    })
+
+    await act(async () => {
+      root!.render(
+        <InlineCommitDraftProvider>
+          <ProjectChangesPanel repoId={REPO_ID} />
+        </InlineCommitDraftProvider>,
+      )
+    })
+
+    await enableChangeSelection()
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('button[aria-label="changes.select-folder:src"]')?.click()
+    })
+
+    expect(container?.textContent).toContain('changes.selected-count')
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('button[aria-label="changes.discard-selected"]')?.click()
+    })
+    expect(document.body.textContent).toContain('changes.discard-confirm-folder-title')
+    await act(async () => {
+      Array.from(document.body.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent?.includes('changes.discard-confirm-confirm'))
+        ?.click()
+    })
+
+    expect(repoClientMocks.discardRepositoryChanges).toHaveBeenCalledWith(REPO_ID, WORKTREE_PATH, ['src'])
+  })
+
+  test('keeps selected paths when discard fails', async () => {
+    repoClientMocks.discardRepositoryChanges.mockResolvedValueOnce({ ok: false, message: 'fatal: clean failed' })
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } })],
+      selectedBranch: 'feature/worktree',
+      statusLoaded: true,
+      status: [
+        {
+          path: WORKTREE_PATH,
+          branch: 'feature/worktree',
+          isMain: true,
+          entries: [{ x: 'M', y: ' ', path: 'src/app.ts' }],
+        },
+      ],
+    })
+
+    await act(async () => {
+      root!.render(
+        <InlineCommitDraftProvider>
+          <ProjectChangesPanel repoId={REPO_ID} />
+        </InlineCommitDraftProvider>,
+      )
+    })
+
+    await enableChangeSelection()
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('button[aria-label="changes.select-file:src/app.ts"]')?.click()
+    })
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('button[aria-label="changes.discard-selected"]')?.click()
+    })
+    await act(async () => {
+      Array.from(document.body.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent?.includes('changes.discard-confirm-confirm'))
+        ?.click()
+    })
+
+    expect(container?.textContent).toContain('changes.selected-count')
   })
 })

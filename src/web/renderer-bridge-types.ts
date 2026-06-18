@@ -55,6 +55,7 @@ export interface RendererShellBridge {
   openSettingsWindow: (input?: { page?: SettingsPage }) => Promise<boolean>
   openExternalUrl: (input: { url: string; allowHttp?: boolean }) => Promise<ExecResult>
   openDirectoryDialog: (input?: { title?: string }) => Promise<string | null>
+  openFileDialog?: (input?: { title?: string }) => Promise<string[]>
   consumeExternalOpenPaths: () => Promise<string[]>
   openInFinder: (input: { path: string }) => Promise<ExecResult>
   readClipboardFilePaths?: () => Promise<string[]>

@@ -13,6 +13,7 @@ import {
   SHELL_CONSUME_EXTERNAL_OPEN_PATHS_CHANNEL,
   SHELL_OPEN_DIRECTORY_DIALOG_CHANNEL,
   SHELL_OPEN_EXTERNAL_URL_CHANNEL,
+  SHELL_OPEN_FILE_DIALOG_CHANNEL,
   SHELL_OPEN_IN_FINDER_CHANNEL,
   SHELL_OPEN_SETTINGS_WINDOW_CHANNEL,
   SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,
@@ -59,6 +60,19 @@ export function wireShellBridgeIpc(): void {
       const result = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
       if (result.canceled || result.filePaths.length === 0) return null
       return result.filePaths[0] ?? null
+    },
+  )
+
+  ipcMain.handle(
+    SHELL_OPEN_FILE_DIALOG_CHANNEL,
+    async (event, input?: { title?: unknown }): Promise<string[]> => {
+      if (!isTrustedIpcEvent(event)) return []
+      const title = typeof input?.title === 'string' && input.title.trim() ? input.title.trim() : 'Choose Files'
+      const win = callerWindow(event)
+      const opts: Electron.OpenDialogOptions = { properties: ['openFile', 'multiSelections'], title }
+      const result = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
+      if (result.canceled || result.filePaths.length === 0) return []
+      return result.filePaths
     },
   )
 

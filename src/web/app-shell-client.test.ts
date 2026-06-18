@@ -25,6 +25,7 @@ function testBridge(overrides: Partial<RendererBridge> = {}): RendererBridge {
       if (capability === 'open-settings-window') return nativeShell?.openSettingsWindow !== undefined
       if (capability === 'open-external-url') return nativeShell?.openExternalUrl !== undefined
       if (capability === 'open-directory-dialog') return nativeShell?.openDirectoryDialog !== undefined
+      if (capability === 'open-file-dialog') return nativeShell?.openFileDialog !== undefined
       if (capability === 'consume-external-open-paths') return nativeShell?.consumeExternalOpenPaths !== undefined
       if (capability === 'open-in-finder') return nativeShell?.openInFinder !== undefined
       if (capability === 'clipboard-file-paths') return nativeShell?.readClipboardFilePaths !== undefined
@@ -150,6 +151,37 @@ describe('app shell client', () => {
     const { chooseFileTreeDownloadDirectory } = await import('#/web/app-shell-client.ts')
     await expect(chooseFileTreeDownloadDirectory()).resolves.toBe('/Downloads')
     expect(openDirectoryDialog).toHaveBeenCalledWith({ title: 'Download files' })
+  })
+
+  test('chooses file tree upload files through the renderer bridge shell', async () => {
+    const bridgeModule = await import('#/web/renderer-bridge.ts')
+    const openFileDialog = vi.fn(async () => ['/Users/test/Desktop/a.txt', '/Users/test/Desktop/b.txt'])
+    bridgeModule.setRendererBridgeForTests(
+      testBridge({
+        shell: () => ({
+          openSettingsWindow: vi.fn(),
+          openExternalUrl: vi.fn(),
+          openDirectoryDialog: vi.fn(),
+          openFileDialog,
+          consumeExternalOpenPaths: vi.fn(),
+          openInFinder: vi.fn(),
+        }),
+      }),
+    )
+
+    const { chooseFileTreeUploadFiles, hasNativeFilePicker } = await import('#/web/app-shell-client.ts')
+    expect(hasNativeFilePicker()).toBe(true)
+    await expect(chooseFileTreeUploadFiles()).resolves.toEqual([
+      '/Users/test/Desktop/a.txt',
+      '/Users/test/Desktop/b.txt',
+    ])
+    expect(openFileDialog).toHaveBeenCalledWith({ title: 'Upload files' })
+  })
+
+  test('returns an empty upload file list without a native shell', async () => {
+    const { chooseFileTreeUploadFiles, hasNativeFilePicker } = await import('#/web/app-shell-client.ts')
+    expect(hasNativeFilePicker()).toBe(false)
+    await expect(chooseFileTreeUploadFiles()).resolves.toEqual([])
   })
 
   test('opens paths in Finder through the renderer bridge shell', async () => {

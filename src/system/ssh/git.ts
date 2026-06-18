@@ -604,6 +604,24 @@ export async function resetRemoteHard(
   return remoteExecResult(result)
 }
 
+export async function discardRemoteChangesForPaths(
+  target: RemoteRepoTarget,
+  worktreePath: string,
+  paths: string[],
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<ExecResult> {
+  if (!isValidRemotePath(worktreePath)) return { ok: false, message: 'error.invalid-path' }
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const known = await resolveKnownRemoteWorktree(target, worktreePath, { signal: options.signal, run })
+  if ('ok' in known) return known
+  const result = await run(
+    { type: 'gitDiscardChanges', path: known.path, paths },
+    target,
+    { signal: options.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
+  )
+  return remoteExecResult(result)
+}
+
 export async function createRemoteWorktree(
   target: RemoteRepoTarget,
   input: CreateWorktreeInput & { signal?: AbortSignal; run?: RemoteGitRunner },
