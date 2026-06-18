@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { getBackgroundSyncRepos, setBackgroundSyncRepos } from '#/server/modules/background-sync.ts'
+import { exportRepositoryFilesToLocalDirectory } from '#/server/modules/repo-file-export.ts'
 import { transferRepositoryFiles } from '#/server/modules/repo-file-transfer.ts'
 import {
   generateRepositoryCommitMessage,
@@ -200,6 +201,16 @@ export function createRepoRoutes() {
         () => transferRepositoryFiles(body),
         { ok: false, message: 'error.failed-read-repo' },
         'file-transfer',
+      ),
+    )
+  })
+  app.post('/file-export', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    return c.json(
+      await jsonOr(
+        () => exportRepositoryFilesToLocalDirectory(body),
+        { ok: false, message: 'error.failed-read-repo' },
+        'file-export',
       ),
     )
   })

@@ -330,6 +330,7 @@ export const en = {
   'file-tree.retry': 'Retry',
   'file-tree.copy-path': 'Copy path',
   'file-tree.copy-relative-path': 'Copy relative path',
+  'file-tree.download': 'Download',
   'file-tree.paste': 'Paste',
   'file-tree.new-folder': 'New folder',
   'file-tree.refresh': 'Refresh',

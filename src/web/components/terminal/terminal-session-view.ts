@@ -13,6 +13,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import type { ITheme } from '@xterm/xterm'
 import type { Terminal as XTermTerminal } from '@xterm/xterm'
 import { Terminal } from '@xterm/xterm'
+import { TERMINAL_SCROLLBACK_LINES } from '#/shared/terminal.ts'
 import {
   observeTerminalTheme,
   terminalSearchDecorationsForCurrentDocument,
@@ -151,7 +152,7 @@ export class TerminalSessionView {
       fontSize: this.fontSize,
       lineHeight: 1,
       minimumContrastRatio: 4.5,
-      scrollback: 10_000,
+      scrollback: TERMINAL_SCROLLBACK_LINES,
       macOptionIsMeta: true,
       rescaleOverlappingGlyphs: true,
       scrollOnUserInput: true,
@@ -434,7 +435,6 @@ export class TerminalSessionView {
     cancelScheduledAnimationFrame(this.pinToBottomFrame)
     this.pinToBottomFrame = null
   }
-
 }
 
 function terminalSearchOptions(incremental?: boolean): ISearchOptions {

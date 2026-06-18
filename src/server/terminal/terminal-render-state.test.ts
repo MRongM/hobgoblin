@@ -1,7 +1,26 @@
 import { describe, expect, test } from 'vitest'
-import { createEmptyTerminalRenderState, appendTerminalReplayData } from '#/server/terminal/terminal-render-state.ts'
+import { TERMINAL_SCROLLBACK_LINES } from '#/shared/terminal.ts'
+import {
+  appendTerminalReplayData,
+  createEmptyTerminalRenderState,
+  createTerminalRenderModel,
+} from '#/server/terminal/terminal-render-state.ts'
 
 describe('terminal-render-state', () => {
+  describe('createTerminalRenderModel', () => {
+    test('configures headless terminal scrollback from the shared retention constant', () => {
+      const model = createTerminalRenderModel(80, 24)
+
+      try {
+        expect((model.term as unknown as { options: { scrollback: number } }).options.scrollback).toBe(
+          TERMINAL_SCROLLBACK_LINES,
+        )
+      } finally {
+        model.term.dispose()
+      }
+    })
+  })
+
   describe('appendTerminalReplayData', () => {
     test('increments sequence and appends data without truncation when under limit', () => {
       const state = createEmptyTerminalRenderState()

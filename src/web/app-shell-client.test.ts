@@ -132,6 +132,26 @@ describe('app shell client', () => {
     await expect(chooseCloneParentPath()).resolves.toBe('/tmp')
   })
 
+  test('chooses a file tree download directory through the renderer bridge shell', async () => {
+    const bridgeModule = await import('#/web/renderer-bridge.ts')
+    const openDirectoryDialog = vi.fn(async () => '/Downloads')
+    bridgeModule.setRendererBridgeForTests(
+      testBridge({
+        shell: () => ({
+          openSettingsWindow: vi.fn(),
+          openExternalUrl: vi.fn(),
+          openDirectoryDialog,
+          consumeExternalOpenPaths: vi.fn(),
+          openInFinder: vi.fn(),
+        }),
+      }),
+    )
+
+    const { chooseFileTreeDownloadDirectory } = await import('#/web/app-shell-client.ts')
+    await expect(chooseFileTreeDownloadDirectory()).resolves.toBe('/Downloads')
+    expect(openDirectoryDialog).toHaveBeenCalledWith({ title: 'Download files' })
+  })
+
   test('opens paths in Finder through the renderer bridge shell', async () => {
     const bridgeModule = await import('#/web/renderer-bridge.ts')
     const shellOpenInFinder = vi.fn(async () => ({ ok: true, message: '/tmp/repo/README.md' }))

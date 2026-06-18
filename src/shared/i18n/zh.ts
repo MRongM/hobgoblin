@@ -313,6 +313,7 @@ export const zh: Record<DictKey, string> = {
   'file-tree.retry': '重试',
   'file-tree.copy-path': '复制路径',
   'file-tree.copy-relative-path': '复制相对路径',
+  'file-tree.download': '下载',
   'file-tree.paste': '粘贴',
   'file-tree.new-folder': '新建文件夹',
   'file-tree.refresh': '刷新',

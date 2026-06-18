@@ -374,6 +374,48 @@ describe('repo-client', () => {
     )
   })
 
+  test('requests repository file export', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        copied: [{ sourcePath: '/repo/a.txt', destinationPath: '/Downloads/a.txt', kind: 'file' }],
+        renamed: [],
+        failed: [],
+      }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { exportRepositoryFilesToLocalDirectory } = await import('#/web/repo-client.ts')
+    const result = await exportRepositoryFilesToLocalDirectory({
+      repoId: '/repo',
+      worktreePath: '/repo',
+      targetDirPath: '/Downloads',
+      paths: ['/repo/a.txt'],
+    })
+
+    expect(result).toEqual({
+      ok: true,
+      copied: [{ sourcePath: '/repo/a.txt', destinationPath: '/Downloads/a.txt', kind: 'file' }],
+      renamed: [],
+      failed: [],
+    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:32100/api/repo/file-export',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
+        body: JSON.stringify({
+          repoId: '/repo',
+          worktreePath: '/repo',
+          targetDirPath: '/Downloads',
+          paths: ['/repo/a.txt'],
+        }),
+      }),
+    )
+  })
+
   test('requests file tree rename through the embedded server', async () => {
     installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
     const fetchMock = vi.fn(async () => ({
