@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   getRepositoryCommitDetail: vi.fn(),
   getRepositoryHistory: vi.fn(),
+  exportRepositoryFilesToLocalDirectory: vi.fn(),
 }))
 
 vi.mock('#/server/modules/repo-read-paths.ts', () => ({
@@ -46,6 +47,10 @@ vi.mock('#/server/modules/repo-write-paths.ts', () => ({
 
 vi.mock('#/server/modules/repo-file-transfer.ts', () => ({
   transferRepositoryFiles: vi.fn(),
+}))
+
+vi.mock('#/server/modules/repo-file-export.ts', () => ({
+  exportRepositoryFilesToLocalDirectory: mocks.exportRepositoryFilesToLocalDirectory,
 }))
 
 vi.mock('#/server/modules/background-sync.ts', () => ({
@@ -132,4 +137,41 @@ describe('repo routes', () => {
     })
     expect(mocks.getRepositoryCommitDetail).toHaveBeenCalledWith('/repo', 'abc1234', expect.any(AbortSignal))
   })
+
+  test('serves repository file export', async () => {
+    mocks.exportRepositoryFilesToLocalDirectory.mockResolvedValue({
+      ok: true,
+      copied: [{ sourcePath: '/repo/a.txt', destinationPath: '/Downloads/a.txt', kind: 'file' }],
+      renamed: [],
+      failed: [],
+    })
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/file-export', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        repoId: '/repo',
+        worktreePath: '/repo',
+        targetDirPath: '/Downloads',
+        paths: ['/repo/a.txt'],
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      copied: [{ sourcePath: '/repo/a.txt', destinationPath: '/Downloads/a.txt', kind: 'file' }],
+      renamed: [],
+      failed: [],
+    })
+    expect(mocks.exportRepositoryFilesToLocalDirectory).toHaveBeenCalledWith({
+      repoId: '/repo',
+      worktreePath: '/repo',
+      targetDirPath: '/Downloads',
+      paths: ['/repo/a.txt'],
+    })
+  })
+
 })

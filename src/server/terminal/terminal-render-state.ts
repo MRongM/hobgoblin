@@ -1,7 +1,7 @@
 import * as xtermHeadlessImport from '@xterm/headless'
 import type { SerializeAddon as XTermSerializeAddon } from '@xterm/addon-serialize'
 import { SerializeAddon } from '@xterm/addon-serialize'
-import type { TerminalSessionSnapshot } from '#/shared/terminal.ts'
+import { TERMINAL_SCROLLBACK_LINES, type TerminalSessionSnapshot } from '#/shared/terminal.ts'
 
 const MAX_SESSION_BUFFER_CHARS = 16 * 1024 * 1024
 
@@ -29,7 +29,12 @@ export interface TerminalRenderState {
 }
 
 const headlessModule = ('default' in xtermHeadlessImport ? xtermHeadlessImport.default : xtermHeadlessImport) as {
-  Terminal: new (options?: { cols?: number; rows?: number; scrollback?: number; allowProposedApi?: boolean }) => HeadlessTerminalLike
+  Terminal: new (options?: {
+    cols?: number
+    rows?: number
+    scrollback?: number
+    allowProposedApi?: boolean
+  }) => HeadlessTerminalLike
 }
 const { Terminal: HeadlessTerminal } = headlessModule
 
@@ -45,7 +50,7 @@ export function createEmptyTerminalRenderState(): TerminalRenderState {
 }
 
 export function createTerminalRenderModel(cols: number, rows: number): TerminalRenderModel {
-  const term = new HeadlessTerminal({ cols, rows, scrollback: 10000, allowProposedApi: true })
+  const term = new HeadlessTerminal({ cols, rows, scrollback: TERMINAL_SCROLLBACK_LINES, allowProposedApi: true })
   const serializeAddon = new SerializeAddon()
   term.loadAddon(serializeAddon)
   return {
@@ -59,13 +64,15 @@ export function bindTerminalRenderTitle(
   state: TerminalRenderState,
   onTitle: (canonicalTitle: string | null) => void,
 ): { dispose(): void } {
-  return state.model?.term.onTitleChange((title) => {
-    state.titleEventVersion += 1
-    const nextCanonicalTitle = normalizeTerminalTitle(title)
-    if (state.canonicalTitle === nextCanonicalTitle) return
-    state.canonicalTitle = nextCanonicalTitle
-    onTitle(nextCanonicalTitle)
-  }) ?? { dispose() {} }
+  return (
+    state.model?.term.onTitleChange((title) => {
+      state.titleEventVersion += 1
+      const nextCanonicalTitle = normalizeTerminalTitle(title)
+      if (state.canonicalTitle === nextCanonicalTitle) return
+      state.canonicalTitle = nextCanonicalTitle
+      onTitle(nextCanonicalTitle)
+    }) ?? { dispose() {} }
+  )
 }
 
 export function appendTerminalReplayData(state: TerminalRenderState, data: string): number {
@@ -186,8 +193,14 @@ function stripLeadingIncompleteAnsi(s: string): string {
     let i = 2
     while (i < s.length) {
       const c = s.charCodeAt(i)
-      if (c >= 0x30 && c <= 0x3f) { i++; continue }
-      if (c >= 0x20 && c <= 0x2f) { i++; continue }
+      if (c >= 0x30 && c <= 0x3f) {
+        i++
+        continue
+      }
+      if (c >= 0x20 && c <= 0x2f) {
+        i++
+        continue
+      }
       if (c >= 0x40 && c <= 0x7e) return s // complete CSI
       break // incomplete
     }

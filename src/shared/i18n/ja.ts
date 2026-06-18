@@ -329,6 +329,7 @@ export const ja: Record<DictKey, string> = {
   'file-tree.retry': '再試行',
   'file-tree.copy-path': 'パスをコピー',
   'file-tree.copy-relative-path': '相対パスをコピー',
+  'file-tree.download': 'ダウンロード',
   'file-tree.paste': '貼り付け',
   'file-tree.new-folder': '新しいフォルダ',
   'file-tree.refresh': '更新',

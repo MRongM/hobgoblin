@@ -2,6 +2,7 @@ import { openExternalUrl } from '#/web/app-shell-client.ts'
 import { postServerJson } from '#/web/lib/server-fetch.ts'
 import type { CommitMessageGenerationResult, CommitMessageProvider, CommitMessageProviderAvailability } from '#/shared/commit-message-ai.ts'
 import type { RepoFileTransferRequest, RepoFileTransferResult, RepoFileTreeResult } from '#/shared/file-tree.ts'
+import type { RepoFileExportRequest, RepoFileExportResult } from '#/shared/file-tree-export.ts'
 import type { CloneRepoResult, PullRequestEntry, RepoSnapshot } from '#/shared/rpc.ts'
 import type { CommitDetail, CommitHistoryEntry, ExecResult, PullRequestFetchMode, WorktreeStatus } from '#/shared/git-types.ts'
 import type { ProbeResult } from '#/shared/rpc.ts'
@@ -224,6 +225,12 @@ export async function moveRepositoryFileTreeEntries(
 
 export async function transferRepositoryFiles(input: RepoFileTransferRequest): Promise<RepoFileTransferResult> {
   return await postServerJson('/api/repo/file-transfer', input)
+}
+
+export async function exportRepositoryFilesToLocalDirectory(
+  input: RepoFileExportRequest,
+): Promise<RepoFileExportResult> {
+  return await postServerJson('/api/repo/file-export', input)
 }
 
 export async function openRepositoryRemote(cwd: string, branch?: string): Promise<ExecResult> {

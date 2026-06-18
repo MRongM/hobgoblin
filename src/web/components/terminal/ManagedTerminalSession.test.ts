@@ -2,6 +2,7 @@
 
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { ELECTRON_RENDERER_CAPABILITIES, RENDERER_BRIDGE_VERSION } from '#/shared/bootstrap.ts'
+import { TERMINAL_SCROLLBACK_LINES } from '#/shared/terminal.ts'
 import { ManagedTerminalSession } from '#/web/components/terminal/ManagedTerminalSession.ts'
 import { installTerminalThemeStyles } from '#/web/components/terminal/terminal-theme-test-utils.ts'
 import { isTerminalFocused } from '#/web/terminal-focus.ts'
@@ -51,6 +52,7 @@ const xtermMocks = vi.hoisted(() => {
       macOptionIsMeta?: boolean
       minimumContrastRatio?: number
       rescaleOverlappingGlyphs?: boolean
+      scrollback?: number
       theme?: { background?: string; foreground?: string }
       scrollOnUserInput?: boolean
     }
@@ -105,6 +107,7 @@ const xtermMocks = vi.hoisted(() => {
       macOptionIsMeta?: boolean
       minimumContrastRatio?: number
       rescaleOverlappingGlyphs?: boolean
+      scrollback?: number
       theme?: { background?: string; foreground?: string }
       scrollOnUserInput?: boolean
     }) {
@@ -120,6 +123,7 @@ const xtermMocks = vi.hoisted(() => {
         macOptionIsMeta: options.macOptionIsMeta,
         minimumContrastRatio: options.minimumContrastRatio,
         rescaleOverlappingGlyphs: options.rescaleOverlappingGlyphs,
+        scrollback: options.scrollback,
         theme: options.theme,
         scrollOnUserInput: options.scrollOnUserInput,
       }
@@ -130,7 +134,9 @@ const xtermMocks = vi.hoisted(() => {
       addon.activate?.(this)
     }
 
-    registerLinkProvider(provider: { provideLinks: (line: number, cb: (links: unknown[] | undefined) => void) => void }) {
+    registerLinkProvider(provider: {
+      provideLinks: (line: number, cb: (links: unknown[] | undefined) => void) => void
+    }) {
       this.linkProviders.push(provider)
       return { dispose: vi.fn(() => (this.linkProviders = this.linkProviders.filter((item) => item !== provider))) }
     }
@@ -689,7 +695,7 @@ describe('ManagedTerminalSession', () => {
       const host = document.createElement('div')
       document.body.appendChild(host)
       const session = new ManagedTerminalSession(descriptor, vi.fn())
-    hydrateManagedSession(session)
+      hydrateManagedSession(session)
 
       session.attach(host)
       await flushTerminalStart()
@@ -721,7 +727,8 @@ describe('ManagedTerminalSession', () => {
     const savedUserAgent = navigator.userAgent
     Object.defineProperty(window.navigator, 'userAgent', {
       configurable: true,
-      value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15',
+      value:
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15',
     })
     try {
       const host = document.createElement('div')
@@ -757,7 +764,8 @@ describe('ManagedTerminalSession', () => {
     const savedUserAgent = navigator.userAgent
     Object.defineProperty(window.navigator, 'userAgent', {
       configurable: true,
-      value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15',
+      value:
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15',
     })
     try {
       const host = document.createElement('div')
@@ -800,7 +808,8 @@ describe('ManagedTerminalSession', () => {
     const savedUserAgent = navigator.userAgent
     Object.defineProperty(window.navigator, 'userAgent', {
       configurable: true,
-      value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+      value:
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
     })
     try {
       const host = document.createElement('div')
@@ -940,7 +949,12 @@ describe('ManagedTerminalSession', () => {
     session.attach(host)
     await flushTerminalStart()
 
-    expect(session.snapshot()).toEqual({ phase: 'error', message: 'error.spawn-failed', processName: 'zsh', canonicalTitle: null })
+    expect(session.snapshot()).toEqual({
+      phase: 'error',
+      message: 'error.spawn-failed',
+      processName: 'zsh',
+      canonicalTitle: null,
+    })
   })
 
   test('continues after terminal write failures', async () => {
@@ -1045,8 +1059,11 @@ describe('ManagedTerminalSession', () => {
 
     expect(terminalCalls.write).not.toHaveBeenCalled()
     expect(terminalCalls.resize).not.toHaveBeenCalled()
-    expect(session.snapshot().attachment).toMatchObject({ role: 'viewer',
-      controllerStatus: 'connected', canTakeover: true })
+    expect(session.snapshot().attachment).toMatchObject({
+      role: 'viewer',
+      controllerStatus: 'connected',
+      canTakeover: true,
+    })
   })
 
   test('preloads hydrated snapshot before attaching as controller', async () => {
@@ -1199,8 +1216,11 @@ describe('ManagedTerminalSession', () => {
     await flushTerminalStart()
 
     expect(terminalCalls.write).not.toHaveBeenCalled()
-    expect(session.snapshot().attachment).toMatchObject({ role: 'viewer',
-      controllerStatus: 'connected', canTakeover: true })
+    expect(session.snapshot().attachment).toMatchObject({
+      role: 'viewer',
+      controllerStatus: 'connected',
+      canTakeover: true,
+    })
     expect(notify).not.toHaveBeenCalled()
   })
 
@@ -1229,16 +1249,22 @@ describe('ManagedTerminalSession', () => {
 
     xtermMocks.terminals[0]!.resize(101, 31)
     await flushResizeDebounce()
-    expect(session.snapshot().attachment).toMatchObject({ role: 'viewer',
-      controllerStatus: 'connected', canTakeover: true })
+    expect(session.snapshot().attachment).toMatchObject({
+      role: 'viewer',
+      controllerStatus: 'connected',
+      canTakeover: true,
+    })
 
     session.takeover()
     await flushUntil(() => terminalCalls.takeover.mock.calls.length > 0)
 
     expect(terminalCalls.takeover).toHaveBeenCalledWith({ sessionId: 'session-1', cols: 101, rows: 31 })
     // Before authoritative ownership message arrives, role is still viewer
-    expect(session.snapshot().attachment).toMatchObject({ role: 'viewer',
-      controllerStatus: 'connected', canTakeover: true })
+    expect(session.snapshot().attachment).toMatchObject({
+      role: 'viewer',
+      controllerStatus: 'connected',
+      canTakeover: true,
+    })
 
     // Simulate authoritative server ownership event
     session.handleOwnership({
@@ -1249,8 +1275,11 @@ describe('ManagedTerminalSession', () => {
       canonicalRows: 31,
     })
 
-    expect(session.snapshot().attachment).toMatchObject({ role: 'controller',
-      controllerStatus: 'connected', canTakeover: false })
+    expect(session.snapshot().attachment).toMatchObject({
+      role: 'controller',
+      controllerStatus: 'connected',
+      canTakeover: false,
+    })
   })
 
   test('takeover applies authoritative server ownership instead of optimistic local control', async () => {
@@ -1280,8 +1309,11 @@ describe('ManagedTerminalSession', () => {
     await flushUntil(() => terminalCalls.takeover.mock.calls.length > 0)
 
     // Bridge response alone does not change ownership; only authoritative onOwnership does
-    expect(session.snapshot().attachment).toMatchObject({ role: 'viewer',
-      controllerStatus: 'connected', canTakeover: true })
+    expect(session.snapshot().attachment).toMatchObject({
+      role: 'viewer',
+      controllerStatus: 'connected',
+      canTakeover: true,
+    })
 
     session.handleOwnership({
       sessionId: 'session-1',
@@ -1331,6 +1363,19 @@ describe('ManagedTerminalSession', () => {
       canonicalCols: 101,
       canonicalRows: 31,
     })
+  })
+
+  test('configures visible terminal scrollback from the shared retention constant', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    expect(xtermMocks.terminals[0]!.options.scrollback).toBe(TERMINAL_SCROLLBACK_LINES)
   })
 
   test('forwards user input while replay is being written', async () => {
@@ -1384,6 +1429,31 @@ describe('ManagedTerminalSession', () => {
 
     expect(xtermMocks.terminals[0]!.write).toHaveBeenCalledTimes(1)
     expect(xtermMocks.terminals[0]!.write).toHaveBeenCalledWith('firstsecond')
+  })
+
+  test('keeps the same terminal instance and does not reset while flushing ordinary multi-line output', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.reset.mockClear()
+    term.dispose.mockClear()
+    term.write.mockClear()
+
+    const output = Array.from({ length: 300 }, (_, index) => `line-${index + 1}\r\n`).join('')
+    session.handleOutput({ sessionId: 'session-1', data: output, seq: 1, processName: 'zsh' })
+    await flushTerminalStart()
+
+    expect(xtermMocks.terminals).toHaveLength(1)
+    expect(xtermMocks.terminals[0]).toBe(term)
+    expect(term.reset).not.toHaveBeenCalled()
+    expect(term.dispose).not.toHaveBeenCalled()
+    expect(term.write).toHaveBeenCalledWith(output)
   })
 
   test('flushes matching terminal exits before the provider dismisses the session', async () => {

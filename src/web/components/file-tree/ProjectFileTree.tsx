@@ -3,9 +3,9 @@ import type { ClipboardEvent, CSSProperties, DragEvent, KeyboardEvent, MouseEven
 import {
   ChevronDown,
   ChevronRight,
-  ClipboardPaste,
   Code2,
   Copy,
+  Download,
   File,
   FileSymlink,
   Folder,
@@ -35,6 +35,7 @@ import {
   openRepositoryTerminal,
   renameRepositoryFileTreeEntry,
   transferRepositoryFiles,
+  exportRepositoryFilesToLocalDirectory,
 } from '#/web/repo-client.ts'
 import { Button } from '#/web/components/ui/button.tsx'
 import {
@@ -80,7 +81,7 @@ import {
 } from '#/web/components/file-tree/clipboard.ts'
 import { resolveDropTargetDirectory } from '#/web/components/file-tree/drop-target.ts'
 import type { WorktreeStatus } from '#/web/types.ts'
-import { openInFinder, readSystemClipboardFilePaths } from '#/web/app-shell-client.ts'
+import { chooseFileTreeDownloadDirectory, openInFinder, readSystemClipboardFilePaths } from '#/web/app-shell-client.ts'
 import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 
 const ROOT_DIR = ''
@@ -335,12 +336,17 @@ export function ProjectFileTree({
   const handleDragStart = useCallback(
     (node: FileTreeNode, event: DragEvent) => {
       const selectedIds = selection.selected.has(node.id) ? selection.selected : new Set([node.id])
-      const paths = Array.from(selectedIds)
-        .map((id) => flatNodeById.get(id)?.absolutePath)
-        .filter((path): path is string => !!path)
+      const targets = Array.from(selectedIds)
+        .map((id) => flatNodeById.get(id))
+        .filter((target): target is FileTreeNode => !!target)
+      const paths = targets.map((target) => target.absolutePath)
       event.dataTransfer.setData(GOBLIN_FILE_PATHS_MIME, buildGoblinFilePathDragPayload(paths))
-      event.dataTransfer.setData('text/plain', paths.join(' '))
       event.dataTransfer.effectAllowed = 'copyMove'
+
+      const exportable = exportableFileNodes(targets)
+      if (exportable.length === 0) {
+        event.dataTransfer.setData('text/plain', paths.join(' '))
+      }
     },
     [flatNodeById, selection.selected],
   )
@@ -386,6 +392,23 @@ export function ProjectFileTree({
       return targets.length > 0 ? targets : [node]
     },
     [flatNodeById, selection.selected],
+  )
+
+  const runDownload = useCallback(
+    async (nodes: FileTreeNode[]) => {
+      if (!worktreePath) return
+      const files = exportableFileNodes(nodes)
+      if (files.length === 0) return
+      const targetDirPath = await chooseFileTreeDownloadDirectory()
+      if (!targetDirPath) return
+      await exportRepositoryFilesToLocalDirectory({
+        repoId,
+        worktreePath,
+        targetDirPath,
+        paths: files.map((file) => file.absolutePath),
+      })
+    },
+    [repoId, worktreePath],
   )
 
   const realSelectedNodes = useMemo(
@@ -791,20 +814,19 @@ export function ProjectFileTree({
     worktreePath,
   ])
 
-  const sourceForContextPaste = useCallback(async () => {
-    const internal = readInternalFileTreeClipboard()
-    if (internal) return internal
+  const sourceFromSystemClipboard = useCallback(async () => {
     return sourceFromSystemClipboardPaths(await readSystemClipboardFilePaths())
   }, [])
 
-  const runContextPaste = useCallback(
-    async (node: FileTreeNode | null) => {
-      if (!worktreePath) return
-      const source = await sourceForContextPaste()
-      if (!source) return
-      await runTransfer(resolveFileTreePasteTarget(worktreePath, node), source)
+  const sourceForPasteEvent = useCallback(
+    async (event: ClipboardEvent<HTMLDivElement>) => {
+      const system = await sourceFromSystemClipboard()
+      if (system) return system
+      const internal = readInternalFileTreeClipboard()
+      if (internal) return internal
+      return await sourceFromClipboardEvent(event.nativeEvent)
     },
-    [runTransfer, sourceForContextPaste, worktreePath],
+    [sourceFromSystemClipboard],
   )
 
   const handleKeyDown = useCallback(
@@ -833,8 +855,10 @@ export function ProjectFileTree({
           paths: paths.length > 0 ? paths : [node.absolutePath],
         })
       } else if (key === 'v') {
+        const internal = readInternalFileTreeClipboard()
+        if (!internal) return
         event.preventDefault()
-        void runTransfer(resolveFileTreePasteTarget(worktreePath, node))
+        void runTransfer(resolveFileTreePasteTarget(worktreePath, node), internal)
       }
     },
     [beginRename, repoId, runTransfer, runUndo, selectedPaths, selection.selected, worktreePath],
@@ -844,13 +868,13 @@ export function ProjectFileTree({
     (event: ClipboardEvent<HTMLDivElement>) => {
       if (!worktreePath) return
       void (async () => {
-        const source = readInternalFileTreeClipboard() ?? (await sourceFromClipboardEvent(event.nativeEvent))
+        const source = await sourceForPasteEvent(event)
         if (!source) return
         event.preventDefault()
         await runTransfer(resolveFileTreePasteTarget(worktreePath, pasteTargetNode()), source)
       })()
     },
-    [pasteTargetNode, runTransfer, worktreePath],
+    [pasteTargetNode, runTransfer, sourceForPasteEvent, worktreePath],
   )
 
   const handleDrop = useCallback(
@@ -949,11 +973,11 @@ export function ProjectFileTree({
                     onBeginDelete={beginDelete}
                     onBeginCreateDirectory={beginCreateDirectoryForNode}
                     onRefresh={refreshDirectoryForContextNode}
+                    onDownload={runDownload}
                     onKeyDown={handleKeyDown}
                     onFocus={setFocusedNodeId}
                     onDrop={handleDrop}
                     onDragOver={handleDragOver}
-                    onPaste={runContextPaste}
                     renameNodeId={renameNode?.id ?? null}
                     renameValue={renameValue}
                     renamePending={renamePending}
@@ -982,7 +1006,6 @@ export function ProjectFileTree({
                   <FileTreeEmptyContextMenu
                     onCreateDirectory={() => beginCreateDirectory(rootCreateDirectoryTarget())}
                     onRefresh={() => refreshTreeDirectory(rootCreateDirectoryTarget())}
-                    onPaste={() => void runContextPaste(null)}
                   />
                 </ContextMenu>
               </>
@@ -1040,11 +1063,11 @@ function FileTreeRow({
   onBeginDelete,
   onBeginCreateDirectory,
   onRefresh,
+  onDownload,
   onKeyDown,
   onFocus,
   onDrop,
   onDragOver,
-  onPaste,
   renameNodeId,
   renameValue,
   renamePending,
@@ -1077,11 +1100,11 @@ function FileTreeRow({
   onBeginDelete: (node: FileTreeNode) => void
   onBeginCreateDirectory: (node: FileTreeNode | null) => void
   onRefresh: (node: FileTreeNode | null) => void
+  onDownload: (nodes: FileTreeNode[]) => void
   onKeyDown: (node: FileTreeNode, event: KeyboardEvent) => void
   onFocus: (nodeId: string) => void
   onDrop: (node: FileTreeNode, event: DragEvent<HTMLDivElement>) => void
   onDragOver: (event: DragEvent<HTMLDivElement>) => void
-  onPaste: (node: FileTreeNode | null) => void
   renameNodeId: string | null
   renameValue: string
   renamePending: boolean
@@ -1194,7 +1217,7 @@ function FileTreeRow({
           onBeginDelete={onBeginDelete}
           onBeginCreateDirectory={onBeginCreateDirectory}
           onRefresh={onRefresh}
-          onPaste={onPaste}
+          onDownload={onDownload}
         />
       </ContextMenu>
       {renameNodeId === node.id && renameError ? (
@@ -1238,11 +1261,11 @@ function FileTreeRow({
             onBeginDelete={onBeginDelete}
             onBeginCreateDirectory={onBeginCreateDirectory}
             onRefresh={onRefresh}
+            onDownload={onDownload}
             onKeyDown={onKeyDown}
             onFocus={onFocus}
             onDrop={onDrop}
             onDragOver={onDragOver}
-            onPaste={onPaste}
             renameNodeId={renameNodeId}
             renameValue={renameValue}
             renamePending={renamePending}
@@ -1271,7 +1294,7 @@ function FileTreeContextMenu({
   onBeginDelete,
   onBeginCreateDirectory,
   onRefresh,
-  onPaste,
+  onDownload,
 }: {
   repoId: string
   node: FileTreeNode
@@ -1280,11 +1303,12 @@ function FileTreeContextMenu({
   onBeginDelete: (node: FileTreeNode) => void
   onBeginCreateDirectory: (node: FileTreeNode | null) => void
   onRefresh: (node: FileTreeNode | null) => void
-  onPaste: (node: FileTreeNode | null) => void
+  onDownload: (nodes: FileTreeNode[]) => void
 }) {
   const t = useT()
   const realNode = isWritableNode(node)
   const canRevealInFinder = realNode && !isRemoteRepoId(repoId)
+  const downloadTargets = exportableFileNodes(targets)
   return (
     <ContextMenuContent>
       <ContextMenuItem onSelect={() => void copyPaths(targets.map((target) => target.absolutePath))}>
@@ -1295,9 +1319,9 @@ function FileTreeContextMenu({
         <FileSymlink className="size-3.5" />
         {t('file-tree.copy-relative-path')}
       </ContextMenuItem>
-      <ContextMenuItem onSelect={() => void onPaste(node)}>
-        <ClipboardPaste className="size-3.5" />
-        {t('file-tree.paste')}
+      <ContextMenuItem disabled={downloadTargets.length === 0} onSelect={() => void onDownload(downloadTargets)}>
+        <Download className="size-3.5" />
+        {t('file-tree.download')}
       </ContextMenuItem>
       <ContextMenuItem disabled={!realNode} onSelect={() => onBeginCreateDirectory(node)}>
         <FolderPlus className="size-3.5" />
@@ -1337,11 +1361,9 @@ function FileTreeContextMenu({
 function FileTreeEmptyContextMenu({
   onCreateDirectory,
   onRefresh,
-  onPaste,
 }: {
   onCreateDirectory: () => void
   onRefresh: () => void
-  onPaste: () => void
 }) {
   const t = useT()
   return (
@@ -1353,10 +1375,6 @@ function FileTreeEmptyContextMenu({
       <ContextMenuItem onSelect={onRefresh}>
         <RefreshCw className="size-3.5" />
         {t('file-tree.refresh')}
-      </ContextMenuItem>
-      <ContextMenuItem onSelect={onPaste}>
-        <ClipboardPaste className="size-3.5" />
-        {t('file-tree.paste')}
       </ContextMenuItem>
     </ContextMenuContent>
   )
@@ -1593,6 +1611,14 @@ function editorPathForNode(node: FileTreeNode): string {
 
 function isWritableNode(node: FileTreeNode): boolean {
   return node.kind !== 'virtual'
+}
+
+function isExportableFileNode(node: FileTreeNode): boolean {
+  return node.kind === 'file' && node.targetKind !== 'missing'
+}
+
+function exportableFileNodes(nodes: FileTreeNode[]): FileTreeNode[] {
+  return nodes.filter(isExportableFileNode)
 }
 
 function parentRelativePathForNode(node: FileTreeNode): string {

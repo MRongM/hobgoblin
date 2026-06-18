@@ -321,6 +321,7 @@ export const ko: Record<DictKey, string> = {
   'file-tree.retry': '다시 시도',
   'file-tree.copy-path': '경로 복사',
   'file-tree.copy-relative-path': '상대 경로 복사',
+  'file-tree.download': '다운로드',
   'file-tree.paste': '붙여넣기',
   'file-tree.new-folder': '새 폴더',
   'file-tree.refresh': '새로 고침',

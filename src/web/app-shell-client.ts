@@ -117,6 +117,10 @@ export async function chooseCloneParentPath(): Promise<string | null> {
   return (await nativeShell()?.openDirectoryDialog?.({ title: 'Choose Clone Destination' })) ?? null
 }
 
+export async function chooseFileTreeDownloadDirectory(): Promise<string | null> {
+  return (await nativeShell()?.openDirectoryDialog?.({ title: 'Download files' })) ?? null
+}
+
 export async function consumeExternalOpenPaths(): Promise<string[]> {
   return (await nativeShell()?.consumeExternalOpenPaths?.()) ?? []
 }

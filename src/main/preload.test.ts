@@ -151,7 +151,7 @@ describe('preload goblinNative bridge', () => {
   })
 
   test('forwards shell bridge calls to their IPC channels', async () => {
-    const { goblinNative, invocations } = loadPreload()
+    const { goblinNative, invocations, sends } = loadPreload()
 
     await goblinNative.shell.openSettingsWindow({ page: 'about' })
     await goblinNative.shell.openExternalUrl({ url: 'https://example.com', allowHttp: false })
@@ -174,6 +174,7 @@ describe('preload goblinNative bridge', () => {
       SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,
       SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL,
     ])
+    expect(sends).toEqual([])
   })
 
   test('forwards native terminal notification calls to their IPC channels', async () => {
