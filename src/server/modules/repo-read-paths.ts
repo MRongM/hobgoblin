@@ -1,6 +1,10 @@
 import { runWithRepoBackend } from '#/server/modules/repo-backend.ts'
 import { getRepositoryFileTree as getRepositoryFileTreeRead } from '#/server/modules/repo-file-tree.ts'
-import { generateCommitMessageFromPatch, probeCommitMessageProviders } from '#/system/commit-message-ai.ts'
+import {
+  generateCodexCommitMessageFromContext,
+  generateCommitMessageFromPatch,
+  probeCommitMessageProviders,
+} from '#/system/commit-message-ai.ts'
 import { isCommitMessageProvider, type CommitMessageGenerationResult, type CommitMessageProviderAvailability } from '#/shared/commit-message-ai.ts'
 import type { RepoFileTreeResult } from '#/shared/file-tree.ts'
 import { type CommitDetail, type CommitHistoryEntry, type ExecResult, type PullRequestFetchMode, type WorktreeStatus } from '#/shared/git-types.ts'
@@ -73,6 +77,15 @@ export async function generateRepositoryCommitMessage(
 ): Promise<CommitMessageGenerationResult> {
   if (!isCommitMessageProvider(provider)) return { ok: false, message: 'error.commit-message-provider-unavailable' }
   return await runWithRepoBackend(cwd, async (backend) => {
+    if (provider === 'codex' && backend.kind === 'local' && backend.getCommitMessageContext) {
+      const context = await backend.getCommitMessageContext(worktreePath, signal)
+      if (!context.ok) return { ok: false, message: context.message }
+      return await generateCodexCommitMessageFromContext(context.context, {
+        cwd: context.worktreePath,
+        signal,
+      })
+    }
+
     const patch = await backend.getPatch(worktreePath, signal)
     if (!patch.ok) return patch
     const generationCwd = backend.kind === 'local' ? worktreePath : undefined

@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
   deleteLocalFileTreeEntries: vi.fn(),
   deleteRemoteBranch: vi.fn(),
   deleteRemoteFileTreeEntries: vi.fn(),
+  discardChangesForPaths: vi.fn(),
+  discardRemoteChangesForPaths: vi.fn(),
   deleteUpstreamBranch: vi.fn(),
   fsAccess: vi.fn(),
   fsMkdir: vi.fn(),
@@ -35,6 +37,7 @@ const mocks = vi.hoisted(() => ({
   getRemoteInfo: vi.fn(),
   getRemoteTrackingBranches: vi.fn(),
   getUpstream: vi.fn(),
+  getWorktreeCommitMessageContext: vi.fn(),
   getWorktreePatch: vi.fn(),
   getWorktrees: vi.fn(),
   isAncestor: vi.fn(),
@@ -61,6 +64,7 @@ const mocks = vi.hoisted(() => ({
   setBackgroundSyncRepos: vi.fn(),
   publishRepoQueryInvalidation: vi.fn(),
   probeCommitMessageProviders: vi.fn(),
+  generateCodexCommitMessageFromContext: vi.fn(),
   generateCommitMessageFromPatch: vi.fn(),
   resetHardToCurrentHead: vi.fn(),
   resetRemoteHard: vi.fn(),
@@ -91,6 +95,7 @@ vi.mock('#/system/git/commit.ts', () => ({
 }))
 
 vi.mock('#/system/git/reset.ts', () => ({
+  discardChangesForPaths: mocks.discardChangesForPaths,
   resetHardToCurrentHead: mocks.resetHardToCurrentHead,
 }))
 
@@ -103,8 +108,13 @@ vi.mock('#/system/git/patch.ts', () => ({
   getWorktreePatch: mocks.getWorktreePatch,
 }))
 
+vi.mock('#/system/git/commit-message-context.ts', () => ({
+  getWorktreeCommitMessageContext: mocks.getWorktreeCommitMessageContext,
+}))
+
 vi.mock('#/system/commit-message-ai.ts', () => ({
   probeCommitMessageProviders: mocks.probeCommitMessageProviders,
+  generateCodexCommitMessageFromContext: mocks.generateCodexCommitMessageFromContext,
   generateCommitMessageFromPatch: mocks.generateCommitMessageFromPatch,
 }))
 
@@ -174,6 +184,7 @@ vi.mock('#/system/ssh/git.ts', () => ({
   createRemoteWorktree: vi.fn(),
   deleteRemoteBranch: mocks.deleteRemoteBranch,
   deleteRemoteFileTreeEntries: mocks.deleteRemoteFileTreeEntries,
+  discardRemoteChangesForPaths: mocks.discardRemoteChangesForPaths,
   fetchRemoteRepository: mocks.fetchRemoteRepository,
   getRemoteBrowserUrl: mocks.getRemoteBrowserUrl,
   getRemoteCommitDetail: mocks.getRemoteCommitDetail,
@@ -249,6 +260,8 @@ beforeEach(() => {
   mocks.removeRemoteWorktree.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.resetHardToCurrentHead.mockResolvedValue({ ok: true, message: 'reset local' })
   mocks.resetRemoteHard.mockResolvedValue({ ok: true, message: 'reset remote' })
+  mocks.discardChangesForPaths.mockResolvedValue({ ok: true, message: '' })
+  mocks.discardRemoteChangesForPaths.mockResolvedValue({ ok: true, message: '' })
   mocks.getRemoteBrowserUrl.mockResolvedValue(null)
   mocks.getCommitHistory.mockResolvedValue([
     {
@@ -303,12 +316,21 @@ beforeEach(() => {
   mocks.getRepoName.mockResolvedValue('repo')
   mocks.getRepoRoot.mockResolvedValue('/tmp/repo')
   mocks.getWorktrees.mockResolvedValue([])
+  mocks.getWorktreeCommitMessageContext.mockResolvedValue({
+    status: ['M  src/app.ts'],
+    stat: ' src/app.ts | 2 +-',
+    diff: 'diff --git a/src/app.ts b/src/app.ts\n+new',
+    untracked: '',
+    omitted: [],
+    truncated: false,
+  })
   mocks.getWorktreePatch.mockResolvedValue('diff --git a/a b/a\n+hello\n')
   mocks.getRemoteTrackingBranches.mockResolvedValue([])
   mocks.getDefaultBranch.mockResolvedValue('main')
   mocks.getUpstream.mockResolvedValue(null)
   mocks.isAncestor.mockResolvedValue(true)
   mocks.probeCommitMessageProviders.mockResolvedValue({ codex: true, claude: false })
+  mocks.generateCodexCommitMessageFromContext.mockResolvedValue({ ok: true, message: 'feat: generated codex message' })
   mocks.generateCommitMessageFromPatch.mockResolvedValue({ ok: true, message: 'feat: generated message' })
 })
 
@@ -451,25 +473,56 @@ describe('commit message AI read paths', () => {
     expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
   })
 
-  test('generates commit messages from the current local worktree patch', async () => {
+  test('generates local Codex commit messages from lightweight context', async () => {
     mocks.getWorktrees.mockResolvedValueOnce([
       { path: '/tmp/repo', branch: 'main', isBare: false, isPrimary: true, isDirty: true, changeCount: 1 },
     ])
-    mocks.getWorktreePatch.mockResolvedValueOnce('diff --git a/a b/a\n+hello\n')
 
     const { generateRepositoryCommitMessage } = await import('#/server/modules/repo-read-paths.ts')
     await expect(generateRepositoryCommitMessage('/tmp/repo', '/tmp/repo', 'codex')).resolves.toEqual({
       ok: true,
-      message: 'feat: generated message',
+      message: 'feat: generated codex message',
+    })
+
+    expect(mocks.getWorktrees).toHaveBeenCalledWith('/tmp/repo', { includeStatus: false, signal: undefined })
+    expect(mocks.getWorktreeCommitMessageContext).toHaveBeenCalledWith('/tmp/repo', { signal: undefined })
+    expect(mocks.generateCodexCommitMessageFromContext).toHaveBeenCalledWith(
+      {
+        status: ['M  src/app.ts'],
+        stat: ' src/app.ts | 2 +-',
+        diff: 'diff --git a/src/app.ts b/src/app.ts\n+new',
+        untracked: '',
+        omitted: [],
+        truncated: false,
+      },
+      { cwd: '/tmp/repo', signal: undefined },
+    )
+    expect(mocks.getWorktreePatch).not.toHaveBeenCalled()
+    expect(mocks.generateCommitMessageFromPatch).not.toHaveBeenCalled()
+    expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
+  })
+
+  test('keeps Claude commit-message generation on the existing patch path', async () => {
+    mocks.getWorktrees.mockResolvedValueOnce([
+      { path: '/tmp/repo', branch: 'main', isBare: false, isPrimary: true, isDirty: true, changeCount: 1 },
+    ])
+    mocks.getWorktreePatch.mockResolvedValueOnce('diff --git a/a b/a\n+hello\n')
+    mocks.generateCommitMessageFromPatch.mockResolvedValueOnce({ ok: true, message: 'feat: generated claude message' })
+
+    const { generateRepositoryCommitMessage } = await import('#/server/modules/repo-read-paths.ts')
+    await expect(generateRepositoryCommitMessage('/tmp/repo', '/tmp/repo', 'claude')).resolves.toEqual({
+      ok: true,
+      message: 'feat: generated claude message',
     })
 
     expect(mocks.getWorktreePatch).toHaveBeenCalledWith('/tmp/repo', { signal: undefined })
     expect(mocks.generateCommitMessageFromPatch).toHaveBeenCalledWith(
-      'codex',
+      'claude',
       'diff --git a/a b/a\n+hello\n',
       { cwd: '/tmp/repo', signal: undefined },
     )
-    expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
+    expect(mocks.getWorktreeCommitMessageContext).not.toHaveBeenCalled()
+    expect(mocks.generateCodexCommitMessageFromContext).not.toHaveBeenCalled()
   })
 
   test('rejects unknown commit message providers before reading the patch', async () => {
@@ -482,6 +535,8 @@ describe('commit message AI read paths', () => {
 
     expect(mocks.getWorktreePatch).not.toHaveBeenCalled()
     expect(mocks.generateCommitMessageFromPatch).not.toHaveBeenCalled()
+    expect(mocks.getWorktreeCommitMessageContext).not.toHaveBeenCalled()
+    expect(mocks.generateCodexCommitMessageFromContext).not.toHaveBeenCalled()
   })
 })
 
@@ -1072,6 +1127,69 @@ describe('repo mutation invalidation publishing', () => {
       repoId: 'ssh-config://prod/srv/repo',
       query: 'repo-snapshot',
     })
+  })
+
+  test('discardRepositoryChanges dispatches local paths and publishes invalidation on success', async () => {
+    const { discardRepositoryChanges } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await discardRepositoryChanges('/tmp/repo', '/tmp/repo-worktree', ['src/app.ts', 'docs'])
+
+    expect(result).toEqual({ ok: true, message: '' })
+    expect(mocks.discardChangesForPaths).toHaveBeenCalledWith('/tmp/repo-worktree', ['src/app.ts', 'docs'], undefined)
+    expect(mocks.discardRemoteChangesForPaths).not.toHaveBeenCalled()
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: '/tmp/repo',
+      query: 'repo-snapshot',
+    })
+  })
+
+  test('discardRepositoryChanges dispatches remote paths and publishes invalidation on success', async () => {
+    const { discardRepositoryChanges } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await discardRepositoryChanges('ssh-config://prod/srv/repo', '/srv/repo', ['src/app.ts'])
+
+    expect(result).toEqual({ ok: true, message: '' })
+    expect(mocks.discardChangesForPaths).not.toHaveBeenCalled()
+    expect(mocks.discardRemoteChangesForPaths).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
+      '/srv/repo',
+      ['src/app.ts'],
+      { signal: undefined },
+    )
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: 'ssh-config://prod/srv/repo',
+      query: 'repo-snapshot',
+    })
+  })
+
+  test('discardRepositoryChanges publishes invalidation when Git was attempted and failed', async () => {
+    mocks.discardChangesForPaths.mockResolvedValueOnce({ ok: false, message: 'fatal: clean failed' })
+    const { discardRepositoryChanges } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await discardRepositoryChanges('/tmp/repo', '/tmp/repo-worktree', ['src/app.ts'])
+
+    expect(result).toEqual({ ok: false, message: 'fatal: clean failed' })
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: '/tmp/repo',
+      query: 'repo-snapshot',
+    })
+  })
+
+  test.each([
+    [[]],
+    [['']],
+    [['/absolute/path']],
+    [['../outside']],
+    [['src/../outside']],
+  ])('discardRepositoryChanges rejects invalid paths %o before publishing invalidation', async (paths) => {
+    const { discardRepositoryChanges } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await discardRepositoryChanges('/tmp/repo', '/tmp/repo-worktree', paths)
+
+    expect(result).toEqual({ ok: false, message: 'error.invalid-arguments' })
+    expect(mocks.discardChangesForPaths).not.toHaveBeenCalled()
+    expect(mocks.discardRemoteChangesForPaths).not.toHaveBeenCalled()
+    expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
   })
 
   test('mergeRepositoryBranch merges local worktrees through the local backend and publishes invalidation', async () => {

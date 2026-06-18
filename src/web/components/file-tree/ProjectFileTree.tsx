@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Terminal,
   Trash2,
+  Upload,
 } from 'lucide-react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import {
@@ -81,7 +82,13 @@ import {
 } from '#/web/components/file-tree/clipboard.ts'
 import { resolveDropTargetDirectory } from '#/web/components/file-tree/drop-target.ts'
 import type { WorktreeStatus } from '#/web/types.ts'
-import { chooseFileTreeDownloadDirectory, openInFinder, readSystemClipboardFilePaths } from '#/web/app-shell-client.ts'
+import {
+  chooseFileTreeDownloadDirectory,
+  chooseFileTreeUploadFiles,
+  hasNativeFilePicker,
+  openInFinder,
+  readSystemClipboardFilePaths,
+} from '#/web/app-shell-client.ts'
 import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 
 const ROOT_DIR = ''
@@ -257,6 +264,7 @@ export function ProjectFileTree({
   const flatNodeByAbsolutePath = useMemo(() => new Map(flatNodes.map((node) => [node.absolutePath, node])), [flatNodes])
   const visibleIds = useMemo(() => visibleFileTreeNodeIds(rootNodes), [rootNodes])
   const rootState = directories[ROOT_DIR]
+  const canUploadFiles = hasNativeFilePicker()
 
   useEffect(() => {
     if (!worktreePath || !revealRequest) return
@@ -676,6 +684,14 @@ export function ProjectFileTree({
     return firstSelected ? (flatNodeById.get(firstSelected) ?? null) : null
   }, [contextNode, contextOpen, flatNodeById, focusedNodeId, selection.selected])
 
+  const uploadTargetForNode = useCallback(
+    (node: FileTreeNode | null) => {
+      if (!worktreePath) return null
+      return resolveFileTreePasteTarget(worktreePath, node)
+    },
+    [worktreePath],
+  )
+
   const runTransfer = useCallback(
     async (targetDirPath: string, source: RepoFileTransferSource | null = readInternalFileTreeClipboard()) => {
       if (!worktreePath || !source) return
@@ -693,6 +709,28 @@ export function ProjectFileTree({
       }
     },
     [loadDirectory, repoId, worktreePath],
+  )
+
+  const runUpload = useCallback(
+    async (targetDirPath: string) => {
+      if (!worktreePath) return
+      const paths = await chooseFileTreeUploadFiles()
+      if (paths.length === 0) return
+      await runTransfer(targetDirPath, {
+        kind: 'localPaths',
+        items: paths.map((path) => ({ path })),
+      })
+    },
+    [runTransfer, worktreePath],
+  )
+
+  const runUploadForNode = useCallback(
+    (node: FileTreeNode | null) => {
+      const targetDirPath = uploadTargetForNode(node)
+      if (!targetDirPath) return
+      void runUpload(targetDirPath)
+    },
+    [runUpload, uploadTargetForNode],
   )
 
   const runMove = useCallback(
@@ -974,6 +1012,8 @@ export function ProjectFileTree({
                     onBeginCreateDirectory={beginCreateDirectoryForNode}
                     onRefresh={refreshDirectoryForContextNode}
                     onDownload={runDownload}
+                    canUploadFiles={canUploadFiles}
+                    onUpload={runUploadForNode}
                     onKeyDown={handleKeyDown}
                     onFocus={setFocusedNodeId}
                     onDrop={handleDrop}
@@ -1004,6 +1044,8 @@ export function ProjectFileTree({
                     />
                   </ContextMenuTrigger>
                   <FileTreeEmptyContextMenu
+                    canUploadFiles={canUploadFiles}
+                    onUpload={() => runUploadForNode(null)}
                     onCreateDirectory={() => beginCreateDirectory(rootCreateDirectoryTarget())}
                     onRefresh={() => refreshTreeDirectory(rootCreateDirectoryTarget())}
                   />
@@ -1064,6 +1106,8 @@ function FileTreeRow({
   onBeginCreateDirectory,
   onRefresh,
   onDownload,
+  canUploadFiles,
+  onUpload,
   onKeyDown,
   onFocus,
   onDrop,
@@ -1101,6 +1145,8 @@ function FileTreeRow({
   onBeginCreateDirectory: (node: FileTreeNode | null) => void
   onRefresh: (node: FileTreeNode | null) => void
   onDownload: (nodes: FileTreeNode[]) => void
+  canUploadFiles: boolean
+  onUpload: (node: FileTreeNode | null) => void
   onKeyDown: (node: FileTreeNode, event: KeyboardEvent) => void
   onFocus: (nodeId: string) => void
   onDrop: (node: FileTreeNode, event: DragEvent<HTMLDivElement>) => void
@@ -1218,6 +1264,8 @@ function FileTreeRow({
           onBeginCreateDirectory={onBeginCreateDirectory}
           onRefresh={onRefresh}
           onDownload={onDownload}
+          canUploadFiles={canUploadFiles}
+          onUpload={onUpload}
         />
       </ContextMenu>
       {renameNodeId === node.id && renameError ? (
@@ -1262,6 +1310,8 @@ function FileTreeRow({
             onBeginCreateDirectory={onBeginCreateDirectory}
             onRefresh={onRefresh}
             onDownload={onDownload}
+            canUploadFiles={canUploadFiles}
+            onUpload={onUpload}
             onKeyDown={onKeyDown}
             onFocus={onFocus}
             onDrop={onDrop}
@@ -1295,6 +1345,8 @@ function FileTreeContextMenu({
   onBeginCreateDirectory,
   onRefresh,
   onDownload,
+  canUploadFiles,
+  onUpload,
 }: {
   repoId: string
   node: FileTreeNode
@@ -1304,6 +1356,8 @@ function FileTreeContextMenu({
   onBeginCreateDirectory: (node: FileTreeNode | null) => void
   onRefresh: (node: FileTreeNode | null) => void
   onDownload: (nodes: FileTreeNode[]) => void
+  canUploadFiles: boolean
+  onUpload: (node: FileTreeNode | null) => void
 }) {
   const t = useT()
   const realNode = isWritableNode(node)
@@ -1323,6 +1377,12 @@ function FileTreeContextMenu({
         <Download className="size-3.5" />
         {t('file-tree.download')}
       </ContextMenuItem>
+      {canUploadFiles ? (
+        <ContextMenuItem onSelect={() => onUpload(node)}>
+          <Upload className="size-3.5" />
+          {t('file-tree.upload-file')}
+        </ContextMenuItem>
+      ) : null}
       <ContextMenuItem disabled={!realNode} onSelect={() => onBeginCreateDirectory(node)}>
         <FolderPlus className="size-3.5" />
         {t('file-tree.new-folder')}
@@ -1359,15 +1419,25 @@ function FileTreeContextMenu({
 }
 
 function FileTreeEmptyContextMenu({
+  canUploadFiles,
+  onUpload,
   onCreateDirectory,
   onRefresh,
 }: {
+  canUploadFiles: boolean
+  onUpload: () => void
   onCreateDirectory: () => void
   onRefresh: () => void
 }) {
   const t = useT()
   return (
     <ContextMenuContent>
+      {canUploadFiles ? (
+        <ContextMenuItem onSelect={onUpload}>
+          <Upload className="size-3.5" />
+          {t('file-tree.upload-file')}
+        </ContextMenuItem>
+      ) : null}
       <ContextMenuItem onSelect={onCreateDirectory}>
         <FolderPlus className="size-3.5" />
         {t('file-tree.new-folder')}

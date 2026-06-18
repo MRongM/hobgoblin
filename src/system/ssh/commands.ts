@@ -51,6 +51,7 @@ export type RemoteCommandKind =
   | { type: 'gitCommitAll'; path: string; message: string }
   | { type: 'gitMerge'; path: string; branch: string }
   | { type: 'gitResetHard'; path: string }
+  | { type: 'gitDiscardChanges'; path: string; paths: string[] }
   | { type: 'gitBranchCreate'; path: string; branch: string; baseBranch: string }
   | { type: 'gitBranchTrackRemote'; path: string; localBranch: string; remoteRef: string }
   | { type: 'gitFetchBranch'; path: string; remote: string; remoteBranch: string; branch: string }
@@ -342,6 +343,8 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return `git -C ${shellQuote(command.path)} merge -- ${shellQuote(command.branch)}`
     case 'gitResetHard':
       return `git -C ${shellQuote(command.path)} reset --hard`
+    case 'gitDiscardChanges':
+      return remoteDiscardChangesScript(command)
     case 'gitBranchCreate':
       return `git -C ${shellQuote(command.path)} branch -- ${shellQuote(command.branch)} ${shellQuote(command.baseBranch)}`
     case 'gitBranchTrackRemote':
@@ -381,6 +384,16 @@ function scriptForCommand(command: RemoteCommandKind): string {
   }
   const exhaustive: never = command
   return exhaustive
+}
+
+function remoteDiscardChangesScript(command: Extract<RemoteCommandKind, { type: 'gitDiscardChanges' }>): string {
+  const repo = shellQuote(command.path)
+  const pathspecs = command.paths.map((item) => shellQuote(item)).join(' ')
+  const restoreCommands = command.paths.map((pathspec) => {
+    const quoted = shellQuote(pathspec)
+    return `{ git -C ${repo} ls-files --error-unmatch -- ${quoted} >/dev/null 2>&1; code=$?; if [ "$code" -eq 0 ]; then git -C ${repo} restore --staged --worktree --source=HEAD -- ${quoted}; elif [ "$code" -ne 1 ]; then exit "$code"; fi; }`
+  })
+  return [...restoreCommands, `git -C ${repo} clean -fd -- ${pathspecs}`].join(' && ')
 }
 
 function shellQuote(value: string): string {

@@ -216,6 +216,20 @@ describe('remote command scripts', () => {
     expect(invocation.script).toBe("git -C '/srv/repo-feature/user'\\''s-work' reset --hard")
   })
 
+  test('renders quoted remote discard selected changes command', () => {
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'gitDiscardChanges',
+      path: "/srv/repo-feature/user's-work",
+      paths: ['src/app.ts', "docs/user's guide"],
+    })
+
+    expect(invocation.script).toBe(
+      "{ git -C '/srv/repo-feature/user'\\''s-work' ls-files --error-unmatch -- 'src/app.ts' >/dev/null 2>&1; code=$?; if [ \"$code\" -eq 0 ]; then git -C '/srv/repo-feature/user'\\''s-work' restore --staged --worktree --source=HEAD -- 'src/app.ts'; elif [ \"$code\" -ne 1 ]; then exit \"$code\"; fi; } && " +
+        "{ git -C '/srv/repo-feature/user'\\''s-work' ls-files --error-unmatch -- 'docs/user'\\''s guide' >/dev/null 2>&1; code=$?; if [ \"$code\" -eq 0 ]; then git -C '/srv/repo-feature/user'\\''s-work' restore --staged --worktree --source=HEAD -- 'docs/user'\\''s guide'; elif [ \"$code\" -ne 1 ]; then exit \"$code\"; fi; } && " +
+        "git -C '/srv/repo-feature/user'\\''s-work' clean -fd -- 'src/app.ts' 'docs/user'\\''s guide'",
+    )
+  })
+
   test('renders quoted remote branch creation commands', () => {
     expect(
       buildRemoteCommandInvocation(TARGET, {

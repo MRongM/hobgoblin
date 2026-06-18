@@ -125,6 +125,29 @@ async function publishSnapshotInvalidationAfterMutation(
   return result
 }
 
+function publishSnapshotInvalidationAfterGitAttempt(
+  cwd: string,
+  result: ExecResult,
+  sourceToken?: string,
+): ExecResult {
+  publishRepoSnapshotInvalidation(cwd, sourceToken)
+  return result
+}
+
+function isSafeRelativeGitPath(value: unknown): value is string {
+  if (typeof value !== 'string') return false
+  if (value.trim() === '') return false
+  if (value.startsWith('/')) return false
+  return !value.split('/').some((part) => part === '..')
+}
+
+function normalizeDiscardPaths(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null
+  if (value.length === 0) return null
+  const paths = value.filter(isSafeRelativeGitPath)
+  return paths.length === value.length ? paths : null
+}
+
 async function withMergedAbortSignal<T>(
   signals: Array<AbortSignal | undefined>,
   task: (signal: AbortSignal | undefined) => Promise<T>,
@@ -506,6 +529,26 @@ export async function resetRepositoryHard(
     return await publishSnapshotInvalidationAfterMutation(
       repoId,
       await backend.resetHard(worktreePath, signal),
+      sourceToken,
+    )
+  })
+}
+
+export async function discardRepositoryChanges(
+  repoId: string,
+  worktreePath: string,
+  paths: unknown,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  const normalizedPaths = normalizeDiscardPaths(paths)
+  if (!isValidRepoLocator(repoId) || !isAbsoluteWorktreePath(worktreePath) || !normalizedPaths) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  return await runWithRepoBackend(repoId, async (backend) => {
+    return publishSnapshotInvalidationAfterGitAttempt(
+      repoId,
+      await backend.discardChanges(worktreePath, normalizedPaths, signal),
       sourceToken,
     )
   })

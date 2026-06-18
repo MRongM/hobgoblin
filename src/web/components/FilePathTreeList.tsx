@@ -6,6 +6,7 @@ interface FilePathTreeListProps<T> {
   items: T[]
   getPath: (item: T) => string
   renderFile: (row: FilePathTreeFileRow<T>) => ReactNode
+  renderDirectory?: (row: FilePathTreeDirectoryRow) => ReactNode
   className?: string
 }
 
@@ -18,7 +19,7 @@ export interface FilePathTreeFileRow<T> {
   item: T
 }
 
-interface FilePathTreeDirectoryRow {
+export interface FilePathTreeDirectoryRow {
   kind: 'directory'
   name: string
   path: string
@@ -86,22 +87,32 @@ export function buildFilePathTreeRows<T>(items: T[], getPath: (item: T) => strin
   return flattenTreeRows(root.children, 0)
 }
 
-export function FilePathTreeList<T>({ items, getPath, renderFile, className }: FilePathTreeListProps<T>) {
+export function FilePathTreeList<T>({
+  items,
+  getPath,
+  renderFile,
+  renderDirectory,
+  className,
+}: FilePathTreeListProps<T>) {
   const rows = buildFilePathTreeRows(items, getPath)
 
   return (
     <ul className={className}>
       {rows.map((row) =>
         row.kind === 'directory' ? (
-          <li
-            key={`dir:${row.path}`}
-            data-file-folder-path={row.path}
-            className="flex min-h-6 items-center gap-1.5 pr-2 text-xs text-muted-foreground"
-            style={{ paddingLeft: `${0.5 + row.depth * 1}rem` }}
-          >
-            <Folder size={13} className="shrink-0" />
-            <span className="min-w-0 truncate font-mono">{row.name}</span>
-          </li>
+          renderDirectory ? (
+            <Fragment key={`dir:${row.path}`}>{renderDirectory(row)}</Fragment>
+          ) : (
+            <li
+              key={`dir:${row.path}`}
+              data-file-folder-path={row.path}
+              className="flex min-h-6 items-center gap-1.5 pr-2 text-xs text-muted-foreground"
+              style={{ paddingLeft: `${0.5 + row.depth * 1}rem` }}
+            >
+              <Folder size={13} className="shrink-0" />
+              <span className="min-w-0 truncate font-mono">{row.name}</span>
+            </li>
+          )
         ) : (
           <Fragment key={`file:${row.id}`}>{renderFile(row)}</Fragment>
         ),

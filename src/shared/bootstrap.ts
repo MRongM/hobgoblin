@@ -12,6 +12,7 @@ export type RendererNativeCapability =
   | 'open-settings-window'
   | 'open-external-url'
   | 'open-directory-dialog'
+  | 'open-file-dialog'
   | 'consume-external-open-paths'
   | 'open-in-finder'
   | 'clipboard-file-paths'
@@ -25,6 +26,7 @@ export const ELECTRON_RENDERER_CAPABILITIES = [
   'open-settings-window',
   'open-external-url',
   'open-directory-dialog',
+  'open-file-dialog',
   'consume-external-open-paths',
   'open-in-finder',
   'clipboard-file-paths',

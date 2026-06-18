@@ -59,6 +59,18 @@ describe('i18n dictionaries', () => {
     expect(zh['action.pull-remote-branch-title']).toBe('从远程分支创建本地分支')
   })
 
+  test('includes discard selected changes copy', () => {
+    expect(en['changes.selection-toggle']).toBe('Select')
+    expect(en['changes.selection-toggle-title']).toBe('Show selection checkboxes')
+    expect(en['changes.discard-selected']).toBe('Discard selected')
+    expect(en['changes.selected-count']).toBe('{count} selected')
+    expect(en['changes.discard-confirm-file-title']).toBe('Discard changes to this file?')
+    expect(en['changes.discard-confirm-folder-title']).toBe('Discard changes in this folder?')
+    expect(en['changes.discard-confirm-multiple-title']).toBe('Discard changes to {count} selected items?')
+    expect(en['changes.discard-confirm-body']).toContain('staged, unstaged, and untracked')
+    expect(en['changes.discard-confirm-confirm']).toBe('Discard')
+  })
+
   test('uses Hobgoblin in user-visible product copy', () => {
     for (const [lang, dict] of Object.entries(dicts)) {
       expect(dict['about.app'], `${lang}.about.app`).toBe('Hobgoblin')

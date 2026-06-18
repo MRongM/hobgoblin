@@ -1,15 +1,19 @@
-import { useState } from 'react'
-import { FolderTree } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { FolderTree, RotateCcw } from 'lucide-react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
+import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import { FileListViewModeControl, type FileListViewMode } from '#/web/components/FileListViewModeControl.tsx'
 import { BranchActionControls } from '#/web/components/BranchActionControls.tsx'
 import { EmptyState, ScrollPane } from '#/web/components/Layout.tsx'
 import { StatusListSkeleton } from '#/web/components/Skeleton.tsx'
 import { StatusList } from '#/web/components/StatusList.tsx'
+import { Button } from '#/web/components/ui/button.tsx'
+import { Switch } from '#/web/components/ui/switch.tsx'
 import type { BranchActionItemGroups } from '#/web/hooks/useBranchActionItems.ts'
 import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.ts'
 import type { BranchDetailRepo, SelectedBranchDetailPresentation } from '#/web/components/branch-detail/model.ts'
 import { getSelectedBranchDetailPresentation } from '#/web/components/branch-detail/model.ts'
+import { discardRepositoryChanges } from '#/web/repo-client.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 
@@ -43,6 +47,69 @@ function projectChangesRepoEqual(a: BranchDetailRepo | undefined, b: BranchDetai
   )
 }
 
+function changedFilePaths(status: SelectedBranchDetailPresentation['selectedStatus']): string[] {
+  return status.flatMap((worktree) => worktree.entries.map((entry) => entry.path))
+}
+
+function changedDirectoryPaths(filePaths: string[]): string[] {
+  const directories = new Set<string>()
+  for (const filePath of filePaths) {
+    const parts = filePath.split('/').filter(Boolean)
+    let current = ''
+    for (const part of parts.slice(0, -1)) {
+      current = current ? `${current}/${part}` : part
+      directories.add(current)
+    }
+  }
+  return Array.from(directories)
+}
+
+function isNestedPath(path: string, directory: string): boolean {
+  return path.startsWith(`${directory}/`)
+}
+
+function toggleFileTargetSelection(selected: ReadonlySet<string>, path: string): Set<string> {
+  const next = new Set(selected)
+  if (next.has(path)) {
+    next.delete(path)
+    return next
+  }
+  const parentSelection = Array.from(next).find((target) => isNestedPath(path, target))
+  if (parentSelection) {
+    next.delete(parentSelection)
+    return next
+  }
+  next.add(path)
+  return next
+}
+
+function toggleDirectoryTargetSelection(selected: ReadonlySet<string>, path: string): Set<string> {
+  const next = new Set(selected)
+  if (next.has(path)) {
+    next.delete(path)
+    return next
+  }
+  for (const target of next) {
+    if (isNestedPath(target, path)) next.delete(target)
+  }
+  next.add(path)
+  return next
+}
+
+function discardConfirmTitle(
+  t: (key: string) => string,
+  selectedTargets: ReadonlySet<string>,
+  directoryTargets: ReadonlySet<string>,
+): string {
+  if (selectedTargets.size === 1) {
+    const [target] = Array.from(selectedTargets)
+    return target && directoryTargets.has(target)
+      ? t('changes.discard-confirm-folder-title')
+      : t('changes.discard-confirm-file-title')
+  }
+  return t('changes.discard-confirm-multiple-title').replace('{count}', String(selectedTargets.size))
+}
+
 export function ProjectChangesPanel({
   repoId,
   onRevealPath,
@@ -52,6 +119,9 @@ export function ProjectChangesPanel({
 }) {
   const t = useT()
   const [fileViewMode, setFileViewMode] = useState<FileListViewMode>('tree')
+  const [selectionEnabled, setSelectionEnabled] = useState(false)
+  const [selectedTargets, setSelectedTargets] = useState<Set<string>>(() => new Set())
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false)
   const repo = useStoreWithEqualityFn(
     useReposStore,
     (state) => {
@@ -94,14 +164,34 @@ export function ProjectChangesPanel({
     projectChangesRepoEqual,
   )
 
+  const detail = repo ? getSelectedBranchDetailPresentation(repo) : null
+  const selectedStatus = detail?.selectedStatus ?? []
+  const currentChangedFiles = useMemo(() => changedFilePaths(selectedStatus), [selectedStatus])
+  const currentChangedDirectories = useMemo(() => changedDirectoryPaths(currentChangedFiles), [currentChangedFiles])
+  const currentChangedDirectorySet = useMemo(() => new Set(currentChangedDirectories), [currentChangedDirectories])
+  const currentSelectableTargets = useMemo(
+    () => new Set([...currentChangedFiles, ...currentChangedDirectories]),
+    [currentChangedDirectories, currentChangedFiles],
+  )
+
+  useEffect(() => {
+    setSelectedTargets((current) => {
+      const next = new Set(Array.from(current).filter((path) => currentSelectableTargets.has(path)))
+      return next.size === current.size ? current : next
+    })
+  }, [currentSelectableTargets])
+
   if (!repo) return null
 
-  const detail = getSelectedBranchDetailPresentation(repo)
-  if (!detail.branch) {
+  if (!detail?.branch) {
     return <EmptyState title={t(repo.data.branches.length === 0 ? 'branches.empty' : 'branches.filter-empty')} />
   }
 
   const hasChanges = detail.selectedStatus.some((worktree) => worktree.entries.length > 0)
+  const handleSelectionEnabledChange = (enabled: boolean) => {
+    setSelectionEnabled(enabled)
+    if (!enabled) setSelectedTargets(new Set())
+  }
 
   return (
     <section className="flex min-h-0 flex-1 flex-col">
@@ -111,7 +201,11 @@ export function ProjectChangesPanel({
         disableCommit={!hasChanges}
         showFileViewMode={hasChanges}
         fileViewMode={fileViewMode}
+        selectionEnabled={selectionEnabled}
+        selectedCount={selectedTargets.size}
         onFileViewModeChange={setFileViewMode}
+        onSelectionEnabledChange={handleSelectionEnabledChange}
+        onDiscardSelected={() => setConfirmDiscardOpen(true)}
       />
       <ProjectChangesContent
         repo={repo}
@@ -121,7 +215,28 @@ export function ProjectChangesPanel({
         statusError={detail.errors.status}
         statusStale={detail.stale.status}
         fileViewMode={fileViewMode}
+        selectionEnabled={selectionEnabled}
+        selectedTargets={selectedTargets}
+        onToggleFile={(path) => setSelectedTargets((current) => toggleFileTargetSelection(current, path))}
+        onToggleDirectory={(path) => setSelectedTargets((current) => toggleDirectoryTargetSelection(current, path))}
         onRevealPath={onRevealPath}
+      />
+      <ConfirmDialog
+        open={confirmDiscardOpen}
+        title={discardConfirmTitle(t, selectedTargets, currentChangedDirectorySet)}
+        message={t('changes.discard-confirm-body')}
+        confirmLabel={t('changes.discard-confirm-confirm')}
+        destructive
+        onCancel={() => setConfirmDiscardOpen(false)}
+        onConfirm={async () => {
+          const worktreePath = detail.branch?.worktree?.path
+          if (!worktreePath) return
+          const paths = Array.from(selectedTargets)
+          const result = await discardRepositoryChanges(repo.id, worktreePath, paths)
+          useReposStore.getState().setLastResult(repo.id, result, repo.instanceToken)
+          if (result.ok) setSelectedTargets(new Set())
+          setConfirmDiscardOpen(false)
+        }}
       />
     </section>
   )
@@ -133,18 +248,27 @@ function ProjectChangesActionBar({
   disableCommit,
   showFileViewMode,
   fileViewMode,
+  selectionEnabled,
+  selectedCount,
   onFileViewModeChange,
+  onSelectionEnabledChange,
+  onDiscardSelected,
 }: {
   repo: BranchDetailRepo
   branch: ProjectChangesBranch
   disableCommit: boolean
   showFileViewMode: boolean
   fileViewMode: FileListViewMode
+  selectionEnabled: boolean
+  selectedCount: number
   onFileViewModeChange: (mode: FileListViewMode) => void
+  onSelectionEnabledChange: (enabled: boolean) => void
+  onDiscardSelected: () => void
 }) {
+  const t = useT()
   const actions = useBranchActionItems(repo, branch)
   const commitItem = actions.mainItems.find((item) => item.id === 'commit' && item.visible)
-  if (!commitItem && !showFileViewMode) return <>{actions.dialogs}</>
+  if (!commitItem && !showFileViewMode && selectedCount === 0) return <>{actions.dialogs}</>
 
   const commitActions: BranchActionItemGroups | null = commitItem
     ? {
@@ -161,6 +285,37 @@ function ProjectChangesActionBar({
       data-testid="project-changes-action-bar"
       className="flex min-h-8 shrink-0 items-center justify-end gap-1 border-b border-separator/70 bg-card px-2"
     >
+      {selectedCount > 0 && (
+        <>
+          <span className="mr-auto text-xs text-muted-foreground">
+            {t('changes.selected-count').replace('{count}', String(selectedCount))}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="destructive"
+            aria-label={t('changes.discard-selected')}
+            onClick={onDiscardSelected}
+          >
+            <RotateCcw size={14} />
+            {t('changes.discard-selected')}
+          </Button>
+        </>
+      )}
+      {showFileViewMode && (
+        <label
+          className="flex shrink-0 items-center gap-1.5 px-1 text-xs text-muted-foreground"
+          title={t('changes.selection-toggle-title')}
+        >
+          <Switch
+            checked={selectionEnabled}
+            onCheckedChange={onSelectionEnabledChange}
+            aria-label={t('changes.selection-toggle-title')}
+            title={t('changes.selection-toggle-title')}
+          />
+          <span className="text-[11px] leading-none">{t('changes.selection-toggle')}</span>
+        </label>
+      )}
       {commitActions && <BranchActionControls actions={commitActions} variant="bar" />}
       {showFileViewMode && <FileListViewModeControl value={fileViewMode} onChange={onFileViewModeChange} />}
       {actions.dialogs}
@@ -176,6 +331,10 @@ function ProjectChangesContent({
   statusError,
   statusStale,
   fileViewMode,
+  selectionEnabled,
+  selectedTargets,
+  onToggleFile,
+  onToggleDirectory,
   onRevealPath,
 }: {
   repo: Pick<BranchDetailRepo, 'data'>
@@ -185,6 +344,10 @@ function ProjectChangesContent({
   statusError: string | null
   statusStale: boolean
   fileViewMode: FileListViewMode
+  selectionEnabled: boolean
+  selectedTargets: ReadonlySet<string>
+  onToggleFile: (path: string) => void
+  onToggleDirectory: (path: string) => void
   onRevealPath?: (relativePath: string) => void
 }) {
   const t = useT()
@@ -207,10 +370,23 @@ function ProjectChangesContent({
       {statusStale && statusError && <StaleStatusNotice message={statusError} />}
       {totalEntries > 0 ? (
         <ScrollPane>
-          <StatusList status={selectedStatus} viewMode={fileViewMode} onPathClick={onRevealPath} />
+          <StatusList
+            status={selectedStatus}
+            viewMode={fileViewMode}
+            selectedTargets={selectionEnabled ? selectedTargets : undefined}
+            onToggleFile={selectionEnabled ? onToggleFile : undefined}
+            onToggleDirectory={selectionEnabled ? onToggleDirectory : undefined}
+            onPathClick={onRevealPath}
+          />
         </ScrollPane>
       ) : (
-        <StatusList status={selectedStatus} onPathClick={onRevealPath} />
+        <StatusList
+          status={selectedStatus}
+          selectedTargets={selectionEnabled ? selectedTargets : undefined}
+          onToggleFile={selectionEnabled ? onToggleFile : undefined}
+          onToggleDirectory={selectionEnabled ? onToggleDirectory : undefined}
+          onPathClick={onRevealPath}
+        />
       )}
     </div>
   )

@@ -24,6 +24,7 @@ import {
   createRepositoryBranch,
   createRepositoryFileTreeDirectory,
   createRepositoryWorktree,
+  discardRepositoryChanges,
   deleteRepositoryFileTreeEntries,
   deleteRepositoryBranch,
   fetchRepository,
@@ -413,6 +414,20 @@ export function createRepoRoutes() {
         () => resetRepositoryHard(repoId, worktreePath, c.req.raw.signal, sourceToken),
         { ok: false, message: 'error.failed-read-repo' },
         'reset-hard',
+      ),
+    )
+  })
+  app.post('/discard-changes', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const paths = Array.isArray(body?.paths) ? body.paths : []
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => discardRepositoryChanges(repoId, worktreePath, paths, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'discard-changes',
       ),
     )
   })

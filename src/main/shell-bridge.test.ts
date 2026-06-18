@@ -5,6 +5,7 @@ import {
   SHELL_CONSUME_EXTERNAL_OPEN_PATHS_CHANNEL,
   SHELL_OPEN_DIRECTORY_DIALOG_CHANNEL,
   SHELL_OPEN_EXTERNAL_URL_CHANNEL,
+  SHELL_OPEN_FILE_DIALOG_CHANNEL,
   SHELL_OPEN_SETTINGS_WINDOW_CHANNEL,
   SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,
   SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL,
@@ -77,6 +78,7 @@ describe('shell bridge IPC', () => {
     expect(ipcHandlers.has(SHELL_OPEN_SETTINGS_WINDOW_CHANNEL)).toBe(true)
     expect(ipcHandlers.has(SHELL_OPEN_EXTERNAL_URL_CHANNEL)).toBe(true)
     expect(ipcHandlers.has(SHELL_OPEN_DIRECTORY_DIALOG_CHANNEL)).toBe(true)
+    expect(ipcHandlers.has(SHELL_OPEN_FILE_DIALOG_CHANNEL)).toBe(true)
     expect(ipcHandlers.has(SHELL_CONSUME_EXTERNAL_OPEN_PATHS_CHANNEL)).toBe(true)
     expect(ipcHandlers.has(SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL)).toBe(true)
     expect(ipcHandlers.has(SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL)).toBe(true)
@@ -95,6 +97,40 @@ describe('shell bridge IPC', () => {
       properties: ['openDirectory'],
       title: 'Open Git Repository',
     })
+  })
+
+  test('parents file dialogs to the sender window', async () => {
+    const senderWindow = {} as any
+    browserWindowFromWebContents.mockReturnValue(senderWindow)
+    showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: ['/tmp/a.txt', '/tmp/b.txt'] })
+
+    const result = await invoke(SHELL_OPEN_FILE_DIALOG_CHANNEL, { title: 'Upload files' })
+
+    expect(result).toEqual(['/tmp/a.txt', '/tmp/b.txt'])
+    expect(browserWindowFromWebContents).toHaveBeenCalledWith(trustedSender)
+    expect(showOpenDialog).toHaveBeenCalledWith(senderWindow, {
+      properties: ['openFile', 'multiSelections'],
+      title: 'Upload files',
+    })
+  })
+
+  test('returns an empty file list when the file dialog is canceled', async () => {
+    browserWindowFromWebContents.mockReturnValue({} as any)
+    showOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: ['/tmp/a.txt'] })
+
+    const result = await invoke(SHELL_OPEN_FILE_DIALOG_CHANNEL, { title: 'Upload files' })
+
+    expect(result).toEqual([])
+  })
+
+  test('returns no file paths for untrusted file dialog senders', async () => {
+    const result = await invokeWithEvent(SHELL_OPEN_FILE_DIALOG_CHANNEL, { title: 'Upload files' }, {
+      sender: { id: 99, once: vi.fn() },
+      senderFrame: { url: 'https://example.com/' },
+    } as any)
+
+    expect(result).toEqual([])
+    expect(showOpenDialog).not.toHaveBeenCalled()
   })
 
   test('opens settings through an effect intent on the activated main window', async () => {

@@ -21,9 +21,13 @@ import { getRemoteTrackingBranches as getLocalRemoteTrackingBranches } from '#/s
 import { getWorkingStatus } from '#/system/git/status.ts'
 import { createWorktree, getWorktrees, removeWorktree } from '#/system/git/worktrees.ts'
 import { getWorktreePatch } from '#/system/git/patch.ts'
+import {
+  getWorktreeCommitMessageContext,
+  type CommitMessageContext,
+} from '#/system/git/commit-message-context.ts'
 import { commitAllChanges } from '#/system/git/commit.ts'
 import { mergeBranch } from '#/system/git/merge.ts'
-import { resetHardToCurrentHead } from '#/system/git/reset.ts'
+import { discardChangesForPaths, resetHardToCurrentHead } from '#/system/git/reset.ts'
 import {
   type CommitDetail,
   type CommitHistoryEntry,
@@ -44,6 +48,7 @@ import {
   createRemoteTrackingBranch,
   createRemoteWorktree,
   deleteRemoteBranch,
+  discardRemoteChangesForPaths,
   fetchRemoteRepository,
   getRemoteBrowserUrl,
   getRemoteCommitDetail,
@@ -72,6 +77,10 @@ import type { CreateWorktreeInput } from '#/shared/worktree-create.ts'
 
 type ProbeAvailability = { ok: true } | { ok: false; message: string }
 
+export type CommitMessageContextResult =
+  | { ok: true; worktreePath: string; context: CommitMessageContext }
+  | { ok: false; message: string }
+
 export interface RepoBackend {
   id: string
   kind: 'local' | 'remote'
@@ -93,6 +102,7 @@ export interface RepoBackend {
   commitAll(worktreePath: string, message: string, signal?: AbortSignal): Promise<ExecResult>
   merge(worktreePath: string, branch: string, signal?: AbortSignal): Promise<ExecResult>
   resetHard(worktreePath: string, signal?: AbortSignal): Promise<ExecResult>
+  discardChanges(worktreePath: string, paths: string[], signal?: AbortSignal): Promise<ExecResult>
   createBranch(branch: string, baseBranch: string, signal?: AbortSignal): Promise<ExecResult>
   trackRemoteBranch(localBranch: string, remoteRef: string, signal?: AbortSignal): Promise<ExecResult>
   createWorktree(input: CreateWorktreeInput, signal?: AbortSignal): Promise<ExecResult>
@@ -111,6 +121,7 @@ export interface RepoBackend {
     },
     signal?: AbortSignal,
   ): Promise<ExecResult>
+  getCommitMessageContext?(worktreePath: string, signal?: AbortSignal): Promise<CommitMessageContextResult>
   getPatch(worktreePath: string, signal?: AbortSignal): Promise<ExecResult>
   getBrowserRemoteUrl(branch?: string, signal?: AbortSignal): Promise<string | null>
 }
@@ -307,6 +318,10 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       if (!isValidCwd(worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
       return await resetHardToCurrentHead(worktreePath, signal)
     },
+    async discardChanges(worktreePath, paths, signal) {
+      if (!isValidCwd(worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
+      return await discardChangesForPaths(worktreePath, paths, signal)
+    },
     async createBranch(branch, baseBranch, signal) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       return await createLocalBranch(repoId, branch, baseBranch, signal)
@@ -348,6 +363,21 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
         { force: input.forceDeleteBranch, alsoDeleteUpstream: input.alsoDeleteUpstream },
         signal,
       )
+    },
+    async getCommitMessageContext(worktreePath, signal) {
+      if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
+      const worktrees = await getWorktrees(repoId, { includeStatus: false, signal })
+      const known = resolveKnownWorktree(worktrees, worktreePath)
+      if (!known.ok) return { ok: false, message: known.message }
+      try {
+        return {
+          ok: true,
+          worktreePath: known.path,
+          context: await getWorktreeCommitMessageContext(known.path, { signal }),
+        }
+      } catch (err) {
+        return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      }
     },
     async getPatch(worktreePath, signal) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
@@ -430,6 +460,9 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
     },
     async resetHard(worktreePath, signal) {
       return await resetRemoteHard(target, worktreePath, { signal })
+    },
+    async discardChanges(worktreePath, paths, signal) {
+      return await discardRemoteChangesForPaths(target, worktreePath, paths, { signal })
     },
     async createBranch(branch, baseBranch, signal) {
       return await createRemoteBranch(target, { branch, baseBranch, signal })

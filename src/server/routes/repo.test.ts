@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  discardRepositoryChanges: vi.fn(),
   getRepositoryCommitDetail: vi.fn(),
   getRepositoryHistory: vi.fn(),
   exportRepositoryFilesToLocalDirectory: vi.fn(),
@@ -30,6 +31,7 @@ vi.mock('#/server/modules/repo-write-paths.ts', () => ({
   createRepositoryWorktree: vi.fn(),
   deleteRepositoryBranch: vi.fn(),
   deleteRepositoryFileTreeEntries: vi.fn(),
+  discardRepositoryChanges: mocks.discardRepositoryChanges,
   fetchRepository: vi.fn(),
   getRepositoryRemoteBranches: vi.fn(),
   mergeRepositoryBranch: vi.fn(),
@@ -84,6 +86,7 @@ describe('repo routes', () => {
       parents: [],
       files: [],
     })
+    mocks.discardRepositoryChanges.mockResolvedValue({ ok: true, message: '' })
   })
 
   test('serves repository history with normalized body values', async () => {
@@ -172,6 +175,32 @@ describe('repo routes', () => {
       targetDirPath: '/Downloads',
       paths: ['/repo/a.txt'],
     })
+  })
+
+  test('routes discard selected changes with parsed body values', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/discard-changes', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        repoId: '/repo',
+        worktreePath: '/repo',
+        paths: ['src/app.ts', 'docs'],
+        sourceToken: 'client_123',
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true, message: '' })
+    expect(mocks.discardRepositoryChanges).toHaveBeenCalledWith(
+      '/repo',
+      '/repo',
+      ['src/app.ts', 'docs'],
+      expect.any(AbortSignal),
+      'client_123',
+    )
   })
 
 })

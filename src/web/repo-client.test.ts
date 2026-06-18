@@ -594,4 +594,28 @@ describe('repo-client', () => {
       }),
     )
   })
+
+  test('requests discard selected changes through the embedded server', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, message: '' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { discardRepositoryChanges } = await import('#/web/repo-client.ts')
+    await expect(discardRepositoryChanges('/repo', '/repo', ['src/app.ts', 'docs'])).resolves.toEqual({
+      ok: true,
+      message: '',
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:32100/api/repo/discard-changes',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
+        body: JSON.stringify({ repoId: '/repo', worktreePath: '/repo', paths: ['src/app.ts', 'docs'] }),
+      }),
+    )
+  })
 })

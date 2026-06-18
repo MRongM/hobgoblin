@@ -47,6 +47,8 @@ const openRepositoryTerminal = vi.fn(async (_path: string) => ({ ok: true as con
 const openInFinder = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
 const readSystemClipboardFilePaths = vi.fn(async () => ['/tmp/report.pdf'])
 const chooseFileTreeDownloadDirectory = vi.fn(async () => '/Downloads')
+const chooseFileTreeUploadFiles = vi.fn(async () => ['/Users/test/Desktop/upload-a.txt', '/Users/test/Desktop/upload-b.txt'])
+const hasNativeFilePicker = vi.fn(() => true)
 
 vi.mock('#/web/repo-client.ts', () => ({
   getRepositoryFileTree: (...args: GetRepositoryFileTreeArgs) => getRepositoryFileTree(...args),
@@ -65,6 +67,8 @@ vi.mock('#/web/app-shell-client.ts', () => ({
   openInFinder: (path: string) => openInFinder(path),
   readSystemClipboardFilePaths: () => readSystemClipboardFilePaths(),
   chooseFileTreeDownloadDirectory: () => chooseFileTreeDownloadDirectory(),
+  chooseFileTreeUploadFiles: () => chooseFileTreeUploadFiles(),
+  hasNativeFilePicker: () => hasNativeFilePicker(),
 }))
 
 vi.mock('#/web/remote-client.ts', () => ({
@@ -100,6 +104,10 @@ beforeEach(() => {
   readSystemClipboardFilePaths.mockResolvedValue(['/tmp/report.pdf'])
   chooseFileTreeDownloadDirectory.mockClear()
   chooseFileTreeDownloadDirectory.mockResolvedValue('/Downloads')
+  chooseFileTreeUploadFiles.mockClear()
+  chooseFileTreeUploadFiles.mockResolvedValue(['/Users/test/Desktop/upload-a.txt', '/Users/test/Desktop/upload-b.txt'])
+  hasNativeFilePicker.mockClear()
+  hasNativeFilePicker.mockReturnValue(true)
   writeInternalFileTreeClipboard({ repoId: '', worktreePath: '', paths: [] })
   Object.defineProperty(globalThis.navigator, 'clipboard', {
     configurable: true,
@@ -589,6 +597,102 @@ describe('ProjectFileTree', () => {
       targetDirPath: '/Downloads',
       paths: ['/repo/README.md'],
     })
+  })
+
+  test('uploads selected files into a directory context target', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    await clickContextMenuItem(treeItemByText('src'), 'file-tree.upload-file')
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(chooseFileTreeUploadFiles).toHaveBeenCalledTimes(1)
+    expect(transferRepositoryFiles).toHaveBeenCalledWith({
+      repoId: '/repo',
+      worktreePath: '/repo',
+      targetDirPath: '/repo/src',
+      source: {
+        kind: 'localPaths',
+        items: [{ path: '/Users/test/Desktop/upload-a.txt' }, { path: '/Users/test/Desktop/upload-b.txt' }],
+      },
+    })
+  })
+
+  test('uploads selected files into a file context target parent directory', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    await clickContextMenuItem(treeItemByText('README.md'), 'file-tree.upload-file')
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(transferRepositoryFiles).toHaveBeenCalledWith({
+      repoId: '/repo',
+      worktreePath: '/repo',
+      targetDirPath: '/repo',
+      source: {
+        kind: 'localPaths',
+        items: [{ path: '/Users/test/Desktop/upload-a.txt' }, { path: '/Users/test/Desktop/upload-b.txt' }],
+      },
+    })
+  })
+
+  test('uploads selected files into the worktree root from the empty context menu', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const emptyArea = container?.querySelector<HTMLElement>('[data-testid="file-tree-empty-context-target"]')
+    if (!emptyArea) throw new Error('missing empty context target')
+    await clickContextMenuItem(emptyArea, 'file-tree.upload-file')
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(transferRepositoryFiles).toHaveBeenCalledWith({
+      repoId: '/repo',
+      worktreePath: '/repo',
+      targetDirPath: '/repo',
+      source: {
+        kind: 'localPaths',
+        items: [{ path: '/Users/test/Desktop/upload-a.txt' }, { path: '/Users/test/Desktop/upload-b.txt' }],
+      },
+    })
+  })
+
+  test('does not upload when the file picker is canceled', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+    chooseFileTreeUploadFiles.mockResolvedValue([])
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    await clickContextMenuItem(treeItemByText('src'), 'file-tree.upload-file')
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(chooseFileTreeUploadFiles).toHaveBeenCalledTimes(1)
+    expect(transferRepositoryFiles).not.toHaveBeenCalled()
+  })
+
+  test('hides upload file actions when the native file picker is unavailable', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+    hasNativeFilePicker.mockReturnValue(false)
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const labels = await contextMenuLabels(treeItemByText('src'))
+
+    expect(labels).not.toContain('file-tree.upload-file')
   })
 
   test('does not show paste in the empty file tree context menu', async () => {
