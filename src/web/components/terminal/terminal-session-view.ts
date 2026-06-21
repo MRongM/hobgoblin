@@ -421,8 +421,9 @@ export class TerminalSessionView {
 
   private pinToBottomSoon(): void {
     if (!this.term) return
-    // Product policy: after any local terminal resize/fit pass, always snap
-    // back to the live tail instead of preserving scroll position.
+    if (!isTerminalAtBottom(this.term)) return
+    // Product policy: keep user-visible output in sync with live output unless
+    // the user is actively scrolling history.
     this.cancelPinToBottom()
     this.pinToBottomFrame = requestAnimationFrame(() => {
       this.pinToBottomFrame = null
@@ -458,6 +459,13 @@ function hasMeasurableBox(element: HTMLElement): boolean {
 function scrollTerminalToBottom(term: XTermTerminal | null): void {
   if (!term) return
   term.scrollToBottom()
+}
+
+function isTerminalAtBottom(term: XTermTerminal): boolean {
+  const active = term.buffer?.active as { viewportY?: number } | undefined
+  if (!active) return true
+  const viewportY = active.viewportY
+  return typeof viewportY !== 'number' || viewportY <= 0
 }
 
 function cancelScheduledAnimationFrame(frame: number): void {

@@ -78,6 +78,7 @@ const xtermMocks = vi.hoisted(() => {
         type: 'normal',
         cursorX: 4,
         cursorY: 2,
+        viewportY: 0,
         getLine: (index: number) => {
           const text = this.bufferLines[index]
           return typeof text === 'string' ? { translateToString: () => text } : undefined
@@ -605,6 +606,31 @@ describe('ManagedTerminalSession', () => {
     expect(xtermMocks.terminals[0]!.options.rescaleOverlappingGlyphs).toBe(true)
     expect(terminalCalls.restart).not.toHaveBeenCalled()
     expect(session.snapshot().phase).toBe('open')
+  })
+
+  test('keeps scroll position when terminal viewport is already scrolled up during font refit', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    const fitAddon = xtermMocks.fitAddons[0]!
+
+    term.buffer.active.viewportY = 12
+    term.scrollToBottom.mockClear()
+    fitAddon.fit.mockClear()
+    term.refresh.mockClear()
+
+    session.setFontSize(16)
+
+    expect(fitAddon.fit).toHaveBeenCalledTimes(1)
+    expect(term.refresh).toHaveBeenCalledWith(0, term.rows - 1)
+    expect(term.scrollToBottom).toHaveBeenCalledTimes(0)
   })
 
   test('updates xterm font size and refits the terminal', async () => {
