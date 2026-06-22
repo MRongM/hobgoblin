@@ -1,16 +1,18 @@
 import { lastPathSegment } from '#/web/lib/paths.ts'
-import { emptyRepo } from '#/web/stores/repos/helpers.ts'
+import { emptyRepo, replaceRepoState } from '#/web/stores/repos/helpers.ts'
 import { restoreRepoProjectionFromSnapshot } from '#/web/stores/repos/persistence.ts'
 import { disposeRepoRuntime } from '#/web/stores/repos/runtime.ts'
 import { runRepoRefreshIntent } from '#/web/stores/repos/refresh-coordinator.ts'
 import {
   abortRepositoryOperation,
+  initRepository as initRepositoryRpc,
   probeRepository,
 } from '#/web/repo-client.ts'
 import { resolveRemoteRepositoryTarget } from '#/web/remote-client.ts'
 import { stopPortForwardSessionsForRepo } from '#/web/port-forwarding-client.ts'
 import { recordRecentRepo } from '#/web/settings-write-paths.ts'
 import type { OpenRepoResult, ReposGet, ReposSet, ReposStore } from '#/web/stores/repos/types.ts'
+import type { ExecResult } from '#/web/types.ts'
 import { nextActiveRepoIdAfterWorkspaceClose } from '#/web/open-workspace-state.ts'
 import {
   isRemoteRepoId,
@@ -188,7 +190,7 @@ function applyWorkspaceOpen(
   return { repos, order, changed, id: repo.id }
 }
 
-export function createRuntimeRepoLifecycleActions(set: ReposSet, get: ReposGet): Pick<ReposStore, 'ensureWorkspaceOpen' | 'closeRepo'> {
+export function createRuntimeRepoLifecycleActions(set: ReposSet, get: ReposGet): Pick<ReposStore, 'ensureWorkspaceOpen' | 'closeRepo' | 'initGitRepository'> {
   return {
     async ensureWorkspaceOpen(pathOrEntry: string | RepoSessionEntry): Promise<OpenRepoResult> {
       const entry = sessionEntryFromInput(pathOrEntry)
@@ -240,6 +242,28 @@ export function createRuntimeRepoLifecycleActions(set: ReposSet, get: ReposGet):
         const activeId = nextActiveRepoIdAfterWorkspaceClose(s.order, s.activeId, id)
         return { repos, branchSearchQueries, selectedTerminalByWorktree, order, activeId }
       })
+    },
+
+    async initGitRepository(id: string): Promise<ExecResult> {
+      const result = await initRepositoryRpc(id)
+      if (!result.ok) return result
+      set((s) => {
+        const repo = s.repos[id]
+        if (!repo) return s
+        return replaceRepoState(s, repo, (draft) => {
+          draft.isGitRepo = true
+        })
+      })
+      const repo = get().repos[id]
+      if (repo) {
+        void runRepoRefreshIntent(get, {
+          kind: 'core-data-changed',
+          reason: 'initial-load',
+          id,
+          token: repo.instanceToken,
+        })
+      }
+      return result
     },
   }
 }
