@@ -233,6 +233,8 @@ export const ja: Record<DictKey, string> = {
   // ---- Branches list -----------------------------------------------------
   'branches.empty': 'このリポジトリにブランチがありません。',
   'branches.filter-empty': '現在のフィルターに一致するブランチはありません。',
+  'non-git.init-button': 'Git リポジトリを初期化',
+  'non-git.init-failed': 'リポジトリの初期化に失敗しました',
   'branches.filter-label': 'ブランチをフィルター',
   'branches.search-label': 'ブランチを検索',
   'branches.search-placeholder': 'ブランチを検索',
