@@ -237,6 +237,8 @@ export interface RuntimeCoherentRepoProjectionActions {
    *  by an explicit refresh, so a stale badge doesn't follow the user
    *  around forever. */
   clearFetchFailed: (id: string, token: number) => void
+  /** Initialize the directory at `id` as a git repo, then refresh. */
+  initGitRepository: (id: string) => Promise<ExecResult>
 }
 
 export interface RepoMutationActions {
