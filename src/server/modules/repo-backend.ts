@@ -227,12 +227,14 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       if (!gitAvailable.ok) return gitAvailable
       const readable = await probeReadableDirectory(repoId)
       if (!readable.ok) return readable
-      const ok = await isGitRepo(repoId)
-      if (!ok) return { ok: false, message: 'error.not-git-repo' }
+      const gitRepo = await isGitRepo(repoId)
+      if (!gitRepo) {
+        return { ok: true, root: repoId, name: path.basename(repoId), isGitRepo: false }
+      }
       const root = await getRepoRoot(repoId)
       if (!root) return { ok: false, message: 'error.failed-read-repo' }
       const name = await getRepoName(repoId)
-      return { ok: true, root, name }
+      return { ok: true, root, name, isGitRepo: true }
     },
     async getSnapshot(signal) {
       if (!isValidCwd(repoId)) return null

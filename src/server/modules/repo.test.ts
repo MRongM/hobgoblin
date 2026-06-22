@@ -632,6 +632,20 @@ describe('probeRepository path errors', () => {
     const { probeRepository } = await import('#/server/modules/repo-read-paths.ts')
     await expect(probeRepository('/tmp/private')).resolves.toEqual({ ok: false, message: 'error.path-permission-denied' })
   })
+
+  test('returns ok with isGitRepo:false for readable non-git directory', async () => {
+    mocks.fsStat.mockResolvedValueOnce({ isDirectory: () => true })
+    mocks.fsAccess.mockResolvedValueOnce(undefined)
+    mocks.isGitRepo.mockResolvedValueOnce(false)
+
+    const { probeRepository } = await import('#/server/modules/repo-read-paths.ts')
+    await expect(probeRepository('/tmp/notgit')).resolves.toEqual({
+      ok: true,
+      root: '/tmp/notgit',
+      name: 'notgit',
+      isGitRepo: false,
+    })
+  })
 })
 
 describe('repo mutation invalidation publishing', () => {
