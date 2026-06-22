@@ -21,6 +21,7 @@ export function emptyRepo(id: string, name: string): RepoState {
   return {
     id,
     name,
+    isGitRepo: true,
     instanceToken: nextInstanceToken++,
     data: {
       branches: [],
