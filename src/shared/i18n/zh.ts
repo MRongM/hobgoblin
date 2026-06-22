@@ -217,6 +217,8 @@ export const zh: Record<DictKey, string> = {
   // ---- Branches list -----------------------------------------------------
   'branches.empty': '该仓库暂无分支。',
   'branches.filter-empty': '没有匹配当前筛选或搜索的分支。',
+  'non-git.init-button': '初始化 Git 仓库',
+  'non-git.init-failed': '初始化仓库失败',
   'branches.filter-label': '筛选分支',
   'branches.search-label': '搜索分支',
   'branches.search-placeholder': '搜索分支',

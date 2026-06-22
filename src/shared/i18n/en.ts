@@ -234,6 +234,10 @@ export const en = {
   // ---- Branches list ------------------------------------------------------
   'branches.empty': 'No branches found in this repository.',
   'branches.filter-empty': 'No branches match the current filters.',
+
+  // ---- Non-git directory --------------------------------------------------
+  'non-git.init-button': 'Initialize Git Repository',
+  'non-git.init-failed': 'Failed to initialize repository',
   'branches.filter-label': 'Filter branches',
   'branches.search-label': 'Search branches',
   'branches.search-placeholder': 'Search branches',
