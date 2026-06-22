@@ -25,6 +25,7 @@ import {
 interface ResolvedRepo {
   id: string
   name: string
+  isGitRepo?: boolean
   target?: RemoteRepoTarget
 }
 
@@ -72,6 +73,7 @@ export async function resolveRepoPath(
       repo: {
         id: probe.root,
         name: probe.name ?? (entry.kind === 'remote' ? entry.ref.displayName : lastPathSegment(probe.root)),
+        isGitRepo: probe.isGitRepo ?? true,
         ...(target ? { target } : {}),
       },
       target,
@@ -135,6 +137,7 @@ export function addResolvedRepo(
   }
   const repo = restoreRepoProjectionFromSnapshot(emptyRepo(id, name), s.restorableRepoCache[id])
   if (resolvedRepo.target) repo.remote.target = resolvedRepo.target
+  if (resolvedRepo.isGitRepo === false) repo.isGitRepo = false
   return {
     repos: { ...s.repos, [id]: repo },
     order: orderedInsert(s.order, id, rankById),

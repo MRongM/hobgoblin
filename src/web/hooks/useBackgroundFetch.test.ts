@@ -52,6 +52,7 @@ function createRepo(input: {
   return {
     id: input.id,
     name: 'repo',
+    isGitRepo: true,
     instanceToken: 1,
     data: {
       branches: [],
