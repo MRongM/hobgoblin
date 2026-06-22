@@ -109,6 +109,8 @@ export interface RepoState {
   /** Absolute repo root — also the unique id. */
   id: string
   name: string
+  /** false when the directory is readable but not yet a git repository. */
+  isGitRepo: boolean
   /** Bumped on every fresh open so async writers can detect close-and-reopen. */
   instanceToken: number
   /** Renderer-local projection of runtime-coherent repo truth. */
