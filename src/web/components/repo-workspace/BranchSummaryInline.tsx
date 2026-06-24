@@ -8,7 +8,7 @@ import { formatWorktreeListPath, lastPathSegment } from '#/web/lib/paths.ts'
 import { getBranchWorktreeState, type BranchWorktreeRepo } from '#/web/stores/repos/worktree-state.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
-import { useWorktreeTerminalHasBell } from '#/web/components/terminal/terminal-session-store.ts'
+import { useWorktreeTerminalCount, useWorktreeTerminalHasBell } from '#/web/components/terminal/terminal-session-store.ts'
 import { TerminalBellDot } from '#/web/components/terminal/TerminalBellDot.tsx'
 
 export type BranchSummaryInlineRepo = BranchWorktreeRepo & {
@@ -55,6 +55,7 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
     ? lastPathSegment(branch.worktree.path) || formatWorktreeListPath(branch.worktree.path, repo.remote?.target, repoRoot)
     : null
   const terminalWorktreeKey = branch.worktree?.path ? worktreeTerminalKey(repo.id, branch.worktree.path) : null
+  const terminalCount = useWorktreeTerminalCount(terminalWorktreeKey)
   const hasTerminalBell = useWorktreeTerminalHasBell(terminalWorktreeKey)
   const terminalBellLabel = t('terminal.bell-unread')
   const commitTime = formatRelativeTimeOrNull(branch.lastCommitDate, lang)
@@ -99,6 +100,15 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
           >
             {branch.name}
           </span>
+          {terminalCount > 0 && (
+            <Badge
+              data-testid="terminal-count-badge"
+              variant="outline"
+              className="h-4 rounded-full px-1.5 text-[10px] font-medium tabular-nums"
+            >
+              {terminalCount}
+            </Badge>
+          )}
           {hasTerminalBell && <TerminalBellDot label={terminalBellLabel} />}
           <span
             className={cn(

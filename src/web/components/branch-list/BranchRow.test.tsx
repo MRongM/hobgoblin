@@ -78,6 +78,41 @@ afterEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
 })
 
+function terminalReadContextWithState(
+  bellKeys: ReadonlySet<string>,
+  countsByWorktreeKey: ReadonlyMap<string, number>,
+): TerminalSessionReadContextValue {
+  return {
+    worktreeSnapshot: (worktreeTerminalKey) => {
+      const hasBell = bellKeys.has(worktreeTerminalKey)
+      return {
+        worktreeTerminalKey,
+        selectedDescriptor: null,
+        sessions: hasBell
+          ? [
+              {
+                key: `${worktreeTerminalKey}\0terminal-1`,
+                worktreeTerminalKey,
+                terminalId: 'terminal-1',
+                index: 1,
+                title: 'terminal',
+                phase: 'open',
+                selected: true,
+                hasBell: true,
+              },
+            ]
+          : [],
+        count: countsByWorktreeKey.get(worktreeTerminalKey) ?? 0,
+      }
+    },
+    subscribeWorktree: () => () => {},
+    repoSyncReady: () => true,
+    subscribeRepoSync: () => () => {},
+    snapshot: () => ({ phase: 'opening', message: null, processName: 'terminal' }),
+    subscribeSnapshot: () => () => {},
+  }
+}
+
 describe('BranchRow', () => {
   test('shows the generic dirty label for dirty worktrees', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
@@ -207,10 +242,61 @@ describe('BranchRow', () => {
           showActions={false}
         />
       </ul>,
-      ['/tmp/repo\0/tmp/worktree-a'],
+      {
+        bellWorktreeKeys: ['/tmp/repo\0/tmp/worktree-a'],
+        countsByWorktreeKey: new Map([['/tmp/repo\0/tmp/worktree-a', 1]]),
+      },
     )
 
     expect(document.body.querySelector('[aria-label="终端有未读提醒"]')).not.toBeNull()
+  })
+
+  test('shows a terminal count badge for linked worktrees with open sessions', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+      {
+        countsByWorktreeKey: new Map([['/tmp/repo\0/tmp/worktree-a', 2]]),
+      },
+    )
+
+    expect(document.body.querySelector('[data-testid="terminal-count-badge"]')?.textContent).toBe('2')
+  })
+
+  test('does not show a terminal count badge when a linked worktree has no open sessions', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+      {
+        countsByWorktreeKey: new Map([['/tmp/repo\0/tmp/worktree-a', 0]]),
+      },
+    )
+
+    expect(document.body.querySelector('[data-testid="terminal-count-badge"]')).toBeNull()
   })
 
   test('shows only the directory name for remote worktree paths', () => {
@@ -384,43 +470,20 @@ describe('BranchRow', () => {
   })
 })
 
-function render(element: React.ReactNode, bellWorktreeKeys: string[] = []) {
-  const readContext = terminalReadContextWithBellKeys(new Set(bellWorktreeKeys))
+function render(
+  element: React.ReactNode,
+  fixture: {
+    bellWorktreeKeys?: string[]
+    countsByWorktreeKey?: Map<string, number>
+  } = {},
+) {
+  const readContext = terminalReadContextWithState(
+    new Set(fixture.bellWorktreeKeys ?? []),
+    fixture.countsByWorktreeKey ?? new Map(),
+  )
   act(() => {
     root!.render(
       <TerminalSessionReadContext.Provider value={readContext}>{element}</TerminalSessionReadContext.Provider>,
     )
   })
-}
-
-function terminalReadContextWithBellKeys(bellKeys: ReadonlySet<string>): TerminalSessionReadContextValue {
-  return {
-    worktreeSnapshot: (worktreeTerminalKey) => {
-      const hasBell = bellKeys.has(worktreeTerminalKey)
-      return {
-        worktreeTerminalKey,
-        selectedDescriptor: null,
-        sessions: hasBell
-          ? [
-              {
-                key: `${worktreeTerminalKey}\0terminal-1`,
-                worktreeTerminalKey,
-                terminalId: 'terminal-1',
-                index: 1,
-                title: 'terminal',
-                phase: 'open',
-                selected: true,
-                hasBell: true,
-              },
-            ]
-          : [],
-        count: hasBell ? 1 : 0,
-      }
-    },
-    subscribeWorktree: () => () => {},
-    repoSyncReady: () => true,
-    subscribeRepoSync: () => () => {},
-    snapshot: () => ({ phase: 'opening', message: null, processName: 'terminal' }),
-    subscribeSnapshot: () => () => {},
-  }
 }
