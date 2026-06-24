@@ -33,6 +33,8 @@ vi.mock('#/web/stores/i18n.ts', () => ({
         return `落后 ${params?.n ?? 0}`
       case 'terminal.bell-unread':
         return '终端有未读提醒'
+      case 'terminal.open-count':
+        return `${params?.count ?? 0} 个终端`
       default:
         return key
     }
@@ -251,7 +253,7 @@ describe('BranchRow', () => {
     expect(document.body.querySelector('[aria-label="终端有未读提醒"]')).not.toBeNull()
   })
 
-  test('shows a terminal count badge for linked worktrees with open sessions', () => {
+  test('shows a labeled terminal count badge for linked worktrees with open sessions', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
 
@@ -272,7 +274,10 @@ describe('BranchRow', () => {
       },
     )
 
-    expect(document.body.querySelector('[data-testid="terminal-count-badge"]')?.textContent).toBe('2')
+    const badge = document.body.querySelector('[data-testid="terminal-count-badge"]')
+    expect(badge?.textContent).toBe('2')
+    expect(badge?.getAttribute('aria-label')).toBe('2 个终端')
+    expect(badge?.querySelector('svg')).not.toBeNull()
   })
 
   test('does not show a terminal count badge when a linked worktree has no open sessions', () => {

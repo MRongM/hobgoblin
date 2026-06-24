@@ -1,5 +1,7 @@
 import { Hono } from 'hono'
 import {
+  activatePortForwardSession,
+  deletePortForwardSession,
   listPortForwardSessions,
   startPortForwardSession,
   stopPortForwardSession,
@@ -60,6 +62,30 @@ export function createPortForwardingRoutes() {
         () => stopPortForwardSessionsForRepo(repoId),
         { ok: false, message: 'error.invalid-arguments' },
         'stop-for-repo',
+      ),
+    )
+  })
+
+  app.post('/delete', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const id = typeof body?.id === 'string' ? body.id : ''
+    return c.json(
+      await jsonOr(
+        () => deletePortForwardSession(id),
+        { ok: false, message: 'error.port-forward-not-found' },
+        'delete',
+      ),
+    )
+  })
+
+  app.post('/activate', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const id = typeof body?.id === 'string' ? body.id : ''
+    return c.json(
+      await jsonOr(
+        () => activatePortForwardSession(id, c.req.raw.signal),
+        { ok: false, message: 'error.port-forward-not-found' },
+        'activate',
       ),
     )
   })

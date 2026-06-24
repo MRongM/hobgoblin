@@ -106,6 +106,90 @@ describe('port forwarding manager', () => {
     expect(first.stop).toHaveBeenCalled()
     expect(second.stop).not.toHaveBeenCalled()
   })
+
+  test('deletes stopped session history without touching active sessions', async () => {
+    const stoppedHandle = fakeHandle()
+    const activeHandle = fakeHandle()
+    const manager = testManager({ handles: [stoppedHandle, activeHandle] })
+    await manager.start({
+      repoId: 'ssh-config://prod/srv/repo',
+      localBindHost: '127.0.0.1',
+      localPort: null,
+      remoteHost: '127.0.0.1',
+      remotePort: 3000,
+    })
+    await manager.start({
+      repoId: 'ssh-config://prod/srv/repo',
+      localBindHost: '127.0.0.1',
+      localPort: null,
+      remoteHost: '127.0.0.1',
+      remotePort: 3001,
+    })
+    await manager.stop('pf_1')
+
+    await expect(manager.delete('pf_1')).resolves.toEqual({ ok: true, deletedId: 'pf_1' })
+    await expect(manager.delete('pf_2')).resolves.toEqual({ ok: false, message: 'error.port-forward-delete-active' })
+
+    await expect(manager.list('ssh-config://prod/srv/repo')).resolves.toMatchObject({
+      ok: true,
+      sessions: [expect.objectContaining({ id: 'pf_2', status: 'active' })],
+    })
+    expect(stoppedHandle.stop).toHaveBeenCalledTimes(1)
+    expect(activeHandle.stop).not.toHaveBeenCalled()
+  })
+
+  test('reactivates a stopped session in place', async () => {
+    const firstHandle = fakeHandle()
+    const secondHandle = fakeHandle()
+    const manager = testManager({ handles: [firstHandle, secondHandle] })
+    await manager.start({
+      repoId: 'ssh-config://prod/srv/repo',
+      localBindHost: '127.0.0.1',
+      localPort: 3000,
+      remoteHost: '127.0.0.1',
+      remotePort: 5173,
+    })
+    await manager.stop('pf_1')
+
+    const result = await manager.activate('pf_1')
+
+    expect(result.ok).toBe(true)
+    expect(result.ok ? result.session : null).toMatchObject({
+      id: 'pf_1',
+      requestedLocalPort: 3000,
+      actualLocalPort: 3000,
+      remotePort: 5173,
+      status: 'active',
+      localUrl: 'http://127.0.0.1:3000',
+    })
+    await expect(manager.list('ssh-config://prod/srv/repo')).resolves.toMatchObject({
+      ok: true,
+      sessions: [expect.objectContaining({ id: 'pf_1', status: 'active' })],
+    })
+    firstHandle.emitExit({ code: 0, signal: null, stderr: '' })
+    await expect(manager.list('ssh-config://prod/srv/repo')).resolves.toMatchObject({
+      ok: true,
+      sessions: [expect.objectContaining({ id: 'pf_1', status: 'active' })],
+    })
+    expect(firstHandle.stop).toHaveBeenCalledTimes(1)
+    expect(secondHandle.stop).not.toHaveBeenCalled()
+  })
+
+  test('rejects reactivation while a session is active or starting', async () => {
+    const manager = testManager({ handle: fakeHandle() })
+    await manager.start({
+      repoId: 'ssh-config://prod/srv/repo',
+      localBindHost: '127.0.0.1',
+      localPort: null,
+      remoteHost: '127.0.0.1',
+      remotePort: 3000,
+    })
+
+    await expect(manager.activate('pf_1')).resolves.toEqual({
+      ok: false,
+      message: 'error.port-forward-already-active',
+    })
+  })
 })
 
 function testManager(

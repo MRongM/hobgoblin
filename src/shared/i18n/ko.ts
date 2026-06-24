@@ -358,6 +358,8 @@ export const ko: Record<DictKey, string> = {
   'ports.open': '로컬 URL 열기',
   'ports.copy': '로컬 URL 복사',
   'ports.stop': '전달 중지',
+  'ports.activate': '전달 다시 활성화',
+  'ports.delete-history': '기록 삭제',
 
   // ---- Terminal ----------------------------------------------------------
   'terminal.opening': '터미널 여는 중…',
@@ -386,6 +388,7 @@ export const ko: Record<DictKey, string> = {
   'terminal.unowned': '현재 이 터미널을 제어하는 창이 없습니다.',
   'terminal.takeover': '터미널 제어 가져오기',
   'terminal.index-title': '터미널 {index}',
+  'terminal.open-count': '터미널 {count}개',
   'terminal.bell-unread': '읽지 않은 터미널 벨',
   'terminal.bell-unread-count': '읽지 않은 벨 {count}개',
 
@@ -582,6 +585,8 @@ export const ko: Record<DictKey, string> = {
   'error.invalid-port': '포트가 올바르지 않습니다',
   'error.port-forward-start-failed': '포트 전달을 시작할 수 없습니다',
   'error.port-forward-not-found': '포트 전달을 찾을 수 없습니다',
+  'error.port-forward-delete-active': '기록을 삭제하기 전에 포트 전달을 중지하세요',
+  'error.port-forward-already-active': '포트 전달이 이미 활성 상태입니다',
   'error.network-op-in-progress': '다른 git 네트워크 작업이 이미 실행 중입니다.',
   'error.branch-action-wait-timeout': '저장소 새로고침 완료 대기 시간이 초과되었습니다.',
   'error.unknown': '알 수 없는 오류',

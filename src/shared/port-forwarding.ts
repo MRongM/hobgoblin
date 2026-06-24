@@ -27,6 +27,8 @@ export type PortForwardStartResult =
   | { ok: true; session: PortForwardSessionSnapshot }
   | { ok: false; message: string; detail?: string; session?: PortForwardSessionSnapshot }
 
+export type PortForwardActivateResult = PortForwardStartResult
+
 export type PortForwardListResult =
   | { ok: true; sessions: PortForwardSessionSnapshot[] }
   | { ok: false; message: string }
@@ -37,6 +39,10 @@ export type PortForwardStopResult =
 
 export type PortForwardStopForRepoResult =
   | { ok: true; stopped: PortForwardSessionSnapshot[] }
+  | { ok: false; message: string }
+
+export type PortForwardDeleteResult =
+  | { ok: true; deletedId: string }
   | { ok: false; message: string }
 
 export type PortForwardStartRequestResult =

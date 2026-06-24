@@ -4,6 +4,8 @@ import { resolveRemoteTarget as resolveSshRemoteTarget } from '#/system/ssh/conf
 import {
   formatPortForwardLocalUrl,
   normalizePortForwardStartRequest,
+  type PortForwardActivateResult,
+  type PortForwardDeleteResult,
   type PortForwardListResult,
   type PortForwardSessionSnapshot,
   type PortForwardStartResult,
@@ -36,6 +38,8 @@ export interface PortForwardingManager {
   start(input: unknown, signal?: AbortSignal): Promise<PortForwardStartResult>
   stop(id: string): Promise<PortForwardStopResult>
   stopForRepo(repoId: string): Promise<PortForwardStopForRepoResult>
+  delete(id: string): Promise<PortForwardDeleteResult>
+  activate(id: string, signal?: AbortSignal): Promise<PortForwardActivateResult>
   shutdown(): void
 }
 
@@ -67,6 +71,14 @@ export async function stopPortForwardSessionsForRepo(repoId: string): Promise<Po
   return await defaultManager.stopForRepo(repoId)
 }
 
+export async function deletePortForwardSession(id: string): Promise<PortForwardDeleteResult> {
+  return await defaultManager.delete(id)
+}
+
+export async function activatePortForwardSession(id: string, signal?: AbortSignal): Promise<PortForwardActivateResult> {
+  return await defaultManager.activate(id, signal)
+}
+
 export function shutdownPortForwarding(): void {
   defaultManager.shutdown()
 }
@@ -95,6 +107,52 @@ function createPortForwardingManager(deps: ManagerDeps): PortForwardingManager {
       return await deps.resolveRemoteTarget(ref, signal)
     } catch {
       throw new Error('error.ssh-config-changed')
+    }
+  }
+
+  async function startForwardForSession(
+    session: RuntimeSession,
+    request: {
+      localBindHost: string
+      localPort: number | null
+      remoteHost: string
+      remotePort: number
+    },
+    resolved: ResolvedRemoteTarget,
+  ): Promise<PortForwardStartResult> {
+    const preferredPort = request.localPort ?? request.remotePort
+    try {
+      const actualLocalPort = await deps.reservePort(request.localBindHost, preferredPort)
+      const handle = await deps.startForward({
+        alias: resolved.target.alias,
+        localBindHost: request.localBindHost,
+        localPort: actualLocalPort,
+        remoteHost: request.remoteHost,
+        remotePort: request.remotePort,
+      })
+      session.handle = handle
+      handle.onExit((exit) => {
+        if (session.handle !== handle || session.snapshot.status === 'stopped') return
+        setSession(session, {
+          status: session.stoppedByUser ? 'stopped' : 'failed',
+          message: session.stoppedByUser ? undefined : safeDetail(exit.stderr),
+        })
+      })
+      setSession(session, {
+        status: 'active',
+        actualLocalPort,
+        localUrl: formatPortForwardLocalUrl(request.localBindHost, actualLocalPort),
+      })
+      return { ok: true, session: session.snapshot }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'error.port-forward-start-failed'
+      setSession(session, { status: 'failed', message: safeDetail(detail) })
+      return {
+        ok: false,
+        message: 'error.port-forward-start-failed',
+        detail: safeDetail(detail),
+        session: session.snapshot,
+      }
     }
   }
 
@@ -141,40 +199,7 @@ function createPortForwardingManager(deps: ManagerDeps): PortForwardingManager {
       }
       sessions.set(id, session)
 
-      const preferredPort = request.localPort ?? request.remotePort
-      try {
-        const actualLocalPort = await deps.reservePort(request.localBindHost, preferredPort)
-        const handle = await deps.startForward({
-          alias: resolved.target.alias,
-          localBindHost: request.localBindHost,
-          localPort: actualLocalPort,
-          remoteHost: request.remoteHost,
-          remotePort: request.remotePort,
-        })
-        session.handle = handle
-        handle.onExit((exit) => {
-          if (session.snapshot.status === 'stopped') return
-          setSession(session, {
-            status: session.stoppedByUser ? 'stopped' : 'failed',
-            message: session.stoppedByUser ? undefined : safeDetail(exit.stderr),
-          })
-        })
-        setSession(session, {
-          status: 'active',
-          actualLocalPort,
-          localUrl: formatPortForwardLocalUrl(request.localBindHost, actualLocalPort),
-        })
-        return { ok: true, session: session.snapshot }
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : 'error.port-forward-start-failed'
-        setSession(session, { status: 'failed', message: safeDetail(detail) })
-        return {
-          ok: false,
-          message: 'error.port-forward-start-failed',
-          detail: safeDetail(detail),
-          session: session.snapshot,
-        }
-      }
+      return await startForwardForSession(session, request, resolved)
     },
 
     async stop(id) {
@@ -196,6 +221,50 @@ function createPortForwardingManager(deps: ManagerDeps): PortForwardingManager {
         stopped.push(session.snapshot)
       }
       return { ok: true, stopped }
+    },
+
+    async delete(id) {
+      const session = sessions.get(id)
+      if (!session) return { ok: false, message: 'error.port-forward-not-found' }
+      if (session.snapshot.status === 'active' || session.snapshot.status === 'starting') {
+        return { ok: false, message: 'error.port-forward-delete-active' }
+      }
+      sessions.delete(id)
+      return { ok: true, deletedId: id }
+    },
+
+    async activate(id, signal) {
+      const session = sessions.get(id)
+      if (!session) return { ok: false, message: 'error.port-forward-not-found' }
+      if (session.snapshot.status === 'active' || session.snapshot.status === 'starting') {
+        return { ok: false, message: 'error.port-forward-already-active' }
+      }
+      let resolved: ResolvedRemoteTarget | null
+      try {
+        resolved = await resolveAlias(session.snapshot.repoId, signal)
+      } catch {
+        return { ok: false, message: 'error.ssh-config-changed', session: session.snapshot }
+      }
+      if (!resolved) return { ok: false, message: 'error.invalid-arguments', session: session.snapshot }
+
+      session.stoppedByUser = false
+      session.handle = null
+      setSession(session, {
+        status: 'starting',
+        actualLocalPort: null,
+        localUrl: null,
+        message: undefined,
+      })
+      return await startForwardForSession(
+        session,
+        {
+          localBindHost: session.snapshot.localBindHost,
+          localPort: session.snapshot.requestedLocalPort,
+          remoteHost: session.snapshot.remoteHost,
+          remotePort: session.snapshot.remotePort,
+        },
+        resolved,
+      )
     },
 
     shutdown() {

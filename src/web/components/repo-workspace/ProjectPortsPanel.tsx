@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Copy, ExternalLink, Play, Square } from 'lucide-react'
+import { Copy, ExternalLink, Play, Square, Trash2 } from 'lucide-react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { Badge, type BadgeVariant } from '#/web/components/ui/badge.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
@@ -7,6 +7,8 @@ import { Input } from '#/web/components/ui/input.tsx'
 import { Switch } from '#/web/components/ui/switch.tsx'
 import { openExternalUrl } from '#/web/app-shell-client.ts'
 import {
+  activatePortForwardSession,
+  deletePortForwardSession,
   listPortForwardSessions,
   startPortForwardSession,
   stopPortForwardSession,
@@ -168,7 +170,7 @@ export function ProjectPortsPanel({ repoId }: { repoId: string }) {
         {loading && sessions.length === 0 ? <div className="text-muted-foreground">{t('ports.loading')}</div> : null}
         {!loading && sessions.length === 0 ? <div className="text-muted-foreground">{t('ports.empty')}</div> : null}
         {sessions.map((session) => (
-          <PortForwardSessionRow key={session.id} session={session} onStopped={loadSessions} />
+          <PortForwardSessionRow key={session.id} session={session} onChanged={loadSessions} />
         ))}
       </div>
     </div>
@@ -177,13 +179,15 @@ export function ProjectPortsPanel({ repoId }: { repoId: string }) {
 
 function PortForwardSessionRow({
   session,
-  onStopped,
+  onChanged,
 }: {
   session: PortForwardSessionSnapshot
-  onStopped: () => Promise<void>
+  onChanged: () => Promise<void>
 }) {
   const t = useT()
   const canUseUrl = !!session.localUrl && session.status === 'active'
+  const canDelete = session.status === 'failed' || session.status === 'stopped'
+  const canActivate = session.status === 'failed' || session.status === 'stopped'
   return (
     <div className="flex min-w-0 items-center gap-1.5 rounded border border-separator px-1.5 py-1">
       <div className="min-w-0 flex-1">
@@ -219,6 +223,21 @@ function PortForwardSessionRow({
         <Copy className="size-3.5" />
       </Button>
       <Button
+        data-testid={`ports-activate-${session.id}`}
+        type="button"
+        size="icon-xs"
+        variant="ghost"
+        aria-label={t('ports.activate')}
+        title={t('ports.activate')}
+        disabled={!canActivate}
+        onClick={async () => {
+          await activatePortForwardSession(session.id)
+          await onChanged()
+        }}
+      >
+        <Play className="size-3.5" />
+      </Button>
+      <Button
         data-testid={`ports-stop-${session.id}`}
         type="button"
         size="icon-xs"
@@ -228,10 +247,26 @@ function PortForwardSessionRow({
         disabled={session.status === 'stopped'}
         onClick={async () => {
           await stopPortForwardSession(session.id)
-          await onStopped()
+          await onChanged()
         }}
       >
         <Square className="size-3.5" />
+      </Button>
+      <Button
+        data-testid={`ports-delete-${session.id}`}
+        type="button"
+        size="icon-xs"
+        variant="ghost"
+        className="text-danger hover:bg-danger-surface hover:text-danger"
+        aria-label={t('ports.delete-history')}
+        title={t('ports.delete-history')}
+        disabled={!canDelete}
+        onClick={async () => {
+          await deletePortForwardSession(session.id)
+          await onChanged()
+        }}
+      >
+        <Trash2 className="size-3.5" />
       </Button>
     </div>
   )

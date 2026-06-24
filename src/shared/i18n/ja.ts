@@ -367,6 +367,8 @@ export const ja: Record<DictKey, string> = {
   'ports.open': 'ローカル URL を開く',
   'ports.copy': 'ローカル URL をコピー',
   'ports.stop': '転送を停止',
+  'ports.activate': '転送を再アクティブ化',
+  'ports.delete-history': '履歴レコードを削除',
 
   // ---- Terminal ----------------------------------------------------------
   'terminal.opening': 'ターミナルを開いています…',
@@ -395,6 +397,7 @@ export const ja: Record<DictKey, string> = {
   'terminal.unowned': '現在このターミナルを操作しているウィンドウはありません。',
   'terminal.takeover': 'ターミナルを引き継ぐ',
   'terminal.index-title': 'ターミナル {index}',
+  'terminal.open-count': 'ターミナル {count} 件',
   'terminal.bell-unread': '未読のターミナルベル',
   'terminal.bell-unread-count': '未読ベル {count} 件',
 
@@ -592,6 +595,8 @@ export const ja: Record<DictKey, string> = {
   'error.invalid-port': '無効なポート',
   'error.port-forward-start-failed': 'ポート転送を開始できませんでした',
   'error.port-forward-not-found': 'ポート転送が見つかりません',
+  'error.port-forward-delete-active': '履歴レコードを削除する前にポート転送を停止してください',
+  'error.port-forward-already-active': 'ポート転送はすでにアクティブです',
   'error.network-op-in-progress': '別の git ネットワーク操作がすでに実行中です。',
   'error.branch-action-wait-timeout': 'リポジトリの更新完了待ちがタイムアウトしました。',
   'error.unknown': '不明なエラー',

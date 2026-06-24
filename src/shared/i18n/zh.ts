@@ -350,6 +350,8 @@ export const zh: Record<DictKey, string> = {
   'ports.open': '打开本地 URL',
   'ports.copy': '复制本地 URL',
   'ports.stop': '停止转发',
+  'ports.activate': '重新激活转发',
+  'ports.delete-history': '删除历史记录',
 
   // ---- Terminal ----------------------------------------------------------
   'terminal.opening': '正在打开终端…',
@@ -378,6 +380,7 @@ export const zh: Record<DictKey, string> = {
   'terminal.unowned': '当前终端没有控制者',
   'terminal.takeover': '接管',
   'terminal.index-title': '终端 {index}',
+  'terminal.open-count': '{count} 个终端',
   'terminal.bell-unread': '终端有未读提醒',
   'terminal.bell-unread-count': '{count} 个未读终端提醒',
 
@@ -569,6 +572,8 @@ export const zh: Record<DictKey, string> = {
   'error.invalid-port': '端口无效',
   'error.port-forward-start-failed': '无法启动端口转发',
   'error.port-forward-not-found': '未找到端口转发',
+  'error.port-forward-delete-active': '请先停止端口转发，再删除历史记录',
+  'error.port-forward-already-active': '端口转发已处于活动状态',
   'error.network-op-in-progress': '另一个 git 网络操作正在进行中。',
   'error.branch-action-wait-timeout': '等待仓库刷新完成超时。',
   'error.unknown': '未知错误',

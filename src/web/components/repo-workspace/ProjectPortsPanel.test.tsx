@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   listPortForwardSessions: vi.fn(),
   startPortForwardSession: vi.fn(),
   stopPortForwardSession: vi.fn(),
+  deletePortForwardSession: vi.fn(),
+  activatePortForwardSession: vi.fn(),
   openExternalUrl: vi.fn(),
 }))
 
@@ -20,6 +22,8 @@ vi.mock('#/web/port-forwarding-client.ts', () => ({
   listPortForwardSessions: mocks.listPortForwardSessions,
   startPortForwardSession: mocks.startPortForwardSession,
   stopPortForwardSession: mocks.stopPortForwardSession,
+  deletePortForwardSession: mocks.deletePortForwardSession,
+  activatePortForwardSession: mocks.activatePortForwardSession,
 }))
 
 vi.mock('#/web/app-shell-client.ts', () => ({
@@ -37,6 +41,14 @@ beforeEach(() => {
   mocks.stopPortForwardSession.mockResolvedValue({
     ok: true,
     session: { ...activeSession(), status: 'stopped' },
+  })
+  mocks.deletePortForwardSession.mockResolvedValue({
+    ok: true,
+    deletedId: 'pf_1',
+  })
+  mocks.activatePortForwardSession.mockResolvedValue({
+    ok: true,
+    session: activeSession(),
   })
   Object.defineProperty(globalThis.navigator, 'clipboard', {
     configurable: true,
@@ -178,6 +190,48 @@ describe('ProjectPortsPanel', () => {
         ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
     expect(mocks.stopPortForwardSession).toHaveBeenCalledWith('pf_1')
+    await act(async () => root.unmount())
+  })
+
+  test('deletes stopped session history and reloads sessions', async () => {
+    seedRepo('ssh-config://prod/srv/repo')
+    mocks.listPortForwardSessions
+      .mockResolvedValueOnce({ ok: true, sessions: [{ ...activeSession(), status: 'stopped', localUrl: null }] })
+      .mockResolvedValue({ ok: true, sessions: [] })
+    const { container, root } = await render('ssh-config://prod/srv/repo')
+
+    await vi.waitFor(() => {
+      expect(container.querySelector<HTMLButtonElement>('[data-testid="ports-delete-pf_1"]')).toBeTruthy()
+    })
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="ports-delete-pf_1"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(mocks.deletePortForwardSession).toHaveBeenCalledWith('pf_1')
+    await vi.waitFor(() => expect(mocks.listPortForwardSessions).toHaveBeenCalledTimes(2))
+    await act(async () => root.unmount())
+  })
+
+  test('reactivates stopped session history and reloads sessions', async () => {
+    seedRepo('ssh-config://prod/srv/repo')
+    mocks.listPortForwardSessions
+      .mockResolvedValueOnce({ ok: true, sessions: [{ ...activeSession(), status: 'stopped', localUrl: null }] })
+      .mockResolvedValue({ ok: true, sessions: [activeSession()] })
+    const { container, root } = await render('ssh-config://prod/srv/repo')
+
+    await vi.waitFor(() => {
+      expect(container.querySelector<HTMLButtonElement>('[data-testid="ports-activate-pf_1"]')).toBeTruthy()
+    })
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="ports-activate-pf_1"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(mocks.activatePortForwardSession).toHaveBeenCalledWith('pf_1')
+    await vi.waitFor(() => expect(mocks.listPortForwardSessions).toHaveBeenCalledTimes(2))
     await act(async () => root.unmount())
   })
 })

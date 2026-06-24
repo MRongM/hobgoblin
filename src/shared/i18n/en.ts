@@ -367,6 +367,8 @@ export const en = {
   'ports.open': 'Open local URL',
   'ports.copy': 'Copy local URL',
   'ports.stop': 'Stop forwarding',
+  'ports.activate': 'Reactivate forwarding',
+  'ports.delete-history': 'Delete history record',
 
   // ---- Terminal -----------------------------------------------------------
   'terminal.opening': 'Opening terminal…',
@@ -395,6 +397,7 @@ export const en = {
   'terminal.unowned': 'This terminal currently has no controller.',
   'terminal.takeover': 'Take over terminal',
   'terminal.index-title': 'Terminal {index}',
+  'terminal.open-count': '{count} terminals',
   'terminal.bell-unread': 'Unread terminal bell',
   'terminal.bell-unread-count': '{count} unread bell',
 
@@ -591,6 +594,8 @@ export const en = {
   'error.invalid-port': 'Invalid port',
   'error.port-forward-start-failed': 'Could not start port forwarding',
   'error.port-forward-not-found': 'Port forward not found',
+  'error.port-forward-delete-active': 'Stop the port forward before deleting its history record',
+  'error.port-forward-already-active': 'Port forward is already active',
   'error.network-op-in-progress': 'Another git network operation is already running.',
   'error.branch-action-wait-timeout': 'Timed out waiting for repository refresh to finish.',
   'error.unknown': 'Unknown error',
