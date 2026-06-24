@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ClipboardEvent, CSSProperties, DragEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import {
   ChevronDown,
+  ChevronUp,
   ChevronRight,
   Code2,
   Copy,
@@ -11,16 +12,20 @@ import {
   Folder,
   FolderPlus,
   FolderOpen,
+  Loader2,
   Pencil,
   RefreshCw,
   Terminal,
   Trash2,
   Upload,
+  X,
 } from 'lucide-react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import {
   GOBLIN_FILE_PATHS_MIME,
   parseGoblinFilePathDragPayload,
+  type RepoFileSearchEntryKind,
+  type RepoFileSearchMatch,
   type RepoFileTransferSource,
   type RepoFileTreeEntry,
   type RepoFileTreeResult,
@@ -35,6 +40,7 @@ import {
   openRepositoryEditor,
   openRepositoryTerminal,
   renameRepositoryFileTreeEntry,
+  searchRepositoryFileTree,
   transferRepositoryFiles,
   exportRepositoryFilesToLocalDirectory,
 } from '#/web/repo-client.ts'
@@ -81,6 +87,7 @@ import {
   writeInternalFileTreeClipboard,
 } from '#/web/components/file-tree/clipboard.ts'
 import { resolveDropTargetDirectory } from '#/web/components/file-tree/drop-target.ts'
+import { mergeFileTreeSearchMatches, searchLoadedFileTreeNodes } from '#/web/components/file-tree/search.ts'
 import type { WorktreeStatus } from '#/web/types.ts'
 import {
   chooseFileTreeDownloadDirectory,
@@ -92,6 +99,8 @@ import {
 import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 
 const ROOT_DIR = ''
+const FILE_TREE_SEARCH_LIMIT = 100
+const EMPTY_FILE_TREE_SEARCH_MATCHES: RepoFileSearchMatch[] = []
 
 interface DirectoryState {
   entries?: RepoFileTreeEntry[]
@@ -108,6 +117,22 @@ interface ProjectFileTreeView {
   exists: boolean
   worktreePath: string | null
   status: WorktreeStatus[]
+}
+
+interface FileTreeFallbackSearchState {
+  query: string
+  matches: RepoFileSearchMatch[]
+  truncated: boolean
+  loading: boolean
+  error: string | null
+}
+
+const EMPTY_FILE_TREE_FALLBACK_SEARCH: FileTreeFallbackSearchState = {
+  query: '',
+  matches: EMPTY_FILE_TREE_SEARCH_MATCHES,
+  truncated: false,
+  loading: false,
+  error: null,
 }
 
 type FileTreeUndoAction =
@@ -173,6 +198,11 @@ export function ProjectFileTree({
   const [createDirectoryName, setCreateDirectoryName] = useState('')
   const [createDirectoryPending, setCreateDirectoryPending] = useState(false)
   const [createDirectoryError, setCreateDirectoryError] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchIndex, setSearchIndex] = useState(0)
+  const [fallbackSearch, setFallbackSearch] = useState<FileTreeFallbackSearchState>(
+    () => EMPTY_FILE_TREE_FALLBACK_SEARCH,
+  )
 
   useEffect(() => {
     activeWorktreeRef.current = worktreePath
@@ -232,6 +262,9 @@ export function ProjectFileTree({
     setCreateDirectoryName('')
     setCreateDirectoryPending(false)
     setCreateDirectoryError(null)
+    setSearchQuery('')
+    setSearchIndex(0)
+    setFallbackSearch(EMPTY_FILE_TREE_FALLBACK_SEARCH)
     if (!worktreePath) return
     const controller = new AbortController()
     void loadDirectory(ROOT_DIR, worktreePath, controller.signal)
@@ -265,50 +298,164 @@ export function ProjectFileTree({
   const visibleIds = useMemo(() => visibleFileTreeNodeIds(rootNodes), [rootNodes])
   const rootState = directories[ROOT_DIR]
   const canUploadFiles = hasNativeFilePicker()
+  const trimmedSearchQuery = searchQuery.trim()
+  const loadedSearchMatches = useMemo(
+    () =>
+      searchLoadedFileTreeNodes(
+        trimmedSearchQuery,
+        flatNodes.map((node) => ({
+          id: node.id,
+          name: node.name,
+          relativePath: node.relativePath,
+          kind: fileTreeNodeSearchKind(node),
+        })),
+      ),
+    [flatNodes, trimmedSearchQuery],
+  )
+  const activeFallbackSearchMatches =
+    trimmedSearchQuery && loadedSearchMatches.length === 0 && fallbackSearch.query === trimmedSearchQuery
+      ? fallbackSearch.matches
+      : EMPTY_FILE_TREE_SEARCH_MATCHES
+  const searchMatches = useMemo(
+    () => mergeFileTreeSearchMatches(trimmedSearchQuery, loadedSearchMatches, activeFallbackSearchMatches),
+    [activeFallbackSearchMatches, loadedSearchMatches, trimmedSearchQuery],
+  )
+  const normalizedSearchIndex =
+    searchMatches.length > 0 ? ((searchIndex % searchMatches.length) + searchMatches.length) % searchMatches.length : 0
+  const activeSearchMatch = searchMatches[normalizedSearchIndex] ?? null
+  const searchLoading =
+    !!trimmedSearchQuery &&
+    loadedSearchMatches.length === 0 &&
+    fallbackSearch.query === trimmedSearchQuery &&
+    fallbackSearch.loading
+  const searchError =
+    !!trimmedSearchQuery && fallbackSearch.query === trimmedSearchQuery && loadedSearchMatches.length === 0
+      ? fallbackSearch.error
+      : null
+  const searchTruncated =
+    !!trimmedSearchQuery &&
+    loadedSearchMatches.length === 0 &&
+    fallbackSearch.query === trimmedSearchQuery &&
+    fallbackSearch.truncated
 
-  useEffect(() => {
-    if (!worktreePath || !revealRequest) return
-    const request = revealRequest
-    const activeWorktreePath = worktreePath
-    if (revealRequestRef.current === request.id) return
-    revealRequestRef.current = request.id
-    let cancelled = false
+  const revealRelativePath = useCallback(
+    async (
+      relativePath: string,
+      options: { requestId?: number; cancelled?: () => boolean } = {},
+    ): Promise<void> => {
+      if (!worktreePath) return
+      const activeWorktreePath = worktreePath
 
-    async function ensureDirectory(relativePath: string, absolutePath: string): Promise<RepoFileTreeEntry[] | null> {
-      const state = directoriesRef.current[relativePath]
-      if (state?.entries) return state.entries
-      const result = await loadDirectory(relativePath, absolutePath)
-      if (!result?.ok) return null
-      return result.entries
-    }
+      async function ensureDirectory(relativePath: string, absolutePath: string): Promise<RepoFileTreeEntry[] | null> {
+        const state = directoriesRef.current[relativePath]
+        if (state?.entries) return state.entries
+        const result = await loadDirectory(relativePath, absolutePath)
+        if (!result?.ok) return null
+        return result.entries
+      }
 
-    async function revealPath() {
-      let parentRelativePath = ROOT_DIR
       let entries = await ensureDirectory(ROOT_DIR, activeWorktreePath)
       if (!entries) return
 
-      for (const directoryRelativePath of parentRelativePaths(request.relativePath)) {
-        if (cancelled) return
+      for (const directoryRelativePath of parentRelativePaths(relativePath)) {
+        if (options.cancelled?.()) return
         const entry = findEntry(entries, directoryRelativePath)
         if (!entry) return
         setExpandedDirs((current) => new Set(current).add(entry.relativePath))
         entries = await ensureDirectory(entry.relativePath, entry.absolutePath)
         if (!entries) return
-        parentRelativePath = entry.relativePath
       }
 
-      const finalEntry = findEntry(entries, request.relativePath)
-      const targetId = finalEntry ? finalEntry.relativePath : `virtual:${request.relativePath}`
-      if (cancelled) return
+      const finalEntry = findEntry(entries, relativePath)
+      const targetId = finalEntry ? finalEntry.relativePath : `virtual:${relativePath}`
+      if (options.cancelled?.()) return
+      if (options.requestId !== undefined) revealRequestRef.current = options.requestId
       setSelection({ selected: new Set([targetId]), anchor: targetId })
+      setFocusedNodeId(targetId)
       scheduleFileTreeNodeScroll(targetId)
-    }
+    },
+    [loadDirectory, worktreePath],
+  )
 
-    void revealPath()
+  useEffect(() => {
+    if (!worktreePath || !revealRequest) return
+    const request = revealRequest
+    if (revealRequestRef.current === request.id) return
+    revealRequestRef.current = request.id
+    let cancelled = false
+    void revealRelativePath(request.relativePath, { requestId: request.id, cancelled: () => cancelled })
     return () => {
       cancelled = true
     }
-  }, [loadDirectory, revealRequest, worktreePath])
+  }, [revealRelativePath, revealRequest, worktreePath])
+
+  useEffect(() => {
+    setSearchIndex(0)
+  }, [trimmedSearchQuery])
+
+  useLayoutEffect(() => {
+    if (!worktreePath || !trimmedSearchQuery || loadedSearchMatches.length > 0) return
+    const controller = new AbortController()
+    const timer = setTimeout(() => {
+      setFallbackSearch({
+        query: trimmedSearchQuery,
+        matches: EMPTY_FILE_TREE_SEARCH_MATCHES,
+        truncated: false,
+        loading: true,
+        error: null,
+      })
+      void searchRepositoryFileTree(repoId, worktreePath, trimmedSearchQuery, FILE_TREE_SEARCH_LIMIT, controller.signal)
+        .then((result) => {
+          if (controller.signal.aborted) return
+          setFallbackSearch(
+            result.ok
+              ? {
+                  query: trimmedSearchQuery,
+                  matches: result.matches,
+                  truncated: result.truncated,
+                  loading: false,
+                  error: null,
+                }
+              : {
+                  query: trimmedSearchQuery,
+                  matches: EMPTY_FILE_TREE_SEARCH_MATCHES,
+                  truncated: false,
+                  loading: false,
+                  error: result.message,
+                },
+          )
+        })
+        .catch(() => {
+          if (controller.signal.aborted) return
+          setFallbackSearch({
+            query: trimmedSearchQuery,
+            matches: EMPTY_FILE_TREE_SEARCH_MATCHES,
+            truncated: false,
+            loading: false,
+            error: 'error.failed-read-repo',
+          })
+        })
+    }, 250)
+    return () => {
+      controller.abort()
+      clearTimeout(timer)
+    }
+  }, [loadedSearchMatches.length, repoId, trimmedSearchQuery, worktreePath])
+
+  const activeSearchKey = activeSearchMatch
+    ? `${activeSearchMatch.source}:${activeSearchMatch.source === 'loaded' ? activeSearchMatch.id : activeSearchMatch.relativePath}`
+    : ''
+
+  useEffect(() => {
+    if (!activeSearchMatch) return
+    if (activeSearchMatch.source === 'loaded') {
+      setSelection({ selected: new Set([activeSearchMatch.id]), anchor: activeSearchMatch.id })
+      setFocusedNodeId(activeSearchMatch.id)
+      scheduleFileTreeNodeScroll(activeSearchMatch.id)
+      return
+    }
+    void revealRelativePath(activeSearchMatch.relativePath)
+  }, [activeSearchKey, activeSearchMatch, revealRelativePath])
 
   const toggleDirectory = useCallback(
     (node: FileTreeNode) => {
@@ -946,6 +1093,21 @@ export function ProjectFileTree({
     event.dataTransfer.dropEffect = 'copy'
   }, [])
 
+  const moveSearchMatch = useCallback(
+    (offset: number) => {
+      setSearchIndex((current) => {
+        if (searchMatches.length === 0) return 0
+        return (current + offset + searchMatches.length) % searchMatches.length
+      })
+    },
+    [searchMatches.length],
+  )
+
+  const clearSearch = useCallback(() => {
+    setSearchQuery('')
+    setSearchIndex(0)
+  }, [])
+
   if (!view.exists) return null
   const fileTreeStyle = {
     '--goblin-file-tree-font-size': `${fileTreeFontSize}px`,
@@ -970,6 +1132,15 @@ export function ProjectFileTree({
       ) : (
         <div className="flex min-h-0 flex-1 flex-col text-[length:var(--goblin-file-tree-font-size)]">
           <FileTreeToolbar
+            query={searchQuery}
+            onQueryChange={setSearchQuery}
+            resultIndex={searchMatches.length > 0 ? normalizedSearchIndex + 1 : 0}
+            resultCount={searchMatches.length}
+            loading={searchLoading}
+            error={searchError}
+            truncated={searchTruncated}
+            onMoveSearch={moveSearchMatch}
+            onClearSearch={clearSearch}
             onCreateDirectory={() => beginCreateDirectory(rootCreateDirectoryTarget())}
             onRefresh={() => refreshTreeDirectory(rootCreateDirectoryTarget())}
           />
@@ -1451,15 +1622,106 @@ function FileTreeEmptyContextMenu({
 }
 
 function FileTreeToolbar({
+  query,
+  onQueryChange,
+  resultIndex,
+  resultCount,
+  loading,
+  error,
+  truncated,
+  onMoveSearch,
+  onClearSearch,
   onCreateDirectory,
   onRefresh,
 }: {
+  query: string
+  onQueryChange: (query: string) => void
+  resultIndex: number
+  resultCount: number
+  loading: boolean
+  error: string | null
+  truncated: boolean
+  onMoveSearch: (offset: number) => void
+  onClearSearch: () => void
   onCreateDirectory: () => void
   onRefresh: () => void
 }) {
   const t = useT()
+  const hasQuery = query.trim().length > 0
+  const canMove = resultCount > 0
   return (
     <div className="flex min-h-8 shrink-0 items-center justify-end gap-1 border-b border-separator/70 bg-card px-2">
+      <div className="mr-auto flex min-w-0 flex-1 items-center gap-1 pr-1">
+        <Input
+          aria-label={t('file-tree.search-label')}
+          placeholder={t('file-tree.search-placeholder')}
+          value={query}
+          onInput={(event) => onQueryChange(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            event.stopPropagation()
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              onClearSearch()
+              return
+            }
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              onMoveSearch(event.shiftKey ? -1 : 1)
+            }
+          }}
+          className="h-6 min-w-0 max-w-56 flex-1 px-2 py-0 text-[length:var(--goblin-file-tree-font-size)]"
+        />
+        {loading ? <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" /> : null}
+        {hasQuery && !loading ? (
+          <Button
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            aria-label={t('file-tree.search-clear')}
+            title={t('file-tree.search-clear')}
+            onClick={onClearSearch}
+          >
+            <X className="size-3.5" />
+          </Button>
+        ) : null}
+        {hasQuery ? (
+          <span className="shrink-0 whitespace-nowrap text-[10px] text-muted-foreground">
+            {loading
+              ? t('file-tree.search-loading')
+              : resultCount > 0
+                ? `${resultIndex} / ${resultCount}`
+                : t('file-tree.search-no-results')}
+            {truncated ? ` ${t('file-tree.search-truncated')}` : ''}
+          </span>
+        ) : null}
+        {hasQuery ? (
+          <>
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              disabled={!canMove}
+              aria-label={t('file-tree.search-prev')}
+              title={t('file-tree.search-prev')}
+              onClick={() => onMoveSearch(-1)}
+            >
+              <ChevronUp className="size-3.5" />
+            </Button>
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              disabled={!canMove}
+              aria-label={t('file-tree.search-next')}
+              title={t('file-tree.search-next')}
+              onClick={() => onMoveSearch(1)}
+            >
+              <ChevronDown className="size-3.5" />
+            </Button>
+          </>
+        ) : null}
+        {error ? <span className="min-w-0 truncate text-[10px] text-danger">{t(error)}</span> : null}
+      </div>
       <Button
         type="button"
         size="icon-xs"
@@ -1622,6 +1884,10 @@ function iconForNode(node: FileTreeNode, expanded: boolean) {
   if (node.kind === 'directory') return expanded ? FolderOpen : Folder
   if (node.kind === 'symlink') return FileSymlink
   return File
+}
+
+function fileTreeNodeSearchKind(node: FileTreeNode): RepoFileSearchEntryKind {
+  return node.kind === 'virtual' ? 'other' : node.kind
 }
 
 function isExpandableNode(node: FileTreeNode): boolean {

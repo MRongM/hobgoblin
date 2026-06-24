@@ -283,6 +283,7 @@ function renderToolbar(options: {
     scrollLines: vi.fn(),
     clearBell: vi.fn(() => false),
     closeTerminalAndDismissDetailIfLast: vi.fn(() => []),
+    registerWorktreeHost: vi.fn(),
     attach: vi.fn(),
     detach: vi.fn(),
     restart: vi.fn(),

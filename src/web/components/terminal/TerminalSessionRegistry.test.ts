@@ -5,6 +5,22 @@ import { TerminalSessionRegistry } from '#/web/components/terminal/TerminalSessi
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import type { TerminalDescriptor, TerminalRepoIndex } from '#/web/components/terminal/types.ts'
 
+const bridgeMocks = vi.hoisted(() => ({
+  create: vi.fn(),
+  close: vi.fn(async () => true),
+  reorder: vi.fn(async () => true),
+  setBadge: vi.fn(),
+}))
+
+vi.mock('#/web/terminal.ts', () => ({
+  terminalBridge: {
+    create: bridgeMocks.create,
+    close: bridgeMocks.close,
+    reorder: bridgeMocks.reorder,
+    setBadge: bridgeMocks.setBadge,
+  },
+}))
+
 const REPO_ROOT = '/repo'
 const WORKTREE_PATH = '/repo'
 const BRANCH = 'main'
@@ -35,12 +51,14 @@ function makeServerSession(
   sessionId: string,
   terminalId: string,
   overrides: Partial<{
-    controller: { attachmentId: string; status: 'connected' | 'grace' }
+    controller: { attachmentId: string; status: 'connected' }
     processName: string
     canonicalTitle: string | null
     cols: number
     rows: number
     displayOrder: number
+    phase: 'opening' | 'restarting' | 'open' | 'error' | 'closed'
+    message: string | null
   }> = {},
 ) {
   return {
@@ -53,6 +71,8 @@ function makeServerSession(
     cols: overrides.cols ?? 80,
     rows: overrides.rows ?? 24,
     displayOrder: overrides.displayOrder ?? 1,
+    phase: overrides.phase ?? 'open',
+    message: overrides.message ?? null,
   }
 }
 
@@ -62,6 +82,11 @@ describe('TerminalSessionRegistry', () => {
 
   beforeEach(() => {
     selectedChanges = []
+    bridgeMocks.create.mockReset()
+    bridgeMocks.close.mockClear()
+    bridgeMocks.reorder.mockClear()
+    bridgeMocks.setBadge.mockClear()
+    window.sessionStorage.setItem('goblin:web-terminal-attachment-id', 'attachment_local')
     registry = new TerminalSessionRegistry(
       () => REPO_ROOT,
       (worktreeTerminalKey, key) => selectedChanges.push({ worktreeTerminalKey, key }),
@@ -70,6 +95,97 @@ describe('TerminalSessionRegistry', () => {
 
   afterEach(() => {
     registry.destroy()
+  })
+
+  describe('createTerminal', () => {
+    test('supports registerWorktreeHost after context method extraction', () => {
+      const registerWorktreeHost = registry.registerWorktreeHost
+      const host = document.createElement('div')
+
+      expect(() => registerWorktreeHost(WORKTREE_KEY, host)).not.toThrow()
+      expect(() => registerWorktreeHost(WORKTREE_KEY, null)).not.toThrow()
+    })
+
+    test('sends measured geometry and hydrates the created session first frame', async () => {
+      registry.setRepoIndex(makeRepoIndex())
+      const host = document.createElement('div')
+      document.body.appendChild(host)
+      vi.spyOn(host, 'getBoundingClientRect').mockReturnValue({
+        x: 0,
+        y: 0,
+        width: 800,
+        height: 400,
+        top: 0,
+        right: 800,
+        bottom: 400,
+        left: 0,
+        toJSON: () => ({}),
+      })
+      registry.registerWorktreeHost(WORKTREE_KEY, host)
+      bridgeMocks.create.mockResolvedValueOnce({
+        ok: true,
+        action: 'created',
+        key: `${REPO_ROOT}\0${WORKTREE_PATH}\0terminal-1`,
+        sessionId: 'session-created',
+        processName: 'zsh',
+        canonicalTitle: null,
+        snapshot: 'first-frame',
+        snapshotSeq: 7,
+        controller: { attachmentId: 'attachment_local', status: 'connected' },
+        canonicalCols: 95,
+        canonicalRows: 28,
+        phase: 'open',
+        message: null,
+        sessions: [makeServerSession('session-created', 'terminal-1', { cols: 95, rows: 28, processName: 'zsh' })],
+      })
+
+      const key = await registry.createTerminal({ repoRoot: REPO_ROOT, branch: BRANCH, worktreePath: WORKTREE_PATH })
+
+      expect(bridgeMocks.create).toHaveBeenCalledWith({
+        repoRoot: REPO_ROOT,
+        branch: BRANCH,
+        worktreePath: WORKTREE_PATH,
+        kind: 'primary',
+        attachmentId: 'attachment_local',
+        cols: 95,
+        rows: 28,
+      })
+      expect(key).toBe(`${REPO_ROOT}\0${WORKTREE_PATH}\0terminal-1`)
+      expect(registry.snapshot(key)).toMatchObject({
+        phase: 'open',
+        processName: 'zsh',
+      })
+      const session = (registry as any).sessions.get(key)
+      expect((session as any).hydratedSnapshot).toEqual({ snapshot: 'first-frame', snapshotSeq: 7 })
+    })
+
+    test('rejects malformed successful create responses', async () => {
+      registry.setRepoIndex(makeRepoIndex())
+      const host = document.createElement('div')
+      document.body.appendChild(host)
+      vi.spyOn(host, 'getBoundingClientRect').mockReturnValue({
+        x: 0,
+        y: 0,
+        width: 800,
+        height: 400,
+        top: 0,
+        right: 800,
+        bottom: 400,
+        left: 0,
+        toJSON: () => ({}),
+      })
+      registry.registerWorktreeHost(WORKTREE_KEY, host)
+      bridgeMocks.create.mockResolvedValueOnce({
+        ok: true,
+        action: 'created',
+        key: `${REPO_ROOT}\0${WORKTREE_PATH}\0terminal-1`,
+        sessions: [makeServerSession('session-created', 'terminal-1')],
+      })
+
+      await expect(
+        registry.createTerminal({ repoRoot: REPO_ROOT, branch: BRANCH, worktreePath: WORKTREE_PATH }),
+      ).rejects.toThrow('error.terminal-create-failed')
+    })
   })
 
   describe('event dispatch', () => {

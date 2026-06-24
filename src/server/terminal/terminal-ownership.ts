@@ -1,4 +1,4 @@
-import type { TerminalController, TerminalControllerStatus } from '#/shared/terminal.ts'
+import type { TerminalController } from '#/shared/terminal.ts'
 
 export interface TerminalAttachmentState {
   cols: number
@@ -7,10 +7,9 @@ export interface TerminalAttachmentState {
 }
 
 export interface TerminalOwnershipState {
-  attachmentId: string | null
-  attachment: TerminalAttachmentState | null
+  attachments: Map<string, TerminalAttachmentState>
   controller: TerminalController | null
-  allowImplicitAttachControl: boolean
+  claimedByOwner: boolean
   cols: number
   rows: number
 }
@@ -20,6 +19,11 @@ export interface TerminalOwnershipEffect {
   emitOwnership: boolean
 }
 
+export type TerminalAuthorityAction = 'write' | 'resize' | 'restart' | 'takeover'
+export type TerminalAuthorityReason = 'not-controller' | 'session-unowned' | 'unknown-attachment'
+
+export type TerminalAuthorityResult = { ok: true } | { ok: false; reason: TerminalAuthorityReason }
+
 export function registerTerminalAttachment(
   state: TerminalOwnershipState,
   attachmentId: string,
@@ -27,23 +31,16 @@ export function registerTerminalAttachment(
   rows: number,
   connected?: boolean,
 ): void {
-  state.attachmentId = attachmentId
-  state.attachment = {
+  const previous = state.attachments.get(attachmentId)
+  state.attachments.set(attachmentId, {
     cols,
     rows,
-    connected: connected ?? state.attachment?.connected ?? false,
-  }
+    connected: connected ?? previous?.connected ?? false,
+  })
 }
 
 export function attachTerminalAttachment(state: TerminalOwnershipState, attachmentId: string): TerminalOwnershipEffect {
-  if (
-    state.controller !== null ||
-    !state.allowImplicitAttachControl ||
-    state.attachmentId !== attachmentId ||
-    !state.attachment?.connected
-  ) {
-    return { emitOwnership: false }
-  }
+  if (state.controller !== null) return { emitOwnership: false }
   return claimTerminalAttachmentControl(state, attachmentId)
 }
 
@@ -51,27 +48,22 @@ export function claimTerminalAttachmentControl(
   state: TerminalOwnershipState,
   attachmentId: string,
 ): TerminalOwnershipEffect {
-  if (state.attachmentId !== attachmentId || !state.attachment) return { emitOwnership: false }
-  if (!state.attachment.connected) {
-    state.attachment = null
-    state.attachmentId = null
-    return { emitOwnership: false }
-  }
-  const sizeChanged = state.cols !== state.attachment.cols || state.rows !== state.attachment.rows
+  const attachment = state.attachments.get(attachmentId)
+  if (!attachment?.connected) return { emitOwnership: false }
+
+  const sizeChanged = state.cols !== attachment.cols || state.rows !== attachment.rows
   state.controller = { attachmentId, status: 'connected' }
-  state.allowImplicitAttachControl = false
-  return {
-    resizeTo: sizeChanged ? { cols: state.attachment.cols, rows: state.attachment.rows } : undefined,
-    emitOwnership: !sizeChanged,
-  }
+  state.claimedByOwner = true
+
+  return sizeChanged
+    ? { emitOwnership: false, resizeTo: { cols: attachment.cols, rows: attachment.rows } }
+    : { emitOwnership: true }
 }
 
 export function restartTerminalAttachmentControl(state: TerminalOwnershipState, attachmentId: string): void {
-  state.controller =
-    state.attachmentId === attachmentId && state.attachment?.connected
-      ? { attachmentId, status: 'connected' }
-      : null
-  if (state.controller) state.allowImplicitAttachControl = false
+  const attachment = state.attachments.get(attachmentId)
+  state.controller = attachment?.connected ? { attachmentId, status: 'connected' } : null
+  if (state.controller) state.claimedByOwner = true
 }
 
 export function updateTerminalAttachmentConnection(
@@ -79,36 +71,41 @@ export function updateTerminalAttachmentConnection(
   attachmentId: string,
   connected: boolean,
 ): TerminalOwnershipEffect {
-  if (state.attachmentId !== attachmentId || !state.attachment) return { emitOwnership: false }
-  const controllerStatus = connected ? 'connected' : 'grace'
-  if (
-    state.attachment.connected === connected &&
-    (state.controller?.attachmentId !== attachmentId || state.controller?.status === controllerStatus)
-  ) {
-    return { emitOwnership: false }
+  const attachment = state.attachments.get(attachmentId)
+  if (!attachment) return { emitOwnership: false }
+
+  const wasConnected = attachment.connected
+  attachment.connected = connected
+
+  if (state.controller?.attachmentId === attachmentId && !connected) {
+    state.controller = null
+    return { emitOwnership: true }
   }
-  state.attachment.connected = connected
-  if (state.controller?.attachmentId !== attachmentId) {
-    if (connected && state.controller === null && state.allowImplicitAttachControl) {
-      return claimTerminalAttachmentControl(state, attachmentId)
-    }
-    if (!connected) {
-      state.attachment = null
-      state.attachmentId = null
-    }
-    return { emitOwnership: false }
+
+  if (!wasConnected && connected && state.controller === null) {
+    return claimTerminalAttachmentControl(state, attachmentId)
   }
-  if (state.controller?.status === controllerStatus) return { emitOwnership: false }
-  state.controller = { attachmentId, status: controllerStatus as Exclude<TerminalControllerStatus, 'none'> }
-  return { emitOwnership: true }
+
+  return { emitOwnership: false }
+}
+
+export function authorizeTerminalAttachment(
+  state: TerminalOwnershipState,
+  attachmentId: string,
+  action: TerminalAuthorityAction,
+): TerminalAuthorityResult {
+  const attachment = state.attachments.get(attachmentId)
+  if (!attachment?.connected) return { ok: false, reason: 'unknown-attachment' }
+  if (action === 'takeover') return { ok: true }
+  if (!state.controller) return { ok: false, reason: 'session-unowned' }
+  if (state.controller.attachmentId !== attachmentId) return { ok: false, reason: 'not-controller' }
+  return { ok: true }
 }
 
 export function releaseTerminalAttachmentControl(state: TerminalOwnershipState, attachmentId: string): boolean {
   if (state.controller?.attachmentId !== attachmentId) return false
-  if (state.attachment?.connected) return false
+  const attachment = state.attachments.get(attachmentId)
+  if (attachment?.connected) return false
   state.controller = null
-  state.allowImplicitAttachControl = false
-  state.attachment = null
-  state.attachmentId = null
   return true
 }

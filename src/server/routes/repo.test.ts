@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   discardRepositoryChanges: vi.fn(),
   getRepositoryCommitDetail: vi.fn(),
   getRepositoryHistory: vi.fn(),
+  searchRepositoryFileTree: vi.fn(),
   exportRepositoryFilesToLocalDirectory: vi.fn(),
 }))
 
@@ -18,6 +19,7 @@ vi.mock('#/server/modules/repo-read-paths.ts', () => ({
   getRepositorySnapshot: vi.fn(),
   getRepositoryStatus: vi.fn(),
   probeRepository: vi.fn(),
+  searchRepositoryFileTree: mocks.searchRepositoryFileTree,
 }))
 
 vi.mock('#/server/modules/repo-write-paths.ts', () => ({
@@ -87,6 +89,12 @@ describe('repo routes', () => {
       files: [],
     })
     mocks.discardRepositoryChanges.mockResolvedValue({ ok: true, message: '' })
+    mocks.searchRepositoryFileTree.mockResolvedValue({
+      ok: true,
+      matches: [{ relativePath: 'src/Button.tsx', kind: 'file' }],
+      truncated: false,
+      limit: 20,
+    })
   })
 
   test('serves repository history with normalized body values', async () => {
@@ -203,4 +211,23 @@ describe('repo routes', () => {
     )
   })
 
+  test('routes repository file search with normalized body values', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/file-search', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ repoId: '/repo', worktreePath: '/repo', query: 'button', limit: 500 }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      matches: [{ relativePath: 'src/Button.tsx', kind: 'file' }],
+      truncated: false,
+      limit: 20,
+    })
+    expect(mocks.searchRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', 'button', 200, expect.any(AbortSignal))
+  })
 })

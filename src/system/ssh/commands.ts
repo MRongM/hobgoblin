@@ -23,6 +23,7 @@ export type RemoteCommandKind =
   | { type: 'testDirectory'; path: string }
   | { type: 'listDirectories'; path: string; limit?: number }
   | { type: 'listDirectoryEntries'; worktreePath: string; dirPath: string }
+  | { type: 'searchFileTree'; worktreePath: string; query: string; limit: number }
   | { type: 'createFileTreeDirectory'; worktreePath: string; parentDirPath: string; name: string }
   | { type: 'renameFileTreeEntry'; worktreePath: string; oldPath: string; newName: string }
   | { type: 'deleteFileTreeEntries'; worktreePath: string; paths: string[] }
@@ -238,6 +239,8 @@ function scriptForCommand(command: RemoteCommandKind): string {
         'print(json.dumps({"ok": True, "entries": entries}, ensure_ascii=False))',
         'PY',
       ].join('\n')
+    case 'searchFileTree':
+      return remoteFileTreeSearchScript(command)
     case 'renameFileTreeEntry':
       return remoteRenameFileTreeScript(command)
     case 'createFileTreeDirectory':
@@ -384,6 +387,62 @@ function scriptForCommand(command: RemoteCommandKind): string {
   }
   const exhaustive: never = command
   return exhaustive
+}
+
+function remoteFileTreeSearchScript(command: Extract<RemoteCommandKind, { type: 'searchFileTree' }>): string {
+  const payload = {
+    worktreePath: command.worktreePath,
+    query: command.query,
+    limit: Math.max(1, Math.min(200, Math.floor(command.limit))),
+  }
+  return [
+    "python3 - <<'PY'",
+    'import json, os, subprocess, sys',
+    `payload = ${pythonString(JSON.stringify(payload))}`,
+    'data = json.loads(payload)',
+    'root = os.path.normpath(data["worktreePath"])',
+    'query = str(data["query"]).strip().lower()',
+    'limit = int(data["limit"])',
+    'skip = {".git", "node_modules", "dist", "build", ".next", ".turbo", ".cache", "coverage"}',
+    'def fail(message):',
+    '    print(json.dumps({"ok": False, "message": message}))',
+    '    sys.exit(0)',
+    'if not root or not os.path.isabs(root) or not query:',
+    '    fail("error.invalid-arguments")',
+    'if not os.path.isdir(root):',
+    '    fail("error.path-not-directory")',
+    'def basename(p):',
+    '    return p.rsplit("/", 1)[-1]',
+    'def rank(p):',
+    '    name = basename(p).lower()',
+    '    value = p.lower()',
+    '    if name.startswith(query): return 0',
+    '    if query in name: return 1',
+    '    if value.startswith(query): return 2',
+    '    if query in value: return 3',
+    '    return None',
+    'def skipped(p):',
+    '    return any(part in skip for part in p.split("/"))',
+    'try:',
+    '    raw = subprocess.check_output(["git", "-C", root, "ls-files", "-co", "--exclude-standard", "-z"], stderr=subprocess.PIPE)',
+    'except subprocess.CalledProcessError as exc:',
+    '    fail(exc.stderr.decode("utf-8", "replace") if exc.stderr else "error.failed-read-repo")',
+    'paths = [p.decode("utf-8", "surrogateescape") for p in raw.split(b"\\0") if p]',
+    'items = {}',
+    'for rel in paths:',
+    '    if rel.startswith("/") or "\\x00" in rel or skipped(rel):',
+    '        continue',
+    '    items.setdefault(rel, {"relativePath": rel, "kind": "file"})',
+    '    parts = [part for part in rel.split("/") if part]',
+    '    for i in range(1, len(parts)):',
+    '        directory = "/".join(parts[:i])',
+    '        if not skipped(directory):',
+    '            items.setdefault(directory, {"relativePath": directory, "kind": "directory"})',
+    'matches = [item for item in items.values() if rank(item["relativePath"]) is not None]',
+    'matches.sort(key=lambda item: (rank(item["relativePath"]), item["relativePath"].lower()))',
+    'print(json.dumps({"ok": True, "matches": matches[:limit], "truncated": len(matches) > limit, "limit": limit}, ensure_ascii=False))',
+    'PY',
+  ].join('\n')
 }
 
 function remoteDiscardChangesScript(command: Extract<RemoteCommandKind, { type: 'gitDiscardChanges' }>): string {

@@ -11,6 +11,13 @@ import { createRepoBranch, resetReposStore } from '#/web/stores/repos/test-utils
 import { GOBLIN_FILE_PATHS_MIME } from '#/shared/file-tree.ts'
 
 type GetRepositoryFileTreeArgs = [repoId: string, worktreePath: string, dirPath: string, signal?: AbortSignal]
+type SearchRepositoryFileTreeArgs = [
+  repoId: string,
+  worktreePath: string,
+  query: string,
+  limit?: number,
+  signal?: AbortSignal,
+]
 
 const getRepositoryFileTree = vi.fn(
   async (_repoId: string, _worktreePath: string, dirPath: string, _signal?: AbortSignal) => ({
@@ -42,6 +49,12 @@ const moveRepositoryFileTreeEntries = vi.fn(async (..._args: unknown[]) => ({ ok
 const renameRepositoryFileTreeEntry = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
 const deleteRepositoryFileTreeEntries = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
 const createRepositoryFileTreeDirectory = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
+const searchRepositoryFileTree = vi.fn(async (..._args: SearchRepositoryFileTreeArgs) => ({
+  ok: true as const,
+  matches: [{ relativePath: 'src/app.ts', kind: 'file' as const }],
+  truncated: false,
+  limit: 100,
+}))
 const openRepositoryEditor = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
 const openRepositoryTerminal = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
 const openInFinder = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
@@ -56,6 +69,7 @@ vi.mock('#/web/repo-client.ts', () => ({
   renameRepositoryFileTreeEntry: (...args: unknown[]) => renameRepositoryFileTreeEntry(...args),
   deleteRepositoryFileTreeEntries: (...args: unknown[]) => deleteRepositoryFileTreeEntries(...args),
   moveRepositoryFileTreeEntries: (...args: unknown[]) => moveRepositoryFileTreeEntries(...args),
+  searchRepositoryFileTree: (...args: SearchRepositoryFileTreeArgs) => searchRepositoryFileTree(...args),
   openRepositoryEditor: (path: string) => openRepositoryEditor(path),
   openRepositoryTerminal: (path: string) => openRepositoryTerminal(path),
   transferRepositoryFiles: (input: unknown) => transferRepositoryFiles(input),
@@ -97,6 +111,7 @@ beforeEach(() => {
   renameRepositoryFileTreeEntry.mockClear()
   deleteRepositoryFileTreeEntries.mockClear()
   createRepositoryFileTreeDirectory.mockClear()
+  searchRepositoryFileTree.mockClear()
   openRepositoryEditor.mockClear()
   openRepositoryTerminal.mockClear()
   openInFinder.mockClear()
@@ -120,6 +135,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   act(() => {
     root?.unmount()
   })
@@ -213,6 +229,47 @@ describe('ProjectFileTree', () => {
     expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', '/repo/src', undefined)
     const row = treeItemByText('app.ts')
     expect(row.getAttribute('aria-selected')).toBe('true')
+  })
+
+  test('searches loaded file tree nodes and jumps between matches', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const input = container?.querySelector<HTMLInputElement>('input[aria-label="file-tree.search-label"]')
+    expect(input).toBeTruthy()
+    expect(container?.querySelector('.lucide-search')).toBeNull()
+    await act(async () => {
+      input!.value = 'readme'
+      input!.dispatchEvent(new Event('input', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(container?.textContent).toContain('1 / 1')
+    expect(treeItemByText('README.md').getAttribute('aria-selected')).toBe('true')
+    expect(searchRepositoryFileTree).not.toHaveBeenCalled()
+  })
+
+  test('falls back to whole-worktree search when loaded nodes do not match', async () => {
+    vi.useFakeTimers()
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const input = container?.querySelector<HTMLInputElement>('input[aria-label="file-tree.search-label"]')
+    await act(async () => {
+      input!.value = 'app'
+      input!.dispatchEvent(new Event('input', { bubbles: true }))
+      await Promise.resolve()
+      await vi.advanceTimersByTimeAsync(300)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(searchRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', 'app', 100, expect.any(AbortSignal))
+    expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', '/repo/src', undefined)
+    expect(treeItemByText('app.ts').getAttribute('aria-selected')).toBe('true')
+    vi.useRealTimers()
   })
 
   test('clicking a directory row selects and expands it', async () => {

@@ -26,13 +26,16 @@ import {
 } from '#/web/components/terminal/terminal-keyboard.ts'
 import { registerTerminalRelativePathLinkProvider } from '#/web/components/terminal/terminal-path-links.ts'
 import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
+import {
+  TERMINAL_FONT_FAMILY,
+  measureTerminalGeometry,
+  type TerminalGeometry,
+} from '#/web/components/terminal/terminal-geometry.ts'
+import type { TerminalInput } from '#/web/components/terminal/terminal-input.ts'
 const DEFAULT_PARKING_WIDTH = 800
 const DEFAULT_PARKING_HEIGHT = 400
-const DEFAULT_TERMINAL_COLS = 80
-const DEFAULT_TERMINAL_ROWS = 24
 const RESIZE_DEBOUNCE_MS = 80
 const FONT_REMEASURE_DEBOUNCE_MS = 80
-const TERMINAL_FONT_FAMILY = "'Maple Mono NF CN', monospace"
 
 export class TerminalSessionView {
   private readonly frame: HTMLDivElement
@@ -58,7 +61,7 @@ export class TerminalSessionView {
 
   constructor(
     handlers: {
-      onInput: (data: string) => void
+      onInput: (data: TerminalInput) => void
       onBell: () => void
       onResize: (size: { cols: number; rows: number }) => void
       onSearchResult: (event: ISearchResultChangeEvent) => void
@@ -79,7 +82,7 @@ export class TerminalSessionView {
   }
 
   private readonly handlers: {
-    onInput: (data: string) => void
+    onInput: (data: TerminalInput) => void
     onBell: () => void
     onResize: (size: { cols: number; rows: number }) => void
     onSearchResult: (event: ISearchResultChangeEvent) => void
@@ -140,12 +143,16 @@ export class TerminalSessionView {
     blurElementIfFocused(this.frame)
   }
 
-  openTerminal(onMacOptionInput: (input: string) => void): XTermTerminal {
+  measureGeometry(): TerminalGeometry | null {
+    return measureTerminalGeometry({ host: this.xtermHost, fontSize: this.fontSize })
+  }
+
+  openTerminal(geometry: TerminalGeometry, onMacOptionInput: (input: TerminalInput) => void): XTermTerminal {
     const theme = terminalThemeForCurrentDocument()
     const term = new Terminal({
       allowProposedApi: true,
-      cols: DEFAULT_TERMINAL_COLS,
-      rows: DEFAULT_TERMINAL_ROWS,
+      cols: geometry.cols,
+      rows: geometry.rows,
       cursorBlink: true,
       cursorStyle: 'bar',
       fontFamily: TERMINAL_FONT_FAMILY,
@@ -168,8 +175,12 @@ export class TerminalSessionView {
     this.disposeThemeObserver = observeTerminalTheme((nextTheme) => {
       this.applyTerminalTheme(term, nextTheme)
     })
-    this.disposables.push(term.onData((data) => this.handlers.onInput(data)))
-    this.disposables.push(term.onBinary((data) => this.handlers.onInput(data)))
+    this.disposables.push(
+      term.onData((data) => this.handlers.onInput({ origin: 'user-intent', source: 'xterm', data })),
+    )
+    this.disposables.push(
+      term.onBinary((data) => this.handlers.onInput({ origin: 'user-intent', source: 'xterm', data })),
+    )
     this.disposables.push(term.onBell(() => this.handlers.onBell()))
     this.disposables.push(term.onResize((size) => this.handlers.onResize(size)))
     term.open(this.xtermHost)
@@ -258,7 +269,7 @@ export class TerminalSessionView {
     if (!this.frame.contains(this.xtermHost)) this.frame.appendChild(this.xtermHost)
   }
 
-  private installKeyboardHandlers(term: XTermTerminal, onInput: (input: string) => void): void {
+  private installKeyboardHandlers(term: XTermTerminal, onInput: (input: TerminalInput) => void): void {
     const isMac = isMacNavigatorPlatform(globalThis.navigator?.platform ?? '')
     const safariShiftKeyResolver = this.safariShiftKeyResolver
     term.attachCustomKeyEventHandler((event) => {
@@ -269,14 +280,14 @@ export class TerminalSessionView {
       if (optionInput) {
         event.preventDefault()
         event.stopPropagation()
-        onInput(optionInput)
+        onInput({ origin: 'user-intent', source: 'keyboard', data: optionInput })
         return false
       }
       const safariShiftInput = safariShiftKeyResolver.inputForEvent(event)
       if (safariShiftInput) {
         event.preventDefault()
         event.stopPropagation()
-        onInput(safariShiftInput)
+        onInput({ origin: 'user-intent', source: 'keyboard', data: safariShiftInput })
         return false
       }
       return true

@@ -14,7 +14,13 @@ describe('TerminalSessionRuntime', () => {
         replayTruncated: false,
         processName: 'zsh',
         canonicalTitle: null,
+        snapshot: '',
+        snapshotSeq: 0,
         controller: { attachmentId: 'attachment_local', status: 'connected' },
+        canonicalCols: 100,
+        canonicalRows: 30,
+        phase: 'open',
+        message: null,
         role: 'controller',
         controllerStatus: 'connected',
       },
@@ -43,7 +49,11 @@ describe('TerminalSessionRuntime', () => {
         replayTruncated: false,
         processName: 'zsh',
         canonicalTitle: null,
+        snapshot: '',
+        snapshotSeq: 0,
         controller: { attachmentId: 'attachment_remote', status: 'connected' },
+        phase: 'open',
+        message: null,
         role: 'viewer',
         controllerStatus: 'connected',
         canonicalCols: 120,
@@ -117,7 +127,13 @@ describe('TerminalSessionRuntime', () => {
         replayTruncated: false,
         processName: 'zsh',
         canonicalTitle: '~/Developer/goblin — npm run dev',
+        snapshot: '',
+        snapshotSeq: 0,
         controller: { attachmentId: 'attachment_remote', status: 'connected' },
+        canonicalCols: 100,
+        canonicalRows: 30,
+        phase: 'open',
+        message: null,
         role: 'viewer',
         controllerStatus: 'connected',
       },
@@ -161,6 +177,47 @@ describe('TerminalSessionRuntime', () => {
       output: 'tick',
       summaryChanged: true,
     })
+  })
+
+  test('applies server phase and message during attach and hydrate', () => {
+    const runtime = new TerminalSessionRuntime()
+
+    runtime.applyAttachResult(
+      {
+        ok: true,
+        sessionId: 'session-1',
+        replay: '',
+        replaySeq: 0,
+        replayTruncated: false,
+        processName: 'zsh',
+        canonicalTitle: null,
+        snapshot: '',
+        snapshotSeq: 0,
+        controller: null,
+        canonicalCols: 100,
+        canonicalRows: 30,
+        phase: 'restarting',
+        message: 'Restarting terminal',
+        role: 'unowned',
+        controllerStatus: 'none',
+      },
+      { cols: 100, rows: 30 },
+    )
+
+    expect(runtime.snapshot()).toMatchObject({ phase: 'restarting', message: 'Restarting terminal' })
+
+    runtime.hydrateSession({
+      sessionId: 'session-2',
+      processName: 'terminal',
+      role: 'unowned',
+      controllerStatus: 'none',
+      canonicalCols: 80,
+      canonicalRows: 24,
+      phase: 'error',
+      message: 'spawn failed',
+    })
+
+    expect(runtime.snapshot()).toMatchObject({ phase: 'error', message: 'spawn failed' })
   })
 
   test('resetTransientState clears transient terminal state without dropping runtime metadata', () => {

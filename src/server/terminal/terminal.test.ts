@@ -162,6 +162,50 @@ describe('server terminal sessions', () => {
     unregisterTerminalSocket('client_1', 'attachment_a', socket)
   })
 
+  test('create returns an authoritative first frame with measured geometry', async () => {
+    const socket = { send: vi.fn(), close: vi.fn() }
+    registerTerminalSocket('client_1', 'attachment_a', socket)
+
+    const result = await createServerTerminal('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+      kind: 'additional',
+      cols: 132,
+      rows: 41,
+      attachmentId: 'attachment_a',
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(spawn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Array),
+      expect.objectContaining({ cols: 132, rows: 41 }),
+    )
+    expect(result).toMatchObject({
+      sessionId: expect.any(String),
+      processName: 'zsh',
+      canonicalTitle: null,
+      snapshot: expect.any(String),
+      snapshotSeq: expect.any(Number),
+      controller: { attachmentId: 'attachment_a', status: 'connected' },
+      canonicalCols: 132,
+      canonicalRows: 41,
+      phase: 'open',
+      message: null,
+    })
+    expect(result.sessions).toContainEqual(
+      expect.objectContaining({
+        sessionId: result.sessionId,
+        phase: 'open',
+        message: null,
+      }),
+    )
+
+    unregisterTerminalSocket('client_1', 'attachment_a', socket)
+  })
+
   test('creates remote terminal sessions with a plain ssh command by default', async () => {
     const result = await createServerTerminal('client_1', {
       repoRoot: 'ssh-config://prod/srv/repo',
@@ -710,7 +754,7 @@ describe('server terminal sessions', () => {
     unregisterTerminalSocket('client_1', 'attachment_b', socketB)
   })
 
-  test('attaching a different view after controller disconnect does not take control implicitly', async () => {
+  test('attaching a different view after controller disconnect auto-claims control', async () => {
     vi.useFakeTimers()
     const socketA = { send: vi.fn(), close: vi.fn() }
     registerTerminalSocket('client_1', 'attachment_a', socketA)
@@ -741,10 +785,10 @@ describe('server terminal sessions', () => {
     expect(spawn).toHaveBeenCalledTimes(1)
     if (!attachedAgain.ok) return
     expect(attachedAgain.sessionId).toBe(first.sessionId)
-    expect(attachedAgain.controller).toBeNull()
-    expect(attachedAgain.canonicalCols).toBe(80)
-    expect(attachedAgain.canonicalRows).toBe(24)
-    expect(mockPtys[0]?.resize).not.toHaveBeenCalledWith(100, 30)
+    expect(attachedAgain.controller).toEqual({ attachmentId: 'attachment_b', status: 'connected' })
+    expect(attachedAgain.canonicalCols).toBe(100)
+    expect(attachedAgain.canonicalRows).toBe(30)
+    expect(mockPtys[0]?.resize).toHaveBeenCalledWith(100, 30)
 
     unregisterTerminalSocket('client_1', 'attachment_b', socketB)
   })
@@ -819,6 +863,8 @@ describe('server terminal sessions', () => {
   })
 
   test('restarts an existing session by session id without creating a second terminal record', async () => {
+    const socket = { send: vi.fn(), close: vi.fn() }
+    registerTerminalSocket('client_1', 'attachment_a', socket)
     const sessionId = await createTerminalSession('client_1')
     const attached = await attachServerTerminal('client_1', {
       sessionId,
@@ -843,6 +889,8 @@ describe('server terminal sessions', () => {
     await expect(listServerTerminalSessions('client_1', '/repo')).resolves.toEqual([
       expect.objectContaining({ sessionId, cols: 100, rows: 30 }),
     ])
+
+    unregisterTerminalSocket('client_1', 'attachment_a', socket)
   })
 
   test('lists repo sessions across clients and broadcasts lifecycle invalidations globally', async () => {
@@ -984,6 +1032,49 @@ describe('server terminal sessions', () => {
     unregisterTerminalSocket('client_1', 'attachment_a', socket)
   })
 
+  test('denies connected viewer write and resize until takeover', async () => {
+    const socketA = { send: vi.fn(), close: vi.fn() }
+    const socketB = { send: vi.fn(), close: vi.fn() }
+    registerTerminalSocket('client_1', 'attachment_a', socketA)
+    registerTerminalSocket('client_1', 'attachment_b', socketB)
+
+    const created = await createServerTerminal('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+      kind: 'additional',
+      cols: 90,
+      rows: 28,
+      attachmentId: 'attachment_a',
+    })
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+
+    const joined = await attachServerTerminal('client_1', {
+      sessionId: created.sessionId,
+      cols: 120,
+      rows: 40,
+      attachmentId: 'attachment_b',
+    })
+    expect(joined.ok).toBe(true)
+
+    expect(
+      resizeServerTerminal('client_1', {
+        sessionId: created.sessionId,
+        cols: 120,
+        rows: 40,
+        attachmentId: 'attachment_b',
+      }),
+    ).toBe(false)
+    expect(writeServerTerminal('client_1', { sessionId: created.sessionId, data: 'ls', attachmentId: 'attachment_b' })).toBe(
+      false,
+    )
+    expect(mockPtys[0]?.resize).not.toHaveBeenCalledWith(120, 40)
+
+    unregisterTerminalSocket('client_1', 'attachment_a', socketA)
+    unregisterTerminalSocket('client_1', 'attachment_b', socketB)
+  })
+
   test('reports canonical attachment state when another attachment joins without taking control', async () => {
     const socket = { send: vi.fn(), close: vi.fn() }
     registerTerminalSocket('client_1', 'attachment_a', socket)
@@ -1031,11 +1122,17 @@ describe('server terminal sessions', () => {
     expect(result).toEqual({
       ok: true,
       sessionId,
+      role: 'controller',
+      controllerStatus: 'connected',
       controller: { attachmentId: 'attachment_b', status: 'connected' },
       canonicalCols: 120,
       canonicalRows: 40,
+      phase: 'open',
     })
     expect(mockPtys[0]?.resize).toHaveBeenLastCalledWith(120, 40)
+    expect(writeServerTerminal('client_1', { sessionId, data: 'pwd', attachmentId: 'attachment_b' })).toBe(true)
+    await new Promise<void>((resolve) => queueMicrotask(resolve))
+    expect(mockPtys[0]?.write).toHaveBeenCalledWith('pwd')
 
     unregisterTerminalSocket('client_1', 'attachment_a', socketA)
     unregisterTerminalSocket('client_1', 'attachment_b', socketB)
@@ -1071,15 +1168,49 @@ describe('server terminal sessions', () => {
     })
 
     expect(result).toEqual({
-      ok: true,
-      sessionId,
-      controller: { attachmentId: 'attachment_a', status: 'connected' },
-      canonicalCols: 80,
-      canonicalRows: 24,
+      ok: false,
+      message: 'error.unavailable',
     })
     expect(mockPtys[0]?.resize).not.toHaveBeenCalledWith(120, 40)
 
     unregisterTerminalSocket('client_1', 'attachment_a', socketA)
+  })
+
+  test('restart failure keeps the session listed in error phase', async () => {
+    const socket = { send: vi.fn(), close: vi.fn() }
+    registerTerminalSocket('client_1', 'attachment_a', socket)
+    const created = await createServerTerminal('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+      kind: 'additional',
+      cols: 80,
+      rows: 24,
+      attachmentId: 'attachment_a',
+    })
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+    vi.mocked(spawn).mockImplementationOnce(() => {
+      throw new Error('spawn failed')
+    })
+
+    const restarted = await restartServerTerminal('client_1', {
+      sessionId: created.sessionId,
+      cols: 100,
+      rows: 30,
+      attachmentId: 'attachment_a',
+    })
+
+    expect(restarted).toEqual({ ok: false, message: 'spawn failed' })
+    await expect(listServerTerminalSessions('client_1', '/repo')).resolves.toContainEqual(
+      expect.objectContaining({
+        sessionId: created.sessionId,
+        phase: 'error',
+        message: 'spawn failed',
+      }),
+    )
+
+    unregisterTerminalSocket('client_1', 'attachment_a', socket)
   })
 
   test('batches rapid writes into a single ordered pty write via the input queue', async () => {

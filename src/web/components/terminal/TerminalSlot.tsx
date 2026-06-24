@@ -56,6 +56,7 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
   const context = useTerminalSessionContext()
   const {
     clearBell,
+    registerWorktreeHost,
     attach,
     detach,
     scrollLines,
@@ -84,6 +85,11 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
   const isController = hasSessions && snapshot.phase === 'open' && attachment?.role === 'controller'
   const isReadonly =
     hasSessions && snapshot.phase === 'open' && (attachment?.role === 'viewer' || attachment?.role === 'unowned')
+
+  useLayoutEffect(() => {
+    registerWorktreeHost(terminalWorktreeKey, hostRef.current)
+    return () => registerWorktreeHost(terminalWorktreeKey, null)
+  }, [registerWorktreeHost, terminalWorktreeKey])
 
   useLayoutEffect(() => {
     const host = hostRef.current

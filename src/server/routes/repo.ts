@@ -10,6 +10,7 @@ import {
   getRepositoryHistory,
   getRepositoryPatch,
   getRepositoryPullRequests,
+  searchRepositoryFileTree,
   getRepositorySnapshot,
   getRepositoryStatus,
   probeRepository,
@@ -42,6 +43,7 @@ import {
   trackRepositoryRemoteBranch,
 } from '#/server/modules/repo-write-paths.ts'
 import { getServerFetchIntervalSec } from '#/server/modules/settings-source.ts'
+import { normalizeFileTreeSearchLimit } from '#/shared/file-tree.ts'
 
 export function createRepoRoutes() {
   const app = new Hono()
@@ -129,6 +131,20 @@ export function createRepoRoutes() {
         () => getRepositoryFileTree(repoId, worktreePath, dirPath, c.req.raw.signal),
         { ok: false, message: 'error.failed-read-repo' },
         'file-tree',
+      ),
+    )
+  })
+  app.post('/file-search', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const query = typeof body?.query === 'string' ? body.query : ''
+    const limit = normalizeFileTreeSearchLimit(body?.limit)
+    return c.json(
+      await jsonOr(
+        () => searchRepositoryFileTree(repoId, worktreePath, query, limit, c.req.raw.signal),
+        { ok: false, message: 'error.failed-read-repo' },
+        'file-search',
       ),
     )
   })

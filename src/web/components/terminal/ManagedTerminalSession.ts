@@ -14,8 +14,10 @@ import { setTerminalFocused } from '#/web/terminal-focus.ts'
 import { openExternalUrl } from '#/web/app-shell-client.ts'
 import { TerminalSessionRuntime } from '#/web/components/terminal/terminal-session-runtime.ts'
 import { TerminalSessionView } from '#/web/components/terminal/terminal-session-view.ts'
+import { writeWithTerminalAuthority } from '#/web/components/terminal/authority-gate.ts'
 import { readOrCreateWebTerminalAttachmentId } from '#/web/renderer-terminal-bridge.ts'
 import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
+import type { TerminalInput } from '#/web/components/terminal/terminal-input.ts'
 import type {
   TerminalBellEvent,
   TerminalDescriptor,
@@ -126,9 +128,11 @@ export class ManagedTerminalSession {
     return this.view.isTerminalFocusTarget(target)
   }
 
-  writeInput(data: string): void {
+  writeInput(input: string | TerminalInput): void {
+    if (typeof input !== 'string' && input.origin === 'terminal-emulator') return
+    const data = typeof input === 'string' ? input : input.data
     const sessionId = this.runtime.currentSessionId()
-    if (!sessionId || !this.runtime.canResize()) return
+    if (!sessionId) return
     this.pendingWriteBuffer += data
     this.scheduleInputFlush()
   }
@@ -145,11 +149,22 @@ export class ManagedTerminalSession {
   private flushInput(): void {
     if (this.disposed) return
     const sessionId = this.runtime.currentSessionId()
-    if (!sessionId || !this.runtime.canResize()) return
+    if (!sessionId) return
     const data = this.pendingWriteBuffer
     this.pendingWriteBuffer = ''
     if (!data) return
-    void terminalBridge.write({ sessionId, data }).catch(() => {})
+    void writeWithTerminalAuthority({
+      data,
+      getSessionId: () => this.runtime.currentSessionId(),
+      getAttachment: () => this.runtime.snapshot().attachment,
+      currentSize: () => this.currentViewSize(),
+      bridge: terminalBridge,
+      applyTakeover: (result) => {
+        const changed = this.runtime.applyTakeoverResult(result)
+        const pendingCleared = this.runtime.clearTakeoverPending()
+        if (changed || pendingCleared) this.notify('metadata')
+      },
+    }).catch(() => {})
   }
 
   findNext(term: string, incremental = false): TerminalSearchResult {
@@ -189,6 +204,8 @@ export class ManagedTerminalSession {
     controllerStatus: TerminalOwnershipViewModel['controllerStatus']
     canonicalCols: number
     canonicalRows: number
+    phase?: TerminalAttachResultWithOwnership['phase']
+    message?: string | null
     snapshot?: string
     snapshotSeq?: number
   }): void {
@@ -205,6 +222,8 @@ export class ManagedTerminalSession {
       controllerStatus: input.controllerStatus,
       canonicalCols: input.canonicalCols,
       canonicalRows: input.canonicalRows,
+      phase: input.phase,
+      message: input.message,
     })
     if (previousSessionId && previousSessionId !== input.sessionId) this.applyHydratedSnapshotToActiveView()
     if (changed) this.notify('metadata')
@@ -263,6 +282,12 @@ export class ManagedTerminalSession {
     if (this.runtime.setTakeoverPending(true)) this.notify('metadata')
     void terminalBridge
       .takeover({ sessionId, cols: size.cols, rows: size.rows })
+      .then((result) => {
+        if (!result.ok) return
+        const changed = this.runtime.applyTakeoverResult(result)
+        const pendingCleared = this.runtime.clearTakeoverPending()
+        if (changed || pendingCleared) this.notify('metadata')
+      })
       .catch(() => {})
       .finally(() => {
         // If the server response settles but we never received an ownership event,
@@ -297,7 +322,9 @@ export class ManagedTerminalSession {
 
   private async openPhase(token: number): Promise<{ term: XTermTerminal; preloaded: boolean }> {
     if (this.disposed || this.startToken !== token || this.view.currentTerminal()) throw new StartCancelledError()
-    const term = this.view.openTerminal((input) => this.writeInput(input))
+    const geometry = this.view.measureGeometry()
+    if (!geometry) throw new Error('error.terminal-not-measurable')
+    const term = this.view.openTerminal(geometry, (input) => this.writeInput(input))
     const preloaded = await this.preloadHydratedSnapshot(token, term)
     await waitForTerminalLayout()
     this.guardStart(token, term)
@@ -477,6 +504,11 @@ export class ManagedTerminalSession {
   private applyCanonicalSizeToView(): void {
     const { cols, rows } = this.runtime.currentCanonicalSize()
     if (cols > 0 && rows > 0) this.view.resizeTo(cols, rows)
+  }
+
+  private currentViewSize(): { cols: number; rows: number } {
+    const term = this.view.currentTerminal()
+    return term ? { cols: term.cols, rows: term.rows } : this.runtime.currentCanonicalSize()
   }
 
   private cancelResizeFlush(): void {

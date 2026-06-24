@@ -1,5 +1,10 @@
 import path from 'node:path'
-import type { RepoFileTreeEntry, RepoFileTreeResult } from '#/shared/file-tree.ts'
+import {
+  normalizeFileTreeSearchLimit,
+  type RepoFileSearchResult,
+  type RepoFileTreeEntry,
+  type RepoFileTreeResult,
+} from '#/shared/file-tree.ts'
 import { parseBranches, parseCommitFileChanges, parseCommitHistory, parseLog, parseStatus, parseWorktrees } from '#/system/git/parsers.ts'
 import { markDefaultBranch, prioritizeDefaultBranch } from '#/system/git/branches.ts'
 import {
@@ -83,6 +88,14 @@ interface RemoteFileTreeJson {
   ok?: boolean
   message?: string
   entries?: Array<{ name?: unknown; kind?: unknown; targetKind?: unknown }>
+}
+
+interface RemoteFileTreeSearchJson {
+  ok?: boolean
+  message?: string
+  limit?: unknown
+  truncated?: unknown
+  matches?: Array<{ relativePath?: unknown; kind?: unknown }>
 }
 
 interface RemoteFileTreeMutationJson {
@@ -279,6 +292,49 @@ export async function listRemoteFileTreeDirectory(
       }
     })
   return { ok: true, worktreePath: normalizedWorktree, dirPath: normalizedDir, entries: sortRemoteFileTreeEntries(entries) }
+}
+
+export async function searchRemoteFileTree(
+  target: RemoteRepoTarget,
+  worktreePath: string,
+  query: string,
+  options: { limit?: number; signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<RepoFileSearchResult> {
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const limit = normalizeFileTreeSearchLimit(options.limit)
+  const result = await run({ type: 'searchFileTree', worktreePath, query, limit }, target, {
+    signal: options.signal,
+    timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS,
+    maxBuffer: 10 * 1024 * 1024,
+  })
+  if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
+  if (!result.ok && !result.stdout) return { ok: false, message: result.message || 'error.failed-read-repo' }
+
+  let parsed: RemoteFileTreeSearchJson
+  try {
+    parsed = JSON.parse(result.stdout) as RemoteFileTreeSearchJson
+  } catch {
+    return { ok: false, message: 'error.failed-read-repo' }
+  }
+  if (parsed.ok !== true) return { ok: false, message: parsed.message || 'error.failed-read-repo' }
+
+  const matches = (parsed.matches ?? [])
+    .filter((match): match is { relativePath: string; kind: 'file' | 'directory' | 'symlink' | 'other' } => {
+      return (
+        typeof match.relativePath === 'string' &&
+        match.relativePath.length > 0 &&
+        !match.relativePath.startsWith('/') &&
+        (match.kind === 'file' || match.kind === 'directory' || match.kind === 'symlink' || match.kind === 'other')
+      )
+    })
+    .map((match) => ({ relativePath: match.relativePath, kind: match.kind }))
+
+  return {
+    ok: true,
+    matches,
+    truncated: parsed.truncated === true,
+    limit: normalizeFileTreeSearchLimit(parsed.limit),
+  }
 }
 
 export async function inventoryRemoteFileTransfer(

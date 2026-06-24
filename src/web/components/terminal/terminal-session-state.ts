@@ -110,12 +110,20 @@ export class TerminalSessionState {
     return this.setPhaseAndMessage('opening', null)
   }
 
+  setRestarting(message: string | null = null): boolean {
+    return this.setPhaseAndMessage('restarting', message)
+  }
+
   setOpen(): boolean {
     return this.setPhaseAndMessage('open', null)
   }
 
   setError(message: string | null): boolean {
     return this.setPhaseAndMessage('error', message)
+  }
+
+  applyPhase(phase: TerminalPhase, message: string | null): boolean {
+    return this.setPhaseAndMessage(phase, message)
   }
 
   setProcessName(processName: string): boolean {

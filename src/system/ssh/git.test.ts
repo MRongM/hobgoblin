@@ -25,6 +25,7 @@ import {
   remoteExecResult,
   renameRemoteFileTreeEntry,
   removeRemoteWorktree,
+  searchRemoteFileTree,
   writeRemoteFileBase64,
 } from '#/system/ssh/git.ts'
 import type { RemoteCommandResult } from '#/system/ssh/commands.ts'
@@ -170,6 +171,39 @@ describe('remote git helpers', () => {
       { type: 'listDirectoryEntries', worktreePath: '/srv/repo', dirPath: '/srv/repo' },
       TARGET,
       { signal: undefined },
+    )
+  })
+
+  test('parses remote file search JSON and passes fixed command input', async () => {
+    const run = vi.fn(async () =>
+      okRemoteResult(
+        JSON.stringify({
+          ok: true,
+          matches: [
+            { relativePath: 'src/Button.tsx', kind: 'file' },
+            { relativePath: 'src/components', kind: 'directory' },
+          ],
+          truncated: true,
+          limit: 2,
+        }),
+      ),
+    )
+
+    const result = await searchRemoteFileTree(TARGET, '/srv/repo', 'button', { limit: 2, run: run as any })
+
+    expect(result).toEqual({
+      ok: true,
+      matches: [
+        { relativePath: 'src/Button.tsx', kind: 'file' },
+        { relativePath: 'src/components', kind: 'directory' },
+      ],
+      truncated: true,
+      limit: 2,
+    })
+    expect(run).toHaveBeenCalledWith(
+      { type: 'searchFileTree', worktreePath: '/srv/repo', query: 'button', limit: 2 },
+      TARGET,
+      { signal: undefined, timeoutMs: 90_000, maxBuffer: 10 * 1024 * 1024 },
     )
   })
 

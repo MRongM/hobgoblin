@@ -9,11 +9,13 @@ import { terminalBridge } from '#/web/terminal.ts'
 import { readOrCreateWebTerminalAttachmentId } from '#/web/renderer-terminal-bridge.ts'
 import { parseTerminalIdIndex, resolveTerminalOwnership } from '#/shared/terminal.ts'
 import type {
+  TerminalCatalogMutationResult,
   TerminalSessionSnapshot,
   TerminalSessionSummary as ServerTerminalSessionSummary,
 } from '#/shared/terminal.ts'
 import { branchForTerminalWorktree } from '#/web/components/terminal/terminal-repo-index.ts'
 import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
+import { measureTerminalGeometry } from '#/web/components/terminal/terminal-geometry.ts'
 import type {
   TerminalDescriptor,
   TerminalRepoIndex,
@@ -36,6 +38,20 @@ function parseServerSessionKey(key: string): { repoRoot: string; worktreePath: s
   return { repoRoot: parts[0], worktreePath: parts[1], terminalId: parts[2] }
 }
 
+function isValidCreateFirstFrame(result: Extract<TerminalCatalogMutationResult, { ok: true }>): boolean {
+  return (
+    typeof result.sessionId === 'string' &&
+    typeof result.snapshot === 'string' &&
+    typeof result.snapshotSeq === 'number' &&
+    typeof result.processName === 'string' &&
+    typeof result.canonicalCols === 'number' &&
+    typeof result.canonicalRows === 'number' &&
+    typeof result.phase === 'string' &&
+    Object.prototype.hasOwnProperty.call(result, 'message') &&
+    result.sessions.some((session) => session.sessionId === result.sessionId)
+  )
+}
+
 interface ReattachSnapshotCacheEntry {
   sessionId: string
   snapshot: string
@@ -56,6 +72,7 @@ export class TerminalSessionRegistry {
   private readonly worktreeListeners = new Map<string, Set<() => void>>()
   private readonly snapshotListeners = new Map<string, Set<() => void>>()
   private readonly displayOrderByKey = new Map<string, number>()
+  private readonly hostByWorktree = new Map<string, HTMLElement>()
   private terminalFontSize = DEFAULT_TERMINAL_FONT_SIZE
   private readonly bellController = createTerminalBellController(
     (key) => {
@@ -103,7 +120,16 @@ export class TerminalSessionRegistry {
     this.worktreeSnapshotCache.clear()
     this.worktreeListeners.clear()
     this.snapshotListeners.clear()
+    this.hostByWorktree.clear()
     this.bellController.reset()
+  }
+
+  registerWorktreeHost = (worktreeTerminalKey: string, host: HTMLElement | null): void => {
+    if (host) {
+      this.hostByWorktree.set(worktreeTerminalKey, host)
+    } else {
+      this.hostByWorktree.delete(worktreeTerminalKey)
+    }
   }
 
   handleOutput(event: { sessionId: string; data: string; seq: number; processName: string }): void {
@@ -137,7 +163,7 @@ export class TerminalSessionRegistry {
   handleOwnership(event: {
     sessionId: string
     role: 'controller' | 'viewer' | 'unowned'
-    controllerStatus: 'connected' | 'grace' | 'none'
+    controllerStatus: 'connected' | 'none'
     canonicalCols: number
     canonicalRows: number
   }): void {
@@ -193,6 +219,8 @@ export class TerminalSessionRegistry {
         controllerStatus: ownership.controllerStatus,
         canonicalCols: serverSession.cols,
         canonicalRows: serverSession.rows,
+        phase: serverSession.phase,
+        message: serverSession.message,
         snapshot: serverSnapshot?.snapshot ?? (isReattachMatch ? reattachCache?.snapshot : undefined),
         snapshotSeq: serverSnapshot?.snapshotSeq ?? (isReattachMatch ? reattachCache?.snapshotSeq : undefined),
       })
@@ -237,24 +265,39 @@ export class TerminalSessionRegistry {
   createTerminal = async (base: TerminalSessionBase): Promise<string> => {
     const attachmentId = readOrCreateWebTerminalAttachmentId()
     const terminalWorktreeKey = worktreeTerminalKey(base.repoRoot, base.worktreePath)
+    const geometry = this.measureCreateGeometry(terminalWorktreeKey)
     const result = await terminalBridge.create({
       repoRoot: base.repoRoot,
       branch: base.branch,
       worktreePath: base.worktreePath,
       kind: this.sessionSummaries(terminalWorktreeKey).length === 0 ? 'primary' : 'additional',
       attachmentId,
+      cols: geometry.cols,
+      rows: geometry.rows,
     })
     if (!result.ok) {
       throw new Error(result.message)
+    }
+    if (!isValidCreateFirstFrame(result)) {
+      throw new Error('error.terminal-create-failed')
     }
     this.setPreferredSelectedTerminalKey(terminalWorktreeKey, result.key)
     this.reconcileServerSessions(
       base.repoRoot,
       result.sessions,
       attachmentId,
-      new Map<string, TerminalSessionSnapshot>(),
+      new Map<string, TerminalSessionSnapshot>([
+        [result.sessionId, { sessionId: result.sessionId, snapshot: result.snapshot, snapshotSeq: result.snapshotSeq }],
+      ]),
     )
     return result.key
+  }
+
+  private measureCreateGeometry(worktreeTerminalKey: string): { cols: number; rows: number } {
+    const host = this.hostByWorktree.get(worktreeTerminalKey)
+    const geometry = host ? measureTerminalGeometry({ host, fontSize: this.terminalFontSize }) : null
+    if (!geometry) return { cols: 80, rows: 24 }
+    return geometry
   }
 
   private selectedDescriptor(worktreeTerminalKey: string): TerminalDescriptor | null {

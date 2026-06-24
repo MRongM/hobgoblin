@@ -41,6 +41,8 @@ const xtermMocks = vi.hoisted(() => {
   class MockTerminal {
     cols: number
     rows: number
+    initialCols: number
+    initialRows: number
     unicode = { activeVersion: '6' }
     options: {
       allowProposedApi?: boolean
@@ -114,6 +116,8 @@ const xtermMocks = vi.hoisted(() => {
     }) {
       this.cols = options.cols
       this.rows = options.rows
+      this.initialCols = options.cols
+      this.initialRows = options.rows
       this.options = {
         allowProposedApi: options.allowProposedApi,
         cursorBlink: options.cursorBlink,
@@ -467,20 +471,22 @@ beforeEach(() => {
     value: (cb: FrameRequestCallback) => window.setTimeout(() => cb(performance.now()), 0),
   })
   window.sessionStorage.setItem('goblin:web-terminal-attachment-id', 'attachment_local')
-  HTMLElement.prototype.getBoundingClientRect = vi.fn(
-    () =>
-      ({
-        width: 800,
-        height: 400,
-        top: 0,
-        left: 0,
-        bottom: 400,
-        right: 800,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      }) as DOMRect,
-  )
+  HTMLElement.prototype.getBoundingClientRect = vi.fn(function (this: HTMLElement) {
+    const isCellProbe = this.textContent === 'MMMMMMMMMM'
+    const width = isCellProbe ? 84 : 800
+    const height = isCellProbe ? 14 : 400
+    return {
+      width,
+      height,
+      top: 0,
+      left: 0,
+      bottom: height,
+      right: width,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+  })
   Object.defineProperty(window, 'goblinNative', {
     configurable: true,
     value: {
@@ -560,8 +566,38 @@ beforeEach(() => {
       close: terminalCalls.close.mockResolvedValue(true),
       create: vi.fn(async (input?: { kind?: string }) =>
         input?.kind === 'primary'
-          ? { ok: true as const, action: 'reused' as const, key: 'repo\0worktree\0terminal-1', sessions: [] }
-          : { ok: true as const, action: 'created' as const, key: 'repo\0worktree\0terminal-2', sessions: [] },
+          ? {
+              ok: true as const,
+              action: 'reused' as const,
+              key: 'repo\0worktree\0terminal-1',
+              sessionId: 'terminal-1',
+              processName: 'zsh',
+              canonicalTitle: null,
+              snapshot: '',
+              snapshotSeq: 0,
+              controller: null,
+              canonicalCols: 80,
+              canonicalRows: 24,
+              phase: 'open' as const,
+              message: null,
+              sessions: [],
+            }
+          : {
+              ok: true as const,
+              action: 'created' as const,
+              key: 'repo\0worktree\0terminal-2',
+              sessionId: 'terminal-2',
+              processName: 'zsh',
+              canonicalTitle: null,
+              snapshot: '',
+              snapshotSeq: 0,
+              controller: null,
+              canonicalCols: 80,
+              canonicalRows: 24,
+              phase: 'open' as const,
+              message: null,
+              sessions: [],
+            },
       ),
       pruneTerminals: vi.fn(async () => ({ pruned: 0, remaining: 0 })),
       listSessions: vi.fn(async () => []),
@@ -602,6 +638,8 @@ describe('ManagedTerminalSession', () => {
     expect(xtermMocks.terminals[0]!.options.cursorStyle).toBe('bar')
     expect(xtermMocks.terminals[0]!.options.fontFamily).toContain('Maple Mono NF CN')
     expect(xtermMocks.terminals[0]!.options.fontSize).toBe(14)
+    expect(xtermMocks.terminals[0]!.initialCols).toBe(95)
+    expect(xtermMocks.terminals[0]!.initialRows).toBe(28)
     expect(xtermMocks.terminals[0]!.options.lineHeight).toBe(1)
     expect(xtermMocks.terminals[0]!.options.rescaleOverlappingGlyphs).toBe(true)
     expect(terminalCalls.restart).not.toHaveBeenCalled()
@@ -1060,7 +1098,7 @@ describe('ManagedTerminalSession', () => {
     expect(session.snapshot().phase).toBe('open')
   })
 
-  test('does not send resize or input while attached as a mirror page before explicit takeover', async () => {
+  test('does not send mirror resize and promotes mirror input through takeover', async () => {
     terminalCalls.attach.mockResolvedValueOnce(
       attachResult('session-1', {
         controller: { attachmentId: 'attachment_remote', status: 'connected' },
@@ -1081,14 +1119,16 @@ describe('ManagedTerminalSession', () => {
     expect(terminalCalls.resize).not.toHaveBeenCalled()
 
     xtermMocks.terminals[0]!.emitData('input')
-    await flushTerminalStart()
+    await flushUntil(() => terminalCalls.takeover.mock.calls.length > 0)
+    await flushUntil(() => terminalCalls.write.mock.calls.length > 0)
 
-    expect(terminalCalls.write).not.toHaveBeenCalled()
+    expect(terminalCalls.takeover).toHaveBeenCalledWith({ sessionId: 'session-1', cols: 101, rows: 31 })
+    expect(terminalCalls.write).toHaveBeenCalledWith({ sessionId: 'session-1', data: 'input' })
     expect(terminalCalls.resize).not.toHaveBeenCalled()
     expect(session.snapshot().attachment).toMatchObject({
-      role: 'viewer',
+      role: 'controller',
       controllerStatus: 'connected',
-      canTakeover: true,
+      canTakeover: false,
     })
   })
 
@@ -1199,6 +1239,21 @@ describe('ManagedTerminalSession', () => {
     expect(notify).not.toHaveBeenCalled()
   })
 
+  test('drops terminal-emulator input envelopes before bridge write', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    session.writeInput({ origin: 'terminal-emulator', source: 'data', data: 'protocol-reply' })
+    await flushTerminalStart()
+
+    expect(terminalCalls.write).not.toHaveBeenCalled()
+  })
+
   test('tracks server title changes separately from process name', async () => {
     const host = document.createElement('div')
     document.body.appendChild(host)
@@ -1220,7 +1275,7 @@ describe('ManagedTerminalSession', () => {
     expect(notify).toHaveBeenCalledTimes(1)
   })
 
-  test('ignores input while attached as a mirror until takeover occurs', async () => {
+  test('promotes viewer input through takeover before writing', async () => {
     terminalCalls.attach.mockResolvedValueOnce(
       attachResult('session-1', {
         controller: { attachmentId: 'attachment_remote', status: 'connected' },
@@ -1228,6 +1283,7 @@ describe('ManagedTerminalSession', () => {
         canonicalRows: 40,
       }),
     )
+    terminalCalls.takeover.mockResolvedValueOnce(takeoverResult('session-1'))
     const host = document.createElement('div')
     document.body.appendChild(host)
     const notify = vi.fn()
@@ -1239,15 +1295,17 @@ describe('ManagedTerminalSession', () => {
     notify.mockClear()
 
     xtermMocks.terminals[0]!.emitData('blocked')
-    await flushTerminalStart()
+    await flushUntil(() => terminalCalls.takeover.mock.calls.length > 0)
+    await flushUntil(() => terminalCalls.write.mock.calls.length > 0)
 
-    expect(terminalCalls.write).not.toHaveBeenCalled()
+    expect(terminalCalls.takeover).toHaveBeenCalledWith({ sessionId: 'session-1', cols: 120, rows: 40 })
+    expect(terminalCalls.write).toHaveBeenCalledWith({ sessionId: 'session-1', data: 'blocked' })
     expect(session.snapshot().attachment).toMatchObject({
-      role: 'viewer',
+      role: 'controller',
       controllerStatus: 'connected',
-      canTakeover: true,
+      canTakeover: false,
     })
-    expect(notify).not.toHaveBeenCalled()
+    expect(notify).toHaveBeenCalled()
   })
 
   test('explicit takeover claims control without requiring input', async () => {
@@ -1285,22 +1343,6 @@ describe('ManagedTerminalSession', () => {
     await flushUntil(() => terminalCalls.takeover.mock.calls.length > 0)
 
     expect(terminalCalls.takeover).toHaveBeenCalledWith({ sessionId: 'session-1', cols: 101, rows: 31 })
-    // Before authoritative ownership message arrives, role is still viewer
-    expect(session.snapshot().attachment).toMatchObject({
-      role: 'viewer',
-      controllerStatus: 'connected',
-      canTakeover: true,
-    })
-
-    // Simulate authoritative server ownership event
-    session.handleOwnership({
-      sessionId: 'session-1',
-      role: 'controller',
-      controllerStatus: 'connected',
-      canonicalCols: 101,
-      canonicalRows: 31,
-    })
-
     expect(session.snapshot().attachment).toMatchObject({
       role: 'controller',
       controllerStatus: 'connected',
@@ -1308,7 +1350,7 @@ describe('ManagedTerminalSession', () => {
     })
   })
 
-  test('takeover applies authoritative server ownership instead of optimistic local control', async () => {
+  test('takeover applies authoritative server response instead of optimistic local control', async () => {
     terminalCalls.attach.mockResolvedValueOnce(
       attachResult('session-1', {
         controller: { attachmentId: 'attachment_remote', status: 'connected' },
@@ -1318,6 +1360,8 @@ describe('ManagedTerminalSession', () => {
     )
     terminalCalls.takeover.mockResolvedValueOnce(
       takeoverResult('session-1', {
+        role: 'unowned',
+        controllerStatus: 'none',
         controller: null,
         canonicalCols: 120,
         canonicalRows: 40,
@@ -1333,21 +1377,6 @@ describe('ManagedTerminalSession', () => {
 
     session.takeover()
     await flushUntil(() => terminalCalls.takeover.mock.calls.length > 0)
-
-    // Bridge response alone does not change ownership; only authoritative onOwnership does
-    expect(session.snapshot().attachment).toMatchObject({
-      role: 'viewer',
-      controllerStatus: 'connected',
-      canTakeover: true,
-    })
-
-    session.handleOwnership({
-      sessionId: 'session-1',
-      role: 'unowned',
-      controllerStatus: 'none',
-      canonicalCols: 120,
-      canonicalRows: 40,
-    })
 
     expect(session.snapshot().attachment).toMatchObject({
       role: 'unowned',
@@ -1405,7 +1434,9 @@ describe('ManagedTerminalSession', () => {
   })
 
   test('forwards user input while replay is being written', async () => {
-    terminalCalls.attach.mockResolvedValueOnce(attachResult('session-1', { replay: 'history', replaySeq: 1 }))
+    terminalCalls.attach.mockResolvedValueOnce(
+      attachResult('session-1', { replay: 'history', replaySeq: 1, snapshot: 'history', snapshotSeq: 1 }),
+    )
     const host = document.createElement('div')
     document.body.appendChild(host)
     const session = new ManagedTerminalSession(descriptor, vi.fn())
@@ -1421,7 +1452,9 @@ describe('ManagedTerminalSession', () => {
   })
 
   test('resets the terminal before replaying truncated history', async () => {
-    terminalCalls.attach.mockResolvedValueOnce(attachResult('session-1', { replay: 'tail', replayTruncated: true }))
+    terminalCalls.attach.mockResolvedValueOnce(
+      attachResult('session-1', { replay: 'tail', replayTruncated: true, snapshot: 'tail', snapshotSeq: 0 }),
+    )
     const host = document.createElement('div')
     document.body.appendChild(host)
     const session = new ManagedTerminalSession(descriptor, vi.fn())
@@ -1745,7 +1778,13 @@ function attachResult(
     replayTruncated: false,
     processName: 'zsh',
     canonicalTitle: null,
+    snapshot: '',
+    snapshotSeq: 0,
     controller: { attachmentId: 'attachment_local', status: 'connected' },
+    canonicalCols: 100,
+    canonicalRows: 30,
+    phase: 'open',
+    message: null,
     ...overrides,
   }
 }
@@ -1757,9 +1796,12 @@ function takeoverResult(
   return {
     ok: true,
     sessionId,
+    role: 'controller',
+    controllerStatus: 'connected',
     controller: { attachmentId: 'attachment_local', status: 'connected' },
     canonicalCols: 100,
     canonicalRows: 30,
+    phase: 'open',
     ...overrides,
   }
 }
@@ -1771,7 +1813,7 @@ function hydrateManagedSession(
     processName: string
     canonicalTitle?: string | null
     role: 'controller' | 'viewer' | 'unowned'
-    controllerStatus: 'connected' | 'grace' | 'none'
+    controllerStatus: 'connected' | 'none'
     canonicalCols: number
     canonicalRows: number
     snapshot?: string
