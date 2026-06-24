@@ -1,9 +1,11 @@
 import { postServerJson } from '#/web/lib/server-fetch.ts'
 import type {
+  PortForwardActivateResult,
   PortForwardListResult,
   PortForwardStartResult,
   PortForwardStopForRepoResult,
   PortForwardStopResult,
+  PortForwardDeleteResult,
 } from '#/shared/port-forwarding.ts'
 
 export async function listPortForwardSessions(repoId: string, signal?: AbortSignal): Promise<PortForwardListResult> {
@@ -20,4 +22,12 @@ export async function stopPortForwardSession(id: string): Promise<PortForwardSto
 
 export async function stopPortForwardSessionsForRepo(repoId: string): Promise<PortForwardStopForRepoResult> {
   return await postServerJson('/api/port-forwarding/stop-for-repo', { repoId })
+}
+
+export async function deletePortForwardSession(id: string): Promise<PortForwardDeleteResult> {
+  return await postServerJson('/api/port-forwarding/delete', { id })
+}
+
+export async function activatePortForwardSession(id: string): Promise<PortForwardActivateResult> {
+  return await postServerJson('/api/port-forwarding/activate', { id })
 }

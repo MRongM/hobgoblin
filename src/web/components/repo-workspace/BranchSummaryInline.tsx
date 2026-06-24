@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Check, FolderTree, GitBranch } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, FolderTree, GitBranch, Terminal } from 'lucide-react'
 import { useI18nStore, useT } from '#/web/stores/i18n.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import { Badge } from '#/web/components/ui/badge.tsx'
@@ -57,6 +57,7 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
   const terminalWorktreeKey = branch.worktree?.path ? worktreeTerminalKey(repo.id, branch.worktree.path) : null
   const terminalCount = useWorktreeTerminalCount(terminalWorktreeKey)
   const hasTerminalBell = useWorktreeTerminalHasBell(terminalWorktreeKey)
+  const terminalCountLabel = terminalCount > 0 ? t('terminal.open-count', { count: terminalCount }) : null
   const terminalBellLabel = t('terminal.bell-unread')
   const commitTime = formatRelativeTimeOrNull(branch.lastCommitDate, lang)
   const commitMeta = commitTime
@@ -69,6 +70,7 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
     isCurrent ? t('branch-status.current') : null,
     branch.isDefault ? t('branches.default') : null,
     hasWorktree ? t(worktreeDirty ? 'branches.dirty' : 'branches.worktree') : null,
+    terminalCountLabel,
     hasTerminalBell ? terminalBellLabel : null,
     worktreePath,
     branch.trackingGone ? t('branches.gone') : null,
@@ -103,9 +105,12 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
           {terminalCount > 0 && (
             <Badge
               data-testid="terminal-count-badge"
-              variant="outline"
-              className="h-4 rounded-full px-1.5 text-[10px] font-medium tabular-nums"
+              aria-label={terminalCountLabel ?? undefined}
+              title={terminalCountLabel ?? undefined}
+              variant="brand"
+              className="h-4 gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums"
             >
+              <Terminal size={10} aria-hidden="true" />
               {terminalCount}
             </Badge>
           )}

@@ -35,6 +35,8 @@ describe('port-forwarding-client', () => {
     await client.startPortForwardSession({ repoId: 'ssh-config://prod/srv/repo', remotePort: 3000 })
     await client.stopPortForwardSession('pf_1')
     await client.stopPortForwardSessionsForRepo('ssh-config://prod/srv/repo')
+    await client.deletePortForwardSession('pf_1')
+    await client.activatePortForwardSession('pf_1')
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -58,6 +60,16 @@ describe('port-forwarding-client', () => {
       4,
       'http://127.0.0.1:32100/api/port-forwarding/stop-for-repo',
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ repoId: 'ssh-config://prod/srv/repo' }) }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      5,
+      'http://127.0.0.1:32100/api/port-forwarding/delete',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ id: 'pf_1' }) }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      6,
+      'http://127.0.0.1:32100/api/port-forwarding/activate',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ id: 'pf_1' }) }),
     )
   })
 })
