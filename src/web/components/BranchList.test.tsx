@@ -4,6 +4,8 @@ import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { BranchList } from '#/web/components/BranchList.tsx'
+import { TerminalSessionReadContext } from '#/web/components/terminal/terminal-session-context.ts'
+import type { TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 
@@ -102,6 +104,41 @@ afterEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
 })
 
+function terminalReadContextWithState(
+  bellKeys: ReadonlySet<string>,
+  countsByWorktreeKey: ReadonlyMap<string, number>,
+): TerminalSessionReadContextValue {
+  return {
+    worktreeSnapshot: (worktreeTerminalKey) => {
+      const hasBell = bellKeys.has(worktreeTerminalKey)
+      return {
+        worktreeTerminalKey,
+        selectedDescriptor: null,
+        sessions: hasBell
+          ? [
+              {
+                key: `${worktreeTerminalKey}\0terminal-1`,
+                worktreeTerminalKey,
+                terminalId: 'terminal-1',
+                index: 1,
+                title: 'terminal',
+                phase: 'open',
+                selected: true,
+                hasBell: true,
+              },
+            ]
+          : [],
+        count: countsByWorktreeKey.get(worktreeTerminalKey) ?? 0,
+      }
+    },
+    subscribeWorktree: () => () => {},
+    repoSyncReady: () => true,
+    subscribeRepoSync: () => () => {},
+    snapshot: () => ({ phase: 'opening', message: null, processName: 'terminal' }),
+    subscribeSnapshot: () => () => {},
+  }
+}
+
 function seedWorktreeRepo(branchViewMode: 'all' | 'worktrees' | 'no-worktree' = 'worktrees') {
   seedRepoState({
     id: REPO_ID,
@@ -116,9 +153,22 @@ function seedWorktreeRepo(branchViewMode: 'all' | 'worktrees' | 'no-worktree' = 
   })
 }
 
-function renderList() {
+function renderList(
+  fixture: {
+    bellWorktreeKeys?: string[]
+    countsByWorktreeKey?: Map<string, number>
+  } = {},
+) {
+  const readContext = terminalReadContextWithState(
+    new Set(fixture.bellWorktreeKeys ?? []),
+    fixture.countsByWorktreeKey ?? new Map(),
+  )
   act(() => {
-    root!.render(<BranchList repoId={REPO_ID} showActions={false} />)
+    root!.render(
+      <TerminalSessionReadContext.Provider value={readContext}>
+        <BranchList repoId={REPO_ID} showActions={false} />
+      </TerminalSessionReadContext.Provider>,
+    )
   })
 }
 
@@ -135,12 +185,15 @@ describe('BranchList worktree drag ordering', () => {
       selectedBranch: 'feature/a',
     })
 
-    renderList()
+    renderList({
+      countsByWorktreeKey: new Map([['/tmp/repo\0/tmp/worktree-a', 2]]),
+    })
 
     expect(Array.from(container?.querySelectorAll('.text-sm.font-medium') ?? []).map((node) => node.textContent)).toEqual([
       'main',
       'feature/a',
     ])
+    expect(container?.querySelector('[data-testid="terminal-count-badge"]')?.textContent).toBe('2')
     expect(container?.textContent).toContain('worktree-a')
     expect(container?.querySelector('[aria-label="worktree-a"]')).not.toBeNull()
     expect(container?.textContent).not.toContain('../worktree-a')
