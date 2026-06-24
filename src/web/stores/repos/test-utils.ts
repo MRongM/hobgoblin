@@ -241,9 +241,12 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
           return {
             ok: true as const,
             sessionId: 'session-1',
+            role: 'controller',
+            controllerStatus: 'connected',
             controller: { attachmentId: 'attachment_local', status: 'connected' as const },
             canonicalCols: 80,
             canonicalRows: 24,
+            phase: 'open',
           }
         case 'terminal.prune':
           return { pruned: 0, remaining: 0 }
@@ -253,10 +256,22 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
           return null
         case 'terminal.create': {
           const terminalKind = (payload as { kind?: string } | undefined)?.kind
+          const terminalId = terminalKind === 'primary' ? 'terminal-1' : 'terminal-2'
+          const key = `repo\0worktree\0${terminalId}`
           return {
             ok: true,
             action: terminalKind === 'primary' ? 'reused' : 'created',
-            key: terminalKind === 'primary' ? 'repo\0worktree\0terminal-1' : 'repo\0worktree\0terminal-2',
+            key,
+            sessionId: terminalId,
+            processName: 'zsh',
+            canonicalTitle: null,
+            snapshot: '',
+            snapshotSeq: 0,
+            controller: null,
+            canonicalCols: 80,
+            canonicalRows: 24,
+            phase: 'open',
+            message: null,
             sessions: [],
           }
         }

@@ -1,8 +1,15 @@
 import * as v from 'valibot'
 
 export const TERMINAL_SCROLLBACK_LINES = 50_000
+export const TERMINAL_SIZE_LIMITS = {
+  minCols: 1,
+  maxCols: 500,
+  minRows: 1,
+  maxRows: 300,
+} as const
 
-export type TerminalControllerStatus = 'connected' | 'grace' | 'none'
+export type TerminalSessionPhase = 'opening' | 'restarting' | 'open' | 'error' | 'closed'
+export type TerminalControllerStatus = 'connected' | 'none'
 export type TerminalAttachmentRole = 'controller' | 'viewer' | 'unowned'
 export interface TerminalResolvedOwnership {
   role: TerminalAttachmentRole
@@ -12,6 +19,20 @@ export interface TerminalResolvedOwnership {
 export interface TerminalController {
   attachmentId: string
   status: Exclude<TerminalControllerStatus, 'none'>
+}
+
+export interface TerminalFirstFrame {
+  sessionId: string
+  processName: string
+  /** Server-canonical terminal title from the headless session model. */
+  canonicalTitle: string | null
+  snapshot: string
+  snapshotSeq: number
+  controller: TerminalController | null
+  canonicalCols: number
+  canonicalRows: number
+  phase: TerminalSessionPhase
+  message: string | null
 }
 
 export interface TerminalAttachInput {
@@ -42,39 +63,33 @@ export type TerminalTakeoverResult =
   | {
       ok: true
       sessionId: string
+      role: TerminalAttachmentRole
+      controllerStatus: TerminalControllerStatus
       controller: TerminalController | null
       canonicalCols: number
       canonicalRows: number
+      phase: TerminalSessionPhase
     }
   | { ok: false; message: string }
 
 export type TerminalAttachResult =
-  | {
+  | (TerminalFirstFrame & {
       ok: true
-      sessionId: string
       replay: string
       replaySeq: number
       replayTruncated: boolean
-      processName: string
-      /** Server-canonical terminal title from the headless session model. */
-      canonicalTitle: string | null
-      snapshot?: string
-      snapshotSeq?: number
-      controller: TerminalController | null
-      canonicalCols?: number
-      canonicalRows?: number
-    }
+    })
   | { ok: false; message: string }
 
 export type TerminalCatalogAction = 'created' | 'restored' | 'reused'
 
 export type TerminalCatalogMutationResult =
-  | {
+  | (TerminalFirstFrame & {
       ok: true
       action: TerminalCatalogAction
       key: string
       sessions: TerminalSessionSummary[]
-    }
+    })
   | { ok: false; message: string }
 
 export interface TerminalWriteInput {
@@ -125,6 +140,8 @@ export interface TerminalSessionSummary {
   cols: number
   rows: number
   displayOrder: number
+  phase: TerminalSessionPhase
+  message: string | null
 }
 
 export interface TerminalSessionSnapshotInput {
@@ -161,6 +178,7 @@ export interface TerminalOwnershipEvent {
   controller: TerminalController | null
   cols: number
   rows: number
+  phase: TerminalSessionPhase
 }
 
 export type TerminalRealtimeMessage =
@@ -234,10 +252,6 @@ export type TerminalSocketServerMessage = TerminalRealtimeMessage | TerminalSock
 /** Client → Server realtime messages over the bidirectional WebSocket. */
 export type TerminalClientMessage = TerminalSocketRequestMessage
 
-const MIN_TERMINAL_COLS = 1
-const MAX_TERMINAL_COLS = 500
-const MIN_TERMINAL_ROWS = 1
-const MAX_TERMINAL_ROWS = 300
 const MAX_TERMINAL_WRITE_CHARS = 1024 * 1024
 const TERMINAL_SESSION_ID_RE = /^[A-Za-z0-9_-]{16,64}$/
 const TERMINAL_ATTACHMENT_ID_RE = /^[A-Za-z0-9_-]{1,128}$/
@@ -255,20 +269,32 @@ const TERMINAL_SOCKET_ACTIONS = [
   'session-snapshot',
   'reorder',
 ] as const satisfies TerminalSocketRequestAction[]
-const TERMINAL_CONNECTED_CONTROLLER_STATUS_VALUES = ['connected', 'grace'] satisfies Exclude<
+const TERMINAL_SESSION_PHASE_VALUES = ['opening', 'restarting', 'open', 'error', 'closed'] as const
+const TERMINAL_CONNECTED_CONTROLLER_STATUS_VALUES = ['connected'] as const satisfies Exclude<
   TerminalControllerStatus,
   'none'
 >[]
 const TerminalSessionIdSchema = v.pipe(v.string(), v.regex(TERMINAL_SESSION_ID_RE))
 const TerminalAttachmentIdSchema = v.pipe(v.string(), v.regex(TERMINAL_ATTACHMENT_ID_RE))
 const TerminalRequestIdSchema = v.pipe(v.string(), v.regex(TERMINAL_REQUEST_ID_RE))
-const TerminalColsSchema = v.pipe(v.number(), v.integer(), v.minValue(MIN_TERMINAL_COLS), v.maxValue(MAX_TERMINAL_COLS))
-const TerminalRowsSchema = v.pipe(v.number(), v.integer(), v.minValue(MIN_TERMINAL_ROWS), v.maxValue(MAX_TERMINAL_ROWS))
+const TerminalColsSchema = v.pipe(
+  v.number(),
+  v.integer(),
+  v.minValue(TERMINAL_SIZE_LIMITS.minCols),
+  v.maxValue(TERMINAL_SIZE_LIMITS.maxCols),
+)
+const TerminalRowsSchema = v.pipe(
+  v.number(),
+  v.integer(),
+  v.minValue(TERMINAL_SIZE_LIMITS.minRows),
+  v.maxValue(TERMINAL_SIZE_LIMITS.maxRows),
+)
 const TerminalOptionalAttachmentIdSchema = v.optional(TerminalAttachmentIdSchema)
 const TerminalControllerSchema = v.object({
   attachmentId: v.string(),
   status: v.picklist(TERMINAL_CONNECTED_CONTROLLER_STATUS_VALUES),
 })
+const TerminalSessionPhaseSchema = v.picklist(TERMINAL_SESSION_PHASE_VALUES)
 const TerminalAttachInputSchema = v.object({
   sessionId: TerminalSessionIdSchema,
   cols: TerminalColsSchema,
@@ -318,6 +344,8 @@ const TerminalSessionSummarySchema = v.object({
   cols: v.number(),
   rows: v.number(),
   displayOrder: v.number(),
+  phase: TerminalSessionPhaseSchema,
+  message: v.nullable(v.string()),
 })
 const TerminalSessionSnapshotSchema = v.object({
   sessionId: v.string(),
@@ -342,6 +370,7 @@ const TerminalOwnershipEventSchema = v.object({
   controller: v.nullable(TerminalControllerSchema),
   cols: v.number(),
   rows: v.number(),
+  phase: TerminalSessionPhaseSchema,
 })
 const TerminalRealtimeMessageVariants = [
   v.object({ type: v.literal('output'), event: TerminalOutputEventSchema }),
@@ -444,7 +473,12 @@ export function normalizeTerminalSize(cols: unknown, rows: unknown): { cols: num
   }
   const c = Math.floor(cols)
   const r = Math.floor(rows)
-  if (c < MIN_TERMINAL_COLS || c > MAX_TERMINAL_COLS || r < MIN_TERMINAL_ROWS || r > MAX_TERMINAL_ROWS) {
+  if (
+    c < TERMINAL_SIZE_LIMITS.minCols ||
+    c > TERMINAL_SIZE_LIMITS.maxCols ||
+    r < TERMINAL_SIZE_LIMITS.minRows ||
+    r > TERMINAL_SIZE_LIMITS.maxRows
+  ) {
     return null
   }
   return { cols: c, rows: r }

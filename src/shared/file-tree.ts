@@ -1,11 +1,14 @@
 export const GOBLIN_FILE_PATHS_MIME = 'application/x-goblin-file-paths+json'
 
 export const FILE_TREE_MAX_ENTRIES = 5000
+export const FILE_TREE_SEARCH_LIMIT_DEFAULT = 100
+export const FILE_TREE_SEARCH_LIMIT_MAX = 200
 export const FILE_TRANSFER_MAX_FILE_BYTES = 100 * 1024 * 1024
 export const FILE_TRANSFER_MAX_TOTAL_BYTES = 500 * 1024 * 1024
 
 export type RepoFileTreeEntryKind = 'file' | 'directory' | 'symlink'
 export type RepoFileTreeTargetKind = 'file' | 'directory' | 'other' | 'missing'
+export type RepoFileSearchEntryKind = RepoFileTreeEntryKind | 'other'
 export type RepoFileTransferEntryKind = 'file' | 'directory' | 'symlink'
 
 export interface RepoFileTreeEntry {
@@ -22,6 +25,30 @@ export type RepoFileTreeResult =
       worktreePath: string
       dirPath: string
       entries: RepoFileTreeEntry[]
+    }
+  | {
+      ok: false
+      message: string
+    }
+
+export interface RepoFileSearchMatch {
+  relativePath: string
+  kind: RepoFileSearchEntryKind
+}
+
+export interface RepoFileSearchRequest {
+  repoId: string
+  worktreePath: string
+  query: string
+  limit?: number
+}
+
+export type RepoFileSearchResult =
+  | {
+      ok: true
+      matches: RepoFileSearchMatch[]
+      truncated: boolean
+      limit: number
     }
   | {
       ok: false
@@ -158,6 +185,51 @@ export function isRepoFileMoveRequest(value: unknown): value is RepoFileMoveRequ
     value.paths.length > 0 &&
     typeof value.targetDirPath === 'string'
   )
+}
+
+export function normalizeFileTreeSearchLimit(value: unknown): number {
+  const parsed = typeof value === 'number' ? Math.floor(value) : Number.NaN
+  if (!Number.isFinite(parsed)) return FILE_TREE_SEARCH_LIMIT_DEFAULT
+  return Math.max(1, Math.min(FILE_TREE_SEARCH_LIMIT_MAX, parsed))
+}
+
+export function isRepoFileSearchRequest(value: unknown): value is RepoFileSearchRequest {
+  return (
+    isRecord(value) &&
+    typeof value.repoId === 'string' &&
+    value.repoId.length > 0 &&
+    typeof value.worktreePath === 'string' &&
+    value.worktreePath.length > 0 &&
+    typeof value.query === 'string' &&
+    value.query.trim().length > 0 &&
+    (value.limit === undefined || typeof value.limit === 'number')
+  )
+}
+
+function fileTreeSearchBasename(relativePath: string): string {
+  const slash = relativePath.lastIndexOf('/')
+  return slash < 0 ? relativePath : relativePath.slice(slash + 1)
+}
+
+export function fileTreeSearchRank(query: string, relativePath: string): number | null {
+  const needle = query.trim().toLocaleLowerCase()
+  if (!needle) return null
+  const pathValue = relativePath.toLocaleLowerCase()
+  const nameValue = fileTreeSearchBasename(relativePath).toLocaleLowerCase()
+  if (nameValue.startsWith(needle)) return 0
+  if (nameValue.includes(needle)) return 1
+  if (pathValue.startsWith(needle)) return 2
+  if (pathValue.includes(needle)) return 3
+  return null
+}
+
+export function sortRepoFileSearchMatches<T extends RepoFileSearchMatch>(query: string, matches: T[]): T[] {
+  return [...matches].sort((a, b) => {
+    const rankA = fileTreeSearchRank(query, a.relativePath) ?? Number.MAX_SAFE_INTEGER
+    const rankB = fileTreeSearchRank(query, b.relativePath) ?? Number.MAX_SAFE_INTEGER
+    if (rankA !== rankB) return rankA - rankB
+    return a.relativePath.localeCompare(b.relativePath, undefined, { numeric: true, sensitivity: 'base' })
+  })
 }
 
 export function isValidFileTransferDestinationName(value: unknown): value is string {

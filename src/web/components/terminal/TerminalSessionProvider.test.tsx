@@ -144,7 +144,7 @@ vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
       processName: string
       canonicalTitle?: string | null
       role: 'controller' | 'viewer' | 'unowned'
-      controllerStatus: 'connected' | 'grace' | 'none'
+      controllerStatus: 'connected' | 'none'
       canonicalCols: number
       canonicalRows: number
       snapshot?: string
@@ -191,7 +191,7 @@ vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
     handleOwnership(event: {
       sessionId: string
       role: 'controller' | 'viewer' | 'unowned'
-      controllerStatus: 'connected' | 'grace' | 'none'
+      controllerStatus: 'connected' | 'none'
       canonicalCols: number
       canonicalRows: number
     }) {
@@ -228,7 +228,7 @@ let ownershipHandler:
   | ((event: {
       sessionId: string
       role: 'controller' | 'viewer' | 'unowned'
-      controllerStatus: 'connected' | 'grace' | 'none'
+      controllerStatus: 'connected' | 'none'
       canonicalCols: number
       canonicalRows: number
     }) => void)
@@ -253,7 +253,13 @@ function attachResult(): TerminalAttachResult {
     replayTruncated: false,
     processName: 'zsh',
     canonicalTitle: null,
+    snapshot: '',
+    snapshotSeq: 0,
     controller: { attachmentId: 'attachment_local', status: 'connected' },
+    canonicalCols: 80,
+    canonicalRows: 24,
+    phase: 'open',
+    message: null,
   }
 }
 
@@ -288,7 +294,23 @@ beforeEach(() => {
     const key = `${input.repoRoot}\u0000${input.worktreePath}\u0000${terminalId}`
     if (input.kind === 'primary' && currentSessions.some((session) => session.key === key)) {
       managedServerSessions = currentSessions
-      return { ok: true, action: 'reused', key, sessions: managedServerSessions }
+      const session = managedServerSessions.find((item) => item.key === key) ?? managedServerSessions[0]
+      return {
+        ok: true,
+        action: 'reused',
+        key,
+        sessionId: session?.sessionId ?? terminalId,
+        processName: session?.processName ?? terminalId,
+        canonicalTitle: session?.canonicalTitle ?? null,
+        snapshot: '',
+        snapshotSeq: 0,
+        controller: session?.controller ?? null,
+        canonicalCols: session?.cols ?? input.cols ?? 80,
+        canonicalRows: session?.rows ?? input.rows ?? 24,
+        phase: session?.phase ?? 'open',
+        message: session?.message ?? null,
+        sessions: managedServerSessions,
+      }
     }
     const controller = input.attachmentId ? { attachmentId: input.attachmentId, status: 'connected' as const } : null
     managedServerSessions = [
@@ -305,12 +327,29 @@ beforeEach(() => {
         controller,
         processName: terminalId,
         canonicalTitle: null,
-        cols: 80,
-        rows: 24,
+        cols: input.cols ?? 80,
+        rows: input.rows ?? 24,
         displayOrder: 1,
+        phase: 'open',
+        message: null,
       },
     ]
-    return { ok: true, action: 'created', key, sessions: managedServerSessions }
+    return {
+      ok: true,
+      action: 'created',
+      key,
+      sessionId: terminalId,
+      processName: terminalId,
+      canonicalTitle: null,
+      snapshot: '',
+      snapshotSeq: 0,
+      controller,
+      canonicalCols: input.cols ?? 80,
+      canonicalRows: input.rows ?? 24,
+      phase: 'open',
+      message: null,
+      sessions: managedServerSessions,
+    }
   })
   resetReposStore()
   window.sessionStorage.setItem('goblin:web-terminal-attachment-id', 'attachment_local')
@@ -337,32 +376,19 @@ beforeEach(() => {
       onEvent: vi.fn(() => () => {}),
       pathForFile: vi.fn(() => ''),
       terminal: {
-        attach: vi.fn(async () => ({
-          ok: true,
-          sessionId: 'unused',
-          replay: '',
-          replaySeq: 0,
-          replayTruncated: false,
-          processName: 'zsh',
-          canonicalTitle: null,
-        })),
-        restart: vi.fn(async () => ({
-          ok: true,
-          sessionId: 'unused',
-          replay: '',
-          replaySeq: 0,
-          replayTruncated: false,
-          processName: 'zsh',
-          canonicalTitle: null,
-        })),
+        attach: vi.fn(async () => attachResult()),
+        restart: vi.fn(async () => attachResult()),
         write: vi.fn(async () => true),
         resize: vi.fn(async () => true),
         takeover: vi.fn(async () => ({
           ok: true as const,
           sessionId: 'session-1',
+          role: 'controller' as const,
+          controllerStatus: 'connected' as const,
           controller: { attachmentId: 'attachment_local', status: 'connected' as const },
           canonicalCols: 80,
           canonicalRows: 24,
+          phase: 'open' as const,
         })),
         close: closeMock,
         notifyBell: vi.fn(async () => true),
@@ -388,7 +414,7 @@ beforeEach(() => {
             cb: (event: {
               sessionId: string
               role: 'controller' | 'viewer' | 'unowned'
-              controllerStatus: 'connected' | 'grace' | 'none'
+              controllerStatus: 'connected' | 'none'
               canonicalCols: number
               canonicalRows: number
             }) => void,
@@ -456,9 +482,12 @@ beforeEach(() => {
       takeover: vi.fn(async () => ({
         ok: true as const,
         sessionId: 'session-1',
+        role: 'controller' as const,
+        controllerStatus: 'connected' as const,
         controller: { attachmentId: 'attachment_local', status: 'connected' as const },
         canonicalCols: 80,
         canonicalRows: 24,
+        phase: 'open' as const,
       })),
       close: closeMock,
       create: createTerminalMock,
@@ -486,7 +515,7 @@ beforeEach(() => {
           cb: (event: {
             sessionId: string
             role: 'controller' | 'viewer' | 'unowned'
-            controllerStatus: 'connected' | 'grace' | 'none'
+            controllerStatus: 'connected' | 'none'
             canonicalCols: number
             canonicalRows: number
           }) => void,
@@ -529,11 +558,15 @@ describe('TerminalSessionProvider', () => {
         ...base,
         kind: 'primary',
         attachmentId: 'attachment_local',
+        cols: 80,
+        rows: 24,
       })
       expect(createTerminalMock).toHaveBeenNthCalledWith(2, {
         ...base,
         kind: 'additional',
         attachmentId: 'attachment_local',
+        cols: 80,
+        rows: 24,
       })
       expect(getProbe().summaries.map((session) => [session.terminalId, session.selected, session.hasBell])).toEqual([
         ['terminal-1', false, false],
@@ -765,6 +798,8 @@ describe('TerminalSessionProvider', () => {
         cols: 120,
         rows: 40,
         displayOrder: 1,
+        phase: 'open',
+        message: null,
       },
     ])
     getSessionSnapshotMock.mockResolvedValue({
@@ -828,6 +863,8 @@ describe('TerminalSessionProvider', () => {
         cols: 80,
         rows: 24,
         displayOrder: 1,
+        phase: 'open',
+        message: null,
       },
     ]
     listSessionsMock.mockImplementation(async () => managedServerSessions)
@@ -890,6 +927,8 @@ describe('TerminalSessionProvider', () => {
         cols: 80,
         rows: 24,
         displayOrder: 1,
+        phase: 'open',
+        message: null,
       },
       {
         sessionId: 'server_session_2',
@@ -901,6 +940,8 @@ describe('TerminalSessionProvider', () => {
         cols: 80,
         rows: 24,
         displayOrder: 1,
+        phase: 'open',
+        message: null,
       },
     ]
     listSessionsMock.mockImplementation(async () => managedServerSessions)
@@ -1079,6 +1120,8 @@ describe('TerminalSessionProvider', () => {
         cols: 100,
         rows: 30,
         displayOrder: 1,
+        phase: 'open',
+        message: null,
       },
     ])
     const terminalWorktreeKey = worktreeTerminalKey(REPO_ID, WORKTREE_PATH)
@@ -1124,6 +1167,8 @@ describe('TerminalSessionProvider', () => {
         cols: 100,
         rows: 30,
         displayOrder: 1,
+        phase: 'open',
+        message: null,
       },
     ])
     const terminalWorktreeKey = worktreeTerminalKey(REPO_ID, WORKTREE_PATH)
@@ -1154,6 +1199,8 @@ describe('TerminalSessionProvider', () => {
           cols: 100,
           rows: 30,
           displayOrder: 1,
+          phase: 'open',
+          message: null,
         },
       ])
       getSessionSnapshotMock.mockClear()
@@ -1193,6 +1240,8 @@ describe('TerminalSessionProvider', () => {
         cols: 100,
         rows: 30,
         displayOrder: 1,
+        phase: 'open',
+        message: null,
       },
     ])
     const terminalWorktreeKey = worktreeTerminalKey(REPO_ID, WORKTREE_PATH)
@@ -1258,6 +1307,8 @@ describe('TerminalSessionProvider', () => {
         cols: 100,
         rows: 30,
         displayOrder: 1,
+        phase: 'open',
+        message: null,
       },
     ])
     getSessionSnapshotMock.mockResolvedValueOnce({
@@ -1293,6 +1344,8 @@ describe('TerminalSessionProvider', () => {
           cols: 100,
           rows: 30,
           displayOrder: 1,
+          phase: 'open',
+          message: null,
         },
       ])
 
@@ -1329,6 +1382,8 @@ describe('TerminalSessionProvider', () => {
         cols: 100,
         rows: 30,
         displayOrder: 1,
+        phase: 'open',
+        message: null,
       },
     ])
     getSessionSnapshotMock.mockResolvedValueOnce({
@@ -1366,6 +1421,8 @@ describe('TerminalSessionProvider', () => {
           cols: 100,
           rows: 30,
           displayOrder: 1,
+          phase: 'open',
+          message: null,
         },
       ])
 
@@ -1404,6 +1461,8 @@ describe('TerminalSessionProvider', () => {
         cols: 100,
         rows: 30,
         displayOrder: 1,
+        phase: 'open',
+        message: null,
       },
     ])
     getSessionSnapshotMock.mockResolvedValueOnce({

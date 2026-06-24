@@ -3,8 +3,9 @@ import type {
   TerminalControllerStatus,
   TerminalExitEvent,
   TerminalOutputEvent,
+  TerminalSessionPhase,
 } from '#/shared/terminal.ts'
-export type TerminalPhase = 'opening' | 'open' | 'error'
+export type TerminalPhase = TerminalSessionPhase
 
 export interface TerminalDescriptor {
   key: string
@@ -113,6 +114,7 @@ export interface TerminalSessionContextValue {
   scrollLines: (key: string, amount: number) => void
   clearBell: (key: string) => boolean
   closeTerminalAndDismissDetailIfLast: (key: string, base: TerminalSessionBase) => void
+  registerWorktreeHost: (worktreeTerminalKey: string, host: HTMLElement | null) => void
   attach: (descriptor: TerminalDescriptor, host: HTMLElement, handlers?: TerminalSessionAttachHandlers) => void
   detach: (key: string, host: HTMLElement) => void
   restart: (key: string) => void

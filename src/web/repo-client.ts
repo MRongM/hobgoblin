@@ -1,7 +1,12 @@
 import { openExternalUrl } from '#/web/app-shell-client.ts'
 import { postServerJson } from '#/web/lib/server-fetch.ts'
 import type { CommitMessageGenerationResult, CommitMessageProvider, CommitMessageProviderAvailability } from '#/shared/commit-message-ai.ts'
-import type { RepoFileTransferRequest, RepoFileTransferResult, RepoFileTreeResult } from '#/shared/file-tree.ts'
+import type {
+  RepoFileSearchResult,
+  RepoFileTransferRequest,
+  RepoFileTransferResult,
+  RepoFileTreeResult,
+} from '#/shared/file-tree.ts'
 import type { RepoFileExportRequest, RepoFileExportResult } from '#/shared/file-tree-export.ts'
 import type { CloneRepoResult, PullRequestEntry, RepoSnapshot } from '#/shared/rpc.ts'
 import type { CommitDetail, CommitHistoryEntry, ExecResult, PullRequestFetchMode, WorktreeStatus } from '#/shared/git-types.ts'
@@ -186,6 +191,16 @@ export async function getRepositoryFileTree(
   signal?: AbortSignal,
 ): Promise<RepoFileTreeResult> {
   return await postServerJson('/api/repo/file-tree', { repoId, worktreePath, dirPath }, { signal })
+}
+
+export async function searchRepositoryFileTree(
+  repoId: string,
+  worktreePath: string,
+  query: string,
+  limit?: number,
+  signal?: AbortSignal,
+): Promise<RepoFileSearchResult> {
+  return await postServerJson('/api/repo/file-search', { repoId, worktreePath, query, limit }, { signal })
 }
 
 export async function renameRepositoryFileTreeEntry(

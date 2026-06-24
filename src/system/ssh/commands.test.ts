@@ -29,6 +29,22 @@ describe('remote command scripts', () => {
     expect(invocation.args).toContain(TARGET.alias)
   })
 
+  test('builds fixed remote file search command with JSON encoded inputs', () => {
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'searchFileTree',
+      worktreePath: "/srv/repo/user's work",
+      query: 'button',
+      limit: 50,
+    })
+
+    expect(invocation.script).toContain('python3')
+    expect(invocation.script).toContain('git')
+    expect(invocation.script).toContain("user's work")
+    expect(invocation.script).toContain('button')
+    expect(invocation.script).toContain('\\"limit\\":50')
+    expect(invocation.args).toContain(TARGET.alias)
+  })
+
   test('builds a fixed remote rename command with JSON encoded inputs', () => {
     const invocation = buildRemoteCommandInvocation(TARGET, {
       type: 'renameFileTreeEntry',

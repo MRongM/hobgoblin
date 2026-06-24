@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { ProjectChangesPanel } from '#/web/components/repo-workspace/ProjectChangesPanel.tsx'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { InlineCommitDraftProvider } from '#/web/components/branch-list/InlineCommitDraftProvider.tsx'
+import { useReposStore } from '#/web/stores/repos/store.ts'
 
 const REPO_ID = '/tmp/gbl-project-changes-repo'
 const WORKTREE_PATH = '/tmp/gbl-project-changes-repo'
@@ -160,6 +161,43 @@ describe('ProjectChangesPanel', () => {
     })
 
     expect(onRevealPath).toHaveBeenCalledWith('src/app.ts')
+  })
+
+  test('refresh icon refreshes only selected repository status', async () => {
+    const refreshStatus = vi.fn(async () => undefined)
+    const syncAndRefresh = vi.fn(async () => undefined)
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } })],
+      selectedBranch: 'feature/worktree',
+      statusLoaded: true,
+      status: [
+        {
+          path: WORKTREE_PATH,
+          branch: 'feature/worktree',
+          isMain: true,
+          entries: [{ x: 'M', y: ' ', path: 'src/app.ts' }],
+        },
+      ],
+    })
+    useReposStore.setState({ refreshStatus, syncAndRefresh } as Partial<ReturnType<typeof useReposStore.getState>>)
+    const token = useReposStore.getState().repos[REPO_ID]!.instanceToken
+
+    await act(async () => {
+      root!.render(
+        <InlineCommitDraftProvider>
+          <ProjectChangesPanel repoId={REPO_ID} />
+        </InlineCommitDraftProvider>,
+      )
+    })
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('button[aria-label="changes.refresh"]')?.click()
+      await Promise.resolve()
+    })
+
+    expect(refreshStatus).toHaveBeenCalledWith(REPO_ID, { token })
+    expect(syncAndRefresh).not.toHaveBeenCalled()
   })
 
   test('defaults changed files to a folder hierarchy and keeps reveal clicks', async () => {

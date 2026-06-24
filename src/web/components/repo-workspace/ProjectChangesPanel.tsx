@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FolderTree, RotateCcw } from 'lucide-react'
+import { FolderTree, RefreshCw, RotateCcw } from 'lucide-react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import { FileListViewModeControl, type FileListViewMode } from '#/web/components/FileListViewModeControl.tsx'
@@ -7,6 +7,7 @@ import { BranchActionControls } from '#/web/components/BranchActionControls.tsx'
 import { EmptyState, ScrollPane } from '#/web/components/Layout.tsx'
 import { StatusListSkeleton } from '#/web/components/Skeleton.tsx'
 import { StatusList } from '#/web/components/StatusList.tsx'
+import { AsyncButton } from '#/web/components/AsyncButton.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { Switch } from '#/web/components/ui/switch.tsx'
 import type { BranchActionItemGroups } from '#/web/hooks/useBranchActionItems.ts'
@@ -16,6 +17,7 @@ import { getSelectedBranchDetailPresentation } from '#/web/components/branch-det
 import { discardRepositoryChanges } from '#/web/repo-client.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
+import { resourceBusy } from '#/web/stores/repos/resources.ts'
 
 type ProjectChangesBranch = NonNullable<SelectedBranchDetailPresentation['branch']>
 
@@ -203,9 +205,13 @@ export function ProjectChangesPanel({
         fileViewMode={fileViewMode}
         selectionEnabled={selectionEnabled}
         selectedCount={selectedTargets.size}
+        statusRefreshing={resourceBusy(repo.resources.status)}
         onFileViewModeChange={setFileViewMode}
         onSelectionEnabledChange={handleSelectionEnabledChange}
         onDiscardSelected={() => setConfirmDiscardOpen(true)}
+        onRefreshStatus={() => {
+          void useReposStore.getState().refreshStatus(repo.id, { token: repo.instanceToken })
+        }}
       />
       <ProjectChangesContent
         repo={repo}
@@ -250,9 +256,11 @@ function ProjectChangesActionBar({
   fileViewMode,
   selectionEnabled,
   selectedCount,
+  statusRefreshing,
   onFileViewModeChange,
   onSelectionEnabledChange,
   onDiscardSelected,
+  onRefreshStatus,
 }: {
   repo: BranchDetailRepo
   branch: ProjectChangesBranch
@@ -261,9 +269,11 @@ function ProjectChangesActionBar({
   fileViewMode: FileListViewMode
   selectionEnabled: boolean
   selectedCount: number
+  statusRefreshing: boolean
   onFileViewModeChange: (mode: FileListViewMode) => void
   onSelectionEnabledChange: (enabled: boolean) => void
   onDiscardSelected: () => void
+  onRefreshStatus: () => void
 }) {
   const t = useT()
   const actions = useBranchActionItems(repo, branch)
@@ -302,6 +312,18 @@ function ProjectChangesActionBar({
           </Button>
         </>
       )}
+      <AsyncButton
+        type="button"
+        size="icon-xs"
+        variant="ghost"
+        loading={statusRefreshing}
+        disabled={statusRefreshing}
+        aria-label={t('changes.refresh')}
+        title={t('changes.refresh')}
+        onClick={onRefreshStatus}
+      >
+        {({ busy }) => <RefreshCw className={busy ? 'size-3.5 animate-spin' : 'size-3.5'} />}
+      </AsyncButton>
       {showFileViewMode && (
         <label
           className="flex shrink-0 items-center gap-1.5 px-1 text-xs text-muted-foreground"

@@ -42,8 +42,10 @@ type EnsureTerminalCatalogResult =
       snapshot?: string
       snapshotSeq?: number
       controller: { attachmentId: string; status: Exclude<TerminalControllerStatus, 'none'> } | null
-      canonicalCols?: number
-      canonicalRows?: number
+      canonicalCols: number
+      canonicalRows: number
+      phase: Extract<TerminalAttachResult, { ok: true }>['phase']
+      message: string | null
     }
   | { ok: false; message: string }
 
@@ -126,11 +128,25 @@ class TerminalCatalog {
         input.kind === 'primary' ? 'terminal-1' : await this.nextTerminalId(input.repoRoot, input.worktreePath),
     })
     if (!createResult.ok) return { ok: false, message: createResult.message }
+    const sessions = await this.options.manager.listSessions(input.repoRoot)
+    if (!sessions.some((session) => session.sessionId === createResult.sessionId)) {
+      return { ok: false, message: 'error.terminal-create-failed' }
+    }
     return {
       ok: true,
       action: createResult.action,
       key: createResult.key,
-      sessions: await this.options.manager.listSessions(input.repoRoot),
+      sessionId: createResult.sessionId,
+      processName: createResult.processName,
+      canonicalTitle: createResult.canonicalTitle,
+      snapshot: createResult.snapshot ?? '',
+      snapshotSeq: createResult.snapshotSeq ?? createResult.replaySeq,
+      controller: createResult.controller,
+      canonicalCols: createResult.canonicalCols,
+      canonicalRows: createResult.canonicalRows,
+      phase: createResult.phase,
+      message: createResult.message,
+      sessions,
     }
   }
 
@@ -271,6 +287,8 @@ function toEnsureResult(
     controller: snapshotResult.controller,
     canonicalCols: snapshotResult.canonicalCols,
     canonicalRows: snapshotResult.canonicalRows,
+    phase: snapshotResult.phase,
+    message: snapshotResult.message,
   }
 }
 

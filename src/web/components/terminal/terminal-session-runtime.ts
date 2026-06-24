@@ -1,4 +1,9 @@
-import type { TerminalAttachResult, TerminalOutputEvent } from '#/shared/terminal.ts'
+import type {
+  TerminalAttachResult,
+  TerminalOutputEvent,
+  TerminalSessionPhase,
+  TerminalTakeoverResult,
+} from '#/shared/terminal.ts'
 import { TerminalSessionState } from '#/web/components/terminal/terminal-session-state.ts'
 import type { TerminalOwnershipViewModel, TerminalSearchResult } from '#/web/components/terminal/types.ts'
 export class TerminalSessionRuntime {
@@ -11,7 +16,7 @@ export class TerminalSessionRuntime {
     return this.state.snapshot(this.ptySessionId)
   }
 
-  phase(): 'opening' | 'open' | 'error' {
+  phase(): TerminalSessionPhase {
     return this.state.getPhase()
   }
 
@@ -52,7 +57,7 @@ export class TerminalSessionRuntime {
     this.ptySessionId = null
     if (oldPtySessionId) this.replacingPtySessionId = oldPtySessionId
     this.restartOnStart = true
-    return { changed: this.state.setOpening() }
+    return { changed: this.state.setRestarting() }
   }
 
   settleStartAttempt(): void {
@@ -68,7 +73,7 @@ export class TerminalSessionRuntime {
   ): boolean {
     this.replacingPtySessionId = null
     this.ptySessionId = result.sessionId
-    return this.state.applyOpenResult({
+    const metadataChanged = this.state.applyOpenResult({
       processName: result.processName,
       canonicalTitle: result.canonicalTitle ?? null,
       role: result.role,
@@ -76,6 +81,8 @@ export class TerminalSessionRuntime {
       canonicalCols: result.canonicalCols ?? fallbackSize.cols,
       canonicalRows: result.canonicalRows ?? fallbackSize.rows,
     })
+    const phaseChanged = this.state.applyPhase(result.phase, result.message)
+    return metadataChanged || phaseChanged
   }
 
   hydrateSession(input: {
@@ -86,6 +93,8 @@ export class TerminalSessionRuntime {
     controllerStatus: TerminalOwnershipViewModel['controllerStatus']
     canonicalCols: number
     canonicalRows: number
+    phase?: TerminalSessionPhase
+    message?: string | null
   }): boolean {
     const sessionChanged = this.ptySessionId !== input.sessionId
     this.replacingPtySessionId = null
@@ -99,7 +108,7 @@ export class TerminalSessionRuntime {
       canonicalCols: input.canonicalCols,
       canonicalRows: input.canonicalRows,
     })
-    const phaseChanged = this.state.setOpen()
+    const phaseChanged = this.state.applyPhase(input.phase ?? 'open', input.message ?? null)
     const stateChanged = metadataChanged || phaseChanged
     return sessionChanged || stateChanged
   }
@@ -155,6 +164,17 @@ export class TerminalSessionRuntime {
   handleOwnership(event: TerminalOwnershipViewModel): boolean {
     if (event.sessionId !== this.ptySessionId) return false
     return this.state.applyOwnership(event)
+  }
+
+  applyTakeoverResult(result: Extract<TerminalTakeoverResult, { ok: true }>): boolean {
+    if (result.sessionId !== this.ptySessionId) return false
+    return this.state.applyOwnership({
+      sessionId: result.sessionId,
+      role: result.role,
+      controllerStatus: result.controllerStatus,
+      canonicalCols: result.canonicalCols,
+      canonicalRows: result.canonicalRows,
+    })
   }
 
   setCanonicalTitle(canonicalTitle: string | null): boolean {

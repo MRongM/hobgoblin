@@ -3,17 +3,20 @@ import path from 'node:path'
 import {
   cloneTerminalController,
   normalizeTerminalSize,
+  resolveTerminalOwnership,
   type TerminalAttachResult,
   type TerminalController,
   type TerminalExitEvent,
   type TerminalOwnershipEvent,
   type TerminalOutputEvent,
+  type TerminalSessionPhase,
   type TerminalSessionSnapshot,
   type TerminalSessionSummary,
   type TerminalTakeoverResult,
 } from '#/shared/terminal.ts'
 import {
   attachTerminalAttachment,
+  authorizeTerminalAttachment,
   claimTerminalAttachmentControl,
   registerTerminalAttachment,
   releaseTerminalAttachmentControl,
@@ -67,10 +70,11 @@ interface TerminalSession<TOwner extends string | number> {
   disposables: Array<{ dispose: () => void }>
   render: TerminalRenderState
   processName: string
-  attachmentId: string | null
-  attachment: TerminalAttachmentState | null
   controller: TerminalController | null
-  allowImplicitAttachControl: boolean
+  attachments: Map<string, TerminalAttachmentState>
+  claimedByOwner: boolean
+  phase: TerminalSessionPhase
+  message: string | null
   /** Display order within the worktree for tab strip sorting. */
   displayOrder: number
   /** Input queue ensures ordered PTY writes even with multiple concurrent callers. */
@@ -128,10 +132,11 @@ export class TerminalSessionManager<TOwner extends string | number> {
       disposables: [],
       render: createEmptyTerminalRenderState(),
       processName: '',
-      attachmentId: null,
-      attachment: null,
       controller: null,
-      allowImplicitAttachControl: true,
+      attachments: new Map(),
+      claimedByOwner: false,
+      phase: 'opening',
+      message: null,
       displayOrder: this.nextDisplayOrder(input.scope, parseWorktreePathFromKey(input.key) ?? input.key),
       inputQueue: [],
       inputFlushScheduled: false,
@@ -140,9 +145,11 @@ export class TerminalSessionManager<TOwner extends string | number> {
     this.sessionIdByOwnerKey.set(ownerKey, id)
     if (input.attachmentId) {
       registerTerminalAttachment(session, input.attachmentId, size.cols, size.rows, input.attachmentConnected ?? true)
-      session.controller = session.attachment?.connected
-        ? { attachmentId: input.attachmentId, status: 'connected' }
-        : null
+      const effect = attachTerminalAttachment(session, input.attachmentId)
+      if (effect.resizeTo) {
+        session.cols = effect.resizeTo.cols
+        session.rows = effect.resizeTo.rows
+      }
     }
     const spawnResult = this.spawnSessionPty(session)
     if (!spawnResult.ok) {
@@ -156,7 +163,8 @@ export class TerminalSessionManager<TOwner extends string | number> {
     if (!isValidTerminalSessionId(sessionId) || !isValidTerminalWriteData(data)) return false
     const session = this.ownedSession(ownerId, sessionId)
     if (!session?.pty) return false
-    if (attachmentId && session.controller?.attachmentId !== attachmentId) return false
+    if (!attachmentId) return false
+    if (!authorizeTerminalAttachment(session, attachmentId, 'write').ok) return false
     session.inputQueue.push(data)
     this.scheduleInputFlush(session)
     return true
@@ -197,7 +205,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
     if (!session) return false
     if (!attachmentId) return false
     registerTerminalAttachment(session, attachmentId, size.cols, size.rows, attachmentConnected)
-    if (session.controller?.attachmentId !== attachmentId) return false
+    if (!authorizeTerminalAttachment(session, attachmentId, 'resize').ok) return false
     return this.resizeSessionPty(session, size.cols, size.rows)
   }
 
@@ -216,8 +224,10 @@ export class TerminalSessionManager<TOwner extends string | number> {
     if (!session) return { ok: false, message: 'error.invalid-arguments' }
     if (attachmentId) {
       registerTerminalAttachment(session, attachmentId, size.cols, size.rows, attachmentConnected)
+      const authority = authorizeTerminalAttachment(session, attachmentId, 'takeover')
+      if (!authority.ok) return { ok: false, message: 'error.unavailable' }
       this.applyOwnershipEffect(session, claimTerminalAttachmentControl(session, attachmentId))
-      return this.takeoverResult(session)
+      return this.takeoverResult(session, attachmentId)
     }
     return { ok: false, message: 'error.invalid-arguments' }
   }
@@ -237,8 +247,14 @@ export class TerminalSessionManager<TOwner extends string | number> {
     if (!session) return { ok: false, message: 'error.invalid-arguments' }
     if (attachmentId) {
       registerTerminalAttachment(session, attachmentId, size.cols, size.rows, attachmentConnected)
+      const authority = authorizeTerminalAttachment(session, attachmentId, 'restart')
+      if (!authority.ok) return { ok: false, message: 'error.not-controller' }
       restartTerminalAttachmentControl(session, attachmentId)
+    } else {
+      return { ok: false, message: 'error.invalid-arguments' }
     }
+    session.phase = 'restarting'
+    session.message = null
     this.resetSessionState(session, size.cols, size.rows)
     const spawnResult = this.spawnSessionPty(session)
     if (!spawnResult.ok) return spawnResult
@@ -254,6 +270,8 @@ export class TerminalSessionManager<TOwner extends string | number> {
   closeSession(sessionId: string): void {
     const session = this.sessionsById.get(sessionId)
     if (!session) return
+    session.phase = 'closed'
+    session.message = null
     this.sessionsById.delete(sessionId)
     const ownerKey = this.sessionOwnerKey(session.ownerId, session.key)
     if (this.sessionIdByOwnerKey.get(ownerKey) === sessionId) this.sessionIdByOwnerKey.delete(ownerKey)
@@ -318,6 +336,8 @@ export class TerminalSessionManager<TOwner extends string | number> {
           cols: session.cols,
           rows: session.rows,
           displayOrder: session.displayOrder,
+          phase: session.phase,
+          message: session.message,
         })
       }
     }
@@ -388,13 +408,17 @@ export class TerminalSessionManager<TOwner extends string | number> {
     }
   }
 
-  private takeoverResult(session: TerminalSession<TOwner>): TerminalTakeoverResult {
+  private takeoverResult(session: TerminalSession<TOwner>, attachmentId: string): TerminalTakeoverResult {
+    const ownership = resolveTerminalOwnership(session.controller, attachmentId)
     return {
       ok: true,
       sessionId: session.id,
+      role: ownership.role,
+      controllerStatus: ownership.controllerStatus,
       controller: cloneTerminalController(session.controller),
       canonicalCols: session.cols,
       canonicalRows: session.rows,
+      phase: session.phase,
     }
   }
 
@@ -407,9 +431,13 @@ export class TerminalSessionManager<TOwner extends string | number> {
       replayTruncated: session.render.bufferTruncated,
       processName: session.processName,
       canonicalTitle: session.render.canonicalTitle,
+      snapshot: '',
+      snapshotSeq: session.render.sequence,
       controller: cloneTerminalController(session.controller),
       canonicalCols: session.cols,
       canonicalRows: session.rows,
+      phase: session.phase,
+      message: session.message,
     }
   }
 
@@ -423,6 +451,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
       controller: cloneTerminalController(session.controller),
       cols: session.cols,
       rows: session.rows,
+      phase: session.phase,
     })
   }
 
@@ -454,10 +483,14 @@ export class TerminalSessionManager<TOwner extends string | number> {
     })
     if (!spawnResult.ok) {
       this.disposeSessionResources(session)
+      session.phase = 'error'
+      session.message = spawnResult.message
       return spawnResult
     }
     session.pty = spawnResult.runtime
     session.processName = session.pty.processName()
+    session.phase = 'open'
+    session.message = null
     session.render.model = createTerminalRenderModel(session.cols, session.rows)
     session.disposables.push(
       bindTerminalRenderTitle(session.render, (canonicalTitle) => {

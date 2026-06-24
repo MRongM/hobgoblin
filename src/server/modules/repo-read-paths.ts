@@ -1,12 +1,15 @@
 import { runWithRepoBackend } from '#/server/modules/repo-backend.ts'
-import { getRepositoryFileTree as getRepositoryFileTreeRead } from '#/server/modules/repo-file-tree.ts'
+import {
+  getRepositoryFileTree as getRepositoryFileTreeRead,
+  searchRepositoryFileTree as searchRepositoryFileTreeRead,
+} from '#/server/modules/repo-file-tree.ts'
 import {
   generateCodexCommitMessageFromContext,
   generateCommitMessageFromPatch,
   probeCommitMessageProviders,
 } from '#/system/commit-message-ai.ts'
 import { isCommitMessageProvider, type CommitMessageGenerationResult, type CommitMessageProviderAvailability } from '#/shared/commit-message-ai.ts'
-import type { RepoFileTreeResult } from '#/shared/file-tree.ts'
+import type { RepoFileSearchResult, RepoFileTreeResult } from '#/shared/file-tree.ts'
 import { type CommitDetail, type CommitHistoryEntry, type ExecResult, type PullRequestFetchMode, type WorktreeStatus } from '#/shared/git-types.ts'
 import type { ProbeResult, PullRequestEntry, RepoSnapshot } from '#/shared/rpc.ts'
 
@@ -102,4 +105,16 @@ export async function getRepositoryFileTree(
   return signal?.aborted
     ? { ok: false, message: 'cancelled' }
     : await getRepositoryFileTreeRead(repoId, worktreePath, dirPath, signal)
+}
+
+export async function searchRepositoryFileTree(
+  repoId: string,
+  worktreePath: string,
+  query: string,
+  limit?: number,
+  signal?: AbortSignal,
+): Promise<RepoFileSearchResult> {
+  return signal?.aborted
+    ? { ok: false, message: 'cancelled' }
+    : await searchRepositoryFileTreeRead(repoId, worktreePath, query, limit, signal)
 }

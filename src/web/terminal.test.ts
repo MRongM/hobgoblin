@@ -551,7 +551,7 @@ describe('terminal web host bridge', () => {
     socket.emitMessage(
       JSON.stringify({
         type: 'ownership',
-        event: { sessionId: 'term_1', controller: null, cols: 100, rows: 30 },
+        event: { sessionId: 'term_1', controller: null, cols: 100, rows: 30, phase: 'open' },
       }),
     )
     socket.emitMessage(

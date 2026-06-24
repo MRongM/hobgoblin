@@ -1,8 +1,14 @@
 import { describe, expect, test } from 'vitest'
 import {
+  FILE_TREE_SEARCH_LIMIT_DEFAULT,
+  FILE_TREE_SEARCH_LIMIT_MAX,
+  fileTreeSearchRank,
+  isRepoFileSearchRequest,
   isRepoFileMoveRequest,
   isRepoFileTransferRequest,
   isValidFileTransferDestinationName,
+  normalizeFileTreeSearchLimit,
+  sortRepoFileSearchMatches,
 } from '#/shared/file-tree.ts'
 
 describe('file transfer request validation', () => {
@@ -68,5 +74,46 @@ describe('file move request validation', () => {
         targetDirPath: '/repo/docs',
       }),
     ).toBe(false)
+  })
+})
+
+describe('file tree search contract', () => {
+  test('normalizes search limits into the supported range', () => {
+    expect(normalizeFileTreeSearchLimit(undefined)).toBe(FILE_TREE_SEARCH_LIMIT_DEFAULT)
+    expect(normalizeFileTreeSearchLimit(0)).toBe(1)
+    expect(normalizeFileTreeSearchLimit(9999)).toBe(FILE_TREE_SEARCH_LIMIT_MAX)
+    expect(normalizeFileTreeSearchLimit(25.8)).toBe(25)
+  })
+
+  test('validates file search requests', () => {
+    expect(
+      isRepoFileSearchRequest({
+        repoId: '/repo',
+        worktreePath: '/repo',
+        query: 'button',
+        limit: 50,
+      }),
+    ).toBe(true)
+    expect(isRepoFileSearchRequest({ repoId: '/repo', worktreePath: '/repo', query: '' })).toBe(false)
+    expect(isRepoFileSearchRequest({ repoId: '/repo', worktreePath: '/repo', query: '   ' })).toBe(false)
+    expect(isRepoFileSearchRequest({ repoId: '/repo', worktreePath: '/repo', query: 'a', limit: '10' })).toBe(false)
+  })
+
+  test('ranks filename matches before path-only matches', () => {
+    expect(fileTreeSearchRank('button', 'src/components/Button.tsx')).toBe(0)
+    expect(fileTreeSearchRank('utton', 'src/components/Button.tsx')).toBe(1)
+    expect(fileTreeSearchRank('src', 'src/components/Button.tsx')).toBe(2)
+    expect(fileTreeSearchRank('components', 'src/components/Button.tsx')).toBe(3)
+    expect(fileTreeSearchRank('missing', 'src/components/Button.tsx')).toBeNull()
+  })
+
+  test('sorts search matches by rank then relative path', () => {
+    expect(
+      sortRepoFileSearchMatches('button', [
+        { relativePath: 'src/components/IconButton.tsx', kind: 'file' },
+        { relativePath: 'docs/button-guide.md', kind: 'file' },
+        { relativePath: 'src/Button.tsx', kind: 'file' },
+      ]).map((match) => match.relativePath),
+    ).toEqual(['docs/button-guide.md', 'src/Button.tsx', 'src/components/IconButton.tsx'])
   })
 })
