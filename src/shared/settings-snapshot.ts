@@ -21,6 +21,7 @@ export function buildRuntimeSettingsSnapshot(input: {
     globalShortcutDisabled: input.prefs.globalShortcutDisabled,
     swapCloseShortcuts: input.prefs.swapCloseShortcuts,
     toggleDetailOnActionBarBlankClick: input.prefs.toggleDetailOnActionBarBlankClick,
+    terminalThemeSyncEnabled: input.prefs.terminalThemeSyncEnabled,
     temporaryFilesDirectory: input.prefs.temporaryFilesDirectory,
     globalShortcut: input.prefs.globalShortcut,
     globalShortcutRegistered: input.globalShortcutRegistered,
@@ -74,6 +75,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     | 'globalShortcutDisabled'
     | 'swapCloseShortcuts'
     | 'toggleDetailOnActionBarBlankClick'
+    | 'terminalThemeSyncEnabled'
     | 'temporaryFilesDirectory'
     | 'globalShortcut'
     | 'globalShortcutRegistered'
@@ -100,6 +102,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     globalShortcutDisabled: snapshot.globalShortcutDisabled,
     swapCloseShortcuts: snapshot.swapCloseShortcuts,
     toggleDetailOnActionBarBlankClick: snapshot.toggleDetailOnActionBarBlankClick,
+    terminalThemeSyncEnabled: snapshot.terminalThemeSyncEnabled,
     temporaryFilesDirectory: snapshot.temporaryFilesDirectory,
     globalShortcut: snapshot.globalShortcut,
     globalShortcutRegistered: snapshot.globalShortcutRegistered,

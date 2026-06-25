@@ -26,13 +26,8 @@ export function PlainWorkspaceTerminalPanel({ repoId }: PlainWorkspaceTerminalPa
   const snapshot = useWorktreeTerminalSnapshot(terminalWorktreeKey)
   const terminalTabFocusRegistry = useFocusRegistry<string, HTMLButtonElement>()
   const bootstrappedRef = useRef(false)
-  const {
-    createTerminal,
-    selectTerminal,
-    scrollToBottom,
-    closeTerminalAndDismissDetailIfLast,
-    reorderSessions,
-  } = useTerminalSessionContext()
+  const { createTerminal, selectTerminal, scrollToBottom, closeTerminalAndDismissDetailIfLast, reorderSessions } =
+    useTerminalSessionContext()
 
   const terminalBase = useMemo<TerminalSessionBase>(
     () => ({
@@ -80,7 +75,7 @@ export function PlainWorkspaceTerminalPanel({ repoId }: PlainWorkspaceTerminalPa
   )
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col bg-background">
+    <section className="flex min-h-0 flex-1 flex-col bg-pane">
       <Toolbar variant="detail">
         <div className="flex h-full min-w-0 items-center gap-1 overflow-hidden">
           <TerminalTabs

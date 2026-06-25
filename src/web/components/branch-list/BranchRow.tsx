@@ -73,8 +73,10 @@ export function BranchRow({
             ? 'grid-cols-[minmax(0,1fr)_auto]'
             : 'grid-cols-1',
         'transition-colors duration-100',
-        isSelected ? 'bg-selected text-selected-foreground hover:bg-selected' : 'hover:bg-muted',
-        sortable?.isDragging && 'z-10 bg-card text-foreground shadow-sm',
+        isSelected
+          ? 'bg-list-row-selected text-list-row-selected-foreground hover:bg-list-row-selected'
+          : 'hover:bg-list-row-hover',
+        sortable?.isDragging && 'z-10 bg-[var(--goblin-card-bg,var(--color-card))] text-foreground shadow-sm',
       )}
     >
       {dragHandle && (
@@ -94,7 +96,7 @@ export function BranchRow({
               dragHandle.props.onDoubleClick?.(event)
             }}
             className={cn(
-              'flex size-6 touch-none cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground active:cursor-grabbing',
+              'flex size-6 touch-none cursor-grab items-center justify-center rounded-[var(--goblin-brand-radius-sm,var(--radius-sm))] text-muted-foreground hover:bg-list-row-hover hover:text-foreground active:cursor-grabbing',
               dragHandle.props.className,
             )}
           >

@@ -37,7 +37,7 @@ export function SettingsSidebar<TPage extends string>({
   return (
     <aside
       className={cn(
-        'flex shrink-0 flex-col border-r border-separator bg-muted/30 pb-3',
+        'flex shrink-0 flex-col border-r border-separator bg-sidebar pb-3',
         compact ? 'w-14 px-2' : 'w-48 px-3',
       )}
       style={{ paddingTop: topInset > 0 ? topInset + 12 : 12 }}
@@ -55,8 +55,8 @@ export function SettingsSidebar<TPage extends string>({
               'h-9 w-full gap-2 text-left text-sm font-normal',
               compact ? 'justify-center px-2' : 'justify-start px-2.5',
               page === item.page
-                ? 'bg-selected text-selected-foreground hover:bg-selected'
-                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                ? 'bg-list-row-selected text-list-row-selected-foreground hover:bg-list-row-selected'
+                : 'text-muted-foreground hover:bg-list-row-hover hover:text-foreground',
             )}
             aria-label={item.label}
             aria-current={page === item.page ? 'page' : undefined}
@@ -64,7 +64,7 @@ export function SettingsSidebar<TPage extends string>({
             <item.Icon
               className={cn(
                 'size-4 shrink-0',
-                page === item.page ? 'text-selected-foreground' : 'text-muted-foreground',
+                page === item.page ? 'text-list-row-selected-foreground' : 'text-muted-foreground',
               )}
             />
             <span className={cn(compact ? 'hidden' : 'truncate', page === item.page ? 'font-medium' : 'font-normal')}>

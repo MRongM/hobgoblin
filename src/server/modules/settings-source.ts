@@ -21,9 +21,8 @@ import {
 } from '#/shared/workspace-layout.ts'
 import { repoSessionEntryId, type RepoSessionEntry } from '#/shared/remote-repo.ts'
 import { normalizeGlobalShortcut } from '#/shared/accelerator.ts'
-import { isColorTheme, type ColorTheme } from '#/shared/color-theme.ts'
+import { normalizeColorTheme, type ColorTheme } from '#/shared/color-theme.ts'
 import {
-  DEFAULT_COLOR_THEME,
   DEFAULT_EDITOR_APP,
   DEFAULT_FILE_TREE_FONT_SIZE,
   DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
@@ -38,6 +37,7 @@ import {
   DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
   DEFAULT_TERMINAL_FONT_SIZE,
   DEFAULT_TERMINAL_NOTIFICATIONS_ENABLED,
+  DEFAULT_TERMINAL_THEME_SYNC_ENABLED,
   DEFAULT_THEME_PREF,
   DEFAULT_TOGGLE_DETAIL_ON_ACTION_BAR_BLANK_CLICK,
   MAX_FILE_TREE_FONT_SIZE,
@@ -62,6 +62,7 @@ interface ServerSettingsData {
   globalShortcutDisabled: boolean
   swapCloseShortcuts: boolean
   toggleDetailOnActionBarBlankClick: boolean
+  terminalThemeSyncEnabled: boolean
   temporaryFilesDirectory: string
   globalShortcut: string
   terminalApp: TerminalPref
@@ -97,11 +98,9 @@ function normalizeThemePref(value: unknown): ThemePref {
 }
 
 function normalizeLangPref(value: unknown): LangPref {
-  return value === 'auto' || value === 'en' || value === 'zh' || value === 'ko' || value === 'ja' ? value : DEFAULT_LANG_PREF
-}
-
-function normalizeColorTheme(value: unknown): ColorTheme {
-  return isColorTheme(value) ? value : DEFAULT_COLOR_THEME
+  return value === 'auto' || value === 'en' || value === 'zh' || value === 'ko' || value === 'ja'
+    ? value
+    : DEFAULT_LANG_PREF
 }
 
 function normalizeTerminalPref(value: unknown): TerminalPref {
@@ -153,6 +152,10 @@ function normalizeTemporaryFilesDirectory(value: unknown): string {
   return isValidAbsolutePath(trimmed) ? trimmed : ''
 }
 
+function normalizeTerminalThemeSyncEnabled(value: unknown): boolean {
+  return typeof value === 'boolean' ? value : DEFAULT_TERMINAL_THEME_SYNC_ENABLED
+}
+
 function normalizeTerminalExternalInputEnabled(value: unknown): boolean {
   return value === true
 }
@@ -166,9 +169,7 @@ function normalizeTerminalCustomButtonsVisible(value: unknown): boolean {
 }
 
 function normalizeTerminalCustomButtonSize(value: unknown): TerminalCustomButtonSize {
-  return value === 'small' || value === 'medium' || value === 'large'
-    ? value
-    : DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE
+  return value === 'small' || value === 'medium' || value === 'large' ? value : DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE
 }
 
 function normalizeTerminalCustomButtonAction(value: unknown): TerminalCustomButtonAction {
@@ -205,6 +206,7 @@ function settingsPrefsFromData(data: ServerSettingsData): SettingsPrefs {
     globalShortcutDisabled: data.globalShortcutDisabled,
     swapCloseShortcuts: data.swapCloseShortcuts,
     toggleDetailOnActionBarBlankClick: data.toggleDetailOnActionBarBlankClick,
+    terminalThemeSyncEnabled: data.terminalThemeSyncEnabled,
     temporaryFilesDirectory: data.temporaryFilesDirectory,
     globalShortcut: data.globalShortcut,
     terminalApp: data.terminalApp,
@@ -254,7 +256,9 @@ function normalizeSession(value: unknown): SessionState {
   if (!value || typeof value !== 'object') return defaultSession()
   const partial = value as Partial<SessionState> & { activeTerminalByGroup?: unknown }
   const openRepos = Array.isArray(partial.openRepos)
-    ? dedupeRepoEntries(partial.openRepos.map(toSafeSessionRepoEntry).filter((entry): entry is RepoSessionEntry => entry !== null))
+    ? dedupeRepoEntries(
+        partial.openRepos.map(toSafeSessionRepoEntry).filter((entry): entry is RepoSessionEntry => entry !== null),
+      )
     : []
   const activeRepo = toSafeRepoLocator(partial.activeRepo)
   const workspaceLayout = normalizeWorkspaceLayout(partial.workspaceLayout)
@@ -277,10 +281,9 @@ function normalizeSession(value: unknown): SessionState {
 
 function normalizeRecentRepos(value: unknown): RepoSessionEntry[] {
   if (!Array.isArray(value)) return []
-  return dedupeRepoEntries(value.map(toSafeSessionRepoEntry).filter((entry): entry is RepoSessionEntry => entry !== null)).slice(
-    0,
-    MAX_RECENT_REPOS,
-  )
+  return dedupeRepoEntries(
+    value.map(toSafeSessionRepoEntry).filter((entry): entry is RepoSessionEntry => entry !== null),
+  ).slice(0, MAX_RECENT_REPOS)
 }
 
 async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
@@ -297,6 +300,7 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       globalShortcutDisabled: parsed.globalShortcutDisabled === true,
       swapCloseShortcuts: parsed.swapCloseShortcuts === true,
       toggleDetailOnActionBarBlankClick: parsed.toggleDetailOnActionBarBlankClick === true,
+      terminalThemeSyncEnabled: normalizeTerminalThemeSyncEnabled(parsed.terminalThemeSyncEnabled),
       temporaryFilesDirectory: normalizeTemporaryFilesDirectory(parsed.temporaryFilesDirectory),
       globalShortcut: normalizeGlobalShortcut(parsed.globalShortcut),
       terminalApp: normalizeTerminalPref(parsed.terminalApp),
@@ -374,7 +378,8 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     patch.terminalNotificationsEnabled === undefined
       ? data.terminalNotificationsEnabled
       : normalizeTerminalNotificationsEnabled(patch.terminalNotificationsEnabled)
-  const nextShortcutsDisabled = patch.shortcutsDisabled === undefined ? data.shortcutsDisabled : patch.shortcutsDisabled === true
+  const nextShortcutsDisabled =
+    patch.shortcutsDisabled === undefined ? data.shortcutsDisabled : patch.shortcutsDisabled === true
   const nextGlobalShortcutDisabled =
     patch.globalShortcutDisabled === undefined ? data.globalShortcutDisabled : patch.globalShortcutDisabled === true
   const nextSwapCloseShortcuts =
@@ -383,6 +388,10 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     patch.toggleDetailOnActionBarBlankClick === undefined
       ? data.toggleDetailOnActionBarBlankClick
       : patch.toggleDetailOnActionBarBlankClick === true
+  const nextTerminalThemeSyncEnabled =
+    patch.terminalThemeSyncEnabled === undefined
+      ? data.terminalThemeSyncEnabled
+      : normalizeTerminalThemeSyncEnabled(patch.terminalThemeSyncEnabled)
   const nextTemporaryFilesDirectory =
     patch.temporaryFilesDirectory === undefined
       ? data.temporaryFilesDirectory
@@ -430,6 +439,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     data.globalShortcutDisabled !== nextGlobalShortcutDisabled ||
     data.swapCloseShortcuts !== nextSwapCloseShortcuts ||
     data.toggleDetailOnActionBarBlankClick !== nextToggleDetailOnActionBarBlankClick ||
+    data.terminalThemeSyncEnabled !== nextTerminalThemeSyncEnabled ||
     data.temporaryFilesDirectory !== nextTemporaryFilesDirectory ||
     data.globalShortcut !== nextGlobalShortcut ||
     data.terminalApp !== nextTerminalApp ||
@@ -452,6 +462,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   data.globalShortcutDisabled = nextGlobalShortcutDisabled
   data.swapCloseShortcuts = nextSwapCloseShortcuts
   data.toggleDetailOnActionBarBlankClick = nextToggleDetailOnActionBarBlankClick
+  data.terminalThemeSyncEnabled = nextTerminalThemeSyncEnabled
   data.temporaryFilesDirectory = nextTemporaryFilesDirectory
   data.globalShortcut = nextGlobalShortcut
   data.terminalApp = nextTerminalApp

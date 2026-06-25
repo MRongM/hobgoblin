@@ -37,6 +37,7 @@ function settingsPrefs(overrides: Partial<SettingsPrefs> = {}): SettingsPrefs {
     globalShortcutDisabled: false,
     swapCloseShortcuts: false,
     toggleDetailOnActionBarBlankClick: false,
+    terminalThemeSyncEnabled: true,
     temporaryFilesDirectory: '',
     globalShortcut: '',
     terminalApp: 'auto',

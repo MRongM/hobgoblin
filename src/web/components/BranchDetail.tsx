@@ -106,7 +106,7 @@ export function BranchDetail({
   const focusMode = layout === 'top-bottom' && detailFocusMode
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col bg-background">
+    <section className="flex min-h-0 flex-1 flex-col bg-detail">
       {detail.branch && !focusMode ? (
         <BranchShortcutHandler
           key={`${repo.id}:${detail.branch.name}`}

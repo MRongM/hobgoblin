@@ -1,3 +1,29 @@
+html[data-color-theme='github'] {
+  --color-terminal-classic-background: #050505;
+  --color-terminal-classic-foreground: #f5f5f5;
+  --color-terminal-classic-cursor: #f5f5f5;
+  --color-terminal-classic-selection-background: rgba(255, 255, 255, 0.24);
+  --color-terminal-classic-ansi-black: #000000;
+  --color-terminal-classic-ansi-red: #ff5f56;
+  --color-terminal-classic-ansi-green: #27c93f;
+  --color-terminal-classic-ansi-yellow: #ffbd2e;
+  --color-terminal-classic-ansi-blue: #5ac8fa;
+  --color-terminal-classic-ansi-magenta: #bf5af2;
+  --color-terminal-classic-ansi-cyan: #64d2ff;
+  --color-terminal-classic-ansi-white: #d1d1d1;
+  --color-terminal-classic-ansi-bright-black: #808080;
+  --color-terminal-classic-ansi-bright-red: #ff6b65;
+  --color-terminal-classic-ansi-bright-green: #32d74b;
+  --color-terminal-classic-ansi-bright-yellow: #ffd60a;
+  --color-terminal-classic-ansi-bright-blue: #70d7ff;
+  --color-terminal-classic-ansi-bright-magenta: #da8fff;
+  --color-terminal-classic-ansi-bright-cyan: #70d7ff;
+  --color-terminal-classic-ansi-bright-white: #ffffff;
+  --color-terminal-classic-search-match: #ffd60a;
+  --color-terminal-classic-search-active-match: #ff9f0a;
+  --color-terminal-classic-search-active-border: #ffffff;
+}
+
 html[data-color-theme='github'][data-theme='light'] {
   color-scheme: light;
 
@@ -13,6 +39,7 @@ html[data-color-theme='github'][data-theme='light'] {
   --goblin-text-secondary-strong: #3d444d;
   --goblin-text-secondary: #59636e;
   --goblin-text-selected-secondary: #4b535d;
+  --goblin-text-disabled: #8c959f;
   --goblin-border-subtle: #d8dee4;
   --goblin-border-default: #d0d7de;
   --goblin-border-strong: #afb8c1;
@@ -50,6 +77,32 @@ html[data-color-theme='github'][data-theme='light'] {
   --shadow-inset-highlight: inset 0 1px 0 rgb(255 255 255 / 0.35);
   --shadow-control-inset-highlight: inset 0 1px 0 rgb(255 255 255 / 0.4);
   --radius: 0.375rem;
+
+  --goblin-app-bg: #ffffff;
+  --goblin-topbar-bg: #ffffff;
+  --goblin-topbar-border: #d0d7de;
+  --goblin-tab-bg: transparent;
+  --goblin-tab-hover-bg: #f6f8fa;
+  --goblin-tab-active-bg: #ffffff;
+  --goblin-sidebar-bg: #f6f8fa;
+  --goblin-pane-bg: #ffffff;
+  --goblin-pane-header-bg: #f6f8fa;
+  --goblin-detail-bg: #ffffff;
+  --goblin-card-bg: #ffffff;
+  --goblin-list-row-bg: transparent;
+  --goblin-list-row-hover-bg: #f3f4f6;
+  --goblin-list-row-selected-bg: rgb(var(--goblin-accent-rgb) / 0.12);
+  --goblin-list-row-selected-fg: #1f2328;
+  --goblin-control-bg: #ffffff;
+  --goblin-control-hover-bg: #f6f8fa;
+  --goblin-control-border: #afb8c1;
+  --goblin-control-radius: 0.375rem;
+  --goblin-control-height-sm: 2rem;
+  --goblin-control-density: 1;
+  --goblin-brand-radius-sm: 0.25rem;
+  --goblin-brand-radius-md: 0.375rem;
+  --goblin-brand-radius-lg: 0.5rem;
+  --goblin-brand-divider-strength: 0.85;
 
   --color-terminal-background: #ffffff;
   --color-terminal-foreground: #1f2328;
@@ -91,6 +144,7 @@ html[data-color-theme='github'][data-theme='dark'] {
   --goblin-text-secondary-strong: #c9d1d9;
   --goblin-text-secondary: #8b949e;
   --goblin-text-selected-secondary: #c9d1d9;
+  --goblin-text-disabled: #6e7681;
   --goblin-border-subtle: #30363d;
   --goblin-border-default: #30363d;
   --goblin-border-strong: #484f58;
@@ -128,6 +182,32 @@ html[data-color-theme='github'][data-theme='dark'] {
   --shadow-inset-highlight: inset 0 1px 0 rgb(255 255 255 / 0.08);
   --shadow-control-inset-highlight: inset 0 1px 0 rgb(255 255 255 / 0.08);
   --radius: 0.375rem;
+
+  --goblin-app-bg: #0d1117;
+  --goblin-topbar-bg: #0d1117;
+  --goblin-topbar-border: #30363d;
+  --goblin-tab-bg: transparent;
+  --goblin-tab-hover-bg: #161b22;
+  --goblin-tab-active-bg: #21262d;
+  --goblin-sidebar-bg: #161b22;
+  --goblin-pane-bg: #0d1117;
+  --goblin-pane-header-bg: #161b22;
+  --goblin-detail-bg: #0d1117;
+  --goblin-card-bg: #161b22;
+  --goblin-list-row-bg: transparent;
+  --goblin-list-row-hover-bg: #21262d;
+  --goblin-list-row-selected-bg: rgb(var(--goblin-accent-rgb) / 0.2);
+  --goblin-list-row-selected-fg: #e6edf3;
+  --goblin-control-bg: #161b22;
+  --goblin-control-hover-bg: #21262d;
+  --goblin-control-border: #484f58;
+  --goblin-control-radius: 0.375rem;
+  --goblin-control-height-sm: 2rem;
+  --goblin-control-density: 1;
+  --goblin-brand-radius-sm: 0.25rem;
+  --goblin-brand-radius-md: 0.375rem;
+  --goblin-brand-radius-lg: 0.5rem;
+  --goblin-brand-divider-strength: 0.95;
 
   --color-terminal-background: #0d1117;
   --color-terminal-foreground: #e6edf3;

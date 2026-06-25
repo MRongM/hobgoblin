@@ -13,17 +13,17 @@ export function toolbarTabChromeClassName(options: {
     'group relative shrink-0 select-none items-center transition-colors duration-100',
     compositeFocusRing,
     variant === 'repo'
-      ? 'flex h-8 min-w-36 max-w-56 touch-none gap-1.5 rounded-md border px-2 text-xs'
-      : 'flex h-7 w-28 gap-1 rounded-md border px-2.5 text-sm',
+      ? 'flex h-8 min-w-36 max-w-56 touch-none gap-1.5 rounded-[var(--goblin-brand-radius-md,var(--radius-md))] border px-2 text-xs'
+      : 'flex h-7 w-28 gap-1 rounded-[var(--goblin-brand-radius-md,var(--radius-md))] border px-2.5 text-sm',
     variant === 'repo'
       ? active
-        ? 'border-input bg-card text-foreground'
-        : 'border-transparent text-muted-foreground hover:bg-accent/70 hover:text-foreground'
+        ? 'border-input bg-tab-active text-foreground'
+        : 'border-transparent text-muted-foreground hover:bg-tab-hover hover:text-foreground'
       : active
-        ? 'border-transparent bg-selected text-selected-foreground'
-        : 'border-separator text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+        ? 'border-transparent bg-tab-active text-foreground'
+        : 'border-separator text-muted-foreground hover:bg-tab-hover hover:text-foreground',
     dragging && 'z-10 cursor-grabbing',
-    dragging && !active && 'bg-card text-foreground',
+    dragging && !active && 'bg-tab-active text-foreground',
   )
 }
 

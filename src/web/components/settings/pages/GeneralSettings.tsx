@@ -26,8 +26,13 @@ export function GeneralSettings() {
   const setColorTheme = useThemeStore((s) => s.setColorTheme)
   const langPref = useI18nStore((s) => s.pref)
   const setLangPref = useI18nStore((s) => s.setPref)
-  const { toggleDetailOnActionBarBlankClick, temporaryFilesDirectory } = useRuntimeGeneralSettings()
-  const { setToggleDetailOnActionBarBlankClick, setTemporaryFilesDirectory } = useGeneralSettingsController()
+  const { toggleDetailOnActionBarBlankClick, terminalThemeSyncEnabled, temporaryFilesDirectory } =
+    useRuntimeGeneralSettings()
+  const {
+    setToggleDetailOnActionBarBlankClick,
+    setTerminalThemeSyncEnabled,
+    setTemporaryFilesDirectory,
+  } = useGeneralSettingsController()
   const appearanceOptions: { value: ThemePref; labelKey: string; icon: ReactNode }[] = [
     { value: 'auto', labelKey: 'settings.appearance.auto', icon: <Laptop className="size-4" /> },
     { value: 'light', labelKey: 'settings.appearance.light', icon: <Sun className="size-4" /> },
@@ -81,6 +86,19 @@ export function GeneralSettings() {
                 value={langPref}
                 options={langOptions.map((o) => ({ value: o.value, label: `${o.emoji} ${t(o.labelKey)}` }))}
                 onChange={(v) => void setLangPref(v)}
+              />
+            }
+          />
+          <SettingsRow
+            controlId="settings-terminal-theme-sync"
+            label={t('settings.terminal-theme-sync')}
+            hint={t('settings.terminal-theme-sync-hint')}
+            control={
+              <Switch
+                id="settings-terminal-theme-sync"
+                checked={terminalThemeSyncEnabled}
+                onCheckedChange={(enabled) => void setTerminalThemeSyncEnabled(enabled)}
+                aria-label={t('settings.terminal-theme-sync')}
               />
             }
           />

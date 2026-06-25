@@ -104,10 +104,7 @@ function BranchArea({ repoId, showActions }: { repoId: string; showActions: bool
   return (
     <section className="flex min-h-0 flex-1 flex-col">
       <Toolbar data-testid="branch-area-toolbar" className="px-2" variant="detail">
-        <BranchFilterControls
-          repoId={repoId}
-          className="h-full min-w-0 flex-1 gap-1"
-        />
+        <BranchFilterControls repoId={repoId} className="h-full min-w-0 flex-1 gap-1" />
         <div className="flex shrink-0 items-center gap-1">
           <RepoToolbarActions repoId={repoId} compact />
         </div>
@@ -160,18 +157,13 @@ function ExplorerTabs({
   }, [externalRevealRequest, onTabChange])
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col border-t border-separator/70 bg-background">
+    <section className="flex min-h-0 flex-1 flex-col border-t border-separator/70 bg-pane">
       <Toolbar data-testid="repo-explorer-toolbar" className="px-2" variant="detail" style={toolbarStyle}>
         <ToolbarTabStrip
           compact={false}
           compactContent={null}
           scrollContent={
-            <ToolbarTabStripBody
-              scroll
-              role="tablist"
-              aria-label={t('file-tree.title')}
-              aria-orientation="horizontal"
-            >
+            <ToolbarTabStripBody scroll role="tablist" aria-label={t('file-tree.title')} aria-orientation="horizontal">
               {tabs.map((tab) => {
                 const selected = activeVisibleTab === tab.id
                 return (
@@ -187,8 +179,8 @@ function ExplorerTabs({
                     className={cn(
                       'h-7 gap-1.5 border px-2.5 text-[length:var(--goblin-file-tree-topbar-font-size)] font-normal',
                       selected
-                        ? 'border-transparent bg-selected text-selected-foreground'
-                        : 'border-separator text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+                        ? 'border-transparent bg-tab-active text-foreground'
+                        : 'border-separator text-muted-foreground hover:bg-tab-hover hover:text-foreground',
                     )}
                   >
                     {tab.label}

@@ -60,7 +60,10 @@ const openRepositoryTerminal = vi.fn(async (_path: string) => ({ ok: true as con
 const openInFinder = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
 const readSystemClipboardFilePaths = vi.fn(async () => ['/tmp/report.pdf'])
 const chooseFileTreeDownloadDirectory = vi.fn(async () => '/Downloads')
-const chooseFileTreeUploadFiles = vi.fn(async () => ['/Users/test/Desktop/upload-a.txt', '/Users/test/Desktop/upload-b.txt'])
+const chooseFileTreeUploadFiles = vi.fn(async () => [
+  '/Users/test/Desktop/upload-a.txt',
+  '/Users/test/Desktop/upload-b.txt',
+])
 const hasNativeFilePicker = vi.fn(() => true)
 
 vi.mock('#/web/repo-client.ts', () => ({
@@ -258,9 +261,17 @@ describe('ProjectFileTree', () => {
 
     await render(<ProjectFileTree repoId="/repo" />)
 
+    expect(container?.querySelector('input[aria-label="file-tree.search-label"]')).toBeNull()
+    const searchButton = container?.querySelector<HTMLButtonElement>('button[aria-label="file-tree.search-label"]')
+    expect(searchButton).toBeTruthy()
+    await act(async () => {
+      searchButton!.click()
+      await Promise.resolve()
+    })
+
     const input = container?.querySelector<HTMLInputElement>('input[aria-label="file-tree.search-label"]')
     expect(input).toBeTruthy()
-    expect(container?.querySelector('.lucide-search')).toBeNull()
+    expect(document.activeElement).toBe(input)
     await act(async () => {
       input!.value = 'readme'
       input!.dispatchEvent(new Event('input', { bubbles: true }))
@@ -278,6 +289,12 @@ describe('ProjectFileTree', () => {
 
     await render(<ProjectFileTree repoId="/repo" />)
 
+    const searchButton = container?.querySelector<HTMLButtonElement>('button[aria-label="file-tree.search-label"]')
+    await act(async () => {
+      searchButton?.click()
+      await Promise.resolve()
+    })
+
     const input = container?.querySelector<HTMLInputElement>('input[aria-label="file-tree.search-label"]')
     await act(async () => {
       input!.value = 'app'
@@ -292,6 +309,48 @@ describe('ProjectFileTree', () => {
     expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', '/repo/src', undefined)
     expect(treeItemByText('app.ts').getAttribute('aria-selected')).toBe('true')
     vi.useRealTimers()
+  })
+
+  test('places file tree action buttons on the left with collapsed search last', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const toolbar = fileTreeToolbar()
+    const labels = [...toolbar.querySelectorAll<HTMLButtonElement>('button[aria-label]')].map((button) =>
+      button.getAttribute('aria-label'),
+    )
+
+    expect(labels).toEqual([
+      'file-tree.collapse-all',
+      'file-tree.refresh',
+      'file-tree.new-folder',
+      'file-tree.search-label',
+    ])
+    expect(toolbar.querySelector('input[aria-label="file-tree.search-label"]')).toBeNull()
+  })
+
+  test('collapses expanded file tree directories from the toolbar', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const row = treeItemByText('src')
+    await act(async () => {
+      row.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(container?.textContent).toContain('app.ts')
+
+    const collapseButton = container?.querySelector<HTMLButtonElement>('button[aria-label="file-tree.collapse-all"]')
+    if (!collapseButton) throw new Error('missing collapse button')
+    await act(async () => {
+      collapseButton.click()
+      await Promise.resolve()
+    })
+
+    expect(container?.textContent).not.toContain('app.ts')
   })
 
   test('clicking a directory row selects and expands it', async () => {
@@ -864,14 +923,12 @@ describe('ProjectFileTree', () => {
 
     await render(<ProjectFileTree repoId="/repo" />)
 
-    const refreshButton = container?.querySelector<HTMLButtonElement>('button[aria-label="file-tree.refresh"]')
-    const toolbar = refreshButton?.parentElement
-    if (!toolbar) throw new Error('missing file tree toolbar')
+    const toolbar = fileTreeToolbar()
 
     expect(toolbar.className).toContain('min-h-8')
     expect(toolbar.className).toContain('justify-end')
-    expect(toolbar.className).toContain('border-separator/70')
-    expect(toolbar.className).toContain('bg-card')
+    expect(toolbar.className).toContain('border-toolbar-border')
+    expect(toolbar.className).toContain('bg-toolbar')
     expect(toolbar.className).toContain('px-2')
   })
 
@@ -1159,6 +1216,13 @@ function fileTreeRoot(): HTMLElement {
   const root = container?.querySelector<HTMLElement>('[data-repo-id="/repo"]')
   if (!root) throw new Error('missing file tree root')
   return root
+}
+
+function fileTreeToolbar(): HTMLElement {
+  const refreshButton = container?.querySelector<HTMLButtonElement>('button[aria-label="file-tree.refresh"]')
+  const toolbar = refreshButton?.closest<HTMLElement>('.bg-toolbar')
+  if (!toolbar) throw new Error('missing file tree toolbar')
+  return toolbar
 }
 
 function dispatchFileTreePaste(

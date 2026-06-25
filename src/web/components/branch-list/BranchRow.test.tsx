@@ -199,6 +199,30 @@ describe('BranchRow', () => {
     )
   })
 
+  test('uses the worktree icon for the current branch when it has a worktree', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    repo.data.currentBranch = 'main'
+    const branch = createRepoBranch('main', { worktree: { path: '/tmp/repo' } })
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+    )
+
+    const icon = document.body.querySelector('svg')
+    expect(icon?.classList.contains('text-brand-text')).toBe(true)
+    expect(icon?.classList.contains('text-success')).toBe(false)
+  })
+
   test('does not render the recent commit summary line for worktree rows', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     const branch = createRepoBranch('feature/a', {
@@ -358,6 +382,30 @@ describe('BranchRow', () => {
 
     expect(document.body.textContent).not.toContain('没有工作树')
     expect(document.body.textContent).not.toContain('no worktree')
+  })
+
+  test('does not use a check icon for current branch rows without worktrees', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    repo.data.currentBranch = 'main'
+    const branch = createRepoBranch('main')
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+    )
+
+    const icon = document.body.querySelector('svg')
+    expect(icon?.classList.contains('text-muted-foreground')).toBe(true)
+    expect(icon?.classList.contains('text-success')).toBe(false)
   })
 
   test('uses compact row height and content padding', () => {

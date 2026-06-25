@@ -67,6 +67,7 @@ export function clearGitProjection(repo: Draft<RepoState> | RepoState): void {
   repo.data.statusLoaded = false
   repo.data.worktreesByPath = {}
   repo.resources = emptyRepoResources()
+  resetRepoOperations(repo)
   repo.ui.selectedBranch = null
   repo.ui.worktreePathOrder = []
   repo.projection = { source: 'fresh', savedAt: null }
@@ -82,6 +83,10 @@ export function clearGitProjection(repo: Draft<RepoState> | RepoState): void {
     fetchFailed: false,
     fetchError: null,
   }
+}
+
+export function resetRepoOperations(repo: Draft<RepoState> | RepoState): void {
+  repo.operations = emptyRepoOperations()
 }
 
 export function rotateRepoInstanceToken(repo: Draft<RepoState> | RepoState): void {

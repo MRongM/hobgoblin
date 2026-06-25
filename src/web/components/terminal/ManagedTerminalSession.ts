@@ -18,6 +18,7 @@ import { writeWithTerminalAuthority } from '#/web/components/terminal/authority-
 import { readOrCreateWebTerminalAttachmentId } from '#/web/renderer-terminal-bridge.ts'
 import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
 import type { TerminalInput } from '#/web/components/terminal/terminal-input.ts'
+import type { TerminalThemeMode } from '#/web/components/terminal/terminal-theme.ts'
 import type {
   TerminalBellEvent,
   TerminalDescriptor,
@@ -57,6 +58,7 @@ export class ManagedTerminalSession {
     notify: (reason: TerminalNotifyReason) => void,
     onBell: ((descriptor: TerminalDescriptor, event: TerminalBellEvent) => void) | null = null,
     fontSize = DEFAULT_TERMINAL_FONT_SIZE,
+    terminalThemeMode: () => TerminalThemeMode = () => 'theme',
   ) {
     this.descriptor = descriptor
     this.notify = notify
@@ -68,7 +70,7 @@ export class ManagedTerminalSession {
       onSearchResult: (event) => this.updateSearchResult(event),
       onProgress: (state, value) => this.updateProgress(state, value),
       onOpenExternalLink: (uri) => this.openExternalLink(uri),
-    }, { fontSize })
+    }, { fontSize, terminalThemeMode })
   }
 
   updateDescriptor(descriptor: TerminalDescriptor): void {
@@ -77,6 +79,10 @@ export class ManagedTerminalSession {
 
   setFontSize(fontSize: number): void {
     this.view.setFontSize(fontSize)
+  }
+
+  setTerminalThemeMode(terminalThemeMode: () => TerminalThemeMode): void {
+    this.view.setTerminalThemeMode(terminalThemeMode)
   }
 
   attach(host: HTMLElement, handlers?: TerminalSessionAttachHandlers): void {

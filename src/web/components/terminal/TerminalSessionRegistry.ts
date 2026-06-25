@@ -16,6 +16,7 @@ import type {
 import { branchForTerminalWorktree } from '#/web/components/terminal/terminal-repo-index.ts'
 import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
 import { measureTerminalGeometry } from '#/web/components/terminal/terminal-geometry.ts'
+import type { TerminalThemeMode } from '#/web/components/terminal/terminal-theme.ts'
 import type {
   TerminalDescriptor,
   TerminalRepoIndex,
@@ -74,6 +75,8 @@ export class TerminalSessionRegistry {
   private readonly displayOrderByKey = new Map<string, number>()
   private readonly hostByWorktree = new Map<string, HTMLElement>()
   private terminalFontSize = DEFAULT_TERMINAL_FONT_SIZE
+  private terminalThemeMode: TerminalThemeMode = 'theme'
+  private readonly getTerminalThemeMode = (): TerminalThemeMode => this.terminalThemeMode
   private readonly bellController = createTerminalBellController(
     (key) => {
       if (key) {
@@ -105,6 +108,12 @@ export class TerminalSessionRegistry {
     if (this.terminalFontSize === fontSize) return
     this.terminalFontSize = fontSize
     for (const session of this.sessions.values()) session.setFontSize(fontSize)
+  }
+
+  setTerminalThemeMode(mode: TerminalThemeMode): void {
+    if (this.terminalThemeMode === mode) return
+    this.terminalThemeMode = mode
+    for (const session of this.sessions.values()) session.setTerminalThemeMode(this.getTerminalThemeMode)
   }
 
   destroy(): void {
@@ -642,6 +651,7 @@ export class TerminalSessionRegistry {
       (reason) => this.notifySession(descriptor.key, reason),
       this.bellController.handleBell,
       this.terminalFontSize,
+      this.getTerminalThemeMode,
     )
     this.sessions.set(descriptor.key, session)
     this.syncSessionIdIndex(descriptor.key, session.currentSessionId())

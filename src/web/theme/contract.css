@@ -25,11 +25,32 @@
   --color-muted-foreground: var(--goblin-text-secondary);
   --color-accent: var(--goblin-surface-hover);
   --color-accent-foreground: var(--goblin-text-primary);
-  --color-control: var(--goblin-surface-control, var(--goblin-surface-raised));
-  --color-control-hover: var(--goblin-surface-control-hover, var(--goblin-surface-hover));
+  --color-control: var(--goblin-control-bg, var(--goblin-surface-control, var(--goblin-surface-raised)));
+  --color-control-hover: var(
+    --goblin-control-hover-bg,
+    var(--goblin-surface-control-hover, var(--goblin-surface-hover))
+  );
   --color-separator: var(--goblin-border-subtle);
   --color-border: var(--goblin-border-default);
-  --color-input: var(--goblin-border-strong);
+  --color-input: var(--goblin-input-border, var(--goblin-control-border, var(--goblin-border-strong)));
+  --color-input-background: var(
+    --goblin-input-bg,
+    color-mix(in srgb, var(--goblin-control-bg, var(--goblin-surface-control)) 92%, var(--goblin-accent) 8%)
+  );
+  --color-input-hover: var(
+    --goblin-input-hover-bg,
+    color-mix(
+      in srgb,
+      var(--goblin-control-hover-bg, var(--goblin-surface-control-hover)) 90%,
+      var(--goblin-accent) 10%
+    )
+  );
+  --color-input-border: var(
+    --goblin-input-border,
+    color-mix(in srgb, var(--goblin-control-border, var(--goblin-border-strong)) 78%, var(--goblin-accent) 22%)
+  );
+  --color-input-foreground: var(--goblin-input-fg, var(--goblin-text-primary));
+  --color-input-placeholder: var(--goblin-input-placeholder, var(--goblin-text-secondary));
   --color-ring: var(--goblin-focus-ring);
   --color-destructive: var(--goblin-action-danger);
   --color-destructive-foreground: var(--goblin-action-danger-foreground);
@@ -60,6 +81,40 @@
   --color-danger-border: var(--goblin-status-danger-border);
   --color-selected-muted-foreground: var(--goblin-text-selected-secondary, var(--goblin-text-secondary));
 
+  /* App-region surfaces */
+  --color-app: var(--goblin-app-bg, var(--goblin-surface-canvas));
+  --color-topbar: var(--goblin-topbar-bg, var(--goblin-surface-canvas));
+  --color-topbar-border: var(--goblin-topbar-border, var(--goblin-border-subtle));
+  --color-topbar-foreground: var(--goblin-topbar-fg, var(--goblin-text-primary));
+  --color-app-region: var(
+    --goblin-app-region-bg,
+    color-mix(in srgb, var(--goblin-pane-header-bg, var(--goblin-surface-raised)) 88%, var(--goblin-accent) 12%)
+  );
+  --color-app-region-border: var(
+    --goblin-app-region-border,
+    color-mix(in srgb, var(--goblin-border-subtle) 72%, var(--goblin-accent) 28%)
+  );
+  --color-toolbar: var(
+    --goblin-toolbar-bg,
+    color-mix(in srgb, var(--goblin-pane-header-bg, var(--goblin-surface-raised)) 86%, var(--goblin-accent) 14%)
+  );
+  --color-toolbar-border: var(
+    --goblin-toolbar-border,
+    color-mix(in srgb, var(--goblin-border-subtle) 70%, var(--goblin-accent) 30%)
+  );
+  --color-toolbar-foreground: var(--goblin-toolbar-fg, var(--goblin-text-primary));
+  --color-tab: var(--goblin-tab-bg, transparent);
+  --color-tab-hover: var(--goblin-tab-hover-bg, var(--goblin-surface-hover));
+  --color-tab-active: var(--goblin-tab-active-bg, var(--goblin-surface-raised));
+  --color-sidebar: var(--goblin-sidebar-bg, var(--goblin-surface-base));
+  --color-pane: var(--goblin-pane-bg, var(--goblin-surface-canvas));
+  --color-pane-header: var(--goblin-pane-header-bg, var(--goblin-surface-raised));
+  --color-detail: var(--goblin-detail-bg, var(--goblin-surface-canvas));
+  --color-list-row: var(--goblin-list-row-bg, transparent);
+  --color-list-row-hover: var(--goblin-list-row-hover-bg, var(--goblin-surface-hover));
+  --color-list-row-selected: var(--goblin-list-row-selected-bg, var(--goblin-accent-selection));
+  --color-list-row-selected-foreground: var(--goblin-list-row-selected-fg, var(--goblin-text-primary));
+
   /* Type / shadows / radius — shadcn radius scale, project shadow
    * and font stacks. */
   --font-sans: 'Maple Mono NF CN', -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', 'PingFang SC',
@@ -75,4 +130,8 @@
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
+  --radius-control: var(--goblin-control-radius, var(--radius-md));
+  --radius-brand-sm: var(--goblin-brand-radius-sm, var(--radius-sm));
+  --radius-brand-md: var(--goblin-brand-radius-md, var(--radius-md));
+  --radius-brand-lg: var(--goblin-brand-radius-lg, var(--radius-lg));
 }

@@ -173,6 +173,10 @@ export async function setToggleDetailOnActionBarBlankClick(enabled: boolean): Pr
   await updateSettingsPrefsPatch({ toggleDetailOnActionBarBlankClick: enabled })
 }
 
+export async function setTerminalThemeSyncEnabled(enabled: boolean): Promise<void> {
+  await updateSettingsPrefsPatch({ terminalThemeSyncEnabled: enabled })
+}
+
 export async function setTemporaryFilesDirectory(path: string): Promise<void> {
   await updateSettingsPrefsPatch({ temporaryFilesDirectory: path })
 }

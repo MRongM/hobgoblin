@@ -48,6 +48,23 @@ export function resetRefreshTest(): void {
   resetReposStore()
   installGoblinTestBridge(rpcHandlers)
   rpcHandlers['repo.abort'] = async () => false
+  rpcHandlers['repo.probe'] = async ({ cwd }: { cwd: string }) => ({
+    ok: true,
+    root: cwd,
+    name: cwd.split('/').at(-1) ?? cwd,
+    isGitRepo: true,
+  })
+  rpcHandlers['remote.resolveTarget'] = async ({ alias, remotePath }: { alias: string; remotePath: string }) => ({
+    target: {
+      id: `ssh-config://${encodeURIComponent(alias)}${remotePath}`,
+      alias,
+      host: `${alias}.example.com`,
+      user: 'tester',
+      port: 22,
+      remotePath,
+      displayName: `${alias}:${remotePath.split('/').at(-1) || '/'}`,
+    },
+  })
   rpcHandlers['repo.fetch'] = async () => ({ ok: true, message: 'ok' })
   rpcHandlers['repo.snapshot'] = async () => ({ branches: [], current: '' })
   rpcHandlers['repo.pullRequests'] = async () => []

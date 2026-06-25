@@ -1,3 +1,29 @@
+html[data-color-theme='claude'] {
+  --color-terminal-classic-background: #050505;
+  --color-terminal-classic-foreground: #f5f5f5;
+  --color-terminal-classic-cursor: #f5f5f5;
+  --color-terminal-classic-selection-background: rgba(255, 255, 255, 0.24);
+  --color-terminal-classic-ansi-black: #000000;
+  --color-terminal-classic-ansi-red: #ff5f56;
+  --color-terminal-classic-ansi-green: #27c93f;
+  --color-terminal-classic-ansi-yellow: #ffbd2e;
+  --color-terminal-classic-ansi-blue: #5ac8fa;
+  --color-terminal-classic-ansi-magenta: #bf5af2;
+  --color-terminal-classic-ansi-cyan: #64d2ff;
+  --color-terminal-classic-ansi-white: #d1d1d1;
+  --color-terminal-classic-ansi-bright-black: #808080;
+  --color-terminal-classic-ansi-bright-red: #ff6b65;
+  --color-terminal-classic-ansi-bright-green: #32d74b;
+  --color-terminal-classic-ansi-bright-yellow: #ffd60a;
+  --color-terminal-classic-ansi-bright-blue: #70d7ff;
+  --color-terminal-classic-ansi-bright-magenta: #da8fff;
+  --color-terminal-classic-ansi-bright-cyan: #70d7ff;
+  --color-terminal-classic-ansi-bright-white: #ffffff;
+  --color-terminal-classic-search-match: #ffd60a;
+  --color-terminal-classic-search-active-match: #ff9f0a;
+  --color-terminal-classic-search-active-border: #ffffff;
+}
+
 html[data-color-theme='claude'][data-theme='light'] {
   color-scheme: light;
 
@@ -13,6 +39,7 @@ html[data-color-theme='claude'][data-theme='light'] {
   --goblin-text-secondary-strong: #252523;
   --goblin-text-secondary: #6c6a64;
   --goblin-text-selected-secondary: #3d3d3a;
+  --goblin-text-disabled: #9a958d;
   --goblin-border-subtle: #ebe6df;
   --goblin-border-default: #e6dfd8;
   --goblin-border-strong: #d4cabd;
@@ -50,6 +77,32 @@ html[data-color-theme='claude'][data-theme='light'] {
   --shadow-inset-highlight: inset 0 1px 0 rgb(255 255 255 / 0.38);
   --shadow-control-inset-highlight: inset 0 1px 0 rgb(255 255 255 / 0.44);
   --radius: 0.5rem;
+
+  --goblin-app-bg: #faf9f5;
+  --goblin-topbar-bg: #faf9f5;
+  --goblin-topbar-border: #e6dfd8;
+  --goblin-tab-bg: transparent;
+  --goblin-tab-hover-bg: #f5f0e8;
+  --goblin-tab-active-bg: #efe9de;
+  --goblin-sidebar-bg: #f5f0e8;
+  --goblin-pane-bg: #faf9f5;
+  --goblin-pane-header-bg: #efe9de;
+  --goblin-detail-bg: #faf9f5;
+  --goblin-card-bg: #ffffff;
+  --goblin-list-row-bg: transparent;
+  --goblin-list-row-hover-bg: #ebe6df;
+  --goblin-list-row-selected-bg: rgb(var(--goblin-accent-rgb) / 0.14);
+  --goblin-list-row-selected-fg: #141413;
+  --goblin-control-bg: #ffffff;
+  --goblin-control-hover-bg: #f5f0e8;
+  --goblin-control-border: #d4cabd;
+  --goblin-control-radius: 0.5rem;
+  --goblin-control-height-sm: 2rem;
+  --goblin-control-density: 1;
+  --goblin-brand-radius-sm: 0.375rem;
+  --goblin-brand-radius-md: 0.5rem;
+  --goblin-brand-radius-lg: 0.75rem;
+  --goblin-brand-divider-strength: 0.75;
 
   --color-terminal-background: #181715;
   --color-terminal-foreground: #faf9f5;
@@ -91,6 +144,7 @@ html[data-color-theme='claude'][data-theme='dark'] {
   --goblin-text-secondary-strong: #e6dfd8;
   --goblin-text-secondary: #a09d96;
   --goblin-text-selected-secondary: #d6cec3;
+  --goblin-text-disabled: #817c73;
   --goblin-border-subtle: rgb(230 223 216 / 0.12);
   --goblin-border-default: rgb(230 223 216 / 0.18);
   --goblin-border-strong: rgb(230 223 216 / 0.28);
@@ -128,6 +182,32 @@ html[data-color-theme='claude'][data-theme='dark'] {
   --shadow-inset-highlight: inset 0 1px 0 rgb(255 255 255 / 0.08);
   --shadow-control-inset-highlight: inset 0 1px 0 rgb(255 255 255 / 0.1);
   --radius: 0.5rem;
+
+  --goblin-app-bg: #181715;
+  --goblin-topbar-bg: #181715;
+  --goblin-topbar-border: rgb(230 223 216 / 0.18);
+  --goblin-tab-bg: transparent;
+  --goblin-tab-hover-bg: #1f1e1b;
+  --goblin-tab-active-bg: #252320;
+  --goblin-sidebar-bg: #1f1e1b;
+  --goblin-pane-bg: #181715;
+  --goblin-pane-header-bg: #1f1e1b;
+  --goblin-detail-bg: #181715;
+  --goblin-card-bg: #252320;
+  --goblin-list-row-bg: transparent;
+  --goblin-list-row-hover-bg: #33302b;
+  --goblin-list-row-selected-bg: rgb(var(--goblin-accent-rgb) / 0.22);
+  --goblin-list-row-selected-fg: #faf9f5;
+  --goblin-control-bg: #252320;
+  --goblin-control-hover-bg: #33302b;
+  --goblin-control-border: rgb(230 223 216 / 0.28);
+  --goblin-control-radius: 0.5rem;
+  --goblin-control-height-sm: 2rem;
+  --goblin-control-density: 1;
+  --goblin-brand-radius-sm: 0.375rem;
+  --goblin-brand-radius-md: 0.5rem;
+  --goblin-brand-radius-lg: 0.75rem;
+  --goblin-brand-divider-strength: 0.85;
 
   --color-terminal-background: #181715;
   --color-terminal-foreground: #faf9f5;

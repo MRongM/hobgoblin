@@ -121,7 +121,7 @@ export function ProjectPortsPanel({ repoId }: { repoId: string }) {
   const startLabel = t('ports.start')
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto bg-background p-3 text-xs">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto bg-pane p-3 text-xs">
       <div className="grid items-center gap-1.5 md:grid-cols-[5.5rem_5.5rem_auto_auto]">
         <Input
           name="localPort"

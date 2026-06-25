@@ -33,15 +33,7 @@ interface Props {
   layout: RepoWorkspaceLayout
 }
 
-export function BranchDetailToolbar({
-  repo,
-  detail,
-  detailId,
-  contentId,
-  collapsed,
-  detailFocusMode,
-  layout,
-}: Props) {
+export function BranchDetailToolbar({ repo, detail, detailId, contentId, collapsed, detailFocusMode, layout }: Props) {
   const t = useT()
   const { setDetailCollapsed, toggleDetailCollapsed, toggleDetailFocusMode } = useStoreWithEqualityFn(
     useReposStore,
@@ -53,15 +45,12 @@ export function BranchDetailToolbar({
   const compact = useIsCompactUi()
   const behavior = repoWorkspaceBehavior(layout, collapsed, detailFocusMode)
   const activeDetailTab = detailTabForWorktree(repo.ui.detailTab, !!detail.branch?.worktree?.path)
-  const terminalWorktreeKey = detail.branch?.worktree?.path ? worktreeTerminalKey(repo.id, detail.branch.worktree.path) : null
+  const terminalWorktreeKey = detail.branch?.worktree?.path
+    ? worktreeTerminalKey(repo.id, detail.branch.worktree.path)
+    : null
 
-  const {
-    createTerminal,
-    selectTerminal,
-    scrollToBottom,
-    closeTerminalAndDismissDetailIfLast,
-    reorderSessions,
-  } = useTerminalSessionContext()
+  const { createTerminal, selectTerminal, scrollToBottom, closeTerminalAndDismissDetailIfLast, reorderSessions } =
+    useTerminalSessionContext()
 
   const worktreeSnapshot = useWorktreeTerminalSnapshot(terminalWorktreeKey)
   const terminalSessions = worktreeSnapshot.sessions
@@ -172,7 +161,9 @@ export function BranchDetailToolbar({
       <div
         aria-hidden="true"
         className={cn('min-w-2 flex-1 self-stretch', compact && 'hidden')}
-        onClick={behavior.detailCollapseAllowed && toggleDetailOnActionBarBlankClick ? toggleDetailCollapsed : undefined}
+        onClick={
+          behavior.detailCollapseAllowed && toggleDetailOnActionBarBlankClick ? toggleDetailCollapsed : undefined
+        }
       />
       <div className="flex shrink-0 items-center gap-1">
         {layout === 'top-bottom' && <div className="mx-1 h-4 w-px bg-separator/70" aria-hidden="true" />}
@@ -185,7 +176,7 @@ export function BranchDetailToolbar({
             title={t(focusTogglePressed ? 'branch-detail.exit-focus-title' : 'branch-detail.focus-title')}
             aria-pressed={focusTogglePressed}
             className={cn(
-              focusTogglePressed && 'bg-accent text-accent-foreground shadow-xs hover:bg-accent hover:text-accent-foreground',
+              focusTogglePressed && 'bg-tab-active text-foreground shadow-xs hover:bg-tab-active hover:text-foreground',
             )}
           >
             {focusTogglePressed ? <Minimize2 /> : <Maximize2 />}

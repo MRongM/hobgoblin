@@ -12,9 +12,11 @@ import {
   Folder,
   FolderPlus,
   FolderOpen,
+  ListCollapse,
   Loader2,
   Pencil,
   RefreshCw,
+  Search,
   Terminal,
   Trash2,
   Upload,
@@ -340,10 +342,7 @@ export function ProjectFileTree({
     fallbackSearch.truncated
 
   const revealRelativePath = useCallback(
-    async (
-      relativePath: string,
-      options: { requestId?: number; cancelled?: () => boolean } = {},
-    ): Promise<void> => {
+    async (relativePath: string, options: { requestId?: number; cancelled?: () => boolean } = {}): Promise<void> => {
       if (!worktreePath) return
       const activeWorktreePath = worktreePath
 
@@ -919,7 +918,9 @@ export function ProjectFileTree({
 
       if (sourceNodes.length > 0) {
         const targetRelativePath = relativeDirPath(worktreePath, targetDirPath)
-        const movedIds = sourceNodes.map((node) => targetRelativePath ? `${targetRelativePath}/${node.name}` : node.name)
+        const movedIds = sourceNodes.map((node) =>
+          targetRelativePath ? `${targetRelativePath}/${node.name}` : node.name,
+        )
         setSelection({ selected: new Set(movedIds), anchor: movedIds[0] ?? null })
         setFocusedNodeId(movedIds[0] ?? null)
       }
@@ -961,7 +962,9 @@ export function ProjectFileTree({
             return
           }
         }
-        clearCachedRelativePaths(action.entries.flatMap((entry) => [entry.movedRelativePath, entry.originalRelativePath]))
+        clearCachedRelativePaths(
+          action.entries.flatMap((entry) => [entry.movedRelativePath, entry.originalRelativePath]),
+        )
         const parentDirs = new Set<string>()
         for (const entry of action.entries) {
           parentDirs.add(parentDirectoryPath(entry.movedPath))
@@ -992,13 +995,7 @@ export function ProjectFileTree({
     } finally {
       undoPendingRef.current = false
     }
-  }, [
-    clearCachedRelativePaths,
-    refreshDirectoryPath,
-    refreshParentDirectoryForPath,
-    repoId,
-    worktreePath,
-  ])
+  }, [clearCachedRelativePaths, refreshDirectoryPath, refreshParentDirectoryForPath, repoId, worktreePath])
 
   const sourceFromSystemClipboard = useCallback(async () => {
     return sourceFromSystemClipboardPaths(await readSystemClipboardFilePaths())
@@ -1108,6 +1105,9 @@ export function ProjectFileTree({
     setSearchQuery('')
     setSearchIndex(0)
   }, [])
+  const collapseAllDirectories = useCallback(() => {
+    setExpandedDirs(new Set())
+  }, [])
 
   if (!view.exists) return null
   const fileTreeStyle = {
@@ -1116,7 +1116,7 @@ export function ProjectFileTree({
 
   return (
     <div
-      className="flex min-h-0 flex-1 flex-col bg-background"
+      className="flex min-h-0 flex-1 flex-col bg-sidebar"
       style={fileTreeStyle}
       data-repo-id={repoId}
       onPaste={handlePaste}
@@ -1142,6 +1142,7 @@ export function ProjectFileTree({
             truncated={searchTruncated}
             onMoveSearch={moveSearchMatch}
             onClearSearch={clearSearch}
+            onCollapseAll={collapseAllDirectories}
             onCreateDirectory={() => beginCreateDirectory(rootCreateDirectoryTarget())}
             onRefresh={() => refreshTreeDirectory(rootCreateDirectoryTarget())}
           />
@@ -1365,7 +1366,9 @@ function FileTreeRow({
             onContextMenu={(event) => onContextMenu(node, event)}
             className={cn(
               'flex h-6 min-w-0 cursor-default select-none items-center gap-1 px-2 outline-hidden',
-              selected ? 'bg-accent text-accent-foreground' : 'text-foreground hover:bg-accent/60',
+              selected
+                ? 'bg-list-row-selected text-list-row-selected-foreground'
+                : 'text-foreground hover:bg-list-row-hover',
               toneClass(node.tone),
             )}
             style={{ paddingLeft: `${8 + depth * 14}px` }}
@@ -1380,7 +1383,7 @@ function FileTreeRow({
               }}
               className={cn(
                 'flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground',
-                expandable && 'hover:bg-muted hover:text-foreground',
+                expandable && 'hover:bg-list-row-hover hover:text-foreground',
               )}
             >
               {expandable ? (
@@ -1634,6 +1637,7 @@ function FileTreeToolbar({
   truncated,
   onMoveSearch,
   onClearSearch,
+  onCollapseAll,
   onCreateDirectory,
   onRefresh,
 }: {
@@ -1646,105 +1650,149 @@ function FileTreeToolbar({
   truncated: boolean
   onMoveSearch: (offset: number) => void
   onClearSearch: () => void
+  onCollapseAll: () => void
   onCreateDirectory: () => void
   onRefresh: () => void
 }) {
   const t = useT()
+  const inputRef = useRef<HTMLInputElement>(null)
   const hasQuery = query.trim().length > 0
   const canMove = resultCount > 0
+  const [searchOpen, setSearchOpen] = useState(hasQuery)
+
+  useEffect(() => {
+    if (hasQuery) setSearchOpen(true)
+  }, [hasQuery])
+
+  useEffect(() => {
+    if (searchOpen) inputRef.current?.focus()
+  }, [searchOpen])
+
+  const closeSearch = useCallback(() => {
+    onClearSearch()
+    setSearchOpen(false)
+  }, [onClearSearch])
+
   return (
-    <div className="flex min-h-8 shrink-0 items-center justify-end gap-1 border-b border-separator/70 bg-card px-2">
-      <div className="mr-auto flex min-w-0 flex-1 items-center gap-1 pr-1">
-        <Input
-          aria-label={t('file-tree.search-label')}
-          placeholder={t('file-tree.search-placeholder')}
-          value={query}
-          onInput={(event) => onQueryChange(event.currentTarget.value)}
-          onKeyDown={(event) => {
-            event.stopPropagation()
-            if (event.key === 'Escape') {
-              event.preventDefault()
-              onClearSearch()
-              return
-            }
-            if (event.key === 'Enter') {
-              event.preventDefault()
-              onMoveSearch(event.shiftKey ? -1 : 1)
-            }
-          }}
-          className="h-6 min-w-0 max-w-56 flex-1 px-2 py-0 text-[length:var(--goblin-file-tree-font-size)]"
-        />
-        {loading ? <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" /> : null}
-        {hasQuery && !loading ? (
-          <Button
-            type="button"
-            size="icon-xs"
-            variant="ghost"
-            aria-label={t('file-tree.search-clear')}
-            title={t('file-tree.search-clear')}
-            onClick={onClearSearch}
-          >
-            <X className="size-3.5" />
-          </Button>
-        ) : null}
-        {hasQuery ? (
-          <span className="shrink-0 whitespace-nowrap text-[10px] text-muted-foreground">
-            {loading
-              ? t('file-tree.search-loading')
-              : resultCount > 0
-                ? `${resultIndex} / ${resultCount}`
-                : t('file-tree.search-no-results')}
-            {truncated ? ` ${t('file-tree.search-truncated')}` : ''}
-          </span>
-        ) : null}
-        {hasQuery ? (
-          <>
-            <Button
-              type="button"
-              size="icon-xs"
-              variant="ghost"
-              disabled={!canMove}
-              aria-label={t('file-tree.search-prev')}
-              title={t('file-tree.search-prev')}
-              onClick={() => onMoveSearch(-1)}
-            >
-              <ChevronUp className="size-3.5" />
-            </Button>
-            <Button
-              type="button"
-              size="icon-xs"
-              variant="ghost"
-              disabled={!canMove}
-              aria-label={t('file-tree.search-next')}
-              title={t('file-tree.search-next')}
-              onClick={() => onMoveSearch(1)}
-            >
-              <ChevronDown className="size-3.5" />
-            </Button>
-          </>
-        ) : null}
-        {error ? <span className="min-w-0 truncate text-[10px] text-danger">{t(error)}</span> : null}
+    <div className="flex min-h-8 shrink-0 items-center justify-end gap-1 border-b border-toolbar-border bg-toolbar px-2">
+      <div className="mr-auto flex shrink-0 items-center gap-1 pr-1">
+        <Button
+          type="button"
+          size="icon-xs"
+          variant="ghost"
+          aria-label={t('file-tree.collapse-all')}
+          title={t('file-tree.collapse-all')}
+          onClick={onCollapseAll}
+        >
+          <ListCollapse className="size-3.5" />
+        </Button>
+        <Button
+          type="button"
+          size="icon-xs"
+          variant="ghost"
+          aria-label={t('file-tree.refresh')}
+          title={t('file-tree.refresh')}
+          onClick={onRefresh}
+        >
+          <RefreshCw className="size-3.5" />
+        </Button>
+        <Button
+          type="button"
+          size="icon-xs"
+          variant="ghost"
+          aria-label={t('file-tree.new-folder')}
+          title={t('file-tree.new-folder')}
+          onClick={onCreateDirectory}
+        >
+          <FolderPlus className="size-3.5" />
+        </Button>
       </div>
-      <Button
-        type="button"
-        size="icon-xs"
-        variant="ghost"
-        aria-label={t('file-tree.new-folder')}
-        title={t('file-tree.new-folder')}
-        onClick={onCreateDirectory}
-      >
-        <FolderPlus className="size-3.5" />
-      </Button>
-      <Button
-        type="button"
-        size="icon-xs"
-        variant="ghost"
-        aria-label={t('file-tree.refresh')}
-        title={t('file-tree.refresh')}
-        onClick={onRefresh}
-      >
-        <RefreshCw className="size-3.5" />
-      </Button>
+      {searchOpen ? (
+        <div className="ml-1 flex min-w-0 flex-1 items-center justify-end gap-1">
+          <Input
+            ref={inputRef}
+            aria-label={t('file-tree.search-label')}
+            placeholder={t('file-tree.search-placeholder')}
+            value={query}
+            onInput={(event) => onQueryChange(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              event.stopPropagation()
+              if (event.key === 'Escape') {
+                event.preventDefault()
+                if (hasQuery) onClearSearch()
+                else setSearchOpen(false)
+                return
+              }
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                onMoveSearch(event.shiftKey ? -1 : 1)
+              }
+            }}
+            className="h-6 min-w-0 max-w-56 flex-1 px-2 py-0 text-[length:var(--goblin-file-tree-font-size)]"
+          />
+          {loading ? <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" /> : null}
+          {hasQuery && !loading ? (
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              aria-label={t('file-tree.search-clear')}
+              title={t('file-tree.search-clear')}
+              onClick={closeSearch}
+            >
+              <X className="size-3.5" />
+            </Button>
+          ) : null}
+          {hasQuery ? (
+            <span className="shrink-0 whitespace-nowrap text-[10px] text-muted-foreground">
+              {loading
+                ? t('file-tree.search-loading')
+                : resultCount > 0
+                  ? `${resultIndex} / ${resultCount}`
+                  : t('file-tree.search-no-results')}
+              {truncated ? ` ${t('file-tree.search-truncated')}` : ''}
+            </span>
+          ) : null}
+          {hasQuery ? (
+            <>
+              <Button
+                type="button"
+                size="icon-xs"
+                variant="ghost"
+                disabled={!canMove}
+                aria-label={t('file-tree.search-prev')}
+                title={t('file-tree.search-prev')}
+                onClick={() => onMoveSearch(-1)}
+              >
+                <ChevronUp className="size-3.5" />
+              </Button>
+              <Button
+                type="button"
+                size="icon-xs"
+                variant="ghost"
+                disabled={!canMove}
+                aria-label={t('file-tree.search-next')}
+                title={t('file-tree.search-next')}
+                onClick={() => onMoveSearch(1)}
+              >
+                <ChevronDown className="size-3.5" />
+              </Button>
+            </>
+          ) : null}
+          {error ? <span className="min-w-0 truncate text-[10px] text-danger">{t(error)}</span> : null}
+        </div>
+      ) : (
+        <Button
+          type="button"
+          size="icon-xs"
+          variant="ghost"
+          aria-label={t('file-tree.search-label')}
+          title={t('file-tree.search-label')}
+          onClick={() => setSearchOpen(true)}
+        >
+          <Search className="size-3.5" />
+        </Button>
+      )}
     </div>
   )
 }

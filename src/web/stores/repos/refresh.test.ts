@@ -88,6 +88,9 @@ describe('remote fetch timestamps', () => {
     })
 
     const work = useReposStore.getState().syncAndRefresh(REPO_ID, { token })
+    await vi.waitFor(() => {
+      expect(typeof resolveFetch).toBe('function')
+    })
     seedRepo([branch('feature/a')], 2)
     resolveFetch({ ok: true, message: 'ok' })
     await work
@@ -108,9 +111,11 @@ describe('remote fetch timestamps', () => {
 
     const work = useReposStore.getState().syncAndRefresh(REPO_ID, { token })
 
-    const runningRepo = useReposStore.getState().repos[REPO_ID]
-    expect(runningRepo?.resources.fetch.phase).toBe('loading')
-    expect(canStartRemoteFetch(runningRepo)).toBe(false)
+    await vi.waitFor(() => {
+      const runningRepo = useReposStore.getState().repos[REPO_ID]
+      expect(runningRepo?.resources.fetch.phase).toBe('loading')
+      expect(canStartRemoteFetch(runningRepo)).toBe(false)
+    })
 
     resolveNetwork({ ok: true, message: 'ok' })
     await work
@@ -837,7 +842,7 @@ describe('core refresh request ordering', () => {
     expect(warnSpy).toHaveBeenCalledWith('[terminal] failed to prune repo sessions', err)
   })
 
-  test('non-git repositories skip git refresh and manual sync paths', async () => {
+  test('direct git refresh paths skip git reads for non-git repositories', async () => {
     const token = seedRepoState({
       id: REPO_ID,
       isGitRepo: false,
@@ -862,7 +867,6 @@ describe('core refresh request ordering', () => {
     }
 
     await useReposStore.getState().refreshCoreData(REPO_ID, { token })
-    await useReposStore.getState().syncAndRefresh(REPO_ID, { token })
     await useReposStore.getState().refreshSnapshot(REPO_ID, { token })
     await useReposStore.getState().refreshStatus(REPO_ID, { token })
     await useReposStore.getState().refreshPullRequests(REPO_ID, ['feature/a'], { token })
@@ -876,5 +880,192 @@ describe('core refresh request ordering', () => {
     expect(useReposStore.getState().repos[REPO_ID]?.resources.status.phase).toBe('idle')
     expect(useReposStore.getState().repos[REPO_ID]?.resources.pullRequests.phase).toBe('idle')
     expect(useReposStore.getState().repos[REPO_ID]?.operations.manualRefresh.phase).toBe('idle')
+  })
+
+  test('manual refresh reprobes a plain workspace and skips git reads when it remains plain', async () => {
+    const token = seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    }).instanceToken
+    let probeCount = 0
+    let fetchCount = 0
+    let snapshotCount = 0
+    let statusCount = 0
+    rpcHandlers['repo.probe'] = async ({ cwd }: { cwd: string }) => {
+      probeCount += 1
+      return { ok: true, root: cwd, name: 'plain', isGitRepo: false }
+    }
+    rpcHandlers['repo.fetch'] = async () => {
+      fetchCount += 1
+      return { ok: true, message: 'ok' }
+    }
+    rpcHandlers['repo.snapshot'] = async () => {
+      snapshotCount += 1
+      return { branches: [branch('main')], current: 'main' }
+    }
+    rpcHandlers['repo.status'] = async () => {
+      statusCount += 1
+      return []
+    }
+
+    await useReposStore.getState().syncAndRefresh(REPO_ID, { token })
+
+    const repo = useReposStore.getState().repos[REPO_ID]
+    expect(probeCount).toBe(1)
+    expect(fetchCount).toBe(0)
+    expect(snapshotCount).toBe(0)
+    expect(statusCount).toBe(0)
+    expect(repo?.isGitRepo).toBe(false)
+    expect(repo?.data.branches).toEqual([])
+    expect(repo?.operations.manualRefresh.phase).toBe('idle')
+  })
+
+  test('manual refresh switches a plain local workspace to git and refreshes git data', async () => {
+    const token = seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    }).instanceToken
+    const calls = { probe: 0, snapshot: 0, status: 0 }
+    rpcHandlers['repo.probe'] = async ({ cwd }: { cwd: string }) => {
+      calls.probe += 1
+      return { ok: true, root: cwd, name: 'repo', isGitRepo: true }
+    }
+    rpcHandlers['repo.snapshot'] = async () => {
+      calls.snapshot += 1
+      return { branches: [branch('main')], current: 'main' }
+    }
+    rpcHandlers['repo.status'] = async () => {
+      calls.status += 1
+      return []
+    }
+
+    await useReposStore.getState().syncAndRefresh(REPO_ID, { token })
+
+    const repo = useReposStore.getState().repos[REPO_ID]
+    expect(calls.probe).toBe(1)
+    expect(calls.snapshot).toBe(1)
+    expect(calls.status).toBe(1)
+    expect(repo?.isGitRepo).toBe(true)
+    expect(repo?.data.currentBranch).toBe('main')
+    expect(repo?.data.branches.map((entry) => entry.name)).toEqual(['main'])
+    expect(repo?.operations.manualRefresh.phase).toBe('idle')
+  })
+
+  test('manual refresh switches a git local workspace to plain and clears git projection', async () => {
+    const token = seedRepo([branch('main')])
+    updateRepoForTest((repo) => {
+      repo.data.status = [{ path: REPO_ID, branch: 'main', isMain: true, entries: [{ x: 'M', y: ' ', path: 'README.md' }] }]
+      repo.data.statusLoaded = true
+      repo.ui.selectedBranch = 'main'
+      repo.remote.remotes = ['origin']
+      repo.remote.hasRemotes = true
+      repo.remote.hasGitHubRemote = true
+    })
+    let snapshotCount = 0
+    let statusCount = 0
+    let terminalPruneCount = 0
+    let terminalCloseCount = 0
+    rpcHandlers['repo.probe'] = async ({ cwd }: { cwd: string }) => ({ ok: true, root: cwd, name: 'plain', isGitRepo: false })
+    rpcHandlers['repo.snapshot'] = async () => {
+      snapshotCount += 1
+      return { branches: [branch('stale')], current: 'stale' }
+    }
+    rpcHandlers['repo.status'] = async () => {
+      statusCount += 1
+      return []
+    }
+    rpcHandlers['terminal.prune'] = async () => {
+      terminalPruneCount += 1
+      return { pruned: 0, remaining: 1 }
+    }
+    rpcHandlers['terminal.close'] = async () => {
+      terminalCloseCount += 1
+      return true
+    }
+
+    await useReposStore.getState().syncAndRefresh(REPO_ID, { token })
+
+    const repo = useReposStore.getState().repos[REPO_ID]
+    expect(repo?.isGitRepo).toBe(false)
+    expect(repo?.data).toMatchObject({
+      branches: [],
+      currentBranch: '',
+      status: [],
+      statusLoaded: false,
+      worktreesByPath: {},
+    })
+    expect(repo?.ui.selectedBranch).toBeNull()
+    expect(repo?.remote.hasRemotes).toBe(false)
+    expect(snapshotCount).toBe(0)
+    expect(statusCount).toBe(0)
+    expect(terminalPruneCount).toBe(0)
+    expect(terminalCloseCount).toBe(0)
+    expect(repo?.operations.manualRefresh.phase).toBe('idle')
+  })
+
+  test('manual refresh marks probe failures unavailable and retry can restore a plain workspace', async () => {
+    const token = seedRepo([branch('main')])
+    rpcHandlers['repo.probe'] = async () => ({ ok: false, message: 'error.path-not-found' })
+
+    await useReposStore.getState().syncAndRefresh(REPO_ID, { token })
+
+    const unavailable = useReposStore.getState().repos[REPO_ID]
+    expect(unavailable?.availability).toMatchObject({ phase: 'unavailable', reason: 'error.path-not-found' })
+    expect(unavailable?.operations.manualRefresh.phase).toBe('idle')
+
+    const retryToken = unavailable!.instanceToken
+    rpcHandlers['repo.probe'] = async ({ cwd }: { cwd: string }) => ({ ok: true, root: cwd, name: 'plain', isGitRepo: false })
+
+    await useReposStore.getState().syncAndRefresh(REPO_ID, { token: retryToken })
+
+    const restored = useReposStore.getState().repos[REPO_ID]
+    expect(restored?.availability).toEqual({ phase: 'available' })
+    expect(restored?.isGitRepo).toBe(false)
+    expect(restored?.data.branches).toEqual([])
+    expect(restored?.operations.manualRefresh.phase).toBe('idle')
+  })
+
+  test('manual refresh switches a remote plain workspace to git through the same reprobe path', async () => {
+    const remoteId = 'ssh-config://prod/srv/plain'
+    const token = seedRepoState({
+      id: remoteId,
+      name: 'prod:plain',
+      isGitRepo: false,
+      branches: [],
+      selectedBranch: null,
+      remote: {
+        target: {
+          id: remoteId,
+          alias: 'prod',
+          host: 'prod.example.com',
+          user: 'tester',
+          port: 22,
+          remotePath: '/srv/plain',
+          displayName: 'prod:plain',
+        },
+      },
+    }).instanceToken
+    rpcHandlers['repo.probe'] = async ({ cwd }: { cwd: string }) => ({
+      ok: true,
+      root: cwd,
+      name: 'prod:plain',
+      isGitRepo: true,
+    })
+    rpcHandlers['repo.snapshot'] = async () => ({ branches: [branch('main')], current: 'main' })
+    rpcHandlers['repo.status'] = async () => []
+
+    await useReposStore.getState().syncAndRefresh(remoteId, { token })
+
+    const repo = useReposStore.getState().repos[remoteId]
+    expect(repo?.isGitRepo).toBe(true)
+    expect(repo?.data.currentBranch).toBe('main')
+    expect(repo?.remote.target?.remotePath).toBe('/srv/plain')
+    expect(repo?.operations.manualRefresh.phase).toBe('idle')
   })
 })

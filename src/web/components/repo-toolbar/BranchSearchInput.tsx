@@ -24,7 +24,7 @@ export function BranchSearchInput({ value, disabled = false, className, onChange
   return (
     <div
       className={cn(
-        'group/search relative flex h-7 w-52 shrink-0 items-center overflow-hidden rounded-md border border-input bg-control shadow-xs transition-[background-color,opacity] duration-150 ease-out',
+        'group/search relative flex h-7 w-52 shrink-0 items-center overflow-hidden rounded-md border border-input-border bg-input-background shadow-xs transition-[background-color,opacity] duration-150 ease-out hover:bg-input-hover',
         compositeFocusRing,
         disabled && 'cursor-not-allowed opacity-50',
         className,
@@ -58,7 +58,7 @@ export function BranchSearchInput({ value, disabled = false, className, onChange
         placeholder={t('branches.search-placeholder')}
         tabIndex={0}
         className={cn(
-          'h-full min-w-0 flex-1 border-0 bg-transparent px-2 text-xs text-foreground outline-none placeholder:text-muted-foreground/75 disabled:cursor-not-allowed',
+          'h-full min-w-0 flex-1 border-0 bg-transparent px-2 text-xs text-input-foreground outline-none placeholder:text-input-placeholder disabled:cursor-not-allowed',
         )}
       />
       {value && !disabled && (

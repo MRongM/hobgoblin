@@ -1,3 +1,29 @@
+html[data-color-theme='mono'] {
+  --color-terminal-classic-background: #050505;
+  --color-terminal-classic-foreground: #f5f5f5;
+  --color-terminal-classic-cursor: #f5f5f5;
+  --color-terminal-classic-selection-background: rgba(255, 255, 255, 0.24);
+  --color-terminal-classic-ansi-black: #000000;
+  --color-terminal-classic-ansi-red: #ff5f56;
+  --color-terminal-classic-ansi-green: #27c93f;
+  --color-terminal-classic-ansi-yellow: #ffbd2e;
+  --color-terminal-classic-ansi-blue: #5ac8fa;
+  --color-terminal-classic-ansi-magenta: #bf5af2;
+  --color-terminal-classic-ansi-cyan: #64d2ff;
+  --color-terminal-classic-ansi-white: #d1d1d1;
+  --color-terminal-classic-ansi-bright-black: #808080;
+  --color-terminal-classic-ansi-bright-red: #ff6b65;
+  --color-terminal-classic-ansi-bright-green: #32d74b;
+  --color-terminal-classic-ansi-bright-yellow: #ffd60a;
+  --color-terminal-classic-ansi-bright-blue: #70d7ff;
+  --color-terminal-classic-ansi-bright-magenta: #da8fff;
+  --color-terminal-classic-ansi-bright-cyan: #70d7ff;
+  --color-terminal-classic-ansi-bright-white: #ffffff;
+  --color-terminal-classic-search-match: #ffd60a;
+  --color-terminal-classic-search-active-match: #ff9f0a;
+  --color-terminal-classic-search-active-border: #ffffff;
+}
+
 html[data-color-theme='mono'][data-theme='light'] {
   color-scheme: light;
 
@@ -13,6 +39,7 @@ html[data-color-theme='mono'][data-theme='light'] {
   --goblin-text-secondary-strong: #27272a;
   --goblin-text-secondary: #71717a;
   --goblin-text-selected-secondary: #52525b;
+  --goblin-text-disabled: #a1a1aa;
   --goblin-border-subtle: rgb(9 9 11 / 0.1);
   --goblin-border-default: #e4e4e7;
   --goblin-border-strong: #d4d4d8;
@@ -50,6 +77,32 @@ html[data-color-theme='mono'][data-theme='light'] {
   --shadow-inset-highlight: inset 0 1px 0 rgb(255 255 255 / 0.3);
   --shadow-control-inset-highlight: inset 0 1px 0 rgb(255 255 255 / 0.35);
   --radius: 0.625rem;
+
+  --goblin-app-bg: #ffffff;
+  --goblin-topbar-bg: #ffffff;
+  --goblin-topbar-border: #e4e4e7;
+  --goblin-tab-bg: transparent;
+  --goblin-tab-hover-bg: #f4f4f5;
+  --goblin-tab-active-bg: #ffffff;
+  --goblin-sidebar-bg: #f4f4f5;
+  --goblin-pane-bg: #ffffff;
+  --goblin-pane-header-bg: #f4f4f5;
+  --goblin-detail-bg: #ffffff;
+  --goblin-card-bg: #ffffff;
+  --goblin-list-row-bg: transparent;
+  --goblin-list-row-hover-bg: #e4e4e7;
+  --goblin-list-row-selected-bg: rgb(var(--goblin-accent-rgb) / 0.12);
+  --goblin-list-row-selected-fg: #09090b;
+  --goblin-control-bg: #ffffff;
+  --goblin-control-hover-bg: #f4f4f5;
+  --goblin-control-border: #d4d4d8;
+  --goblin-control-radius: 0.5rem;
+  --goblin-control-height-sm: 2rem;
+  --goblin-control-density: 1;
+  --goblin-brand-radius-sm: 0.25rem;
+  --goblin-brand-radius-md: 0.5rem;
+  --goblin-brand-radius-lg: 0.5rem;
+  --goblin-brand-divider-strength: 0.8;
 
   --color-terminal-background: #ffffff;
   --color-terminal-foreground: #09090b;
@@ -91,6 +144,7 @@ html[data-color-theme='mono'][data-theme='dark'] {
   --goblin-text-secondary-strong: #e4e4e7;
   --goblin-text-secondary: #a1a1aa;
   --goblin-text-selected-secondary: #d4d4d8;
+  --goblin-text-disabled: #71717a;
   --goblin-border-subtle: rgb(255 255 255 / 0.08);
   --goblin-border-default: rgb(255 255 255 / 0.1);
   --goblin-border-strong: rgb(255 255 255 / 0.16);
@@ -128,6 +182,32 @@ html[data-color-theme='mono'][data-theme='dark'] {
   --shadow-inset-highlight: inset 0 1px 0 rgb(255 255 255 / 0.08);
   --shadow-control-inset-highlight: inset 0 1px 0 rgb(255 255 255 / 0.08);
   --radius: 0.625rem;
+
+  --goblin-app-bg: #09090b;
+  --goblin-topbar-bg: #09090b;
+  --goblin-topbar-border: #27272a;
+  --goblin-tab-bg: transparent;
+  --goblin-tab-hover-bg: #18181b;
+  --goblin-tab-active-bg: #27272a;
+  --goblin-sidebar-bg: #18181b;
+  --goblin-pane-bg: #09090b;
+  --goblin-pane-header-bg: #18181b;
+  --goblin-detail-bg: #09090b;
+  --goblin-card-bg: #18181b;
+  --goblin-list-row-bg: transparent;
+  --goblin-list-row-hover-bg: #27272a;
+  --goblin-list-row-selected-bg: rgb(var(--goblin-accent-rgb) / 0.18);
+  --goblin-list-row-selected-fg: #fafafa;
+  --goblin-control-bg: #18181b;
+  --goblin-control-hover-bg: #27272a;
+  --goblin-control-border: rgb(250 250 250 / 0.24);
+  --goblin-control-radius: 0.5rem;
+  --goblin-control-height-sm: 2rem;
+  --goblin-control-density: 1;
+  --goblin-brand-radius-sm: 0.25rem;
+  --goblin-brand-radius-md: 0.5rem;
+  --goblin-brand-radius-lg: 0.5rem;
+  --goblin-brand-divider-strength: 0.9;
 
   --color-terminal-background: #09090b;
   --color-terminal-foreground: #fafafa;

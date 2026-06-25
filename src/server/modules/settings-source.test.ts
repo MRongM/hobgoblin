@@ -35,6 +35,7 @@ test('initializes server-settings.json with defaults when no persisted settings 
     globalShortcutDisabled: false,
     swapCloseShortcuts: false,
     toggleDetailOnActionBarBlankClick: false,
+    terminalThemeSyncEnabled: true,
     temporaryFilesDirectory: '',
     globalShortcut: 'Alt+G',
     terminalApp: 'auto',
@@ -79,6 +80,7 @@ test('persists updates and notifies subscribers from the server settings store',
     globalShortcutDisabled: true,
     swapCloseShortcuts: true,
     toggleDetailOnActionBarBlankClick: true,
+    terminalThemeSyncEnabled: false,
     temporaryFilesDirectory: path.join(tmp, 'terminal-paste'),
     globalShortcut: 'CommandOrControl+Alt+G',
     terminalApp: 'ghostty',
@@ -122,6 +124,7 @@ test('persists updates and notifies subscribers from the server settings store',
     globalShortcutDisabled: true,
     swapCloseShortcuts: true,
     toggleDetailOnActionBarBlankClick: true,
+    terminalThemeSyncEnabled: false,
     temporaryFilesDirectory: path.join(tmp, 'terminal-paste'),
     globalShortcut: 'Alt+G',
     terminalApp: 'ghostty',
@@ -145,6 +148,19 @@ test('persists updates and notifies subscribers from the server settings store',
     selectedTerminalByWorktree: { '/repo-b\0/worktree': '/repo-b\0/worktree\0terminal-2' },
   })
   expect(await reloaded.getServerRecentRepos()).toEqual([{ kind: 'local', id: '/repo-b' }])
+})
+
+test('normalizes missing and invalid terminal theme sync values to enabled', async () => {
+  tmp = mkdtempSync(path.join(os.tmpdir(), 'gbl-server-settings-'))
+  previousDataDir = process.env.GOBLIN_SERVER_DATA_DIR
+  process.env.GOBLIN_SERVER_DATA_DIR = tmp
+
+  const mod = await import('#/server/modules/settings-source.ts')
+  await mod.updateServerSettingsPrefs({ terminalThemeSyncEnabled: 'bad-value' as never })
+
+  expect(await mod.getServerSettingsPrefs()).toMatchObject({
+    terminalThemeSyncEnabled: true,
+  })
 })
 
 test('normalizes invalid temporary file directories to the default project tmp mode', async () => {
@@ -181,16 +197,19 @@ test('limits persisted terminal custom buttons to 20 valid entries', async () =>
   expect(prefs.terminalCustomButtons[19]).toEqual({ label: 'button-19', value: 'echo 19', action: 'execute' })
 })
 
-test('accepts design color theme presets and normalizes unknown presets', async () => {
+test('accepts current design color themes and normalizes legacy apple plus unknown presets', async () => {
   tmp = mkdtempSync(path.join(os.tmpdir(), 'gbl-server-settings-'))
   previousDataDir = process.env.GOBLIN_SERVER_DATA_DIR
   process.env.GOBLIN_SERVER_DATA_DIR = tmp
 
   const mod = await import('#/server/modules/settings-source.ts')
-  for (const colorTheme of ['claude', 'cursor', 'apple'] as const) {
+  for (const colorTheme of ['claude', 'cursor', 'airbnb', 'bmw'] as const) {
     await mod.updateServerSettingsPrefs({ colorTheme })
     expect(await mod.getServerSettingsPrefs()).toMatchObject({ colorTheme })
   }
+
+  await mod.updateServerSettingsPrefs({ colorTheme: 'apple' as never })
+  expect(await mod.getServerSettingsPrefs()).toMatchObject({ colorTheme: 'macos' })
 
   await mod.updateServerSettingsPrefs({ colorTheme: 'not-a-theme' as never })
   expect(await mod.getServerSettingsPrefs()).toMatchObject({ colorTheme: 'macos' })

@@ -90,7 +90,7 @@ describe('TerminalTabs keyboard dnd wiring', () => {
 
     const tabChrome = document.body.querySelector('[data-terminal-tab-tooltip-id="t1"]')
     if (!(tabChrome instanceof HTMLDivElement)) throw new Error('missing terminal tab')
-    expect(tabChrome.className).toContain('bg-selected')
+    expect(tabChrome.className).toContain('bg-tab-active')
     expect(tabChrome.className).toContain('cursor-grabbing')
     expect(tabChrome.className).not.toContain('bg-card')
   })

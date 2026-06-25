@@ -337,6 +337,7 @@ export const en = {
   'file-tree.download': 'Download',
   'file-tree.upload-file': 'Upload file',
   'file-tree.paste': 'Paste',
+  'file-tree.collapse-all': 'Collapse tree',
   'file-tree.new-folder': 'New folder',
   'file-tree.refresh': 'Refresh',
   'file-tree.search-label': 'Search files',
@@ -648,7 +649,8 @@ export const en = {
   'settings.theme-preset.github': 'GitHub',
   'settings.theme-preset.claude': 'Claude',
   'settings.theme-preset.cursor': 'Cursor',
-  'settings.theme-preset.apple': 'Apple',
+  'settings.theme-preset.airbnb': 'Airbnb',
+  'settings.theme-preset.bmw': 'BMW',
   'settings.appearance': 'Appearance',
   'settings.appearance.auto': 'Auto',
   'settings.appearance.light': 'Light',
@@ -666,6 +668,9 @@ export const en = {
   'settings.temporary-files-directory-hint':
     'Used when terminal binary paste creates files. Leave empty to use the current project tmp folder.',
   'settings.temporary-files-directory-placeholder': 'Current project tmp folder',
+  'settings.terminal-theme-sync': 'Terminal follows theme',
+  'settings.terminal-theme-sync-hint':
+    'When enabled, the embedded terminal uses the selected app theme. Turn it off to keep a classic terminal palette.',
   'settings.terminal-notifications': 'Terminal bell notifications',
   'settings.terminal-notifications-hint': 'Show system notifications for background terminal bells.',
   'settings.terminal-notifications-test': 'Test system notifications',

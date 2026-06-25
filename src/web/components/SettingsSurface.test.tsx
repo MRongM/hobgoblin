@@ -45,6 +45,7 @@ function defaultRpcResult(path: string, input?: unknown) {
       globalShortcutDisabled: false,
       swapCloseShortcuts: false,
       toggleDetailOnActionBarBlankClick: false,
+      terminalThemeSyncEnabled: true,
       temporaryFilesDirectory: '',
       globalShortcut: 'CommandOrControl+Shift+G',
       globalShortcutRegistered: true,
@@ -458,6 +459,27 @@ describe('SettingsSurface', () => {
         if (new URL(String(url)).pathname !== '/api/settings/prefs') return false
         const body = JSON.parse(String(options?.body ?? '{}')) as { settings?: Record<string, unknown> }
         return body.settings?.temporaryFilesDirectory === '/Users/test/project/tmp'
+      }),
+    ).toBe(true)
+  })
+
+  test('updates terminal theme sync from general settings', async () => {
+    await render(<SettingsSurface page="general" onPageChange={() => {}} />)
+
+    const input = document.getElementById('settings-terminal-theme-sync')
+    if (!(input instanceof HTMLButtonElement)) throw new Error('Missing terminal theme sync switch')
+
+    await act(async () => {
+      input.click()
+      await Promise.resolve()
+    })
+
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [url, options] = call as unknown as [unknown, RequestInit | undefined]
+        if (new URL(String(url)).pathname !== '/api/settings/prefs') return false
+        const body = JSON.parse(String(options?.body ?? '{}')) as { settings?: Record<string, unknown> }
+        return body.settings?.terminalThemeSyncEnabled === false
       }),
     ).toBe(true)
   })

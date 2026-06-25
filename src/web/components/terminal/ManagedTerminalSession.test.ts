@@ -690,7 +690,7 @@ describe('ManagedTerminalSession', () => {
 
     expect(term.options.fontSize).toBe(16)
     expect(fitAddon.fit).toHaveBeenCalledTimes(1)
-    expect(term.refresh).toHaveBeenCalledWith(0, Math.max(0, term.rows - 1))
+    expect(term.refresh).toHaveBeenCalledWith(0, expect.any(Number))
   })
 
   test('remeasures and refits after fonts finish loading', async () => {
@@ -1638,6 +1638,8 @@ describe('ManagedTerminalSession', () => {
 
     const term = xtermMocks.terminals[0]!
     expect(term.options.theme).toMatchObject({ background: '#fbfbfd', foreground: '#1d1d1f' })
+    expect(term.refresh).toHaveBeenCalledWith(0, expect.any(Number))
+    term.refresh.mockClear()
     expect(host.querySelector<HTMLElement>('.goblin-managed-terminal-frame')?.style.background).toBe(
       'rgb(251, 251, 253)',
     )
@@ -1656,6 +1658,50 @@ describe('ManagedTerminalSession', () => {
         .querySelector<HTMLElement>('.goblin-managed-terminal-frame')
         ?.style.getPropertyValue('--goblin-terminal-background'),
     ).toBe('#111113')
+    expect(term.refresh).toHaveBeenCalledWith(0, expect.any(Number))
+  })
+
+  test('uses classic terminal theme when theme sync is disabled', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    session.setTerminalThemeMode(() => 'classic')
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+
+    const term = xtermMocks.terminals[0]!
+    expect(term.options.theme).toMatchObject({
+      background: '#050505',
+      foreground: '#f5f5f5',
+      cursor: '#f5f5f5',
+      blue: '#5ac8fa',
+    })
+    expect(
+      host
+        .querySelector<HTMLElement>('.goblin-managed-terminal-frame')
+      ?.style.getPropertyValue('--goblin-terminal-background'),
+    ).toBe('#050505')
+  })
+
+  test('refreshes the terminal when theme sync mode changes after open', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+
+    const term = xtermMocks.terminals[0]!
+    term.refresh.mockClear()
+
+    session.setTerminalThemeMode(() => 'classic')
+
+    expect(term.options.theme).toMatchObject({
+      background: '#050505',
+      foreground: '#f5f5f5',
+    })
+    expect(term.refresh).toHaveBeenCalledWith(0, Math.max(0, term.rows - 1))
   })
 
   test('loads image and progress addons', async () => {

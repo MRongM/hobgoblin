@@ -24,4 +24,14 @@ describe('terminal session CSS layout contract', () => {
     expect(css).toContain('box-sizing: border-box;')
     expect(css).toContain('padding: 4px 0;')
   })
+
+  test('keeps the xterm scrollbar blended with the terminal background', () => {
+    expect(css).toContain(
+      'scrollbar-color: color-mix(in srgb, var(--color-terminal-foreground) 28%, transparent) transparent;',
+    )
+    expect(css).toContain('.goblin-managed-terminal-host .xterm-viewport::-webkit-scrollbar-thumb')
+    expect(css).toContain('background: color-mix(in srgb, var(--color-terminal-foreground) 28%, transparent);')
+    expect(css).toContain('.goblin-managed-terminal-host .xterm-viewport::-webkit-scrollbar-corner')
+    expect(css).toContain('background: transparent;')
+  })
 })

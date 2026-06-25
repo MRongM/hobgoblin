@@ -11,7 +11,7 @@ function Panel<T extends ElementType = 'div'>({ as, className, ...props }: Panel
   return (
     <Comp
       className={cn(
-        'overflow-hidden rounded-xl border border-border/60 bg-background/85 shadow-[var(--shadow-inset-highlight)]',
+        'overflow-hidden rounded-[var(--goblin-brand-radius-lg,var(--radius-lg))] border border-border/60 bg-[var(--goblin-card-bg,var(--color-background))] shadow-[var(--shadow-inset-highlight)]',
         className,
       )}
       {...props}
@@ -20,7 +20,15 @@ function Panel<T extends ElementType = 'div'>({ as, className, ...props }: Panel
 }
 
 function PanelHeader({ className, ...props }: ComponentPropsWithoutRef<'div'>) {
-  return <div className={cn('flex items-center justify-between border-b border-border/60 px-3 py-2', className)} {...props} />
+  return (
+    <div
+      className={cn(
+        'flex items-center justify-between border-b border-border/60 bg-[var(--goblin-pane-header-bg,var(--color-card))] px-3 py-2',
+        className,
+      )}
+      {...props}
+    />
+  )
 }
 
 function PanelBody({ className, ...props }: ComponentPropsWithoutRef<'div'>) {
@@ -39,7 +47,7 @@ function PanelInset({
   return (
     <div
       className={cn(
-        'rounded-md border',
+        'rounded-[var(--goblin-brand-radius-md,var(--radius-md))] border',
         tone === 'default' && 'border-border/50 bg-background/60',
         tone === 'muted' && 'border-border/60 bg-muted/20',
         tone === 'subtle' && 'border-border/60 bg-muted/15',

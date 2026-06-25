@@ -132,7 +132,7 @@ export function ProjectHistoryPanel({ repoId, onRevealPath }: ProjectHistoryPane
   const selectedDetail = selectedHash ? detailByHash[selectedHash] : null
 
   return (
-    <section className="grid min-h-0 flex-1 grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] border-t border-separator/70">
+    <section className="grid min-h-0 flex-1 grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] border-t border-separator/70 bg-pane">
       <HistoryList
         commits={commits}
         selectedHash={selectedHash}
@@ -200,8 +200,8 @@ function HistoryList({
                 aria-label={row.commit.hash}
                 onClick={() => onSelect(row.commit.hash)}
                 className={cn(
-                  'grid w-full grid-cols-[64px_minmax(0,1fr)] gap-2 px-2 py-1.5 text-left hover:bg-accent/50',
-                  selectedHash === row.commit.hash && 'bg-selected text-selected-foreground',
+                  'grid w-full grid-cols-[64px_minmax(0,1fr)] gap-2 px-2 py-1.5 text-left hover:bg-list-row-hover',
+                  selectedHash === row.commit.hash && 'bg-list-row-selected text-list-row-selected-foreground',
                 )}
               >
                 <HistoryGraphCell lane={row.lane} laneCount={row.laneCount} />
@@ -272,7 +272,7 @@ function CommitDetailPane({
 
   return (
     <div className="flex min-h-0 flex-col">
-      <div className="border-b border-separator/70 px-3 py-2">
+      <div className="border-b border-app-region-border bg-app-region px-3 py-2">
         <h3 className="truncate text-sm font-medium">{detail.subject}</h3>
         <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{detail.hash}</p>
         <p className="mt-1 text-xs text-muted-foreground">
@@ -410,7 +410,7 @@ function CommitFileRow({
         <button
           type="button"
           aria-label={file.path}
-          className={cn(rowClassName, 'hover:bg-accent/50')}
+          className={cn(rowClassName, 'hover:bg-list-row-hover')}
           style={style}
           onClick={() => onRevealPath(file.path)}
         >

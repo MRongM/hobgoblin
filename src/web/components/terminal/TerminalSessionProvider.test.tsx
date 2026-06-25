@@ -42,12 +42,18 @@ const mockSessions = vi.hoisted(
       descriptor: TerminalDescriptor
       emitBell: (event: TerminalBellEvent) => void
       setSerializeValue: (value: string) => void
+      currentThemeMode: () => 'theme' | 'classic'
+      setTerminalThemeMode: ReturnType<typeof vi.fn>
       hydrate: ReturnType<typeof vi.fn>
       handleOutput: ReturnType<typeof vi.fn>
       handleServerTitle: ReturnType<typeof vi.fn>
       handleOwnership: ReturnType<typeof vi.fn>
     }>,
 )
+
+const runtimeTerminalSettingsMock = vi.hoisted(() => ({
+  terminalThemeSyncEnabled: true,
+}))
 
 vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
   class ManagedTerminalSession {
@@ -59,6 +65,8 @@ vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
     private readonly handleOwnershipSpy = vi.fn()
     private readonly hydrateSpy = vi.fn()
     private readonly detachSpy = vi.fn()
+    private readonly setTerminalThemeModeSpy = vi.fn()
+    private terminalThemeModeGetter: () => 'theme' | 'classic'
     private serializeValue = ''
     private sessionId: string | null = null
     private snapshotValue: TerminalSnapshot
@@ -67,10 +75,13 @@ vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
       descriptor: TerminalDescriptor,
       _notify: () => void,
       onBell: (descriptor: TerminalDescriptor, event: TerminalBellEvent) => void,
+      _fontSize = 14,
+      terminalThemeMode?: () => 'theme' | 'classic',
     ) {
       this.descriptor = descriptor
       this.notify = _notify
       this.onBell = onBell
+      this.terminalThemeModeGetter = terminalThemeMode ?? (() => 'theme')
       this.sessionId = null
       this.snapshotValue = {
         phase: 'open',
@@ -84,6 +95,8 @@ vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
         setSerializeValue: (value) => {
           this.serializeValue = value
         },
+        currentThemeMode: () => this.terminalThemeModeGetter(),
+        setTerminalThemeMode: this.setTerminalThemeModeSpy,
         hydrate: this.hydrateSpy,
         handleOutput: this.handleOutputSpy,
         handleServerTitle: this.handleServerTitleSpy,
@@ -96,6 +109,11 @@ vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
     }
 
     setFontSize() {}
+
+    setTerminalThemeMode(terminalThemeMode: () => 'theme' | 'classic') {
+      this.terminalThemeModeGetter = terminalThemeMode
+      this.setTerminalThemeModeSpy(terminalThemeMode())
+    }
 
     attach() {}
 
@@ -213,6 +231,7 @@ vi.mock('#/web/runtime-settings-terminal-buttons.ts', () => ({
     terminalCustomButtonsVisible: true,
     terminalCustomButtons: [],
     terminalFontSize: 14,
+    terminalThemeSyncEnabled: runtimeTerminalSettingsMock.terminalThemeSyncEnabled,
   }),
 }))
 
@@ -271,6 +290,7 @@ beforeEach(() => {
   ownershipHandler = null
   sessionsChangedHandler = null
   mockSessions.length = 0
+  runtimeTerminalSettingsMock.terminalThemeSyncEnabled = true
   managedServerSessions = []
   listSessionsMock.mockReset()
   listSessionsMock.mockImplementation(async () => managedServerSessions)
@@ -712,6 +732,60 @@ describe('TerminalSessionProvider', () => {
         canonicalRows: 30,
       })
       expect(first.handleOwnership).not.toHaveBeenCalled()
+    } finally {
+      await unmount()
+    }
+  })
+
+  test('passes enabled terminal theme sync to managed sessions', async () => {
+    runtimeTerminalSettingsMock.terminalThemeSyncEnabled = true
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } })],
+      selectedBranch: 'feature/worktree',
+      detailTab: 'terminal',
+    })
+    const { getContext, unmount } = await renderProvider()
+
+    try {
+      await act(async () => {
+        await getContext().createTerminal({
+          repoRoot: REPO_ID,
+          branch: 'feature/worktree',
+          worktreePath: WORKTREE_PATH,
+        })
+      })
+
+      const session = mockSessions.find((item) => item.descriptor.terminalId === 'terminal-1')
+      if (!session) throw new Error('missing terminal-1 mock session')
+      expect(session.currentThemeMode()).toBe('theme')
+    } finally {
+      await unmount()
+    }
+  })
+
+  test('passes disabled terminal theme sync to managed sessions', async () => {
+    runtimeTerminalSettingsMock.terminalThemeSyncEnabled = false
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } })],
+      selectedBranch: 'feature/worktree',
+      detailTab: 'terminal',
+    })
+    const { getContext, unmount } = await renderProvider()
+
+    try {
+      await act(async () => {
+        await getContext().createTerminal({
+          repoRoot: REPO_ID,
+          branch: 'feature/worktree',
+          worktreePath: WORKTREE_PATH,
+        })
+      })
+
+      const session = mockSessions.find((item) => item.descriptor.terminalId === 'terminal-1')
+      if (!session) throw new Error('missing terminal-1 mock session')
+      expect(session.currentThemeMode()).toBe('classic')
     } finally {
       await unmount()
     }
