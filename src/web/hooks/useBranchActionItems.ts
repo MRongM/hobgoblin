@@ -1,4 +1,14 @@
-import { ArrowDown, ArrowUp, ClipboardCopy, ExternalLink, FolderPlus, GitBranch, GitPullRequest, RefreshCw, Trash2 } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowUp,
+  ClipboardCopy,
+  ExternalLink,
+  FolderPlus,
+  GitBranch,
+  GitPullRequest,
+  RefreshCw,
+  Trash2,
+} from 'lucide-react'
 import { createElement, Fragment, type ReactNode } from 'react'
 import { GitHubOutlineIcon } from '#/web/components/GitHubOutlineIcon.tsx'
 import { GitLabLogoIcon } from '#/web/components/GitLabLogoIcon.tsx'
@@ -42,7 +52,10 @@ export function visibleBranchActionItems({
   mainItems,
   externalItems,
   destructiveItems,
-}: Pick<BranchActionItemGroups, 'patchItems' | 'mainItems' | 'externalItems' | 'destructiveItems'>): BranchActionItem[] {
+}: Pick<
+  BranchActionItemGroups,
+  'patchItems' | 'mainItems' | 'externalItems' | 'destructiveItems'
+>): BranchActionItem[] {
   return [...patchItems, ...mainItems, ...externalItems, ...destructiveItems].filter((item) => item.visible)
 }
 
@@ -73,7 +86,10 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
   const { terminalApp, resolvedTerminalApp, terminalAvailable, editorApp, resolvedEditorApp, editorAvailable } =
     useRuntimeExternalAppSettings()
   const { blocked, busyAction, capabilities, actions, dialogs } = useBranchActions(repo, branch)
-  const writeActions = useBranchWriteActions(repo, branch)
+  const writeActions = useBranchWriteActions(repo, branch, {
+    canPush: capabilities.canPush,
+    onPush: actions.push,
+  })
   const createWorktreeDialog = useRetainedDialogState<string>()
   const disabled = blocked
   const busy = (id: BranchActionItemId) => busyAction === id

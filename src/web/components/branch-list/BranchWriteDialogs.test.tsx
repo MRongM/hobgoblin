@@ -75,12 +75,7 @@ afterEach(() => {
 
 describe('InlineCommitForm', () => {
   test('shows only available commit message providers', () => {
-    render(
-      <InlineCommitFormHarness
-        availableProviders={['codex']}
-        onCommit={vi.fn(async () => {})}
-      />,
-    )
+    render(<InlineCommitFormHarness availableProviders={['codex']} onCommit={vi.fn(async () => {})} />)
 
     expect(buttonByProvider('codex')).not.toBeNull()
     expect(queryButtonByProvider('claude')).toBeNull()
@@ -142,6 +137,27 @@ describe('InlineCommitForm', () => {
     await flush()
 
     expect(onCommit).toHaveBeenCalledWith('feat: inline commit')
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  test('submits trimmed commit message through commit and push action', async () => {
+    const onCommit = vi.fn(async () => {})
+    const onCommitAndPush = vi.fn(async () => {})
+    const onClose = vi.fn()
+
+    render(
+      <InlineCommitFormHarness
+        initialMessage="  feat: inline commit  "
+        onClose={onClose}
+        onCommit={onCommit}
+        onCommitAndPush={onCommitAndPush}
+      />,
+    )
+    clickButtonByText('action.commit-and-push-confirm')
+    await flush()
+
+    expect(onCommit).not.toHaveBeenCalled()
+    expect(onCommitAndPush).toHaveBeenCalledWith('feat: inline commit')
     expect(onClose).toHaveBeenCalled()
   })
 
@@ -344,14 +360,7 @@ describe('PullRemoteBranchDialog', () => {
     const onTrack = vi.fn(async () => {})
 
     render(
-      <PullRemoteBranchDialog
-        open
-        repoId="/repo"
-        allBranches={[]}
-        busy={false}
-        onClose={vi.fn()}
-        onTrack={onTrack}
-      />,
+      <PullRemoteBranchDialog open repoId="/repo" allBranches={[]} busy={false} onClose={vi.fn()} onTrack={onTrack} />,
     )
     await flush()
     await flush()
@@ -383,6 +392,7 @@ function InlineCommitFormHarness({
   initialPendingGeneratedMessage = null,
   onClose = vi.fn(),
   onCommit,
+  onCommitAndPush,
   onGenerate = vi.fn(async () => {}),
 }: {
   availableProviders?: Array<'codex' | 'claude'>
@@ -391,6 +401,7 @@ function InlineCommitFormHarness({
   initialPendingGeneratedMessage?: string | null
   onClose?: () => void
   onCommit: (message: string) => Promise<void>
+  onCommitAndPush?: (message: string) => Promise<void>
   onGenerate?: (provider: 'codex' | 'claude') => Promise<void>
 }) {
   const [message, setMessage] = useState(initialMessage)
@@ -415,6 +426,7 @@ function InlineCommitFormHarness({
       onClearPendingGeneratedMessage={() => setPendingGeneratedMessage(null)}
       onClose={onClose}
       onCommit={onCommit}
+      onCommitAndPush={onCommitAndPush}
     />
   )
 }

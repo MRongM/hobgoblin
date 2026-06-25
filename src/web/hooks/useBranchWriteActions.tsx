@@ -35,7 +35,16 @@ interface BranchWriteActions {
   inlinePanel?: ReactNode
 }
 
-export function useBranchWriteActions(repo: BranchActionRepo, branch: RepoBranchState): BranchWriteActions {
+interface BranchWriteActionOptions {
+  canPush: boolean
+  onPush: () => void
+}
+
+export function useBranchWriteActions(
+  repo: BranchActionRepo,
+  branch: RepoBranchState,
+  options: BranchWriteActionOptions,
+): BranchWriteActions {
   const t = useT()
   const setLastResult = useReposStore((s) => s.setLastResult)
   const runBranchAction = useReposStore((s) => s.runBranchAction)
@@ -81,6 +90,11 @@ export function useBranchWriteActions(repo: BranchActionRepo, branch: RepoBranch
     const result = await commitRepositoryChanges(repo.id, worktreePath, message)
     setLastResult(repo.id, result, repo.instanceToken)
     if (!result.ok) throw new Error(result.message)
+  }
+
+  async function handleCommitAndPush(message: string) {
+    await handleCommit(message)
+    options.onPush()
   }
 
   async function handleCreateBranch(newBranch: string) {
@@ -230,12 +244,15 @@ export function useBranchWriteActions(repo: BranchActionRepo, branch: RepoBranch
             provider,
           })
         }
-        onApplyPendingGeneratedMessage={() => inlineCommitDraftActions.applyPendingGeneratedMessage(repo.id, worktreePath)}
+        onApplyPendingGeneratedMessage={() =>
+          inlineCommitDraftActions.applyPendingGeneratedMessage(repo.id, worktreePath)
+        }
         onClearPendingGeneratedMessage={() =>
           inlineCommitDraftActions.clearPendingGeneratedMessage(repo.id, worktreePath)
         }
         onClose={() => inlineCommitDraftActions.clearDraft(repo.id, worktreePath)}
         onCommit={handleCommit}
+        onCommitAndPush={options.canPush ? handleCommitAndPush : undefined}
       />
     ) : null
 

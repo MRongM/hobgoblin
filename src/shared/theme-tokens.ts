@@ -17,4 +17,16 @@ export const WINDOW_BACKGROUND_BY_COLOR_THEME: Record<ColorTheme, Record<Resolve
     light: '#ffffff',
     dark: '#0d1117',
   },
+  claude: {
+    light: '#faf9f5',
+    dark: '#181715',
+  },
+  cursor: {
+    light: '#f7f7f4',
+    dark: '#1f1f1c',
+  },
+  apple: {
+    light: '#ffffff',
+    dark: '#000000',
+  },
 }

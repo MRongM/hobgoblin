@@ -20,6 +20,7 @@ interface InlineCommitFormProps {
   onClearPendingGeneratedMessage: () => void
   onClose: () => void
   onCommit: (message: string) => Promise<void>
+  onCommitAndPush?: (message: string) => Promise<void>
 }
 
 export function InlineCommitForm({
@@ -35,23 +36,35 @@ export function InlineCommitForm({
   onClearPendingGeneratedMessage,
   onClose,
   onCommit,
+  onCommitAndPush,
 }: InlineCommitFormProps) {
   const t = useT()
-  const { isPending, run } = useAsyncPending<'commit'>()
+  const { pending, isPending, run } = useAsyncPending<'commit' | 'commitAndPush'>()
 
-  async function handleConfirm() {
+  async function handleSubmit(action: 'commit' | 'commitAndPush', submit: (message: string) => Promise<void>) {
     const trimmed = message.trim()
     if (!trimmed) return
     onErrorChange(null)
-    await run('commit', async () => {
+    await run(action, async () => {
       try {
-        await onCommit(trimmed)
+        await submit(trimmed)
         onClose()
       } catch (err) {
         onErrorChange(err instanceof Error ? err.message : String(err))
       }
     })
   }
+
+  async function handleConfirm() {
+    await handleSubmit('commit', onCommit)
+  }
+
+  async function handleCommitAndPush() {
+    if (!onCommitAndPush) return
+    await handleSubmit('commitAndPush', onCommitAndPush)
+  }
+
+  const submitDisabled = !message.trim() || isPending || generating !== null
 
   return (
     <div className="col-span-full border-t border-border/70 bg-muted/35 px-4 py-3" onClick={(e) => e.stopPropagation()}>
@@ -89,14 +102,20 @@ export function InlineCommitForm({
           />
         </Field>
         {error && <DialogError>{error}</DialogError>}
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={onClose}>
             {t('dialog.cancel')}
           </Button>
-          <Button type="submit" size="sm" disabled={!message.trim() || isPending || generating !== null}>
-            {isPending && <Loader2 className="animate-spin" />}
+          <Button type="submit" size="sm" disabled={submitDisabled}>
+            {pending === 'commit' && <Loader2 className="animate-spin" />}
             {t('action.commit-confirm')}
           </Button>
+          {onCommitAndPush && (
+            <Button type="button" size="sm" disabled={submitDisabled} onClick={() => void handleCommitAndPush()}>
+              {pending === 'commitAndPush' && <Loader2 className="animate-spin" />}
+              {t('action.commit-and-push-confirm')}
+            </Button>
+          )}
         </div>
       </form>
       <ConfirmDialog
