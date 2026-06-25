@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, test } from 'vitest'
-import { replaceRepo } from '#/web/stores/repos/helpers.ts'
+import { emptyRepo, replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { DetailTab, RepoState } from '#/web/stores/repos/types.ts'
 import { createRepoBranch as branch, installGoblinTestBridge, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import type { BranchSnapshotInfo } from '#/web/types.ts'
 import { DEFAULT_DETAIL_PANE_SIZES, DEFAULT_FILE_TREE_PANE_SIZES } from '#/shared/workspace-layout.ts'
 const REPO_ID = '/tmp/gbl-selection-test-repo'
+const REPO_B_ID = '/tmp/gbl-selection-test-repo-b'
 const rpcHandlers: Record<string, (input: any) => unknown> = {}
 
 function seedRepo(options: {
@@ -274,6 +275,60 @@ describe('selectBranch', () => {
   })
 })
 
+describe('checkoutSelectedInRepo', () => {
+  test('plain workspaces with no selected branch do not start checkout work', async () => {
+    let checkoutCalls = 0
+    rpcHandlers['repo.checkout'] = async () => {
+      checkoutCalls += 1
+      return { ok: true, message: 'ok' }
+    }
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+
+    await useReposStore.getState().checkoutSelectedInRepo(REPO_ID)
+    await useReposStore.getState().checkoutSelected()
+
+    const repo = useReposStore.getState().repos[REPO_ID]
+    expect(checkoutCalls).toBe(0)
+    expect(repo?.operations.branchAction.phase).toBe('idle')
+    expect(repo?.events).toEqual([])
+  })
+
+  test('stale branch selection in a plain workspace reaches the non-git action gate', async () => {
+    let checkoutCalls = 0
+    rpcHandlers['repo.checkout'] = async () => {
+      checkoutCalls += 1
+      return { ok: true, message: 'ok' }
+    }
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [branch('main'), branch('feature/plain')],
+      currentBranch: 'main',
+      selectedBranch: 'feature/plain',
+    })
+
+    await useReposStore.getState().checkoutSelectedInRepo(REPO_ID)
+
+    const repo = useReposStore.getState().repos[REPO_ID]
+    expect(checkoutCalls).toBe(0)
+    expect(repo?.operations.branchAction.phase).toBe('idle')
+    expect(repo?.events.at(-1)).toMatchObject({
+      kind: 'result',
+      result: { ok: false, message: 'error.not-git-repo' },
+      action: {
+        kind: 'checkout',
+        branch: 'feature/plain',
+      },
+    })
+  })
+})
+
 describe('setDetailTab', () => {
   test('persists the selected detail tab immediately', () => {
     seedRepo({ selectedBranch: 'feature/worktree', detailTab: 'status' })
@@ -415,6 +470,33 @@ describe('setDetailTab', () => {
 })
 
 describe('setWorkspaceLayout', () => {
+  test('stores workspace layout per repo without leaking to other repos', () => {
+    const repoA = replaceRepo(emptyRepo(REPO_ID, 'repo-a'), (repo) => {
+      repo.ui.workspaceLayout = 'left-right'
+    })
+    const repoB = replaceRepo(emptyRepo(REPO_B_ID, 'repo-b'), (repo) => {
+      repo.ui.workspaceLayout = 'top-bottom'
+    })
+    useReposStore.setState({
+      repos: { [REPO_ID]: repoA, [REPO_B_ID]: repoB },
+      order: [REPO_ID, REPO_B_ID],
+      activeId: REPO_ID,
+      workspaceLayout: 'left-right',
+    })
+
+    useReposStore.getState().setWorkspaceLayout(REPO_ID, 'top-bottom')
+
+    expect(useReposStore.getState().repos[REPO_ID]?.ui.workspaceLayout).toBe('top-bottom')
+    expect(useReposStore.getState().repos[REPO_B_ID]?.ui.workspaceLayout).toBe('top-bottom')
+    expect(useReposStore.getState().workspaceLayout).toBe('top-bottom')
+
+    useReposStore.getState().setWorkspaceLayout(REPO_B_ID, 'left-right')
+
+    expect(useReposStore.getState().repos[REPO_ID]?.ui.workspaceLayout).toBe('top-bottom')
+    expect(useReposStore.getState().repos[REPO_B_ID]?.ui.workspaceLayout).toBe('left-right')
+    expect(useReposStore.getState().workspaceLayout).toBe('top-bottom')
+  })
+
   test('allows detail collapse changes in top-bottom layout', () => {
     useReposStore.getState().setWorkspaceLayout('top-bottom')
     useReposStore.getState().setDetailCollapsed(false)

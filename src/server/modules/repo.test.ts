@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => ({
   getRepoName: vi.fn(),
   getRepoRoot: vi.fn(),
   getRemoteInfo: vi.fn(),
+  getRemoteSnapshot: vi.fn(),
   getRemoteTrackingBranches: vi.fn(),
   getUpstream: vi.fn(),
   getWorktreeCommitMessageContext: vi.fn(),
@@ -68,6 +69,7 @@ const mocks = vi.hoisted(() => ({
   generateCommitMessageFromPatch: vi.fn(),
   resetHardToCurrentHead: vi.fn(),
   resetRemoteHard: vi.fn(),
+  testRemoteRepository: vi.fn(),
 }))
 
 vi.mock('#/system/git/branches.ts', () => ({
@@ -172,7 +174,7 @@ vi.mock('#/system/ssh/config.ts', () => ({
 }))
 
 vi.mock('#/system/ssh/diagnostics.ts', () => ({
-  testRemoteRepository: vi.fn(),
+  testRemoteRepository: mocks.testRemoteRepository,
 }))
 
 vi.mock('#/system/ssh/git.ts', () => ({
@@ -192,7 +194,7 @@ vi.mock('#/system/ssh/git.ts', () => ({
   getRemotePatch: vi.fn(),
   getRemoteTrackingBranches: mocks.getRemoteTrackingBranches,
   getRemoteLog: vi.fn(),
-  getRemoteSnapshot: vi.fn(),
+  getRemoteSnapshot: mocks.getRemoteSnapshot,
   getRemoteStatus: vi.fn(),
   pullRemoteBranch: mocks.pullRemoteBranch,
   pushRemoteBranch: mocks.pushRemoteBranch,
@@ -300,6 +302,20 @@ beforeEach(() => {
     date: '2026-06-15T09:00:00+08:00',
     parents: [],
     files: [],
+  })
+  mocks.getRemoteSnapshot.mockResolvedValue(repoSnapshot('main'))
+  mocks.testRemoteRepository.mockResolvedValue({
+    target: {
+      id: 'ssh-config://prod/srv/repo',
+      alias: 'prod',
+      host: 'example.com',
+      user: 'alice',
+      port: 22,
+      remotePath: '/srv/repo',
+      displayName: 'prod:repo',
+    },
+    ok: true,
+    stages: [],
   })
   mocks.resolveRemoteTarget.mockResolvedValue({
     target: {
@@ -631,6 +647,80 @@ describe('probeRepository path errors', () => {
 
     const { probeRepository } = await import('#/server/modules/repo-read-paths.ts')
     await expect(probeRepository('/tmp/private')).resolves.toEqual({ ok: false, message: 'error.path-permission-denied' })
+  })
+
+  test('returns ok with isGitRepo:false for readable non-git directory', async () => {
+    mocks.fsStat.mockResolvedValueOnce({ isDirectory: () => true })
+    mocks.fsAccess.mockResolvedValueOnce(undefined)
+    mocks.isGitRepo.mockResolvedValueOnce(false)
+
+    const { probeRepository } = await import('#/server/modules/repo-read-paths.ts')
+    await expect(probeRepository('/tmp/notgit')).resolves.toEqual({
+      ok: true,
+      root: '/tmp/notgit',
+      name: 'notgit',
+      isGitRepo: false,
+    })
+  })
+
+  test('keeps a readable nested directory as a plain workspace when it is not the git root', async () => {
+    mocks.fsStat.mockResolvedValueOnce({ isDirectory: () => true })
+    mocks.fsAccess.mockResolvedValueOnce(undefined)
+    mocks.isGitRepo.mockResolvedValueOnce(true)
+    mocks.getRepoRoot.mockResolvedValueOnce('/tmp/parent')
+
+    const { probeRepository } = await import('#/server/modules/repo-read-paths.ts')
+    await expect(probeRepository('/tmp/parent/plain-project')).resolves.toEqual({
+      ok: true,
+      root: '/tmp/parent/plain-project',
+      name: 'plain-project',
+      isGitRepo: false,
+    })
+  })
+
+  test('falls back to a plain workspace when git is unavailable', async () => {
+    mocks.fsStat.mockResolvedValueOnce({ isDirectory: () => true })
+    mocks.fsAccess.mockResolvedValueOnce(undefined)
+    mocks.checkGitAvailable.mockResolvedValueOnce({ ok: false, message: 'error.git-not-found' })
+
+    const { probeRepository } = await import('#/server/modules/repo-read-paths.ts')
+    await expect(probeRepository('/tmp/plain')).resolves.toEqual({
+      ok: true,
+      root: '/tmp/plain',
+      name: 'plain',
+      isGitRepo: false,
+    })
+  })
+
+  test('returns ok with isGitRepo:true for git repositories', async () => {
+    mocks.getRepoRoot.mockResolvedValueOnce('/tmp/repo-root')
+    mocks.getRepoName.mockResolvedValueOnce('repo-root')
+
+    const { probeRepository } = await import('#/server/modules/repo-read-paths.ts')
+    await expect(probeRepository('/tmp/repo')).resolves.toEqual({
+      ok: true,
+      root: '/tmp/repo-root',
+      name: 'repo-root',
+      isGitRepo: true,
+    })
+  })
+
+  test('returns ok with isGitRepo:false for readable remote non-git directories', async () => {
+    mocks.getRemoteSnapshot.mockResolvedValueOnce(null)
+
+    const { probeRepository } = await import('#/server/modules/repo-read-paths.ts')
+    await expect(probeRepository('ssh-config://prod/srv/repo')).resolves.toEqual({
+      ok: true,
+      root: 'ssh-config://prod/srv/repo',
+      name: 'prod:repo',
+      isGitRepo: false,
+    })
+    expect(mocks.testRemoteRepository).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
+    )
+    expect(mocks.getRemoteSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
+    )
   })
 })
 

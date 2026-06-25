@@ -68,6 +68,7 @@ export interface RepoUiState {
   selectedBranch: string | null
   branchViewMode: BranchViewMode
   detailTab: DetailTab
+  workspaceLayout: RepoWorkspaceLayout
   worktreePathOrder: string[]
 }
 
@@ -102,13 +103,17 @@ export interface RestorableRepoSnapshot {
   savedAt: number
   name: string
   data: Pick<RepoDataState, 'branches' | 'currentBranch'>
-  ui: Pick<RepoUiState, 'selectedBranch' | 'branchViewMode' | 'detailTab' | 'worktreePathOrder'>
+  ui: Pick<RepoUiState, 'selectedBranch' | 'branchViewMode' | 'detailTab' | 'worktreePathOrder'> & {
+    workspaceLayout?: RepoWorkspaceLayout
+  }
 }
 
 export interface RepoState {
   /** Absolute repo root — also the unique id. */
   id: string
   name: string
+  /** false when the directory is readable but not yet a git repository. */
+  isGitRepo: boolean
   /** Bumped on every fresh open so async writers can detect close-and-reopen. */
   instanceToken: number
   /** Renderer-local projection of runtime-coherent repo truth. */
@@ -180,7 +185,7 @@ export interface RestorableWorkspaceActions {
    *  rendered layout mode should be derived from `repoWorkspaceBehavior()`. */
   setDetailFocusMode: (focused: boolean) => void
   toggleDetailFocusMode: () => void
-  setWorkspaceLayout: (layout: RepoWorkspaceLayout) => void
+  setWorkspaceLayout: (idOrLayout: string, layout?: RepoWorkspaceLayout) => void
   applySessionLayoutState: (
     layout: Pick<
       SessionState,
@@ -235,6 +240,8 @@ export interface RuntimeCoherentRepoProjectionActions {
    *  by an explicit refresh, so a stale badge doesn't follow the user
    *  around forever. */
   clearFetchFailed: (id: string, token: number) => void
+  /** Initialize the directory at `id` as a git repo, then refresh. */
+  initGitRepository: (id: string) => Promise<ExecResult>
 }
 
 export interface RepoMutationActions {

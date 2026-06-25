@@ -16,6 +16,7 @@ import type {
 } from '#/shared/terminal.ts'
 import type { BranchSnapshotInfo, PullRequestInfo, WorktreeStatus } from '#/web/types.ts'
 import type { DetailTab, RepoBranchState, RepoState } from '#/web/stores/repos/types.ts'
+import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import {
   DEFAULT_DETAIL_COLLAPSED,
   DEFAULT_DETAIL_PANE_SIZES,
@@ -500,12 +501,14 @@ export function seedRepoState(options: {
   selectedBranch?: string | null
   branchViewMode?: RepoState['ui']['branchViewMode']
   detailTab?: DetailTab
+  workspaceLayout?: RepoWorkspaceLayout
   worktreePathOrder?: string[]
   instanceToken?: number
   status?: WorktreeStatus[]
   statusLoaded?: boolean
   worktreesByPath?: RepoState['data']['worktreesByPath']
   remote?: Partial<RepoState['remote']>
+  isGitRepo?: boolean
 }): RepoState {
   const base = emptyRepo(options.id, options.name ?? 'repo')
   const branchesWithSnapshotWorktreeMetadata = options.branchSnapshots ?? options.branches ?? base.data.branches
@@ -514,6 +517,7 @@ export function seedRepoState(options: {
   const repo: RepoState = {
     ...base,
     instanceToken: options.instanceToken ?? base.instanceToken,
+    isGitRepo: options.isGitRepo ?? base.isGitRepo,
     data: {
       ...base.data,
       branches,
@@ -529,6 +533,7 @@ export function seedRepoState(options: {
       selectedBranch: options.selectedBranch ?? base.ui.selectedBranch,
       branchViewMode: options.branchViewMode ?? base.ui.branchViewMode,
       detailTab: options.detailTab ?? base.ui.detailTab,
+      workspaceLayout: options.workspaceLayout ?? base.ui.workspaceLayout,
       worktreePathOrder: options.worktreePathOrder ?? base.ui.worktreePathOrder,
     },
     remote: {
@@ -545,7 +550,7 @@ export function seedRepoState(options: {
     branchSearchQueries: {},
     detailCollapsed: DEFAULT_DETAIL_COLLAPSED,
     detailFocusMode: false,
-    workspaceLayout: DEFAULT_WORKSPACE_LAYOUT,
+    workspaceLayout: repo.ui.workspaceLayout,
     detailPaneSizes: DEFAULT_DETAIL_PANE_SIZES,
     fileTreePaneSizes: DEFAULT_FILE_TREE_PANE_SIZES,
   })

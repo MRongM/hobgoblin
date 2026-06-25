@@ -26,6 +26,10 @@ export async function cloneRepository(input: {
   return await postServerJson('/api/repo/clone', input)
 }
 
+export async function initRepository(cwd: string): Promise<ExecResult> {
+  return await postServerJson('/api/repo/init', { cwd })
+}
+
 export async function abortCloneOperation(operationId: string): Promise<boolean> {
   return await postServerJson('/api/repo/abort-clone', { operationId })
 }

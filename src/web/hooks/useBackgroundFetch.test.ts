@@ -52,6 +52,7 @@ function createRepo(input: {
   return {
     id: input.id,
     name: 'repo',
+    isGitRepo: true,
     instanceToken: 1,
     data: {
       branches: [],
@@ -112,6 +113,7 @@ function createRepo(input: {
       selectedBranch: null,
       branchViewMode: 'all',
       detailTab: 'status',
+      workspaceLayout: 'left-right',
       worktreePathOrder: [],
     },
     projection: { source: 'fresh', savedAt: null },

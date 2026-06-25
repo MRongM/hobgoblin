@@ -1,16 +1,19 @@
 import { lastPathSegment } from '#/web/lib/paths.ts'
-import { emptyRepo } from '#/web/stores/repos/helpers.ts'
+import { clearGitProjection, emptyRepo, replaceRepo, replaceRepoState, rotateRepoInstanceToken } from '#/web/stores/repos/helpers.ts'
 import { restoreRepoProjectionFromSnapshot } from '#/web/stores/repos/persistence.ts'
 import { disposeRepoRuntime } from '#/web/stores/repos/runtime.ts'
 import { runRepoRefreshIntent } from '#/web/stores/repos/refresh-coordinator.ts'
+import { repoSupportsGitData } from '#/web/stores/repos/capabilities.ts'
 import {
   abortRepositoryOperation,
+  initRepository as initRepositoryRpc,
   probeRepository,
 } from '#/web/repo-client.ts'
 import { resolveRemoteRepositoryTarget } from '#/web/remote-client.ts'
 import { stopPortForwardSessionsForRepo } from '#/web/port-forwarding-client.ts'
 import { recordRecentRepo } from '#/web/settings-write-paths.ts'
 import type { OpenRepoResult, ReposGet, ReposSet, ReposStore } from '#/web/stores/repos/types.ts'
+import type { ExecResult } from '#/web/types.ts'
 import { nextActiveRepoIdAfterWorkspaceClose } from '#/web/open-workspace-state.ts'
 import {
   isRemoteRepoId,
@@ -25,6 +28,7 @@ import {
 interface ResolvedRepo {
   id: string
   name: string
+  isGitRepo?: boolean
   target?: RemoteRepoTarget
 }
 
@@ -72,6 +76,7 @@ export async function resolveRepoPath(
       repo: {
         id: probe.root,
         name: probe.name ?? (entry.kind === 'remote' ? entry.ref.displayName : lastPathSegment(probe.root)),
+        isGitRepo: probe.isGitRepo ?? true,
         ...(target ? { target } : {}),
       },
       target,
@@ -107,34 +112,40 @@ export function addResolvedRepo(
   const { id, name } = resolvedRepo
   const existing = s.repos[id]
   if (existing) {
-    if (
-      !resolvedRepo.target ||
-      (existing.remote.target &&
-        existing.remote.target.alias === resolvedRepo.target.alias &&
-        existing.remote.target.host === resolvedRepo.target.host &&
-        existing.remote.target.user === resolvedRepo.target.user &&
-        existing.remote.target.port === resolvedRepo.target.port &&
-        existing.remote.target.remotePath === resolvedRepo.target.remotePath)
-    ) {
+    const nextIsGitRepo = resolvedRepo.isGitRepo ?? true
+    const targetChanged =
+      !!resolvedRepo.target &&
+      (!existing.remote.target ||
+        existing.remote.target.alias !== resolvedRepo.target.alias ||
+        existing.remote.target.host !== resolvedRepo.target.host ||
+        existing.remote.target.user !== resolvedRepo.target.user ||
+        existing.remote.target.port !== resolvedRepo.target.port ||
+        existing.remote.target.remotePath !== resolvedRepo.target.remotePath)
+    const capabilityChanged = existing.isGitRepo !== nextIsGitRepo
+    if (!targetChanged && !capabilityChanged) {
       return { repos: s.repos, order: s.order, changed: false }
     }
+    const nextRepo = replaceRepo(existing, (draft) => {
+      if (capabilityChanged) rotateRepoInstanceToken(draft)
+      draft.isGitRepo = nextIsGitRepo
+      if (!nextIsGitRepo) clearGitProjection(draft)
+      if (targetChanged && resolvedRepo.target) draft.remote.target = resolvedRepo.target
+    })
     return {
       repos: {
         ...s.repos,
-        [id]: {
-          ...existing,
-          remote: {
-            ...existing.remote,
-            target: resolvedRepo.target,
-          },
-        },
+        [id]: nextRepo,
       },
       order: s.order,
-      changed: false,
+      changed: true,
     }
   }
   const repo = restoreRepoProjectionFromSnapshot(emptyRepo(id, name), s.restorableRepoCache[id])
   if (resolvedRepo.target) repo.remote.target = resolvedRepo.target
+  if (resolvedRepo.isGitRepo === false) {
+    repo.isGitRepo = false
+    clearGitProjection(repo)
+  }
   return {
     repos: { ...s.repos, [id]: repo },
     order: orderedInsert(s.order, id, rankById),
@@ -185,7 +196,7 @@ function applyWorkspaceOpen(
   return { repos, order, changed, id: repo.id }
 }
 
-export function createRuntimeRepoLifecycleActions(set: ReposSet, get: ReposGet): Pick<ReposStore, 'ensureWorkspaceOpen' | 'closeRepo'> {
+export function createRuntimeRepoLifecycleActions(set: ReposSet, get: ReposGet): Pick<ReposStore, 'ensureWorkspaceOpen' | 'closeRepo' | 'initGitRepository'> {
   return {
     async ensureWorkspaceOpen(pathOrEntry: string | RepoSessionEntry): Promise<OpenRepoResult> {
       const entry = sessionEntryFromInput(pathOrEntry)
@@ -203,7 +214,7 @@ export function createRuntimeRepoLifecycleActions(set: ReposSet, get: ReposGet):
         const existingRepo = s.repos[id]
         const { repos, order, changed } = applyWorkspaceOpen(s, repo)
         const repoToRefresh = changed ? repos[id] : existingRepo
-        if (repoToRefresh) initialRefresh = { id, token: repoToRefresh.instanceToken }
+        if (repoToRefresh && repoSupportsGitData(repoToRefresh)) initialRefresh = { id, token: repoToRefresh.instanceToken }
         return changed ? { repos, order } : s
       })
 
@@ -237,6 +248,28 @@ export function createRuntimeRepoLifecycleActions(set: ReposSet, get: ReposGet):
         const activeId = nextActiveRepoIdAfterWorkspaceClose(s.order, s.activeId, id)
         return { repos, branchSearchQueries, selectedTerminalByWorktree, order, activeId }
       })
+    },
+
+    async initGitRepository(id: string): Promise<ExecResult> {
+      const result = await initRepositoryRpc(id)
+      if (!result.ok) return result
+      set((s) => {
+        const repo = s.repos[id]
+        if (!repo) return s
+        return replaceRepoState(s, repo, (draft) => {
+          draft.isGitRepo = true
+        })
+      })
+      const repo = get().repos[id]
+      if (repo) {
+        void runRepoRefreshIntent(get, {
+          kind: 'core-data-changed',
+          reason: 'initial-load',
+          id,
+          token: repo.instanceToken,
+        })
+      }
+      return result
     },
   }
 }

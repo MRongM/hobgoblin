@@ -10,7 +10,7 @@ export function useSessionPersistence() {
   const order = useReposStore((s) => s.order)
   const detailCollapsed = useReposStore((s) => s.detailCollapsed)
   const detailFocusMode = useReposStore((s) => s.detailFocusMode)
-  const workspaceLayout = useReposStore((s) => s.workspaceLayout)
+  const workspaceLayout = useReposStore((s) => (s.activeId ? s.repos[s.activeId]?.ui.workspaceLayout ?? s.workspaceLayout : s.workspaceLayout))
   const detailPaneSizes = useReposStore((s) => s.detailPaneSizes)
   const fileTreePaneSizes = useReposStore((s) => s.fileTreePaneSizes)
   const selectedTerminalByWorktree = useReposStore((s) => s.selectedTerminalByWorktree)
@@ -24,18 +24,20 @@ export function useSessionPersistence() {
     // sessionReady gates this effect so we never overwrite restorable session
     // state with an empty pre-bootstrap workspace.
     if (!sessionReady) return
+    const restorableWorkspaceState = restorableWorkspaceStateFromStore({
+      repos,
+      order,
+      activeId,
+      detailCollapsed,
+      detailFocusMode,
+      workspaceLayout,
+      detailPaneSizes,
+      fileTreePaneSizes,
+      selectedTerminalByWorktree,
+    })
     const session = sessionStateFromRestorableWorkspaceState({
       repos,
-      restorableWorkspaceState: restorableWorkspaceStateFromStore({
-        order,
-        activeId,
-        detailCollapsed,
-        detailFocusMode,
-        workspaceLayout,
-        detailPaneSizes,
-        fileTreePaneSizes,
-        selectedTerminalByWorktree,
-      }),
+      restorableWorkspaceState,
     })
     const serialized = JSON.stringify(session)
     const immediateKey = JSON.stringify({
@@ -43,7 +45,7 @@ export function useSessionPersistence() {
       activeRepo: session.activeRepo,
       detailCollapsed,
       detailFocusMode,
-      workspaceLayout,
+      workspaceLayout: restorableWorkspaceState.workspaceLayout,
       selectedTerminalByWorktree: session.selectedTerminalByWorktree,
     })
     const immediate = lastImmediateKeyRef.current !== immediateKey
@@ -68,7 +70,6 @@ export function useSessionPersistence() {
     activeId,
     detailCollapsed,
     detailFocusMode,
-    workspaceLayout,
     detailPaneSizes,
     fileTreePaneSizes,
     selectedTerminalByWorktree,

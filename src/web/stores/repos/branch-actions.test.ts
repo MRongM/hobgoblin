@@ -870,4 +870,106 @@ describe('runBranchAction', () => {
     expect(repo?.ui.branchViewMode).toBe('no-worktree')
     expect(repo?.ui.selectedBranch).toBe('feature/a')
   })
+
+  test.each([
+    ['checkout', { kind: 'checkout', branch: 'feature/a' }, 'repo.checkout'],
+    ['pull', { kind: 'pull', branch: 'feature/a' }, 'repo.pull'],
+    ['push', { kind: 'push', branch: 'feature/a' }, 'repo.push'],
+    ['createWorktree', createNewBranchWorktreeAction(), 'repo.createWorktree'],
+    ['createBranch', { kind: 'createBranch', branch: 'feature/new', baseBranch: 'feature/a' }, 'repo.createBranch'],
+    [
+      'trackRemoteBranch',
+      { kind: 'trackRemoteBranch', localBranch: 'feature/new', remoteRef: 'origin/feature/new' },
+      'repo.trackRemoteBranch',
+    ],
+    ['deleteBranch', { kind: 'deleteBranch', branch: 'feature/a' }, 'repo.deleteBranch'],
+    [
+      'removeWorktree',
+      {
+        kind: 'removeWorktree',
+        branch: 'feature/a',
+        worktreePath: '/tmp/gbl-branch-actions-test-worktree',
+        alsoDeleteBranch: false,
+      },
+      'repo.removeWorktree',
+    ],
+  ] satisfies Array<[string, RepoBranchAction, string]>)(
+    'rejects %s for non-git repositories before rpc scheduling',
+    async (_label, action, rpcPath) => {
+      let actionCount = 0
+      let snapshotCount = 0
+      let statusCount = 0
+      let pullRequestCount = 0
+      let fetchCount = 0
+      const handlers: Record<string, (input: any) => unknown> = {
+        [rpcPath]: async () => {
+          actionCount += 1
+          return { ok: true, message: 'ok' }
+        },
+        'repo.fetch': async () => {
+          fetchCount += 1
+          return { ok: true, message: 'ok' }
+        },
+        'repo.snapshot': async () => {
+          snapshotCount += 1
+          return { branches: [createBranchSnapshot('feature/a')], current: 'feature/a' }
+        },
+        'repo.status': async () => {
+          statusCount += 1
+          return []
+        },
+        'repo.pullRequests': async () => {
+          pullRequestCount += 1
+          return []
+        },
+      }
+      installGoblinTestBridge(handlers)
+      updateRepoForTest((repo) => {
+        repo.isGitRepo = false
+      })
+
+      const result = await useReposStore.getState().runBranchAction(REPO_ID, action, { token: 1 })
+
+      expect(result).toEqual({ ok: false, message: 'error.not-git-repo' })
+      expect(actionCount).toBe(0)
+      expect(fetchCount).toBe(0)
+      expect(snapshotCount).toBe(0)
+      expect(statusCount).toBe(0)
+      expect(pullRequestCount).toBe(0)
+      expect(useReposStore.getState().repos[REPO_ID]?.operations.branchAction.phase).toBe('idle')
+      expect(useReposStore.getState().repos[REPO_ID]?.resources.fetch.phase).toBe('idle')
+      expect(useReposStore.getState().repos[REPO_ID]?.events.at(-1)).toMatchObject({
+        kind: 'result',
+        result: { ok: false, message: 'error.not-git-repo' },
+      })
+      expect(useReposStore.getState().repos[REPO_ID]?.events.at(-1)).toHaveProperty('action')
+    },
+  )
+
+  test('submitBranchAction still routes non-git work through the guarded branch action path', async () => {
+    let checkoutCount = 0
+    installGoblinTestBridge({
+      'repo.checkout': async () => {
+        checkoutCount += 1
+        return { ok: true, message: 'ok' }
+      },
+    })
+    updateRepoForTest((repo) => {
+      repo.isGitRepo = false
+    })
+
+    useReposStore.getState().submitBranchAction(REPO_ID, { kind: 'checkout', branch: 'feature/a' }, { token: 1 })
+    await flushAsyncWork()
+
+    expect(checkoutCount).toBe(0)
+    expect(useReposStore.getState().repos[REPO_ID]?.operations.branchAction.phase).toBe('idle')
+    expect(useReposStore.getState().repos[REPO_ID]?.events.at(-1)).toMatchObject({
+      kind: 'result',
+      result: { ok: false, message: 'error.not-git-repo' },
+      action: {
+        kind: 'checkout',
+        branch: 'feature/a',
+      },
+    })
+  })
 })

@@ -1,4 +1,4 @@
-import { FolderTree, GitBranch, ListTree, type LucideIcon } from 'lucide-react'
+import { FolderTree, ListTree, type LucideIcon } from 'lucide-react'
 import { ToggleGroup, ToggleGroupItem } from '#/web/components/ui/toggle-group.tsx'
 import { Tip } from '#/web/components/Tip.tsx'
 import { useT } from '#/web/stores/i18n.ts'
@@ -14,8 +14,7 @@ interface Props {
 const BRANCH_VIEW_MODE_ICONS = {
   all: ListTree,
   worktrees: FolderTree,
-  'no-worktree': GitBranch,
-} satisfies Record<BranchViewMode, LucideIcon>
+} satisfies Record<(typeof BRANCH_VIEW_MODE_OPTIONS)[number]['id'], LucideIcon>
 
 export function BranchViewModeControl({ value, disabled = false, onChange }: Props) {
   const t = useT()

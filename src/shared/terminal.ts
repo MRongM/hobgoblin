@@ -7,6 +7,7 @@ export const TERMINAL_SIZE_LIMITS = {
   minRows: 1,
   maxRows: 300,
 } as const
+export const NON_GIT_WORKSPACE_TERMINAL_BRANCH = 'workspace'
 
 export type TerminalSessionPhase = 'opening' | 'restarting' | 'open' | 'error' | 'closed'
 export type TerminalControllerStatus = 'connected' | 'none'

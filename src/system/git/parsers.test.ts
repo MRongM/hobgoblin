@@ -23,6 +23,41 @@ describe('parseBranches', () => {
     expect(parseBranches('', '')).toEqual([])
   })
 
+  test('synthesizes the unborn current branch from the primary worktree', () => {
+    expect(
+      parseBranches('', 'main', [
+        {
+          path: '/repo',
+          branch: 'main',
+          head: '0000000000000000000000000000000000000000',
+          isBare: false,
+          isPrimary: true,
+          isDirty: false,
+          changeCount: 0,
+        },
+      ]),
+    ).toEqual([
+      {
+        name: 'main',
+        isCurrent: true,
+        ahead: 0,
+        behind: 0,
+        lastCommitHash: '',
+        lastCommitMessage: '',
+        lastCommitDate: '',
+        lastCommitAuthor: '',
+        worktree: {
+          path: '/repo',
+          isPrimary: true,
+          summary: {
+            dirty: false,
+            changeCount: 0,
+          },
+        },
+      },
+    ])
+  })
+
   test('parses a single branch with no upstream', () => {
     const line = ['main', 'abc1234', 'initial commit', '2026-05-20T10:00:00+08:00', 'Alice', '', ''].join(SEP)
     const result = parseBranches(line, 'main')

@@ -54,9 +54,14 @@ describe('i18n dictionaries', () => {
   })
 
   test('distinguishes Chinese pull and remote tracking branch actions', () => {
-    expect(zh['action.pull-remote']).toBe('拉取上游')
+    expect(zh['action.pull']).toBe('拉取')
     expect(zh['action.pull-remote-branch']).toBe('从远程新建分支')
     expect(zh['action.pull-remote-branch-title']).toBe('从远程分支创建本地分支')
+  })
+
+  test('distinguishes Chinese destructive branch actions', () => {
+    expect(zh['action.remove-worktree']).toBe('删除工作树')
+    expect(zh['action.delete-branch']).toBe('删除分支')
   })
 
   test('includes discard selected changes copy', () => {

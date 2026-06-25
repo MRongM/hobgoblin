@@ -1,3 +1,5 @@
+import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
+import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
 import type { ReposStore } from '#/web/stores/repos/types.ts'
 import type { TerminalRepoIndex } from '#/web/components/terminal/types.ts'
 
@@ -5,9 +7,14 @@ export function repoIndexFromRepos(repos: ReposStore['repos']): TerminalRepoInde
   const index: TerminalRepoIndex = {}
   for (const [repoRoot, repo] of Object.entries(repos)) {
     const branchByWorktreePath: Record<string, string> = {}
-    for (const branch of repo.data.branches) {
-      const worktreePath = branch.worktree?.path
-      if (worktreePath) branchByWorktreePath[worktreePath] = branch.name
+    if (repo.isGitRepo === false) {
+      const workspacePath = repoPlainWorkspacePath(repo) ?? repoRoot
+      branchByWorktreePath[workspacePath] = NON_GIT_WORKSPACE_TERMINAL_BRANCH
+    } else {
+      for (const branch of repo.data.branches) {
+        const worktreePath = branch.worktree?.path
+        if (worktreePath) branchByWorktreePath[worktreePath] = branch.name
+      }
     }
     index[repoRoot] = {
       instanceToken: repo.instanceToken,
