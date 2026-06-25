@@ -4,6 +4,7 @@ import {
   appendTerminalReplayData,
   createEmptyTerminalRenderState,
   createTerminalRenderModel,
+  queueTerminalRenderWrite,
 } from '#/server/terminal/terminal-render-state.ts'
 
 describe('terminal-render-state', () => {
@@ -17,6 +18,27 @@ describe('terminal-render-state', () => {
         )
       } finally {
         model.term.dispose()
+      }
+    })
+
+    test('keeps erased viewport lines in headless scrollback snapshots', async () => {
+      const state = createEmptyTerminalRenderState()
+      state.model = createTerminalRenderModel(40, 6)
+      try {
+        queueTerminalRenderWrite(
+          state,
+          'old-1\r\nold-2\r\nold-3\r\nold-4\r\n' + '\x1b[2J\x1b[H' + 'new-1\r\nnew-2\r\n',
+        )
+        await state.model.chain
+
+        const buffer = (state.model.term as unknown as HeadlessTerminalWithBuffer)._core._bufferService.buffer
+        const lines = Array.from({ length: buffer.lines.length }, (_, index) =>
+          buffer.lines.get(index)?.translateToString(true),
+        )
+        expect(buffer.ybase).toBeGreaterThan(0)
+        expect(lines).toEqual(expect.arrayContaining(['old-1', 'old-2', 'old-3', 'old-4', 'new-1', 'new-2']))
+      } finally {
+        state.model.term.dispose()
       }
     })
   })
@@ -104,3 +126,17 @@ describe('terminal-render-state', () => {
     })
   })
 })
+
+interface HeadlessTerminalWithBuffer {
+  _core: {
+    _bufferService: {
+      buffer: {
+        ybase: number
+        lines: {
+          length: number
+          get(index: number): { translateToString(trimRight?: boolean): string } | undefined
+        }
+      }
+    }
+  }
+}

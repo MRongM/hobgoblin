@@ -13,7 +13,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import type { ITheme } from '@xterm/xterm'
 import type { Terminal as XTermTerminal } from '@xterm/xterm'
 import { Terminal } from '@xterm/xterm'
-import { TERMINAL_SCROLLBACK_LINES } from '#/shared/terminal.ts'
+import { TERMINAL_SCROLLBACK_LINES, TERMINAL_SCROLL_ON_ERASE_IN_DISPLAY } from '#/shared/terminal.ts'
 import {
   observeTerminalTheme,
   terminalSearchDecorationsForCurrentDocument,
@@ -29,7 +29,6 @@ import { registerTerminalRelativePathLinkProvider } from '#/web/components/termi
 import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
 import {
   TERMINAL_FONT_FAMILY,
-  TERMINAL_LINE_HEIGHT,
   measureTerminalGeometry,
   type TerminalGeometry,
 } from '#/web/components/terminal/terminal-geometry.ts'
@@ -168,9 +167,10 @@ export class TerminalSessionView {
       cursorStyle: 'bar',
       fontFamily: TERMINAL_FONT_FAMILY,
       fontSize: this.fontSize,
-      lineHeight: TERMINAL_LINE_HEIGHT,
+      lineHeight: 1,
       minimumContrastRatio: 4.5,
       scrollback: TERMINAL_SCROLLBACK_LINES,
+      scrollOnEraseInDisplay: TERMINAL_SCROLL_ON_ERASE_IN_DISPLAY,
       macOptionIsMeta: true,
       rescaleOverlappingGlyphs: true,
       scrollOnUserInput: true,

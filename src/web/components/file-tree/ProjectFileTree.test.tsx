@@ -932,6 +932,19 @@ describe('ProjectFileTree', () => {
     expect(toolbar.className).toContain('px-2')
   })
 
+  test('uses terminal-height toolbar chrome when requested by a plain workspace pane', async () => {
+    seedPlainWorkspace()
+
+    await render(<ProjectFileTree repoId="/repo" toolbarHeight="detail" />)
+
+    const toolbar = fileTreeToolbar()
+
+    expect(toolbar.className).toContain('h-9')
+    expect(toolbar.className).not.toContain('min-h-8')
+    expect(toolbar.className).toContain('border-toolbar-border')
+    expect(toolbar.className).toContain('bg-toolbar')
+  })
+
   test('shows rename and delete actions for real context nodes', async () => {
     seedRepoWithSelectedBranch({ hasWorktree: true })
 
