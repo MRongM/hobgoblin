@@ -107,7 +107,6 @@ export function BranchList({ repoId, showActions = true }: Props) {
     },
     [repoId, handleSelectBranch, navigation, setDetailCollapsed],
   )
-  const branchSearchQuery = useReposStore((s) => s.branchSearchQueries[repoId] ?? '')
   const repo = useStoreWithEqualityFn(
     useReposStore,
     (s) => {
@@ -158,10 +157,9 @@ export function BranchList({ repoId, showActions = true }: Props) {
   const branches = visibleBranches({
     branches: repo.data.branches,
     viewMode: repo.ui.branchViewMode,
-    searchQuery: branchSearchQuery,
     worktreePathOrder: repo.ui.worktreePathOrder,
   })
-  const dragEnabled = repo.ui.branchViewMode === 'worktrees' && branchSearchQuery.trim() === ''
+  const dragEnabled = repo.ui.branchViewMode === 'worktrees'
   const sortableWorktreePaths = dragEnabled
     ? branches.map((branch) => branch.worktree?.path).filter((path): path is string => !!path)
     : []
@@ -174,9 +172,6 @@ export function BranchList({ repoId, showActions = true }: Props) {
     ? []
     : Object.values(repo.data.worktreesByPath)
         .filter((worktree) => worktree.isDetached)
-        .filter((worktree) =>
-          detachedWorktreeMatchesSearch(worktree, branchSearchQuery, repoRoot, repo.remote.target),
-        )
   useEffect(() => {
     if (!openActionMenu) return
     if (openActionMenu.repoId !== repoId || !showActions || !branches.some((branch) => branch.name === openActionMenu.branch)) {
@@ -280,18 +275,6 @@ function SortableBranchRow(props: ComponentProps<typeof BranchRow> & { id: strin
       }}
     />
   )
-}
-
-function detachedWorktreeMatchesSearch(
-  worktree: RepoWorktreeState,
-  searchQuery: string,
-  repoRoot: string,
-  remoteTarget?: RemoteRepoTarget,
-): boolean {
-  const query = searchQuery.trim().toLowerCase()
-  if (!query) return true
-  const displayPath = formatWorktreeListPath(worktree.path, remoteTarget, repoRoot).toLowerCase()
-  return displayPath.includes(query) || (worktree.head ?? '').toLowerCase().includes(query)
 }
 
 function DetachedWorktreeRow({
