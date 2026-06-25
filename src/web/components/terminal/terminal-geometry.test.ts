@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, test, vi } from 'vitest'
-import { TERMINAL_LINE_HEIGHT, measureTerminalGeometry } from '#/web/components/terminal/terminal-geometry.ts'
+import { measureTerminalGeometry } from '#/web/components/terminal/terminal-geometry.ts'
 
 function measurableHost(width: number, height: number): HTMLElement {
   const host = document.createElement('div')
@@ -61,7 +61,7 @@ describe('measureTerminalGeometry', () => {
     expect(measureCell).toHaveBeenCalledWith(20)
   })
 
-  test('uses terminal line height when measuring the default cell box', () => {
+  test('uses unit line height when measuring the default cell box', () => {
     const appendSpy = vi.spyOn(document.body, 'appendChild')
     let measuredLineHeight = ''
     appendSpy.mockImplementation((node) => {
@@ -71,10 +71,10 @@ describe('measureTerminalGeometry', () => {
           x: 0,
           y: 0,
           width: 84,
-          height: 14 * TERMINAL_LINE_HEIGHT,
+          height: 14,
           top: 0,
           right: 84,
-          bottom: 14 * TERMINAL_LINE_HEIGHT,
+          bottom: 14,
           left: 0,
           toJSON: () => ({}),
         })
@@ -87,8 +87,8 @@ describe('measureTerminalGeometry', () => {
           host: measurableHost(840, 420),
           fontSize: 14,
         }),
-      ).toEqual({ cols: 100, rows: 25 })
-      expect(measuredLineHeight).toBe(String(TERMINAL_LINE_HEIGHT))
+      ).toEqual({ cols: 100, rows: 30 })
+      expect(measuredLineHeight).toBe('1')
     } finally {
       appendSpy.mockRestore()
     }

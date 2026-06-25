@@ -168,12 +168,16 @@ export interface FileTreeRevealRequest {
   relativePath: string
 }
 
+type FileTreeToolbarHeight = 'compact' | 'detail'
+
 export function ProjectFileTree({
   repoId,
   revealRequest,
+  toolbarHeight = 'compact',
 }: {
   repoId: string
   revealRequest?: FileTreeRevealRequest | null
+  toolbarHeight?: FileTreeToolbarHeight
 }) {
   const t = useT()
   const { fileTreeFontSize } = useRuntimeFontSettings()
@@ -1133,6 +1137,7 @@ export function ProjectFileTree({
       ) : (
         <div className="flex min-h-0 flex-1 flex-col text-[length:var(--goblin-file-tree-font-size)]">
           <FileTreeToolbar
+            height={toolbarHeight}
             query={searchQuery}
             onQueryChange={setSearchQuery}
             resultIndex={searchMatches.length > 0 ? normalizedSearchIndex + 1 : 0}
@@ -1628,6 +1633,7 @@ function FileTreeEmptyContextMenu({
 }
 
 function FileTreeToolbar({
+  height,
   query,
   onQueryChange,
   resultIndex,
@@ -1641,6 +1647,7 @@ function FileTreeToolbar({
   onCreateDirectory,
   onRefresh,
 }: {
+  height: FileTreeToolbarHeight
   query: string
   onQueryChange: (query: string) => void
   resultIndex: number
@@ -1674,7 +1681,12 @@ function FileTreeToolbar({
   }, [onClearSearch])
 
   return (
-    <div className="flex min-h-8 shrink-0 items-center justify-end gap-1 border-b border-toolbar-border bg-toolbar px-2">
+    <div
+      className={cn(
+        'flex shrink-0 items-center justify-end gap-1 border-b border-toolbar-border bg-toolbar px-2',
+        height === 'detail' ? 'h-9' : 'min-h-8',
+      )}
+    >
       <div className="mr-auto flex shrink-0 items-center gap-1 pr-1">
         <Button
           type="button"

@@ -24,8 +24,18 @@ vi.mock('#/web/components/BranchList.tsx', () => ({
 }))
 
 vi.mock('#/web/components/file-tree/ProjectFileTree.tsx', () => ({
-  ProjectFileTree: ({ revealRequest }: { revealRequest?: { relativePath: string } | null }) => (
-    <div data-testid="project-file-tree" data-reveal-path={revealRequest?.relativePath ?? ''} />
+  ProjectFileTree: ({
+    revealRequest,
+    toolbarHeight,
+  }: {
+    revealRequest?: { relativePath: string } | null
+    toolbarHeight?: string
+  }) => (
+    <div
+      data-testid="project-file-tree"
+      data-reveal-path={revealRequest?.relativePath ?? ''}
+      data-toolbar-height={toolbarHeight ?? ''}
+    />
   ),
 }))
 
@@ -193,6 +203,29 @@ describe('RepoExplorerPane', () => {
     expect(container.querySelector('[data-testid="project-file-tree"]')?.getAttribute('data-reveal-path')).toBe(
       'src/from-terminal.ts',
     )
+    await act(async () => root.unmount())
+  })
+
+  test('plain workspace file area uses terminal-height file toolbar without rendering git explorer tabs', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
+    })
+
+    expect(container.querySelector('[data-testid="project-file-tree"]')?.getAttribute('data-toolbar-height')).toBe(
+      'detail',
+    )
+    expect(container.querySelector('[data-testid="plain-workspace-file-toolbar"]')).toBeNull()
+    expect(container.querySelector('[data-testid="repo-explorer-toolbar"]')).toBeNull()
     await act(async () => root.unmount())
   })
 

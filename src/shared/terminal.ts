@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 
 export const TERMINAL_SCROLLBACK_LINES = 50_000
+export const TERMINAL_SCROLL_ON_ERASE_IN_DISPLAY = true
 export const TERMINAL_SIZE_LIMITS = {
   minCols: 1,
   maxCols: 500,

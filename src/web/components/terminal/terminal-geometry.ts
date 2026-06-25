@@ -1,7 +1,6 @@
 import { TERMINAL_SIZE_LIMITS, normalizeTerminalSize } from '#/shared/terminal.ts'
 
 export const TERMINAL_FONT_FAMILY = "'Maple Mono NF CN', monospace"
-export const TERMINAL_LINE_HEIGHT = 1.2
 
 export interface TerminalGeometry {
   cols: number
@@ -36,7 +35,7 @@ function measureTerminalCell(host: HTMLElement, fontSize: number): { width: numb
   probe.style.whiteSpace = 'pre'
   probe.style.fontFamily = TERMINAL_FONT_FAMILY
   probe.style.fontSize = `${fontSize}px`
-  probe.style.lineHeight = String(TERMINAL_LINE_HEIGHT)
+  probe.style.lineHeight = '1'
   body.appendChild(probe)
   try {
     const rect = probe.getBoundingClientRect()
@@ -48,7 +47,7 @@ function measureTerminalCell(host: HTMLElement, fontSize: number): { width: numb
 }
 
 function fallbackCell(fontSize: number): { width: number; height: number } {
-  return { width: Math.max(1, fontSize * 0.6), height: Math.max(1, fontSize * TERMINAL_LINE_HEIGHT) }
+  return { width: Math.max(1, fontSize * 0.6), height: Math.max(1, fontSize) }
 }
 
 function clamp(value: number, min: number, max: number): number {

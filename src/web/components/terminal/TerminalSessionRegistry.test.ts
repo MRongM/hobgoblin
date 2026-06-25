@@ -133,10 +133,10 @@ describe('TerminalSessionRegistry', () => {
         snapshotSeq: 7,
         controller: { attachmentId: 'attachment_local', status: 'connected' },
         canonicalCols: 95,
-        canonicalRows: 23,
+        canonicalRows: 28,
         phase: 'open',
         message: null,
-        sessions: [makeServerSession('session-created', 'terminal-1', { cols: 95, rows: 23, processName: 'zsh' })],
+        sessions: [makeServerSession('session-created', 'terminal-1', { cols: 95, rows: 28, processName: 'zsh' })],
       })
 
       const key = await registry.createTerminal({ repoRoot: REPO_ROOT, branch: BRANCH, worktreePath: WORKTREE_PATH })
@@ -148,7 +148,7 @@ describe('TerminalSessionRegistry', () => {
         kind: 'primary',
         attachmentId: 'attachment_local',
         cols: 95,
-        rows: 23,
+        rows: 28,
       })
       expect(key).toBe(`${REPO_ROOT}\0${WORKTREE_PATH}\0terminal-1`)
       expect(registry.snapshot(key)).toMatchObject({

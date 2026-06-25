@@ -23,7 +23,7 @@ export function PlainWorkspacePane({ repoId, layout, revealRequest }: PlainWorks
       onDetailSizeChange={(size) => setDetailPaneSize(layout, size)}
       branchPane={
         <RepoWorkspacePane>
-          <ProjectFileTree repoId={repoId} revealRequest={revealRequest ?? null} />
+          <ProjectFileTree repoId={repoId} revealRequest={revealRequest ?? null} toolbarHeight="detail" />
         </RepoWorkspacePane>
       }
       detailPane={
