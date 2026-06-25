@@ -107,29 +107,29 @@ html[data-color-theme='macos'][data-theme='light'] {
   --goblin-brand-radius-lg: 1.125rem;
   --goblin-brand-divider-strength: 0.7;
 
-  --color-terminal-background: #272729;
-  --color-terminal-foreground: #ffffff;
-  --color-terminal-cursor: #ffffff;
-  --color-terminal-selection-background: rgba(0, 102, 204, 0.32);
+  --color-terminal-background: #fbfbfd;
+  --color-terminal-foreground: #1d1d1f;
+  --color-terminal-cursor: #1d1d1f;
+  --color-terminal-selection-background: rgba(0, 102, 204, 0.18);
   --color-terminal-ansi-black: #000000;
-  --color-terminal-ansi-red: #ff453a;
-  --color-terminal-ansi-green: #34c759;
-  --color-terminal-ansi-yellow: #ff9500;
-  --color-terminal-ansi-blue: #2997ff;
-  --color-terminal-ansi-magenta: #bf5af2;
-  --color-terminal-ansi-cyan: #32ade6;
-  --color-terminal-ansi-white: #cccccc;
-  --color-terminal-ansi-bright-black: #7a7a7a;
-  --color-terminal-ansi-bright-red: #ff6961;
-  --color-terminal-ansi-bright-green: #30d158;
-  --color-terminal-ansi-bright-yellow: #ffd60a;
+  --color-terminal-ansi-red: #d70015;
+  --color-terminal-ansi-green: #1f7f37;
+  --color-terminal-ansi-yellow: #946200;
+  --color-terminal-ansi-blue: #0066cc;
+  --color-terminal-ansi-magenta: #af52de;
+  --color-terminal-ansi-cyan: #007c89;
+  --color-terminal-ansi-white: #7a7a7a;
+  --color-terminal-ansi-bright-black: #8f8f94;
+  --color-terminal-ansi-bright-red: #ff3b30;
+  --color-terminal-ansi-bright-green: #34c759;
+  --color-terminal-ansi-bright-yellow: #ff9500;
   --color-terminal-ansi-bright-blue: #0071e3;
-  --color-terminal-ansi-bright-magenta: #da8fff;
-  --color-terminal-ansi-bright-cyan: #64d2ff;
-  --color-terminal-ansi-bright-white: #ffffff;
+  --color-terminal-ansi-bright-magenta: #bf5af2;
+  --color-terminal-ansi-bright-cyan: #32ade6;
+  --color-terminal-ansi-bright-white: #1d1d1f;
   --color-terminal-search-match: #ff9500;
   --color-terminal-search-active-match: #0066cc;
-  --color-terminal-search-active-border: #ffffff;
+  --color-terminal-search-active-border: #1d1d1f;
 }
 
 html[data-theme='dark']:not([data-color-theme]),

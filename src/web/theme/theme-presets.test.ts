@@ -156,6 +156,23 @@ function selectorBlock(css: string, colorTheme: string, theme: 'light' | 'dark')
   throw new Error(`Missing closing brace for ${selector}`)
 }
 
+function cssTokenValue(block: string, token: string): string {
+  const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = block.match(new RegExp(`${escapedToken}:\\s*([^;]+);`))
+  expect(match, `${token} is defined`).not.toBeNull()
+  return match![1]!.trim()
+}
+
+function hexLuminance(hex: string): number {
+  const match = hex.match(/^#([0-9a-f]{6})$/i)
+  expect(match, `expected six-digit hex color, got ${hex}`).not.toBeNull()
+  const value = match![1]!
+  const red = Number.parseInt(value.slice(0, 2), 16) / 255
+  const green = Number.parseInt(value.slice(2, 4), 16) / 255
+  const blue = Number.parseInt(value.slice(4, 6), 16) / 255
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+}
+
 describe('theme preset css contracts', () => {
   test('has a css file for every shared color theme', () => {
     for (const colorTheme of COLOR_THEMES) {
@@ -176,6 +193,20 @@ describe('theme preset css contracts', () => {
     }
   })
 
+  test('uses distinct light and dark terminal backgrounds for every color theme', () => {
+    for (const colorTheme of COLOR_THEMES) {
+      const css = readThemeCss(colorTheme)
+      const light = selectorBlock(css, colorTheme, 'light')
+      const dark = selectorBlock(css, colorTheme, 'dark')
+      const lightBackground = cssTokenValue(light, '--color-terminal-background')
+      const darkBackground = cssTokenValue(dark, '--color-terminal-background')
+
+      expect(lightBackground, `${colorTheme} terminal light/dark backgrounds differ`).not.toBe(darkBackground)
+      expect(hexLuminance(lightBackground), `${colorTheme} light terminal background is light`).toBeGreaterThan(0.72)
+      expect(hexLuminance(darkBackground), `${colorTheme} dark terminal background is dark`).toBeLessThan(0.28)
+    }
+  })
+
   test('defines complete classic terminal token coverage for every color theme', () => {
     for (const colorTheme of COLOR_THEMES) {
       const css = readThemeCss(colorTheme)
@@ -192,7 +223,7 @@ describe('theme preset css contracts', () => {
 
     expect(light).toContain('--goblin-surface-canvas: #ffffff;')
     expect(light).toContain('--goblin-action-primary: #0066cc;')
-    expect(light).toContain('--color-terminal-background: #272729;')
+    expect(light).toContain('--color-terminal-background: #fbfbfd;')
     expect(dark).toContain('--goblin-surface-canvas: #000000;')
     expect(dark).toContain('--goblin-action-primary: #2997ff;')
   })

@@ -47,7 +47,6 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
   const lang = useI18nStore((s) => s.lang)
   const isCurrent = branch.name === repo.data.currentBranch
   const hasWorktree = !!branch.worktree?.path
-  const isWorktree = hasWorktree && !isCurrent
   const worktreeState = getBranchWorktreeState(repo, branch)
   const worktreeDirty = worktreeState?.dirty ?? false
   const repoRoot = repo.remote?.target?.remotePath ?? repo.id
@@ -128,11 +127,6 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
               <Badge variant="attention" className="gap-1">
                 <FolderTree size={10} />
                 {t('branches.dirty')}
-              </Badge>
-            ) : isWorktree ? (
-              <Badge variant="outline" className="gap-1 text-muted-foreground">
-                <FolderTree size={10} />
-                {t('branches.worktree')}
               </Badge>
             ) : null}
             {branch.trackingGone && <Badge variant="attention">{t('branches.gone')}</Badge>}

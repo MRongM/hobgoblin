@@ -104,29 +104,29 @@ html[data-color-theme='claude'][data-theme='light'] {
   --goblin-brand-radius-lg: 0.75rem;
   --goblin-brand-divider-strength: 0.75;
 
-  --color-terminal-background: #181715;
-  --color-terminal-foreground: #faf9f5;
-  --color-terminal-cursor: #faf9f5;
-  --color-terminal-selection-background: rgba(204, 120, 92, 0.28);
-  --color-terminal-ansi-black: #181715;
+  --color-terminal-background: #faf9f5;
+  --color-terminal-foreground: #141413;
+  --color-terminal-cursor: #141413;
+  --color-terminal-selection-background: rgba(204, 120, 92, 0.18);
+  --color-terminal-ansi-black: #141413;
   --color-terminal-ansi-red: #c64545;
-  --color-terminal-ansi-green: #5db872;
-  --color-terminal-ansi-yellow: #d4a017;
-  --color-terminal-ansi-blue: #6f9fd8;
-  --color-terminal-ansi-magenta: #b58ad7;
-  --color-terminal-ansi-cyan: #5db8a6;
-  --color-terminal-ansi-white: #d8d2c8;
-  --color-terminal-ansi-bright-black: #6c6a64;
+  --color-terminal-ansi-green: #237244;
+  --color-terminal-ansi-yellow: #9f6a00;
+  --color-terminal-ansi-blue: #496f9f;
+  --color-terminal-ansi-magenta: #8c5fa8;
+  --color-terminal-ansi-cyan: #2f7d72;
+  --color-terminal-ansi-white: #6c6a64;
+  --color-terminal-ansi-bright-black: #9a958d;
   --color-terminal-ansi-bright-red: #e06a5f;
-  --color-terminal-ansi-bright-green: #7ed08f;
-  --color-terminal-ansi-bright-yellow: #e8a55a;
-  --color-terminal-ansi-bright-blue: #8bb8f0;
-  --color-terminal-ansi-bright-magenta: #d1a4ef;
-  --color-terminal-ansi-bright-cyan: #74d2c0;
-  --color-terminal-ansi-bright-white: #faf9f5;
+  --color-terminal-ansi-bright-green: #3f9f64;
+  --color-terminal-ansi-bright-yellow: #c47a2c;
+  --color-terminal-ansi-bright-blue: #6f9fd8;
+  --color-terminal-ansi-bright-magenta: #b58ad7;
+  --color-terminal-ansi-bright-cyan: #4aa696;
+  --color-terminal-ansi-bright-white: #141413;
   --color-terminal-search-match: #d4a017;
   --color-terminal-search-active-match: #cc785c;
-  --color-terminal-search-active-border: #faf9f5;
+  --color-terminal-search-active-border: #141413;
 }
 
 html[data-color-theme='claude'][data-theme='dark'] {
