@@ -134,6 +134,121 @@ const APP_REGION_TOKENS = [
   '--goblin-brand-divider-strength',
 ] as const
 
+const TOPBAR_BRAND_TINT_EXPECTATIONS = {
+  macos: {
+    light: {
+      topbar: '#d8e7f8',
+      border: '#bfd0e4',
+      toolbar: '#e4effc',
+      tabHover: '#fafafc',
+      tabActive: '#ffffff',
+    },
+    dark: {
+      topbar: '#0d1622',
+      border: '#243247',
+      toolbar: '#1f3044',
+      tabHover: '#1d1d1f',
+      tabActive: '#272729',
+    },
+  },
+  mono: {
+    light: {
+      topbar: '#d6d6d8',
+      border: '#c6c6ca',
+      toolbar: '#e3e3e5',
+      tabHover: '#f7f7f8',
+      tabActive: '#ffffff',
+    },
+    dark: {
+      topbar: '#151518',
+      border: '#2a2a2e',
+      toolbar: '#303033',
+      tabHover: '#1d1d20',
+      tabActive: '#27272a',
+    },
+  },
+  github: {
+    light: {
+      topbar: '#d7e5f7',
+      border: '#b9c9dd',
+      toolbar: '#e3eefc',
+      tabHover: '#f6f8fa',
+      tabActive: '#ffffff',
+    },
+    dark: {
+      topbar: '#0f1724',
+      border: '#303f55',
+      toolbar: '#1d2f49',
+      tabHover: '#182234',
+      tabActive: '#222c3a',
+    },
+  },
+  claude: {
+    light: {
+      topbar: '#ead7c9',
+      border: '#d6bdad',
+      toolbar: '#f1e2d6',
+      tabHover: '#f5f0e8',
+      tabActive: '#ffffff',
+    },
+    dark: {
+      topbar: '#211a17',
+      border: '#4a3329',
+      toolbar: '#372b24',
+      tabHover: '#25201d',
+      tabActive: '#2e2823',
+    },
+  },
+  cursor: {
+    light: {
+      topbar: '#f1dccd',
+      border: '#d6c8bd',
+      toolbar: '#fae9dd',
+      tabHover: '#fafaf7',
+      tabActive: '#ffffff',
+    },
+    dark: {
+      topbar: '#2a2119',
+      border: '#50301e',
+      toolbar: '#432b1a',
+      tabHover: '#2d2820',
+      tabActive: '#342f27',
+    },
+  },
+  airbnb: {
+    light: {
+      topbar: '#f8d7df',
+      border: '#eab8c3',
+      toolbar: '#fde7eb',
+      tabHover: '#fff7f8',
+      tabActive: '#ffffff',
+    },
+    dark: {
+      topbar: '#2a151a',
+      border: '#59313a',
+      toolbar: '#43262d',
+      tabHover: '#2f2024',
+      tabActive: '#37282c',
+    },
+  },
+  bmw: {
+    light: {
+      topbar: '#d7e3f2',
+      border: '#a9b8cc',
+      toolbar: '#e6f0fb',
+      tabHover: '#f5f5f5',
+      tabActive: '#ffffff',
+    },
+    dark: {
+      topbar: '#050b14',
+      border: '#2a3d56',
+      toolbar: '#0f1a29',
+      tabHover: '#121a25',
+      tabActive: '#1f2a38',
+    },
+  },
+} as const
+
 function themeCssPath(colorTheme: string): URL {
   return new URL(`./themes/${colorTheme}.css`, import.meta.url)
 }
@@ -221,6 +336,30 @@ describe('theme preset css contracts', () => {
         const toolbar = hexLuminance(cssTokenValue(block, '--goblin-toolbar-bg'))
 
         expect(topbar, `${colorTheme}/${theme} topbar is deeper than toolbar`).toBeLessThan(toolbar)
+      }
+    }
+  })
+
+  test('uses the approved theme-native topbar brand tint pairings', () => {
+    for (const colorTheme of COLOR_THEMES) {
+      const css = readThemeCss(colorTheme)
+      const expectedByTheme = TOPBAR_BRAND_TINT_EXPECTATIONS[colorTheme]
+
+      for (const theme of ['light', 'dark'] as const) {
+        const block = selectorBlock(css, colorTheme, theme)
+        const expected = expectedByTheme[theme]
+
+        expect(cssTokenValue(block, '--goblin-topbar-bg'), `${colorTheme}/${theme} topbar`).toBe(expected.topbar)
+        expect(cssTokenValue(block, '--goblin-topbar-border'), `${colorTheme}/${theme} topbar border`).toBe(
+          expected.border,
+        )
+        expect(cssTokenValue(block, '--goblin-toolbar-bg'), `${colorTheme}/${theme} toolbar`).toBe(expected.toolbar)
+        expect(cssTokenValue(block, '--goblin-tab-hover-bg'), `${colorTheme}/${theme} tab hover`).toBe(
+          expected.tabHover,
+        )
+        expect(cssTokenValue(block, '--goblin-tab-active-bg'), `${colorTheme}/${theme} tab active`).toBe(
+          expected.tabActive,
+        )
       }
     }
   })
