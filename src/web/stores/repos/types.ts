@@ -68,6 +68,7 @@ export interface RepoUiState {
   selectedBranch: string | null
   branchViewMode: BranchViewMode
   detailTab: DetailTab
+  workspaceLayout: RepoWorkspaceLayout
   worktreePathOrder: string[]
 }
 
@@ -102,7 +103,9 @@ export interface RestorableRepoSnapshot {
   savedAt: number
   name: string
   data: Pick<RepoDataState, 'branches' | 'currentBranch'>
-  ui: Pick<RepoUiState, 'selectedBranch' | 'branchViewMode' | 'detailTab' | 'worktreePathOrder'>
+  ui: Pick<RepoUiState, 'selectedBranch' | 'branchViewMode' | 'detailTab' | 'worktreePathOrder'> & {
+    workspaceLayout?: RepoWorkspaceLayout
+  }
 }
 
 export interface RepoState {
@@ -182,7 +185,7 @@ export interface RestorableWorkspaceActions {
    *  rendered layout mode should be derived from `repoWorkspaceBehavior()`. */
   setDetailFocusMode: (focused: boolean) => void
   toggleDetailFocusMode: () => void
-  setWorkspaceLayout: (layout: RepoWorkspaceLayout) => void
+  setWorkspaceLayout: (idOrLayout: string, layout?: RepoWorkspaceLayout) => void
   applySessionLayoutState: (
     layout: Pick<
       SessionState,

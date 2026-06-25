@@ -7,6 +7,7 @@ export interface RepoTabSummary {
   worktreePaths?: string[]
   remoteTarget?: RemoteRepoTarget
   unavailable?: boolean
+  isGitRepo?: boolean
 }
 
 export interface RepoTabStripLabels {

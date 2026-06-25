@@ -8,7 +8,9 @@ import { ProjectChangesPanel } from '#/web/components/repo-workspace/ProjectChan
 import { ProjectHistoryPanel } from '#/web/components/repo-workspace/ProjectHistoryPanel.tsx'
 import { ProjectPortsPanel } from '#/web/components/repo-workspace/ProjectPortsPanel.tsx'
 import { ProjectStatusPanel } from '#/web/components/repo-workspace/ProjectStatusPanel.tsx'
+import { PlainWorkspacePane } from '#/web/components/repo-workspace/PlainWorkspacePane.tsx'
 import { BranchFilterControls } from '#/web/components/repo-toolbar/BranchFilterControls.tsx'
+import { RepoToolbarActions } from '#/web/components/repo-toolbar/RepoToolbarActions.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { Toolbar } from '#/web/components/Layout.tsx'
@@ -19,6 +21,7 @@ import { useT } from '#/web/stores/i18n.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
+import { repoIsPlainWorkspace } from '#/web/stores/repos/capabilities.ts'
 
 type ExplorerTab = 'files' | 'changes' | 'status' | 'history' | 'ports'
 
@@ -58,6 +61,18 @@ export function RepoExplorerPane({ repoId, layout, showActions, revealRequest }:
   const fileTreeSize = fileTreePaneSizes[layout]
   const splitOrientation = layout === 'top-bottom' ? 'horizontal' : 'vertical'
   const sideBySide = splitOrientation === 'horizontal'
+  const isPlainWorkspace = useReposStore((s) => {
+    const repo = s.repos[repoId]
+    return repoIsPlainWorkspace(repo)
+  })
+
+  if (isPlainWorkspace) {
+    return (
+      <div data-file-tree-layout={layout} className="flex min-h-0 min-w-0 flex-1">
+        <PlainWorkspacePane repoId={repoId} layout={layout} revealRequest={revealRequest ?? null} />
+      </div>
+    )
+  }
 
   return (
     <div data-file-tree-layout={layout} className="flex min-h-0 min-w-0 flex-1">
@@ -94,6 +109,9 @@ function BranchArea({ repoId, showActions }: { repoId: string; showActions: bool
           className="h-full min-w-0 flex-1 gap-1"
           searchClassName="max-w-[calc(100%_-_5.5rem)]"
         />
+        <div className="flex shrink-0 items-center gap-1">
+          <RepoToolbarActions repoId={repoId} compact />
+        </div>
       </Toolbar>
       <BranchList repoId={repoId} showActions={showActions} />
     </section>

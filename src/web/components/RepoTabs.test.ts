@@ -3,6 +3,17 @@ import { repoTabSummariesEqual } from '#/web/components/repo-tabs/summary-equali
 import type { RepoTabSummary } from '#/web/components/repo-tabs/types.ts'
 
 describe('repoTabSummariesEqual', () => {
+  test('treats repository kind changes as unequal', () => {
+    const left = [
+      { id: '/tmp/repo', name: 'repo', remoteDetails: [], worktreePaths: ['/tmp/repo'], isGitRepo: true },
+    ] as RepoTabSummary[]
+    const right = [
+      { id: '/tmp/repo', name: 'repo', remoteDetails: [], worktreePaths: ['/tmp/repo'], isGitRepo: false },
+    ] as RepoTabSummary[]
+
+    expect(repoTabSummariesEqual(left, right)).toBe(false)
+  })
+
   test('treats worktree path changes as unequal for terminal bell subscriptions', () => {
     const left = [
       { id: '/tmp/repo', name: 'repo', remoteDetails: [], worktreePaths: ['/tmp/repo'] },

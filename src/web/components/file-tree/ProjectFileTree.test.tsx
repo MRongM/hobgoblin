@@ -140,6 +140,28 @@ describe('ProjectFileTree', () => {
     expect(container?.textContent).toContain('README.md')
   })
 
+  test('loads a non-git local workspace from the repo root', async () => {
+    seedPlainWorkspace()
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', '/repo', expect.any(AbortSignal))
+    expect(container?.textContent).toContain('src')
+    expect(container?.textContent).toContain('README.md')
+  })
+
+  test('loads a non-git remote workspace from the remote path', async () => {
+    const repoId = 'ssh-config://prod/srv/plain'
+    seedPlainWorkspace({
+      repoId,
+      remotePath: '/srv/plain',
+    })
+
+    await render(<ProjectFileTree repoId={repoId} />)
+
+    expect(getRepositoryFileTree).toHaveBeenCalledWith(repoId, '/srv/plain', '/srv/plain', expect.any(AbortSignal))
+  })
+
   test('shows empty state when selected branch has no worktree', async () => {
     seedRepoWithSelectedBranch({ hasWorktree: false })
 
@@ -1027,6 +1049,29 @@ function seedRepoWithSelectedBranch(options: { repoId?: string; hasWorktree: boo
   repo.data.status = []
   repo.data.statusLoaded = true
   repo.ui.selectedBranch = 'main'
+  useReposStore.setState({
+    repos: { [repoId]: repo },
+    activeId: repoId,
+    order: [repoId],
+    sessionReady: true,
+  })
+}
+
+function seedPlainWorkspace(options: { repoId?: string; remotePath?: string } = {}) {
+  const repoId = options.repoId ?? '/repo'
+  const repo = emptyRepo(repoId, 'repo')
+  repo.isGitRepo = false
+  if (options.remotePath) {
+    repo.remote.target = {
+      id: repoId,
+      alias: 'prod',
+      host: 'example.com',
+      user: 'alice',
+      port: 22,
+      remotePath: options.remotePath,
+      displayName: 'prod:plain',
+    }
+  }
   useReposStore.setState({
     repos: { [repoId]: repo },
     activeId: repoId,

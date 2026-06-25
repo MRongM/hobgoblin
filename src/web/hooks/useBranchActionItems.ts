@@ -118,29 +118,27 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
     await syncAndRefresh(repo.id, { token: repo.instanceToken })
   }
 
-  const patchItems: BranchActionItem[] = capabilities.canCopyPatch
-    ? [
-        {
-          id: 'copyPatch',
-          label: t('status.copy-patch'),
-          title: t('status.copy-patch-title'),
-          ariaLabel: t('status.copy-patch-title'),
-          disabled,
-          busy: busy('copyPatch'),
-          visible: true,
-          icon: createElement(ClipboardCopy),
-          onSelect: actions.copyPatch,
-        },
-      ]
-    : []
+  const patchItems: BranchActionItem[] = [
+    {
+      id: 'copyPatch',
+      label: t('status.copy-patch'),
+      title: t('status.copy-patch-title'),
+      ariaLabel: t('status.copy-patch-title'),
+      disabled: disabled || !capabilities.canCopyPatch,
+      busy: busy('copyPatch'),
+      visible: true,
+      icon: createElement(ClipboardCopy),
+      onSelect: actions.copyPatch,
+    },
+  ]
 
   const mainItems: BranchActionItem[] = [
     {
       id: 'checkout',
       label: branchActionLabel('checkout', 'action.checkout', 'action.checkout-loading', 'action.checkout-queued'),
-      disabled,
+      disabled: disabled || capabilities.isCurrent || capabilities.checkedOutInAnotherWorktree,
       busy: busy('checkout'),
-      visible: !capabilities.isCurrent && !capabilities.checkedOutInAnotherWorktree,
+      visible: true,
       shortcut: '↩',
       icon: createElement(GitBranch),
       onSelect: actions.checkout,
@@ -148,9 +146,9 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
     {
       id: 'pull',
       label: branchActionLabel('pull', 'action.pull-remote', 'action.pull-loading', 'action.pull-queued'),
-      disabled,
+      disabled: disabled || !capabilities.canPull,
       busy: busy('pull'),
-      visible: capabilities.canPull,
+      visible: true,
       shortcut: 'P',
       icon: createElement(ArrowDown),
       onSelect: actions.pull,
@@ -158,9 +156,9 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
     {
       id: 'push',
       label: branchActionLabel('push', 'action.push', 'action.push-loading', 'action.push-queued'),
-      disabled,
+      disabled: disabled || !capabilities.canPush,
       busy: busy('push'),
-      visible: capabilities.canPush,
+      visible: true,
       shortcut: '⇧P',
       icon: createElement(ArrowUp),
       onSelect: actions.push,
@@ -184,7 +182,7 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
       id: 'sync',
       label: t('action.refresh'),
       title: t('action.fetch-title'),
-      disabled,
+      disabled: disabled || syncBusy,
       busy: syncBusy,
       visible: true,
       icon: createElement(RefreshCw),
@@ -193,40 +191,32 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
   ]
 
   const externalItems: BranchActionItem[] = [
-    ...(showTerminalAction
-      ? [
-          {
-            id: 'terminal' as const,
-            label: t('worktrees.open-in-terminal-label'),
-            disabled,
-            busy: busy('terminal'),
-            visible: true,
-            shortcut: 'G',
-            icon: createElement(TerminalAppIcon, { pref: terminalIconPref }),
-            onSelect: actions.openTerminal,
-          },
-        ]
-      : []),
-    ...(capabilities.canOpenEditor && editorAvailable
-      ? [
-          {
-            id: 'editor' as const,
-            label: t('worktrees.open-in-editor-label'),
-            disabled,
-            busy: busy('editor'),
-            visible: true,
-            shortcut: 'V',
-            icon: createElement(EditorAppIcon, { pref: resolvedEditorApp ?? editorApp }),
-            onSelect: actions.openEditor,
-          },
-        ]
-      : []),
+    {
+      id: 'terminal',
+      label: t('worktrees.open-in-terminal-label'),
+      disabled: disabled || !showTerminalAction,
+      busy: busy('terminal'),
+      visible: true,
+      shortcut: 'G',
+      icon: createElement(TerminalAppIcon, { pref: terminalIconPref }),
+      onSelect: actions.openTerminal,
+    },
+    {
+      id: 'editor',
+      label: t('worktrees.open-in-editor-label'),
+      disabled: disabled || !capabilities.canOpenEditor || !editorAvailable,
+      busy: busy('editor'),
+      visible: true,
+      shortcut: 'V',
+      icon: createElement(EditorAppIcon, { pref: resolvedEditorApp ?? editorApp }),
+      onSelect: actions.openEditor,
+    },
     {
       id: 'remote',
       label: pullRequest ? t('action.remote-pr', { n: pullRequest.number }) : t('action.remote'),
-      disabled,
+      disabled: disabled || !capabilities.canOpenRemote,
       busy: busy('remote'),
-      visible: capabilities.canOpenRemote,
+      visible: true,
       shortcut: '⇧G',
       icon: createElement(remoteIcon),
       onSelect: actions.openRemote,
@@ -234,44 +224,36 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
   ]
 
   const destructiveItems: BranchActionItem[] = [
-    ...(capabilities.canRemoveWorktree
-      ? [
-          {
-            id: 'removeWorktree' as const,
-            label: branchActionLabel(
-              'removeWorktree',
-              'action.remove-worktree',
-              'action.remove-worktree-removing-title',
-              'action.remove-worktree-queued-title',
-            ),
-            disabled,
-            busy: busy('removeWorktree'),
-            visible: true,
-            destructive: true,
-            icon: createElement(Trash2),
-            onSelect: actions.requestRemoveWorktree,
-          },
-        ]
-      : []),
-    ...(capabilities.isRegularBranch
-      ? [
-          {
-            id: 'deleteBranch' as const,
-            label: branchActionLabel(
-              'deleteBranch',
-              'action.delete-branch',
-              'action.delete-branch-deleting-title',
-              'action.delete-branch-queued-title',
-            ),
-            disabled,
-            busy: busy('deleteBranch'),
-            visible: true,
-            destructive: true,
-            icon: createElement(Trash2),
-            onSelect: actions.requestDeleteBranch,
-          },
-        ]
-      : []),
+    {
+      id: 'removeWorktree',
+      label: branchActionLabel(
+        'removeWorktree',
+        'action.remove-worktree',
+        'action.remove-worktree-removing-title',
+        'action.remove-worktree-queued-title',
+      ),
+      disabled: disabled || !capabilities.canRemoveWorktree,
+      busy: busy('removeWorktree'),
+      visible: true,
+      destructive: true,
+      icon: createElement(Trash2),
+      onSelect: actions.requestRemoveWorktree,
+    },
+    {
+      id: 'deleteBranch',
+      label: branchActionLabel(
+        'deleteBranch',
+        'action.delete-branch',
+        'action.delete-branch-deleting-title',
+        'action.delete-branch-queued-title',
+      ),
+      disabled: disabled || !capabilities.isRegularBranch,
+      busy: busy('deleteBranch'),
+      visible: true,
+      destructive: true,
+      icon: createElement(Trash2),
+      onSelect: actions.requestDeleteBranch,
+    },
   ]
 
   return {

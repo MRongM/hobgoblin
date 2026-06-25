@@ -22,7 +22,9 @@ export function FileAreaSettings() {
   const t = useT()
   const { fileTreeFontSize, fileTreeTopbarFontSize } = useRuntimeFontSettings()
   const { setFileTreeFontSize, setFileTreeTopbarFontSize } = useFontSettingsController()
-  const workspaceLayout = useReposStore((state) => state.workspaceLayout)
+  const workspaceLayout = useReposStore((state) =>
+    state.activeId ? state.repos[state.activeId]?.ui.workspaceLayout ?? state.workspaceLayout : state.workspaceLayout,
+  )
   const fileTreePaneSize = useReposStore((state) => state.fileTreePaneSizes[workspaceLayout])
   const setFileTreePaneSize = useReposStore((state) => state.setFileTreePaneSize)
 

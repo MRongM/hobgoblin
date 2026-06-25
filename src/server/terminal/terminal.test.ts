@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { spawn } from 'node-pty'
+import { getWorktrees } from '#/system/git/worktrees.ts'
+import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
 import {
   closeAllServerTerminalSessions,
   closeServerTerminal,
@@ -196,6 +198,33 @@ describe('server terminal sessions', () => {
     expect(args[7]).not.toContain('tmux')
     expect(args[7]).not.toContain('alice@example.com')
     expect(args[7]).not.toContain('/srv/repo\u0000')
+  })
+
+  test('creates non-git local workspace terminal without resolving git worktrees', async () => {
+    vi.mocked(getWorktrees).mockRejectedValueOnce(new Error('not a git repo'))
+
+    const result = await createServerTerminal('client_1', {
+      repoRoot: '/plain-project',
+      branch: NON_GIT_WORKSPACE_TERMINAL_BRANCH,
+      worktreePath: '/plain-project',
+      kind: 'additional',
+      cols: 120,
+      rows: 40,
+    })
+
+    expect(result.ok).toBe(true)
+    expect(getWorktrees).not.toHaveBeenCalled()
+    expect(spawn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Array),
+      expect.objectContaining({
+        cwd: '/plain-project',
+        cols: 120,
+        rows: 40,
+      }),
+    )
+    if (!result.ok) return
+    expect(result.key).toBe('/plain-project\u0000/plain-project\u0000terminal-1')
   })
 
   test('creates remote terminal sessions with a tmux-aware ssh command when enabled', async () => {

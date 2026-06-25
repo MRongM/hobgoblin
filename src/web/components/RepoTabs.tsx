@@ -49,6 +49,7 @@ export function RepoTabs({ currentRepoId, onOpenRepoPathDialog, onOpenRemote, on
                 worktreePaths: repoTerminalWorktreePaths(r),
                 remoteTarget: r.remote.target,
                 unavailable: r.availability.phase === 'unavailable',
+                isGitRepo: r.isGitRepo,
               }
             : null
         })
@@ -100,11 +101,15 @@ export function RepoTabs({ currentRepoId, onOpenRepoPathDialog, onOpenRemote, on
 }
 
 function repoTerminalWorktreePaths(repo: {
+  id: string
+  isGitRepo?: boolean
   data: {
     branches: Array<{ worktree?: { path?: string } }>
     worktreesByPath: Record<string, unknown>
   }
 }): string[] {
+  if (repo.isGitRepo === false) return [repo.id]
+
   return Array.from(
     new Set([
       ...Object.keys(repo.data.worktreesByPath),

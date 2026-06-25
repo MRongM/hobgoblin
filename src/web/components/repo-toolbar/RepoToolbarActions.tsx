@@ -28,6 +28,9 @@ interface Props {
 export function RepoToolbarActions({ repoId, compact: compactOverride }: Props) {
   const responsiveCompact = useIsCompactUi()
   const compact = compactOverride ?? responsiveCompact
+  const isGitRepo = useReposStore((s) => s.repos[repoId]?.isGitRepo ?? true)
+  if (!isGitRepo) return null
+
   return (
     <div className="flex items-center gap-1">
       <RepoActivityControl repoId={repoId} compact={compact} />

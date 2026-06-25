@@ -21,6 +21,10 @@ import {
   evaluateBranchActionSchedule as evaluateBranchActionScheduleDecision,
   isNetworkBranchActionKind,
 } from '#/web/stores/repos/branch-action-scheduler.ts'
+import {
+  NON_GIT_REPO_OPERATION_RESULT,
+  repoSupportsGitData,
+} from '#/web/stores/repos/capabilities.ts'
 import type { RepoEventAction, RepoState, ReposGet, ReposSet } from '#/web/stores/repos/types.ts'
 import type { ExecResult } from '#/web/types.ts'
 import type { CreateWorktreeInput } from '#/shared/worktree-create.ts'
@@ -288,6 +292,11 @@ export function createBranchActions(set: ReposSet, get: ReposGet) {
       const branchOperation = repoOperation(id, 'branchAction')
       if (repoBefore.availability.phase === 'unavailable') {
         return { ok: false, message: repoBefore.availability.reason }
+      }
+      if (!repoSupportsGitData(repoBefore)) {
+        const result = NON_GIT_REPO_OPERATION_RESULT
+        get().setLastResult(id, result, token, { action: branchActionEventAction(action) })
+        return result
       }
       if (branchOperation.phase === 'running' || branchOperation.phase === 'queued') {
         // A queued pull/push can be replaced by the latest network branch action; running work cannot.

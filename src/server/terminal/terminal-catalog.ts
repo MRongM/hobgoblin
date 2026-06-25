@@ -9,6 +9,7 @@ import {
   formatTerminalId,
   isValidTerminalAttachmentId,
   isValidTerminalSize,
+  NON_GIT_WORKSPACE_TERMINAL_BRANCH,
   parseTerminalIdIndex,
   type TerminalAttachResult,
   type TerminalCatalogAction,
@@ -228,17 +229,45 @@ class TerminalCatalog {
       action: TerminalCatalogAction
     },
   ): Promise<EnsureTerminalCatalogResult> {
+    if (isNonGitLocalWorkspaceTerminal(input)) {
+      const repoRoot = path.resolve(input.repoRoot)
+      return await this.ensureLocalSession(clientId, input, {
+        ...context,
+        repoRoot,
+        worktreePath: repoRoot,
+      })
+    }
+
     const worktrees = await getWorktrees(input.repoRoot, { includeStatus: false })
     const resolved = resolveKnownWorktree(worktrees, input.worktreePath, input.branch)
     if (!resolved.ok) return { ok: false, message: resolved.message }
 
     const repoRoot = path.resolve(input.repoRoot)
     const worktreePath = path.resolve(resolved.path)
+    return await this.ensureLocalSession(clientId, input, {
+      ...context,
+      repoRoot,
+      worktreePath,
+    })
+  }
+
+  private async ensureLocalSession(
+    clientId: string,
+    input: EnsureTerminalCatalogInput,
+    context: {
+      cols: number
+      rows: number
+      targetSessionKey: string
+      action: TerminalCatalogAction
+      repoRoot: string
+      worktreePath: string
+    },
+  ): Promise<EnsureTerminalCatalogResult> {
     const result = this.options.manager.ensureSession({
       ownerId: clientId,
-      scope: repoRoot,
+      scope: context.repoRoot,
       key: context.targetSessionKey,
-      cwd: worktreePath,
+      cwd: context.worktreePath,
       cols: context.cols,
       rows: context.rows,
       attachmentId: input.attachmentId,
@@ -249,6 +278,16 @@ class TerminalCatalog {
     this.options.broadcastSessionsChanged(input.repoRoot)
     return toEnsureResult(context.targetSessionKey, context.action, await this.options.withSessionSnapshot(result))
   }
+}
+
+function isNonGitLocalWorkspaceTerminal(
+  input: Pick<EnsureTerminalCatalogInput, 'repoRoot' | 'branch' | 'worktreePath'>,
+): boolean {
+  return (
+    !isRemoteRepoId(input.repoRoot) &&
+    input.branch === NON_GIT_WORKSPACE_TERMINAL_BRANCH &&
+    path.resolve(input.repoRoot) === path.resolve(input.worktreePath)
+  )
 }
 
 function toEnsureResult(

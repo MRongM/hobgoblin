@@ -4,6 +4,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { RepoToolbar } from '#/web/components/repo-toolbar/RepoToolbar.tsx'
 import { TopbarRepoControls } from '#/web/components/topbar/TopbarRepoControls.tsx'
 import { MainWindowNavigationProvider, type MainWindowNavigationActions } from '#/web/main-window-navigation.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
@@ -51,7 +52,31 @@ afterEach(() => {
 })
 
 describe('TopbarRepoControls', () => {
-  test('shows icon-only repo controls for an active repo', () => {
+  test('keeps workspace layout controls for non-git local workspaces while hiding git actions', () => {
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+
+    renderControls(navigationWith({}))
+
+    expect(container?.querySelector('button[aria-label="action.refresh"]')).toBeNull()
+    expect(container?.querySelector('button[aria-label="action.create-worktree-title"]')).toBeNull()
+    expect(container?.querySelector('button[aria-label="branches.switch"]')).toBeNull()
+    expect(container?.querySelector('button[aria-label="action.menu"]')).toBeNull()
+    expect(container?.querySelector('[aria-label="workspace.layout-label"]')).not.toBeNull()
+
+    act(() => {
+      container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.layout-tooltip.left-right"]')?.click()
+    })
+
+    expect(useReposStore.getState().workspaceLayout).toBe('left-right')
+  })
+
+  test('keeps topbar repo controls focused on layout for an active repo', () => {
     seedRepoState({
       id: REPO_ID,
       branches: [createRepoBranch('main'), createRepoBranch('feature/a')],
@@ -61,30 +86,11 @@ describe('TopbarRepoControls', () => {
 
     renderControls(navigationWith({}))
 
-    expect(container?.querySelector('button[aria-label="action.refresh"]')).not.toBeNull()
-    expect(container?.querySelector('button[aria-label="action.create-worktree-title"]')).not.toBeNull()
+    expect(container?.querySelector('button[aria-label="action.refresh"]')).toBeNull()
+    expect(container?.querySelector('button[aria-label="action.create-worktree-title"]')).toBeNull()
     expect(container?.querySelector('[aria-label="workspace.layout-label"]')).not.toBeNull()
     expect(container?.querySelector('[aria-label="branches.filter-label"]')).toBeNull()
     expect(container?.querySelector('[aria-label="branches.search-label"]')).toBeNull()
-    expect(container?.textContent).not.toContain('action.refresh')
-    expect(container?.textContent).not.toContain('action.create-worktree')
-  })
-
-  test('places repo controls before workspace layout', () => {
-    seedRepoState({
-      id: REPO_ID,
-      branches: [createRepoBranch('main'), createRepoBranch('feature/a')],
-      currentBranch: 'main',
-      selectedBranch: 'feature/a',
-    })
-
-    renderControls(navigationWith({}))
-
-    const sync = requiredElement('button[aria-label="action.refresh"]')
-    const createWorktree = requiredElement('button[aria-label="action.create-worktree-title"]')
-    const layout = requiredElement('[aria-label="workspace.layout-label"]')
-    expect(isBefore(sync, layout)).toBe(true)
-    expect(isBefore(createWorktree, layout)).toBe(true)
   })
 
   test('hides layout control in compact mode', () => {
@@ -107,8 +113,9 @@ describe('TopbarRepoControls', () => {
       branches: [createRepoBranch('main'), createRepoBranch('feature/a')],
       currentBranch: 'main',
       selectedBranch: 'feature/a',
+      workspaceLayout: 'top-bottom',
     })
-    useReposStore.setState({ workspaceLayout: 'top-bottom', detailCollapsed: false, detailFocusMode: true })
+    useReposStore.setState({ detailCollapsed: false, detailFocusMode: true })
 
     renderControls(navigationWith({}))
 
@@ -119,7 +126,53 @@ describe('TopbarRepoControls', () => {
   })
 })
 
+describe('RepoToolbar', () => {
+  test('keeps body layout controls for non-git local workspaces while hiding branch controls', () => {
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+
+    renderWithProviders(<RepoToolbar repoId={REPO_ID} />, navigationWith({}))
+
+    expect(container?.querySelector('[aria-label="branches.filter-label"]')).toBeNull()
+    expect(container?.querySelector('[aria-label="branches.search-label"]')).toBeNull()
+    expect(container?.querySelector('button[aria-label="action.create-worktree-title"]')).toBeNull()
+    expect(container?.querySelector('[aria-label="workspace.layout-label"]')).not.toBeNull()
+
+    act(() => {
+      container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.layout-tooltip.left-right"]')?.click()
+    })
+
+    expect(useReposStore.getState().workspaceLayout).toBe('left-right')
+  })
+
+  test('keeps body toolbar branch filters and layout for git-capable repositories', () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main')],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+    })
+
+    renderWithProviders(<RepoToolbar repoId={REPO_ID} />, navigationWith({}))
+
+    expect(container?.querySelector('[aria-label="branches.filter-label"]')).not.toBeNull()
+    expect(container?.querySelector('[aria-label="branches.search-label"]')).not.toBeNull()
+    expect(container?.querySelector('button[aria-label="action.refresh"]')).toBeNull()
+    expect(container?.querySelector('button[aria-label="action.create-worktree-title"]')).toBeNull()
+    expect(container?.querySelector('[aria-label="workspace.layout-label"]')).not.toBeNull()
+  })
+})
+
 function renderControls(navigation: MainWindowNavigationActions) {
+  renderWithProviders(<TopbarRepoControls repoId={REPO_ID} />, navigation)
+}
+
+function renderWithProviders(element: React.ReactNode, navigation: MainWindowNavigationActions) {
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -129,7 +182,7 @@ function renderControls(navigation: MainWindowNavigationActions) {
       <QueryClientProvider client={queryClient!}>
         <InlineCommitDraftProvider>
           <MainWindowNavigationProvider value={navigation}>
-            <TopbarRepoControls repoId={REPO_ID} />
+            {element}
           </MainWindowNavigationProvider>
         </InlineCommitDraftProvider>
       </QueryClientProvider>,
@@ -161,14 +214,4 @@ function createMatchMedia(small: boolean): typeof window.matchMedia {
     removeEventListener: vi.fn(),
     dispatchEvent: vi.fn(),
   })) as typeof window.matchMedia
-}
-
-function requiredElement(selector: string): Element {
-  const element = container?.querySelector(selector)
-  if (!element) throw new Error(`Missing element: ${selector}`)
-  return element
-}
-
-function isBefore(a: Element, b: Element): boolean {
-  return !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
 }

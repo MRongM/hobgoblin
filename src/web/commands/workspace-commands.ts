@@ -1,7 +1,8 @@
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { readTerminalSessionCommandBridge } from '#/web/components/terminal/terminal-session-command-bridge.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
-import { formatTerminalId } from '#/shared/terminal.ts'
+import { formatTerminalId, NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
+import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
 import type { MainWindowNavigationActions } from '#/web/main-window-navigation.tsx'
 import type { DetailTab } from '#/web/stores/repos/types.ts'
 import type { TerminalSessionBase } from '#/web/components/terminal/types.ts'
@@ -89,6 +90,14 @@ export function runSelectTerminalCommand({
 
 function selectedTerminalBase(repoId: string): TerminalSessionBase | null {
   const repo = useReposStore.getState().repos[repoId]
+  const plainWorkspacePath = repoPlainWorkspacePath(repo)
+  if (repo && plainWorkspacePath) {
+    return {
+      repoRoot: repo.id,
+      branch: NON_GIT_WORKSPACE_TERMINAL_BRANCH,
+      worktreePath: plainWorkspacePath,
+    }
+  }
   if (!repo?.ui.selectedBranch) return null
   const branch = repo.data.branches.find((candidate) => candidate.name === repo.ui.selectedBranch)
   const worktreePath = branch?.worktree?.path

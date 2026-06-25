@@ -45,18 +45,12 @@ export async function testRemoteRepository(
   stages[0] = { ...stages[0]!, status: 'passed' }
   if (shell.stdout.trim() !== 'ok') return fail(1, 'shell-failed', { ...shell, message: 'shell-failed' })
   stages[1] = { ...stages[1]!, status: 'passed' }
-
-  const git = await run({ type: 'checkGit' }, target, { signal: options.signal })
-  if (!git.ok) return fail(2, classifyCommandFailure(git, 'git-missing'), git)
-  stages[2] = { ...stages[2]!, status: 'passed' }
+  stages[2] = { ...stages[2]!, status: 'skipped' }
 
   const path = await run({ type: 'testDirectory', path: target.remotePath }, target, { signal: options.signal })
   if (!path.ok) return fail(3, classifyCommandFailure(path, 'path-missing'), path)
   stages[3] = { ...stages[3]!, status: 'passed' }
-
-  const repo = await run({ type: 'revParseTopLevel', path: target.remotePath }, target, { signal: options.signal })
-  if (!repo.ok) return fail(4, classifyCommandFailure(repo, 'not-a-repo'), repo)
-  stages[4] = { ...stages[4]!, status: 'passed' }
+  stages[4] = { ...stages[4]!, status: 'skipped' }
 
   return { target, ok: true, stages }
 }
