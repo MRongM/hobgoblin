@@ -79,12 +79,12 @@ html[data-color-theme='github'][data-theme='light'] {
   --radius: 0.375rem;
 
   --goblin-app-bg: #ffffff;
-  --goblin-topbar-bg: #cad8ea;
-  --goblin-topbar-border: #d0d7de;
-  --goblin-toolbar-bg: #d5e4f6;
+  --goblin-topbar-bg: #d7e5f7;
+  --goblin-topbar-border: #b9c9dd;
+  --goblin-toolbar-bg: #e3eefc;
   --goblin-toolbar-border: var(--goblin-topbar-border);
   --goblin-tab-bg: transparent;
-  --goblin-tab-hover-bg: #ffffff;
+  --goblin-tab-hover-bg: #f6f8fa;
   --goblin-tab-active-bg: #ffffff;
   --goblin-sidebar-bg: #f6f8fa;
   --goblin-pane-bg: #ffffff;
@@ -186,13 +186,13 @@ html[data-color-theme='github'][data-theme='dark'] {
   --radius: 0.375rem;
 
   --goblin-app-bg: #0d1117;
-  --goblin-topbar-bg: #121925;
-  --goblin-topbar-border: #30363d;
-  --goblin-toolbar-bg: #1a2940;
+  --goblin-topbar-bg: #0f1724;
+  --goblin-topbar-border: #303f55;
+  --goblin-toolbar-bg: #1d2f49;
   --goblin-toolbar-border: var(--goblin-topbar-border);
   --goblin-tab-bg: transparent;
-  --goblin-tab-hover-bg: #161b22;
-  --goblin-tab-active-bg: #21262d;
+  --goblin-tab-hover-bg: #182234;
+  --goblin-tab-active-bg: #222c3a;
   --goblin-sidebar-bg: #161b22;
   --goblin-pane-bg: #0d1117;
   --goblin-pane-header-bg: #161b22;

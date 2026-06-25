@@ -79,9 +79,9 @@ html[data-color-theme='cursor'][data-theme='light'] {
   --radius: 0.5rem;
 
   --goblin-app-bg: #f7f7f4;
-  --goblin-topbar-bg: #ecd7c9;
-  --goblin-topbar-border: #cfcdc4;
-  --goblin-toolbar-bg: #f9e2d4;
+  --goblin-topbar-bg: #f1dccd;
+  --goblin-topbar-border: #d6c8bd;
+  --goblin-toolbar-bg: #fae9dd;
   --goblin-toolbar-border: var(--goblin-topbar-border);
   --goblin-tab-bg: transparent;
   --goblin-tab-hover-bg: #fafaf7;
@@ -186,13 +186,13 @@ html[data-color-theme='cursor'][data-theme='dark'] {
   --radius: 0.5rem;
 
   --goblin-app-bg: #1f1f1c;
-  --goblin-topbar-bg: #2a231b;
-  --goblin-topbar-border: rgb(230 229 224 / 0.16);
+  --goblin-topbar-bg: #2a2119;
+  --goblin-topbar-border: #50301e;
   --goblin-toolbar-bg: #432b1a;
   --goblin-toolbar-border: var(--goblin-topbar-border);
   --goblin-tab-bg: transparent;
-  --goblin-tab-hover-bg: #26251e;
-  --goblin-tab-active-bg: #2e2d26;
+  --goblin-tab-hover-bg: #2d2820;
+  --goblin-tab-active-bg: #342f27;
   --goblin-sidebar-bg: #26251e;
   --goblin-pane-bg: #1f1f1c;
   --goblin-pane-header-bg: #26251e;
