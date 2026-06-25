@@ -52,7 +52,7 @@ afterEach(() => {
 })
 
 describe('TopbarRepoControls', () => {
-  test('keeps workspace layout controls for non-git local workspaces while hiding git actions', () => {
+  test('keeps workspace layout and refresh controls for non-git local workspaces while hiding git actions', () => {
     seedRepoState({
       id: REPO_ID,
       isGitRepo: false,
@@ -63,7 +63,7 @@ describe('TopbarRepoControls', () => {
 
     renderControls(navigationWith({}))
 
-    expect(container?.querySelector('button[aria-label="action.refresh"]')).toBeNull()
+    expect(container?.querySelector('button[aria-label="action.refresh"]')).not.toBeNull()
     expect(container?.querySelector('button[aria-label="action.create-worktree-title"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="branches.switch"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="action.menu"]')).toBeNull()

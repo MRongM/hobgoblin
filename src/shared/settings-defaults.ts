@@ -38,6 +38,7 @@ export const DEFAULT_SHORTCUTS_DISABLED = false
 export const DEFAULT_GLOBAL_SHORTCUT_DISABLED = false
 export const DEFAULT_SWAP_CLOSE_SHORTCUTS = false
 export const DEFAULT_TOGGLE_DETAIL_ON_ACTION_BAR_BLANK_CLICK = false
+export const DEFAULT_TERMINAL_THEME_SYNC_ENABLED = true
 export const DEFAULT_TEMPORARY_FILES_DIRECTORY = ''
 export const DEFAULT_TERMINAL_APP: TerminalPref = 'auto'
 export const DEFAULT_EDITOR_APP: EditorPref = 'auto'
@@ -76,6 +77,7 @@ export function defaultSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): Se
     swapCloseShortcuts: overrides.swapCloseShortcuts ?? DEFAULT_SWAP_CLOSE_SHORTCUTS,
     toggleDetailOnActionBarBlankClick:
       overrides.toggleDetailOnActionBarBlankClick ?? DEFAULT_TOGGLE_DETAIL_ON_ACTION_BAR_BLANK_CLICK,
+    terminalThemeSyncEnabled: overrides.terminalThemeSyncEnabled ?? DEFAULT_TERMINAL_THEME_SYNC_ENABLED,
     temporaryFilesDirectory:
       overrides.temporaryFilesDirectory ?? DEFAULT_TEMPORARY_FILES_DIRECTORY,
     globalShortcut: overrides.globalShortcut ?? DEFAULT_GLOBAL_SHORTCUT,
@@ -115,6 +117,7 @@ export function initialSettingsFromSnapshot(snapshot: Pick<
   | 'globalShortcutDisabled'
   | 'swapCloseShortcuts'
   | 'toggleDetailOnActionBarBlankClick'
+  | 'terminalThemeSyncEnabled'
   | 'temporaryFilesDirectory'
   | 'globalShortcut'
   | 'globalShortcutRegistered'
@@ -137,6 +140,7 @@ export function initialSettingsFromSnapshot(snapshot: Pick<
     globalShortcutDisabled: snapshot.globalShortcutDisabled,
     swapCloseShortcuts: snapshot.swapCloseShortcuts,
     toggleDetailOnActionBarBlankClick: snapshot.toggleDetailOnActionBarBlankClick,
+    terminalThemeSyncEnabled: snapshot.terminalThemeSyncEnabled,
     temporaryFilesDirectory: snapshot.temporaryFilesDirectory,
     globalShortcut: snapshot.globalShortcut,
     globalShortcutRegistered: snapshot.globalShortcutRegistered,

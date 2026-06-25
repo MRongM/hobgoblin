@@ -291,6 +291,18 @@ describe('app menu actions', () => {
     })
   })
 
+  test('wires Ctrl+Shift+I to toggle the web developer tools', async () => {
+    const { buildAppMenu } = await import('#/main/menu.ts')
+
+    buildAppMenu()
+
+    const viewMenu = mocks.template.find((entry) => entry.label === 'menu.view')
+    const devToolsItem = viewMenu?.submenu?.find((entry: any) => entry.label === 'menu.view.toggle-dev-tools')
+
+    expect(devToolsItem?.role).toBe('toggleDevTools')
+    expect(devToolsItem?.accelerator).toBe('Ctrl+Shift+I')
+  })
+
   test('includes standard edit roles and full screen in the menu', async () => {
     const { buildAppMenu } = await import('#/main/menu.ts')
 

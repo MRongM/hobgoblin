@@ -244,7 +244,7 @@ function MergeConflictAiActions({
   return (
     <div
       data-slot="merge-conflict-ai-actions"
-      className="min-w-0 max-w-full rounded-md border border-border bg-muted/35 p-2"
+      className="min-w-0 max-w-full rounded-[var(--goblin-brand-radius-md,var(--radius-md))] border border-app-region-border bg-app-region p-2"
     >
       <div className="mb-2 text-xs font-medium text-muted-foreground">{t('action.merge-conflict-ai-title')}</div>
       <div className="flex flex-wrap gap-2">
@@ -283,14 +283,7 @@ interface CreateBranchDialogProps {
   onCreate: (branchName: string) => Promise<void>
 }
 
-export function CreateBranchDialog({
-  open,
-  branch,
-  allBranches,
-  busy,
-  onClose,
-  onCreate,
-}: CreateBranchDialogProps) {
+export function CreateBranchDialog({ open, branch, allBranches, busy, onClose, onCreate }: CreateBranchDialogProps) {
   const t = useT()
   const [branchName, setBranchName] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -485,7 +478,11 @@ export function PullRemoteBranchDialog({
             }}
             disabled={visibleChoices.length === 0 || loading}
           >
-            <SelectTrigger id="pull-remote-ref" className="w-full" aria-label={t('action.pull-remote-branch-remote-label')}>
+            <SelectTrigger
+              id="pull-remote-ref"
+              className="w-full"
+              aria-label={t('action.pull-remote-branch-remote-label')}
+            >
               <SelectValue placeholder={t('action.create-worktree-remote-placeholder')} />
             </SelectTrigger>
             <SelectContent

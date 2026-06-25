@@ -42,6 +42,7 @@ describe('native shell projection helpers', () => {
         globalShortcutDisabled: true,
         swapCloseShortcuts: true,
         toggleDetailOnActionBarBlankClick: false,
+        terminalThemeSyncEnabled: true,
         temporaryFilesDirectory: '',
         globalShortcut: 'Alt+K',
         terminalApp: 'auto',
@@ -71,8 +72,8 @@ describe('native shell projection helpers', () => {
     expect(v.safeParse(NativeShellProjectionSchema, {}).success).toBe(false)
   })
 
-  test('accepts design color theme presets in native projection payloads', () => {
-    for (const colorTheme of ['claude', 'cursor', 'apple'] as const) {
+  test('accepts current design color theme presets in native projection payloads', () => {
+    for (const colorTheme of ['claude', 'cursor', 'airbnb', 'bmw'] as const) {
       expect(
         v.safeParse(NativeShellProjectionSchema, {
           prefs: {
@@ -90,5 +91,24 @@ describe('native shell projection helpers', () => {
         }).success,
       ).toBe(true)
     }
+  })
+
+  test('rejects legacy apple in current native projection payloads', () => {
+    expect(
+      v.safeParse(NativeShellProjectionSchema, {
+        prefs: {
+          patch: { colorTheme: 'apple' },
+          settings: {
+            lang: 'auto',
+            theme: 'auto',
+            colorTheme: 'apple',
+            shortcutsDisabled: false,
+            globalShortcutDisabled: false,
+            swapCloseShortcuts: false,
+            globalShortcut: 'Alt+G',
+          },
+        },
+      }).success,
+    ).toBe(false)
   })
 })

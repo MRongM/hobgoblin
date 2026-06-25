@@ -2,6 +2,7 @@ import { readRuntimeGeneralSettings, useRuntimeSettingsSnapshot } from '#/web/se
 import {
   runSettingsControllerAction,
   setTemporaryFilesDirectoryPreference,
+  setTerminalThemeSyncEnabledPreference,
   setToggleDetailOnActionBarBlankClickPreference,
 } from '#/web/settings-write-paths.ts'
 
@@ -15,6 +16,11 @@ export function useGeneralSettingsController() {
     async setToggleDetailOnActionBarBlankClick(enabled: boolean): Promise<void> {
       await runSettingsControllerAction('action bar blank toggle update', async () => {
         await setToggleDetailOnActionBarBlankClickPreference(enabled)
+      })
+    },
+    async setTerminalThemeSyncEnabled(enabled: boolean): Promise<void> {
+      await runSettingsControllerAction('terminal theme sync update', async () => {
+        await setTerminalThemeSyncEnabledPreference(enabled)
       })
     },
     async setTemporaryFilesDirectory(path: string): Promise<void> {

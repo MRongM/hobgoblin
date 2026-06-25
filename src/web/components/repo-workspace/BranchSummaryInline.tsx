@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Check, FolderTree, GitBranch, Terminal } from 'lucide-react'
+import { ArrowDown, ArrowUp, FolderTree, GitBranch, Terminal } from 'lucide-react'
 import { useI18nStore, useT } from '#/web/stores/i18n.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import { Badge } from '#/web/components/ui/badge.tsx'
@@ -85,9 +85,7 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
     <div title={title} className={cn('flex min-w-0 flex-col gap-px', className)}>
       <div className="flex min-w-0 items-center gap-1.5">
         <span className="flex w-4 shrink-0 items-center justify-center">
-          {isCurrent ? (
-            <Check size={13} className="text-success" />
-          ) : isWorktree ? (
+          {hasWorktree ? (
             <FolderTree size={13} className={worktreeDirty ? 'text-attention' : 'text-brand-text'} />
           ) : (
             <GitBranch size={13} className={selected ? 'text-selected-muted-foreground' : 'text-muted-foreground'} />

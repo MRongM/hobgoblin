@@ -65,7 +65,7 @@ export function SettingsLayout({
   const active = pages.find((item) => item.page === page) ?? pages[0]
 
   return (
-    <div className="relative flex h-full min-h-0 bg-background">
+    <div className="relative flex h-full min-h-0 bg-app">
       {topInset > 0 ? (
         <div
           aria-hidden

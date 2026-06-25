@@ -33,6 +33,7 @@ import {
   setTerminalExternalInputEnabled,
   setTerminalFontSize,
   setTerminalNotificationsEnabled,
+  setTerminalThemeSyncEnabled,
   setToggleDetailOnActionBarBlankClick,
 } from '#/web/settings-client.ts'
 import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
@@ -92,6 +93,14 @@ export async function setToggleDetailOnActionBarBlankClickPreference(enabled: bo
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
     ...current,
     toggleDetailOnActionBarBlankClick: enabled,
+  }))
+}
+
+export async function setTerminalThemeSyncEnabledPreference(enabled: boolean): Promise<void> {
+  await setTerminalThemeSyncEnabled(enabled)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
+    ...current,
+    terminalThemeSyncEnabled: enabled,
   }))
 }
 

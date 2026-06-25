@@ -45,6 +45,7 @@ describe('renderer bootstrap', () => {
       globalShortcutDisabled: false,
       swapCloseShortcuts: false,
       toggleDetailOnActionBarBlankClick: false,
+      terminalThemeSyncEnabled: true,
       temporaryFilesDirectory: '',
       globalShortcut: 'CommandOrControl+Shift+G',
       globalShortcutRegistered: false,

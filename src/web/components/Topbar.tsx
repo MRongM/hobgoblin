@@ -21,7 +21,7 @@ export function Topbar({ onOpenSettings, children, actions }: Props) {
 
   return (
     <div
-      className="topbar relative flex items-center gap-2 overflow-hidden border-b border-separator bg-background text-sm"
+      className="topbar relative flex items-center gap-2 overflow-hidden border-b border-topbar-border bg-topbar text-sm text-topbar-foreground"
       style={{ height: WINDOW_TOPBAR_HEIGHT_PX }}
     >
       {children}

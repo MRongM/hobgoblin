@@ -146,6 +146,48 @@ describe('RepoView', () => {
       'src/from-terminal.ts',
     )
   })
+
+  test('switches from plain workspace shell to git workspace shell when repo capability changes', () => {
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    useReposStore.setState({ workspaceLayout: 'top-bottom', detailCollapsed: false })
+
+    renderRepoView()
+
+    expect(container?.querySelector('[data-testid="branch-detail"]')).toBeNull()
+
+    act(() => {
+      useReposStore.setState((state) => {
+        const repo = state.repos[REPO_ID]
+        if (!repo) return state
+        return {
+          repos: {
+            ...state.repos,
+            [REPO_ID]: {
+              ...repo,
+              isGitRepo: true,
+              data: {
+                ...repo.data,
+                branches: [createRepoBranch('main', { worktree: { path: REPO_ID } })],
+                currentBranch: 'main',
+              },
+              ui: {
+                ...repo.ui,
+                selectedBranch: 'main',
+              },
+            },
+          },
+        }
+      })
+    })
+
+    expect(container?.querySelector('[data-testid="branch-detail"]')).not.toBeNull()
+  })
 })
 
 function renderRepoView(repoId = REPO_ID) {

@@ -28,7 +28,8 @@ interface TerminalSessionProviderProps {
 
 export function TerminalSessionProvider({ currentRepoId, children, syncTracker: syncTrackerProp }: TerminalSessionProviderProps) {
   const repoIndex = useStoreWithEqualityFn(useReposStore, (s) => repoIndexFromRepos(s.repos), repoIndexEqual)
-  const { terminalFontSize } = useRuntimeTerminalSettings()
+  const { terminalFontSize, terminalThemeSyncEnabled = true } = useRuntimeTerminalSettings()
+  const terminalThemeMode = terminalThemeSyncEnabled ? 'theme' : 'classic'
   const currentRepoInstanceToken = currentRepoId ? (repoIndex[currentRepoId]?.instanceToken ?? null) : null
   const selectedTerminalByWorktree = useReposStore((s) => s.selectedTerminalByWorktree)
   const setSelectedTerminal = useReposStore((s) => s.setSelectedTerminal)
@@ -106,6 +107,11 @@ export function TerminalSessionProvider({ currentRepoId, children, syncTracker: 
   useEffect(() => {
     registry.setFontSize(terminalFontSize)
   }, [registry, terminalFontSize])
+
+  // Terminal theme settings
+  useEffect(() => {
+    registry.setTerminalThemeMode(terminalThemeMode)
+  }, [registry, terminalThemeMode])
 
   // Registry lifecycle (event listeners + bridge + destroy)
   useEffect(() => {

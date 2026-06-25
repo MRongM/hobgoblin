@@ -67,7 +67,10 @@ export function InlineCommitForm({
   const submitDisabled = !message.trim() || isPending || generating !== null
 
   return (
-    <div className="col-span-full border-t border-border/70 bg-muted/35 px-4 py-3" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="col-span-full border-t border-app-region-border bg-app-region px-4 py-3"
+      onClick={(e) => e.stopPropagation()}
+    >
       <form
         className="space-y-2"
         onSubmit={(e) => {
@@ -94,7 +97,7 @@ export function InlineCommitForm({
           </div>
           <textarea
             id="inline-commit-message"
-            className="w-full min-h-[64px] resize-y rounded-md border border-input bg-background px-3 py-2 text-sm"
+            className="min-h-[64px] w-full resize-y rounded-[var(--goblin-control-radius,var(--radius-md))] border border-input-border bg-input-background px-3 py-2 text-sm text-input-foreground placeholder:text-input-placeholder focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
             placeholder={t('action.commit-message-placeholder')}
             value={message}
             onChange={(e) => onMessageChange(e.target.value)}

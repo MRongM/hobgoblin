@@ -277,6 +277,7 @@ describe('runBranchAction', () => {
       repo.remote.hasRemotes = true
     })
     installGoblinTestBridge({
+      'repo.probe': async ({ cwd }: { cwd: string }) => ({ ok: true, root: cwd, name: 'repo', isGitRepo: true }),
       'repo.fetch': () =>
         new Promise((resolve) => {
           resolveFetch = () => resolve({ ok: true, message: 'ok' })

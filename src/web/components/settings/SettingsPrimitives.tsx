@@ -44,7 +44,7 @@ export function SettingsCard<T extends ElementType = 'div'>({ as, className, ...
   return (
     <Comp
       className={cn(
-        'overflow-hidden rounded-xl border border-border/60 bg-background/85 shadow-[var(--shadow-inset-highlight)]',
+        'overflow-hidden rounded-[var(--goblin-brand-radius-lg,var(--radius-lg))] border border-border/60 bg-[var(--goblin-card-bg,var(--color-background))] shadow-[var(--shadow-inset-highlight)]',
         className,
       )}
       {...props}

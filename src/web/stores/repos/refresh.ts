@@ -14,6 +14,7 @@ import {
   runCoreDataRefreshWorkflow,
   runSnapshotSuccessWorkflow,
 } from '#/web/stores/repos/refresh-workflows.ts'
+import { reprobeWorkspaceCapability } from '#/web/stores/repos/lifecycle-write-paths.ts'
 import { repoSupportsGitData } from '#/web/stores/repos/capabilities.ts'
 import {
   applyPullRequestRefreshErrorState,
@@ -293,8 +294,7 @@ export function createRefreshActions(set: ReposSet, get: ReposGet) {
     async syncAndRefresh(id: string, options?: { token?: number }) {
       const resolved = resolveActionToken(get, id, options?.token)
       if (!resolved) return
-      const { repo: repoBefore, token } = resolved
-      if (!repoSupportsGitData(repoBefore)) return
+      const { token } = resolved
       await runExclusiveOperation({
         set,
         get,
@@ -304,7 +304,12 @@ export function createRefreshActions(set: ReposSet, get: ReposGet) {
         priority: 100,
         targets: [{ key: 'manualRefresh', reason: 'manual-refresh' }],
         task: async () =>
-          await runWithRepoInvalidationSource('manual', async (sourceToken) => await runManualSyncPipeline(id, token, sourceToken)),
+          await runWithRepoInvalidationSource('manual', async (sourceToken) => {
+            const capability = await reprobeWorkspaceCapability(set, get, id, token)
+            if (capability.kind !== 'available') return
+            if (!capability.isGitRepo) return
+            await runManualSyncPipeline(capability.id, capability.token, sourceToken)
+          }),
       })
     },
   }

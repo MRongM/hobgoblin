@@ -109,6 +109,7 @@ describe('runtime settings hooks', () => {
       settingsSnapshotQueryKey(),
       defaultSettingsSnapshot({
         toggleDetailOnActionBarBlankClick: true,
+        terminalThemeSyncEnabled: false,
       }),
     )
     let result: ReturnType<typeof useRuntimeGeneralSettings> | undefined
@@ -122,6 +123,7 @@ describe('runtime settings hooks', () => {
 
     expect(result).toMatchObject({
       toggleDetailOnActionBarBlankClick: true,
+      terminalThemeSyncEnabled: false,
     })
   })
 

@@ -1,9 +1,10 @@
 import { lastPathSegment } from '#/web/lib/paths.ts'
-import { clearGitProjection, emptyRepo, replaceRepo, replaceRepoState, rotateRepoInstanceToken } from '#/web/stores/repos/helpers.ts'
+import { clearGitProjection, emptyRepo, replaceRepo, replaceRepoState, resetRepoOperations, rotateRepoInstanceToken } from '#/web/stores/repos/helpers.ts'
 import { restoreRepoProjectionFromSnapshot } from '#/web/stores/repos/persistence.ts'
 import { disposeRepoRuntime } from '#/web/stores/repos/runtime.ts'
 import { runRepoRefreshIntent } from '#/web/stores/repos/refresh-coordinator.ts'
 import { repoSupportsGitData } from '#/web/stores/repos/capabilities.ts'
+import { markRepoAvailable, markRepoUnavailable } from '#/web/stores/repos/availability.ts'
 import {
   abortRepositoryOperation,
   initRepository as initRepositoryRpc,
@@ -44,12 +45,21 @@ interface InitialRepoRefresh {
   token: number
 }
 
+export type WorkspaceCapabilityReprobeResult =
+  | { kind: 'available'; id: string; token: number; isGitRepo: boolean; changed: boolean }
+  | { kind: 'unavailable'; id: string; token: number; message: string }
+  | { kind: 'stale' }
+
 function sessionEntryFromInput(input: string | RepoSessionEntry): RepoSessionEntry {
   if (typeof input !== 'string') return input
   if (!isRemoteRepoId(input)) return localRepoSessionEntry(input)
   const parsed = parseRemoteRepoId(input)
   const ref = parsed ? normalizeRemoteRepoRef(parsed) : null
   return ref ? { kind: 'remote', id: ref.id, ref } : localRepoSessionEntry(input)
+}
+
+function sessionEntryForReprobe(repo: Pick<ReposStore['repos'][string], 'id' | 'remote'>): string | RepoSessionEntry {
+  return repo.remote.target ? remoteRepoSessionEntry(repo.remote.target) : repo.id
 }
 
 export async function resolveRepoPath(
@@ -122,12 +132,17 @@ export function addResolvedRepo(
         existing.remote.target.port !== resolvedRepo.target.port ||
         existing.remote.target.remotePath !== resolvedRepo.target.remotePath)
     const capabilityChanged = existing.isGitRepo !== nextIsGitRepo
-    if (!targetChanged && !capabilityChanged) {
+    const availabilityChanged = existing.availability.phase !== 'available'
+    if (!targetChanged && !capabilityChanged && !availabilityChanged) {
       return { repos: s.repos, order: s.order, changed: false }
     }
     const nextRepo = replaceRepo(existing, (draft) => {
-      if (capabilityChanged) rotateRepoInstanceToken(draft)
+      if (capabilityChanged) {
+        rotateRepoInstanceToken(draft)
+        resetRepoOperations(draft)
+      }
       draft.isGitRepo = nextIsGitRepo
+      markRepoAvailable(draft)
       if (!nextIsGitRepo) clearGitProjection(draft)
       if (targetChanged && resolvedRepo.target) draft.remote.target = resolvedRepo.target
     })
@@ -169,6 +184,59 @@ export function addUnavailableRepo(
     repos: { ...s.repos, [id]: repo },
     order: s.order.includes(id) ? s.order : orderedInsert(s.order, id, rankById),
     changed: true,
+  }
+}
+
+export async function reprobeWorkspaceCapability(
+  set: ReposSet,
+  get: ReposGet,
+  id: string,
+  token: number,
+): Promise<WorkspaceCapabilityReprobeResult> {
+  const current = get().repos[id]
+  if (!current || current.instanceToken !== token) return { kind: 'stale' }
+
+  const resolved = await resolveRepoPath(sessionEntryForReprobe(current), undefined, 'error.not-git-repo')
+
+  const fresh = get().repos[id]
+  if (!fresh || fresh.instanceToken !== token) return { kind: 'stale' }
+
+  if (!resolved.repo) {
+    const message = resolved.reason ?? 'error.failed-read-repo'
+    let nextToken = token
+    set((s) => {
+      const repo = s.repos[id]
+      if (!repo || repo.instanceToken !== token) return s
+      const nextRepo = replaceRepo(repo, (draft) => {
+        rotateRepoInstanceToken(draft)
+        resetRepoOperations(draft)
+        markRepoUnavailable(draft, message)
+      })
+      nextToken = nextRepo.instanceToken
+      return { repos: { ...s.repos, [id]: nextRepo } }
+    })
+    return { kind: 'unavailable', id, token: nextToken, message }
+  }
+
+  const resolvedRepo = resolved.repo
+  let changed: boolean | null = null
+
+  set((s) => {
+    const repo = s.repos[id]
+    if (!repo || repo.instanceToken !== token) return s
+    const result = addResolvedRepo(s, resolvedRepo)
+    changed = result.changed
+    return result.changed ? { repos: result.repos, order: result.order } : s
+  })
+
+  const nextRepo = get().repos[resolvedRepo.id]
+  if (changed === null || !nextRepo) return { kind: 'stale' }
+  return {
+    kind: 'available',
+    id: resolvedRepo.id,
+    token: nextRepo.instanceToken,
+    isGitRepo: nextRepo.isGitRepo,
+    changed,
   }
 }
 

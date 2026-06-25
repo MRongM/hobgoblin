@@ -93,6 +93,8 @@ export function readRuntimeGeneralSettings(data: RuntimeSettingsSnapshot | undef
   return {
     toggleDetailOnActionBarBlankClick:
       data?.toggleDetailOnActionBarBlankClick ?? fallback?.toggleDetailOnActionBarBlankClick ?? false,
+    terminalThemeSyncEnabled:
+      data?.terminalThemeSyncEnabled ?? fallback?.terminalThemeSyncEnabled ?? true,
     temporaryFilesDirectory: data?.temporaryFilesDirectory ?? fallback?.temporaryFilesDirectory ?? '',
   }
 }
@@ -120,6 +122,8 @@ export function readRuntimeTerminalSettings(data: RuntimeSettingsSnapshot | unde
       data?.terminalFontSize ?? fallback?.terminalFontSize ?? DEFAULT_TERMINAL_FONT_SIZE,
     terminalExternalInputEnabled:
       data?.terminalExternalInputEnabled ?? fallback?.terminalExternalInputEnabled ?? false,
+    terminalThemeSyncEnabled:
+      data?.terminalThemeSyncEnabled ?? fallback?.terminalThemeSyncEnabled ?? true,
     remoteTerminalTmuxEnabled:
       data?.remoteTerminalTmuxEnabled ?? fallback?.remoteTerminalTmuxEnabled ?? false,
     temporaryFilesDirectory: data?.temporaryFilesDirectory ?? fallback?.temporaryFilesDirectory ?? '',

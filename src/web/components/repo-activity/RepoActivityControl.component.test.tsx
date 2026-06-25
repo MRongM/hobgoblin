@@ -63,6 +63,21 @@ describe('RepoActivityControl component', () => {
     expect(button().disabled).toBe(false)
     expect(document.body.textContent).not.toContain('tab.local-only')
   })
+
+  test('renders the primary refresh button for plain workspaces', () => {
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+
+    render(<RepoActivityControl repoId={REPO_ID} />)
+
+    expect(button().disabled).toBe(false)
+    expect(button().getAttribute('aria-label')).toBe('action.refresh')
+  })
 })
 
 function render(element: ReactNode) {

@@ -21,4 +21,9 @@ describe('boot color theme allowlist', () => {
     const boot = readFileSync(new URL('./boot.js', import.meta.url), 'utf8')
     expect(boot).toContain(`colorTheme = '${DEFAULT_COLOR_THEME}'`)
   })
+
+  test('maps legacy apple query values to macos before validation', () => {
+    const boot = readFileSync(new URL('./boot.js', import.meta.url), 'utf8')
+    expect(boot).toContain("if (colorTheme === 'apple') colorTheme = 'macos'")
+  })
 })

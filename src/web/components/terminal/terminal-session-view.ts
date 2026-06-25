@@ -18,6 +18,7 @@ import {
   observeTerminalTheme,
   terminalSearchDecorationsForCurrentDocument,
   terminalThemeForCurrentDocument,
+  type TerminalThemeMode,
 } from '#/web/components/terminal/terminal-theme.ts'
 import {
   SafariShiftKeyResolver,
@@ -57,6 +58,7 @@ export class TerminalSessionView {
   private host: HTMLElement | null = null
   private revealPathHandler: ((relativePath: string) => void) | null = null
   private fontSize: number
+  private terminalThemeMode: () => TerminalThemeMode
   private readonly safariShiftKeyResolver = new SafariShiftKeyResolver()
 
   constructor(
@@ -68,9 +70,10 @@ export class TerminalSessionView {
       onProgress: (state: number, value: number) => void
       onOpenExternalLink: (uri: string) => void
     },
-    options: { fontSize?: number } = {},
+    options: { fontSize?: number; terminalThemeMode?: () => TerminalThemeMode } = {},
   ) {
     this.fontSize = options.fontSize ?? DEFAULT_TERMINAL_FONT_SIZE
+    this.terminalThemeMode = options.terminalThemeMode ?? (() => 'theme')
     this.frame = document.createElement('div')
     this.frame.className = 'goblin-managed-terminal-frame'
     this.xtermHost = document.createElement('div')
@@ -101,6 +104,13 @@ export class TerminalSessionView {
     if (!term) return
     term.options.fontSize = fontSize
     this.fitForFontLoad(term)
+  }
+
+  setTerminalThemeMode(terminalThemeMode: () => TerminalThemeMode): void {
+    this.terminalThemeMode = terminalThemeMode
+    const term = this.term
+    if (!term) return
+    this.applyTerminalTheme(term, terminalThemeForCurrentDocument(this.terminalThemeMode()), { refresh: true })
   }
 
   attach(host: HTMLElement): void {
@@ -148,7 +158,7 @@ export class TerminalSessionView {
   }
 
   openTerminal(geometry: TerminalGeometry, onMacOptionInput: (input: TerminalInput) => void): XTermTerminal {
-    const theme = terminalThemeForCurrentDocument()
+    const theme = terminalThemeForCurrentDocument(this.terminalThemeMode())
     const term = new Terminal({
       allowProposedApi: true,
       cols: geometry.cols,
@@ -172,8 +182,8 @@ export class TerminalSessionView {
     this.installOptionalAddons(term)
     this.installKeyboardHandlers(term, onMacOptionInput)
     this.applyTerminalTheme(term, theme)
-    this.disposeThemeObserver = observeTerminalTheme((nextTheme) => {
-      this.applyTerminalTheme(term, nextTheme)
+    this.disposeThemeObserver = observeTerminalTheme(this.terminalThemeMode, (nextTheme) => {
+      this.applyTerminalTheme(term, nextTheme, { refresh: true })
     })
     this.disposables.push(
       term.onData((data) => this.handlers.onInput({ origin: 'user-intent', source: 'xterm', data })),
@@ -184,6 +194,7 @@ export class TerminalSessionView {
     this.disposables.push(term.onBell(() => this.handlers.onBell()))
     this.disposables.push(term.onResize((size) => this.handlers.onResize(size)))
     term.open(this.xtermHost)
+    this.applyTerminalTheme(term, terminalThemeForCurrentDocument(this.terminalThemeMode()), { refresh: true })
     this.installResizeObserver()
     this.installFontObserver(term)
     return term
@@ -226,8 +237,8 @@ export class TerminalSessionView {
       return false
     }
     return direction === 'next'
-      ? this.searchAddon.findNext(term, terminalSearchOptions(incremental))
-      : this.searchAddon.findPrevious(term, terminalSearchOptions())
+      ? this.searchAddon.findNext(term, terminalSearchOptions(this.terminalThemeMode(), incremental))
+      : this.searchAddon.findPrevious(term, terminalSearchOptions(this.terminalThemeMode()))
   }
 
   fitSoon(): void {
@@ -371,11 +382,17 @@ export class TerminalSessionView {
     }
   }
 
-  private applyTerminalTheme(term: XTermTerminal, theme: ITheme): void {
+  private applyTerminalTheme(
+    term: XTermTerminal,
+    theme: ITheme,
+    options: { refresh?: boolean } = {},
+  ): void {
     term.options.theme = theme
-    const background = typeof theme.background === 'string' ? theme.background : ''
+    const background = typeof theme.background === 'string' && theme.background ? theme.background : 'black'
     this.frame.style.background = background
     this.frame.style.setProperty('--goblin-terminal-background', background)
+    if (options.refresh !== true || !term.element) return
+    term.refresh(0, Math.max(0, term.rows - 1))
   }
 
   private installResizeObserver(): void {
@@ -449,10 +466,10 @@ export class TerminalSessionView {
   }
 }
 
-function terminalSearchOptions(incremental?: boolean): ISearchOptions {
+function terminalSearchOptions(mode: TerminalThemeMode, incremental?: boolean): ISearchOptions {
   return {
     caseSensitive: false,
-    decorations: terminalSearchDecorationsForCurrentDocument(),
+    decorations: terminalSearchDecorationsForCurrentDocument(mode),
     ...(incremental === undefined ? {} : { incremental }),
   }
 }

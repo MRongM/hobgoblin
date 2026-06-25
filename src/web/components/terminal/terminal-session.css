@@ -5,13 +5,13 @@
   flex: 1;
   flex-direction: column;
   overflow: hidden;
-  background: var(--color-background);
+  background: var(--goblin-pane-bg, var(--color-background));
   --goblin-terminal-surface-inset: 4px;
   --goblin-terminal-float-offset: 10px;
   --goblin-terminal-overlay-offset: 12px;
   --goblin-terminal-float-padding: 6px 8px;
-  --goblin-terminal-float-radius: 8px;
-  --goblin-terminal-control-radius: 6px;
+  --goblin-terminal-float-radius: var(--goblin-control-radius, 8px);
+  --goblin-terminal-control-radius: var(--goblin-control-radius, 6px);
   --goblin-terminal-bottom-dock-height: 44px;
 }
 
@@ -111,6 +111,30 @@
 
 .goblin-managed-terminal-host .xterm-viewport {
   background: var(--goblin-terminal-background, var(--color-terminal-background)) !important;
+  scrollbar-color: color-mix(in srgb, var(--color-terminal-foreground) 28%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+.goblin-managed-terminal-host .xterm-viewport::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.goblin-managed-terminal-host .xterm-viewport::-webkit-scrollbar-track,
+.goblin-managed-terminal-host .xterm-viewport::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.goblin-managed-terminal-host .xterm-viewport::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-terminal-foreground) 28%, transparent);
+  background-clip: content-box;
+}
+
+.goblin-managed-terminal-host .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--color-terminal-foreground) 42%, transparent);
+  background-clip: content-box;
 }
 
 .goblin-terminal-slot:has(.goblin-terminal-bottom-dock) .goblin-managed-terminal-frame {
@@ -122,9 +146,9 @@
   max-width: calc(100% - 20px);
   align-items: center;
   gap: 4px;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-toolbar-border);
   border-radius: var(--goblin-terminal-float-radius);
-  background: color-mix(in srgb, var(--color-popover) 96%, transparent);
+  background: color-mix(in srgb, var(--color-toolbar) 94%, transparent);
   padding: 6px;
   box-shadow: var(--shadow-sm);
 }
@@ -144,11 +168,11 @@
   height: 24px;
   min-width: 80px;
   width: clamp(80px, 32vw, 190px);
-  border: 1px solid var(--color-input);
+  border: 1px solid var(--color-input-border);
   border-radius: var(--goblin-terminal-control-radius);
-  background: var(--color-control);
+  background: var(--color-input-background);
   padding: 0 8px;
-  color: var(--color-foreground);
+  color: var(--color-input-foreground);
   font-size: 12px;
   outline: none;
 }
@@ -156,6 +180,10 @@
 .goblin-terminal-slot__search-input:focus {
   border-color: var(--color-ring);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-ring) 25%, transparent);
+}
+
+.goblin-terminal-slot__search-input::placeholder {
+  color: var(--color-input-placeholder);
 }
 
 .goblin-terminal-slot__search-result {
@@ -173,9 +201,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-toolbar-border);
   border-radius: var(--goblin-terminal-control-radius);
-  background: color-mix(in srgb, var(--color-popover) 95%, transparent);
+  background: color-mix(in srgb, var(--color-toolbar) 95%, transparent);
   padding: var(--goblin-terminal-float-padding);
   color: var(--color-muted-foreground);
   font-size: 12px;
@@ -218,9 +246,9 @@
   align-items: center;
   gap: 6px;
   overflow-x: auto;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-toolbar-border);
   border-radius: var(--goblin-terminal-float-radius);
-  background: color-mix(in srgb, var(--color-popover) 94%, transparent);
+  background: color-mix(in srgb, var(--color-toolbar) 94%, transparent);
   padding: 5px;
   box-shadow: var(--shadow-sm);
   backdrop-filter: blur(4px);
@@ -262,9 +290,9 @@
   min-height: 44px;
   align-items: center;
   gap: 8px;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-toolbar-border);
   border-radius: var(--goblin-terminal-float-radius);
-  background: color-mix(in srgb, var(--color-popover) 96%, transparent);
+  background: color-mix(in srgb, var(--color-toolbar) 96%, transparent);
   padding: 8px 12px;
   box-shadow: var(--shadow-sm);
   pointer-events: auto;
@@ -274,7 +302,9 @@
 
 .goblin-terminal-external-input:focus-within {
   border-color: var(--color-ring);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-ring) 25%, transparent), var(--shadow-sm);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--color-ring) 25%, transparent),
+    var(--shadow-sm);
 }
 
 .goblin-terminal-external-input__prefix {
@@ -301,7 +331,7 @@
   border: 0;
   outline: none;
   background: transparent;
-  color: var(--color-foreground);
+  color: var(--color-input-foreground);
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 18px;
@@ -340,7 +370,7 @@
 }
 
 .goblin-terminal-external-input__control::placeholder {
-  color: var(--color-muted-foreground);
+  color: var(--color-input-placeholder);
 }
 
 .goblin-terminal-external-input__send {
@@ -443,9 +473,9 @@
   display: flex;
   flex-direction: column;
   gap: 5px;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-toolbar-border);
   border-radius: var(--goblin-terminal-float-radius);
-  background: color-mix(in srgb, var(--color-popover) 96%, transparent);
+  background: color-mix(in srgb, var(--color-toolbar) 96%, transparent);
   padding: 6px;
   box-shadow: var(--shadow-sm);
   backdrop-filter: blur(4px);

@@ -142,8 +142,8 @@ export function ShortcutSettings() {
               shortcutStatus?.tone === 'error'
                 ? 'border-danger-border bg-danger-surface text-danger hover:bg-danger-surface'
                 : recordingShortcut
-                  ? 'border-primary/70 bg-primary/10 text-primary hover:bg-primary/15'
-                  : 'border-border bg-muted/50 text-foreground hover:bg-accent',
+                  ? 'border-brand-border bg-brand-surface text-brand-text hover:bg-brand-surface'
+                  : 'border-input bg-control text-foreground hover:bg-control-hover',
             )}
             aria-label={t(recordingShortcut ? 'settings.global-shortcut-recording' : 'settings.global-shortcut-record')}
             aria-pressed={recordingShortcut}

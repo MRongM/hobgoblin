@@ -17,9 +17,7 @@ import {
   SettingsList,
   SettingsRow,
 } from '#/web/components/settings/SettingsPrimitives.tsx'
-import {
-  useExternalAppsQuery,
-} from '#/web/settings-queries.ts'
+import { useExternalAppsQuery } from '#/web/settings-queries.ts'
 import { useExternalAppSettingsController } from '#/web/runtime-settings-external-apps.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import type { EditorPref, TerminalPref } from '#/shared/rpc.ts'
@@ -82,7 +80,7 @@ function DetectionRow({ item }: { item: ExternalToolItem & { available: boolean 
   const Icon = item.Icon
   return (
     <SettingsListItem as="li" size="xl">
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-[var(--goblin-brand-radius-md,var(--radius-md))] bg-control text-muted-foreground">
         <Icon className="size-4" />
       </span>
       <div className="min-w-0 flex-1">

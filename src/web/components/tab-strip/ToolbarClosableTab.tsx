@@ -58,7 +58,7 @@ export function ToolbarClosableTab({
         onPointerDown={(event) => event.stopPropagation()}
         onClick={onClose}
         className={cn(
-          'cursor-pointer rounded border-0 bg-transparent p-0.5 text-muted-foreground transition-colors duration-100 hover:bg-accent hover:text-accent-foreground',
+          'cursor-pointer rounded-[var(--goblin-brand-radius-sm,var(--radius-sm))] border-0 bg-transparent p-0.5 text-muted-foreground transition-colors duration-100 hover:bg-tab-hover hover:text-foreground',
           closeVisible ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
         )}
         title={closeLabel}

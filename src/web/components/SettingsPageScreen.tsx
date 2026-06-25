@@ -18,7 +18,7 @@ export function SettingsPageScreen({ page, onBack, onPageChange }: SettingsPageS
   return (
     <div className="flex h-full flex-col bg-background">
       <div
-        className="topbar flex shrink-0 items-center gap-2 border-b border-separator/70 bg-background text-sm"
+        className="topbar flex shrink-0 items-center gap-2 border-b border-topbar-border bg-topbar text-sm text-topbar-foreground"
         style={{ height: WINDOW_TOPBAR_HEIGHT_PX }}
       >
         <Button type="button" variant="ghost" size="sm" className="gap-1.5 px-2" onClick={onBack}>

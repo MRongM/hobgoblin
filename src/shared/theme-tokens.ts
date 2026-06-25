@@ -6,8 +6,8 @@ import type { ColorTheme } from '#/shared/color-theme.ts'
 // become data-driven and main can read the persisted canvas token.
 export const WINDOW_BACKGROUND_BY_COLOR_THEME: Record<ColorTheme, Record<ResolvedTheme, string>> = {
   macos: {
-    light: '#fbfbfd',
-    dark: '#1c1c1e',
+    light: '#ffffff',
+    dark: '#000000',
   },
   mono: {
     light: '#ffffff',
@@ -25,8 +25,12 @@ export const WINDOW_BACKGROUND_BY_COLOR_THEME: Record<ColorTheme, Record<Resolve
     light: '#f7f7f4',
     dark: '#1f1f1c',
   },
-  apple: {
+  airbnb: {
     light: '#ffffff',
+    dark: '#111111',
+  },
+  bmw: {
+    light: '#f5f5f5',
     dark: '#000000',
   },
 }

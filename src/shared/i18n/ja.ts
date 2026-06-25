@@ -334,6 +334,7 @@ export const ja: Record<DictKey, string> = {
   'file-tree.download': 'ダウンロード',
   'file-tree.upload-file': 'ファイルをアップロード',
   'file-tree.paste': '貼り付け',
+  'file-tree.collapse-all': 'ツリーを折りたたむ',
   'file-tree.new-folder': '新しいフォルダ',
   'file-tree.refresh': '更新',
   'file-tree.search-label': 'ファイルを検索',
@@ -647,7 +648,8 @@ export const ja: Record<DictKey, string> = {
   'settings.theme-preset.github': 'GitHub',
   'settings.theme-preset.claude': 'Claude',
   'settings.theme-preset.cursor': 'Cursor',
-  'settings.theme-preset.apple': 'Apple',
+  'settings.theme-preset.airbnb': 'Airbnb',
+  'settings.theme-preset.bmw': 'BMW',
   'settings.appearance': '外観',
   'settings.appearance.auto': '自動',
   'settings.appearance.light': 'ライト',
@@ -666,6 +668,9 @@ export const ja: Record<DictKey, string> = {
   'settings.temporary-files-directory-hint':
     'ターミナルでバイナリを貼り付けたときに作成するファイルに使用します。空の場合は現在のプロジェクトの tmp フォルダを使用します。',
   'settings.temporary-files-directory-placeholder': '現在のプロジェクトの tmp フォルダ',
+  'settings.terminal-theme-sync': 'ターミナルをテーマに合わせる',
+  'settings.terminal-theme-sync-hint':
+    'オンにすると内蔵ターミナルが選択中のアプリテーマを使用します。オフにすると従来のターミナル配色を維持します。',
   'settings.terminal-notifications': 'ターミナルベル通知',
   'settings.terminal-notifications-hint': 'バックグラウンドのターミナルベルでシステム通知を表示します。',
   'settings.terminal-notifications-test': 'システム通知をテスト',

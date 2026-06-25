@@ -37,6 +37,7 @@ describe('renderer bootstrap seeding', () => {
         globalShortcutDisabled: true,
         swapCloseShortcuts: true,
         toggleDetailOnActionBarBlankClick: true,
+        terminalThemeSyncEnabled: true,
         temporaryFilesDirectory: '',
         globalShortcut: 'CommandOrControl+Alt+G',
         globalShortcutRegistered: true,

@@ -13,7 +13,7 @@ const buttonVariants = cva(
   // `cursor: default` on buttons). Desktop-tool feel — the user expects
   // a hand cursor on every clickable Button.
   cn(
-    "inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-xs font-medium whitespace-nowrap transition-colors duration-100 cursor-pointer outline-none disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-danger-border aria-invalid:ring-danger/20 dark:aria-invalid:ring-danger/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
+    "inline-flex shrink-0 items-center justify-center gap-2 rounded-[var(--goblin-control-radius,var(--radius-md))] text-xs font-medium whitespace-nowrap transition-colors duration-100 cursor-pointer outline-none disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-danger-border aria-invalid:ring-danger/20 dark:aria-invalid:ring-danger/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
     focusRing,
     openRing,
     dataActiveRing,
@@ -46,8 +46,8 @@ const buttonVariants = cva(
       size: {
         // base sets text-xs + svg size-3.5 + gap-2; sizes only override
         // gap / padding / height to keep the variant table readable.
-        default: 'h-7 px-2.5 gap-1.5 has-[>svg]:px-2',
-        sm: "h-6 gap-1 px-2 text-xs has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
+        default: 'h-[var(--goblin-control-height-sm,1.75rem)] px-2.5 gap-1.5 has-[>svg]:px-2',
+        sm: "h-[calc(var(--goblin-control-height-sm,1.75rem)-0.25rem)] gap-1 px-2 text-xs has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
         'icon-xs': "size-5 [&_svg:not([class*='size-'])]:size-3",
         'icon-sm': 'size-6',
         icon: 'size-7',

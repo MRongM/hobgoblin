@@ -326,6 +326,7 @@ export const ko: Record<DictKey, string> = {
   'file-tree.download': '다운로드',
   'file-tree.upload-file': '파일 업로드',
   'file-tree.paste': '붙여넣기',
+  'file-tree.collapse-all': '트리 접기',
   'file-tree.new-folder': '새 폴더',
   'file-tree.refresh': '새로 고침',
   'file-tree.search-label': '파일 검색',
@@ -637,7 +638,8 @@ export const ko: Record<DictKey, string> = {
   'settings.theme-preset.github': 'GitHub',
   'settings.theme-preset.claude': 'Claude',
   'settings.theme-preset.cursor': 'Cursor',
-  'settings.theme-preset.apple': 'Apple',
+  'settings.theme-preset.airbnb': 'Airbnb',
+  'settings.theme-preset.bmw': 'BMW',
   'settings.appearance': '외관',
   'settings.appearance.auto': '자동',
   'settings.appearance.light': '라이트',
@@ -656,6 +658,9 @@ export const ko: Record<DictKey, string> = {
   'settings.temporary-files-directory-hint':
     '터미널에서 바이너리를 붙여넣을 때 생성되는 파일에 사용합니다. 비워 두면 현재 프로젝트의 tmp 폴더를 사용합니다.',
   'settings.temporary-files-directory-placeholder': '현재 프로젝트 tmp 폴더',
+  'settings.terminal-theme-sync': '터미널이 테마 따르기',
+  'settings.terminal-theme-sync-hint':
+    '켜면 내장 터미널이 선택한 앱 테마를 사용합니다. 끄면 클래식 터미널 팔레트를 유지합니다.',
   'settings.terminal-notifications': '터미널 벨 알림',
   'settings.terminal-notifications-hint': '백그라운드 터미널 벨에 대해 시스템 알림을 표시합니다.',
   'settings.terminal-notifications-test': '시스템 알림 테스트',

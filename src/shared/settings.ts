@@ -37,6 +37,7 @@ export interface SettingsPrefs {
   globalShortcutDisabled: boolean
   swapCloseShortcuts: boolean
   toggleDetailOnActionBarBlankClick: boolean
+  terminalThemeSyncEnabled: boolean
   temporaryFilesDirectory: string
   globalShortcut: string
   terminalApp: TerminalPref

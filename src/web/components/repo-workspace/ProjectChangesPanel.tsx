@@ -196,7 +196,7 @@ export function ProjectChangesPanel({
   }
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col">
+    <section className="flex min-h-0 flex-1 flex-col bg-pane">
       <ProjectChangesActionBar
         repo={repo}
         branch={detail.branch}
@@ -293,7 +293,7 @@ function ProjectChangesActionBar({
   return (
     <div
       data-testid="project-changes-action-bar"
-      className="flex min-h-8 shrink-0 items-center justify-end gap-1 border-b border-separator/70 bg-card px-2"
+      className="flex min-h-8 shrink-0 items-center justify-end gap-1 border-b border-toolbar-border bg-toolbar px-2"
     >
       {selectedCount > 0 && (
         <>

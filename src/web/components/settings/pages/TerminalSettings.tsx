@@ -8,18 +8,10 @@ import {
   useSensors,
   type DragEndEvent,
 } from '@dnd-kit/core'
-import {
-  rectSortingStrategy,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-} from '@dnd-kit/sortable'
+import { rectSortingStrategy, SortableContext, sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { ArrowDown, ArrowUp, GripVertical, Plus, Save, Trash2 } from 'lucide-react'
-import {
-  MAX_TERMINAL_FONT_SIZE,
-  MIN_TERMINAL_FONT_SIZE,
-} from '#/shared/settings.ts'
+import { MAX_TERMINAL_FONT_SIZE, MIN_TERMINAL_FONT_SIZE } from '#/shared/settings.ts'
 import type { TerminalCustomButton, TerminalCustomButtonSize } from '#/shared/rpc.ts'
 import { Button } from '#/web/components/ui/button.tsx'
 import { Input } from '#/web/components/ui/input.tsx'
@@ -176,13 +168,7 @@ export function TerminalSettings() {
         label={t('settings.terminal-custom-buttons.title')}
         hint={t('settings.terminal-custom-buttons.hint')}
         action={
-          <Button
-            type="button"
-            data-interactive
-            variant="ghost"
-            size="sm"
-            onClick={addRow}
-          >
+          <Button type="button" data-interactive variant="ghost" size="sm" onClick={addRow}>
             <Plus className="size-3" />
             {t('settings.terminal-custom-buttons.add')}
           </Button>
@@ -324,7 +310,7 @@ function TerminalCustomButtonCard({
       ref={setNodeRef}
       style={cardStyle}
       className={[
-        'min-w-0 rounded-lg border border-border/60 bg-background/85 p-2 shadow-[var(--shadow-inset-highlight)]',
+        'min-w-0 rounded-[var(--goblin-brand-radius-lg,var(--radius-lg))] border border-border/60 bg-[var(--goblin-card-bg,var(--color-background))] p-2 shadow-[var(--shadow-inset-highlight)]',
         isDragging ? 'z-10 shadow-sm' : '',
       ].join(' ')}
     >
@@ -337,11 +323,11 @@ function TerminalCustomButtonCard({
           {...listeners}
           aria-label={t('settings.terminal-custom-buttons.reorder')}
           title={t('settings.terminal-custom-buttons.reorder')}
-          className="flex size-6 touch-none cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground active:cursor-grabbing"
+          className="flex size-6 touch-none cursor-grab items-center justify-center rounded-[var(--goblin-brand-radius-sm,var(--radius-sm))] text-muted-foreground hover:bg-list-row-hover hover:text-foreground active:cursor-grabbing"
         >
           <GripVertical className="size-3.5" />
         </button>
-        <span className="flex size-6 shrink-0 items-center justify-center rounded bg-muted text-[11px] text-muted-foreground">
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-[var(--goblin-brand-radius-sm,var(--radius-sm))] bg-control text-[11px] text-muted-foreground">
           {index + 1}
         </span>
         <div className="min-w-0 flex-1">
@@ -400,7 +386,7 @@ function TerminalCustomButtonCard({
         />
         <textarea
           id={`terminal-custom-button-value-${index}`}
-          className="min-h-[52px] max-h-40 w-full resize-y rounded-md border border-input bg-control px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          className="min-h-[52px] max-h-40 w-full resize-y rounded-md border border-input-border bg-input-background px-3 py-2 text-sm text-input-foreground placeholder:text-input-placeholder focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
           value={row.value}
           placeholder={t('settings.terminal-custom-buttons.value-placeholder')}
           aria-label={t('settings.terminal-custom-buttons.value')}

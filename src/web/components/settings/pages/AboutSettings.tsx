@@ -20,7 +20,7 @@ export function AboutSettings() {
         </div>
       </SettingsListItem>
       <SettingsListItem as="li" size="xl">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-[var(--goblin-brand-radius-md,var(--radius-md))] bg-control text-muted-foreground">
           <Tag size={16} />
         </span>
         <div className="min-w-0 flex-1">
@@ -29,7 +29,7 @@ export function AboutSettings() {
         <span className="shrink-0 font-mono text-xs text-muted-foreground">v{__APP_VERSION__}</span>
       </SettingsListItem>
       <SettingsListItem as="li" size="xl">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-[var(--goblin-brand-radius-md,var(--radius-md))] bg-control text-muted-foreground">
           <Hash size={16} />
         </span>
         <div className="min-w-0 flex-1">
@@ -40,7 +40,7 @@ export function AboutSettings() {
         </span>
       </SettingsListItem>
       <SettingsListItem as="li" size="xl">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-[var(--goblin-brand-radius-md,var(--radius-md))] bg-control text-muted-foreground">
           <GitHubMark className="size-4" />
         </span>
         <div className="min-w-0 flex-1">

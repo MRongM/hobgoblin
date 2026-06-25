@@ -38,6 +38,7 @@ function defaultArgv() {
       globalShortcutDisabled: false,
       swapCloseShortcuts: false,
       toggleDetailOnActionBarBlankClick: false,
+      terminalThemeSyncEnabled: true,
       temporaryFilesDirectory: '',
       globalShortcut: 'CommandOrControl+Shift+G',
       globalShortcutRegistered: false,
@@ -113,6 +114,7 @@ describe('preload goblinNative bridge', () => {
     expect(goblinNative.initialSettings).toMatchObject({
       fetchIntervalSec: 120,
       terminalNotificationsEnabled: false,
+      terminalThemeSyncEnabled: true,
       editorApp: 'cursor',
     })
   })

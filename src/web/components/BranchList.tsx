@@ -168,13 +168,17 @@ export function BranchList({ repoId, showActions = true }: Props) {
     if (!over || active.id === over.id) return
     reorderWorktrees(repoId, String(active.id), String(over.id))
   }
-  const detachedWorktrees = repo.ui.branchViewMode === 'no-worktree'
-    ? []
-    : Object.values(repo.data.worktreesByPath)
-        .filter((worktree) => worktree.isDetached)
+  const detachedWorktrees =
+    repo.ui.branchViewMode === 'no-worktree'
+      ? []
+      : Object.values(repo.data.worktreesByPath).filter((worktree) => worktree.isDetached)
   useEffect(() => {
     if (!openActionMenu) return
-    if (openActionMenu.repoId !== repoId || !showActions || !branches.some((branch) => branch.name === openActionMenu.branch)) {
+    if (
+      openActionMenu.repoId !== repoId ||
+      !showActions ||
+      !branches.some((branch) => branch.name === openActionMenu.branch)
+    ) {
       setOpenActionMenu(null)
     }
   }, [openActionMenu, branches, repoId, showActions])
@@ -248,7 +252,7 @@ export function BranchList({ repoId, showActions = true }: Props) {
     </ul>
   )
 
-  return <ScrollArea className="min-h-0 flex-1">{list}</ScrollArea>
+  return <ScrollArea className="min-h-0 flex-1 bg-sidebar">{list}</ScrollArea>
 }
 
 function SortableBranchRow(props: ComponentProps<typeof BranchRow> & { id: string; dragHandleLabel: string }) {
@@ -295,12 +299,14 @@ function DetachedWorktreeRow({
     worktree.head ?? null,
     displayPath,
     dirty ? t('branches.dirty') : null,
-  ].filter(Boolean).join(', ')
+  ]
+    .filter(Boolean)
+    .join(', ')
 
   return (
     <li
       title={title}
-      className="relative grid min-h-9 grid-cols-1 items-stretch text-muted-foreground transition-colors duration-100 hover:bg-muted"
+      className="relative grid min-h-9 grid-cols-1 items-stretch text-muted-foreground transition-colors duration-100 hover:bg-list-row-hover"
     >
       <div className="pointer-events-none relative z-10 flex min-w-0 items-center gap-2 px-4 py-1.5">
         <span className="flex w-4 shrink-0 items-center justify-center">
@@ -312,9 +318,7 @@ function DetachedWorktreeRow({
             <FolderTree size={10} />
             {dirty ? t('branches.dirty') : t('branches.detached')}
           </Badge>
-          <span className="min-w-0 truncate text-[11px] leading-none text-muted-foreground/85">
-            {displayPath}
-          </span>
+          <span className="min-w-0 truncate text-[11px] leading-none text-muted-foreground/85">{displayPath}</span>
         </span>
       </div>
     </li>
