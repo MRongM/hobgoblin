@@ -174,7 +174,6 @@ describe('useBranchActionItems', () => {
     const groups = await renderItemGroups(useItems, repo, branch)
 
     expect(groups.mainItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
-      'checkout',
       'pull',
       'push',
       'createWorktree',
@@ -186,7 +185,7 @@ describe('useBranchActionItems', () => {
       'commit',
     ])
     expect(groups.externalItems.filter((item) => item.visible).map((item) => item.id)).toEqual(['terminal', 'editor', 'remote'])
-    expect(groups.mainItems.find((item) => item.id === 'pull')?.label).toBe('action.pull-remote')
+    expect(groups.mainItems.find((item) => item.id === 'pull')?.label).toBe('action.pull')
   })
 
   test('shows unavailable repository and worktree actions disabled instead of hidden', async () => {
@@ -240,7 +239,6 @@ describe('useBranchActionItems', () => {
 
     expect(groups.patchItems.filter((item) => item.visible).map((item) => item.id)).toEqual(['copyPatch'])
     expect(groups.mainItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
-      'checkout',
       'pull',
       'push',
       'createWorktree',
@@ -263,7 +261,7 @@ describe('useBranchActionItems', () => {
     ])
 
     expect(disabledById.get('copyPatch')).toBe(true)
-    expect(disabledById.get('checkout')).toBe(false)
+    expect(allItems.find((item) => item.id === 'checkout')?.visible).toBe(false)
     expect(disabledById.get('pull')).toBe(true)
     expect(disabledById.get('push')).toBe(true)
     expect(disabledById.get('createWorktree')).toBe(false)
@@ -371,6 +369,8 @@ describe('useBranchActionItems', () => {
       'deleteBranch',
       'resetHard',
     ])
+    expect(groups.destructiveItems.find((item) => item.id === 'removeWorktree')?.label).toBe('action.remove-worktree')
+    expect(groups.destructiveItems.find((item) => item.id === 'deleteBranch')?.label).toBe('action.delete-branch')
     expect(groups.destructiveItems.find((item) => item.id === 'removeWorktree')?.disabled).toBe(true)
     expect(groups.destructiveItems.find((item) => item.id === 'resetHard')?.label).toBe('action.reset-hard')
   })
