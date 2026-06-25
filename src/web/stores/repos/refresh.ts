@@ -14,6 +14,7 @@ import {
   runCoreDataRefreshWorkflow,
   runSnapshotSuccessWorkflow,
 } from '#/web/stores/repos/refresh-workflows.ts'
+import { repoSupportsGitData } from '#/web/stores/repos/capabilities.ts'
 import {
   applyPullRequestRefreshErrorState,
   applyPullRequestRefreshStaleState,
@@ -158,7 +159,8 @@ export function createRefreshActions(set: ReposSet, get: ReposGet) {
     async refreshSnapshot(id: string, options?: { skipLogBackfill?: boolean; token?: number }) {
       const resolved = resolveActionToken(get, id, options?.token)
       if (!resolved) return
-      const { token } = resolved
+      const { repo: repoBefore, token } = resolved
+      if (!repoSupportsGitData(repoBefore)) return
       updateIfFresh(set, id, token, (r) => {
         startResource(r.resources.snapshot, { hasData: r.data.branches.length > 0 })
       })
@@ -205,6 +207,7 @@ export function createRefreshActions(set: ReposSet, get: ReposGet) {
       const resolved = resolveActionToken(get, id, options?.token)
       if (!resolved) return
       const { repo: repoBefore, token } = resolved
+      if (!repoSupportsGitData(repoBefore)) return
       const request = resolvePullRequestRefreshRequest(repoBefore, branchesArg, options)
       if (!request) return
       const { branchNames, requested, mode, clearMissing } = request
@@ -244,7 +247,8 @@ export function createRefreshActions(set: ReposSet, get: ReposGet) {
     async refreshStatus(id: string, options?: { token?: number }) {
       const resolved = resolveActionToken(get, id, options?.token)
       if (!resolved) return
-      const { token } = resolved
+      const { repo: repoBefore, token } = resolved
+      if (!repoSupportsGitData(repoBefore)) return
       await runLatestResourceOperation({
         set,
         get,
@@ -276,7 +280,8 @@ export function createRefreshActions(set: ReposSet, get: ReposGet) {
     async refreshCoreData(id: string, options?: { token?: number }) {
       const resolved = resolveActionToken(get, id, options?.token)
       if (!resolved) return
-      const { token } = resolved
+      const { repo: repoBefore, token } = resolved
+      if (!repoSupportsGitData(repoBefore)) return
       await runCoreDataRefreshWorkflow(get, { id, token })
     },
 
@@ -288,7 +293,8 @@ export function createRefreshActions(set: ReposSet, get: ReposGet) {
     async syncAndRefresh(id: string, options?: { token?: number }) {
       const resolved = resolveActionToken(get, id, options?.token)
       if (!resolved) return
-      const { token } = resolved
+      const { repo: repoBefore, token } = resolved
+      if (!repoSupportsGitData(repoBefore)) return
       await runExclusiveOperation({
         set,
         get,

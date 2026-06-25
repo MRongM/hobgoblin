@@ -20,14 +20,31 @@ import type {
  *  containing it. Used by both the branch and log format strings. */
 export const FIELD_SEP = '\x1f'
 
+function branchWorktreeSnapshot(
+  wtInfo: { path: string; isDirty?: boolean; isPrimary: boolean; changeCount?: number; isLocked?: boolean },
+): NonNullable<BranchSnapshotInfo['worktree']> {
+  const hasSummary = wtInfo.isDirty !== undefined || wtInfo.changeCount !== undefined
+  return {
+    path: wtInfo.path,
+    isPrimary: wtInfo.isPrimary,
+    ...(wtInfo.isLocked !== undefined ? { isLocked: wtInfo.isLocked } : {}),
+    ...(hasSummary
+      ? {
+          summary: {
+            ...(wtInfo.isDirty !== undefined ? { dirty: wtInfo.isDirty } : {}),
+            ...(wtInfo.changeCount !== undefined ? { changeCount: wtInfo.changeCount } : {}),
+          },
+        }
+      : {}),
+  }
+}
+
 /**
  * Parse `git for-each-ref --format=<fields joined by FIELD_SEP> refs/heads/`.
  * Fields, in order: refname:short, objectname:short, subject,
  * authordate:iso-strict, authorname, upstream:short, upstream:track.
  */
 export function parseBranches(output: string, currentBranch: string, worktrees: WorktreeInfo[] = []): BranchSnapshotInfo[] {
-  if (!output) return []
-
   const worktreeMap = new Map<
     string,
     { path: string; isDirty?: boolean; isPrimary: boolean; changeCount?: number; isLocked?: boolean }
@@ -42,6 +59,24 @@ export function parseBranches(output: string, currentBranch: string, worktrees: 
         isLocked: wt.isLocked,
       })
     }
+  }
+
+  if (!output) {
+    const wtInfo = currentBranch ? worktreeMap.get(currentBranch) : null
+    if (!currentBranch || !wtInfo) return []
+    return [
+      {
+        name: currentBranch,
+        isCurrent: true,
+        ahead: 0,
+        behind: 0,
+        lastCommitHash: '',
+        lastCommitMessage: '',
+        lastCommitDate: '',
+        lastCommitAuthor: '',
+        worktree: branchWorktreeSnapshot(wtInfo),
+      },
+    ]
   }
 
   const lines = output.split('\n').filter(Boolean)
@@ -82,20 +117,7 @@ export function parseBranches(output: string, currentBranch: string, worktrees: 
 
     const wtInfo = worktreeMap.get(name)
     if (wtInfo) {
-      const hasSummary = wtInfo.isDirty !== undefined || wtInfo.changeCount !== undefined
-      branchInfo.worktree = {
-        path: wtInfo.path,
-        isPrimary: wtInfo.isPrimary,
-        ...(wtInfo.isLocked !== undefined ? { isLocked: wtInfo.isLocked } : {}),
-        ...(hasSummary
-          ? {
-              summary: {
-                ...(wtInfo.isDirty !== undefined ? { dirty: wtInfo.isDirty } : {}),
-                ...(wtInfo.changeCount !== undefined ? { changeCount: wtInfo.changeCount } : {}),
-              },
-            }
-          : {}),
-      }
+      branchInfo.worktree = branchWorktreeSnapshot(wtInfo)
     }
 
     branches.push(branchInfo)

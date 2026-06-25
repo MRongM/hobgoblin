@@ -167,6 +167,11 @@ function classifyPathProbeError(err: unknown): string {
   return 'error.invalid-path'
 }
 
+function isNestedPath(parentPath: string, childPath: string): boolean {
+  const relative = path.relative(path.resolve(parentPath), path.resolve(childPath))
+  return relative.length > 0 && !relative.startsWith('..') && !path.isAbsolute(relative)
+}
+
 async function probeGitRepository(cwd: string): Promise<ProbeAvailability> {
   const ok = await isGitRepo(cwd)
   if (ok) return { ok: true }
@@ -223,16 +228,23 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
     kind: 'local',
     async probe() {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-path' }
-      const gitAvailable = await checkGitAvailable()
-      if (!gitAvailable.ok) return gitAvailable
       const readable = await probeReadableDirectory(repoId)
       if (!readable.ok) return readable
-      const ok = await isGitRepo(repoId)
-      if (!ok) return { ok: false, message: 'error.not-git-repo' }
+      const gitAvailable = await checkGitAvailable()
+      if (!gitAvailable.ok) {
+        return { ok: true, root: repoId, name: path.basename(repoId), isGitRepo: false }
+      }
+      const gitRepo = await isGitRepo(repoId)
+      if (!gitRepo) {
+        return { ok: true, root: repoId, name: path.basename(repoId), isGitRepo: false }
+      }
       const root = await getRepoRoot(repoId)
       if (!root) return { ok: false, message: 'error.failed-read-repo' }
+      if (isNestedPath(root, repoId)) {
+        return { ok: true, root: repoId, name: path.basename(repoId), isGitRepo: false }
+      }
       const name = await getRepoName(repoId)
-      return { ok: true, root, name }
+      return { ok: true, root, name, isGitRepo: true }
     },
     async getSnapshot(signal) {
       if (!isValidCwd(repoId)) return null
@@ -405,7 +417,8 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
     async probe() {
       const result = await testRemoteRepository(target)
       if (!result.ok) return { ok: false, message: result.message || 'error.failed-read-repo' }
-      return { ok: true, root: target.id, name: target.displayName }
+      const snapshot = await getRemoteSnapshot(target)
+      return { ok: true, root: target.id, name: target.displayName, isGitRepo: snapshot !== null }
     },
     async getSnapshot(signal) {
       const remoteSnapshot = await getRemoteSnapshot(target, { signal })

@@ -3,6 +3,7 @@ import { publishRepoQueryInvalidation } from '#/server/modules/invalidation-brok
 import { resolveRemoteRepoTarget, resolveRepoBackend, runWithRepoBackend } from '#/server/modules/repo-backend.ts'
 import { getServerSettingsPrefs } from '#/server/modules/settings-source.ts'
 import { cloneRepository as cloneGitRepository } from '#/system/git/clone.ts'
+import { initRepository as gitInit } from '#/system/git/init.ts'
 import {
   createLocalFileTreeDirectory,
   deleteLocalFileTreeEntries,
@@ -552,4 +553,9 @@ export async function discardRepositoryChanges(
       sourceToken,
     )
   })
+}
+
+export async function initRepository(cwd: string): Promise<ExecResult> {
+  if (!isValidCwd(cwd)) return { ok: false, message: 'error.invalid-arguments' }
+  return await gitInit(cwd)
 }

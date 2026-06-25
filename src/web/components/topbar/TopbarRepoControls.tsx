@@ -8,7 +8,6 @@ import {
   DropdownMenuTrigger,
 } from '#/web/components/ui/dropdown-menu.tsx'
 import { BranchActionControls } from '#/web/components/BranchActionControls.tsx'
-import { RepoToolbarActions } from '#/web/components/repo-toolbar/RepoToolbarActions.tsx'
 import { WorkspaceLayoutControl } from '#/web/components/repo-toolbar/WorkspaceLayoutControl.tsx'
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import { useResponsiveUiMode } from '#/web/hooks/useResponsiveUiMode.tsx'
@@ -27,8 +26,10 @@ interface Props {
 
 export function TopbarRepoControls({ repoId }: Props) {
   const exists = useReposStore((s) => !!s.repos[repoId])
+  const isGitRepo = useReposStore((s) => s.repos[repoId]?.isGitRepo ?? true)
+  const workspaceLayout = useReposStore((s) => s.repos[repoId]?.ui.workspaceLayout ?? s.workspaceLayout)
   const focusMode = useReposStore((s) => {
-    const behavior = repoWorkspaceBehavior(s.workspaceLayout, s.detailCollapsed, s.detailFocusMode)
+    const behavior = repoWorkspaceBehavior(workspaceLayout, s.detailCollapsed, s.detailFocusMode)
     return behavior.mode === 'focus'
   })
 
@@ -36,9 +37,8 @@ export function TopbarRepoControls({ repoId }: Props) {
 
   return (
     <div className="flex h-full shrink-0 items-center gap-1">
-      <RepoToolbarActions repoId={repoId} compact />
-      {focusMode && <FocusBranchControls repoId={repoId} />}
-      <WorkspaceLayoutControlConnected />
+      {isGitRepo && focusMode && <FocusBranchControls repoId={repoId} />}
+      <WorkspaceLayoutControlConnected repoId={repoId} />
     </div>
   )
 }
@@ -190,11 +190,11 @@ function BranchSelector({
   )
 }
 
-function WorkspaceLayoutControlConnected() {
+function WorkspaceLayoutControlConnected({ repoId }: Props) {
   const uiMode = useResponsiveUiMode()
-  const workspaceLayout = useReposStore((s) => s.workspaceLayout)
+  const workspaceLayout = useReposStore((s) => s.repos[repoId]?.ui.workspaceLayout ?? s.workspaceLayout)
   const setWorkspaceLayout = useReposStore((s) => s.setWorkspaceLayout)
   if (uiMode === 'compact') return null
 
-  return <WorkspaceLayoutControl value={workspaceLayout} onChange={setWorkspaceLayout} />
+  return <WorkspaceLayoutControl value={workspaceLayout} onChange={(layout) => setWorkspaceLayout(repoId, layout)} />
 }

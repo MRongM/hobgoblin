@@ -174,6 +174,8 @@ export interface ProbeResult {
   root?: string
   name?: string
   message?: string
+  /** undefined or true = git repo; false = readable directory that is not a git repo */
+  isGitRepo?: boolean
 }
 
 export interface CloneRepoResult extends ExecResult {

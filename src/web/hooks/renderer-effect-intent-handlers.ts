@@ -46,7 +46,7 @@ interface SharedRendererIntentDeps {
   ensureWorkspaceOpen: (input: string | RepoSessionEntry) => Promise<OpenRepoResult>
   setDetailCollapsed: (collapsed: boolean) => void
   setSelectedTerminal: (worktreeKey: string, key: string) => void
-  setWorkspaceLayout: (layout: WorkspaceLayout) => void
+  setWorkspaceLayout: (id: string, layout: WorkspaceLayout) => void
   toggleDetailCollapsed: () => void
   resetLayout: () => void
   t: (key: string) => string
@@ -91,7 +91,7 @@ export async function handleAppLevelRendererIntent(
     case 'noop':
       return true
     case 'set-workspace-layout':
-      deps.setWorkspaceLayout(plan.layout)
+      if (deps.currentRepoId) deps.setWorkspaceLayout(deps.currentRepoId, plan.layout)
       return true
     case 'open-settings':
       deps.navigation.openSettings(plan.page)

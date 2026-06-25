@@ -41,6 +41,44 @@ afterEach(() => {
 })
 
 describe('RepoTabStrip', () => {
+  test('marks non-git local workspace tabs as plain repositories', () => {
+    render(
+      <RepoTabStrip
+        repos={[repo('plain-project', '/tmp/plain-project', { isGitRepo: false, worktreePaths: ['/tmp/plain-project'] })]}
+        activeId="/tmp/plain-project"
+        labels={labels}
+        onActivate={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+        onOpenLocal={() => {}}
+        onOpenRemote={() => {}}
+        onClone={() => {}}
+      />,
+    )
+
+    const tab = document.body.querySelector('[data-repo-tab-id="/tmp/plain-project"]')
+    expect(tab?.getAttribute('data-repo-kind')).toBe('plain')
+  })
+
+  test('keeps remote repository tabs remote when git capability is false', () => {
+    render(
+      <RepoTabStrip
+        repos={[repo('remote-project', 'ssh-config://example/srv%2Fremote-project', { isGitRepo: false })]}
+        activeId="ssh-config://example/srv%2Fremote-project"
+        labels={labels}
+        onActivate={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+        onOpenLocal={() => {}}
+        onOpenRemote={() => {}}
+        onClone={() => {}}
+      />,
+    )
+
+    const tab = document.body.querySelector('[data-repo-tab-id="ssh-config://example/srv%2Fremote-project"]')
+    expect(tab?.getAttribute('data-repo-kind')).toBe('remote')
+  })
+
   test('marks a repo tab when any repo worktree has an unread terminal bell', () => {
     render(
       <RepoTabStrip
@@ -182,8 +220,14 @@ function render(element: React.ReactNode, bellWorktreeKeys: string[] = []) {
   })
 }
 
-function repo(name: string, id: string, options: { worktreePaths?: string[] } = {}): RepoTabSummary {
-  return { id, name, remoteDetails: [], worktreePaths: options.worktreePaths ?? [] } as RepoTabSummary
+function repo(name: string, id: string, options: { worktreePaths?: string[]; isGitRepo?: boolean } = {}): RepoTabSummary {
+  return {
+    id,
+    name,
+    remoteDetails: [],
+    worktreePaths: options.worktreePaths ?? [],
+    isGitRepo: options.isGitRepo,
+  } as RepoTabSummary
 }
 
 function terminalReadContextWithBellKeys(bellKeys: ReadonlySet<string>): TerminalSessionReadContextValue {

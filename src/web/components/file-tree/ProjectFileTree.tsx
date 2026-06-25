@@ -65,6 +65,7 @@ import {
 import { Input } from '#/web/components/ui/input.tsx'
 import { cn } from '#/web/lib/cn.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
+import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import {
   buildFileTreeStatusIndex,
@@ -1247,6 +1248,8 @@ function useProjectFileTreeView(repoId: string): ProjectFileTreeView {
     (state) => {
       const repo = state.repos[repoId]
       if (!repo) return { exists: false, worktreePath: null, status: [] }
+      const plainWorkspacePath = repoPlainWorkspacePath(repo)
+      if (plainWorkspacePath) return { exists: true, worktreePath: plainWorkspacePath, status: [] }
       const selected = repo.data.branches.find((branch) => branch.name === repo.ui.selectedBranch) ?? null
       return {
         exists: true,

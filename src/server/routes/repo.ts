@@ -30,6 +30,7 @@ import {
   deleteRepositoryBranch,
   fetchRepository,
   getRepositoryRemoteBranches,
+  initRepository,
   mergeRepositoryBranch,
   moveRepositoryFileTreeEntries,
   openRepositoryEditor,
@@ -446,6 +447,11 @@ export function createRepoRoutes() {
         'discard-changes',
       ),
     )
+  })
+  app.post('/init', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    return c.json(await jsonOr(() => initRepository(cwd), { ok: false, message: 'error.failed-read-repo' }, 'init'))
   })
   return app
 }

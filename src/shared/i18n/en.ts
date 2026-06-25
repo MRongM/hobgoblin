@@ -234,6 +234,10 @@ export const en = {
   // ---- Branches list ------------------------------------------------------
   'branches.empty': 'No branches found in this repository.',
   'branches.filter-empty': 'No branches match the current filters.',
+
+  // ---- Non-git directory --------------------------------------------------
+  'non-git.init-button': 'Initialize Git Repository',
+  'non-git.init-failed': 'Failed to initialize repository',
   'branches.filter-label': 'Filter branches',
   'branches.search-label': 'Search branches',
   'branches.search-placeholder': 'Search branches',
@@ -424,8 +428,8 @@ export const en = {
   'action.fetch': 'Fetch',
   'action.remote': 'Remote',
   'action.remote-pr': 'PR #{n}',
-  'action.delete-branch': 'Delete',
-  'action.remove-worktree': 'Delete',
+  'action.delete-branch': 'Delete Branch',
+  'action.remove-worktree': 'Delete Worktree',
   'action.create-branch': 'Create Branch',
   'action.create-branch-title': 'Create branch',
   'action.create-branch-base-label': 'Base branch',

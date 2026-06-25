@@ -9,7 +9,6 @@ import {
 } from '#/web/components/ui/dropdown-menu.tsx'
 import { BranchActionControls } from '#/web/components/BranchActionControls.tsx'
 import { BranchFilterControls } from '#/web/components/repo-toolbar/BranchFilterControls.tsx'
-import { RepoToolbarActions } from '#/web/components/repo-toolbar/RepoToolbarActions.tsx'
 import { WorkspaceLayoutControl } from '#/web/components/repo-toolbar/WorkspaceLayoutControl.tsx'
 import { BranchSummaryInline } from '#/web/components/repo-workspace/BranchSummaryInline.tsx'
 import { Toolbar } from '#/web/components/Layout.tsx'
@@ -30,21 +29,21 @@ interface Props {
 
 export function RepoToolbar({ repoId }: Props) {
   const exists = useReposStore((s) => !!s.repos[repoId])
-  if (!exists) return null
-
+  const isGitRepo = useReposStore((s) => s.repos[repoId]?.isGitRepo ?? true)
+  const workspaceLayout = useReposStore((s) => s.repos[repoId]?.ui.workspaceLayout ?? s.workspaceLayout)
   const focusMode = useReposStore((s) => {
-    const behavior = repoWorkspaceBehavior(s.workspaceLayout, s.detailCollapsed, s.detailFocusMode)
+    const behavior = repoWorkspaceBehavior(workspaceLayout, s.detailCollapsed, s.detailFocusMode)
     return behavior.mode === 'focus'
   })
+  if (!exists) return null
 
   return (
     <Toolbar variant="repo" className="justify-between gap-3">
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        {focusMode ? <FocusBranchControls repoId={repoId} /> : <BranchFilterControls repoId={repoId} />}
+        {isGitRepo && (focusMode ? <FocusBranchControls repoId={repoId} /> : <BranchFilterControls repoId={repoId} />)}
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <RepoToolbarActions repoId={repoId} />
-        <WorkspaceLayoutControlConnected />
+        <WorkspaceLayoutControlConnected repoId={repoId} />
       </div>
     </Toolbar>
   )
@@ -219,11 +218,11 @@ function BranchSelector({
   )
 }
 
-function WorkspaceLayoutControlConnected() {
+function WorkspaceLayoutControlConnected({ repoId }: Props) {
   const uiMode = useResponsiveUiMode()
-  const workspaceLayout = useReposStore((s) => s.workspaceLayout)
+  const workspaceLayout = useReposStore((s) => s.repos[repoId]?.ui.workspaceLayout ?? s.workspaceLayout)
   const setWorkspaceLayout = useReposStore((s) => s.setWorkspaceLayout)
   if (uiMode === 'compact') return null
 
-  return <WorkspaceLayoutControl value={workspaceLayout} onChange={setWorkspaceLayout} />
+  return <WorkspaceLayoutControl value={workspaceLayout} onChange={(layout) => setWorkspaceLayout(repoId, layout)} />
 }

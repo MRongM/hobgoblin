@@ -837,4 +837,44 @@ describe('core refresh request ordering', () => {
     expect(warnSpy).toHaveBeenCalledWith('[terminal] failed to prune repo sessions', err)
   })
 
+  test('non-git repositories skip git refresh and manual sync paths', async () => {
+    const token = seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    }).instanceToken
+    let fetchCount = 0
+    let snapshotCount = 0
+    let statusCount = 0
+    rpcHandlers['repo.fetch'] = async () => {
+      fetchCount += 1
+      return { ok: true, message: 'ok' }
+    }
+    rpcHandlers['repo.snapshot'] = async () => {
+      snapshotCount += 1
+      return { branches: [branch('feature/a')], current: 'feature/a' }
+    }
+    rpcHandlers['repo.status'] = async () => {
+      statusCount += 1
+      return []
+    }
+
+    await useReposStore.getState().refreshCoreData(REPO_ID, { token })
+    await useReposStore.getState().syncAndRefresh(REPO_ID, { token })
+    await useReposStore.getState().refreshSnapshot(REPO_ID, { token })
+    await useReposStore.getState().refreshStatus(REPO_ID, { token })
+    await useReposStore.getState().refreshPullRequests(REPO_ID, ['feature/a'], { token })
+
+    expect(fetchCount).toBe(0)
+    expect(snapshotCount).toBe(0)
+    expect(statusCount).toBe(0)
+    expect(useReposStore.getState().repos[REPO_ID]?.data.branches).toEqual([])
+    expect(useReposStore.getState().repos[REPO_ID]?.data.statusLoaded).toBe(false)
+    expect(useReposStore.getState().repos[REPO_ID]?.resources.snapshot.phase).toBe('idle')
+    expect(useReposStore.getState().repos[REPO_ID]?.resources.status.phase).toBe('idle')
+    expect(useReposStore.getState().repos[REPO_ID]?.resources.pullRequests.phase).toBe('idle')
+    expect(useReposStore.getState().repos[REPO_ID]?.operations.manualRefresh.phase).toBe('idle')
+  })
 })
