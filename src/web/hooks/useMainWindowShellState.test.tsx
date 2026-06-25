@@ -97,8 +97,8 @@ describe('useMainWindowShellState', () => {
   })
 
   test('derives focus workspace mode from the effective layout and focus preference', async () => {
+    useReposStore.getState().setWorkspaceLayout('/tmp/repo', 'top-bottom')
     useReposStore.setState({
-      workspaceLayout: 'top-bottom',
       detailCollapsed: false,
       detailFocusMode: true,
     })

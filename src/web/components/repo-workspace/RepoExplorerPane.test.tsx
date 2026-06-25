@@ -8,6 +8,7 @@ import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/r
 
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 const REPO_ID = '/repo'
+const REMOTE_REPO_ID = 'ssh-config://prod/srv/plain'
 const runtimeFontSettings = vi.hoisted(() => ({
   fileTreeFontSize: 12,
   fileTreeTopbarFontSize: 13,
@@ -54,6 +55,12 @@ vi.mock('#/web/components/repo-workspace/ProjectPortsPanel.tsx', () => ({
   ),
 }))
 
+vi.mock('#/web/components/repo-workspace/PlainWorkspaceTerminalPanel.tsx', () => ({
+  PlainWorkspaceTerminalPanel: ({ repoId }: { repoId: string }) => (
+    <div data-testid="plain-workspace-terminal" data-repo-id={repoId} />
+  ),
+}))
+
 vi.mock('#/web/components/SplitPane.tsx', () => ({
   SplitPane: ({
     before,
@@ -82,7 +89,140 @@ afterEach(() => {
 })
 
 describe('RepoExplorerPane', () => {
-  test('places branch controls above the branch list', async () => {
+  test('renders non-git local workspaces as files and terminal only without a branch pane', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
+    })
+
+    expect(container.querySelector('[data-testid="split-pane"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="branch-list"]')).toBeNull()
+    expect(container.querySelector('[data-testid="branch-area-toolbar"]')).toBeNull()
+
+    const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+    expect(tabs).toEqual([])
+    expect(container.querySelector('[data-testid="project-file-tree"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="plain-workspace-terminal"]')?.getAttribute('data-repo-id')).toBe(
+      REPO_ID,
+    )
+    expect(container.querySelector('[data-testid="project-changes-panel"]')).toBeNull()
+    expect(container.querySelector('[data-testid="project-status-panel"]')).toBeNull()
+    expect(container.querySelector('[data-testid="project-history-panel"]')).toBeNull()
+    expect(container.querySelector('[data-testid="project-ports-panel"]')).toBeNull()
+    expect(container.textContent).not.toContain('branches.empty')
+    await act(async () => root.unmount())
+  })
+
+  test('renders non-git remote workspaces as files and terminal only without a branch pane', async () => {
+    seedRepoState({
+      id: REMOTE_REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+      remote: {
+        target: {
+          id: REMOTE_REPO_ID,
+          alias: 'prod',
+          host: 'example.com',
+          user: 'alice',
+          port: 22,
+          remotePath: '/srv/plain',
+          displayName: 'prod:plain',
+        },
+      },
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REMOTE_REPO_ID} layout="top-bottom" showActions />)
+    })
+
+    expect(container.querySelector('[data-testid="split-pane"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="branch-list"]')).toBeNull()
+    expect(container.querySelector('[data-testid="project-file-tree"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="plain-workspace-terminal"]')?.getAttribute('data-repo-id')).toBe(
+      REMOTE_REPO_ID,
+    )
+
+    const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+    expect(tabs).toEqual([])
+    await act(async () => root.unmount())
+  })
+
+  test('plain workspace external reveal requests are passed to the file tree while terminal stays visible', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
+    })
+
+    expect(container.querySelector('[data-testid="project-file-tree"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="plain-workspace-terminal"]')).toBeTruthy()
+
+    await act(async () => {
+      root.render(
+        <RepoExplorerPane
+          repoId={REPO_ID}
+          layout="top-bottom"
+          showActions
+          revealRequest={{ id: 1, relativePath: 'src/from-terminal.ts' }}
+        />,
+      )
+    })
+
+    expect(container.querySelector('[data-testid="plain-workspace-terminal"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="project-file-tree"]')?.getAttribute('data-reveal-path')).toBe(
+      'src/from-terminal.ts',
+    )
+    await act(async () => root.unmount())
+  })
+
+  test('plain workspace ignores outer detail tab and keeps files with terminal visible', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+      detailTab: 'terminal',
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
+    })
+
+    expect(container.querySelector('[data-testid="split-pane"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="branch-list"]')).toBeNull()
+    expect(container.querySelector('[data-testid="project-file-tree"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="plain-workspace-terminal"]')?.getAttribute('data-repo-id')).toBe(
+      REPO_ID,
+    )
+    expect(container.textContent).not.toContain('branches.empty')
+    await act(async () => root.unmount())
+  })
+
+  test('places branch filters and repo actions above the branch list', async () => {
     seedRepoState({
       id: REPO_ID,
       branches: [createRepoBranch('main'), createRepoBranch('feature/a')],
@@ -98,11 +238,25 @@ describe('RepoExplorerPane', () => {
 
     const branchToolbar = container.querySelector('[data-testid="branch-area-toolbar"]')
     const branchList = container.querySelector('[data-testid="branch-list"]')
+    const filter = branchToolbar?.querySelector('[aria-label="branches.filter-label"]')
+    const search = branchToolbar?.querySelector('[aria-label="branches.search-label"]')
+    const refresh = branchToolbar?.querySelector('button[aria-label="action.refresh"]')
+    const createWorktree = branchToolbar?.querySelector('button[aria-label="action.create-worktree-title"]')
+    const allBranchesFilter = branchToolbar?.querySelector('[aria-label="branches.filter-tooltip.all"]')
+    const worktreesFilter = branchToolbar?.querySelector('[aria-label="branches.filter-tooltip.worktrees"]')
+    const noWorktreeFilter = branchToolbar?.querySelector('[aria-label="branches.filter-tooltip.no-worktree"]')
     expect(branchToolbar).toBeTruthy()
     expect(branchToolbar?.className).toContain('h-9')
     expect(branchToolbar?.className).not.toContain('h-8')
-    expect(branchToolbar?.querySelector('[aria-label="branches.filter-label"]')).toBeTruthy()
-    expect(branchToolbar?.querySelector('[aria-label="branches.search-label"]')).toBeTruthy()
+    expect(filter).toBeTruthy()
+    expect(search).toBeTruthy()
+    expect(refresh).toBeTruthy()
+    expect(createWorktree).toBeTruthy()
+    expect(allBranchesFilter).toBeTruthy()
+    expect(worktreesFilter).toBeTruthy()
+    expect(noWorktreeFilter).toBeNull()
+    expect(filter!.compareDocumentPosition(refresh!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(search!.compareDocumentPosition(createWorktree!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(branchList).toBeTruthy()
     expect(branchToolbar!.compareDocumentPosition(branchList!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     await act(async () => root.unmount())

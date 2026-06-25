@@ -31,6 +31,7 @@ function branchHasWorktree(repo: RepoState, branchName: string | null): boolean 
 }
 
 function detailTabForSelection(repo: RepoState, tab: DetailTab, selectedBranch = repo.ui.selectedBranch): DetailTab {
+  if (repo.isGitRepo === false && tab === 'terminal') return 'terminal'
   return detailTabForWorktree(tab, branchHasWorktree(repo, selectedBranch))
 }
 
@@ -69,7 +70,15 @@ function createRestorableWorkspaceSelectionActions(
 ): RestorableWorkspaceSelectionActions {
   return {
     setActive(id: string) {
-      set((s) => (s.repos[id] && s.activeId !== id ? { activeId: id } : s))
+      set((s) => {
+        const repo = s.repos[id]
+        if (!repo) return s
+        if (s.activeId === id && s.workspaceLayout === repo.ui.workspaceLayout) return s
+        return {
+          activeId: id,
+          workspaceLayout: repo.ui.workspaceLayout,
+        }
+      })
     },
 
     reorderRepos(fromId: string, toId: string) {
@@ -124,19 +133,49 @@ function createRestorableWorkspaceSelectionActions(
       })
     },
 
-    setWorkspaceLayout(layout: RepoWorkspaceLayout) {
+    setWorkspaceLayout(idOrLayout: string, explicitLayout?: RepoWorkspaceLayout) {
+      const id = explicitLayout ? idOrLayout : get().activeId
+      const layout = explicitLayout ?? (idOrLayout as RepoWorkspaceLayout)
+      if (!id) {
+        set((s) => {
+          const detailFocusMode = layout === 'top-bottom' ? s.detailFocusMode : false
+          const detailCollapsed = effectiveDetailCollapsed(layout, s.detailCollapsed)
+          if (
+            s.workspaceLayout === layout &&
+            s.detailCollapsed === detailCollapsed &&
+            s.detailFocusMode === detailFocusMode
+          ) {
+            return s
+          }
+          return { workspaceLayout: layout, detailCollapsed, detailFocusMode }
+        })
+        return
+      }
+      let changed = false
+      let token: number | undefined
       set((s) => {
-        const detailFocusMode = layout === 'top-bottom' ? s.detailFocusMode : false
-        const detailCollapsed = effectiveDetailCollapsed(layout, s.detailCollapsed)
-        if (
-          s.workspaceLayout === layout &&
-          s.detailCollapsed === detailCollapsed &&
-          s.detailFocusMode === detailFocusMode
-        ) {
-          return s
+        const repo = s.repos[id]
+        if (!repo) return s
+        if (repo.ui.workspaceLayout === layout && (s.activeId !== id || s.workspaceLayout === layout)) return s
+        changed = true
+        token = repo.instanceToken
+        const isActiveRepo = s.activeId === id
+        const detailFocusMode = isActiveRepo ? (layout === 'top-bottom' ? s.detailFocusMode : false) : s.detailFocusMode
+        const detailCollapsed = isActiveRepo ? effectiveDetailCollapsed(layout, s.detailCollapsed) : s.detailCollapsed
+        return {
+          workspaceLayout: isActiveRepo ? layout : s.workspaceLayout,
+          detailCollapsed,
+          detailFocusMode,
+          repos: {
+            ...s.repos,
+            [id]: replaceRepo(repo, (r) => {
+              r.ui.workspaceLayout = layout
+            }),
+          },
         }
-        return { workspaceLayout: layout, detailCollapsed, detailFocusMode }
       })
+      const repo = get().repos[id]
+      if (changed && token !== undefined && repo) persistRestorableRepoSnapshot(set, repo, token)
     },
 
     applySessionLayoutState(layoutState: Parameters<ReposStore['applySessionLayoutState']>[0]) {

@@ -48,14 +48,17 @@ export function restorableWorkspaceStateFromStore(
     | 'detailPaneSizes'
     | 'fileTreePaneSizes'
     | 'selectedTerminalByWorktree'
-  >,
+  > & { repos?: ReposStore['repos'] },
 ): RestorableWorkspaceState {
+  const workspaceLayout = state.activeId
+    ? state.repos?.[state.activeId]?.ui.workspaceLayout ?? state.workspaceLayout
+    : state.workspaceLayout
   return {
     order: state.order,
     activeId: state.activeId,
     detailCollapsed: state.detailCollapsed,
     detailFocusMode: state.detailFocusMode,
-    workspaceLayout: state.workspaceLayout,
+    workspaceLayout,
     detailPaneSizes: state.detailPaneSizes,
     fileTreePaneSizes: state.fileTreePaneSizes,
     selectedTerminalByWorktree: state.selectedTerminalByWorktree,
@@ -72,14 +75,19 @@ export function localWorkspaceStateFromStore(
 }
 
 function restorableWorkspaceViewportStateFromStore(
-  state: Pick<ReposStore, 'activeId' | 'order' | 'detailCollapsed' | 'detailFocusMode' | 'workspaceLayout'>,
+  state: Pick<ReposStore, 'activeId' | 'order' | 'detailCollapsed' | 'detailFocusMode' | 'workspaceLayout'> & {
+    repos?: ReposStore['repos']
+  },
 ): RestorableWorkspaceViewportState {
+  const workspaceLayout = state.activeId
+    ? state.repos?.[state.activeId]?.ui.workspaceLayout ?? state.workspaceLayout
+    : state.workspaceLayout
   return {
     activeId: state.activeId,
     order: state.order,
     detailCollapsed: state.detailCollapsed,
     detailFocusMode: state.detailFocusMode,
-    workspaceLayout: state.workspaceLayout,
+    workspaceLayout,
   }
 }
 
@@ -109,7 +117,9 @@ export function localWorkspaceSearchStateFromStore(
 }
 
 export function mainWindowWorkspaceStateFromStore(
-  state: Pick<ReposStore, 'activeId' | 'order' | 'detailCollapsed' | 'detailFocusMode' | 'workspaceLayout' | 'sessionReady'>,
+  state: Pick<ReposStore, 'activeId' | 'order' | 'detailCollapsed' | 'detailFocusMode' | 'workspaceLayout' | 'sessionReady'> & {
+    repos?: ReposStore['repos']
+  },
 ): MainWindowWorkspaceState {
   const restorable = restorableWorkspaceViewportStateFromStore(state)
   const local = localWorkspaceSessionStateFromStore({ sessionReady: state.sessionReady })

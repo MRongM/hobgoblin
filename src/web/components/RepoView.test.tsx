@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act } from 'react'
+import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { RepoView } from '#/web/components/RepoView.tsx'
@@ -22,7 +22,17 @@ vi.mock('#/web/components/repo-workspace/RepoExplorerPane.tsx', () => ({
   ),
 }))
 
+vi.mock('#/web/components/SplitPane.tsx', () => ({
+  SplitPane: ({ before, after }: { before: ReactNode; after: ReactNode }) => (
+    <div data-testid="split-pane">
+      {before}
+      {after}
+    </div>
+  ),
+}))
+
 const REPO_ID = '/tmp/gbl-repo-view-topbar-actions-repo'
+const REMOTE_REPO_ID = 'ssh-config://prod/srv/plain'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -54,12 +64,58 @@ afterEach(() => {
 })
 
 describe('RepoView', () => {
-  test('does not render repository toolbar controls inside the repository body', () => {
+  test('does not mount branch detail for non-git local workspaces', () => {
     seedRepoState({
       id: REPO_ID,
-      branches: [createRepoBranch('main'), createRepoBranch('feature/a')],
-      currentBranch: 'main',
-      selectedBranch: 'feature/a',
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    useReposStore.setState({ workspaceLayout: 'top-bottom', detailCollapsed: false })
+
+    renderRepoView()
+
+    expect(container?.querySelector('[data-testid="branch-detail"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).not.toBeNull()
+    expect(container?.textContent).not.toContain('branches.empty')
+  })
+
+  test('does not mount branch detail for non-git remote workspaces', () => {
+    seedRepoState({
+      id: REMOTE_REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+      remote: {
+        target: {
+          id: REMOTE_REPO_ID,
+          alias: 'prod',
+          host: 'example.com',
+          user: 'alice',
+          port: 22,
+          remotePath: '/srv/plain',
+          displayName: 'prod:plain',
+        },
+      },
+    })
+    useReposStore.setState({ workspaceLayout: 'top-bottom', detailCollapsed: false })
+
+    renderRepoView(REMOTE_REPO_ID)
+
+    expect(container?.querySelector('[data-testid="branch-detail"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).not.toBeNull()
+    expect(container?.textContent).not.toContain('branches.empty')
+  })
+
+  test('does not render repository toolbar controls for non-git local workspaces', () => {
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
     })
     useReposStore.setState({ workspaceLayout: 'top-bottom', detailCollapsed: true })
 
@@ -92,14 +148,14 @@ describe('RepoView', () => {
   })
 })
 
-function renderRepoView() {
+function renderRepoView(repoId = REPO_ID) {
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
   act(() => {
     root!.render(
       <MainWindowNavigationProvider value={navigationWith({})}>
-        <RepoView repoId={REPO_ID} />
+        <RepoView repoId={repoId} />
       </MainWindowNavigationProvider>,
     )
   })

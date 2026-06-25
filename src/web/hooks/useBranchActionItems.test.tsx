@@ -174,6 +174,7 @@ describe('useBranchActionItems', () => {
     const groups = await renderItemGroups(useItems, repo, branch)
 
     expect(groups.mainItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
+      'checkout',
       'pull',
       'push',
       'createWorktree',
@@ -188,7 +189,146 @@ describe('useBranchActionItems', () => {
     expect(groups.mainItems.find((item) => item.id === 'pull')?.label).toBe('action.pull-remote')
   })
 
-  test('places discard changes below delete branch in the destructive group', async () => {
+  test('shows unavailable repository and worktree actions disabled instead of hidden', async () => {
+    mocks.useRuntimeExternalAppSettings.mockReturnValue({
+      terminalApp: 'auto',
+      resolvedTerminalApp: null,
+      terminalAvailable: false,
+      editorApp: 'vscode',
+      resolvedEditorApp: null,
+      editorAvailable: false,
+    })
+    mocks.useBranchActions.mockReturnValue({
+      blocked: false,
+      busyAction: null,
+      capabilities: {
+        isCurrent: false,
+        checkedOutInAnotherWorktree: false,
+        canRemoveWorktree: false,
+        isRegularBranch: true,
+        canCopyPatch: false,
+        canPull: false,
+        canPush: false,
+        canOpenRemote: false,
+        canOpenTerminal: false,
+        canOpenEditor: false,
+      },
+      actions: {
+        copyPatch: vi.fn(),
+        checkout: vi.fn(),
+        pull: vi.fn(),
+        push: vi.fn(),
+        openTerminal: vi.fn(),
+        openEditor: vi.fn(),
+        openRemote: vi.fn(),
+        requestDeleteBranch: vi.fn(),
+        requestRemoveWorktree: vi.fn(),
+      },
+      dialogs: null,
+    })
+    const branch = createRepoBranch('feature/menu')
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      branches: [branch],
+      remote: { hasRemotes: false, hasBrowserRemote: false, hasGitHubRemote: false },
+    })
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.ts')
+    const groups = await renderItemGroups(useItems, repo, branch)
+    const allItems = [...groups.patchItems, ...groups.mainItems, ...groups.externalItems, ...groups.destructiveItems]
+    const disabledById = new Map(allItems.map((item) => [item.id, item.disabled]))
+
+    expect(groups.patchItems.filter((item) => item.visible).map((item) => item.id)).toEqual(['copyPatch'])
+    expect(groups.mainItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
+      'checkout',
+      'pull',
+      'push',
+      'createWorktree',
+      'sync',
+      'createBranch',
+      'pullRemoteBranch',
+      'checkoutTo',
+      'merge',
+      'commit',
+    ])
+    expect(groups.externalItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
+      'terminal',
+      'editor',
+      'remote',
+    ])
+    expect(groups.destructiveItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
+      'removeWorktree',
+      'deleteBranch',
+      'resetHard',
+    ])
+
+    expect(disabledById.get('copyPatch')).toBe(true)
+    expect(disabledById.get('checkout')).toBe(false)
+    expect(disabledById.get('pull')).toBe(true)
+    expect(disabledById.get('push')).toBe(true)
+    expect(disabledById.get('createWorktree')).toBe(false)
+    expect(disabledById.get('sync')).toBe(false)
+    expect(disabledById.get('createBranch')).toBe(false)
+    expect(disabledById.get('pullRemoteBranch')).toBe(true)
+    expect(disabledById.get('checkoutTo')).toBe(true)
+    expect(disabledById.get('merge')).toBe(true)
+    expect(disabledById.get('commit')).toBe(true)
+    expect(disabledById.get('terminal')).toBe(true)
+    expect(disabledById.get('editor')).toBe(true)
+    expect(disabledById.get('remote')).toBe(true)
+    expect(disabledById.get('removeWorktree')).toBe(true)
+    expect(disabledById.get('deleteBranch')).toBe(false)
+    expect(disabledById.get('resetHard')).toBe(true)
+  })
+
+  test('keeps unavailable destructive actions visible but disabled', async () => {
+    mocks.useBranchActions.mockReturnValue({
+      blocked: false,
+      busyAction: null,
+      capabilities: {
+        isCurrent: true,
+        checkedOutInAnotherWorktree: false,
+        canRemoveWorktree: false,
+        isRegularBranch: false,
+        canCopyPatch: false,
+        canPull: false,
+        canPush: true,
+        canOpenRemote: false,
+        canOpenTerminal: true,
+        canOpenEditor: true,
+      },
+      actions: {
+        copyPatch: vi.fn(),
+        checkout: vi.fn(),
+        pull: vi.fn(),
+        push: vi.fn(),
+        openTerminal: vi.fn(),
+        openEditor: vi.fn(),
+        openRemote: vi.fn(),
+        requestDeleteBranch: vi.fn(),
+        requestRemoveWorktree: vi.fn(),
+      },
+      dialogs: null,
+    })
+    const branch = createRepoBranch('main', { isCurrent: true, worktree: { path: '/tmp/repo' } })
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      branches: [branch],
+      currentBranch: 'main',
+      remote: { hasRemotes: true },
+    })
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.ts')
+    const groups = await renderItemGroups(useItems, repo, branch)
+    const destructiveItems = groups.destructiveItems.filter((item) => item.visible)
+
+    expect(destructiveItems.map((item) => item.id)).toEqual(['removeWorktree', 'deleteBranch', 'resetHard'])
+    expect(destructiveItems.find((item) => item.id === 'removeWorktree')?.disabled).toBe(true)
+    expect(destructiveItems.find((item) => item.id === 'deleteBranch')?.disabled).toBe(true)
+    expect(destructiveItems.find((item) => item.id === 'resetHard')?.disabled).toBe(false)
+  })
+
+  test('keeps disabled remove worktree above delete branch and reset in the destructive group', async () => {
     mocks.useBranchActions.mockReturnValue({
       blocked: false,
       busyAction: null,
@@ -227,9 +367,11 @@ describe('useBranchActionItems', () => {
     const groups = await renderItemGroups(useItems, repo, branch)
 
     expect(groups.destructiveItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
+      'removeWorktree',
       'deleteBranch',
       'resetHard',
     ])
+    expect(groups.destructiveItems.find((item) => item.id === 'removeWorktree')?.disabled).toBe(true)
     expect(groups.destructiveItems.find((item) => item.id === 'resetHard')?.label).toBe('action.reset-hard')
   })
 

@@ -5,6 +5,7 @@ import { selectedBranchForBranchSet } from '#/web/stores/repos/branch-view-mode.
 import type { RestorableRepoSnapshot, RepoState } from '#/web/stores/repos/types.ts'
 import { finishResourceSuccess } from '#/web/stores/repos/resources.ts'
 import { stripBranchWorktreeMetadata } from '#/web/stores/repos/worktree-state.ts'
+import { DEFAULT_WORKSPACE_LAYOUT } from '#/shared/workspace-layout.ts'
 const MAX_CACHE_AGE_MS = 14 * 24 * 60 * 60 * 1000
 const MAX_REPOS = 50
 const FiniteNumber = v.pipe(v.number(), v.finite())
@@ -65,6 +66,7 @@ const RestorableRepoSnapshotSchema = v.object({
     selectedBranch: v.nullable(v.string()),
     branchViewMode: v.picklist(['all', 'worktrees', 'no-worktree']),
     detailTab: v.picklist(['status', 'changes', 'terminal']),
+    workspaceLayout: v.optional(v.picklist(['top-bottom', 'left-right']), DEFAULT_WORKSPACE_LAYOUT),
     worktreePathOrder: v.optional(v.array(v.string()), []),
   }),
 })
@@ -104,6 +106,7 @@ function restoreProjectionFromSnapshot(repo: RepoState, snapshot: RestorableRepo
       selectedBranch,
       branchViewMode: snapshot.ui.branchViewMode,
       detailTab: normalizeCachedDetailTab(snapshot.ui.detailTab),
+      workspaceLayout: snapshot.ui.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT,
       worktreePathOrder: snapshot.ui.worktreePathOrder,
     },
     projection: {
@@ -154,6 +157,7 @@ function restorableRepoSnapshotFromRepo(repo: RepoState): RestorableRepoSnapshot
       selectedBranch: repo.ui.selectedBranch,
       branchViewMode: repo.ui.branchViewMode,
       detailTab: normalizeCachedDetailTab(repo.ui.detailTab),
+      workspaceLayout: repo.ui.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT,
       worktreePathOrder: repo.ui.worktreePathOrder,
     },
   }
@@ -184,6 +188,7 @@ function normalizeRestorableRepoSnapshotEntry(value: unknown): RestorableRepoSna
     ui: {
       ...snapshot.ui,
       detailTab: normalizeCachedDetailTab(snapshot.ui.detailTab),
+      workspaceLayout: snapshot.ui.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT,
     },
   }
 }

@@ -16,6 +16,7 @@ import { RepoExplorerPane, type FileTreeRevealRequest } from '#/web/components/r
 import { UnavailableRepoView } from '#/web/components/UnavailableRepoView.tsx'
 import { useResponsiveUiMode } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
+import { repoIsPlainWorkspace } from '#/web/stores/repos/capabilities.ts'
 
 interface Props {
   repoId: string
@@ -29,12 +30,13 @@ export function RepoView({ repoId }: Props) {
     (s) => {
       const repo = s.repos[repoId]
       const presentation = getRepoWorkspacePresentation(repo)
+      const workspaceLayout = repo?.ui.workspaceLayout ?? s.workspaceLayout
       return {
         exists: presentation.exists,
         initialLoading: presentation.initialLoading,
         detailCollapsed: s.detailCollapsed,
         detailFocusMode: s.detailFocusMode,
-        workspaceLayout: s.workspaceLayout,
+        workspaceLayout,
         detailPaneSizes: s.detailPaneSizes,
       }
     },
@@ -60,6 +62,7 @@ export function RepoView({ repoId }: Props) {
   const behavior = repoWorkspaceBehavior(layout, view.detailCollapsed, view.detailFocusMode)
   const detailPaneSize = view.detailPaneSizes[layout]
   const compactLeftRight = uiMode === 'compact' && view.workspaceLayout === 'left-right'
+  const isPlainWorkspace = repoIsPlainWorkspace(repo)
 
   if (!view.exists || !repo) return <div />
   if (repo.availability.phase === 'unavailable') return <UnavailableRepoView repo={repo} />
@@ -71,6 +74,20 @@ export function RepoView({ repoId }: Props) {
         detailFocusMode={behavior.detailFocusMode}
         compact={uiMode === 'compact'}
       />
+    )
+  }
+  if (isPlainWorkspace) {
+    return (
+      <section className="relative flex min-w-0 flex-1 flex-col">
+        <RepoWorkspacePane>
+          <RepoExplorerPane
+            repoId={repoId}
+            layout={layout}
+            showActions={false}
+            revealRequest={terminalRevealRequest}
+          />
+        </RepoWorkspacePane>
+      </section>
     )
   }
 
@@ -117,7 +134,7 @@ export function RepoView({ repoId }: Props) {
           <Smartphone className="mb-4 h-10 w-10 text-muted-foreground" />
           <div className="text-sm font-medium text-foreground">{t('workspace.compact-mask.title')}</div>
           <div className="mt-1 text-xs text-muted-foreground">{t('workspace.compact-mask.description')}</div>
-          <Button className="mt-4" onClick={() => setWorkspaceLayout('top-bottom')}>
+          <Button className="mt-4" onClick={() => setWorkspaceLayout(repoId, 'top-bottom')}>
             {t('workspace.compact-mask.button')}
           </Button>
         </div>

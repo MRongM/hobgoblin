@@ -1,4 +1,4 @@
-import { AlertCircle, FolderGit2, Server } from 'lucide-react'
+import { AlertCircle, Folder, FolderGit2, Server } from 'lucide-react'
 import type { RepoTabSummary } from '#/web/components/repo-tabs/types.ts'
 import type { FocusRegistry } from '#/web/components/tab-strip/useFocusRegistry.ts'
 import { ToolbarClosableTab } from '#/web/components/tab-strip/ToolbarClosableTab.tsx'
@@ -46,6 +46,7 @@ export function RepoTab({
   const terminalBellLabel = t('terminal.bell-unread')
   const tabLabelBase = repo.unavailable ? `${repo.name} — ${unavailableLabel}` : repo.name
   const tabLabel = hasTerminalBell ? `${tabLabelBase} — ${terminalBellLabel}` : tabLabelBase
+  const repoKind = isRemoteRepoId(repo.id) ? 'remote' : repo.isGitRepo === false ? 'plain' : 'git'
   const sortable = useSortableTab(repo.id, { onButtonRef: focusRegistry?.setRef(repo.id) })
 
   return (
@@ -72,6 +73,7 @@ export function RepoTab({
       buttonRef={sortable.setButtonRef}
       buttonProps={{
         'data-repo-tab-id': repo.id,
+        'data-repo-kind': repoKind,
         ...sortable.attributes,
         ...sortable.sortableListeners,
         role: 'tab',
@@ -100,8 +102,10 @@ export function RepoTab({
         onClose(repo.id)
       }}
     >
-      {isRemoteRepoId(repo.id) ? (
+      {repoKind === 'remote' ? (
         <Server size={13} className={toolbarTabIconClassName(isActive)} />
+      ) : repoKind === 'plain' ? (
+        <Folder size={13} className={toolbarTabIconClassName(isActive)} />
       ) : (
         <FolderGit2 size={13} className={toolbarTabIconClassName(isActive)} />
       )}

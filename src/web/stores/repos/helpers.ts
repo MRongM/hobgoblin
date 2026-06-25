@@ -36,6 +36,7 @@ export function emptyRepo(id: string, name: string): RepoState {
       selectedBranch: null,
       branchViewMode: 'all',
       detailTab: 'status',
+      workspaceLayout: 'left-right',
       worktreePathOrder: [],
     },
     projection: {
@@ -56,6 +57,35 @@ export function emptyRepo(id: string, name: string): RepoState {
     availability: { phase: 'available' },
     events: [],
   }
+}
+
+export function clearGitProjection(repo: Draft<RepoState> | RepoState): void {
+  const target = repo.remote.target
+  repo.data.branches = []
+  repo.data.currentBranch = ''
+  repo.data.status = []
+  repo.data.statusLoaded = false
+  repo.data.worktreesByPath = {}
+  repo.resources = emptyRepoResources()
+  repo.ui.selectedBranch = null
+  repo.ui.worktreePathOrder = []
+  repo.projection = { source: 'fresh', savedAt: null }
+  repo.remote = {
+    ...(target ? { target } : {}),
+    remotes: [],
+    remoteDetails: [],
+    hasRemotes: false,
+    hasBrowserRemote: false,
+    browserRemoteProvider: undefined,
+    remoteProviders: {},
+    hasGitHubRemote: false,
+    fetchFailed: false,
+    fetchError: null,
+  }
+}
+
+export function rotateRepoInstanceToken(repo: Draft<RepoState> | RepoState): void {
+  repo.instanceToken = nextInstanceToken++
 }
 
 export function resultEvent(result: { ok: boolean; message: string }, options?: RepoResultEventOptions): RepoEvent {

@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 
 export const TERMINAL_SCROLLBACK_LINES = 50_000
+export const NON_GIT_WORKSPACE_TERMINAL_BRANCH = 'workspace'
 
 export type TerminalControllerStatus = 'connected' | 'grace' | 'none'
 export type TerminalAttachmentRole = 'controller' | 'viewer' | 'unowned'
