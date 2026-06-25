@@ -79,8 +79,10 @@ html[data-color-theme='cursor'][data-theme='light'] {
   --radius: 0.5rem;
 
   --goblin-app-bg: #f7f7f4;
-  --goblin-topbar-bg: #f7f7f4;
-  --goblin-topbar-border: #e6e5e0;
+  --goblin-topbar-bg: #ecd7c9;
+  --goblin-topbar-border: #cfcdc4;
+  --goblin-toolbar-bg: #f9e2d4;
+  --goblin-toolbar-border: var(--goblin-topbar-border);
   --goblin-tab-bg: transparent;
   --goblin-tab-hover-bg: #fafaf7;
   --goblin-tab-active-bg: #ffffff;
@@ -184,8 +186,10 @@ html[data-color-theme='cursor'][data-theme='dark'] {
   --radius: 0.5rem;
 
   --goblin-app-bg: #1f1f1c;
-  --goblin-topbar-bg: #1f1f1c;
+  --goblin-topbar-bg: #2a231b;
   --goblin-topbar-border: rgb(230 229 224 / 0.16);
+  --goblin-toolbar-bg: #432b1a;
+  --goblin-toolbar-border: var(--goblin-topbar-border);
   --goblin-tab-bg: transparent;
   --goblin-tab-hover-bg: #26251e;
   --goblin-tab-active-bg: #2e2d26;

@@ -108,6 +108,8 @@ const APP_REGION_TOKENS = [
   '--goblin-app-bg',
   '--goblin-topbar-bg',
   '--goblin-topbar-border',
+  '--goblin-toolbar-bg',
+  '--goblin-toolbar-border',
   '--goblin-tab-bg',
   '--goblin-tab-hover-bg',
   '--goblin-tab-active-bg',
@@ -189,6 +191,36 @@ describe('theme preset css contracts', () => {
         for (const token of [...FOUNDATION_TOKENS, ...APP_REGION_TOKENS, ...TERMINAL_TOKENS]) {
           expect(block, `${colorTheme}/${theme} defines ${token}`).toContain(token)
         }
+      }
+    }
+  })
+
+  test('keeps topbar visually deeper than tab states for every color theme', () => {
+    for (const colorTheme of COLOR_THEMES) {
+      const css = readThemeCss(colorTheme)
+
+      for (const theme of ['light', 'dark'] as const) {
+        const block = selectorBlock(css, colorTheme, theme)
+        const topbar = hexLuminance(cssTokenValue(block, '--goblin-topbar-bg'))
+        const tabHover = hexLuminance(cssTokenValue(block, '--goblin-tab-hover-bg'))
+        const tabActive = hexLuminance(cssTokenValue(block, '--goblin-tab-active-bg'))
+
+        expect(topbar, `${colorTheme}/${theme} topbar is deeper than tab hover`).toBeLessThan(tabHover)
+        expect(tabHover, `${colorTheme}/${theme} tab hover is not brighter than active tab`).toBeLessThanOrEqual(tabActive)
+      }
+    }
+  })
+
+  test('keeps topbar visually deeper than toolbar for every color theme', () => {
+    for (const colorTheme of COLOR_THEMES) {
+      const css = readThemeCss(colorTheme)
+
+      for (const theme of ['light', 'dark'] as const) {
+        const block = selectorBlock(css, colorTheme, theme)
+        const topbar = hexLuminance(cssTokenValue(block, '--goblin-topbar-bg'))
+        const toolbar = hexLuminance(cssTokenValue(block, '--goblin-toolbar-bg'))
+
+        expect(topbar, `${colorTheme}/${theme} topbar is deeper than toolbar`).toBeLessThan(toolbar)
       }
     }
   })

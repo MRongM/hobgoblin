@@ -79,11 +79,13 @@ html[data-color-theme='claude'][data-theme='light'] {
   --radius: 0.5rem;
 
   --goblin-app-bg: #faf9f5;
-  --goblin-topbar-bg: #faf9f5;
-  --goblin-topbar-border: #e6dfd8;
+  --goblin-topbar-bg: #ddcdc1;
+  --goblin-topbar-border: #d4cabd;
+  --goblin-toolbar-bg: #ead9cc;
+  --goblin-toolbar-border: var(--goblin-topbar-border);
   --goblin-tab-bg: transparent;
   --goblin-tab-hover-bg: #f5f0e8;
-  --goblin-tab-active-bg: #efe9de;
+  --goblin-tab-active-bg: #ffffff;
   --goblin-sidebar-bg: #f5f0e8;
   --goblin-pane-bg: #faf9f5;
   --goblin-pane-header-bg: #efe9de;
@@ -184,8 +186,10 @@ html[data-color-theme='claude'][data-theme='dark'] {
   --radius: 0.5rem;
 
   --goblin-app-bg: #181715;
-  --goblin-topbar-bg: #181715;
+  --goblin-topbar-bg: #201c19;
   --goblin-topbar-border: rgb(230 223 216 / 0.18);
+  --goblin-toolbar-bg: #372b24;
+  --goblin-toolbar-border: var(--goblin-topbar-border);
   --goblin-tab-bg: transparent;
   --goblin-tab-hover-bg: #1f1e1b;
   --goblin-tab-active-bg: #252320;
