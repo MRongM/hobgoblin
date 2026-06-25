@@ -99,29 +99,29 @@ html[data-color-theme='bmw'][data-theme='light'] {
   --goblin-brand-radius-md: 0rem;
   --goblin-brand-radius-lg: 0rem;
   --goblin-brand-divider-strength: 1;
-  --color-terminal-background: #000000;
-  --color-terminal-foreground: #ffffff;
-  --color-terminal-cursor: #ffffff;
-  --color-terminal-selection-background: rgba(28, 105, 212, 0.36);
-  --color-terminal-ansi-black: #000000;
-  --color-terminal-ansi-red: #e22718;
-  --color-terminal-ansi-green: #0fa336;
-  --color-terminal-ansi-yellow: #f4b400;
+  --color-terminal-background: #ffffff;
+  --color-terminal-foreground: #0d0d0d;
+  --color-terminal-cursor: #0d0d0d;
+  --color-terminal-selection-background: rgba(28, 105, 212, 0.2);
+  --color-terminal-ansi-black: #0d0d0d;
+  --color-terminal-ansi-red: #c42116;
+  --color-terminal-ansi-green: #0b7a2b;
+  --color-terminal-ansi-yellow: #8a6400;
   --color-terminal-ansi-blue: #1c69d4;
-  --color-terminal-ansi-magenta: #7a5cff;
+  --color-terminal-ansi-magenta: #6a4bd8;
   --color-terminal-ansi-cyan: #0066b1;
-  --color-terminal-ansi-white: #bbbbbb;
+  --color-terminal-ansi-white: #5a5a5a;
   --color-terminal-ansi-bright-black: #7e7e7e;
-  --color-terminal-ansi-bright-red: #ff5a4d;
-  --color-terminal-ansi-bright-green: #33c95a;
-  --color-terminal-ansi-bright-yellow: #ffd166;
-  --color-terminal-ansi-bright-blue: #6fa8ff;
-  --color-terminal-ansi-bright-magenta: #a899ff;
-  --color-terminal-ansi-bright-cyan: #4ca9e8;
-  --color-terminal-ansi-bright-white: #ffffff;
+  --color-terminal-ansi-bright-red: #e22718;
+  --color-terminal-ansi-bright-green: #0fa336;
+  --color-terminal-ansi-bright-yellow: #f4b400;
+  --color-terminal-ansi-bright-blue: #0653b6;
+  --color-terminal-ansi-bright-magenta: #7a5cff;
+  --color-terminal-ansi-bright-cyan: #0066b1;
+  --color-terminal-ansi-bright-white: #0d0d0d;
   --color-terminal-search-match: #f4b400;
   --color-terminal-search-active-match: #1c69d4;
-  --color-terminal-search-active-border: #ffffff;
+  --color-terminal-search-active-border: #0d0d0d;
 }
 
 html[data-color-theme='bmw'][data-theme='dark'] {

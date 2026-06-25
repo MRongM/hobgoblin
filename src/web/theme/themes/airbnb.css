@@ -99,29 +99,29 @@ html[data-color-theme='airbnb'][data-theme='light'] {
   --goblin-brand-radius-md: 0.875rem;
   --goblin-brand-radius-lg: 1.25rem;
   --goblin-brand-divider-strength: 0.65;
-  --color-terminal-background: #222222;
-  --color-terminal-foreground: #ffffff;
-  --color-terminal-cursor: #ffffff;
-  --color-terminal-selection-background: rgba(255, 56, 92, 0.3);
+  --color-terminal-background: #ffffff;
+  --color-terminal-foreground: #222222;
+  --color-terminal-cursor: #222222;
+  --color-terminal-selection-background: rgba(255, 56, 92, 0.18);
   --color-terminal-ansi-black: #222222;
-  --color-terminal-ansi-red: #ff385c;
-  --color-terminal-ansi-green: #0fa336;
-  --color-terminal-ansi-yellow: #f4b400;
-  --color-terminal-ansi-blue: #428bff;
-  --color-terminal-ansi-magenta: #92174d;
+  --color-terminal-ansi-red: #e00b41;
+  --color-terminal-ansi-green: #1f7f37;
+  --color-terminal-ansi-yellow: #9a6700;
+  --color-terminal-ansi-blue: #3973e6;
+  --color-terminal-ansi-magenta: #a51550;
   --color-terminal-ansi-cyan: #007a87;
-  --color-terminal-ansi-white: #dddddd;
-  --color-terminal-ansi-bright-black: #6a6a6a;
-  --color-terminal-ansi-bright-red: #ff6b81;
-  --color-terminal-ansi-bright-green: #45c26a;
-  --color-terminal-ansi-bright-yellow: #ffd166;
-  --color-terminal-ansi-bright-blue: #76a9ff;
+  --color-terminal-ansi-white: #6a6a6a;
+  --color-terminal-ansi-bright-black: #929292;
+  --color-terminal-ansi-bright-red: #ff385c;
+  --color-terminal-ansi-bright-green: #0fa336;
+  --color-terminal-ansi-bright-yellow: #f4b400;
+  --color-terminal-ansi-bright-blue: #428bff;
   --color-terminal-ansi-bright-magenta: #b64f7b;
-  --color-terminal-ansi-bright-cyan: #4bb7c5;
-  --color-terminal-ansi-bright-white: #ffffff;
+  --color-terminal-ansi-bright-cyan: #007a87;
+  --color-terminal-ansi-bright-white: #222222;
   --color-terminal-search-match: #f4b400;
   --color-terminal-search-active-match: #ff385c;
-  --color-terminal-search-active-border: #ffffff;
+  --color-terminal-search-active-border: #222222;
 }
 
 html[data-color-theme='airbnb'][data-theme='dark'] {

@@ -199,6 +199,30 @@ describe('BranchRow', () => {
     )
   })
 
+  test('does not render the neutral worktree badge for clean linked worktree rows', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+    )
+
+    expect(document.body.querySelector('.text-sm.font-medium')?.textContent).toBe('feature/a')
+    expect(document.body.querySelector('[aria-label="worktree-a"]')).not.toBeNull()
+    expect(document.body.textContent).toContain('worktree-a')
+    expect(document.body.textContent).not.toContain('工作树')
+  })
+
   test('uses the worktree icon for the current branch when it has a worktree', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     repo.data.currentBranch = 'main'

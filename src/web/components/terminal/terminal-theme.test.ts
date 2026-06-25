@@ -97,10 +97,36 @@ describe('terminal theme tokens', () => {
     document.documentElement.setAttribute('data-color-theme', 'claude')
 
     expect(terminalThemeForCurrentDocument()).toMatchObject({
-      background: '#181715',
-      foreground: '#faf9f5',
-      cursor: '#faf9f5',
-      blue: '#6f9fd8',
+      background: '#faf9f5',
+      foreground: '#141413',
+      cursor: '#141413',
+      blue: '#496f9f',
+    })
+  })
+
+  test('reads corrected BMW light terminal tokens from real preset css', () => {
+    installRealTerminalPresetStyles('bmw')
+    document.documentElement.setAttribute('data-theme', 'light')
+    document.documentElement.setAttribute('data-color-theme', 'bmw')
+
+    expect(terminalThemeForCurrentDocument()).toMatchObject({
+      background: '#ffffff',
+      foreground: '#0d0d0d',
+      cursor: '#0d0d0d',
+      blue: '#1c69d4',
+    })
+  })
+
+  test('reads dark terminal tokens from real preset css when app theme is dark', () => {
+    installRealTerminalPresetStyles('airbnb')
+    document.documentElement.setAttribute('data-theme', 'dark')
+    document.documentElement.setAttribute('data-color-theme', 'airbnb')
+
+    expect(terminalThemeForCurrentDocument()).toMatchObject({
+      background: '#111111',
+      foreground: '#ffffff',
+      cursor: '#ffffff',
+      blue: '#76a9ff',
     })
   })
 
