@@ -70,4 +70,25 @@ describe('native shell projection helpers', () => {
   test('rejects an empty shell projection payload', () => {
     expect(v.safeParse(NativeShellProjectionSchema, {}).success).toBe(false)
   })
+
+  test('accepts design color theme presets in native projection payloads', () => {
+    for (const colorTheme of ['claude', 'cursor', 'apple'] as const) {
+      expect(
+        v.safeParse(NativeShellProjectionSchema, {
+          prefs: {
+            patch: { colorTheme },
+            settings: {
+              lang: 'auto',
+              theme: 'auto',
+              colorTheme,
+              shortcutsDisabled: false,
+              globalShortcutDisabled: false,
+              swapCloseShortcuts: false,
+              globalShortcut: 'Alt+G',
+            },
+          },
+        }).success,
+      ).toBe(true)
+    }
+  })
 })

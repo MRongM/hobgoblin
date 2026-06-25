@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
 const repoClientMocks = vi.hoisted(() => ({
   getCommitMessageProviders: vi.fn(),
   generateRepositoryCommitMessage: vi.fn(),
+  commitRepositoryChanges: vi.fn(),
 }))
 
 let container: HTMLDivElement
@@ -42,6 +43,7 @@ vi.mock('#/web/repo-client.ts', async () => {
     ...actual,
     getCommitMessageProviders: repoClientMocks.getCommitMessageProviders,
     generateRepositoryCommitMessage: repoClientMocks.generateRepositoryCommitMessage,
+    commitRepositoryChanges: repoClientMocks.commitRepositoryChanges,
   }
 })
 
@@ -89,6 +91,10 @@ describe('useBranchActionItems', () => {
     })
     repoClientMocks.getCommitMessageProviders.mockResolvedValue({ codex: false, claude: false })
     repoClientMocks.generateRepositoryCommitMessage.mockResolvedValue({ ok: true, message: 'feat: generated message' })
+    repoClientMocks.commitRepositoryChanges.mockResolvedValue({
+      ok: true,
+      message: '[feature/commit abc1234] feat: inline commit',
+    })
   })
 
   afterEach(async () => {
@@ -184,7 +190,11 @@ describe('useBranchActionItems', () => {
       'merge',
       'commit',
     ])
-    expect(groups.externalItems.filter((item) => item.visible).map((item) => item.id)).toEqual(['terminal', 'editor', 'remote'])
+    expect(groups.externalItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
+      'terminal',
+      'editor',
+      'remote',
+    ])
     expect(groups.mainItems.find((item) => item.id === 'pull')?.label).toBe('action.pull-remote')
   })
 
@@ -373,6 +383,63 @@ describe('useBranchActionItems', () => {
     expect(document.body.querySelector('#inline-commit-message')).not.toBeNull()
   })
 
+  test('commit and push commits the worktree then triggers the existing push action', async () => {
+    const push = vi.fn()
+    mocks.useBranchActions.mockReturnValue({
+      blocked: false,
+      busyAction: null,
+      capabilities: {
+        isCurrent: false,
+        checkedOutInAnotherWorktree: true,
+        canRemoveWorktree: false,
+        isRegularBranch: false,
+        canCopyPatch: false,
+        canPull: false,
+        canPush: true,
+        canOpenRemote: false,
+        canOpenTerminal: true,
+        canOpenEditor: true,
+      },
+      actions: {
+        copyPatch: vi.fn(),
+        checkout: vi.fn(),
+        pull: vi.fn(),
+        push,
+        openTerminal: vi.fn(),
+        openEditor: vi.fn(),
+        openRemote: vi.fn(),
+        requestDeleteBranch: vi.fn(),
+        requestRemoveWorktree: vi.fn(),
+      },
+      dialogs: null,
+    })
+    const branch = createRepoBranch('feature/commit', { worktree: { path: '/tmp/repo-feature' } })
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      branches: [branch],
+      remote: { hasRemotes: true },
+    })
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.ts')
+    const groups = await renderItemGroups(useItems, repo, branch)
+    const commit = groups.mainItems.find((item) => item.id === 'commit')
+    if (!commit) throw new Error('missing commit action')
+
+    await act(async () => {
+      await commit.onSelect()
+    })
+    setTextareaValue('#inline-commit-message', '  feat: inline commit  ')
+    clickButtonByText('action.commit-and-push-confirm')
+    await flush()
+
+    expect(repoClientMocks.commitRepositoryChanges).toHaveBeenCalledWith(
+      '/tmp/repo',
+      '/tmp/repo-feature',
+      'feat: inline commit',
+    )
+    expect(push).toHaveBeenCalledTimes(1)
+  })
+
   test('opens create-worktree with the selected branch as the default base', async () => {
     const submitBranchAction = vi.fn()
     useReposStore.setState({ submitBranchAction })
@@ -416,7 +483,9 @@ async function renderItems(
   branch: ReturnType<typeof createRepoBranch>,
 ): Promise<string[]> {
   const groups = await renderItemGroups(useItems, repo, branch)
-  return [...groups.patchItems, ...groups.mainItems, ...groups.externalItems, ...groups.destructiveItems].map((item) => item.id)
+  return [...groups.patchItems, ...groups.mainItems, ...groups.externalItems, ...groups.destructiveItems].map(
+    (item) => item.id,
+  )
 }
 
 async function renderItemGroups(
@@ -466,9 +535,23 @@ function input(selector: string): HTMLInputElement {
   return element
 }
 
+function textarea(selector: string): HTMLTextAreaElement {
+  const element = document.body.querySelector(selector)
+  if (!(element instanceof HTMLTextAreaElement)) throw new Error(`Missing textarea: ${selector}`)
+  return element
+}
+
 function button(selector: string): HTMLButtonElement {
   const element = document.body.querySelector(selector)
   if (!(element instanceof HTMLButtonElement)) throw new Error(`Missing button: ${selector}`)
+  return element
+}
+
+function buttonByText(text: string): HTMLButtonElement {
+  const element = [...document.body.querySelectorAll('button')].find(
+    (candidate) => candidate.textContent?.trim() === text,
+  )
+  if (!(element instanceof HTMLButtonElement)) throw new Error(`Missing button text: ${text}`)
   return element
 }
 
@@ -482,9 +565,32 @@ function setInputValue(selector: string, value: string) {
   })
 }
 
+function setTextareaValue(selector: string, value: string) {
+  const element = textarea(selector)
+  const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')
+  descriptor?.set?.call(element, value)
+  act(() => {
+    element.dispatchEvent(new Event('input', { bubbles: true }))
+    element.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+}
+
 function clickButton(selector: string) {
   const element = button(selector)
   act(() => {
     element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
+}
+
+function clickButtonByText(text: string) {
+  const element = buttonByText(text)
+  act(() => {
+    element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
+}
+
+async function flush() {
+  await act(async () => {
+    await Promise.resolve()
   })
 }

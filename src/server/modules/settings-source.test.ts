@@ -180,3 +180,18 @@ test('limits persisted terminal custom buttons to 20 valid entries', async () =>
   expect(prefs.terminalCustomButtons[0]).toEqual({ label: 'button-0', value: 'echo 0', action: 'execute' })
   expect(prefs.terminalCustomButtons[19]).toEqual({ label: 'button-19', value: 'echo 19', action: 'execute' })
 })
+
+test('accepts design color theme presets and normalizes unknown presets', async () => {
+  tmp = mkdtempSync(path.join(os.tmpdir(), 'gbl-server-settings-'))
+  previousDataDir = process.env.GOBLIN_SERVER_DATA_DIR
+  process.env.GOBLIN_SERVER_DATA_DIR = tmp
+
+  const mod = await import('#/server/modules/settings-source.ts')
+  for (const colorTheme of ['claude', 'cursor', 'apple'] as const) {
+    await mod.updateServerSettingsPrefs({ colorTheme })
+    expect(await mod.getServerSettingsPrefs()).toMatchObject({ colorTheme })
+  }
+
+  await mod.updateServerSettingsPrefs({ colorTheme: 'not-a-theme' as never })
+  expect(await mod.getServerSettingsPrefs()).toMatchObject({ colorTheme: 'macos' })
+})

@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import type { ColorTheme } from '#/shared/color-theme.ts'
 
 const mocks = vi.hoisted(() => ({
   shouldUseDarkColors: false,
   themeSource: 'system',
   nativeThemeOn: vi.fn(),
-  getSettingsPrefs: vi.fn<
-    () => Promise<{ theme?: 'auto' | 'light' | 'dark'; colorTheme?: 'macos' | 'mono' | 'github' }>
-  >(async () => ({ theme: 'auto', colorTheme: 'macos' })),
+  getSettingsPrefs: vi.fn<() => Promise<{ theme?: 'auto' | 'light' | 'dark'; colorTheme?: ColorTheme }>>(async () => ({
+    theme: 'auto',
+    colorTheme: 'macos',
+  })),
 }))
 
 vi.mock('electron', () => ({
