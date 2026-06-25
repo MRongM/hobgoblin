@@ -29,6 +29,7 @@ import { registerTerminalRelativePathLinkProvider } from '#/web/components/termi
 import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
 import {
   TERMINAL_FONT_FAMILY,
+  TERMINAL_LINE_HEIGHT,
   measureTerminalGeometry,
   type TerminalGeometry,
 } from '#/web/components/terminal/terminal-geometry.ts'
@@ -167,7 +168,7 @@ export class TerminalSessionView {
       cursorStyle: 'bar',
       fontFamily: TERMINAL_FONT_FAMILY,
       fontSize: this.fontSize,
-      lineHeight: 1,
+      lineHeight: TERMINAL_LINE_HEIGHT,
       minimumContrastRatio: 4.5,
       scrollback: TERMINAL_SCROLLBACK_LINES,
       macOptionIsMeta: true,

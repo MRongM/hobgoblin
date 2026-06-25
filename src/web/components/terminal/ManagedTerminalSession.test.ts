@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { ELECTRON_RENDERER_CAPABILITIES, RENDERER_BRIDGE_VERSION } from '#/shared/bootstrap.ts'
 import { TERMINAL_SCROLLBACK_LINES } from '#/shared/terminal.ts'
 import { ManagedTerminalSession } from '#/web/components/terminal/ManagedTerminalSession.ts'
+import { TERMINAL_LINE_HEIGHT } from '#/web/components/terminal/terminal-geometry.ts'
 import { installTerminalThemeStyles } from '#/web/components/terminal/terminal-theme-test-utils.ts'
 import { isTerminalFocused } from '#/web/terminal-focus.ts'
 import { setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
@@ -640,7 +641,7 @@ describe('ManagedTerminalSession', () => {
     expect(xtermMocks.terminals[0]!.options.fontSize).toBe(14)
     expect(xtermMocks.terminals[0]!.initialCols).toBe(95)
     expect(xtermMocks.terminals[0]!.initialRows).toBe(28)
-    expect(xtermMocks.terminals[0]!.options.lineHeight).toBe(1)
+    expect(xtermMocks.terminals[0]!.options.lineHeight).toBe(TERMINAL_LINE_HEIGHT)
     expect(xtermMocks.terminals[0]!.options.rescaleOverlappingGlyphs).toBe(true)
     expect(terminalCalls.restart).not.toHaveBeenCalled()
     expect(session.snapshot().phase).toBe('open')
