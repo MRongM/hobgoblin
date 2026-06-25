@@ -161,7 +161,7 @@ describe('RepoToolbar', () => {
     renderWithProviders(<RepoToolbar repoId={REPO_ID} />, navigationWith({}))
 
     expect(container?.querySelector('[aria-label="branches.filter-label"]')).not.toBeNull()
-    expect(container?.querySelector('[aria-label="branches.search-label"]')).not.toBeNull()
+    expect(container?.querySelector('[aria-label="branches.search-label"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="action.refresh"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="action.create-worktree-title"]')).toBeNull()
     expect(container?.querySelector('[aria-label="workspace.layout-label"]')).not.toBeNull()

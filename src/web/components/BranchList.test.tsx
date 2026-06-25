@@ -163,13 +163,14 @@ describe('BranchList worktree drag ordering', () => {
     expect(document.querySelectorAll('[aria-label="重新排序工作树"]')).toHaveLength(0)
   })
 
-  test('hides drag handles while search is active', () => {
+  test('ignores stale branch search state when rendering worktree drag handles', () => {
     seedWorktreeRepo('worktrees')
     useReposStore.getState().setBranchSearchQuery(REPO_ID, 'feature')
 
     renderList()
 
-    expect(document.querySelectorAll('[aria-label="重新排序工作树"]')).toHaveLength(0)
+    expect(document.querySelectorAll('[aria-label="重新排序工作树"]')).toHaveLength(2)
+    expect(container?.textContent).toContain('main')
   })
 
   test('reorders worktrees when drag ends over another worktree', () => {

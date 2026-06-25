@@ -107,7 +107,6 @@ function BranchArea({ repoId, showActions }: { repoId: string; showActions: bool
         <BranchFilterControls
           repoId={repoId}
           className="h-full min-w-0 flex-1 gap-1"
-          searchClassName="max-w-[calc(100%_-_5.5rem)]"
         />
         <div className="flex shrink-0 items-center gap-1">
           <RepoToolbarActions repoId={repoId} compact />
