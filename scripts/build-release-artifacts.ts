@@ -13,6 +13,8 @@ process.chdir(repoRoot)
 $.cwd(repoRoot)
 
 const APP_NAME = 'Hobgoblin'
+const viteCli = path.join(repoRoot, 'node_modules/vite/bin/vite.js')
+const electronBuilderCli = path.join(repoRoot, 'node_modules/electron-builder/cli.js')
 
 type ReleasePlatform = 'macos' | 'windows'
 type ReleaseArch = 'arm64' | 'x64'
@@ -69,6 +71,21 @@ function assertFileExists(relativePath: string): void {
   fail(`Error: expected build artifact missing: ${relativePath}`)
 }
 
+async function buildServerBundle(): Promise<void> {
+  const result = await Bun.build({
+    entrypoints: ['./src/server/entrypoints/main.ts', './src/server/entrypoints/terminal-worker.ts'],
+    outdir: './dist/server',
+    target: 'node',
+    external: ['node-pty'],
+  })
+  if (result.success) return
+
+  for (const log of result.logs) {
+    console.error(log)
+  }
+  fail('Error: server build failed.')
+}
+
 const platform = parsePlatform(values.platform)
 const arch = parseArch(values.arch)
 assertSupported(platform, arch)
@@ -83,8 +100,8 @@ if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version)) {
 
 rmSync(path.join(repoRoot, 'release'), { recursive: true, force: true })
 
-await $`bun run build:web`
-await $`bun run build:server`
+await $`bun ${viteCli} build`
+await buildServerBundle()
 
 assertFileExists('dist/web/index.html')
 assertFileExists('dist/web/boot.js')
@@ -94,7 +111,7 @@ assertFileExists('dist/server/terminal-worker.js')
 const platformArgs = platform === 'macos' ? ['--mac', 'dmg'] : ['--win', 'nsis']
 const archFlag = arch === 'arm64' ? '--arm64' : '--x64'
 const publishArgs = ['--publish', 'never']
-await $`bun run build:electron -- ${platformArgs} ${archFlag} ${publishArgs}`
+await $`bun ${electronBuilderCli} ${platformArgs} ${archFlag} ${publishArgs}`
 
 const artifactPath = path.join(repoRoot, 'release', expectedArtifactName(version, platform, arch))
 if (!existsSync(artifactPath)) {

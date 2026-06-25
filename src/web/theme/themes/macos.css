@@ -82,11 +82,13 @@ html[data-color-theme='macos'][data-theme='light'] {
   --radius: 0.6875rem;
 
   --goblin-app-bg: #ffffff;
-  --goblin-topbar-bg: #ffffff;
+  --goblin-topbar-bg: #ccd9e8;
   --goblin-topbar-border: #e0e0e0;
+  --goblin-toolbar-bg: #d7e5f5;
+  --goblin-toolbar-border: var(--goblin-topbar-border);
   --goblin-tab-bg: transparent;
-  --goblin-tab-hover-bg: #f5f5f7;
-  --goblin-tab-active-bg: #fafafc;
+  --goblin-tab-hover-bg: #fafafc;
+  --goblin-tab-active-bg: #ffffff;
   --goblin-sidebar-bg: #f5f5f7;
   --goblin-pane-bg: #ffffff;
   --goblin-pane-header-bg: #fafafc;
@@ -188,8 +190,10 @@ html[data-color-theme='macos'][data-theme='dark'] {
   --radius: 0.6875rem;
 
   --goblin-app-bg: #000000;
-  --goblin-topbar-bg: #000000;
+  --goblin-topbar-bg: #0b1016;
   --goblin-topbar-border: rgb(255 255 255 / 0.12);
+  --goblin-toolbar-bg: #1f2e3e;
+  --goblin-toolbar-border: var(--goblin-topbar-border);
   --goblin-tab-bg: transparent;
   --goblin-tab-hover-bg: #1d1d1f;
   --goblin-tab-active-bg: #272729;

@@ -75,10 +75,12 @@ html[data-color-theme='bmw'][data-theme='light'] {
   --shadow-control-inset-highlight: inset 0 1px 0 rgb(255 255 255 / 0.56);
   --radius: 0rem;
   --goblin-app-bg: #f5f5f5;
-  --goblin-topbar-bg: #ffffff;
+  --goblin-topbar-bg: #d2ddeb;
   --goblin-topbar-border: #c8c8c8;
+  --goblin-toolbar-bg: #dfeaf9;
+  --goblin-toolbar-border: var(--goblin-topbar-border);
   --goblin-tab-bg: transparent;
-  --goblin-tab-hover-bg: #e6e6e6;
+  --goblin-tab-hover-bg: #f5f5f5;
   --goblin-tab-active-bg: #ffffff;
   --goblin-sidebar-bg: #ffffff;
   --goblin-pane-bg: #f5f5f5;
@@ -175,8 +177,10 @@ html[data-color-theme='bmw'][data-theme='dark'] {
   --shadow-control-inset-highlight: inset 0 1px 0 rgb(255 255 255 / 0.08);
   --radius: 0rem;
   --goblin-app-bg: #000000;
-  --goblin-topbar-bg: #000000;
+  --goblin-topbar-bg: #05090e;
   --goblin-topbar-border: #3c3c3c;
+  --goblin-toolbar-bg: #0f1a29;
+  --goblin-toolbar-border: var(--goblin-topbar-border);
   --goblin-tab-bg: transparent;
   --goblin-tab-hover-bg: #1a1a1a;
   --goblin-tab-active-bg: #262626;
