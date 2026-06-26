@@ -2,15 +2,16 @@
 
 English | [简体中文](README.zh-CN.md) | [한국어](README.ko.md) | [日本語](README.ja.md)
 
-Hobgoblin is not just a branch management tool. It is a high-productivity desktop workspace for Git worktree-based development with AI CLI tools.
+Hobgoblin is not just a branch management tool. It is a high-productivity workspace for Git worktree-based development with AI CLI tools, available as a desktop app or a browser-accessible server mode.
 
-The core model is simple: **multi-project + multi-worktree / multi-branch + multi-terminal**. Open several repositories, isolate parallel branches in separate worktrees, attach terminals to the right context, and run AI CLI tools such as Codex or Claude without losing track of Git state.
+The core model is simple: **multi-project + multi-worktree / multi-branch + multi-terminal**. Open several repositories, isolate parallel branches in separate worktrees, attach terminals to the right context, and run AI CLI tools such as Codex or Claude without losing track of Git state. Work with local repositories, Git SSH remotes, or repositories reachable through SSH-config aliases.
 
 ## Screenshots
 
-| Workspace overview | Repository workspace |
-| --- | --- |
-| ![Hobgoblin workspace overview](docs/screenshot-20260626-143532.png) | ![Hobgoblin repository workspace](docs/screenshot-20260626-144523.png) |
+<p>
+  <img src="docs/screenshot-20260626-143532.png" alt="Hobgoblin workspace overview" width="49%" />
+  <img src="docs/screenshot-20260626-144523.png" alt="Hobgoblin repository workspace" width="49%" />
+</p>
 
 ## Productivity Formula
 
@@ -24,12 +25,13 @@ This is the intended workflow: every project, worktree, branch, terminal, and AI
 
 - **AI CLI-ready workflow:** Keep coding agents, shell tasks, and Git state together instead of scattering them across unrelated terminal windows.
 - **Multi-project workspace:** Open repositories in tabs, reorder them, and restore your previous session.
+- **Desktop or web browser:** Use Hobgoblin as a packaged desktop app, or run server mode and open the same workspace from a browser.
 - **Multi-worktree branch development:** Create and inspect worktrees so multiple branches can move independently without dirtying one checkout.
 - **Branch and worktree overview:** See branch status, worktree state, latest commits, and linked pull requests in one window.
 - **Git actions in context:** Checkout, pull, push, create worktrees, open branches in external tools, and jump to GitHub.
 - **Multi-terminal execution surface:** Keep multiple server-backed terminals attached to the workspace and the branch/worktree they belong to.
-- **Local and SSH repositories:** Work with local paths and remote repositories through SSH-focused flows.
-- **Keyboard-first workflow:** Navigate branches, switch repositories, and trigger actions without leaving the keyboard.
+- **Local and SSH remote repositories:** Work with local paths, SSH clone URLs, and remote repositories opened through SSH-config aliases and remote paths.
+- **Visual workflow controls:** Navigate branches, switch repositories, trigger Git actions, and jump to external tools from clear interface context.
 - **Themes and languages:** Use light, dark, and themed presets with English, Simplified Chinese, Korean, and Japanese UI strings.
 
 ## Installation
@@ -76,21 +78,21 @@ bun install
 bun run dev
 ```
 
-## Server Mode
+## Web Browser / Server Mode
 
-Build the web UI and start server mode:
+Build the web UI and start server mode, then open Hobgoblin from a web browser:
 
 ```sh
 ./serve.sh
 ```
 
-Default URL:
+Default browser URL:
 
 ```text
 http://127.0.0.1:32200
 ```
 
-Override the listen address when needed:
+Override the listen address when you need to expose it on a different interface or port:
 
 ```sh
 ./serve.sh --host 127.0.0.1 --port 32200
