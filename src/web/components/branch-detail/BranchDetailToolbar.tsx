@@ -129,6 +129,7 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
         : 'branch-detail.collapse-title',
   )
   const focusTogglePressed = behavior.detailFocusMode
+  const showCollapseControl = behavior.detailCollapseAllowed && layout !== 'left-right'
 
   return (
     <Toolbar variant="detail">
@@ -182,7 +183,7 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
             {focusTogglePressed ? <Minimize2 /> : <Maximize2 />}
           </Button>
         )}
-        {behavior.detailCollapseAllowed && (
+        {showCollapseControl && (
           <Button
             variant="ghost"
             size="icon"

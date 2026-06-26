@@ -153,7 +153,7 @@ describe('BranchDetailToolbar', () => {
     expect(c.querySelector('[data-testid="branch-detail-toolbar-divider"]')).toBeNull()
   })
 
-  test('shows terminal focus and collapse controls in left-right layout', () => {
+  test('shows terminal focus control without collapse control in left-right layout', () => {
     const { container: c } = renderToolbar({
       terminalCount: 1,
       detailTab: 'terminal',
@@ -165,18 +165,13 @@ describe('BranchDetailToolbar', () => {
     const collapseButton = c.querySelector<HTMLButtonElement>('button[aria-label="branch-detail.collapse"]')
 
     expect(focusButton).not.toBeNull()
-    expect(collapseButton).not.toBeNull()
+    expect(collapseButton).toBeNull()
 
     act(() => {
       focusButton?.click()
     })
     expect(useReposStore.getState().detailFocusMode).toBe(true)
     expect(useReposStore.getState().detailCollapsed).toBe(false)
-
-    act(() => {
-      collapseButton?.click()
-    })
-    expect(useReposStore.getState().detailCollapsed).toBe(true)
   })
 
   test('keeps terminal focus when pressing End on the compact terminal tab', async () => {
