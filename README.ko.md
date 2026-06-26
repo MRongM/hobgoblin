@@ -6,6 +6,12 @@ Hobgoblin은 단순한 브랜치 관리 도구가 아닙니다. Git worktree 기
 
 핵심 모델은 단순합니다: **멀티 프로젝트 + 멀티 worktree / 멀티 브랜치 + 멀티 터미널**. 여러 리포지토리를 열고, 병렬 브랜치를 별도 worktree로 격리하고, 터미널을 올바른 문맥에 연결한 뒤, Codex나 Claude 같은 AI CLI를 Git 상태를 놓치지 않고 실행할 수 있습니다.
 
+## 스크린샷
+
+![Hobgoblin 작업 공간 개요](docs/screenshot-20260626-143532.png)
+
+![Hobgoblin 리포지토리 작업 공간](docs/screenshot-20260626-144523.png)
+
 ## 생산성 공식
 
 ```text

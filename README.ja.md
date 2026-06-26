@@ -6,6 +6,12 @@ Hobgoblin は単なるブランチ管理ツールではありません。Git wor
 
 中心になるモデルはシンプルです: **マルチプロジェクト + マルチ worktree / マルチブランチ + マルチターミナル**。複数のリポジトリを開き、並行するブランチを別々の worktree に分離し、適切な文脈にターミナルを紐づけ、Codex や Claude などの AI CLI を Git 状態を見失わずに実行できます。
 
+## スクリーンショット
+
+![Hobgoblin ワークスペース概要](docs/screenshot-20260626-143532.png)
+
+![Hobgoblin リポジトリワークスペース](docs/screenshot-20260626-144523.png)
+
 ## 生産性の式
 
 ```text
