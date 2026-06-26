@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   checkGitAvailable: vi.fn(),
   checkoutBranch: vi.fn(),
   checkoutRemoteBranch: vi.fn(),
+  cloneGitRepository: vi.fn(),
   commitAllChanges: vi.fn(),
   commitRemoteChanges: vi.fn(),
   createBranch: vi.fn(),
@@ -32,6 +33,7 @@ const mocks = vi.hoisted(() => ({
   getCommitHistory: vi.fn(),
   getCurrentBranch: vi.fn(),
   getDefaultBranch: vi.fn(),
+  getServerSettingsPrefs: vi.fn(),
   getRepoName: vi.fn(),
   getRepoRoot: vi.fn(),
   getRemoteInfo: vi.fn(),
@@ -90,6 +92,10 @@ vi.mock('#/system/git/branches.ts', () => ({
 
 vi.mock('#/system/git/helper.ts', () => ({
   checkGitAvailable: mocks.checkGitAvailable,
+}))
+
+vi.mock('#/system/git/clone.ts', () => ({
+  cloneRepository: mocks.cloneGitRepository,
 }))
 
 vi.mock('#/system/git/commit.ts', () => ({
@@ -218,6 +224,10 @@ vi.mock('#/server/modules/invalidation-broker.ts', () => ({
   publishRepoQueryInvalidation: mocks.publishRepoQueryInvalidation,
 }))
 
+vi.mock('#/server/modules/settings-source.ts', () => ({
+  getServerSettingsPrefs: mocks.getServerSettingsPrefs,
+}))
+
 vi.mock('#/server/modules/background-sync.ts', () => ({
   getBackgroundSyncRepos: mocks.getBackgroundSyncRepos,
   setBackgroundSyncRepos: mocks.setBackgroundSyncRepos,
@@ -233,6 +243,7 @@ beforeEach(() => {
   mocks.isGitRepo.mockResolvedValue(true)
   mocks.checkoutBranch.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.checkoutRemoteBranch.mockResolvedValue({ ok: true, message: 'ok' })
+  mocks.cloneGitRepository.mockResolvedValue({ ok: true, message: 'cloned', path: '/tmp/project' })
   mocks.commitAllChanges.mockResolvedValue({ ok: true, message: 'committed local' })
   mocks.commitRemoteChanges.mockResolvedValue({ ok: true, message: 'committed remote' })
   mocks.createBranch.mockResolvedValue({ ok: true, message: 'created local' })
@@ -329,6 +340,13 @@ beforeEach(() => {
     },
   })
   mocks.getCurrentBranch.mockResolvedValue('main')
+  mocks.getServerSettingsPrefs.mockResolvedValue({
+    gitNetworkProxyEnabled: true,
+    gitNetworkProxyUrl: 'socks5://127.0.0.1:7890',
+    gitNetworkTimeoutSec: 240,
+    terminalApp: 'auto',
+    editorApp: 'auto',
+  })
   mocks.getRepoName.mockResolvedValue('repo')
   mocks.getRepoRoot.mockResolvedValue('/tmp/repo')
   mocks.getWorktrees.mockResolvedValue([])
@@ -568,7 +586,11 @@ describe('fetchRepository invalidation publishing', () => {
     const result = await fetchRepository('/tmp/repo', kind as 'user' | 'background')
 
     expect(result).toEqual({ ok: true, message: 'fetched' })
-    expect(mocks.fetchAll).toHaveBeenCalledWith('/tmp/repo', expect.any(AbortSignal))
+    expect(mocks.fetchAll).toHaveBeenCalledWith(
+      '/tmp/repo',
+      expect.any(AbortSignal),
+      { timeoutMs: 240_000, proxyUrl: 'socks5://127.0.0.1:7890' },
+    )
   })
 
   test('publishes snapshot invalidation after a successful sync', async () => {
@@ -624,6 +646,77 @@ describe('fetchRepository invalidation publishing', () => {
 
     expect(result).toEqual({ ok: false, message: 'fatal: offline' })
     expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
+  })
+})
+
+describe('git network settings for local repository network operations', () => {
+  test('fetchRepository passes configured network options to local fetch', async () => {
+    mocks.fetchAll.mockResolvedValueOnce({ ok: true, message: 'fetched' })
+    const { fetchRepository } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(fetchRepository('/tmp/repo', 'user')).resolves.toEqual({ ok: true, message: 'fetched' })
+
+    expect(mocks.fetchAll).toHaveBeenCalledWith(
+      '/tmp/repo',
+      expect.any(AbortSignal),
+      { timeoutMs: 240_000, proxyUrl: 'socks5://127.0.0.1:7890' },
+    )
+  })
+
+  test('pullRepositoryBranch passes configured network options to local pull', async () => {
+    const { pullRepositoryBranch } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(pullRepositoryBranch('/tmp/repo', 'feature/a')).resolves.toEqual({ ok: true, message: 'ok' })
+
+    expect(mocks.pullBranch).toHaveBeenCalledWith(
+      '/tmp/repo',
+      'feature/a',
+      undefined,
+      expect.any(AbortSignal),
+      { timeoutMs: 240_000, proxyUrl: 'socks5://127.0.0.1:7890' },
+    )
+  })
+
+  test('pushRepositoryBranch passes configured network options to local push', async () => {
+    const { pushRepositoryBranch } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(pushRepositoryBranch('/tmp/repo', 'feature/a')).resolves.toEqual({ ok: true, message: 'ok' })
+
+    expect(mocks.pushBranch).toHaveBeenCalledWith(
+      '/tmp/repo',
+      'feature/a',
+      expect.any(AbortSignal),
+      { timeoutMs: 240_000, proxyUrl: 'socks5://127.0.0.1:7890' },
+    )
+  })
+
+  test('cloneRepository passes configured network options to local clone', async () => {
+    const { cloneRepository } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(
+      cloneRepository('clone-1', 'https://example.com/acme/project.git', '/tmp', 'project'),
+    ).resolves.toEqual({ ok: true, message: 'cloned', path: '/tmp/project' })
+
+    expect(mocks.cloneGitRepository).toHaveBeenCalledWith(
+      '/tmp',
+      'project',
+      'https://example.com/acme/project.git',
+      expect.any(AbortSignal),
+      { timeoutMs: 240_000, proxyUrl: 'socks5://127.0.0.1:7890' },
+    )
+  })
+})
+
+describe('git network settings for SSH repository network operations', () => {
+  test('remote fetch does not pass local git network options into SSH helper', async () => {
+    const { fetchRepository } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(fetchRepository('ssh-config://prod/srv/repo', 'user')).resolves.toEqual({ ok: true, message: 'ok' })
+
+    expect(mocks.fetchRemoteRepository).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
+      { signal: expect.any(AbortSignal) },
+    )
   })
 })
 

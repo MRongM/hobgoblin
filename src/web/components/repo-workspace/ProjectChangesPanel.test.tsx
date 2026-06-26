@@ -40,10 +40,27 @@ vi.mock('#/web/stores/i18n.ts', () => ({
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
+let writeText: ReturnType<typeof vi.fn>
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+const originalResizeObserver = globalThis.ResizeObserver
+
+class MockResizeObserver implements ResizeObserver {
+  observe = vi.fn()
+  unobserve = vi.fn()
+  disconnect = vi.fn()
+}
 
 beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    configurable: true,
+    value: MockResizeObserver,
+  })
+  writeText = vi.fn(() => Promise.resolve())
+  Object.defineProperty(globalThis.navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText },
+  })
   resetReposStore()
   mocks.useRuntimeExternalAppSettings.mockReturnValue({
     terminalApp: 'auto',
@@ -68,6 +85,10 @@ afterEach(() => {
   container?.remove()
   root = null
   container = null
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    configurable: true,
+    value: originalResizeObserver,
+  })
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
 })
 
@@ -244,6 +265,49 @@ describe('ProjectChangesPanel', () => {
     })
 
     expect(onRevealPath).toHaveBeenCalledWith('src/components/Button.tsx')
+  })
+
+  test('copies changed file paths from the action bar after the tree view toggle', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } })],
+      selectedBranch: 'feature/worktree',
+      statusLoaded: true,
+      status: [
+        {
+          path: WORKTREE_PATH,
+          branch: 'feature/worktree',
+          isMain: true,
+          entries: [
+            { x: 'M', y: ' ', path: 'src/app.ts' },
+            { x: '?', y: '?', path: 'src/components/Button.tsx' },
+            { x: 'D', y: ' ', path: 'README.md' },
+          ],
+        },
+      ],
+    })
+
+    await act(async () => {
+      root!.render(
+        <InlineCommitDraftProvider>
+          <ProjectChangesPanel repoId={REPO_ID} />
+        </InlineCommitDraftProvider>,
+      )
+    })
+
+    const actionBar = container?.querySelector('[data-testid="project-changes-action-bar"]')
+    const treeViewButton = actionBar?.querySelector<HTMLButtonElement>('button[aria-label="file-list.view-tree"]')
+    const copyFilePaths = actionBar?.querySelector<HTMLButtonElement>('button[aria-label="history.copy-file-paths"]')
+    expect(treeViewButton).toBeTruthy()
+    expect(copyFilePaths).toBeTruthy()
+    expect(treeViewButton!.compareDocumentPosition(copyFilePaths!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    await act(async () => {
+      copyFilePaths?.click()
+    })
+    await act(async () => {})
+
+    expect(writeText).toHaveBeenCalledWith('src/app.ts\nsrc/components/Button.tsx\nREADME.md')
   })
 
   test('hides selection controls by default and shows them from the pre-commit toggle', async () => {

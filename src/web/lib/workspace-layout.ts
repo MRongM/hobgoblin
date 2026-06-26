@@ -9,7 +9,7 @@ export interface RepoWorkspaceBehavior {
   detailCollapsed: boolean
   detailCollapseAllowed: boolean
   detailFocusAllowed: boolean
-  /** The normalized focus-toggle preference/pressed state for top-bottom
+  /** The normalized focus-toggle preference/pressed state for supported
    *  layouts. This can stay true while `mode` is `collapsed`, so callers
    *  should not treat it as proof that the workspace is currently rendering
    *  in focus mode. */
@@ -41,7 +41,7 @@ export function repoWorkspaceBehavior(
   detailFocusMode = false,
 ): RepoWorkspaceBehavior {
   const detailCollapsedEffective = effectiveDetailCollapsed(layout, detailCollapsed)
-  const detailFocusAllowed = layout === 'top-bottom'
+  const detailFocusAllowed = true
   const detailFocusModeEffective = detailFocusAllowed && detailFocusMode
   const mode: RepoWorkspaceMode = detailCollapsedEffective ? 'collapsed' : detailFocusModeEffective ? 'focus' : 'split'
   const baseBehavior = REPO_WORKSPACE_BEHAVIOR[layout]

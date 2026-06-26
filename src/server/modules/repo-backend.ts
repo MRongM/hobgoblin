@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { checkGitAvailable } from '#/system/git/helper.ts'
+import { checkGitAvailable, type GitNetworkOptions } from '#/system/git/helper.ts'
 import {
   checkoutBranch,
   createBranch as createLocalBranch,
@@ -94,11 +94,11 @@ export interface RepoBackend {
   getHistory(branch: string, input: { limit: number; skip: number }, signal?: AbortSignal): Promise<CommitHistoryEntry[]>
   getCommitDetail(commit: string, signal?: AbortSignal): Promise<CommitDetail | null>
   getRemoteBranches(signal?: AbortSignal): Promise<string[]>
-  fetch(signal: AbortSignal): Promise<{ ok: boolean; message: string }>
+  fetch(signal: AbortSignal, networkOptions?: GitNetworkOptions): Promise<{ ok: boolean; message: string }>
   checkout(branch: string, signal?: AbortSignal): Promise<ExecResult>
   checkoutWorktree(worktreePath: string, branch: string, signal?: AbortSignal): Promise<ExecResult>
-  pull(branch: string, worktreePath?: string, signal?: AbortSignal): Promise<ExecResult>
-  push(branch: string, signal?: AbortSignal): Promise<ExecResult>
+  pull(branch: string, worktreePath?: string, signal?: AbortSignal, networkOptions?: GitNetworkOptions): Promise<ExecResult>
+  push(branch: string, signal?: AbortSignal, networkOptions?: GitNetworkOptions): Promise<ExecResult>
   commitAll(worktreePath: string, message: string, signal?: AbortSignal): Promise<ExecResult>
   merge(worktreePath: string, branch: string, signal?: AbortSignal): Promise<ExecResult>
   resetHard(worktreePath: string, signal?: AbortSignal): Promise<ExecResult>
@@ -296,11 +296,11 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       if (!isValidCwd(repoId)) return []
       return await getLocalRemoteTrackingBranches(repoId, signal)
     },
-    async fetch(signal) {
+    async fetch(signal, networkOptions) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       const available = await probeGitRepository(repoId)
       if (!available.ok) return available
-      return await fetchAll(repoId, signal)
+      return await fetchAll(repoId, signal, networkOptions)
     },
     async checkout(branch, signal) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
@@ -310,13 +310,13 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       if (!isValidCwd(worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
       return await checkoutBranch(worktreePath, branch, signal)
     },
-    async pull(branch, worktreePath, signal) {
+    async pull(branch, worktreePath, signal, networkOptions) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
-      return await pullBranch(repoId, branch, worktreePath, signal)
+      return await pullBranch(repoId, branch, worktreePath, signal, networkOptions)
     },
-    async push(branch, signal) {
+    async push(branch, signal, networkOptions) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
-      return await pushBranch(repoId, branch, signal)
+      return await pushBranch(repoId, branch, signal, networkOptions)
     },
     async commitAll(worktreePath, message, signal) {
       if (!isValidCwd(worktreePath)) return { ok: false, message: 'error.invalid-arguments' }

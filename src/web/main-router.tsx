@@ -78,6 +78,12 @@ const settingsSyncRoute = createRoute({
   component: SettingsSyncRoute,
 })
 
+const settingsProxyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings/proxy',
+  component: SettingsProxyRoute,
+})
+
 const settingsAppsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/apps',
@@ -118,6 +124,7 @@ const mainRouteTree = rootRoute.addChildren([
   settingsNotificationsRoute,
   settingsSshRoute,
   settingsSyncRoute,
+  settingsProxyRoute,
   settingsAppsRoute,
   settingsGitHubRoute,
   settingsLanRoute,
@@ -173,6 +180,10 @@ function SettingsSshRoute() {
 
 function SettingsSyncRoute() {
   return <SettingsRoutePage settingsPage="sync" />
+}
+
+function SettingsProxyRoute() {
+  return <SettingsRoutePage settingsPage="proxy" />
 }
 
 function SettingsAppsRoute() {

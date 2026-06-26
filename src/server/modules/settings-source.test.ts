@@ -30,6 +30,9 @@ test('initializes server-settings.json with defaults when no persisted settings 
     lang: 'auto',
     theme: 'auto',
     colorTheme: 'macos',
+    gitNetworkProxyEnabled: false,
+    gitNetworkProxyUrl: '',
+    gitNetworkTimeoutSec: 120,
     terminalNotificationsEnabled: false,
     shortcutsDisabled: false,
     globalShortcutDisabled: false,
@@ -75,6 +78,9 @@ test('persists updates and notifies subscribers from the server settings store',
     lang: 'ko',
     theme: 'dark',
     colorTheme: 'github',
+    gitNetworkProxyEnabled: true,
+    gitNetworkProxyUrl: 'socks5://127.0.0.1:7890',
+    gitNetworkTimeoutSec: 240,
     terminalNotificationsEnabled: true,
     shortcutsDisabled: true,
     globalShortcutDisabled: true,
@@ -119,6 +125,9 @@ test('persists updates and notifies subscribers from the server settings store',
     lang: 'ko',
     theme: 'dark',
     colorTheme: 'github',
+    gitNetworkProxyEnabled: true,
+    gitNetworkProxyUrl: 'socks5://127.0.0.1:7890',
+    gitNetworkTimeoutSec: 240,
     terminalNotificationsEnabled: true,
     shortcutsDisabled: true,
     globalShortcutDisabled: true,
@@ -148,6 +157,41 @@ test('persists updates and notifies subscribers from the server settings store',
     selectedTerminalByWorktree: { '/repo-b\0/worktree': '/repo-b\0/worktree\0terminal-2' },
   })
   expect(await reloaded.getServerRecentRepos()).toEqual([{ kind: 'local', id: '/repo-b' }])
+})
+
+test('normalizes invalid git network proxy and clamps timeout seconds', async () => {
+  tmp = mkdtempSync(path.join(os.tmpdir(), 'gbl-server-settings-'))
+  previousDataDir = process.env.GOBLIN_SERVER_DATA_DIR
+  process.env.GOBLIN_SERVER_DATA_DIR = tmp
+
+  const mod = await import('#/server/modules/settings-source.ts')
+  await mod.updateServerSettingsPrefs({
+    gitNetworkProxyEnabled: true,
+    gitNetworkProxyUrl: 'ftp://127.0.0.1:21',
+    gitNetworkTimeoutSec: 9999,
+  } as Parameters<typeof mod.updateServerSettingsPrefs>[0] & {
+    gitNetworkProxyUrl: string
+    gitNetworkTimeoutSec: number
+  })
+
+  expect(await mod.getServerSettingsPrefs()).toMatchObject({
+    gitNetworkProxyEnabled: true,
+    gitNetworkProxyUrl: '',
+    gitNetworkTimeoutSec: 900,
+  })
+
+  await mod.updateServerSettingsPrefs({
+    gitNetworkProxyUrl: ' socks5://127.0.0.1:7890 ',
+    gitNetworkTimeoutSec: 1,
+  } as Parameters<typeof mod.updateServerSettingsPrefs>[0] & {
+    gitNetworkProxyUrl: string
+    gitNetworkTimeoutSec: number
+  })
+
+  expect(await mod.getServerSettingsPrefs()).toMatchObject({
+    gitNetworkProxyUrl: 'socks5://127.0.0.1:7890',
+    gitNetworkTimeoutSec: 15,
+  })
 })
 
 test('normalizes missing and invalid terminal theme sync values to enabled', async () => {

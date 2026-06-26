@@ -22,7 +22,11 @@ import {
   lanInfoQueryKey,
   settingsSnapshotQueryKey,
 } from '#/web/settings-query-cache.ts'
-import { DEFAULT_DETAIL_PANE_SIZES, DEFAULT_WORKSPACE_LAYOUT } from '#/shared/workspace-layout.ts'
+import {
+  DEFAULT_DETAIL_COLLAPSED,
+  DEFAULT_DETAIL_PANE_SIZES,
+  DEFAULT_WORKSPACE_LAYOUT,
+} from '#/shared/workspace-layout.ts'
 
 function initialSettingsSnapshot(): SettingsSnapshot | undefined {
   const initialSettings = getInitialBootstrap().initialSettings
@@ -36,7 +40,7 @@ function initialSettingsSnapshot(): SettingsSnapshot | undefined {
     session: {
       openRepos: [],
       activeRepo: null,
-      detailCollapsed: true,
+      detailCollapsed: DEFAULT_DETAIL_COLLAPSED,
       detailFocusMode: false,
       workspaceLayout: DEFAULT_WORKSPACE_LAYOUT,
       detailPaneSizes: DEFAULT_DETAIL_PANE_SIZES,

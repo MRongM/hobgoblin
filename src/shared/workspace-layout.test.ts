@@ -12,7 +12,7 @@ describe('normalizeWorkspaceSessionLayoutState', () => {
     expect(DEFAULT_FILE_TREE_PANE_SIZES).toEqual({ 'top-bottom': 66.7, 'left-right': 66.7 })
   })
 
-  test('disables detail focus mode and collapse when the layout does not support them', () => {
+  test('preserves detail focus mode and collapse in left-right layout', () => {
     expect(
       normalizeWorkspaceSessionLayoutState({
         workspaceLayout: 'left-right',
@@ -23,8 +23,8 @@ describe('normalizeWorkspaceSessionLayoutState', () => {
       }),
     ).toEqual({
       workspaceLayout: 'left-right',
-      detailCollapsed: false,
-      detailFocusMode: false,
+      detailCollapsed: true,
+      detailFocusMode: true,
       detailPaneSizes: { 'top-bottom': 55, 'left-right': 45 },
       fileTreePaneSizes: { 'top-bottom': 44, 'left-right': 36 },
     })

@@ -32,6 +32,9 @@ describe('renderer bootstrap seeding', () => {
     installBridge({
       initialSettings: {
         fetchIntervalSec: 300,
+        gitNetworkProxyEnabled: false,
+        gitNetworkProxyUrl: '',
+        gitNetworkTimeoutSec: 120,
         terminalNotificationsEnabled: true,
         shortcutsDisabled: true,
         globalShortcutDisabled: true,

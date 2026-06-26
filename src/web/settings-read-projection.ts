@@ -7,6 +7,7 @@ import { runtimeRecentReposStateFromSettingsSnapshot, runtimeSettingsSnapshotFro
 import {
   DEFAULT_FILE_TREE_FONT_SIZE,
   DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
+  DEFAULT_GIT_NETWORK_TIMEOUT_SEC,
   DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
   DEFAULT_TERMINAL_FONT_SIZE,
 } from '#/shared/settings-defaults.ts'
@@ -139,6 +140,16 @@ export function readRuntimeLanSettings(data: RuntimeSettingsSnapshot | undefined
   const fallback = fallbackInitialSettings()
   return {
     lanEnabled: data?.lanEnabled ?? fallback?.lanEnabled ?? false,
+  }
+}
+
+export function readRuntimeGitNetworkSettings(data: RuntimeSettingsSnapshot | undefined) {
+  const fallback = fallbackInitialSettings()
+  return {
+    gitNetworkProxyEnabled: data?.gitNetworkProxyEnabled ?? fallback?.gitNetworkProxyEnabled ?? false,
+    gitNetworkProxyUrl: data?.gitNetworkProxyUrl ?? fallback?.gitNetworkProxyUrl ?? '',
+    gitNetworkTimeoutSec:
+      data?.gitNetworkTimeoutSec ?? fallback?.gitNetworkTimeoutSec ?? DEFAULT_GIT_NETWORK_TIMEOUT_SEC,
   }
 }
 

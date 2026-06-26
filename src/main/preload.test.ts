@@ -33,6 +33,9 @@ function defaultArgv() {
     i18n: { lang: 'en', pref: 'ja', dict: { hello: 'world' } },
     settings: {
       fetchIntervalSec: 120,
+      gitNetworkProxyEnabled: false,
+      gitNetworkProxyUrl: '',
+      gitNetworkTimeoutSec: 120,
       terminalNotificationsEnabled: false,
       shortcutsDisabled: false,
       globalShortcutDisabled: false,

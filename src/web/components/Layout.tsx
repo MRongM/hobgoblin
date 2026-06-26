@@ -83,8 +83,7 @@ export function RepoWorkspace({
   onDetailSizeChange,
 }: RepoWorkspaceProps) {
   const axis = workspaceLayoutAxis(layout)
-  const workspaceMode = axis === 'rows' ? mode : 'split'
-  if (workspaceMode === 'split') {
+  if (mode === 'split') {
     return (
       <SplitPane
         orientation={axis === 'columns' ? 'horizontal' : 'vertical'}
@@ -99,6 +98,21 @@ export function RepoWorkspace({
       />
     )
   }
+
+  if (axis === 'columns') {
+    return (
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+        {branchPane}
+        <div
+          className="absolute right-0 top-0 z-20 max-w-full overflow-hidden border-b border-l border-separator bg-detail shadow-sm"
+          style={{ width: `min(100%, max(${LEFT_RIGHT_DETAIL_MIN_SIZE}, ${detailSize}%))` }}
+        >
+          {detailPane}
+        </div>
+      </div>
+    )
+  }
+
   // Collapsed top/bottom layout keeps only the detail toolbar visible.
   return (
     <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_1px_2.25rem]">

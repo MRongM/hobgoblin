@@ -1,4 +1,10 @@
-import { git, gitResultWithOptions, NETWORK_TIMEOUT_MS } from '#/system/git/helper.ts'
+import {
+  git,
+  gitNetworkOptions,
+  gitResultWithOptions,
+  NETWORK_TIMEOUT_MS,
+  type GitNetworkOptions,
+} from '#/system/git/helper.ts'
 import type { BrowserRemoteProvider, ExecResult, GitRemoteInfo, RepoRemoteInfo } from '#/shared/git-types.ts'
 import { getCurrentBranch } from '#/system/git/branches.ts'
 import { isGitHubHost, isGitLabHost, parseGitRemoteUrl, remoteUrlToHttps } from '#/system/git/remote-url.ts'
@@ -235,7 +241,11 @@ async function resolvePushTarget(
   return resolvePushTargetForRemotes(remotes, upstream, branch)
 }
 
-export async function fetchAll(cwd: string, signal?: AbortSignal): Promise<ExecResult> {
+export async function fetchAll(
+  cwd: string,
+  signal?: AbortSignal,
+  networkOptions?: GitNetworkOptions,
+): Promise<ExecResult> {
   let remotes: GitRemoteInfo[] | null = null
   let upstream: UpstreamParts | null = null
   try {
@@ -254,7 +264,7 @@ export async function fetchAll(cwd: string, signal?: AbortSignal): Promise<ExecR
   if (!remote) return { ok: true, message: '' }
   return gitResultWithOptions(
     cwd,
-    { timeoutMs: NETWORK_TIMEOUT_MS, signal },
+    gitNetworkOptions(networkOptions, NETWORK_TIMEOUT_MS, signal),
     'fetch',
     '--prune',
     '--',
@@ -267,15 +277,21 @@ export async function pullBranch(
   branch: string,
   worktreePath?: string,
   signal?: AbortSignal,
+  networkOptions?: GitNetworkOptions,
 ): Promise<ExecResult> {
   if (!isSafeBranchName(branch)) return { ok: false, message: 'error.invalid-arguments' }
   if (worktreePath) {
-    return gitResultWithOptions(worktreePath, { timeoutMs: NETWORK_TIMEOUT_MS, signal }, 'pull', '--ff-only')
+    return gitResultWithOptions(
+      worktreePath,
+      gitNetworkOptions(networkOptions, NETWORK_TIMEOUT_MS, signal),
+      'pull',
+      '--ff-only',
+    )
   }
   const current = await getCurrentBranch(cwd, { signal })
   if (signal?.aborted) return { ok: false, message: 'cancelled' }
   if (branch === current) {
-    return gitResultWithOptions(cwd, { timeoutMs: NETWORK_TIMEOUT_MS, signal }, 'pull', '--ff-only')
+    return gitResultWithOptions(cwd, gitNetworkOptions(networkOptions, NETWORK_TIMEOUT_MS, signal), 'pull', '--ff-only')
   }
   const target = await getUpstreamParts(cwd, branch, signal)
   if (signal?.aborted) return { ok: false, message: 'cancelled' }
@@ -287,7 +303,7 @@ export async function pullBranch(
   }
   return gitResultWithOptions(
     cwd,
-    { timeoutMs: NETWORK_TIMEOUT_MS, signal },
+    gitNetworkOptions(networkOptions, NETWORK_TIMEOUT_MS, signal),
     'fetch',
     '--',
     target.remote,
@@ -295,7 +311,12 @@ export async function pullBranch(
   )
 }
 
-export async function pushBranch(cwd: string, branch: string, signal?: AbortSignal): Promise<ExecResult> {
+export async function pushBranch(
+  cwd: string,
+  branch: string,
+  signal?: AbortSignal,
+  networkOptions?: GitNetworkOptions,
+): Promise<ExecResult> {
   if (!isSafeBranchName(branch)) return { ok: false, message: 'error.invalid-arguments' }
   const target = await resolvePushTarget(cwd, branch, signal)
   if (signal?.aborted) return { ok: false, message: 'cancelled' }
@@ -303,5 +324,5 @@ export async function pushBranch(cwd: string, branch: string, signal?: AbortSign
   const args = target.setUpstream
     ? ['push', '-u', '--', target.remote, `${branch}:${target.branch}`]
     : ['push', '--', target.remote, `${branch}:${target.branch}`]
-  return gitResultWithOptions(cwd, { timeoutMs: NETWORK_TIMEOUT_MS, signal }, ...args)
+  return gitResultWithOptions(cwd, gitNetworkOptions(networkOptions, NETWORK_TIMEOUT_MS, signal), ...args)
 }

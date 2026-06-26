@@ -29,10 +29,27 @@ vi.mock('#/web/stores/i18n.ts', () => ({
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
+let writeText: ReturnType<typeof vi.fn>
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+const originalResizeObserver = globalThis.ResizeObserver
+
+class MockResizeObserver implements ResizeObserver {
+  observe = vi.fn()
+  unobserve = vi.fn()
+  disconnect = vi.fn()
+}
 
 beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    configurable: true,
+    value: MockResizeObserver,
+  })
+  writeText = vi.fn(() => Promise.resolve())
+  Object.defineProperty(globalThis.navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText },
+  })
   resetReposStore()
   mocks.getRepositoryHistory.mockResolvedValue([
     {
@@ -78,6 +95,10 @@ afterEach(() => {
   container?.remove()
   root = null
   container = null
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    configurable: true,
+    value: originalResizeObserver,
+  })
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
 })
 
@@ -154,6 +175,55 @@ describe('ProjectHistoryPanel', () => {
     })
 
     expect(onRevealPath).toHaveBeenCalledWith('src/app.ts')
+  })
+
+  test('copies selected commit detail and file paths from the detail toolbar', async () => {
+    mocks.getRepositoryCommitDetail.mockResolvedValueOnce({
+      hash: 'abc123456789',
+      shortHash: 'abc1234',
+      subject: 'feat: first',
+      author: 'Alice',
+      date: '2026-06-15T09:00:00+08:00',
+      parents: ['def456789012', 'fed987654321'],
+      files: [
+        { path: 'src/app.ts', status: 'modified', additions: 3, deletions: 1 },
+        { path: 'src/components/Button.tsx', status: 'added', additions: 8, deletions: 0 },
+      ],
+    })
+
+    await act(async () => {
+      root!.render(
+        <ProjectHistoryPanel repoId={REPO_ID} onRevealPath={vi.fn()} />,
+      )
+    })
+    await act(async () => {})
+
+    const treeViewButton = container?.querySelector<HTMLButtonElement>('button[aria-label="file-list.view-tree"]')
+    const copyFilePaths = container?.querySelector<HTMLButtonElement>('button[aria-label="history.copy-file-paths"]')
+    expect(treeViewButton).toBeTruthy()
+    expect(copyFilePaths).toBeTruthy()
+    expect(treeViewButton!.compareDocumentPosition(copyFilePaths!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('button[aria-label="history.copy-commit"]')?.click()
+    })
+
+    expect(writeText).toHaveBeenCalledWith(
+      [
+        'Subject: feat: first',
+        'Hash: abc123456789',
+        'Author: Alice',
+        'Date: 2026-06-15T09:00:00+08:00',
+        'Parents: def456789012, fed987654321',
+      ].join('\n'),
+    )
+
+    await act(async () => {
+      copyFilePaths?.click()
+    })
+    await act(async () => {})
+
+    expect(writeText).toHaveBeenLastCalledWith('src/app.ts\nsrc/components/Button.tsx')
   })
 
   test('shows detail errors without clearing the history list', async () => {

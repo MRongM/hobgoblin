@@ -1,5 +1,6 @@
 import { runServerCancellable, abortServerNetworkOp } from '#/server/common/network-ops.ts'
 import { publishRepoQueryInvalidation } from '#/server/modules/invalidation-broker.ts'
+import { gitNetworkOptionsFromPrefs } from '#/server/modules/git-network-settings.ts'
 import { resolveRemoteRepoTarget, resolveRepoBackend, runWithRepoBackend } from '#/server/modules/repo-backend.ts'
 import { getServerSettingsPrefs } from '#/server/modules/settings-source.ts'
 import { cloneRepository as cloneGitRepository } from '#/system/git/clone.ts'
@@ -36,6 +37,10 @@ const CLONE_OPERATION_ID_RE = /^[A-Za-z0-9_-]{1,128}$/
 const INVALIDATION_SOURCE_TOKEN_RE = /^[A-Za-z0-9_-]{1,128}$/
 const activeCloneControllers = new Map<string, AbortController>()
 const activeBackgroundFetches = new Map<string, Promise<{ ok: boolean; message: string }>>()
+
+async function getGitNetworkOptions() {
+  return gitNetworkOptionsFromPrefs(await getServerSettingsPrefs())
+}
 
 async function probeReadableDirectory(cwd: string): Promise<ProbeAvailability> {
   try {
@@ -208,10 +213,11 @@ export async function cloneRepository(
   const writable = await ensureWritableDirectory(targetParent)
   if (!writable.ok) return writable
   if (activeCloneControllers.has(operationId)) return { ok: false, message: 'error.network-op-in-progress' }
+  const networkOptions = await getGitNetworkOptions()
   const ctrl = new AbortController()
   activeCloneControllers.set(operationId, ctrl)
   try {
-    return await cloneGitRepository(targetParent, targetName, repoUrl, ctrl.signal)
+    return await cloneGitRepository(targetParent, targetName, repoUrl, ctrl.signal, networkOptions)
   } finally {
     if (activeCloneControllers.get(operationId) === ctrl) activeCloneControllers.delete(operationId)
   }
@@ -236,7 +242,10 @@ export async function fetchRepository(
     return result
   }
   async function executeFetch(): Promise<{ ok: boolean; message: string }> {
-    return await runWithRepoBackend(cwd, async (backend) => await runFetch((signal) => backend.fetch(signal)))
+    return await runWithRepoBackend(cwd, async (backend) => {
+      const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
+      return await runFetch((signal) => backend.fetch(signal, networkOptions))
+    })
   }
 
   if (kind === 'user') {
@@ -273,8 +282,9 @@ export async function pullRepositoryBranch(
   sourceToken?: string,
 ): Promise<ExecResult> {
   const backend = await resolveRepoBackend(cwd)
+  const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
   return await runUserNetworkMutation(cwd, signal, sourceToken, async (mergedSignal) => {
-    return await backend.pull(branch, worktreePath, mergedSignal)
+    return await backend.pull(branch, worktreePath, mergedSignal, networkOptions)
   })
 }
 
@@ -285,8 +295,9 @@ export async function pushRepositoryBranch(
   sourceToken?: string,
 ): Promise<ExecResult> {
   const backend = await resolveRepoBackend(cwd)
+  const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
   return await runUserNetworkMutation(cwd, signal, sourceToken, async (mergedSignal) => {
-    return await backend.push(branch, mergedSignal)
+    return await backend.push(branch, mergedSignal, networkOptions)
   })
 }
 

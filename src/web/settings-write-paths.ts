@@ -19,6 +19,9 @@ import {
   setFileTreeTopbarFontSize,
   setGlobalShortcut,
   setGlobalShortcutDisabled,
+  setGitNetworkProxyEnabled,
+  setGitNetworkProxyUrl,
+  setGitNetworkTimeoutSec,
   setLanEnabled,
   setPreferredEditorApp,
   setPreferredTerminalApp,
@@ -208,6 +211,30 @@ export async function setLanEnabledPreference(enabled: boolean): Promise<void> {
   await setLanEnabled(enabled)
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, lanEnabled: enabled }))
   void mainWindowQueryClient.invalidateQueries({ queryKey: lanInfoQueryKey() })
+}
+
+export async function setGitNetworkProxyEnabledPreference(enabled: boolean): Promise<void> {
+  await setGitNetworkProxyEnabled(enabled)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
+    ...current,
+    gitNetworkProxyEnabled: enabled,
+  }))
+}
+
+export async function setGitNetworkProxyUrlPreference(url: string): Promise<void> {
+  await setGitNetworkProxyUrl(url)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
+    ...current,
+    gitNetworkProxyUrl: url,
+  }))
+}
+
+export async function setGitNetworkTimeoutSecPreference(sec: number): Promise<void> {
+  await setGitNetworkTimeoutSec(sec)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
+    ...current,
+    gitNetworkTimeoutSec: sec,
+  }))
 }
 
 export async function runSettingsControllerAction<T>(label: string, task: () => Promise<T>): Promise<T | null> {

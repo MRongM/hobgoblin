@@ -10,6 +10,7 @@ import { TerminalSessionContext, TerminalSessionReadContext } from '#/web/compon
 import type { TerminalSessionContextValue, TerminalSessionReadContextValue, TerminalSessionSummary, TerminalDescriptor, WorktreeTerminalSnapshot } from '#/web/components/terminal/types.ts'
 import { MainWindowNavigationProvider, type MainWindowNavigationActions } from '#/web/main-window-navigation.tsx'
 import { emptyRendererBridgeBootstrap, setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { DEFAULT_WORKSPACE_LAYOUT } from '#/shared/workspace-layout.ts'
 import type { RendererBridge } from '#/web/renderer-bridge-types.ts'
@@ -150,6 +151,32 @@ describe('BranchDetailToolbar', () => {
 
     expect(c.querySelector('button[aria-label="action.menu"]')).toBeNull()
     expect(c.querySelector('[data-testid="branch-detail-toolbar-divider"]')).toBeNull()
+  })
+
+  test('shows terminal focus and collapse controls in left-right layout', () => {
+    const { container: c } = renderToolbar({
+      terminalCount: 1,
+      detailTab: 'terminal',
+      layout: 'left-right',
+      navigation: navigationWith({}),
+    })
+
+    const focusButton = c.querySelector<HTMLButtonElement>('button[aria-label="branch-detail.focus"]')
+    const collapseButton = c.querySelector<HTMLButtonElement>('button[aria-label="branch-detail.collapse"]')
+
+    expect(focusButton).not.toBeNull()
+    expect(collapseButton).not.toBeNull()
+
+    act(() => {
+      focusButton?.click()
+    })
+    expect(useReposStore.getState().detailFocusMode).toBe(true)
+    expect(useReposStore.getState().detailCollapsed).toBe(false)
+
+    act(() => {
+      collapseButton?.click()
+    })
+    expect(useReposStore.getState().detailCollapsed).toBe(true)
   })
 
   test('keeps terminal focus when pressing End on the compact terminal tab', async () => {

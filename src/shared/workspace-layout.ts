@@ -15,9 +15,7 @@ export const MAX_WORKSPACE_PANE_SIZE = 90
 
 const WORKSPACE_LAYOUT_META = {
   'top-bottom': { axis: 'rows', detailCollapseAllowed: true },
-  // Side-by-side layout always keeps both panes visible; collapsing the
-  // detail pane would leave the branch list without its companion pane.
-  'left-right': { axis: 'columns', detailCollapseAllowed: false },
+  'left-right': { axis: 'columns', detailCollapseAllowed: true },
 } satisfies Record<WorkspaceLayout, { axis: WorkspaceLayoutAxis; detailCollapseAllowed: boolean }>
 
 export function normalizeWorkspaceLayout(value: unknown): WorkspaceLayout {
@@ -85,9 +83,7 @@ export function normalizeWorkspaceSessionLayoutState(value: {
     typeof value.detailCollapsed === 'boolean' ? value.detailCollapsed : DEFAULT_DETAIL_COLLAPSED,
   )
   const detailFocusMode =
-    workspaceLayout === 'top-bottom' && typeof value.detailFocusMode === 'boolean'
-      ? value.detailFocusMode
-      : DEFAULT_DETAIL_FOCUS_MODE
+    typeof value.detailFocusMode === 'boolean' ? value.detailFocusMode : DEFAULT_DETAIL_FOCUS_MODE
   return {
     workspaceLayout,
     detailCollapsed,

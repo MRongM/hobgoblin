@@ -1,15 +1,25 @@
-import { describe, expect, test, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { getBrowserRemoteUrl, resolveFetchRemoteForRemotes, resolvePushTargetForRemotes } from '#/system/git/remote.ts'
 import type { GitRemoteInfo } from '#/shared/git-types.ts'
 
 const gitMock = vi.hoisted(() => vi.fn())
+const gitResultWithOptionsMock = vi.hoisted(() => vi.fn())
 
 vi.mock('#/system/git/helper.ts', async () => {
   const actual = await vi.importActual<typeof import('#/system/git/helper.ts')>('#/system/git/helper.ts')
   return {
     ...actual,
     git: vi.fn((cwd: string, args: string[], options?: unknown) => gitMock(cwd, args, options)),
+    gitResultWithOptions: vi.fn((cwd: string, opts: unknown, ...args: string[]) =>
+      gitResultWithOptionsMock(cwd, opts, ...args),
+    ),
   }
+})
+
+beforeEach(() => {
+  gitMock.mockReset()
+  gitResultWithOptionsMock.mockReset()
+  gitResultWithOptionsMock.mockResolvedValue({ ok: true, message: 'ok' })
 })
 
 describe('getBrowserRemoteUrl', () => {
@@ -27,6 +37,62 @@ describe('getBrowserRemoteUrl', () => {
 
     await expect(getBrowserRemoteUrl('/tmp/repo', { branch: 'feature/test' })).resolves.toBe(
       'https://github.com/acme/project/pull/new/feature/test',
+    )
+  })
+})
+
+describe('local network git options', () => {
+  test('pullBranch uses configured network options for a concrete worktree path', async () => {
+    const { pullBranch } = await import('#/system/git/remote.ts')
+    const signal = new AbortController().signal
+
+    await expect(
+      pullBranch('/repo', 'feature/a', '/repo-feature-a', signal, {
+        timeoutMs: 120_000,
+        proxyUrl: 'socks5://127.0.0.1:7890',
+      }),
+    ).resolves.toEqual({ ok: true, message: 'ok' })
+
+    expect(gitResultWithOptionsMock).toHaveBeenCalledWith(
+      '/repo-feature-a',
+      expect.objectContaining({
+        timeoutMs: 120_000,
+        signal,
+        env: expect.objectContaining({ ALL_PROXY: 'socks5://127.0.0.1:7890' }),
+      }),
+      'pull',
+      '--ff-only',
+    )
+  })
+
+  test('pushBranch uses configured network options after resolving the push target', async () => {
+    gitMock.mockImplementation(async (_cwd: string, args: string[]) => {
+      if (args[0] === 'remote' && args[1] === '-v') {
+        return 'origin\thttps://example.com/acme/repo.git (fetch)\norigin\thttps://example.com/acme/repo.git (push)'
+      }
+      if (args[0] === 'config' && args[1] === '--get') throw new Error('no upstream')
+      throw new Error(`Unexpected git call: ${args.join(' ')}`)
+    })
+    const { pushBranch } = await import('#/system/git/remote.ts')
+
+    await expect(
+      pushBranch('/repo', 'feature/a', undefined, {
+        timeoutMs: 180_000,
+        proxyUrl: 'http://127.0.0.1:7890',
+      }),
+    ).resolves.toEqual({ ok: true, message: 'ok' })
+
+    expect(gitResultWithOptionsMock).toHaveBeenCalledWith(
+      '/repo',
+      expect.objectContaining({
+        timeoutMs: 180_000,
+        env: expect.objectContaining({ HTTPS_PROXY: 'http://127.0.0.1:7890' }),
+      }),
+      'push',
+      '-u',
+      '--',
+      'origin',
+      'feature/a:feature/a',
     )
   })
 })
