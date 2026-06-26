@@ -7,6 +7,7 @@ import { BranchActionControls } from '#/web/components/BranchActionControls.tsx'
 import { EmptyState, ScrollPane } from '#/web/components/Layout.tsx'
 import { StatusListSkeleton } from '#/web/components/Skeleton.tsx'
 import { StatusList } from '#/web/components/StatusList.tsx'
+import { CopyButton } from '#/web/components/CopyButton.tsx'
 import { AsyncButton } from '#/web/components/AsyncButton.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { Switch } from '#/web/components/ui/switch.tsx'
@@ -51,6 +52,10 @@ function projectChangesRepoEqual(a: BranchDetailRepo | undefined, b: BranchDetai
 
 function changedFilePaths(status: SelectedBranchDetailPresentation['selectedStatus']): string[] {
   return status.flatMap((worktree) => worktree.entries.map((entry) => entry.path))
+}
+
+function changedFilePathsClipboardText(filePaths: string[]): string {
+  return filePaths.join('\n')
 }
 
 function changedDirectoryPaths(filePaths: string[]): string[] {
@@ -206,6 +211,7 @@ export function ProjectChangesPanel({
         selectionEnabled={selectionEnabled}
         selectedCount={selectedTargets.size}
         statusRefreshing={resourceBusy(repo.resources.status)}
+        changedFilePathsValue={changedFilePathsClipboardText(currentChangedFiles)}
         onFileViewModeChange={setFileViewMode}
         onSelectionEnabledChange={handleSelectionEnabledChange}
         onDiscardSelected={() => setConfirmDiscardOpen(true)}
@@ -257,6 +263,7 @@ function ProjectChangesActionBar({
   selectionEnabled,
   selectedCount,
   statusRefreshing,
+  changedFilePathsValue,
   onFileViewModeChange,
   onSelectionEnabledChange,
   onDiscardSelected,
@@ -270,6 +277,7 @@ function ProjectChangesActionBar({
   selectionEnabled: boolean
   selectedCount: number
   statusRefreshing: boolean
+  changedFilePathsValue: string
   onFileViewModeChange: (mode: FileListViewMode) => void
   onSelectionEnabledChange: (enabled: boolean) => void
   onDiscardSelected: () => void
@@ -340,6 +348,15 @@ function ProjectChangesActionBar({
       )}
       {commitActions && <BranchActionControls actions={commitActions} variant="bar" />}
       {showFileViewMode && <FileListViewModeControl value={fileViewMode} onChange={onFileViewModeChange} />}
+      {showFileViewMode && (
+        <CopyButton
+          value={changedFilePathsValue}
+          copyLabel={t('history.copy-file-paths')}
+          copiedLabel={t('branch-status.copied')}
+          disabled={!changedFilePathsValue}
+          className="shrink-0"
+        />
+      )}
       {actions.dialogs}
     </div>
   )

@@ -14,6 +14,53 @@ export interface GitOptions {
   /** Cancel the in-flight git invocation. SIGTERM is sent, then SIGKILL
    *  after a short grace if git doesn't exit. */
   signal?: AbortSignal
+  /** Extra environment variables for this git child process only. */
+  env?: Record<string, string>
+}
+
+export interface GitNetworkOptions {
+  timeoutMs: number
+  proxyUrl?: string
+}
+
+export function buildGitNetworkEnv(proxyUrl?: string): Record<string, string> | undefined {
+  const normalized = proxyUrl?.trim()
+  if (!normalized) return undefined
+  let parsed: URL
+  try {
+    parsed = new URL(normalized)
+  } catch {
+    return undefined
+  }
+  if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+    return {
+      HTTP_PROXY: normalized,
+      HTTPS_PROXY: normalized,
+      http_proxy: normalized,
+      https_proxy: normalized,
+    }
+  }
+  if (parsed.protocol === 'socks5:') {
+    return {
+      ALL_PROXY: normalized,
+      HTTPS_PROXY: normalized,
+      all_proxy: normalized,
+      https_proxy: normalized,
+    }
+  }
+  return undefined
+}
+
+export function gitNetworkOptions(
+  options: GitNetworkOptions | undefined,
+  fallbackTimeoutMs: number,
+  signal?: AbortSignal,
+): GitOptions {
+  return {
+    timeoutMs: options?.timeoutMs ?? fallbackTimeoutMs,
+    signal,
+    env: buildGitNetworkEnv(options?.proxyUrl),
+  }
 }
 
 export type GitAvailability = { ok: true } | { ok: false; message: string }
@@ -47,6 +94,7 @@ export function git(cwd: string, args: string[], opts?: GitOptions): Promise<str
     cwd,
     timeout: timeoutMs,
     cancelSignal: opts?.signal,
+    env: opts?.env,
     forceKillAfterDelay: 500,
     // Some repos can produce large outputs (log, for-each-ref). 10MB headroom.
     maxBuffer: 10 * 1024 * 1024,

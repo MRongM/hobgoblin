@@ -27,6 +27,7 @@ import {
   DEFAULT_FILE_TREE_FONT_SIZE,
   DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
   DEFAULT_FETCH_INTERVAL_SEC,
+  DEFAULT_GIT_NETWORK_TIMEOUT_SEC,
   DEFAULT_GLOBAL_SHORTCUT,
   DEFAULT_GLOBAL_SHORTCUT_DISABLED,
   DEFAULT_LANG_PREF,
@@ -42,10 +43,12 @@ import {
   DEFAULT_TOGGLE_DETAIL_ON_ACTION_BAR_BLANK_CLICK,
   MAX_FILE_TREE_FONT_SIZE,
   MAX_FILE_TREE_TOPBAR_FONT_SIZE,
+  MAX_GIT_NETWORK_TIMEOUT_SEC,
   MAX_RECENT_REPOS,
   MAX_TERMINAL_FONT_SIZE,
   MIN_FILE_TREE_FONT_SIZE,
   MIN_FILE_TREE_TOPBAR_FONT_SIZE,
+  MIN_GIT_NETWORK_TIMEOUT_SEC,
   MIN_TERMINAL_FONT_SIZE,
   defaultSessionState,
   defaultSettingsPrefs,
@@ -57,6 +60,9 @@ interface ServerSettingsData {
   theme: ThemePref
   colorTheme: ColorTheme
   fetchIntervalSec: number
+  gitNetworkProxyEnabled: boolean
+  gitNetworkProxyUrl: string
+  gitNetworkTimeoutSec: number
   terminalNotificationsEnabled: boolean
   shortcutsDisabled: boolean
   globalShortcutDisabled: boolean
@@ -195,12 +201,36 @@ function normalizeLanEnabled(value: unknown): boolean {
   return value === true
 }
 
+function normalizeGitNetworkProxyEnabled(value: unknown): boolean {
+  return value === true
+}
+
+function normalizeGitNetworkProxyUrl(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  try {
+    const parsed = new URL(trimmed)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'socks5:' ? trimmed : ''
+  } catch {
+    return ''
+  }
+}
+
+function normalizeGitNetworkTimeoutSec(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_GIT_NETWORK_TIMEOUT_SEC
+  return Math.max(MIN_GIT_NETWORK_TIMEOUT_SEC, Math.min(MAX_GIT_NETWORK_TIMEOUT_SEC, Math.round(value)))
+}
+
 function settingsPrefsFromData(data: ServerSettingsData): SettingsPrefs {
   return {
     lang: data.lang,
     theme: data.theme,
     colorTheme: data.colorTheme,
     fetchIntervalSec: data.fetchIntervalSec,
+    gitNetworkProxyEnabled: data.gitNetworkProxyEnabled,
+    gitNetworkProxyUrl: data.gitNetworkProxyUrl,
+    gitNetworkTimeoutSec: data.gitNetworkTimeoutSec,
     terminalNotificationsEnabled: data.terminalNotificationsEnabled,
     shortcutsDisabled: data.shortcutsDisabled,
     globalShortcutDisabled: data.globalShortcutDisabled,
@@ -295,6 +325,9 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       theme: normalizeThemePref(parsed.theme),
       colorTheme: normalizeColorTheme(parsed.colorTheme),
       fetchIntervalSec: normalizeFetchInterval(parsed.fetchIntervalSec),
+      gitNetworkProxyEnabled: normalizeGitNetworkProxyEnabled(parsed.gitNetworkProxyEnabled),
+      gitNetworkProxyUrl: normalizeGitNetworkProxyUrl(parsed.gitNetworkProxyUrl),
+      gitNetworkTimeoutSec: normalizeGitNetworkTimeoutSec(parsed.gitNetworkTimeoutSec),
       terminalNotificationsEnabled: normalizeTerminalNotificationsEnabled(parsed.terminalNotificationsEnabled),
       shortcutsDisabled: parsed.shortcutsDisabled === true,
       globalShortcutDisabled: parsed.globalShortcutDisabled === true,
@@ -374,6 +407,18 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   const nextColorTheme = patch.colorTheme === undefined ? data.colorTheme : normalizeColorTheme(patch.colorTheme)
   const nextFetchIntervalSec =
     patch.fetchIntervalSec === undefined ? data.fetchIntervalSec : normalizeFetchInterval(patch.fetchIntervalSec)
+  const nextGitNetworkProxyEnabled =
+    patch.gitNetworkProxyEnabled === undefined
+      ? data.gitNetworkProxyEnabled
+      : normalizeGitNetworkProxyEnabled(patch.gitNetworkProxyEnabled)
+  const nextGitNetworkProxyUrl =
+    patch.gitNetworkProxyUrl === undefined
+      ? data.gitNetworkProxyUrl
+      : normalizeGitNetworkProxyUrl(patch.gitNetworkProxyUrl)
+  const nextGitNetworkTimeoutSec =
+    patch.gitNetworkTimeoutSec === undefined
+      ? data.gitNetworkTimeoutSec
+      : normalizeGitNetworkTimeoutSec(patch.gitNetworkTimeoutSec)
   const nextTerminalNotificationsEnabled =
     patch.terminalNotificationsEnabled === undefined
       ? data.terminalNotificationsEnabled
@@ -434,6 +479,9 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     data.theme !== nextTheme ||
     data.colorTheme !== nextColorTheme ||
     data.fetchIntervalSec !== nextFetchIntervalSec ||
+    data.gitNetworkProxyEnabled !== nextGitNetworkProxyEnabled ||
+    data.gitNetworkProxyUrl !== nextGitNetworkProxyUrl ||
+    data.gitNetworkTimeoutSec !== nextGitNetworkTimeoutSec ||
     data.terminalNotificationsEnabled !== nextTerminalNotificationsEnabled ||
     data.shortcutsDisabled !== nextShortcutsDisabled ||
     data.globalShortcutDisabled !== nextGlobalShortcutDisabled ||
@@ -457,6 +505,9 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   data.theme = nextTheme
   data.colorTheme = nextColorTheme
   data.fetchIntervalSec = nextFetchIntervalSec
+  data.gitNetworkProxyEnabled = nextGitNetworkProxyEnabled
+  data.gitNetworkProxyUrl = nextGitNetworkProxyUrl
+  data.gitNetworkTimeoutSec = nextGitNetworkTimeoutSec
   data.terminalNotificationsEnabled = nextTerminalNotificationsEnabled
   data.shortcutsDisabled = nextShortcutsDisabled
   data.globalShortcutDisabled = nextGlobalShortcutDisabled

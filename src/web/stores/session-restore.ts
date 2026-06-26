@@ -8,6 +8,7 @@ import type { SessionState } from '#/shared/rpc.ts'
 import { restorableSessionStateFromSettingsSnapshot } from '#/shared/settings-snapshot.ts'
 import { getSettingsSnapshot } from '#/web/settings-client.ts'
 import {
+  DEFAULT_DETAIL_COLLAPSED,
   DEFAULT_DETAIL_PANE_SIZES,
   DEFAULT_FILE_TREE_PANE_SIZES,
   DEFAULT_WORKSPACE_LAYOUT,
@@ -16,7 +17,7 @@ import {
 export const DEFAULT_RESTORABLE_SESSION_STATE: SessionState = {
   openRepos: [],
   activeRepo: null,
-  detailCollapsed: true,
+  detailCollapsed: DEFAULT_DETAIL_COLLAPSED,
   detailFocusMode: false,
   workspaceLayout: DEFAULT_WORKSPACE_LAYOUT,
   detailPaneSizes: DEFAULT_DETAIL_PANE_SIZES,

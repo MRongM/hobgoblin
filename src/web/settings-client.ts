@@ -108,6 +108,18 @@ export async function setLanEnabled(enabled: boolean): Promise<void> {
   await updateSettingsPrefsPatch({ lanEnabled: enabled })
 }
 
+export async function setGitNetworkProxyEnabled(enabled: boolean): Promise<void> {
+  await updateSettingsPrefsPatch({ gitNetworkProxyEnabled: enabled })
+}
+
+export async function setGitNetworkProxyUrl(url: string): Promise<void> {
+  await updateSettingsPrefsPatch({ gitNetworkProxyUrl: url })
+}
+
+export async function setGitNetworkTimeoutSec(sec: number): Promise<void> {
+  await updateSettingsPrefsPatch({ gitNetworkTimeoutSec: sec })
+}
+
 export async function getExternalAppsSnapshot(): Promise<ExternalAppsSnapshot> {
   return await fetchServerJson<ExternalAppsSnapshot>('/api/settings/external-apps')
 }

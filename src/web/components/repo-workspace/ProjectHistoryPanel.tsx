@@ -3,7 +3,8 @@ import { FolderTree } from 'lucide-react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { EmptyState, ScrollPane } from '#/web/components/Layout.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
-import { FileListViewToolbar, type FileListViewMode } from '#/web/components/FileListViewModeControl.tsx'
+import { CopyButton } from '#/web/components/CopyButton.tsx'
+import { FileListViewModeControl, type FileListViewMode } from '#/web/components/FileListViewModeControl.tsx'
 import {
   FILE_TREE_FILE_NAME_CLASS,
   FilePathTreeList,
@@ -33,6 +34,20 @@ interface ProjectHistoryPanelProps {
 interface HistoryView {
   branchName: string | null
   worktreePath: string | null
+}
+
+function commitDetailClipboardText(detail: CommitDetail): string {
+  return [
+    `Subject: ${detail.subject}`,
+    `Hash: ${detail.hash}`,
+    `Author: ${detail.author}`,
+    `Date: ${detail.date}`,
+    `Parents: ${detail.parents.length > 0 ? detail.parents.join(', ') : '-'}`,
+  ].join('\n')
+}
+
+function commitFilePathsClipboardText(files: CommitFileChange[]): string {
+  return files.map((file) => file.path).join('\n')
 }
 
 export function ProjectHistoryPanel({ repoId, onRevealPath }: ProjectHistoryPanelProps) {
@@ -125,11 +140,11 @@ export function ProjectHistoryPanel({ repoId, onRevealPath }: ProjectHistoryPane
     }
   }
 
+  const selectedDetail = selectedHash ? detailByHash[selectedHash] : null
+
   if (!view.branchName) {
     return <EmptyState icon={<FolderTree size={16} />} title={t('branches.empty')} body={t('history.no-branch')} />
   }
-
-  const selectedDetail = selectedHash ? detailByHash[selectedHash] : null
 
   return (
     <section className="grid min-h-0 flex-1 grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] border-t border-separator/70 bg-pane">
@@ -273,17 +288,39 @@ function CommitDetailPane({
   return (
     <div className="flex min-h-0 flex-col">
       <div className="border-b border-app-region-border bg-app-region px-3 py-2">
-        <h3 className="truncate text-sm font-medium">{detail.subject}</h3>
-        <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{detail.hash}</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {detail.author} · {formatHistoryDate(detail.date)}
-        </p>
-        <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
-          {t('history.parents')}:{' '}
-          {detail.parents.length > 0 ? detail.parents.map((parent) => parent.slice(0, 7)).join(', ') : '-'}
-        </p>
+        <div className="flex min-w-0 items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <h3 className="truncate text-sm font-medium">{detail.subject}</h3>
+            <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{detail.hash}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {detail.author} · {formatHistoryDate(detail.date)}
+            </p>
+            <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
+              {t('history.parents')}:{' '}
+              {detail.parents.length > 0 ? detail.parents.map((parent) => parent.slice(0, 7)).join(', ') : '-'}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <CopyButton
+              value={commitDetailClipboardText(detail)}
+              copyLabel={t('history.copy-commit')}
+              copiedLabel={t('branch-status.copied')}
+            />
+          </div>
+        </div>
       </div>
-      {detail.files.length > 0 && <FileListViewToolbar value={fileViewMode} onChange={setFileViewMode} />}
+      {detail.files.length > 0 && (
+        <div className="flex min-h-8 shrink-0 items-center justify-end gap-1 border-b border-toolbar-border bg-toolbar px-2">
+          <FileListViewModeControl value={fileViewMode} onChange={setFileViewMode} />
+          <CopyButton
+            value={commitFilePathsClipboardText(detail.files)}
+            copyLabel={t('history.copy-file-paths')}
+            copiedLabel={t('branch-status.copied')}
+            disabled={detail.files.length === 0}
+            className="shrink-0"
+          />
+        </div>
+      )}
       <ScrollPane>
         <CommitFileList
           files={detail.files}

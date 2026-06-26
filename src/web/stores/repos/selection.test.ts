@@ -444,7 +444,7 @@ describe('setDetailTab', () => {
     expect(useReposStore.getState().detailCollapsed).toBe(false)
   })
 
-  test('dismissing terminal detail keeps the pane expanded in left-right layout', () => {
+  test('dismissing terminal detail collapses the pane in left-right layout', () => {
     seedRepo({ selectedBranch: 'feature/worktree', detailTab: 'terminal' })
     useReposStore.getState().setWorkspaceLayout('left-right')
 
@@ -453,7 +453,7 @@ describe('setDetailTab', () => {
       .dismissExitedTerminalDetail(REPO_ID, '/tmp/feature-worktree', { affectVisibleWorkspace: true })
 
     expect(useReposStore.getState().repos[REPO_ID]?.ui.detailTab).toBe('status')
-    expect(useReposStore.getState().detailCollapsed).toBe(false)
+    expect(useReposStore.getState().detailCollapsed).toBe(true)
   })
 
   test('dismissing a background terminal detail leaves global detail collapse unchanged', () => {
@@ -506,19 +506,20 @@ describe('setWorkspaceLayout', () => {
     expect(useReposStore.getState().detailCollapsed).toBe(true)
   })
 
-  test('expands detail and blocks collapse in left-right layout', () => {
+  test('allows detail collapse changes in left-right layout', () => {
+    useReposStore.getState().setWorkspaceLayout('top-bottom')
     useReposStore.getState().setDetailCollapsed(true)
 
     useReposStore.getState().setWorkspaceLayout('left-right')
 
     expect(useReposStore.getState().workspaceLayout).toBe('left-right')
-    expect(useReposStore.getState().detailCollapsed).toBe(false)
+    expect(useReposStore.getState().detailCollapsed).toBe(true)
 
-    useReposStore.getState().setDetailCollapsed(true)
+    useReposStore.getState().setDetailCollapsed(false)
     expect(useReposStore.getState().detailCollapsed).toBe(false)
 
     useReposStore.getState().toggleDetailCollapsed()
-    expect(useReposStore.getState().detailCollapsed).toBe(false)
+    expect(useReposStore.getState().detailCollapsed).toBe(true)
   })
 
   test('allows collapse again after returning to top-bottom layout', () => {
@@ -541,8 +542,8 @@ describe('setWorkspaceLayout', () => {
 
     expect(useReposStore.getState()).toMatchObject({
       workspaceLayout: 'left-right',
-      detailCollapsed: false,
-      detailFocusMode: false,
+      detailCollapsed: true,
+      detailFocusMode: true,
       detailPaneSizes: { 'top-bottom': 55, 'left-right': 45 },
     })
   })
@@ -591,23 +592,23 @@ describe('setDetailFocusMode', () => {
     expect(useReposStore.getState().detailCollapsed).toBe(false)
   })
 
-  test('exits focus mode when switching to left-right layout', () => {
+  test('preserves focus mode when switching to left-right layout', () => {
     useReposStore.getState().setWorkspaceLayout('top-bottom')
     useReposStore.getState().setDetailFocusMode(true)
 
     useReposStore.getState().setWorkspaceLayout('left-right')
 
     expect(useReposStore.getState().workspaceLayout).toBe('left-right')
-    expect(useReposStore.getState().detailFocusMode).toBe(false)
+    expect(useReposStore.getState().detailFocusMode).toBe(true)
     expect(useReposStore.getState().detailCollapsed).toBe(false)
   })
 
-  test('does not enable focus mode in left-right layout', () => {
+  test('enables focus mode in left-right layout', () => {
     useReposStore.getState().setWorkspaceLayout('left-right')
 
     useReposStore.getState().setDetailFocusMode(true)
 
-    expect(useReposStore.getState().detailFocusMode).toBe(false)
+    expect(useReposStore.getState().detailFocusMode).toBe(true)
   })
 
   test('preserves focus preference when filtering leaves no selected branch', () => {

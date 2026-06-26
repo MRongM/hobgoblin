@@ -1,6 +1,20 @@
-import { ArrowDown, ArrowUp, Check, FolderTree, GitBranch, GitCommitHorizontal, GitMerge, RadioTower, RefreshCw } from 'lucide-react'
-import { useI18nStore, useT } from '#/web/stores/i18n.ts'
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  Clock,
+  FolderTree,
+  GitBranch,
+  GitMerge,
+  Hash,
+  MessageSquare,
+  RadioTower,
+  RefreshCw,
+  User,
+} from 'lucide-react'
+import { useT } from '#/web/stores/i18n.ts'
 import { EmptyState } from '#/web/components/Layout.tsx'
+import { CopyButton } from '#/web/components/CopyButton.tsx'
 import { PullRequestStatusRow } from '#/web/components/branch-detail/PullRequestStatusRow.tsx'
 import {
   CopyableValue,
@@ -8,17 +22,16 @@ import {
   StatusChip,
   StatusRow,
   StatusRows,
+  STATUS_INLINE_GROUP_CLASS,
   type Tone,
 } from '#/web/components/branch-detail/status-ui.tsx'
-import { formatRelativeTimeOrNull } from '#/web/lib/dates.ts'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
-import { formatWorktreePath } from '#/web/lib/paths.ts'
 import { PROTECTED_BRANCHES, branchPullRequestBelongsToBranch } from '#/shared/git-types.ts'
 import type { SelectedBranchDetail } from '#/web/components/branch-detail/model.ts'
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { repoWorkspaceBehavior } from '#/web/lib/workspace-layout.ts'
+import { cn } from '#/web/lib/cn.ts'
 interface Props {
-  repoRoot: string
   detail: SelectedBranchDetail
   layout: RepoWorkspaceLayout
 }
@@ -66,18 +79,61 @@ function SyncValue({
   )
 }
 
-export function BranchStatus({ repoRoot, detail, layout }: Props) {
+function formatCommitTime(value: string): string {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString(undefined, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function CommitMetadataValue({
+  value,
+  displayValue = value,
+  copyLabel,
+  copiedLabel,
+  mono = false,
+}: {
+  value: string
+  displayValue?: string
+  copyLabel: string
+  copiedLabel: string
+  mono?: boolean
+}) {
+  const hasValue = value.trim().length > 0
+  return (
+    <div className={STATUS_INLINE_GROUP_CLASS}>
+      <span
+        className={cn('block min-w-0 flex-1 truncate', mono && 'font-mono')}
+        title={hasValue ? value : undefined}
+      >
+        {hasValue ? displayValue : '—'}
+      </span>
+      <CopyButton
+        value={value}
+        copyLabel={copyLabel}
+        copiedLabel={copiedLabel}
+        disabled={!hasValue}
+        className="shrink-0"
+      />
+    </div>
+  )
+}
+
+export function BranchStatus({ detail, layout }: Props) {
   const t = useT()
-  const lang = useI18nStore((s) => s.lang)
   const compact = useIsCompactUi()
   const { branch, statusCount } = detail
   const behavior = repoWorkspaceBehavior(layout, false)
   if (!branch) return <EmptyState title={t('branches.empty')} />
 
   const protectedBranch = PROTECTED_BRANCHES.has(branch.name)
-  const worktreePath = branch.worktree?.path
-    ? formatWorktreePath(branch.worktree?.path, detail.remoteTarget, repoRoot)
-    : ''
+  const worktreePath = branch.worktree?.path ?? ''
   const worktreeChangeCount = detail.worktreeState?.changeCount ?? statusCount
   const pullRequest =
     branch.pullRequest && branchPullRequestBelongsToBranch(branch, branch.pullRequest) ? branch.pullRequest : undefined
@@ -85,8 +141,7 @@ export function BranchStatus({ repoRoot, detail, layout }: Props) {
   const hasWorktreeChanges = !!branch.worktree?.path && (detail.worktreeState?.dirty || worktreeChangeCount > 0)
   const mergeKnown = branch.isDefault || branch.mergedToDefault !== undefined
   const showMerged = !branch.isDefault
-  const commitTime = formatRelativeTimeOrNull(branch.lastCommitDate, lang)
-  const commitMeta = commitTime ? (branch.lastCommitAuthor ? `${branch.lastCommitAuthor} · ${commitTime}` : commitTime) : null
+  const commitTime = formatCommitTime(branch.lastCommitDate)
   const mergeLabel = !mergeKnown
     ? t('branch-status.merge-unknown')
     : branch.mergedToDefault || branch.isDefault
@@ -101,7 +156,6 @@ export function BranchStatus({ repoRoot, detail, layout }: Props) {
   const worktreeValue = branch.worktree?.path ? (
     <CopyableValue
       value={worktreePath}
-      copyValue={branch.worktree?.path}
       copyLabel={t('branch-status.copy-worktree-path')}
       copiedLabel={t('branch-status.copied')}
     />
@@ -186,27 +240,52 @@ export function BranchStatus({ repoRoot, detail, layout }: Props) {
         tone={syncTone}
       />
       <StatusRow
-        icon={<GitCommitHorizontal size={14} />}
-        label={t('branch-status.signal.commit')}
+        icon={<Hash size={14} />}
+        label={t('branch-status.signal.commit-hash')}
         value={
-          <div className="flex min-w-0 flex-nowrap items-center gap-2 overflow-hidden text-sm text-foreground">
-            {branch.lastCommitHash ? (
-              <span
-                className="shrink-0 font-mono text-sm font-medium tabular-nums leading-none text-brand-text/85"
-                title={branch.lastCommitHash}
-              >
-                {branch.lastCommitHash}
-              </span>
-            ) : null}
-            <span className="min-w-0 truncate leading-tight text-foreground/95" title={branch.lastCommitMessage || undefined}>
-              {branch.lastCommitMessage || '—'}
-            </span>
-            {commitMeta && (
-              <span className="shrink-0 whitespace-nowrap text-xs leading-tight text-muted-foreground/85" title={commitMeta}>
-                {commitMeta}
-              </span>
-            )}
-          </div>
+          <CommitMetadataValue
+            value={branch.lastCommitHash}
+            copyLabel={t('branch-status.copy-commit-hash')}
+            copiedLabel={t('branch-status.copied')}
+            mono
+          />
+        }
+        valueLayout="fill"
+      />
+      <StatusRow
+        icon={<MessageSquare size={14} />}
+        label={t('branch-status.signal.commit-message')}
+        value={
+          <CommitMetadataValue
+            value={branch.lastCommitMessage}
+            copyLabel={t('branch-status.copy-commit-message')}
+            copiedLabel={t('branch-status.copied')}
+          />
+        }
+        valueLayout="fill"
+      />
+      <StatusRow
+        icon={<User size={14} />}
+        label={t('branch-status.signal.commit-author')}
+        value={
+          <CommitMetadataValue
+            value={branch.lastCommitAuthor}
+            copyLabel={t('branch-status.copy-commit-author')}
+            copiedLabel={t('branch-status.copied')}
+          />
+        }
+        valueLayout="fill"
+      />
+      <StatusRow
+        icon={<Clock size={14} />}
+        label={t('branch-status.signal.commit-time')}
+        value={
+          <CommitMetadataValue
+            value={branch.lastCommitDate}
+            displayValue={commitTime}
+            copyLabel={t('branch-status.copy-commit-time')}
+            copiedLabel={t('branch-status.copied')}
+          />
         }
         valueLayout="fill"
       />

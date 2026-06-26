@@ -30,6 +30,9 @@ const appDataClientMocks = vi.hoisted(() => ({
   setFileTreeTopbarFontSize: vi.fn(async (fontSize: number) => fontSize),
   setGlobalShortcut: vi.fn(async (accelerator) => ({ accelerator, registered: true })),
   setGlobalShortcutDisabled: vi.fn(async () => {}),
+  setGitNetworkProxyEnabled: vi.fn(async () => {}),
+  setGitNetworkProxyUrl: vi.fn(async () => {}),
+  setGitNetworkTimeoutSec: vi.fn(async () => {}),
   setLanEnabled: vi.fn(async () => {}),
   setPreferredEditorApp: vi.fn(async (pref) => ({
     pref,
@@ -69,6 +72,9 @@ vi.mock('#/web/settings-client.ts', () => ({
   setFileTreeTopbarFontSize: appDataClientMocks.setFileTreeTopbarFontSize,
   setGlobalShortcut: appDataClientMocks.setGlobalShortcut,
   setGlobalShortcutDisabled: appDataClientMocks.setGlobalShortcutDisabled,
+  setGitNetworkProxyEnabled: appDataClientMocks.setGitNetworkProxyEnabled,
+  setGitNetworkProxyUrl: appDataClientMocks.setGitNetworkProxyUrl,
+  setGitNetworkTimeoutSec: appDataClientMocks.setGitNetworkTimeoutSec,
   setLanEnabled: appDataClientMocks.setLanEnabled,
   setPreferredEditorApp: appDataClientMocks.setPreferredEditorApp,
   setPreferredTerminalApp: appDataClientMocks.setPreferredTerminalApp,
@@ -110,6 +116,12 @@ describe('settings write paths', () => {
     appDataClientMocks.setGlobalShortcut.mockImplementation(async (accelerator) => ({ accelerator, registered: true }))
     appDataClientMocks.setGlobalShortcutDisabled.mockReset()
     appDataClientMocks.setGlobalShortcutDisabled.mockResolvedValue(undefined)
+    appDataClientMocks.setGitNetworkProxyEnabled.mockReset()
+    appDataClientMocks.setGitNetworkProxyEnabled.mockResolvedValue(undefined)
+    appDataClientMocks.setGitNetworkProxyUrl.mockReset()
+    appDataClientMocks.setGitNetworkProxyUrl.mockResolvedValue(undefined)
+    appDataClientMocks.setGitNetworkTimeoutSec.mockReset()
+    appDataClientMocks.setGitNetworkTimeoutSec.mockResolvedValue(undefined)
     appDataClientMocks.setLanEnabled.mockReset()
     appDataClientMocks.setLanEnabled.mockResolvedValue(undefined)
     appDataClientMocks.setPreferredEditorApp.mockReset()
@@ -251,6 +263,42 @@ describe('settings write paths', () => {
     expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({ lanEnabled: true })
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: lanInfoQueryKey() })
     invalidateSpy.mockRestore()
+  })
+
+  test('setGitNetworkProxyEnabledPreference updates runtime settings cache', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    const { setGitNetworkProxyEnabledPreference } = await import('#/web/settings-write-paths.ts')
+
+    await setGitNetworkProxyEnabledPreference(true)
+
+    expect(appDataClientMocks.setGitNetworkProxyEnabled).toHaveBeenCalledWith(true)
+    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
+      gitNetworkProxyEnabled: true,
+    })
+  })
+
+  test('setGitNetworkProxyUrlPreference updates runtime settings cache', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    const { setGitNetworkProxyUrlPreference } = await import('#/web/settings-write-paths.ts')
+
+    await setGitNetworkProxyUrlPreference('socks5://127.0.0.1:7890')
+
+    expect(appDataClientMocks.setGitNetworkProxyUrl).toHaveBeenCalledWith('socks5://127.0.0.1:7890')
+    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
+      gitNetworkProxyUrl: 'socks5://127.0.0.1:7890',
+    })
+  })
+
+  test('setGitNetworkTimeoutSecPreference updates runtime settings cache', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    const { setGitNetworkTimeoutSecPreference } = await import('#/web/settings-write-paths.ts')
+
+    await setGitNetworkTimeoutSecPreference(180)
+
+    expect(appDataClientMocks.setGitNetworkTimeoutSec).toHaveBeenCalledWith(180)
+    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
+      gitNetworkTimeoutSec: 180,
+    })
   })
 
   test('setTemporaryFilesDirectoryPreference updates runtime settings cache', async () => {

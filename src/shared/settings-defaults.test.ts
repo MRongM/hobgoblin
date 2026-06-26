@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'vitest'
 import {
+  DEFAULT_GIT_NETWORK_PROXY_ENABLED,
+  DEFAULT_GIT_NETWORK_PROXY_URL,
+  DEFAULT_GIT_NETWORK_TIMEOUT_SEC,
   DEFAULT_FILE_TREE_FONT_SIZE,
   DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
   defaultSettingsPrefs,
@@ -15,5 +18,16 @@ describe('settings defaults', () => {
   test('defaults terminal custom button size to medium', () => {
     expect(DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE).toBe('medium')
     expect((defaultSettingsPrefs() as { terminalCustomButtonSize?: string }).terminalCustomButtonSize).toBe('medium')
+  })
+
+  test('defaults git network proxy off with a 120 second timeout', () => {
+    expect(DEFAULT_GIT_NETWORK_PROXY_ENABLED).toBe(false)
+    expect(DEFAULT_GIT_NETWORK_PROXY_URL).toBe('')
+    expect(DEFAULT_GIT_NETWORK_TIMEOUT_SEC).toBe(120)
+    expect(defaultSettingsPrefs()).toMatchObject({
+      gitNetworkProxyEnabled: false,
+      gitNetworkProxyUrl: '',
+      gitNetworkTimeoutSec: 120,
+    })
   })
 })

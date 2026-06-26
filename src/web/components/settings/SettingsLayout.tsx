@@ -27,6 +27,7 @@ const SETTINGS_PAGE_ICONS = {
   notifications: Bell,
   ssh: Shield,
   sync: SlidersHorizontal,
+  proxy: Globe,
   apps: AppWindow,
   github: GitHubMark,
   lan: Globe,

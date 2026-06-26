@@ -40,6 +40,9 @@ function defaultRpcResult(path: string, input?: unknown) {
   if (path === 'settings.get') {
     return {
       fetchIntervalSec: 60,
+      gitNetworkProxyEnabled: false,
+      gitNetworkProxyUrl: '',
+      gitNetworkTimeoutSec: 120,
       terminalNotificationsEnabled: false,
       shortcutsDisabled: false,
       globalShortcutDisabled: false,
@@ -184,6 +187,9 @@ beforeEach(() => {
     initialI18n: null,
     initialSettings: {
       fetchIntervalSec: 60,
+      gitNetworkProxyEnabled: false,
+      gitNetworkProxyUrl: '',
+      gitNetworkTimeoutSec: 120,
       terminalNotificationsEnabled: false,
       shortcutsDisabled: false,
       globalShortcutDisabled: false,
@@ -211,6 +217,9 @@ beforeEach(() => {
     initialI18n: null,
     initialSettings: {
       fetchIntervalSec: 60,
+      gitNetworkProxyEnabled: false,
+      gitNetworkProxyUrl: '',
+      gitNetworkTimeoutSec: 120,
       terminalNotificationsEnabled: false,
       shortcutsDisabled: false,
       globalShortcutDisabled: false,
@@ -388,6 +397,57 @@ describe('SettingsSurface', () => {
     expect(document.body.textContent).toContain('settings.ssh.title')
     expect(document.body.textContent).toContain('settings.ssh.body')
     expect(document.body.textContent).toContain('settings.ssh.example')
+  })
+
+  test('renders the proxy settings page', async () => {
+    await render(<SettingsSurface page="proxy" onPageChange={() => {}} />)
+
+    expect(document.body.textContent).toContain('settings.nav.proxy')
+    expect(document.body.textContent).toContain('settings.proxy.git-proxy')
+    expect(document.body.textContent).toContain('settings.proxy.git-timeout')
+    expect(document.body.textContent).toContain('settings.proxy.ssh-note')
+  })
+
+  test('edits git network proxy settings from proxy settings', async () => {
+    await render(<SettingsSurface page="proxy" onPageChange={() => {}} />)
+
+    const enabledSwitch = switchById('settings-git-network-proxy-enabled')
+    const urlInput = document.getElementById('settings-git-network-proxy-url')
+    const timeoutInput = document.getElementById('settings-git-network-timeout-sec')
+    if (!(urlInput instanceof HTMLInputElement)) throw new Error('Missing git network proxy url input')
+    if (!(timeoutInput instanceof HTMLInputElement)) throw new Error('Missing git network timeout input')
+
+    await act(async () => {
+      enabledSwitch.click()
+      setInputValue(urlInput, 'socks5://127.0.0.1:7890')
+      setInputValue(timeoutInput, '180')
+      await Promise.resolve()
+    })
+
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [url, options] = call as unknown as [unknown, RequestInit | undefined]
+        if (new URL(String(url)).pathname !== '/api/settings/prefs') return false
+        const body = JSON.parse(String(options?.body ?? '{}')) as { settings?: Record<string, unknown> }
+        return body.settings?.gitNetworkProxyEnabled === true
+      }),
+    ).toBe(true)
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [url, options] = call as unknown as [unknown, RequestInit | undefined]
+        if (new URL(String(url)).pathname !== '/api/settings/prefs') return false
+        const body = JSON.parse(String(options?.body ?? '{}')) as { settings?: Record<string, unknown> }
+        return body.settings?.gitNetworkProxyUrl === 'socks5://127.0.0.1:7890'
+      }),
+    ).toBe(true)
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [url, options] = call as unknown as [unknown, RequestInit | undefined]
+        if (new URL(String(url)).pathname !== '/api/settings/prefs') return false
+        const body = JSON.parse(String(options?.body ?? '{}')) as { settings?: Record<string, unknown> }
+        return body.settings?.gitNetworkTimeoutSec === 180
+      }),
+    ).toBe(true)
   })
 
   test('edits file tree font size from settings', async () => {

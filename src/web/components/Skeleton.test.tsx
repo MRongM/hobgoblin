@@ -70,6 +70,22 @@ describe('RepoWorkspaceSkeleton', () => {
     expect(container?.querySelector('[data-testid="repo-toolbar-skeleton-branch-view"]')).toBeNull()
   })
 
+  test('hides the branch pane entirely in left-right focus mode', () => {
+    render(<RepoWorkspaceSkeleton layout="left-right" detailCollapsed={false} detailFocusMode />)
+
+    expect(container?.querySelectorAll('li')).toHaveLength(8)
+    expect(container?.querySelectorAll('[data-testid="branch-list-skeleton-action"]')).toHaveLength(0)
+    expect(container?.querySelector('[data-testid="mock-split-pane"]')).toBeNull()
+  })
+
+  test('keeps branch rows visible in left-right collapsed mode', () => {
+    render(<RepoWorkspaceSkeleton layout="left-right" detailCollapsed detailFocusMode />)
+
+    expect(container?.querySelectorAll('li')).toHaveLength(6)
+    expect(container?.querySelectorAll('[data-testid="branch-list-skeleton-action"]')).toHaveLength(6)
+    expect(container?.querySelector('[data-testid="mock-split-pane"]')).toBeNull()
+  })
+
   test('does not render a compact repository toolbar on small screens', () => {
     render(
       <RepoWorkspaceSkeleton

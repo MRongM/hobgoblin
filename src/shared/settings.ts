@@ -17,6 +17,8 @@ export const MIN_FILE_TREE_TOPBAR_FONT_SIZE = 10
 export const MAX_FILE_TREE_TOPBAR_FONT_SIZE = 18
 export const MIN_TERMINAL_FONT_SIZE = 10
 export const MAX_TERMINAL_FONT_SIZE = 24
+export const MIN_GIT_NETWORK_TIMEOUT_SEC = 15
+export const MAX_GIT_NETWORK_TIMEOUT_SEC = 900
 
 export type TerminalCustomButtonAction = 'execute' | 'input'
 export type TerminalCustomButtonSize = 'small' | 'medium' | 'large'
@@ -32,6 +34,9 @@ export interface SettingsPrefs {
   colorTheme: ColorTheme
   lang: LangPref
   fetchIntervalSec: number
+  gitNetworkProxyEnabled: boolean
+  gitNetworkProxyUrl: string
+  gitNetworkTimeoutSec: number
   terminalNotificationsEnabled: boolean
   shortcutsDisabled: boolean
   globalShortcutDisabled: boolean

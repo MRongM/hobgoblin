@@ -15,9 +15,11 @@ import type {
 import {
   MAX_FILE_TREE_FONT_SIZE,
   MAX_FILE_TREE_TOPBAR_FONT_SIZE,
+  MAX_GIT_NETWORK_TIMEOUT_SEC,
   MAX_TERMINAL_FONT_SIZE,
   MIN_FILE_TREE_FONT_SIZE,
   MIN_FILE_TREE_TOPBAR_FONT_SIZE,
+  MIN_GIT_NETWORK_TIMEOUT_SEC,
   MIN_TERMINAL_FONT_SIZE,
 } from '#/shared/settings.ts'
 import {
@@ -29,6 +31,9 @@ import {
 } from '#/shared/workspace-layout.ts'
 
 export const DEFAULT_FETCH_INTERVAL_SEC = 120
+export const DEFAULT_GIT_NETWORK_PROXY_ENABLED = false
+export const DEFAULT_GIT_NETWORK_PROXY_URL = ''
+export const DEFAULT_GIT_NETWORK_TIMEOUT_SEC = 120
 export const MAX_RECENT_REPOS = 10
 export const DEFAULT_LANG_PREF: LangPref = 'auto'
 export const DEFAULT_THEME_PREF: ThemePref = 'auto'
@@ -71,6 +76,12 @@ export function defaultSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): Se
     theme: overrides.theme ?? DEFAULT_THEME_PREF,
     colorTheme: overrides.colorTheme ?? DEFAULT_COLOR_THEME,
     fetchIntervalSec: overrides.fetchIntervalSec ?? DEFAULT_FETCH_INTERVAL_SEC,
+    gitNetworkProxyEnabled:
+      overrides.gitNetworkProxyEnabled ?? DEFAULT_GIT_NETWORK_PROXY_ENABLED,
+    gitNetworkProxyUrl:
+      overrides.gitNetworkProxyUrl ?? DEFAULT_GIT_NETWORK_PROXY_URL,
+    gitNetworkTimeoutSec:
+      overrides.gitNetworkTimeoutSec ?? DEFAULT_GIT_NETWORK_TIMEOUT_SEC,
     terminalNotificationsEnabled: overrides.terminalNotificationsEnabled ?? DEFAULT_TERMINAL_NOTIFICATIONS_ENABLED,
     shortcutsDisabled: overrides.shortcutsDisabled ?? DEFAULT_SHORTCUTS_DISABLED,
     globalShortcutDisabled: overrides.globalShortcutDisabled ?? DEFAULT_GLOBAL_SHORTCUT_DISABLED,
@@ -112,6 +123,9 @@ export function defaultSettingsSnapshot(overrides: Partial<SettingsSnapshot> = {
 export function initialSettingsFromSnapshot(snapshot: Pick<
   SettingsSnapshot,
   | 'fetchIntervalSec'
+  | 'gitNetworkProxyEnabled'
+  | 'gitNetworkProxyUrl'
+  | 'gitNetworkTimeoutSec'
   | 'terminalNotificationsEnabled'
   | 'shortcutsDisabled'
   | 'globalShortcutDisabled'
@@ -135,6 +149,9 @@ export function initialSettingsFromSnapshot(snapshot: Pick<
 >): InitialSettingsSnapshot {
   return {
     fetchIntervalSec: snapshot.fetchIntervalSec,
+    gitNetworkProxyEnabled: snapshot.gitNetworkProxyEnabled,
+    gitNetworkProxyUrl: snapshot.gitNetworkProxyUrl,
+    gitNetworkTimeoutSec: snapshot.gitNetworkTimeoutSec,
     terminalNotificationsEnabled: snapshot.terminalNotificationsEnabled,
     shortcutsDisabled: snapshot.shortcutsDisabled,
     globalShortcutDisabled: snapshot.globalShortcutDisabled,
@@ -166,9 +183,11 @@ export { DEFAULT_COLOR_THEME, DEFAULT_GLOBAL_SHORTCUT }
 export {
   MAX_FILE_TREE_FONT_SIZE,
   MAX_FILE_TREE_TOPBAR_FONT_SIZE,
+  MAX_GIT_NETWORK_TIMEOUT_SEC,
   MAX_TERMINAL_FONT_SIZE,
   MIN_FILE_TREE_FONT_SIZE,
   MIN_FILE_TREE_TOPBAR_FONT_SIZE,
+  MIN_GIT_NETWORK_TIMEOUT_SEC,
   MIN_TERMINAL_FONT_SIZE,
 }
 export type { ColorTheme }

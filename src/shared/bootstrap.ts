@@ -38,6 +38,9 @@ export const WEB_RENDERER_CAPABILITIES = [] as const satisfies readonly Renderer
 
 export interface InitialSettingsSnapshot {
   fetchIntervalSec: number
+  gitNetworkProxyEnabled: boolean
+  gitNetworkProxyUrl: string
+  gitNetworkTimeoutSec: number
   terminalNotificationsEnabled: boolean
   shortcutsDisabled: boolean
   globalShortcutDisabled: boolean

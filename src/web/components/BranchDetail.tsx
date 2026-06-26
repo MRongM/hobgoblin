@@ -103,7 +103,7 @@ export function BranchDetail({
   const detail = getSelectedBranchDetailPresentation(repo)
   const contentId = `${detailId}-content`
 
-  const focusMode = layout === 'top-bottom' && detailFocusMode
+  const focusMode = detailFocusMode
 
   return (
     <section className="flex min-h-0 flex-1 flex-col bg-detail">

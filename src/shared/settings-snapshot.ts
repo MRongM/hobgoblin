@@ -16,6 +16,9 @@ export function buildRuntimeSettingsSnapshot(input: {
     theme: input.prefs.theme,
     colorTheme: input.prefs.colorTheme,
     fetchIntervalSec: input.prefs.fetchIntervalSec,
+    gitNetworkProxyEnabled: input.prefs.gitNetworkProxyEnabled,
+    gitNetworkProxyUrl: input.prefs.gitNetworkProxyUrl,
+    gitNetworkTimeoutSec: input.prefs.gitNetworkTimeoutSec,
     terminalNotificationsEnabled: input.prefs.terminalNotificationsEnabled,
     shortcutsDisabled: input.prefs.shortcutsDisabled,
     globalShortcutDisabled: input.prefs.globalShortcutDisabled,
@@ -70,6 +73,9 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     | 'theme'
     | 'colorTheme'
     | 'fetchIntervalSec'
+    | 'gitNetworkProxyEnabled'
+    | 'gitNetworkProxyUrl'
+    | 'gitNetworkTimeoutSec'
     | 'terminalNotificationsEnabled'
     | 'shortcutsDisabled'
     | 'globalShortcutDisabled'
@@ -97,6 +103,9 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     theme: snapshot.theme,
     colorTheme: snapshot.colorTheme,
     fetchIntervalSec: snapshot.fetchIntervalSec,
+    gitNetworkProxyEnabled: snapshot.gitNetworkProxyEnabled,
+    gitNetworkProxyUrl: snapshot.gitNetworkProxyUrl,
+    gitNetworkTimeoutSec: snapshot.gitNetworkTimeoutSec,
     terminalNotificationsEnabled: snapshot.terminalNotificationsEnabled,
     shortcutsDisabled: snapshot.shortcutsDisabled,
     globalShortcutDisabled: snapshot.globalShortcutDisabled,
