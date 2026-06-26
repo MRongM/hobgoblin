@@ -56,7 +56,7 @@ export function visibleBranchActionItems({
   BranchActionItemGroups,
   'patchItems' | 'mainItems' | 'externalItems' | 'destructiveItems'
 >): BranchActionItem[] {
-  return [...patchItems, ...mainItems, ...externalItems, ...destructiveItems].filter((item) => item.visible)
+  return [...externalItems, ...mainItems, ...patchItems, ...destructiveItems].filter((item) => item.visible)
 }
 
 export function branchBrowserRemoteProvider(
@@ -134,19 +134,17 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
     await syncAndRefresh(repo.id, { token: repo.instanceToken })
   }
 
-  const patchItems: BranchActionItem[] = [
-    {
-      id: 'copyPatch',
-      label: t('status.copy-patch'),
-      title: t('status.copy-patch-title'),
-      ariaLabel: t('status.copy-patch-title'),
-      disabled: disabled || !capabilities.canCopyPatch,
-      busy: busy('copyPatch'),
-      visible: true,
-      icon: createElement(ClipboardCopy),
-      onSelect: actions.copyPatch,
-    },
-  ]
+  const copyPatchItem: BranchActionItem = {
+    id: 'copyPatch',
+    label: t('status.copy-patch'),
+    title: t('status.copy-patch-title'),
+    ariaLabel: t('status.copy-patch-title'),
+    disabled: disabled || !capabilities.canCopyPatch,
+    busy: busy('copyPatch'),
+    visible: true,
+    icon: createElement(ClipboardCopy),
+    onSelect: actions.copyPatch,
+  }
 
   const mainItems: BranchActionItem[] = [
     {
@@ -208,16 +206,6 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
 
   const externalItems: BranchActionItem[] = [
     {
-      id: 'terminal',
-      label: t('worktrees.open-in-terminal-label'),
-      disabled: disabled || !showTerminalAction,
-      busy: busy('terminal'),
-      visible: true,
-      shortcut: 'G',
-      icon: createElement(TerminalAppIcon, { pref: terminalIconPref }),
-      onSelect: actions.openTerminal,
-    },
-    {
       id: 'editor',
       label: t('worktrees.open-in-editor-label'),
       disabled: disabled || !capabilities.canOpenEditor || !editorAvailable,
@@ -226,6 +214,16 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
       shortcut: 'V',
       icon: createElement(EditorAppIcon, { pref: resolvedEditorApp ?? editorApp }),
       onSelect: actions.openEditor,
+    },
+    {
+      id: 'terminal',
+      label: t('worktrees.open-in-terminal-label'),
+      disabled: disabled || !showTerminalAction,
+      busy: busy('terminal'),
+      visible: true,
+      shortcut: 'G',
+      icon: createElement(TerminalAppIcon, { pref: terminalIconPref }),
+      onSelect: actions.openTerminal,
     },
     {
       id: 'remote',
@@ -273,8 +271,8 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
   ]
 
   return {
-    patchItems,
-    mainItems: [...mainItems, ...writeActions.mainItems],
+    patchItems: [],
+    mainItems: [...mainItems, ...writeActions.mainItems, copyPatchItem],
     externalItems,
     destructiveItems: [...destructiveItems, ...writeActions.destructiveItems],
     dialogs: createElement(

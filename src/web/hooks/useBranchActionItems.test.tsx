@@ -129,7 +129,7 @@ describe('useBranchActionItems', () => {
     expect(itemIds).toContain('editor')
   })
 
-  test('keeps terminal editor and remote in a separate external group', async () => {
+  test('orders external actions first and keeps patch at the bottom of branch actions', async () => {
     mocks.useRuntimeExternalAppSettings.mockReturnValue({
       terminalApp: 'auto',
       resolvedTerminalApp: 'iterm',
@@ -179,6 +179,12 @@ describe('useBranchActionItems', () => {
     const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.ts')
     const groups = await renderItemGroups(useItems, repo, branch)
 
+    expect(groups.externalItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
+      'editor',
+      'terminal',
+      'remote',
+    ])
+    expect(groups.patchItems.filter((item) => item.visible).map((item) => item.id)).toEqual([])
     expect(groups.mainItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
       'pull',
       'push',
@@ -189,11 +195,7 @@ describe('useBranchActionItems', () => {
       'checkoutTo',
       'merge',
       'commit',
-    ])
-    expect(groups.externalItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
-      'terminal',
-      'editor',
-      'remote',
+      'copyPatch',
     ])
     expect(groups.mainItems.find((item) => item.id === 'pull')?.label).toBe('action.pull')
   })
@@ -247,7 +249,7 @@ describe('useBranchActionItems', () => {
     const allItems = [...groups.patchItems, ...groups.mainItems, ...groups.externalItems, ...groups.destructiveItems]
     const disabledById = new Map(allItems.map((item) => [item.id, item.disabled]))
 
-    expect(groups.patchItems.filter((item) => item.visible).map((item) => item.id)).toEqual(['copyPatch'])
+    expect(groups.patchItems.filter((item) => item.visible).map((item) => item.id)).toEqual([])
     expect(groups.mainItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
       'pull',
       'push',
@@ -258,10 +260,11 @@ describe('useBranchActionItems', () => {
       'checkoutTo',
       'merge',
       'commit',
+      'copyPatch',
     ])
     expect(groups.externalItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
-      'terminal',
       'editor',
+      'terminal',
       'remote',
     ])
     expect(groups.destructiveItems.filter((item) => item.visible).map((item) => item.id)).toEqual([

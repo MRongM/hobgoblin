@@ -82,6 +82,7 @@ const xtermMocks = vi.hoisted(() => {
         cursorX: 4,
         cursorY: 2,
         viewportY: 0,
+        baseY: 0,
         getLine: (index: number) => {
           const text = this.bufferLines[index]
           return typeof text === 'string' ? { translateToString: () => text } : undefined
@@ -673,6 +674,27 @@ describe('ManagedTerminalSession', () => {
     expect(fitAddon.fit).toHaveBeenCalledTimes(1)
     expect(term.refresh).toHaveBeenCalledWith(0, term.rows - 1)
     expect(term.scrollToBottom).toHaveBeenCalledTimes(0)
+  })
+
+  test('keeps terminal pinned to bottom during font refit when scrollback exists', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.buffer.active.baseY = 12
+    term.buffer.active.viewportY = 12
+    term.scrollToBottom.mockClear()
+
+    session.setFontSize(16)
+    await flushTerminalStart()
+
+    expect(term.scrollToBottom).toHaveBeenCalledTimes(1)
   })
 
   test('updates xterm font size and refits the terminal', async () => {

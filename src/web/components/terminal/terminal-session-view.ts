@@ -491,10 +491,12 @@ function scrollTerminalToBottom(term: XTermTerminal | null): void {
 }
 
 function isTerminalAtBottom(term: XTermTerminal): boolean {
-  const active = term.buffer?.active as { viewportY?: number } | undefined
+  const active = term.buffer?.active as { viewportY?: number; baseY?: number } | undefined
   if (!active) return true
   const viewportY = active.viewportY
-  return typeof viewportY !== 'number' || viewportY <= 0
+  if (typeof viewportY !== 'number') return true
+  const baseY = active.baseY
+  return typeof baseY === 'number' ? viewportY >= baseY : viewportY <= 0
 }
 
 function cancelScheduledAnimationFrame(frame: number): void {

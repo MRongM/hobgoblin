@@ -431,7 +431,7 @@ async function dispatchRealtimeRequestForAction<TAction extends TerminalSocketRe
 }
 
 function shouldPauseRealtimeRequest(action: TerminalSocketRequestAction): boolean {
-  return action === 'attach' || action === 'restart'
+  return action === 'attach' || action === 'restart' || action === 'create'
 }
 
 class BufferedTerminalSocket implements TerminalRealtimeSocket {
