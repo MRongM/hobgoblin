@@ -2,15 +2,16 @@
 
 [English](README.md) | 简体中文 | [한국어](README.ko.md) | [日本語](README.ja.md)
 
-Hobgoblin 不只是一个分支管理工具。它是一个基于 Git worktree 开发方式、配合 AI CLI 使用的高生产力桌面工作区。
+Hobgoblin 不只是一个分支管理工具。它是一个基于 Git worktree 开发方式、配合 AI CLI 使用的高生产力工作区，既可以作为桌面应用使用，也可以通过 server mode 在 Web 浏览器中访问。
 
-它的核心模型很简单：**多项目 + 多 worktree / 多分支 + 多终端**。你可以同时打开多个仓库，把并行分支隔离到不同 worktree，把终端绑定到正确上下文，并在其中运行 Codex、Claude 等 AI CLI，而不会丢失当前 Git 状态。
+它的核心模型很简单：**多项目 + 多 worktree / 多分支 + 多终端**。你可以同时打开多个仓库，把并行分支隔离到不同 worktree，把终端绑定到正确上下文，并在其中运行 Codex、Claude 等 AI CLI，而不会丢失当前 Git 状态。它支持本地仓库、Git SSH 远程地址，也支持通过 SSH config alias 和远程路径打开 SSH 远程仓库。
 
 ## 截图
 
-| 工作区纵览 | 仓库工作区 |
-| --- | --- |
-| ![Hobgoblin 工作区纵览](docs/screenshot-20260626-143532.png) | ![Hobgoblin 仓库工作区](docs/screenshot-20260626-144523.png) |
+<p>
+  <img src="docs/screenshot-20260626-143532.png" alt="Hobgoblin 工作区纵览" width="49%" />
+  <img src="docs/screenshot-20260626-144523.png" alt="Hobgoblin 仓库工作区" width="49%" />
+</p>
 
 ## 生产力公式
 
@@ -24,12 +25,13 @@ Hobgoblin = 多项目 x 多 worktree / 多分支 x 多终端
 
 - **面向 AI CLI 的工作流：** 把代码代理、Shell 任务和 Git 状态放在同一个工作上下文里，而不是散落在互不相关的终端窗口中。
 - **多项目工作区：** 以标签页打开多个仓库，支持排序，并在下次启动时恢复会话。
+- **桌面或 Web 浏览器使用：** 可以使用打包后的桌面应用，也可以启动 server mode，在浏览器中打开同一个工作区。
 - **多 worktree 分支开发：** 为并行分支创建和查看独立 worktree，让多个分支互不污染地推进。
 - **分支与 worktree 纵览：** 在一个窗口里查看分支状态、worktree 状态、最新提交和关联 Pull Request。
 - **上下文内 Git 操作：** 支持 checkout、pull、push、创建 worktree、在外部工具打开分支，以及跳转到 GitHub。
 - **多终端执行界面：** 多个服务端托管终端跟随工作区管理，并绑定到对应分支或 worktree 上下文。
-- **本地与 SSH 仓库：** 支持本地路径，也支持面向 SSH 的远程仓库流程。
-- **键盘优先：** 用键盘浏览分支、切换仓库和触发操作。
+- **本地与 SSH 远程仓库：** 支持本地路径、SSH clone URL，也支持通过 SSH config alias 和远程路径打开远程仓库。
+- **可视化操作工作流：** 在清晰的界面上下文中浏览分支、切换仓库、触发 Git 操作并跳转外部工具。
 - **主题与语言：** 支持浅色、深色和主题预设，并提供英语、简体中文、韩文、日文界面文案。
 
 ## 安装步骤
@@ -76,21 +78,21 @@ bun install
 bun run dev
 ```
 
-## Server Mode
+## Web 浏览器 / Server Mode
 
-构建 Web UI 并启动 server mode：
+构建 Web UI 并启动 server mode，然后在 Web 浏览器中打开 Hobgoblin：
 
 ```sh
 ./serve.sh
 ```
 
-默认地址：
+默认浏览器地址：
 
 ```text
 http://127.0.0.1:32200
 ```
 
-需要时可以覆盖监听地址：
+需要暴露到不同网卡或端口时，可以覆盖监听地址：
 
 ```sh
 ./serve.sh --host 127.0.0.1 --port 32200
