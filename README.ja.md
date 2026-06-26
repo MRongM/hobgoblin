@@ -8,9 +8,9 @@ Hobgoblin は単なるブランチ管理ツールではありません。Git wor
 
 ## スクリーンショット
 
-![Hobgoblin ワークスペース概要](docs/screenshot-20260626-143532.png)
-
-![Hobgoblin リポジトリワークスペース](docs/screenshot-20260626-144523.png)
+| ワークスペース概要 | リポジトリワークスペース |
+| --- | --- |
+| ![Hobgoblin ワークスペース概要](docs/screenshot-20260626-143532.png) | ![Hobgoblin リポジトリワークスペース](docs/screenshot-20260626-144523.png) |
 
 ## 生産性の式
 

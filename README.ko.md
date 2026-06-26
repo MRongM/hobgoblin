@@ -8,9 +8,9 @@ Hobgoblin은 단순한 브랜치 관리 도구가 아닙니다. Git worktree 기
 
 ## 스크린샷
 
-![Hobgoblin 작업 공간 개요](docs/screenshot-20260626-143532.png)
-
-![Hobgoblin 리포지토리 작업 공간](docs/screenshot-20260626-144523.png)
+| 작업 공간 개요 | 리포지토리 작업 공간 |
+| --- | --- |
+| ![Hobgoblin 작업 공간 개요](docs/screenshot-20260626-143532.png) | ![Hobgoblin 리포지토리 작업 공간](docs/screenshot-20260626-144523.png) |
 
 ## 생산성 공식
 

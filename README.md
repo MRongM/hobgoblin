@@ -8,9 +8,9 @@ The core model is simple: **multi-project + multi-worktree / multi-branch + mult
 
 ## Screenshots
 
-![Hobgoblin workspace overview](docs/screenshot-20260626-143532.png)
-
-![Hobgoblin repository workspace](docs/screenshot-20260626-144523.png)
+| Workspace overview | Repository workspace |
+| --- | --- |
+| ![Hobgoblin workspace overview](docs/screenshot-20260626-143532.png) | ![Hobgoblin repository workspace](docs/screenshot-20260626-144523.png) |
 
 ## Productivity Formula
 
