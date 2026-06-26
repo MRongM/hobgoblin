@@ -445,6 +445,52 @@
         line-height: 1.6;
       }
 
+      /* INSTALL */
+      .install-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+        margin-bottom: 32px;
+      }
+
+      .install-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 24px;
+      }
+
+      .install-card h3 {
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+
+      .install-card p {
+        color: var(--text-secondary);
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      .install-code {
+        background: var(--text);
+        color: var(--bg);
+        border-radius: 12px;
+        padding: 18px 20px;
+        overflow-x: auto;
+        font:
+          600 13px/1.7 ui-monospace,
+          'SF Mono',
+          Menlo,
+          monospace;
+      }
+
+      .install-note {
+        margin-top: 20px;
+        color: var(--text-secondary);
+        font-size: 14px;
+      }
+
       /* HOW IT WORKS */
       .steps {
         display: flex;
@@ -673,8 +719,9 @@
       <div class="nav-right">
         <div class="nav-links">
           <a href="#features" data-i18n="nav_features">Features</a>
+          <a href="#install" data-i18n="nav_install">Install</a>
           <a href="#how-it-works" data-i18n="nav_how">How It Works</a>
-          <a href="https://github.com/nano-props/goblin" target="_blank" rel="noopener noreferrer">GitHub</a>
+          <a href="https://github.com/MRongM/hobgoblin" target="_blank" rel="noopener noreferrer">GitHub</a>
         </div>
         <span class="sep"></span>
         <div class="lang-toggle">
@@ -741,7 +788,7 @@
           </p>
           <div class="hero-actions">
             <a
-              href="https://github.com/nano-props/goblin/releases"
+              href="https://github.com/MRongM/hobgoblin/releases"
               class="btn btn-primary"
               target="_blank"
               rel="noopener noreferrer"
@@ -761,7 +808,7 @@
               <span data-i18n="btn_download">Download</span>
             </a>
             <a
-              href="https://github.com/nano-props/goblin"
+              href="https://github.com/MRongM/hobgoblin"
               class="btn btn-secondary"
               target="_blank"
               rel="noopener noreferrer"
@@ -789,7 +836,8 @@
           Everything about your branches,<br />nothing in the way
         </h2>
         <p class="section-desc" data-i18n="features_desc">
-          Hobgoblin gives you a bird's-eye view of every branch, worktree, and pull request across all your repositories.
+          Hobgoblin gives you a bird's-eye view of every branch, worktree, and pull request across all your
+          repositories.
         </p>
         <div class="features-grid">
           <!-- f1: Multi-Repo Tabs -->
@@ -939,6 +987,58 @@
       </div>
     </section>
 
+    <!-- INSTALL -->
+    <section id="install">
+      <div class="container">
+        <div class="section-label" data-i18n="install_label">Install</div>
+        <h2 class="section-title" data-i18n-html="install_title">Choose the build<br />for your machine</h2>
+        <p class="section-desc" data-i18n="install_desc">
+          Download Hobgoblin from GitHub Releases, or run it from source with Bun during development.
+        </p>
+        <div class="install-grid">
+          <div class="install-card fade-in">
+            <h3 data-i18n="install_macos_arm_title">macOS Apple Silicon</h3>
+            <p data-i18n="install_macos_arm_desc">Download the arm64 DMG from the latest GitHub Release.</p>
+          </div>
+          <div class="install-card fade-in">
+            <h3 data-i18n="install_macos_intel_title">macOS Intel</h3>
+            <p data-i18n="install_macos_intel_desc">Download the x64 DMG from the latest GitHub Release.</p>
+          </div>
+          <div class="install-card fade-in">
+            <h3 data-i18n="install_windows_title">Windows x64</h3>
+            <p data-i18n="install_windows_desc">Download the Windows x64 installer from the latest GitHub Release.</p>
+          </div>
+          <div class="install-card fade-in">
+            <h3 data-i18n="install_source_title">Develop from source</h3>
+            <p data-i18n="install_source_desc">Install dependencies with Bun and start the development app locally.</p>
+          </div>
+        </div>
+        <pre class="install-code"><code>bun install
+bun run dev</code></pre>
+        <p class="install-note" data-i18n="install_note">
+          Current release builds are unsigned. macOS Gatekeeper or Windows SmartScreen may show a warning.
+        </p>
+        <div class="hero-actions" style="margin-top: 28px">
+          <a
+            href="https://github.com/MRongM/hobgoblin/releases"
+            class="btn btn-primary"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <span data-i18n="btn_download">Download</span>
+          </a>
+          <a
+            href="https://github.com/MRongM/hobgoblin"
+            class="btn btn-secondary"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <span data-i18n="btn_source">Source Code</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
     <!-- HOW IT WORKS -->
     <section id="how-it-works" style="background: var(--gradient)">
       <div class="container">
@@ -953,8 +1053,8 @@
             <div class="step-content">
               <h3 data-i18n="s1_title">Open repositories</h3>
               <p data-i18n="s1_desc">
-                Add Git repositories via the file picker or drag-and-drop. Hobgoblin opens each in a tab and restores your
-                session on next launch.
+                Add Git repositories via the file picker or drag-and-drop. Hobgoblin opens each in a tab and restores
+                your session on next launch.
               </p>
             </div>
           </div>
@@ -988,7 +1088,7 @@
       <p data-i18n="cta_desc">Hobgoblin is free, open-source, and MIT-licensed.</p>
       <div class="hero-actions">
         <a
-          href="https://github.com/nano-props/goblin/releases"
+          href="https://github.com/MRongM/hobgoblin/releases"
           class="btn btn-primary"
           target="_blank"
           rel="noopener noreferrer"
@@ -1010,7 +1110,7 @@
           <span data-i18n="btn_download">Download</span>
         </a>
         <a
-          href="https://github.com/nano-props/goblin"
+          href="https://github.com/MRongM/hobgoblin"
           class="btn btn-secondary"
           target="_blank"
           rel="noopener noreferrer"
@@ -1024,7 +1124,7 @@
     <footer>
       <p>
         <span data-i18n="footer_made">Made by</span>
-        <a href="https://github.com/nano-props" target="_blank" rel="noopener noreferrer">nano</a> &middot; MIT License
+        <a href="https://github.com/MRongM" target="_blank" rel="noopener noreferrer">MRongM</a> &middot; MIT License
         &middot; Hobgoblin
       </p>
     </footer>
@@ -1033,6 +1133,7 @@
       const i18n = {
         en: {
           nav_features: 'Features',
+          nav_install: 'Install',
           nav_how: 'How It Works',
           hero_badge: 'macOS Desktop App',
           hero_title: 'Branches and worktrees,<br/><span>at a glance</span>',
@@ -1063,6 +1164,19 @@
           f6_title: 'Multilingual & Themed',
           f6_desc:
             'Supports English, Chinese, Korean, and Japanese with auto-detection. Switch between light, dark, and system themes — all preferences persist across sessions.',
+          install_label: 'Install',
+          install_title: 'Choose the build<br/>for your machine',
+          install_desc: 'Download Hobgoblin from GitHub Releases, or run it from source with Bun during development.',
+          install_macos_arm_title: 'macOS Apple Silicon',
+          install_macos_arm_desc: 'Download the arm64 DMG from the latest GitHub Release.',
+          install_macos_intel_title: 'macOS Intel',
+          install_macos_intel_desc: 'Download the x64 DMG from the latest GitHub Release.',
+          install_windows_title: 'Windows x64',
+          install_windows_desc: 'Download the Windows x64 installer from the latest GitHub Release.',
+          install_source_title: 'Develop from source',
+          install_source_desc: 'Install dependencies with Bun and start the development app locally.',
+          install_note:
+            'Current release builds are unsigned. macOS Gatekeeper or Windows SmartScreen may show a warning.',
           how_label: 'How It Works',
           how_title: 'Three steps. Full picture.',
           how_desc: 'Point Hobgoblin at your repositories and get a live overview of branches, status, and PRs.',
@@ -1081,6 +1195,7 @@
         },
         zh: {
           nav_features: '功能',
+          nav_install: '安装',
           nav_how: '使用方式',
           hero_badge: 'macOS 桌面应用',
           hero_title: '分支与工作树，<br/><span>一眼纵览</span>',
@@ -1106,6 +1221,18 @@
           f6_title: '多语言与主题',
           f6_desc:
             '支持英语、中文、韩语、日语并自动检测系统语言。在浅色、深色和跟随系统主题间切换——所有偏好跨会话保持。',
+          install_label: '安装',
+          install_title: '选择适合你设备的<br/>构建版本',
+          install_desc: '从 GitHub Releases 下载 Hobgoblin，或在开发时使用 Bun 从源码运行。',
+          install_macos_arm_title: 'macOS Apple Silicon',
+          install_macos_arm_desc: '从最新 GitHub Release 下载 arm64 DMG。',
+          install_macos_intel_title: 'macOS Intel',
+          install_macos_intel_desc: '从最新 GitHub Release 下载 x64 DMG。',
+          install_windows_title: 'Windows x64',
+          install_windows_desc: '从最新 GitHub Release 下载 Windows x64 安装程序。',
+          install_source_title: '从源码开发',
+          install_source_desc: '使用 Bun 安装依赖，并在本地启动开发应用。',
+          install_note: '当前发布构建未签名。macOS Gatekeeper 或 Windows SmartScreen 可能会显示警告。',
           how_label: '使用方式',
           how_title: '三步上手，全局纵览。',
           how_desc: '把仓库交给 Hobgoblin，即刻获得分支、状态和 PR 的实时概览。',
@@ -1123,6 +1250,7 @@
         },
         ko: {
           nav_features: '기능',
+          nav_install: '설치',
           nav_how: '사용 방법',
           hero_badge: 'macOS 데스크톱 앱',
           hero_title: '브랜치와 워크트리,<br/><span>한눈에 파악</span>',
@@ -1152,6 +1280,19 @@
           f6_title: '다국어 & 테마',
           f6_desc:
             '영어, 중국어, 한국어, 일본어를 자동 감지로 지원합니다. 라이트, 다크, 시스템 테마 간 전환 — 모든 설정이 세션 간 유지됩니다.',
+          install_label: '설치',
+          install_title: '내 환경에 맞는<br/>빌드 선택',
+          install_desc: 'GitHub Releases에서 Hobgoblin을 다운로드하거나 개발 중에는 Bun으로 소스에서 실행하세요.',
+          install_macos_arm_title: 'macOS Apple Silicon',
+          install_macos_arm_desc: '최신 GitHub Release에서 arm64 DMG를 다운로드하세요.',
+          install_macos_intel_title: 'macOS Intel',
+          install_macos_intel_desc: '최신 GitHub Release에서 x64 DMG를 다운로드하세요.',
+          install_windows_title: 'Windows x64',
+          install_windows_desc: '최신 GitHub Release에서 Windows x64 설치 파일을 다운로드하세요.',
+          install_source_title: '소스에서 개발',
+          install_source_desc: 'Bun으로 의존성을 설치하고 로컬 개발 앱을 시작하세요.',
+          install_note:
+            '현재 릴리스 빌드는 서명되지 않았습니다. macOS Gatekeeper 또는 Windows SmartScreen이 경고를 표시할 수 있습니다.',
           how_label: '사용 방법',
           how_title: '세 단계. 전체 그림.',
           how_desc: 'Hobgoblin에 리포지토리를 연결하면 브랜치, 상태, PR의 실시간 개요를 얻을 수 있습니다.',
@@ -1170,6 +1311,7 @@
         },
         ja: {
           nav_features: '機能',
+          nav_install: 'インストール',
           nav_how: '使い方',
           hero_badge: 'macOS デスクトップアプリ',
           hero_title: 'ブランチとワークツリーを<br/><span>一目で把握</span>',
@@ -1199,6 +1341,19 @@
           f6_title: '多言語 & テーマ',
           f6_desc:
             '英語、中国語、韓国語、日本語を自動検出でサポート。ライト、ダーク、システムテーマを切り替え — すべての設定がセッション間で保持されます。',
+          install_label: 'インストール',
+          install_title: '環境に合うビルドを<br/>選択',
+          install_desc: 'GitHub Releases から Hobgoblin をダウンロードするか、開発時は Bun でソースから実行します。',
+          install_macos_arm_title: 'macOS Apple Silicon',
+          install_macos_arm_desc: '最新の GitHub Release から arm64 DMG をダウンロードしてください。',
+          install_macos_intel_title: 'macOS Intel',
+          install_macos_intel_desc: '最新の GitHub Release から x64 DMG をダウンロードしてください。',
+          install_windows_title: 'Windows x64',
+          install_windows_desc: '最新の GitHub Release から Windows x64 インストーラーをダウンロードしてください。',
+          install_source_title: 'ソースから開発',
+          install_source_desc: 'Bun で依存関係をインストールし、ローカルで開発アプリを起動します。',
+          install_note:
+            '現在のリリースビルドは未署名です。macOS Gatekeeper または Windows SmartScreen が警告を表示する場合があります。',
           how_label: '使い方',
           how_title: '3ステップ。全体像を把握。',
           how_desc: 'Hobgoblin にリポジトリを指定するだけで、ブランチ、ステータス、PR のライブ概要を取得できます。',

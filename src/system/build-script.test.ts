@@ -159,11 +159,12 @@ describe('desktop build scripts', () => {
     expect(releaseScript).toContain('return `${APP_NAME}-${version}-${arch}.dmg`')
     expect(releaseScript).toContain('return `${APP_NAME}-${version}-${arch}.exe`')
     expect(releaseScript).toContain("path.join(repoRoot, 'release', expectedArtifactName(version, platform, arch))")
-    expect(releaseScript).toContain('bun run build:web')
-    expect(releaseScript).toContain('bun run build:server')
+    expect(releaseScript).toContain("const viteCli = path.join(repoRoot, 'node_modules/vite/bin/vite.js')")
+    expect(releaseScript).toContain('await $`bun ${viteCli} build`')
+    expect(releaseScript).toContain('async function buildServerBundle()')
     expect(releaseScript).toContain("const publishArgs = ['--publish', 'never']")
-    expect(releaseScript).toContain('bun run build:electron')
-    expect(releaseScript).toContain('bun run build:electron -- ${platformArgs} ${archFlag} ${publishArgs}')
+    expect(releaseScript).toContain("const electronBuilderCli = path.join(repoRoot, 'node_modules/electron-builder/cli.js')")
+    expect(releaseScript).toContain('await $`bun ${electronBuilderCli} ${platformArgs} ${archFlag} ${publishArgs}`')
   })
 
   test('desktop release packaging config includes Windows x64 NSIS output', () => {
