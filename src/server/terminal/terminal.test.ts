@@ -55,6 +55,7 @@ interface MockPty {
 }
 
 const mockPtys: MockPty[] = []
+let autoEmitOnDataSubscribe: string | null = null
 
 vi.mock('node-pty', () => ({
   spawn: vi.fn(() => {
@@ -81,6 +82,7 @@ vi.mock('node-pty', () => ({
       kill: pty.kill,
       onData: (cb: (data: string) => void) => {
         onData = cb
+        if (autoEmitOnDataSubscribe !== null) cb(autoEmitOnDataSubscribe)
         return {
           dispose: vi.fn(() => {
             if (onData === cb) onData = null
@@ -103,6 +105,7 @@ beforeEach(() => {
   vi.useRealTimers()
   closeAllServerTerminalSessions()
   mockPtys.length = 0
+  autoEmitOnDataSubscribe = null
   vi.clearAllMocks()
   vi.mocked(spawn).mockClear()
   settingsSourceMocks.getServerSettingsPrefs.mockResolvedValue({ remoteTerminalTmuxEnabled: false })
@@ -586,6 +589,64 @@ describe('server terminal sessions', () => {
       event: {
         sessionId,
         data: 'during-attach',
+        seq: 1,
+        processName: 'zsh',
+      },
+    })
+
+    unregisterTerminalSocket('client_1', 'attachment_a', socket)
+  })
+
+  test('sends create response before flushing buffered output emitted during the create request', async () => {
+    const socket = { send: vi.fn(), close: vi.fn() }
+    registerTerminalSocket('client_1', 'attachment_a', socket)
+    autoEmitOnDataSubscribe = 'during-create'
+
+    handleRealtimeServerMessage(
+      'client_1',
+      'attachment_a',
+      socket,
+      JSON.stringify({
+        type: 'request',
+        requestId: 'req_create',
+        action: 'create',
+        input: {
+          repoRoot: '/repo',
+          branch: 'feature',
+          worktreePath: '/repo-linked',
+          kind: 'additional',
+          cols: 80,
+          rows: 24,
+        },
+      }),
+    )
+
+    await vi.waitFor(() => {
+      expect(socket.send.mock.calls.some(([payload]) => JSON.parse(String(payload)).type === 'response')).toBe(true)
+      expect(socket.send.mock.calls.some(([payload]) => JSON.parse(String(payload)).type === 'output')).toBe(true)
+    })
+
+    const messages = socket.send.mock.calls.map(([payload]) => JSON.parse(String(payload)))
+    const responseIndex = messages.findIndex((message) => message.type === 'response')
+    const outputIndex = messages.findIndex((message) => message.type === 'output')
+    expect(responseIndex).toBeGreaterThanOrEqual(0)
+    expect(outputIndex).toBeGreaterThan(responseIndex)
+    expect(messages[responseIndex]).toMatchObject({
+      type: 'response',
+      requestId: 'req_create',
+      ok: true,
+      action: 'create',
+      payload: {
+        ok: true,
+        sessionId: expect.any(String),
+      },
+    })
+    const sessionId = messages[responseIndex]?.payload?.sessionId
+    expect(messages[outputIndex]).toMatchObject({
+      type: 'output',
+      event: {
+        sessionId,
+        data: 'during-create',
         seq: 1,
         processName: 'zsh',
       },

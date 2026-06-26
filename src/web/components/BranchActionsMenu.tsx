@@ -61,7 +61,7 @@ export function BranchActionsDropdown({
   const visibleMainItems = mainItems.filter((item) => item.visible)
   const visibleExternalItems = externalItems.filter((item) => item.visible)
   const visibleDestructiveItems = destructiveItems.filter((item) => item.visible)
-  const itemGroups = [visiblePatchItems, visibleMainItems, visibleExternalItems, visibleDestructiveItems].filter(
+  const itemGroups = [visibleExternalItems, visibleMainItems, visiblePatchItems, visibleDestructiveItems].filter(
     (items) => items.length > 0,
   )
   const visibleItems = itemGroups.flat()

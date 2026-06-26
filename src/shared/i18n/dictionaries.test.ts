@@ -55,6 +55,8 @@ describe('i18n dictionaries', () => {
 
   test('distinguishes Chinese pull and remote tracking branch actions', () => {
     expect(zh['action.pull']).toBe('拉取')
+    expect(zh['action.create-branch']).toBe('从本地新建分支')
+    expect(zh['action.create-branch-title']).toBe('从本地新建分支')
     expect(zh['action.pull-remote-branch']).toBe('从远程新建分支')
     expect(zh['action.pull-remote-branch-title']).toBe('从远程分支创建本地分支')
   })
