@@ -445,6 +445,33 @@
         line-height: 1.6;
       }
 
+      /* ORIGIN */
+      .origin-section {
+        background: var(--bg);
+      }
+
+      .origin-band {
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: var(--bg-card);
+        padding: 32px;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 24px;
+      }
+
+      .origin-band .section-desc {
+        margin-bottom: 0;
+      }
+
+      .origin-actions {
+        display: flex;
+        flex-shrink: 0;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
       /* INSTALL */
       .install-grid {
         display: grid;
@@ -625,6 +652,11 @@
 
         .features-grid {
           grid-template-columns: 1fr;
+        }
+
+        .origin-band {
+          flex-direction: column;
+          padding: 24px;
         }
 
         .cta-section {
@@ -983,6 +1015,40 @@
       </div>
     </section>
 
+    <!-- ORIGIN -->
+    <section id="origin" class="origin-section">
+      <div class="container">
+        <div class="origin-band fade-in">
+          <div>
+            <div class="section-label" data-i18n="origin_label">Origin</div>
+            <h2 class="section-title" data-i18n-html="origin_title">From Goblin<br />to Hobgoblin</h2>
+            <p class="section-desc" data-i18n="origin_desc">
+              Hobgoblin began with Goblin, a small macOS app for seeing Git branches and worktrees at a glance. Goblin
+              remains a focused option for the original lightweight workflow.
+            </p>
+          </div>
+          <div class="origin-actions">
+            <a
+              href="https://nano-props.github.io/goblin/"
+              class="btn btn-primary"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span data-i18n="origin_visit">Visit Goblin</span>
+            </a>
+            <a
+              href="https://github.com/nano-props/goblin"
+              class="btn btn-secondary"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span data-i18n="origin_source">Goblin source</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- INSTALL -->
     <section id="install">
       <div class="container">
@@ -1163,6 +1229,12 @@ bun run dev</code></pre>
           f6_title: 'Ready for real repositories',
           f6_desc:
             'Work with local paths and SSH repositories, then keep the workspace comfortable with persistent themes and English, Chinese, Korean, and Japanese UI strings.',
+          origin_label: 'Origin',
+          origin_title: 'From Goblin<br/>to Hobgoblin',
+          origin_desc:
+            'Hobgoblin began with Goblin, a small macOS app for seeing Git branches and worktrees at a glance. Goblin remains a focused option for the original lightweight workflow.',
+          origin_visit: 'Visit Goblin',
+          origin_source: 'Goblin source',
           install_label: 'Install',
           install_title: 'Choose the build<br/>for your machine',
           install_desc: 'Download Hobgoblin from GitHub Releases, or run it from source with Bun during development.',
@@ -1221,6 +1293,12 @@ bun run dev</code></pre>
             '浏览分支、切换仓库、切换视图、checkout、pull、push、创建 worktree、跳转外部工具，都可以在清晰的界面上下文中完成。',
           f6_title: '适配真实仓库工作流',
           f6_desc: '支持本地路径与 SSH 仓库，并提供持久化主题以及英语、中文、韩语、日语 UI，让工作区长期可用。',
+          origin_label: '起源',
+          origin_title: '从 Goblin<br/>到 Hobgoblin',
+          origin_desc:
+            'Hobgoblin 起源于 Goblin。Goblin 是一个小而美的 macOS 应用，专注于一眼看清 Git 分支和 worktree，也仍然适合想要轻量原始工作流的用户。',
+          origin_visit: '访问 Goblin',
+          origin_source: 'Goblin 源代码',
           install_label: '安装',
           install_title: '选择适合你设备的<br/>构建版本',
           install_desc: '从 GitHub Releases 下载 Hobgoblin，或在开发时使用 Bun 从源码运行。',
@@ -1280,6 +1358,12 @@ bun run dev</code></pre>
           f6_title: '실제 리포지토리 워크플로 준비',
           f6_desc:
             '로컬 경로와 SSH 리포지토리로 작업하고, 지속되는 테마와 영어, 중국어, 한국어, 일본어 UI로 워크스페이스를 편하게 유지합니다.',
+          origin_label: '기원',
+          origin_title: 'Goblin에서<br/>Hobgoblin으로',
+          origin_desc:
+            'Hobgoblin은 Git 브랜치와 worktree를 한눈에 보여 주는 작은 macOS 앱 Goblin에서 시작했습니다. Goblin은 원래의 가벼운 워크플로를 원하는 사용자에게 여전히 집중된 선택지입니다.',
+          origin_visit: 'Goblin 보기',
+          origin_source: 'Goblin 소스',
           install_label: '설치',
           install_title: '내 환경에 맞는<br/>빌드 선택',
           install_desc: 'GitHub Releases에서 Hobgoblin을 다운로드하거나 개발 중에는 Bun으로 소스에서 실행하세요.',
@@ -1343,6 +1427,12 @@ bun run dev</code></pre>
           f6_title: '実運用のリポジトリワークフローへ',
           f6_desc:
             'ローカルパスと SSH リポジトリで作業し、永続化されるテーマと英語、中国語、韓国語、日本語 UI で快適なワークスペースを保ちます。',
+          origin_label: '起源',
+          origin_title: 'Goblin から<br/>Hobgoblin へ',
+          origin_desc:
+            'Hobgoblin は、Git ブランチと worktree を一目で把握する小さな macOS アプリ Goblin から始まりました。Goblin は、最初の軽量なワークフローを求めるユーザーにとって今も焦点の絞られた選択肢です。',
+          origin_visit: 'Goblin を見る',
+          origin_source: 'Goblin ソース',
           install_label: 'インストール',
           install_title: '環境に合うビルドを<br/>選択',
           install_desc: 'GitHub Releases から Hobgoblin をダウンロードするか、開発時は Bun でソースから実行します。',
