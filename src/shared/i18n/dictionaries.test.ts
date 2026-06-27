@@ -78,6 +78,24 @@ describe('i18n dictionaries', () => {
     expect(en['changes.discard-confirm-confirm']).toBe('Discard')
   })
 
+  test('includes file tree text content shortcut copy in every dictionary', () => {
+    const keys = [
+      'file-tree.new-file',
+      'file-tree.new-file-input-label',
+      'file-tree.copy-file-contents-ok',
+      'file-tree.replace-file-contents-ok',
+      'error.file-tree-text-file-too-large',
+      'error.file-tree-binary-file',
+      'error.file-tree-not-regular-file',
+    ] satisfies DictKey[]
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) {
+        expect(dict[key], `${lang}.${key}`).toBeTruthy()
+      }
+    }
+  })
+
   test('uses Hobgoblin in user-visible product copy', () => {
     for (const [lang, dict] of Object.entries(dicts)) {
       expect(dict['about.app'], `${lang}.about.app`).toBe('Hobgoblin')

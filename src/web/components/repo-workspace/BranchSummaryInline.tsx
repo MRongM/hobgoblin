@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, FolderTree, GitBranch, Terminal } from 'lucide-react'
+import { ArrowDown, ArrowUp, FolderTree, GitBranch, GitCompareArrows, Terminal } from 'lucide-react'
 import { useI18nStore, useT } from '#/web/stores/i18n.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import { Badge } from '#/web/components/ui/badge.tsx'
@@ -125,7 +125,7 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
             )}
             {hasWorktree && worktreeDirty ? (
               <Badge variant="attention" className="gap-1">
-                <FolderTree size={10} />
+                <GitCompareArrows size={10} />
                 {t('branches.dirty')}
               </Badge>
             ) : null}

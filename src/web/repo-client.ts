@@ -6,6 +6,8 @@ import type {
   RepoFileTransferRequest,
   RepoFileTransferResult,
   RepoFileTreeResult,
+  RepoFileTreeTextFileReadResult,
+  RepoFileTreeTextFileReplaceResult,
 } from '#/shared/file-tree.ts'
 import type { RepoFileExportRequest, RepoFileExportResult } from '#/shared/file-tree-export.ts'
 import type { CloneRepoResult, PullRequestEntry, RepoSnapshot } from '#/shared/rpc.ts'
@@ -223,6 +225,32 @@ export async function createRepositoryFileTreeDirectory(
   name: string,
 ): Promise<ExecResult> {
   return await postServerJson('/api/repo/file-tree/create-directory', { repoId, worktreePath, parentDirPath, name })
+}
+
+export async function createRepositoryFileTreeFile(
+  repoId: string,
+  worktreePath: string,
+  parentDirPath: string,
+  name: string,
+): Promise<ExecResult> {
+  return await postServerJson('/api/repo/file-tree/create-file', { repoId, worktreePath, parentDirPath, name })
+}
+
+export async function readRepositoryFileTreeTextFile(
+  repoId: string,
+  worktreePath: string,
+  filePath: string,
+): Promise<RepoFileTreeTextFileReadResult> {
+  return await postServerJson('/api/repo/file-tree/read-text-file', { repoId, worktreePath, filePath })
+}
+
+export async function replaceRepositoryFileTreeTextFile(
+  repoId: string,
+  worktreePath: string,
+  filePath: string,
+  content: string,
+): Promise<RepoFileTreeTextFileReplaceResult> {
+  return await postServerJson('/api/repo/file-tree/replace-text-file', { repoId, worktreePath, filePath, content })
 }
 
 export async function deleteRepositoryFileTreeEntries(

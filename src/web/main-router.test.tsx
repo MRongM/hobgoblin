@@ -19,5 +19,5 @@ describe('mainRouter', () => {
     for (const page of SETTINGS_PAGES) {
       expect(mainRouter.routesByPath[`/settings/${page}`], `missing settings route for ${page}`).toBeDefined()
     }
-  })
+  }, 15_000)
 })

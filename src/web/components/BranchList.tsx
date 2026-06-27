@@ -19,7 +19,7 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { FolderTree, GitCommitHorizontal } from 'lucide-react'
+import { FolderTree, GitCommitHorizontal, GitCompareArrows } from 'lucide-react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useT } from '#/web/stores/i18n.ts'
@@ -315,7 +315,7 @@ function DetachedWorktreeRow({
         <span className="flex min-w-0 items-center gap-2 overflow-hidden">
           <span className="shrink-0 truncate font-mono text-sm text-foreground">{head}</span>
           <Badge variant={dirty ? 'attention' : 'outline'} className="gap-1">
-            <FolderTree size={10} />
+            {dirty ? <GitCompareArrows size={10} /> : <FolderTree size={10} />}
             {dirty ? t('branches.dirty') : t('branches.detached')}
           </Badge>
           <span className="min-w-0 truncate text-[11px] leading-none text-muted-foreground/85">{displayPath}</span>

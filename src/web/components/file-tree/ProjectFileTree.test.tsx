@@ -19,6 +19,11 @@ type SearchRepositoryFileTreeArgs = [
   signal?: AbortSignal,
 ]
 
+const toastMocks = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
+}))
+
 const getRepositoryFileTree = vi.fn(
   async (_repoId: string, _worktreePath: string, dirPath: string, _signal?: AbortSignal) => ({
     ok: true as const,
@@ -48,7 +53,18 @@ const exportRepositoryFilesToLocalDirectory = vi.fn(async (_input: unknown) => (
 const moveRepositoryFileTreeEntries = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
 const renameRepositoryFileTreeEntry = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
 const deleteRepositoryFileTreeEntries = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
+const createRepositoryFileTreeFile = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
 const createRepositoryFileTreeDirectory = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
+const readRepositoryFileTreeTextFile = vi.fn(async (..._args: unknown[]) => ({
+  ok: true as const,
+  content: 'file contents\n',
+  byteLength: 14,
+}))
+const replaceRepositoryFileTreeTextFile = vi.fn(async (..._args: unknown[]) => ({
+  ok: true as const,
+  previousContent: 'old contents\n',
+  previousByteLength: 13,
+}))
 const searchRepositoryFileTree = vi.fn(async (..._args: SearchRepositoryFileTreeArgs) => ({
   ok: true as const,
   matches: [{ relativePath: 'src/app.ts', kind: 'file' as const }],
@@ -65,10 +81,15 @@ const chooseFileTreeUploadFiles = vi.fn(async () => [
   '/Users/test/Desktop/upload-b.txt',
 ])
 const hasNativeFilePicker = vi.fn(() => true)
+const clipboardWriteText = vi.fn(async (_value: string) => undefined)
+const clipboardReadText = vi.fn(async () => 'replacement contents\n')
 
 vi.mock('#/web/repo-client.ts', () => ({
   getRepositoryFileTree: (...args: GetRepositoryFileTreeArgs) => getRepositoryFileTree(...args),
+  createRepositoryFileTreeFile: (...args: unknown[]) => createRepositoryFileTreeFile(...args),
   createRepositoryFileTreeDirectory: (...args: unknown[]) => createRepositoryFileTreeDirectory(...args),
+  readRepositoryFileTreeTextFile: (...args: unknown[]) => readRepositoryFileTreeTextFile(...args),
+  replaceRepositoryFileTreeTextFile: (...args: unknown[]) => replaceRepositoryFileTreeTextFile(...args),
   renameRepositoryFileTreeEntry: (...args: unknown[]) => renameRepositoryFileTreeEntry(...args),
   deleteRepositoryFileTreeEntries: (...args: unknown[]) => deleteRepositoryFileTreeEntries(...args),
   moveRepositoryFileTreeEntries: (...args: unknown[]) => moveRepositoryFileTreeEntries(...args),
@@ -101,6 +122,13 @@ vi.mock('#/web/runtime-settings-fonts.ts', () => ({
   useRuntimeFontSettings: () => ({ fileTreeFontSize: 12, terminalFontSize: 14 }),
 }))
 
+vi.mock('sonner', () => ({
+  toast: {
+    success: toastMocks.success,
+    error: toastMocks.error,
+  },
+}))
+
 let container: HTMLDivElement | null = null
 let root: Root | null = null
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -113,7 +141,10 @@ beforeEach(() => {
   moveRepositoryFileTreeEntries.mockClear()
   renameRepositoryFileTreeEntry.mockClear()
   deleteRepositoryFileTreeEntries.mockClear()
+  createRepositoryFileTreeFile.mockClear()
   createRepositoryFileTreeDirectory.mockClear()
+  readRepositoryFileTreeTextFile.mockClear()
+  replaceRepositoryFileTreeTextFile.mockClear()
   searchRepositoryFileTree.mockClear()
   openRepositoryEditor.mockClear()
   openRepositoryTerminal.mockClear()
@@ -126,10 +157,15 @@ beforeEach(() => {
   chooseFileTreeUploadFiles.mockResolvedValue(['/Users/test/Desktop/upload-a.txt', '/Users/test/Desktop/upload-b.txt'])
   hasNativeFilePicker.mockClear()
   hasNativeFilePicker.mockReturnValue(true)
+  toastMocks.success.mockClear()
+  toastMocks.error.mockClear()
+  clipboardWriteText.mockClear()
+  clipboardReadText.mockClear()
+  clipboardReadText.mockResolvedValue('replacement contents\n')
   writeInternalFileTreeClipboard({ repoId: '', worktreePath: '', paths: [] })
   Object.defineProperty(globalThis.navigator, 'clipboard', {
     configurable: true,
-    value: { writeText: vi.fn(async () => undefined) },
+    value: { writeText: clipboardWriteText, readText: clipboardReadText },
   })
   resetReposStore()
   container = document.createElement('div')
@@ -324,6 +360,7 @@ describe('ProjectFileTree', () => {
     expect(labels).toEqual([
       'file-tree.collapse-all',
       'file-tree.refresh',
+      'file-tree.new-file',
       'file-tree.new-folder',
       'file-tree.search-label',
     ])
@@ -406,6 +443,89 @@ describe('ProjectFileTree', () => {
       targetDirPath: '/repo/src',
       source: { kind: 'fileTreePaths', repoId: '/repo', worktreePath: '/repo', paths: ['/repo/README.md'] },
     })
+  })
+
+  test('copies focused file contents with primary shift c', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const file = treeItemByText('README.md')
+    await act(async () => {
+      file.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      file.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'c', metaKey: true, shiftKey: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(readRepositoryFileTreeTextFile).toHaveBeenCalledWith('/repo', '/repo', '/repo/README.md')
+    expect(clipboardWriteText).toHaveBeenCalledWith('file contents\n')
+    expect(transferRepositoryFiles).not.toHaveBeenCalled()
+    expect(toastMocks.success).toHaveBeenCalledWith('file-tree.copy-file-contents-ok')
+  })
+
+  test('replaces focused file contents with primary shift v and undoes the replacement', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const file = treeItemByText('README.md')
+    await act(async () => {
+      file.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      file.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'v', metaKey: true, shiftKey: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(clipboardReadText).toHaveBeenCalledTimes(1)
+    expect(replaceRepositoryFileTreeTextFile).toHaveBeenNthCalledWith(
+      1,
+      '/repo',
+      '/repo',
+      '/repo/README.md',
+      'replacement contents\n',
+    )
+    expect(toastMocks.success).toHaveBeenCalledWith('file-tree.replace-file-contents-ok')
+
+    await act(async () => {
+      file.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'z', ctrlKey: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(replaceRepositoryFileTreeTextFile).toHaveBeenNthCalledWith(
+      2,
+      '/repo',
+      '/repo',
+      '/repo/README.md',
+      'old contents\n',
+    )
+  })
+
+  test('does not run file content shortcuts for directories or mixed selections', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const directory = treeItemByText('src')
+    const file = treeItemByText('README.md')
+    await act(async () => {
+      directory.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      directory.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'c', metaKey: true, shiftKey: true }))
+      file.dispatchEvent(new MouseEvent('click', { bubbles: true, metaKey: true }))
+      await Promise.resolve()
+    })
+    await act(async () => {
+      file.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'c', metaKey: true, shiftKey: true }))
+      file.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'v', metaKey: true, shiftKey: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(readRepositoryFileTreeTextFile).not.toHaveBeenCalled()
+    expect(replaceRepositoryFileTreeTextFile).not.toHaveBeenCalled()
+    expect(clipboardWriteText).not.toHaveBeenCalled()
+    expect(clipboardReadText).not.toHaveBeenCalled()
   })
 
   test('does not consume primary paste keydown when the internal clipboard is empty', async () => {
@@ -700,6 +820,7 @@ describe('ProjectFileTree', () => {
     const labels = await contextMenuLabels(treeItemByText('src'))
 
     expect(labels).not.toContain('file-tree.paste')
+    expect(labels).toContain('file-tree.new-file')
     expect(labels).toContain('file-tree.new-folder')
     expect(labels).toContain('file-tree.refresh')
   })
@@ -843,6 +964,7 @@ describe('ProjectFileTree', () => {
     const labels = await contextMenuLabels(emptyArea)
 
     expect(labels).not.toContain('file-tree.paste')
+    expect(labels).toContain('file-tree.new-file')
     expect(labels).toContain('file-tree.new-folder')
     expect(labels).toContain('file-tree.refresh')
   })
@@ -898,6 +1020,56 @@ describe('ProjectFileTree', () => {
     })
 
     expect(createRepositoryFileTreeDirectory).toHaveBeenCalledWith('/repo', '/repo', '/repo/src', 'components')
+    expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', '/repo/src', undefined)
+  })
+
+  test('creates a file from the file tree toolbar in the worktree root', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const newFileButton = container?.querySelector<HTMLButtonElement>('button[aria-label="file-tree.new-file"]')
+    if (!newFileButton) throw new Error('missing new file button')
+
+    await act(async () => {
+      newFileButton.click()
+      await Promise.resolve()
+    })
+
+    const input = container?.querySelector<HTMLInputElement>('input[aria-label="file-tree.new-file-input-label"]')
+    if (!input) throw new Error('missing new file input')
+
+    await act(async () => {
+      input.value = 'notes.md'
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(createRepositoryFileTreeFile).toHaveBeenCalledWith('/repo', '/repo', '/repo', 'notes.md')
+    expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', '/repo', undefined)
+  })
+
+  test('creates a file from a directory context menu and refreshes that directory', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    await clickContextMenuItem(treeItemByText('src'), 'file-tree.new-file')
+
+    const input = container?.querySelector<HTMLInputElement>('input[aria-label="file-tree.new-file-input-label"]')
+    if (!input) throw new Error('missing new file input')
+
+    await act(async () => {
+      input.value = 'index.ts'
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(createRepositoryFileTreeFile).toHaveBeenCalledWith('/repo', '/repo', '/repo/src', 'index.ts')
     expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', '/repo/src', undefined)
   })
 

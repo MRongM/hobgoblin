@@ -5,6 +5,7 @@ export const FILE_TREE_SEARCH_LIMIT_DEFAULT = 100
 export const FILE_TREE_SEARCH_LIMIT_MAX = 200
 export const FILE_TRANSFER_MAX_FILE_BYTES = 100 * 1024 * 1024
 export const FILE_TRANSFER_MAX_TOTAL_BYTES = 500 * 1024 * 1024
+export const FILE_TREE_TEXT_FILE_MAX_BYTES = 1 * 1024 * 1024
 
 export type RepoFileTreeEntryKind = 'file' | 'directory' | 'symlink'
 export type RepoFileTreeTargetKind = 'file' | 'directory' | 'other' | 'missing'
@@ -121,6 +122,48 @@ export interface RepoFileMoveRequest {
   targetDirPath: string
 }
 
+export interface RepoFileTreeCreateFileRequest {
+  repoId: string
+  worktreePath: string
+  parentDirPath: string
+  name: string
+}
+
+export type RepoFileTreeTextFileReadResult =
+  | {
+      ok: true
+      content: string
+      byteLength: number
+    }
+  | {
+      ok: false
+      message: string
+    }
+
+export interface RepoFileTreeTextFileReadRequest {
+  repoId: string
+  worktreePath: string
+  filePath: string
+}
+
+export type RepoFileTreeTextFileReplaceResult =
+  | {
+      ok: true
+      previousContent: string
+      previousByteLength: number
+    }
+  | {
+      ok: false
+      message: string
+    }
+
+export interface RepoFileTreeTextFileReplaceRequest {
+  repoId: string
+  worktreePath: string
+  filePath: string
+  content: string
+}
+
 export interface RepoFileTransferCopiedEntry {
   sourcePath?: string
   destinationPath: string
@@ -184,6 +227,35 @@ export function isRepoFileMoveRequest(value: unknown): value is RepoFileMoveRequ
     isStringArray(value.paths) &&
     value.paths.length > 0 &&
     typeof value.targetDirPath === 'string'
+  )
+}
+
+export function isRepoFileTreeCreateFileRequest(value: unknown): value is RepoFileTreeCreateFileRequest {
+  return (
+    isRecord(value) &&
+    typeof value.repoId === 'string' &&
+    typeof value.worktreePath === 'string' &&
+    typeof value.parentDirPath === 'string' &&
+    typeof value.name === 'string'
+  )
+}
+
+export function isRepoFileTreeTextFileReadRequest(value: unknown): value is RepoFileTreeTextFileReadRequest {
+  return (
+    isRecord(value) &&
+    typeof value.repoId === 'string' &&
+    typeof value.worktreePath === 'string' &&
+    typeof value.filePath === 'string'
+  )
+}
+
+export function isRepoFileTreeTextFileReplaceRequest(value: unknown): value is RepoFileTreeTextFileReplaceRequest {
+  return (
+    isRecord(value) &&
+    typeof value.repoId === 'string' &&
+    typeof value.worktreePath === 'string' &&
+    typeof value.filePath === 'string' &&
+    typeof value.content === 'string'
   )
 }
 

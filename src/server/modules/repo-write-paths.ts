@@ -7,19 +7,24 @@ import { cloneRepository as cloneGitRepository } from '#/system/git/clone.ts'
 import { initRepository as gitInit } from '#/system/git/init.ts'
 import {
   createLocalFileTreeDirectory,
+  createLocalFileTreeFile,
   deleteLocalFileTreeEntries,
   moveLocalFileTreeEntries,
   renameLocalFileTreeEntry,
+  replaceLocalFileTreeTextFile,
 } from '#/system/file-tree/local.ts'
 import {
   createRemoteFileTreeDirectory,
+  createRemoteFileTreeFile,
   deleteRemoteFileTreeEntries,
   moveRemoteFileTreeEntries,
   renameRemoteFileTreeEntry,
+  replaceRemoteFileTreeTextFile,
 } from '#/system/ssh/git.ts'
 import { openInPreferredEditor } from '#/system/editors.ts'
 import { openInPreferredTerminal } from '#/system/terminals.ts'
 import { type ExecResult } from '#/shared/git-types.ts'
+import type { RepoFileTreeTextFileReplaceResult } from '#/shared/file-tree.ts'
 import { isRemoteRepoId, type NetworkOpKind } from '#/shared/rpc.ts'
 import { checkGitAvailable } from '#/system/git/helper.ts'
 import { isValidCwd, isValidRepoLocator } from '#/shared/input-validation.ts'
@@ -438,6 +443,36 @@ export async function createRepositoryFileTreeDirectory(
   const result = isRemoteRepoId(repoId)
     ? await createRemoteFileTreeDirectory(await resolveRemoteRepoTarget(repoId), worktreePath, parentDirPath, name, { signal })
     : await createLocalFileTreeDirectory(worktreePath, parentDirPath, name)
+  if (result.ok) publishRepoSnapshotInvalidation(repoId, sourceToken)
+  return result
+}
+
+export async function createRepositoryFileTreeFile(
+  repoId: string,
+  worktreePath: string,
+  parentDirPath: string,
+  name: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  const result = isRemoteRepoId(repoId)
+    ? await createRemoteFileTreeFile(await resolveRemoteRepoTarget(repoId), worktreePath, parentDirPath, name, { signal })
+    : await createLocalFileTreeFile(worktreePath, parentDirPath, name)
+  if (result.ok) publishRepoSnapshotInvalidation(repoId, sourceToken)
+  return result
+}
+
+export async function replaceRepositoryFileTreeTextFile(
+  repoId: string,
+  worktreePath: string,
+  filePath: string,
+  content: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<RepoFileTreeTextFileReplaceResult> {
+  const result = isRemoteRepoId(repoId)
+    ? await replaceRemoteFileTreeTextFile(await resolveRemoteRepoTarget(repoId), worktreePath, filePath, content, { signal })
+    : await replaceLocalFileTreeTextFile(worktreePath, filePath, content)
   if (result.ok) publishRepoSnapshotInvalidation(repoId, sourceToken)
   return result
 }

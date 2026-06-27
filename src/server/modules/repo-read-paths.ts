@@ -1,4 +1,4 @@
-import { runWithRepoBackend } from '#/server/modules/repo-backend.ts'
+import { resolveRemoteRepoTarget, runWithRepoBackend } from '#/server/modules/repo-backend.ts'
 import {
   getRepositoryFileTree as getRepositoryFileTreeRead,
   searchRepositoryFileTree as searchRepositoryFileTreeRead,
@@ -8,10 +8,12 @@ import {
   generateCommitMessageFromPatch,
   probeCommitMessageProviders,
 } from '#/system/commit-message-ai.ts'
+import { readLocalFileTreeTextFile } from '#/system/file-tree/local.ts'
+import { readRemoteFileTreeTextFile } from '#/system/ssh/git.ts'
 import { isCommitMessageProvider, type CommitMessageGenerationResult, type CommitMessageProviderAvailability } from '#/shared/commit-message-ai.ts'
-import type { RepoFileSearchResult, RepoFileTreeResult } from '#/shared/file-tree.ts'
+import type { RepoFileSearchResult, RepoFileTreeResult, RepoFileTreeTextFileReadResult } from '#/shared/file-tree.ts'
 import { type CommitDetail, type CommitHistoryEntry, type ExecResult, type PullRequestFetchMode, type WorktreeStatus } from '#/shared/git-types.ts'
-import type { ProbeResult, PullRequestEntry, RepoSnapshot } from '#/shared/rpc.ts'
+import { isRemoteRepoId, type ProbeResult, type PullRequestEntry, type RepoSnapshot } from '#/shared/rpc.ts'
 
 export async function probeRepository(cwd: string): Promise<ProbeResult> {
   return await runWithRepoBackend(cwd, async (backend) => await backend.probe())
@@ -117,4 +119,17 @@ export async function searchRepositoryFileTree(
   return signal?.aborted
     ? { ok: false, message: 'cancelled' }
     : await searchRepositoryFileTreeRead(repoId, worktreePath, query, limit, signal)
+}
+
+export async function readRepositoryFileTreeTextFile(
+  repoId: string,
+  worktreePath: string,
+  filePath: string,
+  signal?: AbortSignal,
+): Promise<RepoFileTreeTextFileReadResult> {
+  if (signal?.aborted) return { ok: false, message: 'cancelled' }
+  if (isRemoteRepoId(repoId)) {
+    return await readRemoteFileTreeTextFile(await resolveRemoteRepoTarget(repoId), worktreePath, filePath, { signal })
+  }
+  return await readLocalFileTreeTextFile(worktreePath, filePath)
 }

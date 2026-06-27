@@ -200,6 +200,42 @@ describe('BranchList worktree drag ordering', () => {
     expect(container?.textContent).not.toContain('/tmp/worktree-a')
   })
 
+  test('uses a change icon inside the dirty detached worktree badge', () => {
+    seedRepoState({
+      id: REPO_ID,
+      branchViewMode: 'all',
+      branches: [createRepoBranch('main', { worktree: { path: REPO_ID } })],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+      worktreesByPath: {
+        [REPO_ID]: {
+          path: REPO_ID,
+          branch: 'main',
+          isMain: true,
+          isDirty: false,
+        },
+        '/tmp/detached-worktree': {
+          path: '/tmp/detached-worktree',
+          head: '1234567890abcdef',
+          isDetached: true,
+          isMain: false,
+          isDirty: true,
+          changeCount: 3,
+        },
+      },
+    })
+
+    renderList()
+
+    const dirtyBadge = Array.from(document.body.querySelectorAll<HTMLElement>('[data-slot="badge"]')).find(
+      (node) => node.textContent === '有改动',
+    )
+    const badgeIcon = dirtyBadge?.querySelector('svg')
+
+    expect(badgeIcon?.classList.contains('lucide-git-compare-arrows')).toBe(true)
+    expect(badgeIcon?.classList.contains('lucide-folder-tree')).toBe(false)
+  })
+
   test('shows drag handles only in worktrees view without search', () => {
     seedWorktreeRepo('worktrees')
 
