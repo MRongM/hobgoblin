@@ -14,6 +14,7 @@ import {
   getRepositorySnapshot,
   getRepositoryStatus,
   probeRepository,
+  readRepositoryFileTreeTextFile,
 } from '#/server/modules/repo-read-paths.ts'
 import {
   abortCloneOperation,
@@ -24,6 +25,7 @@ import {
   commitRepositoryChanges,
   createRepositoryBranch,
   createRepositoryFileTreeDirectory,
+  createRepositoryFileTreeFile,
   createRepositoryWorktree,
   discardRepositoryChanges,
   deleteRepositoryFileTreeEntries,
@@ -39,6 +41,7 @@ import {
   pullRepositoryBranch,
   pushRepositoryBranch,
   renameRepositoryFileTreeEntry,
+  replaceRepositoryFileTreeTextFile,
   removeRepositoryWorktree,
   resetRepositoryHard,
   trackRepositoryRemoteBranch,
@@ -176,6 +179,49 @@ export function createRepoRoutes() {
         () => createRepositoryFileTreeDirectory(repoId, worktreePath, parentDirPath, name, c.req.raw.signal, sourceToken),
         { ok: false, message: 'error.failed-read-repo' },
         'file-tree-create-directory',
+      ),
+    )
+  })
+  app.post('/file-tree/create-file', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const parentDirPath = typeof body?.parentDirPath === 'string' ? body.parentDirPath : ''
+    const name = typeof body?.name === 'string' ? body.name : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => createRepositoryFileTreeFile(repoId, worktreePath, parentDirPath, name, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'file-tree-create-file',
+      ),
+    )
+  })
+  app.post('/file-tree/read-text-file', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const filePath = typeof body?.filePath === 'string' ? body.filePath : ''
+    return c.json(
+      await jsonOr(
+        () => readRepositoryFileTreeTextFile(repoId, worktreePath, filePath, c.req.raw.signal),
+        { ok: false, message: 'error.failed-read-repo' },
+        'file-tree-read-text-file',
+      ),
+    )
+  })
+  app.post('/file-tree/replace-text-file', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const filePath = typeof body?.filePath === 'string' ? body.filePath : ''
+    const content = typeof body?.content === 'string' ? body.content : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => replaceRepositoryFileTreeTextFile(repoId, worktreePath, filePath, content, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'file-tree-replace-text-file',
       ),
     )
   })

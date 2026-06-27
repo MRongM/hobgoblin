@@ -144,6 +144,40 @@ describe('BranchRow', () => {
     expect(document.body.textContent).toContain('有改动')
   })
 
+  test('uses a change icon inside the dirty worktree badge', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    repo.data.worktreesByPath['/tmp/worktree-a'] = {
+      path: '/tmp/worktree-a',
+      branch: 'feature/a',
+      isMain: false,
+      isDirty: true,
+      changeCount: 7,
+    }
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+    )
+
+    const dirtyBadge = Array.from(document.body.querySelectorAll<HTMLElement>('[data-slot="badge"]')).find(
+      (node) => node.textContent === '有改动',
+    )
+    const badgeIcon = dirtyBadge?.querySelector('svg')
+
+    expect(badgeIcon?.classList.contains('lucide-git-compare-arrows')).toBe(true)
+    expect(badgeIcon?.classList.contains('lucide-folder-tree')).toBe(false)
+  })
+
   test('keeps the generic dirty label even when exact counts are unavailable', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     repo.data.worktreesByPath['/tmp/worktree-a'] = {
@@ -197,6 +231,34 @@ describe('BranchRow', () => {
     expect(document.body.textContent).not.toContain(
       '/Users/test/Desktop/src/tries/2026-06-13-hobgoblin/hobgoblin-feat-optimize',
     )
+  })
+
+  test('centers the worktree icon beside the full two-line worktree summary', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+    )
+
+    const summary = document.querySelector<HTMLElement>('li > .pointer-events-none > [title*="feature/a"]')
+    const [iconColumn, textColumn] = Array.from(summary?.children ?? []) as HTMLElement[]
+
+    expect(summary?.className).toContain('grid-cols-[1rem_minmax(0,1fr)]')
+    expect(summary?.className).toContain('items-center')
+    expect(iconColumn?.querySelector('svg')?.classList.contains('lucide-folder-tree')).toBe(true)
+    expect(textColumn?.textContent).toContain('feature/a')
+    expect(textColumn?.textContent).toContain('worktree-a')
   })
 
   test('does not render the neutral worktree badge for clean linked worktree rows', () => {
@@ -522,6 +584,39 @@ describe('BranchRow', () => {
 
     const handle = document.querySelector('[aria-label="重新排序工作树"]')
     expect(handle?.getAttribute('aria-label')).toBe('重新排序工作树')
+  })
+
+  test('removes left content padding beside the drag handle', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+          dragHandle={{
+            label: '重新排序工作树',
+            ref: vi.fn(),
+            props: {},
+          }}
+        />
+      </ul>,
+    )
+
+    const content = Array.from(document.querySelectorAll<HTMLElement>('li > .pointer-events-none')).find((node) =>
+      node.textContent?.includes('feature/a'),
+    )
+
+    expect(content?.className).toContain('pr-4')
+    expect(content?.className).toContain('py-1')
+    expect(content?.className).not.toContain('px-4')
+    expect(content?.className).not.toContain('pl-4')
   })
 
   test('renders inline action panel below the branch row content', () => {

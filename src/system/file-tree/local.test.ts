@@ -5,12 +5,16 @@ import { tmpdir } from 'node:os'
 import { describe, expect, test } from 'vitest'
 import {
   createLocalFileTreeDirectory,
+  createLocalFileTreeFile,
   deleteLocalFileTreeEntries,
   listLocalFileTreeDirectory,
   moveLocalFileTreeEntries,
   pathInsideRoot,
+  readLocalFileTreeTextFile,
   renameLocalFileTreeEntry,
+  replaceLocalFileTreeTextFile,
 } from '#/system/file-tree/local.ts'
+import { FILE_TREE_TEXT_FILE_MAX_BYTES } from '#/shared/file-tree.ts'
 
 describe('pathInsideRoot', () => {
   test('accepts root and descendants', () => {
@@ -151,6 +155,121 @@ describe('createLocalFileTreeDirectory', () => {
       ok: false,
       message: 'error.file-exists',
     })
+  })
+})
+
+describe('createLocalFileTreeFile', () => {
+  test('creates one empty file inside an existing worktree directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goblin-file-tree-create-file-'))
+    const srcPath = join(root, 'src')
+    await mkdir(srcPath)
+
+    const result = await createLocalFileTreeFile(root, srcPath, 'index.ts')
+
+    expect(result).toEqual({ ok: true, message: '' })
+    await expect(readFile(join(srcPath, 'index.ts'), 'utf8')).resolves.toBe('')
+  })
+
+  test('rejects unsafe file basenames and destination overwrite', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goblin-file-tree-create-file-'))
+    await writeFile(join(root, 'existing.txt'), 'old')
+
+    await expect(createLocalFileTreeFile(root, root, '../escape.txt')).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+    await expect(createLocalFileTreeFile(root, root, 'nested/file.txt')).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+    await expect(createLocalFileTreeFile(root, root, 'existing.txt')).resolves.toEqual({
+      ok: false,
+      message: 'error.file-exists',
+    })
+  })
+})
+
+describe('readLocalFileTreeTextFile', () => {
+  test('reads a regular UTF-8 text file inside the worktree', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goblin-file-tree-read-text-'))
+    const filePath = join(root, 'README.md')
+    await writeFile(filePath, 'hello\n')
+
+    await expect(readLocalFileTreeTextFile(root, filePath)).resolves.toEqual({
+      ok: true,
+      content: 'hello\n',
+      byteLength: 6,
+    })
+  })
+
+  test('rejects directories, symlinks, binary content, invalid UTF-8, and oversized files', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goblin-file-tree-read-text-'))
+    const dirPath = join(root, 'src')
+    const targetPath = join(root, 'target.txt')
+    const linkPath = join(root, 'link.txt')
+    const binaryPath = join(root, 'binary.dat')
+    const invalidUtf8Path = join(root, 'invalid.txt')
+    const largePath = join(root, 'large.txt')
+    await mkdir(dirPath)
+    await writeFile(targetPath, 'target')
+    await symlink(targetPath, linkPath)
+    await writeFile(binaryPath, Buffer.from([65, 0, 66]))
+    await writeFile(invalidUtf8Path, Buffer.from([0xff, 0xfe]))
+    await writeFile(largePath, 'a'.repeat(FILE_TREE_TEXT_FILE_MAX_BYTES + 1))
+
+    await expect(readLocalFileTreeTextFile(root, dirPath)).resolves.toEqual({
+      ok: false,
+      message: 'error.file-tree-not-regular-file',
+    })
+    await expect(readLocalFileTreeTextFile(root, linkPath)).resolves.toEqual({
+      ok: false,
+      message: 'error.file-tree-not-regular-file',
+    })
+    await expect(readLocalFileTreeTextFile(root, binaryPath)).resolves.toEqual({
+      ok: false,
+      message: 'error.file-tree-binary-file',
+    })
+    await expect(readLocalFileTreeTextFile(root, invalidUtf8Path)).resolves.toEqual({
+      ok: false,
+      message: 'error.file-tree-binary-file',
+    })
+    await expect(readLocalFileTreeTextFile(root, largePath)).resolves.toEqual({
+      ok: false,
+      message: 'error.file-tree-text-file-too-large',
+    })
+  })
+})
+
+describe('replaceLocalFileTreeTextFile', () => {
+  test('replaces a regular UTF-8 text file and returns the previous content', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goblin-file-tree-replace-text-'))
+    const filePath = join(root, 'README.md')
+    await writeFile(filePath, 'old\n')
+
+    const result = await replaceLocalFileTreeTextFile(root, filePath, 'new\n')
+
+    expect(result).toEqual({
+      ok: true,
+      previousContent: 'old\n',
+      previousByteLength: 4,
+    })
+    await expect(readFile(filePath, 'utf8')).resolves.toBe('new\n')
+  })
+
+  test('rejects oversized or NUL-containing replacement content without writing', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goblin-file-tree-replace-text-'))
+    const filePath = join(root, 'README.md')
+    await writeFile(filePath, 'old')
+
+    await expect(replaceLocalFileTreeTextFile(root, filePath, 'a'.repeat(FILE_TREE_TEXT_FILE_MAX_BYTES + 1))).resolves.toEqual({
+      ok: false,
+      message: 'error.file-tree-text-file-too-large',
+    })
+    await expect(replaceLocalFileTreeTextFile(root, filePath, 'a\0b')).resolves.toEqual({
+      ok: false,
+      message: 'error.file-tree-binary-file',
+    })
+    await expect(readFile(filePath, 'utf8')).resolves.toBe('old')
   })
 })
 

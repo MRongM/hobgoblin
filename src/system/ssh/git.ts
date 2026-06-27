@@ -4,6 +4,8 @@ import {
   type RepoFileSearchResult,
   type RepoFileTreeEntry,
   type RepoFileTreeResult,
+  type RepoFileTreeTextFileReadResult,
+  type RepoFileTreeTextFileReplaceResult,
 } from '#/shared/file-tree.ts'
 import { parseBranches, parseCommitFileChanges, parseCommitHistory, parseLog, parseStatus, parseWorktrees } from '#/system/git/parsers.ts'
 import { markDefaultBranch, prioritizeDefaultBranch } from '#/system/git/branches.ts'
@@ -456,6 +458,63 @@ export async function createRemoteFileTreeDirectory(
   )
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
   return remoteFileTreeMutationResult(result)
+}
+
+export async function createRemoteFileTreeFile(
+  target: RemoteRepoTarget,
+  worktreePath: string,
+  parentDirPath: string,
+  name: string,
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<ExecResult> {
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const result = await run(
+    { type: 'createFileTreeFile', worktreePath, parentDirPath, name },
+    target,
+    { signal: options.signal },
+  )
+  if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
+  return remoteFileTreeMutationResult(result)
+}
+
+export async function readRemoteFileTreeTextFile(
+  target: RemoteRepoTarget,
+  worktreePath: string,
+  filePath: string,
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<RepoFileTreeTextFileReadResult> {
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const result = await run(
+    { type: 'readFileTreeTextFile', worktreePath, filePath },
+    target,
+    { signal: options.signal, timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS, maxBuffer: REMOTE_FILE_TRANSFER_MAX_BUFFER },
+  )
+  if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
+  if (!result.ok && !result.stdout) return { ok: false, message: remoteExecResult(result).message }
+  return parseRemoteTextFileReadResult(result.stdout)
+}
+
+export async function replaceRemoteFileTreeTextFile(
+  target: RemoteRepoTarget,
+  worktreePath: string,
+  filePath: string,
+  content: string,
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<RepoFileTreeTextFileReplaceResult> {
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const result = await run(
+    { type: 'replaceFileTreeTextFile', worktreePath, filePath },
+    target,
+    {
+      signal: options.signal,
+      timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS,
+      stdin: Buffer.from(content, 'utf8').toString('base64'),
+      maxBuffer: REMOTE_FILE_TRANSFER_MAX_BUFFER,
+    },
+  )
+  if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
+  if (!result.ok && !result.stdout) return { ok: false, message: remoteExecResult(result).message }
+  return parseRemoteTextFileReplaceResult(result.stdout)
 }
 
 export async function deleteRemoteFileTreeEntries(
@@ -1070,6 +1129,40 @@ function remoteFileTreeMutationResult(result: RemoteCommandResult): ExecResult {
   } catch {
     return { ok: false, message: 'error.failed-read-repo' }
   }
+}
+
+function parseRemoteTextFileReadResult(value: string): RepoFileTreeTextFileReadResult {
+  try {
+    const parsed = JSON.parse(value) as Partial<RepoFileTreeTextFileReadResult>
+    if (parsed.ok === true && typeof parsed.content === 'string' && typeof parsed.byteLength === 'number') {
+      return { ok: true, content: parsed.content, byteLength: parsed.byteLength }
+    }
+    if (parsed.ok === false && typeof parsed.message === 'string') return { ok: false, message: parsed.message }
+  } catch {
+    return { ok: false, message: 'error.failed-read-repo' }
+  }
+  return { ok: false, message: 'error.failed-read-repo' }
+}
+
+function parseRemoteTextFileReplaceResult(value: string): RepoFileTreeTextFileReplaceResult {
+  try {
+    const parsed = JSON.parse(value) as Partial<RepoFileTreeTextFileReplaceResult>
+    if (
+      parsed.ok === true &&
+      typeof parsed.previousContent === 'string' &&
+      typeof parsed.previousByteLength === 'number'
+    ) {
+      return {
+        ok: true,
+        previousContent: parsed.previousContent,
+        previousByteLength: parsed.previousByteLength,
+      }
+    }
+    if (parsed.ok === false && typeof parsed.message === 'string') return { ok: false, message: parsed.message }
+  } catch {
+    return { ok: false, message: 'error.failed-read-repo' }
+  }
+  return { ok: false, message: 'error.failed-read-repo' }
 }
 
 function parseRemoteTransferInventory(output: string): RemoteTransferInventoryResult {

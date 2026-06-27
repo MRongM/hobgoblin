@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  createRepositoryFileTreeFile: vi.fn(),
   discardRepositoryChanges: vi.fn(),
   getRepositoryCommitDetail: vi.fn(),
   getRepositoryHistory: vi.fn(),
+  readRepositoryFileTreeTextFile: vi.fn(),
+  replaceRepositoryFileTreeTextFile: vi.fn(),
   searchRepositoryFileTree: vi.fn(),
   exportRepositoryFilesToLocalDirectory: vi.fn(),
 }))
@@ -19,6 +22,7 @@ vi.mock('#/server/modules/repo-read-paths.ts', () => ({
   getRepositorySnapshot: vi.fn(),
   getRepositoryStatus: vi.fn(),
   probeRepository: vi.fn(),
+  readRepositoryFileTreeTextFile: mocks.readRepositoryFileTreeTextFile,
   searchRepositoryFileTree: mocks.searchRepositoryFileTree,
 }))
 
@@ -30,6 +34,7 @@ vi.mock('#/server/modules/repo-write-paths.ts', () => ({
   cloneRepository: vi.fn(),
   commitRepositoryChanges: vi.fn(),
   createRepositoryBranch: vi.fn(),
+  createRepositoryFileTreeFile: mocks.createRepositoryFileTreeFile,
   createRepositoryWorktree: vi.fn(),
   deleteRepositoryBranch: vi.fn(),
   deleteRepositoryFileTreeEntries: vi.fn(),
@@ -44,6 +49,7 @@ vi.mock('#/server/modules/repo-write-paths.ts', () => ({
   pullRepositoryBranch: vi.fn(),
   pushRepositoryBranch: vi.fn(),
   renameRepositoryFileTreeEntry: vi.fn(),
+  replaceRepositoryFileTreeTextFile: mocks.replaceRepositoryFileTreeTextFile,
   removeRepositoryWorktree: vi.fn(),
   resetRepositoryHard: vi.fn(),
   trackRepositoryRemoteBranch: vi.fn(),
@@ -89,6 +95,13 @@ describe('repo routes', () => {
       files: [],
     })
     mocks.discardRepositoryChanges.mockResolvedValue({ ok: true, message: '' })
+    mocks.createRepositoryFileTreeFile.mockResolvedValue({ ok: true, message: '' })
+    mocks.readRepositoryFileTreeTextFile.mockResolvedValue({ ok: true, content: 'hello\n', byteLength: 6 })
+    mocks.replaceRepositoryFileTreeTextFile.mockResolvedValue({
+      ok: true,
+      previousContent: 'old\n',
+      previousByteLength: 4,
+    })
     mocks.searchRepositoryFileTree.mockResolvedValue({
       ok: true,
       matches: [{ relativePath: 'src/Button.tsx', kind: 'file' }],
@@ -229,5 +242,69 @@ describe('repo routes', () => {
       limit: 20,
     })
     expect(mocks.searchRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', 'button', 200, expect.any(AbortSignal))
+  })
+
+  test('routes file tree create file with parsed body values', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/file-tree/create-file', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ repoId: '/repo', worktreePath: '/repo', parentDirPath: '/repo/src', name: 'index.ts' }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true, message: '' })
+    expect(mocks.createRepositoryFileTreeFile).toHaveBeenCalledWith(
+      '/repo',
+      '/repo',
+      '/repo/src',
+      'index.ts',
+      expect.any(AbortSignal),
+      undefined,
+    )
+  })
+
+  test('routes file tree text file read with parsed body values', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/file-tree/read-text-file', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ repoId: '/repo', worktreePath: '/repo', filePath: '/repo/README.md' }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true, content: 'hello\n', byteLength: 6 })
+    expect(mocks.readRepositoryFileTreeTextFile).toHaveBeenCalledWith(
+      '/repo',
+      '/repo',
+      '/repo/README.md',
+      expect.any(AbortSignal),
+    )
+  })
+
+  test('routes file tree text file replace with parsed body values', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/file-tree/replace-text-file', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ repoId: '/repo', worktreePath: '/repo', filePath: '/repo/README.md', content: 'new\n' }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true, previousContent: 'old\n', previousByteLength: 4 })
+    expect(mocks.replaceRepositoryFileTreeTextFile).toHaveBeenCalledWith(
+      '/repo',
+      '/repo',
+      '/repo/README.md',
+      'new\n',
+      expect.any(AbortSignal),
+      undefined,
+    )
   })
 })

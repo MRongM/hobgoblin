@@ -106,6 +106,51 @@ describe('remote command scripts', () => {
     expect(invocation.args).toContain(TARGET.alias)
   })
 
+  test('builds a fixed remote create file command with JSON encoded inputs', () => {
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'createFileTreeFile',
+      worktreePath: '/srv/repo',
+      parentDirPath: "/srv/repo/src with 'quote'",
+      name: 'index.ts',
+    })
+
+    expect(invocation.script).toContain('python3')
+    expect(invocation.script).toContain('open(target, "xb")')
+    expect(invocation.script).toContain('src with')
+    expect(invocation.script).toContain('index.ts')
+    expect(invocation.args).toContain(TARGET.alias)
+  })
+
+  test('builds a fixed remote text file read command', () => {
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'readFileTreeTextFile',
+      worktreePath: '/srv/repo',
+      filePath: "/srv/repo/README 'quoted'.md",
+    })
+
+    expect(invocation.script).toContain('python3')
+    expect(invocation.script).toContain('read_text_file')
+    expect(invocation.script).toContain('FILE_TREE_TEXT_FILE_MAX_BYTES')
+    expect(invocation.script).toContain("README 'quoted'.md")
+    expect(invocation.args).toContain(TARGET.alias)
+  })
+
+  test('builds a fixed remote text file replace command that reads content from stdin', () => {
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'replaceFileTreeTextFile',
+      worktreePath: '/srv/repo',
+      filePath: '/srv/repo/README.md',
+    })
+
+    expect(invocation.script).toContain('python3')
+    expect(invocation.script).toContain('python3 -c')
+    expect(invocation.script).not.toContain("<<'PY'")
+    expect(invocation.script).toContain('sys.stdin.buffer.read')
+    expect(invocation.script).toContain('base64.b64decode')
+    expect(invocation.script).toContain('/srv/repo/README.md')
+    expect(invocation.args).toContain(TARGET.alias)
+  })
+
   test('builds quoted remote file inventory command', () => {
     const invocation = buildRemoteCommandInvocation(TARGET, {
       type: 'fileTransferInventory',

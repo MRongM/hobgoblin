@@ -104,7 +104,12 @@ export function BranchRow({
           </button>
         </div>
       )}
-      <div className="pointer-events-none relative z-10 flex min-w-0 items-center px-4 py-1">
+      <div
+        className={cn(
+          'pointer-events-none relative z-10 flex min-w-0 items-center py-1',
+          dragHandle ? 'pr-4' : 'px-4',
+        )}
+      >
         <BranchSummaryInline repo={repo} branch={branch} selected={isSelected} />
       </div>
       {showActions && (

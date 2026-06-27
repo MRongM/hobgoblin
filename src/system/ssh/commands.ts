@@ -4,6 +4,7 @@ import {
   FILE_TRANSFER_MAX_FILE_BYTES,
   FILE_TRANSFER_MAX_TOTAL_BYTES,
   FILE_TREE_MAX_ENTRIES,
+  FILE_TREE_TEXT_FILE_MAX_BYTES,
 } from '#/shared/file-tree.ts'
 import { FIELD_SEP } from '#/system/git/parsers.ts'
 import { buildManagedRemoteTerminalInvocation } from '#/system/remote-terminal.ts'
@@ -25,6 +26,9 @@ export type RemoteCommandKind =
   | { type: 'listDirectoryEntries'; worktreePath: string; dirPath: string }
   | { type: 'searchFileTree'; worktreePath: string; query: string; limit: number }
   | { type: 'createFileTreeDirectory'; worktreePath: string; parentDirPath: string; name: string }
+  | { type: 'createFileTreeFile'; worktreePath: string; parentDirPath: string; name: string }
+  | { type: 'readFileTreeTextFile'; worktreePath: string; filePath: string }
+  | { type: 'replaceFileTreeTextFile'; worktreePath: string; filePath: string }
   | { type: 'renameFileTreeEntry'; worktreePath: string; oldPath: string; newName: string }
   | { type: 'deleteFileTreeEntries'; worktreePath: string; paths: string[] }
   | { type: 'moveFileTreeEntries'; worktreePath: string; paths: string[]; targetDirPath: string }
@@ -245,6 +249,12 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return remoteRenameFileTreeScript(command)
     case 'createFileTreeDirectory':
       return remoteCreateFileTreeDirectoryScript(command)
+    case 'createFileTreeFile':
+      return remoteCreateFileTreeFileScript(command)
+    case 'readFileTreeTextFile':
+      return remoteReadFileTreeTextFileScript(command)
+    case 'replaceFileTreeTextFile':
+      return remoteReplaceFileTreeTextFileScript(command)
     case 'deleteFileTreeEntries':
       return remoteDeleteFileTreeScript(command)
     case 'moveFileTreeEntries':
@@ -555,6 +565,133 @@ function remoteCreateFileTreeDirectoryScript(command: Extract<RemoteCommandKind,
     '    finish(False, "error.failed-read-repo")',
     'PY',
   ].join('\n')
+}
+
+function remoteCreateFileTreeFileScript(command: Extract<RemoteCommandKind, { type: 'createFileTreeFile' }>): string {
+  return [
+    "python3 - <<'PY'",
+    ...remoteFileTreePreamble(command.worktreePath),
+    `parent_dir = ${pythonString(command.parentDirPath)}`,
+    `name = ${pythonString(command.name)}`,
+    'if not isinstance(parent_dir, str) or not parent_dir or "\\x00" in parent_dir:',
+    '    finish(False, "error.invalid-arguments")',
+    'parent_dir = os.path.normpath(parent_dir)',
+    'if not os.path.isabs(parent_dir):',
+    '    finish(False, "error.invalid-arguments")',
+    'if not inside_root(parent_dir):',
+    '    finish(False, "error.invalid-path")',
+    'if not os.path.isdir(parent_dir):',
+    '    finish(False, "error.path-not-directory")',
+    'if not isinstance(name, str) or not name or name in (".", "..") or "/" in name or "\\x00" in name:',
+    '    finish(False, "error.invalid-arguments")',
+    'target = os.path.normpath(os.path.join(parent_dir, name))',
+    'if not inside_root(target):',
+    '    finish(False, "error.invalid-path")',
+    'try:',
+    '    handle = open(target, "xb")',
+    '    handle.close()',
+    '    finish(True)',
+    'except FileExistsError:',
+    '    finish(False, "error.file-exists")',
+    'except FileNotFoundError:',
+    '    finish(False, "error.path-not-found")',
+    'except PermissionError:',
+    '    finish(False, "error.path-permission-denied")',
+    'except OSError:',
+    '    finish(False, "error.failed-read-repo")',
+    'PY',
+  ].join('\n')
+}
+
+function remoteTextFilePreamble(worktreePath: string): string[] {
+  return [
+    '# FILE_TREE_TEXT_FILE_MAX_BYTES',
+    'import base64, json, os, stat, sys',
+    `root = ${pythonString(worktreePath)}`,
+    `max_bytes = ${FILE_TREE_TEXT_FILE_MAX_BYTES}`,
+    'root_real = os.path.normpath(root)',
+    'def finish(payload):',
+    '    print(json.dumps(payload, ensure_ascii=False))',
+    '    sys.exit(0)',
+    'def fail(message):',
+    '    finish({"ok": False, "message": message})',
+    'def inside_root(value):',
+    '    candidate = os.path.normpath(value)',
+    "    return candidate == root_real or candidate.startswith(root_real.rstrip('/') + '/')",
+    'def checked_file_path(value):',
+    '    if not isinstance(value, str) or not value or "\\x00" in value:',
+    '        fail("error.invalid-arguments")',
+    '    candidate = os.path.normpath(value)',
+    '    if not os.path.isabs(candidate):',
+    '        fail("error.invalid-arguments")',
+    '    if not inside_root(candidate):',
+    '        fail("error.invalid-path")',
+    '    return candidate',
+    'def decode_text(raw):',
+    '    if len(raw) > max_bytes:',
+    '        fail("error.file-tree-text-file-too-large")',
+    '    try:',
+    '        content = raw.decode("utf-8", "strict")',
+    '    except UnicodeDecodeError:',
+    '        fail("error.file-tree-binary-file")',
+    '    if "\\x00" in content:',
+    '        fail("error.file-tree-binary-file")',
+    '    return content',
+    'def read_text_file(path_value):',
+    '    try:',
+    '        info = os.lstat(path_value)',
+    '    except FileNotFoundError:',
+    '        fail("error.path-not-found")',
+    '    except PermissionError:',
+    '        fail("error.path-permission-denied")',
+    '    if not stat.S_ISREG(info.st_mode):',
+    '        fail("error.file-tree-not-regular-file")',
+    '    if info.st_size > max_bytes:',
+    '        fail("error.file-tree-text-file-too-large")',
+    '    try:',
+    '        with open(path_value, "rb") as handle:',
+    '            raw = handle.read(max_bytes + 1)',
+    '    except PermissionError:',
+    '        fail("error.path-permission-denied")',
+    '    except OSError:',
+    '        fail("error.failed-read-repo")',
+    '    content = decode_text(raw)',
+    '    return content, len(raw)',
+  ]
+}
+
+function remoteReadFileTreeTextFileScript(command: Extract<RemoteCommandKind, { type: 'readFileTreeTextFile' }>): string {
+  return [
+    "python3 - <<'PY'",
+    ...remoteTextFilePreamble(command.worktreePath),
+    `file_path = checked_file_path(${pythonString(command.filePath)})`,
+    'content, byte_length = read_text_file(file_path)',
+    'finish({"ok": True, "content": content, "byteLength": byte_length})',
+    'PY',
+  ].join('\n')
+}
+
+function remoteReplaceFileTreeTextFileScript(command: Extract<RemoteCommandKind, { type: 'replaceFileTreeTextFile' }>): string {
+  const script = [
+    ...remoteTextFilePreamble(command.worktreePath),
+    `file_path = checked_file_path(${pythonString(command.filePath)})`,
+    'stdin_raw = sys.stdin.buffer.read()',
+    'try:',
+    '    next_raw = base64.b64decode(stdin_raw, validate=True)',
+    'except Exception:',
+    '    fail("error.invalid-arguments")',
+    'next_content = decode_text(next_raw)',
+    'previous_content, previous_byte_length = read_text_file(file_path)',
+    'try:',
+    '    with open(file_path, "wb") as handle:',
+    '        handle.write(next_raw)',
+    'except PermissionError:',
+    '    fail("error.path-permission-denied")',
+    'except OSError:',
+    '    fail("error.failed-read-repo")',
+    'finish({"ok": True, "previousContent": previous_content, "previousByteLength": previous_byte_length})',
+  ].join('\n')
+  return `python3 -c ${shellQuote(script)}`
 }
 
 function remoteDeleteFileTreeScript(command: Extract<RemoteCommandKind, { type: 'deleteFileTreeEntries' }>): string {

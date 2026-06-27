@@ -4,6 +4,7 @@ import {
   commitRemoteChanges,
   createRemoteBranch,
   createRemoteFileTreeDirectory,
+  createRemoteFileTreeFile,
   createRemoteTrackingBranch,
   createRemoteWorktree,
   deleteRemoteBranch,
@@ -21,9 +22,11 @@ import {
   fetchRemoteRepository,
   pushRemoteBranch,
   readRemoteFileBase64,
+  readRemoteFileTreeTextFile,
   resetRemoteHard,
   remoteExecResult,
   renameRemoteFileTreeEntry,
+  replaceRemoteFileTreeTextFile,
   removeRemoteWorktree,
   searchRemoteFileTree,
   writeRemoteFileBase64,
@@ -326,6 +329,71 @@ describe('remote git helpers', () => {
       },
       TARGET,
       { signal: undefined },
+    )
+  })
+
+  test('createRemoteFileTreeFile returns parsed success and passes fixed command input', async () => {
+    const run = vi.fn(async () => ({ ok: true, stdout: '{"ok":true,"message":""}', stderr: '' }))
+
+    const result = await createRemoteFileTreeFile(TARGET, '/srv/repo', '/srv/repo/src', 'index.ts', {
+      run: run as any,
+    })
+
+    expect(result).toEqual({ ok: true, message: '' })
+    expect(run).toHaveBeenCalledWith(
+      {
+        type: 'createFileTreeFile',
+        worktreePath: '/srv/repo',
+        parentDirPath: '/srv/repo/src',
+        name: 'index.ts',
+      },
+      TARGET,
+      { signal: undefined },
+    )
+  })
+
+  test('readRemoteFileTreeTextFile parses remote JSON text content', async () => {
+    const run = vi.fn(async () => ({
+      ok: true,
+      stdout: JSON.stringify({ ok: true, content: 'hello\n', byteLength: 6 }),
+      stderr: '',
+    }))
+
+    await expect(readRemoteFileTreeTextFile(TARGET, '/srv/repo', '/srv/repo/README.md', { run: run as any })).resolves.toEqual({
+      ok: true,
+      content: 'hello\n',
+      byteLength: 6,
+    })
+    expect(run).toHaveBeenCalledWith(
+      { type: 'readFileTreeTextFile', worktreePath: '/srv/repo', filePath: '/srv/repo/README.md' },
+      TARGET,
+      { signal: undefined, timeoutMs: 90_000, maxBuffer: expect.any(Number) },
+    )
+  })
+
+  test('replaceRemoteFileTreeTextFile sends replacement content through stdin and returns previous content', async () => {
+    const run = vi.fn(async () => ({
+      ok: true,
+      stdout: JSON.stringify({ ok: true, previousContent: 'old\n', previousByteLength: 4 }),
+      stderr: '',
+    }))
+
+    await expect(
+      replaceRemoteFileTreeTextFile(TARGET, '/srv/repo', '/srv/repo/README.md', 'new\n', { run: run as any }),
+    ).resolves.toEqual({
+      ok: true,
+      previousContent: 'old\n',
+      previousByteLength: 4,
+    })
+    expect(run).toHaveBeenCalledWith(
+      { type: 'replaceFileTreeTextFile', worktreePath: '/srv/repo', filePath: '/srv/repo/README.md' },
+      TARGET,
+      {
+        signal: undefined,
+        timeoutMs: 90_000,
+        stdin: Buffer.from('new\n', 'utf8').toString('base64'),
+        maxBuffer: expect.any(Number),
+      },
     )
   })
 
