@@ -21,6 +21,10 @@ Hobgoblin = 多项目 x 多 worktree / 多分支 x 多终端
 
 这就是 Hobgoblin 的目标工作流：每个项目、worktree、分支、终端和 AI CLI 会话，都保持在同一个可理解 Git 状态的工作区里。
 
+## 起源
+
+Hobgoblin 起源于 [Goblin](https://nano-props.github.io/goblin/)。Goblin 是一个小而美的 macOS 桌面项目，专注于一眼看清多个仓库里的 Git 分支和 worktree。如果你想体验最初那个轻量的分支/worktree 纵览，Goblin 仍然值得一看；Hobgoblin 则在这个想法之上扩展出 AI CLI 会话、多终端、server mode 和更完整的仓库工作流。
+
 ## 产品特点
 
 - **面向 AI CLI 的工作流：** 把代码代理、Shell 任务和 Git 状态放在同一个工作上下文里，而不是散落在互不相关的终端窗口中。

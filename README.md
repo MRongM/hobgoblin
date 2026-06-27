@@ -21,6 +21,10 @@ Hobgoblin = multi-project x multi-worktree / multi-branch x multi-terminal
 
 This is the intended workflow: every project, worktree, branch, terminal, and AI CLI session stays connected to the same Git-aware workspace.
 
+## Origins
+
+Hobgoblin started from [Goblin](https://nano-props.github.io/goblin/), a small, focused macOS desktop app for seeing Git branches and worktrees across repositories at a glance. If you want the original lightweight branch/worktree overview, Goblin is still worth a look; Hobgoblin extends that idea into a broader workspace for AI CLI sessions, multiple terminals, server mode, and richer repository workflows.
+
 ## Product Features
 
 - **AI CLI-ready workflow:** Keep coding agents, shell tasks, and Git state together instead of scattering them across unrelated terminal windows.
