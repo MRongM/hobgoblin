@@ -186,6 +186,10 @@ export class TerminalSessionState {
     this.replayBufferState.replayPendingOutput = []
   }
 
+  isReplaying(): boolean {
+    return this.replayBufferState.replayBoundarySeq !== null
+  }
+
   captureReplayOutput(event: TerminalOutputEvent): boolean {
     if (this.replayBufferState.replayBoundarySeq === null) return false
     this.replayBufferState.replayPendingOutput.push(event)

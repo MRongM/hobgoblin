@@ -197,6 +197,10 @@ export class TerminalSessionRuntime {
     return events
   }
 
+  isReplaying(): boolean {
+    return this.state.isReplaying()
+  }
+
   acknowledgeResize(cols: number, rows: number): void {
     this.state.setCanonicalSize(cols, rows)
   }

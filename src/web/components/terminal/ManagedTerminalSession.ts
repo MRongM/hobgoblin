@@ -70,6 +70,7 @@ export class ManagedTerminalSession {
       onSearchResult: (event) => this.updateSearchResult(event),
       onProgress: (state, value) => this.updateProgress(state, value),
       onOpenExternalLink: (uri) => this.openExternalLink(uri),
+      onRenderRecoveryRequest: () => this.recoverActiveView(),
     }, { fontSize, terminalThemeMode })
   }
 
@@ -135,7 +136,7 @@ export class ManagedTerminalSession {
   }
 
   writeInput(input: string | TerminalInput): void {
-    if (typeof input !== 'string' && input.origin === 'terminal-emulator') return
+    if (typeof input !== 'string' && input.origin === 'terminal-emulator' && this.runtime.isReplaying()) return
     const data = typeof input === 'string' ? input : input.data
     const sessionId = this.runtime.currentSessionId()
     if (!sessionId) return
@@ -192,6 +193,10 @@ export class ManagedTerminalSession {
 
   scrollLines(amount: number): void {
     this.view.scrollLines(amount)
+  }
+
+  redraw(): void {
+    this.view.redraw()
   }
 
   serialize(): string {
@@ -449,7 +454,7 @@ export class ManagedTerminalSession {
     this.runtime.beginReplay(replaySeq)
     try {
       if (replayTruncated) term.reset()
-      if (replay) await termWrite(term, replay)
+      if (replay) await this.writeOutputToView(replay)
     } finally {
       if (this.currentStart(token, term)) {
         for (const event of this.runtime.finishReplay()) this.queueOutput(event.data)
@@ -463,7 +468,7 @@ export class ManagedTerminalSession {
     this.runtime.beginReplay(hydratedSnapshot.snapshotSeq)
     try {
       term.reset()
-      if (hydratedSnapshot.snapshot) await termWrite(term, hydratedSnapshot.snapshot)
+      if (hydratedSnapshot.snapshot) await this.writeOutputToView(hydratedSnapshot.snapshot)
       return this.currentStart(token, term)
     } finally {
       if (this.currentStart(token, term)) this.runtime.finishReplay()
@@ -475,7 +480,7 @@ export class ManagedTerminalSession {
     const hydratedSnapshot = this.hydratedSnapshot
     if (!term) return
     term.reset()
-    if (hydratedSnapshot?.snapshot) term.write(hydratedSnapshot.snapshot)
+    if (hydratedSnapshot?.snapshot) this.view.writeOutput(hydratedSnapshot.snapshot)
   }
 
   private queueResize(cols: number, rows: number): void {
@@ -541,7 +546,21 @@ export class ManagedTerminalSession {
     if (!this.pendingOutput.length) return
     const output = this.pendingOutput.join('')
     this.pendingOutput = []
-    this.view.currentTerminal()?.write(output)
+    this.view.writeOutput(output)
+  }
+
+  private writeOutputToView(data: string): Promise<void> {
+    return new Promise((resolve) => {
+      this.view.writeOutput(data, resolve)
+    })
+  }
+
+  private recoverActiveView(): void {
+    if (this.disposed) return
+    if (!this.runtime.currentSessionId()) return
+    if (!this.view.isConnected()) return
+    this.destroyActiveView({ preserveTransientState: true })
+    this.start()
   }
 
   private destroyActiveView(options?: { preserveTransientState?: boolean }): void {
@@ -622,12 +641,6 @@ export class ManagedTerminalSession {
 
 function waitForTerminalLayout(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
-}
-
-function termWrite(term: XTermTerminal, data: string): Promise<void> {
-  return new Promise((resolve) => {
-    term.write(data, resolve)
-  })
 }
 
 function cancelScheduledAnimationFrame(frame: number): void {
