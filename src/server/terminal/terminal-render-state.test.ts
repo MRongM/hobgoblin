@@ -5,6 +5,7 @@ import {
   createEmptyTerminalRenderState,
   createTerminalRenderModel,
   queueTerminalRenderWrite,
+  snapshotTerminalRenderState,
 } from '#/server/terminal/terminal-render-state.ts'
 
 describe('terminal-render-state', () => {
@@ -37,6 +38,26 @@ describe('terminal-render-state', () => {
         )
         expect(buffer.ybase).toBeGreaterThan(0)
         expect(lines).toEqual(expect.arrayContaining(['old-1', 'old-2', 'old-3', 'old-4', 'new-1', 'new-2']))
+      } finally {
+        state.model.term.dispose()
+      }
+    })
+
+    test('serializes the normal buffer while alternate screen is active', async () => {
+      const state = createEmptyTerminalRenderState()
+      state.model = createTerminalRenderModel(40, 6)
+      try {
+        appendTerminalReplayData(state, 'chat-1\r\nchat-2\r\n')
+        queueTerminalRenderWrite(state, 'chat-1\r\nchat-2\r\n')
+        appendTerminalReplayData(state, '\x1b[?1049hresume menu\r\nold session')
+        queueTerminalRenderWrite(state, '\x1b[?1049hresume menu\r\nold session')
+        const snapshot = await snapshotTerminalRenderState('term_1234567890123456', state)
+
+        expect(snapshot?.snapshot).toContain('chat-1')
+        expect(snapshot?.snapshot).toContain('chat-2')
+        expect(snapshot?.snapshot).not.toContain('\x1b[?1049h')
+        expect(snapshot?.snapshot).not.toContain('resume menu')
+        expect(snapshot?.snapshotSeq).toBe(2)
       } finally {
         state.model.term.dispose()
       }

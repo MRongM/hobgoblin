@@ -66,14 +66,26 @@ const xtermMocks = vi.hoisted(() => {
       mouseTrackingMode: false,
     }
     refresh = vi.fn()
+    clearTextureAtlas = vi.fn()
     write = vi.fn((_data: string, callback?: () => void) => {
       if (callback) queueMicrotask(callback)
     })
     reset = vi.fn()
     scrollToBottom = vi.fn()
+    scrollLines = vi.fn((amount: number) => {
+      const active = this.buffer.active
+      active.viewportY = Math.max(0, Math.min(active.baseY, active.viewportY + amount))
+      this.dispatchViewportScroll()
+    })
+    scrollToLine = vi.fn((line: number) => {
+      const active = this.buffer.active
+      active.viewportY = Math.max(0, Math.min(active.baseY, line))
+      this.dispatchViewportScroll()
+    })
     dispose = vi.fn()
     focus = vi.fn(() => this.textarea?.focus())
     customKeyEventHandler: ((event: KeyboardEvent) => boolean) | null = null
+    viewportElement: HTMLDivElement | null = null
     bufferLines: string[] = []
     linkProviders: Array<{ provideLinks: (line: number, cb: (links: unknown[] | undefined) => void) => void }> = []
     buffer = {
@@ -98,6 +110,7 @@ const xtermMocks = vi.hoisted(() => {
     private dataHandlers: Array<(data: string) => void> = []
     private binaryHandlers: Array<(data: string) => void> = []
     private bellHandlers: Array<() => void> = []
+    private scrollHandlers: Array<(position: number) => void> = []
     private titleHandlers: Array<(title: string) => void> = []
 
     constructor(options: {
@@ -153,8 +166,10 @@ const xtermMocks = vi.hoisted(() => {
     open(host: HTMLElement) {
       this.element = document.createElement('div')
       this.element.className = 'xterm'
+      this.viewportElement = document.createElement('div')
+      this.viewportElement.className = 'xterm-viewport'
       this.textarea = document.createElement('textarea')
-      this.element.appendChild(this.textarea)
+      this.element.append(this.viewportElement, this.textarea)
       host.appendChild(this.element)
     }
 
@@ -176,6 +191,11 @@ const xtermMocks = vi.hoisted(() => {
     onBell(cb: () => void) {
       this.bellHandlers.push(cb)
       return { dispose: vi.fn(() => (this.bellHandlers = this.bellHandlers.filter((handler) => handler !== cb))) }
+    }
+
+    onScroll(cb: (position: number) => void) {
+      this.scrollHandlers.push(cb)
+      return { dispose: vi.fn(() => (this.scrollHandlers = this.scrollHandlers.filter((handler) => handler !== cb))) }
     }
 
     onTitleChange(cb: (title: string) => void) {
@@ -203,6 +223,27 @@ const xtermMocks = vi.hoisted(() => {
 
     emitTitleChange(title: string) {
       for (const handler of this.titleHandlers) handler(title)
+    }
+
+    emitViewportScroll(viewportY: number) {
+      const active = this.buffer.active
+      active.viewportY = Math.max(0, Math.min(active.baseY, viewportY))
+      this.dispatchViewportScroll()
+      this.dispatchTerminalScroll()
+    }
+
+    emitTerminalScroll(viewportY: number) {
+      const active = this.buffer.active
+      active.viewportY = Math.max(0, Math.min(active.baseY, viewportY))
+      this.dispatchTerminalScroll()
+    }
+
+    private dispatchViewportScroll() {
+      this.viewportElement?.dispatchEvent(new Event('scroll'))
+    }
+
+    private dispatchTerminalScroll() {
+      for (const handler of this.scrollHandlers) handler(this.buffer.active.viewportY)
     }
   }
 
@@ -373,6 +414,7 @@ vi.mock('@xterm/addon-web-links', () => ({ WebLinksAddon: xtermMocks.MockWebLink
 class MockResizeObserver {
   static instances: MockResizeObserver[] = []
   observe = vi.fn()
+  unobserve = vi.fn()
   disconnect = vi.fn()
 
   readonly cb: ResizeObserverCallback
@@ -697,6 +739,105 @@ describe('ManagedTerminalSession', () => {
     expect(term.scrollToBottom).toHaveBeenCalledTimes(1)
   })
 
+  test('refreshes visible rows after resize refit while preserving scrolled history', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    const fitAddon = xtermMocks.fitAddons[0]!
+    const observer = MockResizeObserver.instances.at(-1)!
+
+    term.buffer.active.baseY = 80
+    term.buffer.active.viewportY = 24
+    fitAddon.proposeDimensions.mockReturnValue({ cols: 100, rows: 28 })
+    fitAddon.fit.mockImplementationOnce(() => term.resize(100, 28))
+    fitAddon.fit.mockClear()
+    term.refresh.mockClear()
+    term.scrollToBottom.mockClear()
+
+    observer.cb([], observer)
+    await flushResizeDebounce()
+
+    expect(fitAddon.fit).toHaveBeenCalledTimes(1)
+    expect(term.refresh).toHaveBeenCalledWith(0, term.rows - 1)
+    expect(term.scrollToBottom).not.toHaveBeenCalled()
+  })
+
+  test('refreshes visible rows when the user scrolls rendered terminal history', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.buffer.active.baseY = 200
+    term.buffer.active.viewportY = 200
+    term.refresh.mockClear()
+    term.scrollToBottom.mockClear()
+
+    term.emitViewportScroll(64)
+    await flushTerminalStart()
+
+    expect(term.refresh).toHaveBeenCalledWith(0, term.rows - 1)
+    expect(term.scrollToBottom).not.toHaveBeenCalled()
+    expect(term.buffer.active.viewportY).toBe(64)
+  })
+
+  test('coalesces rapid terminal viewport scroll repaint into one animation frame', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.buffer.active.baseY = 200
+    term.refresh.mockClear()
+
+    term.emitViewportScroll(150)
+    term.emitViewportScroll(120)
+    term.emitViewportScroll(90)
+    await flushTerminalStart()
+
+    expect(term.refresh).toHaveBeenCalledTimes(1)
+    expect(term.refresh).toHaveBeenCalledWith(0, term.rows - 1)
+    expect(term.buffer.active.viewportY).toBe(90)
+  })
+
+  test('refreshes visible rows from xterm scroll events even without DOM viewport scroll', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.buffer.active.baseY = 200
+    term.buffer.active.viewportY = 200
+    term.refresh.mockClear()
+    term.scrollToBottom.mockClear()
+
+    term.emitTerminalScroll(64)
+    await flushTerminalStart()
+
+    expect(term.refresh).toHaveBeenCalledWith(0, term.rows - 1)
+    expect(term.scrollToBottom).not.toHaveBeenCalled()
+    expect(term.buffer.active.viewportY).toBe(64)
+  })
+
   test('updates xterm font size and refits the terminal', async () => {
     const host = document.createElement('div')
     document.body.appendChild(host)
@@ -776,6 +917,28 @@ describe('ManagedTerminalSession', () => {
     session.clearSearch()
     expect(xtermMocks.searchAddons[0]!.clearDecorations).toHaveBeenCalled()
     expect(session.snapshot().search).toBeUndefined()
+  })
+
+  test('redraw clears renderer cache and refreshes visible rows', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.clearTextureAtlas.mockClear()
+    term._core._renderService.clear.mockClear()
+    term.refresh.mockClear()
+
+    session.redraw()
+
+    expect(term.clearTextureAtlas).toHaveBeenCalledTimes(1)
+    expect(term._core._renderService.clear).toHaveBeenCalledTimes(1)
+    expect(term.refresh).toHaveBeenCalledWith(0, term.rows - 1)
   })
 
   test('handles mac option arrows with VS Code-like terminal input', async () => {
@@ -1243,7 +1406,7 @@ describe('ManagedTerminalSession', () => {
     await flushTerminalStart()
 
     expect(term.reset).toHaveBeenCalled()
-    expect(term.write).toHaveBeenCalledWith('remote-screen')
+    expect(term.write).toHaveBeenCalledWith('remote-screen', expect.any(Function))
     expect(session.currentSessionId()).toBe('session-remote')
   })
 
@@ -1265,7 +1428,32 @@ describe('ManagedTerminalSession', () => {
     expect(notify).not.toHaveBeenCalled()
   })
 
-  test('drops terminal-emulator input envelopes before bridge write', async () => {
+  test('drops terminal-emulator input envelopes while replay is active', async () => {
+    terminalCalls.attach.mockResolvedValueOnce(
+      attachResult('session-1', { replay: 'history', replaySeq: 1, snapshot: 'history', snapshotSeq: 1 }),
+    )
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushUntil(() => xtermMocks.terminals[0])
+    const term = xtermMocks.terminals[0]!
+    let finishReplayWrite = () => {}
+    term.write.mockImplementation((_data: string, callback?: () => void) => {
+      finishReplayWrite = () => callback?.()
+    })
+    await flushUntil(() => term.write.mock.calls.some((call: unknown[]) => call[0] === 'history'))
+
+    session.writeInput({ origin: 'terminal-emulator', source: 'data', data: 'protocol-reply' })
+    await flushTerminalStart()
+
+    expect(terminalCalls.write).not.toHaveBeenCalled()
+    finishReplayWrite()
+    await flushUntil(() => session.snapshot().phase === 'open')
+  })
+
+  test('forwards terminal-emulator replies outside replay', async () => {
     const host = document.createElement('div')
     document.body.appendChild(host)
     const session = new ManagedTerminalSession(descriptor, vi.fn())
@@ -1274,10 +1462,10 @@ describe('ManagedTerminalSession', () => {
     await flushTerminalStart()
     await flushUntil(() => session.snapshot().phase === 'open')
 
-    session.writeInput({ origin: 'terminal-emulator', source: 'data', data: 'protocol-reply' })
+    session.writeInput({ origin: 'terminal-emulator', source: 'data', data: '\x1b[1;1R' })
     await flushTerminalStart()
 
-    expect(terminalCalls.write).not.toHaveBeenCalled()
+    expect(terminalCalls.write).toHaveBeenCalledWith({ sessionId: 'session-1', data: '\x1b[1;1R' })
   })
 
   test('tracks server title changes separately from process name', async () => {
@@ -1477,6 +1665,37 @@ describe('ManagedTerminalSession', () => {
     expect(terminalCalls.write).toHaveBeenCalledWith({ sessionId: 'session-1', data: 'input during replay' })
   })
 
+  test('drops terminal protocol replies generated while replay is being written', async () => {
+    terminalCalls.attach.mockResolvedValueOnce(
+      attachResult('session-1', {
+        replay: '\x1b[5n\x1b[6n\x1b[?6n\x1b[c\x1b[>c\x1b]4;0;?\x07',
+        replaySeq: 1,
+        snapshot: '\x1b[5n\x1b[6n\x1b[?6n\x1b[c\x1b[>c\x1b]4;0;?\x07',
+        snapshotSeq: 1,
+      }),
+    )
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    const term = xtermMocks.terminals[0]!
+    term.write.mockImplementation((_data: string, callback?: () => void) => {
+      term.emitData('\x1b[0n')
+      term.emitData('\x1b[1;1R')
+      term.emitData('\x1b[>0;276;0c')
+      term.emitData('\x1b[?1;1Rinput during replay\x1b]4;0;rgb:2e2e/3434/3636\x1b\\')
+      if (callback) queueMicrotask(callback)
+    })
+
+    await flushUntil(() => session.snapshot().phase === 'open')
+    await flushTerminalStart()
+
+    expect(terminalCalls.write.mock.calls.map(([input]: [TerminalWriteInput]) => input.data)).toEqual([
+      'input during replay',
+    ])
+  })
+
   test('resets the terminal before replaying truncated history', async () => {
     terminalCalls.attach.mockResolvedValueOnce(
       attachResult('session-1', { replay: 'tail', replayTruncated: true, snapshot: 'tail', snapshotSeq: 0 }),
@@ -1513,7 +1732,128 @@ describe('ManagedTerminalSession', () => {
     await flushTerminalStart()
 
     expect(xtermMocks.terminals[0]!.write).toHaveBeenCalledTimes(1)
-    expect(xtermMocks.terminals[0]!.write).toHaveBeenCalledWith('firstsecond')
+    expect(xtermMocks.terminals[0]!.write).toHaveBeenCalledWith('firstsecond', expect.any(Function))
+  })
+
+  test('settle-repaints visible rows after high-frequency output grows scrollback', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.buffer.active.baseY = 20
+    term.buffer.active.viewportY = 20
+    term.refresh.mockClear()
+    term.scrollToBottom.mockClear()
+    term.write.mockImplementation((_data: string, callback?: () => void) => {
+      term.buffer.active.baseY = 96
+      term.buffer.active.viewportY = 96
+      queueMicrotask(() => callback?.())
+    })
+
+    session.handleOutput({ sessionId: 'session-1', data: 'line-1\r\nline-2\r\n', seq: 1, processName: 'zsh' })
+    session.handleOutput({ sessionId: 'session-1', data: 'line-3\r\nline-4\r\n', seq: 2, processName: 'zsh' })
+    await flushTerminalRenderSettle()
+
+    expect(term.refresh).toHaveBeenCalledWith(0, term.rows - 1)
+    expect(term.scrollToBottom).not.toHaveBeenCalled()
+  })
+
+  test('invalidates renderer cache before settle repainting offscreen scrollback growth', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.buffer.active.baseY = 20
+    term.buffer.active.viewportY = 20
+    term.refresh.mockClear()
+    term.clearTextureAtlas.mockClear()
+    term._core._renderService.clear.mockClear()
+    term.write.mockImplementation((_data: string, callback?: () => void) => {
+      term.buffer.active.baseY = 140
+      term.buffer.active.viewportY = 140
+      queueMicrotask(() => callback?.())
+    })
+
+    session.handleOutput({ sessionId: 'session-1', data: 'many-lines\r\n', seq: 1, processName: 'zsh' })
+    await flushTerminalRenderSettle()
+
+    expect(term.clearTextureAtlas).toHaveBeenCalledTimes(1)
+    expect(term._core._renderService.clear).toHaveBeenCalledTimes(1)
+    expect(term.refresh).toHaveBeenCalledWith(0, term.rows - 1)
+    expect(term.clearTextureAtlas.mock.invocationCallOrder[0]).toBeLessThan(term.refresh.mock.invocationCallOrder[0]!)
+    expect(term._core._renderService.clear.mock.invocationCallOrder[0]).toBeLessThan(
+      term.refresh.mock.invocationCallOrder[0]!,
+    )
+  })
+
+  test('settle repaint preserves a scrolled history viewport', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.buffer.active.baseY = 80
+    term.buffer.active.viewportY = 24
+    term.refresh.mockClear()
+    term.scrollToBottom.mockClear()
+    term.scrollToLine.mockClear()
+    term.write.mockImplementation((_data: string, callback?: () => void) => {
+      term.buffer.active.baseY = 140
+      term.buffer.active.viewportY = 24
+      queueMicrotask(() => callback?.())
+    })
+
+    session.handleOutput({ sessionId: 'session-1', data: 'many-lines\r\n', seq: 1, processName: 'zsh' })
+    await flushTerminalRenderSettle()
+
+    expect(term.refresh).toHaveBeenCalledWith(0, term.rows - 1)
+    expect(term.scrollToBottom).not.toHaveBeenCalled()
+    expect(term.buffer.active.viewportY).toBe(24)
+  })
+
+  test('recovers a failed repaint by rebuilding only the front-end terminal view', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const firstTerm = xtermMocks.terminals[0]!
+    firstTerm.buffer.active.baseY = 120
+    firstTerm.buffer.active.viewportY = 40
+    firstTerm.refresh.mockImplementationOnce(() => {
+      throw new Error('render refresh failed')
+    })
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    firstTerm.dispose.mockClear()
+    terminalCalls.close.mockClear()
+    terminalCalls.attach.mockClear()
+
+    firstTerm.emitViewportScroll(40)
+    await flushTerminalStart()
+
+    expect(firstTerm.dispose).toHaveBeenCalled()
+    expect(xtermMocks.terminals).toHaveLength(2)
+    expect(terminalCalls.attach).toHaveBeenCalledWith({ sessionId: 'session-1', cols: 100, rows: 30 })
+    expect(terminalCalls.close).not.toHaveBeenCalled()
+    expect(session.currentSessionId()).toBe('session-1')
+    warnSpy.mockRestore()
   })
 
   test('keeps the same terminal instance and does not reset while flushing ordinary multi-line output', async () => {
@@ -1538,7 +1878,7 @@ describe('ManagedTerminalSession', () => {
     expect(xtermMocks.terminals[0]).toBe(term)
     expect(term.reset).not.toHaveBeenCalled()
     expect(term.dispose).not.toHaveBeenCalled()
-    expect(term.write).toHaveBeenCalledWith(output)
+    expect(term.write).toHaveBeenCalledWith(output, expect.any(Function))
   })
 
   test('flushes matching terminal exits before the provider dismisses the session', async () => {
@@ -1555,7 +1895,7 @@ describe('ManagedTerminalSession', () => {
     expect(session.handleExit({ sessionId: 'session-1' })).toBe(true)
     session.dispose()
 
-    expect(xtermMocks.terminals[0]!.write).toHaveBeenCalledWith('before exit')
+    expect(xtermMocks.terminals[0]!.write).toHaveBeenCalledWith('before exit', expect.any(Function))
     expect(session.snapshot()).toEqual({ phase: 'open', message: null, processName: 'zsh', canonicalTitle: null })
     expect(terminalCalls.close).not.toHaveBeenCalled()
   })
@@ -1930,6 +2270,12 @@ async function flushResizeDebounce(): Promise<void> {
 async function flushFontRefit(): Promise<void> {
   await Promise.resolve()
   await new Promise((resolve) => setTimeout(resolve, 100))
+  await Promise.resolve()
+}
+
+async function flushTerminalRenderSettle(): Promise<void> {
+  await flushTerminalStart()
+  await new Promise((resolve) => setTimeout(resolve, 120))
   await Promise.resolve()
 }
 

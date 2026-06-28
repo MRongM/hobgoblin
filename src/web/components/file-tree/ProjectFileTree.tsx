@@ -1840,16 +1840,6 @@ function FileTreeToolbar({
           type="button"
           size="icon-xs"
           variant="ghost"
-          aria-label={t('file-tree.refresh')}
-          title={t('file-tree.refresh')}
-          onClick={onRefresh}
-        >
-          <RefreshCw className="size-3.5" />
-        </Button>
-        <Button
-          type="button"
-          size="icon-xs"
-          variant="ghost"
           aria-label={t('file-tree.new-file')}
           title={t('file-tree.new-file')}
           onClick={onCreateFile}
@@ -1865,6 +1855,16 @@ function FileTreeToolbar({
           onClick={onCreateDirectory}
         >
           <FolderPlus className="size-3.5" />
+        </Button>
+        <Button
+          type="button"
+          size="icon-xs"
+          variant="ghost"
+          aria-label={t('file-tree.refresh')}
+          title={t('file-tree.refresh')}
+          onClick={onRefresh}
+        >
+          <RefreshCw className="size-3.5" />
         </Button>
       </div>
       {searchOpen ? (

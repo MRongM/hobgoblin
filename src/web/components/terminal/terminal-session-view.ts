@@ -37,6 +37,20 @@ const DEFAULT_PARKING_WIDTH = 800
 const DEFAULT_PARKING_HEIGHT = 400
 const RESIZE_DEBOUNCE_MS = 80
 const FONT_REMEASURE_DEBOUNCE_MS = 80
+const OUTPUT_RENDER_SETTLE_MS = 80
+
+interface TerminalViewportSnapshot {
+  viewportY: number | null
+  baseY: number | null
+}
+
+interface TerminalWithPrivateRenderService {
+  _core?: {
+    _renderService?: {
+      clear?: () => void
+    }
+  }
+}
 
 export class TerminalSessionView {
   private readonly frame: HTMLDivElement
@@ -55,11 +69,17 @@ export class TerminalSessionView {
   private fitFlushTimer: number | null = null
   private fontFitTimer: number | null = null
   private pinToBottomFrame: number | null = null
+  private outputSettleTimer: number | null = null
+  private viewportRefreshFrame: number | null = null
+  private outputWriteDepth = 0
+  private scrollbackRenderDirty = false
+  private viewportElement: HTMLElement | null = null
   private host: HTMLElement | null = null
   private revealPathHandler: ((relativePath: string) => void) | null = null
   private fontSize: number
   private terminalThemeMode: () => TerminalThemeMode
   private readonly safariShiftKeyResolver = new SafariShiftKeyResolver()
+  private readonly handleViewportScroll = () => this.scheduleViewportRefresh()
 
   constructor(
     handlers: {
@@ -69,6 +89,7 @@ export class TerminalSessionView {
       onSearchResult: (event: ISearchResultChangeEvent) => void
       onProgress: (state: number, value: number) => void
       onOpenExternalLink: (uri: string) => void
+      onRenderRecoveryRequest: () => void
     },
     options: { fontSize?: number; terminalThemeMode?: () => TerminalThemeMode } = {},
   ) {
@@ -91,6 +112,7 @@ export class TerminalSessionView {
     onSearchResult: (event: ISearchResultChangeEvent) => void
     onProgress: (state: number, value: number) => void
     onOpenExternalLink: (uri: string) => void
+    onRenderRecoveryRequest: () => void
   }
 
   setRevealPathHandler(handler: ((relativePath: string) => void) | null): void {
@@ -186,15 +208,15 @@ export class TerminalSessionView {
     this.disposeThemeObserver = observeTerminalTheme(this.terminalThemeMode, (nextTheme) => {
       this.applyTerminalTheme(term, nextTheme, { refresh: true })
     })
-    this.disposables.push(
-      term.onData((data) => this.handlers.onInput({ origin: 'user-intent', source: 'xterm', data })),
-    )
+    this.disposables.push(term.onData((data) => this.handleTerminalData(data)))
     this.disposables.push(
       term.onBinary((data) => this.handlers.onInput({ origin: 'user-intent', source: 'xterm', data })),
     )
     this.disposables.push(term.onBell(() => this.handlers.onBell()))
     this.disposables.push(term.onResize((size) => this.handlers.onResize(size)))
+    this.disposables.push(term.onScroll(() => this.scheduleViewportRefresh()))
     term.open(this.xtermHost)
+    this.installViewportScrollListener(term)
     this.applyTerminalTheme(term, terminalThemeForCurrentDocument(this.terminalThemeMode()), { refresh: true })
     this.installResizeObserver()
     this.installFontObserver(term)
@@ -203,6 +225,21 @@ export class TerminalSessionView {
 
   currentTerminal(): XTermTerminal | null {
     return this.term
+  }
+
+  writeOutput(data: string, callback?: () => void): void {
+    const term = this.term
+    if (!term) {
+      callback?.()
+      return
+    }
+    const before = readTerminalViewportSnapshot(term)
+    this.outputWriteDepth += 1
+    term.write(data, () => {
+      this.outputWriteDepth = Math.max(0, this.outputWriteDepth - 1)
+      this.handleOutputWriteParsed(term, before)
+      callback?.()
+    })
   }
 
   focus(): void {
@@ -232,6 +269,10 @@ export class TerminalSessionView {
     this.term?.scrollLines(amount)
   }
 
+  redraw(): void {
+    this.repaintVisibleRowsPreservingViewport({ clearRendererCache: true })
+  }
+
   find(term: string, direction: 'next' | 'previous', incremental: boolean): boolean {
     if (!term || !this.searchAddon) {
       this.clearSearch()
@@ -256,11 +297,13 @@ export class TerminalSessionView {
   fitNow(): void {
     if (!this.term || !this.fitAddon || !hasMeasurableBox(this.xtermHost)) return
     this.fitAddon.fit()
+    this.term.refresh(0, Math.max(0, this.term.rows - 1))
     this.pinToBottomSoon()
   }
 
   destroyTerminal(): void {
     this.disconnectResizeObserver()
+    this.disconnectViewportScrollListener()
     this.cancelFitFlush()
     for (const disposable of this.disposables.splice(0)) disposable.dispose()
     this.disposeThemeObserver?.()
@@ -269,6 +312,7 @@ export class TerminalSessionView {
     this.disposeFontObserver = null
     this.cancelFontFit()
     this.cancelPinToBottom()
+    this.cancelOutputSettleRepaint()
     this.safariShiftKeyResolver.reset()
     this.fitAddon = null
     this.searchAddon = null
@@ -304,6 +348,28 @@ export class TerminalSessionView {
       }
       return true
     })
+  }
+
+  private handleTerminalData(data: string): void {
+    if (this.outputWriteDepth <= 0) {
+      this.handlers.onInput({ origin: 'user-intent', source: 'xterm', data })
+      return
+    }
+    const userData = stripTerminalProtocolReplies(data)
+    const input =
+      userData.length === 0
+        ? ({ origin: 'terminal-emulator', source: 'data', data } as const)
+        : ({ origin: 'user-intent', source: 'xterm', data: userData } as const)
+    this.handlers.onInput(input)
+  }
+
+  private handleOutputWriteParsed(term: XTermTerminal, before: TerminalViewportSnapshot): void {
+    if (this.term !== term) return
+    const after = readTerminalViewportSnapshot(term)
+    if (before.baseY !== null && after.baseY !== null && after.baseY > before.baseY) {
+      this.scrollbackRenderDirty = true
+    }
+    if (this.scrollbackRenderDirty) this.scheduleOutputSettleRepaint()
   }
 
   private installOptionalAddons(term: XTermTerminal): void {
@@ -420,6 +486,20 @@ export class TerminalSessionView {
     this.resizeObserver = null
   }
 
+  private installViewportScrollListener(term: XTermTerminal): void {
+    this.disconnectViewportScrollListener()
+    const viewportElement = term.element?.querySelector<HTMLElement>('.xterm-viewport') ?? null
+    if (!viewportElement) return
+    this.viewportElement = viewportElement
+    viewportElement.addEventListener('scroll', this.handleViewportScroll, { passive: true })
+  }
+
+  private disconnectViewportScrollListener(): void {
+    this.viewportElement?.removeEventListener('scroll', this.handleViewportScroll)
+    this.viewportElement = null
+    this.cancelViewportRefresh()
+  }
+
   private scheduleFontFit(term: XTermTerminal): void {
     if (this.term !== term) return
     this.cancelFontFit()
@@ -446,6 +526,55 @@ export class TerminalSessionView {
     if (this.fitFlushTimer === null) return
     window.clearTimeout(this.fitFlushTimer)
     this.fitFlushTimer = null
+  }
+
+  private scheduleOutputSettleRepaint(): void {
+    this.cancelOutputSettleRepaint()
+    this.outputSettleTimer = window.setTimeout(() => {
+      this.outputSettleTimer = null
+      this.repaintVisibleRowsPreservingViewport({ clearRendererCache: true })
+      this.scrollbackRenderDirty = false
+    }, OUTPUT_RENDER_SETTLE_MS)
+  }
+
+  private cancelOutputSettleRepaint(): void {
+    if (this.outputSettleTimer === null) return
+    window.clearTimeout(this.outputSettleTimer)
+    this.outputSettleTimer = null
+  }
+
+  private scheduleViewportRefresh(): void {
+    if (!this.term || this.viewportRefreshFrame !== null) return
+    this.viewportRefreshFrame = requestAnimationFrame(() => {
+      this.viewportRefreshFrame = null
+      this.repaintVisibleRowsPreservingViewport()
+    })
+  }
+
+  private cancelViewportRefresh(): void {
+    if (this.viewportRefreshFrame === null) return
+    cancelScheduledAnimationFrame(this.viewportRefreshFrame)
+    this.viewportRefreshFrame = null
+  }
+
+  private repaintVisibleRowsPreservingViewport(options: { clearRendererCache?: boolean } = {}): void {
+    const term = this.term
+    if (!term) return
+    const before = readTerminalViewportSnapshot(term)
+    if (!this.safeRefreshVisibleRows(term, options)) return
+    restoreTerminalViewport(term, before.viewportY)
+  }
+
+  private safeRefreshVisibleRows(term: XTermTerminal, options: { clearRendererCache?: boolean }): boolean {
+    try {
+      if (options.clearRendererCache) clearTerminalRendererCache(term)
+      refreshVisibleRows(term)
+      return true
+    } catch (err) {
+      console.warn('[terminal] failed to repaint terminal viewport', err)
+      this.handlers.onRenderRecoveryRequest()
+      return false
+    }
   }
 
   private pinToBottomSoon(): void {
@@ -490,6 +619,31 @@ function scrollTerminalToBottom(term: XTermTerminal | null): void {
   term.scrollToBottom()
 }
 
+function readTerminalViewportSnapshot(term: XTermTerminal): TerminalViewportSnapshot {
+  const active = term.buffer?.active as { viewportY?: number; baseY?: number } | undefined
+  return {
+    viewportY: typeof active?.viewportY === 'number' ? active.viewportY : null,
+    baseY: typeof active?.baseY === 'number' ? active.baseY : null,
+  }
+}
+
+function refreshVisibleRows(term: XTermTerminal): void {
+  term.refresh(0, Math.max(0, term.rows - 1))
+}
+
+function clearTerminalRendererCache(term: XTermTerminal): void {
+  term.clearTextureAtlas()
+  const renderService = (term as unknown as TerminalWithPrivateRenderService)._core?._renderService
+  renderService?.clear?.()
+}
+
+function restoreTerminalViewport(term: XTermTerminal, viewportY: number | null): void {
+  if (viewportY === null) return
+  const active = term.buffer?.active as { viewportY?: number } | undefined
+  if (active?.viewportY === viewportY) return
+  term.scrollToLine(viewportY)
+}
+
 function isTerminalAtBottom(term: XTermTerminal): boolean {
   const active = term.buffer?.active as { viewportY?: number; baseY?: number } | undefined
   if (!active) return true
@@ -497,6 +651,13 @@ function isTerminalAtBottom(term: XTermTerminal): boolean {
   if (typeof viewportY !== 'number') return true
   const baseY = active.baseY
   return typeof baseY === 'number' ? viewportY >= baseY : viewportY <= 0
+}
+
+const TERMINAL_PROTOCOL_REPLY_PATTERN =
+  /(?:\x1b\[\??\d+n)|(?:\x1b\[\??\d+;\d+R)|(?:\x1b\[(?:[?>])?[0-9;]*c)|(?:\x1b\](?:4;\d+|10|11|12);[^\x07\x1b]*(?:\x07|\x1b\\))/g
+
+function stripTerminalProtocolReplies(data: string): string {
+  return data.replace(TERMINAL_PROTOCOL_REPLY_PATTERN, '')
 }
 
 function cancelScheduledAnimationFrame(frame: number): void {

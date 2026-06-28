@@ -811,7 +811,8 @@ describe('server terminal sessions', () => {
     expect(spawn).toHaveBeenCalledTimes(1)
 
     unregisterTerminalSocket('client_1', 'attachment_a', socketA)
-    mockPtys[0]?.emitData('\u001b[?1049hhello')
+    mockPtys[0]?.emitData('chat-1\r\nchat-2\r\n')
+    mockPtys[0]?.emitData('\u001b[?1049hresume menu')
     await new Promise((resolve) => setTimeout(resolve, 0))
 
     const socketB = { send: vi.fn(), close: vi.fn() }
@@ -827,9 +828,11 @@ describe('server terminal sessions', () => {
     expect(spawn).toHaveBeenCalledTimes(1)
     if (!first.ok || !attachedAgain.ok) return
     expect(attachedAgain.sessionId).toBe(first.sessionId)
-    expect(attachedAgain.snapshot).toContain('\u001b[?1049h')
-    expect(attachedAgain.snapshot).toContain('hello')
-    expect(attachedAgain.snapshotSeq).toBe(1)
+    expect(attachedAgain.snapshot).toContain('chat-1')
+    expect(attachedAgain.snapshot).toContain('chat-2')
+    expect(attachedAgain.snapshot).not.toContain('\u001b[?1049h')
+    expect(attachedAgain.snapshot).not.toContain('resume menu')
+    expect(attachedAgain.snapshotSeq).toBe(2)
     expect(mockPtys[0]?.resize).toHaveBeenCalledWith(100, 30)
 
     mockPtys[0]?.emitData('resumed')
@@ -838,7 +841,7 @@ describe('server terminal sessions', () => {
       .find((message) => message.type === 'output')
     expect(outputMessage).toMatchObject({
       type: 'output',
-      event: { sessionId: first.sessionId, data: 'resumed', seq: 2, processName: 'zsh' },
+      event: { sessionId: first.sessionId, data: 'resumed', seq: 3, processName: 'zsh' },
     })
 
     unregisterTerminalSocket('client_1', 'attachment_b', socketB)

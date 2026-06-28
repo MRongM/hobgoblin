@@ -317,6 +317,48 @@ describe('TerminalSlot', () => {
     }
   })
 
+  test('redraw button repaints the active terminal', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const redraw = vi.fn()
+    const { descriptor, worktreeSnapshot, snapshot } = controllerFixture()
+    const context = terminalContext({ redraw })
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+
+    await act(async () => {
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot={descriptor.repoRoot} branch={descriptor.branch} worktreePath={descriptor.worktreePath} />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    })
+
+    try {
+      const button = container.querySelector<HTMLButtonElement>('button[aria-label="terminal.redraw"]')
+      expect(button).toBeTruthy()
+
+      await act(async () => {
+        button?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+
+      expect(redraw).toHaveBeenCalledWith(descriptor.key)
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
   test('writes internal file tree path drops into the active terminal', async () => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const container = document.createElement('div')

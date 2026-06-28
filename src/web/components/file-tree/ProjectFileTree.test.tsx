@@ -347,7 +347,7 @@ describe('ProjectFileTree', () => {
     vi.useRealTimers()
   })
 
-  test('places file tree action buttons on the left with collapsed search last', async () => {
+  test('places file tree refresh directly before collapsed search', async () => {
     seedRepoWithSelectedBranch({ hasWorktree: true })
 
     await render(<ProjectFileTree repoId="/repo" />)
@@ -359,9 +359,9 @@ describe('ProjectFileTree', () => {
 
     expect(labels).toEqual([
       'file-tree.collapse-all',
-      'file-tree.refresh',
       'file-tree.new-file',
       'file-tree.new-folder',
+      'file-tree.refresh',
       'file-tree.search-label',
     ])
     expect(toolbar.querySelector('input[aria-label="file-tree.search-label"]')).toBeNull()

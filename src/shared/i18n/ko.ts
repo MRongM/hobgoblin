@@ -387,6 +387,7 @@ export const ko: Record<DictKey, string> = {
   // ---- Terminal ----------------------------------------------------------
   'terminal.opening': '터미널 여는 중…',
   'terminal.restart': '터미널 다시 시작',
+  'terminal.redraw': '터미널 다시 그리기',
   'terminal.search-placeholder': '터미널 검색',
   'terminal.search-no-results': '결과 없음',
   'terminal.search-previous': '이전',

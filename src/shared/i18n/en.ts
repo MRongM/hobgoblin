@@ -398,6 +398,7 @@ export const en = {
   // ---- Terminal -----------------------------------------------------------
   'terminal.opening': 'Opening terminal…',
   'terminal.restart': 'Restart terminal',
+  'terminal.redraw': 'Redraw terminal',
   'terminal.search-placeholder': 'Search terminal',
   'terminal.search-no-results': 'No results',
   'terminal.search-previous': 'Previous',
