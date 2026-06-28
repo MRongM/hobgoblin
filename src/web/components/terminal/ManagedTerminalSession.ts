@@ -195,10 +195,6 @@ export class ManagedTerminalSession {
     this.view.scrollLines(amount)
   }
 
-  redraw(): void {
-    this.view.redraw()
-  }
-
   serialize(): string {
     return this.view.serialize()
   }
@@ -559,6 +555,7 @@ export class ManagedTerminalSession {
     if (this.disposed) return
     if (!this.runtime.currentSessionId()) return
     if (!this.view.isConnected()) return
+    this.flushInput()
     this.destroyActiveView({ preserveTransientState: true })
     this.start()
   }

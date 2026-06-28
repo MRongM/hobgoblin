@@ -317,14 +317,14 @@ describe('TerminalSlot', () => {
     }
   })
 
-  test('redraw button repaints the active terminal', async () => {
+  test('does not render the removed redraw button for the active terminal', async () => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const container = document.createElement('div')
     document.body.appendChild(container)
     const root: Root = createRoot(container)
     const redraw = vi.fn()
     const { descriptor, worktreeSnapshot, snapshot } = controllerFixture()
-    const context = terminalContext({ redraw })
+    const context = { ...terminalContext(), redraw }
     const readContext: TerminalSessionReadContextValue = {
       worktreeSnapshot: () => worktreeSnapshot,
       subscribeWorktree: () => () => {},
@@ -346,13 +346,8 @@ describe('TerminalSlot', () => {
 
     try {
       const button = container.querySelector<HTMLButtonElement>('button[aria-label="terminal.redraw"]')
-      expect(button).toBeTruthy()
-
-      await act(async () => {
-        button?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-      })
-
-      expect(redraw).toHaveBeenCalledWith(descriptor.key)
+      expect(button).toBeNull()
+      expect(redraw).not.toHaveBeenCalled()
     } finally {
       await act(async () => root.unmount())
       container.remove()

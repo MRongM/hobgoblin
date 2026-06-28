@@ -269,10 +269,6 @@ export class TerminalSessionView {
     this.term?.scrollLines(amount)
   }
 
-  redraw(): void {
-    this.repaintVisibleRowsPreservingViewport({ clearRendererCache: true })
-  }
-
   find(term: string, direction: 'next' | 'previous', incremental: boolean): boolean {
     if (!term || !this.searchAddon) {
       this.clearSearch()
@@ -313,6 +309,8 @@ export class TerminalSessionView {
     this.cancelFontFit()
     this.cancelPinToBottom()
     this.cancelOutputSettleRepaint()
+    this.outputWriteDepth = 0
+    this.scrollbackRenderDirty = false
     this.safariShiftKeyResolver.reset()
     this.fitAddon = null
     this.searchAddon = null
@@ -547,7 +545,15 @@ export class TerminalSessionView {
     if (!this.term || this.viewportRefreshFrame !== null) return
     this.viewportRefreshFrame = requestAnimationFrame(() => {
       this.viewportRefreshFrame = null
-      this.repaintVisibleRowsPreservingViewport()
+      const term = this.term
+      if (!term) return
+      const viewport = readTerminalViewportSnapshot(term)
+      const isReadingHistory =
+        viewport.viewportY !== null && viewport.baseY !== null && viewport.viewportY < viewport.baseY
+      this.repaintVisibleRowsPreservingViewport({
+        clearRendererCache: this.scrollbackRenderDirty || isReadingHistory,
+        viewportY: viewport.viewportY,
+      })
     })
   }
 
@@ -557,12 +563,12 @@ export class TerminalSessionView {
     this.viewportRefreshFrame = null
   }
 
-  private repaintVisibleRowsPreservingViewport(options: { clearRendererCache?: boolean } = {}): void {
+  private repaintVisibleRowsPreservingViewport(options: { clearRendererCache?: boolean; viewportY?: number | null } = {}): void {
     const term = this.term
     if (!term) return
     const before = readTerminalViewportSnapshot(term)
     if (!this.safeRefreshVisibleRows(term, options)) return
-    restoreTerminalViewport(term, before.viewportY)
+    restoreTerminalViewport(term, options.viewportY ?? before.viewportY)
   }
 
   private safeRefreshVisibleRows(term: XTermTerminal, options: { clearRendererCache?: boolean }): boolean {

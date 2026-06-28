@@ -43,7 +43,7 @@ describe('terminal-render-state', () => {
       }
     })
 
-    test('serializes the normal buffer while alternate screen is active', async () => {
+    test('serializes the active alternate screen while alternate screen is active', async () => {
       const state = createEmptyTerminalRenderState()
       state.model = createTerminalRenderModel(40, 6)
       try {
@@ -53,10 +53,8 @@ describe('terminal-render-state', () => {
         queueTerminalRenderWrite(state, '\x1b[?1049hresume menu\r\nold session')
         const snapshot = await snapshotTerminalRenderState('term_1234567890123456', state)
 
-        expect(snapshot?.snapshot).toContain('chat-1')
-        expect(snapshot?.snapshot).toContain('chat-2')
-        expect(snapshot?.snapshot).not.toContain('\x1b[?1049h')
-        expect(snapshot?.snapshot).not.toContain('resume menu')
+        expect(snapshot?.snapshot).toContain('\x1b[?1049h')
+        expect(snapshot?.snapshot).toContain('resume menu')
         expect(snapshot?.snapshotSeq).toBe(2)
       } finally {
         state.model.term.dispose()

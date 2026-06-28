@@ -10,7 +10,6 @@ import {
   type FocusEvent,
   type KeyboardEvent,
 } from 'react'
-import { RefreshCw } from 'lucide-react'
 import { Button } from '#/web/components/ui/button.tsx'
 import { GOBLIN_FILE_PATHS_MIME, parseGoblinFilePathDragPayload, type RepoFileTransferUploadedItem } from '#/shared/file-tree.ts'
 import type { ClipboardBinaryFilePayload } from '#/shared/clipboard-binary-temp-files.ts'
@@ -65,7 +64,6 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
     findNext,
     findPrevious,
     clearSearch,
-    redraw,
     writeInput,
     takeover,
     restart,
@@ -380,19 +378,6 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
         aria-readonly={(!isController && hasSessions) || undefined}
       />
       <div className="goblin-terminal-float-group">
-        {isController && key && redraw && (
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="secondary"
-            className="goblin-terminal-slot__redraw"
-            aria-label={t('terminal.redraw')}
-            title={t('terminal.redraw')}
-            onClick={() => redraw(key)}
-          >
-            <RefreshCw className="size-3.5" />
-          </Button>
-        )}
         {searchOpen && (
           <div className="goblin-terminal-slot__search">
             <input

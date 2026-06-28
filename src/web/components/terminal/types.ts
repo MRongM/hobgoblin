@@ -112,7 +112,6 @@ export interface TerminalSessionContextValue {
   selectTerminal: (worktreeTerminalKey: string, key: string) => void
   scrollToBottom: (key: string) => void
   scrollLines: (key: string, amount: number) => void
-  redraw?: (key: string) => void
   clearBell: (key: string) => boolean
   closeTerminalAndDismissDetailIfLast: (key: string, base: TerminalSessionBase) => void
   registerWorktreeHost: (worktreeTerminalKey: string, host: HTMLElement | null) => void
@@ -155,7 +154,6 @@ export interface ManagedTerminalSessionLike {
   clearSearch: () => void
   scrollToBottom: () => void
   scrollLines: (amount: number) => void
-  redraw: () => void
   writeInput: (data: string) => void
   takeover: () => void
   handleOwnership: (event: TerminalOwnershipViewModel) => void

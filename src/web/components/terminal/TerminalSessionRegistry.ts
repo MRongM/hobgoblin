@@ -392,10 +392,6 @@ export class TerminalSessionRegistry {
     this.sessions.get(key)?.scrollLines(amount)
   }
 
-  redraw = (key: string): void => {
-    this.sessions.get(key)?.redraw()
-  }
-
   closeTerminalAndDismissDetailIfLast = (key: string, base: TerminalSessionBase): void => {
     const session = this.sessions.get(key)
     if (!session || session.descriptor.worktreeTerminalKey !== worktreeTerminalKey(base.repoRoot, base.worktreePath))

@@ -174,6 +174,20 @@ describe('BranchDetailToolbar', () => {
     expect(useReposStore.getState().detailCollapsed).toBe(false)
   })
 
+  test('does not render the removed terminal redraw control', () => {
+    const { container: c } = renderToolbar({
+      terminalCount: 1,
+      detailTab: 'terminal',
+      navigation: navigationWith({}),
+    })
+
+    const redrawButton = c.querySelector<HTMLButtonElement>('button[aria-label="terminal.redraw"]')
+    const focusButton = c.querySelector<HTMLButtonElement>('button[aria-label="branch-detail.focus"]')
+
+    expect(redrawButton).toBeNull()
+    expect(focusButton).not.toBeNull()
+  })
+
   test('keeps terminal focus when pressing End on the compact terminal tab', async () => {
     compactUi = true
     const showRepoDetailTab = vi.fn()
