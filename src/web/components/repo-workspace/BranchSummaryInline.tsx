@@ -81,16 +81,16 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
     .join(', ')
 
   return (
-    <div title={title} className={cn('flex min-w-0 flex-col gap-px', className)}>
-      <div className="flex min-w-0 items-center gap-1.5">
-        <span className="flex w-4 shrink-0 items-center justify-center">
-          {hasWorktree ? (
-            <FolderTree size={13} className={worktreeDirty ? 'text-attention' : 'text-brand-text'} />
-          ) : (
-            <GitBranch size={13} className={selected ? 'text-selected-muted-foreground' : 'text-muted-foreground'} />
-          )}
-        </span>
-        <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+    <div title={title} className={cn('grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-1.5', className)}>
+      <span className="flex w-4 shrink-0 items-center justify-center">
+        {hasWorktree ? (
+          <FolderTree size={13} className={worktreeDirty ? 'text-attention' : 'text-brand-text'} />
+        ) : (
+          <GitBranch size={13} className={selected ? 'text-selected-muted-foreground' : 'text-muted-foreground'} />
+        )}
+      </span>
+      <div className="flex min-w-0 flex-col gap-px">
+        <div className="flex min-w-0 items-center gap-1.5">
           <span
             className={cn(
               'shrink-0 truncate text-sm leading-4 font-medium',
@@ -156,20 +156,20 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
               </span>
             )}
           </span>
-        </span>
+        </div>
+        {worktreePath && (
+          <span
+            title={worktreePath}
+            aria-label={worktreePath}
+            className={cn(
+              'block min-w-0 truncate font-mono text-[11px] leading-3',
+              selected ? 'text-selected-muted-foreground/90' : 'text-muted-foreground/85',
+            )}
+          >
+            {worktreePath}
+          </span>
+        )}
       </div>
-      {worktreePath && (
-        <span
-          title={worktreePath}
-          aria-label={worktreePath}
-          className={cn(
-            'block min-w-0 truncate pl-[22px] font-mono text-[11px] leading-3',
-            selected ? 'text-selected-muted-foreground/90' : 'text-muted-foreground/85',
-          )}
-        >
-          {worktreePath}
-        </span>
-      )}
     </div>
   )
 }
