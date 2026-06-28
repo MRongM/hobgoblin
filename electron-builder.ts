@@ -3,7 +3,7 @@ import type { Configuration } from 'electron-builder'
 const config: Configuration = {
   appId: 'hobgoblin.app',
   productName: 'Hobgoblin',
-  icon: 'assets/icon-mac-1024.png',
+  icon: 'assets/icon.icns',
   directories: {
     output: 'release',
   },

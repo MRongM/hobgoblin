@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, test } from 'vitest'
 import electronBuilderConfig from '../../electron-builder.ts'
@@ -52,6 +52,14 @@ describe('desktop identity', () => {
     expect(readText('src/web/renderer-terminal-bridge.ts')).toContain(
       "showBrowserNotification('Hobgoblin', 'Test notification')",
     )
+  })
+
+  test('uses an explicit macOS ICNS app icon for Dock and notification packaging', () => {
+    const iconPath = electronBuilderConfig.icon
+
+    expect(iconPath).toBe('assets/icon.icns')
+    expect(path.extname(iconPath ?? '')).toBe('.icns')
+    expect(existsSync(path.join(repoRoot, iconPath ?? ''))).toBe(true)
   })
 
   test('updates lockfile workspace identity without changing dependency versions', () => {

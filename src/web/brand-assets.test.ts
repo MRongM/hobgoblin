@@ -42,7 +42,7 @@ describe('brand assets', () => {
     }
   })
 
-  test('keeps generated icons full bleed at the macOS dock edge', () => {
+  test('keeps generated icons opaque and full bleed at the macOS dock edge', () => {
     for (const assetPath of pngAssets) {
       const png = PNG.sync.read(readFileSync(assetPath))
 
@@ -50,10 +50,11 @@ describe('brand assets', () => {
       expect(readPixel(png, 0, 512)).toEqual(expect.objectContaining({ dark: true }))
       expect(readPixel(png, 1023, 512)).toEqual(expect.objectContaining({ dark: true }))
       expect(readPixel(png, 512, 1023)).toEqual(expect.objectContaining({ dark: true }))
-      expect(readPixel(png, 0, 0)).toEqual(expect.objectContaining({ transparent: true }))
-      expect(readPixel(png, 1023, 0)).toEqual(expect.objectContaining({ transparent: true }))
-      expect(readPixel(png, 0, 1023)).toEqual(expect.objectContaining({ transparent: true }))
-      expect(readPixel(png, 1023, 1023)).toEqual(expect.objectContaining({ transparent: true }))
+      expect(readPixel(png, 0, 0)).toEqual(expect.objectContaining({ dark: true, transparent: false }))
+      expect(readPixel(png, 1023, 0)).toEqual(expect.objectContaining({ dark: true, transparent: false }))
+      expect(readPixel(png, 0, 1023)).toEqual(expect.objectContaining({ dark: true, transparent: false }))
+      expect(readPixel(png, 1023, 1023)).toEqual(expect.objectContaining({ dark: true, transparent: false }))
+      expect(readAlphaStats(png)).toEqual({ transparent: 0, translucent: 0 })
       expect(readForegroundBounds(png)).toEqual(expect.objectContaining({ wide: true, tall: true, compact: true }))
     }
   })
@@ -81,6 +82,22 @@ function readPixel(
     transparent: rgba[3] === 0,
     rgba,
   }
+}
+
+function readAlphaStats(png: { width: number; height: number; data: Uint8Array }): {
+  transparent: number
+  translucent: number
+} {
+  let transparent = 0
+  let translucent = 0
+  for (let y = 0; y < png.height; y += 1) {
+    for (let x = 0; x < png.width; x += 1) {
+      const alpha = png.data[(y * png.width + x) * 4 + 3] ?? 0
+      if (alpha === 0) transparent += 1
+      else if (alpha < 255) translucent += 1
+    }
+  }
+  return { transparent, translucent }
 }
 
 function readForegroundBounds(png: { width: number; height: number; data: Uint8Array }): {
