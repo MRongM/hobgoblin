@@ -3,7 +3,6 @@ import { FolderTree, RefreshCw, RotateCcw } from 'lucide-react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import { FileListViewModeControl, type FileListViewMode } from '#/web/components/FileListViewModeControl.tsx'
-import { BranchActionControls } from '#/web/components/BranchActionControls.tsx'
 import { EmptyState, ScrollPane } from '#/web/components/Layout.tsx'
 import { StatusListSkeleton } from '#/web/components/Skeleton.tsx'
 import { StatusList } from '#/web/components/StatusList.tsx'
@@ -11,8 +10,6 @@ import { CopyButton } from '#/web/components/CopyButton.tsx'
 import { AsyncButton } from '#/web/components/AsyncButton.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { Switch } from '#/web/components/ui/switch.tsx'
-import type { BranchActionItemGroups } from '#/web/hooks/useBranchActionItems.ts'
-import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.ts'
 import type { BranchDetailRepo, SelectedBranchDetailPresentation } from '#/web/components/branch-detail/model.ts'
 import { getSelectedBranchDetailPresentation } from '#/web/components/branch-detail/model.ts'
 import { discardRepositoryChanges } from '#/web/repo-client.ts'
@@ -203,9 +200,6 @@ export function ProjectChangesPanel({
   return (
     <section className="flex min-h-0 flex-1 flex-col bg-pane">
       <ProjectChangesActionBar
-        repo={repo}
-        branch={detail.branch}
-        disableCommit={!hasChanges}
         showFileViewMode={hasChanges}
         fileViewMode={fileViewMode}
         selectionEnabled={selectionEnabled}
@@ -255,9 +249,6 @@ export function ProjectChangesPanel({
 }
 
 function ProjectChangesActionBar({
-  repo,
-  branch,
-  disableCommit,
   showFileViewMode,
   fileViewMode,
   selectionEnabled,
@@ -269,9 +260,6 @@ function ProjectChangesActionBar({
   onDiscardSelected,
   onRefreshStatus,
 }: {
-  repo: BranchDetailRepo
-  branch: ProjectChangesBranch
-  disableCommit: boolean
   showFileViewMode: boolean
   fileViewMode: FileListViewMode
   selectionEnabled: boolean
@@ -284,28 +272,49 @@ function ProjectChangesActionBar({
   onRefreshStatus: () => void
 }) {
   const t = useT()
-  const actions = useBranchActionItems(repo, branch)
-  const commitItem = actions.mainItems.find((item) => item.id === 'commit' && item.visible)
-  if (!commitItem && !showFileViewMode && selectedCount === 0) return <>{actions.dialogs}</>
-
-  const commitActions: BranchActionItemGroups | null = commitItem
-    ? {
-        patchItems: [],
-        mainItems: [{ ...commitItem, disabled: commitItem.disabled || disableCommit }],
-        externalItems: [],
-        destructiveItems: [],
-        dialogs: actions.dialogs,
-      }
-    : null
 
   return (
     <div
       data-testid="project-changes-action-bar"
-      className="flex min-h-8 shrink-0 items-center justify-end gap-1 border-b border-toolbar-border bg-toolbar px-2"
+      className="flex min-h-8 shrink-0 items-center gap-2 border-b border-toolbar-border bg-toolbar px-2"
     >
+      <div data-testid="project-changes-left-actions" className="flex min-w-0 items-center gap-1">
+        {showFileViewMode && <FileListViewModeControl value={fileViewMode} onChange={onFileViewModeChange} />}
+        {showFileViewMode && (
+          <CopyButton
+            value={changedFilePathsValue}
+            copyLabel={t('history.copy-file-paths')}
+            copiedLabel={t('branch-status.copied')}
+            disabled={!changedFilePathsValue}
+            className="shrink-0"
+          />
+        )}
+        <AsyncButton
+          type="button"
+          size="icon-xs"
+          variant="ghost"
+          loading={statusRefreshing}
+          disabled={statusRefreshing}
+          aria-label={t('changes.refresh')}
+          title={t('changes.refresh')}
+          onClick={onRefreshStatus}
+        >
+          {({ busy }) => <RefreshCw className={busy ? 'size-3.5 animate-spin' : 'size-3.5'} />}
+        </AsyncButton>
+        {showFileViewMode && (
+          <label className="flex shrink-0 items-center px-1" title={t('changes.selection-toggle-title')}>
+            <Switch
+              checked={selectionEnabled}
+              onCheckedChange={onSelectionEnabledChange}
+              aria-label={t('changes.selection-toggle-title')}
+              title={t('changes.selection-toggle-title')}
+            />
+          </label>
+        )}
+      </div>
       {selectedCount > 0 && (
-        <>
-          <span className="mr-auto text-xs text-muted-foreground">
+        <div className="ml-auto flex min-w-0 shrink-0 items-center gap-1">
+          <span className="truncate text-xs text-muted-foreground">
             {t('changes.selected-count').replace('{count}', String(selectedCount))}
           </span>
           <Button
@@ -318,46 +327,8 @@ function ProjectChangesActionBar({
             <RotateCcw size={14} />
             {t('changes.discard-selected')}
           </Button>
-        </>
+        </div>
       )}
-      <AsyncButton
-        type="button"
-        size="icon-xs"
-        variant="ghost"
-        loading={statusRefreshing}
-        disabled={statusRefreshing}
-        aria-label={t('changes.refresh')}
-        title={t('changes.refresh')}
-        onClick={onRefreshStatus}
-      >
-        {({ busy }) => <RefreshCw className={busy ? 'size-3.5 animate-spin' : 'size-3.5'} />}
-      </AsyncButton>
-      {showFileViewMode && (
-        <label
-          className="flex shrink-0 items-center gap-1.5 px-1 text-xs text-muted-foreground"
-          title={t('changes.selection-toggle-title')}
-        >
-          <Switch
-            checked={selectionEnabled}
-            onCheckedChange={onSelectionEnabledChange}
-            aria-label={t('changes.selection-toggle-title')}
-            title={t('changes.selection-toggle-title')}
-          />
-          <span className="text-[11px] leading-none">{t('changes.selection-toggle')}</span>
-        </label>
-      )}
-      {commitActions && <BranchActionControls actions={commitActions} variant="bar" />}
-      {showFileViewMode && <FileListViewModeControl value={fileViewMode} onChange={onFileViewModeChange} />}
-      {showFileViewMode && (
-        <CopyButton
-          value={changedFilePathsValue}
-          copyLabel={t('history.copy-file-paths')}
-          copiedLabel={t('branch-status.copied')}
-          disabled={!changedFilePathsValue}
-          className="shrink-0"
-        />
-      )}
-      {actions.dialogs}
     </div>
   )
 }

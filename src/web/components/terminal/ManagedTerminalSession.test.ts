@@ -792,6 +792,34 @@ describe('ManagedTerminalSession', () => {
     expect(term.buffer.active.viewportY).toBe(64)
   })
 
+  test('invalidates renderer cache before repainting scrolled terminal history', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.buffer.active.baseY = 200
+    term.buffer.active.viewportY = 200
+    term.refresh.mockClear()
+    term.clearTextureAtlas.mockClear()
+    term._core._renderService.clear.mockClear()
+
+    term.emitViewportScroll(64)
+    await flushTerminalStart()
+
+    expect(term.clearTextureAtlas).toHaveBeenCalledTimes(1)
+    expect(term._core._renderService.clear).toHaveBeenCalledTimes(1)
+    expect(term.refresh).toHaveBeenCalledWith(0, term.rows - 1)
+    expect(term.clearTextureAtlas.mock.invocationCallOrder[0]).toBeLessThan(term.refresh.mock.invocationCallOrder[0]!)
+    expect(term._core._renderService.clear.mock.invocationCallOrder[0]).toBeLessThan(
+      term.refresh.mock.invocationCallOrder[0]!,
+    )
+  })
+
   test('coalesces rapid terminal viewport scroll repaint into one animation frame', async () => {
     const host = document.createElement('div')
     document.body.appendChild(host)
@@ -917,28 +945,6 @@ describe('ManagedTerminalSession', () => {
     session.clearSearch()
     expect(xtermMocks.searchAddons[0]!.clearDecorations).toHaveBeenCalled()
     expect(session.snapshot().search).toBeUndefined()
-  })
-
-  test('redraw clears renderer cache and refreshes visible rows', async () => {
-    const host = document.createElement('div')
-    document.body.appendChild(host)
-    const session = new ManagedTerminalSession(descriptor, vi.fn())
-    hydrateManagedSession(session)
-
-    session.attach(host)
-    await flushTerminalStart()
-    await flushUntil(() => session.snapshot().phase === 'open')
-
-    const term = xtermMocks.terminals[0]!
-    term.clearTextureAtlas.mockClear()
-    term._core._renderService.clear.mockClear()
-    term.refresh.mockClear()
-
-    session.redraw()
-
-    expect(term.clearTextureAtlas).toHaveBeenCalledTimes(1)
-    expect(term._core._renderService.clear).toHaveBeenCalledTimes(1)
-    expect(term.refresh).toHaveBeenCalledWith(0, term.rows - 1)
   })
 
   test('handles mac option arrows with VS Code-like terminal input', async () => {
@@ -1854,6 +1860,58 @@ describe('ManagedTerminalSession', () => {
     expect(terminalCalls.close).not.toHaveBeenCalled()
     expect(session.currentSessionId()).toBe('session-1')
     warnSpy.mockRestore()
+  })
+
+  test('does not leak output write state into a recovered terminal view', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const firstTerm = xtermMocks.terminals[0]!
+    firstTerm.write.mockImplementation(() => {})
+    session.handleOutput({ sessionId: 'session-1', data: 'pending output', seq: 1, processName: 'zsh' })
+    await flushTerminalStart()
+
+    firstTerm.buffer.active.baseY = 120
+    firstTerm.buffer.active.viewportY = 40
+    firstTerm.refresh.mockImplementationOnce(() => {
+      throw new Error('render refresh failed')
+    })
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    terminalCalls.attach.mockClear()
+
+    firstTerm.emitViewportScroll(40)
+    await flushTerminalStart()
+    await flushUntil(() => xtermMocks.terminals.length === 2)
+
+    const recoveredTerm = xtermMocks.terminals[1]!
+    terminalCalls.write.mockClear()
+    recoveredTerm.emitData('\x1b[1;1Rtyped')
+    await flushTerminalStart()
+
+    expect(terminalCalls.write).toHaveBeenCalledWith({ sessionId: 'session-1', data: '\x1b[1;1Rtyped' })
+    warnSpy.mockRestore()
+  })
+
+  test('flushes pending user input before rebuilding the front-end terminal view', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    session.writeInput('queued input')
+    ;(session as unknown as { recoverActiveView: () => void }).recoverActiveView()
+    await flushTerminalStart()
+
+    expect(terminalCalls.write).toHaveBeenCalledWith({ sessionId: 'session-1', data: 'queued input' })
+    expect(terminalCalls.close).not.toHaveBeenCalled()
   })
 
   test('keeps the same terminal instance and does not reset while flushing ordinary multi-line output', async () => {

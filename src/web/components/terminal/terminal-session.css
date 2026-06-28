@@ -153,12 +153,6 @@
   box-shadow: var(--shadow-sm);
 }
 
-.goblin-terminal-slot__redraw {
-  border: 1px solid var(--color-toolbar-border);
-  background: color-mix(in srgb, var(--color-toolbar) 94%, transparent);
-  box-shadow: var(--shadow-sm);
-}
-
 .goblin-terminal-float-group {
   position: absolute;
   top: var(--goblin-terminal-float-offset);

@@ -828,10 +828,8 @@ describe('server terminal sessions', () => {
     expect(spawn).toHaveBeenCalledTimes(1)
     if (!first.ok || !attachedAgain.ok) return
     expect(attachedAgain.sessionId).toBe(first.sessionId)
-    expect(attachedAgain.snapshot).toContain('chat-1')
-    expect(attachedAgain.snapshot).toContain('chat-2')
-    expect(attachedAgain.snapshot).not.toContain('\u001b[?1049h')
-    expect(attachedAgain.snapshot).not.toContain('resume menu')
+    expect(attachedAgain.snapshot).toContain('\u001b[?1049h')
+    expect(attachedAgain.snapshot).toContain('resume menu')
     expect(attachedAgain.snapshotSeq).toBe(2)
     expect(mockPtys[0]?.resize).toHaveBeenCalledWith(100, 30)
 

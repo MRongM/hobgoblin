@@ -130,7 +130,6 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
   )
   const focusTogglePressed = behavior.detailFocusMode
   const showCollapseControl = behavior.detailCollapseAllowed && layout !== 'left-right'
-
   return (
     <Toolbar variant="detail">
       <div className="flex h-full min-w-0 items-center gap-1 overflow-hidden">

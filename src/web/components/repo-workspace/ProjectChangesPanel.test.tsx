@@ -105,7 +105,7 @@ async function enableChangeSelection(): Promise<void> {
 }
 
 describe('ProjectChangesPanel', () => {
-  test('renders selected worktree changes with typed status markers and a commit entry', async () => {
+  test('renders selected worktree changes with typed status markers without a commit entry', async () => {
     seedRepoState({
       id: REPO_ID,
       branches: [createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } })],
@@ -144,7 +144,7 @@ describe('ProjectChangesPanel', () => {
     expect(modifiedMarker?.textContent).toBe('M')
     expect(modifiedMarker?.className).toContain('text-warning')
     expect(container?.textContent).toContain('modified.ts')
-    expect(container?.querySelector('button[aria-label="action.commit-title"]')).toBeTruthy()
+    expect(container?.querySelector('button[aria-label="action.commit-title"]')).toBeNull()
     expect(container?.textContent).not.toContain('action.merge')
   })
 
@@ -310,6 +310,55 @@ describe('ProjectChangesPanel', () => {
     expect(writeText).toHaveBeenCalledWith('src/app.ts\nsrc/components/Button.tsx\nREADME.md')
   })
 
+  test('orders change toolbar actions and omits the commit entry', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } })],
+      selectedBranch: 'feature/worktree',
+      statusLoaded: true,
+      status: [
+        {
+          path: WORKTREE_PATH,
+          branch: 'feature/worktree',
+          isMain: true,
+          entries: [
+            { x: 'M', y: ' ', path: 'src/app.ts' },
+            { x: '?', y: '?', path: 'src/components/Button.tsx' },
+          ],
+        },
+      ],
+    })
+
+    await act(async () => {
+      root!.render(
+        <InlineCommitDraftProvider>
+          <ProjectChangesPanel repoId={REPO_ID} />
+        </InlineCommitDraftProvider>,
+      )
+    })
+
+    const actionBar = container?.querySelector('[data-testid="project-changes-action-bar"]')
+    const leftActions = actionBar?.querySelector('[data-testid="project-changes-left-actions"]')
+    const listView = actionBar?.querySelector<HTMLButtonElement>('button[aria-label="file-list.view-list"]')
+    const treeView = actionBar?.querySelector<HTMLButtonElement>('button[aria-label="file-list.view-tree"]')
+    const copy = actionBar?.querySelector<HTMLButtonElement>('button[aria-label="history.copy-file-paths"]')
+    const refresh = actionBar?.querySelector<HTMLButtonElement>('button[aria-label="changes.refresh"]')
+    const selection = actionBar?.querySelector<HTMLButtonElement>('button[aria-label="changes.selection-toggle-title"]')
+    const commit = actionBar?.querySelector<HTMLButtonElement>('button[aria-label="action.commit-title"]')
+
+    expect(leftActions).toBeTruthy()
+    for (const control of [listView, treeView, copy, refresh, selection]) {
+      expect(control).toBeTruthy()
+      expect(leftActions!.contains(control!)).toBe(true)
+    }
+    expect(commit).toBeNull()
+    expect(listView!.compareDocumentPosition(treeView!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(treeView!.compareDocumentPosition(copy!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(copy!.compareDocumentPosition(refresh!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(refresh!.compareDocumentPosition(selection!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(actionBar?.textContent).not.toContain('changes.selection-toggle')
+  })
+
   test('hides selection controls by default and shows them from the pre-commit toggle', async () => {
     seedRepoState({
       id: REPO_ID,
@@ -339,9 +388,7 @@ describe('ProjectChangesPanel', () => {
 
     const actionBar = container?.querySelector('[data-testid="project-changes-action-bar"]')
     const toggle = changeSelectionToggle()
-    const commitButton = actionBar?.querySelector<HTMLButtonElement>('button[aria-label="action.commit-title"]')
-    expect(commitButton).toBeTruthy()
-    expect(toggle.compareDocumentPosition(commitButton!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(actionBar?.querySelector<HTMLButtonElement>('button[aria-label="action.commit-title"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="changes.select-file:src/app.ts"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="changes.select-folder:src"]')).toBeNull()
     expect(container?.textContent).not.toContain('changes.selected-count')
