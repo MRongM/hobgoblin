@@ -52,6 +52,7 @@ describe('native shell projection helpers', () => {
         editorApp: 'auto',
         fileTreeFontSize: 12,
         fileTreeTopbarFontSize: 13,
+        fileTreeClipboardMaxBytesMb: 30,
         terminalFontSize: 14,
         terminalExternalInputEnabled: false,
         remoteTerminalTmuxEnabled: false,

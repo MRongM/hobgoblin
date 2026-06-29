@@ -5,7 +5,10 @@ const mocks = vi.hoisted(() => ({
   discardRepositoryChanges: vi.fn(),
   getRepositoryCommitDetail: vi.fn(),
   getRepositoryHistory: vi.fn(),
+  openRepositoryEditor: vi.fn(),
+  readRepositoryFileTreeBinaryFile: vi.fn(),
   readRepositoryFileTreeTextFile: vi.fn(),
+  replaceRepositoryFileTreeBinaryFile: vi.fn(),
   replaceRepositoryFileTreeTextFile: vi.fn(),
   searchRepositoryFileTree: vi.fn(),
   exportRepositoryFilesToLocalDirectory: vi.fn(),
@@ -22,6 +25,7 @@ vi.mock('#/server/modules/repo-read-paths.ts', () => ({
   getRepositorySnapshot: vi.fn(),
   getRepositoryStatus: vi.fn(),
   probeRepository: vi.fn(),
+  readRepositoryFileTreeBinaryFile: mocks.readRepositoryFileTreeBinaryFile,
   readRepositoryFileTreeTextFile: mocks.readRepositoryFileTreeTextFile,
   searchRepositoryFileTree: mocks.searchRepositoryFileTree,
 }))
@@ -43,12 +47,13 @@ vi.mock('#/server/modules/repo-write-paths.ts', () => ({
   getRepositoryRemoteBranches: vi.fn(),
   mergeRepositoryBranch: vi.fn(),
   moveRepositoryFileTreeEntries: vi.fn(),
-  openRepositoryEditor: vi.fn(),
+  openRepositoryEditor: mocks.openRepositoryEditor,
   openRepositoryRemote: vi.fn(),
   openRepositoryTerminal: vi.fn(),
   pullRepositoryBranch: vi.fn(),
   pushRepositoryBranch: vi.fn(),
   renameRepositoryFileTreeEntry: vi.fn(),
+  replaceRepositoryFileTreeBinaryFile: mocks.replaceRepositoryFileTreeBinaryFile,
   replaceRepositoryFileTreeTextFile: mocks.replaceRepositoryFileTreeTextFile,
   removeRepositoryWorktree: vi.fn(),
   resetRepositoryHard: vi.fn(),
@@ -96,7 +101,19 @@ describe('repo routes', () => {
     })
     mocks.discardRepositoryChanges.mockResolvedValue({ ok: true, message: '' })
     mocks.createRepositoryFileTreeFile.mockResolvedValue({ ok: true, message: '' })
+    mocks.openRepositoryEditor.mockResolvedValue({ ok: true, message: '/repo/src/app.ts' })
+    mocks.readRepositoryFileTreeBinaryFile.mockResolvedValue({
+      ok: true,
+      name: 'image.bin',
+      byteLength: 3,
+      bytesBase64: 'AQID',
+    })
     mocks.readRepositoryFileTreeTextFile.mockResolvedValue({ ok: true, content: 'hello\n', byteLength: 6 })
+    mocks.replaceRepositoryFileTreeBinaryFile.mockResolvedValue({
+      ok: true,
+      previousBytesBase64: 'CQg=',
+      previousByteLength: 2,
+    })
     mocks.replaceRepositoryFileTreeTextFile.mockResolvedValue({
       ok: true,
       previousContent: 'old\n',
@@ -266,6 +283,21 @@ describe('repo routes', () => {
     )
   })
 
+  test('routes structured repository editor targets', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/open-editor', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ target: { path: '/repo/src/app.ts', line: 12, column: 3 } }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true, message: '/repo/src/app.ts' })
+    expect(mocks.openRepositoryEditor).toHaveBeenCalledWith({ path: '/repo/src/app.ts', line: 12, column: 3 })
+  })
+
   test('routes file tree text file read with parsed body values', async () => {
     const { createRepoRoutes } = await import('#/server/routes/repo.ts')
     const app = createRepoRoutes()
@@ -306,5 +338,76 @@ describe('repo routes', () => {
       expect.any(AbortSignal),
       undefined,
     )
+  })
+
+  test('routes file tree binary file read with validated body values', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/file-tree/read-binary-file', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ repoId: '/repo', worktreePath: '/repo', filePath: '/repo/image.bin', maxBytes: 30 }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      name: 'image.bin',
+      byteLength: 3,
+      bytesBase64: 'AQID',
+    })
+    expect(mocks.readRepositoryFileTreeBinaryFile).toHaveBeenCalledWith(
+      '/repo',
+      '/repo',
+      '/repo/image.bin',
+      30,
+      expect.any(AbortSignal),
+    )
+  })
+
+  test('routes file tree binary file replace with source token', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/file-tree/replace-binary-file', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        repoId: '/repo',
+        worktreePath: '/repo',
+        filePath: '/repo/image.bin',
+        bytesBase64: 'AQI=',
+        maxBytes: 30,
+        sourceToken: 'client_123',
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true, previousBytesBase64: 'CQg=', previousByteLength: 2 })
+    expect(mocks.replaceRepositoryFileTreeBinaryFile).toHaveBeenCalledWith(
+      '/repo',
+      '/repo',
+      '/repo/image.bin',
+      'AQI=',
+      30,
+      expect.any(AbortSignal),
+      'client_123',
+    )
+  })
+
+  test('rejects invalid file tree binary file read bodies', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/file-tree/read-binary-file', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ repoId: '/repo', worktreePath: '/repo', filePath: '/repo/image.bin', maxBytes: 0 }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+    expect(mocks.readRepositoryFileTreeBinaryFile).not.toHaveBeenCalled()
   })
 })

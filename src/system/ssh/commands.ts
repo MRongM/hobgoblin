@@ -29,6 +29,8 @@ export type RemoteCommandKind =
   | { type: 'createFileTreeFile'; worktreePath: string; parentDirPath: string; name: string }
   | { type: 'readFileTreeTextFile'; worktreePath: string; filePath: string }
   | { type: 'replaceFileTreeTextFile'; worktreePath: string; filePath: string }
+  | { type: 'readFileTreeBinaryFile'; worktreePath: string; filePath: string; maxBytes: number }
+  | { type: 'replaceFileTreeBinaryFile'; worktreePath: string; filePath: string; maxBytes: number }
   | { type: 'renameFileTreeEntry'; worktreePath: string; oldPath: string; newName: string }
   | { type: 'deleteFileTreeEntries'; worktreePath: string; paths: string[] }
   | { type: 'moveFileTreeEntries'; worktreePath: string; paths: string[]; targetDirPath: string }
@@ -255,6 +257,10 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return remoteReadFileTreeTextFileScript(command)
     case 'replaceFileTreeTextFile':
       return remoteReplaceFileTreeTextFileScript(command)
+    case 'readFileTreeBinaryFile':
+      return remoteReadFileTreeBinaryFileScript(command)
+    case 'replaceFileTreeBinaryFile':
+      return remoteReplaceFileTreeBinaryFileScript(command)
     case 'deleteFileTreeEntries':
       return remoteDeleteFileTreeScript(command)
     case 'moveFileTreeEntries':
@@ -690,6 +696,99 @@ function remoteReplaceFileTreeTextFileScript(command: Extract<RemoteCommandKind,
     'except OSError:',
     '    fail("error.failed-read-repo")',
     'finish({"ok": True, "previousContent": previous_content, "previousByteLength": previous_byte_length})',
+  ].join('\n')
+  return `python3 -c ${shellQuote(script)}`
+}
+
+function normalizedRemoteMaxBytes(value: number): number {
+  return Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 1
+}
+
+function remoteBinaryFilePreamble(worktreePath: string, maxBytes: number): string[] {
+  return [
+    'import base64, json, os, stat, sys',
+    `root = ${pythonString(worktreePath)}`,
+    `max_bytes = ${normalizedRemoteMaxBytes(maxBytes)}`,
+    'root_real = os.path.normpath(root)',
+    'def finish(payload):',
+    '    print(json.dumps(payload, ensure_ascii=False))',
+    '    sys.exit(0)',
+    'def fail(message):',
+    '    finish({"ok": False, "message": message})',
+    'def inside_root(value):',
+    '    candidate = os.path.normpath(value)',
+    "    return candidate == root_real or candidate.startswith(root_real.rstrip('/') + '/')",
+    'def checked_file_path(value):',
+    '    if not isinstance(value, str) or not value or "\\x00" in value:',
+    '        fail("error.invalid-arguments")',
+    '    candidate = os.path.normpath(value)',
+    '    if not os.path.isabs(candidate):',
+    '        fail("error.invalid-arguments")',
+    '    if not inside_root(candidate):',
+    '        fail("error.invalid-path")',
+    '    return candidate',
+    'def read_binary_file(path_value):',
+    '    try:',
+    '        info = os.lstat(path_value)',
+    '    except FileNotFoundError:',
+    '        fail("error.path-not-found")',
+    '    except PermissionError:',
+    '        fail("error.path-permission-denied")',
+    '    if not stat.S_ISREG(info.st_mode):',
+    '        fail("error.file-tree-not-regular-file")',
+    '    if info.st_size > max_bytes:',
+    '        fail("error.file-tree-clipboard-file-too-large")',
+    '    try:',
+    '        with open(path_value, "rb") as handle:',
+    '            raw = handle.read(max_bytes + 1)',
+    '    except PermissionError:',
+    '        fail("error.path-permission-denied")',
+    '    except OSError:',
+    '        fail("error.failed-read-repo")',
+    '    if len(raw) > max_bytes:',
+    '        fail("error.file-tree-clipboard-file-too-large")',
+    '    return raw',
+  ]
+}
+
+function remoteReadFileTreeBinaryFileScript(command: Extract<RemoteCommandKind, { type: 'readFileTreeBinaryFile' }>): string {
+  return [
+    "python3 - <<'PY'",
+    ...remoteBinaryFilePreamble(command.worktreePath, command.maxBytes),
+    `file_path = checked_file_path(${pythonString(command.filePath)})`,
+    'raw = read_binary_file(file_path)',
+    'payload = {"ok": True, "name": os.path.basename(file_path), "byteLength": len(raw), "bytesBase64": base64.b64encode(raw).decode("ascii")}',
+    'try:',
+    '    text = raw.decode("utf-8", "strict")',
+    '    if "\\x00" not in text:',
+    '        payload["text"] = text',
+    'except UnicodeDecodeError:',
+    '    pass',
+    'finish(payload)',
+    'PY',
+  ].join('\n')
+}
+
+function remoteReplaceFileTreeBinaryFileScript(command: Extract<RemoteCommandKind, { type: 'replaceFileTreeBinaryFile' }>): string {
+  const script = [
+    ...remoteBinaryFilePreamble(command.worktreePath, command.maxBytes),
+    `file_path = checked_file_path(${pythonString(command.filePath)})`,
+    'stdin_raw = sys.stdin.buffer.read()',
+    'try:',
+    '    next_raw = base64.b64decode(stdin_raw, validate=True)',
+    'except Exception:',
+    '    fail("error.invalid-arguments")',
+    'if len(next_raw) > max_bytes:',
+    '    fail("error.file-tree-clipboard-file-too-large")',
+    'previous_raw = read_binary_file(file_path)',
+    'try:',
+    '    with open(file_path, "wb") as handle:',
+    '        handle.write(next_raw)',
+    'except PermissionError:',
+    '    fail("error.path-permission-denied")',
+    'except OSError:',
+    '    fail("error.failed-read-repo")',
+    'finish({"ok": True, "previousBytesBase64": base64.b64encode(previous_raw).decode("ascii"), "previousByteLength": len(previous_raw)})',
   ].join('\n')
   return `python3 -c ${shellQuote(script)}`
 }

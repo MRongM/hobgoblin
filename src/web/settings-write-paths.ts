@@ -15,6 +15,7 @@ import {
   refreshExternalAppsSnapshot,
   refreshGitHubCliState,
   saveSession,
+  setFileTreeClipboardMaxBytesMb,
   setFileTreeFontSize,
   setFileTreeTopbarFontSize,
   setGlobalShortcut,
@@ -149,6 +150,12 @@ export async function setFileTreeTopbarFontSizePreference(fontSize: number): Pro
   const fileTreeTopbarFontSize = await setFileTreeTopbarFontSize(fontSize)
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, fileTreeTopbarFontSize }))
   return fileTreeTopbarFontSize
+}
+
+export async function setFileTreeClipboardMaxBytesMbPreference(value: number): Promise<number> {
+  const fileTreeClipboardMaxBytesMb = await setFileTreeClipboardMaxBytesMb(value)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, fileTreeClipboardMaxBytesMb }))
+  return fileTreeClipboardMaxBytesMb
 }
 
 export async function setTerminalFontSizePreference(fontSize: number): Promise<number> {

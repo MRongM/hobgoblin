@@ -2,7 +2,11 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
-import { runSelectTerminalCommand, runTerminalPrimaryActionCommand } from '#/web/commands/workspace-commands.ts'
+import {
+  runSelectTerminalCommand,
+  runTerminalDeepLinkCommand,
+  runTerminalPrimaryActionCommand,
+} from '#/web/commands/workspace-commands.ts'
 import { setTerminalSessionCommandBridge } from '#/web/components/terminal/terminal-session-command-bridge.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
@@ -216,6 +220,70 @@ describe('workspace commands', () => {
       [`${REPO_ID}\0${WORKTREE_PATH}`, 'terminal-2'],
       [`${REPO_ID}\0${WORKTREE_PATH}`, 'terminal-3'],
     ])
+  })
+
+  test('terminal deep link command opens the targeted worktree terminal session', () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } })],
+      selectedBranch: 'main',
+      detailTab: 'status',
+    })
+    const selectTerminal = vi.fn()
+    setTerminalSessionCommandBridge({
+      worktreeSnapshot: () => ({
+        worktreeTerminalKey: `${REPO_ID}\0${WORKTREE_PATH}`,
+        selectedDescriptor: null,
+        sessions: [
+          {
+            key: 'session-key-1',
+            worktreeTerminalKey: `${REPO_ID}\0${WORKTREE_PATH}`,
+            terminalId: 'terminal-1',
+            index: 1,
+            title: 'terminal 1',
+            phase: 'open',
+            selected: false,
+            hasBell: false,
+          },
+          {
+            key: 'session-key-2',
+            worktreeTerminalKey: `${REPO_ID}\0${WORKTREE_PATH}`,
+            terminalId: 'terminal-2',
+            index: 2,
+            title: 'terminal 2',
+            phase: 'open',
+            selected: true,
+            hasBell: false,
+          },
+        ],
+        count: 2,
+      }),
+      createTerminal: vi.fn(async () => 'session-key-2'),
+      selectTerminal,
+      fillExternalInput: vi.fn(() => false),
+      writeInput: vi.fn(),
+    })
+    const navigation = navigationWith()
+    const setDetailCollapsed = vi.fn((collapsed: boolean) => useReposStore.getState().setDetailCollapsed(collapsed))
+
+    expect(
+      runTerminalDeepLinkCommand({
+        target: {
+          repoId: REPO_ID,
+          worktreePath: WORKTREE_PATH,
+          branch: 'feature/worktree',
+          terminalId: 'terminal-2',
+        },
+        navigation,
+        setDetailCollapsed,
+      }),
+    ).toBe(true)
+
+    const repo = useReposStore.getState().repos[REPO_ID]
+    expect(repo?.ui.selectedBranch).toBe('feature/worktree')
+    expect(repo?.ui.detailTab).toBe('terminal')
+    expect(useReposStore.getState().detailCollapsed).toBe(false)
+    expect(selectTerminal).toHaveBeenCalledWith(`${REPO_ID}\0${WORKTREE_PATH}`, 'session-key-2')
   })
 })
 

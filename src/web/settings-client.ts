@@ -218,6 +218,11 @@ export async function setFileTreeTopbarFontSize(fontSize: number): Promise<numbe
   return result.settings.fileTreeTopbarFontSize
 }
 
+export async function setFileTreeClipboardMaxBytesMb(value: number): Promise<number> {
+  const result = await updateSettingsPrefsPatch({ fileTreeClipboardMaxBytesMb: value })
+  return result.settings.fileTreeClipboardMaxBytesMb
+}
+
 export async function setTerminalFontSize(fontSize: number): Promise<number> {
   const result = await updateSettingsPrefsPatch({ terminalFontSize: fontSize })
   return result.settings.terminalFontSize

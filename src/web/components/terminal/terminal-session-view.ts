@@ -33,6 +33,7 @@ import {
   type TerminalGeometry,
 } from '#/web/components/terminal/terminal-geometry.ts'
 import type { TerminalInput } from '#/web/components/terminal/terminal-input.ts'
+import type { FilePathTarget } from '#/shared/file-path-target.ts'
 const DEFAULT_PARKING_WIDTH = 800
 const DEFAULT_PARKING_HEIGHT = 400
 const RESIZE_DEBOUNCE_MS = 80
@@ -76,10 +77,17 @@ export class TerminalSessionView {
   private viewportElement: HTMLElement | null = null
   private host: HTMLElement | null = null
   private revealPathHandler: ((relativePath: string) => void) | null = null
+  private openPathInEditorHandler: ((target: FilePathTarget) => void) | null = null
   private fontSize: number
   private terminalThemeMode: () => TerminalThemeMode
   private readonly safariShiftKeyResolver = new SafariShiftKeyResolver()
   private readonly handleViewportScroll = () => this.scheduleViewportRefresh()
+  private readonly handleTerminalPointerDown = (event: Event) => {
+    if (!(event.target instanceof Node)) return
+    if (!this.xtermHost.contains(event.target)) return
+    if ('button' in event && typeof event.button === 'number' && event.button !== 0) return
+    this.term?.focus()
+  }
 
   constructor(
     handlers: {
@@ -100,6 +108,7 @@ export class TerminalSessionView {
     this.xtermHost = document.createElement('div')
     this.xtermHost.className = 'goblin-managed-terminal-host'
     this.frame.appendChild(this.xtermHost)
+    this.frame.addEventListener('pointerdown', this.handleTerminalPointerDown)
     this.parkingElement = document.createElement('div')
     this.parkingElement.className = 'goblin-terminal-parking__item'
     this.handlers = handlers
@@ -117,6 +126,10 @@ export class TerminalSessionView {
 
   setRevealPathHandler(handler: ((relativePath: string) => void) | null): void {
     this.revealPathHandler = handler
+  }
+
+  setOpenPathInEditorHandler(handler: ((target: FilePathTarget) => void) | null): void {
+    this.openPathInEditorHandler = handler
   }
 
   setFontSize(fontSize: number): void {
@@ -159,6 +172,7 @@ export class TerminalSessionView {
   }
 
   disposeFrame(): void {
+    this.frame.removeEventListener('pointerdown', this.handleTerminalPointerDown)
     this.parkingElement.remove()
     this.frame.remove()
   }
@@ -399,7 +413,13 @@ export class TerminalSessionView {
 
   private installRelativePathLinkProvider(term: XTermTerminal): void {
     try {
-      this.disposables.push(registerTerminalRelativePathLinkProvider(term, () => this.revealPathHandler))
+      this.disposables.push(
+        registerTerminalRelativePathLinkProvider(
+          term,
+          () => this.revealPathHandler,
+          () => this.openPathInEditorHandler,
+        ),
+      )
     } catch (err) {
       console.warn('[terminal] failed to register relative path links', err)
     }

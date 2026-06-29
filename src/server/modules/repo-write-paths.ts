@@ -10,6 +10,7 @@ import {
   createLocalFileTreeFile,
   deleteLocalFileTreeEntries,
   moveLocalFileTreeEntries,
+  replaceLocalFileTreeBinaryFile,
   renameLocalFileTreeEntry,
   replaceLocalFileTreeTextFile,
 } from '#/system/file-tree/local.ts'
@@ -18,13 +19,15 @@ import {
   createRemoteFileTreeFile,
   deleteRemoteFileTreeEntries,
   moveRemoteFileTreeEntries,
+  replaceRemoteFileTreeBinaryFile,
   renameRemoteFileTreeEntry,
   replaceRemoteFileTreeTextFile,
 } from '#/system/ssh/git.ts'
 import { openInPreferredEditor } from '#/system/editors.ts'
 import { openInPreferredTerminal } from '#/system/terminals.ts'
 import { type ExecResult } from '#/shared/git-types.ts'
-import type { RepoFileTreeTextFileReplaceResult } from '#/shared/file-tree.ts'
+import type { EditorOpenTarget } from '#/shared/file-path-target.ts'
+import type { RepoFileTreeBinaryFileReplaceResult, RepoFileTreeTextFileReplaceResult } from '#/shared/file-tree.ts'
 import { isRemoteRepoId, type NetworkOpKind } from '#/shared/rpc.ts'
 import { checkGitAvailable } from '#/system/git/helper.ts'
 import { isValidCwd, isValidRepoLocator } from '#/shared/input-validation.ts'
@@ -407,9 +410,9 @@ export async function openRepositoryTerminal(path: string): Promise<ExecResult> 
   return await openInPreferredTerminal(path, prefs.terminalApp)
 }
 
-export async function openRepositoryEditor(path: string): Promise<ExecResult> {
+export async function openRepositoryEditor(target: EditorOpenTarget): Promise<ExecResult> {
   const prefs = await getServerSettingsPrefs()
-  return await openInPreferredEditor(path, prefs.editorApp)
+  return await openInPreferredEditor(target, prefs.editorApp)
 }
 
 export function abortRepositoryOperation(cwd: string): boolean {
@@ -473,6 +476,29 @@ export async function replaceRepositoryFileTreeTextFile(
   const result = isRemoteRepoId(repoId)
     ? await replaceRemoteFileTreeTextFile(await resolveRemoteRepoTarget(repoId), worktreePath, filePath, content, { signal })
     : await replaceLocalFileTreeTextFile(worktreePath, filePath, content)
+  if (result.ok) publishRepoSnapshotInvalidation(repoId, sourceToken)
+  return result
+}
+
+export async function replaceRepositoryFileTreeBinaryFile(
+  repoId: string,
+  worktreePath: string,
+  filePath: string,
+  bytesBase64: string,
+  maxBytes: number,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<RepoFileTreeBinaryFileReplaceResult> {
+  const result = isRemoteRepoId(repoId)
+    ? await replaceRemoteFileTreeBinaryFile(
+        await resolveRemoteRepoTarget(repoId),
+        worktreePath,
+        filePath,
+        bytesBase64,
+        maxBytes,
+        { signal },
+      )
+    : await replaceLocalFileTreeBinaryFile(worktreePath, filePath, bytesBase64, maxBytes)
   if (result.ok) publishRepoSnapshotInvalidation(repoId, sourceToken)
   return result
 }

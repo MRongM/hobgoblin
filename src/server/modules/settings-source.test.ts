@@ -222,6 +222,22 @@ test('normalizes invalid temporary file directories to the default project tmp m
   })
 })
 
+test('normalizes file tree clipboard max bytes setting', async () => {
+  tmp = mkdtempSync(path.join(os.tmpdir(), 'gbl-server-settings-'))
+  previousDataDir = process.env.GOBLIN_SERVER_DATA_DIR
+  process.env.GOBLIN_SERVER_DATA_DIR = tmp
+
+  const mod = await import('#/server/modules/settings-source.ts')
+  await mod.updateServerSettingsPrefs({ fileTreeClipboardMaxBytesMb: 250 })
+  await expect(mod.getServerSettingsPrefs()).resolves.toMatchObject({ fileTreeClipboardMaxBytesMb: 100 })
+
+  await mod.updateServerSettingsPrefs({ fileTreeClipboardMaxBytesMb: -5 })
+  await expect(mod.getServerSettingsPrefs()).resolves.toMatchObject({ fileTreeClipboardMaxBytesMb: 1 })
+
+  await mod.updateServerSettingsPrefs({ fileTreeClipboardMaxBytesMb: 'large' as never })
+  await expect(mod.getServerSettingsPrefs()).resolves.toMatchObject({ fileTreeClipboardMaxBytesMb: 30 })
+})
+
 test('limits persisted terminal custom buttons to 20 valid entries', async () => {
   tmp = mkdtempSync(path.join(os.tmpdir(), 'gbl-server-settings-'))
   previousDataDir = process.env.GOBLIN_SERVER_DATA_DIR

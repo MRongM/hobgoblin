@@ -5,6 +5,8 @@ import type { ExecResult } from '#/shared/git-types.ts'
 import {
   FILE_TREE_MAX_ENTRIES,
   FILE_TREE_TEXT_FILE_MAX_BYTES,
+  type RepoFileTreeBinaryFileReadResult,
+  type RepoFileTreeBinaryFileReplaceResult,
   type RepoFileTreeEntry,
   type RepoFileTreeResult,
   type RepoFileTreeTextFileReadResult,
@@ -90,6 +92,28 @@ function validateReplacementText(content: string): { ok: true; bytes: Buffer } |
   if (bytes.byteLength > FILE_TREE_TEXT_FILE_MAX_BYTES) {
     return { ok: false, message: 'error.file-tree-text-file-too-large' }
   }
+  return { ok: true, bytes }
+}
+
+function validateBinaryMaxBytes(maxBytes: number): boolean {
+  return Number.isSafeInteger(maxBytes) && maxBytes > 0
+}
+
+function isBase64String(value: string): boolean {
+  return /^[A-Za-z0-9+/]*={0,2}$/.test(value) && value.length % 4 === 0
+}
+
+function decodeReplacementBase64(
+  bytesBase64: string,
+  maxBytes: number,
+): { ok: true; bytes: Buffer } | { ok: false; message: string } {
+  if (!validateBinaryMaxBytes(maxBytes) || typeof bytesBase64 !== 'string') {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  if (!isBase64String(bytesBase64)) return { ok: false, message: 'error.invalid-arguments' }
+  const bytes = Buffer.from(bytesBase64, 'base64')
+  if (bytes.toString('base64') !== bytesBase64) return { ok: false, message: 'error.invalid-arguments' }
+  if (bytes.byteLength > maxBytes) return { ok: false, message: 'error.file-tree-clipboard-file-too-large' }
   return { ok: true, bytes }
 }
 
@@ -281,6 +305,62 @@ export async function replaceLocalFileTreeTextFile(
   try {
     await fs.writeFile(path.resolve(filePath), replacement.bytes)
     return { ok: true, previousContent: previous.content, previousByteLength: previous.byteLength }
+  } catch (err) {
+    return { ok: false, message: classifyFsWriteError(err) }
+  }
+}
+
+export async function readLocalFileTreeBinaryFile(
+  worktreePath: string,
+  filePath: string,
+  maxBytes: number,
+): Promise<RepoFileTreeBinaryFileReadResult> {
+  if (!isAbsolutePathInput(worktreePath) || !isAbsolutePathInput(filePath) || !validateBinaryMaxBytes(maxBytes)) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  const root = path.resolve(worktreePath)
+  const file = path.resolve(filePath)
+  if (!pathInsideRoot(root, file)) return { ok: false, message: 'error.invalid-path' }
+  const info = await fs.lstat(file).catch((err: unknown) => err)
+  if (!isFileStat(info)) return { ok: false, message: classifyFsWriteError(info) }
+  if (!info.isFile()) return { ok: false, message: 'error.file-tree-not-regular-file' }
+  if (info.size > maxBytes) return { ok: false, message: 'error.file-tree-clipboard-file-too-large' }
+  try {
+    const bytes = await fs.readFile(file)
+    if (bytes.byteLength > maxBytes) return { ok: false, message: 'error.file-tree-clipboard-file-too-large' }
+    const decoded = decodeUtf8Text(bytes)
+    return {
+      ok: true,
+      name: path.basename(file),
+      byteLength: bytes.byteLength,
+      bytesBase64: bytes.toString('base64'),
+      ...(decoded.ok ? { text: decoded.content } : {}),
+    }
+  } catch (err) {
+    return { ok: false, message: classifyFsWriteError(err) }
+  }
+}
+
+export async function replaceLocalFileTreeBinaryFile(
+  worktreePath: string,
+  filePath: string,
+  bytesBase64: string,
+  maxBytes: number,
+): Promise<RepoFileTreeBinaryFileReplaceResult> {
+  if (!isAbsolutePathInput(worktreePath) || !isAbsolutePathInput(filePath)) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  const next = decodeReplacementBase64(bytesBase64, maxBytes)
+  if (!next.ok) return next
+  const previous = await readLocalFileTreeBinaryFile(worktreePath, filePath, maxBytes)
+  if (!previous.ok) return previous
+  try {
+    await fs.writeFile(path.resolve(filePath), next.bytes)
+    return {
+      ok: true,
+      previousBytesBase64: previous.bytesBase64,
+      previousByteLength: previous.byteLength,
+    }
   } catch (err) {
     return { ok: false, message: classifyFsWriteError(err) }
   }

@@ -2,6 +2,8 @@ import path from 'node:path'
 import {
   normalizeFileTreeSearchLimit,
   type RepoFileSearchResult,
+  type RepoFileTreeBinaryFileReadResult,
+  type RepoFileTreeBinaryFileReplaceResult,
   type RepoFileTreeEntry,
   type RepoFileTreeResult,
   type RepoFileTreeTextFileReadResult,
@@ -515,6 +517,48 @@ export async function replaceRemoteFileTreeTextFile(
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
   if (!result.ok && !result.stdout) return { ok: false, message: remoteExecResult(result).message }
   return parseRemoteTextFileReplaceResult(result.stdout)
+}
+
+export async function readRemoteFileTreeBinaryFile(
+  target: RemoteRepoTarget,
+  worktreePath: string,
+  filePath: string,
+  maxBytes: number,
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<RepoFileTreeBinaryFileReadResult> {
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const result = await run(
+    { type: 'readFileTreeBinaryFile', worktreePath, filePath, maxBytes },
+    target,
+    { signal: options.signal, timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS, maxBuffer: REMOTE_FILE_TRANSFER_MAX_BUFFER },
+  )
+  if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
+  if (!result.ok && !result.stdout) return { ok: false, message: remoteExecResult(result).message }
+  return parseRemoteBinaryFileReadResult(result.stdout)
+}
+
+export async function replaceRemoteFileTreeBinaryFile(
+  target: RemoteRepoTarget,
+  worktreePath: string,
+  filePath: string,
+  bytesBase64: string,
+  maxBytes: number,
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<RepoFileTreeBinaryFileReplaceResult> {
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const result = await run(
+    { type: 'replaceFileTreeBinaryFile', worktreePath, filePath, maxBytes },
+    target,
+    {
+      signal: options.signal,
+      timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS,
+      stdin: bytesBase64,
+      maxBuffer: REMOTE_FILE_TRANSFER_MAX_BUFFER,
+    },
+  )
+  if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
+  if (!result.ok && !result.stdout) return { ok: false, message: remoteExecResult(result).message }
+  return parseRemoteBinaryFileReplaceResult(result.stdout)
 }
 
 export async function deleteRemoteFileTreeEntries(
@@ -1155,6 +1199,54 @@ function parseRemoteTextFileReplaceResult(value: string): RepoFileTreeTextFileRe
       return {
         ok: true,
         previousContent: parsed.previousContent,
+        previousByteLength: parsed.previousByteLength,
+      }
+    }
+    if (parsed.ok === false && typeof parsed.message === 'string') return { ok: false, message: parsed.message }
+  } catch {
+    return { ok: false, message: 'error.failed-read-repo' }
+  }
+  return { ok: false, message: 'error.failed-read-repo' }
+}
+
+function parseRemoteBinaryFileReadResult(value: string): RepoFileTreeBinaryFileReadResult {
+  try {
+    const parsed = JSON.parse(value) as Partial<RepoFileTreeBinaryFileReadResult>
+    if (
+      parsed.ok === true &&
+      typeof parsed.name === 'string' &&
+      typeof parsed.byteLength === 'number' &&
+      typeof parsed.bytesBase64 === 'string' &&
+      (parsed.text === undefined || typeof parsed.text === 'string') &&
+      (parsed.mimeType === undefined || typeof parsed.mimeType === 'string')
+    ) {
+      return {
+        ok: true,
+        name: parsed.name,
+        byteLength: parsed.byteLength,
+        bytesBase64: parsed.bytesBase64,
+        ...(parsed.text !== undefined ? { text: parsed.text } : {}),
+        ...(parsed.mimeType !== undefined ? { mimeType: parsed.mimeType } : {}),
+      }
+    }
+    if (parsed.ok === false && typeof parsed.message === 'string') return { ok: false, message: parsed.message }
+  } catch {
+    return { ok: false, message: 'error.failed-read-repo' }
+  }
+  return { ok: false, message: 'error.failed-read-repo' }
+}
+
+function parseRemoteBinaryFileReplaceResult(value: string): RepoFileTreeBinaryFileReplaceResult {
+  try {
+    const parsed = JSON.parse(value) as Partial<RepoFileTreeBinaryFileReplaceResult>
+    if (
+      parsed.ok === true &&
+      typeof parsed.previousBytesBase64 === 'string' &&
+      typeof parsed.previousByteLength === 'number'
+    ) {
+      return {
+        ok: true,
+        previousBytesBase64: parsed.previousBytesBase64,
         previousByteLength: parsed.previousByteLength,
       }
     }

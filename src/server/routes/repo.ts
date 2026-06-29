@@ -15,6 +15,7 @@ import {
   getRepositoryStatus,
   probeRepository,
   readRepositoryFileTreeTextFile,
+  readRepositoryFileTreeBinaryFile,
 } from '#/server/modules/repo-read-paths.ts'
 import {
   abortCloneOperation,
@@ -41,13 +42,19 @@ import {
   pullRepositoryBranch,
   pushRepositoryBranch,
   renameRepositoryFileTreeEntry,
+  replaceRepositoryFileTreeBinaryFile,
   replaceRepositoryFileTreeTextFile,
   removeRepositoryWorktree,
   resetRepositoryHard,
   trackRepositoryRemoteBranch,
 } from '#/server/modules/repo-write-paths.ts'
 import { getServerFetchIntervalSec } from '#/server/modules/settings-source.ts'
-import { normalizeFileTreeSearchLimit } from '#/shared/file-tree.ts'
+import type { FilePathTarget } from '#/shared/file-path-target.ts'
+import {
+  isRepoFileTreeBinaryFileReadRequest,
+  isRepoFileTreeBinaryFileReplaceRequest,
+  normalizeFileTreeSearchLimit,
+} from '#/shared/file-tree.ts'
 
 export function createRepoRoutes() {
   const app = new Hono()
@@ -63,6 +70,19 @@ export function createRepoRoutes() {
     const parsed = typeof value === 'number' ? Math.floor(value) : Number.NaN
     if (!Number.isFinite(parsed)) return fallback
     return Math.max(min, Math.min(max, parsed))
+  }
+  function routeEditorTarget(value: unknown): FilePathTarget | null {
+    if (!value || typeof value !== 'object') return null
+    const input = value as Record<string, unknown>
+    if (typeof input.path !== 'string') return null
+    const target: FilePathTarget = { path: input.path }
+    if (typeof input.line === 'number' && Number.isSafeInteger(input.line) && input.line > 0) {
+      target.line = input.line
+      if (typeof input.column === 'number' && Number.isSafeInteger(input.column) && input.column > 0) {
+        target.column = input.column
+      }
+    }
+    return target
   }
   app.post('/probe', async (c) => {
     const body = await c.req.json().catch(() => null)
@@ -222,6 +242,45 @@ export function createRepoRoutes() {
         () => replaceRepositoryFileTreeTextFile(repoId, worktreePath, filePath, content, c.req.raw.signal, sourceToken),
         { ok: false, message: 'error.failed-read-repo' },
         'file-tree-replace-text-file',
+      ),
+    )
+  })
+  app.post('/file-tree/read-binary-file', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    if (!isRepoFileTreeBinaryFileReadRequest(body)) {
+      return c.json({ ok: false, message: 'error.invalid-arguments' })
+    }
+    return c.json(
+      await jsonOr(
+        () => readRepositoryFileTreeBinaryFile(body.repoId, body.worktreePath, body.filePath, body.maxBytes, c.req.raw.signal),
+        { ok: false, message: 'error.failed-read-repo' },
+        'file-tree-read-binary-file',
+      ),
+    )
+  })
+  app.post('/file-tree/replace-binary-file', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const sourceToken =
+      typeof body === 'object' && body !== null && 'sourceToken' in body && typeof body.sourceToken === 'string'
+        ? body.sourceToken
+        : undefined
+    if (!isRepoFileTreeBinaryFileReplaceRequest(body)) {
+      return c.json({ ok: false, message: 'error.invalid-arguments' })
+    }
+    return c.json(
+      await jsonOr(
+        () =>
+          replaceRepositoryFileTreeBinaryFile(
+            body.repoId,
+            body.worktreePath,
+            body.filePath,
+            body.bytesBase64,
+            body.maxBytes,
+            c.req.raw.signal,
+            sourceToken,
+          ),
+        { ok: false, message: 'error.failed-read-repo' },
+        'file-tree-replace-binary-file',
       ),
     )
   })
@@ -407,8 +466,15 @@ export function createRepoRoutes() {
   })
   app.post('/open-editor', async (c) => {
     const body = await c.req.json().catch(() => null)
+    const target = routeEditorTarget(body?.target)
     const path = typeof body?.path === 'string' ? body.path : ''
-    return c.json(await jsonOr(() => openRepositoryEditor(path), { ok: false, message: 'error.failed-read-repo' }, 'open-editor'))
+    return c.json(
+      await jsonOr(
+        () => openRepositoryEditor(target ?? path),
+        { ok: false, message: 'error.failed-read-repo' },
+        'open-editor',
+      ),
+    )
   })
   app.post('/background-sync-repos', async (c) => {
     const body = await c.req.json().catch(() => null)

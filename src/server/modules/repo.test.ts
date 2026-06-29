@@ -60,11 +60,15 @@ const mocks = vi.hoisted(() => ({
   pullRemoteBranch: vi.fn(),
   pushBranch: vi.fn(),
   pushRemoteBranch: vi.fn(),
+  readLocalFileTreeBinaryFile: vi.fn(),
   readLocalFileTreeTextFile: vi.fn(),
+  readRemoteFileTreeBinaryFile: vi.fn(),
   readRemoteFileTreeTextFile: vi.fn(),
   renameLocalFileTreeEntry: vi.fn(),
   renameRemoteFileTreeEntry: vi.fn(),
+  replaceLocalFileTreeBinaryFile: vi.fn(),
   replaceLocalFileTreeTextFile: vi.fn(),
+  replaceRemoteFileTreeBinaryFile: vi.fn(),
   replaceRemoteFileTreeTextFile: vi.fn(),
   removeWorktree: vi.fn(),
   removeRemoteWorktree: vi.fn(),
@@ -174,8 +178,10 @@ vi.mock('#/system/file-tree/local.ts', () => ({
   createLocalFileTreeFile: mocks.createLocalFileTreeFile,
   deleteLocalFileTreeEntries: mocks.deleteLocalFileTreeEntries,
   moveLocalFileTreeEntries: mocks.moveLocalFileTreeEntries,
+  readLocalFileTreeBinaryFile: mocks.readLocalFileTreeBinaryFile,
   readLocalFileTreeTextFile: mocks.readLocalFileTreeTextFile,
   renameLocalFileTreeEntry: mocks.renameLocalFileTreeEntry,
+  replaceLocalFileTreeBinaryFile: mocks.replaceLocalFileTreeBinaryFile,
   replaceLocalFileTreeTextFile: mocks.replaceLocalFileTreeTextFile,
 }))
 
@@ -214,10 +220,12 @@ vi.mock('#/system/ssh/git.ts', () => ({
   getRemoteStatus: vi.fn(),
   pullRemoteBranch: mocks.pullRemoteBranch,
   pushRemoteBranch: mocks.pushRemoteBranch,
+  readRemoteFileTreeBinaryFile: mocks.readRemoteFileTreeBinaryFile,
   readRemoteFileTreeTextFile: mocks.readRemoteFileTreeTextFile,
   mergeRemoteBranch: mocks.mergeRemoteBranch,
   moveRemoteFileTreeEntries: mocks.moveRemoteFileTreeEntries,
   renameRemoteFileTreeEntry: mocks.renameRemoteFileTreeEntry,
+  replaceRemoteFileTreeBinaryFile: mocks.replaceRemoteFileTreeBinaryFile,
   replaceRemoteFileTreeTextFile: mocks.replaceRemoteFileTreeTextFile,
   removeRemoteWorktree: mocks.removeRemoteWorktree,
   resetRemoteHard: mocks.resetRemoteHard,
@@ -274,7 +282,19 @@ beforeEach(() => {
   mocks.pullRemoteBranch.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.pushBranch.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.pushRemoteBranch.mockResolvedValue({ ok: true, message: 'ok' })
+  mocks.readLocalFileTreeBinaryFile.mockResolvedValue({
+    ok: true,
+    name: 'image.bin',
+    byteLength: 3,
+    bytesBase64: 'AQID',
+  })
   mocks.readLocalFileTreeTextFile.mockResolvedValue({ ok: true, content: 'hello\n', byteLength: 6 })
+  mocks.readRemoteFileTreeBinaryFile.mockResolvedValue({
+    ok: true,
+    name: 'image.bin',
+    byteLength: 3,
+    bytesBase64: 'AQID',
+  })
   mocks.readRemoteFileTreeTextFile.mockResolvedValue({ ok: true, content: 'remote\n', byteLength: 7 })
   mocks.fetchRemoteRepository.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.createWorktree.mockResolvedValue({ ok: true, message: 'ok' })
@@ -285,7 +305,17 @@ beforeEach(() => {
   mocks.deleteUpstreamBranch.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.renameLocalFileTreeEntry.mockResolvedValue({ ok: true, message: '' })
   mocks.renameRemoteFileTreeEntry.mockResolvedValue({ ok: true, message: '' })
+  mocks.replaceLocalFileTreeBinaryFile.mockResolvedValue({
+    ok: true,
+    previousBytesBase64: 'CQg=',
+    previousByteLength: 2,
+  })
   mocks.replaceLocalFileTreeTextFile.mockResolvedValue({ ok: true, previousContent: 'old\n', previousByteLength: 4 })
+  mocks.replaceRemoteFileTreeBinaryFile.mockResolvedValue({
+    ok: true,
+    previousBytesBase64: 'CQg=',
+    previousByteLength: 2,
+  })
   mocks.replaceRemoteFileTreeTextFile.mockResolvedValue({
     ok: true,
     previousContent: 'remote old\n',
@@ -1089,6 +1119,33 @@ describe('repo mutation invalidation publishing', () => {
     )
   })
 
+  test('readRepositoryFileTreeBinaryFile dispatches local and remote repos', async () => {
+    const { readRepositoryFileTreeBinaryFile } = await import('#/server/modules/repo-read-paths.ts')
+
+    await expect(readRepositoryFileTreeBinaryFile('/tmp/repo', '/tmp/repo', '/tmp/repo/image.bin', 30)).resolves.toEqual({
+      ok: true,
+      name: 'image.bin',
+      byteLength: 3,
+      bytesBase64: 'AQID',
+    })
+    await expect(
+      readRepositoryFileTreeBinaryFile('ssh-config://prod/srv/repo', '/srv/repo', '/srv/repo/image.bin', 30),
+    ).resolves.toEqual({
+      ok: true,
+      name: 'image.bin',
+      byteLength: 3,
+      bytesBase64: 'AQID',
+    })
+    expect(mocks.readLocalFileTreeBinaryFile).toHaveBeenCalledWith('/tmp/repo', '/tmp/repo/image.bin', 30)
+    expect(mocks.readRemoteFileTreeBinaryFile).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
+      '/srv/repo',
+      '/srv/repo/image.bin',
+      30,
+      { signal: undefined },
+    )
+  })
+
   test('replaceRepositoryFileTreeTextFile publishes snapshot invalidation after local success', async () => {
     const { replaceRepositoryFileTreeTextFile } = await import('#/server/modules/repo-write-paths.ts')
 
@@ -1099,6 +1156,28 @@ describe('repo mutation invalidation publishing', () => {
     expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
       repoId: '/tmp/repo',
       query: 'repo-snapshot',
+    })
+  })
+
+  test('replaceRepositoryFileTreeBinaryFile publishes snapshot invalidation after local success', async () => {
+    const { replaceRepositoryFileTreeBinaryFile } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await replaceRepositoryFileTreeBinaryFile(
+      '/tmp/repo',
+      '/tmp/repo',
+      '/tmp/repo/image.bin',
+      'AQI=',
+      30,
+      undefined,
+      'client_123',
+    )
+
+    expect(result).toEqual({ ok: true, previousBytesBase64: 'CQg=', previousByteLength: 2 })
+    expect(mocks.replaceLocalFileTreeBinaryFile).toHaveBeenCalledWith('/tmp/repo', '/tmp/repo/image.bin', 'AQI=', 30)
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: '/tmp/repo',
+      query: 'repo-snapshot',
+      sourceToken: 'client_123',
     })
   })
 

@@ -10,9 +10,11 @@ import {
   type FocusEvent,
   type KeyboardEvent,
 } from 'react'
+import { toast } from 'sonner'
 import { Button } from '#/web/components/ui/button.tsx'
 import { GOBLIN_FILE_PATHS_MIME, parseGoblinFilePathDragPayload, type RepoFileTransferUploadedItem } from '#/shared/file-tree.ts'
 import type { ClipboardBinaryFilePayload } from '#/shared/clipboard-binary-temp-files.ts'
+import type { FilePathTarget } from '#/shared/file-path-target.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { setTerminalFocused } from '#/web/terminal-focus.ts'
@@ -36,6 +38,7 @@ import { useRuntimeTerminalSettings } from '#/web/runtime-settings-terminal-butt
 import { TerminalExternalInput } from '#/web/components/terminal/terminal-external-input.tsx'
 import { setTerminalExternalInputFillHandler } from '#/web/components/terminal/terminal-external-input-fill.ts'
 import { generatedPasteFileName, generatedTimestampedPasteFileName } from '#/web/components/file-tree/model.ts'
+import { openWorktreeEditorTarget } from '#/web/lib/editor-open-targets.ts'
 interface TerminalSlotProps {
   repoRoot: string
   branch: string
@@ -91,12 +94,20 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
     return () => registerWorktreeHost(terminalWorktreeKey, null)
   }, [registerWorktreeHost, terminalWorktreeKey])
 
+  const handleOpenPathInEditor = useCallback(
+    async (target: FilePathTarget) => {
+      const result = await openWorktreeEditorTarget(repoRoot, worktreePath, target)
+      if (!result.ok) toast.error(t(result.message))
+    },
+    [repoRoot, t, worktreePath],
+  )
+
   useLayoutEffect(() => {
     const host = hostRef.current
     if (!host || !descriptor) return
-    attach(descriptor, host, { onRevealPath })
+    attach(descriptor, host, { onRevealPath, onOpenPathInEditor: handleOpenPathInEditor })
     return () => detach(descriptor.key, host)
-  }, [attach, descriptor, detach, onRevealPath])
+  }, [attach, descriptor, detach, handleOpenPathInEditor, onRevealPath])
 
   useEffect(() => {
     if (!key || typeof document === 'undefined' || !document.hasFocus()) return

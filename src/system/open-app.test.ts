@@ -44,6 +44,20 @@ describe('openByAppCli', () => {
       expect.objectContaining({ timeout: 10_000, reject: false }),
     )
   })
+
+  test('opens an existing file path at a line and column with --goto', async () => {
+    const { openByAppCli } = await import('#/system/open-app.ts')
+
+    await expect(
+      openByAppCli('Visual Studio Code', 'code', { path: '/repo/src/app.ts', line: 12, column: 3 }),
+    ).resolves.toEqual({ ok: true, message: '/repo/src/app.ts' })
+
+    expect(mocks.execa).toHaveBeenCalledWith(
+      '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code',
+      ['--goto', '/repo/src/app.ts:12:3'],
+      expect.objectContaining({ timeout: 10_000, reject: false }),
+    )
+  })
 })
 
 describe('openRemoteByAppCli', () => {
@@ -67,6 +81,20 @@ describe('openRemoteByAppCli', () => {
     expect(mocks.execa).toHaveBeenCalledWith(
       '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code',
       ['--remote', 'ssh-remote+prod', '/srv/repo-feature'],
+      expect.objectContaining({ timeout: 10_000, reject: false }),
+    )
+  })
+
+  test('opens a remote file at a line target with --goto', async () => {
+    const { openRemoteByAppCli } = await import('#/system/open-app.ts')
+
+    await expect(
+      openRemoteByAppCli('Visual Studio Code', 'code', 'prod', { path: '/srv/repo/src/app.ts', line: 12 }),
+    ).resolves.toEqual({ ok: true, message: '/srv/repo/src/app.ts' })
+
+    expect(mocks.execa).toHaveBeenCalledWith(
+      '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code',
+      ['--remote', 'ssh-remote+prod', '--goto', '/srv/repo/src/app.ts:12'],
       expect.objectContaining({ timeout: 10_000, reject: false }),
     )
   })

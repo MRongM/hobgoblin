@@ -61,14 +61,16 @@ const renameRepositoryFileTreeEntry = vi.fn(async (..._args: unknown[]) => ({ ok
 const deleteRepositoryFileTreeEntries = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
 const createRepositoryFileTreeFile = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
 const createRepositoryFileTreeDirectory = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, message: '' }))
-const readRepositoryFileTreeTextFile = vi.fn(async (..._args: unknown[]) => ({
+const readRepositoryFileTreeBinaryFile = vi.fn(async (..._args: unknown[]) => ({
   ok: true as const,
-  content: 'file contents\n',
+  name: 'README.md',
   byteLength: 14,
+  bytesBase64: Buffer.from('file contents\n', 'utf8').toString('base64'),
+  text: 'file contents\n',
 }))
-const replaceRepositoryFileTreeTextFile = vi.fn(async (..._args: unknown[]) => ({
+const replaceRepositoryFileTreeBinaryFile = vi.fn(async (..._args: unknown[]) => ({
   ok: true as const,
-  previousContent: 'old contents\n',
+  previousBytesBase64: Buffer.from('old contents\n', 'utf8').toString('base64'),
   previousByteLength: 13,
 }))
 const searchRepositoryFileTree = vi.fn(async (..._args: SearchRepositoryFileTreeArgs) => ({
@@ -87,6 +89,15 @@ const chooseFileTreeUploadFiles = vi.fn(async () => [
   '/Users/test/Desktop/upload-b.txt',
 ])
 const hasNativeFilePicker = vi.fn(() => true)
+const writeFileTreeClipboardFile = vi.fn(async (..._args: unknown[]) => ({ ok: true as const }))
+const readFileTreeClipboardFile = vi.fn(async (_maxBytes: unknown) => ({
+  ok: true as const,
+  file: {
+    name: 'clipboard.bin',
+    byteLength: 3,
+    bytesBase64: Buffer.from([1, 2, 3]).toString('base64'),
+  },
+}))
 const clipboardWriteText = vi.fn(async (_value: string) => undefined)
 const clipboardReadText = vi.fn(async () => 'replacement contents\n')
 
@@ -94,8 +105,8 @@ vi.mock('#/web/repo-client.ts', () => ({
   getRepositoryFileTree: (...args: GetRepositoryFileTreeArgs) => getRepositoryFileTree(...args),
   createRepositoryFileTreeFile: (...args: unknown[]) => createRepositoryFileTreeFile(...args),
   createRepositoryFileTreeDirectory: (...args: unknown[]) => createRepositoryFileTreeDirectory(...args),
-  readRepositoryFileTreeTextFile: (...args: unknown[]) => readRepositoryFileTreeTextFile(...args),
-  replaceRepositoryFileTreeTextFile: (...args: unknown[]) => replaceRepositoryFileTreeTextFile(...args),
+  readRepositoryFileTreeBinaryFile: (...args: unknown[]) => readRepositoryFileTreeBinaryFile(...args),
+  replaceRepositoryFileTreeBinaryFile: (...args: unknown[]) => replaceRepositoryFileTreeBinaryFile(...args),
   renameRepositoryFileTreeEntry: (...args: unknown[]) => renameRepositoryFileTreeEntry(...args),
   deleteRepositoryFileTreeEntries: (...args: unknown[]) => deleteRepositoryFileTreeEntries(...args),
   moveRepositoryFileTreeEntries: (...args: unknown[]) => moveRepositoryFileTreeEntries(...args),
@@ -113,6 +124,8 @@ vi.mock('#/web/app-shell-client.ts', () => ({
   chooseFileTreeDownloadDirectory: () => chooseFileTreeDownloadDirectory(),
   chooseFileTreeUploadFiles: () => chooseFileTreeUploadFiles(),
   hasNativeFilePicker: () => hasNativeFilePicker(),
+  writeFileTreeClipboardFile: (input: unknown) => writeFileTreeClipboardFile(input),
+  readFileTreeClipboardFile: (maxBytes: unknown) => readFileTreeClipboardFile(maxBytes),
 }))
 
 vi.mock('#/web/remote-client.ts', () => ({
@@ -122,6 +135,10 @@ vi.mock('#/web/remote-client.ts', () => ({
 
 vi.mock('#/web/stores/i18n.ts', () => ({
   useT: () => (key: string) => key,
+}))
+
+vi.mock('#/web/runtime-settings-file-area.ts', () => ({
+  useRuntimeFileAreaSettings: () => ({ fileTreeFontSize: 12, fileTreeClipboardMaxBytesMb: 30 }),
 }))
 
 vi.mock('#/web/runtime-settings-fonts.ts', () => ({
@@ -149,8 +166,8 @@ beforeEach(() => {
   deleteRepositoryFileTreeEntries.mockClear()
   createRepositoryFileTreeFile.mockClear()
   createRepositoryFileTreeDirectory.mockClear()
-  readRepositoryFileTreeTextFile.mockClear()
-  replaceRepositoryFileTreeTextFile.mockClear()
+  readRepositoryFileTreeBinaryFile.mockClear()
+  replaceRepositoryFileTreeBinaryFile.mockClear()
   searchRepositoryFileTree.mockClear()
   openRepositoryEditor.mockClear()
   openRepositoryTerminal.mockClear()
@@ -163,6 +180,16 @@ beforeEach(() => {
   chooseFileTreeUploadFiles.mockResolvedValue(['/Users/test/Desktop/upload-a.txt', '/Users/test/Desktop/upload-b.txt'])
   hasNativeFilePicker.mockClear()
   hasNativeFilePicker.mockReturnValue(true)
+  writeFileTreeClipboardFile.mockClear()
+  readFileTreeClipboardFile.mockClear()
+  readFileTreeClipboardFile.mockResolvedValue({
+    ok: true,
+    file: {
+      name: 'clipboard.bin',
+      byteLength: 3,
+      bytesBase64: Buffer.from([1, 2, 3]).toString('base64'),
+    },
+  })
   toastMocks.success.mockClear()
   toastMocks.error.mockClear()
   clipboardWriteText.mockClear()
@@ -451,7 +478,7 @@ describe('ProjectFileTree', () => {
     })
   })
 
-  test('copies focused file contents with primary shift c', async () => {
+  test('copies focused file contents with primary shift c through system file clipboard', async () => {
     seedRepoWithSelectedBranch({ hasWorktree: true })
 
     await render(<ProjectFileTree repoId="/repo" />)
@@ -464,13 +491,18 @@ describe('ProjectFileTree', () => {
       await Promise.resolve()
     })
 
-    expect(readRepositoryFileTreeTextFile).toHaveBeenCalledWith('/repo', '/repo', '/repo/README.md')
-    expect(clipboardWriteText).toHaveBeenCalledWith('file contents\n')
+    expect(readRepositoryFileTreeBinaryFile).toHaveBeenCalledWith('/repo', '/repo', '/repo/README.md', 30 * 1024 * 1024)
+    expect(writeFileTreeClipboardFile).toHaveBeenCalledWith({
+      name: 'README.md',
+      byteLength: 14,
+      bytesBase64: Buffer.from('file contents\n', 'utf8').toString('base64'),
+      text: 'file contents\n',
+    })
     expect(transferRepositoryFiles).not.toHaveBeenCalled()
     expect(toastMocks.success).toHaveBeenCalledWith('file-tree.copy-file-contents-ok')
   })
 
-  test('replaces focused file contents with primary shift v and undoes the replacement', async () => {
+  test('replaces focused file contents with primary shift v and undoes binary replacement', async () => {
     seedRepoWithSelectedBranch({ hasWorktree: true })
 
     await render(<ProjectFileTree repoId="/repo" />)
@@ -483,13 +515,14 @@ describe('ProjectFileTree', () => {
       await Promise.resolve()
     })
 
-    expect(clipboardReadText).toHaveBeenCalledTimes(1)
-    expect(replaceRepositoryFileTreeTextFile).toHaveBeenNthCalledWith(
+    expect(readFileTreeClipboardFile).toHaveBeenCalledWith(30 * 1024 * 1024)
+    expect(replaceRepositoryFileTreeBinaryFile).toHaveBeenNthCalledWith(
       1,
       '/repo',
       '/repo',
       '/repo/README.md',
-      'replacement contents\n',
+      Buffer.from([1, 2, 3]).toString('base64'),
+      30 * 1024 * 1024,
     )
     expect(toastMocks.success).toHaveBeenCalledWith('file-tree.replace-file-contents-ok')
 
@@ -499,12 +532,13 @@ describe('ProjectFileTree', () => {
       await Promise.resolve()
     })
 
-    expect(replaceRepositoryFileTreeTextFile).toHaveBeenNthCalledWith(
+    expect(replaceRepositoryFileTreeBinaryFile).toHaveBeenNthCalledWith(
       2,
       '/repo',
       '/repo',
       '/repo/README.md',
-      'old contents\n',
+      Buffer.from('old contents\n', 'utf8').toString('base64'),
+      30 * 1024 * 1024,
     )
   })
 
@@ -528,10 +562,10 @@ describe('ProjectFileTree', () => {
       await Promise.resolve()
     })
 
-    expect(readRepositoryFileTreeTextFile).not.toHaveBeenCalled()
-    expect(replaceRepositoryFileTreeTextFile).not.toHaveBeenCalled()
-    expect(clipboardWriteText).not.toHaveBeenCalled()
-    expect(clipboardReadText).not.toHaveBeenCalled()
+    expect(readRepositoryFileTreeBinaryFile).not.toHaveBeenCalled()
+    expect(replaceRepositoryFileTreeBinaryFile).not.toHaveBeenCalled()
+    expect(writeFileTreeClipboardFile).not.toHaveBeenCalled()
+    expect(readFileTreeClipboardFile).not.toHaveBeenCalled()
   })
 
   test('does not consume primary paste keydown when the internal clipboard is empty', async () => {

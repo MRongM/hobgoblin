@@ -2,6 +2,7 @@ import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { activateMainWindow, getMainWindow } from '#/main/window.ts'
 import { saveClipboardBinaryFilesToTemp } from '#/main/clipboard-binary-temp-files.ts'
 import { readClipboardFilePathsFromSystem } from '#/main/clipboard-file-paths.ts'
+import { readFileTreeClipboardFile, writeFileTreeClipboardFile } from '#/main/file-tree-clipboard.ts'
 import { consumeExternalOpenPaths } from '#/main/external-open.ts'
 import { focusedRegisteredSurface } from '#/main/window-registry.ts'
 import { sendRendererEffectIntent } from '#/main/renderer-surface-events.ts'
@@ -17,12 +18,15 @@ import {
   SHELL_OPEN_IN_FINDER_CHANNEL,
   SHELL_OPEN_SETTINGS_WINDOW_CHANNEL,
   SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,
+  SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
   SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL,
+  SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
 } from '#/shared/ipc-channels.ts'
 import type {
   SaveClipboardBinaryFilesInput,
   SaveClipboardBinaryFilesResult,
 } from '#/shared/clipboard-binary-temp-files.ts'
+import type { FileTreeClipboardFilePayload } from '#/shared/file-tree-clipboard.ts'
 
 function callerWindow(event: Electron.IpcMainInvokeEvent): BrowserWindow | null {
   return BrowserWindow.fromWebContents(event.sender) ?? focusedRegisteredSurface()?.window ?? getMainWindow() ?? null
@@ -91,6 +95,23 @@ export function wireShellBridgeIpc(): void {
     async (event, input?: SaveClipboardBinaryFilesInput): Promise<SaveClipboardBinaryFilesResult> => {
       if (!isTrustedIpcEvent(event)) return { ok: false, message: 'error.invalid-path' }
       return await saveClipboardBinaryFilesToTemp(input as SaveClipboardBinaryFilesInput)
+    },
+  )
+
+  ipcMain.handle(
+    SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
+    async (event, input?: FileTreeClipboardFilePayload) => {
+      if (!isTrustedIpcEvent(event)) return { ok: false, message: 'error.invalid-path' }
+      return await writeFileTreeClipboardFile(input as FileTreeClipboardFilePayload)
+    },
+  )
+
+  ipcMain.handle(
+    SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
+    async (event, input?: { maxBytes?: unknown }) => {
+      if (!isTrustedIpcEvent(event)) return { ok: false, message: 'error.invalid-path' }
+      const maxBytes = typeof input?.maxBytes === 'number' ? input.maxBytes : 0
+      return await readFileTreeClipboardFile(maxBytes)
     },
   )
 

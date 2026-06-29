@@ -17,6 +17,7 @@ export type RendererNativeCapability =
   | 'open-in-finder'
   | 'clipboard-file-paths'
   | 'clipboard-binary-temp-files'
+  | 'file-tree-clipboard'
   | 'terminal-notifications'
   | 'terminal-badge'
 
@@ -31,6 +32,7 @@ export const ELECTRON_RENDERER_CAPABILITIES = [
   'open-in-finder',
   'clipboard-file-paths',
   'clipboard-binary-temp-files',
+  'file-tree-clipboard',
   'terminal-notifications',
   'terminal-badge',
 ] as const satisfies readonly RendererNativeCapability[]
@@ -54,6 +56,7 @@ export interface InitialSettingsSnapshot {
   editorApp: EditorPref
   fileTreeFontSize: number
   fileTreeTopbarFontSize: number
+  fileTreeClipboardMaxBytesMb: number
   terminalFontSize: number
   terminalExternalInputEnabled: boolean
   remoteTerminalTmuxEnabled: boolean

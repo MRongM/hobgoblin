@@ -1,5 +1,6 @@
 import { fetchServerJson, postServerJson } from '#/web/lib/server-fetch.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
+import type { EditorOpenTarget } from '#/shared/file-path-target.ts'
 import type {
   RemoteDiagnosticsResult,
   RemotePathSuggestionsInput,
@@ -36,8 +37,11 @@ export async function testRemoteRepositoryConnection(
   return await postServerJson('/api/remote/test-repository', { target }, { signal })
 }
 
-export async function openRemoteRepositoryEditor(repoId: string, worktreePath: string): Promise<ExecResult> {
-  return await postServerJson('/api/remote/open-editor', { repoId, worktreePath })
+export async function openRemoteRepositoryEditor(repoId: string, target: EditorOpenTarget): Promise<ExecResult> {
+  return await postServerJson(
+    '/api/remote/open-editor',
+    typeof target === 'string' ? { repoId, worktreePath: target } : { repoId, target },
+  )
 }
 
 export async function openRemoteRepositoryTerminal(repoId: string, worktreePath: string): Promise<ExecResult> {

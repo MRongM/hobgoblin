@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { FolderTree } from 'lucide-react'
+import { toast } from 'sonner'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { EmptyState, ScrollPane } from '#/web/components/Layout.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
@@ -16,6 +17,8 @@ import { getRepositoryCommitDetail, getRepositoryHistory } from '#/web/repo-clie
 import { useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { cn } from '#/web/lib/cn.ts'
+import { openWorktreeEditorTarget } from '#/web/lib/editor-open-targets.ts'
+import type { FilePathTarget } from '#/shared/file-path-target.ts'
 import type { CommitDetail, CommitFileChange, CommitHistoryEntry } from '#/web/types.ts'
 import {
   buildHistoryGraphRows,
@@ -141,6 +144,11 @@ export function ProjectHistoryPanel({ repoId, onRevealPath }: ProjectHistoryPane
   }
 
   const selectedDetail = selectedHash ? detailByHash[selectedHash] : null
+  async function handleOpenPathInEditor(target: FilePathTarget) {
+    if (!view.worktreePath) return
+    const result = await openWorktreeEditorTarget(repoId, view.worktreePath, target)
+    if (!result.ok) toast.error(t(result.message))
+  }
 
   if (!view.branchName) {
     return <EmptyState icon={<FolderTree size={16} />} title={t('branches.empty')} body={t('history.no-branch')} />
@@ -163,6 +171,7 @@ export function ProjectHistoryPanel({ repoId, onRevealPath }: ProjectHistoryPane
         error={detailError}
         canReveal={!!view.worktreePath}
         onRevealPath={onRevealPath}
+        onOpenPathInEditor={handleOpenPathInEditor}
       />
     </section>
   )
@@ -272,12 +281,14 @@ function CommitDetailPane({
   error,
   canReveal,
   onRevealPath,
+  onOpenPathInEditor,
 }: {
   detail: CommitDetail | null
   loading: boolean
   error: string | null
   canReveal: boolean
   onRevealPath?: (relativePath: string) => void
+  onOpenPathInEditor?: (target: FilePathTarget) => void
 }) {
   const t = useT()
   const [fileViewMode, setFileViewMode] = useState<FileListViewMode>('tree')
@@ -327,6 +338,7 @@ function CommitDetailPane({
           viewMode={fileViewMode}
           canReveal={canReveal}
           onRevealPath={onRevealPath}
+          onOpenPathInEditor={onOpenPathInEditor}
         />
       </ScrollPane>
     </div>
@@ -338,11 +350,13 @@ function CommitFileList({
   viewMode,
   canReveal,
   onRevealPath,
+  onOpenPathInEditor,
 }: {
   files: CommitFileChange[]
   viewMode: FileListViewMode
   canReveal: boolean
   onRevealPath?: (relativePath: string) => void
+  onOpenPathInEditor?: (target: FilePathTarget) => void
 }) {
   if (viewMode === 'tree') {
     return (
@@ -356,6 +370,7 @@ function CommitFileList({
             row={row}
             canReveal={canReveal}
             onRevealPath={onRevealPath}
+            onOpenPathInEditor={onOpenPathInEditor}
           />
         )}
       />
@@ -370,6 +385,7 @@ function CommitFileList({
           file={file}
           canReveal={canReveal}
           onRevealPath={onRevealPath}
+          onOpenPathInEditor={onOpenPathInEditor}
         />
       ))}
     </ul>
@@ -380,16 +396,19 @@ function CommitFileTreeRow({
   row,
   canReveal,
   onRevealPath,
+  onOpenPathInEditor,
 }: {
   row: FilePathTreeFileRow<CommitFileChange>
   canReveal: boolean
   onRevealPath?: (relativePath: string) => void
+  onOpenPathInEditor?: (target: FilePathTarget) => void
 }) {
   return (
     <CommitFileRow
       file={row.item}
       canReveal={canReveal}
       onRevealPath={onRevealPath}
+      onOpenPathInEditor={onOpenPathInEditor}
       displayPath={row.name}
       indent={fileTreeRowPadding(row.depth)}
     />
@@ -400,12 +419,14 @@ function CommitFileRow({
   file,
   canReveal,
   onRevealPath,
+  onOpenPathInEditor,
   displayPath,
   indent,
 }: {
   file: CommitFileChange
   canReveal: boolean
   onRevealPath?: (relativePath: string) => void
+  onOpenPathInEditor?: (target: FilePathTarget) => void
   displayPath?: string
   indent?: string
 }) {
@@ -450,6 +471,7 @@ function CommitFileRow({
           className={cn(rowClassName, 'hover:bg-list-row-hover')}
           style={style}
           onClick={() => onRevealPath(file.path)}
+          onDoubleClick={() => onOpenPathInEditor?.({ path: file.path })}
         >
           {content}
         </button>

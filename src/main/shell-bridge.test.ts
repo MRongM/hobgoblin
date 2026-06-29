@@ -8,7 +8,9 @@ import {
   SHELL_OPEN_FILE_DIALOG_CHANNEL,
   SHELL_OPEN_SETTINGS_WINDOW_CHANNEL,
   SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,
+  SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
   SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL,
+  SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
 } from '#/shared/ipc-channels.ts'
 
 const {
@@ -19,6 +21,8 @@ const {
   activateMainWindow,
   readClipboardFilePathsFromSystem,
   saveClipboardBinaryFilesToTemp,
+  readFileTreeClipboardFile,
+  writeFileTreeClipboardFile,
 } = vi.hoisted(() => ({
   ipcHandlers: new Map<string, (_event: unknown, input: any) => unknown>(),
   browserWindowFromWebContents: vi.fn(),
@@ -27,6 +31,8 @@ const {
   activateMainWindow: vi.fn(),
   readClipboardFilePathsFromSystem: vi.fn(),
   saveClipboardBinaryFilesToTemp: vi.fn(),
+  readFileTreeClipboardFile: vi.fn(),
+  writeFileTreeClipboardFile: vi.fn(),
 }))
 
 vi.mock('electron', () => ({
@@ -57,6 +63,11 @@ vi.mock('#/main/clipboard-binary-temp-files.ts', () => ({
   saveClipboardBinaryFilesToTemp,
 }))
 
+vi.mock('#/main/file-tree-clipboard.ts', () => ({
+  readFileTreeClipboardFile,
+  writeFileTreeClipboardFile,
+}))
+
 const trustedSender = { id: 1, once: vi.fn() }
 const trustedEvent = {
   sender: trustedSender,
@@ -81,6 +92,8 @@ describe('shell bridge IPC', () => {
     expect(ipcHandlers.has(SHELL_OPEN_FILE_DIALOG_CHANNEL)).toBe(true)
     expect(ipcHandlers.has(SHELL_CONSUME_EXTERNAL_OPEN_PATHS_CHANNEL)).toBe(true)
     expect(ipcHandlers.has(SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL)).toBe(true)
+    expect(ipcHandlers.has(SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL)).toBe(true)
+    expect(ipcHandlers.has(SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL)).toBe(true)
     expect(ipcHandlers.has(SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL)).toBe(true)
   })
 
@@ -188,6 +201,23 @@ describe('shell bridge IPC', () => {
 
     expect(result).toEqual({ ok: true, paths: ['/repo/tmp/pasted.png'] })
     expect(saveClipboardBinaryFilesToTemp).toHaveBeenCalledWith(input)
+  })
+
+  test('writes and reads file tree clipboard files for trusted senders', async () => {
+    writeFileTreeClipboardFile.mockResolvedValue({ ok: true })
+    readFileTreeClipboardFile.mockResolvedValue({
+      ok: true,
+      file: { name: 'image.bin', byteLength: 3, bytesBase64: 'AQID' },
+    })
+    const input = { name: 'image.bin', byteLength: 3, bytesBase64: 'AQID' }
+
+    await expect(invoke(SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL, input)).resolves.toEqual({ ok: true })
+    await expect(invoke(SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL, { maxBytes: 30 })).resolves.toEqual({
+      ok: true,
+      file: input,
+    })
+    expect(writeFileTreeClipboardFile).toHaveBeenCalledWith(input)
+    expect(readFileTreeClipboardFile).toHaveBeenCalledWith(30)
   })
 
   test('rejects clipboard binary saves for untrusted senders', async () => {

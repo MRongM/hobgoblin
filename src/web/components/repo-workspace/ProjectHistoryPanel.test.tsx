@@ -9,14 +9,32 @@ import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/r
 const REPO_ID = '/tmp/gbl-history-repo'
 const WORKTREE_PATH = '/tmp/gbl-history-repo'
 
+type OpenWorktreeEditorTargetMock = (
+  repoId: string,
+  worktreePath: string,
+  target: { path: string; line?: number; column?: number },
+) => Promise<{ ok: true; message: string }>
+
 const mocks = vi.hoisted(() => ({
   getRepositoryCommitDetail: vi.fn(),
   getRepositoryHistory: vi.fn(),
 }))
 
+const editorOpenMocks = vi.hoisted(() => ({
+  openWorktreeEditorTarget: vi.fn<OpenWorktreeEditorTargetMock>(async () => ({ ok: true, message: '' })),
+}))
+
 vi.mock('#/web/repo-client.ts', () => ({
   getRepositoryCommitDetail: mocks.getRepositoryCommitDetail,
   getRepositoryHistory: mocks.getRepositoryHistory,
+}))
+
+vi.mock('#/web/lib/editor-open-targets.ts', () => ({
+  openWorktreeEditorTarget: (
+    repoId: string,
+    worktreePath: string,
+    target: { path: string; line?: number; column?: number },
+  ) => editorOpenMocks.openWorktreeEditorTarget(repoId, worktreePath, target),
 }))
 
 vi.mock('#/web/components/FilePathText.tsx', () => ({
@@ -78,6 +96,8 @@ beforeEach(() => {
     parents: ['def456'],
     files: [{ path: 'src/app.ts', status: 'modified', additions: 3, deletions: 1 }],
   })
+  editorOpenMocks.openWorktreeEditorTarget.mockReset()
+  editorOpenMocks.openWorktreeEditorTarget.mockResolvedValue({ ok: true, message: '' })
   seedRepoState({
     id: REPO_ID,
     branches: [createRepoBranch('feature/history', { worktree: { path: WORKTREE_PATH } })],
@@ -175,6 +195,22 @@ describe('ProjectHistoryPanel', () => {
     })
 
     expect(onRevealPath).toHaveBeenCalledWith('src/app.ts')
+  })
+
+  test('opens commit detail file paths in the editor on double click', async () => {
+    await act(async () => {
+      root!.render(<ProjectHistoryPanel repoId={REPO_ID} onRevealPath={vi.fn()} />)
+    })
+    await act(async () => {})
+
+    const row = container?.querySelector<HTMLButtonElement>('button[aria-label="src/app.ts"]')
+    expect(row).toBeTruthy()
+
+    await act(async () => {
+      row?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
+    })
+
+    expect(editorOpenMocks.openWorktreeEditorTarget).toHaveBeenCalledWith(REPO_ID, WORKTREE_PATH, { path: 'src/app.ts' })
   })
 
   test('copies selected commit detail and file paths from the detail toolbar', async () => {

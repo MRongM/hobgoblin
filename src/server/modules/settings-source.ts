@@ -24,6 +24,7 @@ import { normalizeGlobalShortcut } from '#/shared/accelerator.ts'
 import { normalizeColorTheme, type ColorTheme } from '#/shared/color-theme.ts'
 import {
   DEFAULT_EDITOR_APP,
+  DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   DEFAULT_FILE_TREE_FONT_SIZE,
   DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
   DEFAULT_FETCH_INTERVAL_SEC,
@@ -41,11 +42,13 @@ import {
   DEFAULT_TERMINAL_THEME_SYNC_ENABLED,
   DEFAULT_THEME_PREF,
   DEFAULT_TOGGLE_DETAIL_ON_ACTION_BAR_BLANK_CLICK,
+  MAX_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   MAX_FILE_TREE_FONT_SIZE,
   MAX_FILE_TREE_TOPBAR_FONT_SIZE,
   MAX_GIT_NETWORK_TIMEOUT_SEC,
   MAX_RECENT_REPOS,
   MAX_TERMINAL_FONT_SIZE,
+  MIN_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   MIN_FILE_TREE_FONT_SIZE,
   MIN_FILE_TREE_TOPBAR_FONT_SIZE,
   MIN_GIT_NETWORK_TIMEOUT_SEC,
@@ -75,6 +78,7 @@ interface ServerSettingsData {
   editorApp: EditorPref
   fileTreeFontSize: number
   fileTreeTopbarFontSize: number
+  fileTreeClipboardMaxBytesMb: number
   terminalFontSize: number
   terminalExternalInputEnabled: boolean
   remoteTerminalTmuxEnabled: boolean
@@ -138,6 +142,14 @@ function normalizeFileTreeTopbarFontSize(value: unknown): number {
     max: MAX_FILE_TREE_TOPBAR_FONT_SIZE,
     fallback: DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
   })
+}
+
+function normalizeFileTreeClipboardMaxBytesMb(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB
+  return Math.max(
+    MIN_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
+    Math.min(MAX_FILE_TREE_CLIPBOARD_MAX_BYTES_MB, Math.round(value)),
+  )
 }
 
 function normalizeTerminalFontSize(value: unknown): number {
@@ -243,6 +255,7 @@ function settingsPrefsFromData(data: ServerSettingsData): SettingsPrefs {
     editorApp: data.editorApp,
     fileTreeFontSize: data.fileTreeFontSize,
     fileTreeTopbarFontSize: data.fileTreeTopbarFontSize,
+    fileTreeClipboardMaxBytesMb: data.fileTreeClipboardMaxBytesMb,
     terminalFontSize: data.terminalFontSize,
     terminalExternalInputEnabled: data.terminalExternalInputEnabled,
     remoteTerminalTmuxEnabled: data.remoteTerminalTmuxEnabled,
@@ -340,6 +353,7 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       editorApp: normalizeEditorPref(parsed.editorApp),
       fileTreeFontSize: normalizeFileTreeFontSize(parsed.fileTreeFontSize),
       fileTreeTopbarFontSize: normalizeFileTreeTopbarFontSize(parsed.fileTreeTopbarFontSize),
+      fileTreeClipboardMaxBytesMb: normalizeFileTreeClipboardMaxBytesMb(parsed.fileTreeClipboardMaxBytesMb),
       terminalFontSize: normalizeTerminalFontSize(parsed.terminalFontSize),
       terminalExternalInputEnabled: normalizeTerminalExternalInputEnabled(parsed.terminalExternalInputEnabled),
       remoteTerminalTmuxEnabled: normalizeRemoteTerminalTmuxEnabled(parsed.remoteTerminalTmuxEnabled),
@@ -451,6 +465,10 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     patch.fileTreeTopbarFontSize === undefined
       ? data.fileTreeTopbarFontSize
       : normalizeFileTreeTopbarFontSize(patch.fileTreeTopbarFontSize)
+  const nextFileTreeClipboardMaxBytesMb =
+    patch.fileTreeClipboardMaxBytesMb === undefined
+      ? data.fileTreeClipboardMaxBytesMb
+      : normalizeFileTreeClipboardMaxBytesMb(patch.fileTreeClipboardMaxBytesMb)
   const nextTerminalFontSize =
     patch.terminalFontSize === undefined ? data.terminalFontSize : normalizeTerminalFontSize(patch.terminalFontSize)
   const nextTerminalExternalInputEnabled =
@@ -494,6 +512,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     data.editorApp !== nextEditorApp ||
     data.fileTreeFontSize !== nextFileTreeFontSize ||
     data.fileTreeTopbarFontSize !== nextFileTreeTopbarFontSize ||
+    data.fileTreeClipboardMaxBytesMb !== nextFileTreeClipboardMaxBytesMb ||
     data.terminalFontSize !== nextTerminalFontSize ||
     data.terminalExternalInputEnabled !== nextTerminalExternalInputEnabled ||
     data.remoteTerminalTmuxEnabled !== nextRemoteTerminalTmuxEnabled ||
@@ -520,6 +539,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   data.editorApp = nextEditorApp
   data.fileTreeFontSize = nextFileTreeFontSize
   data.fileTreeTopbarFontSize = nextFileTreeTopbarFontSize
+  data.fileTreeClipboardMaxBytesMb = nextFileTreeClipboardMaxBytesMb
   data.terminalFontSize = nextTerminalFontSize
   data.terminalExternalInputEnabled = nextTerminalExternalInputEnabled
   data.remoteTerminalTmuxEnabled = nextRemoteTerminalTmuxEnabled

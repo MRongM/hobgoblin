@@ -88,12 +88,31 @@ describe('remote client web helpers', () => {
       ok: true,
       message: '/srv/repo-feature',
     })
-    expect(fetchMock).toHaveBeenCalledWith(
+    await expect(
+      openRemoteRepositoryEditor('ssh-config://prod/srv/repo', { path: '/srv/repo/src/app.ts', line: 12 }),
+    ).resolves.toEqual({
+      ok: true,
+      message: '/srv/repo-feature',
+    })
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
       'http://127.0.0.1:32100/api/remote/open-editor',
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
         body: JSON.stringify({ repoId: 'ssh-config://prod/srv/repo', worktreePath: '/srv/repo-feature' }),
+      }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'http://127.0.0.1:32100/api/remote/open-editor',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
+        body: JSON.stringify({
+          repoId: 'ssh-config://prod/srv/repo',
+          target: { path: '/srv/repo/src/app.ts', line: 12 },
+        }),
       }),
     )
   })

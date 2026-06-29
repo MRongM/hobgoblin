@@ -1,5 +1,4 @@
 import { useEffect } from 'react'
-import QRCode from 'qrcode'
 import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
   ExternalAppsSnapshot,
@@ -27,6 +26,7 @@ import {
   DEFAULT_DETAIL_PANE_SIZES,
   DEFAULT_WORKSPACE_LAYOUT,
 } from '#/shared/workspace-layout.ts'
+import { qrCodeDataUrls } from '#/web/lib/qr-code-images.ts'
 
 function initialSettingsSnapshot(): SettingsSnapshot | undefined {
   const initialSettings = getInitialBootstrap().initialSettings
@@ -121,15 +121,7 @@ export function lanInfoQueryOptions() {
     queryKey: lanInfoQueryKey(),
     queryFn: async () => {
       const info = await getLanInfo()
-      const qrCodes: Record<string, string> = {}
-      for (const url of info.lanUrls) {
-        try {
-          qrCodes[url] = await QRCode.toDataURL(url, { width: 180, margin: 2 })
-        } catch {
-          // ignore
-        }
-      }
-      return { ...info, qrCodes }
+      return { ...info, qrCodes: await qrCodeDataUrls(info.lanUrls) }
     },
     staleTime: 5 * 60_000,
     gcTime: 10 * 60_000,

@@ -14,6 +14,11 @@ import type {
   SaveClipboardBinaryFilesInput,
   SaveClipboardBinaryFilesResult,
 } from '#/shared/clipboard-binary-temp-files.ts'
+import type {
+  FileTreeClipboardFilePayload,
+  FileTreeClipboardReadResult,
+  FileTreeClipboardWriteResult,
+} from '#/shared/file-tree-clipboard.ts'
 
 interface GoblinNativeBridge {
   runtime: RendererRuntimeSnapshot
@@ -35,6 +40,8 @@ interface GoblinNativeBridge {
     openInFinder: (input: { path: string }) => Promise<ExecResult>
     readClipboardFilePaths?: () => Promise<string[]>
     saveClipboardBinaryFiles?: (input: SaveClipboardBinaryFilesInput) => Promise<SaveClipboardBinaryFilesResult>
+    writeFileTreeClipboardFile?: (input: FileTreeClipboardFilePayload) => Promise<FileTreeClipboardWriteResult>
+    readFileTreeClipboardFile?: (input: { maxBytes: number }) => Promise<FileTreeClipboardReadResult>
   }
   terminal: {
     notifyBell: (input: TerminalNotifyBellInput) => Promise<TerminalMutationResult>

@@ -5,6 +5,7 @@ import type { ExternalAppsSnapshot, RuntimeRecentReposState, RuntimeSettingsSnap
 import type { EditorPref, TerminalPref } from '#/shared/rpc.ts'
 import { runtimeRecentReposStateFromSettingsSnapshot, runtimeSettingsSnapshotFromSettingsSnapshot } from '#/shared/settings-snapshot.ts'
 import {
+  DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   DEFAULT_FILE_TREE_FONT_SIZE,
   DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
   DEFAULT_GIT_NETWORK_TIMEOUT_SEC,
@@ -109,6 +110,20 @@ export function readRuntimeFontSettings(data: RuntimeSettingsSnapshot | undefine
       data?.fileTreeTopbarFontSize ?? fallback?.fileTreeTopbarFontSize ?? DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
     terminalFontSize:
       data?.terminalFontSize ?? fallback?.terminalFontSize ?? DEFAULT_TERMINAL_FONT_SIZE,
+  }
+}
+
+export function readRuntimeFileAreaSettings(data: RuntimeSettingsSnapshot | undefined) {
+  const fallback = fallbackInitialSettings()
+  return {
+    fileTreeFontSize:
+      data?.fileTreeFontSize ?? fallback?.fileTreeFontSize ?? DEFAULT_FILE_TREE_FONT_SIZE,
+    fileTreeTopbarFontSize:
+      data?.fileTreeTopbarFontSize ?? fallback?.fileTreeTopbarFontSize ?? DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
+    fileTreeClipboardMaxBytesMb:
+      data?.fileTreeClipboardMaxBytesMb ??
+      fallback?.fileTreeClipboardMaxBytesMb ??
+      DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   }
 }
 
