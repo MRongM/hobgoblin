@@ -8,7 +8,8 @@ import { writeInternalFileTreeClipboard } from '#/web/components/file-tree/clipb
 import { emptyRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { createRepoBranch, resetReposStore } from '#/web/stores/repos/test-utils.ts'
-import { GOBLIN_FILE_PATHS_MIME } from '#/shared/file-tree.ts'
+import { GOBLIN_FILE_PATHS_MIME, type RepoFileTreeResult } from '#/shared/file-tree.ts'
+import type { ExecResult } from '#/shared/git-types.ts'
 
 type GetRepositoryFileTreeArgs = [repoId: string, worktreePath: string, dirPath: string, signal?: AbortSignal]
 type SearchRepositoryFileTreeArgs = [
@@ -25,7 +26,12 @@ const toastMocks = vi.hoisted(() => ({
 }))
 
 const getRepositoryFileTree = vi.fn(
-  async (_repoId: string, _worktreePath: string, dirPath: string, _signal?: AbortSignal) => ({
+  async (
+    _repoId: string,
+    _worktreePath: string,
+    dirPath: string,
+    _signal?: AbortSignal,
+  ): Promise<RepoFileTreeResult> => ({
     ok: true as const,
     worktreePath: '/repo',
     dirPath,
@@ -71,7 +77,7 @@ const searchRepositoryFileTree = vi.fn(async (..._args: SearchRepositoryFileTree
   truncated: false,
   limit: 100,
 }))
-const openRepositoryEditor = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
+const openRepositoryEditor = vi.fn(async (_path: string): Promise<ExecResult> => ({ ok: true, message: '' }))
 const openRepositoryTerminal = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
 const openInFinder = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
 const readSystemClipboardFilePaths = vi.fn(async () => ['/tmp/report.pdf'])
@@ -1174,7 +1180,68 @@ describe('ProjectFileTree', () => {
     expect(openInFinder).toHaveBeenCalledWith('/repo/README.md')
   })
 
-  test('opens the selected local file parent directory in the editor from the context menu', async () => {
+  test('opens a local file node directly in the editor on double click', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const row = treeItemByText('README.md')
+    await act(async () => {
+      row.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(openRepositoryEditor).toHaveBeenCalledWith('/repo/README.md')
+  })
+
+  test('opens a symlink-to-file node directly in the editor on double click', async () => {
+    getRepositoryFileTree.mockImplementationOnce(
+      async (_repoId: string, _worktreePath: string, dirPath: string, _signal?: AbortSignal) => ({
+        ok: true as const,
+        worktreePath: '/repo',
+        dirPath,
+        entries: [
+          { name: 'src', absolutePath: '/repo/src', relativePath: 'src', kind: 'directory' as const },
+          { name: 'README.md', absolutePath: '/repo/README.md', relativePath: 'README.md', kind: 'file' as const },
+          {
+            name: 'README-link.md',
+            absolutePath: '/repo/README-link.md',
+            relativePath: 'README-link.md',
+            kind: 'symlink' as const,
+            targetKind: 'file' as const,
+          },
+        ],
+      }),
+    )
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const row = treeItemByText('README-link.md')
+    await act(async () => {
+      row.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(openRepositoryEditor).toHaveBeenCalledWith('/repo/README-link.md')
+  })
+
+  test('shows an error toast when double-click editor opening fails', async () => {
+    openRepositoryEditor.mockResolvedValueOnce({ ok: false, message: 'error.editor-not-installed' })
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const row = treeItemByText('README.md')
+    await act(async () => {
+      row.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(toastMocks.error).toHaveBeenCalledWith('error.editor-not-installed')
+  })
+
+  test('opens the selected local file directly in the editor from the context menu', async () => {
     seedRepoWithSelectedBranch({ hasWorktree: true })
 
     await render(<ProjectFileTree repoId="/repo" />)
@@ -1195,7 +1262,7 @@ describe('ProjectFileTree', () => {
       await Promise.resolve()
     })
 
-    expect(openRepositoryEditor).toHaveBeenCalledWith('/repo')
+    expect(openRepositoryEditor).toHaveBeenCalledWith('/repo/README.md')
   })
 
   test('opens the selected local directory in the editor from the context menu', async () => {

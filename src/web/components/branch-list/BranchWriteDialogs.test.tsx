@@ -383,6 +383,49 @@ describe('PullRemoteBranchDialog', () => {
       remoteRef: 'origin/bugfix/login-flow',
     })
   })
+
+  test('keeps remote ref search focused while typing consecutive filters', async () => {
+    mocks.getRepositoryRemoteBranches.mockResolvedValueOnce([
+      'origin/feature/api-client',
+      'origin/bugfix/login-flow',
+      'origin/release/searchable-branch',
+    ])
+
+    render(<PullRemoteBranchDialog open repoId="/repo" allBranches={[]} busy={false} onClose={vi.fn()} onTrack={vi.fn()} />)
+    await flush()
+    await flush()
+
+    openSelect('#pull-remote-ref')
+    const filter = input('#pull-remote-ref-filter')
+    filter.focus()
+    setInputValue('#pull-remote-ref-filter', 'sea')
+    await flush()
+
+    expect(input('#pull-remote-local-branch').value).toBe('release/searchable-branch')
+    expect(document.activeElement).toBe(filter)
+
+    setInputValue('#pull-remote-ref-filter', 'search')
+    await flush()
+
+    expect(input('#pull-remote-ref-filter').value).toBe('search')
+    expect(document.activeElement).toBe(filter)
+  })
+
+  test('constrains the remote ref dropdown to the trigger width', async () => {
+    mocks.getRepositoryRemoteBranches.mockResolvedValueOnce([
+      'origin/feature/really-long-remote-branch-name-that-should-not-push-the-popover-sideways',
+    ])
+
+    render(<PullRemoteBranchDialog open repoId="/repo" allBranches={[]} busy={false} onClose={vi.fn()} onTrack={vi.fn()} />)
+    await flush()
+    await flush()
+
+    openSelect('#pull-remote-ref')
+
+    expect(input('#pull-remote-ref-filter').closest('[data-slot="select-content"]')?.className).toContain(
+      'w-[var(--radix-select-trigger-width)]',
+    )
+  })
 })
 
 function InlineCommitFormHarness({

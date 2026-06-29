@@ -42,6 +42,7 @@ Hobgoblin started from [Goblin](https://nano-props.github.io/goblin/), a small, 
 
 - **Binary paste into terminal input:** Paste binary clipboard content into the terminal input to create temporary files and insert the generated file paths.
 - **Drag from file tree to terminal:** Drag files from the file tree into the terminal to insert shell-safe paths without typing them manually.
+- **Double-click file tree files:** Double-click a file in the file tree to open that exact file in the configured editor.
 - **Clipboard-powered file flow:** Paste clipboard text into files with `Ctrl+Shift+V`, and copy file text back to the system clipboard with `Ctrl+Shift+C`.
 - **Terminal tab jump:** Double-click the active terminal tab to scroll that terminal to the bottom.
 - **Terminal-to-file-tree navigation:** Click detected repository-relative paths in terminal output to reveal them in the file tree.

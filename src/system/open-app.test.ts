@@ -4,14 +4,47 @@ const mocks = vi.hoisted(() => ({
   execa: vi.fn(),
   existsSync: vi.fn(),
   homedir: vi.fn(() => '/Users/test'),
+  statSync: vi.fn(
+    (): { isDirectory: () => boolean; isFile: () => boolean } => ({
+      isDirectory: () => true,
+      isFile: () => false,
+    }),
+  ),
 }))
 
 vi.mock('execa', () => ({ execa: mocks.execa }))
 vi.mock('node:fs', () => ({
   existsSync: mocks.existsSync,
-  statSync: vi.fn(() => ({ isDirectory: () => true })),
+  statSync: mocks.statSync,
 }))
 vi.mock('node:os', () => ({ default: { homedir: mocks.homedir } }))
+
+describe('openByAppCli', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.existsSync.mockImplementation((path: string) =>
+      path === '/Applications/Visual Studio Code.app' ||
+      path === '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code',
+    )
+    mocks.statSync.mockReturnValue({ isDirectory: () => false, isFile: () => true })
+    mocks.execa.mockResolvedValue({ failed: false })
+  })
+
+  test('opens an existing file path with a VS Code-family editor CLI', async () => {
+    const { openByAppCli } = await import('#/system/open-app.ts')
+
+    await expect(openByAppCli('Visual Studio Code', 'code', '/repo/README.md')).resolves.toEqual({
+      ok: true,
+      message: '/repo/README.md',
+    })
+
+    expect(mocks.execa).toHaveBeenCalledWith(
+      '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code',
+      ['/repo/README.md'],
+      expect.objectContaining({ timeout: 10_000, reject: false }),
+    )
+  })
+})
 
 describe('openRemoteByAppCli', () => {
   beforeEach(() => {

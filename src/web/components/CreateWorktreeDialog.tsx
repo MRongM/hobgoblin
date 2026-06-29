@@ -19,6 +19,7 @@ import { Input } from '#/web/components/ui/input.tsx'
 import { ToggleGroup, ToggleGroupItem } from '#/web/components/ui/toggle-group.tsx'
 import { useRemotePathSuggestions } from '#/web/hooks/useRemotePathSuggestions.ts'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
+import { RemoteBranchSearchInput } from '#/web/components/branch-list/RemoteBranchSearchInput.tsx'
 import type { RepoState } from '#/web/stores/repos/types.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { getRepositoryRemoteBranches } from '#/web/repo-client.ts'
@@ -114,8 +115,9 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, onClose, onCre
   const visibleRemoteBranches = remoteBranches.filter((ref) => remoteRefMatchesQuery(ref, remoteBranchQuery))
   const branchTrimmed = branch.trim()
   const detachedRefTrimmed = detachedRef.trim()
-  const selectedRemoteRef = remoteRef && visibleRemoteBranches.includes(remoteRef) ? remoteRef : visibleRemoteBranches[0] || ''
-  const derivedLocalBranch = deriveLocalBranchFromRemoteRef(selectedRemoteRef) ?? ''
+  const visibleSelectedRemoteRef = remoteRef && visibleRemoteBranches.includes(remoteRef) ? remoteRef : ''
+  const activeRemoteRef = visibleSelectedRemoteRef || visibleRemoteBranches[0] || ''
+  const derivedLocalBranch = deriveLocalBranchFromRemoteRef(activeRemoteRef) ?? ''
   const trackLocalBranch = localBranch.trim() || derivedLocalBranch
   const pathName = worktreePathName({ mode, branchTrimmed, existingBranch, trackLocalBranch, detachedRefTrimmed })
   const pathTrimmed = remoteTarget ? worktreePath.trim() : untildify(worktreePath.trim())
@@ -174,11 +176,17 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, onClose, onCre
 
   useEffect(() => {
     if (!open || mode !== 'trackRemoteBranch') return
-    if (selectedRemoteRef && remoteRef !== selectedRemoteRef) {
-      setRemoteRef(selectedRemoteRef)
+    const firstRemoteRef = remoteBranches[0] || ''
+    if (!firstRemoteRef) {
+      if (remoteRef) setRemoteRef('')
+      if (localBranch) setLocalBranch('')
+      return
+    }
+    if (!remoteRef || !remoteBranches.includes(remoteRef)) {
+      setRemoteRef(firstRemoteRef)
       setLocalBranch('')
     }
-  }, [mode, open, remoteRef, selectedRemoteRef])
+  }, [localBranch, mode, open, remoteBranches, remoteRef])
 
   function buildInput(): CreateWorktreeInput | null {
     if (!validPath) return null
@@ -192,8 +200,8 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, onClose, onCre
           ? { worktreePath: effectivePath, mode: { kind: 'existingBranch', branch: existingBranch } }
           : null
       case 'trackRemoteBranch':
-        return selectedRemoteRef && trackLocalBranch && !localBranchError
-          ? { worktreePath: effectivePath, mode: { kind: 'trackRemoteBranch', remoteRef: selectedRemoteRef, localBranch: trackLocalBranch } }
+        return activeRemoteRef && trackLocalBranch && !localBranchError
+          ? { worktreePath: effectivePath, mode: { kind: 'trackRemoteBranch', remoteRef: activeRemoteRef, localBranch: trackLocalBranch } }
           : null
       case 'detached':
         return detachedRefTrimmed && !detachedRefError
@@ -347,12 +355,12 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, onClose, onCre
             <Field className="mt-2">
               <FieldLabel htmlFor="cwt-remote-ref">{t('action.create-worktree-remote-label')}</FieldLabel>
               <Select
-                value={selectedRemoteRef}
+                value={remoteRef}
                 onValueChange={(next) => {
                   setRemoteRef(next)
                   setLocalBranch('')
                 }}
-                disabled={visibleRemoteBranches.length === 0}
+                disabled={remoteBranchesLoading || remoteBranches.length === 0}
               >
                 <SelectTrigger
                   id="cwt-remote-ref"
@@ -363,17 +371,15 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, onClose, onCre
                   <SelectValue placeholder={t('action.create-worktree-remote-placeholder')} />
                 </SelectTrigger>
                 <SelectContent
+                  matchTriggerWidth
                   header={
-                    <Input
+                    <RemoteBranchSearchInput
                       id="cwt-remote-ref-filter"
-                      autoFocus
                       value={remoteBranchQuery}
-                      onChange={(e) => setRemoteBranchQuery(e.target.value)}
-                      onKeyDown={(e) => e.stopPropagation()}
+                      onChange={setRemoteBranchQuery}
                       placeholder={t('action.remote-branch-search-placeholder')}
-                      aria-label={t('action.remote-branch-search-label')}
+                      ariaLabel={t('action.remote-branch-search-label')}
                       disabled={remoteBranchesLoading || remoteBranches.length === 0}
-                      className="h-8"
                     />
                   }
                 >

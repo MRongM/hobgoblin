@@ -9,6 +9,7 @@ import { Input } from '#/web/components/ui/input.tsx'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/web/components/ui/select.tsx'
 import { ScrollArea } from '#/web/components/ui/scroll-area.tsx'
 import { DialogError } from '#/web/components/ui/dialog-error.tsx'
+import { RemoteBranchSearchInput } from '#/web/components/branch-list/RemoteBranchSearchInput.tsx'
 import { getRepositoryRemoteBranches } from '#/web/repo-client.ts'
 import { useMergeConflictAiActions } from '#/web/hooks/useMergeConflictAiActions.ts'
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
@@ -388,9 +389,10 @@ export function PullRemoteBranchDialog({
   const { isPending, run } = useAsyncPending<'trackRemoteBranch'>()
   const choices = remoteTrackingBranchChoices(remoteRefs, allBranches)
   const visibleChoices = choices.filter((choice) => remoteRefMatchesQuery(choice.remoteRef, remoteRefQuery))
-  const selected = visibleChoices.find((choice) => choice.remoteRef === remoteRef) ?? visibleChoices[0]
-  const effectiveRemoteRef = selected?.remoteRef ?? ''
-  const effectiveLocalBranch = localBranch.trim() || selected?.defaultLocalBranch || ''
+  const visibleSelected = visibleChoices.find((choice) => choice.remoteRef === remoteRef)
+  const activeChoice = visibleSelected ?? visibleChoices[0]
+  const effectiveRemoteRef = activeChoice?.remoteRef ?? ''
+  const effectiveLocalBranch = localBranch.trim() || activeChoice?.defaultLocalBranch || ''
   const validationKey = branchNameValidationKey(effectiveLocalBranch, allBranches)
   const pending = busy || isPending
 
@@ -427,18 +429,25 @@ export function PullRemoteBranchDialog({
 
   useEffect(() => {
     if (!open) return
-    if (!selected) {
+    const firstChoice = choices[0]
+    if (!firstChoice) {
       if (remoteRef) setRemoteRef('')
       if (localBranch) setLocalBranch('')
       return
     }
-    if (remoteRef !== selected.remoteRef) {
-      setRemoteRef(selected.remoteRef)
-      setLocalBranch(selected.defaultLocalBranch)
+    const selectedChoice = choices.find((choice) => choice.remoteRef === remoteRef)
+    if (!selectedChoice) {
+      setRemoteRef(firstChoice.remoteRef)
+      setLocalBranch(firstChoice.defaultLocalBranch)
       return
     }
-    if (!localBranch.trim()) setLocalBranch(selected.defaultLocalBranch)
-  }, [localBranch, open, remoteRef, selected])
+    if (!localBranch.trim()) setLocalBranch(selectedChoice.defaultLocalBranch)
+  }, [choices, localBranch, open, remoteRef])
+
+  useEffect(() => {
+    if (!open || !remoteRef || visibleSelected || !activeChoice) return
+    setLocalBranch(activeChoice.defaultLocalBranch)
+  }, [activeChoice?.defaultLocalBranch, activeChoice?.remoteRef, open, remoteRef, visibleSelected])
 
   async function handleConfirm() {
     if (!effectiveRemoteRef || validationKey || pending) return
@@ -470,13 +479,13 @@ export function PullRemoteBranchDialog({
         <Field>
           <FieldLabel htmlFor="pull-remote-ref">{t('action.pull-remote-branch-remote-label')}</FieldLabel>
           <Select
-            value={effectiveRemoteRef}
+            value={remoteRef}
             onValueChange={(next) => {
               const nextChoice = choices.find((choice) => choice.remoteRef === next)
               setRemoteRef(next)
               setLocalBranch(nextChoice?.defaultLocalBranch ?? '')
             }}
-            disabled={visibleChoices.length === 0 || loading}
+            disabled={choices.length === 0 || loading}
           >
             <SelectTrigger
               id="pull-remote-ref"
@@ -486,17 +495,15 @@ export function PullRemoteBranchDialog({
               <SelectValue placeholder={t('action.create-worktree-remote-placeholder')} />
             </SelectTrigger>
             <SelectContent
+              matchTriggerWidth
               header={
-                <Input
+                <RemoteBranchSearchInput
                   id="pull-remote-ref-filter"
-                  autoFocus
                   value={remoteRefQuery}
-                  onChange={(e) => setRemoteRefQuery(e.target.value)}
-                  onKeyDown={(e) => e.stopPropagation()}
+                  onChange={setRemoteRefQuery}
                   placeholder={t('action.remote-branch-search-placeholder')}
-                  aria-label={t('action.remote-branch-search-label')}
+                  ariaLabel={t('action.remote-branch-search-label')}
                   disabled={choices.length === 0 || loading}
-                  className="h-8"
                 />
               }
             >
@@ -523,7 +530,7 @@ export function PullRemoteBranchDialog({
             id="pull-remote-local-branch"
             value={localBranch}
             onChange={(e) => setLocalBranch(e.target.value)}
-            placeholder={selected?.defaultLocalBranch || t('action.create-worktree-local-branch-placeholder')}
+            placeholder={activeChoice?.defaultLocalBranch || t('action.create-worktree-local-branch-placeholder')}
             aria-invalid={!!validationKey}
           />
           <FieldError reserveHeight aria-live="polite" aria-atomic="true">
