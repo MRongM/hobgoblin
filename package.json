@@ -1,7 +1,7 @@
 {
   "name": "hobgoblin",
   "productName": "Hobgoblin",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Hobgoblin - Git Branch List, desktop edition",
   "private": true,
   "type": "module",
