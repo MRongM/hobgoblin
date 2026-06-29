@@ -38,6 +38,17 @@ Hobgoblin started from [Goblin](https://nano-props.github.io/goblin/), a small, 
 - **Visual workflow controls:** Navigate branches, switch repositories, trigger Git actions, and jump to external tools from clear interface context.
 - **Themes and languages:** Use light, dark, and themed presets with English, Simplified Chinese, Korean, and Japanese UI strings.
 
+## Magic Operations
+
+- **Binary paste into terminal input:** Paste binary clipboard content into the terminal input to create temporary files and insert the generated file paths.
+- **Drag from file tree to terminal:** Drag files from the file tree into the terminal to insert shell-safe paths without typing them manually.
+- **Clipboard-powered file flow:** Paste clipboard text into files with `Ctrl+Shift+V`, and copy file text back to the system clipboard with `Ctrl+Shift+C`.
+- **Terminal tab jump:** Double-click the active terminal tab to scroll that terminal to the bottom.
+- **Terminal-to-file-tree navigation:** Click detected repository-relative paths in terminal output to reveal them in the file tree.
+- **Tmux-backed session resume:** Detect and use tmux-backed remote terminal sessions when available, keeping remote terminal state resumable.
+- **Browser project access:** Run server mode and open the project workspace from a web browser.
+- **Mobile terminal takeover:** Use browser-accessible mode from a phone browser to take over terminal sessions when you need to continue from mobile.
+
 ## Installation
 
 Download the latest build from [GitHub Releases](https://github.com/MRongM/hobgoblin/releases).
