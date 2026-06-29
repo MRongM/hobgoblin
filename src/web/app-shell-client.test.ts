@@ -297,9 +297,9 @@ describe('app shell client', () => {
       await import('#/web/app-shell-client.ts')
     const file = { name: 'image.bin', byteLength: 3, bytesBase64: 'AQID' }
     await expect(writeFile(file)).resolves.toEqual({ ok: true })
-    await expect(readFile(30)).resolves.toEqual({ ok: true, file })
+    await expect(readFile(30, 'README.md')).resolves.toEqual({ ok: true, file })
     expect(writeFileTreeClipboardFile).toHaveBeenCalledWith(file)
-    expect(readFileTreeClipboardFile).toHaveBeenCalledWith({ maxBytes: 30 })
+    expect(readFileTreeClipboardFile).toHaveBeenCalledWith({ maxBytes: 30, targetName: 'README.md' })
   })
 
   test('returns an error for file tree clipboard files without a native shell', async () => {

@@ -596,6 +596,8 @@ export const ko: Record<DictKey, string> = {
   'error.file-tree-directory-too-large': '디렉터리 항목이 너무 많아 표시할 수 없습니다.',
   'error.file-tree-text-file-too-large': '파일이 너무 커서 텍스트로 읽을 수 없습니다.',
   'error.file-tree-clipboard-file-too-large': '파일이 파일 영역 클립보드 크기 제한을 초과했습니다.',
+  'error.file-tree-clipboard-ambiguous-binary-format':
+    '클립보드에 여러 바이너리 형식이 있습니다. 확장자가 일치하는 파일을 선택하거나 파일을 직접 복사하세요.',
   'error.file-tree-binary-file': '일반 텍스트 파일이 아닙니다.',
   'error.file-tree-not-regular-file': '일반 파일이 아닙니다.',
   'error.file-transfer-file-too-large': '파일이 너무 커서 복사할 수 없습니다.',

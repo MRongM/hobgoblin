@@ -91,8 +91,11 @@ export async function writeFileTreeClipboardFile(
   }
 }
 
-export async function readFileTreeClipboardFile(maxBytes: number): Promise<FileTreeClipboardReadResult> {
-  return (await nativeShell()?.readFileTreeClipboardFile?.({ maxBytes })) ?? {
+export async function readFileTreeClipboardFile(
+  maxBytes: number,
+  targetName?: string,
+): Promise<FileTreeClipboardReadResult> {
+  return (await nativeShell()?.readFileTreeClipboardFile?.({ maxBytes, ...(targetName ? { targetName } : {}) })) ?? {
     ok: false,
     message: 'error.unsupported-native-bridge',
   }

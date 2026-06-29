@@ -87,6 +87,7 @@ describe('i18n dictionaries', () => {
       'error.file-tree-text-file-too-large',
       'error.file-tree-binary-file',
       'error.file-tree-not-regular-file',
+      'error.file-tree-clipboard-ambiguous-binary-format',
     ] satisfies DictKey[]
 
     for (const [lang, dict] of Object.entries(dicts)) {

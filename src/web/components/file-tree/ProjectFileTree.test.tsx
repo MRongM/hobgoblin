@@ -90,7 +90,7 @@ const chooseFileTreeUploadFiles = vi.fn(async () => [
 ])
 const hasNativeFilePicker = vi.fn(() => true)
 const writeFileTreeClipboardFile = vi.fn(async (..._args: unknown[]) => ({ ok: true as const }))
-const readFileTreeClipboardFile = vi.fn(async (_maxBytes: unknown) => ({
+const readFileTreeClipboardFile = vi.fn(async (_maxBytes: unknown, _targetName?: unknown) => ({
   ok: true as const,
   file: {
     name: 'clipboard.bin',
@@ -125,7 +125,7 @@ vi.mock('#/web/app-shell-client.ts', () => ({
   chooseFileTreeUploadFiles: () => chooseFileTreeUploadFiles(),
   hasNativeFilePicker: () => hasNativeFilePicker(),
   writeFileTreeClipboardFile: (input: unknown) => writeFileTreeClipboardFile(input),
-  readFileTreeClipboardFile: (maxBytes: unknown) => readFileTreeClipboardFile(maxBytes),
+  readFileTreeClipboardFile: (maxBytes: unknown, targetName?: unknown) => readFileTreeClipboardFile(maxBytes, targetName),
 }))
 
 vi.mock('#/web/remote-client.ts', () => ({
@@ -515,7 +515,7 @@ describe('ProjectFileTree', () => {
       await Promise.resolve()
     })
 
-    expect(readFileTreeClipboardFile).toHaveBeenCalledWith(30 * 1024 * 1024)
+    expect(readFileTreeClipboardFile).toHaveBeenCalledWith(30 * 1024 * 1024, 'README.md')
     expect(replaceRepositoryFileTreeBinaryFile).toHaveBeenNthCalledWith(
       1,
       '/repo',
@@ -1089,6 +1089,41 @@ describe('ProjectFileTree', () => {
 
     expect(createRepositoryFileTreeFile).toHaveBeenCalledWith('/repo', '/repo', '/repo', 'notes.md')
     expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', '/repo', undefined)
+  })
+
+  test('creates a file from the file tree toolbar in the selected directory', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const directory = treeItemByText('src')
+    await act(async () => {
+      directory.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const newFileButton = container?.querySelector<HTMLButtonElement>('button[aria-label="file-tree.new-file"]')
+    if (!newFileButton) throw new Error('missing new file button')
+
+    await act(async () => {
+      newFileButton.click()
+      await Promise.resolve()
+    })
+
+    const input = container?.querySelector<HTMLInputElement>('input[aria-label="file-tree.new-file-input-label"]')
+    if (!input) throw new Error('missing new file input')
+
+    await act(async () => {
+      input.value = 'notes.md'
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(createRepositoryFileTreeFile).toHaveBeenCalledWith('/repo', '/repo', '/repo/src', 'notes.md')
+    expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', '/repo/src', undefined)
   })
 
   test('creates a file from a directory context menu and refreshes that directory', async () => {

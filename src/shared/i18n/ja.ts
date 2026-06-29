@@ -606,6 +606,8 @@ export const ja: Record<DictKey, string> = {
   'error.file-tree-directory-too-large': 'ディレクトリの項目が多すぎるため表示できません。',
   'error.file-tree-text-file-too-large': 'ファイルが大きすぎるためテキストとして読み込めません。',
   'error.file-tree-clipboard-file-too-large': 'ファイルがファイル領域クリップボードのサイズ上限を超えています。',
+  'error.file-tree-clipboard-ambiguous-binary-format':
+    'クリップボードに複数のバイナリ形式があります。拡張子が一致するファイルを選択するか、ファイルを直接コピーしてください。',
   'error.file-tree-binary-file': 'プレーンテキストファイルではありません。',
   'error.file-tree-not-regular-file': '通常のファイルではありません。',
   'error.file-transfer-file-too-large': 'ファイルが大きすぎるためコピーできません。',
