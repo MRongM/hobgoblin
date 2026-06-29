@@ -1075,7 +1075,12 @@ export function ProjectFileTree({
   const copyFocusedFileContents = useCallback(
     async (node: FileTreeNode) => {
       if (!worktreePath) return
-      const result = await readRepositoryFileTreeBinaryFile(repoId, worktreePath, node.absolutePath, fileTreeClipboardMaxBytes)
+      const result = await readRepositoryFileTreeBinaryFile(
+        repoId,
+        worktreePath,
+        node.absolutePath,
+        fileTreeClipboardMaxBytes,
+      )
       if (!result.ok) {
         toast.error(t(result.message))
         return
@@ -1099,7 +1104,7 @@ export function ProjectFileTree({
   const replaceFocusedFileContents = useCallback(
     async (node: FileTreeNode) => {
       if (!worktreePath) return
-      const clipboardFile = await readFileTreeClipboardFile(fileTreeClipboardMaxBytes, node.name)
+      const clipboardFile = await readFileTreeClipboardFile(fileTreeClipboardMaxBytes)
       if (!clipboardFile.ok) {
         toast.error(t(clipboardFile.message))
         return

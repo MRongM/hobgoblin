@@ -212,14 +212,12 @@ describe('shell bridge IPC', () => {
     const input = { name: 'image.bin', byteLength: 3, bytesBase64: 'AQID' }
 
     await expect(invoke(SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL, input)).resolves.toEqual({ ok: true })
-    await expect(
-      invoke(SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL, { maxBytes: 30, targetName: 'README.md' }),
-    ).resolves.toEqual({
+    await expect(invoke(SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL, { maxBytes: 30 })).resolves.toEqual({
       ok: true,
       file: input,
     })
     expect(writeFileTreeClipboardFile).toHaveBeenCalledWith(input)
-    expect(readFileTreeClipboardFile).toHaveBeenCalledWith(30, 'README.md')
+    expect(readFileTreeClipboardFile).toHaveBeenCalledWith(30)
   })
 
   test('rejects clipboard binary saves for untrusted senders', async () => {

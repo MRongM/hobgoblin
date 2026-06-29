@@ -67,18 +67,15 @@ export function wireShellBridgeIpc(): void {
     },
   )
 
-  ipcMain.handle(
-    SHELL_OPEN_FILE_DIALOG_CHANNEL,
-    async (event, input?: { title?: unknown }): Promise<string[]> => {
-      if (!isTrustedIpcEvent(event)) return []
-      const title = typeof input?.title === 'string' && input.title.trim() ? input.title.trim() : 'Choose Files'
-      const win = callerWindow(event)
-      const opts: Electron.OpenDialogOptions = { properties: ['openFile', 'multiSelections'], title }
-      const result = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
-      if (result.canceled || result.filePaths.length === 0) return []
-      return result.filePaths
-    },
-  )
+  ipcMain.handle(SHELL_OPEN_FILE_DIALOG_CHANNEL, async (event, input?: { title?: unknown }): Promise<string[]> => {
+    if (!isTrustedIpcEvent(event)) return []
+    const title = typeof input?.title === 'string' && input.title.trim() ? input.title.trim() : 'Choose Files'
+    const win = callerWindow(event)
+    const opts: Electron.OpenDialogOptions = { properties: ['openFile', 'multiSelections'], title }
+    const result = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
+    if (result.canceled || result.filePaths.length === 0) return []
+    return result.filePaths
+  })
 
   ipcMain.handle(
     SHELL_CONSUME_EXTERNAL_OPEN_PATHS_CHANNEL,
@@ -98,21 +95,17 @@ export function wireShellBridgeIpc(): void {
     },
   )
 
-  ipcMain.handle(
-    SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
-    async (event, input?: FileTreeClipboardFilePayload) => {
-      if (!isTrustedIpcEvent(event)) return { ok: false, message: 'error.invalid-path' }
-      return await writeFileTreeClipboardFile(input as FileTreeClipboardFilePayload)
-    },
-  )
+  ipcMain.handle(SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL, async (event, input?: FileTreeClipboardFilePayload) => {
+    if (!isTrustedIpcEvent(event)) return { ok: false, message: 'error.invalid-path' }
+    return await writeFileTreeClipboardFile(input as FileTreeClipboardFilePayload)
+  })
 
   ipcMain.handle(
     SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
     async (event, input?: Partial<FileTreeClipboardReadInput> | number) => {
       if (!isTrustedIpcEvent(event)) return { ok: false, message: 'error.invalid-path' }
       const maxBytes = typeof input === 'number' ? input : typeof input?.maxBytes === 'number' ? input.maxBytes : 0
-      const targetName = typeof input === 'object' && typeof input.targetName === 'string' ? input.targetName : undefined
-      return await readFileTreeClipboardFile(maxBytes, targetName)
+      return await readFileTreeClipboardFile(maxBytes)
     },
   )
 

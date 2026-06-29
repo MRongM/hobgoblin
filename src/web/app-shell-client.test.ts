@@ -31,7 +31,9 @@ function testBridge(overrides: Partial<RendererBridge> = {}): RendererBridge {
       if (capability === 'clipboard-file-paths') return nativeShell?.readClipboardFilePaths !== undefined
       if (capability === 'clipboard-binary-temp-files') return nativeShell?.saveClipboardBinaryFiles !== undefined
       if (capability === 'file-tree-clipboard') {
-        return nativeShell?.writeFileTreeClipboardFile !== undefined && nativeShell?.readFileTreeClipboardFile !== undefined
+        return (
+          nativeShell?.writeFileTreeClipboardFile !== undefined && nativeShell?.readFileTreeClipboardFile !== undefined
+        )
       }
       return false
     },
@@ -297,14 +299,16 @@ describe('app shell client', () => {
       await import('#/web/app-shell-client.ts')
     const file = { name: 'image.bin', byteLength: 3, bytesBase64: 'AQID' }
     await expect(writeFile(file)).resolves.toEqual({ ok: true })
-    await expect(readFile(30, 'README.md')).resolves.toEqual({ ok: true, file })
+    await expect(readFile(30)).resolves.toEqual({ ok: true, file })
     expect(writeFileTreeClipboardFile).toHaveBeenCalledWith(file)
-    expect(readFileTreeClipboardFile).toHaveBeenCalledWith({ maxBytes: 30, targetName: 'README.md' })
+    expect(readFileTreeClipboardFile).toHaveBeenCalledWith({ maxBytes: 30 })
   })
 
   test('returns an error for file tree clipboard files without a native shell', async () => {
     const { readFileTreeClipboardFile, writeFileTreeClipboardFile } = await import('#/web/app-shell-client.ts')
-    await expect(writeFileTreeClipboardFile({ name: 'image.bin', byteLength: 3, bytesBase64: 'AQID' })).resolves.toEqual({
+    await expect(
+      writeFileTreeClipboardFile({ name: 'image.bin', byteLength: 3, bytesBase64: 'AQID' }),
+    ).resolves.toEqual({
       ok: false,
       message: 'error.unsupported-native-bridge',
     })
