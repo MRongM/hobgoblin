@@ -26,7 +26,7 @@ import type {
   SaveClipboardBinaryFilesInput,
   SaveClipboardBinaryFilesResult,
 } from '#/shared/clipboard-binary-temp-files.ts'
-import type { FileTreeClipboardFilePayload } from '#/shared/file-tree-clipboard.ts'
+import type { FileTreeClipboardFilePayload, FileTreeClipboardReadInput } from '#/shared/file-tree-clipboard.ts'
 
 function callerWindow(event: Electron.IpcMainInvokeEvent): BrowserWindow | null {
   return BrowserWindow.fromWebContents(event.sender) ?? focusedRegisteredSurface()?.window ?? getMainWindow() ?? null
@@ -108,10 +108,11 @@ export function wireShellBridgeIpc(): void {
 
   ipcMain.handle(
     SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
-    async (event, input?: { maxBytes?: unknown }) => {
+    async (event, input?: Partial<FileTreeClipboardReadInput> | number) => {
       if (!isTrustedIpcEvent(event)) return { ok: false, message: 'error.invalid-path' }
-      const maxBytes = typeof input?.maxBytes === 'number' ? input.maxBytes : 0
-      return await readFileTreeClipboardFile(maxBytes)
+      const maxBytes = typeof input === 'number' ? input : typeof input?.maxBytes === 'number' ? input.maxBytes : 0
+      const targetName = typeof input === 'object' && typeof input.targetName === 'string' ? input.targetName : undefined
+      return await readFileTreeClipboardFile(maxBytes, targetName)
     },
   )
 

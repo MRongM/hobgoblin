@@ -668,6 +668,12 @@ export function ProjectFileTree({
     [rootCreateEntryTarget, worktreePath],
   )
 
+  const selectedCreateEntryTarget = useCallback((): CreateEntryTarget | null => {
+    if (selection.selected.size !== 1) return rootCreateEntryTarget()
+    const selectedId = Array.from(selection.selected)[0]
+    return createEntryTargetForNode(selectedId ? (flatNodeById.get(selectedId) ?? null) : null)
+  }, [createEntryTargetForNode, flatNodeById, rootCreateEntryTarget, selection.selected])
+
   const beginCreateEntry = useCallback(
     (kind: CreateEntryKind, target: CreateEntryTarget | null) => {
       if (!target) return
@@ -1093,7 +1099,7 @@ export function ProjectFileTree({
   const replaceFocusedFileContents = useCallback(
     async (node: FileTreeNode) => {
       if (!worktreePath) return
-      const clipboardFile = await readFileTreeClipboardFile(fileTreeClipboardMaxBytes)
+      const clipboardFile = await readFileTreeClipboardFile(fileTreeClipboardMaxBytes, node.name)
       if (!clipboardFile.ok) {
         toast.error(t(clipboardFile.message))
         return
@@ -1296,8 +1302,8 @@ export function ProjectFileTree({
             onMoveSearch={moveSearchMatch}
             onClearSearch={clearSearch}
             onCollapseAll={collapseAllDirectories}
-            onCreateFile={() => beginCreateEntry('file', rootCreateEntryTarget())}
-            onCreateDirectory={() => beginCreateEntry('directory', rootCreateEntryTarget())}
+            onCreateFile={() => beginCreateEntry('file', selectedCreateEntryTarget())}
+            onCreateDirectory={() => beginCreateEntry('directory', selectedCreateEntryTarget())}
             onRefresh={() => refreshTreeDirectory(rootCreateEntryTarget())}
           />
           <div className="min-h-0 flex-1 overflow-auto py-1">

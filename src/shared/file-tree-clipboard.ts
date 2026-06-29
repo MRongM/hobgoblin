@@ -9,6 +9,11 @@ export interface FileTreeClipboardFilePayload {
   mimeType?: string
 }
 
+export interface FileTreeClipboardReadInput {
+  maxBytes: number
+  targetName?: string
+}
+
 export type FileTreeClipboardWriteResult = { ok: true } | { ok: false; message: string }
 export type FileTreeClipboardReadResult =
   | { ok: true; file: FileTreeClipboardFilePayload }

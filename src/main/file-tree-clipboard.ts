@@ -37,12 +37,23 @@ export async function writeFileTreeClipboardFile(
   return { ok: true }
 }
 
-export async function readFileTreeClipboardFile(maxBytes: number): Promise<FileTreeClipboardReadResult> {
+export async function readFileTreeClipboardFile(
+  maxBytes: number,
+  targetName?: string,
+): Promise<FileTreeClipboardReadResult> {
   if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) return { ok: false, message: 'error.invalid-arguments' }
   const custom = readCustomClipboard(maxBytes)
   if (custom.ok) return custom
   const fromPath = await readFirstClipboardPath(maxBytes)
   if (fromPath.ok) return fromPath
+  const commonBinary = readCommonBinaryClipboardFormat(maxBytes, targetName)
+  if (
+    commonBinary.ok ||
+    commonBinary.message === 'error.file-tree-clipboard-file-too-large' ||
+    commonBinary.message === 'error.file-tree-clipboard-ambiguous-binary-format'
+  ) {
+    return commonBinary
+  }
   const image = readClipboardImage(maxBytes)
   if (image.ok) return image
   const text = clipboard.readText()
@@ -135,6 +146,149 @@ async function readFirstClipboardPath(maxBytes: number): Promise<FileTreeClipboa
       bytesBase64: bytes.toString('base64'),
     },
   }
+}
+
+interface ClipboardFormatGroup {
+  id: string
+  extensions: string[]
+  formats: string[]
+  fallback?: boolean
+}
+
+const COMMON_BINARY_CLIPBOARD_FORMAT_GROUPS: ClipboardFormatGroup[] = [
+  { id: 'pdf', extensions: ['.pdf'], formats: ['application/pdf', 'public.pdf'] },
+  { id: 'rtf', extensions: ['.rtf'], formats: ['text/rtf', 'application/rtf', 'public.rtf'] },
+  { id: 'html', extensions: ['.html', '.htm'], formats: ['text/html', 'public.html'] },
+  { id: 'png', extensions: ['.png'], formats: ['image/png', 'public.png'] },
+  { id: 'jpeg', extensions: ['.jpg', '.jpeg'], formats: ['image/jpeg', 'public.jpeg'] },
+  { id: 'gif', extensions: ['.gif'], formats: ['image/gif', 'com.compuserve.gif'] },
+  { id: 'webp', extensions: ['.webp'], formats: ['image/webp'] },
+  { id: 'tiff', extensions: ['.tif', '.tiff'], formats: ['image/tiff', 'public.tiff'] },
+  {
+    id: 'zip',
+    extensions: ['.zip'],
+    formats: ['application/zip', 'application/x-zip-compressed', 'com.pkware.zip-archive'],
+  },
+  {
+    id: 'docx',
+    extensions: ['.docx'],
+    formats: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+  },
+  {
+    id: 'xlsx',
+    extensions: ['.xlsx'],
+    formats: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+  },
+  {
+    id: 'pptx',
+    extensions: ['.pptx'],
+    formats: ['application/vnd.openxmlformats-officedocument.presentationml.presentation'],
+  },
+  { id: 'doc', extensions: ['.doc'], formats: ['application/msword'] },
+  { id: 'xls', extensions: ['.xls'], formats: ['application/vnd.ms-excel'] },
+  { id: 'ppt', extensions: ['.ppt'], formats: ['application/vnd.ms-powerpoint'] },
+  { id: 'mp3', extensions: ['.mp3'], formats: ['audio/mpeg'] },
+  { id: 'wav', extensions: ['.wav'], formats: ['audio/wav'] },
+  { id: 'mp4', extensions: ['.mp4'], formats: ['video/mp4'] },
+  { id: 'mov', extensions: ['.mov'], formats: ['video/quicktime'] },
+  { id: 'octet-stream', extensions: [], formats: ['application/octet-stream'], fallback: true },
+]
+
+const COMMON_BINARY_CLIPBOARD_GROUPS_BY_EXTENSION = new Map(
+  COMMON_BINARY_CLIPBOARD_FORMAT_GROUPS.flatMap((group) =>
+    group.extensions.map((extension) => [extension, group] as const),
+  ),
+)
+
+function readCommonBinaryClipboardFormat(maxBytes: number, targetName?: string): FileTreeClipboardReadResult {
+  const availableFormats = availableClipboardFormats()
+  if (availableFormats.length === 0) return { ok: false, message: 'error.invalid-arguments' }
+  const availableByNormalizedFormat = new Map(
+    availableFormats.map((format) => [normalizeClipboardFormat(format), format] as const),
+  )
+  const targetGroup = clipboardFormatGroupForTargetName(targetName)
+  if (targetGroup) {
+    return (
+      readFirstAvailableGroupFormat(targetGroup, availableByNormalizedFormat, maxBytes) ?? {
+        ok: false,
+        message: 'error.invalid-arguments',
+      }
+    )
+  }
+  return (
+    readUniqueCommonBinaryFormat(availableByNormalizedFormat, maxBytes) ?? {
+      ok: false,
+      message: 'error.invalid-arguments',
+    }
+  )
+}
+
+function availableClipboardFormats(): string[] {
+  try {
+    return clipboard.availableFormats()
+  } catch {
+    return []
+  }
+}
+
+function clipboardFormatGroupForTargetName(targetName?: string): ClipboardFormatGroup | null {
+  if (!targetName) return null
+  return COMMON_BINARY_CLIPBOARD_GROUPS_BY_EXTENSION.get(path.extname(targetName).toLowerCase()) ?? null
+}
+
+function readUniqueCommonBinaryFormat(
+  availableByNormalizedFormat: Map<string, string>,
+  maxBytes: number,
+): FileTreeClipboardReadResult | null {
+  const availableGroups = COMMON_BINARY_CLIPBOARD_FORMAT_GROUPS.filter((group) =>
+    group.formats.some((format) => availableByNormalizedFormat.has(normalizeClipboardFormat(format))),
+  )
+  const specificGroups = availableGroups.filter((group) => group.fallback !== true)
+  if (specificGroups.length > 1) {
+    return { ok: false, message: 'error.file-tree-clipboard-ambiguous-binary-format' }
+  }
+  if (specificGroups.length === 1) {
+    return readFirstAvailableGroupFormat(specificGroups[0]!, availableByNormalizedFormat, maxBytes)
+  }
+  const fallbackGroup = availableGroups.find((group) => group.fallback === true)
+  return fallbackGroup ? readFirstAvailableGroupFormat(fallbackGroup, availableByNormalizedFormat, maxBytes) : null
+}
+
+function readFirstAvailableGroupFormat(
+  group: ClipboardFormatGroup,
+  availableByNormalizedFormat: Map<string, string>,
+  maxBytes: number,
+): FileTreeClipboardReadResult | null {
+  for (const format of group.formats) {
+    const availableFormat = availableByNormalizedFormat.get(normalizeClipboardFormat(format))
+    if (!availableFormat) continue
+    const result = readClipboardBufferFormat(availableFormat, maxBytes)
+    if (result.ok || result.message === 'error.file-tree-clipboard-file-too-large') return result
+  }
+  return null
+}
+
+function readClipboardBufferFormat(format: string, maxBytes: number): FileTreeClipboardReadResult {
+  try {
+    const bytes = clipboard.readBuffer(format)
+    if (!bytes || bytes.byteLength === 0) return { ok: false, message: 'error.invalid-arguments' }
+    if (bytes.byteLength > maxBytes) return { ok: false, message: 'error.file-tree-clipboard-file-too-large' }
+    return {
+      ok: true,
+      file: {
+        name: 'clipboard.bin',
+        byteLength: bytes.byteLength,
+        bytesBase64: bytes.toString('base64'),
+        mimeType: format,
+      },
+    }
+  } catch {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+}
+
+function normalizeClipboardFormat(format: string): string {
+  return format.trim().toLowerCase()
 }
 
 async function writeClipboardTempFile(
