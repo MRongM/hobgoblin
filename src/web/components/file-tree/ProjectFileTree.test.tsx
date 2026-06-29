@@ -90,7 +90,7 @@ const chooseFileTreeUploadFiles = vi.fn(async () => [
 ])
 const hasNativeFilePicker = vi.fn(() => true)
 const writeFileTreeClipboardFile = vi.fn(async (..._args: unknown[]) => ({ ok: true as const }))
-const readFileTreeClipboardFile = vi.fn(async (_maxBytes: unknown, _targetName?: unknown) => ({
+const readFileTreeClipboardFile = vi.fn(async (_maxBytes: unknown) => ({
   ok: true as const,
   file: {
     name: 'clipboard.bin',
@@ -125,7 +125,7 @@ vi.mock('#/web/app-shell-client.ts', () => ({
   chooseFileTreeUploadFiles: () => chooseFileTreeUploadFiles(),
   hasNativeFilePicker: () => hasNativeFilePicker(),
   writeFileTreeClipboardFile: (input: unknown) => writeFileTreeClipboardFile(input),
-  readFileTreeClipboardFile: (maxBytes: unknown, targetName?: unknown) => readFileTreeClipboardFile(maxBytes, targetName),
+  readFileTreeClipboardFile: (maxBytes: unknown) => readFileTreeClipboardFile(maxBytes),
 }))
 
 vi.mock('#/web/remote-client.ts', () => ({
@@ -515,7 +515,7 @@ describe('ProjectFileTree', () => {
       await Promise.resolve()
     })
 
-    expect(readFileTreeClipboardFile).toHaveBeenCalledWith(30 * 1024 * 1024, 'README.md')
+    expect(readFileTreeClipboardFile).toHaveBeenCalledWith(30 * 1024 * 1024)
     expect(replaceRepositoryFileTreeBinaryFile).toHaveBeenNthCalledWith(
       1,
       '/repo',

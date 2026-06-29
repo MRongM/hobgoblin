@@ -584,8 +584,7 @@ export const zh: Record<DictKey, string> = {
   'error.file-tree-directory-too-large': '目录条目过多，无法显示。',
   'error.file-tree-text-file-too-large': '文件过大，无法按文本读取。',
   'error.file-tree-clipboard-file-too-large': '文件超过文件区剪贴板大小上限。',
-  'error.file-tree-clipboard-ambiguous-binary-format':
-    '剪贴板包含多个二进制格式。请选择扩展名匹配的文件，或直接复制文件后粘贴。',
+  'error.file-tree-clipboard-unsupported-content': '仅支持文本和图片剪贴板内容。',
   'error.file-tree-binary-file': '文件不是纯文本。',
   'error.file-tree-not-regular-file': '路径不是常规文件。',
   'error.file-transfer-file-too-large': '文件过大，无法复制。',

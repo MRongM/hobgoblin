@@ -607,8 +607,7 @@ export const en = {
   'error.file-tree-directory-too-large': 'Directory has too many entries to display.',
   'error.file-tree-text-file-too-large': 'File is too large to read as text.',
   'error.file-tree-clipboard-file-too-large': 'File exceeds the file-area clipboard size limit.',
-  'error.file-tree-clipboard-ambiguous-binary-format':
-    'Clipboard contains multiple binary formats. Select a file with a matching extension or copy a file directly.',
+  'error.file-tree-clipboard-unsupported-content': 'Only text and image clipboard content is supported.',
   'error.file-tree-binary-file': 'File is not plain text.',
   'error.file-tree-not-regular-file': 'Path is not a regular file.',
   'error.file-transfer-file-too-large': 'A file is too large to copy.',

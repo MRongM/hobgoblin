@@ -425,8 +425,10 @@ export const ja: Record<DictKey, string> = {
   'terminal.bell-unread-count': '未読ベル {count} 件',
   'terminal.lan-qr': 'LAN ターミナル QR コード',
   'terminal.lan-qr-title': 'LAN ターミナル QR コード',
-  'terminal.lan-qr-description': '同じネットワーク上の別デバイスでスキャンすると、このワークスペースのターミナルを開けます。',
-  'terminal.lan-qr-empty': '利用可能な LAN アクセス URL がありません。LAN アクセスを有効にして Hobgoblin を再起動してください。',
+  'terminal.lan-qr-description':
+    '同じネットワーク上の別デバイスでスキャンすると、このワークスペースのターミナルを開けます。',
+  'terminal.lan-qr-empty':
+    '利用可能な LAN アクセス URL がありません。LAN アクセスを有効にして Hobgoblin を再起動してください。',
   'terminal.lan-qr-loading': 'QR コードを生成中…',
   'terminal.lan-qr-image-alt': '{url} の QR コード',
 
@@ -606,8 +608,7 @@ export const ja: Record<DictKey, string> = {
   'error.file-tree-directory-too-large': 'ディレクトリの項目が多すぎるため表示できません。',
   'error.file-tree-text-file-too-large': 'ファイルが大きすぎるためテキストとして読み込めません。',
   'error.file-tree-clipboard-file-too-large': 'ファイルがファイル領域クリップボードのサイズ上限を超えています。',
-  'error.file-tree-clipboard-ambiguous-binary-format':
-    'クリップボードに複数のバイナリ形式があります。拡張子が一致するファイルを選択するか、ファイルを直接コピーしてください。',
+  'error.file-tree-clipboard-unsupported-content': 'クリップボードの内容はテキストと画像のみサポートされています。',
   'error.file-tree-binary-file': 'プレーンテキストファイルではありません。',
   'error.file-tree-not-regular-file': '通常のファイルではありません。',
   'error.file-transfer-file-too-large': 'ファイルが大きすぎるためコピーできません。',
@@ -765,7 +766,8 @@ export const ja: Record<DictKey, string> = {
   'settings.files.height-ratio': '高さの比率',
   'settings.files.height-ratio-hint': 'プロジェクトエクスプローラーでファイル領域が占める割合を調整します。',
   'settings.files.clipboard-max-size': 'クリップボードサイズ上限',
-  'settings.files.clipboard-max-size-hint': 'ファイル領域ショートカットでコピーまたは置換できるファイル内容の最大サイズ（MB）です。',
+  'settings.files.clipboard-max-size-hint':
+    'ファイル領域ショートカットでコピーまたは置換できるファイル内容の最大サイズ（MB）です。',
   'settings.files.font.title': 'フォント',
   'settings.files.font-size': 'フォントサイズ',
   'settings.files.font-size-hint': 'プロジェクトファイルツリーのフォントサイズを調整します。',

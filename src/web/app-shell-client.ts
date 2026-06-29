@@ -76,29 +76,32 @@ export async function readSystemClipboardFilePaths(): Promise<string[]> {
 export async function saveClipboardBinaryFilesFromPaste(
   input: SaveClipboardBinaryFilesInput,
 ): Promise<SaveClipboardBinaryFilesResult> {
-  return (await nativeShell()?.saveClipboardBinaryFiles?.(input)) ?? {
-    ok: false,
-    message: 'error.unsupported-native-bridge',
-  }
+  return (
+    (await nativeShell()?.saveClipboardBinaryFiles?.(input)) ?? {
+      ok: false,
+      message: 'error.unsupported-native-bridge',
+    }
+  )
 }
 
 export async function writeFileTreeClipboardFile(
   input: FileTreeClipboardFilePayload,
 ): Promise<FileTreeClipboardWriteResult> {
-  return (await nativeShell()?.writeFileTreeClipboardFile?.(input)) ?? {
-    ok: false,
-    message: 'error.unsupported-native-bridge',
-  }
+  return (
+    (await nativeShell()?.writeFileTreeClipboardFile?.(input)) ?? {
+      ok: false,
+      message: 'error.unsupported-native-bridge',
+    }
+  )
 }
 
-export async function readFileTreeClipboardFile(
-  maxBytes: number,
-  targetName?: string,
-): Promise<FileTreeClipboardReadResult> {
-  return (await nativeShell()?.readFileTreeClipboardFile?.({ maxBytes, ...(targetName ? { targetName } : {}) })) ?? {
-    ok: false,
-    message: 'error.unsupported-native-bridge',
-  }
+export async function readFileTreeClipboardFile(maxBytes: number): Promise<FileTreeClipboardReadResult> {
+  return (
+    (await nativeShell()?.readFileTreeClipboardFile?.({ maxBytes })) ?? {
+      ok: false,
+      message: 'error.unsupported-native-bridge',
+    }
+  )
 }
 
 function isAllowedExternalUrl(url: string, allowHttp: boolean): boolean {

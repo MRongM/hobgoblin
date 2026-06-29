@@ -1,6 +1,3 @@
-export const FILE_TREE_CLIPBOARD_FORMAT = 'application/x-hobgoblin-file-content+json;version=1'
-export const FILE_TREE_CLIPBOARD_SCHEMA_VERSION = 1
-
 export interface FileTreeClipboardFilePayload {
   name: string
   bytesBase64: string
@@ -11,7 +8,6 @@ export interface FileTreeClipboardFilePayload {
 
 export interface FileTreeClipboardReadInput {
   maxBytes: number
-  targetName?: string
 }
 
 export type FileTreeClipboardWriteResult = { ok: true } | { ok: false; message: string }
