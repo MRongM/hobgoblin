@@ -233,6 +233,75 @@ describe('CreateWorktreeDialog', () => {
     })
     expect(onClose).toHaveBeenCalledTimes(1)
   })
+
+  test('keeps the remote branch search focused across consecutive filtering', async () => {
+    const onCreate = vi.fn(async () => {})
+    testWindow.goblinNative = {
+      ...(testWindow.goblinNative as object),
+      initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' },
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => [
+          'origin/feature/api-client',
+          'origin/bugfix/login-flow',
+          'origin/release/searchable-branch',
+        ],
+      })),
+    )
+
+    render(<CreateWorktreeDialog open repo={createRepo()} onClose={vi.fn()} onCreate={onCreate} />)
+
+    clickButtonByText('action.create-worktree-mode-remote')
+    await waitForAssertion(() => {
+      expect(input('#cwt-local-branch').placeholder).toBe('feature/api-client')
+    })
+    openSelect('#cwt-remote-ref')
+
+    const filter = input('#cwt-remote-ref-filter')
+    filter.focus()
+    setInputValue('#cwt-remote-ref-filter', 'sea')
+    await waitForAssertion(() => {
+      expect(input('#cwt-local-branch').placeholder).toBe('release/searchable-branch')
+    })
+    expect(document.activeElement).toBe(filter)
+
+    setInputValue('#cwt-remote-ref-filter', 'search')
+    await waitForAssertion(() => {
+      expect(input('#cwt-remote-ref-filter').value).toBe('search')
+    })
+    expect(document.activeElement).toBe(filter)
+  })
+
+  test('constrains the remote branch dropdown to the trigger width', async () => {
+    testWindow.goblinNative = {
+      ...(testWindow.goblinNative as object),
+      initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' },
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ['origin/feature/really-long-remote-branch-name-that-should-not-push-the-popover-sideways'],
+      })),
+    )
+
+    render(<CreateWorktreeDialog open repo={createRepo()} onClose={vi.fn()} onCreate={vi.fn(async () => {})} />)
+
+    clickButtonByText('action.create-worktree-mode-remote')
+    await waitForAssertion(() => {
+      expect(input('#cwt-local-branch').placeholder).toBe(
+        'feature/really-long-remote-branch-name-that-should-not-push-the-popover-sideways',
+      )
+    })
+    openSelect('#cwt-remote-ref')
+
+    expect(input('#cwt-remote-ref-filter').closest('[data-slot="select-content"]')?.className).toContain(
+      'w-[var(--radix-select-trigger-width)]',
+    )
+  })
 })
 
 function createRepo(): RepoState {

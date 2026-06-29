@@ -1223,6 +1223,13 @@ export function ProjectFileTree({
   const collapseAllDirectories = useCallback(() => {
     setExpandedDirs(new Set())
   }, [])
+  const runOpenNodeInEditor = useCallback(
+    async (node: FileTreeNode) => {
+      const result = await openNodeInEditor(repoId, node)
+      if (!result.ok) toast.error(result.message)
+    },
+    [repoId],
+  )
 
   if (!view.exists) return null
   const fileTreeStyle = {
@@ -1306,6 +1313,7 @@ export function ProjectFileTree({
                     onDownload={runDownload}
                     canUploadFiles={canUploadFiles}
                     onUpload={runUploadForNode}
+                    onOpenInEditor={(node) => void runOpenNodeInEditor(node)}
                     onKeyDown={handleKeyDown}
                     onFocus={setFocusedNodeId}
                     onDrop={handleDrop}
@@ -1405,6 +1413,7 @@ function FileTreeRow({
   onDownload,
   canUploadFiles,
   onUpload,
+  onOpenInEditor,
   onKeyDown,
   onFocus,
   onDrop,
@@ -1446,6 +1455,7 @@ function FileTreeRow({
   onDownload: (nodes: FileTreeNode[]) => void
   canUploadFiles: boolean
   onUpload: (node: FileTreeNode | null) => void
+  onOpenInEditor: (node: FileTreeNode) => void
   onKeyDown: (node: FileTreeNode, event: KeyboardEvent) => void
   onFocus: (nodeId: string) => void
   onDrop: (node: FileTreeNode, event: DragEvent<HTMLDivElement>) => void
@@ -1484,6 +1494,12 @@ function FileTreeRow({
               onFocus(node.id)
               onSelect(node, event)
               if (expandable) onToggle(node)
+            }}
+            onDoubleClick={(event) => {
+              if (!isEditorOpenableFileNode(node)) return
+              event.preventDefault()
+              event.stopPropagation()
+              onOpenInEditor(node)
             }}
             onDragStart={(event) => onDragStart(node, event)}
             onDrop={(event) => onDrop(node, event)}
@@ -1617,6 +1633,7 @@ function FileTreeRow({
             onDownload={onDownload}
             canUploadFiles={canUploadFiles}
             onUpload={onUpload}
+            onOpenInEditor={onOpenInEditor}
             onKeyDown={onKeyDown}
             onFocus={onFocus}
             onDrop={onDrop}
@@ -2143,8 +2160,8 @@ async function copyPaths(paths: string[]) {
 
 async function openNodeInEditor(repoId: string, node: FileTreeNode) {
   const editorPath = editorPathForNode(node)
-  if (isRemoteRepoId(repoId)) await openRemoteRepositoryEditor(repoId, editorPath)
-  else await openRepositoryEditor(editorPath)
+  if (isRemoteRepoId(repoId)) return await openRemoteRepositoryEditor(repoId, editorPath)
+  return await openRepositoryEditor(editorPath)
 }
 
 async function openNodeInTerminal(repoId: string, node: FileTreeNode) {
@@ -2154,13 +2171,15 @@ async function openNodeInTerminal(repoId: string, node: FileTreeNode) {
 }
 
 function editorPathForNode(node: FileTreeNode): string {
-  if (node.kind === 'directory' || (node.kind === 'symlink' && node.targetKind === 'directory'))
-    return node.absolutePath
-  return parentDirectoryPath(node.absolutePath)
+  return node.absolutePath
 }
 
 function isWritableNode(node: FileTreeNode): boolean {
   return node.kind !== 'virtual'
+}
+
+function isEditorOpenableFileNode(node: FileTreeNode): boolean {
+  return node.kind === 'file' || (node.kind === 'symlink' && node.targetKind === 'file')
 }
 
 function isExportableFileNode(node: FileTreeNode): boolean {

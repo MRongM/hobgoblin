@@ -44,21 +44,66 @@ function SelectContent({
   className,
   children,
   header,
+  matchTriggerWidth = false,
+  onFocusCapture,
+  onPointerDownCapture,
   position = 'popper',
   ...props
-}: React.ComponentProps<typeof SelectPrimitive.Content> & { header?: React.ReactNode }) {
+}: React.ComponentProps<typeof SelectPrimitive.Content> & { header?: React.ReactNode; matchTriggerWidth?: boolean }) {
+  const contentRef = React.useRef<HTMLDivElement | null>(null)
+  const restoreHeaderFocusRef = React.useRef(false)
+
+  function headerElement(): HTMLElement | null {
+    return contentRef.current?.querySelector<HTMLElement>('[data-slot="select-content-header"]') ?? null
+  }
+
+  function focusHeaderInput() {
+    const input = headerElement()?.querySelector<HTMLInputElement>('input:not(:disabled)')
+    if (!input || document.activeElement === input) return
+    input.focus({ preventScroll: true })
+  }
+
+  function scheduleHeaderInputFocus() {
+    queueMicrotask(focusHeaderInput)
+    window.setTimeout(focusHeaderInput, 0)
+  }
+
+  function handleFocusCapture(event: React.FocusEvent<HTMLDivElement>) {
+    onFocusCapture?.(event)
+    if (!header || event.defaultPrevented) return
+    const headerEl = headerElement()
+    const target = event.target instanceof HTMLElement ? event.target : null
+    if (headerEl && target && headerEl.contains(target)) {
+      restoreHeaderFocusRef.current = true
+      return
+    }
+    if (restoreHeaderFocusRef.current) scheduleHeaderInputFocus()
+  }
+
+  function handlePointerDownCapture(event: React.PointerEvent<HTMLDivElement>) {
+    onPointerDownCapture?.(event)
+    if (!header) return
+    const headerEl = headerElement()
+    const target = event.target instanceof HTMLElement ? event.target : null
+    restoreHeaderFocusRef.current = !!headerEl && !!target && headerEl.contains(target)
+  }
+
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content
+        {...props}
+        ref={contentRef}
         data-slot="select-content"
         className={cn(
           'bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 relative z-50 max-h-(--radix-select-content-available-height) min-w-[8rem] origin-(--radix-select-content-transform-origin) overflow-hidden rounded-md border shadow-md',
           position === 'popper' &&
             'data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1',
+          matchTriggerWidth && 'w-[var(--radix-select-trigger-width)] max-w-[var(--radix-select-trigger-width)]',
           className,
         )}
+        onFocusCapture={handleFocusCapture}
+        onPointerDownCapture={handlePointerDownCapture}
         position={position}
-        {...props}
       >
         <SelectScrollUpButton />
         {header && (
