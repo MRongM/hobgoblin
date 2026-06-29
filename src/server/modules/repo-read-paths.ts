@@ -9,9 +9,15 @@ import {
   probeCommitMessageProviders,
 } from '#/system/commit-message-ai.ts'
 import { readLocalFileTreeTextFile } from '#/system/file-tree/local.ts'
-import { readRemoteFileTreeTextFile } from '#/system/ssh/git.ts'
+import { readLocalFileTreeBinaryFile } from '#/system/file-tree/local.ts'
+import { readRemoteFileTreeBinaryFile, readRemoteFileTreeTextFile } from '#/system/ssh/git.ts'
 import { isCommitMessageProvider, type CommitMessageGenerationResult, type CommitMessageProviderAvailability } from '#/shared/commit-message-ai.ts'
-import type { RepoFileSearchResult, RepoFileTreeResult, RepoFileTreeTextFileReadResult } from '#/shared/file-tree.ts'
+import type {
+  RepoFileSearchResult,
+  RepoFileTreeBinaryFileReadResult,
+  RepoFileTreeResult,
+  RepoFileTreeTextFileReadResult,
+} from '#/shared/file-tree.ts'
 import { type CommitDetail, type CommitHistoryEntry, type ExecResult, type PullRequestFetchMode, type WorktreeStatus } from '#/shared/git-types.ts'
 import { isRemoteRepoId, type ProbeResult, type PullRequestEntry, type RepoSnapshot } from '#/shared/rpc.ts'
 
@@ -132,4 +138,20 @@ export async function readRepositoryFileTreeTextFile(
     return await readRemoteFileTreeTextFile(await resolveRemoteRepoTarget(repoId), worktreePath, filePath, { signal })
   }
   return await readLocalFileTreeTextFile(worktreePath, filePath)
+}
+
+export async function readRepositoryFileTreeBinaryFile(
+  repoId: string,
+  worktreePath: string,
+  filePath: string,
+  maxBytes: number,
+  signal?: AbortSignal,
+): Promise<RepoFileTreeBinaryFileReadResult> {
+  if (signal?.aborted) return { ok: false, message: 'cancelled' }
+  if (isRemoteRepoId(repoId)) {
+    return await readRemoteFileTreeBinaryFile(await resolveRemoteRepoTarget(repoId), worktreePath, filePath, maxBytes, {
+      signal,
+    })
+  }
+  return await readLocalFileTreeBinaryFile(worktreePath, filePath, maxBytes)
 }

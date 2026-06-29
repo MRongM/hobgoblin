@@ -22,10 +22,12 @@ import {
   fetchRemoteRepository,
   pushRemoteBranch,
   readRemoteFileBase64,
+  readRemoteFileTreeBinaryFile,
   readRemoteFileTreeTextFile,
   resetRemoteHard,
   remoteExecResult,
   renameRemoteFileTreeEntry,
+  replaceRemoteFileTreeBinaryFile,
   replaceRemoteFileTreeTextFile,
   removeRemoteWorktree,
   searchRemoteFileTree,
@@ -394,6 +396,61 @@ describe('remote git helpers', () => {
         stdin: Buffer.from('new\n', 'utf8').toString('base64'),
         maxBuffer: expect.any(Number),
       },
+    )
+  })
+
+  test('readRemoteFileTreeBinaryFile parses remote JSON binary content', async () => {
+    const run = vi.fn(async () => ({
+      ok: true,
+      stdout: JSON.stringify({
+        ok: true,
+        name: 'image.bin',
+        byteLength: 3,
+        bytesBase64: Buffer.from([1, 2, 3]).toString('base64'),
+      }),
+      stderr: '',
+    }))
+
+    await expect(
+      readRemoteFileTreeBinaryFile(TARGET, '/srv/repo', '/srv/repo/image.bin', 30, { run: run as any }),
+    ).resolves.toEqual({
+      ok: true,
+      name: 'image.bin',
+      byteLength: 3,
+      bytesBase64: Buffer.from([1, 2, 3]).toString('base64'),
+    })
+    expect(run).toHaveBeenCalledWith(
+      { type: 'readFileTreeBinaryFile', worktreePath: '/srv/repo', filePath: '/srv/repo/image.bin', maxBytes: 30 },
+      TARGET,
+      { signal: undefined, timeoutMs: 90_000, maxBuffer: expect.any(Number) },
+    )
+  })
+
+  test('replaceRemoteFileTreeBinaryFile sends base64 bytes and returns previous bytes', async () => {
+    const run = vi.fn(async () => ({
+      ok: true,
+      stdout: JSON.stringify({
+        ok: true,
+        previousBytesBase64: Buffer.from([9, 8]).toString('base64'),
+        previousByteLength: 2,
+      }),
+      stderr: '',
+    }))
+    const nextBytesBase64 = Buffer.from([1, 2]).toString('base64')
+
+    await expect(
+      replaceRemoteFileTreeBinaryFile(TARGET, '/srv/repo', '/srv/repo/image.bin', nextBytesBase64, 30, {
+        run: run as any,
+      }),
+    ).resolves.toEqual({
+      ok: true,
+      previousBytesBase64: Buffer.from([9, 8]).toString('base64'),
+      previousByteLength: 2,
+    })
+    expect(run).toHaveBeenCalledWith(
+      { type: 'replaceFileTreeBinaryFile', worktreePath: '/srv/repo', filePath: '/srv/repo/image.bin', maxBytes: 30 },
+      TARGET,
+      { signal: undefined, timeoutMs: 90_000, stdin: nextBytesBase64, maxBuffer: expect.any(Number) },
     )
   })
 

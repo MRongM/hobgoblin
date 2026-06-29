@@ -11,6 +11,12 @@ import { useReposStore } from '#/web/stores/repos/store.ts'
 const REPO_ID = '/tmp/gbl-project-changes-repo'
 const WORKTREE_PATH = '/tmp/gbl-project-changes-repo'
 
+type OpenWorktreeEditorTargetMock = (
+  repoId: string,
+  worktreePath: string,
+  target: { path: string; line?: number; column?: number },
+) => Promise<{ ok: true; message: string }>
+
 const mocks = vi.hoisted(() => ({
   useRuntimeExternalAppSettings: vi.fn(),
 }))
@@ -19,6 +25,10 @@ const repoClientMocks = vi.hoisted(() => ({
   discardRepositoryChanges: vi.fn(),
   getCommitMessageProviders: vi.fn(),
   generateRepositoryCommitMessage: vi.fn(),
+}))
+
+const editorOpenMocks = vi.hoisted(() => ({
+  openWorktreeEditorTarget: vi.fn<OpenWorktreeEditorTargetMock>(async () => ({ ok: true, message: '' })),
 }))
 
 vi.mock('#/web/runtime-settings-external-apps.ts', () => ({
@@ -33,6 +43,14 @@ vi.mock('#/web/repo-client.ts', async () => {
     generateRepositoryCommitMessage: repoClientMocks.generateRepositoryCommitMessage,
   }
 })
+
+vi.mock('#/web/lib/editor-open-targets.ts', () => ({
+  openWorktreeEditorTarget: (
+    repoId: string,
+    worktreePath: string,
+    target: { path: string; line?: number; column?: number },
+  ) => editorOpenMocks.openWorktreeEditorTarget(repoId, worktreePath, target),
+}))
 
 vi.mock('#/web/stores/i18n.ts', () => ({
   useT: () => (key: string) => key,
@@ -73,6 +91,8 @@ beforeEach(() => {
   repoClientMocks.getCommitMessageProviders.mockResolvedValue({ codex: false, claude: false })
   repoClientMocks.generateRepositoryCommitMessage.mockResolvedValue({ ok: true, message: 'feat: generated message' })
   repoClientMocks.discardRepositoryChanges.mockResolvedValue({ ok: true, message: '' })
+  editorOpenMocks.openWorktreeEditorTarget.mockReset()
+  editorOpenMocks.openWorktreeEditorTarget.mockResolvedValue({ ok: true, message: '' })
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -182,6 +202,40 @@ describe('ProjectChangesPanel', () => {
     })
 
     expect(onRevealPath).toHaveBeenCalledWith('src/app.ts')
+  })
+
+  test('opens changed file paths in the editor on double click', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } })],
+      selectedBranch: 'feature/worktree',
+      statusLoaded: true,
+      status: [
+        {
+          path: WORKTREE_PATH,
+          branch: 'feature/worktree',
+          isMain: true,
+          entries: [{ x: 'M', y: ' ', path: 'src/app.ts' }],
+        },
+      ],
+    })
+
+    await act(async () => {
+      root!.render(
+        <InlineCommitDraftProvider>
+          <ProjectChangesPanel repoId={REPO_ID} onRevealPath={vi.fn()} />
+        </InlineCommitDraftProvider>,
+      )
+    })
+
+    const pathButton = container?.querySelector<HTMLButtonElement>('button[aria-label="src/app.ts"]')
+    expect(pathButton).toBeTruthy()
+
+    await act(async () => {
+      pathButton?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
+    })
+
+    expect(editorOpenMocks.openWorktreeEditorTarget).toHaveBeenCalledWith(REPO_ID, WORKTREE_PATH, { path: 'src/app.ts' })
   })
 
   test('refresh icon refreshes only selected repository status', async () => {

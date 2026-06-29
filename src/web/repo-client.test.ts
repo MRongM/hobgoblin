@@ -148,6 +148,7 @@ describe('repo-client', () => {
       .fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true, message: 'server-terminal' }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true, message: 'server-editor' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true, message: 'server-editor' }) })
     Object.defineProperty(globalThis, 'window', {
       configurable: true,
       value: {
@@ -188,6 +189,10 @@ describe('repo-client', () => {
     const { openRepositoryEditor, openRepositoryTerminal } = await import('#/web/repo-client.ts')
     await expect(openRepositoryTerminal('/tmp/repo')).resolves.toEqual({ ok: true, message: 'server-terminal' })
     await expect(openRepositoryEditor('/tmp/repo')).resolves.toEqual({ ok: true, message: 'server-editor' })
+    await expect(openRepositoryEditor({ path: '/tmp/repo/src/app.ts', line: 12 })).resolves.toEqual({
+      ok: true,
+      message: 'server-editor',
+    })
     expect(openTerminal).not.toHaveBeenCalled()
     expect(openEditor).not.toHaveBeenCalled()
     expect(fetchMock).toHaveBeenNthCalledWith(
@@ -206,6 +211,15 @@ describe('repo-client', () => {
         method: 'POST',
         headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
         body: JSON.stringify({ path: '/tmp/repo' }),
+      }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      'http://127.0.0.1:32100/api/repo/open-editor',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
+        body: JSON.stringify({ target: { path: '/tmp/repo/src/app.ts', line: 12 } }),
       }),
     )
   })
@@ -523,6 +537,65 @@ describe('repo-client', () => {
           worktreePath: '/repo',
           parentDirPath: '/repo/src',
           name: 'components',
+        }),
+      }),
+    )
+  })
+
+  test('requests file tree binary read and replace through the embedded server', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ ok: true, name: 'image.bin', byteLength: 3, bytesBase64: 'AQID' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ ok: true, previousBytesBase64: 'CQg=', previousByteLength: 2 }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { readRepositoryFileTreeBinaryFile, replaceRepositoryFileTreeBinaryFile } = await import('#/web/repo-client.ts')
+    await expect(readRepositoryFileTreeBinaryFile('/repo', '/repo', '/repo/image.bin', 30)).resolves.toEqual({
+      ok: true,
+      name: 'image.bin',
+      byteLength: 3,
+      bytesBase64: 'AQID',
+    })
+    await expect(
+      replaceRepositoryFileTreeBinaryFile('/repo', '/repo', '/repo/image.bin', 'AQI=', 30),
+    ).resolves.toEqual({
+      ok: true,
+      previousBytesBase64: 'CQg=',
+      previousByteLength: 2,
+    })
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'http://127.0.0.1:32100/api/repo/file-tree/read-binary-file',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
+        body: JSON.stringify({
+          repoId: '/repo',
+          worktreePath: '/repo',
+          filePath: '/repo/image.bin',
+          maxBytes: 30,
+        }),
+      }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'http://127.0.0.1:32100/api/repo/file-tree/replace-binary-file',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
+        body: JSON.stringify({
+          repoId: '/repo',
+          worktreePath: '/repo',
+          filePath: '/repo/image.bin',
+          bytesBase64: 'AQI=',
+          maxBytes: 30,
         }),
       }),
     )

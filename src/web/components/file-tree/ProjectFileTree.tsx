@@ -44,9 +44,9 @@ import {
   moveRepositoryFileTreeEntries,
   openRepositoryEditor,
   openRepositoryTerminal,
-  readRepositoryFileTreeTextFile,
+  readRepositoryFileTreeBinaryFile,
   renameRepositoryFileTreeEntry,
-  replaceRepositoryFileTreeTextFile,
+  replaceRepositoryFileTreeBinaryFile,
   searchRepositoryFileTree,
   transferRepositoryFiles,
   exportRepositoryFilesToLocalDirectory,
@@ -102,9 +102,12 @@ import {
   chooseFileTreeUploadFiles,
   hasNativeFilePicker,
   openInFinder,
+  readFileTreeClipboardFile,
   readSystemClipboardFilePaths,
+  writeFileTreeClipboardFile,
 } from '#/web/app-shell-client.ts'
-import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
+import { useRuntimeFileAreaSettings } from '#/web/runtime-settings-file-area.ts'
+import { fileTreeClipboardMaxBytes as fileTreeClipboardMaxBytesFromMb } from '#/shared/file-tree-clipboard.ts'
 
 const ROOT_DIR = ''
 const FILE_TREE_SEARCH_LIMIT = 100
@@ -170,10 +173,10 @@ type FileTreeUndoAction =
       relativePaths: string[]
     }
   | {
-      kind: 'replaceTextFile'
+      kind: 'replaceBinaryFile'
       path: string
       relativePath: string
-      previousContent: string
+      previousBytesBase64: string
     }
 
 export interface FileTreeRevealRequest {
@@ -193,7 +196,8 @@ export function ProjectFileTree({
   toolbarHeight?: FileTreeToolbarHeight
 }) {
   const t = useT()
-  const { fileTreeFontSize } = useRuntimeFontSettings()
+  const { fileTreeFontSize, fileTreeClipboardMaxBytesMb } = useRuntimeFileAreaSettings()
+  const fileTreeClipboardMaxBytes = fileTreeClipboardMaxBytesFromMb(fileTreeClipboardMaxBytesMb)
   const view = useProjectFileTreeView(repoId)
   const worktreePath = view.worktreePath
   const activeWorktreeRef = useRef<string | null>(worktreePath)
@@ -1002,8 +1006,14 @@ export function ProjectFileTree({
         return
       }
 
-      if (action.kind === 'replaceTextFile') {
-        const result = await replaceRepositoryFileTreeTextFile(repoId, worktreePath, action.path, action.previousContent)
+      if (action.kind === 'replaceBinaryFile') {
+        const result = await replaceRepositoryFileTreeBinaryFile(
+          repoId,
+          worktreePath,
+          action.path,
+          action.previousBytesBase64,
+          fileTreeClipboardMaxBytes,
+        )
         if (!result.ok) {
           undoStackRef.current.push(action)
           toast.error(t(result.message))
@@ -1033,7 +1043,15 @@ export function ProjectFileTree({
     } finally {
       undoPendingRef.current = false
     }
-  }, [clearCachedRelativePaths, refreshDirectoryPath, refreshParentDirectoryForPath, repoId, t, worktreePath])
+  }, [
+    clearCachedRelativePaths,
+    fileTreeClipboardMaxBytes,
+    refreshDirectoryPath,
+    refreshParentDirectoryForPath,
+    repoId,
+    t,
+    worktreePath,
+  ])
 
   const sourceFromSystemClipboard = useCallback(async () => {
     return sourceFromSystemClipboardPaths(await readSystemClipboardFilePaths())
@@ -1051,46 +1069,58 @@ export function ProjectFileTree({
   const copyFocusedFileContents = useCallback(
     async (node: FileTreeNode) => {
       if (!worktreePath) return
-      const result = await readRepositoryFileTreeTextFile(repoId, worktreePath, node.absolutePath)
+      const result = await readRepositoryFileTreeBinaryFile(repoId, worktreePath, node.absolutePath, fileTreeClipboardMaxBytes)
       if (!result.ok) {
         toast.error(t(result.message))
         return
       }
-      if (!navigator.clipboard?.writeText) {
-        toast.error(t('action.result-error'))
+      const written = await writeFileTreeClipboardFile({
+        name: result.name,
+        byteLength: result.byteLength,
+        bytesBase64: result.bytesBase64,
+        ...(result.text !== undefined ? { text: result.text } : {}),
+        ...(result.mimeType !== undefined ? { mimeType: result.mimeType } : {}),
+      })
+      if (!written.ok) {
+        toast.error(t(written.message))
         return
       }
-      await navigator.clipboard.writeText(result.content)
       toast.success(t('file-tree.copy-file-contents-ok'))
     },
-    [repoId, t, worktreePath],
+    [fileTreeClipboardMaxBytes, repoId, t, worktreePath],
   )
 
   const replaceFocusedFileContents = useCallback(
     async (node: FileTreeNode) => {
       if (!worktreePath) return
-      const content = await navigator.clipboard?.readText?.()
-      if (content === undefined) {
-        toast.error(t('action.result-error'))
+      const clipboardFile = await readFileTreeClipboardFile(fileTreeClipboardMaxBytes)
+      if (!clipboardFile.ok) {
+        toast.error(t(clipboardFile.message))
         return
       }
-      const result = await replaceRepositoryFileTreeTextFile(repoId, worktreePath, node.absolutePath, content)
+      const result = await replaceRepositoryFileTreeBinaryFile(
+        repoId,
+        worktreePath,
+        node.absolutePath,
+        clipboardFile.file.bytesBase64,
+        fileTreeClipboardMaxBytes,
+      )
       if (!result.ok) {
         toast.error(t(result.message))
         return
       }
       undoStackRef.current.push({
-        kind: 'replaceTextFile',
+        kind: 'replaceBinaryFile',
         path: node.absolutePath,
         relativePath: node.relativePath,
-        previousContent: result.previousContent,
+        previousBytesBase64: result.previousBytesBase64,
       })
       await refreshParentDirectoryForPath(node.absolutePath)
       setSelection({ selected: new Set([node.relativePath]), anchor: node.relativePath })
       setFocusedNodeId(node.relativePath)
       toast.success(t('file-tree.replace-file-contents-ok'))
     },
-    [refreshParentDirectoryForPath, repoId, t, worktreePath],
+    [fileTreeClipboardMaxBytes, refreshParentDirectoryForPath, repoId, t, worktreePath],
   )
 
   const sourceForPasteEvent = useCallback(

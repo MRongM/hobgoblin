@@ -29,6 +29,7 @@ import { RepoView } from '#/web/components/RepoView.tsx'
 import { RepoWorkspaceSkeleton } from '#/web/components/Skeleton.tsx'
 import { RepoDropOverlay } from '#/web/components/RepoDropOverlay.tsx'
 import { TerminalSessionProvider } from '#/web/components/terminal/TerminalSessionProvider.tsx'
+import { TerminalDeepLinkConsumer } from '#/web/components/terminal/TerminalDeepLinkConsumer.tsx'
 import { InlineCommitDraftProvider } from '#/web/components/branch-list/InlineCommitDraftProvider.tsx'
 import { useT } from '#/web/stores/i18n.ts'
 import { useKeyboard } from '#/web/hooks/useKeyboard.ts'
@@ -44,6 +45,8 @@ import { useRepoStoreInvalidationRefresh } from '#/web/hooks/useRepoStoreInvalid
 import { useSettingsQueryInvalidationSync } from '#/web/settings-queries.ts'
 import { MainWindowNavigationProvider } from '#/web/main-window-navigation.tsx'
 import { useResponsiveUiMode } from '#/web/hooks/useResponsiveUiMode.tsx'
+import { getInitialBootstrap } from '#/web/bootstrap.ts'
+import type { RepoWorkspaceMode } from '#/web/lib/workspace-layout.ts'
 import type { SettingsPage } from '#/shared/settings-pages.ts'
 
 interface AppProps {
@@ -106,6 +109,7 @@ export function App({
   return (
     <ErrorBoundary>
       <TerminalSessionProvider currentRepoId={visibleRepoId}>
+        <TerminalDeepLinkConsumer sessionReady={sessionReady} navigation={navigation} />
         <InlineCommitDraftProvider>
           <MainWindowNavigationProvider value={navigation}>
             <MainWindowViewport
@@ -115,6 +119,7 @@ export function App({
               visibleRepoId={visibleRepoId}
               sessionReady={sessionReady}
               workspaceLayout={workspaceLayout}
+              workspaceMode={workspaceBehavior.mode}
               detailCollapsed={workspaceBehavior.detailCollapsed}
               detailFocusMode={workspaceBehavior.detailFocusMode}
               overlays={overlays}
@@ -134,6 +139,7 @@ interface MainWindowViewportProps {
   visibleRepoId: string | null
   sessionReady: boolean
   workspaceLayout: 'top-bottom' | 'left-right'
+  workspaceMode: RepoWorkspaceMode
   detailCollapsed: boolean
   detailFocusMode: boolean
   overlays: ReturnType<typeof useMainWindowShellState>['overlays']
@@ -147,6 +153,7 @@ interface MainWindowViewportContentProps {
   visibleRepoId: string | null
   sessionReady: boolean
   workspaceLayout: 'top-bottom' | 'left-right'
+  workspaceMode: RepoWorkspaceMode
   detailCollapsed: boolean
   detailFocusMode: boolean
   overlays: ReturnType<typeof useMainWindowShellState>['overlays']
@@ -164,6 +171,7 @@ function MainWindowViewport({
   visibleRepoId,
   sessionReady,
   workspaceLayout,
+  workspaceMode,
   detailCollapsed,
   detailFocusMode,
   overlays,
@@ -189,6 +197,7 @@ function MainWindowViewport({
         visibleRepoId={visibleRepoId}
         sessionReady={sessionReady}
         workspaceLayout={workspaceLayout}
+        workspaceMode={workspaceMode}
         detailCollapsed={detailCollapsed}
         detailFocusMode={detailFocusMode}
         overlays={overlays}
@@ -205,6 +214,7 @@ function MainWindowViewportContent({
   visibleRepoId,
   sessionReady,
   workspaceLayout,
+  workspaceMode,
   detailCollapsed,
   detailFocusMode,
   overlays,
@@ -219,19 +229,23 @@ function MainWindowViewportContent({
       />
     )
   }
+  const runtimeKind = getInitialBootstrap().runtime.kind
+  const hideGlobalTopbar = runtimeKind === 'web' && workspaceMode === 'focus'
   return (
     <>
-      <Topbar
-        onOpenSettings={() => openSettings()}
-        actions={visibleRepoId ? <TopbarRepoControls repoId={visibleRepoId} /> : null}
-      >
-        <RepoTabs
-          currentRepoId={visibleRepoId}
-          onOpenRepoPathDialog={overlays.openRepoPathDialog}
-          onOpenRemote={overlays.openRemoteRepo}
-          onClone={overlays.openCloneRepo}
-        />
-      </Topbar>
+      {!hideGlobalTopbar && (
+        <Topbar
+          onOpenSettings={() => openSettings()}
+          actions={visibleRepoId ? <TopbarRepoControls repoId={visibleRepoId} /> : null}
+        >
+          <RepoTabs
+            currentRepoId={visibleRepoId}
+            onOpenRepoPathDialog={overlays.openRepoPathDialog}
+            onOpenRemote={overlays.openRemoteRepo}
+            onClone={overlays.openCloneRepo}
+          />
+        </Topbar>
+      )}
       <main className="flex flex-1 min-h-0 min-w-0">
         <ErrorBoundary resetKey={visibleRepoId}>
           {visibleRepoId ? (

@@ -12,6 +12,7 @@ import type { FileListViewMode } from '#/web/components/FileListViewModeControl.
 import { useT } from '#/web/stores/i18n.ts'
 import type { StatusEntry, WorktreeStatus } from '#/web/types.ts'
 import { Checkbox } from '#/web/components/ui/checkbox.tsx'
+import type { FilePathTarget } from '#/shared/file-path-target.ts'
 
 interface Props {
   status: WorktreeStatus[]
@@ -22,6 +23,7 @@ interface Props {
   onToggleFile?: (path: string) => void
   onToggleDirectory?: (path: string) => void
   onPathClick?: (path: string) => void
+  onPathDoubleClick?: (target: FilePathTarget) => void
 }
 
 function isUnmergedStatus(entry: StatusEntry): boolean {
@@ -83,6 +85,7 @@ export function StatusList({
   onToggleFile,
   onToggleDirectory,
   onPathClick,
+  onPathDoubleClick,
 }: Props) {
   const t = useT()
   const totalEntries = status.reduce((n, w) => n + w.entries.length, 0)
@@ -103,6 +106,7 @@ export function StatusList({
           onToggleFile={onToggleFile}
           onToggleDirectory={onToggleDirectory}
           onPathClick={onPathClick}
+          onPathDoubleClick={onPathDoubleClick}
         />
       ))}
     </>
@@ -116,6 +120,7 @@ function StatusWorktreeList({
   onToggleFile,
   onToggleDirectory,
   onPathClick,
+  onPathDoubleClick,
 }: {
   worktree: WorktreeStatus
   viewMode: FileListViewMode
@@ -123,6 +128,7 @@ function StatusWorktreeList({
   onToggleFile?: (path: string) => void
   onToggleDirectory?: (path: string) => void
   onPathClick?: (path: string) => void
+  onPathDoubleClick?: (target: FilePathTarget) => void
 }) {
   if (viewMode === 'tree') {
     return (
@@ -146,6 +152,7 @@ function StatusWorktreeList({
             selectedTargets={selectedTargets}
             onToggleFile={onToggleFile}
             onPathClick={onPathClick}
+            onPathDoubleClick={onPathDoubleClick}
           />
         )}
       />
@@ -176,6 +183,7 @@ function StatusWorktreeList({
               type="button"
               aria-label={entry.path}
               onClick={() => onPathClick(entry.path)}
+              onDoubleClick={() => onPathDoubleClick?.({ path: entry.path })}
               className="min-w-0 truncate text-left text-foreground underline decoration-border underline-offset-2 hover:text-brand-text hover:decoration-brand-text"
             >
               <FilePathText path={entry.path} />
@@ -194,11 +202,13 @@ function StatusTreeFileRow({
   selectedTargets,
   onToggleFile,
   onPathClick,
+  onPathDoubleClick,
 }: {
   row: FilePathTreeFileRow<StatusEntry>
   selectedTargets?: ReadonlySet<string>
   onToggleFile?: (path: string) => void
   onPathClick?: (path: string) => void
+  onPathDoubleClick?: (target: FilePathTarget) => void
 }) {
   const content = (
     <span className={FILE_TREE_FILE_NAME_CLASS} title={row.path}>
@@ -228,6 +238,7 @@ function StatusTreeFileRow({
           type="button"
           aria-label={row.path}
           onClick={() => onPathClick(row.path)}
+          onDoubleClick={() => onPathDoubleClick?.({ path: row.path })}
           className="min-w-0 truncate text-left underline decoration-border underline-offset-2 hover:text-brand-text hover:decoration-brand-text"
         >
           {content}

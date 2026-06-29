@@ -1,4 +1,4 @@
-import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react'
+import { useEffect, useState, type ComponentPropsWithoutRef, type ElementType, type ReactNode } from 'react'
 import { Input } from '#/web/components/ui/input.tsx'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/web/components/ui/select.tsx'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
@@ -157,6 +157,18 @@ export function SettingsNumberInput({
   step?: number
   onChange: (value: number) => void
 }) {
+  const [focused, setFocused] = useState(false)
+  const [draftValue, setDraftValue] = useState(String(value))
+
+  useEffect(() => {
+    if (!focused) setDraftValue(String(value))
+  }, [value])
+
+  function commitIfValid(input: HTMLInputElement) {
+    const next = input.valueAsNumber
+    if (Number.isFinite(next) && next >= min && next <= max) onChange(next)
+  }
+
   return (
     <Input
       id={id}
@@ -164,11 +176,20 @@ export function SettingsNumberInput({
       min={min}
       max={max}
       step={step}
-      value={value}
+      value={draftValue}
       className="h-8 w-24 px-2 text-xs"
-      onChange={(event) => {
+      onFocus={(event) => {
+        setFocused(true)
+        setDraftValue(event.currentTarget.value)
+      }}
+      onBlur={(event) => {
+        setFocused(false)
         const next = event.currentTarget.valueAsNumber
-        if (Number.isFinite(next)) onChange(next)
+        if (!Number.isFinite(next) || next < min || next > max) setDraftValue(String(value))
+      }}
+      onChange={(event) => {
+        setDraftValue(event.currentTarget.value)
+        commitIfValid(event.currentTarget)
       }}
     />
   )

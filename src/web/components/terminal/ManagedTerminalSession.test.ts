@@ -1122,9 +1122,36 @@ describe('ManagedTerminalSession', () => {
     term.linkProviders[0]?.provideLinks(1, (provided: unknown[] | undefined) => {
       links = provided as typeof links
     })
-    links?.[0]?.activate(new MouseEvent('click'), 'src/app.ts:12')
+    links?.[0]?.activate(new MouseEvent('click', { detail: 1 }), 'src/app.ts:12')
 
     expect(onRevealPath).toHaveBeenCalledWith('src/app.ts')
+    session.detach(host, document.createElement('div'))
+    session.dispose({ closeSession: false })
+  })
+
+  test('opens relative terminal path links in the editor on double click', async () => {
+    const onRevealPath = vi.fn()
+    const onOpenPathInEditor = vi.fn()
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+
+    session.attach(host, { onRevealPath, onOpenPathInEditor })
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.bufferLines[0] = 'created src/app.ts:12:3'
+
+    let links: Array<{ activate: (event: MouseEvent, text: string) => void; text: string }> | undefined
+    term.linkProviders[0]?.provideLinks(1, (provided: unknown[] | undefined) => {
+      links = provided as typeof links
+    })
+    links?.[0]?.activate(new MouseEvent('click', { detail: 2 }), 'src/app.ts:12:3')
+
+    expect(onRevealPath).not.toHaveBeenCalled()
+    expect(onOpenPathInEditor).toHaveBeenCalledWith({ path: 'src/app.ts', line: 12, column: 3 })
     session.detach(host, document.createElement('div'))
     session.dispose({ closeSession: false })
   })
@@ -2052,6 +2079,46 @@ describe('ManagedTerminalSession', () => {
     expect(isTerminalFocused()).toBe(true)
   })
 
+  test('does not auto-focus xterm after mobile attach', async () => {
+    const restoreUserAgent = setMobileUserAgent()
+    try {
+      const host = document.createElement('div')
+      document.body.appendChild(host)
+      const session = new ManagedTerminalSession(descriptor, vi.fn())
+      hydrateManagedSession(session)
+
+      session.attach(host)
+      await flushTerminalStart()
+      await flushUntil(() => session.snapshot().phase === 'open')
+
+      expect(xtermMocks.terminals[0]!.focus).not.toHaveBeenCalled()
+    } finally {
+      restoreUserAgent()
+    }
+  })
+
+  test('focuses xterm when the mobile user taps the terminal', async () => {
+    const restoreUserAgent = setMobileUserAgent()
+    try {
+      const host = document.createElement('div')
+      document.body.appendChild(host)
+      const session = new ManagedTerminalSession(descriptor, vi.fn())
+      hydrateManagedSession(session)
+
+      session.attach(host)
+      await flushTerminalStart()
+      await flushUntil(() => session.snapshot().phase === 'open')
+      const term = xtermMocks.terminals[0]!
+      term.focus.mockClear()
+
+      host.querySelector('.xterm')?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+
+      expect(term.focus).toHaveBeenCalledTimes(1)
+    } finally {
+      restoreUserAgent()
+    }
+  })
+
   test('applies terminal theme and updates when the app theme changes', async () => {
     const host = document.createElement('div')
     document.body.appendChild(host)
@@ -2314,6 +2381,18 @@ function deferred<T>() {
 
 function optionArrow(key: string): KeyboardEvent {
   return new KeyboardEvent('keydown', { key, altKey: true, cancelable: true })
+}
+
+function setMobileUserAgent(): () => void {
+  const userAgent = navigator.userAgent
+  Object.defineProperty(window.navigator, 'userAgent', {
+    configurable: true,
+    value:
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
+  })
+  return () => {
+    Object.defineProperty(window.navigator, 'userAgent', { configurable: true, value: userAgent })
+  }
 }
 
 async function flushTerminalStart(): Promise<void> {

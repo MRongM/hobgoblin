@@ -8,8 +8,11 @@ import { BranchDetailToolbar } from '#/web/components/branch-detail/BranchDetail
 import { getSelectedBranchDetailPresentation } from '#/web/components/branch-detail/model.ts'
 import { TerminalSessionContext, TerminalSessionReadContext } from '#/web/components/terminal/terminal-session-context.ts'
 import type { TerminalSessionContextValue, TerminalSessionReadContextValue, TerminalSessionSummary, TerminalDescriptor, WorktreeTerminalSnapshot } from '#/web/components/terminal/types.ts'
+import { buildTerminalDeepLinkUrl } from '#/web/lib/terminal-deep-link.ts'
 import { MainWindowNavigationProvider, type MainWindowNavigationActions } from '#/web/main-window-navigation.tsx'
 import { emptyRendererBridgeBootstrap, setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
+import { lanInfoQueryKey } from '#/web/settings-query-cache.ts'
+import type { LanInfoWithQrCodes } from '#/web/settings-queries.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { DEFAULT_WORKSPACE_LAYOUT } from '#/shared/workspace-layout.ts'
@@ -188,6 +191,40 @@ describe('BranchDetailToolbar', () => {
     expect(focusButton).not.toBeNull()
   })
 
+  test('opens LAN QR dialog with one current terminal target per LAN URL', async () => {
+    const lanUrls = ['http://192.168.1.23:32200', 'http://10.0.0.8:32200']
+    const { container: c } = renderToolbar({
+      terminalCount: 2,
+      detailTab: 'terminal',
+      navigation: navigationWith({}),
+      lanInfo: { host: '0.0.0.0', port: 32200, lanUrls, qrCodes: {} },
+    })
+
+    const qrButton = c.querySelector<HTMLButtonElement>('button[aria-label="terminal.lan-qr"]')
+    expect(qrButton).not.toBeNull()
+
+    act(() => {
+      qrButton?.click()
+    })
+    await flush()
+
+    const urls = Array.from(document.body.querySelectorAll<HTMLElement>('[data-testid="terminal-lan-qr-url"]')).map(
+      (item) => item.textContent,
+    )
+    expect(urls).toEqual(
+      lanUrls.map((url) =>
+        buildTerminalDeepLinkUrl(url, {
+          repoId: REPO_ID,
+          worktreePath: WORKTREE_PATH,
+          branch: 'feature/worktree',
+          terminalId: 't1',
+        }),
+      ),
+    )
+    await flushUntil(() => document.body.querySelectorAll('[data-testid="terminal-lan-qr-image"]').length === 2)
+    expect(document.body.querySelectorAll('[data-testid="terminal-lan-qr-image"]')).toHaveLength(2)
+  })
+
   test('keeps terminal focus when pressing End on the compact terminal tab', async () => {
     compactUi = true
     const showRepoDetailTab = vi.fn()
@@ -238,6 +275,7 @@ function renderToolbar(options: {
   detailFocusMode?: boolean
   collapsed?: boolean
   layout?: RepoWorkspaceLayout
+  lanInfo?: LanInfoWithQrCodes
 }): {
   container: HTMLDivElement
   terminalTab: HTMLButtonElement
@@ -337,6 +375,7 @@ function renderToolbar(options: {
   document.body.appendChild(container)
   root = createRoot(container)
   queryClient = new QueryClient()
+  queryClient.setQueryData(lanInfoQueryKey(), options.lanInfo ?? { host: '127.0.0.1', port: 32200, lanUrls: [], qrCodes: {} })
   act(() => {
     root!.render(
       <QueryClientProvider client={queryClient!}>
@@ -388,4 +427,11 @@ function navigationWith(overrides: Partial<MainWindowNavigationActions>): MainWi
 
 async function flush() {
   await new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+async function flushUntil(condition: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await flush()
+    if (condition()) return
+  }
 }

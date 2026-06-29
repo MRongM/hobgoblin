@@ -5,6 +5,7 @@ import type {
   TerminalOutputEvent,
   TerminalSessionPhase,
 } from '#/shared/terminal.ts'
+import type { FilePathTarget } from '#/shared/file-path-target.ts'
 export type TerminalPhase = TerminalSessionPhase
 
 export interface TerminalDescriptor {
@@ -78,6 +79,7 @@ export interface TerminalSessionBase {
 
 export interface TerminalSessionAttachHandlers {
   onRevealPath?: (relativePath: string) => void
+  onOpenPathInEditor?: (target: FilePathTarget) => void
 }
 
 export interface TerminalRepoSnapshot {

@@ -3,6 +3,8 @@ import {
   FILE_TREE_SEARCH_LIMIT_DEFAULT,
   FILE_TREE_SEARCH_LIMIT_MAX,
   fileTreeSearchRank,
+  isRepoFileTreeBinaryFileReadRequest,
+  isRepoFileTreeBinaryFileReplaceRequest,
   isRepoFileSearchRequest,
   isRepoFileMoveRequest,
   isRepoFileTransferRequest,
@@ -72,6 +74,48 @@ describe('file move request validation', () => {
         worktreePath: '/repo',
         paths: [],
         targetDirPath: '/repo/docs',
+      }),
+    ).toBe(false)
+  })
+})
+
+describe('binary file tree request validation', () => {
+  test('validates binary file read requests', () => {
+    expect(
+      isRepoFileTreeBinaryFileReadRequest({
+        repoId: '/repo',
+        worktreePath: '/repo',
+        filePath: '/repo/image.png',
+        maxBytes: 30 * 1024 * 1024,
+      }),
+    ).toBe(true)
+    expect(
+      isRepoFileTreeBinaryFileReadRequest({
+        repoId: '/repo',
+        worktreePath: '/repo',
+        filePath: '/repo/image.png',
+        maxBytes: 0,
+      }),
+    ).toBe(false)
+  })
+
+  test('validates binary file replace requests', () => {
+    expect(
+      isRepoFileTreeBinaryFileReplaceRequest({
+        repoId: '/repo',
+        worktreePath: '/repo',
+        filePath: '/repo/image.png',
+        maxBytes: 30 * 1024 * 1024,
+        bytesBase64: Buffer.from([0, 1, 2]).toString('base64'),
+      }),
+    ).toBe(true)
+    expect(
+      isRepoFileTreeBinaryFileReplaceRequest({
+        repoId: '/repo',
+        worktreePath: '/repo',
+        filePath: '/repo/image.png',
+        maxBytes: 30,
+        bytesBase64: 'not base64!',
       }),
     ).toBe(false)
   })

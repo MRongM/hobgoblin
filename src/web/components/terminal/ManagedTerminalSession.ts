@@ -19,6 +19,7 @@ import { readOrCreateWebTerminalAttachmentId } from '#/web/renderer-terminal-bri
 import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
 import type { TerminalInput } from '#/web/components/terminal/terminal-input.ts'
 import type { TerminalThemeMode } from '#/web/components/terminal/terminal-theme.ts'
+import { isMobileDevice } from '#/web/components/terminal/mobile-detection.ts'
 import type {
   TerminalBellEvent,
   TerminalDescriptor,
@@ -89,6 +90,7 @@ export class ManagedTerminalSession {
   attach(host: HTMLElement, handlers?: TerminalSessionAttachHandlers): void {
     if (this.disposed) return
     this.view.setRevealPathHandler(handlers?.onRevealPath ?? null)
+    this.view.setOpenPathInEditorHandler(handlers?.onOpenPathInEditor ?? null)
     this.view.attach(host)
     if (this.runtime.canResize()) {
       if (this.view.currentTerminal()) {
@@ -97,12 +99,13 @@ export class ManagedTerminalSession {
         this.start()
       }
     }
-    if (this.runtime.phase() === 'open' && this.runtime.canResize() && this.view.isVisible()) this.view.focus()
+    if (this.runtime.phase() === 'open' && this.runtime.canResize()) this.autoFocusView()
   }
 
   detach(host: HTMLElement, parkingRoot: HTMLElement): void {
     this.clearTerminalFocusIfOwned()
     this.view.setRevealPathHandler(null)
+    this.view.setOpenPathInEditorHandler(null)
     this.view.detach(host, parkingRoot)
   }
 
@@ -257,7 +260,7 @@ export class ManagedTerminalSession {
         if (this.view.isConnected() && !this.view.currentTerminal()) {
           this.start()
         }
-        if (this.view.isVisible()) this.view.focus()
+        this.autoFocusView()
       }
     }
     if (changed || pendingCleared) {
@@ -407,7 +410,12 @@ export class ManagedTerminalSession {
     this.guardStart(token, term)
     const changed = this.runtime.markAttached()
     if (changed) this.notify('metadata')
-    if (this.view.isVisible()) term.focus()
+    this.autoFocusView()
+  }
+
+  private autoFocusView(): void {
+    if (isMobileDevice()) return
+    if (this.view.isVisible()) this.view.focus()
   }
 
   private guardStart(token: number, term: XTermTerminal): void {

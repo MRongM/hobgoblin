@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { FolderTree, RefreshCw, RotateCcw } from 'lucide-react'
+import { toast } from 'sonner'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import { FileListViewModeControl, type FileListViewMode } from '#/web/components/FileListViewModeControl.tsx'
@@ -16,6 +17,8 @@ import { discardRepositoryChanges } from '#/web/repo-client.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { resourceBusy } from '#/web/stores/repos/resources.ts'
+import { openWorktreeEditorTarget } from '#/web/lib/editor-open-targets.ts'
+import type { FilePathTarget } from '#/shared/file-path-target.ts'
 
 type ProjectChangesBranch = NonNullable<SelectedBranchDetailPresentation['branch']>
 
@@ -191,10 +194,17 @@ export function ProjectChangesPanel({
     return <EmptyState title={t(repo.data.branches.length === 0 ? 'branches.empty' : 'branches.filter-empty')} />
   }
 
+  const branch = detail.branch
   const hasChanges = detail.selectedStatus.some((worktree) => worktree.entries.length > 0)
   const handleSelectionEnabledChange = (enabled: boolean) => {
     setSelectionEnabled(enabled)
     if (!enabled) setSelectedTargets(new Set())
+  }
+  async function handleOpenPathInEditor(target: FilePathTarget) {
+    const worktreePath = branch.worktree?.path
+    if (!worktreePath) return
+    const result = await openWorktreeEditorTarget(repoId, worktreePath, target)
+    if (!result.ok) toast.error(t(result.message))
   }
 
   return (
@@ -215,7 +225,7 @@ export function ProjectChangesPanel({
       />
       <ProjectChangesContent
         repo={repo}
-        branch={detail.branch}
+        branch={branch}
         selectedStatus={detail.selectedStatus}
         statusLoading={detail.loading.status}
         statusError={detail.errors.status}
@@ -226,6 +236,7 @@ export function ProjectChangesPanel({
         onToggleFile={(path) => setSelectedTargets((current) => toggleFileTargetSelection(current, path))}
         onToggleDirectory={(path) => setSelectedTargets((current) => toggleDirectoryTargetSelection(current, path))}
         onRevealPath={onRevealPath}
+        onOpenPathInEditor={handleOpenPathInEditor}
       />
       <ConfirmDialog
         open={confirmDiscardOpen}
@@ -346,6 +357,7 @@ function ProjectChangesContent({
   onToggleFile,
   onToggleDirectory,
   onRevealPath,
+  onOpenPathInEditor,
 }: {
   repo: Pick<BranchDetailRepo, 'data'>
   branch: ProjectChangesBranch
@@ -359,6 +371,7 @@ function ProjectChangesContent({
   onToggleFile: (path: string) => void
   onToggleDirectory: (path: string) => void
   onRevealPath?: (relativePath: string) => void
+  onOpenPathInEditor?: (target: FilePathTarget) => void
 }) {
   const t = useT()
   const totalEntries = selectedStatus.reduce((n, wt) => n + wt.entries.length, 0)
@@ -387,6 +400,7 @@ function ProjectChangesContent({
             onToggleFile={selectionEnabled ? onToggleFile : undefined}
             onToggleDirectory={selectionEnabled ? onToggleDirectory : undefined}
             onPathClick={onRevealPath}
+            onPathDoubleClick={onOpenPathInEditor}
           />
         </ScrollPane>
       ) : (
@@ -396,6 +410,7 @@ function ProjectChangesContent({
           onToggleFile={selectionEnabled ? onToggleFile : undefined}
           onToggleDirectory={selectionEnabled ? onToggleDirectory : undefined}
           onPathClick={onRevealPath}
+          onPathDoubleClick={onOpenPathInEditor}
         />
       )}
     </div>

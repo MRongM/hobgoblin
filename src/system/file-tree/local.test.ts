@@ -10,8 +10,10 @@ import {
   listLocalFileTreeDirectory,
   moveLocalFileTreeEntries,
   pathInsideRoot,
+  readLocalFileTreeBinaryFile,
   readLocalFileTreeTextFile,
   renameLocalFileTreeEntry,
+  replaceLocalFileTreeBinaryFile,
   replaceLocalFileTreeTextFile,
 } from '#/system/file-tree/local.ts'
 import { FILE_TREE_TEXT_FILE_MAX_BYTES } from '#/shared/file-tree.ts'
@@ -270,6 +272,49 @@ describe('replaceLocalFileTreeTextFile', () => {
       message: 'error.file-tree-binary-file',
     })
     await expect(readFile(filePath, 'utf8')).resolves.toBe('old')
+  })
+})
+
+describe('readLocalFileTreeBinaryFile', () => {
+  test('reads ordinary binary files as base64', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goblin-file-tree-'))
+    const filePath = join(root, 'image.bin')
+    await writeFile(filePath, Buffer.from([0, 1, 2, 255]))
+
+    await expect(readLocalFileTreeBinaryFile(root, filePath, 30)).resolves.toEqual({
+      ok: true,
+      name: 'image.bin',
+      byteLength: 4,
+      bytesBase64: Buffer.from([0, 1, 2, 255]).toString('base64'),
+    })
+  })
+
+  test('rejects binary files over max bytes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goblin-file-tree-'))
+    const filePath = join(root, 'large.bin')
+    await writeFile(filePath, Buffer.from([1, 2, 3, 4]))
+
+    await expect(readLocalFileTreeBinaryFile(root, filePath, 3)).resolves.toEqual({
+      ok: false,
+      message: 'error.file-tree-clipboard-file-too-large',
+    })
+  })
+})
+
+describe('replaceLocalFileTreeBinaryFile', () => {
+  test('replaces bytes and returns previous bytes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goblin-file-tree-'))
+    const filePath = join(root, 'data.bin')
+    await writeFile(filePath, Buffer.from([9, 8]))
+
+    const result = await replaceLocalFileTreeBinaryFile(root, filePath, Buffer.from([1, 2]).toString('base64'), 30)
+
+    expect(result).toEqual({
+      ok: true,
+      previousBytesBase64: Buffer.from([9, 8]).toString('base64'),
+      previousByteLength: 2,
+    })
+    await expect(readFile(filePath)).resolves.toEqual(Buffer.from([1, 2]))
   })
 })
 

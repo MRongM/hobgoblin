@@ -66,4 +66,13 @@ describe('openRemoteInPreferredEditor', () => {
       message: 'error.editor-not-installed',
     })
   })
+
+  test('passes structured remote targets to the selected editor', async () => {
+    mocks.cursorInstalled.mockReturnValue(true)
+    const { openRemoteInPreferredEditor } = await import('#/system/editors.ts')
+
+    await openRemoteInPreferredEditor('prod', { path: '/srv/repo/src/app.ts', line: 12 }, 'cursor')
+
+    expect(mocks.openRemoteCursor).toHaveBeenCalledWith('prod', { path: '/srv/repo/src/app.ts', line: 12 })
+  })
 })

@@ -47,6 +47,7 @@ function settingsPrefs(overrides: Partial<SettingsPrefs> = {}): SettingsPrefs {
     editorApp: 'auto',
     fileTreeFontSize: 12,
     fileTreeTopbarFontSize: overrides.fileTreeTopbarFontSize ?? 13,
+    fileTreeClipboardMaxBytesMb: overrides.fileTreeClipboardMaxBytesMb ?? 30,
     terminalFontSize: 14,
     terminalExternalInputEnabled: false,
     remoteTerminalTmuxEnabled: false,

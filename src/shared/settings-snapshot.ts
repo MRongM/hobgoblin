@@ -32,6 +32,7 @@ export function buildRuntimeSettingsSnapshot(input: {
     editorApp: input.prefs.editorApp,
     fileTreeFontSize: input.prefs.fileTreeFontSize,
     fileTreeTopbarFontSize: input.prefs.fileTreeTopbarFontSize,
+    fileTreeClipboardMaxBytesMb: input.prefs.fileTreeClipboardMaxBytesMb,
     terminalFontSize: input.prefs.terminalFontSize,
     terminalExternalInputEnabled: input.prefs.terminalExternalInputEnabled,
     remoteTerminalTmuxEnabled: input.prefs.remoteTerminalTmuxEnabled,
@@ -89,6 +90,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     | 'editorApp'
     | 'fileTreeFontSize'
     | 'fileTreeTopbarFontSize'
+    | 'fileTreeClipboardMaxBytesMb'
     | 'terminalFontSize'
     | 'terminalExternalInputEnabled'
     | 'remoteTerminalTmuxEnabled'
@@ -119,6 +121,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     editorApp: snapshot.editorApp,
     fileTreeFontSize: snapshot.fileTreeFontSize,
     fileTreeTopbarFontSize: snapshot.fileTreeTopbarFontSize,
+    fileTreeClipboardMaxBytesMb: snapshot.fileTreeClipboardMaxBytesMb,
     terminalFontSize: snapshot.terminalFontSize,
     terminalExternalInputEnabled: snapshot.terminalExternalInputEnabled,
     remoteTerminalTmuxEnabled: snapshot.remoteTerminalTmuxEnabled,

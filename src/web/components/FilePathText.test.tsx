@@ -149,6 +149,34 @@ describe('FilePathText', () => {
       container.remove()
     }
   })
+
+  test('passes click and double click handlers through the measured span', async () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      font: '',
+      measureText: (text: string) => ({ width: text.length * 8 }),
+    } as unknown as CanvasRenderingContext2D)
+
+    const onClick = vi.fn()
+    const onDoubleClick = vi.fn()
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+
+    await act(async () => {
+      root.render(<FilePathText path="src/app.ts" onClick={onClick} onDoubleClick={onDoubleClick} />)
+    })
+
+    try {
+      const span = container.querySelector('span')
+      span?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      span?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
+      expect(onClick).toHaveBeenCalledTimes(1)
+      expect(onDoubleClick).toHaveBeenCalledTimes(1)
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
 })
 
 function measureTextWidth(text: string): number {

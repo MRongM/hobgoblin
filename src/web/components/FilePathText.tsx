@@ -1,9 +1,11 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState, type MouseEventHandler } from 'react'
 import { ellipsizeLeftPathByWidth } from '#/web/lib/display-path.ts'
 import { cn } from '#/web/lib/cn.ts'
 interface Props {
   path: string
   className?: string
+  onClick?: MouseEventHandler<HTMLSpanElement>
+  onDoubleClick?: MouseEventHandler<HTMLSpanElement>
 }
 
 let measureCanvas: HTMLCanvasElement | null = null
@@ -28,7 +30,7 @@ function createTextWidthMeasurer(element: HTMLElement): (text: string) => number
   }
 }
 
-export function FilePathText({ path, className }: Props) {
+export function FilePathText({ path, className, onClick, onDoubleClick }: Props) {
   const ref = useRef<HTMLSpanElement | null>(null)
   const [displayPath, setDisplayPath] = useState(path)
 
@@ -64,10 +66,14 @@ export function FilePathText({ path, className }: Props) {
       ref={ref}
       className={cn(
         'block w-full min-w-0 overflow-hidden whitespace-nowrap text-sm text-foreground font-mono',
+        (onClick || onDoubleClick) &&
+          'cursor-pointer underline decoration-border underline-offset-2 hover:text-brand-text hover:decoration-brand-text',
         className,
       )}
       title={path}
       aria-label={path}
+      onClick={onClick}
+      onDoubleClick={onDoubleClick}
     >
       {displayPath}
     </span>

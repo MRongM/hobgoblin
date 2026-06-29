@@ -10,6 +10,8 @@ import { execa } from 'execa'
 import { existsSync, statSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import type { EditorOpenTarget } from '#/shared/file-path-target.ts'
+import { editorTargetPath, editorTargetPathArgument } from '#/shared/file-path-target.ts'
 
 const OPEN_TIMEOUT_MS = 10_000
 
@@ -53,14 +55,20 @@ export function hasAppCli(appName: string, cliName: string): boolean {
 export function openByAppCli(
   appName: string,
   cliName: string,
-  targetPath: string,
+  target: EditorOpenTarget,
 ): Promise<{ ok: boolean; message: string }> {
+  const targetPath = editorTargetPath(target)
   if (!isUsableEditorPath(targetPath)) return Promise.resolve({ ok: false, message: 'error.invalid-path' })
 
   const cli = resolveAppCli(appName, cliName)
   if (!cli) return Promise.resolve({ ok: false, message: 'error.editor-not-installed' })
 
-  return execa(cli, [targetPath], {
+  const args =
+    typeof target === 'string' || target.line === undefined
+      ? [targetPath]
+      : ['--goto', editorTargetPathArgument(target)]
+
+  return execa(cli, args, {
     timeout: OPEN_TIMEOUT_MS,
     forceKillAfterDelay: 500,
     reject: false,
@@ -90,8 +98,9 @@ export function openRemoteByAppCli(
   appName: string,
   cliName: string,
   alias: string,
-  remotePath: string,
+  target: EditorOpenTarget,
 ): Promise<{ ok: boolean; message: string }> {
+  const remotePath = editorTargetPath(target)
   if (!isSafeRemoteAlias(alias) || !isSafeRemoteAbsolutePath(remotePath)) {
     return Promise.resolve({ ok: false, message: 'error.invalid-arguments' })
   }
@@ -99,7 +108,12 @@ export function openRemoteByAppCli(
   const cli = resolveAppCli(appName, cliName)
   if (!cli) return Promise.resolve({ ok: false, message: 'error.editor-not-installed' })
 
-  return execa(cli, ['--remote', `ssh-remote+${alias}`, remotePath], {
+  const args =
+    typeof target === 'string' || target.line === undefined
+      ? ['--remote', `ssh-remote+${alias}`, remotePath]
+      : ['--remote', `ssh-remote+${alias}`, '--goto', editorTargetPathArgument(target)]
+
+  return execa(cli, args, {
     timeout: OPEN_TIMEOUT_MS,
     forceKillAfterDelay: 500,
     reject: false,

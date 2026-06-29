@@ -46,6 +46,7 @@ Hobgoblin started from [Goblin](https://nano-props.github.io/goblin/), a small, 
 - **Clipboard-powered file flow:** Paste clipboard text into files with `Ctrl+Shift+V`, and copy file text back to the system clipboard with `Ctrl+Shift+C`.
 - **Terminal tab jump:** Double-click the active terminal tab to scroll that terminal to the bottom.
 - **Terminal-to-file-tree navigation:** Click detected repository-relative paths in terminal output to reveal them in the file tree.
+- **Terminal path editor jump:** Double-click detected repository-relative paths in terminal output, including `path:line` and `path:line:column`, to open the configured editor at that file position.
 - **Tmux-backed session resume:** Detect and use tmux-backed remote terminal sessions when available, keeping remote terminal state resumable.
 - **Browser project access:** Run server mode and open the project workspace from a web browser.
 - **Mobile terminal takeover:** Use browser-accessible mode from a phone browser to take over terminal sessions when you need to continue from mobile.

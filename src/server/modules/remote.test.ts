@@ -74,6 +74,23 @@ describe('openServerRemoteEditor', () => {
     expect(mocks.openRemoteInPreferredEditor).toHaveBeenCalledWith('prod', '/srv/repo-feature', 'vscode')
   })
 
+  test('opens a structured remote editor target', async () => {
+    const { openServerRemoteEditor } = await import('#/server/modules/remote.ts')
+
+    await expect(
+      openServerRemoteEditor({
+        repoId: 'ssh-config://prod/srv/repo',
+        target: { path: '/srv/repo/src/app.ts', line: 12 },
+      }),
+    ).resolves.toEqual({ ok: true, message: '/srv/repo-feature' })
+
+    expect(mocks.openRemoteInPreferredEditor).toHaveBeenCalledWith(
+      'prod',
+      { path: '/srv/repo/src/app.ts', line: 12 },
+      'vscode',
+    )
+  })
+
   test('rejects invalid repo ids and remote worktree paths', async () => {
     const { openServerRemoteEditor } = await import('#/server/modules/remote.ts')
 

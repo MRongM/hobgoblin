@@ -15,6 +15,9 @@ export const MIN_FILE_TREE_FONT_SIZE = 10
 export const MAX_FILE_TREE_FONT_SIZE = 18
 export const MIN_FILE_TREE_TOPBAR_FONT_SIZE = 10
 export const MAX_FILE_TREE_TOPBAR_FONT_SIZE = 18
+export const DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB = 30
+export const MIN_FILE_TREE_CLIPBOARD_MAX_BYTES_MB = 1
+export const MAX_FILE_TREE_CLIPBOARD_MAX_BYTES_MB = 100
 export const MIN_TERMINAL_FONT_SIZE = 10
 export const MAX_TERMINAL_FONT_SIZE = 24
 export const MIN_GIT_NETWORK_TIMEOUT_SEC = 15
@@ -49,6 +52,7 @@ export interface SettingsPrefs {
   editorApp: EditorPref
   fileTreeFontSize: number
   fileTreeTopbarFontSize: number
+  fileTreeClipboardMaxBytesMb: number
   terminalFontSize: number
   terminalExternalInputEnabled: boolean
   remoteTerminalTmuxEnabled: boolean

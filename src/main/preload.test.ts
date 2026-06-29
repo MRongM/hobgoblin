@@ -16,7 +16,9 @@ import {
   SHELL_OPEN_IN_FINDER_CHANNEL,
   SHELL_OPEN_SETTINGS_WINDOW_CHANNEL,
   SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,
+  SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
   SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL,
+  SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
   TERMINAL_NOTIFY_BELL_CHANNEL,
   TERMINAL_SEND_TEST_NOTIFICATION_CHANNEL,
   TERMINAL_SET_BADGE_CHANNEL,
@@ -49,6 +51,7 @@ function defaultArgv() {
       editorApp: 'cursor',
       fileTreeFontSize: 12,
       fileTreeTopbarFontSize: 13,
+      fileTreeClipboardMaxBytesMb: 30,
       terminalFontSize: 14,
       terminalExternalInputEnabled: false,
       remoteTerminalTmuxEnabled: false,
@@ -166,6 +169,12 @@ describe('preload goblinNative bridge', () => {
     await goblinNative.shell.consumeExternalOpenPaths()
     await goblinNative.shell.openInFinder({ path: '/repo' })
     await goblinNative.shell.readClipboardFilePaths()
+    await goblinNative.shell.writeFileTreeClipboardFile({
+      name: 'image.bin',
+      byteLength: 3,
+      bytesBase64: 'AQID',
+    })
+    await goblinNative.shell.readFileTreeClipboardFile({ maxBytes: 30 })
     await goblinNative.shell.saveClipboardBinaryFiles({
       worktreePath: '/repo',
       temporaryFilesDirectory: '',
@@ -180,6 +189,8 @@ describe('preload goblinNative bridge', () => {
       SHELL_CONSUME_EXTERNAL_OPEN_PATHS_CHANNEL,
       SHELL_OPEN_IN_FINDER_CHANNEL,
       SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,
+      SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
+      SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
       SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL,
     ])
     expect(sends).toEqual([])

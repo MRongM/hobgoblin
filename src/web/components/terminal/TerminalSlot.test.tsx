@@ -36,6 +36,14 @@ vi.mock('#/web/repo-client.ts', () => ({
   transferRepositoryFiles: repoClientMocks.transferRepositoryFiles,
 }))
 
+const editorOpenMocks = vi.hoisted(() => ({
+  openWorktreeEditorTarget: vi.fn(async () => ({ ok: true as const })),
+}))
+
+vi.mock('#/web/lib/editor-open-targets.ts', () => ({
+  openWorktreeEditorTarget: editorOpenMocks.openWorktreeEditorTarget,
+}))
+
 const runtimeSettingsMocks = vi.hoisted(() => ({
   terminalExternalInputEnabled: false,
   temporaryFilesDirectory: '',
@@ -65,6 +73,8 @@ afterEach(() => {
   appShellMocks.readSystemClipboardFilePaths.mockResolvedValue([])
   appShellMocks.saveClipboardBinaryFilesFromPaste.mockReset()
   repoClientMocks.transferRepositoryFiles.mockReset()
+  editorOpenMocks.openWorktreeEditorTarget.mockReset()
+  editorOpenMocks.openWorktreeEditorTarget.mockResolvedValue({ ok: true })
   document.body.innerHTML = ''
 })
 
@@ -134,7 +144,55 @@ describe('TerminalSlot', () => {
     })
 
     try {
-      expect(attach).toHaveBeenCalledWith(descriptor, expect.any(HTMLElement), { onRevealPath })
+      expect(attach).toHaveBeenCalledWith(descriptor, expect.any(HTMLElement), {
+        onRevealPath,
+        onOpenPathInEditor: expect.any(Function),
+      })
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('passes terminal path editor handler through terminal attach', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const attach = vi.fn()
+    const { descriptor, worktreeSnapshot, snapshot } = controllerFixture()
+    const context = terminalContext({ attach })
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+
+    await act(async () => {
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    })
+
+    try {
+      const handlers = attach.mock.calls[0]?.[2]
+      expect(handlers?.onOpenPathInEditor).toEqual(expect.any(Function))
+
+      await act(async () => {
+        await handlers?.onOpenPathInEditor?.({ path: 'src/app.ts', line: 12 })
+      })
+
+      expect(editorOpenMocks.openWorktreeEditorTarget).toHaveBeenCalledWith('/repo', '/worktree', {
+        path: 'src/app.ts',
+        line: 12,
+      })
     } finally {
       await act(async () => root.unmount())
       container.remove()

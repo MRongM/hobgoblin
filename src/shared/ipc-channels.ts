@@ -11,6 +11,8 @@ export const SHELL_CONSUME_EXTERNAL_OPEN_PATHS_CHANNEL = 'goblin:shell-consume-e
 export const SHELL_OPEN_IN_FINDER_CHANNEL = 'goblin:shell-open-in-finder'
 export const SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL = 'goblin:shell-read-clipboard-file-paths'
 export const SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL = 'goblin:shell-save-clipboard-binary-files'
+export const SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL = 'goblin:shell-write-file-tree-clipboard-file'
+export const SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL = 'goblin:shell-read-file-tree-clipboard-file'
 
 export const TERMINAL_NOTIFY_BELL_CHANNEL = 'goblin:terminal-notify-bell'
 export const TERMINAL_SEND_TEST_NOTIFICATION_CHANNEL = 'goblin:terminal-send-test-notification'

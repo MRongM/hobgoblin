@@ -48,6 +48,7 @@ describe('renderer bootstrap seeding', () => {
         editorApp: 'cursor',
         fileTreeFontSize: 12,
         fileTreeTopbarFontSize: 13,
+        fileTreeClipboardMaxBytesMb: 30,
         terminalFontSize: 14,
         terminalExternalInputEnabled: false,
         remoteTerminalTmuxEnabled: false,

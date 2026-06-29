@@ -164,6 +164,46 @@ export interface RepoFileTreeTextFileReplaceRequest {
   content: string
 }
 
+export interface RepoFileTreeBinaryFileReadRequest {
+  repoId: string
+  worktreePath: string
+  filePath: string
+  maxBytes: number
+}
+
+export type RepoFileTreeBinaryFileReadResult =
+  | {
+      ok: true
+      name: string
+      byteLength: number
+      bytesBase64: string
+      text?: string
+      mimeType?: string
+    }
+  | {
+      ok: false
+      message: string
+    }
+
+export interface RepoFileTreeBinaryFileReplaceRequest {
+  repoId: string
+  worktreePath: string
+  filePath: string
+  maxBytes: number
+  bytesBase64: string
+}
+
+export type RepoFileTreeBinaryFileReplaceResult =
+  | {
+      ok: true
+      previousBytesBase64: string
+      previousByteLength: number
+    }
+  | {
+      ok: false
+      message: string
+    }
+
 export interface RepoFileTransferCopiedEntry {
   sourcePath?: string
   destinationPath: string
@@ -259,6 +299,27 @@ export function isRepoFileTreeTextFileReplaceRequest(value: unknown): value is R
   )
 }
 
+export function isRepoFileTreeBinaryFileReadRequest(value: unknown): value is RepoFileTreeBinaryFileReadRequest {
+  return (
+    isRecord(value) &&
+    typeof value.repoId === 'string' &&
+    typeof value.worktreePath === 'string' &&
+    typeof value.filePath === 'string' &&
+    isPositiveSafeInteger(value.maxBytes)
+  )
+}
+
+export function isRepoFileTreeBinaryFileReplaceRequest(value: unknown): value is RepoFileTreeBinaryFileReplaceRequest {
+  return (
+    isRecord(value) &&
+    typeof value.repoId === 'string' &&
+    typeof value.worktreePath === 'string' &&
+    typeof value.filePath === 'string' &&
+    isPositiveSafeInteger(value.maxBytes) &&
+    isBase64String(value.bytesBase64)
+  )
+}
+
 export function normalizeFileTreeSearchLimit(value: unknown): number {
   const parsed = typeof value === 'number' ? Math.floor(value) : Number.NaN
   if (!Number.isFinite(parsed)) return FILE_TREE_SEARCH_LIMIT_DEFAULT
@@ -334,6 +395,14 @@ function isRepoFileTransferUploadedItem(value: unknown): value is RepoFileTransf
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string')
+}
+
+function isPositiveSafeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
+}
+
+function isBase64String(value: unknown): value is string {
+  return typeof value === 'string' && value.length % 4 === 0 && /^[A-Za-z0-9+/]*={0,2}$/.test(value)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -5,6 +5,11 @@ import type {
   SaveClipboardBinaryFilesInput,
   SaveClipboardBinaryFilesResult,
 } from '#/shared/clipboard-binary-temp-files.ts'
+import type {
+  FileTreeClipboardFilePayload,
+  FileTreeClipboardReadResult,
+  FileTreeClipboardWriteResult,
+} from '#/shared/file-tree-clipboard.ts'
 import { getRendererBridge } from '#/web/renderer-bridge.ts'
 const PROJECT_GITHUB_URL = 'https://github.com/nano-props/goblin'
 
@@ -72,6 +77,22 @@ export async function saveClipboardBinaryFilesFromPaste(
   input: SaveClipboardBinaryFilesInput,
 ): Promise<SaveClipboardBinaryFilesResult> {
   return (await nativeShell()?.saveClipboardBinaryFiles?.(input)) ?? {
+    ok: false,
+    message: 'error.unsupported-native-bridge',
+  }
+}
+
+export async function writeFileTreeClipboardFile(
+  input: FileTreeClipboardFilePayload,
+): Promise<FileTreeClipboardWriteResult> {
+  return (await nativeShell()?.writeFileTreeClipboardFile?.(input)) ?? {
+    ok: false,
+    message: 'error.unsupported-native-bridge',
+  }
+}
+
+export async function readFileTreeClipboardFile(maxBytes: number): Promise<FileTreeClipboardReadResult> {
+  return (await nativeShell()?.readFileTreeClipboardFile?.({ maxBytes })) ?? {
     ok: false,
     message: 'error.unsupported-native-bridge',
   }

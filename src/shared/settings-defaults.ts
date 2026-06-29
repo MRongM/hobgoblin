@@ -14,13 +14,16 @@ import type {
 } from '#/shared/rpc.ts'
 import {
   MAX_FILE_TREE_FONT_SIZE,
+  MAX_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   MAX_FILE_TREE_TOPBAR_FONT_SIZE,
   MAX_GIT_NETWORK_TIMEOUT_SEC,
   MAX_TERMINAL_FONT_SIZE,
   MIN_FILE_TREE_FONT_SIZE,
+  MIN_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   MIN_FILE_TREE_TOPBAR_FONT_SIZE,
   MIN_GIT_NETWORK_TIMEOUT_SEC,
   MIN_TERMINAL_FONT_SIZE,
+  DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
 } from '#/shared/settings.ts'
 import {
   DEFAULT_DETAIL_COLLAPSED,
@@ -96,6 +99,8 @@ export function defaultSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): Se
     editorApp: overrides.editorApp ?? DEFAULT_EDITOR_APP,
     fileTreeFontSize: overrides.fileTreeFontSize ?? DEFAULT_FILE_TREE_FONT_SIZE,
     fileTreeTopbarFontSize: overrides.fileTreeTopbarFontSize ?? DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
+    fileTreeClipboardMaxBytesMb:
+      overrides.fileTreeClipboardMaxBytesMb ?? DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
     terminalFontSize: overrides.terminalFontSize ?? DEFAULT_TERMINAL_FONT_SIZE,
     terminalExternalInputEnabled:
       overrides.terminalExternalInputEnabled ?? DEFAULT_TERMINAL_EXTERNAL_INPUT_ENABLED,
@@ -139,6 +144,7 @@ export function initialSettingsFromSnapshot(snapshot: Pick<
   | 'editorApp'
   | 'fileTreeFontSize'
   | 'fileTreeTopbarFontSize'
+  | 'fileTreeClipboardMaxBytesMb'
   | 'terminalFontSize'
   | 'terminalExternalInputEnabled'
   | 'remoteTerminalTmuxEnabled'
@@ -165,6 +171,7 @@ export function initialSettingsFromSnapshot(snapshot: Pick<
     editorApp: snapshot.editorApp,
     fileTreeFontSize: snapshot.fileTreeFontSize,
     fileTreeTopbarFontSize: snapshot.fileTreeTopbarFontSize,
+    fileTreeClipboardMaxBytesMb: snapshot.fileTreeClipboardMaxBytesMb,
     terminalFontSize: snapshot.terminalFontSize,
     terminalExternalInputEnabled: snapshot.terminalExternalInputEnabled,
     remoteTerminalTmuxEnabled: snapshot.remoteTerminalTmuxEnabled,
@@ -181,11 +188,14 @@ export function defaultInitialSettingsSnapshot(overrides: Partial<InitialSetting
 
 export { DEFAULT_COLOR_THEME, DEFAULT_GLOBAL_SHORTCUT }
 export {
+  DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   MAX_FILE_TREE_FONT_SIZE,
+  MAX_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   MAX_FILE_TREE_TOPBAR_FONT_SIZE,
   MAX_GIT_NETWORK_TIMEOUT_SEC,
   MAX_TERMINAL_FONT_SIZE,
   MIN_FILE_TREE_FONT_SIZE,
+  MIN_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   MIN_FILE_TREE_TOPBAR_FONT_SIZE,
   MIN_GIT_NETWORK_TIMEOUT_SEC,
   MIN_TERMINAL_FONT_SIZE,

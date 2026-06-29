@@ -151,6 +151,36 @@ describe('remote command scripts', () => {
     expect(invocation.args).toContain(TARGET.alias)
   })
 
+  test('builds a fixed remote binary file read command', () => {
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'readFileTreeBinaryFile',
+      worktreePath: '/srv/repo',
+      filePath: '/srv/repo/image.bin',
+      maxBytes: 31457280,
+    })
+
+    expect(invocation.script).toContain('python3')
+    expect(invocation.script).toContain('base64.b64encode(raw).decode("ascii")')
+    expect(invocation.script).toContain('"bytesBase64"')
+    expect(invocation.script).toContain('max_bytes = 31457280')
+    expect(invocation.args).toContain(TARGET.alias)
+  })
+
+  test('builds a fixed remote binary file replace command that reads base64 from stdin', () => {
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'replaceFileTreeBinaryFile',
+      worktreePath: '/srv/repo',
+      filePath: '/srv/repo/image.bin',
+      maxBytes: 31457280,
+    })
+
+    expect(invocation.script).toContain('python3')
+    expect(invocation.script).toContain('base64.b64decode(stdin_raw, validate=True)')
+    expect(invocation.script).toContain('"previousBytesBase64"')
+    expect(invocation.script).toContain('with open(file_path, "wb") as handle:')
+    expect(invocation.args).toContain(TARGET.alias)
+  })
+
   test('builds quoted remote file inventory command', () => {
     const invocation = buildRemoteCommandInvocation(TARGET, {
       type: 'fileTransferInventory',

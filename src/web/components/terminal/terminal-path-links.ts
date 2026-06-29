@@ -1,6 +1,8 @@
 import type { ILink, ILinkProvider } from '@xterm/xterm'
+import { filePathTargetsForText, parseFilePathTarget, type FilePathTarget } from '#/shared/file-path-target.ts'
 
 type RevealPathHandler = (relativePath: string) => void
+type OpenPathInEditorHandler = (target: FilePathTarget) => void
 type TerminalBufferLine = {
   translateToString: (trimRight?: boolean, startColumn?: number, endColumn?: number) => string
 }
@@ -16,62 +18,35 @@ interface TerminalLinkProviderHost {
 
 export interface TerminalRelativePathLink {
   text: string
-  relativePath: string
+  target: FilePathTarget
   startColumn: number
   endColumn: number
 }
 
-const PATH_TOKEN_PATTERN =
-  /(^|[\s"'`([{<])(?<token>(?:\.\/)?(?:(?:[A-Za-z0-9_@%+=.-]+\/)+[A-Za-z0-9_@%+=.,-]+|[A-Za-z0-9_@%+=-]+\.[A-Za-z0-9][A-Za-z0-9._-]*)(?::\d+(?::\d+)?)?)(?=$|[\s"'`,;)\]}>])/gu
-const URL_PATTERN = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//u
-const WINDOWS_ABSOLUTE_PATH_PATTERN = /^[A-Za-z]:[\\/]/u
-const LINE_SUFFIX_PATTERN = /:\d+(?::\d+)?$/u
-const LEADING_PUNCTUATION_PATTERN = /^[`"'([{<]+/u
-const TRAILING_PUNCTUATION_PATTERN = /[`"',;)\]}>]+$/u
-
-export function normalizeTerminalRelativePath(raw: string): string | null {
-  const trimmed = raw.trim().replace(LEADING_PUNCTUATION_PATTERN, '').replace(TRAILING_PUNCTUATION_PATTERN, '')
-  if (!trimmed || URL_PATTERN.test(trimmed)) return null
-  if (trimmed.startsWith('/') || WINDOWS_ABSOLUTE_PATH_PATTERN.test(trimmed)) return null
-
-  let relativePath = trimmed.replace(LINE_SUFFIX_PATTERN, '')
-  while (relativePath.startsWith('./')) relativePath = relativePath.slice(2)
-  if (!relativePath || relativePath.startsWith('/') || relativePath.includes('\\')) return null
-
-  const segments = relativePath.split('/')
-  if (segments.some((segment) => !segment || segment === '.' || segment === '..')) return null
-  if (!relativePath.includes('/') && !relativePath.includes('.')) return null
-
-  return relativePath
+function activationDetail(event: MouseEvent): number {
+  const detail = (event as { detail?: unknown }).detail
+  return typeof detail === 'number' ? detail : 0
 }
 
 export function terminalRelativePathLinksForLine(line: string): TerminalRelativePathLink[] {
-  const links: TerminalRelativePathLink[] = []
-  for (const match of line.matchAll(PATH_TOKEN_PATTERN)) {
-    const token = match.groups?.token
-    if (!token || match.index === undefined) continue
-    const relativePath = normalizeTerminalRelativePath(token)
-    if (!relativePath) continue
-    const tokenOffset = match[0].indexOf(token)
-    const startIndex = match.index + tokenOffset
-    links.push({
-      text: token,
-      relativePath,
-      startColumn: startIndex + 1,
-      endColumn: startIndex + token.length,
-    })
-  }
-  return links
+  return filePathTargetsForText(line).map((span) => ({
+    text: span.text,
+    target: span.target,
+    startColumn: span.startIndex + 1,
+    endColumn: span.endIndex,
+  }))
 }
 
 export function registerTerminalRelativePathLinkProvider(
   term: TerminalLinkProviderHost,
   getRevealPathHandler: () => RevealPathHandler | null,
+  getOpenPathInEditorHandler: () => OpenPathInEditorHandler | null,
 ): { dispose: () => void } {
   const provider: ILinkProvider = {
     provideLinks(bufferLineNumber, callback) {
       const revealPath = getRevealPathHandler()
-      if (!revealPath) {
+      const openPathInEditor = getOpenPathInEditorHandler()
+      if (!revealPath && !openPathInEditor) {
         callback(undefined)
         return
       }
@@ -83,9 +58,14 @@ export function registerTerminalRelativePathLinkProvider(
         },
         text: link.text,
         decorations: { pointerCursor: true, underline: true },
-        activate: (_event, text) => {
-          const relativePath = normalizeTerminalRelativePath(text)
-          if (relativePath) getRevealPathHandler()?.(relativePath)
+        activate: (event, text) => {
+          const target = parseFilePathTarget(text)
+          if (!target) return
+          if (activationDetail(event) >= 2) {
+            getOpenPathInEditorHandler()?.(target)
+            return
+          }
+          getRevealPathHandler()?.(target.path)
         },
       }))
       callback(links.length > 0 ? links : undefined)

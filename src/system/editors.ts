@@ -9,6 +9,7 @@
 // 4. Add i18n keys for the settings picker and dependencies overlay
 
 import type { EditorAppAvailability, EditorPref, ResolvedEditorApp } from '#/shared/rpc.ts'
+import type { EditorOpenTarget } from '#/shared/file-path-target.ts'
 import { isVSCodeInstalled, openInVSCode, openRemoteInVSCode } from '#/system/vscode.ts'
 import { isCursorInstalled, openInCursor, openRemoteInCursor } from '#/system/cursor.ts'
 import { isWindsurfInstalled, openInWindsurf, openRemoteInWindsurf } from '#/system/windsurf.ts'
@@ -20,9 +21,9 @@ export interface EditorBackend {
    *  registration time and cache the result. */
   isInstalled: () => boolean
   /** Open a directory in this editor. */
-  open: (path: string) => Promise<{ ok: boolean; message: string }>
+  open: (target: EditorOpenTarget) => Promise<{ ok: boolean; message: string }>
   /** Open a remote SSH workspace in this editor. */
-  openRemote?: (alias: string, remotePath: string) => Promise<{ ok: boolean; message: string }>
+  openRemote?: (alias: string, target: EditorOpenTarget) => Promise<{ ok: boolean; message: string }>
 }
 
 /** Concrete editor pref values (excludes 'auto'). */
@@ -48,23 +49,25 @@ export function resolveEditorApp(pref: EditorPref, availability: EditorAppAvaila
 /** Open `path` in the editor selected by `pref`.
  *  Returns null if no editor is available (auto mode, none installed). */
 export function openInPreferredEditor(
-  path: string,
+  target: EditorOpenTarget,
   pref: EditorPref,
 ): Promise<{ ok: boolean; message: string }> {
   const resolved = resolveEditorApp(pref, getEditorAppAvailability())
-  return resolved ? backends[resolved].open(path) : Promise.resolve({ ok: false, message: 'error.editor-not-installed' })
+  return resolved
+    ? backends[resolved].open(target)
+    : Promise.resolve({ ok: false, message: 'error.editor-not-installed' })
 }
 
 export function openRemoteInPreferredEditor(
   alias: string,
-  remotePath: string,
+  target: EditorOpenTarget,
   pref: EditorPref,
 ): Promise<{ ok: boolean; message: string }> {
   const resolved = resolveEditorApp(pref, getEditorAppAvailability())
   if (!resolved) return Promise.resolve({ ok: false, message: 'error.editor-not-installed' })
   const openRemote = backends[resolved].openRemote
   return openRemote
-    ? openRemote(alias, remotePath)
+    ? openRemote(alias, target)
     : Promise.resolve({ ok: false, message: 'error.remote-editor-not-supported' })
 }
 

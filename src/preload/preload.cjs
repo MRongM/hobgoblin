@@ -20,6 +20,8 @@ const IPC = {
     openInFinder: 'goblin:shell-open-in-finder',
     readClipboardFilePaths: 'goblin:shell-read-clipboard-file-paths',
     saveClipboardBinaryFiles: 'goblin:shell-save-clipboard-binary-files',
+    writeFileTreeClipboardFile: 'goblin:shell-write-file-tree-clipboard-file',
+    readFileTreeClipboardFile: 'goblin:shell-read-file-tree-clipboard-file',
   },
   terminal: {
     notifyBell: 'goblin:terminal-notify-bell',
@@ -158,6 +160,8 @@ contextBridge.exposeInMainWorld('goblinNative', {
     openInFinder: (input) => safeInvoke(IPC.shell.openInFinder, input),
     readClipboardFilePaths: () => safeInvoke(IPC.shell.readClipboardFilePaths),
     saveClipboardBinaryFiles: (input) => safeInvoke(IPC.shell.saveClipboardBinaryFiles, input),
+    writeFileTreeClipboardFile: (input) => safeInvoke(IPC.shell.writeFileTreeClipboardFile, input),
+    readFileTreeClipboardFile: (input) => safeInvoke(IPC.shell.readFileTreeClipboardFile, input),
   },
   terminal: {
     notifyBell: (input) => safeInvoke(IPC.terminal.notifyBell, input),

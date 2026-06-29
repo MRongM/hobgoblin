@@ -8,6 +8,8 @@ import {
   resolveTrackedRemoteTarget,
 } from '#/system/ssh/config.ts'
 import { getServerSettingsPrefs } from '#/server/modules/settings-source.ts'
+import type { EditorOpenTarget } from '#/shared/file-path-target.ts'
+import { editorTargetPath } from '#/shared/file-path-target.ts'
 import {
   isAbsoluteRemotePath,
   isHomeRelativeRemotePath,
@@ -127,10 +129,12 @@ export async function testServerRemoteRepository(
 }
 
 export async function openServerRemoteEditor(
-  input: { repoId: string; worktreePath: string },
+  input: { repoId: string; worktreePath: string } | { repoId: string; target: EditorOpenTarget },
   signal?: AbortSignal,
 ): Promise<ExecResult> {
-  if (!isRemoteRepoId(input.repoId) || !isAbsoluteRemotePath(input.worktreePath)) {
+  const target = 'target' in input ? input.target : input.worktreePath
+  const remotePath = editorTargetPath(target)
+  if (!isRemoteRepoId(input.repoId) || !isAbsoluteRemotePath(remotePath)) {
     return { ok: false, message: 'error.invalid-arguments' }
   }
   const ref = parseRemoteRepoId(input.repoId)
@@ -144,7 +148,7 @@ export async function openServerRemoteEditor(
   }
 
   const prefs = await getServerSettingsPrefs()
-  return await openRemoteInPreferredEditor(resolved.target.alias, input.worktreePath, prefs.editorApp)
+  return await openRemoteInPreferredEditor(resolved.target.alias, target, prefs.editorApp)
 }
 
 export async function openServerRemoteTerminal(

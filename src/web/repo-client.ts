@@ -5,11 +5,14 @@ import type {
   RepoFileSearchResult,
   RepoFileTransferRequest,
   RepoFileTransferResult,
+  RepoFileTreeBinaryFileReadResult,
+  RepoFileTreeBinaryFileReplaceResult,
   RepoFileTreeResult,
   RepoFileTreeTextFileReadResult,
   RepoFileTreeTextFileReplaceResult,
 } from '#/shared/file-tree.ts'
 import type { RepoFileExportRequest, RepoFileExportResult } from '#/shared/file-tree-export.ts'
+import type { EditorOpenTarget } from '#/shared/file-path-target.ts'
 import type { CloneRepoResult, PullRequestEntry, RepoSnapshot } from '#/shared/rpc.ts'
 import type { CommitDetail, CommitHistoryEntry, ExecResult, PullRequestFetchMode, WorktreeStatus } from '#/shared/git-types.ts'
 import type { ProbeResult } from '#/shared/rpc.ts'
@@ -253,6 +256,31 @@ export async function replaceRepositoryFileTreeTextFile(
   return await postServerJson('/api/repo/file-tree/replace-text-file', { repoId, worktreePath, filePath, content })
 }
 
+export async function readRepositoryFileTreeBinaryFile(
+  repoId: string,
+  worktreePath: string,
+  filePath: string,
+  maxBytes: number,
+): Promise<RepoFileTreeBinaryFileReadResult> {
+  return await postServerJson('/api/repo/file-tree/read-binary-file', { repoId, worktreePath, filePath, maxBytes })
+}
+
+export async function replaceRepositoryFileTreeBinaryFile(
+  repoId: string,
+  worktreePath: string,
+  filePath: string,
+  bytesBase64: string,
+  maxBytes: number,
+): Promise<RepoFileTreeBinaryFileReplaceResult> {
+  return await postServerJson('/api/repo/file-tree/replace-binary-file', {
+    repoId,
+    worktreePath,
+    filePath,
+    bytesBase64,
+    maxBytes,
+  })
+}
+
 export async function deleteRepositoryFileTreeEntries(
   repoId: string,
   worktreePath: string,
@@ -294,8 +322,8 @@ export async function openRepositoryTerminal(path: string): Promise<ExecResult> 
   return await postServerJson('/api/repo/open-terminal', { path })
 }
 
-export async function openRepositoryEditor(path: string): Promise<ExecResult> {
-  return await postServerJson('/api/repo/open-editor', { path })
+export async function openRepositoryEditor(target: EditorOpenTarget): Promise<ExecResult> {
+  return await postServerJson('/api/repo/open-editor', typeof target === 'string' ? { path: target } : { target })
 }
 
 export async function setBackgroundSyncRepos(repoIds: string[]): Promise<void> {
