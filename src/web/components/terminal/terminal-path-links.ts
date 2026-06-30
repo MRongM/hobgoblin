@@ -1,5 +1,5 @@
 import type { ILink, ILinkProvider } from '@xterm/xterm'
-import { filePathTargetsForText, parseFilePathTarget, type FilePathTarget } from '#/shared/file-path-target.ts'
+import { filePathTargetsForText, type FilePathTarget } from '#/shared/file-path-target.ts'
 
 type RevealPathHandler = (relativePath: string) => void
 type OpenPathInEditorHandler = (target: FilePathTarget) => void
@@ -58,14 +58,12 @@ export function registerTerminalRelativePathLinkProvider(
         },
         text: link.text,
         decorations: { pointerCursor: true, underline: true },
-        activate: (event, text) => {
-          const target = parseFilePathTarget(text)
-          if (!target) return
+        activate: (event) => {
           if (activationDetail(event) >= 2) {
-            getOpenPathInEditorHandler()?.(target)
+            getOpenPathInEditorHandler()?.(link.target)
             return
           }
-          getRevealPathHandler()?.(target.path)
+          getRevealPathHandler()?.(link.target.path)
         },
       }))
       callback(links.length > 0 ? links : undefined)

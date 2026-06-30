@@ -87,6 +87,37 @@ describe('registerTerminalRelativePathLinkProvider', () => {
     expect(openPathInEditor).toHaveBeenCalledWith({ path: 'src/app.ts', line: 12, column: 3 })
   })
 
+  test('activates structured targets for traceback-style terminal path links', () => {
+    const captured: { provider: ILinkProvider | null } = { provider: null }
+    const term = {
+      buffer: {
+        active: {
+          getLine: () => ({
+            translateToString: () => 'File "backend/app/main.py", line 42, in run',
+          }),
+        },
+      },
+      registerLinkProvider: vi.fn((nextProvider: ILinkProvider) => {
+        captured.provider = nextProvider
+        return { dispose: vi.fn() }
+      }),
+    }
+    const reveal = vi.fn()
+    const openPathInEditor = vi.fn()
+
+    registerTerminalRelativePathLinkProvider(term, () => reveal, () => openPathInEditor)
+
+    let provided: Array<{ text: string; activate: (event: MouseEvent, text: string) => void }> | undefined
+    captured.provider?.provideLinks(1, (links) => {
+      provided = links as typeof provided
+    })
+
+    expect(provided?.[0]?.text).toBe('backend/app/main.py", line 42')
+    provided?.[0]?.activate({ detail: 2 } as MouseEvent, 'backend/app/main.py", line 42')
+
+    expect(openPathInEditor).toHaveBeenCalledWith({ path: 'backend/app/main.py', line: 42 })
+  })
+
   test('does not provide links when no reveal handler is attached', () => {
     const captured: { provider: ILinkProvider | null } = { provider: null }
     const term = {

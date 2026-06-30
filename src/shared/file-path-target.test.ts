@@ -34,6 +34,75 @@ describe('filePathTargetsForText', () => {
       { text: './docs/guide.md', target: { path: 'docs/guide.md' }, startIndex: 22, endIndex: 37 },
     ])
   })
+
+  test('stops path-like spans before CJK punctuation', () => {
+    expect(
+      filePathTargetsForText('关键规则在 backend/app/kooky_agent_runtime/services/im_group/final_ai_text.py:10：'),
+    ).toEqual([
+      {
+        text: 'backend/app/kooky_agent_runtime/services/im_group/final_ai_text.py:10',
+        target: { path: 'backend/app/kooky_agent_runtime/services/im_group/final_ai_text.py', line: 10 },
+        startIndex: 6,
+        endIndex: 75,
+      },
+    ])
+  })
+
+  test('recognizes path-like spans after CJK labels and separators', () => {
+    expect(
+      filePathTargetsForText(
+        [
+          '- stream 消费并保存最后 values：backend/app/kooky_agent_runtime/services/im_group/remote.py:140',
+          '  - callback 优先取 stream values：backend/app/kooky_agent_runtime/services/im_group/callback.py:787',
+          '  - 最终文本选择：backend/app/kooky_agent_runtime/services/im_group/final_reply_selector.py:208',
+        ].join('\n'),
+      ),
+    ).toEqual([
+      {
+        text: 'backend/app/kooky_agent_runtime/services/im_group/remote.py:140',
+        target: { path: 'backend/app/kooky_agent_runtime/services/im_group/remote.py', line: 140 },
+        startIndex: 24,
+        endIndex: 87,
+      },
+      {
+        text: 'backend/app/kooky_agent_runtime/services/im_group/callback.py:787',
+        target: { path: 'backend/app/kooky_agent_runtime/services/im_group/callback.py', line: 787 },
+        startIndex: 119,
+        endIndex: 184,
+      },
+      {
+        text: 'backend/app/kooky_agent_runtime/services/im_group/final_reply_selector.py:208',
+        target: { path: 'backend/app/kooky_agent_runtime/services/im_group/final_reply_selector.py', line: 208 },
+        startIndex: 196,
+        endIndex: 273,
+      },
+    ])
+  })
+
+  test('recognizes quoted and bracketed path-like spans', () => {
+    expect(filePathTargetsForText('see `src/app.ts:12` and (docs/guide.md:3)')).toEqual([
+      { text: 'src/app.ts:12', target: { path: 'src/app.ts', line: 12 }, startIndex: 5, endIndex: 18 },
+      { text: 'docs/guide.md:3', target: { path: 'docs/guide.md', line: 3 }, startIndex: 25, endIndex: 40 },
+    ])
+  })
+
+  test('recognizes Python traceback file line references', () => {
+    expect(filePathTargetsForText('File "backend/app/main.py", line 42, in run')).toEqual([
+      {
+        text: 'backend/app/main.py", line 42',
+        target: { path: 'backend/app/main.py', line: 42 },
+        startIndex: 6,
+        endIndex: 35,
+      },
+    ])
+  })
+
+  test('stops adjacent path-like spans before ASCII punctuation', () => {
+    expect(filePathTargetsForText('src/app.ts:12, docs/guide.md:3;')).toEqual([
+      { text: 'src/app.ts:12', target: { path: 'src/app.ts', line: 12 }, startIndex: 0, endIndex: 13 },
+      { text: 'docs/guide.md:3', target: { path: 'docs/guide.md', line: 3 }, startIndex: 15, endIndex: 30 },
+    ])
+  })
 })
 
 describe('editorTargetPathArgument', () => {
