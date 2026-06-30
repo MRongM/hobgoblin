@@ -74,7 +74,11 @@ export class TerminalSessionView {
   private viewportRefreshFrame: number | null = null
   private outputWriteDepth = 0
   private scrollbackRenderDirty = false
+  private deferredOutput: string[] = []
+  private deferredOutputCallbacks: Array<() => void> = []
   private viewportElement: HTMLElement | null = null
+  private textInputElement: HTMLTextAreaElement | null = null
+  private textInputComposing = false
   private host: HTMLElement | null = null
   private revealPathHandler: ((relativePath: string) => void) | null = null
   private openPathInEditorHandler: ((target: FilePathTarget) => void) | null = null
@@ -87,6 +91,17 @@ export class TerminalSessionView {
     if (!this.xtermHost.contains(event.target)) return
     if ('button' in event && typeof event.button === 'number' && event.button !== 0) return
     this.term?.focus()
+  }
+  private readonly handleTextInputCompositionStart = () => {
+    this.textInputComposing = true
+  }
+  private readonly handleTextInputCompositionEnd = () => {
+    this.textInputComposing = false
+    window.setTimeout(() => {
+      if (this.textInputComposing) return
+      this.flushDeferredOutput()
+      if (this.scrollbackRenderDirty) this.scheduleOutputSettleRepaint()
+    }, 0)
   }
 
   constructor(
@@ -230,6 +245,7 @@ export class TerminalSessionView {
     this.disposables.push(term.onResize((size) => this.handlers.onResize(size)))
     this.disposables.push(term.onScroll(() => this.scheduleViewportRefresh()))
     term.open(this.xtermHost)
+    this.installTextInputCompositionGuard(term)
     this.installViewportScrollListener(term)
     this.applyTerminalTheme(term, terminalThemeForCurrentDocument(this.terminalThemeMode()), { refresh: true })
     this.installResizeObserver()
@@ -245,6 +261,10 @@ export class TerminalSessionView {
     const term = this.term
     if (!term) {
       callback?.()
+      return
+    }
+    if (this.textInputComposing) {
+      this.deferOutput(data, callback)
       return
     }
     const before = readTerminalViewportSnapshot(term)
@@ -314,6 +334,7 @@ export class TerminalSessionView {
   destroyTerminal(): void {
     this.disconnectResizeObserver()
     this.disconnectViewportScrollListener()
+    this.disconnectTextInputCompositionGuard()
     this.cancelFitFlush()
     for (const disposable of this.disposables.splice(0)) disposable.dispose()
     this.disposeThemeObserver?.()
@@ -325,6 +346,8 @@ export class TerminalSessionView {
     this.cancelOutputSettleRepaint()
     this.outputWriteDepth = 0
     this.scrollbackRenderDirty = false
+    this.clearDeferredOutput(true)
+    this.textInputComposing = false
     this.safariShiftKeyResolver.reset()
     this.fitAddon = null
     this.searchAddon = null
@@ -405,7 +428,10 @@ export class TerminalSessionView {
 
   private installWebLinksAddon(term: XTermTerminal): void {
     try {
-      term.loadAddon(new WebLinksAddon((_event, uri) => this.handlers.onOpenExternalLink(uri)))
+      term.loadAddon(new WebLinksAddon((event, uri) => {
+        if (!event.metaKey && !event.ctrlKey) return
+        this.handlers.onOpenExternalLink(uri)
+      }))
     } catch (err) {
       console.warn('[terminal] failed to load web links addon', err)
     }
@@ -518,6 +544,53 @@ export class TerminalSessionView {
     this.cancelViewportRefresh()
   }
 
+  private installTextInputCompositionGuard(term: XTermTerminal): void {
+    this.disconnectTextInputCompositionGuard()
+    const input = term.element?.querySelector<HTMLTextAreaElement>('textarea') ?? null
+    if (!input) return
+    this.textInputElement = input
+    input.addEventListener('compositionstart', this.handleTextInputCompositionStart)
+    input.addEventListener('compositionend', this.handleTextInputCompositionEnd)
+    input.addEventListener('compositioncancel', this.handleTextInputCompositionEnd)
+  }
+
+  private disconnectTextInputCompositionGuard(): void {
+    const input = this.textInputElement
+    if (!input) return
+    input.removeEventListener('compositionstart', this.handleTextInputCompositionStart)
+    input.removeEventListener('compositionend', this.handleTextInputCompositionEnd)
+    input.removeEventListener('compositioncancel', this.handleTextInputCompositionEnd)
+    this.textInputElement = null
+  }
+
+  private deferOutput(data: string, callback?: () => void): void {
+    this.deferredOutput.push(data)
+    if (callback) this.deferredOutputCallbacks.push(callback)
+  }
+
+  private flushDeferredOutput(): void {
+    if (this.textInputComposing || this.deferredOutput.length === 0) return
+    const data = this.deferredOutput.join('')
+    const callbacks = this.deferredOutputCallbacks.splice(0)
+    this.deferredOutput = []
+    this.writeOutput(
+      data,
+      callbacks.length > 0
+        ? () => {
+            for (const callback of callbacks) callback()
+          }
+        : undefined,
+    )
+  }
+
+  private clearDeferredOutput(runCallbacks = false): void {
+    this.deferredOutput = []
+    const callbacks = this.deferredOutputCallbacks.splice(0)
+    if (runCallbacks) {
+      for (const callback of callbacks) callback()
+    }
+  }
+
   private scheduleFontFit(term: XTermTerminal): void {
     if (this.term !== term) return
     this.cancelFontFit()
@@ -550,6 +623,7 @@ export class TerminalSessionView {
     this.cancelOutputSettleRepaint()
     this.outputSettleTimer = window.setTimeout(() => {
       this.outputSettleTimer = null
+      if (this.textInputComposing) return
       this.repaintVisibleRowsPreservingViewport({ clearRendererCache: true })
       this.scrollbackRenderDirty = false
     }, OUTPUT_RENDER_SETTLE_MS)

@@ -340,8 +340,8 @@ const xtermMocks = vi.hoisted(() => {
       this.term = term
     }
 
-    open(uri: string) {
-      this.handler?.(new MouseEvent('click'), uri)
+    open(uri: string, eventInit: MouseEventInit = {}) {
+      this.handler?.(new MouseEvent('click', eventInit), uri)
     }
   }
 
@@ -1089,7 +1089,7 @@ describe('ManagedTerminalSession', () => {
     }
   })
 
-  test('opens web links through the safe shell bridge', async () => {
+  test('opens web links through the safe shell bridge only with primary click modifier', async () => {
     const host = document.createElement('div')
     document.body.appendChild(host)
     const session = new ManagedTerminalSession(descriptor, vi.fn())
@@ -1099,6 +1099,17 @@ describe('ManagedTerminalSession', () => {
     await flushTerminalStart()
     await flushUntil(() => session.snapshot().phase === 'open')
     xtermMocks.webLinkAddons[0]!.open('https://example.com/path')
+    await Promise.resolve()
+
+    expect(shellOpenExternalUrl).not.toHaveBeenCalled()
+
+    xtermMocks.webLinkAddons[0]!.open('https://example.com/path', { ctrlKey: true })
+    await Promise.resolve()
+
+    expect(shellOpenExternalUrl).toHaveBeenCalledWith({ url: 'https://example.com/path', allowHttp: true })
+
+    shellOpenExternalUrl.mockClear()
+    xtermMocks.webLinkAddons[0]!.open('https://example.com/path', { metaKey: true })
     await Promise.resolve()
 
     expect(shellOpenExternalUrl).toHaveBeenCalledWith({ url: 'https://example.com/path', allowHttp: true })
@@ -1794,6 +1805,72 @@ describe('ManagedTerminalSession', () => {
 
     expect(term.refresh).toHaveBeenCalledWith(0, term.rows - 1)
     expect(term.scrollToBottom).not.toHaveBeenCalled()
+  })
+
+  test('defers output-settle repaint while xterm text input is composing', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    const input = host.querySelector('textarea')
+    expect(input).toBeInstanceOf(HTMLTextAreaElement)
+    term.buffer.active.baseY = 20
+    term.buffer.active.viewportY = 20
+    term.refresh.mockClear()
+    term.clearTextureAtlas.mockClear()
+    term._core._renderService.clear.mockClear()
+    term.write.mockImplementation((_data: string, callback?: () => void) => {
+      term.buffer.active.baseY = 140
+      term.buffer.active.viewportY = 140
+      queueMicrotask(() => callback?.())
+    })
+
+    input?.dispatchEvent(new Event('compositionstart'))
+    session.handleOutput({ sessionId: 'session-1', data: 'many-lines\r\n', seq: 1, processName: 'zsh' })
+    await flushTerminalRenderSettle()
+
+    expect(term.clearTextureAtlas).not.toHaveBeenCalled()
+    expect(term._core._renderService.clear).not.toHaveBeenCalled()
+    expect(term.refresh).not.toHaveBeenCalled()
+
+    input?.dispatchEvent(new Event('compositionend'))
+    await flushTerminalRenderSettle()
+
+    expect(term.clearTextureAtlas).toHaveBeenCalledTimes(1)
+    expect(term._core._renderService.clear).toHaveBeenCalledTimes(1)
+    expect(term.refresh).toHaveBeenCalledWith(0, term.rows - 1)
+  })
+
+  test('defers terminal output writes while xterm text input is composing', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    const input = host.querySelector('textarea')
+    expect(input).toBeInstanceOf(HTMLTextAreaElement)
+    term.write.mockClear()
+
+    input?.dispatchEvent(new Event('compositionstart'))
+    session.handleOutput({ sessionId: 'session-1', data: 'streaming output', seq: 1, processName: 'codex' })
+    await flushTerminalStart()
+
+    expect(term.write).not.toHaveBeenCalled()
+
+    input?.dispatchEvent(new Event('compositionend'))
+    await flushTerminalStart()
+
+    expect(term.write).toHaveBeenCalledTimes(1)
+    expect(term.write).toHaveBeenCalledWith('streaming output', expect.any(Function))
   })
 
   test('invalidates renderer cache before settle repainting offscreen scrollback growth', async () => {
