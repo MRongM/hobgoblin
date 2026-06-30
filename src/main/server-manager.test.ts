@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, test } from 'vitest'
 import { createServer } from 'node:net'
-import { DEFAULT_EMBEDDED_SERVER_PORT, parseServerPort, reserveEmbeddedServerPort } from '#/main/server-manager.ts'
+import path from 'node:path'
+import {
+  DEFAULT_EMBEDDED_SERVER_PORT,
+  parseServerPort,
+  reserveEmbeddedServerPort,
+  resolveEmbeddedServerEntryPath,
+} from '#/main/server-manager.ts'
 
 const openServers: Array<ReturnType<typeof createServer>> = []
 
@@ -53,5 +59,15 @@ describe('embedded server port selection', () => {
 
     expect(port).not.toBe(preferredPort)
     expect(port).toBeGreaterThan(0)
+  })
+})
+
+describe('embedded server entry resolution', () => {
+  test('uses the source TypeScript entry in packaged apps to avoid non-portable Bun bundle paths', () => {
+    const appPath = path.join('/Applications/Hobgoblin.app/Contents/Resources', 'app.asar')
+
+    expect(resolveEmbeddedServerEntryPath(appPath)).toBe(
+      path.join(appPath, 'src/server/entrypoints/main.ts'),
+    )
   })
 })

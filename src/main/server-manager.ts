@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessByStdio } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import type { Readable } from 'node:stream'
 import path from 'node:path'
 import { app } from 'electron'
@@ -34,10 +34,12 @@ function embeddedServerEnabled(): boolean {
   return true
 }
 
+export function resolveEmbeddedServerEntryPath(appPath: string): string {
+  return path.join(appPath, 'src/server/entrypoints/main.ts')
+}
+
 function serverEntryPath(): string {
-  return app.isPackaged
-    ? path.join(app.getAppPath(), 'dist/server/main.js')
-    : path.join(app.getAppPath(), 'src/server/entrypoints/main.ts')
+  return resolveEmbeddedServerEntryPath(app.getAppPath())
 }
 
 function serverWorkingDirectory(): string {
@@ -47,16 +49,6 @@ function serverWorkingDirectory(): string {
 
 function serverCommand(): { bin: string; args: string[]; env: NodeJS.ProcessEnv } {
   const entry = serverEntryPath()
-  if (app.isPackaged || existsSync(path.join(app.getAppPath(), 'dist/server/main.js'))) {
-    return {
-      bin: process.execPath,
-      args: [entry],
-      env: {
-        ...process.env,
-        ELECTRON_RUN_AS_NODE: '1',
-      },
-    }
-  }
   return {
     bin: process.execPath,
     args: [entry],
