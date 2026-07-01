@@ -2,6 +2,7 @@ import { constants as fsConstants, promises as fs } from 'node:fs'
 import path from 'node:path'
 import { TextDecoder } from 'node:util'
 import type { ExecResult } from '#/shared/git-types.ts'
+import { localPathComparisonKey, pathModuleForLocalPaths } from '#/system/file-tree/path-utils.ts'
 import {
   FILE_TREE_MAX_ENTRIES,
   FILE_TREE_TEXT_FILE_MAX_BYTES,
@@ -14,9 +15,11 @@ import {
 } from '#/shared/file-tree.ts'
 
 export function pathInsideRoot(rootPath: string, candidatePath: string): boolean {
-  const root = path.resolve(rootPath)
-  const candidate = path.resolve(candidatePath)
-  return candidate === root || candidate.startsWith(root + path.sep)
+  const pathModule = pathModuleForLocalPaths([rootPath, candidatePath])
+  const root = localPathComparisonKey(pathModule, rootPath)
+  const candidate = localPathComparisonKey(pathModule, candidatePath)
+  const rootPrefix = root.endsWith(pathModule.sep) ? root : `${root}${pathModule.sep}`
+  return candidate === root || candidate.startsWith(rootPrefix)
 }
 
 function classifyFsError(err: unknown): string {

@@ -21,6 +21,14 @@ describe('local file transfer naming', () => {
   test('finds a common absolute ancestor for local source paths', () => {
     expect(commonAbsolutePathAncestor(['/tmp/project/a.txt', '/tmp/project/docs/b.txt'])).toBe('/tmp/project')
   })
+
+  test('finds a common absolute ancestor for Windows drive paths', () => {
+    expect(commonAbsolutePathAncestor(['C:\\repo\\a.txt', 'C:\\repo\\docs\\b.txt'])).toBe('C:\\repo')
+  })
+
+  test('finds Windows ancestors case-insensitively while preserving first path casing', () => {
+    expect(commonAbsolutePathAncestor(['C:\\Repo\\a.txt', 'c:\\repo\\docs\\b.txt'])).toBe('C:\\Repo')
+  })
 })
 
 describe('local file transfer', () => {

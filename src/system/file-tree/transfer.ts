@@ -11,6 +11,7 @@ import {
   type RepoFileTransferUploadedItem,
 } from '#/shared/file-tree.ts'
 import { pathInsideRoot } from '#/system/file-tree/local.ts'
+import { pathModuleForLocalPaths } from '#/system/file-tree/path-utils.ts'
 
 export interface LocalInventoryOptions {
   rootPath: string
@@ -62,17 +63,34 @@ export function uniqueCopyName(existingNames: Set<string>, requestedName: string
 }
 
 export function commonAbsolutePathAncestor(paths: string[]): string {
-  const resolved = paths.map((value) => path.resolve(value))
+  const pathModule = pathModuleForLocalPaths(paths)
+  const resolved = paths.map((value) => pathModule.resolve(value))
   if (resolved.length === 0) return ''
-  const split = resolved.map((value) => value.split(path.sep).filter(Boolean))
+  const firstRoot = pathModule.parse(resolved[0] ?? '').root
+  const firstRootKey = pathModule === path.win32 ? firstRoot.toLowerCase() : firstRoot
+  const hasSameRoot = resolved.every((value) => {
+    const root = pathModule.parse(value).root
+    const rootKey = pathModule === path.win32 ? root.toLowerCase() : root
+    return rootKey === firstRootKey
+  })
+  if (!hasSameRoot) return firstRoot
+
+  const split = resolved.map((value) =>
+    value.slice(pathModule.parse(value).root.length).split(pathModule.sep).filter(Boolean),
+  )
   const first = split[0] ?? []
   const parts: string[] = []
   for (let i = 0; i < first.length; i += 1) {
-    if (split.every((candidate) => candidate[i] === first[i])) parts.push(first[i])
-    else break
+    const firstPart = pathModule === path.win32 ? first[i]?.toLowerCase() : first[i]
+    if (
+      split.every(
+        (candidate) => (pathModule === path.win32 ? candidate[i]?.toLowerCase() : candidate[i]) === firstPart,
+      )
+    ) {
+      parts.push(first[i] ?? '')
+    } else break
   }
-  const prefix = path.parse(resolved[0] ?? '').root
-  return parts.length === 0 ? prefix : path.join(prefix, ...parts)
+  return parts.length === 0 ? firstRoot : pathModule.join(firstRoot, ...parts)
 }
 
 export function decodeUploadedItem(item: Pick<RepoFileTransferUploadedItem, 'bytesBase64' | 'byteLength'>): Buffer | null {

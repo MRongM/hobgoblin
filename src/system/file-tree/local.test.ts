@@ -24,9 +24,14 @@ describe('pathInsideRoot', () => {
     expect(pathInsideRoot('/repo/worktree', '/repo/worktree/src/file.ts')).toBe(true)
   })
 
+  test('accepts Windows descendants when path casing differs', () => {
+    expect(pathInsideRoot('C:\\Repo\\Worktree', 'c:\\repo\\worktree\\src\\file.ts')).toBe(true)
+  })
+
   test('rejects siblings and traversal outside root', () => {
     expect(pathInsideRoot('/repo/worktree', '/repo/worktree-other')).toBe(false)
     expect(pathInsideRoot('/repo/worktree', '/repo/other')).toBe(false)
+    expect(pathInsideRoot('C:\\repo\\worktree', 'C:\\repo\\worktree-other')).toBe(false)
   })
 })
 
