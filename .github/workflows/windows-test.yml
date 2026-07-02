@@ -52,6 +52,158 @@ jobs:
           GOBLIN_SMOKE_USER_DATA: ${{ runner.temp }}\hobgoblin-smoke-user-data
         run: |
           $ErrorActionPreference = "Stop"
+
+          function Get-SmokeServerUrl {
+            param([Parameter(Mandatory = $true)][string]$LogPath)
+
+            $log = Get-Content $LogPath -Raw
+            $match = [regex]::Match($log, '\[embedded-server-ready\]\s+\{.*?"url":"(?<url>http://[^"]+)"')
+            if (-not $match.Success) {
+              throw "Could not find embedded server URL in startup log"
+            }
+            return $match.Groups["url"].Value
+          }
+
+          function Get-SmokeBootstrap {
+            param([Parameter(Mandatory = $true)][string]$ServerUrl)
+
+            $rootUrl = "$($ServerUrl.TrimEnd('/'))/"
+            $html = (Invoke-WebRequest -Uri $rootUrl -TimeoutSec 10).Content
+            $match = [regex]::Match(
+              $html,
+              '<script id="goblin-bootstrap" type="application/json">(?<json>.*?)</script>',
+              [System.Text.RegularExpressions.RegexOptions]::Singleline
+            )
+            if (-not $match.Success) {
+              throw "Could not find renderer bootstrap in server HTML"
+            }
+            return $match.Groups["json"].Value | ConvertFrom-Json
+          }
+
+          function ConvertTo-TerminalWebSocketUrl {
+            param(
+              [Parameter(Mandatory = $true)][string]$ServerUrl,
+              [Parameter(Mandatory = $true)][string]$Secret,
+              [Parameter(Mandatory = $true)][string]$ClientId,
+              [Parameter(Mandatory = $true)][string]$AttachmentId
+            )
+
+            $builder = [System.UriBuilder]::new($ServerUrl)
+            if ($builder.Scheme -eq "https") {
+              $builder.Scheme = "wss"
+            } else {
+              $builder.Scheme = "ws"
+            }
+            $builder.Path = "/ws/terminal"
+            $builder.Query = "token=$([System.Uri]::EscapeDataString($Secret))&clientId=$([System.Uri]::EscapeDataString($ClientId))&attachmentId=$([System.Uri]::EscapeDataString($AttachmentId))"
+            return $builder.Uri.AbsoluteUri
+          }
+
+          function Send-WebSocketJson {
+            param(
+              [Parameter(Mandatory = $true)][System.Net.WebSockets.ClientWebSocket]$Socket,
+              [Parameter(Mandatory = $true)][object]$Payload,
+              [Parameter(Mandatory = $true)][System.Threading.CancellationToken]$Token
+            )
+
+            $json = $Payload | ConvertTo-Json -Depth 8 -Compress
+            $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+            $segment = [System.ArraySegment[byte]]::new($bytes)
+            $Socket.SendAsync($segment, [System.Net.WebSockets.WebSocketMessageType]::Text, $true, $Token).GetAwaiter().GetResult()
+          }
+
+          function Receive-WebSocketJson {
+            param(
+              [Parameter(Mandatory = $true)][System.Net.WebSockets.ClientWebSocket]$Socket,
+              [Parameter(Mandatory = $true)][System.Threading.CancellationToken]$Token
+            )
+
+            $buffer = New-Object byte[] 65536
+            $builder = [System.Text.StringBuilder]::new()
+            do {
+              $segment = [System.ArraySegment[byte]]::new($buffer)
+              $result = $Socket.ReceiveAsync($segment, $Token).GetAwaiter().GetResult()
+              if ($result.MessageType -eq [System.Net.WebSockets.WebSocketMessageType]::Close) {
+                throw "Terminal WebSocket closed before create response"
+              }
+              [void]$builder.Append([System.Text.Encoding]::UTF8.GetString($buffer, 0, $result.Count))
+            } while (-not $result.EndOfMessage)
+
+            return $builder.ToString() | ConvertFrom-Json
+          }
+
+          function Invoke-TerminalCreateSmoke {
+            param(
+              [Parameter(Mandatory = $true)][string]$ServerUrl,
+              [Parameter(Mandatory = $true)][string]$WorkspacePath
+            )
+
+            $bootstrap = Get-SmokeBootstrap -ServerUrl $ServerUrl
+            $server = $bootstrap.initialServer
+            if (-not $server -or -not $server.secret -or -not $server.clientId) {
+              throw "Renderer bootstrap did not include terminal server credentials"
+            }
+
+            New-Item -ItemType Directory -Force -Path $WorkspacePath | Out-Null
+            $attachmentId = "attachment_smoke"
+            $socketUrl = ConvertTo-TerminalWebSocketUrl -ServerUrl $server.url -Secret $server.secret -ClientId $server.clientId -AttachmentId $attachmentId
+            $socket = [System.Net.WebSockets.ClientWebSocket]::new()
+            $cts = [System.Threading.CancellationTokenSource]::new()
+            $cts.CancelAfter([TimeSpan]::FromSeconds(20))
+            try {
+              $socket.ConnectAsync([Uri]$socketUrl, $cts.Token).GetAwaiter().GetResult()
+              Send-WebSocketJson -Socket $socket -Token $cts.Token -Payload @{
+                type = "request"
+                requestId = "terminal_smoke_create"
+                action = "create"
+                input = @{
+                  repoRoot = $WorkspacePath
+                  branch = "workspace"
+                  worktreePath = $WorkspacePath
+                  kind = "primary"
+                  cols = 80
+                  rows = 24
+                  attachmentId = $attachmentId
+                }
+              }
+
+              $createResponse = $null
+              while (-not $createResponse) {
+                $message = Receive-WebSocketJson -Socket $socket -Token $cts.Token
+                if ($message.type -eq "response" -and $message.requestId -eq "terminal_smoke_create") {
+                  $createResponse = $message
+                }
+              }
+              if ($createResponse.ok -ne $true) {
+                throw "Terminal create WebSocket request failed: $($createResponse.error)"
+              }
+              if ($createResponse.payload.ok -ne $true) {
+                throw "Terminal create returned failure: $($createResponse.payload.message)"
+              }
+
+              $sessionId = $createResponse.payload.sessionId
+              Send-WebSocketJson -Socket $socket -Token $cts.Token -Payload @{
+                type = "request"
+                requestId = "terminal_smoke_close"
+                action = "close"
+                input = @{ sessionId = $sessionId }
+              }
+              Write-Host "Terminal smoke created session $sessionId"
+            } finally {
+              try {
+                if ($socket.State -eq [System.Net.WebSockets.WebSocketState]::Open) {
+                  $socket.CloseAsync(
+                    [System.Net.WebSockets.WebSocketCloseStatus]::NormalClosure,
+                    "terminal smoke complete",
+                    [System.Threading.CancellationToken]::None
+                  ).GetAwaiter().GetResult()
+                }
+              } catch {}
+              $socket.Dispose()
+              $cts.Dispose()
+            }
+          }
+
           $exe = Get-ChildItem -Path "release" -Recurse -Filter "Hobgoblin.exe" | Select-Object -First 1
           if (-not $exe) {
             Write-Host "Could not find unpacked Hobgoblin.exe. Release tree:"
@@ -71,6 +223,7 @@ jobs:
           $deadline = (Get-Date).AddSeconds(45)
           $ready = $false
           $logPath = $null
+          $terminalSmokeError = $null
 
           while ((Get-Date) -lt $deadline) {
             if ($process.HasExited) {
@@ -91,6 +244,16 @@ jobs:
             Start-Sleep -Milliseconds 500
           }
 
+          if ($ready -and $logPath -and (Test-Path $logPath)) {
+            try {
+              $serverUrl = Get-SmokeServerUrl -LogPath $logPath
+              $terminalWorkspace = Join-Path $env:RUNNER_TEMP "hobgoblin-terminal-smoke-workspace"
+              Invoke-TerminalCreateSmoke -ServerUrl $serverUrl -WorkspacePath $terminalWorkspace
+            } catch {
+              $terminalSmokeError = $_
+            }
+          }
+
           if (-not $process.HasExited) {
             Stop-Process -Id $process.Id -Force
           }
@@ -108,6 +271,9 @@ jobs:
 
           if (-not $ready) {
             throw "Packaged Windows app did not complete renderer startup smoke"
+          }
+          if ($terminalSmokeError) {
+            throw $terminalSmokeError
           }
 
       - name: Upload Windows startup smoke logs
