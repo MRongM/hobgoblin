@@ -173,6 +173,7 @@ export function TerminalSessionProvider({ currentRepoId, children, syncTracker: 
       createTerminal: registry.createTerminal,
       selectTerminal: registry.selectTerminal,
       scrollToBottom: registry.scrollToBottom,
+      focusTerminal: registry.focusTerminal,
       scrollLines: registry.scrollLines,
       clearBell: registry.clearBell,
       closeTerminalAndDismissDetailIfLast: registry.closeTerminalAndDismissDetailIfLast,

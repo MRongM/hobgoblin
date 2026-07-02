@@ -11,8 +11,10 @@ import { resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts
 const createTerminal = vi.fn()
 const selectTerminal = vi.fn()
 const scrollToBottom = vi.fn()
+const focusTerminal = vi.fn()
 const closeTerminalAndDismissDetailIfLast = vi.fn()
 const reorderSessions = vi.fn()
+const terminalTabsProps: Array<Record<string, unknown>> = []
 const REMOTE_REPO_ID = 'ssh-config://prod/srv/plain'
 
 vi.mock('#/web/components/terminal/terminal-session-context.ts', () => ({
@@ -20,6 +22,7 @@ vi.mock('#/web/components/terminal/terminal-session-context.ts', () => ({
     createTerminal,
     selectTerminal,
     scrollToBottom,
+    focusTerminal,
     closeTerminalAndDismissDetailIfLast,
     reorderSessions,
   }),
@@ -31,7 +34,10 @@ vi.mock('#/web/components/terminal/terminal-session-store.ts', () => ({
 
 vi.mock('#/web/components/terminal/TerminalTabs.tsx', () => ({
   EMPTY_TERMINAL_TAB_FOCUS_KEY: 'empty',
-  TerminalTabs: () => <div data-testid="terminal-tabs" />,
+  TerminalTabs: (props: Record<string, unknown>) => {
+    terminalTabsProps.push(props)
+    return <div data-testid="terminal-tabs" />
+  },
 }))
 
 vi.mock('#/web/stores/i18n.ts', () => ({
@@ -54,8 +60,10 @@ beforeEach(() => {
   createTerminal.mockClear()
   selectTerminal.mockClear()
   scrollToBottom.mockClear()
+  focusTerminal.mockClear()
   closeTerminalAndDismissDetailIfLast.mockClear()
   reorderSessions.mockClear()
+  terminalTabsProps.length = 0
   resetReposStore()
 })
 
@@ -89,6 +97,12 @@ describe('PlainWorkspaceTerminalPanel', () => {
     })
 
     expect(createTerminal).toHaveBeenCalledTimes(1)
+  })
+
+  test('passes terminal focus command to terminal tabs', () => {
+    render(<PlainWorkspaceTerminalPanel repoId="/repo" />)
+
+    expect(terminalTabsProps[0]?.onFocusTerminal).toBe(focusTerminal)
   })
 
   test('auto-creates remote plain workspace sessions at the remote path', () => {

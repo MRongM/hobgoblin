@@ -105,6 +105,7 @@ describe('BranchDetailToolbar', () => {
     expect(showRepoDetailTab).toHaveBeenCalledWith(REPO_ID, 'terminal')
     expect(mocks.createTerminal).not.toHaveBeenCalled()
     expect(mocks.selectTerminal).toHaveBeenCalledWith(`${REPO_ID}\0${WORKTREE_PATH}`, 't1')
+    expect(mocks.focusTerminal).toHaveBeenCalledWith('t1')
   })
 
   test('clicking a selected session tab in terminal panel scrolls to bottom', async () => {
@@ -124,6 +125,7 @@ describe('BranchDetailToolbar', () => {
     expect(mocks.createTerminal).not.toHaveBeenCalled()
     expect(mocks.selectTerminal).not.toHaveBeenCalled()
     expect(mocks.scrollToBottom).toHaveBeenCalledWith('t1')
+    expect(mocks.focusTerminal).toHaveBeenCalledWith('t1')
   })
 
   test('clicking an unselected session tab navigates and selects it', async () => {
@@ -144,6 +146,7 @@ describe('BranchDetailToolbar', () => {
     expect(showRepoDetailTab).toHaveBeenCalledWith(REPO_ID, 'terminal')
     expect(mocks.createTerminal).not.toHaveBeenCalled()
     expect(mocks.selectTerminal).toHaveBeenCalledWith(`${REPO_ID}\0${WORKTREE_PATH}`, 't2')
+    expect(mocks.focusTerminal).toHaveBeenCalledWith('t2')
   })
 
   test('does not show branch actions in the detail bar (actions moved to branch rows)', () => {
@@ -283,6 +286,7 @@ function renderToolbar(options: {
     createTerminal: ReturnType<typeof vi.fn>
     selectTerminal: ReturnType<typeof vi.fn>
     scrollToBottom: ReturnType<typeof vi.fn>
+    focusTerminal: ReturnType<typeof vi.fn>
     showRepoDetailTab: ReturnType<typeof vi.fn>
   }
 } {
@@ -349,11 +353,13 @@ function renderToolbar(options: {
   const createTerminal = vi.fn(async () => 'key')
   const selectTerminal = vi.fn()
   const scrollToBottom = vi.fn()
+  const focusTerminal = vi.fn()
   const showRepoDetailTab = vi.fn(options.navigation.showRepoDetailTab)
   const commandContext: TerminalSessionContextValue = {
     createTerminal,
     selectTerminal,
     scrollToBottom,
+    focusTerminal,
     scrollLines: vi.fn(),
     clearBell: vi.fn(() => false),
     closeTerminalAndDismissDetailIfLast: vi.fn(() => []),
@@ -407,6 +413,7 @@ function renderToolbar(options: {
       createTerminal,
       selectTerminal,
       scrollToBottom,
+      focusTerminal,
       showRepoDetailTab,
     },
   }

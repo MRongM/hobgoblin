@@ -46,6 +46,7 @@ export class ManagedTerminalSession {
   private startToken = 0
   private resizeFlushTimer: number | null = null
   private outputFlushFrame: number | null = null
+  private pendingFocus = false
 
   private pendingResize: { cols: number; rows: number } | null = null
   private pendingOutput: string[] = []
@@ -99,6 +100,7 @@ export class ManagedTerminalSession {
         this.start()
       }
     }
+    this.flushPendingFocus()
   }
 
   detach(host: HTMLElement, parkingRoot: HTMLElement): void {
@@ -106,6 +108,16 @@ export class ManagedTerminalSession {
     this.view.setRevealPathHandler(null)
     this.view.setOpenPathInEditorHandler(null)
     this.view.detach(host, parkingRoot)
+  }
+
+  focus(): void {
+    if (this.disposed) return
+    if (!this.view.isVisible() || !this.view.currentTerminal()) {
+      this.pendingFocus = true
+      return
+    }
+    this.pendingFocus = false
+    this.view.focus()
   }
 
   restart(): void {
@@ -313,6 +325,13 @@ export class ManagedTerminalSession {
     void this.startAsync(token)
   }
 
+  private flushPendingFocus(): void {
+    if (!this.pendingFocus) return
+    if (!this.view.isVisible() || !this.view.currentTerminal()) return
+    this.pendingFocus = false
+    this.view.focus()
+  }
+
   private async startAsync(token: number): Promise<void> {
     try {
       const { term, preloaded } = await this.openPhase(token)
@@ -408,6 +427,7 @@ export class ManagedTerminalSession {
     this.guardStart(token, term)
     const changed = this.runtime.markAttached()
     if (changed) this.notify('metadata')
+    this.flushPendingFocus()
   }
 
 

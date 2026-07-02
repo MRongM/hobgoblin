@@ -44,6 +44,7 @@ interface TerminalTabsProps {
   onNew: () => void
   onSelect: (worktreeTerminalKey: string, key: string) => void
   onScrollToBottom: (key: string) => void
+  onFocusTerminal?: (key: string) => void
   onClose: (key: string) => void
   onReorder: (worktreeTerminalKey: string, orderedKeys: string[]) => void
   onNavigateOut?: (direction: 'prev' | 'next' | 'first' | 'last') => void
@@ -65,6 +66,7 @@ export function TerminalTabs({
   onNew,
   onSelect,
   onScrollToBottom,
+  onFocusTerminal = () => {},
   onClose,
   onReorder,
   onNavigateOut,
@@ -123,8 +125,9 @@ export function TerminalTabs({
       } else {
         onSelect(worktreeTerminalKey, key)
       }
+      onFocusTerminal(key)
     },
-    [sessions, onSelect, onScrollToBottom, worktreeTerminalKey, panelActive],
+    [sessions, onSelect, onScrollToBottom, onFocusTerminal, worktreeTerminalKey, panelActive],
   )
 
   const handleClose = useCallback((event: React.MouseEvent, key: string) => {

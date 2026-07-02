@@ -387,6 +387,10 @@ export class TerminalSessionRegistry {
     this.sessions.get(key)?.scrollToBottom()
   }
 
+  focusTerminal = (key: string): void => {
+    this.sessions.get(key)?.focus()
+  }
+
   scrollLines = (key: string, amount: number): void => {
     this.sessions.get(key)?.scrollLines(amount)
   }
