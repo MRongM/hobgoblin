@@ -1,0 +1,55 @@
+name: Windows Test Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - windows
+    paths:
+      - .github/workflows/windows-test.yml
+      - package.json
+      - bun.lock
+      - scripts/**
+      - src/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-test-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows:
+    name: Build Windows x64
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Build Windows artifact
+        run: bun scripts/build-release-artifacts.ts --platform windows --arch x64
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hobgoblin-windows-x64-${{ github.sha }}
+          path: release/Hobgoblin-*-x64.exe
+          if-no-files-found: error
+          retention-days: 7
