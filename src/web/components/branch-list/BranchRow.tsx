@@ -105,10 +105,7 @@ export function BranchRow({
         </div>
       )}
       <div
-        className={cn(
-          'pointer-events-none relative z-10 flex min-w-0 items-center py-1',
-          dragHandle ? 'pr-4' : 'px-4',
-        )}
+        className={cn('pointer-events-none relative z-10 flex min-w-0 items-center py-1', dragHandle ? 'pr-4' : 'px-4')}
       >
         <BranchSummaryInline repo={repo} branch={branch} selected={isSelected} />
       </div>
@@ -141,6 +138,8 @@ function BranchRowActions({
       <div className="pointer-events-none relative z-20 flex shrink-0 items-center py-1 pr-4">
         <div className="pointer-events-auto">
           <BranchActionsDropdown
+            repoId={repo.id}
+            branchName={branch.name}
             patchItems={actions.patchItems}
             mainItems={actions.mainItems}
             externalItems={actions.externalItems}

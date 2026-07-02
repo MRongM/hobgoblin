@@ -120,6 +120,7 @@ describe('TopbarRepoControls', () => {
     renderControls(navigationWith({}))
 
     expect(container?.querySelector('button[aria-label="branches.switch"]')).not.toBeNull()
+    expect(container?.querySelector('button[aria-label="worktrees.open-in-editor-label"]')).not.toBeNull()
     expect(container?.querySelector('button[aria-label="action.menu"]')).not.toBeNull()
     expect(container?.querySelector('[aria-label="branches.filter-label"]')).toBeNull()
     expect(container?.querySelector('[aria-label="branches.search-label"]')).toBeNull()
@@ -181,9 +182,7 @@ function renderWithProviders(element: React.ReactNode, navigation: MainWindowNav
     root!.render(
       <QueryClientProvider client={queryClient!}>
         <InlineCommitDraftProvider>
-          <MainWindowNavigationProvider value={navigation}>
-            {element}
-          </MainWindowNavigationProvider>
+          <MainWindowNavigationProvider value={navigation}>{element}</MainWindowNavigationProvider>
         </InlineCommitDraftProvider>
       </QueryClientProvider>,
     )

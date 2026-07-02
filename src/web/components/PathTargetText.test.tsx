@@ -50,4 +50,43 @@ describe('PathTargetText', () => {
       container.remove()
     }
   })
+
+  test('dispatches full targets for paths split by a hard line break', async () => {
+    const onRevealPath = vi.fn()
+    const onOpenPathInEditor = vi.fn()
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <PathTargetText
+          text={'see backend/app/kooky_opt/\none_person_team/repositories/agents.py:45'}
+          onRevealPath={onRevealPath}
+          onOpenPathInEditor={onOpenPathInEditor}
+        />,
+      )
+    })
+
+    try {
+      const path = container.querySelector('[data-path-target]')
+      expect(path?.textContent).toBe('backend/app/kooky_opt/\none_person_team/repositories/agents.py:45')
+
+      await act(async () => {
+        path?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+      expect(onRevealPath).toHaveBeenCalledWith('backend/app/kooky_opt/one_person_team/repositories/agents.py')
+
+      await act(async () => {
+        path?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
+      })
+      expect(onOpenPathInEditor).toHaveBeenCalledWith({
+        path: 'backend/app/kooky_opt/one_person_team/repositories/agents.py',
+        line: 45,
+      })
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
 })

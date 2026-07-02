@@ -103,6 +103,40 @@ describe('filePathTargetsForText', () => {
       { text: 'docs/guide.md:3', target: { path: 'docs/guide.md', line: 3 }, startIndex: 15, endIndex: 30 },
     ])
   })
+
+  test('does not treat localhost URLs as path-like spans', () => {
+    expect(filePathTargetsForText('open localhost:3000/src/app.ts and http://localhost:3000/src/app.ts')).toEqual([])
+  })
+
+  test('recognizes path-like spans split by a hard line break after a directory slash', () => {
+    expect(
+      filePathTargetsForText(
+        [
+          'members: backend/app/kooky_opt/one_person_team/services/team_service.py:509 -> backend/app/kooky_opt/',
+          'one_person_team/repositories/agents.py:45、backend/app/kooky_opt/one_person_team/rules/team_policy.py:113',
+        ].join('\n'),
+      ),
+    ).toEqual([
+      {
+        text: 'backend/app/kooky_opt/one_person_team/services/team_service.py:509',
+        target: { path: 'backend/app/kooky_opt/one_person_team/services/team_service.py', line: 509 },
+        startIndex: 9,
+        endIndex: 75,
+      },
+      {
+        text: 'backend/app/kooky_opt/\none_person_team/repositories/agents.py:45',
+        target: { path: 'backend/app/kooky_opt/one_person_team/repositories/agents.py', line: 45 },
+        startIndex: 79,
+        endIndex: 143,
+      },
+      {
+        text: 'backend/app/kooky_opt/one_person_team/rules/team_policy.py:113',
+        target: { path: 'backend/app/kooky_opt/one_person_team/rules/team_policy.py', line: 113 },
+        startIndex: 144,
+        endIndex: 206,
+      },
+    ])
+  })
 })
 
 describe('editorTargetPathArgument', () => {

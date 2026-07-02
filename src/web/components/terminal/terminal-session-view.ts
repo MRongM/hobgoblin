@@ -26,6 +26,7 @@ import {
   terminalInputForMacOptionArrow,
 } from '#/web/components/terminal/terminal-keyboard.ts'
 import { registerTerminalRelativePathLinkProvider } from '#/web/components/terminal/terminal-path-links.ts'
+import { registerTerminalLocalUrlLinkProvider } from '#/web/components/terminal/terminal-local-url-links.ts'
 import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
 import {
   TERMINAL_FONT_FAMILY,
@@ -383,6 +384,7 @@ export class TerminalSessionView {
     this.installUnicode11Addon(term)
     this.installWebLinksAddon(term)
     this.installRelativePathLinkProvider(term)
+    this.installLocalUrlLinkProvider(term)
     this.installSearchAddon(term)
     this.installSerializeAddon(term)
     this.installImageAddon(term)
@@ -420,6 +422,14 @@ export class TerminalSessionView {
       )
     } catch (err) {
       console.warn('[terminal] failed to register relative path links', err)
+    }
+  }
+
+  private installLocalUrlLinkProvider(term: XTermTerminal): void {
+    try {
+      this.disposables.push(registerTerminalLocalUrlLinkProvider(term, () => this.handlers.onOpenExternalLink))
+    } catch (err) {
+      console.warn('[terminal] failed to register local url links', err)
     }
   }
 

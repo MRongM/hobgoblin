@@ -14,7 +14,9 @@ export interface FilePathTargetSpan {
 export type EditorOpenTarget = string | FilePathTarget
 
 const PATH_TOKEN_PATTERN =
-  /(^|[\s"'`([{<:：,，、;；（［【｛《〈「『])(?<token>(?:\.\/)?(?:(?:[A-Za-z0-9_@%+=.-]+\/)+[A-Za-z0-9_@%+=.,-]+|[A-Za-z0-9_@%+=-]+\.[A-Za-z0-9][A-Za-z0-9._-]*)(?::\d+(?::\d+)?)?)(?=$|[\s"'`,;)\]}>，。、；：！？）］】｝》〉」』、])/gu
+  /(^|[\s"'`([{<：,，、;；（［【｛《〈「『])(?<token>(?:\.\/)?(?:(?:[A-Za-z0-9_@%+=.-]+\/)+[A-Za-z0-9_@%+=.,-]+|[A-Za-z0-9_@%+=-]+\.[A-Za-z0-9][A-Za-z0-9._-]*)(?::\d+(?::\d+)?)?)(?=$|[\s"'`,;)\]}>，。、；：！？）］】｝》〉」』、])/gu
+const HARD_WRAPPED_PATH_TOKEN_PATTERN =
+  /(^|[\s"'`([{<：,，、;；（［【｛《〈「『])(?<token>(?:\.\/)?(?:[A-Za-z0-9_@%+=.-]+\/)+(?:\r?\n[ \t]*)(?:(?:[A-Za-z0-9_@%+=.-]+\/)+[A-Za-z0-9_@%+=.,-]+|[A-Za-z0-9_@%+=-]+\.[A-Za-z0-9][A-Za-z0-9._-]*)(?::\d+(?::\d+)?)?)(?=$|[\s"'`,;)\]}>，。、；：！？）］】｝》〉」』、])/gu
 const PYTHON_FILE_LINE_PATTERN =
   /(^|[\s([{<（［【｛《〈「『])File\s+["'](?<path>[^"'\r\n]+)["'],\s+line\s+(?<line>\d+)/gu
 const URL_PATTERN = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//u
@@ -88,6 +90,19 @@ export function filePathTargetsForText(text: string): FilePathTargetSpan[] {
     const target = parseFilePathTarget(`${path}:${line}`)
     if (!target || spanOverlaps(spans, startIndex, endIndex)) continue
     spans.push({ text: text.slice(startIndex, endIndex), target, startIndex, endIndex })
+  }
+
+  for (const match of text.matchAll(HARD_WRAPPED_PATH_TOKEN_PATTERN)) {
+    const token = match.groups?.token
+    if (!token || match.index === undefined) continue
+    const normalizedToken = token.replace(/\r?\n[ \t]*/gu, '')
+    const target = parseFilePathTarget(normalizedToken)
+    if (!target) continue
+    const tokenOffset = match[0].indexOf(token)
+    const startIndex = match.index + tokenOffset
+    const endIndex = startIndex + token.length
+    if (spanOverlaps(spans, startIndex, endIndex)) continue
+    spans.push({ text: token, target, startIndex, endIndex })
   }
 
   for (const match of text.matchAll(PATH_TOKEN_PATTERN)) {

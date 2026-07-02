@@ -61,6 +61,7 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
     attach,
     detach,
     scrollLines,
+    focusTerminal,
     isTerminalFocusTarget,
     findNext,
     findPrevious,
@@ -384,6 +385,7 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
                   onClick={() => {
                     if (action === 'input') writeInput(key, button.value)
                     else writeInput(key, `${button.value}\r`)
+                    focusTerminal(key)
                   }}
                 >
                   {button.label}
