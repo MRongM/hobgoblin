@@ -9,6 +9,7 @@ import {
 } from '#/web/stores/repos/test-utils.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { RestorableRepoSnapshot } from '#/web/stores/repos/types.ts'
+import { DEFAULT_FILE_TREE_PANE_SIZES } from '#/shared/workspace-layout.ts'
 function cachedRepo(savedAt: number): RestorableRepoSnapshot {
   return {
     savedAt,
@@ -98,6 +99,28 @@ describe('normalizeRestorableRepoCache', () => {
     expect(normalized.missing?.ui.worktreePathOrder).toEqual([])
     expect(normalized.invalid).toBeUndefined()
   })
+
+  test('normalizes cached project file tree pane sizes', () => {
+    const now = Date.now()
+    const raw = cachedRepo(now) as any
+    raw.ui.fileTreePaneSizes = { 'top-bottom': 44.44, 'left-right': 'bad' }
+
+    const normalized = normalizeRestorableRepoCache({ repo: raw })
+
+    expect(normalized.repo?.ui.fileTreePaneSizes).toEqual({
+      'top-bottom': 44.4,
+      'left-right': DEFAULT_FILE_TREE_PANE_SIZES['left-right'],
+    })
+  })
+
+  test('keeps old cached repos without project file tree pane sizes valid', () => {
+    const now = Date.now()
+    const raw = cachedRepo(now)
+
+    const normalized = normalizeRestorableRepoCache({ repo: raw })
+
+    expect(normalized.repo?.ui.fileTreePaneSizes).toBeUndefined()
+  })
 })
 
 describe('persistRestorableRepoSnapshot', () => {
@@ -165,6 +188,24 @@ describe('persistRestorableRepoSnapshot', () => {
 
     expect(useReposStore.getState().restorableRepoCache['/repo']?.ui.worktreePathOrder).toEqual(['/repo'])
   })
+
+  test('persists project file tree pane sizes in repo cache', () => {
+    const repo = seedRepoState({
+      id: '/repo',
+      instanceToken: 1,
+      branches: [createRepoBranch('main')],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+      fileTreePaneSizes: { 'top-bottom': 42.2, 'left-right': 73.4 },
+    })
+
+    persistRestorableRepoSnapshot(useReposStore.setState, repo, 1)
+
+    expect(useReposStore.getState().restorableRepoCache['/repo']?.ui.fileTreePaneSizes).toEqual({
+      'top-bottom': 42.2,
+      'left-right': 73.4,
+    })
+  })
 })
 
 describe('restoreRepoProjectionFromSnapshot', () => {
@@ -190,5 +231,15 @@ describe('restoreRepoProjectionFromSnapshot', () => {
     expect(repo.data.branches[0]?.pullRequest).toBeUndefined()
     expect(repo.data.statusLoaded).toBe(false)
     expect(repo.data.status).toEqual([])
+  })
+
+  test('restores project file tree pane sizes from cache', () => {
+    const now = Date.now()
+    const cached = cachedRepo(now)
+    cached.ui.fileTreePaneSizes = { 'top-bottom': 41.5, 'left-right': 70.5 }
+
+    const repo = restoreRepoProjectionFromSnapshot(emptyRepo('/repo', 'repo'), cached)
+
+    expect(repo.ui.fileTreePaneSizes).toEqual({ 'top-bottom': 41.5, 'left-right': 70.5 })
   })
 })
