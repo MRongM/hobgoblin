@@ -110,6 +110,7 @@ function renderConsumer(options: { selectTerminal: TerminalSessionContextValue['
     createTerminal: vi.fn(async () => 'session-key-1'),
     selectTerminal: options.selectTerminal,
     scrollToBottom: vi.fn(),
+    focusTerminal: vi.fn(),
     scrollLines: vi.fn(),
     clearBell: vi.fn(() => false),
     closeTerminalAndDismissDetailIfLast: vi.fn(() => []),

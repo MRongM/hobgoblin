@@ -121,6 +121,76 @@ describe('TerminalTabs', () => {
     expect(document.body.textContent).toContain('terminal.new')
   })
 
+  test('focuses the selected terminal after scrolling it to bottom', () => {
+    const onScrollToBottom = vi.fn()
+    const onSelect = vi.fn()
+    const onFocusTerminal = vi.fn()
+
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[session({ key: 't1', selected: true, title: 'term-1' })]}
+        onNew={() => {}}
+        onSelect={onSelect}
+        onScrollToBottom={onScrollToBottom}
+        onFocusTerminal={onFocusTerminal}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    const tab = document.body.querySelector('#detail-terminal-tab')
+    if (!(tab instanceof HTMLButtonElement)) throw new Error('missing selected terminal tab')
+
+    act(() => {
+      tab.click()
+    })
+
+    expect(onScrollToBottom).toHaveBeenCalledWith('t1')
+    expect(onSelect).not.toHaveBeenCalled()
+    expect(onFocusTerminal).toHaveBeenCalledTimes(1)
+    expect(onFocusTerminal).toHaveBeenCalledWith('t1')
+  })
+
+  test('focuses an unselected terminal after selecting it', () => {
+    const worktreeTerminalKey = '/repo\\0/repo/worktree'
+    const onScrollToBottom = vi.fn()
+    const onSelect = vi.fn()
+    const onFocusTerminal = vi.fn()
+
+    render(
+      <TerminalTabs
+        worktreeTerminalKey={worktreeTerminalKey}
+        detailId="detail"
+        panelActive
+        sessions={[
+          session({ key: 't1', selected: true, title: 'term-1' }),
+          session({ key: 't2', selected: false, title: 'term-2', terminalId: 'terminal-2', index: 2 }),
+        ]}
+        onNew={() => {}}
+        onSelect={onSelect}
+        onScrollToBottom={onScrollToBottom}
+        onFocusTerminal={onFocusTerminal}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    const tab = document.body.querySelector('#detail-terminal-tab-t2')
+    if (!(tab instanceof HTMLButtonElement)) throw new Error('missing unselected terminal tab')
+
+    act(() => {
+      tab.click()
+    })
+
+    expect(onSelect).toHaveBeenCalledWith(worktreeTerminalKey, 't2')
+    expect(onScrollToBottom).not.toHaveBeenCalled()
+    expect(onFocusTerminal).toHaveBeenCalledTimes(1)
+    expect(onFocusTerminal).toHaveBeenCalledWith('t2')
+  })
+
   test('collapsed terminal tab only navigates out on arrow keys', () => {
     const onNavigateOut = vi.fn()
     render(

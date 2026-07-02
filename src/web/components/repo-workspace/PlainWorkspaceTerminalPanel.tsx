@@ -26,8 +26,14 @@ export function PlainWorkspaceTerminalPanel({ repoId }: PlainWorkspaceTerminalPa
   const snapshot = useWorktreeTerminalSnapshot(terminalWorktreeKey)
   const terminalTabFocusRegistry = useFocusRegistry<string, HTMLButtonElement>()
   const bootstrappedRef = useRef(false)
-  const { createTerminal, selectTerminal, scrollToBottom, closeTerminalAndDismissDetailIfLast, reorderSessions } =
-    useTerminalSessionContext()
+  const {
+    createTerminal,
+    selectTerminal,
+    scrollToBottom,
+    focusTerminal,
+    closeTerminalAndDismissDetailIfLast,
+    reorderSessions,
+  } = useTerminalSessionContext()
 
   const terminalBase = useMemo<TerminalSessionBase>(
     () => ({
@@ -88,6 +94,7 @@ export function PlainWorkspaceTerminalPanel({ repoId }: PlainWorkspaceTerminalPa
             onNew={handleNewTerminal}
             onSelect={(_worktreeKey, key) => handleSelectTerminal(key)}
             onScrollToBottom={scrollToBottom}
+            onFocusTerminal={focusTerminal}
             onClose={handleCloseTerminal}
             onReorder={handleReorderTerminals}
           />

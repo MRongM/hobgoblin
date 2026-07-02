@@ -2090,6 +2090,48 @@ describe('ManagedTerminalSession', () => {
     expect(isTerminalFocused()).toBe(true)
   })
 
+  test('focus delegates to the visible xterm view', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+    const term = xtermMocks.terminals[0]!
+    term.focus.mockClear()
+
+    session.focus()
+
+    expect(term.focus).toHaveBeenCalledTimes(1)
+  })
+
+  test('applies one pending focus after a parked session reattaches', async () => {
+    const host = document.createElement('div')
+    const parking = document.createElement('div')
+    document.body.append(host, parking)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+    const term = xtermMocks.terminals[0]!
+    term.focus.mockClear()
+
+    session.detach(host, parking)
+    session.focus()
+
+    expect(term.focus).not.toHaveBeenCalled()
+
+    session.attach(host)
+
+    expect(term.focus).toHaveBeenCalledTimes(1)
+
+    session.attach(host)
+
+    expect(term.focus).toHaveBeenCalledTimes(1)
+  })
+
   test('does not auto-focus xterm after mobile attach', async () => {
     const restoreUserAgent = setMobileUserAgent()
     try {

@@ -113,6 +113,7 @@ export interface TerminalSessionContextValue {
   createTerminal: (base: TerminalSessionBase) => Promise<string>
   selectTerminal: (worktreeTerminalKey: string, key: string) => void
   scrollToBottom: (key: string) => void
+  focusTerminal: (key: string) => void
   scrollLines: (key: string, amount: number) => void
   clearBell: (key: string) => boolean
   closeTerminalAndDismissDetailIfLast: (key: string, base: TerminalSessionBase) => void
@@ -147,6 +148,7 @@ export interface ManagedTerminalSessionLike {
   setFontSize: (fontSize: number) => void
   attach: (host: HTMLElement, handlers?: TerminalSessionAttachHandlers) => void
   detach: (host: HTMLElement, parkingRoot: HTMLElement) => void
+  focus: () => void
   restart: () => void
   dispose: (options?: { closeSession?: boolean }) => void
   snapshot: () => TerminalSnapshot

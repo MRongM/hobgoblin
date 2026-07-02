@@ -61,8 +61,14 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
     ? worktreeTerminalKey(repo.id, detail.branch.worktree.path)
     : null
 
-  const { createTerminal, selectTerminal, scrollToBottom, closeTerminalAndDismissDetailIfLast, reorderSessions } =
-    useTerminalSessionContext()
+  const {
+    createTerminal,
+    selectTerminal,
+    scrollToBottom,
+    focusTerminal,
+    closeTerminalAndDismissDetailIfLast,
+    reorderSessions,
+  } = useTerminalSessionContext()
 
   const worktreeSnapshot = useWorktreeTerminalSnapshot(terminalWorktreeKey)
   const terminalSessions = worktreeSnapshot.sessions
@@ -169,6 +175,7 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
             onNew={handleNewTerminal}
             onSelect={handleSelectTerminal}
             onScrollToBottom={handleScrollToBottom}
+            onFocusTerminal={focusTerminal}
             onClose={handleCloseTerminal}
             onReorder={handleReorderTerminals}
             onNavigateOut={() => {
