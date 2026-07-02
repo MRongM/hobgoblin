@@ -747,8 +747,8 @@ export const ko: Record<DictKey, string> = {
   'settings.about': '정보',
   'settings.files.title': '파일 영역',
   'settings.files.layout.title': '레이아웃',
-  'settings.files.height-ratio': '높이 비율',
-  'settings.files.height-ratio-hint': '프로젝트 탐색기에서 파일 영역이 차지하는 공간 비율을 조정합니다.',
+  'settings.files.height-ratio': '새 프로젝트 기본 높이 비율',
+  'settings.files.height-ratio-hint': '자체 저장 크기가 없는 프로젝트의 파일 영역 높이를 설정합니다.',
   'settings.files.clipboard-max-size': '클립보드 크기 제한',
   'settings.files.clipboard-max-size-hint':
     '파일 영역 단축키로 복사하거나 바꿀 수 있는 파일 내용의 최대 크기(MB)입니다.',

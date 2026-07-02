@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { RepoExplorerPane } from '#/web/components/repo-workspace/RepoExplorerPane.tsx'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
 
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 const REPO_ID = '/repo'
@@ -76,12 +77,19 @@ vi.mock('#/web/components/SplitPane.tsx', () => ({
     before,
     after,
     orientation,
+    afterSize,
+    onAfterSizeChange,
   }: {
     before: React.ReactNode
     after: React.ReactNode
     orientation: string
+    afterSize: number
+    onAfterSizeChange?: (size: number) => void
   }) => (
-    <div data-testid="split-pane" data-orientation={orientation}>
+    <div data-testid="split-pane" data-orientation={orientation} data-after-size={String(afterSize)}>
+      <button type="button" data-testid="resize-file-tree-pane" onClick={() => onAfterSizeChange?.(44.44)}>
+        resize
+      </button>
       {before}
       {after}
     </div>
@@ -317,6 +325,74 @@ describe('RepoExplorerPane', () => {
     expect(explorerToolbar?.className).not.toContain('h-8')
     expect(explorerToolbar?.style.getPropertyValue('--goblin-file-tree-topbar-font-size')).toBe('13px')
     expect(firstTab?.className).toContain('text-[length:var(--goblin-file-tree-topbar-font-size)]')
+    await act(async () => root.unmount())
+  })
+
+  test('uses default file tree pane size when the repo has no project override', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main')],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+    })
+    useReposStore.setState({ fileTreePaneSizes: { 'top-bottom': 41.5, 'left-right': 70.5 } })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
+    })
+
+    expect(container.querySelector('[data-testid="split-pane"]')?.getAttribute('data-after-size')).toBe('41.5')
+    await act(async () => root.unmount())
+  })
+
+  test('uses project file tree pane size before the default', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main')],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+      fileTreePaneSizes: { 'top-bottom': 38.2, 'left-right': 64.1 },
+    })
+    useReposStore.setState({ fileTreePaneSizes: { 'top-bottom': 41.5, 'left-right': 70.5 } })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
+    })
+
+    expect(container.querySelector('[data-testid="split-pane"]')?.getAttribute('data-after-size')).toBe('38.2')
+    await act(async () => root.unmount())
+  })
+
+  test('resizing writes a project file tree pane size without changing defaults', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main')],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+    })
+    useReposStore.setState({ fileTreePaneSizes: { 'top-bottom': 41.5, 'left-right': 70.5 } })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
+    })
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="resize-file-tree-pane"]')?.click()
+    })
+
+    expect(useReposStore.getState().repos[REPO_ID]?.ui.fileTreePaneSizes).toEqual({
+      'top-bottom': 44.4,
+      'left-right': 70.5,
+    })
+    expect(useReposStore.getState().fileTreePaneSizes).toEqual({ 'top-bottom': 41.5, 'left-right': 70.5 })
     await act(async () => root.unmount())
   })
 

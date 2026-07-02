@@ -758,8 +758,8 @@ export const ja: Record<DictKey, string> = {
   'settings.about': '情報',
   'settings.files.title': 'ファイル領域',
   'settings.files.layout.title': 'レイアウト',
-  'settings.files.height-ratio': '高さの比率',
-  'settings.files.height-ratio-hint': 'プロジェクトエクスプローラーでファイル領域が占める割合を調整します。',
+  'settings.files.height-ratio': '新規プロジェクトのデフォルト高さ比率',
+  'settings.files.height-ratio-hint': '独自の保存サイズがないプロジェクトのファイル領域の高さを設定します。',
   'settings.files.clipboard-max-size': 'クリップボードサイズ上限',
   'settings.files.clipboard-max-size-hint':
     'ファイル領域ショートカットでコピーまたは置換できるファイル内容の最大サイズ（MB）です。',

@@ -22,6 +22,7 @@ import {
   DEFAULT_DETAIL_PANE_SIZES,
   DEFAULT_FILE_TREE_PANE_SIZES,
   DEFAULT_WORKSPACE_LAYOUT,
+  type WorkspaceDetailPaneSizes,
 } from '#/shared/workspace-layout.ts'
 export type RpcTestHandler = (input: any) => unknown
 
@@ -502,6 +503,7 @@ export function seedRepoState(options: {
   branchViewMode?: RepoState['ui']['branchViewMode']
   detailTab?: DetailTab
   workspaceLayout?: RepoWorkspaceLayout
+  fileTreePaneSizes?: WorkspaceDetailPaneSizes
   worktreePathOrder?: string[]
   instanceToken?: number
   status?: WorktreeStatus[]
@@ -534,6 +536,7 @@ export function seedRepoState(options: {
       branchViewMode: options.branchViewMode ?? base.ui.branchViewMode,
       detailTab: options.detailTab ?? base.ui.detailTab,
       workspaceLayout: options.workspaceLayout ?? base.ui.workspaceLayout,
+      fileTreePaneSizes: options.fileTreePaneSizes ?? base.ui.fileTreePaneSizes,
       worktreePathOrder: options.worktreePathOrder ?? base.ui.worktreePathOrder,
     },
     remote: {

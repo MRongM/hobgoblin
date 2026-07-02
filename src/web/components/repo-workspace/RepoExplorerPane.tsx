@@ -38,27 +38,30 @@ interface RepoExplorerPaneProps {
 }
 
 export function RepoExplorerPane({ repoId, layout, showActions, revealRequest }: RepoExplorerPaneProps) {
-  const { fileTreePaneSizes, setFileTreePaneSize, changeCount } = useStoreWithEqualityFn(
-    useReposStore,
-    (state) => {
-      const repo = state.repos[repoId]
-      const selected = repo?.data.branches.find((branch) => branch.name === repo.ui.selectedBranch) ?? null
-      const worktreePath = selected?.worktree?.path
-      return {
-        fileTreePaneSizes: state.fileTreePaneSizes,
-        setFileTreePaneSize: state.setFileTreePaneSize,
-        changeCount: worktreePath
-          ? (repo?.data.status.find((status) => status.path === worktreePath)?.entries.length ?? 0)
-          : 0,
-      }
-    },
-    (a, b) =>
-      a.fileTreePaneSizes === b.fileTreePaneSizes &&
-      a.setFileTreePaneSize === b.setFileTreePaneSize &&
-      a.changeCount === b.changeCount,
-  )
+  const { repoFileTreePaneSizes, defaultFileTreePaneSizes, setRepoFileTreePaneSize, changeCount } =
+    useStoreWithEqualityFn(
+      useReposStore,
+      (state) => {
+        const repo = state.repos[repoId]
+        const selected = repo?.data.branches.find((branch) => branch.name === repo.ui.selectedBranch) ?? null
+        const worktreePath = selected?.worktree?.path
+        return {
+          repoFileTreePaneSizes: repo?.ui.fileTreePaneSizes,
+          defaultFileTreePaneSizes: state.fileTreePaneSizes,
+          setRepoFileTreePaneSize: state.setRepoFileTreePaneSize,
+          changeCount: worktreePath
+            ? (repo?.data.status.find((status) => status.path === worktreePath)?.entries.length ?? 0)
+            : 0,
+        }
+      },
+      (a, b) =>
+        a.repoFileTreePaneSizes === b.repoFileTreePaneSizes &&
+        a.defaultFileTreePaneSizes === b.defaultFileTreePaneSizes &&
+        a.setRepoFileTreePaneSize === b.setRepoFileTreePaneSize &&
+        a.changeCount === b.changeCount,
+    )
   const [activeTab, setActiveTab] = useState<ExplorerTab>('files')
-  const fileTreeSize = fileTreePaneSizes[layout]
+  const fileTreeSize = repoFileTreePaneSizes?.[layout] ?? defaultFileTreePaneSizes[layout]
   const splitOrientation = layout === 'top-bottom' ? 'horizontal' : 'vertical'
   const sideBySide = splitOrientation === 'horizontal'
   const isPlainWorkspace = useReposStore((s) => {
@@ -90,7 +93,7 @@ export function RepoExplorerPane({ repoId, layout, showActions, revealRequest }:
           />
         }
         afterSize={fileTreeSize}
-        onAfterSizeChange={(size) => setFileTreePaneSize(layout, size)}
+        onAfterSizeChange={(size) => setRepoFileTreePaneSize(repoId, layout, size)}
         beforeMinSize={sideBySide ? '12rem' : '8rem'}
         afterMinSize={sideBySide ? '12rem' : '8rem'}
         afterMaxSize="80%"
