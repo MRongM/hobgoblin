@@ -56,7 +56,10 @@ function isValidTerminalClientId(value: unknown): value is string {
 
 function defaultSpawnWorker(workerEntry: string): TerminalWorkerChildProcess {
   return spawn(process.execPath, [workerEntry], {
-    env: process.env,
+    env: {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: '1',
+    },
     stdio: ['ignore', 'ignore', 'inherit', 'ipc'],
   })
 }
