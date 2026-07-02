@@ -99,6 +99,15 @@ function menuItem(label: string): HTMLElement {
 }
 
 describe('BranchActionsDropdown split button', () => {
+  test('weights the split button hit targets toward the dropdown trigger', () => {
+    renderDropdown()
+
+    expect(button('Edit').className).toContain('gap-0.5')
+    expect(button('Edit').className).toContain('px-1.5')
+    expect(button('Actions').className).toContain('w-7')
+    expect(button('Actions').className).toContain('px-1.5')
+  })
+
   test('renders edit as the default quick action and runs it from the left button', () => {
     const onEdit = vi.fn()
 
