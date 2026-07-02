@@ -6,6 +6,7 @@ import {
 } from '#/system/terminals.ts'
 import { openInAppleTerminal, openRemoteInAppleTerminal, isAppleTerminalInstalled } from '#/system/apple-terminal.ts'
 import { isGhosttyInstalled, openInGhostty, openRemoteInGhostty } from '#/system/ghostty.ts'
+import { isWindowsTerminalAvailable, openInWindowsTerminal } from '#/system/windows-terminal.ts'
 
 vi.mock('#/system/ghostty.ts', () => ({
   isGhosttyInstalled: vi.fn(() => false),
@@ -23,6 +24,11 @@ vi.mock('#/system/apple-terminal.ts', () => ({
     ok: true,
     message: `${target.alias}:${target.worktreePath}`,
   })),
+}))
+
+vi.mock('#/system/windows-terminal.ts', () => ({
+  isWindowsTerminalAvailable: vi.fn(() => true),
+  openInWindowsTerminal: vi.fn(async (path: string) => ({ ok: true, message: path })),
 }))
 
 describe('openInPreferredTerminal', () => {
@@ -111,6 +117,31 @@ describe('openInPreferredTerminal', () => {
     })
 
     expect(openInAppleTerminal).not.toHaveBeenCalled()
+  })
+
+  test('opens native Windows terminal for the existing terminal preference on win32', async () => {
+    setPlatform('win32')
+    vi.mocked(isWindowsTerminalAvailable).mockReturnValue(true)
+
+    await expect(openInPreferredTerminal('C:\\repo', 'terminal')).resolves.toEqual({
+      ok: true,
+      message: 'C:\\repo',
+    })
+
+    expect(openInWindowsTerminal).toHaveBeenCalledWith('C:\\repo')
+    expect(openInAppleTerminal).not.toHaveBeenCalled()
+  })
+
+  test('reports terminal-not-installed on win32 when no Windows terminal is available', async () => {
+    setPlatform('win32')
+    vi.mocked(isWindowsTerminalAvailable).mockReturnValue(false)
+
+    await expect(openInPreferredTerminal('C:\\repo', 'terminal')).resolves.toEqual({
+      ok: false,
+      message: 'error.terminal-not-installed',
+    })
+
+    expect(openInWindowsTerminal).not.toHaveBeenCalled()
   })
 
   test('opens remote Terminal.app explicitly on darwin when detection reports available', async () => {

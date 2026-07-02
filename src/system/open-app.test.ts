@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   execa: vi.fn(),
   existsSync: vi.fn(),
+  hasCommand: vi.fn(),
   homedir: vi.fn(() => '/Users/test'),
   statSync: vi.fn(
     (): { isDirectory: () => boolean; isFile: () => boolean } => ({
@@ -18,6 +19,10 @@ vi.mock('node:fs', () => ({
   statSync: mocks.statSync,
 }))
 vi.mock('node:os', () => ({ default: { homedir: mocks.homedir } }))
+vi.mock('#/system/command.ts', () => ({
+  hasCommand: mocks.hasCommand,
+  firstAvailableCommand: (commands: string[]) => commands.find((command) => mocks.hasCommand(command)) ?? null,
+}))
 
 describe('openByAppCli', () => {
   beforeEach(() => {
@@ -137,5 +142,46 @@ describe('openRemoteByAppCli', () => {
       ok: false,
       message: 'Remote SSH extension is unavailable',
     })
+  })
+})
+
+describe('openByEditorCli', () => {
+  const originalPlatform = process.platform
+
+  function setPlatform(platform: NodeJS.Platform) {
+    Object.defineProperty(process, 'platform', { value: platform })
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setPlatform('win32')
+    mocks.hasCommand.mockImplementation((command: string) => command === 'code.cmd')
+    mocks.statSync.mockReturnValue({ isDirectory: () => false, isFile: () => true })
+    mocks.execa.mockResolvedValue({ failed: false })
+  })
+
+  afterEach(() => {
+    setPlatform(originalPlatform)
+  })
+
+  test('detects Windows VS Code-family command candidates', async () => {
+    const { hasEditorCli } = await import('#/system/open-app.ts')
+
+    expect(hasEditorCli('Visual Studio Code', 'code')).toBe(true)
+    expect(mocks.hasCommand).toHaveBeenCalledWith('code.cmd')
+  })
+
+  test('opens a Windows file path with --goto when line is present', async () => {
+    const { openByEditorCli } = await import('#/system/open-app.ts')
+
+    await expect(
+      openByEditorCli('Visual Studio Code', 'code', { path: 'C:\\repo\\src\\app.ts', line: 12, column: 3 }),
+    ).resolves.toEqual({ ok: true, message: 'C:\\repo\\src\\app.ts' })
+
+    expect(mocks.execa).toHaveBeenCalledWith(
+      'code.cmd',
+      ['--goto', 'C:\\repo\\src\\app.ts:12:3'],
+      expect.objectContaining({ timeout: 10_000, reject: false }),
+    )
   })
 })
