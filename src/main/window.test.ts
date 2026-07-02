@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { defaultSettingsSnapshot } from '#/shared/settings-defaults.ts'
+import { RENDERER_BOOTSTRAP_CHANNEL } from '#/shared/ipc-channels.ts'
 
 const mocks = vi.hoisted(() => {
   const state = {
@@ -9,6 +10,7 @@ const mocks = vi.hoisted(() => {
     setWindowOpenHandler: vi.fn(),
     windowOn: vi.fn(),
     loadURL: vi.fn(),
+    ipcMainOn: vi.fn(),
     openHttpExternal: vi.fn(() => Promise.resolve(true)),
     getSettingsSnapshot: vi.fn(),
     loadWindowState: vi.fn(() => Promise.resolve({ windowBounds: null })),
@@ -58,11 +60,15 @@ vi.mock('electron', () => ({
   app: {
     getAppPath: () => '/app',
     getPath: () => '/home/user',
+    isPackaged: false,
     whenReady: () => Promise.resolve(),
     show: vi.fn(),
     focus: vi.fn(),
   },
   BrowserWindow: mocks.BrowserWindow,
+  ipcMain: {
+    on: mocks.ipcMainOn,
+  },
   screen: {
     getDisplayMatching: () => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } }),
   },
@@ -108,6 +114,21 @@ describe('main window navigation boundaries', () => {
     mocks.getSettingsSnapshot.mockResolvedValue(defaultSettingsSnapshot())
     mocks.loadWindowState.mockReturnValue(Promise.resolve({ windowBounds: null }))
   })
+
+  function rendererBootstrapPayloadFromWindowOptions(): any {
+    const bootstrapArg = mocks.windowOptions[0]?.webPreferences?.additionalArguments?.find((arg: string) =>
+      arg.startsWith('--goblin-bootstrap-id='),
+    )
+    expect(bootstrapArg).toBeTypeOf('string')
+    expect(String(bootstrapArg).length).toBeLessThan(128)
+
+    const handler = mocks.ipcMainOn.mock.calls.find(([channel]) => channel === RENDERER_BOOTSTRAP_CHANNEL)?.[1]
+    expect(handler).toBeTypeOf('function')
+
+    const event = { returnValue: null as unknown }
+    handler(event, String(bootstrapArg).slice('--goblin-bootstrap-id='.length))
+    return event.returnValue
+  }
 
   test('prevents renderer navigation away from the packaged app page', async () => {
     const { getOrCreateMainWindow } = await import('#/main/window.ts')
@@ -219,10 +240,7 @@ describe('main window navigation boundaries', () => {
 
     await getOrCreateMainWindow()
 
-    const bootstrapArg = mocks.windowOptions[0]?.webPreferences?.additionalArguments?.find((arg: string) =>
-      arg.startsWith('--goblin-bootstrap='),
-    )
-    const payload = JSON.parse(Buffer.from(String(bootstrapArg).slice('--goblin-bootstrap='.length), 'base64').toString('utf8'))
+    const payload = rendererBootstrapPayloadFromWindowOptions()
     expect(payload.server).toMatchObject({
       url: 'http://127.0.0.1:5173/',
       secret: expect.any(String),
@@ -236,10 +254,7 @@ describe('main window navigation boundaries', () => {
 
     await getOrCreateMainWindow()
 
-    const bootstrapArg = mocks.windowOptions[0]?.webPreferences?.additionalArguments?.find((arg: string) =>
-      arg.startsWith('--goblin-bootstrap='),
-    )
-    const payload = JSON.parse(Buffer.from(String(bootstrapArg).slice('--goblin-bootstrap='.length), 'base64').toString('utf8'))
+    const payload = rendererBootstrapPayloadFromWindowOptions()
     expect(payload.i18n).toMatchObject({ pref: 'ja' })
   })
 

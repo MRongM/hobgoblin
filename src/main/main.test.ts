@@ -38,7 +38,6 @@ const mocks = vi.hoisted(() => {
     broadcastRendererEffectIntent: vi.fn(),
     wireShellBridgeIpc: vi.fn(),
     wireTerminalIpc: vi.fn(),
-    appendCommandLineSwitch: vi.fn(),
     resetReady() {
       whenReadyPromise = new Promise<void>((resolve) => {
         resolveReady = resolve
@@ -52,9 +51,6 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('electron', () => ({
   app: {
-    commandLine: {
-      appendSwitch: mocks.appendCommandLineSwitch,
-    },
     focus: vi.fn(),
     getAppPath: mocks.getAppPath,
     getPath: mocks.getPath,

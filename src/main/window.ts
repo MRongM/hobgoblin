@@ -19,6 +19,7 @@ import {
   allowRendererWindowEntryUrl,
   createRendererEntryUrl,
   createRendererWindowWebPreferences,
+  disposeRendererBootstrapForWebPreferences,
   windowCanvasBackground,
 } from '#/main/window-shell.ts'
 import { getTheme } from '#/main/theme.ts'
@@ -147,6 +148,7 @@ async function createMainWindow(): Promise<BrowserWindow> {
   const saved = windowState.windowBounds
   const bounds = saved ? clampToDisplay(saved) : DEFAULT_BOUNDS
 
+  const webPreferences = await createRendererWindowWebPreferences()
   const win = new BrowserWindow({
     x: bounds.x,
     y: bounds.y,
@@ -159,7 +161,7 @@ async function createMainWindow(): Promise<BrowserWindow> {
     titleBarOverlay: titleBarOverlayForTheme(resolved, colorTheme, WINDOW_TOPBAR_HEIGHT_PX),
     trafficLightPosition: macTrafficLightPosition(WINDOW_TOPBAR_HEIGHT_PX),
     autoHideMenuBar: process.platform !== 'darwin',
-    webPreferences: await createRendererWindowWebPreferences(),
+    webPreferences,
   })
   const diagnostics = startupDiagnostics()
   const startupErrorPageState: StartupErrorPageState = { shown: false }
@@ -181,6 +183,7 @@ async function createMainWindow(): Promise<BrowserWindow> {
   win.on('move', persistBounds)
 
   win.on('closed', () => {
+    disposeRendererBootstrapForWebPreferences(webPreferences)
     detachRendererSurfaceWindow(win, MAIN_WINDOW_SURFACE)
   })
 

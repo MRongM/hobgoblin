@@ -22,10 +22,11 @@ import {
   TERMINAL_NOTIFY_BELL_CHANNEL,
   TERMINAL_SEND_TEST_NOTIFICATION_CHANNEL,
   TERMINAL_SET_BADGE_CHANNEL,
+  RENDERER_BOOTSTRAP_CHANNEL,
 } from '#/shared/ipc-channels.ts'
 
-function defaultArgv() {
-  const bootstrap: RendererBootstrapPayload = {
+function defaultBootstrap(): RendererBootstrapPayload {
+  return {
     runtime: {
       kind: 'electron',
       bridgeVersion: RENDERER_BRIDGE_VERSION,
@@ -61,11 +62,19 @@ function defaultArgv() {
     },
     server: null,
   }
+}
+
+function defaultArgv() {
+  const bootstrap = defaultBootstrap()
   return ['--goblin-bootstrap=' + Buffer.from(JSON.stringify(bootstrap)).toString('base64')]
 }
 
 function loadPreload(
-  options: { invoke?: (channel: string, ...args: unknown[]) => Promise<unknown>; argv?: string[] } = {},
+  options: {
+    invoke?: (channel: string, ...args: unknown[]) => Promise<unknown>
+    sendSync?: (channel: string, ...args: unknown[]) => unknown
+    argv?: string[]
+  } = {},
 ) {
   const exposed: Record<string, any> = {}
   const invocations: Array<{ channel: string; args: unknown[] }> = []
@@ -78,6 +87,7 @@ function loadPreload(
     send: vi.fn((channel: string, ...args: unknown[]) => {
       sends.push({ channel, args })
     }),
+    sendSync: vi.fn((channel: string, ...args: unknown[]) => options.sendSync?.(channel, ...args) ?? null),
     on: vi.fn(),
     off: vi.fn(),
   }
@@ -120,6 +130,28 @@ describe('preload goblinNative bridge', () => {
       fetchIntervalSec: 120,
       terminalNotificationsEnabled: false,
       terminalThemeSyncEnabled: true,
+      editorApp: 'cursor',
+    })
+  })
+
+  test('exposes bootstrap snapshots loaded through the short bootstrap id', () => {
+    const bootstrap = defaultBootstrap()
+    const { goblinNative, ipcRenderer } = loadPreload({
+      argv: ['--goblin-bootstrap-id=bootstrap_test_1'],
+      sendSync: (channel, bootstrapId) =>
+        channel === RENDERER_BOOTSTRAP_CHANNEL && bootstrapId === 'bootstrap_test_1' ? bootstrap : null,
+    })
+
+    expect(ipcRenderer.sendSync).toHaveBeenCalledWith(RENDERER_BOOTSTRAP_CHANNEL, 'bootstrap_test_1')
+    expect(goblinNative.runtime).toEqual({
+      kind: 'electron',
+      bridgeVersion: RENDERER_BRIDGE_VERSION,
+      capabilities: [...ELECTRON_RENDERER_CAPABILITIES],
+    })
+    expect(goblinNative.homeDir).toBe('/home/test')
+    expect(goblinNative.initialI18n).toEqual({ lang: 'en', pref: 'ja', dict: { hello: 'world' } })
+    expect(goblinNative.initialSettings).toMatchObject({
+      fetchIntervalSec: 120,
       editorApp: 'cursor',
     })
   })

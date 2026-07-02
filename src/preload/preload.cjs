@@ -1,10 +1,11 @@
 // Preload bridge. Exposes low-level IPC under `window.goblinNative` to the renderer.
-// IMPORTANT: This preload runs with sandbox: true (see window.ts). Only
-// the `electron` module is available here — do NOT require Node built-ins
-// like `os`, `fs`, or `path`. Anything that needs Node lives
-// in the main process and is reached via IPC.
+// Keep this preload sandbox-compatible: only the `electron` module is
+// available in sandboxed renderers, so do NOT require Node built-ins like
+// `os`, `fs`, or `path`. Anything that needs Node lives in the main
+// process and is reached via IPC.
 const { contextBridge, ipcRenderer, webUtils } = require('electron')
 const IPC = {
+  bootstrap: 'goblin:bootstrap',
   rpc: {
     call: 'goblin:rpc',
     abort: 'goblin:rpc-abort',
@@ -62,10 +63,22 @@ function rpcCall(request) {
     })
 }
 
-// `--goblin-bootstrap=...` is injected by main via
-// webPreferences.additionalArguments (see window-shell.ts).
-// `process.argv` is one of the few things sandbox-safe preloads can still
-// read, which is why we use it here instead of sync IPC.
+// Prefer a short bootstrap id. Passing the full bootstrap JSON through
+// additionalArguments can exceed Windows' process command-line limits and
+// prevent the renderer process from launching at all.
+function safeReadBootstrapById(prefix, label) {
+  const bootstrapId = process.argv.find((a) => a.startsWith(prefix))?.slice(prefix.length) ?? ''
+  if (!bootstrapId) return null
+  try {
+    const payload = ipcRenderer.sendSync(IPC.bootstrap, bootstrapId)
+    return isObject(payload) ? payload : null
+  } catch (err) {
+    console.warn(`[preload] failed to read ${label}`, err)
+    return null
+  }
+}
+
+// Legacy fallback for older builds that injected the whole base64 payload.
 function safeParseBase64JsonArgument(prefix, label) {
   const raw = process.argv.find((a) => a.startsWith(prefix))?.slice(prefix.length) ?? ''
   if (!raw) return null
@@ -78,7 +91,10 @@ function safeParseBase64JsonArgument(prefix, label) {
 }
 
 const BOOTSTRAP_PREFIX = '--goblin-bootstrap='
-const bootstrap = safeParseBase64JsonArgument(BOOTSTRAP_PREFIX, 'bootstrap payload')
+const BOOTSTRAP_ID_PREFIX = '--goblin-bootstrap-id='
+const bootstrap =
+  safeReadBootstrapById(BOOTSTRAP_ID_PREFIX, 'bootstrap payload') ??
+  safeParseBase64JsonArgument(BOOTSTRAP_PREFIX, 'bootstrap payload')
 const runtime =
   isObject(bootstrap?.runtime) &&
   (bootstrap.runtime.kind === 'electron' || bootstrap.runtime.kind === 'web') &&

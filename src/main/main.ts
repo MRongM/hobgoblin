@@ -17,7 +17,6 @@ import { broadcastRendererEffectIntent } from '#/main/renderer-surface-events.ts
 import { getSettingsSnapshot, setSettingsGlobalShortcutState } from '#/main/settings-server-client.ts'
 import { startEmbeddedServer, stopEmbeddedServer } from '#/main/server-manager.ts'
 import { createStartupDiagnostics } from '#/main/startup-diagnostics.ts'
-import { configureWindowsRendererProcessStability } from '#/main/windows-renderer-stability.ts'
 
 function activateMainWindowFromEvent(): void {
   void activationBarrier
@@ -68,12 +67,10 @@ app.on('open-file', (event, path) => {
 
 async function main(): Promise<void> {
   applyUserDataDirOverride()
-  const rendererStability = configureWindowsRendererProcessStability(app)
   logMainStartup('main-start', {
     appPath: typeof app.getAppPath === 'function' ? app.getAppPath() : null,
     isPackaged: app.isPackaged,
     hasUserDataOverride: Boolean(userDataDirOverride()),
-    rendererStability,
   })
   if (!app.requestSingleInstanceLock()) {
     app.quit()
