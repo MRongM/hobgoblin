@@ -14,7 +14,9 @@ const mocks = vi.hoisted(() => {
       handlers.set(name, next)
     }),
     requestSingleInstanceLock: vi.fn(() => true),
+    appSetPath: vi.fn(),
     getAppPath: vi.fn(() => '/app'),
+    getPath: vi.fn(() => '/tmp/goblin'),
     exit: vi.fn(),
     quit: vi.fn(),
     whenReady: vi.fn(() => whenReadyPromise),
@@ -32,6 +34,7 @@ const mocks = vi.hoisted(() => {
     enqueueExternalOpenPath: vi.fn(() => true),
     unregisterAppShortcuts: vi.fn(),
     wireRpcIpc: vi.fn(),
+    diagnosticsLog: vi.fn(),
     broadcastRendererEffectIntent: vi.fn(),
     wireShellBridgeIpc: vi.fn(),
     wireTerminalIpc: vi.fn(),
@@ -50,9 +53,10 @@ vi.mock('electron', () => ({
   app: {
     focus: vi.fn(),
     getAppPath: mocks.getAppPath,
-    getPath: vi.fn(() => '/tmp/goblin'),
+    getPath: mocks.getPath,
     isPackaged: false,
     on: mocks.appOn,
+    setPath: mocks.appSetPath,
     exit: mocks.exit,
     quit: mocks.quit,
     requestSingleInstanceLock: mocks.requestSingleInstanceLock,
@@ -121,6 +125,10 @@ vi.mock('#/main/server-manager.ts', () => ({
   stopEmbeddedServer: vi.fn(() => Promise.resolve()),
 }))
 
+vi.mock('#/main/startup-diagnostics.ts', () => ({
+  createStartupDiagnostics: () => ({ logPath: '/tmp/goblin/startup.log', log: mocks.diagnosticsLog }),
+}))
+
 vi.mock('#/main/shortcuts.ts', () => ({
   syncGlobalShortcuts: mocks.syncGlobalShortcuts,
   unregisterAppShortcuts: mocks.unregisterAppShortcuts,
@@ -134,9 +142,22 @@ describe('main process startup lifecycle', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()
+    delete process.env.GOBLIN_USER_DATA_DIR
     mocks.handlers.clear()
     mocks.resetReady()
     mocks.getSettingsSnapshot.mockResolvedValue(defaultSettingsSnapshot())
+  })
+
+  test('applies the startup user data override before app readiness', async () => {
+    process.env.GOBLIN_USER_DATA_DIR = '/tmp/hobgoblin-smoke'
+
+    await import('#/main/main.ts')
+
+    expect(mocks.appSetPath).toHaveBeenCalledWith('userData', '/tmp/hobgoblin-smoke')
+    expect(mocks.diagnosticsLog).toHaveBeenCalledWith(
+      'main-start',
+      expect.objectContaining({ hasUserDataOverride: true }),
+    )
   })
 
   test('flushes settings and shortcut cleanup before exiting', async () => {

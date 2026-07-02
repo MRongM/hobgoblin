@@ -63,7 +63,10 @@ jobs:
           New-Item -ItemType Directory -Force -Path $userData | Out-Null
           $env:APPDATA = $userData
           $env:LOCALAPPDATA = $userData
+          $env:GOBLIN_USER_DATA_DIR = $userData
 
+          Write-Host "Smoke executable: $($exe.FullName)"
+          Write-Host "Smoke user data: $userData"
           $process = Start-Process -FilePath $exe.FullName -PassThru
           $deadline = (Get-Date).AddSeconds(45)
           $ready = $false
