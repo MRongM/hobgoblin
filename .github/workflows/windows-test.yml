@@ -65,15 +65,17 @@ jobs:
           $env:LOCALAPPDATA = $userData
 
           $process = Start-Process -FilePath $exe.FullName -PassThru
-          $logPath = Join-Path $userData "Hobgoblin\startup.log"
           $deadline = (Get-Date).AddSeconds(45)
           $ready = $false
+          $logPath = $null
 
           while ((Get-Date) -lt $deadline) {
             if ($process.HasExited) {
               break
             }
-            if (Test-Path $logPath) {
+            $logFile = Get-ChildItem -Path $userData -Recurse -Filter "startup.log" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($logFile) {
+              $logPath = $logFile.FullName
               $log = Get-Content $logPath -Raw
               if ($log -match "renderer-load-complete") {
                 $ready = $true
@@ -90,10 +92,15 @@ jobs:
             Stop-Process -Id $process.Id -Force
           }
 
-          if (Test-Path $logPath) {
+          if ($process.HasExited) {
+            Write-Host "Hobgoblin process exited with code $($process.ExitCode)"
+          }
+
+          if ($logPath -and (Test-Path $logPath)) {
             Get-Content $logPath
           } else {
-            Write-Host "Startup log was not created at $logPath"
+            Write-Host "Startup log was not found under $userData"
+            Get-ChildItem -Path $userData -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
           }
 
           if (-not $ready) {
@@ -105,7 +112,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: hobgoblin-windows-startup-logs-${{ github.sha }}
-          path: ${{ runner.temp }}\hobgoblin-smoke-user-data\Hobgoblin\startup.log
+          path: ${{ runner.temp }}\hobgoblin-smoke-user-data\**\*
           if-no-files-found: warn
           retention-days: 7
 
