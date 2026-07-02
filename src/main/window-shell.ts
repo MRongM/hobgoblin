@@ -7,7 +7,8 @@
 // - It does NOT own surface identity/capabilities; that lives in
 //   window-registry.ts / renderer-surface.ts.
 
-import { app, type BrowserWindow, type BrowserWindowConstructorOptions } from 'electron'
+import { app, ipcMain, type BrowserWindow, type BrowserWindowConstructorOptions } from 'electron'
+import { randomUUID } from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
 import { openHttpExternal } from '#/main/external-url.ts'
@@ -24,14 +25,17 @@ import type { InitialSettingsSnapshot, RendererBootstrapPayload } from '#/shared
 import { ELECTRON_RENDERER_CAPABILITIES } from '#/shared/bootstrap.ts'
 import { createRendererBootstrapPayload, createRendererRuntimeSnapshot, toInitialServerSnapshot } from '#/shared/bootstrap-builders.ts'
 import { buildI18nSnapshot } from '#/shared/i18n/snapshot.ts'
+import { RENDERER_BOOTSTRAP_CHANNEL } from '#/shared/ipc-channels.ts'
 import type { LangPref } from '#/shared/rpc.ts'
 import { WINDOW_BACKGROUND_BY_COLOR_THEME } from '#/shared/theme-tokens.ts'
 import { DEFAULT_COLOR_THEME, initialSettingsFromSnapshot } from '#/shared/settings-defaults.ts'
-import { shouldUseRendererSandbox } from '#/main/windows-renderer-stability.ts'
 
 const webDevUrl = process.env.GOBLIN_WEB_DEV_URL?.trim()
 const WEB_DIST_DIR = path.join(app.getAppPath(), 'dist/web')
 const PRELOAD_PATH = path.join(app.getAppPath(), 'src/preload/preload.cjs')
+const BOOTSTRAP_ID_PREFIX = '--goblin-bootstrap-id='
+const rendererBootstrapPayloads = new Map<string, RendererBootstrapPayload>()
+let rendererBootstrapIpcWired = false
 
 export function windowCanvasBackground(): string {
   const { resolved, colorTheme } = getTheme()
@@ -52,19 +56,39 @@ function buildRendererBootstrapPayload(
   })
 }
 
+function ensureRendererBootstrapIpc(): void {
+  if (rendererBootstrapIpcWired) return
+  ipcMain.on(RENDERER_BOOTSTRAP_CHANNEL, (event, bootstrapId) => {
+    event.returnValue = typeof bootstrapId === 'string' ? rendererBootstrapPayloads.get(bootstrapId) ?? null : null
+  })
+  rendererBootstrapIpcWired = true
+}
+
+function rendererBootstrapIdFromAdditionalArguments(additionalArguments: readonly string[] | undefined): string | null {
+  const arg = additionalArguments?.find((value) => value.startsWith(BOOTSTRAP_ID_PREFIX))
+  return arg ? arg.slice(BOOTSTRAP_ID_PREFIX.length) : null
+}
+
+export function disposeRendererBootstrapForWebPreferences(
+  webPreferences: BrowserWindowConstructorOptions['webPreferences'],
+): void {
+  const bootstrapId = rendererBootstrapIdFromAdditionalArguments(webPreferences?.additionalArguments)
+  if (bootstrapId) rendererBootstrapPayloads.delete(bootstrapId)
+}
+
 export async function createRendererWindowWebPreferences(): Promise<BrowserWindowConstructorOptions['webPreferences']> {
+  ensureRendererBootstrapIpc()
   const settingsSnapshot = await getSettingsSnapshot()
   const initialSettings: InitialSettingsSnapshot = initialSettingsFromSnapshot(settingsSnapshot)
-  const bootstrapPayload = Buffer.from(
-    JSON.stringify(buildRendererBootstrapPayload(settingsSnapshot.lang, initialSettings)),
-  ).toString('base64')
+  const bootstrapId = randomUUID()
+  rendererBootstrapPayloads.set(bootstrapId, buildRendererBootstrapPayload(settingsSnapshot.lang, initialSettings))
   return {
     preload: PRELOAD_PATH,
     contextIsolation: true,
     nodeIntegration: false,
-    sandbox: shouldUseRendererSandbox({ platform: process.platform, isPackaged: app.isPackaged }),
+    sandbox: true,
     webSecurity: true,
-    additionalArguments: [`--goblin-bootstrap=${bootstrapPayload}`],
+    additionalArguments: [`${BOOTSTRAP_ID_PREFIX}${bootstrapId}`],
   }
 }
 
