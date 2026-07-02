@@ -49,7 +49,8 @@ type RestorableWorkspaceSelectionActions = Pick<
   | 'applySessionSelectedTerminalState'
   | 'setDetailPaneSize'
   | 'setDetailPaneSizes'
-  | 'setFileTreePaneSize'
+  | 'setRepoFileTreePaneSize'
+  | 'setDefaultFileTreePaneSize'
   | 'resetLayout'
   | 'setSelectedTerminal'
   | 'reorderWorktrees'
@@ -242,7 +243,34 @@ function createRestorableWorkspaceSelectionActions(
       })
     },
 
-    setFileTreePaneSize(layout: RepoWorkspaceLayout, size: number) {
+    setRepoFileTreePaneSize(id: string, layout: RepoWorkspaceLayout, size: number) {
+      let changed = false
+      let token: number | undefined
+      set((s) => {
+        const repo = s.repos[id]
+        if (!repo) return s
+        const next = normalizeFileTreePaneSize(layout, size)
+        const current = repo.ui.fileTreePaneSizes?.[layout] ?? s.fileTreePaneSizes[layout]
+        if (current === next) return s
+        changed = true
+        token = repo.instanceToken
+        return {
+          repos: {
+            ...s.repos,
+            [id]: replaceRepo(repo, (r) => {
+              r.ui.fileTreePaneSizes = {
+                ...(r.ui.fileTreePaneSizes ?? s.fileTreePaneSizes),
+                [layout]: next,
+              }
+            }),
+          },
+        }
+      })
+      const repo = get().repos[id]
+      if (changed && token !== undefined && repo) persistRestorableRepoSnapshot(set, repo, token)
+    },
+
+    setDefaultFileTreePaneSize(layout: RepoWorkspaceLayout, size: number) {
       set((s) => {
         const next = normalizeFileTreePaneSize(layout, size)
         if (s.fileTreePaneSizes[layout] === next) return s
