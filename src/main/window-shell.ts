@@ -27,6 +27,7 @@ import { buildI18nSnapshot } from '#/shared/i18n/snapshot.ts'
 import type { LangPref } from '#/shared/rpc.ts'
 import { WINDOW_BACKGROUND_BY_COLOR_THEME } from '#/shared/theme-tokens.ts'
 import { DEFAULT_COLOR_THEME, initialSettingsFromSnapshot } from '#/shared/settings-defaults.ts'
+import { shouldUseRendererSandbox } from '#/main/windows-renderer-stability.ts'
 
 const webDevUrl = process.env.GOBLIN_WEB_DEV_URL?.trim()
 const WEB_DIST_DIR = path.join(app.getAppPath(), 'dist/web')
@@ -61,7 +62,7 @@ export async function createRendererWindowWebPreferences(): Promise<BrowserWindo
     preload: PRELOAD_PATH,
     contextIsolation: true,
     nodeIntegration: false,
-    sandbox: true,
+    sandbox: shouldUseRendererSandbox({ platform: process.platform, isPackaged: app.isPackaged }),
     webSecurity: true,
     additionalArguments: [`--goblin-bootstrap=${bootstrapPayload}`],
   }
