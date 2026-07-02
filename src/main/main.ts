@@ -1,4 +1,5 @@
 import { app, dialog } from 'electron'
+import path from 'node:path'
 import type { SettingsSnapshot } from '#/shared/rpc.ts'
 import { activateMainWindow } from '#/main/window.ts'
 import { initTheme } from '#/main/theme.ts'
@@ -15,6 +16,7 @@ import { enqueueExternalOpenPath } from '#/main/external-open.ts'
 import { broadcastRendererEffectIntent } from '#/main/renderer-surface-events.ts'
 import { getSettingsSnapshot, setSettingsGlobalShortcutState } from '#/main/settings-server-client.ts'
 import { startEmbeddedServer, stopEmbeddedServer } from '#/main/server-manager.ts'
+import { createStartupDiagnostics } from '#/main/startup-diagnostics.ts'
 
 function activateMainWindowFromEvent(): void {
   void activationBarrier
@@ -30,6 +32,33 @@ function activateMainWindowFromEvent(): void {
 let activationBarrier: Promise<void> = Promise.resolve()
 let isQuitting = false
 
+function userDataDirOverride(): string | null {
+  const value = process.env.GOBLIN_USER_DATA_DIR?.trim()
+  return value ? value : null
+}
+
+function applyUserDataDirOverride(): void {
+  const override = userDataDirOverride()
+  if (!override) return
+  app.setPath('userData', override)
+}
+
+function startupLogPath(): string | null {
+  const override = userDataDirOverride()
+  if (override) return path.join(override, 'startup.log')
+  try {
+    return path.join(app.getPath('userData'), 'startup.log')
+  } catch {
+    return null
+  }
+}
+
+function logMainStartup(event: string, payload: Record<string, unknown> = {}): void {
+  const logPath = startupLogPath()
+  if (!logPath) return
+  createStartupDiagnostics(logPath).log(event, payload)
+}
+
 app.on('open-file', (event, path) => {
   event.preventDefault()
   if (!enqueueExternalOpenPath(path)) return
@@ -37,6 +66,12 @@ app.on('open-file', (event, path) => {
 })
 
 async function main(): Promise<void> {
+  applyUserDataDirOverride()
+  logMainStartup('main-start', {
+    appPath: typeof app.getAppPath === 'function' ? app.getAppPath() : null,
+    isPackaged: app.isPackaged,
+    hasUserDataOverride: Boolean(userDataDirOverride()),
+  })
   if (!app.requestSingleInstanceLock()) {
     app.quit()
     return
@@ -89,6 +124,7 @@ async function finalizeMainProcessExit(): Promise<void> {
 
 async function initializeMainProcess(): Promise<void> {
   await app.whenReady()
+  logMainStartup('app-ready', { userData: app.getPath('userData') })
   await startEmbeddedServerForMainProcess()
   const settingsSnapshot = await getSettingsSnapshot()
   await initTheme({ theme: settingsSnapshot.theme, colorTheme: settingsSnapshot.colorTheme })
