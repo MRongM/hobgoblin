@@ -46,6 +46,69 @@ jobs:
       - name: Build Windows artifact
         run: bun scripts/build-release-artifacts.ts --platform windows --arch x64
 
+      - name: Smoke test packaged Windows app startup
+        shell: pwsh
+        env:
+          GOBLIN_SMOKE_USER_DATA: ${{ runner.temp }}\hobgoblin-smoke-user-data
+        run: |
+          $ErrorActionPreference = "Stop"
+          $exe = Get-ChildItem -Path "release" -Recurse -Filter "Hobgoblin.exe" | Select-Object -First 1
+          if (-not $exe) {
+            Write-Host "Could not find unpacked Hobgoblin.exe. Release tree:"
+            Get-ChildItem -Path "release" -Recurse | Select-Object FullName
+            throw "Missing unpacked Hobgoblin.exe for smoke test"
+          }
+
+          $userData = $env:GOBLIN_SMOKE_USER_DATA
+          New-Item -ItemType Directory -Force -Path $userData | Out-Null
+          $env:APPDATA = $userData
+          $env:LOCALAPPDATA = $userData
+
+          $process = Start-Process -FilePath $exe.FullName -PassThru
+          $logPath = Join-Path $userData "Hobgoblin\startup.log"
+          $deadline = (Get-Date).AddSeconds(45)
+          $ready = $false
+
+          while ((Get-Date) -lt $deadline) {
+            if ($process.HasExited) {
+              break
+            }
+            if (Test-Path $logPath) {
+              $log = Get-Content $logPath -Raw
+              if ($log -match "renderer-load-complete") {
+                $ready = $true
+                break
+              }
+              if ($log -match "startup-error-page|renderer-did-fail-load|renderer-process-gone|embedded-server-ready-failed") {
+                break
+              }
+            }
+            Start-Sleep -Milliseconds 500
+          }
+
+          if (-not $process.HasExited) {
+            Stop-Process -Id $process.Id -Force
+          }
+
+          if (Test-Path $logPath) {
+            Get-Content $logPath
+          } else {
+            Write-Host "Startup log was not created at $logPath"
+          }
+
+          if (-not $ready) {
+            throw "Packaged Windows app did not complete renderer startup smoke"
+          }
+
+      - name: Upload Windows startup smoke logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hobgoblin-windows-startup-logs-${{ github.sha }}
+          path: ${{ runner.temp }}\hobgoblin-smoke-user-data\Hobgoblin\startup.log
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:

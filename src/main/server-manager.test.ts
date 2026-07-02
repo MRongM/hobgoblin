@@ -6,6 +6,7 @@ import {
   parseServerPort,
   reserveEmbeddedServerPort,
   resolveEmbeddedServerEntryPath,
+  resolveEmbeddedServerWorkingDirectory,
 } from '#/main/server-manager.ts'
 
 const openServers: Array<ReturnType<typeof createServer>> = []
@@ -69,5 +70,17 @@ describe('embedded server entry resolution', () => {
     expect(resolveEmbeddedServerEntryPath(appPath)).toBe(
       path.join(appPath, 'src/server/entrypoints/main.ts'),
     )
+  })
+
+  test('uses the resources directory as cwd when the packaged app path is an asar archive', () => {
+    const appPath = path.join('/Applications/Hobgoblin.app/Contents/Resources', 'app.asar')
+
+    expect(resolveEmbeddedServerWorkingDirectory(appPath, true)).toBe(path.dirname(appPath))
+  })
+
+  test('uses the app path as cwd outside packaged asar mode', () => {
+    const appPath = path.join('/repo/hobgoblin')
+
+    expect(resolveEmbeddedServerWorkingDirectory(appPath, false)).toBe(appPath)
   })
 })
