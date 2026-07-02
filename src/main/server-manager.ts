@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import type { Readable } from 'node:stream'
 import path from 'node:path'
 import { app } from 'electron'
+import { createStartupDiagnostics, type StartupDiagnostics } from '#/main/startup-diagnostics.ts'
 import { reserveAvailablePort } from '#/system/port-allocation.ts'
 
 const DEFAULT_HOST = '127.0.0.1'
@@ -38,13 +39,16 @@ export function resolveEmbeddedServerEntryPath(appPath: string): string {
   return path.join(appPath, 'src/server/entrypoints/main.ts')
 }
 
+export function resolveEmbeddedServerWorkingDirectory(appPath: string, isPackaged: boolean): string {
+  return isPackaged && path.extname(appPath) === '.asar' ? path.dirname(appPath) : appPath
+}
+
 function serverEntryPath(): string {
   return resolveEmbeddedServerEntryPath(app.getAppPath())
 }
 
 function serverWorkingDirectory(): string {
-  const appPath = app.getAppPath()
-  return app.isPackaged && path.extname(appPath) === '.asar' ? path.dirname(appPath) : appPath
+  return resolveEmbeddedServerWorkingDirectory(app.getAppPath(), app.isPackaged)
 }
 
 function serverCommand(): { bin: string; args: string[]; env: NodeJS.ProcessEnv } {
@@ -85,16 +89,26 @@ function deriveServerClientId(secret: string): string {
   return `client_${createHash('sha256').update(secret).digest('hex').slice(0, 32)}`
 }
 
-function pipeProcessLogs(proc: ServerChildProcess): void {
+function diagnostics(): StartupDiagnostics {
+  return createStartupDiagnostics(path.join(app.getPath('userData'), 'startup.log'))
+}
+
+function pipeProcessLogs(proc: ServerChildProcess, log: StartupDiagnostics): void {
   proc.stdout.setEncoding('utf8')
   proc.stderr.setEncoding('utf8')
   proc.stdout.on('data', (chunk) => {
     const output = chunk.trim()
-    if (output) console.log(`[server] ${output}`)
+    if (output) {
+      console.log(`[server] ${output}`)
+      log.log('server-stdout', { output })
+    }
   })
   proc.stderr.on('data', (chunk) => {
     const output = chunk.trim()
-    if (output) console.error(`[server] ${output}`)
+    if (output) {
+      console.error(`[server] ${output}`)
+      log.log('server-stderr', { output })
+    }
   })
 }
 
@@ -125,8 +139,19 @@ export async function startEmbeddedServer(): Promise<EmbeddedServerRuntime | nul
     const accessHost = host === '0.0.0.0' ? '127.0.0.1' : host
     const url = `http://${accessHost}:${port}`
     const command = serverCommand()
+    const cwd = serverWorkingDirectory()
+    const log = diagnostics()
+    log.log('embedded-server-start', {
+      appPath: app.getAppPath(),
+      isPackaged: app.isPackaged,
+      processExecPath: process.execPath,
+      entry: command.args[0],
+      cwd,
+      host,
+      port,
+    })
     const proc = spawn(command.bin, command.args, {
-      cwd: serverWorkingDirectory(),
+      cwd,
       env: {
         ...command.env,
         GOBLIN_SERVER_HOST: host,
@@ -137,20 +162,27 @@ export async function startEmbeddedServer(): Promise<EmbeddedServerRuntime | nul
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     serverProcess = proc
-    pipeProcessLogs(proc)
-    proc.once('exit', () => {
+    pipeProcessLogs(proc, log)
+    proc.once('exit', (code, signal) => {
+      log.log('embedded-server-exit', { code, signal })
       if (serverProcess === proc) serverProcess = null
       runtime = null
     })
     proc.once('error', (error) => {
+      log.log('embedded-server-process-error', { name: error.name, message: error.message })
       console.error('[server] process failed', error)
     })
     try {
       await waitForServer(url, SERVER_READY_TIMEOUT_MS)
       runtime = { host, port, url, secret, clientId }
+      log.log('embedded-server-ready', { url, host, port, hasClientId: Boolean(clientId) })
       console.log(`[server] ready at ${url}`)
       return runtime
     } catch (error) {
+      log.log('embedded-server-ready-failed', {
+        url,
+        message: error instanceof Error ? error.message : String(error),
+      })
       await stopEmbeddedServer()
       throw error
     } finally {

@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => {
     getSettingsSnapshot: vi.fn(),
     loadWindowState: vi.fn(() => Promise.resolve({ windowBounds: null })),
     setTitleBarOverlay: vi.fn(),
+    diagnosticsLog: vi.fn(),
     getEmbeddedServerRuntime: vi.fn<() => { url: string; secret: string; clientId: string } | null>(() => ({
       url: 'http://127.0.0.1:32100/',
       secret: 'secret',
@@ -93,6 +94,10 @@ vi.mock('#/main/server-manager.ts', () => ({
   getEmbeddedServerRuntime: mocks.getEmbeddedServerRuntime,
 }))
 
+vi.mock('#/main/startup-diagnostics.ts', () => ({
+  createStartupDiagnostics: () => ({ logPath: '/tmp/Hobgoblin/startup.log', log: mocks.diagnosticsLog }),
+}))
+
 describe('main window navigation boundaries', () => {
   beforeEach(() => {
     vi.resetModules()
@@ -160,6 +165,21 @@ describe('main window navigation boundaries', () => {
     expect(mocks.BrowserWindow).toHaveBeenCalledTimes(1)
     expect(warn).toHaveBeenCalledWith('[window] failed to load app URL', expect.any(Error))
     warn.mockRestore()
+  })
+
+  test('shows a startup error page when the initial renderer URL load fails', async () => {
+    mocks.loadURL.mockRejectedValueOnce(new Error('load failed')).mockResolvedValueOnce(undefined)
+    const { getOrCreateMainWindow } = await import('#/main/window.ts')
+
+    await getOrCreateMainWindow()
+
+    expect(mocks.loadURL).toHaveBeenCalledTimes(2)
+    expect(String(mocks.loadURL.mock.calls[1]?.[0])).toContain('data:text/html')
+    expect(decodeURIComponent(String(mocks.loadURL.mock.calls[1]?.[0]))).toContain('renderer-load')
+    expect(mocks.diagnosticsLog).toHaveBeenCalledWith(
+      'startup-error-page',
+      expect.objectContaining({ phase: 'renderer-load' }),
+    )
   })
 
   test('loads the configured renderer dev server URL in development', async () => {
