@@ -2,7 +2,11 @@ import { Loader2 } from 'lucide-react'
 import { AsyncButton } from '#/web/components/AsyncButton.tsx'
 import { BranchActionsDropdown } from '#/web/components/BranchActionsMenu.tsx'
 import { ScrollArea } from '#/web/components/ui/scroll-area.tsx'
-import { type BranchActionItem, type BranchActionItemGroups, visibleBranchActionItems } from '#/web/hooks/useBranchActionItems.ts'
+import {
+  type BranchActionItem,
+  type BranchActionItemGroups,
+  visibleBranchActionItems,
+} from '#/web/hooks/useBranchActionItems.ts'
 import { useOverflowCollapse } from '#/web/hooks/useOverflowCollapse.ts'
 import { cn } from '#/web/lib/cn.ts'
 type BranchActionControlsVariant = 'bar' | 'menu' | 'auto'
@@ -11,15 +15,25 @@ interface BranchActionControlsProps {
   actions: BranchActionItemGroups
   variant?: BranchActionControlsVariant
   iconOnly?: boolean
+  repoId?: string
+  branchName?: string
 }
 
-export function BranchActionControls({ actions, variant = 'bar', iconOnly = false }: BranchActionControlsProps) {
+export function BranchActionControls({
+  actions,
+  variant = 'bar',
+  iconOnly = false,
+  repoId,
+  branchName,
+}: BranchActionControlsProps) {
   const { patchItems, mainItems, externalItems, destructiveItems } = actions
   const visibleItems = visibleBranchActionItems(actions)
 
   if (variant === 'menu') {
     return (
       <BranchActionsDropdown
+        repoId={repoId}
+        branchName={branchName}
         patchItems={patchItems}
         mainItems={mainItems}
         externalItems={externalItems}
@@ -31,6 +45,8 @@ export function BranchActionControls({ actions, variant = 'bar', iconOnly = fals
   if (variant === 'auto') {
     return (
       <BranchActionAuto
+        repoId={repoId}
+        branchName={branchName}
         visibleItems={visibleItems}
         patchItems={patchItems}
         mainItems={mainItems}
@@ -44,12 +60,16 @@ export function BranchActionControls({ actions, variant = 'bar', iconOnly = fals
 }
 
 function BranchActionAuto({
+  repoId,
+  branchName,
   visibleItems,
   patchItems,
   mainItems,
   externalItems,
   destructiveItems,
 }: {
+  repoId?: string
+  branchName?: string
   visibleItems: BranchActionItem[]
   patchItems: BranchActionItem[]
   mainItems: BranchActionItem[]
@@ -63,6 +83,8 @@ function BranchActionAuto({
     <div ref={containerRef} className="relative flex min-w-0 flex-1 justify-end">
       {collapsed ? (
         <BranchActionsDropdown
+          repoId={repoId}
+          branchName={branchName}
           patchItems={patchItems}
           mainItems={mainItems}
           externalItems={externalItems}

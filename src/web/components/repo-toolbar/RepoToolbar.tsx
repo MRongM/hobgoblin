@@ -166,7 +166,7 @@ function FocusBranchActions({ repoId, branch }: { repoId: string; branch: RepoBr
   return (
     <>
       {actions.dialogs}
-      <BranchActionControls actions={actions} variant="menu" />
+      <BranchActionControls actions={actions} variant="menu" repoId={repoId} branchName={branch.name} />
     </>
   )
 }

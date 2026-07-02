@@ -1,7 +1,8 @@
-import { Loader2, MoreHorizontal } from 'lucide-react'
-import { Fragment } from 'react'
+import { ChevronDown, Loader2 } from 'lucide-react'
+import { Fragment, useState } from 'react'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import { useT } from '#/web/stores/i18n.ts'
+import { AsyncButton } from '#/web/components/AsyncButton.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import {
   DropdownMenu,
@@ -18,6 +19,10 @@ import {
 } from '#/web/hooks/useBranchActionItems.ts'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 import { useAsyncPending } from '#/web/hooks/useAsyncPending.ts'
+import { cn } from '#/web/lib/cn.ts'
+
+export type { BranchActionItem } from '#/web/hooks/useBranchActionItems.ts'
+
 interface Props {
   repo: BranchActionRepo
   branch: RepoBranchState
@@ -31,6 +36,8 @@ export function BranchActionsMenu({ repo, branch, open, onOpenChange }: Props) {
   return (
     <>
       <BranchActionsDropdown
+        repoId={repo.id}
+        branchName={branch.name}
         patchItems={patchItems}
         mainItems={mainItems}
         externalItems={externalItems}
@@ -44,7 +51,33 @@ export function BranchActionsMenu({ repo, branch, open, onOpenChange }: Props) {
   )
 }
 
+const DEFAULT_QUICK_ACTION_ID: BranchActionItem['id'] = 'editor'
+const rememberedQuickActions = new Map<string, BranchActionItem['id']>()
+
+function branchQuickActionKey(repoId: string, branchName: string): string {
+  return `${repoId}\0${branchName}`
+}
+
+function findVisibleNonDestructiveAction(
+  items: BranchActionItem[],
+  id: BranchActionItem['id'],
+): BranchActionItem | null {
+  return items.find((item) => item.id === id && item.visible && !item.destructive) ?? null
+}
+
+function resolveQuickAction(
+  items: BranchActionItem[],
+  rememberedId: BranchActionItem['id'] | undefined,
+): BranchActionItem | null {
+  const fallback = findVisibleNonDestructiveAction(items, DEFAULT_QUICK_ACTION_ID)
+  const remembered = rememberedId ? findVisibleNonDestructiveAction(items, rememberedId) : null
+  if (remembered && !remembered.disabled) return remembered
+  return fallback
+}
+
 export function BranchActionsDropdown({
+  repoId,
+  branchName,
   patchItems,
   mainItems,
   externalItems,
@@ -52,10 +85,13 @@ export function BranchActionsDropdown({
   open,
   onOpenChange,
 }: Pick<BranchActionItemGroups, 'patchItems' | 'mainItems' | 'externalItems' | 'destructiveItems'> & {
+  repoId?: string
+  branchName?: string
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }) {
   const t = useT()
+  const [, setQuickActionRevision] = useState(0)
   const { pending: pendingAction, run } = useAsyncPending<BranchActionItem['id']>()
   const visiblePatchItems = patchItems.filter((item) => item.visible)
   const visibleMainItems = mainItems.filter((item) => item.visible)
@@ -66,28 +102,65 @@ export function BranchActionsDropdown({
   )
   const visibleItems = itemGroups.flat()
   const busyAction = pendingAction ?? visibleItems.find((item) => item.busy)?.id ?? null
+  const memoryKey = repoId && branchName ? branchQuickActionKey(repoId, branchName) : null
+  const rememberedActionId = memoryKey ? rememberedQuickActions.get(memoryKey) : undefined
+  const quickAction = resolveQuickAction(visibleItems, rememberedActionId)
+  const quickActionDisabled = !quickAction || branchActionMenuItemDisabled(quickAction, busyAction)
 
   function runItem(item: BranchActionItem) {
     if (branchActionMenuItemDisabled(item, busyAction)) return
+    if (memoryKey && !item.destructive) {
+      rememberedQuickActions.set(memoryKey, item.id)
+      setQuickActionRevision((revision) => revision + 1)
+    }
     void run(item.id, item.onSelect)
+  }
+
+  function runQuickAction() {
+    if (!quickAction || quickActionDisabled) return
+    void run(quickAction.id, quickAction.onSelect)
   }
 
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
-      <DropdownMenuTrigger asChild>
-        <Button
+      <div
+        className="inline-flex items-center"
+        onClick={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+      >
+        <AsyncButton
           variant="ghost"
           size="sm"
-          title={t('action.menu')}
-          aria-label={t('action.menu')}
-          aria-busy={busyAction ? true : undefined}
-          className="data-[state=open]:bg-accent data-[state=open]:text-accent-foreground"
-          onClick={(e) => e.stopPropagation()}
-          onDoubleClick={(e) => e.stopPropagation()}
+          loading={quickAction?.busy}
+          disabled={quickActionDisabled}
+          onClick={runQuickAction}
+          title={quickAction?.title ?? quickAction?.label ?? t('action.menu')}
+          aria-label={quickAction?.ariaLabel ?? quickAction?.title ?? quickAction?.label ?? t('action.menu')}
+          className={cn(
+            'rounded-r-none pr-2',
+            quickAction?.destructive && 'text-danger hover:bg-danger-surface hover:text-danger',
+          )}
         >
-          {busyAction ? <Loader2 className="size-4 animate-spin" /> : <MoreHorizontal className="size-4" />}
-        </Button>
-      </DropdownMenuTrigger>
+          {({ busy }) => (
+            <>
+              {busy ? <Loader2 className="size-4 animate-spin" /> : quickAction?.icon}
+              {quickAction?.label ?? t('action.menu')}
+            </>
+          )}
+        </AsyncButton>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            title={t('action.menu')}
+            aria-label={t('action.menu')}
+            aria-busy={busyAction ? true : undefined}
+            className="rounded-l-none px-1 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground"
+          >
+            {busyAction ? <Loader2 className="size-4 animate-spin" /> : <ChevronDown className="size-3" />}
+          </Button>
+        </DropdownMenuTrigger>
+      </div>
       <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
         {itemGroups.map((items, groupIndex) => (
           <Fragment key={groupIndex}>

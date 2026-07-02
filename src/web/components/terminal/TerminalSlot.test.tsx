@@ -886,8 +886,9 @@ describe('TerminalSlot', () => {
     document.body.appendChild(container)
     const root: Root = createRoot(container)
     const writeInput = vi.fn()
+    const focusTerminal = vi.fn()
     const { worktreeSnapshot, snapshot } = controllerFixture()
-    const context = terminalContext({ writeInput })
+    const context = terminalContext({ writeInput, focusTerminal })
     const readContext: TerminalSessionReadContextValue = {
       worktreeSnapshot: () => worktreeSnapshot,
       subscribeWorktree: () => () => {},
@@ -917,6 +918,54 @@ describe('TerminalSlot', () => {
 
       expect(writeInput).toHaveBeenCalledWith('terminal-1', 'git commit -m ""')
       expect(writeInput.mock.calls[0]![1]).not.toContain('\r')
+      expect(focusTerminal).toHaveBeenCalledTimes(1)
+      expect(focusTerminal).toHaveBeenCalledWith('terminal-1')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('focuses terminal after execute-mode custom button sends enter', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    runtimeSettingsMocks.terminalCustomButtons = [{ label: 'status', value: 'git status', action: 'execute' }]
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const writeInput = vi.fn()
+    const focusTerminal = vi.fn()
+    const { worktreeSnapshot, snapshot } = controllerFixture()
+    const context = terminalContext({ writeInput, focusTerminal })
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+
+    await act(async () => {
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    })
+
+    try {
+      const button = Array.from(container.querySelectorAll('button')).find((node) => node.textContent === 'status')
+      expect(button).toBeInstanceOf(HTMLButtonElement)
+
+      await act(async () => {
+        button?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+
+      expect(writeInput).toHaveBeenCalledWith('terminal-1', 'git status\r')
+      expect(focusTerminal).toHaveBeenCalledTimes(1)
+      expect(focusTerminal).toHaveBeenCalledWith('terminal-1')
     } finally {
       await act(async () => root.unmount())
       container.remove()

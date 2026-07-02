@@ -1083,6 +1083,34 @@ describe('ManagedTerminalSession', () => {
     expect(shellOpenExternalUrl).toHaveBeenCalledWith({ url: 'https://example.com/path', allowHttp: true })
   })
 
+  test('opens protocol-less localhost terminal links through the safe shell bridge', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.bufferLines[0] = 'ready at localhost:5173/app'
+
+    let link: { text: string; activate: (event: MouseEvent, text: string) => void } | undefined
+    for (const provider of term.linkProviders) {
+      provider.provideLinks(1, (provided: unknown[] | undefined) => {
+        link ??= (provided as Array<{ text: string; activate: (event: MouseEvent, text: string) => void }> | undefined)?.find(
+          (item) => item.text === 'localhost:5173/app',
+        )
+      })
+    }
+
+    link?.activate(new MouseEvent('click', { ctrlKey: true }), 'localhost:5173/app')
+    await Promise.resolve()
+
+    expect(shellOpenExternalUrl).toHaveBeenCalledWith({ url: 'http://localhost:5173/app', allowHttp: true })
+  })
+
   test('reveals relative terminal path links through the current attach handler', async () => {
     const onRevealPath = vi.fn()
     const host = document.createElement('div')

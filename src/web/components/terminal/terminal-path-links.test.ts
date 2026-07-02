@@ -19,6 +19,110 @@ describe('terminalRelativePathLinksForLine', () => {
 })
 
 describe('registerTerminalRelativePathLinkProvider', () => {
+  test('provides wrapped terminal path links with a cross-line range', () => {
+    const captured: { provider: ILinkProvider | null } = { provider: null }
+    const lines = [
+      { text: 'created src/components/', isWrapped: false },
+      { text: 'TerminalView.tsx:42', isWrapped: true },
+    ]
+    const term = {
+      buffer: {
+        active: {
+          getLine: (index: number) => {
+            const line = lines[index]
+            return line
+              ? {
+                  isWrapped: line.isWrapped,
+                  translateToString: () => line.text,
+                }
+              : undefined
+          },
+        },
+      },
+      registerLinkProvider: vi.fn((nextProvider: ILinkProvider) => {
+        captured.provider = nextProvider
+        return { dispose: vi.fn() }
+      }),
+    }
+    const reveal = vi.fn()
+
+    registerTerminalRelativePathLinkProvider(term, () => reveal, () => null)
+
+    let provided:
+      | Array<{
+          range: { start: { x: number; y: number }; end: { x: number; y: number } }
+          text: string
+          activate: (event: MouseEvent, text: string) => void
+        }>
+      | undefined
+    captured.provider?.provideLinks(2, (links) => {
+      provided = links as typeof provided
+    })
+
+    expect(provided?.[0]).toMatchObject({
+      text: 'src/components/TerminalView.tsx:42',
+      range: { start: { x: 9, y: 1 }, end: { x: 19, y: 2 } },
+    })
+    provided?.[0]?.activate({ detail: 1 } as MouseEvent, 'src/components/TerminalView.tsx:42')
+    expect(reveal).toHaveBeenCalledWith('src/components/TerminalView.tsx')
+  })
+
+  test('provides hard line break path links when a directory prefix continues on the next line', () => {
+    const captured: { provider: ILinkProvider | null } = { provider: null }
+    const lines = [
+      { text: 'members: backend/app/kooky_opt/', isWrapped: false },
+      { text: 'one_person_team/repositories/agents.py:45, next', isWrapped: false },
+    ]
+    const term = {
+      buffer: {
+        active: {
+          getLine: (index: number) => {
+            const line = lines[index]
+            return line
+              ? {
+                  isWrapped: line.isWrapped,
+                  translateToString: () => line.text,
+                }
+              : undefined
+          },
+        },
+      },
+      registerLinkProvider: vi.fn((nextProvider: ILinkProvider) => {
+        captured.provider = nextProvider
+        return { dispose: vi.fn() }
+      }),
+    }
+    const reveal = vi.fn()
+    const openPathInEditor = vi.fn()
+
+    registerTerminalRelativePathLinkProvider(term, () => reveal, () => openPathInEditor)
+
+    let provided:
+      | Array<{
+          range: { start: { x: number; y: number }; end: { x: number; y: number } }
+          text: string
+          activate: (event: MouseEvent, text: string) => void
+        }>
+      | undefined
+    captured.provider?.provideLinks(2, (links) => {
+      provided = links as typeof provided
+    })
+
+    expect(provided?.[0]).toMatchObject({
+      text: 'backend/app/kooky_opt/\none_person_team/repositories/agents.py:45',
+      range: { start: { x: 10, y: 1 }, end: { x: 41, y: 2 } },
+    })
+
+    provided?.[0]?.activate({ detail: 1 } as MouseEvent, provided[0].text)
+    expect(reveal).toHaveBeenCalledWith('backend/app/kooky_opt/one_person_team/repositories/agents.py')
+
+    provided?.[0]?.activate({ detail: 2 } as MouseEvent, provided[0].text)
+    expect(openPathInEditor).toHaveBeenCalledWith({
+      path: 'backend/app/kooky_opt/one_person_team/repositories/agents.py',
+      line: 45,
+    })
+  })
+
   test('registers links for the requested buffer line and activates the current reveal handler', () => {
     const dispose = vi.fn()
     const captured: { provider: ILinkProvider | null } = { provider: null }
