@@ -44,6 +44,49 @@ describe('TerminalSessionState', () => {
     expect(state.captureReplayOutput({ sessionId: 'session-1', data: 'live', seq: 5, processName: 'zsh' })).toBe(false)
   })
 
+  test('ignores stale replay finish calls without closing the active replay window', () => {
+    const state = new TerminalSessionState()
+
+    const firstGeneration = state.beginReplay(1)
+    expect(firstGeneration).toBe(1)
+    expect(state.captureReplayOutput({ sessionId: 'session-1', data: 'first-live', seq: 2, processName: 'zsh' })).toBe(
+      true,
+    )
+
+    const secondGeneration = state.beginReplay(2)
+    expect(secondGeneration).toBe(2)
+    expect(state.captureReplayOutput({ sessionId: 'session-1', data: 'second-live', seq: 3, processName: 'zsh' })).toBe(
+      true,
+    )
+
+    expect(state.finishReplay(firstGeneration)).toEqual([])
+    expect(state.isReplaying()).toBe(true)
+    expect(state.captureReplayOutput({ sessionId: 'session-1', data: 'second-newer', seq: 4, processName: 'zsh' })).toBe(
+      true,
+    )
+
+    expect(state.finishReplay(secondGeneration)).toEqual([
+      { sessionId: 'session-1', data: 'second-live', seq: 3, processName: 'zsh' },
+      { sessionId: 'session-1', data: 'second-newer', seq: 4, processName: 'zsh' },
+    ])
+    expect(state.isReplaying()).toBe(false)
+  })
+
+  test('discardReplay only clears the matching replay generation', () => {
+    const state = new TerminalSessionState()
+
+    const firstGeneration = state.beginReplay(1)
+    const secondGeneration = state.beginReplay(2)
+
+    state.discardReplay(firstGeneration)
+    expect(state.isReplaying()).toBe(true)
+    expect(state.captureReplayOutput({ sessionId: 'session-1', data: 'live', seq: 3, processName: 'zsh' })).toBe(true)
+
+    state.discardReplay(secondGeneration)
+    expect(state.isReplaying()).toBe(false)
+    expect(state.captureReplayOutput({ sessionId: 'session-1', data: 'after', seq: 4, processName: 'zsh' })).toBe(false)
+  })
+
   test('resetTransientState clears transient state without overwriting ownership', () => {
     const state = new TerminalSessionState()
 

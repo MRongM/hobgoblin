@@ -62,7 +62,6 @@ export function TerminalSettings() {
   const t = useT()
   const {
     terminalCustomButtons: buttons,
-    terminalExternalInputEnabled,
     remoteTerminalTmuxEnabled,
     terminalCustomButtonsVisible,
     terminalCustomButtonSize,
@@ -73,7 +72,6 @@ export function TerminalSettings() {
   const [dirty, setDirty] = useState(false)
   const {
     setTerminalCustomButtons,
-    setTerminalExternalInputEnabled,
     setRemoteTerminalTmuxEnabled,
     setTerminalCustomButtonsVisible,
     setTerminalCustomButtonSize,
@@ -134,21 +132,8 @@ export function TerminalSettings() {
           />
         </SettingsList>
       </SettingsGroup>
-      <SettingsGroup label={t('settings.terminal-input.title')} hint={t('settings.terminal-input.hint')}>
+      <SettingsGroup label={t('settings.terminal-remote.title')} hint={t('settings.terminal-remote.hint')}>
         <SettingsList>
-          <SettingsRow
-            controlId="settings-terminal-external-input"
-            label={t('settings.terminal-external-input')}
-            hint={t('settings.terminal-external-input-hint')}
-            control={
-              <Switch
-                id="settings-terminal-external-input"
-                checked={terminalExternalInputEnabled}
-                onCheckedChange={(enabled) => void setTerminalExternalInputEnabled(enabled)}
-                aria-label={t('settings.terminal-external-input')}
-              />
-            }
-          />
           <SettingsRow
             controlId="settings-terminal-remote-tmux"
             label={t('settings.terminal-remote-tmux')}

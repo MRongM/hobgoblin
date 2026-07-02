@@ -50,7 +50,6 @@ describe('renderer bootstrap seeding', () => {
         fileTreeTopbarFontSize: 13,
         fileTreeClipboardMaxBytesMb: 30,
         terminalFontSize: 14,
-        terminalExternalInputEnabled: false,
         remoteTerminalTmuxEnabled: false,
         terminalCustomButtonsVisible: true,
         terminalCustomButtonSize: 'medium',

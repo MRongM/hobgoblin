@@ -22,7 +22,7 @@ describe('terminal-render-state', () => {
       }
     })
 
-    test('keeps erased viewport lines in headless scrollback snapshots', async () => {
+    test('does not keep erased viewport lines in headless scrollback snapshots', async () => {
       const state = createEmptyTerminalRenderState()
       state.model = createTerminalRenderModel(40, 6)
       try {
@@ -36,8 +36,9 @@ describe('terminal-render-state', () => {
         const lines = Array.from({ length: buffer.lines.length }, (_, index) =>
           buffer.lines.get(index)?.translateToString(true),
         )
-        expect(buffer.ybase).toBeGreaterThan(0)
-        expect(lines).toEqual(expect.arrayContaining(['old-1', 'old-2', 'old-3', 'old-4', 'new-1', 'new-2']))
+        expect(buffer.ybase).toBe(0)
+        expect(lines).toEqual(expect.arrayContaining(['new-1', 'new-2']))
+        expect(lines).not.toEqual(expect.arrayContaining(['old-1', 'old-2', 'old-3', 'old-4']))
       } finally {
         state.model.term.dispose()
       }

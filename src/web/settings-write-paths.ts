@@ -34,7 +34,6 @@ import {
   setTerminalCustomButtons,
   setTerminalCustomButtonSize,
   setTerminalCustomButtonsVisible,
-  setTerminalExternalInputEnabled,
   setTerminalFontSize,
   setTerminalNotificationsEnabled,
   setTerminalThemeSyncEnabled,
@@ -162,14 +161,6 @@ export async function setTerminalFontSizePreference(fontSize: number): Promise<n
   const terminalFontSize = await setTerminalFontSize(fontSize)
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, terminalFontSize }))
   return terminalFontSize
-}
-
-export async function setTerminalExternalInputEnabledPreference(enabled: boolean): Promise<void> {
-  await setTerminalExternalInputEnabled(enabled)
-  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
-    ...current,
-    terminalExternalInputEnabled: enabled,
-  }))
 }
 
 export async function setRemoteTerminalTmuxEnabledPreference(enabled: boolean): Promise<void> {

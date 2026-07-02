@@ -136,8 +136,6 @@ export function readRuntimeTerminalSettings(data: RuntimeSettingsSnapshot | unde
   return {
     terminalFontSize:
       data?.terminalFontSize ?? fallback?.terminalFontSize ?? DEFAULT_TERMINAL_FONT_SIZE,
-    terminalExternalInputEnabled:
-      data?.terminalExternalInputEnabled ?? fallback?.terminalExternalInputEnabled ?? false,
     terminalThemeSyncEnabled:
       data?.terminalThemeSyncEnabled ?? fallback?.terminalThemeSyncEnabled ?? true,
     remoteTerminalTmuxEnabled:

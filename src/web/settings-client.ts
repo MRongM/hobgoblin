@@ -228,10 +228,6 @@ export async function setTerminalFontSize(fontSize: number): Promise<number> {
   return result.settings.terminalFontSize
 }
 
-export async function setTerminalExternalInputEnabled(enabled: boolean): Promise<void> {
-  await updateSettingsPrefsPatch({ terminalExternalInputEnabled: enabled })
-}
-
 export async function setRemoteTerminalTmuxEnabled(enabled: boolean): Promise<void> {
   await updateSettingsPrefsPatch({ remoteTerminalTmuxEnabled: enabled })
 }

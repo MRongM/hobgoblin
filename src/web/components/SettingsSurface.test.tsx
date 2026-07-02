@@ -57,7 +57,6 @@ function defaultRpcResult(path: string, input?: unknown) {
       fileTreeFontSize: 12,
       fileTreeTopbarFontSize: 13,
       terminalFontSize: 14,
-      terminalExternalInputEnabled: false,
       remoteTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
       terminalCustomButtonSize: 'medium',
@@ -203,7 +202,6 @@ beforeEach(() => {
       fileTreeFontSize: 12,
       fileTreeTopbarFontSize: 13,
       terminalFontSize: 14,
-      terminalExternalInputEnabled: false,
       remoteTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
       terminalCustomButtonSize: 'medium',
@@ -233,7 +231,6 @@ beforeEach(() => {
       fileTreeFontSize: 12,
       fileTreeTopbarFontSize: 13,
       terminalFontSize: 14,
-      terminalExternalInputEnabled: false,
       remoteTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
       terminalCustomButtonSize: 'medium',
@@ -566,8 +563,8 @@ describe('SettingsSurface', () => {
   test('edits terminal custom buttons from settings', async () => {
     await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
 
-    expect(document.body.textContent).toContain('settings.terminal-input.title')
-    expect(document.body.textContent).toContain('settings.terminal-external-input')
+    expect(document.body.textContent).toContain('settings.terminal-remote.title')
+    expect(document.body.textContent).not.toContain(['settings', ['terminal', 'external', 'input'].join('-')].join('.'))
     expect(document.body.textContent).toContain('settings.terminal-custom-buttons.visible')
 
     await act(async () => {
@@ -675,15 +672,15 @@ describe('SettingsSurface', () => {
     expect(trigger?.textContent).toContain('settings.terminal-custom-buttons.size-medium')
   })
 
-  test('toggles terminal external input, remote tmux, and custom button visibility from settings', async () => {
+  test('toggles remote tmux and custom button visibility from settings', async () => {
     await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
 
-    const externalInputSwitch = switchById('settings-terminal-external-input')
+    const removedSwitchId = ['settings', 'terminal', 'external', 'input'].join('-')
+    expect(document.getElementById(removedSwitchId)).toBeNull()
     const remoteTmuxSwitch = switchById('settings-terminal-remote-tmux')
     const buttonsVisibleSwitch = switchById('settings-terminal-custom-buttons-visible')
 
     await act(async () => {
-      externalInputSwitch.click()
       remoteTmuxSwitch.click()
       buttonsVisibleSwitch.click()
       await Promise.resolve()
@@ -692,9 +689,9 @@ describe('SettingsSurface', () => {
     expect(
       fetchMock.mock.calls.some((call) => {
         const [, options] = call as unknown as [unknown, RequestInit | undefined]
-        return String(options?.body ?? '').includes('terminalExternalInputEnabled')
+        return String(options?.body ?? '').includes(['terminal', 'ExternalInputEnabled'].join(''))
       }),
-    ).toBe(true)
+    ).toBe(false)
     expect(
       fetchMock.mock.calls.some((call) => {
         const [, options] = call as unknown as [unknown, RequestInit | undefined]

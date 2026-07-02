@@ -187,14 +187,18 @@ export class TerminalSessionRuntime {
     return true
   }
 
-  beginReplay(replaySeq: number): void {
-    this.state.beginReplay(replaySeq)
+  beginReplay(replaySeq: number): number {
+    return this.state.beginReplay(replaySeq)
   }
 
-  finishReplay(): TerminalOutputEvent[] {
-    const events = this.state.finishReplay()
+  finishReplay(replayGeneration?: number): TerminalOutputEvent[] {
+    const events = this.state.finishReplay(replayGeneration)
     for (const event of events) this.state.appendOutputSummary(event.data)
     return events
+  }
+
+  discardReplay(replayGeneration?: number): void {
+    this.state.discardReplay(replayGeneration)
   }
 
   isReplaying(): boolean {

@@ -10,7 +10,6 @@ import {
   setTerminalCustomButtonsPreference,
   setTerminalCustomButtonSizePreference,
   setTerminalCustomButtonsVisiblePreference,
-  setTerminalExternalInputEnabledPreference,
 } from '#/web/settings-write-paths.ts'
 
 export function useRuntimeTerminalCustomButtons(): TerminalCustomButton[] {
@@ -23,11 +22,6 @@ export function useRuntimeTerminalSettings() {
 
 export function useTerminalCustomButtonsController() {
   return {
-    async setTerminalExternalInputEnabled(enabled: boolean): Promise<void> {
-      await runSettingsControllerAction('terminal external input update', async () => {
-        await setTerminalExternalInputEnabledPreference(enabled)
-      })
-    },
     async setRemoteTerminalTmuxEnabled(enabled: boolean): Promise<void> {
       await runSettingsControllerAction('remote terminal tmux update', async () => {
         await setRemoteTerminalTmuxEnabledPreference(enabled)

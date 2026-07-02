@@ -80,7 +80,6 @@ interface ServerSettingsData {
   fileTreeTopbarFontSize: number
   fileTreeClipboardMaxBytesMb: number
   terminalFontSize: number
-  terminalExternalInputEnabled: boolean
   remoteTerminalTmuxEnabled: boolean
   terminalCustomButtonsVisible: boolean
   terminalCustomButtonSize: TerminalCustomButtonSize
@@ -174,10 +173,6 @@ function normalizeTerminalThemeSyncEnabled(value: unknown): boolean {
   return typeof value === 'boolean' ? value : DEFAULT_TERMINAL_THEME_SYNC_ENABLED
 }
 
-function normalizeTerminalExternalInputEnabled(value: unknown): boolean {
-  return value === true
-}
-
 function normalizeRemoteTerminalTmuxEnabled(value: unknown): boolean {
   return value === true
 }
@@ -257,7 +252,6 @@ function settingsPrefsFromData(data: ServerSettingsData): SettingsPrefs {
     fileTreeTopbarFontSize: data.fileTreeTopbarFontSize,
     fileTreeClipboardMaxBytesMb: data.fileTreeClipboardMaxBytesMb,
     terminalFontSize: data.terminalFontSize,
-    terminalExternalInputEnabled: data.terminalExternalInputEnabled,
     remoteTerminalTmuxEnabled: data.remoteTerminalTmuxEnabled,
     terminalCustomButtonsVisible: data.terminalCustomButtonsVisible,
     terminalCustomButtonSize: data.terminalCustomButtonSize,
@@ -355,7 +349,6 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       fileTreeTopbarFontSize: normalizeFileTreeTopbarFontSize(parsed.fileTreeTopbarFontSize),
       fileTreeClipboardMaxBytesMb: normalizeFileTreeClipboardMaxBytesMb(parsed.fileTreeClipboardMaxBytesMb),
       terminalFontSize: normalizeTerminalFontSize(parsed.terminalFontSize),
-      terminalExternalInputEnabled: normalizeTerminalExternalInputEnabled(parsed.terminalExternalInputEnabled),
       remoteTerminalTmuxEnabled: normalizeRemoteTerminalTmuxEnabled(parsed.remoteTerminalTmuxEnabled),
       terminalCustomButtonsVisible: normalizeTerminalCustomButtonsVisible(parsed.terminalCustomButtonsVisible),
       terminalCustomButtonSize: normalizeTerminalCustomButtonSize(parsed.terminalCustomButtonSize),
@@ -471,10 +464,6 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
       : normalizeFileTreeClipboardMaxBytesMb(patch.fileTreeClipboardMaxBytesMb)
   const nextTerminalFontSize =
     patch.terminalFontSize === undefined ? data.terminalFontSize : normalizeTerminalFontSize(patch.terminalFontSize)
-  const nextTerminalExternalInputEnabled =
-    patch.terminalExternalInputEnabled === undefined
-      ? data.terminalExternalInputEnabled
-      : normalizeTerminalExternalInputEnabled(patch.terminalExternalInputEnabled)
   const nextRemoteTerminalTmuxEnabled =
     patch.remoteTerminalTmuxEnabled === undefined
       ? data.remoteTerminalTmuxEnabled
@@ -514,7 +503,6 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     data.fileTreeTopbarFontSize !== nextFileTreeTopbarFontSize ||
     data.fileTreeClipboardMaxBytesMb !== nextFileTreeClipboardMaxBytesMb ||
     data.terminalFontSize !== nextTerminalFontSize ||
-    data.terminalExternalInputEnabled !== nextTerminalExternalInputEnabled ||
     data.remoteTerminalTmuxEnabled !== nextRemoteTerminalTmuxEnabled ||
     data.terminalCustomButtonsVisible !== nextTerminalCustomButtonsVisible ||
     data.terminalCustomButtonSize !== nextTerminalCustomButtonSize ||
@@ -541,7 +529,6 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   data.fileTreeTopbarFontSize = nextFileTreeTopbarFontSize
   data.fileTreeClipboardMaxBytesMb = nextFileTreeClipboardMaxBytesMb
   data.terminalFontSize = nextTerminalFontSize
-  data.terminalExternalInputEnabled = nextTerminalExternalInputEnabled
   data.remoteTerminalTmuxEnabled = nextRemoteTerminalTmuxEnabled
   data.terminalCustomButtonsVisible = nextTerminalCustomButtonsVisible
   data.terminalCustomButtonSize = nextTerminalCustomButtonSize

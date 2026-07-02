@@ -13,7 +13,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import type { ITheme } from '@xterm/xterm'
 import type { Terminal as XTermTerminal } from '@xterm/xterm'
 import { Terminal } from '@xterm/xterm'
-import { TERMINAL_SCROLLBACK_LINES, TERMINAL_SCROLL_ON_ERASE_IN_DISPLAY } from '#/shared/terminal.ts'
+import { TERMINAL_SCROLLBACK_LINES } from '#/shared/terminal.ts'
 import {
   observeTerminalTheme,
   terminalSearchDecorationsForCurrentDocument,
@@ -32,26 +32,17 @@ import {
   measureTerminalGeometry,
   type TerminalGeometry,
 } from '#/web/components/terminal/terminal-geometry.ts'
-import type { TerminalInput } from '#/web/components/terminal/terminal-input.ts'
+import {
+  terminalEmulatorInput,
+  userTerminalInput,
+  type TerminalInput,
+  type TerminalUserInputSource,
+} from '#/web/components/terminal/terminal-input.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
 const DEFAULT_PARKING_WIDTH = 800
 const DEFAULT_PARKING_HEIGHT = 400
 const RESIZE_DEBOUNCE_MS = 80
 const FONT_REMEASURE_DEBOUNCE_MS = 80
-const OUTPUT_RENDER_SETTLE_MS = 80
-
-interface TerminalViewportSnapshot {
-  viewportY: number | null
-  baseY: number | null
-}
-
-interface TerminalWithPrivateRenderService {
-  _core?: {
-    _renderService?: {
-      clear?: () => void
-    }
-  }
-}
 
 export class TerminalSessionView {
   private readonly frame: HTMLDivElement
@@ -70,39 +61,14 @@ export class TerminalSessionView {
   private fitFlushTimer: number | null = null
   private fontFitTimer: number | null = null
   private pinToBottomFrame: number | null = null
-  private outputSettleTimer: number | null = null
-  private viewportRefreshFrame: number | null = null
-  private outputWriteDepth = 0
-  private scrollbackRenderDirty = false
-  private deferredOutput: string[] = []
-  private deferredOutputCallbacks: Array<() => void> = []
-  private viewportElement: HTMLElement | null = null
-  private textInputElement: HTMLTextAreaElement | null = null
-  private textInputComposing = false
   private host: HTMLElement | null = null
   private revealPathHandler: ((relativePath: string) => void) | null = null
   private openPathInEditorHandler: ((target: FilePathTarget) => void) | null = null
   private fontSize: number
   private terminalThemeMode: () => TerminalThemeMode
   private readonly safariShiftKeyResolver = new SafariShiftKeyResolver()
-  private readonly handleViewportScroll = () => this.scheduleViewportRefresh()
-  private readonly handleTerminalPointerDown = (event: Event) => {
-    if (!(event.target instanceof Node)) return
-    if (!this.xtermHost.contains(event.target)) return
-    if ('button' in event && typeof event.button === 'number' && event.button !== 0) return
-    this.term?.focus()
-  }
-  private readonly handleTextInputCompositionStart = () => {
-    this.textInputComposing = true
-  }
-  private readonly handleTextInputCompositionEnd = () => {
-    this.textInputComposing = false
-    window.setTimeout(() => {
-      if (this.textInputComposing) return
-      this.flushDeferredOutput()
-      if (this.scrollbackRenderDirty) this.scheduleOutputSettleRepaint()
-    }, 0)
-  }
+  private pendingCoreUserInput = 0
+  private pendingFallbackUserInput: Array<{ data: string; source: TerminalUserInputSource }> = []
 
   constructor(
     handlers: {
@@ -123,7 +89,6 @@ export class TerminalSessionView {
     this.xtermHost = document.createElement('div')
     this.xtermHost.className = 'goblin-managed-terminal-host'
     this.frame.appendChild(this.xtermHost)
-    this.frame.addEventListener('pointerdown', this.handleTerminalPointerDown)
     this.parkingElement = document.createElement('div')
     this.parkingElement.className = 'goblin-terminal-parking__item'
     this.handlers = handlers
@@ -160,7 +125,7 @@ export class TerminalSessionView {
     this.terminalThemeMode = terminalThemeMode
     const term = this.term
     if (!term) return
-    this.applyTerminalTheme(term, terminalThemeForCurrentDocument(this.terminalThemeMode()), { refresh: true })
+    this.applyTerminalTheme(term, terminalThemeForCurrentDocument(this.terminalThemeMode()))
   }
 
   attach(host: HTMLElement): void {
@@ -187,7 +152,6 @@ export class TerminalSessionView {
   }
 
   disposeFrame(): void {
-    this.frame.removeEventListener('pointerdown', this.handleTerminalPointerDown)
     this.parkingElement.remove()
     this.frame.remove()
   }
@@ -221,7 +185,6 @@ export class TerminalSessionView {
       lineHeight: 1,
       minimumContrastRatio: 4.5,
       scrollback: TERMINAL_SCROLLBACK_LINES,
-      scrollOnEraseInDisplay: TERMINAL_SCROLL_ON_ERASE_IN_DISPLAY,
       macOptionIsMeta: true,
       rescaleOverlappingGlyphs: true,
       scrollOnUserInput: true,
@@ -235,19 +198,15 @@ export class TerminalSessionView {
     this.installKeyboardHandlers(term, onMacOptionInput)
     this.applyTerminalTheme(term, theme)
     this.disposeThemeObserver = observeTerminalTheme(this.terminalThemeMode, (nextTheme) => {
-      this.applyTerminalTheme(term, nextTheme, { refresh: true })
+      this.applyTerminalTheme(term, nextTheme)
     })
-    this.disposables.push(term.onData((data) => this.handleTerminalData(data)))
-    this.disposables.push(
-      term.onBinary((data) => this.handlers.onInput({ origin: 'user-intent', source: 'xterm', data })),
-    )
+    const hasCoreUserInputAttribution = this.installCoreUserInputAttribution(term)
+    if (!hasCoreUserInputAttribution) this.installFallbackUserInputAttribution(term)
+    this.disposables.push(term.onData((data) => this.handlers.onInput(this.inputFromXtermData(data, 'data'))))
+    this.disposables.push(term.onBinary((data) => this.handlers.onInput(this.inputFromXtermData(data, 'binary'))))
     this.disposables.push(term.onBell(() => this.handlers.onBell()))
     this.disposables.push(term.onResize((size) => this.handlers.onResize(size)))
-    this.disposables.push(term.onScroll(() => this.scheduleViewportRefresh()))
     term.open(this.xtermHost)
-    this.installTextInputCompositionGuard(term)
-    this.installViewportScrollListener(term)
-    this.applyTerminalTheme(term, terminalThemeForCurrentDocument(this.terminalThemeMode()), { refresh: true })
     this.installResizeObserver()
     this.installFontObserver(term)
     return term
@@ -255,25 +214,6 @@ export class TerminalSessionView {
 
   currentTerminal(): XTermTerminal | null {
     return this.term
-  }
-
-  writeOutput(data: string, callback?: () => void): void {
-    const term = this.term
-    if (!term) {
-      callback?.()
-      return
-    }
-    if (this.textInputComposing) {
-      this.deferOutput(data, callback)
-      return
-    }
-    const before = readTerminalViewportSnapshot(term)
-    this.outputWriteDepth += 1
-    term.write(data, () => {
-      this.outputWriteDepth = Math.max(0, this.outputWriteDepth - 1)
-      this.handleOutputWriteParsed(term, before)
-      callback?.()
-    })
   }
 
   focus(): void {
@@ -327,14 +267,11 @@ export class TerminalSessionView {
   fitNow(): void {
     if (!this.term || !this.fitAddon || !hasMeasurableBox(this.xtermHost)) return
     this.fitAddon.fit()
-    this.term.refresh(0, Math.max(0, this.term.rows - 1))
     this.pinToBottomSoon()
   }
 
   destroyTerminal(): void {
     this.disconnectResizeObserver()
-    this.disconnectViewportScrollListener()
-    this.disconnectTextInputCompositionGuard()
     this.cancelFitFlush()
     for (const disposable of this.disposables.splice(0)) disposable.dispose()
     this.disposeThemeObserver?.()
@@ -343,12 +280,9 @@ export class TerminalSessionView {
     this.disposeFontObserver = null
     this.cancelFontFit()
     this.cancelPinToBottom()
-    this.cancelOutputSettleRepaint()
-    this.outputWriteDepth = 0
-    this.scrollbackRenderDirty = false
-    this.clearDeferredOutput(true)
-    this.textInputComposing = false
     this.safariShiftKeyResolver.reset()
+    this.pendingCoreUserInput = 0
+    this.pendingFallbackUserInput = []
     this.fitAddon = null
     this.searchAddon = null
     this.serializeAddon = null
@@ -371,40 +305,78 @@ export class TerminalSessionView {
       if (optionInput) {
         event.preventDefault()
         event.stopPropagation()
-        onInput({ origin: 'user-intent', source: 'keyboard', data: optionInput })
+        onInput(userTerminalInput(optionInput, 'keyboard'))
         return false
       }
       const safariShiftInput = safariShiftKeyResolver.inputForEvent(event)
       if (safariShiftInput) {
         event.preventDefault()
         event.stopPropagation()
-        onInput({ origin: 'user-intent', source: 'keyboard', data: safariShiftInput })
+        onInput(userTerminalInput(safariShiftInput, 'keyboard'))
         return false
       }
       return true
     })
   }
 
-  private handleTerminalData(data: string): void {
-    if (this.outputWriteDepth <= 0) {
-      this.handlers.onInput({ origin: 'user-intent', source: 'xterm', data })
-      return
-    }
-    const userData = stripTerminalProtocolReplies(data)
-    const input =
-      userData.length === 0
-        ? ({ origin: 'terminal-emulator', source: 'data', data } as const)
-        : ({ origin: 'user-intent', source: 'xterm', data: userData } as const)
-    this.handlers.onInput(input)
+  private installCoreUserInputAttribution(term: XTermTerminal): boolean {
+    const coreService = xtermCoreUserInputService(term)
+    if (!coreService) return false
+    this.disposables.push(
+      coreService.onUserInput(() => {
+        this.pendingCoreUserInput += 1
+      }),
+    )
+    return true
   }
 
-  private handleOutputWriteParsed(term: XTermTerminal, before: TerminalViewportSnapshot): void {
-    if (this.term !== term) return
-    const after = readTerminalViewportSnapshot(term)
-    if (before.baseY !== null && after.baseY !== null && after.baseY > before.baseY) {
-      this.scrollbackRenderDirty = true
+  private installFallbackUserInputAttribution(term: XTermTerminal): void {
+    this.disposables.push(term.onKey(({ key }) => this.queueFallbackUserInput(key, 'keyboard')))
+    const markPaste = (event: ClipboardEvent) => {
+      if (event.defaultPrevented) return
+      const text = event.clipboardData?.getData('text/plain')
+      if (text) this.queueFallbackUserInput(textForTerminalPaste(text, term.modes.bracketedPasteMode), 'paste')
     }
-    if (this.scrollbackRenderDirty) this.scheduleOutputSettleRepaint()
+    const markTextInput = (event: Event) => {
+      if (!(event instanceof InputEvent)) return
+      if (event.data && event.inputType === 'insertText') this.queueFallbackUserInput(event.data, 'keyboard')
+    }
+    this.xtermHost.addEventListener('paste', markPaste, true)
+    this.xtermHost.addEventListener('input', markTextInput, true)
+    this.disposables.push({
+      dispose: () => {
+        this.xtermHost.removeEventListener('paste', markPaste, true)
+        this.xtermHost.removeEventListener('input', markTextInput, true)
+      },
+    })
+  }
+
+  private inputFromXtermData(data: string, source: 'data' | 'binary'): TerminalInput {
+    if (source === 'binary') return userTerminalInput(data, 'xterm')
+    if (source === 'data' && this.pendingCoreUserInput > 0) {
+      this.pendingCoreUserInput -= 1
+      return userTerminalInput(data, 'xterm')
+    }
+    const fallback = source === 'data' ? this.consumeFallbackUserInput(data) : null
+    if (fallback) return userTerminalInput(data, fallback.source)
+    return terminalEmulatorInput(data, source)
+  }
+
+  private queueFallbackUserInput(data: string, source: TerminalUserInputSource): void {
+    if (!data) return
+    const entry = { data, source }
+    this.pendingFallbackUserInput.push(entry)
+    window.setTimeout(() => {
+      const index = this.pendingFallbackUserInput.indexOf(entry)
+      if (index !== -1) this.pendingFallbackUserInput.splice(index, 1)
+    }, 0)
+  }
+
+  private consumeFallbackUserInput(data: string): { data: string; source: TerminalUserInputSource } | null {
+    const index = this.pendingFallbackUserInput.findIndex((entry) => entry.data === data)
+    if (index === -1) return null
+    const [entry] = this.pendingFallbackUserInput.splice(index, 1)
+    return entry ?? null
   }
 
   private installOptionalAddons(term: XTermTerminal): void {
@@ -493,17 +465,11 @@ export class TerminalSessionView {
     }
   }
 
-  private applyTerminalTheme(
-    term: XTermTerminal,
-    theme: ITheme,
-    options: { refresh?: boolean } = {},
-  ): void {
+  private applyTerminalTheme(term: XTermTerminal, theme: ITheme): void {
     term.options.theme = theme
     const background = typeof theme.background === 'string' && theme.background ? theme.background : 'black'
     this.frame.style.background = background
     this.frame.style.setProperty('--goblin-terminal-background', background)
-    if (options.refresh !== true || !term.element) return
-    term.refresh(0, Math.max(0, term.rows - 1))
   }
 
   private installResizeObserver(): void {
@@ -530,67 +496,6 @@ export class TerminalSessionView {
     this.resizeObserver = null
   }
 
-  private installViewportScrollListener(term: XTermTerminal): void {
-    this.disconnectViewportScrollListener()
-    const viewportElement = term.element?.querySelector<HTMLElement>('.xterm-viewport') ?? null
-    if (!viewportElement) return
-    this.viewportElement = viewportElement
-    viewportElement.addEventListener('scroll', this.handleViewportScroll, { passive: true })
-  }
-
-  private disconnectViewportScrollListener(): void {
-    this.viewportElement?.removeEventListener('scroll', this.handleViewportScroll)
-    this.viewportElement = null
-    this.cancelViewportRefresh()
-  }
-
-  private installTextInputCompositionGuard(term: XTermTerminal): void {
-    this.disconnectTextInputCompositionGuard()
-    const input = term.element?.querySelector<HTMLTextAreaElement>('textarea') ?? null
-    if (!input) return
-    this.textInputElement = input
-    input.addEventListener('compositionstart', this.handleTextInputCompositionStart)
-    input.addEventListener('compositionend', this.handleTextInputCompositionEnd)
-    input.addEventListener('compositioncancel', this.handleTextInputCompositionEnd)
-  }
-
-  private disconnectTextInputCompositionGuard(): void {
-    const input = this.textInputElement
-    if (!input) return
-    input.removeEventListener('compositionstart', this.handleTextInputCompositionStart)
-    input.removeEventListener('compositionend', this.handleTextInputCompositionEnd)
-    input.removeEventListener('compositioncancel', this.handleTextInputCompositionEnd)
-    this.textInputElement = null
-  }
-
-  private deferOutput(data: string, callback?: () => void): void {
-    this.deferredOutput.push(data)
-    if (callback) this.deferredOutputCallbacks.push(callback)
-  }
-
-  private flushDeferredOutput(): void {
-    if (this.textInputComposing || this.deferredOutput.length === 0) return
-    const data = this.deferredOutput.join('')
-    const callbacks = this.deferredOutputCallbacks.splice(0)
-    this.deferredOutput = []
-    this.writeOutput(
-      data,
-      callbacks.length > 0
-        ? () => {
-            for (const callback of callbacks) callback()
-          }
-        : undefined,
-    )
-  }
-
-  private clearDeferredOutput(runCallbacks = false): void {
-    this.deferredOutput = []
-    const callbacks = this.deferredOutputCallbacks.splice(0)
-    if (runCallbacks) {
-      for (const callback of callbacks) callback()
-    }
-  }
-
   private scheduleFontFit(term: XTermTerminal): void {
     if (this.term !== term) return
     this.cancelFontFit()
@@ -609,7 +514,6 @@ export class TerminalSessionView {
   private fitForFontLoad(term: XTermTerminal): void {
     if (this.term !== term || !this.fitAddon || !hasMeasurableBox(this.xtermHost)) return
     this.fitAddon.fit()
-    term.refresh(0, Math.max(0, term.rows - 1))
     this.pinToBottomSoon()
   }
 
@@ -617,64 +521,6 @@ export class TerminalSessionView {
     if (this.fitFlushTimer === null) return
     window.clearTimeout(this.fitFlushTimer)
     this.fitFlushTimer = null
-  }
-
-  private scheduleOutputSettleRepaint(): void {
-    this.cancelOutputSettleRepaint()
-    this.outputSettleTimer = window.setTimeout(() => {
-      this.outputSettleTimer = null
-      if (this.textInputComposing) return
-      this.repaintVisibleRowsPreservingViewport({ clearRendererCache: true })
-      this.scrollbackRenderDirty = false
-    }, OUTPUT_RENDER_SETTLE_MS)
-  }
-
-  private cancelOutputSettleRepaint(): void {
-    if (this.outputSettleTimer === null) return
-    window.clearTimeout(this.outputSettleTimer)
-    this.outputSettleTimer = null
-  }
-
-  private scheduleViewportRefresh(): void {
-    if (!this.term || this.viewportRefreshFrame !== null) return
-    this.viewportRefreshFrame = requestAnimationFrame(() => {
-      this.viewportRefreshFrame = null
-      const term = this.term
-      if (!term) return
-      const viewport = readTerminalViewportSnapshot(term)
-      const isReadingHistory =
-        viewport.viewportY !== null && viewport.baseY !== null && viewport.viewportY < viewport.baseY
-      this.repaintVisibleRowsPreservingViewport({
-        clearRendererCache: this.scrollbackRenderDirty || isReadingHistory,
-        viewportY: viewport.viewportY,
-      })
-    })
-  }
-
-  private cancelViewportRefresh(): void {
-    if (this.viewportRefreshFrame === null) return
-    cancelScheduledAnimationFrame(this.viewportRefreshFrame)
-    this.viewportRefreshFrame = null
-  }
-
-  private repaintVisibleRowsPreservingViewport(options: { clearRendererCache?: boolean; viewportY?: number | null } = {}): void {
-    const term = this.term
-    if (!term) return
-    const before = readTerminalViewportSnapshot(term)
-    if (!this.safeRefreshVisibleRows(term, options)) return
-    restoreTerminalViewport(term, options.viewportY ?? before.viewportY)
-  }
-
-  private safeRefreshVisibleRows(term: XTermTerminal, options: { clearRendererCache?: boolean }): boolean {
-    try {
-      if (options.clearRendererCache) clearTerminalRendererCache(term)
-      refreshVisibleRows(term)
-      return true
-    } catch (err) {
-      console.warn('[terminal] failed to repaint terminal viewport', err)
-      this.handlers.onRenderRecoveryRequest()
-      return false
-    }
   }
 
   private pinToBottomSoon(): void {
@@ -719,31 +565,6 @@ function scrollTerminalToBottom(term: XTermTerminal | null): void {
   term.scrollToBottom()
 }
 
-function readTerminalViewportSnapshot(term: XTermTerminal): TerminalViewportSnapshot {
-  const active = term.buffer?.active as { viewportY?: number; baseY?: number } | undefined
-  return {
-    viewportY: typeof active?.viewportY === 'number' ? active.viewportY : null,
-    baseY: typeof active?.baseY === 'number' ? active.baseY : null,
-  }
-}
-
-function refreshVisibleRows(term: XTermTerminal): void {
-  term.refresh(0, Math.max(0, term.rows - 1))
-}
-
-function clearTerminalRendererCache(term: XTermTerminal): void {
-  term.clearTextureAtlas()
-  const renderService = (term as unknown as TerminalWithPrivateRenderService)._core?._renderService
-  renderService?.clear?.()
-}
-
-function restoreTerminalViewport(term: XTermTerminal, viewportY: number | null): void {
-  if (viewportY === null) return
-  const active = term.buffer?.active as { viewportY?: number } | undefined
-  if (active?.viewportY === viewportY) return
-  term.scrollToLine(viewportY)
-}
-
 function isTerminalAtBottom(term: XTermTerminal): boolean {
   const active = term.buffer?.active as { viewportY?: number; baseY?: number } | undefined
   if (!active) return true
@@ -753,11 +574,22 @@ function isTerminalAtBottom(term: XTermTerminal): boolean {
   return typeof baseY === 'number' ? viewportY >= baseY : viewportY <= 0
 }
 
-const TERMINAL_PROTOCOL_REPLY_PATTERN =
-  /(?:\x1b\[\??\d+n)|(?:\x1b\[\??\d+;\d+R)|(?:\x1b\[(?:[?>])?[0-9;]*c)|(?:\x1b\](?:4;\d+|10|11|12);[^\x07\x1b]*(?:\x07|\x1b\\))/g
+interface XtermCoreUserInputService {
+  onUserInput: (listener: () => void) => { dispose: () => void }
+}
 
-function stripTerminalProtocolReplies(data: string): string {
-  return data.replace(TERMINAL_PROTOCOL_REPLY_PATTERN, '')
+function xtermCoreUserInputService(term: XTermTerminal): XtermCoreUserInputService | null {
+  const coreService = (term as unknown as { _core?: { coreService?: { onUserInput?: unknown } } })._core?.coreService
+  const onUserInput = coreService?.onUserInput
+  if (!coreService || typeof onUserInput !== 'function') return null
+  return {
+    onUserInput: (listener) => onUserInput.call(coreService, listener) as { dispose: () => void },
+  }
+}
+
+function textForTerminalPaste(text: string, bracketedPasteMode: boolean): string {
+  const normalized = text.replace(/\r?\n/g, '\r')
+  return bracketedPasteMode ? `\x1b[200~${normalized}\x1b[201~` : normalized
 }
 
 function cancelScheduledAnimationFrame(frame: number): void {

@@ -115,6 +115,48 @@ describe('TerminalSessionRuntime', () => {
     })
   })
 
+  test('keeps stale replay completions from closing a newer replay window', () => {
+    const runtime = new TerminalSessionRuntime()
+    runtime.applyAttachResult(
+      {
+        ok: true,
+        sessionId: 'session-1',
+        replay: '',
+        replaySeq: 0,
+        replayTruncated: false,
+        processName: 'zsh',
+        canonicalTitle: null,
+        snapshot: '',
+        snapshotSeq: 0,
+        controller: { attachmentId: 'attachment_remote', status: 'connected' },
+        phase: 'open',
+        message: null,
+        role: 'viewer',
+        controllerStatus: 'connected',
+        canonicalCols: 120,
+        canonicalRows: 40,
+      },
+      { cols: 100, rows: 30 },
+    )
+
+    const firstGeneration = runtime.beginReplay(1)
+    const secondGeneration = runtime.beginReplay(2)
+
+    expect(runtime.handleOutput({ sessionId: 'session-1', data: 'live', seq: 3, processName: 'zsh' })).toEqual({
+      changed: false,
+      output: null,
+      summaryChanged: false,
+    })
+    expect(runtime.finishReplay(firstGeneration)).toEqual([])
+    expect(runtime.isReplaying()).toBe(true)
+
+    expect(runtime.finishReplay(secondGeneration)).toEqual([
+      { sessionId: 'session-1', data: 'live', seq: 3, processName: 'zsh' },
+    ])
+    expect(runtime.isReplaying()).toBe(false)
+    expect(runtime.snapshot().outputSummary).toBe('live')
+  })
+
   test('preserves server-provided title when attaching an existing session', () => {
     const runtime = new TerminalSessionRuntime()
 

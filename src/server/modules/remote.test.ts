@@ -41,7 +41,6 @@ beforeEach(() => {
     editorApp: 'vscode',
     fileTreeFontSize: 12,
     terminalFontSize: 14,
-    terminalExternalInputEnabled: false,
     remoteTerminalTmuxEnabled: false,
     terminalCustomButtonsVisible: true,
     terminalCustomButtons: [],

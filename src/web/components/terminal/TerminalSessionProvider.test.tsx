@@ -226,7 +226,6 @@ vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
 
 vi.mock('#/web/runtime-settings-terminal-buttons.ts', () => ({
   useRuntimeTerminalSettings: () => ({
-    terminalExternalInputEnabled: false,
     remoteTerminalTmuxEnabled: false,
     terminalCustomButtonsVisible: true,
     terminalCustomButtons: [],
