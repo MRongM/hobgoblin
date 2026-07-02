@@ -77,7 +77,7 @@ function relativePosixPath(fromPath: string, toPath: string): string | null {
   if (!fromPath.startsWith('/') || !toPath.startsWith('/')) return null
   const fromParts = posixPathParts(fromPath)
   const toParts = posixPathParts(toPath)
-  return relativeParts(fromParts, toParts, '/')
+  return relativeParts(fromParts, toParts, '/', false)
 }
 
 function posixPathParts(value: string): string[] {
@@ -88,7 +88,7 @@ function relativeWindowsPath(fromPath: string, toPath: string): string | null {
   const from = windowsPathParts(fromPath)
   const to = windowsPathParts(toPath)
   if (!from || !to || from.drive !== to.drive) return null
-  return relativeParts(from.parts, to.parts, '\\')
+  return relativeParts(from.parts, to.parts, '\\', true)
 }
 
 function windowsPathParts(value: string): { drive: string; parts: string[] } | null {
@@ -100,13 +100,17 @@ function windowsPathParts(value: string): { drive: string; parts: string[] } | n
   }
 }
 
-function relativeParts(fromParts: string[], toParts: string[], separator: string): string {
+function relativeParts(fromParts: string[], toParts: string[], separator: string, insensitive: boolean): string {
   let common = 0
-  while (common < fromParts.length && common < toParts.length && fromParts[common] === toParts[common]) {
+  while (common < fromParts.length && common < toParts.length && partsEqual(fromParts[common]!, toParts[common]!, insensitive)) {
     common += 1
   }
 
   const up = Array.from({ length: fromParts.length - common }, () => '..')
   const down = toParts.slice(common)
   return [...up, ...down].join(separator) || '.'
+}
+
+function partsEqual(a: string, b: string, insensitive: boolean): boolean {
+  return insensitive ? a.localeCompare(b, undefined, { sensitivity: 'accent' }) === 0 : a === b
 }

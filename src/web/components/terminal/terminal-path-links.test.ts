@@ -8,13 +8,53 @@ import {
 describe('terminalRelativePathLinksForLine', () => {
   test('finds path-like tokens and keeps 1-based terminal columns', () => {
     expect(terminalRelativePathLinksForLine('created src/app.ts:12 and ./docs/guide.md')).toEqual([
-      { text: 'src/app.ts:12', target: { path: 'src/app.ts', line: 12 }, startColumn: 9, endColumn: 21 },
-      { text: './docs/guide.md', target: { path: 'docs/guide.md' }, startColumn: 27, endColumn: 41 },
+      {
+        text: 'src/app.ts:12',
+        target: { path: 'src/app.ts', line: 12 },
+        revealPath: 'src/app.ts',
+        startColumn: 9,
+        endColumn: 21,
+      },
+      {
+        text: './docs/guide.md',
+        target: { path: 'docs/guide.md' },
+        revealPath: 'docs/guide.md',
+        startColumn: 27,
+        endColumn: 41,
+      },
     ])
   })
 
   test('does not link urls or absolute paths', () => {
     expect(terminalRelativePathLinksForLine('see https://example.com/a.ts and /tmp/a.ts')).toEqual([])
+  })
+
+  test('links Windows absolute paths inside the active worktree', () => {
+    expect(terminalRelativePathLinksForLine('created C:\\repo\\src\\app.ts:12', 'C:\\repo')).toEqual([
+      {
+        text: 'C:\\repo\\src\\app.ts:12',
+        target: { path: 'C:\\repo\\src\\app.ts', line: 12 },
+        revealPath: 'src/app.ts',
+        startColumn: 9,
+        endColumn: 29,
+      },
+    ])
+  })
+
+  test('does not link Windows absolute paths outside the active worktree', () => {
+    expect(terminalRelativePathLinksForLine('created C:\\other\\src\\app.ts:12', 'C:\\repo')).toEqual([])
+  })
+
+  test('keeps relative path link behavior without a worktree path', () => {
+    expect(terminalRelativePathLinksForLine('created src/app.ts:12')).toEqual([
+      {
+        text: 'src/app.ts:12',
+        target: { path: 'src/app.ts', line: 12 },
+        revealPath: 'src/app.ts',
+        startColumn: 9,
+        endColumn: 21,
+      },
+    ])
   })
 })
 
@@ -189,6 +229,38 @@ describe('registerTerminalRelativePathLinkProvider', () => {
 
     expect(reveal).not.toHaveBeenCalled()
     expect(openPathInEditor).toHaveBeenCalledWith({ path: 'src/app.ts', line: 12, column: 3 })
+  })
+
+  test('reveals relative path but opens absolute editor target for contained Windows links', () => {
+    const captured: { provider: ILinkProvider | null } = { provider: null }
+    const term = {
+      buffer: {
+        active: {
+          getLine: () => ({
+            translateToString: () => 'created C:\\repo\\src\\app.ts:12:3',
+          }),
+        },
+      },
+      registerLinkProvider: vi.fn((nextProvider: ILinkProvider) => {
+        captured.provider = nextProvider
+        return { dispose: vi.fn() }
+      }),
+    }
+    const reveal = vi.fn()
+    const openPathInEditor = vi.fn()
+
+    registerTerminalRelativePathLinkProvider(term, () => reveal, () => openPathInEditor, () => 'C:\\repo')
+
+    let provided: Array<{ text: string; activate: (event: MouseEvent, text: string) => void }> | undefined
+    captured.provider?.provideLinks(1, (links) => {
+      provided = links as typeof provided
+    })
+
+    provided?.[0]?.activate({ detail: 1 } as MouseEvent, 'C:\\repo\\src\\app.ts:12:3')
+    expect(reveal).toHaveBeenCalledWith('src/app.ts')
+
+    provided?.[0]?.activate({ detail: 2 } as MouseEvent, 'C:\\repo\\src\\app.ts:12:3')
+    expect(openPathInEditor).toHaveBeenCalledWith({ path: 'C:\\repo\\src\\app.ts', line: 12, column: 3 })
   })
 
   test('activates structured targets for traceback-style terminal path links', () => {

@@ -1,8 +1,10 @@
 import type { ILink, ILinkProvider } from '@xterm/xterm'
 import { filePathTargetsForText, type FilePathTarget } from '#/shared/file-path-target.ts'
+import { pathStyle, worktreeRelativePathFromAbsolute } from '#/shared/path-semantics.ts'
 
 type RevealPathHandler = (relativePath: string) => void
 type OpenPathInEditorHandler = (target: FilePathTarget) => void
+type WorktreePathProvider = () => string | null
 type TerminalBufferLine = {
   readonly isWrapped?: boolean
   translateToString: (trimRight?: boolean, startColumn?: number, endColumn?: number) => string
@@ -20,6 +22,7 @@ interface TerminalLinkProviderHost {
 export interface TerminalRelativePathLink {
   text: string
   target: FilePathTarget
+  revealPath: string
   startColumn: number
   endColumn: number
 }
@@ -47,13 +50,25 @@ function activationDetail(event: MouseEvent): number {
   return typeof detail === 'number' ? detail : 0
 }
 
-export function terminalRelativePathLinksForLine(line: string): TerminalRelativePathLink[] {
-  return filePathTargetsForText(line).map((span) => ({
-    text: span.text,
-    target: span.target,
-    startColumn: span.startIndex + 1,
-    endColumn: span.endIndex,
-  }))
+export function terminalRelativePathLinksForLine(line: string, worktreePath?: string | null): TerminalRelativePathLink[] {
+  return filePathTargetsForText(line, { allowAbsolute: !!worktreePath }).flatMap((span) => {
+    const revealPath = revealPathForTarget(span.target, worktreePath)
+    if (!revealPath) return []
+    return [
+      {
+        text: span.text,
+        target: span.target,
+        revealPath,
+        startColumn: span.startIndex + 1,
+        endColumn: span.endIndex,
+      },
+    ]
+  })
+}
+
+function revealPathForTarget(target: FilePathTarget, worktreePath?: string | null): string | null {
+  if (pathStyle(target.path) === 'relative') return target.path
+  return worktreePath ? worktreeRelativePathFromAbsolute(worktreePath, target.path) : null
 }
 
 function terminalLineWindowForBufferLine(term: TerminalLinkProviderHost, lineIndex: number): TerminalLineWindow {
@@ -114,15 +129,19 @@ function isHardWrappedPathBoundary(leftLine: TerminalBufferLine, rightLine: Term
 
 function terminalRelativePathLinksForWindow(
   window: TerminalLineWindow,
+  worktreePath?: string | null,
 ): Array<TerminalRelativePathLink & { rangeLineStart: number; rangeLineEnd: number }> {
-  return filePathTargetsForText(window.text)
+  return filePathTargetsForText(window.text, { allowAbsolute: !!worktreePath })
     .map((span) => {
+      const revealPath = revealPathForTarget(span.target, worktreePath)
+      if (!revealPath) return null
       const start = terminalPositionForOffset(window, span.startIndex)
       const end = terminalPositionForOffset(window, span.endIndex - 1)
       if (!start || !end) return null
       return {
         text: span.text,
         target: span.target,
+        revealPath,
         startColumn: start.column + 1,
         endColumn: end.column + 1,
         rangeLineStart: start.lineIndex + 1,
@@ -136,6 +155,7 @@ export function registerTerminalRelativePathLinkProvider(
   term: TerminalLinkProviderHost,
   getRevealPathHandler: () => RevealPathHandler | null,
   getOpenPathInEditorHandler: () => OpenPathInEditorHandler | null,
+  getWorktreePath: WorktreePathProvider = () => null,
 ): { dispose: () => void } {
   const provider: ILinkProvider = {
     provideLinks(bufferLineNumber, callback) {
@@ -146,7 +166,7 @@ export function registerTerminalRelativePathLinkProvider(
         return
       }
       const window = terminalLineWindowForBufferLine(term, bufferLineNumber - 1)
-      const links = terminalRelativePathLinksForWindow(window)
+      const links = terminalRelativePathLinksForWindow(window, getWorktreePath())
         .filter((link) => link.rangeLineStart <= bufferLineNumber && bufferLineNumber <= link.rangeLineEnd)
         .map<ILink>((link) => ({
           range: {
@@ -160,7 +180,7 @@ export function registerTerminalRelativePathLinkProvider(
               getOpenPathInEditorHandler()?.(link.target)
               return
             }
-            getRevealPathHandler()?.(link.target.path)
+            getRevealPathHandler()?.(link.revealPath)
           },
         }))
       callback(links.length > 0 ? links : undefined)
