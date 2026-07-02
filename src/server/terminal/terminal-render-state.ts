@@ -1,11 +1,7 @@
 import * as xtermHeadlessImport from '@xterm/headless'
 import type { SerializeAddon as XTermSerializeAddon } from '@xterm/addon-serialize'
 import { SerializeAddon } from '@xterm/addon-serialize'
-import {
-  TERMINAL_SCROLLBACK_LINES,
-  TERMINAL_SCROLL_ON_ERASE_IN_DISPLAY,
-  type TerminalSessionSnapshot,
-} from '#/shared/terminal.ts'
+import { TERMINAL_SCROLLBACK_LINES, type TerminalSessionSnapshot } from '#/shared/terminal.ts'
 
 const MAX_SESSION_BUFFER_CHARS = 16 * 1024 * 1024
 
@@ -37,7 +33,6 @@ const headlessModule = ('default' in xtermHeadlessImport ? xtermHeadlessImport.d
     cols?: number
     rows?: number
     scrollback?: number
-    scrollOnEraseInDisplay?: boolean
     allowProposedApi?: boolean
   }) => HeadlessTerminalLike
 }
@@ -59,7 +54,6 @@ export function createTerminalRenderModel(cols: number, rows: number): TerminalR
     cols,
     rows,
     scrollback: TERMINAL_SCROLLBACK_LINES,
-    scrollOnEraseInDisplay: TERMINAL_SCROLL_ON_ERASE_IN_DISPLAY,
     allowProposedApi: true,
   })
   const serializeAddon = new SerializeAddon()

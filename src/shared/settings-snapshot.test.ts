@@ -10,40 +10,39 @@ import {
 
 describe('settings snapshot partitions', () => {
   test('builds runtime settings without recent repo or restorable session fields', () => {
-    expect(
-      buildRuntimeSettingsSnapshot({
-        prefs: {
-          lang: 'ja',
-          theme: 'dark',
-          colorTheme: 'github',
-          fetchIntervalSec: 300,
-          gitNetworkProxyEnabled: true,
-          gitNetworkProxyUrl: 'socks5://127.0.0.1:7890',
-          gitNetworkTimeoutSec: 180,
-          terminalNotificationsEnabled: true,
-          shortcutsDisabled: true,
-          globalShortcutDisabled: false,
-          swapCloseShortcuts: true,
-          toggleDetailOnActionBarBlankClick: true,
-          terminalThemeSyncEnabled: false,
-          temporaryFilesDirectory: '/Users/test/tmp',
-          globalShortcut: 'CommandOrControl+Shift+K',
-          terminalApp: 'ghostty',
-          editorApp: 'cursor',
-          fileTreeFontSize: 13,
-          fileTreeTopbarFontSize: 12,
-          fileTreeClipboardMaxBytesMb: 30,
-          terminalFontSize: 15,
-          terminalExternalInputEnabled: true,
-          remoteTerminalTmuxEnabled: true,
-          terminalCustomButtonsVisible: false,
-          terminalCustomButtonSize: 'large',
-          terminalCustomButtons: [{ label: 'status', value: 'git status --short', action: 'input' }],
-          lanEnabled: true,
-        },
-        globalShortcutRegistered: true,
-      }),
-    ).toEqual({
+    const runtime = buildRuntimeSettingsSnapshot({
+      prefs: {
+        lang: 'ja',
+        theme: 'dark',
+        colorTheme: 'github',
+        fetchIntervalSec: 300,
+        gitNetworkProxyEnabled: true,
+        gitNetworkProxyUrl: 'socks5://127.0.0.1:7890',
+        gitNetworkTimeoutSec: 180,
+        terminalNotificationsEnabled: true,
+        shortcutsDisabled: true,
+        globalShortcutDisabled: false,
+        swapCloseShortcuts: true,
+        toggleDetailOnActionBarBlankClick: true,
+        terminalThemeSyncEnabled: false,
+        temporaryFilesDirectory: '/Users/test/tmp',
+        globalShortcut: 'CommandOrControl+Shift+K',
+        terminalApp: 'ghostty',
+        editorApp: 'cursor',
+        fileTreeFontSize: 13,
+        fileTreeTopbarFontSize: 12,
+        fileTreeClipboardMaxBytesMb: 30,
+        terminalFontSize: 15,
+        remoteTerminalTmuxEnabled: true,
+        terminalCustomButtonsVisible: false,
+        terminalCustomButtonSize: 'large',
+        terminalCustomButtons: [{ label: 'status', value: 'git status --short', action: 'input' }],
+        lanEnabled: true,
+      },
+      globalShortcutRegistered: true,
+    })
+
+    expect(runtime).toEqual({
       lang: 'ja',
       theme: 'dark',
       colorTheme: 'github',
@@ -66,7 +65,6 @@ describe('settings snapshot partitions', () => {
       fileTreeTopbarFontSize: 12,
       fileTreeClipboardMaxBytesMb: 30,
       terminalFontSize: 15,
-      terminalExternalInputEnabled: true,
       remoteTerminalTmuxEnabled: true,
       terminalCustomButtonsVisible: false,
       terminalCustomButtonSize: 'large',
@@ -109,7 +107,6 @@ describe('settings snapshot partitions', () => {
         fileTreeTopbarFontSize: 13,
         fileTreeClipboardMaxBytesMb: 30,
         terminalFontSize: 14,
-        terminalExternalInputEnabled: false,
         remoteTerminalTmuxEnabled: false,
         terminalCustomButtonsVisible: true,
         terminalCustomButtonSize: 'medium',
@@ -129,14 +126,15 @@ describe('settings snapshot partitions', () => {
       },
     })
 
-    expect(runtimeSettingsSnapshotFromSettingsSnapshot(snapshot)).toMatchObject({
+    const runtime = runtimeSettingsSnapshotFromSettingsSnapshot(snapshot)
+
+    expect(runtime).toMatchObject({
       globalShortcutRegistered: false,
       gitNetworkProxyEnabled: false,
       gitNetworkProxyUrl: '',
       gitNetworkTimeoutSec: 120,
       temporaryFilesDirectory: '',
       terminalThemeSyncEnabled: true,
-      terminalExternalInputEnabled: false,
       remoteTerminalTmuxEnabled: false,
       fileTreeTopbarFontSize: 13,
       fileTreeClipboardMaxBytesMb: 30,

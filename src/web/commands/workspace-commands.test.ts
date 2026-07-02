@@ -38,7 +38,6 @@ describe('workspace commands', () => {
       worktreeSnapshot: () => ({ worktreeTerminalKey: `${REPO_ID}\0${REPO_ID}`, selectedDescriptor: null, sessions: [], count: 0 }),
       createTerminal,
       selectTerminal: vi.fn(),
-      fillExternalInput: vi.fn(() => false),
       writeInput: vi.fn(),
     })
     const navigation = navigationWith()
@@ -83,7 +82,6 @@ describe('workspace commands', () => {
       }),
       createTerminal,
       selectTerminal: vi.fn(),
-      fillExternalInput: vi.fn(() => false),
       writeInput: vi.fn(),
     })
     const navigation = navigationWith()
@@ -111,7 +109,6 @@ describe('workspace commands', () => {
       worktreeSnapshot: () => ({ worktreeTerminalKey: `${REPO_ID}\0${WORKTREE_PATH}`, selectedDescriptor: null, sessions: [], count: 0 }),
       createTerminal,
       selectTerminal: vi.fn(),
-      fillExternalInput: vi.fn(() => false),
       writeInput: vi.fn(),
     })
     const navigation = navigationWith()
@@ -156,7 +153,6 @@ describe('workspace commands', () => {
       }),
       createTerminal,
       selectTerminal: vi.fn(),
-      fillExternalInput: vi.fn(() => false),
       writeInput: vi.fn(),
     })
     const navigation = navigationWith()
@@ -206,7 +202,6 @@ describe('workspace commands', () => {
       }),
       createTerminal: vi.fn(async () => 'terminal-3'),
       selectTerminal,
-      fillExternalInput: vi.fn(() => false),
       writeInput: vi.fn(),
     })
     const navigation = navigationWith()
@@ -260,7 +255,6 @@ describe('workspace commands', () => {
       }),
       createTerminal: vi.fn(async () => 'session-key-2'),
       selectTerminal,
-      fillExternalInput: vi.fn(() => false),
       writeInput: vi.fn(),
     })
     const navigation = navigationWith()

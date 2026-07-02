@@ -53,7 +53,6 @@ export const DEFAULT_EDITOR_APP: EditorPref = 'auto'
 export const DEFAULT_FILE_TREE_FONT_SIZE = 14
 export const DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE = 13
 export const DEFAULT_TERMINAL_FONT_SIZE = 14
-export const DEFAULT_TERMINAL_EXTERNAL_INPUT_ENABLED = false
 export const DEFAULT_REMOTE_TERMINAL_TMUX_ENABLED = false
 export const DEFAULT_TERMINAL_CUSTOM_BUTTONS_VISIBLE = true
 export const DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE: TerminalCustomButtonSize = 'medium'
@@ -102,8 +101,6 @@ export function defaultSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): Se
     fileTreeClipboardMaxBytesMb:
       overrides.fileTreeClipboardMaxBytesMb ?? DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
     terminalFontSize: overrides.terminalFontSize ?? DEFAULT_TERMINAL_FONT_SIZE,
-    terminalExternalInputEnabled:
-      overrides.terminalExternalInputEnabled ?? DEFAULT_TERMINAL_EXTERNAL_INPUT_ENABLED,
     remoteTerminalTmuxEnabled:
       overrides.remoteTerminalTmuxEnabled ?? DEFAULT_REMOTE_TERMINAL_TMUX_ENABLED,
     terminalCustomButtonsVisible:
@@ -146,7 +143,6 @@ export function initialSettingsFromSnapshot(snapshot: Pick<
   | 'fileTreeTopbarFontSize'
   | 'fileTreeClipboardMaxBytesMb'
   | 'terminalFontSize'
-  | 'terminalExternalInputEnabled'
   | 'remoteTerminalTmuxEnabled'
   | 'terminalCustomButtonsVisible'
   | 'terminalCustomButtonSize'
@@ -173,7 +169,6 @@ export function initialSettingsFromSnapshot(snapshot: Pick<
     fileTreeTopbarFontSize: snapshot.fileTreeTopbarFontSize,
     fileTreeClipboardMaxBytesMb: snapshot.fileTreeClipboardMaxBytesMb,
     terminalFontSize: snapshot.terminalFontSize,
-    terminalExternalInputEnabled: snapshot.terminalExternalInputEnabled,
     remoteTerminalTmuxEnabled: snapshot.remoteTerminalTmuxEnabled,
     terminalCustomButtonsVisible: snapshot.terminalCustomButtonsVisible,
     terminalCustomButtonSize: snapshot.terminalCustomButtonSize,

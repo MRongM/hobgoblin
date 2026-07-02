@@ -35,8 +35,6 @@ import {
 import { MobileTerminalToolbar } from '#/web/components/terminal/mobile-terminal-toolbar.tsx'
 import { isMobileDevice } from '#/web/components/terminal/mobile-detection.ts'
 import { useRuntimeTerminalSettings } from '#/web/runtime-settings-terminal-buttons.ts'
-import { TerminalExternalInput } from '#/web/components/terminal/terminal-external-input.tsx'
-import { setTerminalExternalInputFillHandler } from '#/web/components/terminal/terminal-external-input-fill.ts'
 import { generatedPasteFileName, generatedTimestampedPasteFileName } from '#/web/components/file-tree/model.ts'
 import { openWorktreeEditorTarget } from '#/web/lib/editor-open-targets.ts'
 interface TerminalSlotProps {
@@ -50,11 +48,11 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
   const t = useT()
   const hostRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
-  const externalInputRef = useRef<HTMLTextAreaElement | null>(null)
   const bottomDockRef = useRef<HTMLDivElement | null>(null)
+  const onRevealPathRef = useRef(onRevealPath)
+  onRevealPathRef.current = onRevealPath
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
-  const [externalInputValue, setExternalInputValue] = useState('')
   const [bottomDockHeight, setBottomDockHeight] = useState<number | null>(null)
   const context = useTerminalSessionContext()
   const {
@@ -76,13 +74,8 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
   const key = descriptor?.key ?? null
   const snapshot = useTerminalSnapshot(key)
   const hasSessions = useWorktreeTerminalCount(terminalWorktreeKey) > 0
-  const {
-    terminalExternalInputEnabled,
-    temporaryFilesDirectory,
-    terminalCustomButtonsVisible,
-    terminalCustomButtonSize,
-    terminalCustomButtons,
-  } = useRuntimeTerminalSettings()
+  const { temporaryFilesDirectory, terminalCustomButtonsVisible, terminalCustomButtonSize, terminalCustomButtons } =
+    useRuntimeTerminalSettings()
   const progress = snapshot.progress
   const attachment = snapshot.attachment
   const isController = hasSessions && snapshot.phase === 'open' && attachment?.role === 'controller'
@@ -94,20 +87,43 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
     return () => registerWorktreeHost(terminalWorktreeKey, null)
   }, [registerWorktreeHost, terminalWorktreeKey])
 
-  const handleOpenPathInEditor = useCallback(
-    async (target: FilePathTarget) => {
-      const result = await openWorktreeEditorTarget(repoRoot, worktreePath, target)
+  // Focus the terminal once when the session first becomes ready, but only if
+  // no other interactive element currently holds focus. This mirrors the old
+  // goblin behaviour where focus was triggered exactly once per session key.
+  const focusedKeyRef = useRef<string | null>(null)
+  useLayoutEffect(() => {
+    if (!isController || !key || searchOpen) {
+      if (focusedKeyRef.current === key) focusedKeyRef.current = null
+      return
+    }
+    if (focusedKeyRef.current === key) return
+    focusedKeyRef.current = key
+    const active = typeof document !== 'undefined' ? document.activeElement : null
+    const isBody = !active || active === document.body
+    if (!isBody) return
+    const textarea = hostRef.current?.querySelector('textarea')
+    textarea?.focus()
+  }, [isController, key, searchOpen])
+
+  const openPathInEditorRef = useRef<(target: FilePathTarget) => void>(() => {})
+  openPathInEditorRef.current = (target: FilePathTarget) => {
+    void openWorktreeEditorTarget(repoRoot, worktreePath, target).then((result) => {
       if (!result.ok) toast.error(t(result.message))
-    },
-    [repoRoot, t, worktreePath],
-  )
+    })
+  }
+  const handleRevealPath = useCallback((relativePath: string) => {
+    onRevealPathRef.current?.(relativePath)
+  }, [])
+  const handleOpenPathInEditor = useCallback((target: FilePathTarget) => {
+    openPathInEditorRef.current(target)
+  }, [])
 
   useLayoutEffect(() => {
     const host = hostRef.current
     if (!host || !descriptor) return
-    attach(descriptor, host, { onRevealPath, onOpenPathInEditor: handleOpenPathInEditor })
+    attach(descriptor, host, { onRevealPath: handleRevealPath, onOpenPathInEditor: handleOpenPathInEditor })
     return () => detach(descriptor.key, host)
-  }, [attach, descriptor, detach, handleOpenPathInEditor, onRevealPath])
+  }, [attach, descriptor, detach, handleOpenPathInEditor, handleRevealPath])
 
   useEffect(() => {
     if (!key || typeof document === 'undefined' || !document.hasFocus()) return
@@ -179,7 +195,6 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
   const handlePasteCapture = useCallback(
     (event: ClipboardEvent<HTMLDivElement>) => {
       if (!key || !isController) return
-      if (isExternalInputPasteTarget(event.target, externalInputRef.current)) return
       if (event.clipboardData.getData('text/plain').length > 0) return
 
       const files = binaryPasteFiles(event.clipboardData)
@@ -247,68 +262,18 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
     },
     [key, worktreePath, writeInput],
   )
-  const handleExternalInputDragOver = useCallback((event: DragEvent<HTMLTextAreaElement>) => {
-    if (!hasPathDrop(event)) return
-    event.preventDefault()
-    event.stopPropagation()
-    event.dataTransfer.dropEffect = 'copy'
-  }, [])
-  const handleExternalInputDrop = useCallback(
-    (event: DragEvent<HTMLTextAreaElement>) => {
-      if (!hasPathDrop(event)) return
-      event.preventDefault()
-      event.stopPropagation()
-      const paths = pathsForDrop(event, worktreePath)
-      if (paths.length === 0) return
-      const text = paths.map(shellEscapePath).join(' ')
-      const textarea = externalInputRef.current
-      const selectionStart = textarea?.selectionStart ?? externalInputValue.length
-      const selectionEnd = textarea?.selectionEnd ?? selectionStart
-      const next = insertExternalInputText(externalInputValue, selectionStart, selectionEnd, text)
-      setExternalInputValue(next.value)
-      queueMicrotask(() => {
-        const input = externalInputRef.current
-        if (!input) return
-        input.focus({ preventScroll: true })
-        input.setSelectionRange(next.cursor, next.cursor)
-      })
-    },
-    [externalInputValue, worktreePath],
-  )
-  const handleExternalInputPaste = useCallback(
-    (event: ClipboardEvent<HTMLTextAreaElement>) => {
-      if (event.clipboardData.getData('text/plain').length > 0) return
-      const files = binaryPasteFiles(event.clipboardData)
+  const visibleCustomButtons =
+    isController && terminalCustomButtonsVisible
+      ? terminalCustomButtons.filter((button) => button.label.trim() && button.value.trim())
+      : []
+  const hasBottomDock = visibleCustomButtons.length > 0
 
-      event.preventDefault()
-      event.stopPropagation()
-      const textarea = externalInputRef.current
-      const selectionStart = textarea?.selectionStart ?? externalInputValue.length
-      const selectionEnd = textarea?.selectionEnd ?? selectionStart
-      void savePastedFilesIntoExternalInput(files, {
-        repoRoot,
-        worktreePath,
-        temporaryFilesDirectory,
-        externalInputValue,
-        selectionStart,
-        selectionEnd,
-        setExternalInputValue,
-        focusInput: () => externalInputRef.current,
-      })
-    },
-    [externalInputValue, repoRoot, temporaryFilesDirectory, worktreePath],
-  )
-
-  const showExternalInput = isController && terminalExternalInputEnabled && !!key
-  const visibleCustomButtons = isController && terminalCustomButtonsVisible
-    ? terminalCustomButtons.filter((button) => button.label.trim() && button.value.trim())
-    : []
-  const hasBottomDock = showExternalInput || visibleCustomButtons.length > 0
   useLayoutEffect(() => {
     if (!hasBottomDock) {
       setBottomDockHeight(null)
       return
     }
+
     const dock = bottomDockRef.current
     if (!dock) return
 
@@ -323,32 +288,11 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
     const observer = new ResizeObserver(updateDockHeight)
     observer.observe(dock)
     return () => observer.disconnect()
-  }, [hasBottomDock, showExternalInput, visibleCustomButtons.length])
+  }, [hasBottomDock, visibleCustomButtons.length])
+
   const readonlyBadge = attachment?.role === 'viewer' ? t('terminal.mirror-controlled') : t('terminal.unowned')
   const progressVariant =
     progress?.state === 2 ? 'error' : progress?.state === 4 ? 'warning' : progress?.state === 3 ? 'indeterminate' : ''
-  const submitExternalInput = useCallback(
-    (value: string) => {
-      if (!key || value.trim().length === 0) return
-      writeInput(key, `${value}\r`)
-      setExternalInputValue('')
-    },
-    [key, writeInput],
-  )
-  const fillExternalInput = useCallback((value: string) => {
-    setExternalInputValue(value)
-    queueMicrotask(() => {
-      externalInputRef.current?.focus({ preventScroll: true })
-      externalInputRef.current?.setSelectionRange(value.length, value.length)
-    })
-  }, [])
-  useEffect(() => {
-    if (!showExternalInput) return
-    return setTerminalExternalInputFillHandler(terminalWorktreeKey, (value) => {
-      fillExternalInput(value)
-      return true
-    })
-  }, [fillExternalInput, showExternalInput, terminalWorktreeKey])
   const slotStyle =
     bottomDockHeight === null
       ? undefined
@@ -356,9 +300,9 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
 
   return (
     <div
-      style={slotStyle}
       className="goblin-terminal-slot focus-visible:outline-none"
       tabIndex={-1}
+      style={slotStyle}
       onFocusCapture={handleFocus}
       onBlurCapture={handleBlur}
       onKeyDownCapture={handleKeyDownCapture}
@@ -423,50 +367,30 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
       </div>
       {key && hasBottomDock && (
         <div ref={bottomDockRef} className="goblin-terminal-bottom-dock">
-          {visibleCustomButtons.length > 0 && (
-            <div className="goblin-terminal-custom-buttons" aria-label={t('terminal.custom-buttons')}>
-              {visibleCustomButtons.map((button, index) => {
-                const action = button.action === 'input' ? 'input' : 'execute'
-                return (
-                  <Button
-                    key={`${index}:${button.label}:${button.value}:${action}`}
-                    type="button"
-                    size={terminalCustomButtonSize === 'large' ? 'default' : 'sm'}
-                    variant="secondary"
-                    className={cn(
-                      'goblin-terminal-custom-buttons__button',
-                      `goblin-terminal-custom-buttons__button--${terminalCustomButtonSize}`,
-                    )}
-                    title={button.value}
-                    onClick={() => {
-                      if (action === 'input') {
-                        if (showExternalInput) fillExternalInput(button.value)
-                        else writeInput(key, button.value)
-                      } else {
-                        writeInput(key, `${button.value}\r`)
-                      }
-                    }}
-                  >
-                    {button.label}
-                  </Button>
-                )
-              })}
-            </div>
-          )}
-          {showExternalInput && (
-            <TerminalExternalInput
-              ref={externalInputRef}
-              value={externalInputValue}
-              placeholder={t('terminal.external-input-placeholder')}
-              submitLabel={t('terminal.external-input-send')}
-              resizeLabel={t('terminal.external-input-resize')}
-              onChange={setExternalInputValue}
-              onSubmit={submitExternalInput}
-              onPaste={handleExternalInputPaste}
-              onDragOver={handleExternalInputDragOver}
-              onDrop={handleExternalInputDrop}
-            />
-          )}
+          <div className="goblin-terminal-custom-buttons" aria-label={t('terminal.custom-buttons')}>
+            {visibleCustomButtons.map((button, index) => {
+              const action = button.action === 'input' ? 'input' : 'execute'
+              return (
+                <Button
+                  key={`${index}:${button.label}:${button.value}:${action}`}
+                  type="button"
+                  size={terminalCustomButtonSize === 'large' ? 'default' : 'sm'}
+                  variant="secondary"
+                  className={cn(
+                    'goblin-terminal-custom-buttons__button',
+                    `goblin-terminal-custom-buttons__button--${terminalCustomButtonSize}`,
+                  )}
+                  title={button.value}
+                  onClick={() => {
+                    if (action === 'input') writeInput(key, button.value)
+                    else writeInput(key, `${button.value}\r`)
+                  }}
+                >
+                  {button.label}
+                </Button>
+              )
+            })}
+          </div>
         </div>
       )}
       {isReadonly && (
@@ -575,10 +499,6 @@ function binaryPasteFiles(data: DataTransfer): File[] {
     .filter((file): file is File => !!file && file.size > 0)
 }
 
-function isExternalInputPasteTarget(target: EventTarget | null, input: HTMLTextAreaElement | null): boolean {
-  return !!input && target instanceof Node && input.contains(target)
-}
-
 interface ResolvePastedFilePathsOptions {
   repoRoot: string
   worktreePath: string
@@ -644,36 +564,6 @@ function remoteTerminalPasteTargetDir(worktreePath: string): string {
   return normalized ? `${normalized}/tmp` : '/tmp'
 }
 
-interface SavePastedFilesIntoExternalInputOptions extends ResolvePastedFilePathsOptions {
-  externalInputValue: string
-  selectionStart: number
-  selectionEnd: number
-  setExternalInputValue: (value: string) => void
-  focusInput: () => HTMLTextAreaElement | null
-}
-
-async function savePastedFilesIntoExternalInput(
-  files: File[],
-  options: SavePastedFilesIntoExternalInputOptions,
-): Promise<void> {
-  const paths = await resolvePastedFilePaths(files, options)
-  if (paths.length === 0) return
-  const text = paths.map(shellEscapePath).join(' ')
-  const next = insertExternalInputText(
-    options.externalInputValue,
-    options.selectionStart,
-    options.selectionEnd,
-    text,
-  )
-  options.setExternalInputValue(next.value)
-  queueMicrotask(() => {
-    const input = options.focusInput()
-    if (!input) return
-    input.focus({ preventScroll: true })
-    input.setSelectionRange(next.cursor, next.cursor)
-  })
-}
-
 async function fileToClipboardPayload(file: File): Promise<ClipboardBinaryFilePayload> {
   return {
     name: file.name,
@@ -709,30 +599,4 @@ function pathForTerminalDrop(path: string, worktreePath: string): string {
 
 function stripTrailingPathSeparators(path: string): string {
   return path.replace(/[\\/]+$/u, '')
-}
-
-function insertExternalInputText(
-  value: string,
-  selectionStart: number,
-  selectionEnd: number,
-  text: string,
-): { value: string; cursor: number } {
-  const start = clampSelectionIndex(selectionStart, value.length)
-  const end = clampSelectionIndex(selectionEnd, value.length)
-  const from = Math.min(start, end)
-  const to = Math.max(start, end)
-  const before = value.slice(0, from)
-  const after = value.slice(to)
-  const prefix = before.length > 0 && !/\s$/u.test(before) ? ' ' : ''
-  const suffix = after.length > 0 && !/^\s/u.test(after) ? ' ' : ''
-  const inserted = `${prefix}${text}${suffix}`
-  return {
-    value: `${before}${inserted}${after}`,
-    cursor: before.length + inserted.length,
-  }
-}
-
-function clampSelectionIndex(value: number, length: number): number {
-  if (!Number.isFinite(value)) return length
-  return Math.max(0, Math.min(length, Math.trunc(value)))
 }

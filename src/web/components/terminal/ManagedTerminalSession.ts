@@ -13,13 +13,13 @@ import { terminalBridge } from '#/web/terminal.ts'
 import { setTerminalFocused } from '#/web/terminal-focus.ts'
 import { openExternalUrl } from '#/web/app-shell-client.ts'
 import { TerminalSessionRuntime } from '#/web/components/terminal/terminal-session-runtime.ts'
-import { TerminalSessionView } from '#/web/components/terminal/terminal-session-view.ts'
 import { writeWithTerminalAuthority } from '#/web/components/terminal/authority-gate.ts'
+import { isMobileDevice } from '#/web/components/terminal/mobile-detection.ts'
+import { TerminalSessionView } from '#/web/components/terminal/terminal-session-view.ts'
 import { readOrCreateWebTerminalAttachmentId } from '#/web/renderer-terminal-bridge.ts'
 import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
-import type { TerminalInput } from '#/web/components/terminal/terminal-input.ts'
+import { isTerminalEmulatorInput, type TerminalInput } from '#/web/components/terminal/terminal-input.ts'
 import type { TerminalThemeMode } from '#/web/components/terminal/terminal-theme.ts'
-import { isMobileDevice } from '#/web/components/terminal/mobile-detection.ts'
 import type {
   TerminalBellEvent,
   TerminalDescriptor,
@@ -99,7 +99,6 @@ export class ManagedTerminalSession {
         this.start()
       }
     }
-    if (this.runtime.phase() === 'open' && this.runtime.canResize()) this.autoFocusView()
   }
 
   detach(host: HTMLElement, parkingRoot: HTMLElement): void {
@@ -139,7 +138,7 @@ export class ManagedTerminalSession {
   }
 
   writeInput(input: string | TerminalInput): void {
-    if (typeof input !== 'string' && input.origin === 'terminal-emulator' && this.runtime.isReplaying()) return
+    if (typeof input !== 'string' && isTerminalEmulatorInput(input) && this.runtime.isReplaying()) return
     const data = typeof input === 'string' ? input : input.data
     const sessionId = this.runtime.currentSessionId()
     if (!sessionId) return
@@ -260,7 +259,6 @@ export class ManagedTerminalSession {
         if (this.view.isConnected() && !this.view.currentTerminal()) {
           this.start()
         }
-        this.autoFocusView()
       }
     }
     if (changed || pendingCleared) {
@@ -410,13 +408,8 @@ export class ManagedTerminalSession {
     this.guardStart(token, term)
     const changed = this.runtime.markAttached()
     if (changed) this.notify('metadata')
-    this.autoFocusView()
   }
 
-  private autoFocusView(): void {
-    if (isMobileDevice()) return
-    if (this.view.isVisible()) this.view.focus()
-  }
 
   private guardStart(token: number, term: XTermTerminal): void {
     if (this.disposed || this.startToken !== token || this.view.currentTerminal() !== term) {
@@ -455,13 +448,15 @@ export class ManagedTerminalSession {
     replaySeq: number,
     replayTruncated: boolean,
   ): Promise<void> {
-    this.runtime.beginReplay(replaySeq)
+    const replayGeneration = this.runtime.beginReplay(replaySeq)
     try {
       if (replayTruncated) term.reset()
-      if (replay) await this.writeOutputToView(replay)
+      if (replay) await termWrite(term, replay)
     } finally {
       if (this.currentStart(token, term)) {
-        for (const event of this.runtime.finishReplay()) this.queueOutput(event.data)
+        for (const event of this.runtime.finishReplay(replayGeneration)) this.queueOutput(event.data)
+      } else {
+        this.runtime.discardReplay(replayGeneration)
       }
     }
   }
@@ -469,22 +464,50 @@ export class ManagedTerminalSession {
   private async preloadHydratedSnapshot(token: number, term: XTermTerminal): Promise<boolean> {
     const hydratedSnapshot = this.hydratedSnapshot
     if (!hydratedSnapshot || !this.currentStart(token, term)) return false
-    this.runtime.beginReplay(hydratedSnapshot.snapshotSeq)
+    const replayGeneration = this.runtime.beginReplay(hydratedSnapshot.snapshotSeq)
     try {
       term.reset()
-      if (hydratedSnapshot.snapshot) await this.writeOutputToView(hydratedSnapshot.snapshot)
+      if (hydratedSnapshot.snapshot) await termWrite(term, hydratedSnapshot.snapshot)
       return this.currentStart(token, term)
     } finally {
-      if (this.currentStart(token, term)) this.runtime.finishReplay()
+      if (this.currentStart(token, term)) {
+        this.runtime.finishReplay(replayGeneration)
+      } else {
+        this.runtime.discardReplay(replayGeneration)
+      }
     }
   }
 
   private applyHydratedSnapshotToActiveView(): void {
     const term = this.view.currentTerminal()
     const hydratedSnapshot = this.hydratedSnapshot
-    if (!term) return
-    term.reset()
-    if (hydratedSnapshot?.snapshot) this.view.writeOutput(hydratedSnapshot.snapshot)
+    if (!term || !hydratedSnapshot) return
+    const replayGeneration = this.runtime.beginReplay(hydratedSnapshot.snapshotSeq)
+    try {
+      term.reset()
+      if (!hydratedSnapshot.snapshot) {
+        this.finishActiveHydratedSnapshotReplay(term, replayGeneration)
+        return
+      }
+      term.write(hydratedSnapshot.snapshot, () => {
+        if (this.disposed) {
+          this.runtime.discardReplay(replayGeneration)
+          return
+        }
+        this.finishActiveHydratedSnapshotReplay(term, replayGeneration)
+      })
+    } catch (err) {
+      this.runtime.discardReplay(replayGeneration)
+      throw err
+    }
+  }
+
+  private finishActiveHydratedSnapshotReplay(term: XTermTerminal, replayGeneration: number): void {
+    if (this.view.currentTerminal() === term) {
+      for (const event of this.runtime.finishReplay(replayGeneration)) this.queueOutput(event.data)
+    } else {
+      this.runtime.discardReplay(replayGeneration)
+    }
   }
 
   private queueResize(cols: number, rows: number): void {
@@ -550,13 +573,7 @@ export class ManagedTerminalSession {
     if (!this.pendingOutput.length) return
     const output = this.pendingOutput.join('')
     this.pendingOutput = []
-    this.view.writeOutput(output)
-  }
-
-  private writeOutputToView(data: string): Promise<void> {
-    return new Promise((resolve) => {
-      this.view.writeOutput(data, resolve)
-    })
+    this.view.currentTerminal()?.write(output)
   }
 
   private recoverActiveView(): void {
@@ -642,6 +659,12 @@ export class ManagedTerminalSession {
     const sessionId = this.runtime.closeReplacingSessionId()
     if (sessionId) void terminalBridge.close({ sessionId }).catch(() => {})
   }
+}
+
+function termWrite(term: XTermTerminal, data: string): Promise<void> {
+  return new Promise((resolve) => {
+    term.write(data, resolve)
+  })
 }
 
 function waitForTerminalLayout(): Promise<void> {

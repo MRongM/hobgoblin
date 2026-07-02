@@ -103,10 +103,8 @@ async function prefillMergeConflictCommand(
   }
 
   await Promise.resolve()
-  const command = buildMergeConflictAiCommand(provider)
-  if (bridge.fillExternalInput(scope, command)) return true
   if (!key) return false
-  bridge.writeInput(key, command)
+  bridge.writeInput(key, buildMergeConflictAiCommand(provider))
   return true
 }
 

@@ -7,7 +7,6 @@ interface TerminalSessionCommandBridge {
   worktreeSnapshot: (worktreeTerminalKey: string) => WorktreeTerminalSnapshot
   createTerminal: (base: TerminalSessionBase) => Promise<string>
   selectTerminal: (worktreeTerminalKey: string, key: string) => void
-  fillExternalInput: (worktreeTerminalKey: string, value: string) => boolean
   writeInput: (key: string, data: string) => void
 }
 

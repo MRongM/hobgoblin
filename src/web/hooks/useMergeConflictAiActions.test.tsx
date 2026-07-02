@@ -11,14 +11,10 @@ const mocks = vi.hoisted(() => ({
     worktreeSnapshot: vi.fn(),
     createTerminal: vi.fn(),
     selectTerminal: vi.fn(),
-    fillExternalInput: vi.fn(),
     writeInput: vi.fn(),
   },
   showRepoBranchDetailTab: vi.fn(),
   setDetailCollapsed: vi.fn(),
-  runtimeSettings: {
-    terminalExternalInputEnabled: true,
-  },
 }))
 
 vi.mock('#/web/repo-client.ts', () => ({
@@ -34,10 +30,6 @@ vi.mock('#/web/stores/i18n.ts', () => ({
     params ? `${key}:${JSON.stringify(params)}` : key,
 }))
 
-vi.mock('#/web/runtime-settings-terminal-buttons.ts', () => ({
-  useRuntimeTerminalSettings: () => mocks.runtimeSettings,
-}))
-
 let container: HTMLDivElement | null = null
 let root: Root | null = null
 
@@ -51,8 +43,6 @@ beforeEach(() => {
     worktreeTerminalKey: '/repo\u0000/worktree',
   })
   mocks.bridge.createTerminal.mockResolvedValue('/repo\u0000/worktree\u0000terminal-1')
-  mocks.bridge.fillExternalInput.mockReturnValue(true)
-  mocks.runtimeSettings.terminalExternalInputEnabled = true
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
@@ -66,7 +56,7 @@ afterEach(() => {
 })
 
 describe('useMergeConflictAiActions', () => {
-  test('creates a worktree terminal and fills external input without executing', async () => {
+  test('creates a worktree terminal and writes merge conflict command without executing', async () => {
     let actions: ReturnType<typeof useMergeConflictAiActions> | null = null
     await act(async () => {
       root!.render(<Harness onReady={(value) => (actions = value)} />)
@@ -82,11 +72,11 @@ describe('useMergeConflictAiActions', () => {
       branch: 'feature/conflict',
       worktreePath: '/worktree',
     })
-    expect(mocks.bridge.fillExternalInput).toHaveBeenCalledWith(
-      '/repo\u0000/worktree',
+    expect(mocks.bridge.writeInput).toHaveBeenCalledWith(
+      '/repo\u0000/worktree\u0000terminal-1',
       expect.stringContaining('codex exec'),
     )
-    expect(mocks.bridge.fillExternalInput.mock.calls[0]![1]).not.toContain('\r')
+    expect(mocks.bridge.writeInput.mock.calls[0]![1]).not.toContain('\r')
   })
 
   test('uses the selected terminal when one already exists', async () => {
@@ -111,47 +101,9 @@ describe('useMergeConflictAiActions', () => {
       '/repo\u0000/worktree',
       '/repo\u0000/worktree\u0000terminal-1',
     )
-    expect(mocks.bridge.fillExternalInput).toHaveBeenCalledWith(
-      '/repo\u0000/worktree',
-      expect.stringContaining('claude --print'),
-    )
-  })
-
-  test('keeps detected providers clickable when terminal external input is disabled', async () => {
-    mocks.runtimeSettings.terminalExternalInputEnabled = false
-    let actions: ReturnType<typeof useMergeConflictAiActions> | null = null
-    await act(async () => {
-      root!.render(<Harness onReady={(value) => (actions = value)} />)
-    })
-    await act(async () => {})
-
-    const codexAction = actions!.actions.find((action) => action.provider === 'codex')
-
-    expect(codexAction).toBeDefined()
-    expect(codexAction?.disabled).toBe(false)
-  })
-
-  test('writes to the selected terminal when external input is unavailable', async () => {
-    mocks.bridge.worktreeSnapshot.mockReturnValue({
-      count: 1,
-      selectedDescriptor: { key: '/repo\u0000/worktree\u0000terminal-1' },
-      sessions: [{ key: '/repo\u0000/worktree\u0000terminal-1' }],
-      worktreeTerminalKey: '/repo\u0000/worktree',
-    })
-    mocks.bridge.fillExternalInput.mockReturnValue(false)
-    let actions: ReturnType<typeof useMergeConflictAiActions> | null = null
-    await act(async () => {
-      root!.render(<Harness onReady={(value) => (actions = value)} />)
-    })
-    await act(async () => {})
-
-    await act(async () => {
-      await actions!.actions.find((action) => action.provider === 'codex')!.onSelect()
-    })
-
     expect(mocks.bridge.writeInput).toHaveBeenCalledWith(
       '/repo\u0000/worktree\u0000terminal-1',
-      expect.stringContaining('codex exec'),
+      expect.stringContaining('claude --print'),
     )
     expect(mocks.bridge.writeInput.mock.calls[0]![1]).not.toContain('\r')
   })

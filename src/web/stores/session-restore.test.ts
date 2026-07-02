@@ -34,7 +34,6 @@ function installBridge(sessionOverrides: Record<string, unknown> = {}) {
             editorApp: 'auto',
             fileTreeFontSize: 12,
             terminalFontSize: 14,
-            terminalExternalInputEnabled: false,
             remoteTerminalTmuxEnabled: false,
             terminalCustomButtonsVisible: true,
             terminalCustomButtons: [],

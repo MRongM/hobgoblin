@@ -26,7 +26,8 @@ test('initializes server-settings.json with defaults when no persisted settings 
   const sec = await mod.getServerFetchIntervalSec()
 
   expect(sec).toBe(120)
-  expect(await mod.getServerSettingsPrefs()).toMatchObject({
+  const prefs = await mod.getServerSettingsPrefs()
+  expect(prefs).toMatchObject({
     lang: 'auto',
     theme: 'auto',
     colorTheme: 'macos',
@@ -46,7 +47,6 @@ test('initializes server-settings.json with defaults when no persisted settings 
     fileTreeFontSize: 14,
     fileTreeTopbarFontSize: 13,
     terminalFontSize: 14,
-    terminalExternalInputEnabled: false,
     remoteTerminalTmuxEnabled: false,
     terminalCustomButtonsVisible: true,
     terminalCustomButtonSize: 'medium',
@@ -94,7 +94,6 @@ test('persists updates and notifies subscribers from the server settings store',
     fileTreeFontSize: 13.4,
     fileTreeTopbarFontSize: 12.2,
     terminalFontSize: 15.6,
-    terminalExternalInputEnabled: true,
     remoteTerminalTmuxEnabled: true,
     terminalCustomButtonsVisible: false,
     terminalCustomButtonSize: 'large',
@@ -121,7 +120,8 @@ test('persists updates and notifies subscribers from the server settings store',
   vi.resetModules()
   const reloaded = await import('#/server/modules/settings-source.ts')
   expect(await reloaded.getServerFetchIntervalSec()).toBe(42)
-  expect(await reloaded.getServerSettingsPrefs()).toMatchObject({
+  const reloadedPrefs = await reloaded.getServerSettingsPrefs()
+  expect(reloadedPrefs).toMatchObject({
     lang: 'ko',
     theme: 'dark',
     colorTheme: 'github',
@@ -141,7 +141,6 @@ test('persists updates and notifies subscribers from the server settings store',
     fileTreeFontSize: 13,
     fileTreeTopbarFontSize: 12,
     terminalFontSize: 16,
-    terminalExternalInputEnabled: true,
     remoteTerminalTmuxEnabled: true,
     terminalCustomButtonsVisible: false,
     terminalCustomButtonSize: 'large',
