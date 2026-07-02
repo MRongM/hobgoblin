@@ -75,7 +75,7 @@ On Windows, SmartScreen may warn about the unsigned installer. Continue only if 
 
 Requirements:
 
-- Bun
+- Bun 1.3.11
 - Node.js 24+
 
 Build and install the desktop app on macOS:

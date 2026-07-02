@@ -182,6 +182,28 @@ describe('main window navigation boundaries', () => {
     )
   })
 
+  test('shows the renderer process startup error page only once', async () => {
+    const { getOrCreateMainWindow } = await import('#/main/window.ts')
+    await getOrCreateMainWindow()
+
+    const renderProcessGone = mocks.webContentsOn.mock.calls.find(([eventName]) => eventName === 'render-process-gone')?.[1]
+    expect(renderProcessGone).toBeTypeOf('function')
+
+    renderProcessGone({}, { reason: 'launch-failed', exitCode: 18 })
+    renderProcessGone({}, { reason: 'launch-failed', exitCode: 18 })
+
+    await vi.waitFor(() => {
+      expect(mocks.diagnosticsLog).toHaveBeenCalledWith(
+        'startup-error-page',
+        expect.objectContaining({ phase: 'renderer-process' }),
+      )
+    })
+
+    const startupErrorPageLogs = mocks.diagnosticsLog.mock.calls.filter(([eventName]) => eventName === 'startup-error-page')
+    expect(startupErrorPageLogs).toHaveLength(1)
+    expect(mocks.loadURL).toHaveBeenCalledTimes(2)
+  })
+
   test('loads the configured renderer dev server URL in development', async () => {
     process.env.GOBLIN_WEB_DEV_URL = 'http://127.0.0.1:5173/'
     const { getOrCreateMainWindow } = await import('#/main/window.ts')

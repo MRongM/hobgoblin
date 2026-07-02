@@ -35,6 +35,10 @@ const MAIN_WINDOW_SURFACE = {
 
 let mainWindowCreation: Promise<BrowserWindow> | null = null
 
+interface StartupErrorPageState {
+  shown: boolean
+}
+
 function startupDiagnostics(): StartupDiagnostics {
   return createStartupDiagnostics(path.join(app.getPath('userData'), 'startup.log'))
 }
@@ -43,7 +47,14 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-async function showStartupErrorPage(win: BrowserWindow, phase: string, error: unknown): Promise<void> {
+async function showStartupErrorPage(
+  win: BrowserWindow,
+  phase: string,
+  error: unknown,
+  state?: StartupErrorPageState,
+): Promise<void> {
+  if (state?.shown) return
+  if (state) state.shown = true
   const diagnostics = startupDiagnostics()
   const message = errorMessage(error)
   const html = buildStartupErrorPageHtml({ phase, message, logPath: diagnostics.logPath })
@@ -58,13 +69,17 @@ async function showStartupErrorPage(win: BrowserWindow, phase: string, error: un
   }
 }
 
-function attachStartupDiagnostics(win: BrowserWindow, diagnostics: StartupDiagnostics): void {
+function attachStartupDiagnostics(
+  win: BrowserWindow,
+  diagnostics: StartupDiagnostics,
+  startupErrorPageState: StartupErrorPageState,
+): void {
   win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
     diagnostics.log('renderer-did-fail-load', { errorCode, errorDescription, validatedURL })
   })
   win.webContents.on('render-process-gone', (_event, details) => {
     diagnostics.log('renderer-process-gone', { reason: details.reason, exitCode: details.exitCode })
-    void showStartupErrorPage(win, 'renderer-process', new Error(details.reason)).catch(() => {})
+    void showStartupErrorPage(win, 'renderer-process', new Error(details.reason), startupErrorPageState).catch(() => {})
   })
   win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
     if (level < 2) return
@@ -147,7 +162,8 @@ async function createMainWindow(): Promise<BrowserWindow> {
     webPreferences: await createRendererWindowWebPreferences(),
   })
   const diagnostics = startupDiagnostics()
-  attachStartupDiagnostics(win, diagnostics)
+  const startupErrorPageState: StartupErrorPageState = { shown: false }
+  attachStartupDiagnostics(win, diagnostics, startupErrorPageState)
   attachRendererSurfaceWindow(win, { logLabel: 'window', surface: MAIN_WINDOW_SURFACE })
   const { url } = createRendererEntryUrl({ routePath: '/' })
   allowRendererWindowEntryUrl(win, url.toString())
@@ -174,7 +190,7 @@ async function createMainWindow(): Promise<BrowserWindow> {
     diagnostics.log('renderer-load-complete', { url: url.toString() })
   } catch (err) {
     console.warn('[window] failed to load app URL', err)
-    await showStartupErrorPage(win, 'renderer-load', err)
+    await showStartupErrorPage(win, 'renderer-load', err, startupErrorPageState)
   }
   return win
 }
