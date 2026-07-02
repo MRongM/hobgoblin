@@ -583,7 +583,11 @@ describe('BranchRow', () => {
     )
 
     const handle = document.querySelector('[aria-label="重新排序工作树"]')
+    const row = document.querySelector('li')
     expect(handle?.getAttribute('aria-label')).toBe('重新排序工作树')
+    expect(row?.className).toContain('grid-cols-[1.75rem_minmax(0,1fr)]')
+    expect(handle?.parentElement?.className).toContain('pl-0')
+    expect(handle?.parentElement?.className).not.toContain('pl-2')
   })
 
   test('removes left content padding beside the drag handle', () => {

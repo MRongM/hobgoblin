@@ -67,8 +67,8 @@ export function BranchRow({
         'relative grid min-h-8 items-stretch cursor-pointer',
         dragHandle
           ? showActions
-            ? 'grid-cols-[2rem_minmax(0,1fr)_auto]'
-            : 'grid-cols-[2rem_minmax(0,1fr)]'
+            ? 'grid-cols-[1.75rem_minmax(0,1fr)_auto]'
+            : 'grid-cols-[1.75rem_minmax(0,1fr)]'
           : showActions
             ? 'grid-cols-[minmax(0,1fr)_auto]'
             : 'grid-cols-1',
@@ -80,7 +80,7 @@ export function BranchRow({
       )}
     >
       {dragHandle && (
-        <div className="relative z-20 flex items-center justify-center py-1 pl-2">
+        <div className="relative z-20 flex items-center justify-center py-1 pl-0">
           <button
             ref={dragHandle.ref}
             type="button"

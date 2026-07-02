@@ -137,7 +137,7 @@ export function BranchActionsDropdown({
           title={quickAction?.title ?? quickAction?.label ?? t('action.menu')}
           aria-label={quickAction?.ariaLabel ?? quickAction?.title ?? quickAction?.label ?? t('action.menu')}
           className={cn(
-            'rounded-r-none pr-2',
+            'gap-0.5 rounded-r-none px-1.5 pr-1.5',
             quickAction?.destructive && 'text-danger hover:bg-danger-surface hover:text-danger',
           )}
         >
@@ -155,9 +155,9 @@ export function BranchActionsDropdown({
             title={t('action.menu')}
             aria-label={t('action.menu')}
             aria-busy={busyAction ? true : undefined}
-            className="rounded-l-none px-1 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground"
+            className="h-6 w-7 rounded-l-none px-1.5 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground"
           >
-            {busyAction ? <Loader2 className="size-4 animate-spin" /> : <ChevronDown className="size-3" />}
+            {busyAction ? <Loader2 className="size-4 animate-spin" /> : <ChevronDown className="size-3.5" />}
           </Button>
         </DropdownMenuTrigger>
       </div>
