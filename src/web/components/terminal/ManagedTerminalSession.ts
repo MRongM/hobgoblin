@@ -73,10 +73,12 @@ export class ManagedTerminalSession {
       onOpenExternalLink: (uri) => this.openExternalLink(uri),
       onRenderRecoveryRequest: () => this.recoverActiveView(),
     }, { fontSize, terminalThemeMode })
+    this.view.setWorktreePath(descriptor.worktreePath)
   }
 
   updateDescriptor(descriptor: TerminalDescriptor): void {
     this.descriptor = descriptor
+    this.view.setWorktreePath(descriptor.worktreePath)
   }
 
   setFontSize(fontSize: number): void {

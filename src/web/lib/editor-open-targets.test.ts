@@ -40,4 +40,20 @@ describe('openWorktreeEditorTarget', () => {
     })
     expect(mocks.openRepositoryEditor).not.toHaveBeenCalled()
   })
+
+  test('preserves contained Windows absolute editor targets', async () => {
+    const { openWorktreeEditorTarget } = await import('#/web/lib/editor-open-targets.ts')
+
+    await openWorktreeEditorTarget('/repo', 'C:\\repo', { path: 'C:\\repo\\src\\app.ts', line: 12 })
+
+    expect(mocks.openRepositoryEditor).toHaveBeenCalledWith({ path: 'C:\\repo\\src\\app.ts', line: 12 })
+  })
+
+  test('rejects Windows absolute editor targets outside the worktree', async () => {
+    const { openWorktreeEditorTarget } = await import('#/web/lib/editor-open-targets.ts')
+
+    await expect(
+      openWorktreeEditorTarget('/repo', 'C:\\repo', { path: 'D:\\other\\src\\app.ts', line: 12 }),
+    ).resolves.toEqual({ ok: false, message: 'error.invalid-path' })
+  })
 })

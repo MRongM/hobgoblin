@@ -1,3 +1,5 @@
+import { pathStyle, safeRelativePath } from '#/shared/path-semantics.ts'
+
 export interface FilePathTarget {
   path: string
   line?: number
@@ -13,12 +15,17 @@ export interface FilePathTargetSpan {
 
 export type EditorOpenTarget = string | FilePathTarget
 
+export interface FilePathTargetParseOptions {
+  allowAbsolute?: boolean
+}
+
 const PATH_TOKEN_PATTERN =
   /(^|[\s"'`([{<:：,，、;；（［【｛《〈「『])(?<token>(?:\.\/)?(?:(?:[A-Za-z0-9_@%+=.-]+\/)+[A-Za-z0-9_@%+=.,-]+|[A-Za-z0-9_@%+=-]+\.[A-Za-z0-9][A-Za-z0-9._-]*)(?::\d+(?::\d+)?)?)(?=$|[\s"'`,;)\]}>，。、；：！？）］】｝》〉」』、])/gu
+const ABSOLUTE_PATH_TOKEN_PATTERN =
+  /(^|[\s"'`([{<:：,，、;；（［【｛《〈「『])(?<token>(?:[A-Za-z]:[\\/]|\/)[^\s"'`,;)\]}>，。、；：！？）］】｝》〉」』、]+)(?=$|[\s"'`,;)\]}>，。、；：！？）］】｝》〉」』、])/gu
 const PYTHON_FILE_LINE_PATTERN =
   /(^|[\s([{<（［【｛《〈「『])File\s+["'](?<path>[^"'\r\n]+)["'],\s+line\s+(?<line>\d+)/gu
 const URL_PATTERN = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//u
-const WINDOWS_ABSOLUTE_PATH_PATTERN = /^[A-Za-z]:[\\/]/u
 const LEADING_PUNCTUATION_PATTERN = /^[`"'([{<（［【｛《〈「『]+/u
 const TRAILING_PUNCTUATION_PATTERN = /[`"',;)\]}>，。、；：！？）］】｝》〉」』、]+$/u
 const LINE_COLUMN_TARGET_PATTERN = /^(?<path>.+):(?<line>\d+):(?<column>\d+)$/u
@@ -52,18 +59,25 @@ function splitLineTarget(value: string): FilePathTarget | null {
   return { path, line }
 }
 
-export function parseFilePathTarget(raw: string): FilePathTarget | null {
+export function parseFilePathTarget(raw: string, options: FilePathTargetParseOptions = {}): FilePathTarget | null {
   const trimmed = raw.trim().replace(LEADING_PUNCTUATION_PATTERN, '').replace(TRAILING_PUNCTUATION_PATTERN, '')
   if (!trimmed || URL_PATTERN.test(trimmed)) return null
-  if (trimmed.startsWith('/') || WINDOWS_ABSOLUTE_PATH_PATTERN.test(trimmed)) return null
 
   const target = splitLineTarget(trimmed)
   if (!target) return null
 
-  let relativePath = target.path
-  while (relativePath.startsWith('./')) relativePath = relativePath.slice(2)
-  if (!relativePath || relativePath.startsWith('/') || relativePath.includes('\\')) return null
+  const style = pathStyle(target.path)
+  if (style !== 'relative') {
+    if (!options.allowAbsolute || style === 'windowsUncAbsolute') return null
+    return target.column === undefined
+      ? target.line === undefined
+        ? { path: target.path }
+        : { path: target.path, line: target.line }
+      : { path: target.path, line: target.line, column: target.column }
+  }
 
+  const relativePath = safeRelativePath(target.path)
+  if (!relativePath) return null
   const segments = relativePath.split('/')
   if (segments.some((segment) => !segment || segment === '.' || segment === '..')) return null
   if (!relativePath.includes('/') && !relativePath.includes('.')) return null
@@ -75,7 +89,7 @@ export function parseFilePathTarget(raw: string): FilePathTarget | null {
     : { path: relativePath, line: target.line, column: target.column }
 }
 
-export function filePathTargetsForText(text: string): FilePathTargetSpan[] {
+export function filePathTargetsForText(text: string, options: FilePathTargetParseOptions = {}): FilePathTargetSpan[] {
   const spans: FilePathTargetSpan[] = []
   for (const match of text.matchAll(PYTHON_FILE_LINE_PATTERN)) {
     const path = match.groups?.path
@@ -85,15 +99,29 @@ export function filePathTargetsForText(text: string): FilePathTargetSpan[] {
     if (prefixLength < 0) continue
     const startIndex = match.index + prefixLength
     const endIndex = match.index + match[0].length
-    const target = parseFilePathTarget(`${path}:${line}`)
+    const target = parseFilePathTarget(`${path}:${line}`, options)
     if (!target || spanOverlaps(spans, startIndex, endIndex)) continue
     spans.push({ text: text.slice(startIndex, endIndex), target, startIndex, endIndex })
+  }
+
+  if (options.allowAbsolute) {
+    for (const match of text.matchAll(ABSOLUTE_PATH_TOKEN_PATTERN)) {
+      const token = match.groups?.token
+      if (!token || match.index === undefined) continue
+      const target = parseFilePathTarget(token, options)
+      if (!target) continue
+      const tokenOffset = match[0].indexOf(token)
+      const startIndex = match.index + tokenOffset
+      const endIndex = startIndex + token.length
+      if (spanOverlaps(spans, startIndex, endIndex)) continue
+      spans.push({ text: token, target, startIndex, endIndex })
+    }
   }
 
   for (const match of text.matchAll(PATH_TOKEN_PATTERN)) {
     const token = match.groups?.token
     if (!token || match.index === undefined) continue
-    const target = parseFilePathTarget(token)
+    const target = parseFilePathTarget(token, options)
     if (!target) continue
     const tokenOffset = match[0].indexOf(token)
     const startIndex = match.index + tokenOffset

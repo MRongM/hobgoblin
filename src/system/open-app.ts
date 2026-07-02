@@ -12,6 +12,8 @@ import os from 'node:os'
 import path from 'node:path'
 import type { EditorOpenTarget } from '#/shared/file-path-target.ts'
 import { editorTargetPath, editorTargetPathArgument } from '#/shared/file-path-target.ts'
+import { pathStyle } from '#/shared/path-semantics.ts'
+import { firstAvailableCommand } from '#/system/command.ts'
 
 const OPEN_TIMEOUT_MS = 10_000
 
@@ -46,6 +48,65 @@ function resolveAppCli(appName: string, cliName: string): string | null {
 
 export function hasAppCli(appName: string, cliName: string): boolean {
   return resolveAppCli(appName, cliName) !== null
+}
+
+function editorCliCandidates(cliName: string): string[] {
+  return process.platform === 'win32' ? [`${cliName}.cmd`, `${cliName}.exe`, cliName] : [cliName]
+}
+
+function resolveEditorCommand(cliName: string): string | null {
+  return firstAvailableCommand(editorCliCandidates(cliName))
+}
+
+function isUsableEditorPathForPlatform(p: string): boolean {
+  if (p.includes('\0')) return false
+  if (process.platform === 'win32') {
+    const style = pathStyle(p)
+    if (style !== 'windowsDriveAbsolute' && style !== 'windowsUncAbsolute') return false
+  } else if (!path.isAbsolute(p)) {
+    return false
+  }
+  try {
+    const stat = statSync(p)
+    return stat.isDirectory() || stat.isFile()
+  } catch {
+    return false
+  }
+}
+
+export function hasEditorCli(appName: string, cliName: string): boolean {
+  if (process.platform === 'darwin') return hasAppCli(appName, cliName)
+  return resolveEditorCommand(cliName) !== null
+}
+
+export function openByEditorCli(
+  appName: string,
+  cliName: string,
+  target: EditorOpenTarget,
+): Promise<{ ok: boolean; message: string }> {
+  if (process.platform === 'darwin') return openByAppCli(appName, cliName, target)
+  const targetPath = editorTargetPath(target)
+  if (!isUsableEditorPathForPlatform(targetPath)) return Promise.resolve({ ok: false, message: 'error.invalid-path' })
+
+  const command = resolveEditorCommand(cliName)
+  if (!command) return Promise.resolve({ ok: false, message: 'error.editor-not-installed' })
+
+  const args =
+    typeof target === 'string' || target.line === undefined
+      ? [targetPath]
+      : ['--goto', editorTargetPathArgument(target)]
+
+  return execa(command, args, {
+    timeout: OPEN_TIMEOUT_MS,
+    forceKillAfterDelay: 500,
+    reject: false,
+  }).then((result) => {
+    if (result.failed) {
+      const message = result.stderr?.trim() || result.shortMessage || result.message || 'error.editor-not-installed'
+      return { ok: false, message }
+    }
+    return { ok: true, message: targetPath }
+  })
 }
 
 /** Open `targetPath` using the CLI binary inside a VS Code-family .app bundle.

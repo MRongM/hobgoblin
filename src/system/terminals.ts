@@ -13,6 +13,7 @@ import type { ResolvedTerminalApp, TerminalAppAvailability, TerminalPref } from 
 import { isGhosttyInstalled, openInGhostty, openRemoteInGhostty } from '#/system/ghostty.ts'
 import { isAppleTerminalInstalled, openInAppleTerminal, openRemoteInAppleTerminal } from '#/system/apple-terminal.ts'
 import type { ExternalRemoteTerminalTarget } from '#/system/remote-terminal.ts'
+import { isWindowsTerminalAvailable, openInWindowsTerminal } from '#/system/windows-terminal.ts'
 
 export interface TerminalBackend {
   /** Whether this terminal is available on the current system.
@@ -29,7 +30,7 @@ export interface TerminalBackend {
 /** Concrete terminal pref values (excludes 'auto'). */
 const backends: Record<ResolvedTerminalApp, TerminalBackend> = {
   ghostty: { isInstalled: isGhosttyInstalled, open: openInGhostty, openRemote: openRemoteInGhostty },
-  terminal: { isInstalled: () => true, open: openInAppleTerminal, openRemote: openRemoteInAppleTerminal },
+  terminal: { isInstalled: () => true, open: openInNativeTerminal, openRemote: openRemoteInNativeTerminal },
 }
 
 /** Auto-detection priority — first installed backend wins. */
@@ -37,6 +38,21 @@ const AUTO_PRIORITY: ResolvedTerminalApp[] = ['ghostty', 'terminal']
 
 function isDarwin(): boolean {
   return process.platform === 'darwin'
+}
+
+function isWin32(): boolean {
+  return process.platform === 'win32'
+}
+
+function openInNativeTerminal(path: string): Promise<ExecResult> {
+  if (isDarwin()) return openInAppleTerminal(path)
+  if (isWin32()) return openInWindowsTerminal(path)
+  return Promise.resolve({ ok: false, message: 'error.terminal-not-installed' })
+}
+
+function openRemoteInNativeTerminal(target: ExternalRemoteTerminalTarget): Promise<ExecResult> {
+  if (isDarwin()) return openRemoteInAppleTerminal(target)
+  return Promise.resolve({ ok: false, message: 'error.remote-terminal-not-supported' })
 }
 
 export function resolveTerminalApp(
@@ -53,15 +69,21 @@ export function resolveTerminalApp(
 }
 
 export async function getTerminalAppAvailability(signal?: AbortSignal): Promise<TerminalAppAvailability> {
-  if (!isDarwin()) {
+  if (isDarwin()) {
+    return {
+      ghostty: backends.ghostty.isInstalled(),
+      terminal: await isAppleTerminalInstalled(signal),
+    }
+  }
+  if (isWin32()) {
     return {
       ghostty: false,
-      terminal: false,
+      terminal: isWindowsTerminalAvailable(),
     }
   }
   return {
-    ghostty: backends.ghostty.isInstalled(),
-    terminal: await isAppleTerminalInstalled(signal),
+    ghostty: false,
+    terminal: false,
   }
 }
 

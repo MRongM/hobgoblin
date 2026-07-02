@@ -29,3 +29,10 @@ export function hasCommand(command: string, extraDirectories: string[] = []): bo
   if (!command || command.includes(path.sep) || command.includes('\0')) return false
   return candidateDirectories(extraDirectories).some((directory) => isExecutableFile(path.join(directory, command)))
 }
+
+export function firstAvailableCommand(commands: string[], extraDirectories: string[] = []): string | null {
+  for (const command of commands) {
+    if (hasCommand(command, extraDirectories)) return command
+  }
+  return null
+}
