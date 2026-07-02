@@ -29,7 +29,7 @@ export function FileAreaSettings() {
     state.activeId ? state.repos[state.activeId]?.ui.workspaceLayout ?? state.workspaceLayout : state.workspaceLayout,
   )
   const fileTreePaneSize = useReposStore((state) => state.fileTreePaneSizes[workspaceLayout])
-  const setFileTreePaneSize = useReposStore((state) => state.setFileTreePaneSize)
+  const setDefaultFileTreePaneSize = useReposStore((state) => state.setDefaultFileTreePaneSize)
 
   return (
     <>
@@ -46,7 +46,7 @@ export function FileAreaSettings() {
                 max={MAX_WORKSPACE_PANE_SIZE}
                 step={0.1}
                 value={fileTreePaneSize}
-                onChange={(size) => setFileTreePaneSize(workspaceLayout, size)}
+                onChange={(size) => setDefaultFileTreePaneSize(workspaceLayout, size)}
               />
             }
           />

@@ -643,10 +643,45 @@ describe('setDetailPaneSize', () => {
   })
 })
 
-describe('setFileTreePaneSize', () => {
-  test('stores file tree pane sizes per workspace layout', () => {
-    useReposStore.getState().setFileTreePaneSize('top-bottom', 44.4)
-    useReposStore.getState().setFileTreePaneSize('left-right', 35.2)
+describe('setRepoFileTreePaneSize', () => {
+  test('stores file tree pane sizes per repo without leaking to other repos or defaults', () => {
+    seedRepo({ selectedBranch: 'main', branches: [branch('main', { worktree: { path: '/repo' } })] })
+    const repoB = replaceRepo(emptyRepo(REPO_B_ID, 'repo-b'), (repo) => {
+      repo.ui.workspaceLayout = 'top-bottom'
+    })
+    useReposStore.setState((s) => ({
+      repos: { ...s.repos, [REPO_B_ID]: repoB },
+      order: [REPO_ID, REPO_B_ID],
+      fileTreePaneSizes: { 'top-bottom': 66.7, 'left-right': 55.5 },
+    }))
+
+    useReposStore.getState().setRepoFileTreePaneSize(REPO_ID, 'top-bottom', 44.44)
+
+    expect(useReposStore.getState().repos[REPO_ID]?.ui.fileTreePaneSizes).toEqual({
+      'top-bottom': 44.4,
+      'left-right': 55.5,
+    })
+    expect(useReposStore.getState().repos[REPO_B_ID]?.ui.fileTreePaneSizes).toBeUndefined()
+    expect(useReposStore.getState().fileTreePaneSizes).toEqual({ 'top-bottom': 66.7, 'left-right': 55.5 })
+    expect(useReposStore.getState().restorableRepoCache[REPO_ID]?.ui.fileTreePaneSizes).toEqual({
+      'top-bottom': 44.4,
+      'left-right': 55.5,
+    })
+  })
+
+  test('ignores resize events for missing repos', () => {
+    const before = useReposStore.getState()
+
+    useReposStore.getState().setRepoFileTreePaneSize('/missing', 'left-right', 72)
+
+    expect(useReposStore.getState()).toBe(before)
+  })
+})
+
+describe('setDefaultFileTreePaneSize', () => {
+  test('stores default file tree pane sizes per workspace layout', () => {
+    useReposStore.getState().setDefaultFileTreePaneSize('top-bottom', 44.4)
+    useReposStore.getState().setDefaultFileTreePaneSize('left-right', 35.2)
 
     expect(useReposStore.getState().fileTreePaneSizes).toEqual({
       'top-bottom': 44.4,
@@ -657,12 +692,14 @@ describe('setFileTreePaneSize', () => {
 
 describe('resetLayout', () => {
   test('restores the initial workspace layout defaults', () => {
+    seedRepo({ selectedBranch: 'main', branches: [branch('main', { worktree: { path: '/repo' } })] })
+    useReposStore.getState().setRepoFileTreePaneSize(REPO_ID, 'top-bottom', 42)
     useReposStore.setState({
       workspaceLayout: 'top-bottom',
       detailCollapsed: true,
       detailFocusMode: true,
       detailPaneSizes: { 'top-bottom': 35, 'left-right': 70 },
-      fileTreePaneSizes: { 'top-bottom': 42, 'left-right': 38 },
+      fileTreePaneSizes: { 'top-bottom': 52, 'left-right': 38 },
     })
 
     useReposStore.getState().resetLayout()
@@ -672,6 +709,10 @@ describe('resetLayout', () => {
     expect(useReposStore.getState().detailFocusMode).toBe(false)
     expect(useReposStore.getState().detailPaneSizes).toBe(DEFAULT_DETAIL_PANE_SIZES)
     expect(useReposStore.getState().fileTreePaneSizes).toBe(DEFAULT_FILE_TREE_PANE_SIZES)
+    expect(useReposStore.getState().repos[REPO_ID]?.ui.fileTreePaneSizes).toEqual({
+      'top-bottom': 42,
+      'left-right': DEFAULT_FILE_TREE_PANE_SIZES['left-right'],
+    })
   })
 
   test('is idempotent when layout is already at defaults', () => {

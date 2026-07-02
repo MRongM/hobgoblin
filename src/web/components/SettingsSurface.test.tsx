@@ -6,6 +6,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { SettingsSurface } from '#/web/components/SettingsSurface.tsx'
 import { setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
+import { emptyRepo, replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { resetReposStore } from '#/web/stores/repos/test-utils.ts'
 
@@ -485,7 +486,17 @@ describe('SettingsSurface', () => {
     ).toBe(true)
   })
 
-  test('edits the file area height ratio from settings', async () => {
+  test('edits the new project default file area height ratio from settings without changing project overrides', async () => {
+    const repo = replaceRepo(emptyRepo('/repo-a', 'repo-a'), (draft) => {
+      draft.ui.fileTreePaneSizes = { 'top-bottom': 31.1, 'left-right': 32.2 }
+    })
+    useReposStore.setState({
+      repos: { '/repo-a': repo },
+      order: ['/repo-a'],
+      activeId: '/repo-a',
+      workspaceLayout: 'left-right',
+      fileTreePaneSizes: { 'top-bottom': 66.7, 'left-right': 66.7 },
+    })
     await render(<SettingsSurface page="files" onPageChange={() => {}} />)
 
     const input = document.getElementById('settings-file-tree-pane-size')
@@ -497,6 +508,10 @@ describe('SettingsSurface', () => {
     })
 
     expect(useReposStore.getState().fileTreePaneSizes['left-right']).toBe(72.5)
+    expect(useReposStore.getState().repos['/repo-a']?.ui.fileTreePaneSizes).toEqual({
+      'top-bottom': 31.1,
+      'left-right': 32.2,
+    })
   })
 
   test('updates the temporary files directory from general settings', async () => {

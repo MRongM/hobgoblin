@@ -69,6 +69,7 @@ export interface RepoUiState {
   branchViewMode: BranchViewMode
   detailTab: DetailTab
   workspaceLayout: RepoWorkspaceLayout
+  fileTreePaneSizes?: WorkspaceDetailPaneSizes
   worktreePathOrder: string[]
 }
 
@@ -105,6 +106,7 @@ export interface RestorableRepoSnapshot {
   data: Pick<RepoDataState, 'branches' | 'currentBranch'>
   ui: Pick<RepoUiState, 'selectedBranch' | 'branchViewMode' | 'detailTab' | 'worktreePathOrder'> & {
     workspaceLayout?: RepoWorkspaceLayout
+    fileTreePaneSizes?: WorkspaceDetailPaneSizes
   }
 }
 
@@ -195,7 +197,8 @@ export interface RestorableWorkspaceActions {
   applySessionSelectedTerminalState: (selectedTerminalByWorktree: Record<string, string>) => void
   setDetailPaneSize: (layout: RepoWorkspaceLayout, size: number) => void
   setDetailPaneSizes: (sizes: WorkspaceDetailPaneSizes) => void
-  setFileTreePaneSize: (layout: RepoWorkspaceLayout, size: number) => void
+  setRepoFileTreePaneSize: (id: string, layout: RepoWorkspaceLayout, size: number) => void
+  setDefaultFileTreePaneSize: (layout: RepoWorkspaceLayout, size: number) => void
   resetLayout: () => void
   setSelectedTerminal: (worktreeTerminalKey: string, key: string | null) => void
   reorderWorktrees: (id: string, fromPath: string, toPath: string) => void
