@@ -85,6 +85,10 @@ describe('defaultWorktreePath', () => {
   test('keeps Windows drive root repo defaults absolute', () => {
     expect(defaultWorktreePath('C:\\', 'feature/x')).toBe('C:\\worktree-feature-x')
   })
+
+  test('derives Windows sibling worktree paths for nested repositories', () => {
+    expect(defaultWorktreePath('C:\\Users\\dev\\repo', 'feature/path')).toBe('C:\\Users\\dev\\repo-feature-path')
+  })
 })
 
 describe('formatWorktreeListPath', () => {
@@ -99,5 +103,15 @@ describe('formatWorktreePath', () => {
   test('keeps copy-safe path formatting relative only when a repository root is provided', () => {
     expect(formatWorktreePath('/tmp/repo-feature', undefined, '/tmp/repo')).toBe('../repo-feature')
     expect(formatWorktreePath('/tmp/repo-feature')).toBe('/tmp/repo-feature')
+  })
+
+  test('shows Windows worktree paths relative to the repository root', () => {
+    expect(formatWorktreePath('C:\\repo', undefined, 'C:\\repo')).toBe('.')
+    expect(formatWorktreePath('C:\\repo\\packages\\app', undefined, 'C:\\repo')).toBe('packages\\app')
+    expect(formatWorktreePath('C:\\repo-feature', undefined, 'C:\\repo')).toBe('..\\repo-feature')
+  })
+
+  test('compares Windows display path segments case-insensitively', () => {
+    expect(formatWorktreePath('C:\\Repo\\packages\\app', undefined, 'c:\\repo')).toBe('packages\\app')
   })
 })

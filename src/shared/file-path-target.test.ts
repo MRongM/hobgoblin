@@ -25,6 +25,31 @@ describe('parseFilePathTarget', () => {
     expect(parseFilePathTarget('src/app.ts:12:0')).toBeNull()
     expect(parseFilePathTarget('src/app.ts:12:')).toBeNull()
   })
+
+  test('keeps absolute paths disabled by default', () => {
+    expect(parseFilePathTarget('C:\\repo\\src\\app.ts:12')).toBeNull()
+    expect(parseFilePathTarget('/repo/src/app.ts:12')).toBeNull()
+  })
+
+  test('accepts Windows and POSIX absolute paths when explicitly enabled', () => {
+    expect(parseFilePathTarget('C:\\repo\\src\\app.ts:12', { allowAbsolute: true })).toEqual({
+      path: 'C:\\repo\\src\\app.ts',
+      line: 12,
+    })
+    expect(parseFilePathTarget('C:/repo/src/app.ts:12:3', { allowAbsolute: true })).toEqual({
+      path: 'C:/repo/src/app.ts',
+      line: 12,
+      column: 3,
+    })
+    expect(parseFilePathTarget('/repo/src/app.ts:12', { allowAbsolute: true })).toEqual({
+      path: '/repo/src/app.ts',
+      line: 12,
+    })
+  })
+
+  test('does not accept UNC paths as terminal file targets', () => {
+    expect(parseFilePathTarget('\\\\server\\share\\repo\\src\\app.ts', { allowAbsolute: true })).toBeNull()
+  })
 })
 
 describe('filePathTargetsForText', () => {
@@ -101,6 +126,18 @@ describe('filePathTargetsForText', () => {
     expect(filePathTargetsForText('src/app.ts:12, docs/guide.md:3;')).toEqual([
       { text: 'src/app.ts:12', target: { path: 'src/app.ts', line: 12 }, startIndex: 0, endIndex: 13 },
       { text: 'docs/guide.md:3', target: { path: 'docs/guide.md', line: 3 }, startIndex: 15, endIndex: 30 },
+    ])
+  })
+
+  test('finds absolute path spans only when explicitly enabled', () => {
+    expect(filePathTargetsForText('at C:\\repo\\src\\app.ts:12')).toEqual([])
+    expect(filePathTargetsForText('at C:\\repo\\src\\app.ts:12', { allowAbsolute: true })).toEqual([
+      {
+        text: 'C:\\repo\\src\\app.ts:12',
+        target: { path: 'C:\\repo\\src\\app.ts', line: 12 },
+        startIndex: 3,
+        endIndex: 24,
+      },
     ])
   })
 })

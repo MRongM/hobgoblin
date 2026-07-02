@@ -82,6 +82,7 @@ export class TerminalSessionView {
   private host: HTMLElement | null = null
   private revealPathHandler: ((relativePath: string) => void) | null = null
   private openPathInEditorHandler: ((target: FilePathTarget) => void) | null = null
+  private worktreePath: string | null = null
   private fontSize: number
   private terminalThemeMode: () => TerminalThemeMode
   private readonly safariShiftKeyResolver = new SafariShiftKeyResolver()
@@ -145,6 +146,10 @@ export class TerminalSessionView {
 
   setOpenPathInEditorHandler(handler: ((target: FilePathTarget) => void) | null): void {
     this.openPathInEditorHandler = handler
+  }
+
+  setWorktreePath(worktreePath: string | null): void {
+    this.worktreePath = worktreePath
   }
 
   setFontSize(fontSize: number): void {
@@ -444,6 +449,7 @@ export class TerminalSessionView {
           term,
           () => this.revealPathHandler,
           () => this.openPathInEditorHandler,
+          () => this.worktreePath,
         ),
       )
     } catch (err) {
