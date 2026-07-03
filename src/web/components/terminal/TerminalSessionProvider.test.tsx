@@ -40,9 +40,11 @@ const mockSessions = vi.hoisted(
   () =>
     [] as Array<{
       descriptor: TerminalDescriptor
+      constructorFontFamily: string
       emitBell: (event: TerminalBellEvent) => void
       setSerializeValue: (value: string) => void
       currentThemeMode: () => 'theme' | 'classic'
+      setFontFamily: ReturnType<typeof vi.fn>
       setTerminalThemeMode: ReturnType<typeof vi.fn>
       focus: ReturnType<typeof vi.fn>
       hydrate: ReturnType<typeof vi.fn>
@@ -53,6 +55,7 @@ const mockSessions = vi.hoisted(
 )
 
 const runtimeTerminalSettingsMock = vi.hoisted(() => ({
+  fontFamily: 'mono' as 'mono' | 'maple' | 'system',
   terminalThemeSyncEnabled: true,
 }))
 
@@ -67,6 +70,7 @@ vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
     private readonly hydrateSpy = vi.fn()
     private readonly focusSpy = vi.fn()
     private readonly detachSpy = vi.fn()
+    private readonly setFontFamilySpy = vi.fn()
     private readonly setTerminalThemeModeSpy = vi.fn()
     private terminalThemeModeGetter: () => 'theme' | 'classic'
     private serializeValue = ''
@@ -78,6 +82,7 @@ vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
       _notify: () => void,
       onBell: (descriptor: TerminalDescriptor, event: TerminalBellEvent) => void,
       _fontSize = 14,
+      _fontFamily = 'ui-monospace, monospace',
       terminalThemeMode?: () => 'theme' | 'classic',
     ) {
       this.descriptor = descriptor
@@ -93,11 +98,13 @@ vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
       }
       mockSessions.push({
         descriptor,
+        constructorFontFamily: _fontFamily,
         emitBell: (event) => this.onBell(this.descriptor, event),
         setSerializeValue: (value) => {
           this.serializeValue = value
         },
         currentThemeMode: () => this.terminalThemeModeGetter(),
+        setFontFamily: this.setFontFamilySpy,
         setTerminalThemeMode: this.setTerminalThemeModeSpy,
         focus: this.focusSpy,
         hydrate: this.hydrateSpy,
@@ -112,6 +119,10 @@ vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
     }
 
     setFontSize() {}
+
+    setFontFamily(fontFamily: string) {
+      this.setFontFamilySpy(fontFamily)
+    }
 
     setTerminalThemeMode(terminalThemeMode: () => 'theme' | 'classic') {
       this.terminalThemeModeGetter = terminalThemeMode
@@ -233,6 +244,7 @@ vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
 
 vi.mock('#/web/runtime-settings-terminal-buttons.ts', () => ({
   useRuntimeTerminalSettings: () => ({
+    fontFamily: runtimeTerminalSettingsMock.fontFamily,
     remoteTerminalTmuxEnabled: false,
     terminalCustomButtonsVisible: true,
     terminalCustomButtons: [],
@@ -296,6 +308,7 @@ beforeEach(() => {
   ownershipHandler = null
   sessionsChangedHandler = null
   mockSessions.length = 0
+  runtimeTerminalSettingsMock.fontFamily = 'mono'
   runtimeTerminalSettingsMock.terminalThemeSyncEnabled = true
   managedServerSessions = []
   listSessionsMock.mockReset()
@@ -792,6 +805,33 @@ describe('TerminalSessionProvider', () => {
       const session = mockSessions.find((item) => item.descriptor.terminalId === 'terminal-1')
       if (!session) throw new Error('missing terminal-1 mock session')
       expect(session.currentThemeMode()).toBe('classic')
+    } finally {
+      await unmount()
+    }
+  })
+
+  test('passes configured font family to managed sessions', async () => {
+    runtimeTerminalSettingsMock.fontFamily = 'maple'
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } })],
+      selectedBranch: 'feature/worktree',
+      detailTab: 'terminal',
+    })
+    const { getContext, unmount } = await renderProvider()
+
+    try {
+      await act(async () => {
+        await getContext().createTerminal({
+          repoRoot: REPO_ID,
+          branch: 'feature/worktree',
+          worktreePath: WORKTREE_PATH,
+        })
+      })
+
+      const session = mockSessions.find((item) => item.descriptor.terminalId === 'terminal-1')
+      if (!session) throw new Error('missing terminal-1 mock session')
+      expect(session.constructorFontFamily).toContain('Maple Mono NF CN')
     } finally {
       await unmount()
     }

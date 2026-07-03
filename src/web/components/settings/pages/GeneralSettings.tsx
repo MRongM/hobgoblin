@@ -11,12 +11,13 @@ import {
 } from '#/web/components/settings/SettingsPrimitives.tsx'
 import { useRuntimeGeneralSettings } from '#/web/runtime-settings-general.ts'
 import { useGeneralSettingsController } from '#/web/runtime-settings-general.ts'
+import { useFontSettingsController, useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useThemeStore } from '#/web/stores/theme.ts'
 import { useI18nStore } from '#/web/stores/i18n.ts'
 import { COLOR_THEMES } from '#/shared/color-theme.ts'
 import type { ColorTheme } from '#/shared/color-theme.ts'
-import type { LangPref, ThemePref } from '#/shared/rpc.ts'
+import type { FontFamilyPref, LangPref, ThemePref } from '#/shared/rpc.ts'
 
 export function GeneralSettings() {
   const t = useT()
@@ -26,6 +27,7 @@ export function GeneralSettings() {
   const setColorTheme = useThemeStore((s) => s.setColorTheme)
   const langPref = useI18nStore((s) => s.pref)
   const setLangPref = useI18nStore((s) => s.setPref)
+  const { fontFamily } = useRuntimeFontSettings()
   const { toggleDetailOnActionBarBlankClick, terminalThemeSyncEnabled, temporaryFilesDirectory } =
     useRuntimeGeneralSettings()
   const {
@@ -33,6 +35,7 @@ export function GeneralSettings() {
     setTerminalThemeSyncEnabled,
     setTemporaryFilesDirectory,
   } = useGeneralSettingsController()
+  const { setFontFamily } = useFontSettingsController()
   const appearanceOptions: { value: ThemePref; labelKey: string; icon: ReactNode }[] = [
     { value: 'auto', labelKey: 'settings.appearance.auto', icon: <Laptop className="size-4" /> },
     { value: 'light', labelKey: 'settings.appearance.light', icon: <Sun className="size-4" /> },
@@ -42,6 +45,11 @@ export function GeneralSettings() {
     value,
     labelKey: `settings.theme-preset.${value}`,
   }))
+  const fontFamilyOptions: { value: FontFamilyPref; labelKey: string }[] = [
+    { value: 'mono', labelKey: 'settings.font-family.mono' },
+    { value: 'maple', labelKey: 'settings.font-family.maple' },
+    { value: 'system', labelKey: 'settings.font-family.system' },
+  ]
   const langOptions: { value: LangPref; labelKey: string; emoji: string }[] = [
     { value: 'auto', labelKey: 'settings.lang.auto', emoji: '🌐' },
     { value: 'en', labelKey: 'settings.lang.en', emoji: '🇺🇸' },
@@ -74,6 +82,19 @@ export function GeneralSettings() {
                 value={themePref}
                 options={appearanceOptions.map((o) => ({ value: o.value, label: t(o.labelKey), icon: o.icon }))}
                 onChange={(v) => void setThemePref(v)}
+              />
+            }
+          />
+          <SettingsRow
+            controlId="settings-font-family"
+            label={t('settings.font-family')}
+            hint={t('settings.font-family-hint')}
+            control={
+              <SettingsSelect<FontFamilyPref>
+                id="settings-font-family"
+                value={fontFamily}
+                options={fontFamilyOptions.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
+                onChange={(v) => void setFontFamily(v)}
               />
             }
           />

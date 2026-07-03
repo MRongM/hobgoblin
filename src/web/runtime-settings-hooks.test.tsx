@@ -10,6 +10,7 @@ import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
 import { externalAppsQueryKey, settingsSnapshotQueryKey } from '#/web/settings-queries.ts'
 import { useRuntimeExternalAppSettings } from '#/web/runtime-settings-external-apps.ts'
 import { useRuntimeFetchSettings } from '#/web/runtime-settings-fetch.ts'
+import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 import { useRuntimeGeneralSettings } from '#/web/runtime-settings-general.ts'
 import { useRuntimeLanSettings } from '#/web/runtime-settings-lan.ts'
 import { useRuntimeRecentRepos } from '#/web/settings-read-projection.ts'
@@ -124,6 +125,33 @@ describe('runtime settings hooks', () => {
     expect(result).toMatchObject({
       toggleDetailOnActionBarBlankClick: true,
       terminalThemeSyncEnabled: false,
+    })
+  })
+
+  test('reads font runtime settings from the settings snapshot', async () => {
+    mainWindowQueryClient.setQueryData(
+      settingsSnapshotQueryKey(),
+      defaultSettingsSnapshot({
+        fontFamily: 'system',
+        fileTreeFontSize: 12,
+        fileTreeTopbarFontSize: 13,
+        terminalFontSize: 16,
+      }),
+    )
+    let result: ReturnType<typeof useRuntimeFontSettings> | undefined
+
+    function HookHost() {
+      result = useRuntimeFontSettings()
+      return null
+    }
+
+    await renderWithMainWindowQueryClient(<HookHost />)
+
+    expect(result).toEqual({
+      fontFamily: 'system',
+      fileTreeFontSize: 12,
+      fileTreeTopbarFontSize: 13,
+      terminalFontSize: 16,
     })
   })
 

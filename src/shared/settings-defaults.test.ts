@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import {
   DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
+  DEFAULT_FONT_FAMILY,
   DEFAULT_GIT_NETWORK_PROXY_ENABLED,
   DEFAULT_GIT_NETWORK_PROXY_URL,
   DEFAULT_GIT_NETWORK_TIMEOUT_SEC,
@@ -26,6 +27,12 @@ describe('settings defaults', () => {
   test('defaults terminal custom button size to medium', () => {
     expect(DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE).toBe('medium')
     expect((defaultSettingsPrefs() as { terminalCustomButtonSize?: string }).terminalCustomButtonSize).toBe('medium')
+  })
+
+  test('defaults global font family to mono', () => {
+    expect(DEFAULT_FONT_FAMILY).toBe('mono')
+    expect(defaultSettingsPrefs().fontFamily).toBe('mono')
+    expect(defaultInitialSettingsSnapshot().fontFamily).toBe('mono')
   })
 
   test('defaults git network proxy off with a 120 second timeout', () => {

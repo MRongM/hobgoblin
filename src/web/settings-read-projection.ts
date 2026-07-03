@@ -8,6 +8,7 @@ import {
   DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   DEFAULT_FILE_TREE_FONT_SIZE,
   DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
+  DEFAULT_FONT_FAMILY,
   DEFAULT_GIT_NETWORK_TIMEOUT_SEC,
   DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
   DEFAULT_TERMINAL_FONT_SIZE,
@@ -104,6 +105,7 @@ export function readRuntimeGeneralSettings(data: RuntimeSettingsSnapshot | undef
 export function readRuntimeFontSettings(data: RuntimeSettingsSnapshot | undefined) {
   const fallback = fallbackInitialSettings()
   return {
+    fontFamily: data?.fontFamily ?? fallback?.fontFamily ?? DEFAULT_FONT_FAMILY,
     fileTreeFontSize:
       data?.fileTreeFontSize ?? fallback?.fileTreeFontSize ?? DEFAULT_FILE_TREE_FONT_SIZE,
     fileTreeTopbarFontSize:
@@ -134,6 +136,7 @@ export function readRuntimeTerminalCustomButtons(data: RuntimeSettingsSnapshot |
 export function readRuntimeTerminalSettings(data: RuntimeSettingsSnapshot | undefined) {
   const fallback = fallbackInitialSettings()
   return {
+    fontFamily: data?.fontFamily ?? fallback?.fontFamily ?? DEFAULT_FONT_FAMILY,
     terminalFontSize:
       data?.terminalFontSize ?? fallback?.terminalFontSize ?? DEFAULT_TERMINAL_FONT_SIZE,
     terminalThemeSyncEnabled:

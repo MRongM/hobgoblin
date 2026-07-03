@@ -55,6 +55,7 @@ function settingsPrefs(overrides: Partial<SettingsPrefs> = {}): SettingsPrefs {
     terminalCustomButtons: [],
     lanEnabled: false,
     ...overrides,
+    fontFamily: overrides.fontFamily ?? 'mono',
   }
 }
 

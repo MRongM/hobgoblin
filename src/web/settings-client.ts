@@ -5,6 +5,7 @@ import type {
   EditorAppState,
   EditorPref,
   ExternalAppsSnapshot,
+  FontFamilyPref,
   GitHubCliState,
   GlobalShortcutState,
   I18nSnapshot,
@@ -226,6 +227,11 @@ export async function setFileTreeClipboardMaxBytesMb(value: number): Promise<num
 export async function setTerminalFontSize(fontSize: number): Promise<number> {
   const result = await updateSettingsPrefsPatch({ terminalFontSize: fontSize })
   return result.settings.terminalFontSize
+}
+
+export async function setFontFamily(fontFamily: FontFamilyPref): Promise<FontFamilyPref> {
+  const result = await updateSettingsPrefsPatch({ fontFamily })
+  return result.settings.fontFamily
 }
 
 export async function setRemoteTerminalTmuxEnabled(enabled: boolean): Promise<void> {

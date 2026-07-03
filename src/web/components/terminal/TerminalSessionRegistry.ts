@@ -14,7 +14,10 @@ import type {
 } from '#/shared/terminal.ts'
 import { branchForTerminalWorktree } from '#/web/components/terminal/terminal-repo-index.ts'
 import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
-import { measureTerminalGeometry } from '#/web/components/terminal/terminal-geometry.ts'
+import {
+  DEFAULT_TERMINAL_FONT_FAMILY,
+  measureTerminalGeometry,
+} from '#/web/components/terminal/terminal-geometry.ts'
 import type { TerminalThemeMode } from '#/web/components/terminal/terminal-theme.ts'
 import type {
   TerminalDescriptor,
@@ -74,6 +77,7 @@ export class TerminalSessionRegistry {
   private readonly displayOrderByKey = new Map<string, number>()
   private readonly hostByWorktree = new Map<string, HTMLElement>()
   private terminalFontSize = DEFAULT_TERMINAL_FONT_SIZE
+  private terminalFontFamily = DEFAULT_TERMINAL_FONT_FAMILY
   private terminalThemeMode: TerminalThemeMode = 'theme'
   private readonly getTerminalThemeMode = (): TerminalThemeMode => this.terminalThemeMode
   private readonly bellController = createTerminalBellController(
@@ -107,6 +111,12 @@ export class TerminalSessionRegistry {
     if (this.terminalFontSize === fontSize) return
     this.terminalFontSize = fontSize
     for (const session of this.sessions.values()) session.setFontSize(fontSize)
+  }
+
+  setFontFamily(fontFamily: string): void {
+    if (this.terminalFontFamily === fontFamily) return
+    this.terminalFontFamily = fontFamily
+    for (const session of this.sessions.values()) session.setFontFamily(fontFamily)
   }
 
   setTerminalThemeMode(mode: TerminalThemeMode): void {
@@ -303,7 +313,13 @@ export class TerminalSessionRegistry {
 
   private measureCreateGeometry(worktreeTerminalKey: string): { cols: number; rows: number } {
     const host = this.hostByWorktree.get(worktreeTerminalKey)
-    const geometry = host ? measureTerminalGeometry({ host, fontSize: this.terminalFontSize }) : null
+    const geometry = host
+      ? measureTerminalGeometry({
+          host,
+          fontSize: this.terminalFontSize,
+          fontFamily: this.terminalFontFamily,
+        })
+      : null
     if (!geometry) return { cols: 80, rows: 24 }
     return geometry
   }
@@ -666,6 +682,7 @@ export class TerminalSessionRegistry {
       (reason) => this.notifySession(descriptor.key, reason),
       this.bellController.handleBell,
       this.terminalFontSize,
+      this.terminalFontFamily,
       this.getTerminalThemeMode,
     )
     this.sessions.set(descriptor.key, session)

@@ -18,6 +18,7 @@ import { isMobileDevice } from '#/web/components/terminal/mobile-detection.ts'
 import { TerminalSessionView } from '#/web/components/terminal/terminal-session-view.ts'
 import { readOrCreateWebTerminalAttachmentId } from '#/web/renderer-terminal-bridge.ts'
 import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
+import { DEFAULT_TERMINAL_FONT_FAMILY } from '#/web/components/terminal/terminal-geometry.ts'
 import { isTerminalEmulatorInput, type TerminalInput } from '#/web/components/terminal/terminal-input.ts'
 import type { TerminalThemeMode } from '#/web/components/terminal/terminal-theme.ts'
 import type {
@@ -60,6 +61,7 @@ export class ManagedTerminalSession {
     notify: (reason: TerminalNotifyReason) => void,
     onBell: ((descriptor: TerminalDescriptor, event: TerminalBellEvent) => void) | null = null,
     fontSize = DEFAULT_TERMINAL_FONT_SIZE,
+    fontFamily = DEFAULT_TERMINAL_FONT_FAMILY,
     terminalThemeMode: () => TerminalThemeMode = () => 'theme',
   ) {
     this.descriptor = descriptor
@@ -73,7 +75,7 @@ export class ManagedTerminalSession {
       onProgress: (state, value) => this.updateProgress(state, value),
       onOpenExternalLink: (uri) => this.openExternalLink(uri),
       onRenderRecoveryRequest: () => this.recoverActiveView(),
-    }, { fontSize, terminalThemeMode })
+    }, { fontSize, fontFamily, terminalThemeMode })
   }
 
   updateDescriptor(descriptor: TerminalDescriptor): void {
@@ -82,6 +84,10 @@ export class ManagedTerminalSession {
 
   setFontSize(fontSize: number): void {
     this.view.setFontSize(fontSize)
+  }
+
+  setFontFamily(fontFamily: string): void {
+    this.view.setFontFamily(fontFamily)
   }
 
   setTerminalThemeMode(terminalThemeMode: () => TerminalThemeMode): void {
