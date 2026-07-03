@@ -1279,6 +1279,68 @@ describe('TerminalSessionProvider', () => {
     }
   })
 
+  test('focuses the selected terminal once after switching worktrees in the current repo', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [
+        createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } }),
+        createRepoBranch('feature/other', { worktree: { path: SECOND_WORKTREE_PATH } }),
+      ],
+      selectedBranch: 'feature/worktree',
+      detailTab: 'terminal',
+    })
+    managedServerSessions = [
+      {
+        sessionId: 'server_session_1',
+        key: `${REPO_ID}\u0000${WORKTREE_PATH}\u0000terminal-1`,
+        cwd: WORKTREE_PATH,
+        controller: { attachmentId: 'attachment_local', status: 'connected' },
+        processName: 'zsh',
+        canonicalTitle: null,
+        cols: 80,
+        rows: 24,
+        displayOrder: 1,
+        phase: 'open',
+        message: null,
+      },
+      {
+        sessionId: 'server_session_2',
+        key: `${REPO_ID}\u0000${SECOND_WORKTREE_PATH}\u0000terminal-1`,
+        cwd: SECOND_WORKTREE_PATH,
+        controller: { attachmentId: 'attachment_local', status: 'connected' },
+        processName: 'zsh',
+        canonicalTitle: null,
+        cols: 80,
+        rows: 24,
+        displayOrder: 1,
+        phase: 'open',
+        message: null,
+      },
+    ]
+    listSessionsMock.mockImplementation(async () => managedServerSessions)
+    const firstWorktreeKey = worktreeTerminalKey(REPO_ID, WORKTREE_PATH)
+    const secondWorktreeKey = worktreeTerminalKey(REPO_ID, SECOND_WORKTREE_PATH)
+    const { getContext, unmount } = await renderProviderWithProbe(firstWorktreeKey, REPO_ID)
+
+    try {
+      await vi.waitFor(() => expect(listSessionsMock).toHaveBeenCalledWith({ repoRoot: REPO_ID }))
+      getContext().registerWorktreeHost(secondWorktreeKey, document.createElement('div'))
+
+      await act(async () => {
+        useReposStore.getState().selectBranch(REPO_ID, 'feature/other')
+        await Promise.resolve()
+      })
+
+      const firstSession = mockSessions.find((session) => session.descriptor.worktreePath === WORKTREE_PATH)
+      const secondSession = mockSessions.find((session) => session.descriptor.worktreePath === SECOND_WORKTREE_PATH)
+      if (!firstSession || !secondSession) throw new Error('missing terminal mock sessions')
+      expect(firstSession.focus).not.toHaveBeenCalled()
+      expect(secondSession.focus).toHaveBeenCalledTimes(1)
+    } finally {
+      await unmount()
+    }
+  })
+
   test('does not resync sessions when repo changes do not affect terminal worktree mapping', async () => {
     seedRepoState({
       id: REPO_ID,

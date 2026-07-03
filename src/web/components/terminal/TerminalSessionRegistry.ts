@@ -407,18 +407,22 @@ export class TerminalSessionRegistry {
     this.sessions.get(key)?.focus()
   }
 
+  focusSelectedTerminalForWorktree = (worktreeTerminalKey: string): boolean => {
+    const preferredKey = this.preferredSelectedKeyByWorktree.get(worktreeTerminalKey) ?? null
+    const selectedKey = this.resolveSelectedTerminalKey(worktreeTerminalKey, preferredKey)
+    const session = selectedKey ? this.sessions.get(selectedKey) : null
+    if (!selectedKey || !session) return false
+    const phase = this.snapshot(selectedKey).phase
+    if (phase === 'closed' || phase === 'error') return false
+    session.focus()
+    return true
+  }
+
   focusRunningTerminalForRepo = (repoRoot: string): boolean => {
     const repoWorktreePrefix = `${repoRoot}\0`
     for (const worktreeTerminalKey of this.hostByWorktree.keys()) {
       if (!worktreeTerminalKey.startsWith(repoWorktreePrefix)) continue
-      const preferredKey = this.preferredSelectedKeyByWorktree.get(worktreeTerminalKey) ?? null
-      const selectedKey = this.resolveSelectedTerminalKey(worktreeTerminalKey, preferredKey)
-      const session = selectedKey ? this.sessions.get(selectedKey) : null
-      if (!selectedKey || !session) continue
-      const phase = this.snapshot(selectedKey).phase
-      if (phase === 'closed' || phase === 'error') continue
-      session.focus()
-      return true
+      if (this.focusSelectedTerminalForWorktree(worktreeTerminalKey)) return true
     }
     return false
   }
