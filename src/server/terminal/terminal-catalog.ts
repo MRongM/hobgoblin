@@ -1,10 +1,10 @@
-import path from 'node:path'
 import { getWorktrees } from '#/system/git/worktrees.ts'
 import { resolveKnownWorktree } from '#/shared/worktree-guards.ts'
 import { isValidBranch, isValidCwd, isValidRepoLocator } from '#/shared/input-validation.ts'
 import { resolveRemoteTarget } from '#/system/ssh/config.ts'
 import { buildRemoteTerminalInvocation } from '#/system/ssh/commands.ts'
 import { isRemoteRepoId, parseRemoteRepoId } from '#/shared/remote-repo.ts'
+import { terminalSessionScope } from '#/server/terminal/terminal-scope.ts'
 import {
   formatTerminalId,
   isValidTerminalAttachmentId,
@@ -103,7 +103,8 @@ class TerminalCatalog {
     if (!this.options.isValidTerminalId(terminalId)) return { ok: false, message: 'error.invalid-arguments' }
     if (!isValidTerminalSize(cols, rows)) return { ok: false, message: 'error.invalid-arguments' }
 
-    const existingSessions = await this.options.manager.listSessions(input.repoRoot)
+    const scope = terminalSessionScope(input.repoRoot)
+    const existingSessions = await this.options.manager.listSessions(scope)
     const targetSessionKey = sessionKey(input.repoRoot, input.worktreePath, terminalId)
     const existingSession = existingSessions.find((session) => session.key === targetSessionKey)
     const action: TerminalCatalogAction = existingSession
@@ -129,7 +130,7 @@ class TerminalCatalog {
         input.kind === 'primary' ? 'terminal-1' : await this.nextTerminalId(input.repoRoot, input.worktreePath),
     })
     if (!createResult.ok) return { ok: false, message: createResult.message }
-    const sessions = await this.options.manager.listSessions(input.repoRoot)
+    const sessions = await this.options.manager.listSessions(terminalSessionScope(input.repoRoot))
     if (!sessions.some((session) => session.sessionId === createResult.sessionId)) {
       return { ok: false, message: 'error.terminal-create-failed' }
     }
@@ -155,27 +156,28 @@ class TerminalCatalog {
     if (!this.options.isValidClientId(clientId)) return { pruned: 0, remaining: 0 }
     if (!isValidRepoLocator(repoRoot)) return { pruned: 0, remaining: 0 }
 
-    const allSessions = await this.options.manager.listSessions(repoRoot)
+    const scope = terminalSessionScope(repoRoot)
+    const allSessions = await this.options.manager.listSessions(scope)
     if (isRemoteRepoId(repoRoot)) return { pruned: 0, remaining: allSessions.length }
 
     const worktrees = await getWorktrees(repoRoot, { includeStatus: false })
-    const liveWorktreePaths = new Set(worktrees.map((worktree) => path.resolve(worktree.path)))
+    const liveWorktreePaths = new Set(worktrees.map((worktree) => terminalSessionScope(worktree.path)))
     let pruned = 0
     for (const session of allSessions) {
       const parsed = parseSessionKey(session.key)
       if (!parsed) continue
-      if (path.resolve(parsed.repoRoot) !== path.resolve(repoRoot)) continue
-      if (liveWorktreePaths.has(path.resolve(parsed.worktreePath))) continue
+      if (terminalSessionScope(parsed.repoRoot) !== scope) continue
+      if (liveWorktreePaths.has(terminalSessionScope(parsed.worktreePath))) continue
       this.options.manager.closeSession(session.sessionId)
       pruned += 1
     }
     if (pruned > 0) this.options.broadcastSessionsChanged(repoRoot)
-    const remaining = await this.options.manager.listSessions(repoRoot).then((sessions) => sessions.length)
+    const remaining = await this.options.manager.listSessions(scope).then((sessions) => sessions.length)
     return { pruned, remaining }
   }
 
   async nextTerminalId(repoRoot: string, worktreePath: string): Promise<string> {
-    const sessions = await this.options.manager.listSessions(repoRoot)
+    const sessions = await this.options.manager.listSessions(terminalSessionScope(repoRoot))
     const usedIndexes = new Set<number>()
     for (const session of sessions) {
       const parsed = parseSessionKey(session.key)
@@ -246,7 +248,7 @@ class TerminalCatalog {
     },
   ): Promise<EnsureTerminalCatalogResult> {
     if (isNonGitLocalWorkspaceTerminal(input)) {
-      const repoRoot = path.resolve(input.repoRoot)
+      const repoRoot = terminalSessionScope(input.repoRoot)
       return await this.ensureLocalSession(clientId, input, {
         ...context,
         repoRoot,
@@ -258,8 +260,8 @@ class TerminalCatalog {
     const resolved = resolveKnownWorktree(worktrees, input.worktreePath, input.branch)
     if (!resolved.ok) return { ok: false, message: resolved.message }
 
-    const repoRoot = path.resolve(input.repoRoot)
-    const worktreePath = path.resolve(resolved.path)
+    const repoRoot = terminalSessionScope(input.repoRoot)
+    const worktreePath = terminalSessionScope(resolved.path)
     return await this.ensureLocalSession(clientId, input, {
       ...context,
       repoRoot,
@@ -302,7 +304,7 @@ function isNonGitLocalWorkspaceTerminal(
   return (
     !isRemoteRepoId(input.repoRoot) &&
     input.branch === NON_GIT_WORKSPACE_TERMINAL_BRANCH &&
-    path.resolve(input.repoRoot) === path.resolve(input.worktreePath)
+    terminalSessionScope(input.repoRoot) === terminalSessionScope(input.worktreePath)
   )
 }
 
