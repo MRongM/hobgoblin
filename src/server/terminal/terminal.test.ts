@@ -274,6 +274,28 @@ describe('server terminal sessions', () => {
     expect(result.key).toBe('/plain-project\u0000/plain-project\u0000terminal-1')
   })
 
+  test('creates git terminal when repo root input needs path normalization', async () => {
+    const result = await createServerTerminal('client_1', {
+      repoRoot: '/repo/',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+      kind: 'additional',
+      cols: 120,
+      rows: 40,
+    })
+
+    expect(result.ok).toBe(true)
+    expect(spawn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Array),
+      expect.objectContaining({
+        cwd: '/repo-linked',
+        cols: 120,
+        rows: 40,
+      }),
+    )
+  })
+
   test('creates remote terminal sessions with a tmux-aware ssh command when enabled', async () => {
     settingsSourceMocks.getServerSettingsPrefs.mockResolvedValue({ remoteTerminalTmuxEnabled: true })
 

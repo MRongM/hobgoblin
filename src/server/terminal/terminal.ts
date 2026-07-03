@@ -8,6 +8,7 @@ import {
 import { createTerminalCatalog } from '#/server/terminal/terminal-catalog.ts'
 import { TerminalConnectionState } from '#/server/terminal/terminal-connection-state.ts'
 import { TerminalRealtimeBroker, type TerminalRealtimeSocket } from '#/server/terminal/terminal-realtime-broker.ts'
+import { terminalSessionScope } from '#/server/terminal/terminal-scope.ts'
 import { type TerminalCatalogMutationResult, type TerminalCreateInput } from '#/shared/terminal.ts'
 import {
   isValidTerminalAttachmentId,
@@ -289,7 +290,7 @@ export function notifyServerTerminalBell(_clientId: string, input: TerminalNotif
 export async function listServerTerminalSessions(clientId: string, repoRoot: string): Promise<TerminalSessionSummary[]> {
   if (!isValidTerminalClientId(clientId)) return []
   if (!isValidRepoLocator(repoRoot)) return []
-  return await manager.listSessions(repoRoot)
+  return await manager.listSessions(terminalSessionScope(repoRoot))
 }
 
 export async function getServerTerminalSessionSnapshot(
@@ -307,7 +308,7 @@ export function reorderServerTerminals(clientId: string, input: TerminalReorderI
   if (typeof input?.worktreePath !== 'string' || input.worktreePath.length === 0) return false
   if (!Array.isArray(input?.orderedKeys)) return false
   if (!input.orderedKeys.every((k) => typeof k === 'string' && k.length > 0)) return false
-  const reordered = manager.reorderSessions(input.repoRoot, input.worktreePath, input.orderedKeys)
+  const reordered = manager.reorderSessions(terminalSessionScope(input.repoRoot), input.worktreePath, input.orderedKeys)
   if (reordered) broker.broadcastGlobal({ type: 'sessions-changed', repoRoot: input.repoRoot })
   return reordered
 }
