@@ -3,7 +3,6 @@ import type { FontFamilyPref } from '#/shared/rpc.ts'
 export interface AppFontFamilyStack {
   sans: string
   mono: string
-  terminal: string
 }
 
 const SYSTEM_MONO_STACK =
@@ -18,17 +17,14 @@ export const APP_FONT_FAMILY_STACKS: Record<FontFamilyPref, AppFontFamilyStack> 
   mono: {
     sans: SYSTEM_MONO_STACK,
     mono: SYSTEM_MONO_STACK,
-    terminal: SYSTEM_MONO_STACK,
   },
   maple: {
     sans: MAPLE_SANS_STACK,
     mono: MAPLE_MONO_STACK,
-    terminal: MAPLE_MONO_STACK,
   },
   system: {
     sans: SYSTEM_SANS_STACK,
     mono: SYSTEM_MONO_STACK,
-    terminal: SYSTEM_SANS_STACK,
   },
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { FolderTree } from 'lucide-react'
 import { toast } from 'sonner'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
@@ -21,7 +21,6 @@ import { openWorktreeEditorTarget } from '#/web/lib/editor-open-targets.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
 import type { CommitDetail, CommitFileChange, CommitHistoryEntry } from '#/web/types.ts'
 import {
-  buildHistoryGraphRows,
   commitFileStatusLabel,
   commitFileStatusTone,
   formatHistoryDate,
@@ -208,7 +207,6 @@ function HistoryList({
   onLoadMore: () => void
 }) {
   const t = useT()
-  const rows = useMemo(() => buildHistoryGraphRows(commits), [commits])
   if (error && commits.length === 0) return <EmptyState title={t('history.load-error')} body={t(error)} />
   if (!loading && commits.length === 0)
     return <EmptyState title={t('history.empty-title')} body={t('history.empty-body')} />
@@ -217,22 +215,21 @@ function HistoryList({
     <div className="flex min-h-0 flex-col border-r border-separator/70">
       <ScrollPane>
         <ul className="py-1.5">
-          {rows.map((row) => (
-            <li key={row.commit.hash}>
+          {commits.map((commit) => (
+            <li key={commit.hash}>
               <button
                 type="button"
-                aria-label={row.commit.hash}
-                onClick={() => onSelect(row.commit.hash)}
+                aria-label={commit.hash}
+                onClick={() => onSelect(commit.hash)}
                 className={cn(
-                  'grid w-full grid-cols-[64px_minmax(0,1fr)] gap-2 px-2 py-1.5 text-left hover:bg-list-row-hover',
-                  selectedHash === row.commit.hash && 'bg-list-row-selected text-list-row-selected-foreground',
+                  'block w-full px-2 py-1.5 text-left hover:bg-list-row-hover',
+                  selectedHash === commit.hash && 'bg-list-row-selected text-list-row-selected-foreground',
                 )}
               >
-                <HistoryGraphCell lane={row.lane} laneCount={row.laneCount} />
-                <span className="min-w-0">
-                  <span className="block truncate text-sm">{row.commit.subject}</span>
+                <span className="block min-w-0">
+                  <span className="block truncate text-sm">{commit.subject}</span>
                   <span className="block truncate font-mono text-xs text-muted-foreground">
-                    {row.commit.shortHash} · {row.commit.author} · {formatHistoryDate(row.commit.date)}
+                    {commit.shortHash} · {commit.author} · {formatHistoryDate(commit.date)}
                   </span>
                 </span>
               </button>
@@ -254,24 +251,6 @@ function HistoryList({
         </Button>
       </div>
     </div>
-  )
-}
-
-function HistoryGraphCell({ lane, laneCount }: { lane: number; laneCount: number }) {
-  const count = Math.max(1, laneCount)
-  return (
-    <span
-      aria-hidden="true"
-      className="grid h-9 items-center"
-      style={{ gridTemplateColumns: `repeat(${count}, minmax(10px, 1fr))` }}
-    >
-      {Array.from({ length: count }, (_, index) => (
-        <span key={index} className="relative flex h-full items-center justify-center">
-          <span className="absolute inset-y-0 w-px bg-separator/80" />
-          {index === lane && <span className="relative h-2.5 w-2.5 rounded-full bg-primary" />}
-        </span>
-      ))}
-    </span>
   )
 }
 
