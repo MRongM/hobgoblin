@@ -559,7 +559,7 @@ describe('BranchRow', () => {
     expect(commitMeta?.className).not.toContain('leading-none')
   })
 
-  test('renders an isolated drag handle when drag props are provided', () => {
+  test('applies sortable props to the row without rendering a drag handle', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
 
@@ -573,24 +573,24 @@ describe('BranchRow', () => {
           onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
-          dragHandle={{
-            label: '重新排序工作树',
-            ref: vi.fn(),
-            props: {},
+          sortable={{
+            setNodeRef: vi.fn(),
+            props: { role: 'button' },
           }}
         />
       </ul>,
     )
 
     const handle = document.querySelector('[aria-label="重新排序工作树"]')
-    const row = document.querySelector('li')
-    expect(handle?.getAttribute('aria-label')).toBe('重新排序工作树')
-    expect(row?.className).toContain('grid-cols-[1.75rem_minmax(0,1fr)]')
-    expect(handle?.parentElement?.className).toContain('pl-0')
-    expect(handle?.parentElement?.className).not.toContain('pl-2')
+    const row = document.querySelector('li[role="button"]')
+    expect(handle).toBeNull()
+    expect(document.querySelector('.lucide-grip-vertical')).toBeNull()
+    expect(row).not.toBeNull()
+    expect(row?.className).toContain('grid-cols-1')
+    expect(row?.className).not.toContain('1.75rem')
   })
 
-  test('removes left content padding beside the drag handle', () => {
+  test('keeps standard content padding when sortable props are provided', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
 
@@ -604,10 +604,9 @@ describe('BranchRow', () => {
           onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
-          dragHandle={{
-            label: '重新排序工作树',
-            ref: vi.fn(),
-            props: {},
+          sortable={{
+            setNodeRef: vi.fn(),
+            props: { role: 'button' },
           }}
         />
       </ul>,
@@ -617,10 +616,9 @@ describe('BranchRow', () => {
       node.textContent?.includes('feature/a'),
     )
 
-    expect(content?.className).toContain('pr-4')
+    expect(content?.className).toContain('px-4')
     expect(content?.className).toContain('py-1')
-    expect(content?.className).not.toContain('px-4')
-    expect(content?.className).not.toContain('pl-4')
+    expect(content?.className).not.toContain('pr-4')
   })
 
   test('renders inline action panel below the branch row content', () => {

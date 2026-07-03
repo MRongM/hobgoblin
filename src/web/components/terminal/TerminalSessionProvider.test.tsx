@@ -12,6 +12,7 @@ import {
 } from '#/web/components/terminal/terminal-session-store.ts'
 import { RepoSyncTracker } from '#/web/components/terminal/repo-sync-tracker.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
+import { DEFAULT_TERMINAL_FONT_FAMILY } from '#/web/components/terminal/terminal-geometry.ts'
 import { setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
 import { defaultSettingsSnapshot } from '#/shared/settings-defaults.ts'
 import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
@@ -810,7 +811,7 @@ describe('TerminalSessionProvider', () => {
     }
   })
 
-  test('passes configured font family to managed sessions', async () => {
+  test('uses the default terminal font family regardless of the global font preference', async () => {
     runtimeTerminalSettingsMock.fontFamily = 'maple'
     seedRepoState({
       id: REPO_ID,
@@ -831,7 +832,41 @@ describe('TerminalSessionProvider', () => {
 
       const session = mockSessions.find((item) => item.descriptor.terminalId === 'terminal-1')
       if (!session) throw new Error('missing terminal-1 mock session')
-      expect(session.constructorFontFamily).toContain('Maple Mono NF CN')
+      expect(session.constructorFontFamily).toBe(DEFAULT_TERMINAL_FONT_FAMILY)
+      expect(session.constructorFontFamily).not.toContain('Maple Mono NF CN')
+    } finally {
+      await unmount()
+    }
+  })
+
+  test('does not update managed terminal font family when the global font preference changes', async () => {
+    const terminalWorktreeKey = worktreeTerminalKey(REPO_ID, WORKTREE_PATH)
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } })],
+      selectedBranch: 'feature/worktree',
+      detailTab: 'terminal',
+    })
+    const { getContext, rerender, unmount } = await renderProviderWithProbe(terminalWorktreeKey)
+
+    try {
+      await act(async () => {
+        await getContext().createTerminal({
+          repoRoot: REPO_ID,
+          branch: 'feature/worktree',
+          worktreePath: WORKTREE_PATH,
+        })
+      })
+
+      const session = mockSessions.find((item) => item.descriptor.terminalId === 'terminal-1')
+      if (!session) throw new Error('missing terminal-1 mock session')
+      session.setFontFamily.mockClear()
+
+      runtimeTerminalSettingsMock.fontFamily = 'system'
+      await rerender(REPO_ID)
+
+      expect(session.setFontFamily).not.toHaveBeenCalled()
+      expect(session.constructorFontFamily).toBe(DEFAULT_TERMINAL_FONT_FAMILY)
     } finally {
       await unmount()
     }

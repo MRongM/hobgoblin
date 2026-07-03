@@ -143,6 +143,59 @@ describe('ProjectHistoryPanel', () => {
     expect(container?.textContent).toContain('-1')
   })
 
+  test('renders history commits as a plain one-column list without graph content', async () => {
+    await act(async () => {
+      root!.render(<ProjectHistoryPanel repoId={REPO_ID} onRevealPath={vi.fn()} />)
+    })
+    await act(async () => {})
+
+    const firstCommitButton = container?.querySelector<HTMLButtonElement>('button[aria-label="abc123456789"]')
+    expect(firstCommitButton).toBeTruthy()
+    expect(firstCommitButton?.className).not.toContain('grid-cols-[64px_minmax(0,1fr)]')
+    expect(firstCommitButton?.children).toHaveLength(1)
+    expect(firstCommitButton?.textContent).toContain('feat: first')
+    expect(firstCommitButton?.textContent).toContain('abc1234')
+  })
+
+  test('updates the right detail pane when a different history list item is selected', async () => {
+    mocks.getRepositoryCommitDetail.mockImplementation(async (_repoId: string, hash: string) => {
+      if (hash === 'def456789012') {
+        return {
+          hash: 'def456789012',
+          shortHash: 'def4567',
+          subject: 'fix: second',
+          author: 'Bob',
+          date: '2026-06-14T09:00:00+08:00',
+          parents: [],
+          files: [],
+        }
+      }
+      return {
+        hash: 'abc123456789',
+        shortHash: 'abc1234',
+        subject: 'feat: first',
+        author: 'Alice',
+        date: '2026-06-15T09:00:00+08:00',
+        parents: ['def456'],
+        files: [{ path: 'src/app.ts', status: 'modified', additions: 3, deletions: 1 }],
+      }
+    })
+
+    await act(async () => {
+      root!.render(<ProjectHistoryPanel repoId={REPO_ID} onRevealPath={vi.fn()} />)
+    })
+    await act(async () => {})
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('button[aria-label="def456789012"]')?.click()
+    })
+    await act(async () => {})
+
+    expect(mocks.getRepositoryCommitDetail).toHaveBeenCalledWith(REPO_ID, 'def456789012', expect.any(AbortSignal))
+    expect(container?.textContent).toContain('def456789012')
+    expect(container?.textContent).toContain('fix: second')
+  })
+
   test('loads more history entries', async () => {
     const firstPage = Array.from({ length: 100 }, (_, index) => ({
       hash: `abc${index.toString().padStart(9, '0')}`,
@@ -234,11 +287,13 @@ describe('ProjectHistoryPanel', () => {
     })
     await act(async () => {})
 
+    const viewModeButton = container?.querySelector<HTMLButtonElement>('button[aria-label="file-list.view-list"]')
     const treeViewButton = container?.querySelector<HTMLButtonElement>('button[aria-label="file-list.view-tree"]')
     const copyFilePaths = container?.querySelector<HTMLButtonElement>('button[aria-label="history.copy-file-paths"]')
-    expect(treeViewButton).toBeTruthy()
+    expect(viewModeButton).toBeTruthy()
+    expect(treeViewButton).toBeNull()
     expect(copyFilePaths).toBeTruthy()
-    expect(treeViewButton!.compareDocumentPosition(copyFilePaths!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(viewModeButton!.compareDocumentPosition(copyFilePaths!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 
     await act(async () => {
       container?.querySelector<HTMLButtonElement>('button[aria-label="history.copy-commit"]')?.click()

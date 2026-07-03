@@ -207,12 +207,7 @@ export function BranchList({ repoId, showActions = true }: Props) {
         ),
     }
     return dragEnabled && branch.worktree?.path ? (
-      <SortableBranchRow
-        {...rowProps}
-        key={branch.name}
-        id={branch.worktree.path}
-        dragHandleLabel={t('branches.reorder-worktree')}
-      />
+      <SortableBranchRow {...rowProps} key={branch.name} id={branch.worktree.path} />
     ) : (
       <BranchRow {...rowProps} key={branch.name} />
     )
@@ -255,9 +250,9 @@ export function BranchList({ repoId, showActions = true }: Props) {
   return <ScrollArea className="min-h-0 flex-1 bg-sidebar">{list}</ScrollArea>
 }
 
-function SortableBranchRow(props: ComponentProps<typeof BranchRow> & { id: string; dragHandleLabel: string }) {
-  const { id, dragHandleLabel, ...rowProps } = props
-  const { attributes, listeners, setActivatorNodeRef, setNodeRef, transform, transition, isDragging } = useSortable({
+function SortableBranchRow(props: ComponentProps<typeof BranchRow> & { id: string }) {
+  const { id, ...rowProps } = props
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
   })
   const verticalTransform = transform ? { ...transform, x: 0, scaleX: 1, scaleY: 1 } : null
@@ -271,10 +266,6 @@ function SortableBranchRow(props: ComponentProps<typeof BranchRow> & { id: strin
           transition,
         },
         isDragging,
-      }}
-      dragHandle={{
-        label: dragHandleLabel,
-        ref: setActivatorNodeRef,
         props: { ...attributes, ...listeners },
       }}
     />

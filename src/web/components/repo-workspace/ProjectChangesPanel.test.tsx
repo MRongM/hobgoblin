@@ -312,7 +312,7 @@ describe('ProjectChangesPanel', () => {
     ).toBeTruthy()
     expect(
       container?.querySelector('[data-testid="project-changes-action-bar"] button[aria-label="file-list.view-tree"]'),
-    ).toBeTruthy()
+    ).toBeNull()
 
     await act(async () => {
       container?.querySelector<HTMLButtonElement>('button[aria-label="src/components/Button.tsx"]')?.click()
@@ -321,7 +321,7 @@ describe('ProjectChangesPanel', () => {
     expect(onRevealPath).toHaveBeenCalledWith('src/components/Button.tsx')
   })
 
-  test('copies changed file paths from the action bar after the tree view toggle', async () => {
+  test('copies changed file paths from the action bar after the view mode control', async () => {
     seedRepoState({
       id: REPO_ID,
       branches: [createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } })],
@@ -350,11 +350,11 @@ describe('ProjectChangesPanel', () => {
     })
 
     const actionBar = container?.querySelector('[data-testid="project-changes-action-bar"]')
-    const treeViewButton = actionBar?.querySelector<HTMLButtonElement>('button[aria-label="file-list.view-tree"]')
+    const viewModeButton = actionBar?.querySelector<HTMLButtonElement>('button[aria-label="file-list.view-list"]')
     const copyFilePaths = actionBar?.querySelector<HTMLButtonElement>('button[aria-label="history.copy-file-paths"]')
-    expect(treeViewButton).toBeTruthy()
+    expect(viewModeButton).toBeTruthy()
     expect(copyFilePaths).toBeTruthy()
-    expect(treeViewButton!.compareDocumentPosition(copyFilePaths!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(viewModeButton!.compareDocumentPosition(copyFilePaths!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 
     await act(async () => {
       copyFilePaths?.click()
@@ -393,7 +393,7 @@ describe('ProjectChangesPanel', () => {
 
     const actionBar = container?.querySelector('[data-testid="project-changes-action-bar"]')
     const leftActions = actionBar?.querySelector('[data-testid="project-changes-left-actions"]')
-    const listView = actionBar?.querySelector<HTMLButtonElement>('button[aria-label="file-list.view-list"]')
+    const viewMode = actionBar?.querySelector<HTMLButtonElement>('button[aria-label="file-list.view-list"]')
     const treeView = actionBar?.querySelector<HTMLButtonElement>('button[aria-label="file-list.view-tree"]')
     const copy = actionBar?.querySelector<HTMLButtonElement>('button[aria-label="history.copy-file-paths"]')
     const refresh = actionBar?.querySelector<HTMLButtonElement>('button[aria-label="changes.refresh"]')
@@ -401,13 +401,13 @@ describe('ProjectChangesPanel', () => {
     const commit = actionBar?.querySelector<HTMLButtonElement>('button[aria-label="action.commit-title"]')
 
     expect(leftActions).toBeTruthy()
-    for (const control of [listView, treeView, copy, refresh, selection]) {
+    for (const control of [viewMode, copy, refresh, selection]) {
       expect(control).toBeTruthy()
       expect(leftActions!.contains(control!)).toBe(true)
     }
+    expect(treeView).toBeNull()
     expect(commit).toBeNull()
-    expect(listView!.compareDocumentPosition(treeView!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(treeView!.compareDocumentPosition(copy!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(viewMode!.compareDocumentPosition(copy!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(copy!.compareDocumentPosition(refresh!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(refresh!.compareDocumentPosition(selection!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(actionBar?.textContent).not.toContain('changes.selection-toggle')
