@@ -2,6 +2,7 @@ import type { ColorTheme } from '#/shared/color-theme.ts'
 
 export type ThemePref = 'auto' | 'light' | 'dark'
 export type ResolvedTheme = 'light' | 'dark'
+export type FontFamilyPref = 'mono' | 'maple' | 'system'
 export type LangPref = 'auto' | 'en' | 'zh' | 'ko' | 'ja'
 export type Lang = 'en' | 'zh' | 'ko' | 'ja'
 export type TerminalPref = 'auto' | 'ghostty' | 'terminal'
@@ -35,6 +36,7 @@ export interface TerminalCustomButton {
 export interface SettingsPrefs {
   theme: ThemePref
   colorTheme: ColorTheme
+  fontFamily: FontFamilyPref
   lang: LangPref
   fetchIntervalSec: number
   gitNetworkProxyEnabled: boolean

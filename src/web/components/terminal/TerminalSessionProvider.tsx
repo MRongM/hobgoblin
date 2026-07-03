@@ -17,6 +17,7 @@ import { setTerminalSessionCommandBridge } from '#/web/components/terminal/termi
 import { repoIndexEqual, repoIndexFromRepos } from '#/web/components/terminal/terminal-repo-index.ts'
 import { RepoSyncTracker } from '#/web/components/terminal/repo-sync-tracker.ts'
 import { useRuntimeTerminalSettings } from '#/web/runtime-settings-terminal-buttons.ts'
+import { fontFamilyStackForPref } from '#/web/font-family.ts'
 import type { TerminalSessionContextValue, TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
 
 interface TerminalSessionProviderProps {
@@ -28,8 +29,9 @@ interface TerminalSessionProviderProps {
 
 export function TerminalSessionProvider({ currentRepoId, children, syncTracker: syncTrackerProp }: TerminalSessionProviderProps) {
   const repoIndex = useStoreWithEqualityFn(useReposStore, (s) => repoIndexFromRepos(s.repos), repoIndexEqual)
-  const { terminalFontSize, terminalThemeSyncEnabled = true } = useRuntimeTerminalSettings()
+  const { terminalFontSize, terminalThemeSyncEnabled = true, fontFamily } = useRuntimeTerminalSettings()
   const terminalThemeMode = terminalThemeSyncEnabled ? 'theme' : 'classic'
+  const terminalFontFamily = fontFamilyStackForPref(fontFamily).terminal
   const currentRepoInstanceToken = currentRepoId ? (repoIndex[currentRepoId]?.instanceToken ?? null) : null
   const selectedTerminalByWorktree = useReposStore((s) => s.selectedTerminalByWorktree)
   const setSelectedTerminal = useReposStore((s) => s.setSelectedTerminal)
@@ -108,6 +110,11 @@ export function TerminalSessionProvider({ currentRepoId, children, syncTracker: 
   useEffect(() => {
     registry.setFontSize(terminalFontSize)
   }, [registry, terminalFontSize])
+
+  // Font family settings
+  useEffect(() => {
+    registry.setFontFamily(terminalFontFamily)
+  }, [registry, terminalFontFamily])
 
   // Terminal theme settings
   useEffect(() => {

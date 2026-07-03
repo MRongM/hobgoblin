@@ -1,6 +1,8 @@
 import { readRuntimeFontSettings, useRuntimeSettingsSnapshot } from '#/web/settings-read-projection.ts'
+import type { FontFamilyPref } from '#/shared/rpc.ts'
 import {
   runSettingsControllerAction,
+  setFontFamilyPreference,
   setFileTreeFontSizePreference,
   setFileTreeTopbarFontSizePreference,
   setTerminalFontSizePreference,
@@ -25,6 +27,11 @@ export function useFontSettingsController() {
     async setTerminalFontSize(fontSize: number): Promise<void> {
       await runSettingsControllerAction('terminal font size update', async () => {
         await setTerminalFontSizePreference(fontSize)
+      })
+    },
+    async setFontFamily(fontFamily: FontFamilyPref): Promise<void> {
+      await runSettingsControllerAction('font family update', async () => {
+        await setFontFamilyPreference(fontFamily)
       })
     },
   }

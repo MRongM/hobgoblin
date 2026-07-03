@@ -31,6 +31,7 @@ test('initializes server-settings.json with defaults when no persisted settings 
     lang: 'auto',
     theme: 'auto',
     colorTheme: 'macos',
+    fontFamily: 'mono',
     gitNetworkProxyEnabled: false,
     gitNetworkProxyUrl: '',
     gitNetworkTimeoutSec: 120,
@@ -78,6 +79,7 @@ test('persists updates and notifies subscribers from the server settings store',
     lang: 'ko',
     theme: 'dark',
     colorTheme: 'github',
+    fontFamily: 'maple',
     gitNetworkProxyEnabled: true,
     gitNetworkProxyUrl: 'socks5://127.0.0.1:7890',
     gitNetworkTimeoutSec: 240,
@@ -125,6 +127,7 @@ test('persists updates and notifies subscribers from the server settings store',
     lang: 'ko',
     theme: 'dark',
     colorTheme: 'github',
+    fontFamily: 'maple',
     gitNetworkProxyEnabled: true,
     gitNetworkProxyUrl: 'socks5://127.0.0.1:7890',
     gitNetworkTimeoutSec: 240,
@@ -191,6 +194,22 @@ test('normalizes invalid git network proxy and clamps timeout seconds', async ()
     gitNetworkProxyUrl: 'socks5://127.0.0.1:7890',
     gitNetworkTimeoutSec: 15,
   })
+})
+
+test('normalizes global font family preferences', async () => {
+  tmp = mkdtempSync(path.join(os.tmpdir(), 'gbl-server-settings-'))
+  previousDataDir = process.env.GOBLIN_SERVER_DATA_DIR
+  process.env.GOBLIN_SERVER_DATA_DIR = tmp
+
+  const mod = await import('#/server/modules/settings-source.ts')
+  await mod.updateServerSettingsPrefs({ fontFamily: 'system' })
+  await expect(mod.getServerSettingsPrefs()).resolves.toMatchObject({ fontFamily: 'system' })
+
+  await mod.updateServerSettingsPrefs({ fontFamily: 'maple' })
+  await expect(mod.getServerSettingsPrefs()).resolves.toMatchObject({ fontFamily: 'maple' })
+
+  await mod.updateServerSettingsPrefs({ fontFamily: 'bad-value' as never })
+  await expect(mod.getServerSettingsPrefs()).resolves.toMatchObject({ fontFamily: 'mono' })
 })
 
 test('normalizes missing and invalid terminal theme sync values to enabled', async () => {

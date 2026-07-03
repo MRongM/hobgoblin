@@ -58,6 +58,7 @@ describe('native shell projection helpers', () => {
         terminalCustomButtonsVisible: true,
         terminalCustomButtonSize: 'medium',
         terminalCustomButtons: [],
+        fontFamily: 'mono',
         lanEnabled: false,
       }),
     ).toEqual({

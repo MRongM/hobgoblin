@@ -3,6 +3,7 @@ import { DEFAULT_COLOR_THEME, type ColorTheme } from '#/shared/color-theme.ts'
 import type { InitialSettingsSnapshot } from '#/shared/bootstrap.ts'
 import type {
   EditorPref,
+  FontFamilyPref,
   LangPref,
   SessionState,
   SettingsPrefs,
@@ -40,6 +41,7 @@ export const DEFAULT_GIT_NETWORK_TIMEOUT_SEC = 120
 export const MAX_RECENT_REPOS = 10
 export const DEFAULT_LANG_PREF: LangPref = 'auto'
 export const DEFAULT_THEME_PREF: ThemePref = 'auto'
+export const DEFAULT_FONT_FAMILY: FontFamilyPref = 'mono'
 export const DEFAULT_SESSION_DETAIL_FOCUS_MODE = DEFAULT_DETAIL_FOCUS_MODE
 export const DEFAULT_TERMINAL_NOTIFICATIONS_ENABLED = false
 export const DEFAULT_SHORTCUTS_DISABLED = false
@@ -77,6 +79,7 @@ export function defaultSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): Se
     lang: overrides.lang ?? DEFAULT_LANG_PREF,
     theme: overrides.theme ?? DEFAULT_THEME_PREF,
     colorTheme: overrides.colorTheme ?? DEFAULT_COLOR_THEME,
+    fontFamily: overrides.fontFamily ?? DEFAULT_FONT_FAMILY,
     fetchIntervalSec: overrides.fetchIntervalSec ?? DEFAULT_FETCH_INTERVAL_SEC,
     gitNetworkProxyEnabled:
       overrides.gitNetworkProxyEnabled ?? DEFAULT_GIT_NETWORK_PROXY_ENABLED,
@@ -125,6 +128,7 @@ export function defaultSettingsSnapshot(overrides: Partial<SettingsSnapshot> = {
 export function initialSettingsFromSnapshot(snapshot: Pick<
   SettingsSnapshot,
   | 'fetchIntervalSec'
+  | 'fontFamily'
   | 'gitNetworkProxyEnabled'
   | 'gitNetworkProxyUrl'
   | 'gitNetworkTimeoutSec'
@@ -151,6 +155,7 @@ export function initialSettingsFromSnapshot(snapshot: Pick<
 >): InitialSettingsSnapshot {
   return {
     fetchIntervalSec: snapshot.fetchIntervalSec,
+    fontFamily: snapshot.fontFamily,
     gitNetworkProxyEnabled: snapshot.gitNetworkProxyEnabled,
     gitNetworkProxyUrl: snapshot.gitNetworkProxyUrl,
     gitNetworkTimeoutSec: snapshot.gitNetworkTimeoutSec,

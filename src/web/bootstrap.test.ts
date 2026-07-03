@@ -62,6 +62,7 @@ describe('renderer bootstrap', () => {
       terminalCustomButtonsVisible: true,
       terminalCustomButtonSize: 'medium',
       terminalCustomButtons: [],
+      fontFamily: 'mono',
       lanEnabled: false,
     }
     const bootstrap: RendererBootstrapSnapshot = electronBootstrap({

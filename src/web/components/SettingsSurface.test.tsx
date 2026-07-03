@@ -41,6 +41,7 @@ function defaultRpcResult(path: string, input?: unknown) {
   if (path === 'settings.get') {
     return {
       fetchIntervalSec: 60,
+      fontFamily: 'mono',
       gitNetworkProxyEnabled: false,
       gitNetworkProxyUrl: '',
       gitNetworkTimeoutSec: 120,
@@ -187,6 +188,7 @@ beforeEach(() => {
     initialI18n: null,
     initialSettings: {
       fetchIntervalSec: 60,
+      fontFamily: 'mono',
       gitNetworkProxyEnabled: false,
       gitNetworkProxyUrl: '',
       gitNetworkTimeoutSec: 120,
@@ -216,6 +218,7 @@ beforeEach(() => {
     initialI18n: null,
     initialSettings: {
       fetchIntervalSec: 60,
+      fontFamily: 'mono',
       gitNetworkProxyEnabled: false,
       gitNetworkProxyUrl: '',
       gitNetworkTimeoutSec: 120,
@@ -554,6 +557,15 @@ describe('SettingsSurface', () => {
         return body.settings?.terminalThemeSyncEnabled === false
       }),
     ).toBe(true)
+  })
+
+  test('renders global font family setting from general settings', async () => {
+    await render(<SettingsSurface page="general" onPageChange={() => {}} />)
+
+    expect(document.body.textContent).toContain('settings.font-family')
+    expect(document.body.textContent).toContain('settings.font-family-hint')
+    expect(document.body.textContent).toContain('settings.font-family.mono')
+    expect(document.getElementById('settings-font-family')).not.toBeNull()
   })
 
   test('edits terminal font size from settings', async () => {
