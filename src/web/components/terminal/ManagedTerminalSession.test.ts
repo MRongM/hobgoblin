@@ -746,7 +746,7 @@ describe('ManagedTerminalSession', () => {
     expect(xtermMocks.terminals[0]!.options.minimumContrastRatio).toBe(4.5)
     expect(xtermMocks.terminals[0]!.options.allowProposedApi).toBe(true)
     expect(xtermMocks.terminals[0]!.options.cursorStyle).toBe('bar')
-    expect(xtermMocks.terminals[0]!.options.fontFamily).toContain('Maple Mono NF CN')
+    expect(xtermMocks.terminals[0]!.options.fontFamily).toContain('ui-monospace')
     expect(xtermMocks.terminals[0]!.options.fontSize).toBe(14)
     expect(xtermMocks.terminals[0]!.initialCols).toBe(95)
     expect(xtermMocks.terminals[0]!.initialRows).toBe(28)
@@ -854,6 +854,28 @@ describe('ManagedTerminalSession', () => {
     expect(term.options.fontSize).toBe(16)
     expect(fitAddon.fit).toHaveBeenCalledTimes(1)
     expect(term.refresh).not.toHaveBeenCalled()
+  })
+
+  test('updates xterm font family and refits the terminal without restarting', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    const fitAddon = xtermMocks.fitAddons[0]!
+    fitAddon.fit.mockClear()
+    terminalCalls.restart.mockClear()
+
+    session.setFontFamily("'Maple Mono NF CN', ui-monospace, monospace")
+
+    expect(term.options.fontFamily).toBe("'Maple Mono NF CN', ui-monospace, monospace")
+    expect(fitAddon.fit).toHaveBeenCalledTimes(1)
+    expect(terminalCalls.restart).not.toHaveBeenCalled()
   })
 
   test('remeasures and refits after fonts finish loading without refreshing visible rows', async () => {

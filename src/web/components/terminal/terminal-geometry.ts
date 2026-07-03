@@ -1,6 +1,7 @@
 import { TERMINAL_SIZE_LIMITS, normalizeTerminalSize } from '#/shared/terminal.ts'
 
-export const TERMINAL_FONT_FAMILY = "'Maple Mono NF CN', monospace"
+export const DEFAULT_TERMINAL_FONT_FAMILY =
+  "ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace"
 
 export interface TerminalGeometry {
   cols: number
@@ -10,12 +11,16 @@ export interface TerminalGeometry {
 export function measureTerminalGeometry(input: {
   host: HTMLElement
   fontSize: number
-  measureCell?: (fontSize: number) => { width: number; height: number } | null
+  fontFamily?: string
+  measureCell?: (fontSize: number, fontFamily: string) => { width: number; height: number } | null
 }): TerminalGeometry | null {
   const rect = input.host.getBoundingClientRect()
   if (rect.width <= 0 || rect.height <= 0) return null
 
-  const cell = input.measureCell ? input.measureCell(input.fontSize) : measureTerminalCell(input.host, input.fontSize)
+  const fontFamily = input.fontFamily ?? DEFAULT_TERMINAL_FONT_FAMILY
+  const cell = input.measureCell
+    ? input.measureCell(input.fontSize, fontFamily)
+    : measureTerminalCell(input.host, input.fontSize, fontFamily)
   if (!cell || cell.width <= 0 || cell.height <= 0) return null
 
   const cols = clamp(Math.floor(rect.width / cell.width), TERMINAL_SIZE_LIMITS.minCols, TERMINAL_SIZE_LIMITS.maxCols)
@@ -23,7 +28,7 @@ export function measureTerminalGeometry(input: {
   return normalizeTerminalSize(cols, rows)
 }
 
-function measureTerminalCell(host: HTMLElement, fontSize: number): { width: number; height: number } | null {
+function measureTerminalCell(host: HTMLElement, fontSize: number, fontFamily: string): { width: number; height: number } | null {
   const document = host.ownerDocument
   const body = document.body
   if (!body) return fallbackCell(fontSize)
@@ -33,7 +38,7 @@ function measureTerminalCell(host: HTMLElement, fontSize: number): { width: numb
   probe.style.position = 'absolute'
   probe.style.visibility = 'hidden'
   probe.style.whiteSpace = 'pre'
-  probe.style.fontFamily = TERMINAL_FONT_FAMILY
+  probe.style.fontFamily = fontFamily
   probe.style.fontSize = `${fontSize}px`
   probe.style.lineHeight = '1'
   body.appendChild(probe)

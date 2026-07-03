@@ -14,6 +14,7 @@ import type { SettingsPage } from '#/shared/settings-pages.ts'
 import type {
   EditorAppAvailability,
   EditorPref,
+  FontFamilyPref,
   Lang,
   LangPref,
   ResolvedEditorApp,
@@ -50,6 +51,7 @@ export type { SettingsPage } from '#/shared/settings-pages.ts'
 export type {
   EditorAppAvailability,
   EditorPref,
+  FontFamilyPref,
   Lang,
   LangPref,
   ResolvedEditorApp,

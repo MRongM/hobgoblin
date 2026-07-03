@@ -4,6 +4,7 @@ import { isValidAbsolutePath, toSafeRepoLocator, toSafeSessionRepoEntry } from '
 import { serverDataFile } from '#/server/common/data-dir.ts'
 import type {
   EditorPref,
+  FontFamilyPref,
   LangPref,
   SessionState,
   SettingsPrefs,
@@ -28,6 +29,7 @@ import {
   DEFAULT_FILE_TREE_FONT_SIZE,
   DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
   DEFAULT_FETCH_INTERVAL_SEC,
+  DEFAULT_FONT_FAMILY,
   DEFAULT_GIT_NETWORK_TIMEOUT_SEC,
   DEFAULT_GLOBAL_SHORTCUT,
   DEFAULT_GLOBAL_SHORTCUT_DISABLED,
@@ -62,6 +64,7 @@ interface ServerSettingsData {
   lang: LangPref
   theme: ThemePref
   colorTheme: ColorTheme
+  fontFamily: FontFamilyPref
   fetchIntervalSec: number
   gitNetworkProxyEnabled: boolean
   gitNetworkProxyUrl: string
@@ -110,6 +113,10 @@ function normalizeLangPref(value: unknown): LangPref {
   return value === 'auto' || value === 'en' || value === 'zh' || value === 'ko' || value === 'ja'
     ? value
     : DEFAULT_LANG_PREF
+}
+
+function normalizeFontFamilyPref(value: unknown): FontFamilyPref {
+  return value === 'mono' || value === 'maple' || value === 'system' ? value : DEFAULT_FONT_FAMILY
 }
 
 function normalizeTerminalPref(value: unknown): TerminalPref {
@@ -234,6 +241,7 @@ function settingsPrefsFromData(data: ServerSettingsData): SettingsPrefs {
     lang: data.lang,
     theme: data.theme,
     colorTheme: data.colorTheme,
+    fontFamily: data.fontFamily,
     fetchIntervalSec: data.fetchIntervalSec,
     gitNetworkProxyEnabled: data.gitNetworkProxyEnabled,
     gitNetworkProxyUrl: data.gitNetworkProxyUrl,
@@ -331,6 +339,7 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       lang: normalizeLangPref(parsed.lang),
       theme: normalizeThemePref(parsed.theme),
       colorTheme: normalizeColorTheme(parsed.colorTheme),
+      fontFamily: normalizeFontFamilyPref(parsed.fontFamily),
       fetchIntervalSec: normalizeFetchInterval(parsed.fetchIntervalSec),
       gitNetworkProxyEnabled: normalizeGitNetworkProxyEnabled(parsed.gitNetworkProxyEnabled),
       gitNetworkProxyUrl: normalizeGitNetworkProxyUrl(parsed.gitNetworkProxyUrl),
@@ -412,6 +421,8 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   const nextLang = patch.lang === undefined ? data.lang : normalizeLangPref(patch.lang)
   const nextTheme = patch.theme === undefined ? data.theme : normalizeThemePref(patch.theme)
   const nextColorTheme = patch.colorTheme === undefined ? data.colorTheme : normalizeColorTheme(patch.colorTheme)
+  const nextFontFamily =
+    patch.fontFamily === undefined ? data.fontFamily : normalizeFontFamilyPref(patch.fontFamily)
   const nextFetchIntervalSec =
     patch.fetchIntervalSec === undefined ? data.fetchIntervalSec : normalizeFetchInterval(patch.fetchIntervalSec)
   const nextGitNetworkProxyEnabled =
@@ -485,6 +496,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     data.lang !== nextLang ||
     data.theme !== nextTheme ||
     data.colorTheme !== nextColorTheme ||
+    data.fontFamily !== nextFontFamily ||
     data.fetchIntervalSec !== nextFetchIntervalSec ||
     data.gitNetworkProxyEnabled !== nextGitNetworkProxyEnabled ||
     data.gitNetworkProxyUrl !== nextGitNetworkProxyUrl ||
@@ -511,6 +523,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   data.lang = nextLang
   data.theme = nextTheme
   data.colorTheme = nextColorTheme
+  data.fontFamily = nextFontFamily
   data.fetchIntervalSec = nextFetchIntervalSec
   data.gitNetworkProxyEnabled = nextGitNetworkProxyEnabled
   data.gitNetworkProxyUrl = nextGitNetworkProxyUrl

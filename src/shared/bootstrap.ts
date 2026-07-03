@@ -1,5 +1,6 @@
 import type {
   EditorPref,
+  FontFamilyPref,
   I18nSnapshot,
   TerminalCustomButton,
   TerminalCustomButtonSize,
@@ -40,6 +41,7 @@ export const WEB_RENDERER_CAPABILITIES = [] as const satisfies readonly Renderer
 
 export interface InitialSettingsSnapshot {
   fetchIntervalSec: number
+  fontFamily: FontFamilyPref
   gitNetworkProxyEnabled: boolean
   gitNetworkProxyUrl: string
   gitNetworkTimeoutSec: number

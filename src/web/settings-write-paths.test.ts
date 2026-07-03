@@ -26,6 +26,7 @@ const appDataClientMocks = vi.hoisted(() => ({
     hosts: {},
   })),
   saveSession: vi.fn(async (session) => session),
+  setFontFamily: vi.fn(async (fontFamily: 'mono' | 'maple' | 'system') => fontFamily),
   setFileTreeFontSize: vi.fn(async (fontSize: number) => fontSize),
   setFileTreeTopbarFontSize: vi.fn(async (fontSize: number) => fontSize),
   setGlobalShortcut: vi.fn(async (accelerator) => ({ accelerator, registered: true })),
@@ -67,6 +68,7 @@ vi.mock('#/web/settings-client.ts', () => ({
   refreshExternalAppsSnapshot: appDataClientMocks.refreshExternalAppsSnapshot,
   refreshGitHubCliState: appDataClientMocks.refreshGitHubCliState,
   saveSession: appDataClientMocks.saveSession,
+  setFontFamily: appDataClientMocks.setFontFamily,
   setFileTreeFontSize: appDataClientMocks.setFileTreeFontSize,
   setFileTreeTopbarFontSize: appDataClientMocks.setFileTreeTopbarFontSize,
   setGlobalShortcut: appDataClientMocks.setGlobalShortcut,
@@ -106,6 +108,8 @@ describe('settings write paths', () => {
     appDataClientMocks.refreshGitHubCliState.mockResolvedValue({ available: false, version: null, detectedAt: 0, hosts: {} })
     appDataClientMocks.saveSession.mockReset()
     appDataClientMocks.saveSession.mockImplementation(async (session) => session)
+    appDataClientMocks.setFontFamily.mockReset()
+    appDataClientMocks.setFontFamily.mockImplementation(async (fontFamily: 'mono' | 'maple' | 'system') => fontFamily)
     appDataClientMocks.setFileTreeFontSize.mockReset()
     appDataClientMocks.setFileTreeFontSize.mockImplementation(async (fontSize: number) => fontSize)
     appDataClientMocks.setFileTreeTopbarFontSize.mockReset()
@@ -259,6 +263,16 @@ describe('settings write paths', () => {
     expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({ lanEnabled: true })
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: lanInfoQueryKey() })
     invalidateSpy.mockRestore()
+  })
+
+  test('setFontFamilyPreference updates runtime settings cache', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    const { setFontFamilyPreference } = await import('#/web/settings-write-paths.ts')
+
+    await setFontFamilyPreference('system')
+
+    expect(appDataClientMocks.setFontFamily).toHaveBeenCalledWith('system')
+    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({ fontFamily: 'system' })
   })
 
   test('setGitNetworkProxyEnabledPreference updates runtime settings cache', async () => {
