@@ -29,7 +29,7 @@ import { registerTerminalRelativePathLinkProvider } from '#/web/components/termi
 import { registerTerminalLocalUrlLinkProvider } from '#/web/components/terminal/terminal-local-url-links.ts'
 import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
 import {
-  TERMINAL_FONT_FAMILY,
+  DEFAULT_TERMINAL_FONT_FAMILY,
   measureTerminalGeometry,
   type TerminalGeometry,
 } from '#/web/components/terminal/terminal-geometry.ts'
@@ -67,6 +67,7 @@ export class TerminalSessionView {
   private openPathInEditorHandler: ((target: FilePathTarget) => void) | null = null
   private worktreePath: string | null = null
   private fontSize: number
+  private fontFamily: string
   private terminalThemeMode: () => TerminalThemeMode
   private readonly safariShiftKeyResolver = new SafariShiftKeyResolver()
   private pendingCoreUserInput = 0
@@ -82,9 +83,10 @@ export class TerminalSessionView {
       onOpenExternalLink: (uri: string) => void
       onRenderRecoveryRequest: () => void
     },
-    options: { fontSize?: number; terminalThemeMode?: () => TerminalThemeMode } = {},
+    options: { fontSize?: number; fontFamily?: string; terminalThemeMode?: () => TerminalThemeMode } = {},
   ) {
     this.fontSize = options.fontSize ?? DEFAULT_TERMINAL_FONT_SIZE
+    this.fontFamily = options.fontFamily ?? DEFAULT_TERMINAL_FONT_FAMILY
     this.terminalThemeMode = options.terminalThemeMode ?? (() => 'theme')
     this.frame = document.createElement('div')
     this.frame.className = 'goblin-managed-terminal-frame'
@@ -124,6 +126,15 @@ export class TerminalSessionView {
     const term = this.term
     if (!term) return
     term.options.fontSize = fontSize
+    this.fitForFontLoad(term)
+  }
+
+  setFontFamily(fontFamily: string): void {
+    if (this.fontFamily === fontFamily) return
+    this.fontFamily = fontFamily
+    const term = this.term
+    if (!term) return
+    term.options.fontFamily = fontFamily
     this.fitForFontLoad(term)
   }
 
@@ -175,7 +186,7 @@ export class TerminalSessionView {
   }
 
   measureGeometry(): TerminalGeometry | null {
-    return measureTerminalGeometry({ host: this.xtermHost, fontSize: this.fontSize })
+    return measureTerminalGeometry({ host: this.xtermHost, fontSize: this.fontSize, fontFamily: this.fontFamily })
   }
 
   openTerminal(geometry: TerminalGeometry, onMacOptionInput: (input: TerminalInput) => void): XTermTerminal {
@@ -186,7 +197,7 @@ export class TerminalSessionView {
       rows: geometry.rows,
       cursorBlink: true,
       cursorStyle: 'bar',
-      fontFamily: TERMINAL_FONT_FAMILY,
+      fontFamily: this.fontFamily,
       fontSize: this.fontSize,
       lineHeight: 1,
       minimumContrastRatio: 4.5,

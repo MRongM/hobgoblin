@@ -54,6 +54,7 @@ describe('renderer bootstrap seeding', () => {
         terminalCustomButtonsVisible: true,
         terminalCustomButtonSize: 'medium',
         terminalCustomButtons: [],
+        fontFamily: 'mono',
         lanEnabled: false,
       },
     })

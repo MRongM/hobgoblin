@@ -2,6 +2,7 @@ import type { RepoSessionEntry } from '#/shared/remote-repo.ts'
 import type {
   EditorAppState,
   EditorPref,
+  FontFamilyPref,
   GlobalShortcutState,
   SessionState,
   TerminalCustomButton,
@@ -16,6 +17,7 @@ import {
   refreshGitHubCliState,
   saveSession,
   setFileTreeClipboardMaxBytesMb,
+  setFontFamily,
   setFileTreeFontSize,
   setFileTreeTopbarFontSize,
   setGlobalShortcut,
@@ -161,6 +163,12 @@ export async function setTerminalFontSizePreference(fontSize: number): Promise<n
   const terminalFontSize = await setTerminalFontSize(fontSize)
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, terminalFontSize }))
   return terminalFontSize
+}
+
+export async function setFontFamilyPreference(fontFamily: FontFamilyPref): Promise<FontFamilyPref> {
+  const nextFontFamily = await setFontFamily(fontFamily)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, fontFamily: nextFontFamily }))
+  return nextFontFamily
 }
 
 export async function setRemoteTerminalTmuxEnabledPreference(enabled: boolean): Promise<void> {

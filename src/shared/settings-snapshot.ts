@@ -15,6 +15,7 @@ export function buildRuntimeSettingsSnapshot(input: {
     lang: input.prefs.lang,
     theme: input.prefs.theme,
     colorTheme: input.prefs.colorTheme,
+    fontFamily: input.prefs.fontFamily,
     fetchIntervalSec: input.prefs.fetchIntervalSec,
     gitNetworkProxyEnabled: input.prefs.gitNetworkProxyEnabled,
     gitNetworkProxyUrl: input.prefs.gitNetworkProxyUrl,
@@ -72,6 +73,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     | 'lang'
     | 'theme'
     | 'colorTheme'
+    | 'fontFamily'
     | 'fetchIntervalSec'
     | 'gitNetworkProxyEnabled'
     | 'gitNetworkProxyUrl'
@@ -102,6 +104,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     lang: snapshot.lang,
     theme: snapshot.theme,
     colorTheme: snapshot.colorTheme,
+    fontFamily: snapshot.fontFamily,
     fetchIntervalSec: snapshot.fetchIntervalSec,
     gitNetworkProxyEnabled: snapshot.gitNetworkProxyEnabled,
     gitNetworkProxyUrl: snapshot.gitNetworkProxyUrl,

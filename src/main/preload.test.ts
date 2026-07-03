@@ -58,6 +58,7 @@ function defaultBootstrap(): RendererBootstrapPayload {
       terminalCustomButtonsVisible: true,
       terminalCustomButtonSize: 'medium',
       terminalCustomButtons: [],
+      fontFamily: 'mono',
       lanEnabled: false,
     },
     server: null,
