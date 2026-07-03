@@ -44,6 +44,7 @@ const mockSessions = vi.hoisted(
       setSerializeValue: (value: string) => void
       currentThemeMode: () => 'theme' | 'classic'
       setTerminalThemeMode: ReturnType<typeof vi.fn>
+      focus: ReturnType<typeof vi.fn>
       hydrate: ReturnType<typeof vi.fn>
       handleOutput: ReturnType<typeof vi.fn>
       handleServerTitle: ReturnType<typeof vi.fn>
@@ -64,6 +65,7 @@ vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
     private readonly handleServerTitleSpy = vi.fn()
     private readonly handleOwnershipSpy = vi.fn()
     private readonly hydrateSpy = vi.fn()
+    private readonly focusSpy = vi.fn()
     private readonly detachSpy = vi.fn()
     private readonly setTerminalThemeModeSpy = vi.fn()
     private terminalThemeModeGetter: () => 'theme' | 'classic'
@@ -97,6 +99,7 @@ vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
         },
         currentThemeMode: () => this.terminalThemeModeGetter(),
         setTerminalThemeMode: this.setTerminalThemeModeSpy,
+        focus: this.focusSpy,
         hydrate: this.hydrateSpy,
         handleOutput: this.handleOutputSpy,
         handleServerTitle: this.handleServerTitleSpy,
@@ -142,6 +145,10 @@ vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
     }
 
     clearSearch() {}
+
+    focus() {
+      this.focusSpy()
+    }
 
     scrollToBottom() {}
 
@@ -1141,6 +1148,97 @@ describe('TerminalSessionProvider', () => {
     }
   })
 
+  test('focuses the new current repo selected terminal once after switching project tabs', async () => {
+    const firstRepo = seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } })],
+      selectedBranch: 'feature/worktree',
+      detailTab: 'terminal',
+    })
+    const secondRepo = {
+      ...firstRepo,
+      id: SECOND_REPO_ID,
+      instanceToken: firstRepo.instanceToken + 1,
+      data: {
+        ...firstRepo.data,
+        branches: [createRepoBranch('feature/other', { worktree: { path: SECOND_WORKTREE_PATH } })],
+        worktreesByPath: {
+          [SECOND_WORKTREE_PATH]: {
+            path: SECOND_WORKTREE_PATH,
+            branch: 'feature/other',
+            isMain: false,
+            isLocked: false,
+          },
+        },
+      },
+      ui: {
+        ...firstRepo.ui,
+        selectedBranch: 'feature/other',
+        detailTab: 'terminal',
+      },
+    } satisfies typeof firstRepo
+    useReposStore.setState((state) => ({
+      ...state,
+      repos: {
+        ...state.repos,
+        [SECOND_REPO_ID]: secondRepo,
+      },
+      order: [REPO_ID, SECOND_REPO_ID],
+    }))
+    listSessionsMock.mockImplementation(async ({ repoRoot }) =>
+      repoRoot === REPO_ID
+        ? [
+            {
+              sessionId: 'server_session_1',
+              key: `${REPO_ID}\u0000${WORKTREE_PATH}\u0000terminal-1`,
+              cwd: WORKTREE_PATH,
+              controller: { attachmentId: 'attachment_local', status: 'connected' },
+              processName: 'zsh',
+              canonicalTitle: null,
+              cols: 80,
+              rows: 24,
+              displayOrder: 1,
+              phase: 'open',
+              message: null,
+            },
+          ]
+        : [
+            {
+              sessionId: 'server_session_2',
+              key: `${SECOND_REPO_ID}\u0000${SECOND_WORKTREE_PATH}\u0000terminal-1`,
+              cwd: SECOND_WORKTREE_PATH,
+              controller: { attachmentId: 'attachment_local', status: 'connected' },
+              processName: 'zsh',
+              canonicalTitle: null,
+              cols: 80,
+              rows: 24,
+              displayOrder: 1,
+              phase: 'open',
+              message: null,
+            },
+          ],
+    )
+    const firstWorktreeKey = worktreeTerminalKey(REPO_ID, WORKTREE_PATH)
+    const secondWorktreeKey = worktreeTerminalKey(SECOND_REPO_ID, SECOND_WORKTREE_PATH)
+    const { getContext, rerender, unmount } = await renderProviderWithProbe(firstWorktreeKey, REPO_ID)
+
+    try {
+      await vi.waitFor(() => expect(listSessionsMock).toHaveBeenCalledWith({ repoRoot: REPO_ID }))
+      getContext().registerWorktreeHost(secondWorktreeKey, document.createElement('div'))
+
+      await rerender(SECOND_REPO_ID)
+      await vi.waitFor(() => expect(listSessionsMock).toHaveBeenCalledWith({ repoRoot: SECOND_REPO_ID }))
+
+      const firstSession = mockSessions.find((session) => session.descriptor.repoRoot === REPO_ID)
+      const secondSession = mockSessions.find((session) => session.descriptor.repoRoot === SECOND_REPO_ID)
+      if (!firstSession || !secondSession) throw new Error('missing terminal mock sessions')
+      expect(firstSession.focus).not.toHaveBeenCalled()
+      expect(secondSession.focus).toHaveBeenCalledTimes(1)
+    } finally {
+      await unmount()
+    }
+  })
+
   test('does not resync sessions when repo changes do not affect terminal worktree mapping', async () => {
     seedRepoState({
       id: REPO_ID,
@@ -1703,6 +1801,7 @@ async function renderProviderWithProbe(
       phase: string
     }>
   }
+  rerender: (currentRepoId: string | null) => Promise<void>
   unmount: () => Promise<void>
 }> {
   const container = document.createElement('div')
@@ -1739,6 +1838,16 @@ async function renderProviderWithProbe(
     getProbe: () => {
       if (!probe) throw new Error('Terminal worktree probe was not captured')
       return probe
+    },
+    rerender: async (nextCurrentRepoId: string | null) => {
+      await act(async () => {
+        root.render(
+          <TerminalSessionProvider currentRepoId={nextCurrentRepoId} syncTracker={syncTracker}>
+            <CaptureContext onContext={(value) => (context = value)} />
+            <CaptureGroupProbe worktreeTerminalKey={worktreeTerminalKey} onProbe={(value) => (probe = value)} />
+          </TerminalSessionProvider>,
+        )
+      })
     },
     unmount: async () => {
       await act(async () => root.unmount())

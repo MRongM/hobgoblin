@@ -37,6 +37,7 @@ export function TerminalSessionProvider({ currentRepoId, children, syncTracker: 
   const parkingRootRef = useRef<HTMLDivElement | null>(null)
   const currentRepoIdRef = useRef(currentRepoId)
   currentRepoIdRef.current = currentRepoId
+  const previousCurrentRepoIdRef = useRef<string | null>(null)
   const repoIndexRef = useRef(repoIndex)
   repoIndexRef.current = repoIndex
 
@@ -146,8 +147,15 @@ export function TerminalSessionProvider({ currentRepoId, children, syncTracker: 
 
   // Server sync (initial + focus + external session changes)
   useEffect(() => {
+    const previousCurrentRepoId = previousCurrentRepoIdRef.current
+    previousCurrentRepoIdRef.current = currentRepoId
     if (!currentRepoId) return
-    void syncServerSessions(currentRepoId)
+    const shouldFocusTerminalAfterSync = previousCurrentRepoId !== null && previousCurrentRepoId !== currentRepoId
+    void syncServerSessions(currentRepoId).then(() => {
+      if (shouldFocusTerminalAfterSync && currentRepoIdRef.current === currentRepoId) {
+        registry.focusRunningTerminalForRepo(currentRepoId)
+      }
+    })
 
     const handleFocus = () => {
       if (!currentRepoIdRef.current) return
@@ -166,7 +174,7 @@ export function TerminalSessionProvider({ currentRepoId, children, syncTracker: 
       window.removeEventListener('focus', handleFocus)
       offSessionsChanged()
     }
-  }, [currentRepoId, currentRepoInstanceToken, syncServerSessions, syncTracker])
+  }, [currentRepoId, currentRepoInstanceToken, registry, syncServerSessions, syncTracker])
 
   const commandValue = useMemo<TerminalSessionContextValue>(
     () => ({
