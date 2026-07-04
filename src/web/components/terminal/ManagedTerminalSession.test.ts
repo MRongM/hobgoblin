@@ -18,6 +18,7 @@ import type {
   TerminalTakeoverResult,
   TerminalTakeoverInput,
   TerminalWriteInput,
+  TerminalWindowsPty,
 } from '#/shared/terminal.ts'
 
 const xtermMocks = vi.hoisted(() => {
@@ -58,6 +59,7 @@ const xtermMocks = vi.hoisted(() => {
       scrollback?: number
       theme?: { background?: string; foreground?: string }
       scrollOnUserInput?: boolean
+      windowsPty?: TerminalWindowsPty
     }
     element: HTMLDivElement | null = null
     modes = {
@@ -143,6 +145,7 @@ const xtermMocks = vi.hoisted(() => {
       scrollback?: number
       theme?: { background?: string; foreground?: string }
       scrollOnUserInput?: boolean
+      windowsPty?: TerminalWindowsPty
     }) {
       this.cols = options.cols
       this.rows = options.rows
@@ -160,6 +163,7 @@ const xtermMocks = vi.hoisted(() => {
         rescaleOverlappingGlyphs: options.rescaleOverlappingGlyphs,
         scrollback: options.scrollback,
         scrollOnUserInput: options.scrollOnUserInput,
+        windowsPty: options.windowsPty,
       }
       this.themeValue = options.theme
       Object.defineProperty(this.options, 'theme', {
@@ -935,6 +939,21 @@ describe('ManagedTerminalSession', () => {
     session.clearSearch()
     expect(xtermMocks.searchAddons[0]!.clearDecorations).toHaveBeenCalled()
     expect(session.snapshot().search).toBeUndefined()
+  })
+
+  test('applies Windows PTY compatibility from attach result before live output', async () => {
+    const windowsPty: TerminalWindowsPty = { backend: 'conpty', buildNumber: 22631 }
+    terminalCalls.attach.mockResolvedValueOnce(attachResult('session-1', { windowsPty }))
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    expect(xtermMocks.terminals[0]!.options.windowsPty).toEqual(windowsPty)
   })
 
   test('handles mac option arrows with VS Code-like terminal input', async () => {

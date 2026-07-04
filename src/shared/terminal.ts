@@ -12,6 +12,13 @@ export const NON_GIT_WORKSPACE_TERMINAL_BRANCH = 'workspace'
 export type TerminalSessionPhase = 'opening' | 'restarting' | 'open' | 'error' | 'closed'
 export type TerminalControllerStatus = 'connected' | 'none'
 export type TerminalAttachmentRole = 'controller' | 'viewer' | 'unowned'
+export type TerminalWindowsPtyBackend = 'conpty' | 'winpty'
+
+export interface TerminalWindowsPty {
+  backend?: TerminalWindowsPtyBackend
+  buildNumber?: number
+}
+
 export interface TerminalResolvedOwnership {
   role: TerminalAttachmentRole
   controllerStatus: TerminalControllerStatus
@@ -34,6 +41,7 @@ export interface TerminalFirstFrame {
   canonicalRows: number
   phase: TerminalSessionPhase
   message: string | null
+  windowsPty?: TerminalWindowsPty
 }
 
 export interface TerminalAttachInput {
@@ -143,6 +151,7 @@ export interface TerminalSessionSummary {
   displayOrder: number
   phase: TerminalSessionPhase
   message: string | null
+  windowsPty?: TerminalWindowsPty
 }
 
 export interface TerminalSessionSnapshotInput {
@@ -271,6 +280,7 @@ const TERMINAL_SOCKET_ACTIONS = [
   'reorder',
 ] as const satisfies TerminalSocketRequestAction[]
 const TERMINAL_SESSION_PHASE_VALUES = ['opening', 'restarting', 'open', 'error', 'closed'] as const
+const TERMINAL_WINDOWS_PTY_BACKEND_VALUES = ['conpty', 'winpty'] as const satisfies TerminalWindowsPtyBackend[]
 const TERMINAL_CONNECTED_CONTROLLER_STATUS_VALUES = ['connected'] as const satisfies Exclude<
   TerminalControllerStatus,
   'none'
@@ -296,6 +306,10 @@ const TerminalControllerSchema = v.object({
   status: v.picklist(TERMINAL_CONNECTED_CONTROLLER_STATUS_VALUES),
 })
 const TerminalSessionPhaseSchema = v.picklist(TERMINAL_SESSION_PHASE_VALUES)
+const TerminalWindowsPtySchema = v.object({
+  backend: v.optional(v.picklist(TERMINAL_WINDOWS_PTY_BACKEND_VALUES)),
+  buildNumber: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
+})
 const TerminalAttachInputSchema = v.object({
   sessionId: TerminalSessionIdSchema,
   cols: TerminalColsSchema,
@@ -347,6 +361,7 @@ const TerminalSessionSummarySchema = v.object({
   displayOrder: v.number(),
   phase: TerminalSessionPhaseSchema,
   message: v.nullable(v.string()),
+  windowsPty: v.optional(TerminalWindowsPtySchema),
 })
 const TerminalSessionSnapshotSchema = v.object({
   sessionId: v.string(),

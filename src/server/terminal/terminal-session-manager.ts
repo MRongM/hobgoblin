@@ -13,6 +13,7 @@ import {
   type TerminalSessionSnapshot,
   type TerminalSessionSummary,
   type TerminalTakeoverResult,
+  type TerminalWindowsPty,
 } from '#/shared/terminal.ts'
 import {
   attachTerminalAttachment,
@@ -67,6 +68,7 @@ interface TerminalSession<TOwner extends string | number> {
   cols: number
   rows: number
   pty: TerminalPtyRuntime | null
+  windowsPty?: TerminalWindowsPty
   disposables: Array<{ dispose: () => void }>
   render: TerminalRenderState
   processName: string
@@ -129,6 +131,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
       cols: size.cols,
       rows: size.rows,
       pty: null,
+      windowsPty: undefined,
       disposables: [],
       render: createEmptyTerminalRenderState(),
       processName: '',
@@ -338,6 +341,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
           displayOrder: session.displayOrder,
           phase: session.phase,
           message: session.message,
+          windowsPty: session.windowsPty,
         })
       }
     }
@@ -438,6 +442,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
       canonicalRows: session.rows,
       phase: session.phase,
       message: session.message,
+      windowsPty: session.windowsPty,
     }
   }
 
@@ -469,6 +474,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
     session.rows = rows
     resetTerminalRenderState(session.render)
     session.processName = ''
+    session.windowsPty = undefined
     session.inputQueue = []
     session.inputFlushScheduled = false
   }
@@ -488,10 +494,11 @@ export class TerminalSessionManager<TOwner extends string | number> {
       return spawnResult
     }
     session.pty = spawnResult.runtime
+    session.windowsPty = spawnResult.windowsPty
     session.processName = session.pty.processName()
     session.phase = 'open'
     session.message = null
-    session.render.model = createTerminalRenderModel(session.cols, session.rows)
+    session.render.model = createTerminalRenderModel(session.cols, session.rows, session.windowsPty)
     session.disposables.push(
       bindTerminalRenderTitle(session.render, (canonicalTitle) => {
         this.sink.onTitle?.(session.ownerId, { sessionId: session.id, canonicalTitle })
