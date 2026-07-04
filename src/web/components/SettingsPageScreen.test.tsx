@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { Topbar } from '#/web/components/Topbar.tsx'
+import { SettingsPageScreen } from '#/web/components/SettingsPageScreen.tsx'
 
 vi.mock('#/web/stores/i18n.ts', () => ({
   useT: () => (key: string) => key,
@@ -11,6 +11,10 @@ vi.mock('#/web/stores/i18n.ts', () => ({
 
 vi.mock('#/web/runtime-settings-chrome.ts', () => ({
   useRuntimeChromeSettings: () => ({ topbarHeightPx: 39, toolbarHeightPx: 41 }),
+}))
+
+vi.mock('#/web/components/SettingsSurface.tsx', () => ({
+  SettingsSurface: () => <div data-testid="settings-surface" />,
 }))
 
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -34,17 +38,13 @@ afterEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
 })
 
-describe('Topbar', () => {
+describe('SettingsPageScreen', () => {
   test('uses runtime topbar height', () => {
     act(() => {
-      root!.render(
-        <Topbar onOpenSettings={() => {}}>
-          <div data-testid="tabs" />
-        </Topbar>,
-      )
+      root!.render(<SettingsPageScreen page="general" onBack={() => {}} onPageChange={() => {}} />)
     })
 
-    expect(container!.firstElementChild).toBeInstanceOf(HTMLElement)
-    expect((container!.firstElementChild as HTMLElement).style.height).toBe('39px')
+    const topbar = container!.querySelector<HTMLElement>('.topbar')
+    expect(topbar?.style.height).toBe('39px')
   })
 })

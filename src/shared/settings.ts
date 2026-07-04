@@ -24,6 +24,13 @@ export const MAX_TERMINAL_FONT_SIZE = 24
 export const MIN_GIT_NETWORK_TIMEOUT_SEC = 15
 export const MAX_GIT_NETWORK_TIMEOUT_SEC = 900
 
+export {
+  DEFAULT_TOPBAR_HEIGHT_PX,
+  DEFAULT_TOOLBAR_HEIGHT_PX,
+  MIN_CHROME_HEIGHT_PX,
+  MAX_CHROME_HEIGHT_PX,
+} from '#/shared/window-chrome.ts'
+
 export type TerminalCustomButtonAction = 'execute' | 'input'
 export type TerminalCustomButtonSize = 'small' | 'medium' | 'large'
 
@@ -52,6 +59,8 @@ export interface SettingsPrefs {
   globalShortcut: string
   terminalApp: TerminalPref
   editorApp: EditorPref
+  topbarHeightPx: number
+  toolbarHeightPx: number
   fileTreeFontSize: number
   fileTreeTopbarFontSize: number
   fileTreeClipboardMaxBytesMb: number

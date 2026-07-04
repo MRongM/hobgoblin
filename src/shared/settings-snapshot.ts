@@ -31,6 +31,8 @@ export function buildRuntimeSettingsSnapshot(input: {
     globalShortcutRegistered: input.globalShortcutRegistered,
     terminalApp: input.prefs.terminalApp,
     editorApp: input.prefs.editorApp,
+    topbarHeightPx: input.prefs.topbarHeightPx,
+    toolbarHeightPx: input.prefs.toolbarHeightPx,
     fileTreeFontSize: input.prefs.fileTreeFontSize,
     fileTreeTopbarFontSize: input.prefs.fileTreeTopbarFontSize,
     fileTreeClipboardMaxBytesMb: input.prefs.fileTreeClipboardMaxBytesMb,
@@ -89,6 +91,8 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     | 'globalShortcutRegistered'
     | 'terminalApp'
     | 'editorApp'
+    | 'topbarHeightPx'
+    | 'toolbarHeightPx'
     | 'fileTreeFontSize'
     | 'fileTreeTopbarFontSize'
     | 'fileTreeClipboardMaxBytesMb'
@@ -120,6 +124,8 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     globalShortcutRegistered: snapshot.globalShortcutRegistered,
     terminalApp: snapshot.terminalApp,
     editorApp: snapshot.editorApp,
+    topbarHeightPx: snapshot.topbarHeightPx,
+    toolbarHeightPx: snapshot.toolbarHeightPx,
     fileTreeFontSize: snapshot.fileTreeFontSize,
     fileTreeTopbarFontSize: snapshot.fileTreeTopbarFontSize,
     fileTreeClipboardMaxBytesMb: snapshot.fileTreeClipboardMaxBytesMb,

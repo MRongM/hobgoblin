@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { RepoExplorerPane } from '#/web/components/repo-workspace/RepoExplorerPane.tsx'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
-import { APP_TOOLBAR_HEIGHT_PX } from '#/shared/window-chrome.ts'
 
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 const REPO_ID = '/repo'
@@ -19,6 +18,10 @@ const runtimeFontSettings = vi.hoisted(() => ({
 
 vi.mock('#/web/runtime-settings-fonts.ts', () => ({
   useRuntimeFontSettings: () => runtimeFontSettings,
+}))
+
+vi.mock('#/web/runtime-settings-chrome.ts', () => ({
+  useRuntimeChromeSettings: () => ({ topbarHeightPx: 39, toolbarHeightPx: 41 }),
 }))
 
 vi.mock('#/web/components/BranchList.tsx', () => ({
@@ -289,7 +292,7 @@ describe('RepoExplorerPane', () => {
     const allBranchesFilter = branchToolbar?.querySelector('[aria-label="branches.filter-tooltip.all"]')
     const noWorktreeFilter = branchToolbar?.querySelector('[aria-label="branches.filter-tooltip.no-worktree"]')
     expect(branchToolbar).toBeTruthy()
-    expect(branchToolbar?.style.height).toBe(`${APP_TOOLBAR_HEIGHT_PX}px`)
+    expect(branchToolbar?.style.height).toBe('41px')
     expect(branchToolbar?.className).not.toContain('h-8')
     expect(branchViewToggle).toBeTruthy()
     expect(search).toBeNull()
@@ -320,12 +323,17 @@ describe('RepoExplorerPane', () => {
 
     const branchToolbar = container.querySelector<HTMLElement>('[data-testid="branch-area-toolbar"]')
     const explorerToolbar = container.querySelector<HTMLElement>('[data-testid="repo-explorer-toolbar"]')
+    const fileTree = container.querySelector<HTMLElement>('[data-testid="project-file-tree"]')
     const firstTab = container.querySelector<HTMLButtonElement>('[role="tab"]')
-    expect(branchToolbar?.style.height).toBe(`${APP_TOOLBAR_HEIGHT_PX}px`)
-    expect(explorerToolbar?.style.height).toBe(`${APP_TOOLBAR_HEIGHT_PX}px`)
+    const tabIcons = Array.from(container.querySelectorAll<SVGElement>('[role="tab"] svg'))
+    expect(branchToolbar?.style.height).toBe('41px')
+    expect(explorerToolbar?.style.height).toBe('41px')
     expect(explorerToolbar?.className).not.toContain('h-8')
+    expect(fileTree?.getAttribute('data-toolbar-height')).toBe('detail')
     expect(explorerToolbar?.style.getPropertyValue('--goblin-file-tree-topbar-font-size')).toBe('13px')
     expect(firstTab?.className).toContain('text-[length:var(--goblin-file-tree-topbar-font-size)]')
+    expect(tabIcons).toHaveLength(4)
+    expect(tabIcons.every((icon) => icon.classList.contains('size-3.5'))).toBe(true)
     await act(async () => root.unmount())
   })
 

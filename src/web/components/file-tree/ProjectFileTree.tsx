@@ -35,7 +35,6 @@ import {
   type RepoFileTreeResult,
 } from '#/shared/file-tree.ts'
 import { isRemoteRepoId } from '#/shared/rpc.ts'
-import { APP_TOOLBAR_HEIGHT_PX } from '#/shared/window-chrome.ts'
 import { openRemoteRepositoryEditor, openRemoteRepositoryTerminal } from '#/web/remote-client.ts'
 import {
   createRepositoryFileTreeFile,
@@ -108,6 +107,7 @@ import {
   writeFileTreeClipboardFile,
 } from '#/web/app-shell-client.ts'
 import { useRuntimeFileAreaSettings } from '#/web/runtime-settings-file-area.ts'
+import { useRuntimeChromeSettings } from '#/web/runtime-settings-chrome.ts'
 import { fileTreeClipboardMaxBytes as fileTreeClipboardMaxBytesFromMb } from '#/shared/file-tree-clipboard.ts'
 
 const ROOT_DIR = ''
@@ -1859,6 +1859,7 @@ function FileTreeToolbar({
   onRefresh: () => void
 }) {
   const t = useT()
+  const { toolbarHeightPx } = useRuntimeChromeSettings()
   const inputRef = useRef<HTMLInputElement>(null)
   const hasQuery = query.trim().length > 0
   const canMove = resultCount > 0
@@ -1883,7 +1884,7 @@ function FileTreeToolbar({
         'flex shrink-0 items-center justify-end gap-1 border-b border-toolbar-border bg-toolbar px-2',
         height === 'detail' ? null : 'min-h-8',
       )}
-      style={height === 'detail' ? { height: APP_TOOLBAR_HEIGHT_PX } : undefined}
+      style={height === 'detail' ? { height: toolbarHeightPx } : undefined}
     >
       <div className="mr-auto flex shrink-0 items-center gap-1 pr-1">
         <Button

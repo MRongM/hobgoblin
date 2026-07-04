@@ -686,6 +686,12 @@ export const en = {
   'settings.lang.zh': '中文',
   'settings.lang.ko': '한국어',
   'settings.lang.ja': '日本語',
+  'settings.chrome-heights.title': 'Window and toolbars',
+  'settings.chrome-heights.topbar': 'Topbar height',
+  'settings.chrome-heights.topbar-hint': 'Controls the app topbar height and native window button alignment.',
+  'settings.chrome-heights.toolbar': 'Toolbar height',
+  'settings.chrome-heights.toolbar-hint':
+    'Controls shared repository, branch, and file toolbar height. Compact action bars stay unchanged.',
   'settings.action-bar-blank-toggle': 'Toggle details from action bar',
   'settings.action-bar-blank-toggle-hint':
     'Top/bottom layout only. Click empty action bar space to show or hide details.',

@@ -56,6 +56,8 @@ function defaultRpcResult(path: string, input?: unknown) {
       globalShortcutRegistered: true,
       terminalApp: 'auto',
       editorApp: 'auto',
+      topbarHeightPx: 34,
+      toolbarHeightPx: 34,
       fileTreeFontSize: 12,
       fileTreeTopbarFontSize: 13,
       terminalFontSize: 14,
@@ -202,6 +204,8 @@ beforeEach(() => {
       globalShortcutRegistered: true,
       terminalApp: 'auto',
       editorApp: 'auto',
+      topbarHeightPx: 34,
+      toolbarHeightPx: 34,
       fileTreeFontSize: 12,
       fileTreeTopbarFontSize: 13,
       terminalFontSize: 14,
@@ -232,6 +236,8 @@ beforeEach(() => {
       globalShortcutRegistered: true,
       terminalApp: 'auto',
       editorApp: 'auto',
+      topbarHeightPx: 34,
+      toolbarHeightPx: 34,
       fileTreeFontSize: 12,
       fileTreeTopbarFontSize: 13,
       terminalFontSize: 14,
@@ -555,6 +561,34 @@ describe('SettingsSurface', () => {
         if (new URL(String(url)).pathname !== '/api/settings/prefs') return false
         const body = JSON.parse(String(options?.body ?? '{}')) as { settings?: Record<string, unknown> }
         return body.settings?.terminalThemeSyncEnabled === false
+      }),
+    ).toBe(true)
+  })
+
+  test('edits chrome heights from general settings', async () => {
+    await render(<SettingsSurface page="general" onPageChange={() => {}} />)
+
+    const topbarInput = document.getElementById('settings-topbar-height')
+    const toolbarInput = document.getElementById('settings-toolbar-height')
+    if (!(topbarInput instanceof HTMLInputElement)) throw new Error('Missing topbar height input')
+    if (!(toolbarInput instanceof HTMLInputElement)) throw new Error('Missing toolbar height input')
+
+    await act(async () => {
+      setInputValue(topbarInput, '39')
+      setInputValue(toolbarInput, '41')
+      await Promise.resolve()
+    })
+
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [, options] = call as unknown as [unknown, RequestInit | undefined]
+        return String(options?.body ?? '').includes('"topbarHeightPx":39')
+      }),
+    ).toBe(true)
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [, options] = call as unknown as [unknown, RequestInit | undefined]
+        return String(options?.body ?? '').includes('"toolbarHeightPx":41')
       }),
     ).toBe(true)
   })

@@ -2,9 +2,12 @@
 
 import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { APP_TOOLBAR_HEIGHT_PX } from '#/shared/window-chrome.ts'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { RepoWorkspace, Toolbar } from '#/web/components/Layout.tsx'
+
+vi.mock('#/web/runtime-settings-chrome.ts', () => ({
+  useRuntimeChromeSettings: () => ({ topbarHeightPx: 39, toolbarHeightPx: 41 }),
+}))
 
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 
@@ -29,7 +32,7 @@ afterEach(() => {
 })
 
 describe('Layout chrome', () => {
-  test('uses the shared app toolbar height for Toolbar', () => {
+  test('uses the runtime app toolbar height for Toolbar', () => {
     render(
       <Toolbar data-testid="toolbar">
         <span>Toolbar content</span>
@@ -37,11 +40,11 @@ describe('Layout chrome', () => {
     )
 
     const toolbar = container!.querySelector<HTMLElement>('[data-testid="toolbar"]')
-    expect(toolbar?.style.height).toBe(`${APP_TOOLBAR_HEIGHT_PX}px`)
+    expect(toolbar?.style.height).toBe('41px')
     expect(toolbar?.className).not.toContain('h-9')
   })
 
-  test('uses the shared app toolbar height for collapsed top-bottom detail row', () => {
+  test('uses the runtime app toolbar height for collapsed top-bottom detail row', () => {
     render(
       <RepoWorkspace
         layout="top-bottom"
@@ -52,7 +55,7 @@ describe('Layout chrome', () => {
     )
 
     const workspace = container!.firstElementChild as HTMLElement
-    expect(workspace.style.gridTemplateRows).toBe(`minmax(0, 1fr) 1px ${APP_TOOLBAR_HEIGHT_PX}px`)
+    expect(workspace.style.gridTemplateRows).toBe('minmax(0, 1fr) 1px 41px')
     expect(workspace.className).not.toContain('2.25rem')
   })
 })

@@ -23,7 +23,8 @@ import {
   windowCanvasBackground,
 } from '#/main/window-shell.ts'
 import { getTheme } from '#/main/theme.ts'
-import { WINDOW_TOPBAR_HEIGHT_PX } from '#/shared/window-chrome.ts'
+import { getSettingsPrefs } from '#/main/settings-server-client.ts'
+import { DEFAULT_TOPBAR_HEIGHT_PX } from '#/shared/window-chrome.ts'
 
 const DEFAULT_BOUNDS: WindowBounds = { width: 900, height: 600 }
 const MAIN_WINDOW_SURFACE = {
@@ -35,6 +36,7 @@ const MAIN_WINDOW_SURFACE = {
 } as const
 
 let mainWindowCreation: Promise<BrowserWindow> | null = null
+let mainWindowTopbarHeightPx = DEFAULT_TOPBAR_HEIGHT_PX
 
 interface StartupErrorPageState {
   shown: boolean
@@ -143,6 +145,8 @@ function clampToDisplay(bounds: WindowBounds): WindowBounds {
 async function createMainWindow(): Promise<BrowserWindow> {
   const backgroundColor = windowCanvasBackground()
   const { resolved, colorTheme } = getTheme()
+  const settingsPrefs = await getSettingsPrefs()
+  mainWindowTopbarHeightPx = settingsPrefs.topbarHeightPx
 
   const windowState = await loadWindowState()
   const saved = windowState.windowBounds
@@ -158,8 +162,8 @@ async function createMainWindow(): Promise<BrowserWindow> {
     minHeight: 480,
     backgroundColor,
     titleBarStyle: defaultTitleBarStyle(),
-    titleBarOverlay: titleBarOverlayForTheme(resolved, colorTheme, WINDOW_TOPBAR_HEIGHT_PX),
-    trafficLightPosition: macTrafficLightPosition(WINDOW_TOPBAR_HEIGHT_PX),
+    titleBarOverlay: titleBarOverlayForTheme(resolved, colorTheme, mainWindowTopbarHeightPx),
+    trafficLightPosition: macTrafficLightPosition(mainWindowTopbarHeightPx),
     autoHideMenuBar: process.platform !== 'darwin',
     webPreferences,
   })
@@ -198,11 +202,39 @@ async function createMainWindow(): Promise<BrowserWindow> {
   return win
 }
 
+function applyMainWindowChromeHeight(win: BrowserWindow, heightPx: number): void {
+  const theme = getTheme()
+  if (supportsTitleBarOverlay()) {
+    const overlay = titleBarOverlayForTheme(theme.resolved, theme.colorTheme, heightPx)
+    if (overlay) {
+      try {
+        win.setTitleBarOverlay(overlay)
+      } catch {}
+    }
+  }
+  const trafficLightPosition = macTrafficLightPosition(heightPx)
+  const windowWithButtonPosition = win as BrowserWindow & {
+    setWindowButtonPosition?: (position: { x: number; y: number }) => void
+  }
+  if (trafficLightPosition && typeof windowWithButtonPosition.setWindowButtonPosition === 'function') {
+    try {
+      windowWithButtonPosition.setWindowButtonPosition(trafficLightPosition)
+    } catch {}
+  }
+}
+
+export function applyMainWindowTopbarHeight(heightPx: number): void {
+  mainWindowTopbarHeightPx = heightPx
+  const win = getMainWindow()
+  if (!win || win.isDestroyed()) return
+  applyMainWindowChromeHeight(win, heightPx)
+}
+
 export function applyMainWindowChromeTheme(theme: 'light' | 'dark'): void {
   if (!supportsTitleBarOverlay()) return
   const win = getMainWindow()
   if (!win || win.isDestroyed()) return
-  const overlay = titleBarOverlayForTheme(theme, getTheme().colorTheme, WINDOW_TOPBAR_HEIGHT_PX)
+  const overlay = titleBarOverlayForTheme(theme, getTheme().colorTheme, mainWindowTopbarHeightPx)
   if (!overlay) return
   try {
     win.setTitleBarOverlay(overlay)
