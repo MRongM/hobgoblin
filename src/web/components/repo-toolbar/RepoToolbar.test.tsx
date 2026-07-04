@@ -67,13 +67,13 @@ describe('TopbarRepoControls', () => {
     expect(container?.querySelector('button[aria-label="action.create-worktree-title"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="branches.switch"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="action.menu"]')).toBeNull()
-    expect(container?.querySelector('[aria-label="workspace.layout-label"]')).not.toBeNull()
+    expect(workspaceLayoutButtons()).toHaveLength(1)
 
     act(() => {
-      container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.layout-tooltip.left-right"]')?.click()
+      container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.layout-tooltip.top-bottom"]')?.click()
     })
 
-    expect(useReposStore.getState().workspaceLayout).toBe('left-right')
+    expect(useReposStore.getState().workspaceLayout).toBe('top-bottom')
   })
 
   test('keeps topbar repo controls focused on layout for an active repo', () => {
@@ -88,7 +88,7 @@ describe('TopbarRepoControls', () => {
 
     expect(container?.querySelector('button[aria-label="action.refresh"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="action.create-worktree-title"]')).toBeNull()
-    expect(container?.querySelector('[aria-label="workspace.layout-label"]')).not.toBeNull()
+    expect(workspaceLayoutButtons()).toHaveLength(1)
     expect(container?.querySelector('[aria-label="branches.filter-label"]')).toBeNull()
     expect(container?.querySelector('[aria-label="branches.search-label"]')).toBeNull()
   })
@@ -104,7 +104,7 @@ describe('TopbarRepoControls', () => {
 
     renderControls(navigationWith({}))
 
-    expect(container?.querySelector('[aria-label="workspace.layout-label"]')).toBeNull()
+    expect(workspaceLayoutButtons()).toHaveLength(0)
   })
 
   test('shows focus-mode branch switcher and branch action menu', () => {
@@ -143,13 +143,13 @@ describe('RepoToolbar', () => {
     expect(container?.querySelector('button[aria-label="branches.filter-tooltip.worktrees"]')).toBeNull()
     expect(container?.querySelector('[aria-label="branches.search-label"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="action.create-worktree-title"]')).toBeNull()
-    expect(container?.querySelector('[aria-label="workspace.layout-label"]')).not.toBeNull()
+    expect(workspaceLayoutButtons()).toHaveLength(1)
 
     act(() => {
-      container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.layout-tooltip.left-right"]')?.click()
+      container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.layout-tooltip.top-bottom"]')?.click()
     })
 
-    expect(useReposStore.getState().workspaceLayout).toBe('left-right')
+    expect(useReposStore.getState().workspaceLayout).toBe('top-bottom')
   })
 
   test('keeps body toolbar branch filters and layout for git-capable repositories', () => {
@@ -167,7 +167,7 @@ describe('RepoToolbar', () => {
     expect(container?.querySelector('[aria-label="branches.search-label"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="action.refresh"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="action.create-worktree-title"]')).toBeNull()
-    expect(container?.querySelector('[aria-label="workspace.layout-label"]')).not.toBeNull()
+    expect(workspaceLayoutButtons()).toHaveLength(1)
   })
 })
 
@@ -215,4 +215,10 @@ function createMatchMedia(small: boolean): typeof window.matchMedia {
     removeEventListener: vi.fn(),
     dispatchEvent: vi.fn(),
   })) as typeof window.matchMedia
+}
+
+function workspaceLayoutButtons(): NodeListOf<HTMLButtonElement> {
+  return container!.querySelectorAll<HTMLButtonElement>(
+    'button[aria-label="workspace.layout-tooltip.top-bottom"], button[aria-label="workspace.layout-tooltip.left-right"]',
+  )
 }
