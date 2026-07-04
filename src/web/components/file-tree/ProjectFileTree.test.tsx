@@ -10,6 +10,7 @@ import { useReposStore } from '#/web/stores/repos/store.ts'
 import { createRepoBranch, resetReposStore } from '#/web/stores/repos/test-utils.ts'
 import { GOBLIN_FILE_PATHS_MIME, type RepoFileTreeResult } from '#/shared/file-tree.ts'
 import type { ExecResult } from '#/shared/git-types.ts'
+import { APP_TOOLBAR_HEIGHT_PX } from '#/shared/window-chrome.ts'
 
 type GetRepositoryFileTreeArgs = [repoId: string, worktreePath: string, dirPath: string, signal?: AbortSignal]
 type SearchRepositoryFileTreeArgs = [
@@ -1186,7 +1187,7 @@ describe('ProjectFileTree', () => {
 
     const toolbar = fileTreeToolbar()
 
-    expect(toolbar.className).toContain('h-9')
+    expect(toolbar.style.height).toBe(`${APP_TOOLBAR_HEIGHT_PX}px`)
     expect(toolbar.className).not.toContain('min-h-8')
     expect(toolbar.className).toContain('border-toolbar-border')
     expect(toolbar.className).toContain('bg-toolbar')

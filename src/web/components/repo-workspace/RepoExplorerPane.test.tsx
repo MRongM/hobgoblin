@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { RepoExplorerPane } from '#/web/components/repo-workspace/RepoExplorerPane.tsx'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
+import { APP_TOOLBAR_HEIGHT_PX } from '#/shared/window-chrome.ts'
 
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 const REPO_ID = '/repo'
@@ -277,7 +278,7 @@ describe('RepoExplorerPane', () => {
       root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
     })
 
-    const branchToolbar = container.querySelector('[data-testid="branch-area-toolbar"]')
+    const branchToolbar = container.querySelector<HTMLElement>('[data-testid="branch-area-toolbar"]')
     const branchList = container.querySelector('[data-testid="branch-list"]')
     const branchViewToggle = branchToolbar?.querySelector<HTMLButtonElement>(
       'button[aria-label="branches.filter-tooltip.worktrees"]',
@@ -288,7 +289,7 @@ describe('RepoExplorerPane', () => {
     const allBranchesFilter = branchToolbar?.querySelector('[aria-label="branches.filter-tooltip.all"]')
     const noWorktreeFilter = branchToolbar?.querySelector('[aria-label="branches.filter-tooltip.no-worktree"]')
     expect(branchToolbar).toBeTruthy()
-    expect(branchToolbar?.className).toContain('h-9')
+    expect(branchToolbar?.style.height).toBe(`${APP_TOOLBAR_HEIGHT_PX}px`)
     expect(branchToolbar?.className).not.toContain('h-8')
     expect(branchViewToggle).toBeTruthy()
     expect(search).toBeNull()
@@ -317,11 +318,11 @@ describe('RepoExplorerPane', () => {
       root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
     })
 
-    const branchToolbar = container.querySelector('[data-testid="branch-area-toolbar"]')
+    const branchToolbar = container.querySelector<HTMLElement>('[data-testid="branch-area-toolbar"]')
     const explorerToolbar = container.querySelector<HTMLElement>('[data-testid="repo-explorer-toolbar"]')
     const firstTab = container.querySelector<HTMLButtonElement>('[role="tab"]')
-    expect(branchToolbar?.className).toContain('h-9')
-    expect(explorerToolbar?.className).toContain('h-9')
+    expect(branchToolbar?.style.height).toBe(`${APP_TOOLBAR_HEIGHT_PX}px`)
+    expect(explorerToolbar?.style.height).toBe(`${APP_TOOLBAR_HEIGHT_PX}px`)
     expect(explorerToolbar?.className).not.toContain('h-8')
     expect(explorerToolbar?.style.getPropertyValue('--goblin-file-tree-topbar-font-size')).toBe('13px')
     expect(firstTab?.className).toContain('text-[length:var(--goblin-file-tree-topbar-font-size)]')

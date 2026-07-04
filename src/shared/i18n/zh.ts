@@ -393,6 +393,7 @@ export const zh: Record<DictKey, string> = {
   'terminal.close-confirm-body': '将关闭 {name} 并结束其中运行的 Shell 会话。',
   'terminal.close-confirm-confirm': '关闭终端',
   'terminal.progress': '终端进度',
+  'terminal.output-active': '终端正在输出',
   'terminal.empty': '没有打开的终端',
   'terminal.drop-hint': '松手粘贴路径',
   'terminal.custom-buttons': '自定义终端按钮',

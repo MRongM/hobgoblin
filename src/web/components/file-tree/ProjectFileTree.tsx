@@ -35,6 +35,7 @@ import {
   type RepoFileTreeResult,
 } from '#/shared/file-tree.ts'
 import { isRemoteRepoId } from '#/shared/rpc.ts'
+import { APP_TOOLBAR_HEIGHT_PX } from '#/shared/window-chrome.ts'
 import { openRemoteRepositoryEditor, openRemoteRepositoryTerminal } from '#/web/remote-client.ts'
 import {
   createRepositoryFileTreeFile,
@@ -1880,8 +1881,9 @@ function FileTreeToolbar({
     <div
       className={cn(
         'flex shrink-0 items-center justify-end gap-1 border-b border-toolbar-border bg-toolbar px-2',
-        height === 'detail' ? 'h-9' : 'min-h-8',
+        height === 'detail' ? null : 'min-h-8',
       )}
+      style={height === 'detail' ? { height: APP_TOOLBAR_HEIGHT_PX } : undefined}
     >
       <div className="mr-auto flex shrink-0 items-center gap-1 pr-1">
         <Button
