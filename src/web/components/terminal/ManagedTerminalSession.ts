@@ -7,6 +7,7 @@ import type {
   TerminalAttachInput,
   TerminalOutputEvent,
   TerminalRestartInput,
+  TerminalWindowsPty,
 } from '#/shared/terminal.ts'
 import { resolveTerminalOwnership } from '#/shared/terminal.ts'
 import { terminalBridge } from '#/web/terminal.ts'
@@ -54,6 +55,7 @@ export class ManagedTerminalSession {
   private pendingWriteBuffer = ''
   private inputFlushScheduled = false
   private hydratedSnapshot: { snapshot: string; snapshotSeq: number } | null = null
+  private windowsPty: TerminalWindowsPty | undefined
   private disposed = false
 
   constructor(
@@ -237,7 +239,10 @@ export class ManagedTerminalSession {
     message?: string | null
     snapshot?: string
     snapshotSeq?: number
+    windowsPty?: TerminalWindowsPty
   }): void {
+    this.windowsPty = input.windowsPty
+    this.view.setWindowsPty(this.windowsPty)
     this.hydratedSnapshot =
       typeof input.snapshot === 'string' && typeof input.snapshotSeq === 'number'
         ? { snapshot: input.snapshot, snapshotSeq: input.snapshotSeq }
@@ -359,7 +364,7 @@ export class ManagedTerminalSession {
     if (this.disposed || this.startToken !== token || this.view.currentTerminal()) throw new StartCancelledError()
     const geometry = this.view.measureGeometry()
     if (!geometry) throw new Error('error.terminal-not-measurable')
-    const term = this.view.openTerminal(geometry, (input) => this.writeInput(input))
+    const term = this.view.openTerminal(geometry, (input) => this.writeInput(input), this.windowsPty)
     const preloaded = await this.preloadHydratedSnapshot(token, term)
     await waitForTerminalLayout()
     this.guardStart(token, term)
@@ -402,6 +407,8 @@ export class ManagedTerminalSession {
     preloaded: boolean,
   ): Promise<void> {
     let changed = this.runtime.applyAttachResult(result, { cols: term.cols, rows: term.rows })
+    this.windowsPty = result.windowsPty
+    this.view.setWindowsPty(this.windowsPty)
     if (!this.runtime.canResize()) {
       this.applyCanonicalSizeToView()
     } else {

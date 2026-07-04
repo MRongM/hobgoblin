@@ -239,6 +239,7 @@ export class TerminalSessionRegistry {
         canonicalRows: serverSession.rows,
         phase: serverSession.phase,
         message: serverSession.message,
+        windowsPty: serverSession.windowsPty,
         snapshot: serverSnapshot?.snapshot ?? (isReattachMatch ? reattachCache?.snapshot : undefined),
         snapshotSeq: serverSnapshot?.snapshotSeq ?? (isReattachMatch ? reattachCache?.snapshotSeq : undefined),
       })

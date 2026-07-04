@@ -40,6 +40,7 @@ import {
   type TerminalUserInputSource,
 } from '#/web/components/terminal/terminal-input.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
+import type { TerminalWindowsPty } from '#/shared/terminal.ts'
 const DEFAULT_PARKING_WIDTH = 800
 const DEFAULT_PARKING_HEIGHT = 400
 const RESIZE_DEBOUNCE_MS = 80
@@ -145,6 +146,13 @@ export class TerminalSessionView {
     this.applyTerminalTheme(term, terminalThemeForCurrentDocument(this.terminalThemeMode()))
   }
 
+  setWindowsPty(windowsPty: TerminalWindowsPty | undefined): void {
+    if (!windowsPty) return
+    const term = this.term
+    if (!term) return
+    term.options.windowsPty = windowsPty
+  }
+
   attach(host: HTMLElement): void {
     this.host = host
     host.replaceChildren(this.frame)
@@ -189,7 +197,11 @@ export class TerminalSessionView {
     return measureTerminalGeometry({ host: this.xtermHost, fontSize: this.fontSize, fontFamily: this.fontFamily })
   }
 
-  openTerminal(geometry: TerminalGeometry, onMacOptionInput: (input: TerminalInput) => void): XTermTerminal {
+  openTerminal(
+    geometry: TerminalGeometry,
+    onMacOptionInput: (input: TerminalInput) => void,
+    windowsPty?: TerminalWindowsPty,
+  ): XTermTerminal {
     const theme = terminalThemeForCurrentDocument(this.terminalThemeMode())
     const term = new Terminal({
       allowProposedApi: true,
@@ -206,6 +218,7 @@ export class TerminalSessionView {
       rescaleOverlappingGlyphs: true,
       scrollOnUserInput: true,
       theme,
+      ...(windowsPty ? { windowsPty } : {}),
     })
     const fitAddon = new FitAddon()
     this.term = term

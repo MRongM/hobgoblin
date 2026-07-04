@@ -22,6 +22,19 @@ describe('terminal-render-state', () => {
       }
     })
 
+    test('passes Windows PTY compatibility to the headless terminal model', () => {
+      const windowsPty = { backend: 'conpty' as const, buildNumber: 22631 }
+      const model = createTerminalRenderModel(80, 24, windowsPty)
+
+      try {
+        expect((model.term as unknown as { options: { windowsPty?: typeof windowsPty } }).options.windowsPty).toEqual(
+          windowsPty,
+        )
+      } finally {
+        model.term.dispose()
+      }
+    })
+
     test('does not keep erased viewport lines in headless scrollback snapshots', async () => {
       const state = createEmptyTerminalRenderState()
       state.model = createTerminalRenderModel(40, 6)

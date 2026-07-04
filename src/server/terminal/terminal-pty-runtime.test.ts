@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { spawnTerminalPtyRuntime } from '#/server/terminal/terminal-pty-runtime.ts'
+import { detectWindowsPtyCompatibility, spawnTerminalPtyRuntime } from '#/server/terminal/terminal-pty-runtime.ts'
 
 const { spawnMock } = vi.hoisted(() => ({
   spawnMock: vi.fn(),
@@ -14,6 +14,24 @@ beforeEach(() => {
 })
 
 describe('spawnTerminalPtyRuntime', () => {
+  test('detects ConPTY compatibility on modern Windows builds', () => {
+    expect(detectWindowsPtyCompatibility('win32', '10.0.22631')).toEqual({
+      backend: 'conpty',
+      buildNumber: 22631,
+    })
+  })
+
+  test('detects winpty compatibility on Windows builds before node-pty ConPTY default', () => {
+    expect(detectWindowsPtyCompatibility('win32', '10.0.17763')).toEqual({
+      backend: 'winpty',
+      buildNumber: 17763,
+    })
+  })
+
+  test('omits Windows PTY compatibility on non-Windows platforms', () => {
+    expect(detectWindowsPtyCompatibility('darwin', '25.0.0')).toBeNull()
+  })
+
   test('returns a trimmed process name when node-pty exposes a string', () => {
     spawnMock.mockReturnValue({
       process: ' zsh ',
