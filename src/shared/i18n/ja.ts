@@ -686,6 +686,12 @@ export const ja: Record<DictKey, string> = {
   'settings.lang.zh': '中文',
   'settings.lang.ko': '한국어',
   'settings.lang.ja': '日本語',
+  'settings.chrome-heights.title': 'ウィンドウとツールバー',
+  'settings.chrome-heights.topbar': 'トップバーの高さ',
+  'settings.chrome-heights.topbar-hint': 'アプリのトップバーの高さとネイティブウィンドウボタンの位置合わせを調整します。',
+  'settings.chrome-heights.toolbar': 'ツールバーの高さ',
+  'settings.chrome-heights.toolbar-hint':
+    'リポジトリ、ブランチ、ファイルの共通ツールバーの高さを調整します。コンパクトな操作バーは変更されません。',
   'settings.back': '戻る',
   'settings.action-bar-blank-toggle': 'アクションバーの空白で詳細を折りたたむ/展開',
   'settings.action-bar-blank-toggle-hint':

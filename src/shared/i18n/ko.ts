@@ -675,6 +675,12 @@ export const ko: Record<DictKey, string> = {
   'settings.lang.zh': '中文',
   'settings.lang.ko': '한국어',
   'settings.lang.ja': '日本語',
+  'settings.chrome-heights.title': '창 및 도구 모음',
+  'settings.chrome-heights.topbar': '상단 바 높이',
+  'settings.chrome-heights.topbar-hint': '앱 상단 바 높이와 네이티브 창 버튼 정렬을 조정합니다.',
+  'settings.chrome-heights.toolbar': '도구 모음 높이',
+  'settings.chrome-heights.toolbar-hint':
+    '저장소, 브랜치, 파일 공용 도구 모음 높이를 조정합니다. 컴팩트 작업 모음은 변경되지 않습니다.',
   'settings.back': '뒤로',
   'settings.action-bar-blank-toggle': '작업 막대 빈 영역으로 세부 패널 접기/펼치기',
   'settings.action-bar-blank-toggle-hint':

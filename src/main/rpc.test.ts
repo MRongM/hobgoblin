@@ -55,6 +55,8 @@ function settingsPrefs(overrides: Partial<SettingsPrefs> = {}): SettingsPrefs {
     terminalCustomButtons: [],
     lanEnabled: false,
     ...overrides,
+    topbarHeightPx: overrides.topbarHeightPx ?? 34,
+    toolbarHeightPx: overrides.toolbarHeightPx ?? 34,
     fontFamily: overrides.fontFamily ?? 'mono',
   }
 }
@@ -139,6 +141,7 @@ vi.mock('#/system/git/pull-requests.ts', () => ({
 
 vi.mock('#/main/window.ts', () => ({
   activateMainWindow: vi.fn(() => Promise.resolve({ webContents: { send: vi.fn() } })),
+  applyMainWindowTopbarHeight: vi.fn(),
   getMainWindow: vi.fn(() => null),
 }))
 
@@ -474,6 +477,7 @@ describe('main repo rpc cancellation', () => {
           shortcutsDisabled: true,
           globalShortcutDisabled: true,
           swapCloseShortcuts: true,
+          topbarHeightPx: 39,
         },
         settings: {
           lang: 'ja',
@@ -483,6 +487,7 @@ describe('main repo rpc cancellation', () => {
           globalShortcutDisabled: true,
           swapCloseShortcuts: true,
           globalShortcut: 'Alt+K',
+          topbarHeightPx: 39,
         },
       },
     })
@@ -494,6 +499,7 @@ describe('main repo rpc cancellation', () => {
       theme: 'dark',
       colorTheme: 'github',
     })
+    expect((await import('#/main/window.ts')).applyMainWindowTopbarHeight).toHaveBeenCalledWith(39)
     expect((await import('#/main/menu-state.ts')).applyMenuRuntimeState).toHaveBeenCalledWith({
       langPref: 'ja',
       shortcutsDisabled: true,

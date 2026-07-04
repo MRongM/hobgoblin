@@ -34,6 +34,11 @@ const editorOpenMocks = vi.hoisted(() => ({
 vi.mock('#/web/runtime-settings-external-apps.ts', () => ({
   useRuntimeExternalAppSettings: mocks.useRuntimeExternalAppSettings,
 }))
+
+vi.mock('#/web/runtime-settings-chrome.ts', () => ({
+  useRuntimeChromeSettings: () => ({ topbarHeightPx: 39, toolbarHeightPx: 41 }),
+}))
+
 vi.mock('#/web/repo-client.ts', async () => {
   const actual = await vi.importActual<typeof import('#/web/repo-client.ts')>('#/web/repo-client.ts')
   return {
@@ -411,6 +416,35 @@ describe('ProjectChangesPanel', () => {
     expect(copy!.compareDocumentPosition(refresh!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(refresh!.compareDocumentPosition(selection!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(actionBar?.textContent).not.toContain('changes.selection-toggle')
+  })
+
+  test('uses runtime toolbar height for the change action bar', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } })],
+      selectedBranch: 'feature/worktree',
+      statusLoaded: true,
+      status: [
+        {
+          path: WORKTREE_PATH,
+          branch: 'feature/worktree',
+          isMain: true,
+          entries: [{ x: 'M', y: ' ', path: 'src/app.ts' }],
+        },
+      ],
+    })
+
+    await act(async () => {
+      root!.render(
+        <InlineCommitDraftProvider>
+          <ProjectChangesPanel repoId={REPO_ID} />
+        </InlineCommitDraftProvider>,
+      )
+    })
+
+    const actionBar = container?.querySelector<HTMLElement>('[data-testid="project-changes-action-bar"]')
+    expect(actionBar?.style.height).toBe('41px')
+    expect(actionBar?.className).not.toContain('min-h-8')
   })
 
   test('hides selection controls by default and shows them from the pre-commit toggle', async () => {

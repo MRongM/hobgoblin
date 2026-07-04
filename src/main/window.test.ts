@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { defaultSettingsSnapshot } from '#/shared/settings-defaults.ts'
+import { defaultSettingsPrefs, defaultSettingsSnapshot } from '#/shared/settings-defaults.ts'
 import { RENDERER_BOOTSTRAP_CHANNEL } from '#/shared/ipc-channels.ts'
 
 const mocks = vi.hoisted(() => {
@@ -12,9 +12,11 @@ const mocks = vi.hoisted(() => {
     loadURL: vi.fn(),
     ipcMainOn: vi.fn(),
     openHttpExternal: vi.fn(() => Promise.resolve(true)),
+    getSettingsPrefs: vi.fn(),
     getSettingsSnapshot: vi.fn(),
     loadWindowState: vi.fn(() => Promise.resolve({ windowBounds: null })),
     setTitleBarOverlay: vi.fn(),
+    setWindowButtonPosition: vi.fn(),
     diagnosticsLog: vi.fn(),
     getEmbeddedServerRuntime: vi.fn<() => { url: string; secret: string; clientId: string } | null>(() => ({
       url: 'http://127.0.0.1:32100/',
@@ -41,6 +43,7 @@ const mocks = vi.hoisted(() => {
         show: vi.fn(),
         focus: vi.fn(),
         setTitleBarOverlay: state.setTitleBarOverlay,
+        setWindowButtonPosition: state.setWindowButtonPosition,
         getNormalBounds: () => ({ x: 0, y: 0, width: 900, height: 600 }),
         loadURL: state.loadURL,
         on: state.windowOn,
@@ -89,6 +92,7 @@ vi.mock('#/main/i18n/index.ts', () => ({
 }))
 
 vi.mock('#/main/settings-server-client.ts', () => ({
+  getSettingsPrefs: mocks.getSettingsPrefs,
   getSettingsSnapshot: mocks.getSettingsSnapshot,
 }))
 
@@ -111,6 +115,7 @@ describe('main window navigation boundaries', () => {
     delete process.env.GOBLIN_WEB_DEV_URL
     mocks.windows.length = 0
     mocks.windowOptions.length = 0
+    mocks.getSettingsPrefs.mockResolvedValue(defaultSettingsPrefs({ topbarHeightPx: 39 }))
     mocks.getSettingsSnapshot.mockResolvedValue(defaultSettingsSnapshot())
     mocks.loadWindowState.mockReturnValue(Promise.resolve({ windowBounds: null }))
   })
@@ -157,17 +162,17 @@ describe('main window navigation boundaries', () => {
 
   test('coalesces concurrent main window creation', async () => {
     const { getOrCreateMainWindow } = await import('#/main/window.ts')
-    let resolveSettings: (settings: { windowBounds: null }) => void = () => {}
-    mocks.loadWindowState.mockImplementationOnce(
+    let resolveSettingsPrefs: (settings: ReturnType<typeof defaultSettingsPrefs>) => void = () => {}
+    mocks.getSettingsPrefs.mockImplementationOnce(
       () =>
-        new Promise<{ windowBounds: null }>((resolve) => {
-          resolveSettings = resolve
+        new Promise<ReturnType<typeof defaultSettingsPrefs>>((resolve) => {
+          resolveSettingsPrefs = resolve
         }),
     )
 
     const first = getOrCreateMainWindow()
     const second = getOrCreateMainWindow()
-    resolveSettings({ windowBounds: null })
+    resolveSettingsPrefs(defaultSettingsPrefs({ topbarHeightPx: 39 }))
     const [firstWindow, secondWindow] = await Promise.all([first, second])
 
     expect(firstWindow).toBe(secondWindow)
@@ -287,7 +292,7 @@ describe('main window navigation boundaries', () => {
       titleBarOverlay: {
         color: '#fbfbfd',
         symbolColor: '#000000',
-        height: 34,
+        height: 39,
       },
       autoHideMenuBar: true,
     })
@@ -297,7 +302,26 @@ describe('main window navigation boundaries', () => {
     expect(mocks.setTitleBarOverlay).toHaveBeenCalledWith({
       color: '#1c1c1e',
       symbolColor: '#ffffff',
-      height: 34,
+      height: 39,
+    })
+  })
+
+  test('applies runtime topbar height updates to native chrome', async () => {
+    const { applyMainWindowTopbarHeight, getOrCreateMainWindow } = await import('#/main/window.ts')
+
+    await getOrCreateMainWindow()
+    applyMainWindowTopbarHeight(42)
+
+    if (process.platform === 'darwin') {
+      expect(mocks.setTitleBarOverlay).not.toHaveBeenCalled()
+      expect(mocks.windows[0].setWindowButtonPosition).toHaveBeenCalledWith({ x: 16, y: 15 })
+      return
+    }
+
+    expect(mocks.setTitleBarOverlay).toHaveBeenCalledWith({
+      color: '#fbfbfd',
+      symbolColor: '#000000',
+      height: 42,
     })
   })
 })

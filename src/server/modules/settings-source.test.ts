@@ -45,6 +45,8 @@ test('initializes server-settings.json with defaults when no persisted settings 
     globalShortcut: 'Alt+G',
     terminalApp: 'auto',
     editorApp: 'auto',
+    topbarHeightPx: 34,
+    toolbarHeightPx: 34,
     fileTreeFontSize: 14,
     fileTreeTopbarFontSize: 13,
     terminalFontSize: 14,
@@ -93,6 +95,8 @@ test('persists updates and notifies subscribers from the server settings store',
     globalShortcut: 'CommandOrControl+Alt+G',
     terminalApp: 'ghostty',
     editorApp: 'cursor',
+    topbarHeightPx: 41.2,
+    toolbarHeightPx: 42.8,
     fileTreeFontSize: 13.4,
     fileTreeTopbarFontSize: 12.2,
     terminalFontSize: 15.6,
@@ -141,6 +145,8 @@ test('persists updates and notifies subscribers from the server settings store',
     globalShortcut: 'Alt+G',
     terminalApp: 'ghostty',
     editorApp: 'cursor',
+    topbarHeightPx: 41,
+    toolbarHeightPx: 43,
     fileTreeFontSize: 13,
     fileTreeTopbarFontSize: 12,
     terminalFontSize: 16,
@@ -159,6 +165,39 @@ test('persists updates and notifies subscribers from the server settings store',
     selectedTerminalByWorktree: { '/repo-b\0/worktree': '/repo-b\0/worktree\0terminal-2' },
   })
   expect(await reloaded.getServerRecentRepos()).toEqual([{ kind: 'local', id: '/repo-b' }])
+})
+
+test('normalizes configurable chrome heights', async () => {
+  tmp = mkdtempSync(path.join(os.tmpdir(), 'gbl-server-settings-'))
+  previousDataDir = process.env.GOBLIN_SERVER_DATA_DIR
+  process.env.GOBLIN_SERVER_DATA_DIR = tmp
+
+  const mod = await import('#/server/modules/settings-source.ts')
+  await mod.updateServerSettingsPrefs({
+    topbarHeightPx: 12,
+    toolbarHeightPx: 99,
+  } as Parameters<typeof mod.updateServerSettingsPrefs>[0] & {
+    topbarHeightPx: number
+    toolbarHeightPx: number
+  })
+
+  expect(await mod.getServerSettingsPrefs()).toMatchObject({
+    topbarHeightPx: 30,
+    toolbarHeightPx: 48,
+  })
+
+  await mod.updateServerSettingsPrefs({
+    topbarHeightPx: 'large' as never,
+    toolbarHeightPx: Number.NaN,
+  } as Parameters<typeof mod.updateServerSettingsPrefs>[0] & {
+    topbarHeightPx: unknown
+    toolbarHeightPx: unknown
+  })
+
+  expect(await mod.getServerSettingsPrefs()).toMatchObject({
+    topbarHeightPx: 34,
+    toolbarHeightPx: 34,
+  })
 })
 
 test('normalizes invalid git network proxy and clamps timeout seconds', async () => {
