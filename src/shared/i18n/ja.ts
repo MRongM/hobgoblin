@@ -410,6 +410,7 @@ export const ja: Record<DictKey, string> = {
   'terminal.close-confirm-body': '{name} を閉じて、実行中のシェルセッションを終了します。',
   'terminal.close-confirm-confirm': 'ターミナルを閉じる',
   'terminal.progress': 'ターミナル進行状況',
+  'terminal.output-active': 'ターミナルが出力中',
   'terminal.empty': '開いているターミナルはありません',
   'terminal.drop-hint': 'ドロップしてパスを貼り付け',
   'terminal.custom-buttons': 'カスタムターミナルボタン',

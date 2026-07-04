@@ -412,6 +412,7 @@ export const en = {
   'terminal.close-confirm-body': 'This will close {name} and end its running shell session.',
   'terminal.close-confirm-confirm': 'Close terminal',
   'terminal.progress': 'Terminal progress',
+  'terminal.output-active': 'Terminal output active',
   'terminal.empty': 'No terminal open',
   'terminal.drop-hint': 'Drop to paste path',
   'terminal.custom-buttons': 'Custom terminal buttons',

@@ -287,7 +287,7 @@ describe('main window navigation boundaries', () => {
       titleBarOverlay: {
         color: '#fbfbfd',
         symbolColor: '#000000',
-        height: 40,
+        height: 34,
       },
       autoHideMenuBar: true,
     })
@@ -297,7 +297,7 @@ describe('main window navigation boundaries', () => {
     expect(mocks.setTitleBarOverlay).toHaveBeenCalledWith({
       color: '#1c1c1e',
       symbolColor: '#ffffff',
-      height: 40,
+      height: 34,
     })
   })
 })

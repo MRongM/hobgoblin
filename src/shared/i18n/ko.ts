@@ -401,6 +401,7 @@ export const ko: Record<DictKey, string> = {
   'terminal.close-confirm-body': '{name} 터미널을 닫고 실행 중인 셸 세션을 종료합니다.',
   'terminal.close-confirm-confirm': '터미널 닫기',
   'terminal.progress': '터미널 진행률',
+  'terminal.output-active': '터미널 출력 중',
   'terminal.empty': '열린 터미널 없음',
   'terminal.drop-hint': '놓아서 경로 붙여넣기',
   'terminal.custom-buttons': '사용자 지정 터미널 버튼',

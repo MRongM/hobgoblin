@@ -1,5 +1,5 @@
-// Persistent branch list. Each row shows branch name, lightweight
-// scan signals, and the head commit subject, author, and relative date. The
+// Persistent branch list. Each row shows branch name and lightweight
+// scan signals. The
 // selected row scrolls into view automatically when the user moves with
 // j/k or arrows so a long branch list doesn't strand the cursor offscreen.
 //
@@ -305,10 +305,22 @@ function DetachedWorktreeRow({
         </span>
         <span className="flex min-w-0 items-center gap-2 overflow-hidden">
           <span className="shrink-0 truncate font-mono text-sm text-foreground">{head}</span>
-          <Badge variant={dirty ? 'attention' : 'outline'} className="gap-1">
-            {dirty ? <GitCompareArrows size={10} /> : <FolderTree size={10} />}
-            {dirty ? t('branches.dirty') : t('branches.detached')}
-          </Badge>
+          {dirty ? (
+            <Badge
+              data-testid="dirty-detached-worktree-badge"
+              variant="attention"
+              aria-label={t('branches.dirty')}
+              title={t('branches.dirty')}
+              className="h-4 px-1"
+            >
+              <GitCompareArrows size={10} aria-hidden="true" />
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="gap-1">
+              <FolderTree size={10} />
+              {t('branches.detached')}
+            </Badge>
+          )}
           <span className="min-w-0 truncate text-[11px] leading-none text-muted-foreground/85">{displayPath}</span>
         </span>
       </div>

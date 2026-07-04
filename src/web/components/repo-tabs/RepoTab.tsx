@@ -10,7 +10,11 @@ import {
 import { useSortableTab } from '#/web/components/tab-strip/useSortableTab.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 import { TerminalBellDot } from '#/web/components/terminal/TerminalBellDot.tsx'
-import { useRepoTerminalHasBell } from '#/web/components/terminal/terminal-session-store.ts'
+import { TerminalOutputActivityIndicator } from '#/web/components/terminal/TerminalOutputActivityIndicator.tsx'
+import {
+  useRepoTerminalHasBell,
+  useRepoTerminalHasOutputActivity,
+} from '#/web/components/terminal/terminal-session-store.ts'
 import { useT } from '#/web/stores/i18n.ts'
 interface RepoTabProps {
   repo: RepoTabSummary
@@ -43,9 +47,17 @@ export function RepoTab({
 }: RepoTabProps) {
   const t = useT()
   const hasTerminalBell = useRepoTerminalHasBell(repo.id, repo.worktreePaths ?? [])
+  const hasTerminalOutputActivity = useRepoTerminalHasOutputActivity(repo.id, repo.worktreePaths ?? [])
   const terminalBellLabel = t('terminal.bell-unread')
+  const terminalOutputActiveLabel = t('terminal.output-active')
   const tabLabelBase = repo.unavailable ? `${repo.name} — ${unavailableLabel}` : repo.name
-  const tabLabel = hasTerminalBell ? `${tabLabelBase} — ${terminalBellLabel}` : tabLabelBase
+  const tabLabel = [
+    tabLabelBase,
+    hasTerminalOutputActivity ? terminalOutputActiveLabel : null,
+    hasTerminalBell ? terminalBellLabel : null,
+  ]
+    .filter(Boolean)
+    .join(' — ')
   const repoKind = isRemoteRepoId(repo.id) ? 'remote' : repo.isGitRepo === false ? 'plain' : 'git'
   const sortable = useSortableTab(repo.id, { onButtonRef: focusRegistry?.setRef(repo.id) })
 
@@ -110,6 +122,7 @@ export function RepoTab({
         <FolderGit2 size={13} className={toolbarTabIconClassName(isActive)} />
       )}
       <span className="truncate font-medium">{repo.name}</span>
+      {hasTerminalOutputActivity && <TerminalOutputActivityIndicator label={terminalOutputActiveLabel} />}
       {hasTerminalBell && <TerminalBellDot label={terminalBellLabel} />}
       {repo.unavailable && <AlertCircle size={12} className="shrink-0 text-warning" aria-hidden />}
     </ToolbarClosableTab>

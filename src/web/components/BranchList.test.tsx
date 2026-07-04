@@ -107,14 +107,17 @@ afterEach(() => {
 function terminalReadContextWithState(
   bellKeys: ReadonlySet<string>,
   countsByWorktreeKey: ReadonlyMap<string, number>,
+  outputActiveKeys: ReadonlySet<string> = new Set(),
 ): TerminalSessionReadContextValue {
   return {
     worktreeSnapshot: (worktreeTerminalKey) => {
       const hasBell = bellKeys.has(worktreeTerminalKey)
+      const isOutputActive = outputActiveKeys.has(worktreeTerminalKey)
+      const count = countsByWorktreeKey.get(worktreeTerminalKey) ?? (hasBell || isOutputActive ? 1 : 0)
       return {
         worktreeTerminalKey,
         selectedDescriptor: null,
-        sessions: hasBell
+        sessions: count > 0
           ? [
               {
                 key: `${worktreeTerminalKey}\0terminal-1`,
@@ -124,11 +127,12 @@ function terminalReadContextWithState(
                 title: 'terminal',
                 phase: 'open',
                 selected: true,
-                hasBell: true,
+                hasBell,
+                isOutputActive,
               },
             ]
           : [],
-        count: countsByWorktreeKey.get(worktreeTerminalKey) ?? 0,
+        count,
       }
     },
     subscribeWorktree: () => () => {},
@@ -157,11 +161,13 @@ function renderList(
   fixture: {
     bellWorktreeKeys?: string[]
     countsByWorktreeKey?: Map<string, number>
+    outputActiveWorktreeKeys?: string[]
   } = {},
 ) {
   const readContext = terminalReadContextWithState(
     new Set(fixture.bellWorktreeKeys ?? []),
     fixture.countsByWorktreeKey ?? new Map(),
+    new Set(fixture.outputActiveWorktreeKeys ?? []),
   )
   act(() => {
     root!.render(
@@ -227,11 +233,12 @@ describe('BranchList worktree drag ordering', () => {
 
     renderList()
 
-    const dirtyBadge = Array.from(document.body.querySelectorAll<HTMLElement>('[data-slot="badge"]')).find(
-      (node) => node.textContent === '有改动',
-    )
+    const dirtyBadge = document.body.querySelector<HTMLElement>('[data-testid="dirty-detached-worktree-badge"]')
     const badgeIcon = dirtyBadge?.querySelector('svg')
 
+    expect(dirtyBadge?.textContent).toBe('')
+    expect(dirtyBadge?.getAttribute('aria-label')).toBe('有改动')
+    expect(dirtyBadge?.getAttribute('title')).toBe('有改动')
     expect(badgeIcon?.classList.contains('lucide-git-compare-arrows')).toBe(true)
     expect(badgeIcon?.classList.contains('lucide-folder-tree')).toBe(false)
   })

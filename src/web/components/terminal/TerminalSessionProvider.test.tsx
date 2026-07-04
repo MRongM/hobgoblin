@@ -1850,6 +1850,43 @@ describe('TerminalSessionProvider', () => {
       await unmount()
     }
   })
+
+  test('exposes terminal output activity through worktree summaries', async () => {
+    vi.useFakeTimers()
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } })],
+      selectedBranch: 'feature/worktree',
+      detailTab: 'terminal',
+    })
+    const terminalWorktreeKey = worktreeTerminalKey(REPO_ID, WORKTREE_PATH)
+    const { getContext, getProbe, unmount } = await renderProviderWithProbe(terminalWorktreeKey)
+
+    try {
+      await act(async () => {
+        await getContext().createTerminal({
+          repoRoot: REPO_ID,
+          branch: 'feature/worktree',
+          worktreePath: WORKTREE_PATH,
+        })
+      })
+
+      expect(getProbe().summaries[0]?.isOutputActive).toBe(false)
+
+      act(() => {
+        outputHandler?.({ sessionId: 'terminal-1', data: 'hello', seq: 1, processName: 'terminal-1' })
+      })
+      expect(getProbe().summaries[0]?.isOutputActive).toBe(true)
+
+      act(() => {
+        vi.advanceTimersByTime(1_200)
+      })
+      expect(getProbe().summaries[0]?.isOutputActive).toBe(false)
+    } finally {
+      await unmount()
+      vi.useRealTimers()
+    }
+  })
 })
 
 function CaptureContext({ onContext }: { onContext: (value: TerminalSessionContextValue) => void }) {
@@ -1870,6 +1907,7 @@ function CaptureGroupProbe({
       terminalId: string
       selected: boolean
       hasBell: boolean
+      isOutputActive: boolean
       title: string
       phase: string
     }>
@@ -1884,6 +1922,7 @@ function CaptureGroupProbe({
       terminalId: session.terminalId,
       selected: session.selected,
       hasBell: session.hasBell,
+      isOutputActive: !!session.isOutputActive,
       title: session.title,
       phase: session.phase,
     })),
@@ -1934,6 +1973,7 @@ async function renderProviderWithProbe(
       terminalId: string
       selected: boolean
       hasBell: boolean
+      isOutputActive: boolean
       title: string
       phase: string
     }>
@@ -1953,6 +1993,7 @@ async function renderProviderWithProbe(
       terminalId: string
       selected: boolean
       hasBell: boolean
+      isOutputActive: boolean
       title: string
       phase: string
     }>

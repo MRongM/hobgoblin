@@ -2,6 +2,7 @@ import type { HTMLAttributes, ReactNode } from 'react'
 import { ScrollArea } from '#/web/components/ui/scroll-area.tsx'
 import { SplitPane } from '#/web/components/SplitPane.tsx'
 import { cn } from '#/web/lib/cn.ts'
+import { APP_TOOLBAR_HEIGHT_PX } from '#/shared/window-chrome.ts'
 import { DEFAULT_DETAIL_PANE_SIZES, DEFAULT_WORKSPACE_LAYOUT, workspaceLayoutAxis } from '#/shared/workspace-layout.ts'
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import type { RepoWorkspaceMode } from '#/web/lib/workspace-layout.ts'
@@ -46,15 +47,16 @@ interface EmptyStateProps {
   tone?: 'neutral' | 'success'
 }
 
-export function Toolbar({ children, className, variant = 'plain', ...props }: ToolbarProps) {
+export function Toolbar({ children, className, variant = 'plain', style, ...props }: ToolbarProps) {
   return (
     <div
       className={cn(
-        'flex h-9 shrink-0 items-center border-b border-toolbar-border bg-toolbar text-toolbar-foreground',
+        'flex shrink-0 items-center border-b border-toolbar-border bg-toolbar text-toolbar-foreground',
         variant === 'repo' && 'gap-3 px-4',
         variant === 'detail' && 'min-w-0 justify-between gap-2 px-2',
         className,
       )}
+      style={{ ...style, height: APP_TOOLBAR_HEIGHT_PX }}
       {...props}
     >
       {children}
@@ -115,7 +117,10 @@ export function RepoWorkspace({
 
   // Collapsed top/bottom layout keeps only the detail toolbar visible.
   return (
-    <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_1px_2.25rem]">
+    <div
+      className="grid min-h-0 flex-1"
+      style={{ gridTemplateRows: `minmax(0, 1fr) 1px ${APP_TOOLBAR_HEIGHT_PX}px` }}
+    >
       {branchPane}
       <WorkspaceSeparator />
       {detailPane}
