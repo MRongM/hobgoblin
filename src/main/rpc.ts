@@ -9,6 +9,7 @@ import { isTrustedIpcEvent } from '#/main/ipc/trusted-webcontents.ts'
 import { WINDOW_BACKGROUND_BY_COLOR_THEME } from '#/shared/theme-tokens.ts'
 import { RPC_ABORT_CHANNEL, RPC_CHANNEL } from '#/shared/ipc-channels.ts'
 import { createNativeHostRpcHandlers } from '#/main/native-host-rpc-handlers.ts'
+import { broadcastRpcEvent } from '#/main/renderer-surface-events.ts'
 
 const MAX_RPC_PROCEDURE_PATH_LENGTH = 128
 const MAX_RPC_REQUEST_ID_LENGTH = 128
@@ -63,6 +64,7 @@ export function wireRpcIpc(): void {
   })
 
   subscribeTheme((state) => {
+    broadcastRpcEvent({ type: 'theme-changed', state })
     for (const { window: win } of allRegisteredSurfacesWithCapability('themeSync')) {
       if (!win.isDestroyed()) win.setBackgroundColor(WINDOW_BACKGROUND_BY_COLOR_THEME[state.colorTheme][state.resolved])
     }

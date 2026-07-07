@@ -40,10 +40,7 @@ import type {
 } from '#/shared/remote-repo.ts'
 import type { RepoQueryInvalidationEvent } from '#/shared/repo-query-invalidation.ts'
 import type { CreateWorktreeRpcInput } from '#/shared/worktree-create.ts'
-import {
-  NativeShellProjectionSchema,
-  type NativeShellProjection,
-} from '#/shared/native-shell-projection.ts'
+import { NativeShellProjectionSchema, type NativeShellProjection } from '#/shared/native-shell-projection.ts'
 import { RemoteAbsolutePathSchema } from '#/shared/remote-repo-schema.ts'
 
 export type { WorkspaceLayout } from '#/shared/workspace-layout.ts'
@@ -212,6 +209,7 @@ export type I18nChangedEvent =
   | { type: 'i18n-changed'; payload: I18nSnapshot; snapshot?: never }
 
 export type RpcEvent =
+  | { type: 'theme-changed'; state: ThemeState }
   | { type: 'fetch-interval-changed'; sec: number }
   | { type: 'terminal-notifications-changed'; enabled: boolean }
   | { type: 'shortcuts-disabled-changed'; disabled: boolean }

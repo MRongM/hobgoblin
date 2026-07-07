@@ -10,6 +10,7 @@ import type { ResolvedTheme, ThemePref, ThemeState } from '#/shared/rpc.ts'
 import type { ColorTheme } from '#/shared/color-theme.ts'
 import { getThemeState, setThemeColorTheme, setThemePref } from '#/web/settings-client.ts'
 import { subscribeSettingsInvalidationRefetch } from '#/web/settings-invalidation-refetch.ts'
+import { subscribeNativeHostEventType } from '#/web/renderer-ingress.ts'
 
 interface ThemeStore extends ThemeState {
   setPref: (pref: ThemePref) => Promise<void>
@@ -17,7 +18,8 @@ interface ThemeStore extends ThemeState {
   hydrate: () => Promise<void>
 }
 
-let unsubscribe: (() => void) | null = null
+let settingsUnsubscribe: (() => void) | null = null
+let nativeThemeUnsubscribe: (() => void) | null = null
 let hydrateVersion = 0
 
 function applyHtmlAttrs(resolved: ResolvedTheme, colorTheme: ColorTheme) {
@@ -26,8 +28,15 @@ function applyHtmlAttrs(resolved: ResolvedTheme, colorTheme: ColorTheme) {
 }
 
 function clearThemeSubscription() {
-  unsubscribe?.()
-  unsubscribe = null
+  settingsUnsubscribe?.()
+  nativeThemeUnsubscribe?.()
+  settingsUnsubscribe = null
+  nativeThemeUnsubscribe = null
+}
+
+function applyThemeState(state: ThemeState, set: (partial: ThemeState | ((state: ThemeStore) => ThemeState)) => void) {
+  applyHtmlAttrs(state.resolved, state.colorTheme)
+  set((s) => (s.pref === state.pref && s.resolved === state.resolved && s.colorTheme === state.colorTheme ? s : state))
 }
 
 function colorThemeFromHtmlAttr(): ColorTheme {
@@ -47,41 +56,36 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
     const version = ++hydrateVersion
     const state = await getThemeState()
     if (version !== hydrateVersion) return
-    applyHtmlAttrs(state.resolved, state.colorTheme)
-    set((s) =>
-      s.pref === state.pref && s.resolved === state.resolved && s.colorTheme === state.colorTheme ? s : state,
-    )
+    applyThemeState(state, set)
     if (version !== hydrateVersion) return
-    const nextUnsubscribe = subscribeSettingsInvalidationRefetch({
+    const nextSettingsUnsubscribe = subscribeSettingsInvalidationRefetch({
       scope: 'theme',
       fetch: getThemeState,
       label: 'theme',
-      apply: (next) => {
-        applyHtmlAttrs(next.resolved, next.colorTheme)
-        set((s) =>
-          s.pref === next.pref && s.resolved === next.resolved && s.colorTheme === next.colorTheme ? s : next,
-        )
-      },
+      apply: (next) => applyThemeState(next, set),
+    })
+    const nextNativeThemeUnsubscribe = subscribeNativeHostEventType('theme-changed', (event) => {
+      applyThemeState(event.state, set)
     })
     if (version !== hydrateVersion) {
-      nextUnsubscribe()
+      nextSettingsUnsubscribe()
+      nextNativeThemeUnsubscribe()
       return
     }
     clearThemeSubscription()
-    unsubscribe = nextUnsubscribe
+    settingsUnsubscribe = nextSettingsUnsubscribe
+    nativeThemeUnsubscribe = nextNativeThemeUnsubscribe
   },
 
   async setPref(pref) {
     if (pref === get().pref) return
     const next = await setThemePref(pref)
-    applyHtmlAttrs(next.resolved, next.colorTheme)
-    set((s) => (s.pref === next.pref && s.resolved === next.resolved && s.colorTheme === next.colorTheme ? s : next))
+    applyThemeState(next, set)
   },
 
   async setColorTheme(colorTheme) {
     if (colorTheme === get().colorTheme) return
     const next = await setThemeColorTheme(colorTheme)
-    applyHtmlAttrs(next.resolved, next.colorTheme)
-    set((s) => (s.pref === next.pref && s.resolved === next.resolved && s.colorTheme === next.colorTheme ? s : next))
+    applyThemeState(next, set)
   },
 }))
