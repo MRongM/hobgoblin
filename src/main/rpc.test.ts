@@ -11,10 +11,8 @@ import { getBranchPullRequest, getBranchPullRequests } from '#/system/git/pull-r
 import { openHttpsExternal } from '#/main/external-url.ts'
 import { registerTrustedAppUrl, registerTrustedWebContents } from '#/main/ipc/trusted-webcontents.ts'
 import { wireRpcIpc } from '#/main/rpc.ts'
-import {
-  getSettingsPrefs,
-} from '#/main/settings-server-client.ts'
-import type { RpcResponse, SettingsPrefs } from '#/shared/rpc.ts'
+import { getSettingsPrefs } from '#/main/settings-server-client.ts'
+import type { RpcResponse, SettingsPrefs, ThemeState } from '#/shared/rpc.ts'
 
 const ipcHandlers = new Map<string, (_event: unknown, input: any) => Promise<unknown>>()
 const browserWindowFromWebContents = vi.hoisted(() => vi.fn(() => null))
@@ -25,6 +23,7 @@ const runRemoteCommandMock = vi.hoisted(() => vi.fn())
 const getEmbeddedServerRuntimeMock = vi.hoisted(() =>
   vi.fn<() => { url: string; secret: string; clientId: string } | null>(() => null),
 )
+const subscribeThemeListeners = vi.hoisted(() => [] as Array<(state: ThemeState) => void>)
 
 function settingsPrefs(overrides: Partial<SettingsPrefs> = {}): SettingsPrefs {
   return {
@@ -140,6 +139,7 @@ vi.mock('#/system/git/pull-requests.ts', () => ({
 }))
 
 vi.mock('#/main/window.ts', () => ({
+  applyMainWindowChromeTheme: vi.fn(),
   activateMainWindow: vi.fn(() => Promise.resolve({ webContents: { send: vi.fn() } })),
   applyMainWindowTopbarHeight: vi.fn(),
   getMainWindow: vi.fn(() => null),
@@ -157,7 +157,10 @@ vi.mock('#/main/theme.ts', () => ({
   getTheme: vi.fn(() => ({ pref: 'auto', resolved: 'light', colorTheme: 'macos' })),
   setColorTheme: vi.fn(),
   setThemePref: vi.fn(),
-  subscribeTheme: vi.fn(),
+  subscribeTheme: vi.fn((listener: (state: ThemeState) => void) => {
+    subscribeThemeListeners.push(listener)
+    return () => {}
+  }),
 }))
 
 vi.mock('#/main/shortcuts.ts', () => ({
@@ -322,10 +325,14 @@ describe('main repo rpc cancellation', () => {
   })
 
   test('rejects RPC calls from untrusted senders', async () => {
-    const result = await invokeRpc('settings.setGlobalShortcut', { accelerator: 'Alt+K' }, {
-      sender: { id: 99 },
-      senderFrame: { url: 'https://example.com/' },
-    })
+    const result = await invokeRpc(
+      'settings.setGlobalShortcut',
+      { accelerator: 'Alt+K' },
+      {
+        sender: { id: 99 },
+        senderFrame: { url: 'https://example.com/' },
+      },
+    )
 
     expect(result).toEqual({
       ok: false,
@@ -334,10 +341,14 @@ describe('main repo rpc cancellation', () => {
   })
 
   test('rejects RPC calls without a sender frame', async () => {
-    const result = await invokeRpc('settings.setGlobalShortcut', { accelerator: 'Alt+K' }, {
-      sender: trustedSender,
-      senderFrame: null,
-    })
+    const result = await invokeRpc(
+      'settings.setGlobalShortcut',
+      { accelerator: 'Alt+K' },
+      {
+        sender: trustedSender,
+        senderFrame: null,
+      },
+    )
 
     expect(result).toEqual({
       ok: false,
@@ -507,6 +518,19 @@ describe('main repo rpc cancellation', () => {
     })
     expect((await import('#/main/shortcuts.ts')).syncGlobalShortcuts).toHaveBeenCalledWith(true, 'Alt+K')
     expect((await import('#/main/menu.ts')).buildAppMenu).toHaveBeenCalled()
+  })
+
+  test('broadcasts theme changes to renderer surfaces', async () => {
+    const state = { pref: 'auto' as const, resolved: 'dark' as const, colorTheme: 'github' as const }
+    const listener = subscribeThemeListeners.at(-1)
+    if (!listener) throw new Error('Expected theme subscription to be wired')
+
+    listener(state)
+
+    expect((await import('#/main/renderer-surface-events.ts')).broadcastRpcEvent).toHaveBeenCalledWith({
+      type: 'theme-changed',
+      state,
+    })
   })
 
   test('rejects an empty native shell projection payload', async () => {
