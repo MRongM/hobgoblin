@@ -1,4 +1,4 @@
-import { serializeGoblinFilePathDragPayload, type RepoFileTreeEntry } from '#/shared/file-tree.ts'
+import { serializeGoblinFilePathDragPayload, sortRepoFileTreeEntries, type RepoFileTreeEntry } from '#/shared/file-tree.ts'
 import type { StatusEntry, WorktreeStatus } from '#/web/types.ts'
 
 export type FileTreeTone = 'attention' | 'success' | 'danger' | 'muted'
@@ -103,12 +103,7 @@ export function buildFileTreeStatusIndex(worktreePath: string, status: WorktreeS
 }
 
 function sortNodes(nodes: FileTreeNode[]): FileTreeNode[] {
-  return nodes.sort((a, b) => {
-    const aDir = a.kind === 'directory'
-    const bDir = b.kind === 'directory'
-    if (aDir !== bDir) return aDir ? -1 : 1
-    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
-  })
+  return sortRepoFileTreeEntries(nodes)
 }
 
 export function mergeDirectoryEntries(

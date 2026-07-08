@@ -171,8 +171,8 @@ describe('remote git helpers', () => {
       worktreePath: '/srv/repo',
       dirPath: '/srv/repo',
       entries: [
-        { name: 'src', absolutePath: '/srv/repo/src', relativePath: 'src', kind: 'directory' },
         { name: 'link', absolutePath: '/srv/repo/link', relativePath: 'link', kind: 'symlink', targetKind: 'directory' },
+        { name: 'src', absolutePath: '/srv/repo/src', relativePath: 'src', kind: 'directory' },
         { name: 'README.md', absolutePath: '/srv/repo/README.md', relativePath: 'README.md', kind: 'file' },
       ],
     })
@@ -181,6 +181,36 @@ describe('remote git helpers', () => {
       TARGET,
       { signal: undefined },
     )
+  })
+
+  test('sorts remote file tree symlinks by their target kind', async () => {
+    const run = vi.fn(async () =>
+      okRemoteResult(
+        JSON.stringify({
+          ok: true,
+          entries: [
+            { name: 'z-dir', kind: 'directory' },
+            { name: 'b-file.txt', kind: 'file' },
+            { name: 'a-link-dir', kind: 'symlink', targetKind: 'directory' },
+            { name: 'a-link-file', kind: 'symlink', targetKind: 'file' },
+          ],
+        }),
+      ),
+    )
+
+    const result = await listRemoteFileTreeDirectory(TARGET, '/srv/repo', '/srv/repo', { run: run as any })
+
+    expect(result).toEqual({
+      ok: true,
+      worktreePath: '/srv/repo',
+      dirPath: '/srv/repo',
+      entries: [
+        { name: 'a-link-dir', absolutePath: '/srv/repo/a-link-dir', relativePath: 'a-link-dir', kind: 'symlink', targetKind: 'directory' },
+        { name: 'z-dir', absolutePath: '/srv/repo/z-dir', relativePath: 'z-dir', kind: 'directory' },
+        { name: 'a-link-file', absolutePath: '/srv/repo/a-link-file', relativePath: 'a-link-file', kind: 'symlink', targetKind: 'file' },
+        { name: 'b-file.txt', absolutePath: '/srv/repo/b-file.txt', relativePath: 'b-file.txt', kind: 'file' },
+      ],
+    })
   })
 
   test('parses remote file search JSON and passes fixed command input', async () => {
