@@ -451,6 +451,7 @@ export const zh: Record<DictKey, string> = {
   'action.merge-label': '要合并的分支',
   'action.merge-placeholder': '选择分支',
   'action.merge-confirm': '合并',
+  'action.merge-and-push-confirm': '合并并推送',
   'action.merge-conflict-ai-title': 'AI 接管',
   'action.merge-conflict-ai-codex': 'Codex',
   'action.merge-conflict-ai-claude': 'Claude',

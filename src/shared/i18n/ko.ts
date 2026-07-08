@@ -459,6 +459,7 @@ export const ko: Record<DictKey, string> = {
   'action.merge-label': '병합할 브랜치',
   'action.merge-placeholder': '브랜치 선택',
   'action.merge-confirm': '병합',
+  'action.merge-and-push-confirm': '병합하고 푸시',
   'action.merge-conflict-ai-title': 'AI 인계',
   'action.merge-conflict-ai-codex': 'Codex',
   'action.merge-conflict-ai-claude': 'Claude',
