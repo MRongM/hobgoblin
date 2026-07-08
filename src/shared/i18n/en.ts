@@ -83,6 +83,10 @@ export const en = {
   'repo-tabs.repos': 'Repositories',
   'repo-tabs.close': 'Close',
   'repo-tabs.close-named': 'Close {name}',
+  'repo-tabs.close-confirm-title': 'Close project?',
+  'repo-tabs.close-confirm-body':
+    'Close {name} in Hobgoblin. Running terminals, port forwards, and cancellable repository operations for this project will be stopped.',
+  'repo-tabs.close-confirm-confirm': 'Close project',
   'repo-tabs.more': 'More tabs',
   'repo-tabs.drag-to-reorder': 'Drag to reorder',
   'repo-tabs.open-local': 'Open local repository…',

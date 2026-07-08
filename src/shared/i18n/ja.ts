@@ -83,6 +83,10 @@ export const ja: Record<DictKey, string> = {
   'repo-tabs.repos': 'リポジトリ',
   'repo-tabs.close': '閉じる',
   'repo-tabs.close-named': '{name} を閉じる',
+  'repo-tabs.close-confirm-title': 'プロジェクトを閉じますか？',
+  'repo-tabs.close-confirm-body':
+    'Hobgoblin で {name} を閉じます。このプロジェクトの実行中のターミナル、ポート転送、キャンセル可能なリポジトリ操作は停止されます。',
+  'repo-tabs.close-confirm-confirm': 'プロジェクトを閉じる',
   'repo-tabs.more': 'その他のタブ',
   'repo-tabs.drag-to-reorder': 'ドラッグで並べ替え',
   'repo-tabs.open-local': 'ローカルリポジトリを開く…',

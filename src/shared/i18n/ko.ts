@@ -76,6 +76,10 @@ export const ko: Record<DictKey, string> = {
   'repo-tabs.repos': '리포지토리',
   'repo-tabs.close': '닫기',
   'repo-tabs.close-named': '{name} 닫기',
+  'repo-tabs.close-confirm-title': '프로젝트를 닫을까요?',
+  'repo-tabs.close-confirm-body':
+    'Hobgoblin 에서 {name} 을 닫습니다. 이 프로젝트의 실행 중인 터미널, 포트 포워딩, 취소 가능한 리포지토리 작업이 중지됩니다.',
+  'repo-tabs.close-confirm-confirm': '프로젝트 닫기',
   'repo-tabs.more': '더 많은 탭',
   'repo-tabs.drag-to-reorder': '드래그하여 순서 변경',
   'repo-tabs.open-local': '로컬 리포지토리 열기…',
