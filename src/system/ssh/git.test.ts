@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from 'vitest'
 import {
+  bootstrapRemoteWorktreeAfterCreate,
   checkoutRemoteBranch,
   commitRemoteChanges,
   createRemoteBranch,
@@ -14,6 +15,7 @@ import {
   getRemoteCommitDetail,
   getRemoteHistory,
   getRemoteSnapshot,
+  getRemoteWorktreeBootstrapPreview,
   inventoryRemoteFileTransfer,
   listRemoteFileTreeDirectory,
   mergeRemoteBranch,
@@ -35,6 +37,7 @@ import {
 } from '#/system/ssh/git.ts'
 import type { RemoteCommandResult } from '#/system/ssh/commands.ts'
 import { normalizeRemoteTarget } from '#/shared/remote-repo.ts'
+import { worktreeBootstrapConfigHash } from '#/system/git/worktree-bootstrap.ts'
 
 const TARGET = normalizeRemoteTarget({
   alias: 'prod',
@@ -882,6 +885,212 @@ describe('remote git helpers', () => {
       TARGET,
       { signal: undefined, timeoutMs: 180_000 },
     )
+  })
+
+  test('getRemoteWorktreeBootstrapPreview reads config without running bootstrap', async () => {
+    const content =
+      '[worktree]\ncopy = [".env", "config/*"]\nsymlink = ["linked.txt"]\nexclude = ["config/*.log"]\nsetup = "bun install"'
+    const run = vi.fn(async (command: { type: string }) => {
+      if (command.type === 'readFileTreeTextFile') {
+        return okRemoteResult(JSON.stringify({ ok: true, content, byteLength: content.length }))
+      }
+      return okRemoteResult('')
+    })
+
+    const result = await getRemoteWorktreeBootstrapPreview(TARGET, { run: run as any })
+
+    expect(result).toEqual({
+      ok: true,
+      preview: {
+        hasConfig: true,
+        hasOperations: true,
+        configHash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+        copyCount: 2,
+        symlinkCount: 1,
+        hardlinkCount: 0,
+        excludeCount: 1,
+        setup: { command: 'bun install' },
+      },
+    })
+    expect(run).toHaveBeenCalledWith(
+      { type: 'readFileTreeTextFile', worktreePath: '/srv/repo', filePath: '/srv/repo/goblin.toml' },
+      TARGET,
+      { signal: undefined, timeoutMs: 90_000, maxBuffer: 160 * 1024 * 1024 },
+    )
+    expect(run).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'bootstrapRemoteWorktree' }),
+      expect.anything(),
+      expect.anything(),
+    )
+  })
+
+  test('bootstrapRemoteWorktreeAfterCreate does nothing when goblin.toml is absent', async () => {
+    const run = vi.fn(async (command: { type: string }) => {
+      if (command.type === 'readFileTreeTextFile') {
+        return okRemoteResult(JSON.stringify({ ok: false, message: 'error.path-not-found' }))
+      }
+      return okRemoteResult('')
+    })
+
+    const result = await bootstrapRemoteWorktreeAfterCreate(TARGET, '/srv/repo-worktree', { run: run as any })
+
+    expect(result).toEqual({ ok: true, message: '' })
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  test('bootstrapRemoteWorktreeAfterCreate runs remote bootstrap and formats output', async () => {
+    const content = '[worktree]\ncopy = [".env"]\nsetup = "bun install"'
+    const run = vi.fn(async (command: { type: string }) => {
+      if (command.type === 'readFileTreeTextFile') {
+        return okRemoteResult(JSON.stringify({ ok: true, content, byteLength: content.length }))
+      }
+      if (command.type === 'bootstrapRemoteWorktree') {
+        return okRemoteResult('GOBLIN_BOOTSTRAP_COPY .env\nGOBLIN_BOOTSTRAP_SETUP bun install')
+      }
+      return okRemoteResult('')
+    })
+
+    const result = await bootstrapRemoteWorktreeAfterCreate(TARGET, '/srv/repo-worktree', { run: run as any })
+
+    expect(result).toEqual({
+      ok: true,
+      message: 'Copied 1 path: .env\nRan setup: bun install',
+      worktreeBootstrap: {
+        copy: { count: 1, paths: ['.env'] },
+        symlink: { count: 0, paths: [] },
+        hardlink: { count: 0, paths: [] },
+        skippedMissing: { count: 0, paths: [] },
+        setup: { command: 'bun install' },
+      },
+    })
+    expect(run).toHaveBeenCalledWith(
+      {
+        type: 'bootstrapRemoteWorktree',
+        sourceRoot: '/srv/repo',
+        targetRoot: '/srv/repo-worktree',
+        copy: ['.env'],
+        symlink: [],
+        hardlink: [],
+        exclude: [],
+        setup: 'bun install',
+      },
+      TARGET,
+      { signal: undefined, timeoutMs: 600_000 },
+    )
+  })
+
+  test('bootstrapRemoteWorktreeAfterCreate does not run when goblin.toml changed after confirmation', async () => {
+    const trustedHash = worktreeBootstrapConfigHash('[worktree]\ncopy = [".env"]')
+    const content = '[worktree]\ncopy = ["other.env"]'
+    const run = vi.fn(async (command: { type: string }) => {
+      if (command.type === 'readFileTreeTextFile') {
+        return okRemoteResult(JSON.stringify({ ok: true, content, byteLength: content.length }))
+      }
+      if (command.type === 'bootstrapRemoteWorktree') return okRemoteResult('GOBLIN_BOOTSTRAP_COPY other.env')
+      return okRemoteResult('')
+    })
+
+    const result = await bootstrapRemoteWorktreeAfterCreate(TARGET, '/srv/repo-worktree', {
+      run: run as any,
+      expectedConfigHash: trustedHash,
+    })
+
+    expect(result).toEqual({
+      ok: false,
+      message: 'Worktree bootstrap failed: goblin.toml changed after confirmation',
+    })
+    expect(run).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'bootstrapRemoteWorktree' }),
+      expect.anything(),
+      expect.anything(),
+    )
+  })
+
+  test('bootstrapRemoteWorktreeAfterCreate reads config from the remote repo root', async () => {
+    const target = normalizeRemoteTarget({
+      alias: 'prod',
+      host: 'example.com',
+      user: 'alice',
+      port: 22,
+      remotePath: '/srv/repo/packages/app',
+    })!
+    const content = '[worktree]\ncopy = [".env"]'
+    const run = vi.fn(async (command: { type: string }) => {
+      if (command.type === 'readFileTreeTextFile') {
+        return okRemoteResult(JSON.stringify({ ok: true, content, byteLength: content.length }))
+      }
+      if (command.type === 'bootstrapRemoteWorktree') return okRemoteResult('GOBLIN_BOOTSTRAP_COPY .env')
+      return okRemoteResult('')
+    })
+
+    const result = await bootstrapRemoteWorktreeAfterCreate(target, '/srv/repo-worktree', { run: run as any })
+
+    expect(result.ok).toBe(true)
+    expect(run).toHaveBeenCalledWith(
+      {
+        type: 'readFileTreeTextFile',
+        worktreePath: '/srv/repo/packages/app',
+        filePath: '/srv/repo/packages/app/goblin.toml',
+      },
+      target,
+      { signal: undefined, timeoutMs: 90_000, maxBuffer: 160 * 1024 * 1024 },
+    )
+    expect(run).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'bootstrapRemoteWorktree', sourceRoot: '/srv/repo/packages/app' }),
+      target,
+      { signal: undefined, timeoutMs: 600_000 },
+    )
+  })
+
+  test('bootstrapRemoteWorktreeAfterCreate returns error when config is invalid', async () => {
+    const content = '[worktree]\ncopy = "not-an-array"'
+    const run = vi.fn(async (command: { type: string }) => {
+      if (command.type === 'readFileTreeTextFile') {
+        return okRemoteResult(JSON.stringify({ ok: true, content, byteLength: content.length }))
+      }
+      return okRemoteResult('')
+    })
+
+    const result = await bootstrapRemoteWorktreeAfterCreate(TARGET, '/srv/repo-worktree', { run: run as any })
+
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('Worktree bootstrap failed')
+  })
+
+  test('bootstrapRemoteWorktreeAfterCreate rejects unsafe paths before running remote bootstrap', async () => {
+    const content = '[worktree]\ncopy = ["../secret.env"]'
+    const run = vi.fn(async (command: { type: string }) => {
+      if (command.type === 'readFileTreeTextFile') {
+        return okRemoteResult(JSON.stringify({ ok: true, content, byteLength: content.length }))
+      }
+      return okRemoteResult('')
+    })
+
+    const result = await bootstrapRemoteWorktreeAfterCreate(TARGET, '/srv/repo-worktree', { run: run as any })
+
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('bootstrap path escapes repo root')
+    expect(run).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'bootstrapRemoteWorktree' }),
+      expect.anything(),
+      expect.anything(),
+    )
+  })
+
+  test('bootstrapRemoteWorktreeAfterCreate returns error when remote bootstrap fails', async () => {
+    const content = '[worktree]\nsetup = "bun install"'
+    const run = vi.fn(async (command: { type: string }) => {
+      if (command.type === 'readFileTreeTextFile') {
+        return okRemoteResult(JSON.stringify({ ok: true, content, byteLength: content.length }))
+      }
+      if (command.type === 'bootstrapRemoteWorktree') return failRemoteResult('bun: command not found')
+      return okRemoteResult('')
+    })
+
+    const result = await bootstrapRemoteWorktreeAfterCreate(TARGET, '/srv/repo-worktree', { run: run as any })
+
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('bun: command not found')
   })
 
   test('fetchRemoteRepository prefers the current branch upstream remote over fetch --all', async () => {

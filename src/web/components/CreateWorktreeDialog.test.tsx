@@ -302,6 +302,58 @@ describe('CreateWorktreeDialog', () => {
       'w-[var(--radix-select-trigger-width)]',
     )
   })
+
+  test('disables submit while worktree bootstrap preflight is loading', () => {
+    render(
+      <CreateWorktreeDialog
+        open
+        repo={createRepo()}
+        worktreeBootstrap={{
+          loading: true,
+          preview: null,
+          error: false,
+          configTrusted: false,
+          onConfigTrustedChange: vi.fn(),
+        }}
+        onClose={vi.fn()}
+        onCreate={vi.fn(async () => {})}
+      />,
+    )
+
+    setInputValue('#cwt-branch', 'feature/new')
+    expect(button('button[type="submit"]').disabled).toBe(true)
+  })
+
+  test('renders trust checkbox for runnable bootstrap config', () => {
+    const onConfigTrustedChange = vi.fn()
+    render(
+      <CreateWorktreeDialog
+        open
+        repo={createRepo()}
+        worktreeBootstrap={{
+          loading: false,
+          preview: {
+            hasConfig: true,
+            hasOperations: true,
+            configHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            copyCount: 1,
+            symlinkCount: 0,
+            hardlinkCount: 0,
+            excludeCount: 0,
+          },
+          error: false,
+          configTrusted: true,
+          onConfigTrustedChange,
+        }}
+        onClose={vi.fn()}
+        onCreate={vi.fn(async () => {})}
+      />,
+    )
+
+    const checkbox = document.querySelector('button[role="checkbox"], input[type="checkbox"]')
+    expect(document.body.textContent).toContain('action.create-worktree-bootstrap-config-trusted')
+    expect(checkbox).toBeTruthy()
+  })
 })
 
 function createRepo(): RepoState {

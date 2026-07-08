@@ -28,8 +28,13 @@ const mocks = vi.hoisted(() => ({
 
 const repoClientMocks = vi.hoisted(() => ({
   getCommitMessageProviders: vi.fn(),
+  getRepositoryWorktreeBootstrapPreview: vi.fn(),
   generateRepositoryCommitMessage: vi.fn(),
   commitRepositoryChanges: vi.fn(),
+}))
+
+const settingsQueryMocks = vi.hoisted(() => ({
+  useSettingsSnapshotQuery: vi.fn(),
 }))
 
 let container: HTMLDivElement
@@ -57,10 +62,14 @@ vi.mock('#/web/repo-client.ts', async () => {
   return {
     ...actual,
     getCommitMessageProviders: repoClientMocks.getCommitMessageProviders,
+    getRepositoryWorktreeBootstrapPreview: repoClientMocks.getRepositoryWorktreeBootstrapPreview,
     generateRepositoryCommitMessage: repoClientMocks.generateRepositoryCommitMessage,
     commitRepositoryChanges: repoClientMocks.commitRepositoryChanges,
   }
 })
+vi.mock('#/web/settings-queries.ts', () => ({
+  useSettingsSnapshotQuery: settingsQueryMocks.useSettingsSnapshotQuery,
+}))
 
 describe('useBranchActionItems', () => {
   beforeEach(() => {
@@ -105,6 +114,22 @@ describe('useBranchActionItems', () => {
       dialogs: null,
     })
     repoClientMocks.getCommitMessageProviders.mockResolvedValue({ codex: false, claude: false })
+    repoClientMocks.getRepositoryWorktreeBootstrapPreview.mockResolvedValue({
+      ok: true,
+      preview: {
+        hasConfig: false,
+        hasOperations: false,
+        configHash: null,
+        copyCount: 0,
+        symlinkCount: 0,
+        hardlinkCount: 0,
+        excludeCount: 0,
+      },
+    })
+    settingsQueryMocks.useSettingsSnapshotQuery.mockReturnValue({
+      data: { repoSettings: [] },
+      isLoading: false,
+    })
     repoClientMocks.generateRepositoryCommitMessage.mockResolvedValue({ ok: true, message: 'feat: generated message' })
     repoClientMocks.commitRepositoryChanges.mockResolvedValue({
       ok: true,
@@ -705,6 +730,7 @@ describe('useBranchActionItems', () => {
           worktreePath: '/tmp/repo-feature-new',
           mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'feature/base' },
         },
+        worktreeBootstrap: { kind: 'skip' },
       },
       { token: repo.instanceToken, refreshOnError: false },
     )

@@ -10,7 +10,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { createElement, Fragment, type ReactNode } from 'react'
+import { createElement, Fragment, useEffect, useState, type ReactNode } from 'react'
 import { GitHubOutlineIcon } from '#/web/components/GitHubOutlineIcon.tsx'
 import { GitLabLogoIcon } from '#/web/components/GitLabLogoIcon.tsx'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
@@ -26,6 +26,10 @@ import { useRuntimeExternalAppSettings } from '#/web/runtime-settings-external-a
 import { useBranchWriteActions } from '#/web/hooks/useBranchWriteActions.tsx'
 import { useRetainedDialogState } from '#/web/hooks/useRetainedDialogState.ts'
 import { CreateWorktreeDialog, type CreateWorktreeRequest } from '#/web/components/CreateWorktreeDialog.tsx'
+import { getRepositoryWorktreeBootstrapPreview } from '#/web/repo-client.ts'
+import { useSettingsSnapshotQuery } from '#/web/settings-queries.ts'
+import { isRepoWorktreeBootstrapConfigTrusted } from '#/shared/repo-settings.ts'
+import type { WorktreeBootstrapDecision, WorktreeBootstrapPreview } from '#/shared/worktree-bootstrap-summary.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { useWorktreeTerminalSnapshot } from '#/web/components/terminal/terminal-session-store.ts'
 import { useTerminalSessionContext } from '#/web/components/terminal/terminal-session-context.ts'
@@ -133,13 +137,14 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
   const terminalWorktreeKey = terminalBase ? worktreeTerminalKey(terminalBase.repoRoot, terminalBase.worktreePath) : null
   const terminalSessions = useWorktreeTerminalSnapshot(terminalWorktreeKey).sessions
 
-  function handleCreateWorktree(request: CreateWorktreeRequest): void {
+  function handleCreateWorktree(request: CreateWorktreeRequest, worktreeBootstrap: WorktreeBootstrapDecision): void {
     if (blocked) return
     submitBranchAction(
       repo.id,
       {
         kind: 'createWorktree',
         input: request.input,
+        worktreeBootstrap,
       },
       { token: repo.instanceToken, refreshOnError: false },
     )
@@ -351,9 +356,75 @@ function CreateWorktreeDialogConnected({
   defaultBranch?: string
   open: boolean
   onClose: () => void
-  onCreate: (request: CreateWorktreeRequest) => void | Promise<void>
+  onCreate: (request: CreateWorktreeRequest, worktreeBootstrap: WorktreeBootstrapDecision) => void | Promise<void>
 }) {
   const repo = useReposStore((s) => s.repos[repoId])
+  const [bootstrapPreview, setBootstrapPreview] = useState<WorktreeBootstrapPreview | null>(null)
+  const [bootstrapPreviewError, setBootstrapPreviewError] = useState(false)
+  const [bootstrapPreviewLoading, setBootstrapPreviewLoading] = useState(false)
+  const [configTrustChoice, setConfigTrustChoice] = useState<boolean | null>(null)
+  const settingsQuery = useSettingsSnapshotQuery()
+
+  useEffect(() => {
+    if (!open) {
+      setBootstrapPreview(null)
+      setBootstrapPreviewError(false)
+      setBootstrapPreviewLoading(false)
+      setConfigTrustChoice(null)
+      return
+    }
+    const controller = new AbortController()
+    setBootstrapPreview(null)
+    setBootstrapPreviewError(false)
+    setBootstrapPreviewLoading(true)
+    setConfigTrustChoice(null)
+    void getRepositoryWorktreeBootstrapPreview(repoId, controller.signal)
+      .then((result) => {
+        setBootstrapPreview(result.ok ? result.preview : null)
+        setBootstrapPreviewError(!result.ok)
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setBootstrapPreviewError(true)
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setBootstrapPreviewLoading(false)
+      })
+    return () => controller.abort()
+  }, [open, repoId])
+
   if (!repo) return null
-  return createElement(CreateWorktreeDialog, { open, repo, defaultBranch, onClose, onCreate })
+
+  function resolveWorktreeBootstrapDecision(): WorktreeBootstrapDecision {
+    const configHash = bootstrapPreview?.hasOperations ? bootstrapPreview.configHash : null
+    if (!configHash) return { kind: 'skip' }
+    const repoSettings = settingsQuery.data?.repoSettings ?? []
+    const trusted = configTrustChoice ?? isRepoWorktreeBootstrapConfigTrusted(repoSettings, repoId, configHash)
+    return { kind: 'run', configHash, configTrusted: trusted }
+  }
+
+  function handleCreate(request: CreateWorktreeRequest) {
+    return onCreate(request, resolveWorktreeBootstrapDecision())
+  }
+
+  const configHash = bootstrapPreview?.configHash
+  const configTrusted =
+    configTrustChoice ??
+    isRepoWorktreeBootstrapConfigTrusted(settingsQuery.data?.repoSettings ?? [], repoId, configHash)
+
+  return createElement(CreateWorktreeDialog, {
+    open,
+    repo,
+    defaultBranch,
+    worktreeBootstrap: {
+      loading:
+        bootstrapPreviewLoading ||
+        (bootstrapPreview?.hasOperations === true && !!bootstrapPreview.configHash && settingsQuery.isLoading),
+      preview: bootstrapPreview,
+      error: bootstrapPreviewError,
+      configTrusted,
+      onConfigTrustedChange: setConfigTrustChoice,
+    },
+    onClose,
+    onCreate: handleCreate,
+  })
 }

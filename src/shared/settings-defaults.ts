@@ -130,6 +130,7 @@ export function defaultSettingsSnapshot(overrides: Partial<SettingsSnapshot> = {
     globalShortcutRegistered: overrides.globalShortcutRegistered ?? false,
     session: overrides.session ?? defaultSessionState(),
     recentRepos: overrides.recentRepos ?? [],
+    repoSettings: overrides.repoSettings ?? [],
   }
 }
 

@@ -1,11 +1,22 @@
 import { afterEach, expect, test, vi } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { defaultSessionState } from '#/shared/settings-defaults.ts'
 
 let tmp: string | null = null
 let previousDataDir = process.env.GOBLIN_SERVER_DATA_DIR
+
+function useTempServerSettingsDir(): void {
+  tmp = mkdtempSync(path.join(os.tmpdir(), 'gbl-server-settings-'))
+  previousDataDir = process.env.GOBLIN_SERVER_DATA_DIR
+  process.env.GOBLIN_SERVER_DATA_DIR = tmp
+}
+
+function writeSettingsFile(partial: Record<string, unknown>): void {
+  if (!tmp) throw new Error('temporary settings directory was not initialized')
+  writeFileSync(path.join(tmp, 'server-settings.json'), JSON.stringify(partial), 'utf-8')
+}
 
 afterEach(async () => {
   const mod = await import('#/server/modules/settings-source.ts')
@@ -330,4 +341,61 @@ test('accepts current design color themes and normalizes legacy apple plus unkno
 
   await mod.updateServerSettingsPrefs({ colorTheme: 'not-a-theme' as never })
   expect(await mod.getServerSettingsPrefs()).toMatchObject({ colorTheme: 'macos' })
+})
+
+test('trusts and untrusts a repo worktree bootstrap config hash', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+  const configHash = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+  await mod.trustServerRepoWorktreeBootstrapConfig({ repoId: '/repo-a', configHash })
+  await expect(mod.getServerRepoSettings()).resolves.toEqual([
+    {
+      repoId: '/repo-a',
+      worktreeBootstrapTrust: {
+        configHash,
+        trustedAt: expect.any(String),
+      },
+    },
+  ])
+
+  await expect(mod.untrustServerRepoWorktreeBootstrapConfig({ repoId: '/repo-a', configHash })).resolves.toBe(true)
+  await expect(mod.getServerRepoSettings()).resolves.toEqual([])
+})
+
+test('drops invalid persisted worktree bootstrap trust entries', async () => {
+  useTempServerSettingsDir()
+  await writeSettingsFile({
+    repoSettings: [
+      {
+        repoId: '/repo-a',
+        worktreeBootstrapTrust: { configHash: 'sha256:bad', trustedAt: '2026-07-08T00:00:00.000Z' },
+      },
+      {
+        repoId: '/repo-b',
+        worktreeBootstrapTrust: {
+          configHash: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+          trustedAt: 123,
+        },
+      },
+      {
+        repoId: '/repo-c',
+        worktreeBootstrapTrust: {
+          configHash: 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+          trustedAt: '2026-07-08T00:00:00.000Z',
+        },
+      },
+    ],
+  })
+
+  const mod = await import('#/server/modules/settings-source.ts')
+  await expect(mod.getServerRepoSettings()).resolves.toEqual([
+    {
+      repoId: '/repo-c',
+      worktreeBootstrapTrust: {
+        configHash: 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+        trustedAt: '2026-07-08T00:00:00.000Z',
+      },
+    },
+  ])
 })

@@ -1,8 +1,13 @@
 import { runServerCancellable, abortServerNetworkOp } from '#/server/common/network-ops.ts'
-import { publishRepoQueryInvalidation } from '#/server/modules/invalidation-broker.ts'
+import { publishRepoQueryInvalidation, publishSettingsInvalidation } from '#/server/modules/invalidation-broker.ts'
 import { gitNetworkOptionsFromPrefs } from '#/server/modules/git-network-settings.ts'
 import { resolveRemoteRepoTarget, resolveRepoBackend, runWithRepoBackend } from '#/server/modules/repo-backend.ts'
-import { getServerSettingsPrefs } from '#/server/modules/settings-source.ts'
+import {
+  getServerRepoSettings,
+  getServerSettingsPrefs,
+  trustServerRepoWorktreeBootstrapConfig,
+  untrustServerRepoWorktreeBootstrapConfig,
+} from '#/server/modules/settings-source.ts'
 import { cloneRepository as cloneGitRepository } from '#/system/git/clone.ts'
 import { initRepository as gitInit } from '#/system/git/init.ts'
 import {
@@ -33,7 +38,10 @@ import { checkGitAvailable } from '#/system/git/helper.ts'
 import { isValidCwd, isValidRepoLocator } from '#/shared/input-validation.ts'
 import { type CloneRepoResult, type ProbeResult } from '#/shared/rpc.ts'
 import { constants as fsConstants, promises as fs } from 'node:fs'
+import PQueue from 'p-queue'
 import { isAbsoluteWorktreePath, normalizeCreateWorktreeInput, type CreateWorktreeInput } from '#/shared/worktree-create.ts'
+import { isRepoWorktreeBootstrapConfigTrusted } from '#/shared/repo-settings.ts'
+import type { WorktreeBootstrapDecision, WorktreeBootstrapPreviewResult } from '#/shared/worktree-bootstrap-summary.ts'
 
 type ProbeAvailability = { ok: true } | { ok: false; message: string }
 
@@ -45,6 +53,7 @@ const CLONE_OPERATION_ID_RE = /^[A-Za-z0-9_-]{1,128}$/
 const INVALIDATION_SOURCE_TOKEN_RE = /^[A-Za-z0-9_-]{1,128}$/
 const activeCloneControllers = new Map<string, AbortController>()
 const activeBackgroundFetches = new Map<string, Promise<{ ok: boolean; message: string }>>()
+const createWorktreeOperationQueuesByRepo = new Map<string, PQueue>()
 
 async function getGitNetworkOptions() {
   return gitNetworkOptionsFromPrefs(await getServerSettingsPrefs())
@@ -312,6 +321,7 @@ export async function pushRepositoryBranch(
 export async function createRepositoryWorktree(
   cwd: string,
   input: CreateWorktreeInput,
+  worktreeBootstrap: WorktreeBootstrapDecision,
   signal?: AbortSignal,
   sourceToken?: string,
 ): Promise<ExecResult> {
@@ -319,13 +329,73 @@ export async function createRepositoryWorktree(
   if (!isWorktreePathInputAbsolute(input)) return { ok: false, message: 'error.invalid-path' }
   const normalized = normalizeCreateWorktreeInput(input)
   if (!normalized) return { ok: false, message: 'error.invalid-arguments' }
-  return await runWithRepoBackend(cwd, async (backend) => {
-    return await publishSnapshotInvalidationAfterMutation(
-      cwd,
-      await backend.createWorktree(normalized, signal),
-      sourceToken,
-    )
+  return await runCreateWorktreeServiceOperation(cwd, async () => {
+    const result = await runWithRepoBackend(cwd, async (backend) => {
+      const createResult = await backend.createWorktree(normalized, signal, { worktreeBootstrap })
+      return await syncWorktreeBootstrapTrustAfterSuccessfulRun(cwd, worktreeBootstrap, createResult)
+    })
+    return result.ok || result.repoChanged
+      ? publishSnapshotInvalidationAfterGitAttempt(cwd, result, sourceToken)
+      : result
   })
+}
+
+export async function getRepositoryWorktreeBootstrapPreview(
+  cwd: string,
+  signal?: AbortSignal,
+): Promise<WorktreeBootstrapPreviewResult> {
+  if (!isValidRepoLocator(cwd)) return { ok: false, message: 'error.invalid-arguments' }
+  return await runWithRepoBackend(cwd, async (backend) => await backend.getWorktreeBootstrapPreview(signal))
+}
+
+async function runCreateWorktreeServiceOperation<T>(repoId: string, task: () => Promise<T>): Promise<T> {
+  const queue = createWorktreeOperationQueueForRepo(repoId)
+  try {
+    return await queue.add(task)
+  } finally {
+    scheduleCreateWorktreeOperationQueueCleanup(repoId, queue)
+  }
+}
+
+function createWorktreeOperationQueueForRepo(repoId: string): PQueue {
+  let queue = createWorktreeOperationQueuesByRepo.get(repoId)
+  if (!queue) {
+    queue = new PQueue({ concurrency: 1 })
+    createWorktreeOperationQueuesByRepo.set(repoId, queue)
+  }
+  return queue
+}
+
+function scheduleCreateWorktreeOperationQueueCleanup(repoId: string, queue: PQueue): void {
+  void queue.onIdle().then(() => {
+    if (createWorktreeOperationQueuesByRepo.get(repoId) !== queue) return
+    if (queue.size === 0 && queue.pending === 0) createWorktreeOperationQueuesByRepo.delete(repoId)
+  })
+}
+
+async function syncWorktreeBootstrapTrustAfterSuccessfulRun(
+  repoId: string,
+  decision: WorktreeBootstrapDecision,
+  result: ExecResult,
+): Promise<ExecResult> {
+  if (!result.ok || decision.kind !== 'run') return result
+  try {
+    const repoSettings = await getServerRepoSettings()
+    const currentlyTrusted = isRepoWorktreeBootstrapConfigTrusted(repoSettings, repoId, decision.configHash)
+    if (decision.configTrusted) {
+      if (currentlyTrusted) return result
+      await trustServerRepoWorktreeBootstrapConfig({ repoId, configHash: decision.configHash })
+      publishSettingsInvalidation(['settings-snapshot'])
+      return result
+    }
+    if (!currentlyTrusted) return result
+    if (await untrustServerRepoWorktreeBootstrapConfig({ repoId, configHash: decision.configHash })) {
+      publishSettingsInvalidation(['settings-snapshot'])
+    }
+    return result
+  } catch {
+    return { ...result, ok: false, message: 'error.settings-write-title', repoChanged: true }
+  }
 }
 
 export async function createRepositoryBranch(

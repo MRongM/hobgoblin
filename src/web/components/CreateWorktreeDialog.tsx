@@ -29,6 +29,7 @@ import { validateBranchName } from '#/shared/refnames.ts'
 import { isResolvableRemotePathInput } from '#/shared/remote-repo.ts'
 import { deriveLocalBranchFromRemoteRef, type CreateWorktreeInput } from '#/shared/worktree-create.ts'
 import { remoteRefMatchesQuery } from '#/web/components/branch-list/branch-create-model.ts'
+import type { WorktreeBootstrapPreview } from '#/shared/worktree-bootstrap-summary.ts'
 
 type CreateWorktreeDialogMode = CreateWorktreeInput['mode']['kind']
 
@@ -47,11 +48,20 @@ interface Props {
   open: boolean
   repo: RepoState
   defaultBranch?: string
+  worktreeBootstrap?: WorktreeBootstrapPromptState
   onClose: () => void
   onCreate: (request: CreateWorktreeRequest) => void | Promise<void>
 }
 
-export function CreateWorktreeDialog({ open, repo, defaultBranch, onClose, onCreate }: Props) {
+interface WorktreeBootstrapPromptState {
+  loading: boolean
+  preview: WorktreeBootstrapPreview | null
+  error: boolean
+  configTrusted: boolean
+  onConfigTrustedChange: (trust: boolean) => void
+}
+
+export function CreateWorktreeDialog({ open, repo, defaultBranch, worktreeBootstrap, onClose, onCreate }: Props) {
   const t = useT()
   const compact = useIsCompactUi()
 
@@ -170,9 +180,10 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, onClose, onCre
       : ''
 
   const branchActionBusy = repo.operations.branchAction.phase !== 'idle'
+  const bootstrapBusy = worktreeBootstrap?.loading === true
   const validPath = remoteTarget ? isResolvableRemotePathInput(effectivePath) : effectivePath.length > 0
   const input = buildInput()
-  const canSubmit = !!input && validPath && !branchActionBusy
+  const canSubmit = !!input && validPath && !branchActionBusy && !bootstrapBusy
 
   useEffect(() => {
     if (!open || mode !== 'trackRemoteBranch') return
@@ -214,7 +225,7 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, onClose, onCre
 
   function handleSubmit() {
     const nextInput = buildInput()
-    if (!nextInput || branchActionBusy) return
+    if (!nextInput || branchActionBusy || bootstrapBusy) return
     void onCreate({ input: nextInput })
     onClose()
   }
@@ -462,6 +473,7 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, onClose, onCre
                 : ''}
           </FieldDescription>
         </Field>
+        <WorktreeBootstrapTrustCheckbox state={worktreeBootstrap} />
         <DialogFooter className="pt-4">
           <Button type="button" variant="outline" className={cn(compact && 'w-full')} onClick={onClose}>
             {t('dialog.cancel')}
@@ -472,6 +484,24 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, onClose, onCre
         </DialogFooter>
       </form>
     </FormDialog>
+  )
+}
+
+function WorktreeBootstrapTrustCheckbox({ state }: { state: WorktreeBootstrapPromptState | undefined }) {
+  const t = useT()
+  const preview = state?.preview ?? null
+  const showPrompt = !state?.loading && !state?.error && preview?.hasOperations === true && !!preview.configHash
+  if (!state || !showPrompt) return null
+
+  return (
+    <label className="flex items-center gap-2 pt-0.5 text-sm text-foreground">
+      <input
+        type="checkbox"
+        checked={state.configTrusted}
+        onChange={(event) => state.onConfigTrustedChange(event.currentTarget.checked)}
+      />
+      <span>{t('action.create-worktree-bootstrap-config-trusted')}</span>
+    </label>
   )
 }
 

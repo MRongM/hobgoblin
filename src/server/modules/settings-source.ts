@@ -21,6 +21,11 @@ import {
   normalizeWorkspaceLayout,
 } from '#/shared/workspace-layout.ts'
 import { repoSessionEntryId, type RepoSessionEntry } from '#/shared/remote-repo.ts'
+import {
+  isWorktreeBootstrapConfigHash,
+  type RepoSettingsEntry,
+  type WorktreeBootstrapTrust,
+} from '#/shared/repo-settings.ts'
 import { normalizeGlobalShortcut } from '#/shared/accelerator.ts'
 import { normalizeColorTheme, type ColorTheme } from '#/shared/color-theme.ts'
 import {
@@ -97,6 +102,7 @@ interface ServerSettingsData {
   lanEnabled: boolean
   session: SessionState
   recentRepos: RepoSessionEntry[]
+  repoSettings: RepoSettingsEntry[]
 }
 
 export type ServerSettingsPrefsPatch = Partial<SettingsPrefs>
@@ -348,6 +354,29 @@ function normalizeRecentRepos(value: unknown): RepoSessionEntry[] {
   ).slice(0, MAX_RECENT_REPOS)
 }
 
+function normalizeRepoSettings(value: unknown): RepoSettingsEntry[] {
+  if (!Array.isArray(value)) return []
+  const entries = new Map<string, RepoSettingsEntry>()
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue
+    const raw = item as Partial<RepoSettingsEntry>
+    if (typeof raw.repoId !== 'string' || raw.repoId.length === 0) continue
+    const next: RepoSettingsEntry = { repoId: raw.repoId }
+    const trust = normalizeWorktreeBootstrapTrust(raw.worktreeBootstrapTrust)
+    if (trust) next.worktreeBootstrapTrust = trust
+    if (next.worktreeBootstrapTrust) entries.set(next.repoId, next)
+  }
+  return Array.from(entries.values())
+}
+
+function normalizeWorktreeBootstrapTrust(value: unknown): WorktreeBootstrapTrust | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const raw = value as Partial<WorktreeBootstrapTrust>
+  if (!isWorktreeBootstrapConfigHash(raw.configHash)) return undefined
+  if (typeof raw.trustedAt !== 'string' || raw.trustedAt.length === 0) return undefined
+  return { configHash: raw.configHash, trustedAt: raw.trustedAt }
+}
+
 async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
   try {
     const raw = await readFile(serverDataFile('server-settings.json'), 'utf-8')
@@ -384,6 +413,7 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       lanEnabled: normalizeLanEnabled(parsed.lanEnabled),
       session: normalizeSession(parsed.session),
       recentRepos: normalizeRecentRepos(parsed.recentRepos),
+      repoSettings: normalizeRepoSettings(parsed.repoSettings),
     }
   } catch {
     return null
@@ -399,7 +429,7 @@ async function writeServerSettingsFile(data: ServerSettingsData): Promise<void> 
 async function loadServerSettings(): Promise<ServerSettingsData> {
   settingsPromise ??= (async () => {
     const persisted = await readServerSettingsFile()
-    const data = persisted ?? { ...defaultSettingsPrefs(), session: defaultSession(), recentRepos: [] }
+    const data = persisted ?? { ...defaultSettingsPrefs(), session: defaultSession(), recentRepos: [], repoSettings: [] }
     await writeServerSettingsFile(data)
     cachedFetchIntervalSec = data.fetchIntervalSec
     return data
@@ -596,6 +626,62 @@ export async function setServerSessionState(session: SessionState): Promise<Sess
 
 export async function getServerRecentRepos(): Promise<RepoSessionEntry[]> {
   return [...(await loadServerSettings()).recentRepos]
+}
+
+export async function getServerRepoSettings(): Promise<RepoSettingsEntry[]> {
+  return cloneRepoSettings((await loadServerSettings()).repoSettings)
+}
+
+export async function trustServerRepoWorktreeBootstrapConfig(input: {
+  repoId: string
+  configHash: string
+}): Promise<RepoSettingsEntry[]> {
+  const data = await loadServerSettings()
+  if (!input.repoId || !isWorktreeBootstrapConfigHash(input.configHash)) return cloneRepoSettings(data.repoSettings)
+  const worktreeBootstrapTrust: WorktreeBootstrapTrust = {
+    configHash: input.configHash,
+    trustedAt: new Date().toISOString(),
+  }
+  data.repoSettings = upsertRepoSettingsEntry(data.repoSettings, {
+    repoId: input.repoId,
+    worktreeBootstrapTrust,
+  })
+  await writeServerSettingsFile(data)
+  return cloneRepoSettings(data.repoSettings)
+}
+
+export async function untrustServerRepoWorktreeBootstrapConfig(input: {
+  repoId: string
+  configHash: string
+}): Promise<boolean> {
+  const data = await loadServerSettings()
+  if (!input.repoId || !isWorktreeBootstrapConfigHash(input.configHash)) return false
+  const existing = data.repoSettings.find((entry) => entry.repoId === input.repoId)
+  if (existing?.worktreeBootstrapTrust?.configHash !== input.configHash) return false
+  data.repoSettings = data.repoSettings.filter((entry) => entry.repoId !== input.repoId)
+  await writeServerSettingsFile(data)
+  return true
+}
+
+function cloneRepoSettings(repoSettings: readonly RepoSettingsEntry[]): RepoSettingsEntry[] {
+  return repoSettings.map((entry) => ({
+    repoId: entry.repoId,
+    ...(entry.worktreeBootstrapTrust
+      ? {
+          worktreeBootstrapTrust: {
+            configHash: entry.worktreeBootstrapTrust.configHash,
+            trustedAt: entry.worktreeBootstrapTrust.trustedAt,
+          },
+        }
+      : {}),
+  }))
+}
+
+function upsertRepoSettingsEntry(
+  entries: readonly RepoSettingsEntry[],
+  next: RepoSettingsEntry,
+): RepoSettingsEntry[] {
+  return [next, ...entries.filter((entry) => entry.repoId !== next.repoId)]
 }
 
 export async function addServerRecentRepo(repo: RepoSessionEntry): Promise<RepoSessionEntry[]> {
