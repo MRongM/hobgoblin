@@ -122,7 +122,9 @@ export function RepoTab({
         <FolderGit2 size={13} className={toolbarTabIconClassName(isActive)} />
       )}
       <span className="truncate font-medium">{repo.name}</span>
-      {hasTerminalOutputActivity && <TerminalOutputActivityIndicator label={terminalOutputActiveLabel} />}
+      {hasTerminalOutputActivity && (
+        <TerminalOutputActivityIndicator label={terminalOutputActiveLabel} effectSize="compact" />
+      )}
       {hasTerminalBell && <TerminalBellDot label={terminalBellLabel} />}
       {repo.unavailable && <AlertCircle size={12} className="shrink-0 text-warning" aria-hidden />}
     </ToolbarClosableTab>
