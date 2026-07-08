@@ -5,6 +5,7 @@ import type { ExecResult } from '#/shared/git-types.ts'
 import {
   FILE_TREE_MAX_ENTRIES,
   FILE_TREE_TEXT_FILE_MAX_BYTES,
+  sortRepoFileTreeEntries,
   type RepoFileTreeBinaryFileReadResult,
   type RepoFileTreeBinaryFileReplaceResult,
   type RepoFileTreeEntry,
@@ -158,15 +159,6 @@ async function symlinkTargetKind(absolutePath: string): Promise<RepoFileTreeEntr
   }
 }
 
-function sortEntries(entries: RepoFileTreeEntry[]): RepoFileTreeEntry[] {
-  return entries.sort((a, b) => {
-    const aDirectory = a.kind === 'directory'
-    const bDirectory = b.kind === 'directory'
-    if (aDirectory !== bDirectory) return aDirectory ? -1 : 1
-    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
-  })
-}
-
 export async function listLocalFileTreeDirectory(
   worktreePath: string,
   dirPath: string,
@@ -195,7 +187,7 @@ export async function listLocalFileTreeDirectory(
         ...(kind === 'symlink' ? { targetKind: await symlinkTargetKind(absolutePath) } : {}),
       })
     }
-    return { ok: true, worktreePath: root, dirPath: dir, entries: sortEntries(entries) }
+    return { ok: true, worktreePath: root, dirPath: dir, entries: sortRepoFileTreeEntries(entries) }
   } catch (err) {
     return { ok: false, message: classifyFsError(err) }
   }

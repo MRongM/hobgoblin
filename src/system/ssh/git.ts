@@ -1,6 +1,7 @@
 import path from 'node:path'
 import {
   normalizeFileTreeSearchLimit,
+  sortRepoFileTreeEntries,
   type RepoFileSearchResult,
   type RepoFileTreeBinaryFileReadResult,
   type RepoFileTreeBinaryFileReplaceResult,
@@ -310,7 +311,7 @@ export async function listRemoteFileTreeDirectory(
         ...(entry.targetKind ? { targetKind: entry.targetKind } : {}),
       }
     })
-  return { ok: true, worktreePath: normalizedWorktree, dirPath: normalizedDir, entries: sortRemoteFileTreeEntries(entries) }
+  return { ok: true, worktreePath: normalizedWorktree, dirPath: normalizedDir, entries: sortRepoFileTreeEntries(entries) }
 }
 
 export async function searchRemoteFileTree(
@@ -1456,15 +1457,6 @@ function parseRemoteTransferInventory(output: string): RemoteTransferInventoryRe
 
 function remoteRelativePath(worktreePath: string, absolutePath: string): string {
   return path.posix.relative(path.posix.normalize(worktreePath), path.posix.normalize(absolutePath))
-}
-
-function sortRemoteFileTreeEntries(entries: RepoFileTreeEntry[]): RepoFileTreeEntry[] {
-  return entries.sort((a, b) => {
-    const aDirectory = a.kind === 'directory'
-    const bDirectory = b.kind === 'directory'
-    if (aDirectory !== bDirectory) return aDirectory ? -1 : 1
-    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
-  })
 }
 
 function isValidRemotePath(value: string): boolean {
