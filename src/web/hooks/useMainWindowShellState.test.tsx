@@ -39,8 +39,18 @@ function Harness() {
       >
         terminal
       </button>
+      <button id="request-close" type="button" onClick={() => shell.navigation.closeRepo('/tmp/repo')}>
+        request close
+      </button>
+      <button id="cancel-close" type="button" onClick={() => shell.closeRepoConfirmation?.cancel()}>
+        cancel close
+      </button>
+      <button id="confirm-close" type="button" onClick={() => shell.closeRepoConfirmation?.confirm()}>
+        confirm close
+      </button>
       <output id="settings-open">{shell.settingsOpen ? 'yes' : 'no'}</output>
       <output id="shortcut-gate">{shell.workspaceShortcutsSuppressed ? 'yes' : 'no'}</output>
+      <output id="close-confirm-open">{shell.closeRepoConfirmation?.open ? 'yes' : 'no'}</output>
       <output id="route-settings">{routeSettingsPage ?? 'none'}</output>
       <output id="active-repo">{activeId ?? 'none'}</output>
       <output id="selected-branch">{selectedBranch ?? 'none'}</output>
@@ -94,6 +104,28 @@ describe('useMainWindowShellState', () => {
     expect(text('#active-repo')).toBe('/tmp/repo')
     expect(text('#selected-branch')).toBe('feature/test')
     expect(text('#detail-tab')).toBe('terminal')
+  })
+
+  test('requires confirmation before closing a repository', async () => {
+    await render(<Harness />)
+
+    await click('#request-close')
+
+    expect(text('#active-repo')).toBe('/tmp/repo')
+    expect(text('#close-confirm-open')).toBe('yes')
+    expect(text('#shortcut-gate')).toBe('yes')
+
+    await click('#cancel-close')
+
+    expect(text('#active-repo')).toBe('/tmp/repo')
+    expect(text('#close-confirm-open')).toBe('no')
+    expect(text('#shortcut-gate')).toBe('no')
+
+    await click('#request-close')
+    await click('#confirm-close')
+
+    expect(text('#active-repo')).toBe('none')
+    expect(text('#close-confirm-open')).toBe('no')
   })
 
   test('derives focus workspace mode from the effective layout and focus preference', async () => {

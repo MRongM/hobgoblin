@@ -75,6 +75,10 @@ export const zh: Record<DictKey, string> = {
   'repo-tabs.repos': '仓库',
   'repo-tabs.close': '关闭',
   'repo-tabs.close-named': '关闭 {name}',
+  'repo-tabs.close-confirm-title': '关闭项目？',
+  'repo-tabs.close-confirm-body':
+    '将在 Hobgoblin 中关闭 {name}。该项目正在运行的终端、端口转发和可取消的仓库操作都会停止。',
+  'repo-tabs.close-confirm-confirm': '关闭项目',
   'repo-tabs.more': '其他标签',
   'repo-tabs.drag-to-reorder': '拖动以重新排序',
   'repo-tabs.open-local': '打开本地仓库…',
@@ -686,8 +690,9 @@ export const zh: Record<DictKey, string> = {
   'settings.action-bar-blank-toggle': '点击操作栏空白处展开/收起详情',
   'settings.action-bar-blank-toggle-hint': '仅上下布局生效。点击操作栏空白处展开或收起详情。',
   'settings.temporary-files-directory': '临时文件目录',
-  'settings.temporary-files-directory-hint': '用于终端二进制粘贴生成文件。留空时使用当前项目的 tmp 目录。',
-  'settings.temporary-files-directory-placeholder': '当前项目 tmp 目录',
+  'settings.temporary-files-directory-hint':
+    '用于终端二进制粘贴生成文件。支持绝对路径，或相对当前项目的路径（如 tmp/cache）；留空时使用当前项目的 tmp 目录。',
+  'settings.temporary-files-directory-placeholder': 'tmp/cache 或绝对路径',
   'settings.terminal-theme-sync': '终端跟随主题',
   'settings.terminal-theme-sync-hint': '开启后，应用内终端使用当前应用主题；关闭后保留经典终端配色。',
   'settings.terminal-notifications': '终端 bell 通知',

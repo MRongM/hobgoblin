@@ -83,6 +83,10 @@ export const ja: Record<DictKey, string> = {
   'repo-tabs.repos': 'リポジトリ',
   'repo-tabs.close': '閉じる',
   'repo-tabs.close-named': '{name} を閉じる',
+  'repo-tabs.close-confirm-title': 'プロジェクトを閉じますか？',
+  'repo-tabs.close-confirm-body':
+    'Hobgoblin で {name} を閉じます。このプロジェクトの実行中のターミナル、ポート転送、キャンセル可能なリポジトリ操作は停止されます。',
+  'repo-tabs.close-confirm-confirm': 'プロジェクトを閉じる',
   'repo-tabs.more': 'その他のタブ',
   'repo-tabs.drag-to-reorder': 'ドラッグで並べ替え',
   'repo-tabs.open-local': 'ローカルリポジトリを開く…',
@@ -704,7 +708,8 @@ export const ja: Record<DictKey, string> = {
   'settings.lang.ja': '日本語',
   'settings.chrome-heights.title': 'ウィンドウとツールバー',
   'settings.chrome-heights.topbar': 'トップバーの高さ',
-  'settings.chrome-heights.topbar-hint': 'アプリのトップバーの高さとネイティブウィンドウボタンの位置合わせを調整します。',
+  'settings.chrome-heights.topbar-hint':
+    'アプリのトップバーの高さとネイティブウィンドウボタンの位置合わせを調整します。',
   'settings.chrome-heights.toolbar': 'ツールバーの高さ',
   'settings.chrome-heights.toolbar-hint':
     'リポジトリ、ブランチ、ファイルの共通ツールバーの高さを調整します。コンパクトな操作バーは変更されません。',
@@ -714,8 +719,8 @@ export const ja: Record<DictKey, string> = {
     '上下レイアウトでのみ有効です。アクションバーの空白をクリックして詳細を表示/非表示にします。',
   'settings.temporary-files-directory': '一時ファイルディレクトリ',
   'settings.temporary-files-directory-hint':
-    'ターミナルでバイナリを貼り付けたときに作成するファイルに使用します。空の場合は現在のプロジェクトの tmp フォルダを使用します。',
-  'settings.temporary-files-directory-placeholder': '現在のプロジェクトの tmp フォルダ',
+    'ターミナルでバイナリを貼り付けたときに作成するファイルに使用します。絶対パス、または現在のプロジェクトからの相対パス（例: tmp/cache）をサポートします。空の場合は現在のプロジェクトの tmp フォルダを使用します。',
+  'settings.temporary-files-directory-placeholder': 'tmp/cache または絶対パス',
   'settings.terminal-theme-sync': 'ターミナルをテーマに合わせる',
   'settings.terminal-theme-sync-hint':
     'オンにすると内蔵ターミナルが選択中のアプリテーマを使用します。オフにすると従来のターミナル配色を維持します。',
