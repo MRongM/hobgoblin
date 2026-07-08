@@ -163,8 +163,7 @@ const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
         ...(body.settings ?? {}),
       },
     }
-  }
-  else if (url.pathname === '/api/settings/external-apps') result = defaultRpcResult('externalApps.get')
+  } else if (url.pathname === '/api/settings/external-apps') result = defaultRpcResult('externalApps.get')
   return {
     ok: true,
     json: async () => result,
@@ -258,8 +257,8 @@ beforeEach(() => {
       write: vi.fn(),
       resize: vi.fn(),
       close: vi.fn(),
-          create: vi.fn(),
-          pruneTerminals: vi.fn(),
+      create: vi.fn(),
+      pruneTerminals: vi.fn(),
       notifyBell: vi.fn(),
       sendTestNotification,
       setBadge: vi.fn(),
@@ -530,7 +529,7 @@ describe('SettingsSurface', () => {
     if (!(input instanceof HTMLInputElement)) throw new Error('Missing temporary files directory input')
 
     await act(async () => {
-      setInputValue(input, '/Users/test/project/tmp')
+      setInputValue(input, 'tmp/cache')
       await Promise.resolve()
     })
 
@@ -539,7 +538,7 @@ describe('SettingsSurface', () => {
         const [url, options] = call as unknown as [unknown, RequestInit | undefined]
         if (new URL(String(url)).pathname !== '/api/settings/prefs') return false
         const body = JSON.parse(String(options?.body ?? '{}')) as { settings?: Record<string, unknown> }
-        return body.settings?.temporaryFilesDirectory === '/Users/test/project/tmp'
+        return body.settings?.temporaryFilesDirectory === 'tmp/cache'
       }),
     ).toBe(true)
   })

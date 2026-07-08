@@ -264,14 +264,29 @@ test('normalizes missing and invalid terminal theme sync values to enabled', asy
   })
 })
 
-test('normalizes invalid temporary file directories to the default project tmp mode', async () => {
+test('normalizes safe relative temporary file directories', async () => {
   tmp = mkdtempSync(path.join(os.tmpdir(), 'gbl-server-settings-'))
   previousDataDir = process.env.GOBLIN_SERVER_DATA_DIR
   process.env.GOBLIN_SERVER_DATA_DIR = tmp
 
   const mod = await import('#/server/modules/settings-source.ts')
   await mod.updateServerSettingsPrefs({
-    temporaryFilesDirectory: ' relative/tmp ',
+    temporaryFilesDirectory: ' tmp/cache ',
+  } as Parameters<typeof mod.updateServerSettingsPrefs>[0] & { temporaryFilesDirectory: string })
+
+  expect(await mod.getServerSettingsPrefs()).toMatchObject({
+    temporaryFilesDirectory: 'tmp/cache',
+  })
+})
+
+test('normalizes unsafe relative temporary file directories to the default project tmp mode', async () => {
+  tmp = mkdtempSync(path.join(os.tmpdir(), 'gbl-server-settings-'))
+  previousDataDir = process.env.GOBLIN_SERVER_DATA_DIR
+  process.env.GOBLIN_SERVER_DATA_DIR = tmp
+
+  const mod = await import('#/server/modules/settings-source.ts')
+  await mod.updateServerSettingsPrefs({
+    temporaryFilesDirectory: '../cache',
   } as Parameters<typeof mod.updateServerSettingsPrefs>[0] & { temporaryFilesDirectory: string })
 
   expect(await mod.getServerSettingsPrefs()).toMatchObject({
