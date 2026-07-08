@@ -75,6 +75,10 @@ export const zh: Record<DictKey, string> = {
   'repo-tabs.repos': '仓库',
   'repo-tabs.close': '关闭',
   'repo-tabs.close-named': '关闭 {name}',
+  'repo-tabs.close-confirm-title': '关闭项目？',
+  'repo-tabs.close-confirm-body':
+    '将在 Hobgoblin 中关闭 {name}。该项目正在运行的终端、端口转发和可取消的仓库操作都会停止。',
+  'repo-tabs.close-confirm-confirm': '关闭项目',
   'repo-tabs.more': '其他标签',
   'repo-tabs.drag-to-reorder': '拖动以重新排序',
   'repo-tabs.open-local': '打开本地仓库…',
