@@ -80,6 +80,7 @@ function CreateWorktreeAction({ repoId, compact }: Props & { compact: boolean })
       {
         kind: 'createWorktree',
         input: request.input,
+        worktreeBootstrap: { kind: 'skip' },
       },
       { token, refreshOnError: false },
     )

@@ -1,4 +1,5 @@
 import type { RepoSessionEntry } from '#/shared/remote-repo.ts'
+import type { RepoSettingsEntry } from '#/shared/repo-settings.ts'
 import type {
   RuntimeRecentReposState,
   RuntimeSettingsSnapshot,
@@ -58,6 +59,7 @@ export function buildSettingsSnapshot(input: {
   globalShortcutRegistered: boolean
   session: SessionState
   recentRepos: RepoSessionEntry[]
+  repoSettings: RepoSettingsEntry[]
 }): SettingsSnapshot {
   return {
     ...buildRuntimeSettingsSnapshot({
@@ -66,6 +68,7 @@ export function buildSettingsSnapshot(input: {
     }),
     ...buildRuntimeRecentReposState({ recentRepos: input.recentRepos }),
     session: input.session,
+    repoSettings: input.repoSettings,
   }
 }
 

@@ -40,6 +40,8 @@ import type {
 } from '#/shared/remote-repo.ts'
 import type { RepoQueryInvalidationEvent } from '#/shared/repo-query-invalidation.ts'
 import type { CreateWorktreeRpcInput } from '#/shared/worktree-create.ts'
+import type { RepoSettingsEntry } from '#/shared/repo-settings.ts'
+import type { WorktreeBootstrapPreviewResult } from '#/shared/worktree-bootstrap-summary.ts'
 import { NativeShellProjectionSchema, type NativeShellProjection } from '#/shared/native-shell-projection.ts'
 import { RemoteAbsolutePathSchema } from '#/shared/remote-repo-schema.ts'
 
@@ -68,6 +70,7 @@ export type {
   NativeSettingsProjectionState,
   NativeShellProjection,
 } from '#/shared/native-shell-projection.ts'
+export type { RepoSettingsEntry, WorktreeBootstrapTrust } from '#/shared/repo-settings.ts'
 
 export interface LanInfo {
   host: string
@@ -106,6 +109,7 @@ export interface RuntimeRecentReposState {
 
 export interface SettingsSnapshot extends RuntimeSettingsSnapshot, RuntimeRecentReposState {
   session: SessionState
+  repoSettings: RepoSettingsEntry[]
 }
 
 export interface GlobalShortcutState {
@@ -257,6 +261,7 @@ export interface AppRpcHandlers {
       alsoDeleteUpstream?: boolean
     }) => Promise<ExecResult>
     createWorktree: (input: CreateWorktreeRpcInput) => Promise<ExecResult>
+    worktreeBootstrapPreview: (input: { cwd: string }) => Promise<WorktreeBootstrapPreviewResult>
     remoteBranches: (input: { cwd: string }) => Promise<string[]>
     pull: (input: { cwd: string; branch: string; worktreePath?: string }) => Promise<ExecResult>
     push: (input: { cwd: string; branch: string }) => Promise<ExecResult>

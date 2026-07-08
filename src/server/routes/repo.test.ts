@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   replaceRepositoryFileTreeTextFile: vi.fn(),
   searchRepositoryFileTree: vi.fn(),
   exportRepositoryFilesToLocalDirectory: vi.fn(),
+  getRepositoryWorktreeBootstrapPreview: vi.fn(),
 }))
 
 vi.mock('#/server/modules/repo-read-paths.ts', () => ({
@@ -45,6 +46,7 @@ vi.mock('#/server/modules/repo-write-paths.ts', () => ({
   discardRepositoryChanges: mocks.discardRepositoryChanges,
   fetchRepository: vi.fn(),
   getRepositoryRemoteBranches: vi.fn(),
+  getRepositoryWorktreeBootstrapPreview: mocks.getRepositoryWorktreeBootstrapPreview,
   mergeRepositoryBranch: vi.fn(),
   moveRepositoryFileTreeEntries: vi.fn(),
   openRepositoryEditor: mocks.openRepositoryEditor,
@@ -125,6 +127,18 @@ describe('repo routes', () => {
       truncated: false,
       limit: 20,
     })
+    mocks.getRepositoryWorktreeBootstrapPreview.mockResolvedValue({
+      ok: true,
+      preview: {
+        hasConfig: false,
+        hasOperations: false,
+        configHash: null,
+        copyCount: 0,
+        symlinkCount: 0,
+        hardlinkCount: 0,
+        excludeCount: 0,
+      },
+    })
   })
 
   test('serves repository history with normalized body values', async () => {
@@ -153,6 +167,66 @@ describe('repo routes', () => {
       'feature/history',
       { limit: 200, skip: 0 },
       expect.any(AbortSignal),
+    )
+  })
+
+  test('serves worktree bootstrap preview', async () => {
+    mocks.getRepositoryWorktreeBootstrapPreview.mockResolvedValueOnce({
+      ok: true,
+      preview: {
+        hasConfig: true,
+        hasOperations: true,
+        configHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        copyCount: 1,
+        symlinkCount: 0,
+        hardlinkCount: 0,
+        excludeCount: 0,
+      },
+    })
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/worktree-bootstrap-preview', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cwd: '/tmp/repo' }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ ok: true, preview: { copyCount: 1 } })
+    expect(mocks.getRepositoryWorktreeBootstrapPreview).toHaveBeenCalledWith('/tmp/repo', expect.any(AbortSignal))
+  })
+
+  test('routes create worktree with bootstrap decision', async () => {
+    const { createRepositoryWorktree } = await import('#/server/modules/repo-write-paths.ts')
+    vi.mocked(createRepositoryWorktree).mockResolvedValueOnce({ ok: true, message: 'ok' })
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+    const worktreeBootstrap = {
+      kind: 'run',
+      configHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      configTrusted: true,
+    }
+
+    const response = await app.request('http://localhost/create-worktree', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        cwd: '/tmp/repo',
+        worktreePath: '/tmp/repo-feature',
+        mode: { kind: 'existingBranch', branch: 'feature/a' },
+        worktreeBootstrap,
+        sourceToken: 'repo_branch_test',
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(createRepositoryWorktree).toHaveBeenCalledWith(
+      '/tmp/repo',
+      { worktreePath: '/tmp/repo-feature', mode: { kind: 'existingBranch', branch: 'feature/a' } },
+      worktreeBootstrap,
+      expect.any(AbortSignal),
+      'repo_branch_test',
     )
   })
 

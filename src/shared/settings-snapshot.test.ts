@@ -7,6 +7,7 @@ import {
   runtimeRecentReposStateFromSettingsSnapshot,
   runtimeSettingsSnapshotFromSettingsSnapshot,
 } from '#/shared/settings-snapshot.ts'
+import { defaultSessionState, defaultSettingsPrefs, defaultSettingsSnapshot } from '#/shared/settings-defaults.ts'
 
 describe('settings snapshot partitions', () => {
   test('builds runtime settings without recent repo or restorable session fields', () => {
@@ -124,6 +125,7 @@ describe('settings snapshot partitions', () => {
       },
       globalShortcutRegistered: false,
       recentRepos: [{ kind: 'local', id: '/tmp/repo-b' }],
+      repoSettings: [],
       session: {
         openRepos: [{ kind: 'local', id: '/tmp/repo-b' }],
         activeRepo: '/tmp/repo-b',
@@ -166,5 +168,28 @@ describe('settings snapshot partitions', () => {
       detailPaneSizes: { 'top-bottom': 40, 'left-right': 50 },
       selectedTerminalByWorktree: { '/tmp/repo-b\0/tmp/repo-b': 'terminal-1' },
     })
+  })
+
+  test('settings snapshot builders preserve repo settings', () => {
+    const repoSettings = [
+      {
+        repoId: '/repo',
+        worktreeBootstrapTrust: {
+          configHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          trustedAt: '2026-07-08T00:00:00.000Z',
+        },
+      },
+    ]
+
+    const snapshot = buildSettingsSnapshot({
+      prefs: defaultSettingsPrefs(),
+      globalShortcutRegistered: false,
+      session: defaultSessionState(),
+      recentRepos: [],
+      repoSettings,
+    })
+
+    expect(snapshot.repoSettings).toEqual(repoSettings)
+    expect(defaultSettingsSnapshot().repoSettings).toEqual([])
   })
 })
