@@ -470,6 +470,7 @@ export const ja: Record<DictKey, string> = {
   'action.merge-label': 'マージするブランチ',
   'action.merge-placeholder': 'ブランチを選択',
   'action.merge-confirm': 'マージ',
+  'action.merge-and-push-confirm': 'マージしてプッシュ',
   'action.merge-conflict-ai-title': 'AI ハンドオフ',
   'action.merge-conflict-ai-codex': 'Codex',
   'action.merge-conflict-ai-claude': 'Claude',

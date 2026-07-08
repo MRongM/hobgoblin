@@ -470,6 +470,7 @@ export const en = {
   'action.merge-label': 'Branch to merge',
   'action.merge-placeholder': 'Pick a branch',
   'action.merge-confirm': 'Merge',
+  'action.merge-and-push-confirm': 'Merge and push',
   'action.merge-conflict-ai-title': 'AI handoff',
   'action.merge-conflict-ai-codex': 'Codex',
   'action.merge-conflict-ai-claude': 'Claude',
