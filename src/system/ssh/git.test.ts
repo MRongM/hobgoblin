@@ -6,6 +6,7 @@ import {
   createRemoteBranch,
   createRemoteFileTreeDirectory,
   createRemoteFileTreeFile,
+  createRemoteFileTreeTextFile,
   createRemoteTrackingBranch,
   createRemoteWorktree,
   deleteRemoteBranch,
@@ -354,6 +355,31 @@ describe('remote git helpers', () => {
       },
       TARGET,
       { signal: undefined },
+    )
+  })
+
+  test('createRemoteFileTreeTextFile sends content through stdin and passes fixed command input', async () => {
+    const run = vi.fn(async () => ({ ok: true, stdout: '{"ok":true,"message":""}', stderr: '' }))
+
+    const result = await createRemoteFileTreeTextFile(TARGET, '/srv/repo', '/srv/repo', 'goblin.toml', '[worktree]\n', {
+      run: run as any,
+    })
+
+    expect(result).toEqual({ ok: true, message: '' })
+    expect(run).toHaveBeenCalledWith(
+      {
+        type: 'createFileTreeTextFile',
+        worktreePath: '/srv/repo',
+        parentDirPath: '/srv/repo',
+        name: 'goblin.toml',
+      },
+      TARGET,
+      {
+        signal: undefined,
+        timeoutMs: 90_000,
+        stdin: Buffer.from('[worktree]\n', 'utf8').toString('base64'),
+        maxBuffer: expect.any(Number),
+      },
     )
   })
 

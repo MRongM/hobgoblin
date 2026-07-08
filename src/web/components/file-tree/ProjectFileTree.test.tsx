@@ -10,8 +10,11 @@ import { useReposStore } from '#/web/stores/repos/store.ts'
 import { createRepoBranch, resetReposStore } from '#/web/stores/repos/test-utils.ts'
 import { GOBLIN_FILE_PATHS_MIME, type RepoFileTreeResult } from '#/shared/file-tree.ts'
 import type { ExecResult } from '#/shared/git-types.ts'
+import type { WorktreeBootstrapPreviewResult } from '#/shared/worktree-bootstrap-summary.ts'
 
 type GetRepositoryFileTreeArgs = [repoId: string, worktreePath: string, dirPath: string, signal?: AbortSignal]
+type GetRepositoryWorktreeBootstrapPreviewArgs = [repoId: string, worktreePath: string, signal?: AbortSignal]
+type InitializeRepositoryWorktreeBootstrapConfigArgs = [repoId: string, worktreePath: string]
 type SearchRepositoryFileTreeArgs = [
   repoId: string,
   worktreePath: string,
@@ -79,6 +82,26 @@ const searchRepositoryFileTree = vi.fn(async (..._args: SearchRepositoryFileTree
   truncated: false,
   limit: 100,
 }))
+const getRepositoryWorktreeBootstrapPreview = vi.fn(
+  async (..._args: GetRepositoryWorktreeBootstrapPreviewArgs): Promise<WorktreeBootstrapPreviewResult> => ({
+    ok: true,
+    preview: {
+      hasConfig: true,
+      hasOperations: false,
+      configHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      copyCount: 0,
+      symlinkCount: 0,
+      hardlinkCount: 0,
+      excludeCount: 0,
+    },
+  }),
+)
+const initializeRepositoryWorktreeBootstrapConfig = vi.fn(
+  async (..._args: InitializeRepositoryWorktreeBootstrapConfigArgs): Promise<ExecResult> => ({
+    ok: true,
+    message: '',
+  }),
+)
 const openRepositoryEditor = vi.fn(async (_path: string): Promise<ExecResult> => ({ ok: true, message: '' }))
 const openRepositoryTerminal = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
 const openInFinder = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
@@ -111,6 +134,10 @@ vi.mock('#/web/repo-client.ts', () => ({
   deleteRepositoryFileTreeEntries: (...args: unknown[]) => deleteRepositoryFileTreeEntries(...args),
   moveRepositoryFileTreeEntries: (...args: unknown[]) => moveRepositoryFileTreeEntries(...args),
   searchRepositoryFileTree: (...args: SearchRepositoryFileTreeArgs) => searchRepositoryFileTree(...args),
+  getRepositoryWorktreeBootstrapPreview: (...args: GetRepositoryWorktreeBootstrapPreviewArgs) =>
+    getRepositoryWorktreeBootstrapPreview(...args),
+  initializeRepositoryWorktreeBootstrapConfig: (...args: InitializeRepositoryWorktreeBootstrapConfigArgs) =>
+    initializeRepositoryWorktreeBootstrapConfig(...args),
   openRepositoryEditor: (path: string) => openRepositoryEditor(path),
   openRepositoryTerminal: (path: string) => openRepositoryTerminal(path),
   transferRepositoryFiles: (input: unknown) => transferRepositoryFiles(input),
@@ -173,6 +200,21 @@ beforeEach(() => {
   readRepositoryFileTreeBinaryFile.mockClear()
   replaceRepositoryFileTreeBinaryFile.mockClear()
   searchRepositoryFileTree.mockClear()
+  getRepositoryWorktreeBootstrapPreview.mockClear()
+  getRepositoryWorktreeBootstrapPreview.mockResolvedValue({
+    ok: true,
+    preview: {
+      hasConfig: true,
+      hasOperations: false,
+      configHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      copyCount: 0,
+      symlinkCount: 0,
+      hardlinkCount: 0,
+      excludeCount: 0,
+    },
+  })
+  initializeRepositoryWorktreeBootstrapConfig.mockClear()
+  initializeRepositoryWorktreeBootstrapConfig.mockResolvedValue({ ok: true, message: '' })
   openRepositoryEditor.mockClear()
   openRepositoryTerminal.mockClear()
   openInFinder.mockClear()
@@ -402,6 +444,41 @@ describe('ProjectFileTree', () => {
       'file-tree.search-label',
     ])
     expect(toolbar.querySelector('input[aria-label="file-tree.search-label"]')).toBeNull()
+  })
+
+  test('initializes missing goblin.toml from the file tree toolbar', async () => {
+    getRepositoryWorktreeBootstrapPreview.mockResolvedValueOnce({
+      ok: true,
+      preview: {
+        hasConfig: false,
+        hasOperations: false,
+        configHash: null,
+        copyCount: 0,
+        symlinkCount: 0,
+        hardlinkCount: 0,
+        excludeCount: 0,
+      },
+    })
+    seedRepoWithSelectedBranch({ hasWorktree: true, worktreePath: '/repo-worktree' })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+    expect(getRepositoryWorktreeBootstrapPreview).toHaveBeenCalledWith('/repo', '/repo-worktree', expect.any(AbortSignal))
+
+    const initButton = fileTreeToolbar().querySelector<HTMLButtonElement>(
+      'button[aria-label="file-tree.init-worktree-bootstrap-config"]',
+    )
+    if (!initButton) throw new Error('missing goblin.toml init button')
+
+    getRepositoryFileTree.mockClear()
+    await act(async () => {
+      initButton.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(initializeRepositoryWorktreeBootstrapConfig).toHaveBeenCalledWith('/repo', '/repo-worktree')
+    expect(toastMocks.success).toHaveBeenCalledWith('file-tree.init-worktree-bootstrap-config-created')
+    expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo-worktree', '/repo-worktree', undefined)
   })
 
   test('collapses expanded file tree directories from the toolbar', async () => {
@@ -1480,10 +1557,12 @@ describe('ProjectFileTree', () => {
   })
 })
 
-function seedRepoWithSelectedBranch(options: { repoId?: string; hasWorktree: boolean }) {
+function seedRepoWithSelectedBranch(options: { repoId?: string; hasWorktree: boolean; worktreePath?: string }) {
   const repoId = options.repoId ?? '/repo'
   const repo = emptyRepo(repoId, 'repo')
-  repo.data.branches = [createRepoBranch('main', options.hasWorktree ? { worktree: { path: '/repo' } } : {})]
+  repo.data.branches = [
+    createRepoBranch('main', options.hasWorktree ? { worktree: { path: options.worktreePath ?? '/repo' } } : {}),
+  ]
   repo.data.currentBranch = 'main'
   repo.data.status = []
   repo.data.statusLoaded = true

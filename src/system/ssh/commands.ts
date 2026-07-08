@@ -28,6 +28,7 @@ export type RemoteCommandKind =
   | { type: 'searchFileTree'; worktreePath: string; query: string; limit: number }
   | { type: 'createFileTreeDirectory'; worktreePath: string; parentDirPath: string; name: string }
   | { type: 'createFileTreeFile'; worktreePath: string; parentDirPath: string; name: string }
+  | { type: 'createFileTreeTextFile'; worktreePath: string; parentDirPath: string; name: string }
   | { type: 'readFileTreeTextFile'; worktreePath: string; filePath: string }
   | { type: 'replaceFileTreeTextFile'; worktreePath: string; filePath: string }
   | { type: 'readFileTreeBinaryFile'; worktreePath: string; filePath: string; maxBytes: number }
@@ -259,6 +260,8 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return remoteCreateFileTreeDirectoryScript(command)
     case 'createFileTreeFile':
       return remoteCreateFileTreeFileScript(command)
+    case 'createFileTreeTextFile':
+      return remoteCreateFileTreeTextFileScript(command)
     case 'readFileTreeTextFile':
       return remoteReadFileTreeTextFileScript(command)
     case 'replaceFileTreeTextFile':
@@ -615,6 +618,49 @@ function remoteCreateFileTreeFileScript(command: Extract<RemoteCommandKind, { ty
     '    finish(False, "error.failed-read-repo")',
     'PY',
   ].join('\n')
+}
+
+function remoteCreateFileTreeTextFileScript(
+  command: Extract<RemoteCommandKind, { type: 'createFileTreeTextFile' }>,
+): string {
+  const script = [
+    ...remoteTextFilePreamble(command.worktreePath),
+    `parent_dir = ${pythonString(command.parentDirPath)}`,
+    `name = ${pythonString(command.name)}`,
+    'if not isinstance(parent_dir, str) or not parent_dir or "\\x00" in parent_dir:',
+    '    fail("error.invalid-arguments")',
+    'parent_dir = os.path.normpath(parent_dir)',
+    'if not os.path.isabs(parent_dir):',
+    '    fail("error.invalid-arguments")',
+    'if not inside_root(parent_dir):',
+    '    fail("error.invalid-path")',
+    'if not os.path.isdir(parent_dir):',
+    '    fail("error.path-not-directory")',
+    'if not isinstance(name, str) or not name or name in (".", "..") or "/" in name or "\\x00" in name:',
+    '    fail("error.invalid-arguments")',
+    'target = os.path.normpath(os.path.join(parent_dir, name))',
+    'if not inside_root(target):',
+    '    fail("error.invalid-path")',
+    'stdin_raw = sys.stdin.buffer.read()',
+    'try:',
+    '    next_raw = base64.b64decode(stdin_raw, validate=True)',
+    'except Exception:',
+    '    fail("error.invalid-arguments")',
+    'decode_text(next_raw)',
+    'try:',
+    '    with open(target, "xb") as handle:',
+    '        handle.write(next_raw)',
+    'except FileExistsError:',
+    '    fail("error.file-exists")',
+    'except FileNotFoundError:',
+    '    fail("error.path-not-found")',
+    'except PermissionError:',
+    '    fail("error.path-permission-denied")',
+    'except OSError:',
+    '    fail("error.failed-read-repo")',
+    'finish({"ok": True, "message": ""})',
+  ].join('\n')
+  return `python3 -c ${shellQuote(script)}`
 }
 
 function remoteTextFilePreamble(worktreePath: string): string[] {

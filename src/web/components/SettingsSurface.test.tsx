@@ -564,6 +564,22 @@ describe('SettingsSurface', () => {
     ).toBe(true)
   })
 
+  test('does not render the goblin.toml initializer in general settings', async () => {
+    useReposStore.setState({
+      repos: { '/repo-a': emptyRepo('/repo-a', 'Repo A') },
+      order: ['/repo-a'],
+      activeId: '/repo-a',
+    })
+
+    await render(<SettingsSurface page="general" onPageChange={() => {}} />)
+    await waitForText('settings.general.open-from-terminal-title')
+
+    expect(
+      fetchMock.mock.calls.some((call) => new URL(String((call as unknown as [unknown])[0])).pathname.startsWith('/api/repo/worktree-bootstrap')),
+    ).toBe(false)
+    expect(document.body.textContent).not.toContain('settings.worktree-bootstrap-config.label')
+  })
+
   test('edits chrome heights from general settings', async () => {
     await render(<SettingsSurface page="general" onPageChange={() => {}} />)
 

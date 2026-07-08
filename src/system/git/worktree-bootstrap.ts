@@ -65,6 +65,43 @@ const CONFIG_FILE = 'goblin.toml'
 const SETUP_TIMEOUT_MS = 10 * 60_000
 const WINDOWS_ROOTED_PATH_RE = /^(?:[A-Za-z]:|[\\/])/
 
+export const DEFAULT_WORKTREE_BOOTSTRAP_CONFIG = `# Configure worktree bootstrap for this repo.
+# Add [worktree] with copy, symlink, hardlink, exclude, and setup when needed.
+# Paths are repo-relative.
+#
+# Example:
+#   [worktree]
+#   copy = [".env.local"]
+#   symlink = ["config/*.json"]
+#   hardlink = ["build/cache.db"]
+#   exclude = ["*.log", "*.tmp"]
+#   setup = "bun install"
+
+[worktree]
+copy = [".env"]
+setup = "bun install"
+`
+
+export async function initializeWorktreeBootstrapConfig(
+  sourceCwd: string,
+  options?: { signal?: AbortSignal },
+): Promise<ExecResult> {
+  try {
+    if (options?.signal?.aborted) return { ok: false, message: 'cancelled' }
+    const sourceRepoRoot = await getRepoRoot(sourceCwd, { signal: options?.signal })
+    if (!sourceRepoRoot) return { ok: false, message: 'failed to resolve source repo root' }
+
+    await fs.writeFile(path.join(path.resolve(sourceRepoRoot), CONFIG_FILE), DEFAULT_WORKTREE_BOOTSTRAP_CONFIG, {
+      flag: 'wx',
+    })
+    return { ok: true, message: `${CONFIG_FILE} created` }
+  } catch (err) {
+    if (options?.signal?.aborted) return { ok: false, message: 'cancelled' }
+    if (isErrno(err, 'EEXIST')) return { ok: false, message: 'error.file-exists' }
+    return { ok: false, message: `failed to create ${CONFIG_FILE}: ${errorMessage(err)}` }
+  }
+}
+
 export async function bootstrapWorktreeAfterCreate(
   sourceCwd: string,
   targetWorktreePath: string,

@@ -34,6 +34,7 @@ import {
   fetchRepository,
   getRepositoryRemoteBranches,
   getRepositoryWorktreeBootstrapPreview,
+  initializeRepositoryWorktreeBootstrapConfig,
   initRepository,
   mergeRepositoryBranch,
   moveRepositoryFileTreeEntries,
@@ -137,11 +138,28 @@ export function createRepoRoutes() {
   app.post('/worktree-bootstrap-preview', async (c) => {
     const body = await c.req.json().catch(() => null)
     const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : undefined
     return c.json(
       await jsonOr(
-        () => getRepositoryWorktreeBootstrapPreview(cwd, c.req.raw.signal),
+        () =>
+          worktreePath === undefined
+            ? getRepositoryWorktreeBootstrapPreview(cwd, c.req.raw.signal)
+            : getRepositoryWorktreeBootstrapPreview(cwd, c.req.raw.signal, worktreePath),
         { ok: false, message: 'error.failed-read-repo' },
         'worktree-bootstrap-preview',
+      ),
+    )
+  })
+  app.post('/worktree-bootstrap-config/init', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => initializeRepositoryWorktreeBootstrapConfig(repoId, worktreePath, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'worktree-bootstrap-config-init',
       ),
     )
   })

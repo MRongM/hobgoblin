@@ -261,7 +261,8 @@ export interface AppRpcHandlers {
       alsoDeleteUpstream?: boolean
     }) => Promise<ExecResult>
     createWorktree: (input: CreateWorktreeRpcInput) => Promise<ExecResult>
-    worktreeBootstrapPreview: (input: { cwd: string }) => Promise<WorktreeBootstrapPreviewResult>
+    worktreeBootstrapPreview: (input: { cwd: string; worktreePath?: string }) => Promise<WorktreeBootstrapPreviewResult>
+    initializeWorktreeBootstrapConfig: (input: { repoId: string; worktreePath: string }) => Promise<ExecResult>
     remoteBranches: (input: { cwd: string }) => Promise<string[]>
     pull: (input: { cwd: string; branch: string; worktreePath?: string }) => Promise<ExecResult>
     push: (input: { cwd: string; branch: string }) => Promise<ExecResult>

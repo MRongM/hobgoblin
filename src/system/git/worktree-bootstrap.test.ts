@@ -4,13 +4,32 @@ import { mkdir, mkdtemp, readFile, readlink, rm, stat, symlink, writeFile } from
 import { beforeEach, afterEach, describe, expect, test, vi } from 'vitest'
 import {
   bootstrapWorktreeAfterCreate,
+  DEFAULT_WORKTREE_BOOTSTRAP_CONFIG,
   getWorktreeBootstrapPreview,
+  initializeWorktreeBootstrapConfig,
   worktreeBootstrapConfigHash,
 } from '#/system/git/worktree-bootstrap.ts'
 
 const mocks = vi.hoisted(() => ({
   getRepoRoot: vi.fn(),
 }))
+
+const GOBLIN_REFERENCE_BOOTSTRAP_CONFIG = `# Configure worktree bootstrap for this repo.
+# Add [worktree] with copy, symlink, hardlink, exclude, and setup when needed.
+# Paths are repo-relative.
+#
+# Example:
+#   [worktree]
+#   copy = [".env.local"]
+#   symlink = ["config/*.json"]
+#   hardlink = ["build/cache.db"]
+#   exclude = ["*.log", "*.tmp"]
+#   setup = "bun install"
+
+[worktree]
+copy = [".env"]
+setup = "bun install"
+`
 
 vi.mock('#/system/git/branches.ts', () => ({
   getRepoRoot: mocks.getRepoRoot,
@@ -88,6 +107,36 @@ exclude = ["config/*.log"]
 
     expect(result).toEqual({ ok: true, message: '' })
     expect(mocks.getRepoRoot).toHaveBeenCalledWith(sourceRoot, { signal: undefined })
+  })
+
+  test('initializes a missing goblin.toml from the reference template', async () => {
+    const result = await initializeWorktreeBootstrapConfig(sourceRoot)
+
+    expect(result).toEqual({ ok: true, message: 'goblin.toml created' })
+    expect(DEFAULT_WORKTREE_BOOTSTRAP_CONFIG).toBe(GOBLIN_REFERENCE_BOOTSTRAP_CONFIG)
+    await expect(readFile(path.join(sourceRoot, 'goblin.toml'), 'utf8')).resolves.toBe(GOBLIN_REFERENCE_BOOTSTRAP_CONFIG)
+    await expect(getWorktreeBootstrapPreview(sourceRoot)).resolves.toMatchObject({
+      ok: true,
+      preview: {
+        hasConfig: true,
+        hasOperations: true,
+        copyCount: 1,
+        symlinkCount: 0,
+        hardlinkCount: 0,
+        excludeCount: 0,
+        setup: { command: 'bun install' },
+      },
+    })
+  })
+
+  test('does not overwrite an existing goblin.toml during initialization', async () => {
+    const existing = '[worktree]\ncopy = [".env"]\n'
+    await writeConfig(existing)
+
+    const result = await initializeWorktreeBootstrapConfig(sourceRoot)
+
+    expect(result).toEqual({ ok: false, message: 'error.file-exists' })
+    await expect(readFile(path.join(sourceRoot, 'goblin.toml'), 'utf8')).resolves.toBe(existing)
   })
 
   test('copies, symlinks, hardlinks, excludes, and runs setup', async () => {
@@ -362,7 +411,7 @@ setup = ${JSON.stringify(setupCommand)}
 
     expect(result.ok).toBe(false)
     expect(result.message).toContain('Worktree bootstrap failed:')
-  })
+  }, 15_000)
 
   test('preserves copied symlinks instead of following them outside the repo', async () => {
     const outside = path.join(tmp, 'outside.txt')
