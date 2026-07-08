@@ -76,6 +76,10 @@ export const ko: Record<DictKey, string> = {
   'repo-tabs.repos': '리포지토리',
   'repo-tabs.close': '닫기',
   'repo-tabs.close-named': '{name} 닫기',
+  'repo-tabs.close-confirm-title': '프로젝트를 닫을까요?',
+  'repo-tabs.close-confirm-body':
+    'Hobgoblin 에서 {name} 을 닫습니다. 이 프로젝트의 실행 중인 터미널, 포트 포워딩, 취소 가능한 리포지토리 작업이 중지됩니다.',
+  'repo-tabs.close-confirm-confirm': '프로젝트 닫기',
   'repo-tabs.more': '더 많은 탭',
   'repo-tabs.drag-to-reorder': '드래그하여 순서 변경',
   'repo-tabs.open-local': '로컬 리포지토리 열기…',
@@ -703,8 +707,8 @@ export const ko: Record<DictKey, string> = {
     '상하 레이아웃에서만 작동합니다. 작업 막대 빈 공간을 클릭해 세부 정보를 표시하거나 숨깁니다.',
   'settings.temporary-files-directory': '임시 파일 디렉터리',
   'settings.temporary-files-directory-hint':
-    '터미널에서 바이너리를 붙여넣을 때 생성되는 파일에 사용합니다. 비워 두면 현재 프로젝트의 tmp 폴더를 사용합니다.',
-  'settings.temporary-files-directory-placeholder': '현재 프로젝트 tmp 폴더',
+    '터미널에서 바이너리를 붙여넣을 때 생성되는 파일에 사용합니다. 절대 경로 또는 현재 프로젝트 기준 상대 경로(예: tmp/cache)를 지원합니다. 비워 두면 현재 프로젝트의 tmp 폴더를 사용합니다.',
+  'settings.temporary-files-directory-placeholder': 'tmp/cache 또는 절대 경로',
   'settings.terminal-theme-sync': '터미널이 테마 따르기',
   'settings.terminal-theme-sync-hint':
     '켜면 내장 터미널이 선택한 앱 테마를 사용합니다. 끄면 클래식 터미널 팔레트를 유지합니다.',

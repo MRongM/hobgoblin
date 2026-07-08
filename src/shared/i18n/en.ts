@@ -83,6 +83,10 @@ export const en = {
   'repo-tabs.repos': 'Repositories',
   'repo-tabs.close': 'Close',
   'repo-tabs.close-named': 'Close {name}',
+  'repo-tabs.close-confirm-title': 'Close project?',
+  'repo-tabs.close-confirm-body':
+    'Close {name} in Hobgoblin. Running terminals, port forwards, and cancellable repository operations for this project will be stopped.',
+  'repo-tabs.close-confirm-confirm': 'Close project',
   'repo-tabs.more': 'More tabs',
   'repo-tabs.drag-to-reorder': 'Drag to reorder',
   'repo-tabs.open-local': 'Open local repository…',
@@ -713,8 +717,8 @@ export const en = {
     'Top/bottom layout only. Click empty action bar space to show or hide details.',
   'settings.temporary-files-directory': 'Temporary files directory',
   'settings.temporary-files-directory-hint':
-    'Used when terminal binary paste creates files. Leave empty to use the current project tmp folder.',
-  'settings.temporary-files-directory-placeholder': 'Current project tmp folder',
+    'Used when terminal binary paste creates files. Supports absolute paths or paths relative to the current project, such as tmp/cache. Leave empty to use the current project tmp folder.',
+  'settings.temporary-files-directory-placeholder': 'tmp/cache or absolute path',
   'settings.terminal-theme-sync': 'Terminal follows theme',
   'settings.terminal-theme-sync-hint':
     'When enabled, the embedded terminal uses the selected app theme. Turn it off to keep a classic terminal palette.',
