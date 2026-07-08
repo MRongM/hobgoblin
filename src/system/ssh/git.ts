@@ -494,6 +494,29 @@ export async function createRemoteFileTreeFile(
   return remoteFileTreeMutationResult(result)
 }
 
+export async function createRemoteFileTreeTextFile(
+  target: RemoteRepoTarget,
+  worktreePath: string,
+  parentDirPath: string,
+  name: string,
+  content: string,
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<ExecResult> {
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const result = await run(
+    { type: 'createFileTreeTextFile', worktreePath, parentDirPath, name },
+    target,
+    {
+      signal: options.signal,
+      timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS,
+      stdin: Buffer.from(content, 'utf8').toString('base64'),
+      maxBuffer: REMOTE_FILE_TRANSFER_MAX_BUFFER,
+    },
+  )
+  if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
+  return remoteFileTreeMutationResult(result)
+}
+
 export async function readRemoteFileTreeTextFile(
   target: RemoteRepoTarget,
   worktreePath: string,

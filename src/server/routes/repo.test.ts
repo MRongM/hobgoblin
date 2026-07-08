@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   searchRepositoryFileTree: vi.fn(),
   exportRepositoryFilesToLocalDirectory: vi.fn(),
   getRepositoryWorktreeBootstrapPreview: vi.fn(),
+  initializeRepositoryWorktreeBootstrapConfig: vi.fn(),
 }))
 
 vi.mock('#/server/modules/repo-read-paths.ts', () => ({
@@ -47,6 +48,7 @@ vi.mock('#/server/modules/repo-write-paths.ts', () => ({
   fetchRepository: vi.fn(),
   getRepositoryRemoteBranches: vi.fn(),
   getRepositoryWorktreeBootstrapPreview: mocks.getRepositoryWorktreeBootstrapPreview,
+  initializeRepositoryWorktreeBootstrapConfig: mocks.initializeRepositoryWorktreeBootstrapConfig,
   mergeRepositoryBranch: vi.fn(),
   moveRepositoryFileTreeEntries: vi.fn(),
   openRepositoryEditor: mocks.openRepositoryEditor,
@@ -139,6 +141,7 @@ describe('repo routes', () => {
         excludeCount: 0,
       },
     })
+    mocks.initializeRepositoryWorktreeBootstrapConfig.mockResolvedValue({ ok: true, message: 'goblin.toml created' })
   })
 
   test('serves repository history with normalized body values', async () => {
@@ -195,6 +198,45 @@ describe('repo routes', () => {
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({ ok: true, preview: { copyCount: 1 } })
     expect(mocks.getRepositoryWorktreeBootstrapPreview).toHaveBeenCalledWith('/tmp/repo', expect.any(AbortSignal))
+  })
+
+  test('serves worktree bootstrap preview for an explicit worktree path', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/worktree-bootstrap-preview', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cwd: '/tmp/repo', worktreePath: '/tmp/repo-feature' }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ ok: true })
+    expect(mocks.getRepositoryWorktreeBootstrapPreview).toHaveBeenCalledWith(
+      '/tmp/repo',
+      expect.any(AbortSignal),
+      '/tmp/repo-feature',
+    )
+  })
+
+  test('routes worktree bootstrap config initialization to an explicit worktree path', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/worktree-bootstrap-config/init', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ repoId: '/tmp/repo', worktreePath: '/tmp/repo-feature' }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true, message: 'goblin.toml created' })
+    expect(mocks.initializeRepositoryWorktreeBootstrapConfig).toHaveBeenCalledWith(
+      '/tmp/repo',
+      '/tmp/repo-feature',
+      expect.any(AbortSignal),
+      undefined,
+    )
   })
 
   test('routes create worktree with bootstrap decision', async () => {

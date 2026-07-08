@@ -22,7 +22,9 @@ import {
 import {
   createRemoteFileTreeDirectory,
   createRemoteFileTreeFile,
+  createRemoteFileTreeTextFile,
   deleteRemoteFileTreeEntries,
+  getRemoteWorktreeBootstrapPreview,
   moveRemoteFileTreeEntries,
   replaceRemoteFileTreeBinaryFile,
   renameRemoteFileTreeEntry,
@@ -35,13 +37,19 @@ import type { EditorOpenTarget } from '#/shared/file-path-target.ts'
 import type { RepoFileTreeBinaryFileReplaceResult, RepoFileTreeTextFileReplaceResult } from '#/shared/file-tree.ts'
 import { isRemoteRepoId, type NetworkOpKind } from '#/shared/rpc.ts'
 import { checkGitAvailable } from '#/system/git/helper.ts'
-import { isValidCwd, isValidRepoLocator } from '#/shared/input-validation.ts'
+import { isValidCwd, isValidRepoLocator, MAX_IPC_PATH_LENGTH } from '#/shared/input-validation.ts'
 import { type CloneRepoResult, type ProbeResult } from '#/shared/rpc.ts'
 import { constants as fsConstants, promises as fs } from 'node:fs'
+import path from 'node:path'
 import PQueue from 'p-queue'
 import { isAbsoluteWorktreePath, normalizeCreateWorktreeInput, type CreateWorktreeInput } from '#/shared/worktree-create.ts'
 import { isRepoWorktreeBootstrapConfigTrusted } from '#/shared/repo-settings.ts'
 import type { WorktreeBootstrapDecision, WorktreeBootstrapPreviewResult } from '#/shared/worktree-bootstrap-summary.ts'
+import {
+  DEFAULT_WORKTREE_BOOTSTRAP_CONFIG,
+  getWorktreeBootstrapPreview as getLocalWorktreeBootstrapPreview,
+  initializeWorktreeBootstrapConfig,
+} from '#/system/git/worktree-bootstrap.ts'
 
 type ProbeAvailability = { ok: true } | { ok: false; message: string }
 
@@ -125,6 +133,20 @@ function isValidCloneOperationId(value: unknown): value is string {
 
 function normalizeInvalidationSourceToken(value: unknown): string | undefined {
   return typeof value === 'string' && INVALIDATION_SOURCE_TOKEN_RE.test(value) ? value : undefined
+}
+
+function isValidRemoteWorktreePath(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= MAX_IPC_PATH_LENGTH &&
+    !value.includes('\0') &&
+    path.posix.isAbsolute(value)
+  )
+}
+
+function isValidRepositoryWorktreePath(repoId: string, worktreePath: unknown): worktreePath is string {
+  return isRemoteRepoId(repoId) ? isValidRemoteWorktreePath(worktreePath) : isValidCwd(worktreePath)
 }
 
 function repoSnapshotInvalidationEvent(cwd: string, sourceToken?: string) {
@@ -343,9 +365,54 @@ export async function createRepositoryWorktree(
 export async function getRepositoryWorktreeBootstrapPreview(
   cwd: string,
   signal?: AbortSignal,
+  worktreePath?: string,
 ): Promise<WorktreeBootstrapPreviewResult> {
   if (!isValidRepoLocator(cwd)) return { ok: false, message: 'error.invalid-arguments' }
+  if (worktreePath !== undefined) {
+    if (!isValidRepositoryWorktreePath(cwd, worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
+    if (isRemoteRepoId(cwd)) {
+      const target = await resolveRemoteRepoTarget(cwd)
+      return await getRemoteWorktreeBootstrapPreview(
+        { ...target, remotePath: path.posix.normalize(worktreePath) },
+        { signal },
+      )
+    }
+    return await getLocalWorktreeBootstrapPreview(worktreePath, { signal })
+  }
   return await runWithRepoBackend(cwd, async (backend) => await backend.getWorktreeBootstrapPreview(signal))
+}
+
+export async function initializeRepositoryWorktreeBootstrapConfig(
+  repoId: string,
+  worktreePath: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  if (!isValidRepoLocator(repoId)) return { ok: false, message: 'error.invalid-arguments' }
+  if (!isValidRepositoryWorktreePath(repoId, worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
+  const result = isRemoteRepoId(repoId)
+    ? await initializeRemoteWorktreeBootstrapConfig(repoId, worktreePath, signal)
+    : await initializeWorktreeBootstrapConfig(worktreePath, { signal })
+  if (result.ok) publishRepoSnapshotInvalidation(repoId, sourceToken)
+  return result
+}
+
+async function initializeRemoteWorktreeBootstrapConfig(
+  repoId: string,
+  worktreePath: string,
+  signal?: AbortSignal,
+): Promise<ExecResult> {
+  const target = await resolveRemoteRepoTarget(repoId)
+  const sourceRoot = path.posix.normalize(worktreePath)
+  const result = await createRemoteFileTreeTextFile(
+    target,
+    sourceRoot,
+    sourceRoot,
+    'goblin.toml',
+    DEFAULT_WORKTREE_BOOTSTRAP_CONFIG,
+    { signal },
+  )
+  return result.ok ? { ok: true, message: 'goblin.toml created' } : result
 }
 
 async function runCreateWorktreeServiceOperation<T>(repoId: string, task: () => Promise<T>): Promise<T> {

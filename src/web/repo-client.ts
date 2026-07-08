@@ -131,9 +131,19 @@ export async function createRepositoryWorktree(
 
 export async function getRepositoryWorktreeBootstrapPreview(
   cwd: string,
+  worktreePathOrSignal?: string | AbortSignal,
   signal?: AbortSignal,
 ): Promise<WorktreeBootstrapPreviewResult> {
-  return await postServerJson('/api/repo/worktree-bootstrap-preview', { cwd }, { signal })
+  const worktreePath = typeof worktreePathOrSignal === 'string' ? worktreePathOrSignal : undefined
+  const requestSignal = typeof worktreePathOrSignal === 'string' ? signal : worktreePathOrSignal
+  return await postServerJson('/api/repo/worktree-bootstrap-preview', { cwd, worktreePath }, { signal: requestSignal })
+}
+
+export async function initializeRepositoryWorktreeBootstrapConfig(
+  repoId: string,
+  worktreePath: string,
+): Promise<ExecResult> {
+  return await postServerJson('/api/repo/worktree-bootstrap-config/init', { repoId, worktreePath })
 }
 
 export async function createRepositoryBranch(

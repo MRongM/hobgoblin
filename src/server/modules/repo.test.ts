@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   createRemoteBranch: vi.fn(),
   createRemoteFileTreeDirectory: vi.fn(),
   createRemoteFileTreeFile: vi.fn(),
+  createRemoteFileTreeTextFile: vi.fn(),
   createRemoteTrackingBranch: vi.fn(),
   createTrackingBranch: vi.fn(),
   createWorktree: vi.fn(),
@@ -50,6 +51,7 @@ const mocks = vi.hoisted(() => ({
   fetchRemoteRepository: vi.fn(),
   getBackgroundSyncRepos: vi.fn(),
   getWorktreeBootstrapPreview: vi.fn(),
+  initializeWorktreeBootstrapConfig: vi.fn(),
   bootstrapWorktreeAfterCreate: vi.fn(),
   getRemoteWorktreeBootstrapPreview: vi.fn(),
   bootstrapRemoteWorktreeAfterCreate: vi.fn(),
@@ -182,7 +184,9 @@ vi.mock('#/system/git/worktrees.ts', () => ({
 }))
 
 vi.mock('#/system/git/worktree-bootstrap.ts', () => ({
+  DEFAULT_WORKTREE_BOOTSTRAP_CONFIG: '[worktree]\ncopy = [".env"]\nsetup = "bun install"\n',
   getWorktreeBootstrapPreview: mocks.getWorktreeBootstrapPreview,
+  initializeWorktreeBootstrapConfig: mocks.initializeWorktreeBootstrapConfig,
   bootstrapWorktreeAfterCreate: mocks.bootstrapWorktreeAfterCreate,
 }))
 
@@ -217,6 +221,7 @@ vi.mock('#/system/ssh/git.ts', () => ({
   createRemoteBranch: mocks.createRemoteBranch,
   createRemoteFileTreeDirectory: mocks.createRemoteFileTreeDirectory,
   createRemoteFileTreeFile: mocks.createRemoteFileTreeFile,
+  createRemoteFileTreeTextFile: mocks.createRemoteFileTreeTextFile,
   createRemoteTrackingBranch: mocks.createRemoteTrackingBranch,
   createRemoteWorktree: vi.fn(),
   deleteRemoteBranch: mocks.deleteRemoteBranch,
@@ -961,6 +966,45 @@ describe('repo mutation invalidation publishing', () => {
     await expect(getRepositoryWorktreeBootstrapPreview('/tmp/repo')).resolves.toMatchObject({
       ok: true,
       preview: { copyCount: 1 },
+    })
+  })
+
+  test('getRepositoryWorktreeBootstrapPreview reads an explicit local worktree path', async () => {
+    mocks.getWorktreeBootstrapPreview.mockResolvedValueOnce({
+      ok: true,
+      preview: {
+        hasConfig: true,
+        hasOperations: true,
+        configHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        copyCount: 1,
+        symlinkCount: 0,
+        hardlinkCount: 0,
+        excludeCount: 0,
+      },
+    })
+
+    const { getRepositoryWorktreeBootstrapPreview } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(getRepositoryWorktreeBootstrapPreview('/tmp/repo', undefined, '/tmp/repo-feature')).resolves.toMatchObject({
+      ok: true,
+      preview: { copyCount: 1 },
+    })
+    expect(mocks.getWorktreeBootstrapPreview).toHaveBeenCalledWith('/tmp/repo-feature', { signal: undefined })
+  })
+
+  test('initializeRepositoryWorktreeBootstrapConfig creates config in the explicit local worktree path', async () => {
+    mocks.initializeWorktreeBootstrapConfig.mockResolvedValueOnce({ ok: true, message: 'goblin.toml created' })
+
+    const { initializeRepositoryWorktreeBootstrapConfig } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(initializeRepositoryWorktreeBootstrapConfig('/tmp/repo', '/tmp/repo-feature')).resolves.toEqual({
+      ok: true,
+      message: 'goblin.toml created',
+    })
+    expect(mocks.initializeWorktreeBootstrapConfig).toHaveBeenCalledWith('/tmp/repo-feature', { signal: undefined })
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: '/tmp/repo',
+      query: 'repo-snapshot',
     })
   })
 
