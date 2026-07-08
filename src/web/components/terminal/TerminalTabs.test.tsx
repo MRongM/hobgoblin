@@ -107,18 +107,72 @@ describe('TerminalTabs', () => {
       />,
     )
 
-    const trigger = document.body.querySelector('button[aria-label="terminal.sessions"]')
-    if (!(trigger instanceof HTMLButtonElement)) throw new Error('missing terminal menu trigger')
-
-    await act(async () => {
-      trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
-      trigger.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }))
-      await Promise.resolve()
-    })
+    await openCompactTerminalDropdown()
 
     const selectedItem = [...document.body.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent?.includes('term-2'))
     expect(selectedItem?.getAttribute('aria-current')).toBe('true')
     expect(document.body.textContent).toContain('terminal.new')
+  })
+
+  test('requires confirmation before closing all compact dropdown terminals', async () => {
+    const onClose = vi.fn()
+
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        responsiveCompact
+        sessions={[
+          session({ key: 't1', selected: false, title: 'term-1' }),
+          session({ key: 't2', selected: true, title: 'term-2' }),
+          session({ key: 't3', selected: false, title: 'term-3' }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+
+    await openCompactTerminalDropdown()
+    clickElementByText('terminal.close-all')
+
+    expect(onClose).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('terminal.close-all-confirm-title')
+    expect(document.body.textContent).toContain('terminal.close-all-confirm-body')
+
+    clickElementByText('terminal.close-all-confirm-confirm')
+
+    expect(onClose.mock.calls).toEqual([['t1'], ['t2'], ['t3']])
+  })
+
+  test('cancels compact dropdown bulk close without closing terminals', async () => {
+    const onClose = vi.fn()
+
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        responsiveCompact
+        sessions={[
+          session({ key: 't1', selected: true, title: 'term-1' }),
+          session({ key: 't2', selected: false, title: 'term-2' }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+
+    await openCompactTerminalDropdown()
+    clickElementByText('terminal.close-all')
+    clickElementByText('dialog.cancel')
+
+    expect(onClose).not.toHaveBeenCalled()
+    expect(document.body.textContent).not.toContain('terminal.close-all-confirm-title')
   })
 
   test('focuses the selected terminal after scrolling it to bottom', () => {
@@ -757,6 +811,32 @@ function session(overrides: Partial<TerminalSessionSummary> = {}): TerminalSessi
     hasBell: false,
     ...overrides,
   }
+}
+
+async function openCompactTerminalDropdown() {
+  const trigger = document.body.querySelector('button[aria-label="terminal.sessions"]')
+  if (!(trigger instanceof HTMLButtonElement)) throw new Error('missing terminal menu trigger')
+
+  await act(async () => {
+    trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+    trigger.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }))
+    await Promise.resolve()
+  })
+}
+
+function elementByText(text: string): HTMLElement {
+  const element = [...document.body.querySelectorAll<HTMLElement>('button, [role="menuitem"]')].find((candidate) =>
+    candidate.textContent?.includes(text),
+  )
+  if (!(element instanceof HTMLElement)) throw new Error(`missing element: ${text}`)
+  return element
+}
+
+function clickElementByText(text: string) {
+  const element = elementByText(text)
+  act(() => {
+    element.click()
+  })
 }
 
 async function flushTimers() {

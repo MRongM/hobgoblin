@@ -80,6 +80,7 @@ export function TerminalTabs({
   const prevSessionCountRef = useRef(sessions.length)
   const newButtonRef = useRef<HTMLButtonElement>(null)
   const [pendingCloseKey, setPendingCloseKey] = useState<string | null>(null)
+  const [bulkCloseConfirmOpen, setBulkCloseConfirmOpen] = useState(false)
   const pendingCloseSession = sessions.find((session) => session.key === pendingCloseKey) ?? null
 
   useLayoutEffect(() => {
@@ -150,6 +151,13 @@ export function TerminalTabs({
       focusRegistry.focus(nextKey)
     }
   }, [focusRegistry, onClose, pendingCloseKey, sessions])
+
+  const confirmBulkClose = useCallback(() => {
+    setBulkCloseConfirmOpen(false)
+    for (const key of sessions.map((session) => session.key)) {
+      onClose(key)
+    }
+  }, [onClose, sessions])
 
   const handleTabKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLButtonElement>, sessionKey: string) => {
@@ -292,6 +300,11 @@ export function TerminalTabs({
               <Plus size={14} />
               {t('terminal.new')}
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="gap-2" variant="destructive" onSelect={() => setBulkCloseConfirmOpen(true)}>
+              <X size={14} />
+              {t('terminal.close-all')}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </ToolbarTabStripBody>
@@ -365,6 +378,15 @@ export function TerminalTabs({
         destructive
         onCancel={() => setPendingCloseKey(null)}
         onConfirm={confirmClose}
+      />
+      <ConfirmDialog
+        open={bulkCloseConfirmOpen}
+        title={t('terminal.close-all-confirm-title')}
+        message={t('terminal.close-all-confirm-body', { count: sessions.length })}
+        confirmLabel={t('terminal.close-all-confirm-confirm')}
+        destructive
+        onCancel={() => setBulkCloseConfirmOpen(false)}
+        onConfirm={confirmBulkClose}
       />
     </>
   )

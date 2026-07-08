@@ -121,6 +121,28 @@ describe('RepoTabStrip', () => {
     expect(tab?.querySelector('[data-terminal-output-activity-indicator="active"]')).not.toBeNull()
   })
 
+  test('uses a smaller terminal output activity effect on repo tabs', () => {
+    render(
+      <RepoTabStrip
+        repos={[repo('repo-a', '/tmp/repo-a', { worktreePaths: ['/tmp/repo-a'] })]}
+        activeId="/tmp/repo-a"
+        labels={labels}
+        onActivate={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+        onOpenLocal={() => {}}
+        onOpenRemote={() => {}}
+        onClone={() => {}}
+      />,
+      { outputActiveWorktreeKeys: ['/tmp/repo-a\0/tmp/repo-a'] },
+    )
+
+    const indicator = document.body.querySelector('[data-terminal-output-activity-indicator="active"]')
+    expect(indicator?.className).toContain('size-3')
+    expect(indicator?.querySelector('[data-terminal-output-activity-glow]')?.className).toContain('h-[120%]')
+    expect(indicator?.querySelector('[data-terminal-output-activity-ping]')?.className).toContain('h-[135%]')
+  })
+
   test('shows active terminal output and unread bell independently on a repo tab', () => {
     render(
       <RepoTabStrip

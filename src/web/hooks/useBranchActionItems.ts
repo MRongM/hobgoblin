@@ -8,6 +8,7 @@ import {
   GitPullRequest,
   RefreshCw,
   Trash2,
+  X,
 } from 'lucide-react'
 import { createElement, Fragment, type ReactNode } from 'react'
 import { GitHubOutlineIcon } from '#/web/components/GitHubOutlineIcon.tsx'
@@ -16,6 +17,7 @@ import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
+import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import { useBranchActions, type BranchActionItemId } from '#/web/hooks/useBranchActions.tsx'
 import { branchActionDisplayPhase, type BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 import { branchPullRequestBelongsToBranch } from '#/shared/git-types.ts'
@@ -24,6 +26,10 @@ import { useRuntimeExternalAppSettings } from '#/web/runtime-settings-external-a
 import { useBranchWriteActions } from '#/web/hooks/useBranchWriteActions.tsx'
 import { useRetainedDialogState } from '#/web/hooks/useRetainedDialogState.ts'
 import { CreateWorktreeDialog, type CreateWorktreeRequest } from '#/web/components/CreateWorktreeDialog.tsx'
+import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
+import { useWorktreeTerminalSnapshot } from '#/web/components/terminal/terminal-session-store.ts'
+import { useTerminalSessionContext } from '#/web/components/terminal/terminal-session-context.ts'
+import type { TerminalSessionBase } from '#/web/components/terminal/types.ts'
 export interface BranchActionItem {
   id: BranchActionItemId
   label: string
@@ -33,6 +39,7 @@ export interface BranchActionItem {
   busy?: boolean
   visible: boolean
   destructive?: boolean
+  menuOnly?: boolean
   shortcut?: string
   icon: ReactNode
   onSelect: () => void | Promise<void>
@@ -56,7 +63,9 @@ export function visibleBranchActionItems({
   BranchActionItemGroups,
   'patchItems' | 'mainItems' | 'externalItems' | 'destructiveItems'
 >): BranchActionItem[] {
-  return [...externalItems, ...mainItems, ...patchItems, ...destructiveItems].filter((item) => item.visible)
+  return [...externalItems, ...mainItems, ...patchItems, ...destructiveItems].filter(
+    (item) => item.visible && !item.menuOnly,
+  )
 }
 
 export function branchBrowserRemoteProvider(
@@ -91,6 +100,8 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
     onPush: actions.push,
   })
   const createWorktreeDialog = useRetainedDialogState<string>()
+  const closeAllTerminalsConfirm = useRetainedDialogState<string>()
+  const { closeTerminalAndDismissDetailIfLast } = useTerminalSessionContext()
   const disabled = blocked
   const busy = (id: BranchActionItemId) => busyAction === id
   const phase = branchActionDisplayPhase(repo, branch.name)
@@ -116,6 +127,11 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
   const isRemoteRepo = !!repo.remote.target
   const showTerminalAction = capabilities.canOpenTerminal && (isRemoteRepo || terminalAvailable)
   const terminalIconPref = isRemoteRepo ? 'auto' : (resolvedTerminalApp ?? terminalApp)
+  const terminalBase: TerminalSessionBase | null = branch.worktree?.path
+    ? { repoRoot: repo.id, branch: branch.name, worktreePath: branch.worktree.path }
+    : null
+  const terminalWorktreeKey = terminalBase ? worktreeTerminalKey(terminalBase.repoRoot, terminalBase.worktreePath) : null
+  const terminalSessions = useWorktreeTerminalSnapshot(terminalWorktreeKey).sessions
 
   function handleCreateWorktree(request: CreateWorktreeRequest): void {
     if (blocked) return
@@ -127,6 +143,19 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
       },
       { token: repo.instanceToken, refreshOnError: false },
     )
+  }
+
+  function requestCloseAllTerminals(): void {
+    if (disabled || !terminalBase || terminalSessions.length === 0) return
+    closeAllTerminalsConfirm.openWith(terminalBase.worktreePath)
+  }
+
+  function closeAllTerminals(): void {
+    if (!terminalBase) return
+    closeAllTerminalsConfirm.close()
+    for (const session of terminalSessions) {
+      closeTerminalAndDismissDetailIfLast(session.key, terminalBase)
+    }
   }
 
   async function handleSync(): Promise<void> {
@@ -239,6 +268,16 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
 
   const destructiveItems: BranchActionItem[] = [
     {
+      id: 'closeAllTerminals',
+      label: t('terminal.close-all'),
+      disabled: disabled || terminalSessions.length === 0,
+      visible: terminalSessions.length > 0,
+      destructive: true,
+      menuOnly: true,
+      icon: createElement(X),
+      onSelect: requestCloseAllTerminals,
+    },
+    {
       id: 'removeWorktree',
       label: branchActionLabel(
         'removeWorktree',
@@ -280,6 +319,15 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
       null,
       dialogs,
       writeActions.dialogs,
+      createElement(ConfirmDialog, {
+        open: closeAllTerminalsConfirm.open,
+        title: t('terminal.close-all-confirm-title'),
+        message: t('terminal.close-all-confirm-body', { count: terminalSessions.length }),
+        confirmLabel: t('terminal.close-all-confirm-confirm'),
+        destructive: true,
+        onCancel: closeAllTerminalsConfirm.close,
+        onConfirm: closeAllTerminals,
+      }),
       createElement(CreateWorktreeDialogConnected, {
         repoId: repo.id,
         defaultBranch: createWorktreeDialog.payload ?? undefined,
