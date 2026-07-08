@@ -1,6 +1,12 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { isValidAbsolutePath, toSafeRepoLocator, toSafeSessionRepoEntry } from '#/shared/input-validation.ts'
+import {
+  MAX_IPC_PATH_LENGTH,
+  isValidAbsolutePath,
+  toSafeRepoLocator,
+  toSafeSessionRepoEntry,
+} from '#/shared/input-validation.ts'
+import { safeRelativePath } from '#/shared/path-semantics.ts'
 import { serverDataFile } from '#/server/common/data-dir.ts'
 import type {
   EditorPref,
@@ -58,11 +64,7 @@ import {
   defaultSessionState,
   defaultSettingsPrefs,
 } from '#/shared/settings-defaults.ts'
-import {
-  DEFAULT_TOPBAR_HEIGHT_PX,
-  DEFAULT_TOOLBAR_HEIGHT_PX,
-  normalizeChromeHeightPx,
-} from '#/shared/window-chrome.ts'
+import { DEFAULT_TOPBAR_HEIGHT_PX, DEFAULT_TOOLBAR_HEIGHT_PX, normalizeChromeHeightPx } from '#/shared/window-chrome.ts'
 
 type FetchIntervalListener = (sec: number) => void
 interface ServerSettingsData {
@@ -188,7 +190,9 @@ function normalizeTerminalNotificationsEnabled(value: unknown): boolean {
 function normalizeTemporaryFilesDirectory(value: unknown): string {
   if (typeof value !== 'string') return ''
   const trimmed = value.trim()
-  return isValidAbsolutePath(trimmed) ? trimmed : ''
+  if (!trimmed || trimmed.length > MAX_IPC_PATH_LENGTH || trimmed.includes('\0')) return ''
+  if (isValidAbsolutePath(trimmed)) return trimmed
+  return safeRelativePath(trimmed) ?? ''
 }
 
 function normalizeTerminalThemeSyncEnabled(value: unknown): boolean {
@@ -440,8 +444,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   const nextLang = patch.lang === undefined ? data.lang : normalizeLangPref(patch.lang)
   const nextTheme = patch.theme === undefined ? data.theme : normalizeThemePref(patch.theme)
   const nextColorTheme = patch.colorTheme === undefined ? data.colorTheme : normalizeColorTheme(patch.colorTheme)
-  const nextFontFamily =
-    patch.fontFamily === undefined ? data.fontFamily : normalizeFontFamilyPref(patch.fontFamily)
+  const nextFontFamily = patch.fontFamily === undefined ? data.fontFamily : normalizeFontFamilyPref(patch.fontFamily)
   const nextFetchIntervalSec =
     patch.fetchIntervalSec === undefined ? data.fetchIntervalSec : normalizeFetchInterval(patch.fetchIntervalSec)
   const nextGitNetworkProxyEnabled =

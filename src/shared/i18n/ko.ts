@@ -692,8 +692,8 @@ export const ko: Record<DictKey, string> = {
     '상하 레이아웃에서만 작동합니다. 작업 막대 빈 공간을 클릭해 세부 정보를 표시하거나 숨깁니다.',
   'settings.temporary-files-directory': '임시 파일 디렉터리',
   'settings.temporary-files-directory-hint':
-    '터미널에서 바이너리를 붙여넣을 때 생성되는 파일에 사용합니다. 비워 두면 현재 프로젝트의 tmp 폴더를 사용합니다.',
-  'settings.temporary-files-directory-placeholder': '현재 프로젝트 tmp 폴더',
+    '터미널에서 바이너리를 붙여넣을 때 생성되는 파일에 사용합니다. 절대 경로 또는 현재 프로젝트 기준 상대 경로(예: tmp/cache)를 지원합니다. 비워 두면 현재 프로젝트의 tmp 폴더를 사용합니다.',
+  'settings.temporary-files-directory-placeholder': 'tmp/cache 또는 절대 경로',
   'settings.terminal-theme-sync': '터미널이 테마 따르기',
   'settings.terminal-theme-sync-hint':
     '켜면 내장 터미널이 선택한 앱 테마를 사용합니다. 끄면 클래식 터미널 팔레트를 유지합니다.',
