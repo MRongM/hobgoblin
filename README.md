@@ -44,6 +44,8 @@ Hobgoblin started from [Goblin](https://nano-props.github.io/goblin/), a small, 
 - **Drag from file tree to terminal:** Drag files from the file tree into the terminal to insert shell-safe paths without typing them manually.
 - **Double-click file tree files:** Double-click a file in the file tree to open that exact file in the configured editor.
 - **File-content clipboard shortcuts:** Use `Cmd+Shift+C` on macOS or `Ctrl+Shift+C` elsewhere to copy the focused file's text or image content to the system clipboard. Use `Cmd+Shift+V` / `Ctrl+Shift+V` to replace that focused file from supported clipboard text or image content.
+- **Worktree bootstrap config generation:** Initialize a missing `goblin.toml` from the file tree toolbar, then define repo-relative `copy`, `symlink`, `hardlink`, `exclude`, and `setup` rules for preparing new worktrees.
+- **Worktree dependency tracking:** Treat `goblin.toml` as the tracked dependency list for new worktrees. Hobgoblin previews the current config hash, stops bootstrap if the file changes after confirmation, and otherwise applies the configured env-file copies, dependency/cache links, and setup command for local and SSH remote repositories.
 - **Terminal tab jump:** Double-click the active terminal tab to scroll that terminal to the bottom.
 - **Terminal-to-file-tree navigation:** Click detected repository-relative paths in terminal output to reveal them in the file tree.
 - **Terminal path editor jump:** Double-click detected repository-relative paths in terminal output, including `path:line` and `path:line:column`, to open the configured editor at that file position.
