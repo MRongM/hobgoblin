@@ -8,7 +8,7 @@ import { Settings } from 'lucide-react'
 import { useT } from '#/web/stores/i18n.ts'
 import { Tip } from '#/web/components/Tip.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
-import { WINDOW_TOPBAR_HEIGHT_PX } from '#/shared/window-chrome.ts'
+import { useRuntimeChromeSettings } from '#/web/runtime-settings-chrome.ts'
 
 interface Props {
   onOpenSettings: () => void
@@ -18,11 +18,12 @@ interface Props {
 
 export function Topbar({ onOpenSettings, children, actions }: Props) {
   const t = useT()
+  const { topbarHeightPx } = useRuntimeChromeSettings()
 
   return (
     <div
       className="topbar relative flex items-center gap-2 overflow-hidden border-b border-topbar-border bg-topbar text-sm text-topbar-foreground"
-      style={{ height: WINDOW_TOPBAR_HEIGHT_PX }}
+      style={{ height: topbarHeightPx }}
     >
       {children}
       {actions && (

@@ -1,7 +1,6 @@
 import { FolderTree, List, type LucideIcon } from 'lucide-react'
 import { Tip } from '#/web/components/Tip.tsx'
-import { ToggleGroup, ToggleGroupItem } from '#/web/components/ui/toggle-group.tsx'
-import { segmentedItemClass } from '#/web/components/repo-toolbar/segmented-control.ts'
+import { Button } from '#/web/components/ui/button.tsx'
 import { useT } from '#/web/stores/i18n.ts'
 
 export type FileListViewMode = 'list' | 'tree'
@@ -11,38 +10,31 @@ const FILE_LIST_VIEW_OPTIONS: Array<{ id: FileListViewMode; labelKey: string; ic
   { id: 'tree', labelKey: 'file-list.view-tree', icon: FolderTree },
 ]
 
+const FILE_LIST_VIEW_OPTION_BY_ID = Object.fromEntries(
+  FILE_LIST_VIEW_OPTIONS.map((option) => [option.id, option]),
+) as Record<FileListViewMode, (typeof FILE_LIST_VIEW_OPTIONS)[number]>
+
 interface FileListViewModeControlProps {
   value: FileListViewMode
   onChange: (mode: FileListViewMode) => void
 }
 
+function nextFileListViewMode(value: FileListViewMode): FileListViewMode {
+  return value === 'tree' ? 'list' : 'tree'
+}
+
 export function FileListViewModeControl({ value, onChange }: FileListViewModeControlProps) {
   const t = useT()
+  const nextValue = nextFileListViewMode(value)
+  const CurrentIcon = FILE_LIST_VIEW_OPTION_BY_ID[value].icon
+  const label = t(FILE_LIST_VIEW_OPTION_BY_ID[nextValue].labelKey)
 
   return (
-    <ToggleGroup
-      type="single"
-      value={value}
-      onValueChange={(next) => {
-        if (next) onChange(next as FileListViewMode)
-      }}
-      aria-label={t('file-list.view-mode')}
-      variant="outline"
-      size="sm"
-      className="shrink-0"
-    >
-      {FILE_LIST_VIEW_OPTIONS.map((option) => {
-        const Icon = option.icon
-        const label = t(option.labelKey)
-        return (
-          <Tip key={option.id} label={label}>
-            <ToggleGroupItem value={option.id} aria-label={label} className={segmentedItemClass(option.id === value)}>
-              <Icon />
-            </ToggleGroupItem>
-          </Tip>
-        )
-      })}
-    </ToggleGroup>
+    <Tip label={label}>
+      <Button type="button" variant="outline" size="icon-sm" aria-label={label} onClick={() => onChange(nextValue)}>
+        <CurrentIcon />
+      </Button>
+    </Tip>
   )
 }
 

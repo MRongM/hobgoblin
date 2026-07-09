@@ -92,12 +92,81 @@ describe('RepoTabStrip', () => {
         onOpenRemote={() => {}}
         onClone={() => {}}
       />,
-      ['/tmp/repo-a\0/tmp/repo-a-feature'],
+      { bellWorktreeKeys: ['/tmp/repo-a\0/tmp/repo-a-feature'] },
     )
 
     const tab = document.body.querySelector('[data-repo-tab-id="/tmp/repo-a"]')
     expect(tab?.getAttribute('aria-label')).toContain('terminal.bell-unread')
     expect(tab?.querySelector('[aria-label="terminal.bell-unread"]')).not.toBeNull()
+  })
+
+  test('marks a repo tab when any repo worktree has active terminal output', () => {
+    render(
+      <RepoTabStrip
+        repos={[repo('repo-a', '/tmp/repo-a', { worktreePaths: ['/tmp/repo-a', '/tmp/repo-a-feature'] })]}
+        activeId="/tmp/repo-a"
+        labels={labels}
+        onActivate={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+        onOpenLocal={() => {}}
+        onOpenRemote={() => {}}
+        onClone={() => {}}
+      />,
+      { outputActiveWorktreeKeys: ['/tmp/repo-a\0/tmp/repo-a-feature'] },
+    )
+
+    const tab = document.body.querySelector('[data-repo-tab-id="/tmp/repo-a"]')
+    expect(tab?.getAttribute('aria-label')).toContain('terminal.output-active')
+    expect(tab?.querySelector('[data-terminal-output-activity-indicator="active"]')).not.toBeNull()
+  })
+
+  test('uses a smaller terminal output activity effect on repo tabs', () => {
+    render(
+      <RepoTabStrip
+        repos={[repo('repo-a', '/tmp/repo-a', { worktreePaths: ['/tmp/repo-a'] })]}
+        activeId="/tmp/repo-a"
+        labels={labels}
+        onActivate={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+        onOpenLocal={() => {}}
+        onOpenRemote={() => {}}
+        onClone={() => {}}
+      />,
+      { outputActiveWorktreeKeys: ['/tmp/repo-a\0/tmp/repo-a'] },
+    )
+
+    const indicator = document.body.querySelector('[data-terminal-output-activity-indicator="active"]')
+    expect(indicator?.className).toContain('size-3')
+    expect(indicator?.querySelector('[data-terminal-output-activity-glow]')?.className).toContain('h-[120%]')
+    expect(indicator?.querySelector('[data-terminal-output-activity-ping]')?.className).toContain('h-[135%]')
+  })
+
+  test('shows active terminal output and unread bell independently on a repo tab', () => {
+    render(
+      <RepoTabStrip
+        repos={[repo('repo-a', '/tmp/repo-a', { worktreePaths: ['/tmp/repo-a', '/tmp/repo-a-feature'] })]}
+        activeId="/tmp/repo-a"
+        labels={labels}
+        onActivate={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+        onOpenLocal={() => {}}
+        onOpenRemote={() => {}}
+        onClone={() => {}}
+      />,
+      {
+        bellWorktreeKeys: ['/tmp/repo-a\0/tmp/repo-a'],
+        outputActiveWorktreeKeys: ['/tmp/repo-a\0/tmp/repo-a-feature'],
+      },
+    )
+
+    const tab = document.body.querySelector('[data-repo-tab-id="/tmp/repo-a"]')
+    expect(tab?.getAttribute('aria-label')).toContain('terminal.bell-unread')
+    expect(tab?.getAttribute('aria-label')).toContain('terminal.output-active')
+    expect(tab?.querySelector('[aria-label="terminal.bell-unread"]')).not.toBeNull()
+    expect(tab?.querySelector('[data-terminal-output-activity-indicator="active"]')).not.toBeNull()
   })
 
   test('keeps the overflow menu trigger outside the tablist on small screens', () => {
@@ -207,12 +276,20 @@ describe('RepoTabStrip', () => {
   })
 })
 
-function render(element: React.ReactNode, bellWorktreeKeys: string[] = []) {
+function render(
+  element: React.ReactNode,
+  fixture: {
+    bellWorktreeKeys?: string[]
+    outputActiveWorktreeKeys?: string[]
+  } = {},
+) {
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
-  const bellKeys = new Set(bellWorktreeKeys)
-  const readContext = terminalReadContextWithBellKeys(bellKeys)
+  const readContext = terminalReadContextWithState(
+    new Set(fixture.bellWorktreeKeys ?? []),
+    new Set(fixture.outputActiveWorktreeKeys ?? []),
+  )
   act(() => {
     root!.render(
       <TerminalSessionReadContext.Provider value={readContext}>{element}</TerminalSessionReadContext.Provider>,
@@ -230,14 +307,18 @@ function repo(name: string, id: string, options: { worktreePaths?: string[]; isG
   } as RepoTabSummary
 }
 
-function terminalReadContextWithBellKeys(bellKeys: ReadonlySet<string>): TerminalSessionReadContextValue {
+function terminalReadContextWithState(
+  bellKeys: ReadonlySet<string>,
+  outputActiveKeys: ReadonlySet<string>,
+): TerminalSessionReadContextValue {
   return {
     worktreeSnapshot: (worktreeTerminalKey) => {
       const hasBell = bellKeys.has(worktreeTerminalKey)
+      const isOutputActive = outputActiveKeys.has(worktreeTerminalKey)
       return {
         worktreeTerminalKey,
         selectedDescriptor: null,
-        sessions: hasBell
+        sessions: hasBell || isOutputActive
           ? [
               {
                 key: `${worktreeTerminalKey}\0terminal-1`,
@@ -247,11 +328,12 @@ function terminalReadContextWithBellKeys(bellKeys: ReadonlySet<string>): Termina
                 title: 'terminal',
                 phase: 'open',
                 selected: true,
-                hasBell: true,
+                hasBell,
+                isOutputActive,
               },
             ]
           : [],
-        count: hasBell ? 1 : 0,
+        count: hasBell || isOutputActive ? 1 : 0,
       }
     },
     subscribeWorktree: () => () => {},

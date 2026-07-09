@@ -17,6 +17,7 @@ import {
   type TerminalControllerStatus,
   type TerminalCreateInput,
   type TerminalSessionSummary,
+  type TerminalWindowsPty,
 } from '#/shared/terminal.ts'
 
 interface EnsureTerminalCatalogInput {
@@ -47,6 +48,7 @@ type EnsureTerminalCatalogResult =
       canonicalRows: number
       phase: Extract<TerminalAttachResult, { ok: true }>['phase']
       message: string | null
+      windowsPty?: TerminalWindowsPty
     }
   | { ok: false; message: string }
 
@@ -148,6 +150,7 @@ class TerminalCatalog {
       canonicalRows: createResult.canonicalRows,
       phase: createResult.phase,
       message: createResult.message,
+      windowsPty: createResult.windowsPty,
       sessions,
     }
   }
@@ -330,6 +333,7 @@ function toEnsureResult(
     canonicalRows: snapshotResult.canonicalRows,
     phase: snapshotResult.phase,
     message: snapshotResult.message,
+    windowsPty: snapshotResult.windowsPty,
   }
 }
 

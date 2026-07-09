@@ -81,7 +81,6 @@ export function useBranchWriteActions(
     if (!worktreePath) return { ok: false, message: 'error.invalid-arguments' }
     const result = await mergeRepositoryBranch(repo.id, worktreePath, sourceBranch)
     setLastResult(repo.id, result, repo.instanceToken)
-    if (result.ok) mergeDialog.close()
     return result
   }
 
@@ -214,6 +213,7 @@ export function useBranchWriteActions(
         allBranches={allBranches}
         onClose={mergeDialog.close}
         onMerge={handleMerge}
+        onPush={options.canPush ? options.onPush : undefined}
       />
       <ConfirmDialog
         open={resetDialog.open}

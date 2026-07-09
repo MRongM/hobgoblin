@@ -10,6 +10,7 @@ import {
   isRepoFileTransferRequest,
   isValidFileTransferDestinationName,
   normalizeFileTreeSearchLimit,
+  sortRepoFileTreeEntries,
   sortRepoFileSearchMatches,
 } from '#/shared/file-tree.ts'
 
@@ -159,5 +160,23 @@ describe('file tree search contract', () => {
         { relativePath: 'src/Button.tsx', kind: 'file' },
       ]).map((match) => match.relativePath),
     ).toEqual(['docs/button-guide.md', 'src/Button.tsx', 'src/components/IconButton.tsx'])
+  })
+})
+
+describe('file tree entry sorting', () => {
+  test('groups directory symlinks with directories and file symlinks with files', () => {
+    expect(
+      sortRepoFileTreeEntries([
+        { name: 'z-dir', kind: 'directory' },
+        { name: 'b-file.txt', kind: 'file' },
+        { name: 'a-link-dir', kind: 'symlink', targetKind: 'directory' },
+        { name: 'a-link-file', kind: 'symlink', targetKind: 'file' },
+      ]).map((entry) => `${entry.kind}:${entry.targetKind ?? '-'}:${entry.name}`),
+    ).toEqual([
+      'symlink:directory:a-link-dir',
+      'directory:-:z-dir',
+      'symlink:file:a-link-file',
+      'file:-:b-file.txt',
+    ])
   })
 })

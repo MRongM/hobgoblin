@@ -12,6 +12,7 @@ import { useRuntimeExternalAppSettings } from '#/web/runtime-settings-external-a
 import { useRuntimeFetchSettings } from '#/web/runtime-settings-fetch.ts'
 import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 import { useRuntimeGeneralSettings } from '#/web/runtime-settings-general.ts'
+import { useRuntimeChromeSettings } from '#/web/runtime-settings-chrome.ts'
 import { useRuntimeLanSettings } from '#/web/runtime-settings-lan.ts'
 import { useRuntimeRecentRepos } from '#/web/settings-read-projection.ts'
 import { useRuntimeShortcutSettings } from '#/web/runtime-settings-shortcuts.ts'
@@ -125,6 +126,29 @@ describe('runtime settings hooks', () => {
     expect(result).toMatchObject({
       toggleDetailOnActionBarBlankClick: true,
       terminalThemeSyncEnabled: false,
+    })
+  })
+
+  test('reads chrome height runtime settings from the settings snapshot', async () => {
+    mainWindowQueryClient.setQueryData(
+      settingsSnapshotQueryKey(),
+      defaultSettingsSnapshot({
+        topbarHeightPx: 39,
+        toolbarHeightPx: 41,
+      }),
+    )
+    let result: ReturnType<typeof useRuntimeChromeSettings> | undefined
+
+    function HookHost() {
+      result = useRuntimeChromeSettings()
+      return null
+    }
+
+    await renderWithMainWindowQueryClient(<HookHost />)
+
+    expect(result).toEqual({
+      topbarHeightPx: 39,
+      toolbarHeightPx: 41,
     })
   })
 

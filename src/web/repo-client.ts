@@ -17,6 +17,7 @@ import type { CloneRepoResult, PullRequestEntry, RepoSnapshot } from '#/shared/r
 import type { CommitDetail, CommitHistoryEntry, ExecResult, PullRequestFetchMode, WorktreeStatus } from '#/shared/git-types.ts'
 import type { ProbeResult } from '#/shared/rpc.ts'
 import type { CreateWorktreeInput } from '#/shared/worktree-create.ts'
+import type { WorktreeBootstrapDecision, WorktreeBootstrapPreviewResult } from '#/shared/worktree-bootstrap-summary.ts'
 
 export async function probeRepository(cwd: string): Promise<ProbeResult> {
   return await postServerJson('/api/repo/probe', { cwd })
@@ -117,14 +118,32 @@ export async function pushRepositoryBranch(
 export async function createRepositoryWorktree(
   cwd: string,
   input: CreateWorktreeInput,
+  worktreeBootstrap: WorktreeBootstrapDecision,
   signal?: AbortSignal,
   sourceToken?: string,
 ): Promise<ExecResult> {
   return await postServerJson(
     '/api/repo/create-worktree',
-    { cwd, ...input, sourceToken },
+    { cwd, ...input, worktreeBootstrap, sourceToken },
     { signal },
   )
+}
+
+export async function getRepositoryWorktreeBootstrapPreview(
+  cwd: string,
+  worktreePathOrSignal?: string | AbortSignal,
+  signal?: AbortSignal,
+): Promise<WorktreeBootstrapPreviewResult> {
+  const worktreePath = typeof worktreePathOrSignal === 'string' ? worktreePathOrSignal : undefined
+  const requestSignal = typeof worktreePathOrSignal === 'string' ? signal : worktreePathOrSignal
+  return await postServerJson('/api/repo/worktree-bootstrap-preview', { cwd, worktreePath }, { signal: requestSignal })
+}
+
+export async function initializeRepositoryWorktreeBootstrapConfig(
+  repoId: string,
+  worktreePath: string,
+): Promise<ExecResult> {
+  return await postServerJson('/api/repo/worktree-bootstrap-config/init', { repoId, worktreePath })
 }
 
 export async function createRepositoryBranch(

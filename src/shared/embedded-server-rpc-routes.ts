@@ -11,6 +11,7 @@ export const EMBEDDED_SERVER_RPC_ROUTES = {
   'repo.deleteBranch': { route: '/api/repo/delete-branch', method: 'POST' },
   'repo.removeWorktree': { route: '/api/repo/remove-worktree', method: 'POST' },
   'repo.createWorktree': { route: '/api/repo/create-worktree', method: 'POST' },
+  'repo.worktreeBootstrapPreview': { route: '/api/repo/worktree-bootstrap-preview', method: 'POST' },
   'repo.pull': { route: '/api/repo/pull', method: 'POST' },
   'repo.push': { route: '/api/repo/push', method: 'POST' },
   'repo.fetch': { route: '/api/repo/fetch', method: 'POST' },

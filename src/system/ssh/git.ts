@@ -1,6 +1,7 @@
 import path from 'node:path'
 import {
   normalizeFileTreeSearchLimit,
+  sortRepoFileTreeEntries,
   type RepoFileSearchResult,
   type RepoFileTreeBinaryFileReadResult,
   type RepoFileTreeBinaryFileReplaceResult,
@@ -11,6 +12,12 @@ import {
 } from '#/shared/file-tree.ts'
 import { parseBranches, parseCommitFileChanges, parseCommitHistory, parseLog, parseStatus, parseWorktrees } from '#/system/git/parsers.ts'
 import { markDefaultBranch, prioritizeDefaultBranch } from '#/system/git/branches.ts'
+import {
+  parseBootstrapConfig,
+  validateBootstrapConfigPaths,
+  worktreeBootstrapConfigHash,
+  type WorktreeBootstrapConfig,
+} from '#/system/git/worktree-bootstrap.ts'
 import {
   getBrowserRemoteUrlForRemotes,
   getNewPullRequestUrlForRemotes,
@@ -41,6 +48,14 @@ import {
   type WorktreeInfo,
   type WorktreeStatus,
 } from '#/shared/git-types.ts'
+import {
+  compactWorktreeBootstrapPaths,
+  formatWorktreeBootstrapSummary,
+  hasWorktreeBootstrapSummaryDetails,
+  worktreeBootstrapPreviewFromConfig,
+  type WorktreeBootstrapPreviewResult,
+  type WorktreeBootstrapSummary,
+} from '#/shared/worktree-bootstrap-summary.ts'
 import { validateBranchDeletionPolicy, validateRemovableWorktreeState } from '#/shared/repo-action-policy.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import { isRemoteTrackingRef, parseRemoteTrackingRefs, type CreateWorktreeInput } from '#/shared/worktree-create.ts'
@@ -59,6 +74,7 @@ const REMOTE_BRANCH_OP_TIMEOUT_MS = 180_000
 const REMOTE_PATCH_TIMEOUT_MS = 90_000
 const REMOTE_FILE_TRANSFER_TIMEOUT_MS = 90_000
 const REMOTE_FILE_TRANSFER_MAX_BUFFER = 160 * 1024 * 1024
+const REMOTE_BOOTSTRAP_TIMEOUT_MS = 10 * 60_000
 
 export interface RemoteRepoSnapshot {
   branches: BranchSnapshotInfo[]
@@ -295,7 +311,7 @@ export async function listRemoteFileTreeDirectory(
         ...(entry.targetKind ? { targetKind: entry.targetKind } : {}),
       }
     })
-  return { ok: true, worktreePath: normalizedWorktree, dirPath: normalizedDir, entries: sortRemoteFileTreeEntries(entries) }
+  return { ok: true, worktreePath: normalizedWorktree, dirPath: normalizedDir, entries: sortRepoFileTreeEntries(entries) }
 }
 
 export async function searchRemoteFileTree(
@@ -474,6 +490,29 @@ export async function createRemoteFileTreeFile(
     { type: 'createFileTreeFile', worktreePath, parentDirPath, name },
     target,
     { signal: options.signal },
+  )
+  if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
+  return remoteFileTreeMutationResult(result)
+}
+
+export async function createRemoteFileTreeTextFile(
+  target: RemoteRepoTarget,
+  worktreePath: string,
+  parentDirPath: string,
+  name: string,
+  content: string,
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<ExecResult> {
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const result = await run(
+    { type: 'createFileTreeTextFile', worktreePath, parentDirPath, name },
+    target,
+    {
+      signal: options.signal,
+      timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS,
+      stdin: Buffer.from(content, 'utf8').toString('base64'),
+      maxBuffer: REMOTE_FILE_TRANSFER_MAX_BUFFER,
+    },
   )
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
   return remoteFileTreeMutationResult(result)
@@ -962,6 +1001,132 @@ export async function getRemoteBrowserUrl(
     : getBrowserRemoteUrlForRemotes(remoteInfo.remotes, upstream)
 }
 
+type RemoteWorktreeBootstrapConfigLoadResult =
+  | { ok: true; value: { sourceRoot: string; config?: WorktreeBootstrapConfig; configHash?: string } }
+  | { ok: false; message: string }
+
+async function loadRemoteWorktreeBootstrapConfig(
+  target: RemoteRepoTarget,
+  options: { signal?: AbortSignal; run: RemoteGitRunner },
+): Promise<RemoteWorktreeBootstrapConfigLoadResult> {
+  const sourceRoot = path.posix.normalize(target.remotePath)
+  const readResult = await readRemoteFileTreeTextFile(
+    target,
+    sourceRoot,
+    path.posix.join(sourceRoot, 'goblin.toml'),
+    { signal: options.signal, run: options.run },
+  )
+  if (!readResult.ok) {
+    if (readResult.message === 'cancelled') return { ok: false, message: 'cancelled' }
+    if (readResult.message === 'error.path-not-found') return { ok: true, value: { sourceRoot } }
+    return { ok: false, message: readResult.message || 'error.failed-read-repo' }
+  }
+
+  const raw = readResult.content
+  if (!raw.trim()) return { ok: true, value: { sourceRoot } }
+
+  const loaded = parseBootstrapConfig(raw)
+  if (loaded.kind === 'error') return { ok: false, message: loaded.message }
+  if (loaded.kind === 'none') return { ok: true, value: { sourceRoot } }
+  const validPaths = validateBootstrapConfigPaths(loaded.config)
+  if (!validPaths.ok) return { ok: false, message: validPaths.message }
+  return { ok: true, value: { sourceRoot, config: loaded.config, configHash: worktreeBootstrapConfigHash(raw) } }
+}
+
+export async function getRemoteWorktreeBootstrapPreview(
+  target: RemoteRepoTarget,
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<WorktreeBootstrapPreviewResult> {
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const loaded = await loadRemoteWorktreeBootstrapConfig(target, { signal: options.signal, run })
+  if (!loaded.ok) return { ok: false, message: `Worktree bootstrap failed: ${loaded.message}` }
+  return { ok: true, preview: worktreeBootstrapPreviewFromConfig(loaded.value.config, loaded.value.configHash) }
+}
+
+export async function bootstrapRemoteWorktreeAfterCreate(
+  target: RemoteRepoTarget,
+  worktreePath: string,
+  options: { signal?: AbortSignal; run?: RemoteGitRunner; expectedConfigHash?: string } = {},
+): Promise<ExecResult> {
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const loaded = await loadRemoteWorktreeBootstrapConfig(target, { signal: options.signal, run })
+  if (!loaded.ok) return { ok: false, message: `Worktree bootstrap failed: ${loaded.message}` }
+  if (!loaded.value.config) {
+    if (options.expectedConfigHash) {
+      return { ok: false, message: 'Worktree bootstrap failed: goblin.toml changed after confirmation' }
+    }
+    return { ok: true, message: '' }
+  }
+  if (options.expectedConfigHash && loaded.value.configHash !== options.expectedConfigHash) {
+    return { ok: false, message: 'Worktree bootstrap failed: goblin.toml changed after confirmation' }
+  }
+
+  const bootstrapResult = await run(
+    {
+      type: 'bootstrapRemoteWorktree',
+      sourceRoot: loaded.value.sourceRoot,
+      targetRoot: worktreePath,
+      copy: loaded.value.config.copy,
+      symlink: loaded.value.config.symlink,
+      hardlink: loaded.value.config.hardlink,
+      exclude: loaded.value.config.exclude,
+      setup: loaded.value.config.setup,
+    },
+    target,
+    { signal: options.signal, timeoutMs: REMOTE_BOOTSTRAP_TIMEOUT_MS },
+  )
+  if (bootstrapResult.message === 'cancelled') return { ok: false, message: 'cancelled' }
+  if (!bootstrapResult.ok) {
+    return {
+      ok: false,
+      message: `Worktree bootstrap failed: ${bootstrapResult.message || bootstrapResult.stderr || 'error.failed-read-repo'}`,
+    }
+  }
+
+  const summary = remoteBootstrapSummaryFromOutput(bootstrapResult.stdout)
+  return {
+    ok: true,
+    message: formatWorktreeBootstrapSummary(summary),
+    ...(hasWorktreeBootstrapSummaryDetails(summary) ? { worktreeBootstrap: summary } : {}),
+  }
+}
+
+function remoteBootstrapSummaryFromOutput(stdout: string): WorktreeBootstrapSummary {
+  const copy: string[] = []
+  const symlink: string[] = []
+  const hardlink: string[] = []
+  const missing: string[] = []
+  let setup: string | undefined
+  for (const line of stdout.split('\n')) {
+    const [marker, ...rest] = line.split(' ')
+    const value = rest.join(' ')
+    switch (marker) {
+      case 'GOBLIN_BOOTSTRAP_COPY':
+        copy.push(value)
+        break
+      case 'GOBLIN_BOOTSTRAP_SYMLINK':
+        symlink.push(value)
+        break
+      case 'GOBLIN_BOOTSTRAP_HARDLINK':
+        hardlink.push(value)
+        break
+      case 'GOBLIN_BOOTSTRAP_MISSING':
+        missing.push(value)
+        break
+      case 'GOBLIN_BOOTSTRAP_SETUP':
+        setup = value
+        break
+    }
+  }
+  return {
+    copy: compactWorktreeBootstrapPaths(copy),
+    symlink: compactWorktreeBootstrapPaths(symlink),
+    hardlink: compactWorktreeBootstrapPaths(hardlink),
+    skippedMissing: compactWorktreeBootstrapPaths(missing),
+    ...(setup ? { setup: { command: setup } } : {}),
+  }
+}
+
 export function parseRemoteSnapshot(output: string, worktrees: WorktreeInfo[] = []): RemoteRepoSnapshot | null {
   const sections = splitSnapshotSections(output)
   if (!sections) return null
@@ -1292,15 +1457,6 @@ function parseRemoteTransferInventory(output: string): RemoteTransferInventoryRe
 
 function remoteRelativePath(worktreePath: string, absolutePath: string): string {
   return path.posix.relative(path.posix.normalize(worktreePath), path.posix.normalize(absolutePath))
-}
-
-function sortRemoteFileTreeEntries(entries: RepoFileTreeEntry[]): RepoFileTreeEntry[] {
-  return entries.sort((a, b) => {
-    const aDirectory = a.kind === 'directory'
-    const bDirectory = b.kind === 'directory'
-    if (aDirectory !== bDirectory) return aDirectory ? -1 : 1
-    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
-  })
 }
 
 function isValidRemotePath(value: string): boolean {

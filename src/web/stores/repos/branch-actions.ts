@@ -239,7 +239,7 @@ function runBranchActionRpc(
     case 'push':
       return pushRepositoryBranch(repoId, action.branch, signal, sourceToken)
     case 'createWorktree':
-      return createRepositoryWorktree(repoId, action.input, signal, sourceToken)
+      return createRepositoryWorktree(repoId, action.input, action.worktreeBootstrap, signal, sourceToken)
     case 'createBranch':
       return createRepositoryBranch(repoId, action.branch, action.baseBranch, signal, sourceToken)
     case 'trackRemoteBranch':

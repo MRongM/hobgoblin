@@ -14,6 +14,7 @@ export interface NativeSettingsProjectionPatch {
   shortcutsDisabled?: SettingsPrefs['shortcutsDisabled']
   globalShortcutDisabled?: SettingsPrefs['globalShortcutDisabled']
   swapCloseShortcuts?: SettingsPrefs['swapCloseShortcuts']
+  topbarHeightPx?: SettingsPrefs['topbarHeightPx']
 }
 
 export interface NativeSettingsProjectionState {
@@ -24,6 +25,7 @@ export interface NativeSettingsProjectionState {
   globalShortcutDisabled: SettingsPrefs['globalShortcutDisabled']
   swapCloseShortcuts: SettingsPrefs['swapCloseShortcuts']
   globalShortcut: SettingsPrefs['globalShortcut']
+  topbarHeightPx: SettingsPrefs['topbarHeightPx']
 }
 
 export interface NativeRecentReposProjection {
@@ -45,6 +47,7 @@ export const NATIVE_SETTINGS_PROJECTION_KEYS = [
   'shortcutsDisabled',
   'globalShortcutDisabled',
   'swapCloseShortcuts',
+  'topbarHeightPx',
 ] as const
 
 export const NativeSettingsProjectionPatchSchema = v.object({
@@ -54,6 +57,7 @@ export const NativeSettingsProjectionPatchSchema = v.object({
   shortcutsDisabled: v.optional(v.boolean()),
   globalShortcutDisabled: v.optional(v.boolean()),
   swapCloseShortcuts: v.optional(v.boolean()),
+  topbarHeightPx: v.optional(v.number()),
 })
 
 export const NativeSettingsProjectionStateSchema = v.object({
@@ -64,6 +68,7 @@ export const NativeSettingsProjectionStateSchema = v.object({
   globalShortcutDisabled: v.boolean(),
   swapCloseShortcuts: v.boolean(),
   globalShortcut: v.string(),
+  topbarHeightPx: v.number(),
 })
 
 export const NativeRecentReposProjectionSchema = v.object({
@@ -91,6 +96,7 @@ export function pickNativeSettingsProjectionPatch(settings: Partial<SettingsPref
   if (settings.shortcutsDisabled !== undefined) patch.shortcutsDisabled = settings.shortcutsDisabled
   if (settings.globalShortcutDisabled !== undefined) patch.globalShortcutDisabled = settings.globalShortcutDisabled
   if (settings.swapCloseShortcuts !== undefined) patch.swapCloseShortcuts = settings.swapCloseShortcuts
+  if (settings.topbarHeightPx !== undefined) patch.topbarHeightPx = settings.topbarHeightPx
   return NATIVE_SETTINGS_PROJECTION_KEYS.some((key) => patch[key] !== undefined) ? patch : null
 }
 
@@ -103,5 +109,6 @@ export function nativeSettingsProjectionStateFromSettings(settings: SettingsPref
     globalShortcutDisabled: settings.globalShortcutDisabled,
     swapCloseShortcuts: settings.swapCloseShortcuts,
     globalShortcut: settings.globalShortcut,
+    topbarHeightPx: settings.topbarHeightPx,
   }
 }

@@ -8,6 +8,17 @@ import { normalizeRemoteTarget } from '#/shared/remote-repo.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { InlineCommitDraftProvider } from '#/web/components/branch-list/InlineCommitDraftProvider.tsx'
+import {
+  TerminalSessionContext,
+  TerminalSessionReadContext,
+} from '#/web/components/terminal/terminal-session-context.ts'
+import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
+import type {
+  TerminalSessionContextValue,
+  TerminalSessionReadContextValue,
+  TerminalSessionSummary,
+  WorktreeTerminalSnapshot,
+} from '#/web/components/terminal/types.ts'
 import type { useBranchActionItems } from '#/web/hooks/useBranchActionItems.ts'
 
 const mocks = vi.hoisted(() => ({
@@ -17,13 +28,22 @@ const mocks = vi.hoisted(() => ({
 
 const repoClientMocks = vi.hoisted(() => ({
   getCommitMessageProviders: vi.fn(),
+  getRepositoryWorktreeBootstrapPreview: vi.fn(),
   generateRepositoryCommitMessage: vi.fn(),
   commitRepositoryChanges: vi.fn(),
+}))
+
+const settingsQueryMocks = vi.hoisted(() => ({
+  useSettingsSnapshotQuery: vi.fn(),
 }))
 
 let container: HTMLDivElement
 let root: Root | null = null
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+let terminalSnapshotsByWorktree: Map<string, WorktreeTerminalSnapshot>
+let closeTerminalAndDismissDetailIfLast: ReturnType<
+  typeof vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>
+>
 
 vi.mock('#/web/runtime-settings-hooks.ts', () => ({
   useRuntimeExternalAppSettings: mocks.useRuntimeExternalAppSettings,
@@ -42,10 +62,14 @@ vi.mock('#/web/repo-client.ts', async () => {
   return {
     ...actual,
     getCommitMessageProviders: repoClientMocks.getCommitMessageProviders,
+    getRepositoryWorktreeBootstrapPreview: repoClientMocks.getRepositoryWorktreeBootstrapPreview,
     generateRepositoryCommitMessage: repoClientMocks.generateRepositoryCommitMessage,
     commitRepositoryChanges: repoClientMocks.commitRepositoryChanges,
   }
 })
+vi.mock('#/web/settings-queries.ts', () => ({
+  useSettingsSnapshotQuery: settingsQueryMocks.useSettingsSnapshotQuery,
+}))
 
 describe('useBranchActionItems', () => {
   beforeEach(() => {
@@ -90,11 +114,30 @@ describe('useBranchActionItems', () => {
       dialogs: null,
     })
     repoClientMocks.getCommitMessageProviders.mockResolvedValue({ codex: false, claude: false })
+    repoClientMocks.getRepositoryWorktreeBootstrapPreview.mockResolvedValue({
+      ok: true,
+      preview: {
+        hasConfig: false,
+        hasOperations: false,
+        configHash: null,
+        copyCount: 0,
+        symlinkCount: 0,
+        hardlinkCount: 0,
+        excludeCount: 0,
+      },
+    })
+    settingsQueryMocks.useSettingsSnapshotQuery.mockReturnValue({
+      data: { repoSettings: [] },
+      isLoading: false,
+    })
     repoClientMocks.generateRepositoryCommitMessage.mockResolvedValue({ ok: true, message: 'feat: generated message' })
     repoClientMocks.commitRepositoryChanges.mockResolvedValue({
       ok: true,
       message: '[feature/commit abc1234] feat: inline commit',
     })
+    terminalSnapshotsByWorktree = new Map()
+    closeTerminalAndDismissDetailIfLast =
+      vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>()
   })
 
   afterEach(async () => {
@@ -388,6 +431,77 @@ describe('useBranchActionItems', () => {
     expect(groups.destructiveItems.find((item) => item.id === 'resetHard')?.label).toBe('action.reset-hard')
   })
 
+  test('shows close all terminals before remove worktree and confirms before closing them', async () => {
+    mocks.useBranchActions.mockReturnValue({
+      blocked: false,
+      busyAction: null,
+      capabilities: {
+        isCurrent: false,
+        checkedOutInAnotherWorktree: true,
+        canRemoveWorktree: true,
+        isRegularBranch: false,
+        canCopyPatch: false,
+        canPull: false,
+        canPush: false,
+        canOpenRemote: false,
+        canOpenTerminal: true,
+        canOpenEditor: true,
+      },
+      actions: {
+        copyPatch: vi.fn(),
+        checkout: vi.fn(),
+        pull: vi.fn(),
+        push: vi.fn(),
+        openTerminal: vi.fn(),
+        openEditor: vi.fn(),
+        openRemote: vi.fn(),
+        requestDeleteBranch: vi.fn(),
+        requestRemoveWorktree: vi.fn(),
+      },
+      dialogs: null,
+    })
+    const branch = createRepoBranch('feature/terminals', { worktree: { path: '/tmp/repo-feature' } })
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      branches: [branch],
+    })
+    const terminalWorktreeKey = worktreeTerminalKey(repo.id, '/tmp/repo-feature')
+    setTerminalSessions(terminalWorktreeKey, [
+      terminalSession({ key: 't1', worktreeTerminalKey: terminalWorktreeKey }),
+      terminalSession({ key: 't2', worktreeTerminalKey: terminalWorktreeKey }),
+    ])
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.ts')
+    const groups = await renderItemGroups(useItems, repo, branch)
+    const destructiveItems = groups.destructiveItems.filter((item) => item.visible)
+    const closeAllTerminals = destructiveItems.find((item) => item.id === 'closeAllTerminals')
+
+    expect(destructiveItems.map((item) => item.id)).toEqual([
+      'closeAllTerminals',
+      'removeWorktree',
+      'deleteBranch',
+      'resetHard',
+    ])
+    expect(closeAllTerminals?.label).toBe('terminal.close-all')
+    expect(closeAllTerminals?.destructive).toBe(true)
+    expect(closeAllTerminals?.disabled).toBe(false)
+
+    await act(async () => {
+      await closeAllTerminals?.onSelect()
+    })
+
+    expect(closeTerminalAndDismissDetailIfLast).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('terminal.close-all-confirm-title')
+    expect(document.body.textContent).toContain('terminal.close-all-confirm-body')
+
+    clickButtonByText('terminal.close-all-confirm-confirm')
+
+    expect(closeTerminalAndDismissDetailIfLast.mock.calls).toEqual([
+      ['t1', { repoRoot: '/tmp/repo', branch: 'feature/terminals', worktreePath: '/tmp/repo-feature' }],
+      ['t2', { repoRoot: '/tmp/repo', branch: 'feature/terminals', worktreePath: '/tmp/repo-feature' }],
+    ])
+  })
+
   test('disables non-target branch actions without showing push loading', async () => {
     mocks.useRuntimeExternalAppSettings.mockReturnValue({
       terminalApp: 'auto',
@@ -616,6 +730,7 @@ describe('useBranchActionItems', () => {
           worktreePath: '/tmp/repo-feature-new',
           mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'feature/base' },
         },
+        worktreeBootstrap: { kind: 'skip' },
       },
       { token: repo.instanceToken, refreshOnError: false },
     )
@@ -643,7 +758,11 @@ async function renderItemGroups(
   await act(async () => {
     root!.render(
       <InlineCommitDraftProvider>
-        <ItemsHarness useItems={useItems} repo={repo} branch={branch} onReady={(items) => (groups = items)} />
+        <TerminalSessionReadContext.Provider value={terminalReadContextValue()}>
+          <TerminalSessionContext.Provider value={terminalContextValue()}>
+            <ItemsHarness useItems={useItems} repo={repo} branch={branch} onReady={(items) => (groups = items)} />
+          </TerminalSessionContext.Provider>
+        </TerminalSessionReadContext.Provider>
       </InlineCommitDraftProvider>,
     )
   })
@@ -732,6 +851,77 @@ function clickButtonByText(text: string) {
   act(() => {
     element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   })
+}
+
+function setTerminalSessions(worktreeKey: string, sessions: TerminalSessionSummary[]) {
+  terminalSnapshotsByWorktree.set(worktreeKey, {
+    worktreeTerminalKey: worktreeKey,
+    selectedDescriptor: null,
+    sessions,
+    count: sessions.length,
+  })
+}
+
+function terminalSession(overrides: Partial<TerminalSessionSummary> = {}): TerminalSessionSummary {
+  return {
+    key: 't1',
+    worktreeTerminalKey: '/tmp/repo\0/tmp/repo',
+    terminalId: 'terminal-1',
+    index: 1,
+    title: 'terminal',
+    fullTitle: 'terminal',
+    originalTitle: 'terminal',
+    phase: 'open',
+    selected: true,
+    hasBell: false,
+    ...overrides,
+  }
+}
+
+function terminalReadContextValue(): TerminalSessionReadContextValue {
+  return {
+    worktreeSnapshot: (worktreeKey) => {
+      const existing = terminalSnapshotsByWorktree.get(worktreeKey)
+      if (existing) return existing
+      const emptySnapshot = {
+        worktreeTerminalKey: worktreeKey,
+        selectedDescriptor: null,
+        sessions: [],
+        count: 0,
+      }
+      terminalSnapshotsByWorktree.set(worktreeKey, emptySnapshot)
+      return emptySnapshot
+    },
+    subscribeWorktree: () => () => {},
+    repoSyncReady: () => true,
+    subscribeRepoSync: () => () => {},
+    snapshot: () => ({ phase: 'open', message: null, processName: 'terminal' }),
+    subscribeSnapshot: () => () => {},
+  }
+}
+
+function terminalContextValue(): TerminalSessionContextValue {
+  return {
+    createTerminal: async () => 't1',
+    selectTerminal: vi.fn(),
+    scrollToBottom: vi.fn(),
+    focusTerminal: vi.fn(),
+    scrollLines: vi.fn(),
+    clearBell: vi.fn(() => false),
+    closeTerminalAndDismissDetailIfLast,
+    registerWorktreeHost: vi.fn(),
+    attach: vi.fn(),
+    detach: vi.fn(),
+    restart: vi.fn(),
+    isTerminalFocusTarget: vi.fn(() => false),
+    findNext: vi.fn(() => ({ resultIndex: 0, resultCount: 0, found: false })),
+    findPrevious: vi.fn(() => ({ resultIndex: 0, resultCount: 0, found: false })),
+    clearSearch: vi.fn(),
+    writeInput: vi.fn(),
+    takeover: vi.fn(),
+    reorderSessions: vi.fn(async () => true),
+    serialize: vi.fn(() => ''),
+  }
 }
 
 async function flush() {

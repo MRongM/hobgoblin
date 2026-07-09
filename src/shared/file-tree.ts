@@ -20,6 +20,27 @@ export interface RepoFileTreeEntry {
   targetKind?: RepoFileTreeTargetKind
 }
 
+export interface RepoFileTreeSortableEntry {
+  name: string
+  kind: string
+  targetKind?: RepoFileTreeTargetKind
+}
+
+export function isRepoFileTreeDirectoryLikeEntry(entry: Pick<RepoFileTreeSortableEntry, 'kind' | 'targetKind'>): boolean {
+  return entry.kind === 'directory' || (entry.kind === 'symlink' && entry.targetKind === 'directory')
+}
+
+export function compareRepoFileTreeEntries<T extends RepoFileTreeSortableEntry>(a: T, b: T): number {
+  const aDirectory = isRepoFileTreeDirectoryLikeEntry(a)
+  const bDirectory = isRepoFileTreeDirectoryLikeEntry(b)
+  if (aDirectory !== bDirectory) return aDirectory ? -1 : 1
+  return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+}
+
+export function sortRepoFileTreeEntries<T extends RepoFileTreeSortableEntry>(entries: T[]): T[] {
+  return entries.sort(compareRepoFileTreeEntries)
+}
+
 export type RepoFileTreeResult =
   | {
       ok: true

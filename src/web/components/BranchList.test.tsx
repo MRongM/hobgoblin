@@ -107,14 +107,17 @@ afterEach(() => {
 function terminalReadContextWithState(
   bellKeys: ReadonlySet<string>,
   countsByWorktreeKey: ReadonlyMap<string, number>,
+  outputActiveKeys: ReadonlySet<string> = new Set(),
 ): TerminalSessionReadContextValue {
   return {
     worktreeSnapshot: (worktreeTerminalKey) => {
       const hasBell = bellKeys.has(worktreeTerminalKey)
+      const isOutputActive = outputActiveKeys.has(worktreeTerminalKey)
+      const count = countsByWorktreeKey.get(worktreeTerminalKey) ?? (hasBell || isOutputActive ? 1 : 0)
       return {
         worktreeTerminalKey,
         selectedDescriptor: null,
-        sessions: hasBell
+        sessions: count > 0
           ? [
               {
                 key: `${worktreeTerminalKey}\0terminal-1`,
@@ -124,11 +127,12 @@ function terminalReadContextWithState(
                 title: 'terminal',
                 phase: 'open',
                 selected: true,
-                hasBell: true,
+                hasBell,
+                isOutputActive,
               },
             ]
           : [],
-        count: countsByWorktreeKey.get(worktreeTerminalKey) ?? 0,
+        count,
       }
     },
     subscribeWorktree: () => () => {},
@@ -157,11 +161,13 @@ function renderList(
   fixture: {
     bellWorktreeKeys?: string[]
     countsByWorktreeKey?: Map<string, number>
+    outputActiveWorktreeKeys?: string[]
   } = {},
 ) {
   const readContext = terminalReadContextWithState(
     new Set(fixture.bellWorktreeKeys ?? []),
     fixture.countsByWorktreeKey ?? new Map(),
+    new Set(fixture.outputActiveWorktreeKeys ?? []),
   )
   act(() => {
     root!.render(
@@ -227,39 +233,49 @@ describe('BranchList worktree drag ordering', () => {
 
     renderList()
 
-    const dirtyBadge = Array.from(document.body.querySelectorAll<HTMLElement>('[data-slot="badge"]')).find(
-      (node) => node.textContent === '有改动',
-    )
+    const dirtyBadge = document.body.querySelector<HTMLElement>('[data-testid="dirty-detached-worktree-badge"]')
     const badgeIcon = dirtyBadge?.querySelector('svg')
 
+    expect(dirtyBadge?.textContent).toBe('')
+    expect(dirtyBadge?.getAttribute('aria-label')).toBe('有改动')
+    expect(dirtyBadge?.getAttribute('title')).toBe('有改动')
     expect(badgeIcon?.classList.contains('lucide-git-compare-arrows')).toBe(true)
     expect(badgeIcon?.classList.contains('lucide-folder-tree')).toBe(false)
   })
 
-  test('shows drag handles only in worktrees view without search', () => {
+  test('hides worktree drag icons while keeping worktree rows sortable', () => {
     seedWorktreeRepo('worktrees')
 
     renderList()
 
-    expect(document.querySelectorAll('[aria-label="重新排序工作树"]')).toHaveLength(2)
+    expect(document.querySelectorAll('[aria-label="重新排序工作树"]')).toHaveLength(0)
+    expect(document.querySelectorAll('.lucide-grip-vertical')).toHaveLength(0)
+
+    const sortableRows = Array.from(container?.querySelectorAll<HTMLLIElement>('li[data-sortable-id]') ?? [])
+    expect(sortableRows.map((row) => row.getAttribute('data-sortable-id'))).toEqual(['/repo', '/tmp/worktree-a'])
+    expect(sortableRows.every((row) => !row.className.includes('1.75rem'))).toBe(true)
   })
 
-  test('hides drag handles in all view', () => {
+  test('does not mark branch rows sortable in all view', () => {
     seedWorktreeRepo('all')
 
     renderList()
 
     expect(document.querySelectorAll('[aria-label="重新排序工作树"]')).toHaveLength(0)
+    expect(document.querySelectorAll('.lucide-grip-vertical')).toHaveLength(0)
+    expect(container?.querySelectorAll('li[data-sortable-id]')).toHaveLength(0)
   })
 
-  test('ignores stale branch search state when rendering worktree drag handles', () => {
+  test('keeps worktree rows visible with stale branch search state without showing drag icons', () => {
     seedWorktreeRepo('worktrees')
     useReposStore.getState().setBranchSearchQuery(REPO_ID, 'feature')
 
     renderList()
 
-    expect(document.querySelectorAll('[aria-label="重新排序工作树"]')).toHaveLength(2)
+    expect(document.querySelectorAll('[aria-label="重新排序工作树"]')).toHaveLength(0)
+    expect(document.querySelectorAll('.lucide-grip-vertical')).toHaveLength(0)
     expect(container?.textContent).toContain('main')
+    expect(container?.textContent).toContain('feature/a')
   })
 
   test('reorders worktrees when drag ends over another worktree', () => {

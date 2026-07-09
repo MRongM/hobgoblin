@@ -2,9 +2,9 @@ import { ArrowLeft } from 'lucide-react'
 import { Button } from '#/web/components/ui/button.tsx'
 import { SettingsSurface } from '#/web/components/SettingsSurface.tsx'
 import { useT } from '#/web/stores/i18n.ts'
+import { useRuntimeChromeSettings } from '#/web/runtime-settings-chrome.ts'
 import { SETTINGS_PAGE_CONFIG } from '#/shared/settings-pages.ts'
 import type { SettingsPage } from '#/shared/settings-pages.ts'
-import { WINDOW_TOPBAR_HEIGHT_PX } from '#/shared/window-chrome.ts'
 interface SettingsPageScreenProps {
   page: SettingsPage
   onBack: () => void
@@ -13,13 +13,14 @@ interface SettingsPageScreenProps {
 
 export function SettingsPageScreen({ page, onBack, onPageChange }: SettingsPageScreenProps) {
   const t = useT()
+  const { topbarHeightPx } = useRuntimeChromeSettings()
   const pageTitle = t(SETTINGS_PAGE_CONFIG[page].titleKey)
 
   return (
     <div className="flex h-full flex-col bg-background">
       <div
         className="topbar flex shrink-0 items-center gap-2 border-b border-topbar-border bg-topbar text-sm text-topbar-foreground"
-        style={{ height: WINDOW_TOPBAR_HEIGHT_PX }}
+        style={{ height: topbarHeightPx }}
       >
         <Button type="button" variant="ghost" size="sm" className="gap-1.5 px-2" onClick={onBack}>
           <ArrowLeft className="size-4" />

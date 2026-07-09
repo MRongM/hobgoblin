@@ -12,12 +12,15 @@ describe('native shell projection helpers', () => {
       pickNativeSettingsProjectionPatch({
         lang: 'ja',
         shortcutsDisabled: true,
+        topbarHeightPx: 39,
+        toolbarHeightPx: 41,
         terminalNotificationsEnabled: true,
         terminalApp: 'ghostty',
       }),
     ).toEqual({
       lang: 'ja',
       shortcutsDisabled: true,
+      topbarHeightPx: 39,
     })
   })
 
@@ -50,6 +53,8 @@ describe('native shell projection helpers', () => {
         globalShortcut: 'Alt+K',
         terminalApp: 'auto',
         editorApp: 'auto',
+        topbarHeightPx: 39,
+        toolbarHeightPx: 41,
         fileTreeFontSize: 12,
         fileTreeTopbarFontSize: 13,
         fileTreeClipboardMaxBytesMb: 30,
@@ -69,6 +74,7 @@ describe('native shell projection helpers', () => {
       globalShortcutDisabled: true,
       swapCloseShortcuts: true,
       globalShortcut: 'Alt+K',
+      topbarHeightPx: 39,
     })
   })
 
@@ -90,6 +96,7 @@ describe('native shell projection helpers', () => {
               globalShortcutDisabled: false,
               swapCloseShortcuts: false,
               globalShortcut: 'Alt+G',
+              topbarHeightPx: 34,
             },
           },
         }).success,
@@ -110,6 +117,7 @@ describe('native shell projection helpers', () => {
             globalShortcutDisabled: false,
             swapCloseShortcuts: false,
             globalShortcut: 'Alt+G',
+            topbarHeightPx: 34,
           },
         },
       }).success,

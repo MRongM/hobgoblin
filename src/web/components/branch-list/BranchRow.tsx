@@ -1,5 +1,4 @@
 import { type CSSProperties, type HTMLAttributes, type RefObject, useCallback } from 'react'
-import { GripVertical } from 'lucide-react'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import { BranchActionsDropdown } from '#/web/components/BranchActionsMenu.tsx'
 import { BranchSummaryInline } from '#/web/components/repo-workspace/BranchSummaryInline.tsx'
@@ -7,16 +6,11 @@ import { cn } from '#/web/lib/cn.ts'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.ts'
 
-interface BranchRowDragHandle {
-  label: string
-  ref: (node: HTMLButtonElement | null) => void
-  props: HTMLAttributes<HTMLButtonElement>
-}
-
 interface BranchRowSortable {
   setNodeRef: (node: HTMLLIElement | null) => void
   style?: CSSProperties
   isDragging?: boolean
+  props?: HTMLAttributes<HTMLLIElement>
 }
 
 interface BranchRowProps {
@@ -29,7 +23,6 @@ interface BranchRowProps {
   showActions?: boolean
   actionMenuOpen?: boolean
   onActionMenuOpenChange?: (open: boolean) => void
-  dragHandle?: BranchRowDragHandle
   sortable?: BranchRowSortable
 }
 
@@ -43,7 +36,6 @@ export function BranchRow({
   showActions = true,
   actionMenuOpen,
   onActionMenuOpenChange,
-  dragHandle,
   sortable,
 }: BranchRowProps) {
   const isSelected = branch.name === selected
@@ -59,19 +51,14 @@ export function BranchRow({
 
   return (
     <li
+      {...sortable?.props}
       ref={sortable || isSelected ? setItemRef : undefined}
       style={sortable?.style}
       onClick={() => onSelectBranch(branch.name)}
       onDoubleClick={() => onOpenBranchStatus(branch.name)}
       className={cn(
         'relative grid min-h-8 items-stretch cursor-pointer',
-        dragHandle
-          ? showActions
-            ? 'grid-cols-[1.75rem_minmax(0,1fr)_auto]'
-            : 'grid-cols-[1.75rem_minmax(0,1fr)]'
-          : showActions
-            ? 'grid-cols-[minmax(0,1fr)_auto]'
-            : 'grid-cols-1',
+        showActions ? 'grid-cols-[minmax(0,1fr)_auto]' : 'grid-cols-1',
         'transition-colors duration-100',
         isSelected
           ? 'bg-list-row-selected text-list-row-selected-foreground hover:bg-list-row-selected'
@@ -79,34 +66,7 @@ export function BranchRow({
         sortable?.isDragging && 'z-10 bg-[var(--goblin-card-bg,var(--color-card))] text-foreground shadow-sm',
       )}
     >
-      {dragHandle && (
-        <div className="relative z-20 flex items-center justify-center py-1 pl-0">
-          <button
-            ref={dragHandle.ref}
-            type="button"
-            {...dragHandle.props}
-            aria-label={dragHandle.label}
-            title={dragHandle.label}
-            onClick={(event) => {
-              event.stopPropagation()
-              dragHandle.props.onClick?.(event)
-            }}
-            onDoubleClick={(event) => {
-              event.stopPropagation()
-              dragHandle.props.onDoubleClick?.(event)
-            }}
-            className={cn(
-              'flex size-6 touch-none cursor-grab items-center justify-center rounded-[var(--goblin-brand-radius-sm,var(--radius-sm))] text-muted-foreground hover:bg-list-row-hover hover:text-foreground active:cursor-grabbing',
-              dragHandle.props.className,
-            )}
-          >
-            <GripVertical size={14} />
-          </button>
-        </div>
-      )}
-      <div
-        className={cn('pointer-events-none relative z-10 flex min-w-0 items-center py-1', dragHandle ? 'pr-4' : 'px-4')}
-      >
+      <div className="pointer-events-none relative z-10 flex min-w-0 items-center px-4 py-1">
         <BranchSummaryInline repo={repo} branch={branch} selected={isSelected} />
       </div>
       {showActions && (

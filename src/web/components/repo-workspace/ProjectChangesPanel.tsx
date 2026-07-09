@@ -18,6 +18,7 @@ import { useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { resourceBusy } from '#/web/stores/repos/resources.ts'
 import { openWorktreeEditorTarget } from '#/web/lib/editor-open-targets.ts'
+import { useRuntimeChromeSettings } from '#/web/runtime-settings-chrome.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
 
 type ProjectChangesBranch = NonNullable<SelectedBranchDetailPresentation['branch']>
@@ -283,11 +284,13 @@ function ProjectChangesActionBar({
   onRefreshStatus: () => void
 }) {
   const t = useT()
+  const { toolbarHeightPx } = useRuntimeChromeSettings()
 
   return (
     <div
       data-testid="project-changes-action-bar"
-      className="flex min-h-8 shrink-0 items-center gap-2 border-b border-toolbar-border bg-toolbar px-2"
+      className="flex shrink-0 items-center gap-2 border-b border-toolbar-border bg-toolbar px-2"
+      style={{ height: toolbarHeightPx }}
     >
       <div data-testid="project-changes-left-actions" className="flex min-w-0 items-center gap-1">
         {showFileViewMode && <FileListViewModeControl value={fileViewMode} onChange={onFileViewModeChange} />}

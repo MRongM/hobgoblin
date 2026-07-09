@@ -10,6 +10,15 @@ import { MainWindowNavigationProvider, type MainWindowNavigationActions } from '
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { resetReposStore, seedRepoState, createRepoBranch } from '#/web/stores/repos/test-utils.ts'
 import { InlineCommitDraftProvider } from '#/web/components/branch-list/InlineCommitDraftProvider.tsx'
+import {
+  TerminalSessionContext,
+  TerminalSessionReadContext,
+} from '#/web/components/terminal/terminal-session-context.ts'
+import type {
+  TerminalSessionContextValue,
+  TerminalSessionReadContextValue,
+  WorktreeTerminalSnapshot,
+} from '#/web/components/terminal/types.ts'
 
 const REPO_ID = '/tmp/gbl-topbar-controls-repo'
 
@@ -31,6 +40,7 @@ let container: HTMLDivElement | null = null
 let root: Root | null = null
 let queryClient: QueryClient | null = null
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+let terminalSnapshotsByWorktree: Map<string, WorktreeTerminalSnapshot>
 
 beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
@@ -38,6 +48,7 @@ beforeEach(() => {
   window.matchMedia = createMatchMedia(false)
   repoClientMocks.getCommitMessageProviders.mockResolvedValue({ codex: false, claude: false })
   repoClientMocks.generateRepositoryCommitMessage.mockResolvedValue({ ok: true, message: 'feat: generated message' })
+  terminalSnapshotsByWorktree = new Map()
 })
 
 afterEach(() => {
@@ -67,13 +78,13 @@ describe('TopbarRepoControls', () => {
     expect(container?.querySelector('button[aria-label="action.create-worktree-title"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="branches.switch"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="action.menu"]')).toBeNull()
-    expect(container?.querySelector('[aria-label="workspace.layout-label"]')).not.toBeNull()
+    expect(workspaceLayoutButtons()).toHaveLength(1)
 
     act(() => {
-      container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.layout-tooltip.left-right"]')?.click()
+      container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.layout-tooltip.top-bottom"]')?.click()
     })
 
-    expect(useReposStore.getState().workspaceLayout).toBe('left-right')
+    expect(useReposStore.getState().workspaceLayout).toBe('top-bottom')
   })
 
   test('keeps topbar repo controls focused on layout for an active repo', () => {
@@ -88,7 +99,7 @@ describe('TopbarRepoControls', () => {
 
     expect(container?.querySelector('button[aria-label="action.refresh"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="action.create-worktree-title"]')).toBeNull()
-    expect(container?.querySelector('[aria-label="workspace.layout-label"]')).not.toBeNull()
+    expect(workspaceLayoutButtons()).toHaveLength(1)
     expect(container?.querySelector('[aria-label="branches.filter-label"]')).toBeNull()
     expect(container?.querySelector('[aria-label="branches.search-label"]')).toBeNull()
   })
@@ -104,7 +115,7 @@ describe('TopbarRepoControls', () => {
 
     renderControls(navigationWith({}))
 
-    expect(container?.querySelector('[aria-label="workspace.layout-label"]')).toBeNull()
+    expect(workspaceLayoutButtons()).toHaveLength(0)
   })
 
   test('shows focus-mode branch switcher and branch action menu', () => {
@@ -140,15 +151,16 @@ describe('RepoToolbar', () => {
     renderWithProviders(<RepoToolbar repoId={REPO_ID} />, navigationWith({}))
 
     expect(container?.querySelector('[aria-label="branches.filter-label"]')).toBeNull()
+    expect(container?.querySelector('button[aria-label="branches.filter-tooltip.worktrees"]')).toBeNull()
     expect(container?.querySelector('[aria-label="branches.search-label"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="action.create-worktree-title"]')).toBeNull()
-    expect(container?.querySelector('[aria-label="workspace.layout-label"]')).not.toBeNull()
+    expect(workspaceLayoutButtons()).toHaveLength(1)
 
     act(() => {
-      container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.layout-tooltip.left-right"]')?.click()
+      container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.layout-tooltip.top-bottom"]')?.click()
     })
 
-    expect(useReposStore.getState().workspaceLayout).toBe('left-right')
+    expect(useReposStore.getState().workspaceLayout).toBe('top-bottom')
   })
 
   test('keeps body toolbar branch filters and layout for git-capable repositories', () => {
@@ -161,11 +173,12 @@ describe('RepoToolbar', () => {
 
     renderWithProviders(<RepoToolbar repoId={REPO_ID} />, navigationWith({}))
 
-    expect(container?.querySelector('[aria-label="branches.filter-label"]')).not.toBeNull()
+    expect(container?.querySelector('button[aria-label="branches.filter-tooltip.worktrees"]')).not.toBeNull()
+    expect(container?.querySelector('button[aria-label="branches.filter-tooltip.all"]')).toBeNull()
     expect(container?.querySelector('[aria-label="branches.search-label"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="action.refresh"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="action.create-worktree-title"]')).toBeNull()
-    expect(container?.querySelector('[aria-label="workspace.layout-label"]')).not.toBeNull()
+    expect(workspaceLayoutButtons()).toHaveLength(1)
   })
 })
 
@@ -182,7 +195,11 @@ function renderWithProviders(element: React.ReactNode, navigation: MainWindowNav
     root!.render(
       <QueryClientProvider client={queryClient!}>
         <InlineCommitDraftProvider>
-          <MainWindowNavigationProvider value={navigation}>{element}</MainWindowNavigationProvider>
+          <TerminalSessionReadContext.Provider value={terminalReadContextValue()}>
+            <TerminalSessionContext.Provider value={terminalContextValue()}>
+              <MainWindowNavigationProvider value={navigation}>{element}</MainWindowNavigationProvider>
+            </TerminalSessionContext.Provider>
+          </TerminalSessionReadContext.Provider>
         </InlineCommitDraftProvider>
       </QueryClientProvider>,
     )
@@ -213,4 +230,56 @@ function createMatchMedia(small: boolean): typeof window.matchMedia {
     removeEventListener: vi.fn(),
     dispatchEvent: vi.fn(),
   })) as typeof window.matchMedia
+}
+
+function workspaceLayoutButtons(): NodeListOf<HTMLButtonElement> {
+  return container!.querySelectorAll<HTMLButtonElement>(
+    'button[aria-label="workspace.layout-tooltip.top-bottom"], button[aria-label="workspace.layout-tooltip.left-right"]',
+  )
+}
+
+function terminalReadContextValue(): TerminalSessionReadContextValue {
+  return {
+    worktreeSnapshot: (worktreeKey) => {
+      const existing = terminalSnapshotsByWorktree.get(worktreeKey)
+      if (existing) return existing
+      const emptySnapshot = {
+        worktreeTerminalKey: worktreeKey,
+        selectedDescriptor: null,
+        sessions: [],
+        count: 0,
+      }
+      terminalSnapshotsByWorktree.set(worktreeKey, emptySnapshot)
+      return emptySnapshot
+    },
+    subscribeWorktree: () => () => {},
+    repoSyncReady: () => true,
+    subscribeRepoSync: () => () => {},
+    snapshot: () => ({ phase: 'open', message: null, processName: 'terminal' }),
+    subscribeSnapshot: () => () => {},
+  }
+}
+
+function terminalContextValue(): TerminalSessionContextValue {
+  return {
+    createTerminal: async () => 't1',
+    selectTerminal: vi.fn(),
+    scrollToBottom: vi.fn(),
+    focusTerminal: vi.fn(),
+    scrollLines: vi.fn(),
+    clearBell: vi.fn(() => false),
+    closeTerminalAndDismissDetailIfLast: vi.fn(),
+    registerWorktreeHost: vi.fn(),
+    attach: vi.fn(),
+    detach: vi.fn(),
+    restart: vi.fn(),
+    isTerminalFocusTarget: vi.fn(() => false),
+    findNext: vi.fn(() => ({ resultIndex: 0, resultCount: 0, found: false })),
+    findPrevious: vi.fn(() => ({ resultIndex: 0, resultCount: 0, found: false })),
+    clearSearch: vi.fn(),
+    writeInput: vi.fn(),
+    takeover: vi.fn(),
+    reorderSessions: vi.fn(async () => true),
+    serialize: vi.fn(() => ''),
+  }
 }

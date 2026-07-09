@@ -25,6 +25,7 @@ import { RepoCloneDialog } from '#/web/components/RepoCloneDialog.tsx'
 import { RepoOpenDialog } from '#/web/components/RepoOpenDialog.tsx'
 import { OpenRemoteRepositoryDialog } from '#/web/components/OpenRemoteRepositoryDialog.tsx'
 import { SettingsPageScreen } from '#/web/components/SettingsPageScreen.tsx'
+import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import { RepoView } from '#/web/components/RepoView.tsx'
 import { RepoWorkspaceSkeleton } from '#/web/components/Skeleton.tsx'
 import { RepoDropOverlay } from '#/web/components/RepoDropOverlay.tsx'
@@ -60,6 +61,7 @@ export function App({
 }: AppProps) {
   const {
     overlays,
+    closeRepoConfirmation,
     sessionReady,
     visibleRepoId,
     workspaceLayout,
@@ -123,6 +125,7 @@ export function App({
               detailCollapsed={workspaceBehavior.detailCollapsed}
               detailFocusMode={workspaceBehavior.detailFocusMode}
               overlays={overlays}
+              closeRepoConfirmation={closeRepoConfirmation}
               repoDrop={repoDrop}
             />
           </MainWindowNavigationProvider>
@@ -143,6 +146,7 @@ interface MainWindowViewportProps {
   detailCollapsed: boolean
   detailFocusMode: boolean
   overlays: ReturnType<typeof useMainWindowShellState>['overlays']
+  closeRepoConfirmation: ReturnType<typeof useMainWindowShellState>['closeRepoConfirmation']
   repoDrop: ReturnType<typeof useRepoDrop>
 }
 
@@ -161,6 +165,7 @@ interface MainWindowViewportContentProps {
 
 interface MainWindowOverlaysProps {
   overlays: ReturnType<typeof useMainWindowShellState>['overlays']
+  closeRepoConfirmation: ReturnType<typeof useMainWindowShellState>['closeRepoConfirmation']
   repoDrop: ReturnType<typeof useRepoDrop>
 }
 
@@ -175,6 +180,7 @@ function MainWindowViewport({
   detailCollapsed,
   detailFocusMode,
   overlays,
+  closeRepoConfirmation,
   repoDrop,
 }: MainWindowViewportProps) {
   return (
@@ -202,7 +208,11 @@ function MainWindowViewport({
         detailFocusMode={detailFocusMode}
         overlays={overlays}
       />
-      <MainWindowOverlays overlays={overlays} repoDrop={repoDrop} />
+      <MainWindowOverlays
+        overlays={overlays}
+        closeRepoConfirmation={closeRepoConfirmation}
+        repoDrop={repoDrop}
+      />
     </div>
   )
 }
@@ -266,7 +276,8 @@ function MainWindowViewportContent({
   )
 }
 
-function MainWindowOverlays({ overlays, repoDrop }: MainWindowOverlaysProps) {
+function MainWindowOverlays({ overlays, closeRepoConfirmation, repoDrop }: MainWindowOverlaysProps) {
+  const t = useT()
   return (
     <>
       <RepoOpenDialog open={overlays.state.openRepo.open} onOpenChange={overlays.setOpenRepoOpen} />
@@ -274,6 +285,15 @@ function MainWindowOverlays({ overlays, repoDrop }: MainWindowOverlaysProps) {
       <OpenRemoteRepositoryDialog
         open={overlays.state.openRemoteRepo.open}
         onOpenChange={overlays.setOpenRemoteRepoOpen}
+      />
+      <ConfirmDialog
+        open={closeRepoConfirmation.open}
+        title={t('repo-tabs.close-confirm-title')}
+        message={t('repo-tabs.close-confirm-body', { name: closeRepoConfirmation.repoName })}
+        confirmLabel={t('repo-tabs.close-confirm-confirm')}
+        destructive
+        onCancel={closeRepoConfirmation.cancel}
+        onConfirm={closeRepoConfirmation.confirm}
       />
       <RepoDropOverlay active={repoDrop.active} />
       {/* shadcn/ui Toaster wrapper — owns its own theme + style hooks.

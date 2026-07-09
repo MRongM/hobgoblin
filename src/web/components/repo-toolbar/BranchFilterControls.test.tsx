@@ -44,6 +44,7 @@ describe('BranchFilterControls', () => {
     })
 
     expect(container.querySelector('[aria-label="branches.search-label"]')).toBeNull()
-    expect(container.querySelector('[aria-label="branches.filter-label"]')).not.toBeNull()
+    expect(container.querySelector('button[aria-label="branches.filter-tooltip.worktrees"]')).not.toBeNull()
+    expect(container.querySelector('button[aria-label="branches.filter-tooltip.all"]')).toBeNull()
   })
 })
