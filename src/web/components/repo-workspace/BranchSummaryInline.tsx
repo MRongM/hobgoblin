@@ -1,15 +1,19 @@
 import { ArrowDown, ArrowUp, FolderTree, GitBranch, GitCompareArrows, Terminal } from 'lucide-react'
-import { useI18nStore, useT } from '#/web/stores/i18n.ts'
+import { useT } from '#/web/stores/i18n.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { cn } from '#/web/lib/cn.ts'
-import { formatRelativeTimeOrNull } from '#/web/lib/dates.ts'
 import { formatWorktreeListPath, lastPathSegment } from '#/web/lib/paths.ts'
 import { getBranchWorktreeState, type BranchWorktreeRepo } from '#/web/stores/repos/worktree-state.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
-import { useWorktreeTerminalCount, useWorktreeTerminalHasBell } from '#/web/components/terminal/terminal-session-store.ts'
+import {
+  useWorktreeTerminalCount,
+  useWorktreeTerminalHasBell,
+  useWorktreeTerminalHasOutputActivity,
+} from '#/web/components/terminal/terminal-session-store.ts'
 import { TerminalBellDot } from '#/web/components/terminal/TerminalBellDot.tsx'
+import { TerminalOutputActivityIndicator } from '#/web/components/terminal/TerminalOutputActivityIndicator.tsx'
 
 export type BranchSummaryInlineRepo = BranchWorktreeRepo & {
   id: string
@@ -42,9 +46,13 @@ function Delta({ direction, count, label }: { direction: 'ahead' | 'behind'; cou
   )
 }
 
+function shortHashTag(hash: string): string | null {
+  const trimmed = hash.trim()
+  return trimmed ? `#${trimmed.slice(0, 7)}` : null
+}
+
 export function BranchSummaryInline({ repo, branch, selected = false, className }: BranchSummaryInlineProps) {
   const t = useT()
-  const lang = useI18nStore((s) => s.lang)
   const isCurrent = branch.name === repo.data.currentBranch
   const hasWorktree = !!branch.worktree?.path
   const worktreeState = getBranchWorktreeState(repo, branch)
@@ -56,26 +64,24 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
   const terminalWorktreeKey = branch.worktree?.path ? worktreeTerminalKey(repo.id, branch.worktree.path) : null
   const terminalCount = useWorktreeTerminalCount(terminalWorktreeKey)
   const hasTerminalBell = useWorktreeTerminalHasBell(terminalWorktreeKey)
+  const hasTerminalOutputActivity = useWorktreeTerminalHasOutputActivity(terminalWorktreeKey)
   const terminalCountLabel = terminalCount > 0 ? t('terminal.open-count', { count: terminalCount }) : null
   const terminalBellLabel = t('terminal.bell-unread')
-  const commitTime = formatRelativeTimeOrNull(branch.lastCommitDate, lang)
-  const commitMeta = commitTime
-    ? branch.lastCommitAuthor
-      ? `${branch.lastCommitAuthor} · ${commitTime}`
-      : commitTime
-    : null
+  const terminalOutputActiveLabel = t('terminal.output-active')
+  const commitHashTag = shortHashTag(branch.lastCommitHash)
   const title = [
     branch.name,
+    commitHashTag,
     isCurrent ? t('branch-status.current') : null,
     branch.isDefault ? t('branches.default') : null,
     hasWorktree ? t(worktreeDirty ? 'branches.dirty' : 'branches.worktree') : null,
     terminalCountLabel,
     hasTerminalBell ? terminalBellLabel : null,
+    hasTerminalOutputActivity ? terminalOutputActiveLabel : null,
     worktreePath,
     branch.trackingGone ? t('branches.gone') : null,
     branch.ahead > 0 ? t('branch-status.sync.ahead', { n: branch.ahead }) : null,
     branch.behind > 0 ? t('branch-status.sync.behind', { n: branch.behind }) : null,
-    commitMeta,
   ]
     .filter(Boolean)
     .join(', ')
@@ -93,12 +99,27 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
         <div className="flex min-w-0 items-center gap-1.5">
           <span
             className={cn(
-              'shrink-0 truncate text-sm leading-4 font-medium',
+              'min-w-0 truncate text-sm leading-4 font-medium',
               selected ? 'text-selected-foreground' : 'text-foreground',
             )}
           >
             {branch.name}
           </span>
+          {commitHashTag && (
+            <Badge
+              data-testid="branch-hash-tag"
+              variant="outline"
+              title={commitHashTag}
+              className={cn(
+                'h-4 border-border/60 px-1 font-mono text-[10px] font-medium tabular-nums',
+                selected
+                  ? 'text-selected-muted-foreground border-selected-muted-foreground/40'
+                  : 'text-muted-foreground',
+              )}
+            >
+              {commitHashTag}
+            </Badge>
+          )}
           {terminalCount > 0 && (
             <Badge
               data-testid="terminal-count-badge"
@@ -107,7 +128,11 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
               variant="brand"
               className="h-4 gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums"
             >
-              <Terminal size={10} aria-hidden="true" />
+              {hasTerminalOutputActivity ? (
+                <TerminalOutputActivityIndicator label={terminalOutputActiveLabel} className="size-2.5" size={10} />
+              ) : (
+                <Terminal size={10} aria-hidden="true" />
+              )}
               {terminalCount}
             </Badge>
           )}
@@ -118,15 +143,15 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
               selected ? 'text-selected-muted-foreground' : 'text-muted-foreground',
             )}
           >
-            {branch.isDefault && (
-              <Badge variant="outline" className="text-muted-foreground">
-                {t('branches.default')}
-              </Badge>
-            )}
             {hasWorktree && worktreeDirty ? (
-              <Badge variant="attention" className="gap-1">
-                <GitCompareArrows size={10} />
-                {t('branches.dirty')}
+              <Badge
+                data-testid="dirty-worktree-badge"
+                variant="attention"
+                aria-label={t('branches.dirty')}
+                title={t('branches.dirty')}
+                className="h-4 px-1"
+              >
+                <GitCompareArrows size={10} aria-hidden="true" />
               </Badge>
             ) : null}
             {branch.trackingGone && <Badge variant="attention">{t('branches.gone')}</Badge>}
@@ -143,17 +168,6 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
                 count={branch.behind}
                 label={t('branch-status.sync.behind', { n: branch.behind })}
               />
-            )}
-            {commitMeta && (
-              <span
-                className={cn(
-                  'min-h-4 min-w-0 truncate whitespace-nowrap text-[11px] leading-4',
-                  selected ? 'text-selected-muted-foreground/90' : 'text-muted-foreground/85',
-                )}
-                title={commitMeta}
-              >
-                {commitMeta}
-              </span>
             )}
           </span>
         </div>

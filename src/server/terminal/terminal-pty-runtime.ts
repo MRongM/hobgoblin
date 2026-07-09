@@ -1,4 +1,6 @@
 import * as pty from 'node-pty'
+import os from 'node:os'
+import type { TerminalWindowsPty } from '#/shared/terminal.ts'
 
 export interface TerminalPtyRuntime {
   write(data: string): void
@@ -18,8 +20,10 @@ export interface SpawnTerminalPtyRuntimeInput {
 }
 
 export type SpawnTerminalPtyRuntimeResult =
-  | { ok: true; runtime: TerminalPtyRuntime }
+  | { ok: true; runtime: TerminalPtyRuntime; windowsPty?: TerminalWindowsPty }
   | { ok: false; message: string }
+
+const NODE_PTY_CONPTY_DEFAULT_BUILD = 18309
 
 export function spawnTerminalPtyRuntime(input: SpawnTerminalPtyRuntimeInput): SpawnTerminalPtyRuntimeResult {
   try {
@@ -33,10 +37,27 @@ export function spawnTerminalPtyRuntime(input: SpawnTerminalPtyRuntimeInput): Sp
       cwd: input.cwd,
       env,
     })
-    return { ok: true, runtime: new NodePtyTerminalRuntime(term) }
+    const windowsPty = detectWindowsPtyCompatibility(process.platform, os.release())
+    return windowsPty
+      ? { ok: true, runtime: new NodePtyTerminalRuntime(term), windowsPty }
+      : { ok: true, runtime: new NodePtyTerminalRuntime(term) }
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : 'error.unknown' }
   }
+}
+
+export function detectWindowsPtyCompatibility(platform: NodeJS.Platform | string, release: string): TerminalWindowsPty | null {
+  if (platform !== 'win32') return null
+  const buildNumber = parseWindowsBuildNumber(release)
+  const backend = buildNumber !== null && buildNumber < NODE_PTY_CONPTY_DEFAULT_BUILD ? 'winpty' : 'conpty'
+  return buildNumber === null ? { backend } : { backend, buildNumber }
+}
+
+function parseWindowsBuildNumber(release: string): number | null {
+  const match = /^\d+\.\d+\.(\d+)/.exec(release)
+  if (!match) return null
+  const buildNumber = Number.parseInt(match[1]!, 10)
+  return Number.isSafeInteger(buildNumber) && buildNumber >= 0 ? buildNumber : null
 }
 
 class NodePtyTerminalRuntime implements TerminalPtyRuntime {

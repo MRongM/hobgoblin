@@ -74,6 +74,26 @@ describe('saveClipboardBinaryFilesToTemp', () => {
     })
   })
 
+  test('resolves a configured relative temporary directory from the worktree root', async () => {
+    const worktreePath = await tempRoot('worktree')
+    const result = await saveClipboardBinaryFilesToTemp(
+      {
+        worktreePath,
+        temporaryFilesDirectory: 'tmp/cache',
+        files: [{ name: 'report.pdf', type: 'application/pdf', bytes: bytes('pdf') }],
+      },
+      {
+        now: new Date(2026, 5, 15, 22, 15, 31),
+        randomHex: () => '57ab91d0',
+      },
+    )
+
+    expect(result).toEqual({
+      ok: true,
+      paths: [join(worktreePath, 'tmp', 'cache', 'pasted-20260615-221531-57ab91d0.pdf')],
+    })
+  })
+
   test('infers extensions from mime type when the file name has no extension', async () => {
     const worktreePath = await tempRoot('worktree')
     const result = await saveClipboardBinaryFilesToTemp(

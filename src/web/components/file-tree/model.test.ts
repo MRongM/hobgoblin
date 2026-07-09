@@ -47,6 +47,40 @@ describe('file tree model', () => {
     expect(merged.some((entry) => entry.relativePath === 'src/old.ts' && entry.kind === 'virtual')).toBe(true)
   })
 
+  test('sorts symlink nodes by their target kind', () => {
+    const index = buildFileTreeStatusIndex('/repo', [])
+    const merged = mergeDirectoryEntries(
+      '/repo',
+      '',
+      [
+        { name: 'z-dir', absolutePath: '/repo/z-dir', relativePath: 'z-dir', kind: 'directory' },
+        { name: 'b-file.txt', absolutePath: '/repo/b-file.txt', relativePath: 'b-file.txt', kind: 'file' },
+        {
+          name: 'a-link-dir',
+          absolutePath: '/repo/a-link-dir',
+          relativePath: 'a-link-dir',
+          kind: 'symlink',
+          targetKind: 'directory',
+        },
+        {
+          name: 'a-link-file',
+          absolutePath: '/repo/a-link-file',
+          relativePath: 'a-link-file',
+          kind: 'symlink',
+          targetKind: 'file',
+        },
+      ],
+      index,
+    )
+
+    expect(merged.map((entry) => `${entry.kind}:${entry.targetKind ?? '-'}:${entry.relativePath}`)).toEqual([
+      'symlink:directory:a-link-dir',
+      'directory:-:z-dir',
+      'symlink:file:a-link-file',
+      'file:-:b-file.txt',
+    ])
+  })
+
   test('toggles and range-selects visible nodes', () => {
     const visible = ['a', 'b', 'c', 'd']
     let selection = nextFileTreeSelection({ selected: new Set(), anchor: null }, visible, 'b', {})

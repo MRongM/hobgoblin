@@ -177,7 +177,7 @@ describe('InlineCommitForm', () => {
   })
 })
 
-describe('MergeDialog AI handoff', () => {
+describe('MergeDialog', () => {
   test('does not show AI buttons for ordinary merge errors', async () => {
     render(
       <MergeDialog
@@ -219,6 +219,39 @@ describe('MergeDialog AI handoff', () => {
     expect(document.body.textContent).toContain('CONFLICT (content)')
     expect(buttonByText('Codex')).not.toBeNull()
     expect(buttonByText('Claude')).not.toBeNull()
+  })
+
+  test('runs push after a successful merge from the merge and push action', async () => {
+    const calls: string[] = []
+    const onClose = vi.fn(() => calls.push('close'))
+    const onMerge = vi.fn(async (sourceBranch: string) => {
+      calls.push(`merge:${sourceBranch}`)
+      return { ok: true, message: 'merged' }
+    })
+    const onPush = vi.fn(async () => {
+      calls.push('push')
+    })
+
+    render(
+      <MergeDialog
+        open
+        repoId="/repo"
+        worktreePath="/repo"
+        branch={repoBranch('feature/current')}
+        allBranches={[repoBranch('feature/current'), repoBranch('main')]}
+        onClose={onClose}
+        onMerge={onMerge}
+        onPush={onPush}
+      />,
+    )
+
+    selectFirstMergeCandidate()
+    clickButtonByText('action.merge-and-push-confirm')
+    await flush()
+
+    expect(onMerge).toHaveBeenCalledWith('main')
+    expect(onPush).toHaveBeenCalled()
+    expect(calls).toEqual(['merge:main', 'push', 'close'])
   })
 
   test('keeps long merge errors inside a bounded scroll area', async () => {

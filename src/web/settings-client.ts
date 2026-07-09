@@ -214,6 +214,16 @@ export async function setFileTreeFontSize(fontSize: number): Promise<number> {
   return result.settings.fileTreeFontSize
 }
 
+export async function setTopbarHeightPx(heightPx: number): Promise<number> {
+  const result = await updateSettingsPrefsPatch({ topbarHeightPx: heightPx })
+  return result.settings.topbarHeightPx
+}
+
+export async function setToolbarHeightPx(heightPx: number): Promise<number> {
+  const result = await updateSettingsPrefsPatch({ toolbarHeightPx: heightPx })
+  return result.settings.toolbarHeightPx
+}
+
 export async function setFileTreeTopbarFontSize(fontSize: number): Promise<number> {
   const result = await updateSettingsPrefsPatch({ fileTreeTopbarFontSize: fontSize })
   return result.settings.fileTreeTopbarFontSize

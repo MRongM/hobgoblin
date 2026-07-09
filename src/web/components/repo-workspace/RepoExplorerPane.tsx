@@ -1,6 +1,7 @@
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
+import { FolderTree, GitBranch, GitCompareArrows, History, RadioTower, type LucideIcon } from 'lucide-react'
 import { BranchList } from '#/web/components/BranchList.tsx'
 import { SplitPane } from '#/web/components/SplitPane.tsx'
 import { ProjectFileTree } from '#/web/components/file-tree/ProjectFileTree.tsx'
@@ -141,12 +142,12 @@ function ExplorerTabs({
     '--goblin-file-tree-topbar-font-size': `${fileTreeTopbarFontSize}px`,
   } as CSSProperties
   const tabs = [
-    { id: 'files' as const, label: t('file-tree.title') },
-    { id: 'changes' as const, label: t('tab.changes') },
-    { id: 'status' as const, label: t('tab.status') },
-    { id: 'history' as const, label: t('tab.history') },
-    ...(isRemoteRepo ? [{ id: 'ports' as const, label: t('ports.title') }] : []),
-  ] satisfies { id: ExplorerTab; label: string }[]
+    { id: 'files' as const, label: t('file-tree.title'), icon: FolderTree },
+    { id: 'changes' as const, label: t('tab.changes'), icon: GitCompareArrows },
+    { id: 'status' as const, label: t('tab.status'), icon: GitBranch },
+    { id: 'history' as const, label: t('tab.history'), icon: History },
+    ...(isRemoteRepo ? [{ id: 'ports' as const, label: t('ports.title'), icon: RadioTower }] : []),
+  ] satisfies { id: ExplorerTab; label: string; icon: LucideIcon }[]
 
   function handleRevealPath(relativePath: string) {
     onTabChange('files')
@@ -169,6 +170,7 @@ function ExplorerTabs({
             <ToolbarTabStripBody scroll role="tablist" aria-label={t('file-tree.title')} aria-orientation="horizontal">
               {tabs.map((tab) => {
                 const selected = activeVisibleTab === tab.id
+                const Icon = tab.icon
                 return (
                   <Button
                     key={tab.id}
@@ -186,6 +188,7 @@ function ExplorerTabs({
                         : 'border-separator text-muted-foreground hover:bg-tab-hover hover:text-foreground',
                     )}
                   >
+                    <Icon className="size-3.5 shrink-0" aria-hidden="true" />
                     {tab.label}
                     {tab.id === 'changes' && changeCount > 0 && (
                       <Badge variant="attention" className="font-normal font-mono tabular-nums">
@@ -201,7 +204,7 @@ function ExplorerTabs({
       </Toolbar>
       <div id={`repo-explorer-${activeVisibleTab}-panel`} role="tabpanel" className="flex min-h-0 flex-1 flex-col">
         {activeVisibleTab === 'files' ? (
-          <ProjectFileTree repoId={repoId} revealRequest={revealRequest} />
+          <ProjectFileTree repoId={repoId} revealRequest={revealRequest} toolbarHeight="detail" />
         ) : activeVisibleTab === 'changes' ? (
           <ProjectChangesPanel repoId={repoId} onRevealPath={handleRevealPath} />
         ) : activeVisibleTab === 'status' ? (

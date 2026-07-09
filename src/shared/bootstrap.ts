@@ -56,6 +56,8 @@ export interface InitialSettingsSnapshot {
   globalShortcutRegistered: boolean
   terminalApp: TerminalPref
   editorApp: EditorPref
+  topbarHeightPx: number
+  toolbarHeightPx: number
   fileTreeFontSize: number
   fileTreeTopbarFontSize: number
   fileTreeClipboardMaxBytesMb: number

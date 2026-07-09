@@ -24,6 +24,10 @@ function hasTerminalBell(snapshot: WorktreeTerminalSnapshot): boolean {
   return snapshot.sessions.some((session) => session.hasBell)
 }
 
+function hasTerminalOutputActivity(snapshot: WorktreeTerminalSnapshot): boolean {
+  return snapshot.sessions.some((session) => !!session.isOutputActive)
+}
+
 export function useWorktreeTerminalSnapshot(worktreeTerminalKey: string | null): WorktreeTerminalSnapshot {
   const { worktreeSnapshot, subscribeWorktree } = useTerminalSessionReadContext()
   const subscribe = useCallback(
@@ -91,6 +95,23 @@ export function useWorktreeTerminalHasBell(worktreeTerminalKey: string | null): 
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
 
+export function useWorktreeTerminalHasOutputActivity(worktreeTerminalKey: string | null): boolean {
+  const readContext = useContext(TerminalSessionReadContext)
+  const subscribe = useCallback(
+    (listener: () => void) =>
+      readContext && worktreeTerminalKey ? readContext.subscribeWorktree(worktreeTerminalKey, listener) : () => {},
+    [readContext, worktreeTerminalKey],
+  )
+  const getSnapshot = useCallback(
+    () =>
+      readContext && worktreeTerminalKey
+        ? hasTerminalOutputActivity(readContext.worktreeSnapshot(worktreeTerminalKey))
+        : false,
+    [readContext, worktreeTerminalKey],
+  )
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+}
+
 export function useRepoTerminalHasBell(repoRoot: string | null, worktreePaths: readonly string[]): boolean {
   const readContext = useContext(TerminalSessionReadContext)
   const worktreeKeys = useMemo(
@@ -109,6 +130,30 @@ export function useRepoTerminalHasBell(repoRoot: string | null, worktreePaths: r
   )
   const getSnapshot = useCallback(
     () => (readContext ? worktreeKeys.some((key) => hasTerminalBell(readContext.worktreeSnapshot(key))) : false),
+    [readContext, worktreeKeys],
+  )
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+}
+
+export function useRepoTerminalHasOutputActivity(repoRoot: string | null, worktreePaths: readonly string[]): boolean {
+  const readContext = useContext(TerminalSessionReadContext)
+  const worktreeKeys = useMemo(
+    () => (repoRoot ? worktreePaths.map((path) => makeWorktreeTerminalKey(repoRoot, path)) : []),
+    [repoRoot, worktreePaths],
+  )
+  const subscribe = useCallback(
+    (listener: () => void) => {
+      if (!readContext || worktreeKeys.length === 0) return () => {}
+      const unsubscribers = worktreeKeys.map((key) => readContext.subscribeWorktree(key, listener))
+      return () => {
+        for (const unsubscribe of unsubscribers) unsubscribe()
+      }
+    },
+    [readContext, worktreeKeys],
+  )
+  const getSnapshot = useCallback(
+    () =>
+      readContext ? worktreeKeys.some((key) => hasTerminalOutputActivity(readContext.worktreeSnapshot(key))) : false,
     [readContext, worktreeKeys],
   )
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)

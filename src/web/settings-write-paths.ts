@@ -39,6 +39,8 @@ import {
   setTerminalFontSize,
   setTerminalNotificationsEnabled,
   setTerminalThemeSyncEnabled,
+  setToolbarHeightPx,
+  setTopbarHeightPx,
   setToggleDetailOnActionBarBlankClick,
 } from '#/web/settings-client.ts'
 import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
@@ -145,6 +147,18 @@ export async function setFileTreeFontSizePreference(fontSize: number): Promise<n
   const fileTreeFontSize = await setFileTreeFontSize(fontSize)
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, fileTreeFontSize }))
   return fileTreeFontSize
+}
+
+export async function setTopbarHeightPxPreference(heightPx: number): Promise<number> {
+  const topbarHeightPx = await setTopbarHeightPx(heightPx)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, topbarHeightPx }))
+  return topbarHeightPx
+}
+
+export async function setToolbarHeightPxPreference(heightPx: number): Promise<number> {
+  const toolbarHeightPx = await setToolbarHeightPx(heightPx)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, toolbarHeightPx }))
+  return toolbarHeightPx
 }
 
 export async function setFileTreeTopbarFontSizePreference(fontSize: number): Promise<number> {

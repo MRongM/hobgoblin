@@ -20,6 +20,10 @@ vi.mock('#/web/runtime-settings-fonts.ts', () => ({
   useRuntimeFontSettings: () => runtimeFontSettings,
 }))
 
+vi.mock('#/web/runtime-settings-chrome.ts', () => ({
+  useRuntimeChromeSettings: () => ({ topbarHeightPx: 39, toolbarHeightPx: 41 }),
+}))
+
 vi.mock('#/web/components/BranchList.tsx', () => ({
   BranchList: () => <div data-testid="branch-list" />,
 }))
@@ -277,27 +281,27 @@ describe('RepoExplorerPane', () => {
       root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
     })
 
-    const branchToolbar = container.querySelector('[data-testid="branch-area-toolbar"]')
+    const branchToolbar = container.querySelector<HTMLElement>('[data-testid="branch-area-toolbar"]')
     const branchList = container.querySelector('[data-testid="branch-list"]')
-    const filter = branchToolbar?.querySelector('[aria-label="branches.filter-label"]')
+    const branchViewToggle = branchToolbar?.querySelector<HTMLButtonElement>(
+      'button[aria-label="branches.filter-tooltip.worktrees"]',
+    )
     const search = branchToolbar?.querySelector('[aria-label="branches.search-label"]')
     const refresh = branchToolbar?.querySelector('button[aria-label="action.refresh"]')
     const createWorktree = branchToolbar?.querySelector('button[aria-label="action.create-worktree-title"]')
     const allBranchesFilter = branchToolbar?.querySelector('[aria-label="branches.filter-tooltip.all"]')
-    const worktreesFilter = branchToolbar?.querySelector('[aria-label="branches.filter-tooltip.worktrees"]')
     const noWorktreeFilter = branchToolbar?.querySelector('[aria-label="branches.filter-tooltip.no-worktree"]')
     expect(branchToolbar).toBeTruthy()
-    expect(branchToolbar?.className).toContain('h-9')
+    expect(branchToolbar?.style.height).toBe('41px')
     expect(branchToolbar?.className).not.toContain('h-8')
-    expect(filter).toBeTruthy()
+    expect(branchViewToggle).toBeTruthy()
     expect(search).toBeNull()
     expect(refresh).toBeTruthy()
     expect(createWorktree).toBeTruthy()
-    expect(allBranchesFilter).toBeTruthy()
-    expect(worktreesFilter).toBeTruthy()
+    expect(allBranchesFilter).toBeNull()
     expect(noWorktreeFilter).toBeNull()
-    expect(filter!.compareDocumentPosition(refresh!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(filter!.compareDocumentPosition(createWorktree!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(branchViewToggle!.compareDocumentPosition(refresh!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(branchViewToggle!.compareDocumentPosition(createWorktree!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(branchList).toBeTruthy()
     expect(branchToolbar!.compareDocumentPosition(branchList!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     await act(async () => root.unmount())
@@ -317,14 +321,19 @@ describe('RepoExplorerPane', () => {
       root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
     })
 
-    const branchToolbar = container.querySelector('[data-testid="branch-area-toolbar"]')
+    const branchToolbar = container.querySelector<HTMLElement>('[data-testid="branch-area-toolbar"]')
     const explorerToolbar = container.querySelector<HTMLElement>('[data-testid="repo-explorer-toolbar"]')
+    const fileTree = container.querySelector<HTMLElement>('[data-testid="project-file-tree"]')
     const firstTab = container.querySelector<HTMLButtonElement>('[role="tab"]')
-    expect(branchToolbar?.className).toContain('h-9')
-    expect(explorerToolbar?.className).toContain('h-9')
+    const tabIcons = Array.from(container.querySelectorAll<SVGElement>('[role="tab"] svg'))
+    expect(branchToolbar?.style.height).toBe('41px')
+    expect(explorerToolbar?.style.height).toBe('41px')
     expect(explorerToolbar?.className).not.toContain('h-8')
+    expect(fileTree?.getAttribute('data-toolbar-height')).toBe('detail')
     expect(explorerToolbar?.style.getPropertyValue('--goblin-file-tree-topbar-font-size')).toBe('13px')
     expect(firstTab?.className).toContain('text-[length:var(--goblin-file-tree-topbar-font-size)]')
+    expect(tabIcons).toHaveLength(4)
+    expect(tabIcons.every((icon) => icon.classList.contains('size-3.5'))).toBe(true)
     await act(async () => root.unmount())
   })
 

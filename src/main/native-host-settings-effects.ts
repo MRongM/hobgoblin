@@ -5,6 +5,7 @@ import { syncRecentRepos } from '#/main/recent-repos.ts'
 import { setSettingsGlobalShortcutState } from '#/main/settings-server-client.ts'
 import { syncGlobalShortcuts } from '#/main/shortcuts.ts'
 import { applyThemeSettingsProjection } from '#/main/theme.ts'
+import { applyMainWindowTopbarHeight } from '#/main/window.ts'
 import type { NativeShellProjection, NativeSettingsProjectionPatch, NativeSettingsProjectionState } from '#/shared/rpc.ts'
 
 // Native-host application of server-owned settings changes.
@@ -59,6 +60,14 @@ function applyThemeSettingsPrefsProjection(input: {
   applyThemeSettingsProjection({ theme: input.settings.theme, colorTheme: input.settings.colorTheme })
 }
 
+function applyTopbarHeightSettingsProjection(input: {
+  patch: NativeSettingsProjectionPatch
+  settings: NativeSettingsProjectionState
+}): void {
+  if (input.patch.topbarHeightPx === undefined) return
+  applyMainWindowTopbarHeight(input.settings.topbarHeightPx)
+}
+
 async function applyGlobalShortcutDisabledProjection(input: {
   patch: NativeSettingsProjectionPatch
   settings: NativeSettingsProjectionState
@@ -76,6 +85,7 @@ export async function applyNativeHostSettingsPrefsProjection(input: {
   const menuStatePatch = menuStatePatchFromSettingsProjection(input)
   applyI18nSettingsProjection(input)
   applyThemeSettingsPrefsProjection(input)
+  applyTopbarHeightSettingsProjection(input)
   if (Object.keys(menuStatePatch).length > 0) applyMenuRuntimeState(menuStatePatch)
   await applyGlobalShortcutDisabledProjection(input)
   if (shouldRebuildMenu) buildAppMenu()

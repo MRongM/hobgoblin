@@ -8,6 +8,7 @@ import {
   Copy,
   Download,
   File,
+  FileCog,
   FilePlus,
   FileSymlink,
   Folder,
@@ -41,6 +42,8 @@ import {
   createRepositoryFileTreeDirectory,
   deleteRepositoryFileTreeEntries,
   getRepositoryFileTree,
+  getRepositoryWorktreeBootstrapPreview,
+  initializeRepositoryWorktreeBootstrapConfig,
   moveRepositoryFileTreeEntries,
   openRepositoryEditor,
   openRepositoryTerminal,
@@ -107,6 +110,7 @@ import {
   writeFileTreeClipboardFile,
 } from '#/web/app-shell-client.ts'
 import { useRuntimeFileAreaSettings } from '#/web/runtime-settings-file-area.ts'
+import { useRuntimeChromeSettings } from '#/web/runtime-settings-chrome.ts'
 import { fileTreeClipboardMaxBytes as fileTreeClipboardMaxBytesFromMb } from '#/shared/file-tree-clipboard.ts'
 
 const ROOT_DIR = ''
@@ -128,6 +132,7 @@ interface CreateEntryTarget {
 
 interface ProjectFileTreeView {
   exists: boolean
+  isGitRepo: boolean
   worktreePath: string | null
   status: WorktreeStatus[]
 }
@@ -185,6 +190,7 @@ export interface FileTreeRevealRequest {
 }
 
 type FileTreeToolbarHeight = 'compact' | 'detail'
+type WorktreeBootstrapConfigStatus = 'idle' | 'loading' | 'missing' | 'present' | 'error'
 
 export function ProjectFileTree({
   repoId,
@@ -225,6 +231,8 @@ export function ProjectFileTree({
   const [createEntryError, setCreateEntryError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchIndex, setSearchIndex] = useState(0)
+  const [bootstrapConfigStatus, setBootstrapConfigStatus] = useState<WorktreeBootstrapConfigStatus>('idle')
+  const [initializingBootstrapConfig, setInitializingBootstrapConfig] = useState(false)
   const [fallbackSearch, setFallbackSearch] = useState<FileTreeFallbackSearchState>(
     () => EMPTY_FILE_TREE_FALLBACK_SEARCH,
   )
@@ -236,6 +244,27 @@ export function ProjectFileTree({
   useEffect(() => {
     directoriesRef.current = directories
   }, [directories])
+
+  useEffect(() => {
+    if (!view.exists || !view.isGitRepo || !worktreePath) {
+      setBootstrapConfigStatus('idle')
+      return
+    }
+
+    const controller = new AbortController()
+    setBootstrapConfigStatus('loading')
+    void getRepositoryWorktreeBootstrapPreview(repoId, worktreePath, controller.signal)
+      .then((result) => {
+        if (controller.signal.aborted) return
+        setBootstrapConfigStatus(result.ok ? (result.preview.hasConfig ? 'present' : 'missing') : 'error')
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return
+        console.warn('[file-tree] worktree bootstrap config preview failed', err)
+        setBootstrapConfigStatus('error')
+      })
+    return () => controller.abort()
+  }, [repoId, view.exists, view.isGitRepo, worktreePath])
 
   const loadDirectory = useCallback(
     async (relativePath: string, absolutePath: string, signal?: AbortSignal): Promise<RepoFileTreeResult | null> => {
@@ -754,6 +783,29 @@ export function ProjectFileTree({
     },
     [loadDirectory],
   )
+
+  const initializeBootstrapConfig = useCallback(async () => {
+    if (!worktreePath || initializingBootstrapConfig || bootstrapConfigStatus !== 'missing') return
+    setInitializingBootstrapConfig(true)
+    try {
+      const result = await initializeRepositoryWorktreeBootstrapConfig(repoId, worktreePath)
+      if (result.ok) {
+        setBootstrapConfigStatus('present')
+        toast.success(t('file-tree.init-worktree-bootstrap-config-created'))
+        refreshTreeDirectory(rootCreateEntryTarget())
+        return
+      }
+      if (result.message === 'error.file-exists') setBootstrapConfigStatus('present')
+      toast.error(t('file-tree.init-worktree-bootstrap-config-failed'), {
+        description: t(result.message),
+      })
+    } catch (err) {
+      console.warn('[file-tree] worktree bootstrap config initialization failed', err)
+      toast.error(t('file-tree.init-worktree-bootstrap-config-failed'))
+    } finally {
+      setInitializingBootstrapConfig(false)
+    }
+  }, [bootstrapConfigStatus, initializingBootstrapConfig, refreshTreeDirectory, repoId, rootCreateEntryTarget, t, worktreePath])
 
   const refreshDirectoryForContextNode = useCallback(
     (node: FileTreeNode | null) => {
@@ -1310,6 +1362,9 @@ export function ProjectFileTree({
             onCreateFile={() => beginCreateEntry('file', selectedCreateEntryTarget())}
             onCreateDirectory={() => beginCreateEntry('directory', selectedCreateEntryTarget())}
             onRefresh={() => refreshTreeDirectory(rootCreateEntryTarget())}
+            showBootstrapConfigInit={bootstrapConfigStatus === 'missing'}
+            initializingBootstrapConfig={initializingBootstrapConfig}
+            onInitializeBootstrapConfig={() => void initializeBootstrapConfig()}
           />
           <div className="min-h-0 flex-1 overflow-auto py-1">
             {rootState?.loading && !rootState.entries ? (
@@ -1418,17 +1473,22 @@ function useProjectFileTreeView(repoId: string): ProjectFileTreeView {
     useReposStore,
     (state) => {
       const repo = state.repos[repoId]
-      if (!repo) return { exists: false, worktreePath: null, status: [] }
+      if (!repo) return { exists: false, isGitRepo: false, worktreePath: null, status: [] }
       const plainWorkspacePath = repoPlainWorkspacePath(repo)
-      if (plainWorkspacePath) return { exists: true, worktreePath: plainWorkspacePath, status: [] }
+      if (plainWorkspacePath) return { exists: true, isGitRepo: false, worktreePath: plainWorkspacePath, status: [] }
       const selected = repo.data.branches.find((branch) => branch.name === repo.ui.selectedBranch) ?? null
       return {
         exists: true,
+        isGitRepo: repo.isGitRepo,
         worktreePath: selected?.worktree?.path ?? null,
         status: repo.data.status,
       }
     },
-    (a, b) => a.exists === b.exists && a.worktreePath === b.worktreePath && a.status === b.status,
+    (a, b) =>
+      a.exists === b.exists &&
+      a.isGitRepo === b.isGitRepo &&
+      a.worktreePath === b.worktreePath &&
+      a.status === b.status,
   )
 }
 
@@ -1841,6 +1901,9 @@ function FileTreeToolbar({
   onCreateFile,
   onCreateDirectory,
   onRefresh,
+  showBootstrapConfigInit,
+  initializingBootstrapConfig,
+  onInitializeBootstrapConfig,
 }: {
   height: FileTreeToolbarHeight
   query: string
@@ -1856,8 +1919,12 @@ function FileTreeToolbar({
   onCreateFile: () => void
   onCreateDirectory: () => void
   onRefresh: () => void
+  showBootstrapConfigInit: boolean
+  initializingBootstrapConfig: boolean
+  onInitializeBootstrapConfig: () => void
 }) {
   const t = useT()
+  const { toolbarHeightPx } = useRuntimeChromeSettings()
   const inputRef = useRef<HTMLInputElement>(null)
   const hasQuery = query.trim().length > 0
   const canMove = resultCount > 0
@@ -1880,8 +1947,9 @@ function FileTreeToolbar({
     <div
       className={cn(
         'flex shrink-0 items-center justify-end gap-1 border-b border-toolbar-border bg-toolbar px-2',
-        height === 'detail' ? 'h-9' : 'min-h-8',
+        height === 'detail' ? null : 'min-h-8',
       )}
+      style={height === 'detail' ? { height: toolbarHeightPx } : undefined}
     >
       <div className="mr-auto flex shrink-0 items-center gap-1 pr-1">
         <Button
@@ -1924,6 +1992,19 @@ function FileTreeToolbar({
         >
           <RefreshCw className="size-3.5" />
         </Button>
+        {showBootstrapConfigInit ? (
+          <Button
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            aria-label={t('file-tree.init-worktree-bootstrap-config')}
+            title={t('file-tree.init-worktree-bootstrap-config')}
+            onClick={onInitializeBootstrapConfig}
+            disabled={initializingBootstrapConfig}
+          >
+            <FileCog className="size-3.5" />
+          </Button>
+        ) : null}
       </div>
       {searchOpen ? (
         <div className="ml-1 flex min-w-0 flex-1 items-center justify-end gap-1">

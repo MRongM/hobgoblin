@@ -56,6 +56,8 @@ function defaultRpcResult(path: string, input?: unknown) {
       globalShortcutRegistered: true,
       terminalApp: 'auto',
       editorApp: 'auto',
+      topbarHeightPx: 34,
+      toolbarHeightPx: 34,
       fileTreeFontSize: 12,
       fileTreeTopbarFontSize: 13,
       terminalFontSize: 14,
@@ -161,8 +163,7 @@ const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
         ...(body.settings ?? {}),
       },
     }
-  }
-  else if (url.pathname === '/api/settings/external-apps') result = defaultRpcResult('externalApps.get')
+  } else if (url.pathname === '/api/settings/external-apps') result = defaultRpcResult('externalApps.get')
   return {
     ok: true,
     json: async () => result,
@@ -202,6 +203,8 @@ beforeEach(() => {
       globalShortcutRegistered: true,
       terminalApp: 'auto',
       editorApp: 'auto',
+      topbarHeightPx: 34,
+      toolbarHeightPx: 34,
       fileTreeFontSize: 12,
       fileTreeTopbarFontSize: 13,
       terminalFontSize: 14,
@@ -232,6 +235,8 @@ beforeEach(() => {
       globalShortcutRegistered: true,
       terminalApp: 'auto',
       editorApp: 'auto',
+      topbarHeightPx: 34,
+      toolbarHeightPx: 34,
       fileTreeFontSize: 12,
       fileTreeTopbarFontSize: 13,
       terminalFontSize: 14,
@@ -252,8 +257,8 @@ beforeEach(() => {
       write: vi.fn(),
       resize: vi.fn(),
       close: vi.fn(),
-          create: vi.fn(),
-          pruneTerminals: vi.fn(),
+      create: vi.fn(),
+      pruneTerminals: vi.fn(),
       notifyBell: vi.fn(),
       sendTestNotification,
       setBadge: vi.fn(),
@@ -524,7 +529,7 @@ describe('SettingsSurface', () => {
     if (!(input instanceof HTMLInputElement)) throw new Error('Missing temporary files directory input')
 
     await act(async () => {
-      setInputValue(input, '/Users/test/project/tmp')
+      setInputValue(input, 'tmp/cache')
       await Promise.resolve()
     })
 
@@ -533,7 +538,7 @@ describe('SettingsSurface', () => {
         const [url, options] = call as unknown as [unknown, RequestInit | undefined]
         if (new URL(String(url)).pathname !== '/api/settings/prefs') return false
         const body = JSON.parse(String(options?.body ?? '{}')) as { settings?: Record<string, unknown> }
-        return body.settings?.temporaryFilesDirectory === '/Users/test/project/tmp'
+        return body.settings?.temporaryFilesDirectory === 'tmp/cache'
       }),
     ).toBe(true)
   })
@@ -555,6 +560,50 @@ describe('SettingsSurface', () => {
         if (new URL(String(url)).pathname !== '/api/settings/prefs') return false
         const body = JSON.parse(String(options?.body ?? '{}')) as { settings?: Record<string, unknown> }
         return body.settings?.terminalThemeSyncEnabled === false
+      }),
+    ).toBe(true)
+  })
+
+  test('does not render the goblin.toml initializer in general settings', async () => {
+    useReposStore.setState({
+      repos: { '/repo-a': emptyRepo('/repo-a', 'Repo A') },
+      order: ['/repo-a'],
+      activeId: '/repo-a',
+    })
+
+    await render(<SettingsSurface page="general" onPageChange={() => {}} />)
+    await waitForText('settings.general.open-from-terminal-title')
+
+    expect(
+      fetchMock.mock.calls.some((call) => new URL(String((call as unknown as [unknown])[0])).pathname.startsWith('/api/repo/worktree-bootstrap')),
+    ).toBe(false)
+    expect(document.body.textContent).not.toContain('settings.worktree-bootstrap-config.label')
+  })
+
+  test('edits chrome heights from general settings', async () => {
+    await render(<SettingsSurface page="general" onPageChange={() => {}} />)
+
+    const topbarInput = document.getElementById('settings-topbar-height')
+    const toolbarInput = document.getElementById('settings-toolbar-height')
+    if (!(topbarInput instanceof HTMLInputElement)) throw new Error('Missing topbar height input')
+    if (!(toolbarInput instanceof HTMLInputElement)) throw new Error('Missing toolbar height input')
+
+    await act(async () => {
+      setInputValue(topbarInput, '39')
+      setInputValue(toolbarInput, '41')
+      await Promise.resolve()
+    })
+
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [, options] = call as unknown as [unknown, RequestInit | undefined]
+        return String(options?.body ?? '').includes('"topbarHeightPx":39')
+      }),
+    ).toBe(true)
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [, options] = call as unknown as [unknown, RequestInit | undefined]
+        return String(options?.body ?? '').includes('"toolbarHeightPx":41')
       }),
     ).toBe(true)
   })

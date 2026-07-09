@@ -54,6 +54,8 @@ describe('renderer bootstrap', () => {
       globalShortcutRegistered: false,
       terminalApp: 'auto',
       editorApp: 'windsurf',
+      topbarHeightPx: 34,
+      toolbarHeightPx: 34,
       fileTreeFontSize: 12,
       fileTreeTopbarFontSize: 13,
       fileTreeClipboardMaxBytesMb: 30,

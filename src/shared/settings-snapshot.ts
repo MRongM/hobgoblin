@@ -1,4 +1,5 @@
 import type { RepoSessionEntry } from '#/shared/remote-repo.ts'
+import type { RepoSettingsEntry } from '#/shared/repo-settings.ts'
 import type {
   RuntimeRecentReposState,
   RuntimeSettingsSnapshot,
@@ -31,6 +32,8 @@ export function buildRuntimeSettingsSnapshot(input: {
     globalShortcutRegistered: input.globalShortcutRegistered,
     terminalApp: input.prefs.terminalApp,
     editorApp: input.prefs.editorApp,
+    topbarHeightPx: input.prefs.topbarHeightPx,
+    toolbarHeightPx: input.prefs.toolbarHeightPx,
     fileTreeFontSize: input.prefs.fileTreeFontSize,
     fileTreeTopbarFontSize: input.prefs.fileTreeTopbarFontSize,
     fileTreeClipboardMaxBytesMb: input.prefs.fileTreeClipboardMaxBytesMb,
@@ -56,6 +59,7 @@ export function buildSettingsSnapshot(input: {
   globalShortcutRegistered: boolean
   session: SessionState
   recentRepos: RepoSessionEntry[]
+  repoSettings: RepoSettingsEntry[]
 }): SettingsSnapshot {
   return {
     ...buildRuntimeSettingsSnapshot({
@@ -64,6 +68,7 @@ export function buildSettingsSnapshot(input: {
     }),
     ...buildRuntimeRecentReposState({ recentRepos: input.recentRepos }),
     session: input.session,
+    repoSettings: input.repoSettings,
   }
 }
 
@@ -89,6 +94,8 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     | 'globalShortcutRegistered'
     | 'terminalApp'
     | 'editorApp'
+    | 'topbarHeightPx'
+    | 'toolbarHeightPx'
     | 'fileTreeFontSize'
     | 'fileTreeTopbarFontSize'
     | 'fileTreeClipboardMaxBytesMb'
@@ -120,6 +127,8 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     globalShortcutRegistered: snapshot.globalShortcutRegistered,
     terminalApp: snapshot.terminalApp,
     editorApp: snapshot.editorApp,
+    topbarHeightPx: snapshot.topbarHeightPx,
+    toolbarHeightPx: snapshot.toolbarHeightPx,
     fileTreeFontSize: snapshot.fileTreeFontSize,
     fileTreeTopbarFontSize: snapshot.fileTreeTopbarFontSize,
     fileTreeClipboardMaxBytesMb: snapshot.fileTreeClipboardMaxBytesMb,

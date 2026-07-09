@@ -8,6 +8,7 @@ import type {
   ReposSet,
   ReposStore,
 } from '#/web/stores/repos/types.ts'
+import type { ExecResult } from '#/web/types.ts'
 
 let nextInstanceToken = 1
 let nextEventId = 1
@@ -93,7 +94,7 @@ export function rotateRepoInstanceToken(repo: Draft<RepoState> | RepoState): voi
   repo.instanceToken = nextInstanceToken++
 }
 
-export function resultEvent(result: { ok: boolean; message: string }, options?: RepoResultEventOptions): RepoEvent {
+export function resultEvent(result: ExecResult, options?: RepoResultEventOptions): RepoEvent {
   return { id: nextEventId++, kind: 'result', result, action: options?.action }
 }
 

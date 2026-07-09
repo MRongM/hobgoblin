@@ -12,6 +12,8 @@ import {
   DEFAULT_GIT_NETWORK_TIMEOUT_SEC,
   DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
   DEFAULT_TERMINAL_FONT_SIZE,
+  DEFAULT_TOOLBAR_HEIGHT_PX,
+  DEFAULT_TOPBAR_HEIGHT_PX,
 } from '#/shared/settings-defaults.ts'
 
 export function fallbackInitialSettings() {
@@ -112,6 +114,14 @@ export function readRuntimeFontSettings(data: RuntimeSettingsSnapshot | undefine
       data?.fileTreeTopbarFontSize ?? fallback?.fileTreeTopbarFontSize ?? DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
     terminalFontSize:
       data?.terminalFontSize ?? fallback?.terminalFontSize ?? DEFAULT_TERMINAL_FONT_SIZE,
+  }
+}
+
+export function readRuntimeChromeSettings(data: RuntimeSettingsSnapshot | undefined) {
+  const fallback = fallbackInitialSettings()
+  return {
+    topbarHeightPx: data?.topbarHeightPx ?? fallback?.topbarHeightPx ?? DEFAULT_TOPBAR_HEIGHT_PX,
+    toolbarHeightPx: data?.toolbarHeightPx ?? fallback?.toolbarHeightPx ?? DEFAULT_TOOLBAR_HEIGHT_PX,
   }
 }
 

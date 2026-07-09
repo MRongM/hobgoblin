@@ -261,6 +261,7 @@ describe('remote fetch timestamps', () => {
           worktreePath: '/tmp/worktrees/feature-a',
           mode: { kind: 'newBranch', newBranch: 'feature/a', baseRef: 'main' },
         },
+        worktreeBootstrap: { kind: 'skip' },
       },
       { token, refreshOnError: false },
     )
@@ -289,6 +290,7 @@ describe('remote fetch timestamps', () => {
           worktreePath: '/tmp/worktrees/feature-a',
           mode: { kind: 'newBranch', newBranch: 'feature/a', baseRef: 'main' },
         },
+        worktreeBootstrap: { kind: 'skip' },
       },
       { token, refreshOnError: false },
     )

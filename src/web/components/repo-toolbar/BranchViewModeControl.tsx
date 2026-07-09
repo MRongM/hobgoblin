@@ -1,49 +1,56 @@
 import { FolderTree, ListTree, type LucideIcon } from 'lucide-react'
-import { ToggleGroup, ToggleGroupItem } from '#/web/components/ui/toggle-group.tsx'
+import { Button } from '#/web/components/ui/button.tsx'
 import { Tip } from '#/web/components/Tip.tsx'
 import { useT } from '#/web/stores/i18n.ts'
 import { BRANCH_VIEW_MODE_OPTIONS } from '#/web/components/repo-toolbar/branch-view-mode-options.ts'
 import type { BranchViewMode } from '#/web/stores/repos/types.ts'
-import { segmentedItemClass } from '#/web/components/repo-toolbar/segmented-control.ts'
+
 interface Props {
   value: BranchViewMode
   disabled?: boolean
   onChange: (viewMode: BranchViewMode) => void
 }
 
+type BranchViewToggleMode = (typeof BRANCH_VIEW_MODE_OPTIONS)[number]['id']
+
 const BRANCH_VIEW_MODE_ICONS = {
   all: ListTree,
   worktrees: FolderTree,
-} satisfies Record<(typeof BRANCH_VIEW_MODE_OPTIONS)[number]['id'], LucideIcon>
+} satisfies Record<BranchViewToggleMode, LucideIcon>
+
+const BRANCH_VIEW_MODE_TOOLTIP_KEYS = Object.fromEntries(
+  BRANCH_VIEW_MODE_OPTIONS.map((option) => [option.id, option.tooltipKey]),
+) as Record<BranchViewToggleMode, string>
+
+function visibleBranchViewMode(value: BranchViewMode): BranchViewToggleMode {
+  return value === 'worktrees' ? 'worktrees' : 'all'
+}
+
+function nextBranchViewMode(value: BranchViewMode): BranchViewToggleMode {
+  return visibleBranchViewMode(value) === 'all' ? 'worktrees' : 'all'
+}
 
 export function BranchViewModeControl({ value, disabled = false, onChange }: Props) {
   const t = useT()
+  const currentValue = visibleBranchViewMode(value)
+  const nextValue = nextBranchViewMode(value)
+  const Icon = BRANCH_VIEW_MODE_ICONS[currentValue]
+  const label = t(BRANCH_VIEW_MODE_TOOLTIP_KEYS[nextValue])
 
   return (
-    <ToggleGroup
-      type="single"
-      value={value}
-      onValueChange={(next) => {
-        if (next) onChange(next as BranchViewMode)
-      }}
-      disabled={disabled}
-      aria-label={t('branches.filter-label')}
-      variant="outline"
-      size="sm"
-      className="shrink-0"
-    >
-      {BRANCH_VIEW_MODE_OPTIONS.map((option) => {
-        const Icon = BRANCH_VIEW_MODE_ICONS[option.id]
-        const label = t(option.tooltipKey)
-        const selected = option.id === value
-        return (
-          <Tip key={option.id} label={label}>
-            <ToggleGroupItem value={option.id} aria-label={label} className={segmentedItemClass(selected)}>
-              <Icon />
-            </ToggleGroupItem>
-          </Tip>
-        )
-      })}
-    </ToggleGroup>
+    <Tip label={label}>
+      <span className="inline-flex shrink-0">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-sm"
+          disabled={disabled}
+          aria-label={label}
+          onClick={() => onChange(nextValue)}
+        >
+          <Icon />
+        </Button>
+      </span>
+    </Tip>
   )
 }

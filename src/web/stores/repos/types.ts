@@ -37,7 +37,7 @@ export interface RepoResultEventOptions {
 }
 
 export type RepoEvent =
-  | { id: number; kind: 'result'; result: { ok: boolean; message: string }; action?: RepoEventAction }
+  | { id: number; kind: 'result'; result: ExecResult; action?: RepoEventAction }
   | { id: number; kind: 'error'; message: string }
 
 /** Discriminated union: a successful open guarantees `id`; a failed
@@ -233,7 +233,7 @@ export interface RuntimeCoherentRepoProjectionActions {
   syncAndRefresh: (id: string, options?: { token?: number }) => Promise<void>
   setLastResult: (
     id: string,
-    result: { ok: boolean; message: string },
+    result: ExecResult,
     token: number,
     options?: RepoResultEventOptions,
   ) => void

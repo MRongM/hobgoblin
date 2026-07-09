@@ -1,10 +1,11 @@
 import { appendRepoEvent, replaceRepoState, resultEvent } from '#/web/stores/repos/helpers.ts'
 import type { RepoResultEventOptions, ReposGet, ReposSet } from '#/web/stores/repos/types.ts'
+import type { ExecResult } from '#/web/types.ts'
 export function createCommitActions(set: ReposSet, get: ReposGet) {
   return {
     setLastResult(
       id: string,
-      result: { ok: boolean; message: string },
+      result: ExecResult,
       token: number,
       options?: RepoResultEventOptions,
     ) {

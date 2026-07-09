@@ -1,6 +1,12 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { isValidAbsolutePath, toSafeRepoLocator, toSafeSessionRepoEntry } from '#/shared/input-validation.ts'
+import {
+  MAX_IPC_PATH_LENGTH,
+  isValidAbsolutePath,
+  toSafeRepoLocator,
+  toSafeSessionRepoEntry,
+} from '#/shared/input-validation.ts'
+import { safeRelativePath } from '#/shared/path-semantics.ts'
 import { serverDataFile } from '#/server/common/data-dir.ts'
 import type {
   EditorPref,
@@ -21,6 +27,11 @@ import {
   normalizeWorkspaceLayout,
 } from '#/shared/workspace-layout.ts'
 import { repoSessionEntryId, type RepoSessionEntry } from '#/shared/remote-repo.ts'
+import {
+  isWorktreeBootstrapConfigHash,
+  type RepoSettingsEntry,
+  type WorktreeBootstrapTrust,
+} from '#/shared/repo-settings.ts'
 import { normalizeGlobalShortcut } from '#/shared/accelerator.ts'
 import { normalizeColorTheme, type ColorTheme } from '#/shared/color-theme.ts'
 import {
@@ -58,6 +69,7 @@ import {
   defaultSessionState,
   defaultSettingsPrefs,
 } from '#/shared/settings-defaults.ts'
+import { DEFAULT_TOPBAR_HEIGHT_PX, DEFAULT_TOOLBAR_HEIGHT_PX, normalizeChromeHeightPx } from '#/shared/window-chrome.ts'
 
 type FetchIntervalListener = (sec: number) => void
 interface ServerSettingsData {
@@ -79,6 +91,8 @@ interface ServerSettingsData {
   globalShortcut: string
   terminalApp: TerminalPref
   editorApp: EditorPref
+  topbarHeightPx: number
+  toolbarHeightPx: number
   fileTreeFontSize: number
   fileTreeTopbarFontSize: number
   fileTreeClipboardMaxBytesMb: number
@@ -90,6 +104,7 @@ interface ServerSettingsData {
   lanEnabled: boolean
   session: SessionState
   recentRepos: RepoSessionEntry[]
+  repoSettings: RepoSettingsEntry[]
 }
 
 export type ServerSettingsPrefsPatch = Partial<SettingsPrefs>
@@ -166,6 +181,14 @@ function normalizeTerminalFontSize(value: unknown): number {
   })
 }
 
+function normalizeTopbarHeightPx(value: unknown): number {
+  return normalizeChromeHeightPx(value, DEFAULT_TOPBAR_HEIGHT_PX)
+}
+
+function normalizeToolbarHeightPx(value: unknown): number {
+  return normalizeChromeHeightPx(value, DEFAULT_TOOLBAR_HEIGHT_PX)
+}
+
 function normalizeTerminalNotificationsEnabled(value: unknown): boolean {
   return value === true
 }
@@ -173,7 +196,9 @@ function normalizeTerminalNotificationsEnabled(value: unknown): boolean {
 function normalizeTemporaryFilesDirectory(value: unknown): string {
   if (typeof value !== 'string') return ''
   const trimmed = value.trim()
-  return isValidAbsolutePath(trimmed) ? trimmed : ''
+  if (!trimmed || trimmed.length > MAX_IPC_PATH_LENGTH || trimmed.includes('\0')) return ''
+  if (isValidAbsolutePath(trimmed)) return trimmed
+  return safeRelativePath(trimmed) ?? ''
 }
 
 function normalizeTerminalThemeSyncEnabled(value: unknown): boolean {
@@ -256,6 +281,8 @@ function settingsPrefsFromData(data: ServerSettingsData): SettingsPrefs {
     globalShortcut: data.globalShortcut,
     terminalApp: data.terminalApp,
     editorApp: data.editorApp,
+    topbarHeightPx: data.topbarHeightPx,
+    toolbarHeightPx: data.toolbarHeightPx,
     fileTreeFontSize: data.fileTreeFontSize,
     fileTreeTopbarFontSize: data.fileTreeTopbarFontSize,
     fileTreeClipboardMaxBytesMb: data.fileTreeClipboardMaxBytesMb,
@@ -331,6 +358,29 @@ function normalizeRecentRepos(value: unknown): RepoSessionEntry[] {
   ).slice(0, MAX_RECENT_REPOS)
 }
 
+function normalizeRepoSettings(value: unknown): RepoSettingsEntry[] {
+  if (!Array.isArray(value)) return []
+  const entries = new Map<string, RepoSettingsEntry>()
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue
+    const raw = item as Partial<RepoSettingsEntry>
+    if (typeof raw.repoId !== 'string' || raw.repoId.length === 0) continue
+    const next: RepoSettingsEntry = { repoId: raw.repoId }
+    const trust = normalizeWorktreeBootstrapTrust(raw.worktreeBootstrapTrust)
+    if (trust) next.worktreeBootstrapTrust = trust
+    if (next.worktreeBootstrapTrust) entries.set(next.repoId, next)
+  }
+  return Array.from(entries.values())
+}
+
+function normalizeWorktreeBootstrapTrust(value: unknown): WorktreeBootstrapTrust | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const raw = value as Partial<WorktreeBootstrapTrust>
+  if (!isWorktreeBootstrapConfigHash(raw.configHash)) return undefined
+  if (typeof raw.trustedAt !== 'string' || raw.trustedAt.length === 0) return undefined
+  return { configHash: raw.configHash, trustedAt: raw.trustedAt }
+}
+
 async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
   try {
     const raw = await readFile(serverDataFile('server-settings.json'), 'utf-8')
@@ -354,6 +404,8 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       globalShortcut: normalizeGlobalShortcut(parsed.globalShortcut),
       terminalApp: normalizeTerminalPref(parsed.terminalApp),
       editorApp: normalizeEditorPref(parsed.editorApp),
+      topbarHeightPx: normalizeTopbarHeightPx(parsed.topbarHeightPx),
+      toolbarHeightPx: normalizeToolbarHeightPx(parsed.toolbarHeightPx),
       fileTreeFontSize: normalizeFileTreeFontSize(parsed.fileTreeFontSize),
       fileTreeTopbarFontSize: normalizeFileTreeTopbarFontSize(parsed.fileTreeTopbarFontSize),
       fileTreeClipboardMaxBytesMb: normalizeFileTreeClipboardMaxBytesMb(parsed.fileTreeClipboardMaxBytesMb),
@@ -365,6 +417,7 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       lanEnabled: normalizeLanEnabled(parsed.lanEnabled),
       session: normalizeSession(parsed.session),
       recentRepos: normalizeRecentRepos(parsed.recentRepos),
+      repoSettings: normalizeRepoSettings(parsed.repoSettings),
     }
   } catch {
     return null
@@ -380,7 +433,7 @@ async function writeServerSettingsFile(data: ServerSettingsData): Promise<void> 
 async function loadServerSettings(): Promise<ServerSettingsData> {
   settingsPromise ??= (async () => {
     const persisted = await readServerSettingsFile()
-    const data = persisted ?? { ...defaultSettingsPrefs(), session: defaultSession(), recentRepos: [] }
+    const data = persisted ?? { ...defaultSettingsPrefs(), session: defaultSession(), recentRepos: [], repoSettings: [] }
     await writeServerSettingsFile(data)
     cachedFetchIntervalSec = data.fetchIntervalSec
     return data
@@ -421,8 +474,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   const nextLang = patch.lang === undefined ? data.lang : normalizeLangPref(patch.lang)
   const nextTheme = patch.theme === undefined ? data.theme : normalizeThemePref(patch.theme)
   const nextColorTheme = patch.colorTheme === undefined ? data.colorTheme : normalizeColorTheme(patch.colorTheme)
-  const nextFontFamily =
-    patch.fontFamily === undefined ? data.fontFamily : normalizeFontFamilyPref(patch.fontFamily)
+  const nextFontFamily = patch.fontFamily === undefined ? data.fontFamily : normalizeFontFamilyPref(patch.fontFamily)
   const nextFetchIntervalSec =
     patch.fetchIntervalSec === undefined ? data.fetchIntervalSec : normalizeFetchInterval(patch.fetchIntervalSec)
   const nextGitNetworkProxyEnabled =
@@ -463,6 +515,10 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     patch.globalShortcut === undefined ? data.globalShortcut : normalizeGlobalShortcut(patch.globalShortcut)
   const nextTerminalApp = patch.terminalApp === undefined ? data.terminalApp : normalizeTerminalPref(patch.terminalApp)
   const nextEditorApp = patch.editorApp === undefined ? data.editorApp : normalizeEditorPref(patch.editorApp)
+  const nextTopbarHeightPx =
+    patch.topbarHeightPx === undefined ? data.topbarHeightPx : normalizeTopbarHeightPx(patch.topbarHeightPx)
+  const nextToolbarHeightPx =
+    patch.toolbarHeightPx === undefined ? data.toolbarHeightPx : normalizeToolbarHeightPx(patch.toolbarHeightPx)
   const nextFileTreeFontSize =
     patch.fileTreeFontSize === undefined ? data.fileTreeFontSize : normalizeFileTreeFontSize(patch.fileTreeFontSize)
   const nextFileTreeTopbarFontSize =
@@ -511,6 +567,8 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     data.globalShortcut !== nextGlobalShortcut ||
     data.terminalApp !== nextTerminalApp ||
     data.editorApp !== nextEditorApp ||
+    data.topbarHeightPx !== nextTopbarHeightPx ||
+    data.toolbarHeightPx !== nextToolbarHeightPx ||
     data.fileTreeFontSize !== nextFileTreeFontSize ||
     data.fileTreeTopbarFontSize !== nextFileTreeTopbarFontSize ||
     data.fileTreeClipboardMaxBytesMb !== nextFileTreeClipboardMaxBytesMb ||
@@ -538,6 +596,8 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   data.globalShortcut = nextGlobalShortcut
   data.terminalApp = nextTerminalApp
   data.editorApp = nextEditorApp
+  data.topbarHeightPx = nextTopbarHeightPx
+  data.toolbarHeightPx = nextToolbarHeightPx
   data.fileTreeFontSize = nextFileTreeFontSize
   data.fileTreeTopbarFontSize = nextFileTreeTopbarFontSize
   data.fileTreeClipboardMaxBytesMb = nextFileTreeClipboardMaxBytesMb
@@ -569,6 +629,62 @@ export async function setServerSessionState(session: SessionState): Promise<Sess
 
 export async function getServerRecentRepos(): Promise<RepoSessionEntry[]> {
   return [...(await loadServerSettings()).recentRepos]
+}
+
+export async function getServerRepoSettings(): Promise<RepoSettingsEntry[]> {
+  return cloneRepoSettings((await loadServerSettings()).repoSettings)
+}
+
+export async function trustServerRepoWorktreeBootstrapConfig(input: {
+  repoId: string
+  configHash: string
+}): Promise<RepoSettingsEntry[]> {
+  const data = await loadServerSettings()
+  if (!input.repoId || !isWorktreeBootstrapConfigHash(input.configHash)) return cloneRepoSettings(data.repoSettings)
+  const worktreeBootstrapTrust: WorktreeBootstrapTrust = {
+    configHash: input.configHash,
+    trustedAt: new Date().toISOString(),
+  }
+  data.repoSettings = upsertRepoSettingsEntry(data.repoSettings, {
+    repoId: input.repoId,
+    worktreeBootstrapTrust,
+  })
+  await writeServerSettingsFile(data)
+  return cloneRepoSettings(data.repoSettings)
+}
+
+export async function untrustServerRepoWorktreeBootstrapConfig(input: {
+  repoId: string
+  configHash: string
+}): Promise<boolean> {
+  const data = await loadServerSettings()
+  if (!input.repoId || !isWorktreeBootstrapConfigHash(input.configHash)) return false
+  const existing = data.repoSettings.find((entry) => entry.repoId === input.repoId)
+  if (existing?.worktreeBootstrapTrust?.configHash !== input.configHash) return false
+  data.repoSettings = data.repoSettings.filter((entry) => entry.repoId !== input.repoId)
+  await writeServerSettingsFile(data)
+  return true
+}
+
+function cloneRepoSettings(repoSettings: readonly RepoSettingsEntry[]): RepoSettingsEntry[] {
+  return repoSettings.map((entry) => ({
+    repoId: entry.repoId,
+    ...(entry.worktreeBootstrapTrust
+      ? {
+          worktreeBootstrapTrust: {
+            configHash: entry.worktreeBootstrapTrust.configHash,
+            trustedAt: entry.worktreeBootstrapTrust.trustedAt,
+          },
+        }
+      : {}),
+  }))
+}
+
+function upsertRepoSettingsEntry(
+  entries: readonly RepoSettingsEntry[],
+  next: RepoSettingsEntry,
+): RepoSettingsEntry[] {
+  return [next, ...entries.filter((entry) => entry.repoId !== next.repoId)]
 }
 
 export async function addServerRecentRepo(repo: RepoSessionEntry): Promise<RepoSessionEntry[]> {

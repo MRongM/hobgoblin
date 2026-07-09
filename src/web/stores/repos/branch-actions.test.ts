@@ -80,6 +80,7 @@ function createNewBranchWorktreeAction(options: {
         baseRef: options.baseRef ?? 'feature/a',
       },
     },
+    worktreeBootstrap: { kind: 'skip' },
   }
 }
 

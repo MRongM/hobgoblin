@@ -123,6 +123,31 @@ vi.mock('#/web/components/OpenRemoteRepositoryDialog.tsx', () => ({
   OpenRemoteRepositoryDialog: () => null,
 }))
 
+vi.mock('#/web/components/ConfirmDialog.tsx', () => ({
+  ConfirmDialog: ({
+    open,
+    title,
+    message,
+    confirmLabel,
+    onConfirm,
+  }: {
+    open: boolean
+    title: string
+    message: ReactNode
+    confirmLabel: string
+    onConfirm: () => void
+  }) =>
+    open ? (
+      <section data-testid="close-repo-confirm">
+        <h1>{title}</h1>
+        <div>{message}</div>
+        <button type="button" onClick={onConfirm}>
+          {confirmLabel}
+        </button>
+      </section>
+    ) : null,
+}))
+
 vi.mock('#/web/components/RepoDropOverlay.tsx', () => ({
   RepoDropOverlay: () => null,
 }))
@@ -170,18 +195,35 @@ describe('App shell topbar visibility', () => {
     expect(container?.querySelector('[data-testid="topbar-repo-controls"]')).not.toBeNull()
     expect(container?.querySelector('[data-testid="repo-view"]')?.textContent).toBe('/repo')
   })
+
+  test('renders the close project confirmation overlay', async () => {
+    const confirmCloseRepo = vi.fn()
+    await renderApp({ runtime: 'web', workspaceMode: 'split', closeConfirmOpen: true, confirmCloseRepo })
+
+    expect(container?.querySelector('[data-testid="close-repo-confirm"]')?.textContent).toContain(
+      'repo-tabs.close-confirm-title',
+    )
+
+    await clickButton('repo-tabs.close-confirm-confirm')
+
+    expect(confirmCloseRepo).toHaveBeenCalledTimes(1)
+  })
 })
 
 async function renderApp({
   runtime,
   workspaceMode,
+  closeConfirmOpen = false,
+  confirmCloseRepo = vi.fn(),
 }: {
   runtime: 'web' | 'electron'
   workspaceMode: RepoWorkspaceMode
+  closeConfirmOpen?: boolean
+  confirmCloseRepo?: () => void
 }) {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   bootstrapMock.runtimeKind = runtime
-  shellMock.state = shellStateWith(workspaceMode)
+  shellMock.state = shellStateWith(workspaceMode, { closeConfirmOpen, confirmCloseRepo })
 
   container = document.createElement('div')
   document.body.append(container)
@@ -192,7 +234,20 @@ async function renderApp({
   })
 }
 
-function shellStateWith(workspaceMode: RepoWorkspaceMode): MainWindowShellState {
+async function clickButton(text: string) {
+  const buttons = Array.from(container?.querySelectorAll('button') ?? [])
+  const button = buttons.find((candidate) => candidate.textContent === text)
+  if (!(button instanceof HTMLButtonElement)) throw new Error(`Missing button: ${text}`)
+  await act(async () => {
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await Promise.resolve()
+  })
+}
+
+function shellStateWith(
+  workspaceMode: RepoWorkspaceMode,
+  options: { closeConfirmOpen?: boolean; confirmCloseRepo?: () => void } = {},
+): MainWindowShellState {
   const overlays = {
     anyOpen: false,
     closeAllOverlays: vi.fn(),
@@ -211,6 +266,13 @@ function shellStateWith(workspaceMode: RepoWorkspaceMode): MainWindowShellState 
 
   return {
     overlays,
+    closeRepoConfirmation: {
+      open: options.closeConfirmOpen ?? false,
+      repoId: options.closeConfirmOpen ? '/repo' : null,
+      repoName: 'repo',
+      cancel: vi.fn(),
+      confirm: options.confirmCloseRepo ?? vi.fn(),
+    },
     sessionReady: true,
     visibleRepoId: '/repo',
     workspaceLayout: 'left-right' as const,

@@ -14,10 +14,16 @@ afterEach(() => {
 })
 
 describe('font family projection', () => {
-  test('resolves fixed font stacks for each preference', () => {
+  test('resolves fixed app UI font stacks for each preference', () => {
     expect(fontFamilyStackForPref('mono')).toBe(APP_FONT_FAMILY_STACKS.mono)
-    expect(fontFamilyStackForPref('maple').terminal).toContain('Maple Mono NF CN')
+    expect(fontFamilyStackForPref('maple').mono).toContain('Maple Mono NF CN')
     expect(fontFamilyStackForPref('system').sans).toContain('-apple-system')
+  })
+
+  test('exposes only app UI font stack fields', () => {
+    expect(Object.keys(APP_FONT_FAMILY_STACKS.mono).sort()).toEqual(['mono', 'sans'])
+    expect(Object.keys(APP_FONT_FAMILY_STACKS.maple).sort()).toEqual(['mono', 'sans'])
+    expect(Object.keys(APP_FONT_FAMILY_STACKS.system).sort()).toEqual(['mono', 'sans'])
   })
 
   test('applies data attribute and css variables to the document root', () => {

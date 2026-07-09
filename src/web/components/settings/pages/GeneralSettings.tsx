@@ -6,16 +6,19 @@ import {
   SettingsGroup,
   SettingsCard,
   SettingsList,
+  SettingsNumberInput,
   SettingsRow,
   SettingsSelect,
 } from '#/web/components/settings/SettingsPrimitives.tsx'
 import { useRuntimeGeneralSettings } from '#/web/runtime-settings-general.ts'
 import { useGeneralSettingsController } from '#/web/runtime-settings-general.ts'
 import { useFontSettingsController, useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
+import { useChromeSettingsController, useRuntimeChromeSettings } from '#/web/runtime-settings-chrome.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useThemeStore } from '#/web/stores/theme.ts'
 import { useI18nStore } from '#/web/stores/i18n.ts'
 import { COLOR_THEMES } from '#/shared/color-theme.ts'
+import { MAX_CHROME_HEIGHT_PX, MIN_CHROME_HEIGHT_PX } from '#/shared/window-chrome.ts'
 import type { ColorTheme } from '#/shared/color-theme.ts'
 import type { FontFamilyPref, LangPref, ThemePref } from '#/shared/rpc.ts'
 
@@ -28,6 +31,7 @@ export function GeneralSettings() {
   const langPref = useI18nStore((s) => s.pref)
   const setLangPref = useI18nStore((s) => s.setPref)
   const { fontFamily } = useRuntimeFontSettings()
+  const { topbarHeightPx, toolbarHeightPx } = useRuntimeChromeSettings()
   const { toggleDetailOnActionBarBlankClick, terminalThemeSyncEnabled, temporaryFilesDirectory } =
     useRuntimeGeneralSettings()
   const {
@@ -36,6 +40,7 @@ export function GeneralSettings() {
     setTemporaryFilesDirectory,
   } = useGeneralSettingsController()
   const { setFontFamily } = useFontSettingsController()
+  const { setTopbarHeightPx, setToolbarHeightPx } = useChromeSettingsController()
   const appearanceOptions: { value: ThemePref; labelKey: string; icon: ReactNode }[] = [
     { value: 'auto', labelKey: 'settings.appearance.auto', icon: <Laptop className="size-4" /> },
     { value: 'light', labelKey: 'settings.appearance.light', icon: <Sun className="size-4" /> },
@@ -148,6 +153,38 @@ export function GeneralSettings() {
                 className="h-8 w-64 max-w-full px-2 text-xs"
                 onChange={(event) => void setTemporaryFilesDirectory(event.currentTarget.value)}
                 aria-label={t('settings.temporary-files-directory')}
+              />
+            }
+          />
+        </SettingsList>
+      </SettingsGroup>
+      <SettingsGroup label={t('settings.chrome-heights.title')}>
+        <SettingsList>
+          <SettingsRow
+            controlId="settings-topbar-height"
+            label={t('settings.chrome-heights.topbar')}
+            hint={t('settings.chrome-heights.topbar-hint')}
+            control={
+              <SettingsNumberInput
+                id="settings-topbar-height"
+                value={topbarHeightPx}
+                min={MIN_CHROME_HEIGHT_PX}
+                max={MAX_CHROME_HEIGHT_PX}
+                onChange={(value) => void setTopbarHeightPx(value)}
+              />
+            }
+          />
+          <SettingsRow
+            controlId="settings-toolbar-height"
+            label={t('settings.chrome-heights.toolbar')}
+            hint={t('settings.chrome-heights.toolbar-hint')}
+            control={
+              <SettingsNumberInput
+                id="settings-toolbar-height"
+                value={toolbarHeightPx}
+                min={MIN_CHROME_HEIGHT_PX}
+                max={MAX_CHROME_HEIGHT_PX}
+                onChange={(value) => void setToolbarHeightPx(value)}
               />
             }
           />

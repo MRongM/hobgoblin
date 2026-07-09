@@ -47,6 +47,7 @@ function initialSettingsSnapshot(): SettingsSnapshot | undefined {
       selectedTerminalByWorktree: {},
     },
     recentRepos: [],
+    repoSettings: [],
   }
 }
 

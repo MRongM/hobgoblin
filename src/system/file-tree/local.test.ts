@@ -65,6 +65,29 @@ describe('listLocalFileTreeDirectory', () => {
     })
   })
 
+  test('sorts symlinks by their target kind', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'goblin-file-tree-'))
+    await mkdir(join(root, 'z-dir'))
+    await mkdir(join(root, 'target-dir'))
+    await writeFile(join(root, 'b-file.txt'), '')
+    await writeFile(join(root, 'target-file.txt'), '')
+    await symlink(join(root, 'target-dir'), join(root, 'a-link-dir'), 'dir')
+    await symlink(join(root, 'target-file.txt'), join(root, 'a-link-file'))
+
+    const result = await listLocalFileTreeDirectory(root, root)
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.entries.map((entry) => `${entry.kind}:${entry.targetKind ?? '-'}:${entry.relativePath}`)).toEqual([
+      'symlink:directory:a-link-dir',
+      'directory:-:target-dir',
+      'directory:-:z-dir',
+      'symlink:file:a-link-file',
+      'file:-:b-file.txt',
+      'file:-:target-file.txt',
+    ])
+  })
+
   test('rejects directory outside worktree', async () => {
     const root = await mkdtemp(join(tmpdir(), 'goblin-file-tree-'))
     const result = await listLocalFileTreeDirectory(root, tmpdir())

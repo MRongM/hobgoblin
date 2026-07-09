@@ -35,6 +35,8 @@ vi.mock('#/web/stores/i18n.ts', () => ({
         return '终端有未读提醒'
       case 'terminal.open-count':
         return `${params?.count ?? 0} 个终端`
+      case 'terminal.output-active':
+        return '终端正在输出'
       default:
         return key
     }
@@ -83,14 +85,17 @@ afterEach(() => {
 function terminalReadContextWithState(
   bellKeys: ReadonlySet<string>,
   countsByWorktreeKey: ReadonlyMap<string, number>,
+  outputActiveKeys: ReadonlySet<string> = new Set(),
 ): TerminalSessionReadContextValue {
   return {
     worktreeSnapshot: (worktreeTerminalKey) => {
       const hasBell = bellKeys.has(worktreeTerminalKey)
+      const isOutputActive = outputActiveKeys.has(worktreeTerminalKey)
+      const count = countsByWorktreeKey.get(worktreeTerminalKey) ?? (hasBell || isOutputActive ? 1 : 0)
       return {
         worktreeTerminalKey,
         selectedDescriptor: null,
-        sessions: hasBell
+        sessions: count > 0
           ? [
               {
                 key: `${worktreeTerminalKey}\0terminal-1`,
@@ -100,11 +105,12 @@ function terminalReadContextWithState(
                 title: 'terminal',
                 phase: 'open',
                 selected: true,
-                hasBell: true,
+                hasBell,
+                isOutputActive,
               },
             ]
           : [],
-        count: countsByWorktreeKey.get(worktreeTerminalKey) ?? 0,
+        count,
       }
     },
     subscribeWorktree: () => () => {},
@@ -116,7 +122,7 @@ function terminalReadContextWithState(
 }
 
 describe('BranchRow', () => {
-  test('shows the generic dirty label for dirty worktrees', () => {
+  test('keeps dirty worktree label in the row title without visible badge text', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     repo.data.worktreesByPath['/tmp/worktree-a'] = {
       path: '/tmp/worktree-a',
@@ -141,7 +147,8 @@ describe('BranchRow', () => {
       </ul>,
     )
 
-    expect(document.body.textContent).toContain('有改动')
+    expect(document.body.textContent).not.toContain('有改动')
+    expect(document.body.querySelector('[title*="有改动"]')).not.toBeNull()
   })
 
   test('uses a change icon inside the dirty worktree badge', () => {
@@ -169,16 +176,17 @@ describe('BranchRow', () => {
       </ul>,
     )
 
-    const dirtyBadge = Array.from(document.body.querySelectorAll<HTMLElement>('[data-slot="badge"]')).find(
-      (node) => node.textContent === '有改动',
-    )
+    const dirtyBadge = document.body.querySelector<HTMLElement>('[data-testid="dirty-worktree-badge"]')
     const badgeIcon = dirtyBadge?.querySelector('svg')
 
+    expect(dirtyBadge?.textContent).toBe('')
+    expect(dirtyBadge?.getAttribute('aria-label')).toBe('有改动')
+    expect(dirtyBadge?.getAttribute('title')).toBe('有改动')
     expect(badgeIcon?.classList.contains('lucide-git-compare-arrows')).toBe(true)
     expect(badgeIcon?.classList.contains('lucide-folder-tree')).toBe(false)
   })
 
-  test('keeps the generic dirty label even when exact counts are unavailable', () => {
+  test('keeps dirty worktree label out of visible text when exact counts are unavailable', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     repo.data.worktreesByPath['/tmp/worktree-a'] = {
       path: '/tmp/worktree-a',
@@ -202,7 +210,31 @@ describe('BranchRow', () => {
       </ul>,
     )
 
-    expect(document.body.textContent).toContain('有改动')
+    expect(document.body.textContent).not.toContain('有改动')
+    expect(document.body.querySelector('[title*="有改动"]')).not.toBeNull()
+  })
+
+  test('does not render the default branch badge in branch rows', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('main', { isDefault: true })
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+    )
+
+    expect(document.body.textContent).toContain('main')
+    expect(document.body.textContent).not.toContain('默认')
+    expect(document.body.querySelector('[title*="默认"]')).not.toBeNull()
   })
 
   test('shows the branch name first and the project directory name as secondary worktree text', () => {
@@ -231,6 +263,31 @@ describe('BranchRow', () => {
     expect(document.body.textContent).not.toContain(
       '/Users/test/Desktop/src/tries/2026-06-13-hobgoblin/hobgoblin-feat-optimize',
     )
+  })
+
+  test('shows the abbreviated commit hash tag after the branch name', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { lastCommitHash: 'abc123456789' })
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+    )
+
+    const branchName = document.body.querySelector('.text-sm.font-medium')
+    const hashBadge = document.body.querySelector('[data-testid="branch-hash-tag"]')
+
+    expect(branchName?.textContent).toBe('feature/a')
+    expect(hashBadge?.textContent).toBe('#abc1234')
   })
 
   test('centers the worktree icon beside the full two-line worktree summary', () => {
@@ -390,6 +447,58 @@ describe('BranchRow', () => {
     expect(badge?.querySelector('svg')).not.toBeNull()
   })
 
+  test('animates the terminal count icon when a linked worktree has active output', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+      {
+        countsByWorktreeKey: new Map([['/tmp/repo\0/tmp/worktree-a', 1]]),
+        outputActiveWorktreeKeys: ['/tmp/repo\0/tmp/worktree-a'],
+      },
+    )
+
+    const badge = document.body.querySelector('[data-testid="terminal-count-badge"]')
+    expect(badge?.textContent).toBe('1')
+    expect(badge?.querySelector('[data-terminal-output-activity-indicator="active"]')).not.toBeNull()
+  })
+
+  test('keeps the terminal count icon idle when linked worktree sessions have no active output', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+      {
+        countsByWorktreeKey: new Map([['/tmp/repo\0/tmp/worktree-a', 1]]),
+      },
+    )
+
+    const badge = document.body.querySelector('[data-testid="terminal-count-badge"]')
+    expect(badge?.querySelector('[data-terminal-output-activity-indicator="active"]')).toBeNull()
+  })
+
   test('does not show a terminal count badge when a linked worktree has no open sessions', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
@@ -521,17 +630,11 @@ describe('BranchRow', () => {
     expect(content?.className).not.toContain('py-1.5')
   })
 
-  test('gives post-badge commit metadata enough vertical room', () => {
+  test('does not render commit author or commit time in visible branch row text', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
-    repo.data.worktreesByPath['/tmp/worktree-a'] = {
-      path: '/tmp/worktree-a',
-      branch: 'feature/a',
-      isMain: false,
-      isDirty: true,
-    }
     const branch = createRepoBranch('feature/a', {
       lastCommitAuthor: 'MRongM',
-      lastCommitDate: new Date().toISOString(),
+      lastCommitDate: new Date('2026-07-04T10:00:00.000Z').toISOString(),
       worktree: { path: '/tmp/worktree-a' },
     })
 
@@ -549,17 +652,13 @@ describe('BranchRow', () => {
       </ul>,
     )
 
-    const commitMeta = Array.from(document.querySelectorAll('span')).find(
-      (node) => node.textContent?.includes('MRongM ·') && node.className.includes('text-[11px]'),
-    )
-
-    expect(document.body.textContent).toContain('有改动')
-    expect(commitMeta?.className).toContain('min-h-4')
-    expect(commitMeta?.className).toContain('leading-4')
-    expect(commitMeta?.className).not.toContain('leading-none')
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('feature/a')
+    expect(text).toContain('worktree-a')
+    expect(text).not.toContain('MRongM')
   })
 
-  test('renders an isolated drag handle when drag props are provided', () => {
+  test('applies sortable props to the row without rendering a drag handle', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
 
@@ -573,24 +672,24 @@ describe('BranchRow', () => {
           onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
-          dragHandle={{
-            label: '重新排序工作树',
-            ref: vi.fn(),
-            props: {},
+          sortable={{
+            setNodeRef: vi.fn(),
+            props: { role: 'button' },
           }}
         />
       </ul>,
     )
 
     const handle = document.querySelector('[aria-label="重新排序工作树"]')
-    const row = document.querySelector('li')
-    expect(handle?.getAttribute('aria-label')).toBe('重新排序工作树')
-    expect(row?.className).toContain('grid-cols-[1.75rem_minmax(0,1fr)]')
-    expect(handle?.parentElement?.className).toContain('pl-0')
-    expect(handle?.parentElement?.className).not.toContain('pl-2')
+    const row = document.querySelector('li[role="button"]')
+    expect(handle).toBeNull()
+    expect(document.querySelector('.lucide-grip-vertical')).toBeNull()
+    expect(row).not.toBeNull()
+    expect(row?.className).toContain('grid-cols-1')
+    expect(row?.className).not.toContain('1.75rem')
   })
 
-  test('removes left content padding beside the drag handle', () => {
+  test('keeps standard content padding when sortable props are provided', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
 
@@ -604,10 +703,9 @@ describe('BranchRow', () => {
           onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
-          dragHandle={{
-            label: '重新排序工作树',
-            ref: vi.fn(),
-            props: {},
+          sortable={{
+            setNodeRef: vi.fn(),
+            props: { role: 'button' },
           }}
         />
       </ul>,
@@ -617,10 +715,9 @@ describe('BranchRow', () => {
       node.textContent?.includes('feature/a'),
     )
 
-    expect(content?.className).toContain('pr-4')
+    expect(content?.className).toContain('px-4')
     expect(content?.className).toContain('py-1')
-    expect(content?.className).not.toContain('px-4')
-    expect(content?.className).not.toContain('pl-4')
+    expect(content?.className).not.toContain('pr-4')
   })
 
   test('renders inline action panel below the branch row content', () => {
@@ -651,11 +748,13 @@ function render(
   fixture: {
     bellWorktreeKeys?: string[]
     countsByWorktreeKey?: Map<string, number>
+    outputActiveWorktreeKeys?: string[]
   } = {},
 ) {
   const readContext = terminalReadContextWithState(
     new Set(fixture.bellWorktreeKeys ?? []),
     fixture.countsByWorktreeKey ?? new Map(),
+    new Set(fixture.outputActiveWorktreeKeys ?? []),
   )
   act(() => {
     root!.render(

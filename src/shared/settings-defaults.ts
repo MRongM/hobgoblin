@@ -14,6 +14,12 @@ import type {
   ThemePref,
 } from '#/shared/rpc.ts'
 import {
+  DEFAULT_TOPBAR_HEIGHT_PX,
+  DEFAULT_TOOLBAR_HEIGHT_PX,
+  MIN_CHROME_HEIGHT_PX,
+  MAX_CHROME_HEIGHT_PX,
+} from '#/shared/window-chrome.ts'
+import {
   MAX_FILE_TREE_FONT_SIZE,
   MAX_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   MAX_FILE_TREE_TOPBAR_FONT_SIZE,
@@ -99,6 +105,8 @@ export function defaultSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): Se
     globalShortcut: overrides.globalShortcut ?? DEFAULT_GLOBAL_SHORTCUT,
     terminalApp: overrides.terminalApp ?? DEFAULT_TERMINAL_APP,
     editorApp: overrides.editorApp ?? DEFAULT_EDITOR_APP,
+    topbarHeightPx: overrides.topbarHeightPx ?? DEFAULT_TOPBAR_HEIGHT_PX,
+    toolbarHeightPx: overrides.toolbarHeightPx ?? DEFAULT_TOOLBAR_HEIGHT_PX,
     fileTreeFontSize: overrides.fileTreeFontSize ?? DEFAULT_FILE_TREE_FONT_SIZE,
     fileTreeTopbarFontSize: overrides.fileTreeTopbarFontSize ?? DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
     fileTreeClipboardMaxBytesMb:
@@ -122,6 +130,7 @@ export function defaultSettingsSnapshot(overrides: Partial<SettingsSnapshot> = {
     globalShortcutRegistered: overrides.globalShortcutRegistered ?? false,
     session: overrides.session ?? defaultSessionState(),
     recentRepos: overrides.recentRepos ?? [],
+    repoSettings: overrides.repoSettings ?? [],
   }
 }
 
@@ -143,6 +152,8 @@ export function initialSettingsFromSnapshot(snapshot: Pick<
   | 'globalShortcutRegistered'
   | 'terminalApp'
   | 'editorApp'
+  | 'topbarHeightPx'
+  | 'toolbarHeightPx'
   | 'fileTreeFontSize'
   | 'fileTreeTopbarFontSize'
   | 'fileTreeClipboardMaxBytesMb'
@@ -170,6 +181,8 @@ export function initialSettingsFromSnapshot(snapshot: Pick<
     globalShortcutRegistered: snapshot.globalShortcutRegistered,
     terminalApp: snapshot.terminalApp,
     editorApp: snapshot.editorApp,
+    topbarHeightPx: snapshot.topbarHeightPx,
+    toolbarHeightPx: snapshot.toolbarHeightPx,
     fileTreeFontSize: snapshot.fileTreeFontSize,
     fileTreeTopbarFontSize: snapshot.fileTreeTopbarFontSize,
     fileTreeClipboardMaxBytesMb: snapshot.fileTreeClipboardMaxBytesMb,
@@ -188,6 +201,10 @@ export function defaultInitialSettingsSnapshot(overrides: Partial<InitialSetting
 
 export { DEFAULT_COLOR_THEME, DEFAULT_GLOBAL_SHORTCUT }
 export {
+  DEFAULT_TOPBAR_HEIGHT_PX,
+  DEFAULT_TOOLBAR_HEIGHT_PX,
+  MIN_CHROME_HEIGHT_PX,
+  MAX_CHROME_HEIGHT_PX,
   DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   MAX_FILE_TREE_FONT_SIZE,
   MAX_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,

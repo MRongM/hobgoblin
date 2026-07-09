@@ -9,6 +9,7 @@ import {
   type SaveClipboardBinaryFilesResult,
 } from '#/shared/clipboard-binary-temp-files.ts'
 import { isValidAbsolutePath } from '#/shared/input-validation.ts'
+import { joinWorktreeRelativePath, safeRelativePath } from '#/shared/path-semantics.ts'
 
 interface SaveOptions {
   now?: Date
@@ -34,10 +35,7 @@ export async function saveClipboardBinaryFilesToTemp(
 
   try {
     const sourceFiles = await sourceFilesFromPaths(sourcePaths)
-    const sizes = [
-      ...files.map((file) => file.bytes?.byteLength ?? -1),
-      ...sourceFiles.map((file) => file.byteLength),
-    ]
+    const sizes = [...files.map((file) => file.bytes?.byteLength ?? -1), ...sourceFiles.map((file) => file.byteLength)]
     if (sizes.some((size) => size < 0 || size > MAX_CLIPBOARD_BINARY_FILE_BYTES)) {
       return { ok: false, message: 'error.file-too-large' }
     }
@@ -60,8 +58,10 @@ export async function saveClipboardBinaryFilesToTemp(
     }
     return { ok: true, paths }
   } catch (err) {
-    if ((err as { message?: string }).message === 'invalid-source-path') return { ok: false, message: 'error.invalid-path' }
-    if ((err as { message?: string }).message === 'invalid-source-file') return { ok: false, message: 'error.invalid-arguments' }
+    if ((err as { message?: string }).message === 'invalid-source-path')
+      return { ok: false, message: 'error.invalid-path' }
+    if ((err as { message?: string }).message === 'invalid-source-file')
+      return { ok: false, message: 'error.invalid-arguments' }
     return { ok: false, message: 'error.failed-write-file' }
   }
 }
@@ -79,8 +79,11 @@ async function sourceFilesFromPaths(sourcePaths: string[]): Promise<Array<{ path
 
 function resolveTargetDirectory(worktreePath: string, configured: string | undefined): string | null {
   const trimmed = typeof configured === 'string' ? configured.trim() : ''
-  if (trimmed) return isValidAbsolutePath(trimmed) ? path.normalize(trimmed) : null
-  return path.join(path.normalize(worktreePath), 'tmp')
+  const normalizedWorktreePath = path.normalize(worktreePath)
+  if (!trimmed) return path.join(normalizedWorktreePath, 'tmp')
+  if (isValidAbsolutePath(trimmed)) return path.normalize(trimmed)
+  const relativePath = safeRelativePath(trimmed)
+  return relativePath ? joinWorktreeRelativePath(normalizedWorktreePath, relativePath) : null
 }
 
 function extensionForFile(name: string | undefined, type: string | undefined): string {
@@ -101,7 +104,10 @@ async function writeUniqueFile(
   options: SaveOptions,
 ): Promise<string> {
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    const filePath = path.join(targetDir, `pasted-${formatStamp(options.now ?? new Date())}-${randomHex(options)}${extension}`)
+    const filePath = path.join(
+      targetDir,
+      `pasted-${formatStamp(options.now ?? new Date())}-${randomHex(options)}${extension}`,
+    )
     try {
       await writeFile(filePath, bytes, { flag: 'wx' })
       return filePath
@@ -119,7 +125,10 @@ async function copyUniqueFile(
   options: SaveOptions,
 ): Promise<string> {
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    const filePath = path.join(targetDir, `pasted-${formatStamp(options.now ?? new Date())}-${randomHex(options)}${extension}`)
+    const filePath = path.join(
+      targetDir,
+      `pasted-${formatStamp(options.now ?? new Date())}-${randomHex(options)}${extension}`,
+    )
     try {
       await copyFile(sourcePath, filePath, constants.COPYFILE_EXCL)
       return filePath

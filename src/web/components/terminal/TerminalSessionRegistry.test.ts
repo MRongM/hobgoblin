@@ -210,6 +210,41 @@ describe('TerminalSessionRegistry', () => {
       expect(handleOutputSpy).toHaveBeenCalledTimes(1)
     })
 
+    test('marks a terminal session output-active while recent output is flowing', () => {
+      vi.useFakeTimers()
+      try {
+        registry.setRepoIndex(makeRepoIndex())
+        registry.reconcileServerSessions(
+          REPO_ROOT,
+          [makeServerSession('session-a', 'terminal-1')],
+          'attachment_local',
+          new Map(),
+        )
+
+        registry.worktreeSnapshot(WORKTREE_KEY)
+        const listener = vi.fn()
+        const unsubscribe = registry.subscribeWorktree(WORKTREE_KEY, listener)
+
+        registry.handleOutput({ sessionId: 'session-a', data: 'hello', seq: 1, processName: 'bash' })
+
+        expect(listener).toHaveBeenCalledTimes(1)
+        expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]?.isOutputActive).toBe(true)
+
+        listener.mockClear()
+        vi.advanceTimersByTime(1_199)
+        expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]?.isOutputActive).toBe(true)
+        expect(listener).not.toHaveBeenCalled()
+
+        vi.advanceTimersByTime(1)
+        expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]?.isOutputActive).toBe(false)
+        expect(listener).toHaveBeenCalledTimes(1)
+
+        unsubscribe()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
     test('dispatches title changes by sessionId index', () => {
       registry.setRepoIndex(makeRepoIndex())
       registry.reconcileServerSessions(

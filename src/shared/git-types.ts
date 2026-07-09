@@ -3,6 +3,8 @@
 // main/renderer bundles independent — neither side has to import the
 // other's module graph just to know what a `BranchSnapshotInfo` looks like.
 
+import type { WorktreeBootstrapSummary } from '#/shared/worktree-bootstrap-summary.ts'
+
 export interface BranchSnapshotInfo {
   name: string
   isCurrent: boolean
@@ -163,6 +165,8 @@ export interface ExecResult {
   ok: boolean
   message: string
   reason?: GitFailureReason
+  repoChanged?: boolean
+  worktreeBootstrap?: WorktreeBootstrapSummary
 }
 
 /** Branch names we treat as protected — direct push/delete/etc. require

@@ -115,14 +115,24 @@ interface MergeDialogProps {
   allBranches: RepoBranchState[]
   onClose: () => void
   onMerge: (sourceBranch: string) => Promise<ExecResult>
+  onPush?: () => void | Promise<void>
 }
 
-export function MergeDialog({ open, repoId, worktreePath, branch, allBranches, onClose, onMerge }: MergeDialogProps) {
+export function MergeDialog({
+  open,
+  repoId,
+  worktreePath,
+  branch,
+  allBranches,
+  onClose,
+  onMerge,
+  onPush,
+}: MergeDialogProps) {
   const t = useT()
   const [selected, setSelected] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [errorReason, setErrorReason] = useState<ExecResult['reason'] | null>(null)
-  const { isPending, run } = useAsyncPending<'merge'>()
+  const { pending, isPending, run } = useAsyncPending<'merge' | 'mergeAndPush'>()
 
   const candidates = allBranches.filter((b) => b.name !== branch.name)
 
@@ -134,11 +144,11 @@ export function MergeDialog({ open, repoId, worktreePath, branch, allBranches, o
     }
   }, [open])
 
-  async function handleConfirm() {
+  async function handleConfirm(pushAfterMerge = false) {
     if (!selected) return
     setError(null)
     setErrorReason(null)
-    await run('merge', async () => {
+    await run(pushAfterMerge ? 'mergeAndPush' : 'merge', async () => {
       try {
         const result = await onMerge(selected)
         if (!result.ok) {
@@ -146,6 +156,7 @@ export function MergeDialog({ open, repoId, worktreePath, branch, allBranches, o
           setErrorReason(result.reason ?? null)
           return
         }
+        if (pushAfterMerge) await onPush?.()
         onClose()
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err))
@@ -193,8 +204,20 @@ export function MergeDialog({ open, repoId, worktreePath, branch, allBranches, o
           <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={onClose}>
             {t('dialog.cancel')}
           </Button>
+          {onPush && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!selected || isPending}
+              onClick={() => void handleConfirm(true)}
+            >
+              {pending === 'mergeAndPush' && <Loader2 className="animate-spin" />}
+              {t('action.merge-and-push-confirm')}
+            </Button>
+          )}
           <Button type="submit" size="sm" disabled={!selected || isPending}>
-            {isPending && <Loader2 className="animate-spin" />}
+            {pending === 'merge' && <Loader2 className="animate-spin" />}
             {t('action.merge-confirm')}
           </Button>
         </DialogFooter>
