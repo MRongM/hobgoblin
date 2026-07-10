@@ -14,6 +14,7 @@ import {
   Folder,
   FolderPlus,
   FolderOpen,
+  HardDrive,
   ListCollapse,
   Loader2,
   Pencil,
@@ -497,6 +498,7 @@ export function ProjectFileTree({
   const activeSearchKey = activeSearchMatch
     ? `${activeSearchMatch.source}:${activeSearchMatch.source === 'loaded' ? activeSearchMatch.id : activeSearchMatch.relativePath}`
     : ''
+  const canOpenLocally = !!worktreePath && !isRemoteRepoId(repoId)
 
   useEffect(() => {
     if (!activeSearchMatch) return
@@ -1323,6 +1325,11 @@ export function ProjectFileTree({
     },
     [repoId],
   )
+  const openWorktreeLocally = useCallback(async () => {
+    if (!canOpenLocally || !worktreePath) return
+    const result = await openInFinder(worktreePath)
+    if (!result.ok) toast.error(result.message)
+  }, [canOpenLocally, worktreePath])
 
   if (!view.exists) return null
   const fileTreeStyle = {
@@ -1362,6 +1369,8 @@ export function ProjectFileTree({
             onCreateFile={() => beginCreateEntry('file', selectedCreateEntryTarget())}
             onCreateDirectory={() => beginCreateEntry('directory', selectedCreateEntryTarget())}
             onRefresh={() => refreshTreeDirectory(rootCreateEntryTarget())}
+            canOpenLocally={canOpenLocally}
+            onOpenLocal={() => void openWorktreeLocally()}
             showBootstrapConfigInit={bootstrapConfigStatus === 'missing'}
             initializingBootstrapConfig={initializingBootstrapConfig}
             onInitializeBootstrapConfig={() => void initializeBootstrapConfig()}
@@ -1901,6 +1910,8 @@ function FileTreeToolbar({
   onCreateFile,
   onCreateDirectory,
   onRefresh,
+  canOpenLocally,
+  onOpenLocal,
   showBootstrapConfigInit,
   initializingBootstrapConfig,
   onInitializeBootstrapConfig,
@@ -1919,6 +1930,8 @@ function FileTreeToolbar({
   onCreateFile: () => void
   onCreateDirectory: () => void
   onRefresh: () => void
+  canOpenLocally: boolean
+  onOpenLocal: () => void
   showBootstrapConfigInit: boolean
   initializingBootstrapConfig: boolean
   onInitializeBootstrapConfig: () => void
@@ -1992,6 +2005,18 @@ function FileTreeToolbar({
         >
           <RefreshCw className="size-3.5" />
         </Button>
+        {canOpenLocally ? (
+          <Button
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            aria-label={t('file-tree.open-local')}
+            title={t('file-tree.open-local')}
+            onClick={onOpenLocal}
+          >
+            <HardDrive className="size-3.5" />
+          </Button>
+        ) : null}
         {showBootstrapConfigInit ? (
           <Button
             type="button"

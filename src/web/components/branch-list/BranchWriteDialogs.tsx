@@ -114,6 +114,7 @@ interface MergeDialogProps {
   branch: RepoBranchState
   allBranches: RepoBranchState[]
   onClose: () => void
+  onPull?: () => Promise<ExecResult>
   onMerge: (sourceBranch: string) => Promise<ExecResult>
   onPush?: () => void | Promise<void>
 }
@@ -125,6 +126,7 @@ export function MergeDialog({
   branch,
   allBranches,
   onClose,
+  onPull,
   onMerge,
   onPush,
 }: MergeDialogProps) {
@@ -132,7 +134,7 @@ export function MergeDialog({
   const [selected, setSelected] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [errorReason, setErrorReason] = useState<ExecResult['reason'] | null>(null)
-  const { pending, isPending, run } = useAsyncPending<'merge' | 'mergeAndPush'>()
+  const { pending, isPending, run } = useAsyncPending<'merge' | 'pullMergePush'>()
 
   const candidates = allBranches.filter((b) => b.name !== branch.name)
 
@@ -144,19 +146,27 @@ export function MergeDialog({
     }
   }, [open])
 
-  async function handleConfirm(pushAfterMerge = false) {
+  async function handleConfirm(mode: 'merge' | 'pullMergePush' = 'merge') {
     if (!selected) return
     setError(null)
     setErrorReason(null)
-    await run(pushAfterMerge ? 'mergeAndPush' : 'merge', async () => {
+    await run(mode, async () => {
       try {
+        if (mode === 'pullMergePush' && onPull) {
+          const pullResult = await onPull()
+          if (!pullResult.ok) {
+            setError(pullResult.message)
+            setErrorReason(pullResult.reason ?? null)
+            return
+          }
+        }
         const result = await onMerge(selected)
         if (!result.ok) {
           setError(result.message)
           setErrorReason(result.reason ?? null)
           return
         }
-        if (pushAfterMerge) await onPush?.()
+        if (mode === 'pullMergePush') await onPush?.()
         onClose()
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err))
@@ -204,15 +214,15 @@ export function MergeDialog({
           <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={onClose}>
             {t('dialog.cancel')}
           </Button>
-          {onPush && (
+          {onPull && onPush && (
             <Button
               type="button"
               variant="outline"
               size="sm"
               disabled={!selected || isPending}
-              onClick={() => void handleConfirm(true)}
+              onClick={() => void handleConfirm('pullMergePush')}
             >
-              {pending === 'mergeAndPush' && <Loader2 className="animate-spin" />}
+              {pending === 'pullMergePush' && <Loader2 className="animate-spin" />}
               {t('action.merge-and-push-confirm')}
             </Button>
           )}

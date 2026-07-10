@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   getCommitMessageProviders: vi.fn(),
   generateRepositoryCommitMessage: vi.fn(),
   mergeRepositoryBranch: vi.fn(),
+  pullRepositoryBranch: vi.fn(),
   resetRepositoryHard: vi.fn(),
 }))
 
@@ -22,6 +23,7 @@ vi.mock('#/web/repo-client.ts', () => ({
   getCommitMessageProviders: mocks.getCommitMessageProviders,
   generateRepositoryCommitMessage: mocks.generateRepositoryCommitMessage,
   mergeRepositoryBranch: mocks.mergeRepositoryBranch,
+  pullRepositoryBranch: mocks.pullRepositoryBranch,
   resetRepositoryHard: mocks.resetRepositoryHard,
 }))
 
@@ -62,7 +64,7 @@ describe('useBranchWriteActions', () => {
     reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
   })
 
-  test('wires merge and push from the branch write merge dialog', async () => {
+  test('wires pull, merge and push from the branch write merge dialog', async () => {
     const calls: string[] = []
     const repo = seedRepoState({
       id: REPO_ID,
@@ -76,6 +78,10 @@ describe('useBranchWriteActions', () => {
     mocks.mergeRepositoryBranch.mockImplementation(async () => {
       calls.push('merge')
       return { ok: true, message: 'merged' }
+    })
+    mocks.pullRepositoryBranch.mockImplementation(async () => {
+      calls.push('pull')
+      return { ok: true, message: 'pulled' }
     })
     const onPush = vi.fn(() => {
       calls.push('push')
@@ -94,9 +100,10 @@ describe('useBranchWriteActions', () => {
     clickButtonByText('action.merge-and-push-confirm')
     await flush()
 
+    expect(mocks.pullRepositoryBranch).toHaveBeenCalledWith(REPO_ID, 'feature/current', '/tmp/repo-feature')
     expect(mocks.mergeRepositoryBranch).toHaveBeenCalledWith(REPO_ID, '/tmp/repo-feature', 'main')
     expect(onPush).toHaveBeenCalled()
-    expect(calls).toEqual(['merge', 'push'])
+    expect(calls).toEqual(['pull', 'merge', 'push'])
   })
 })
 

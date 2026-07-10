@@ -64,6 +64,12 @@ vi.mock('#/web/components/repo-workspace/ProjectHistoryPanel.tsx', () => ({
   ),
 }))
 
+vi.mock('#/web/components/repo-workspace/ProjectRemoteBranchesPanel.tsx', () => ({
+  ProjectRemoteBranchesPanel: ({ repoId }: { repoId: string }) => (
+    <div data-testid="project-remote-branches-panel" data-repo-id={repoId} />
+  ),
+}))
+
 vi.mock('#/web/components/repo-workspace/ProjectPortsPanel.tsx', () => ({
   ProjectPortsPanel: ({ repoId }: { repoId: string }) => (
     <div data-testid="project-ports-panel" data-repo-id={repoId} />
@@ -332,7 +338,7 @@ describe('RepoExplorerPane', () => {
     expect(fileTree?.getAttribute('data-toolbar-height')).toBe('detail')
     expect(explorerToolbar?.style.getPropertyValue('--goblin-file-tree-topbar-font-size')).toBe('13px')
     expect(firstTab?.className).toContain('text-[length:var(--goblin-file-tree-topbar-font-size)]')
-    expect(tabIcons).toHaveLength(4)
+    expect(tabIcons).toHaveLength(5)
     expect(tabIcons.every((icon) => icon.classList.contains('size-3.5'))).toBe(true)
     await act(async () => root.unmount())
   })
@@ -441,7 +447,13 @@ describe('RepoExplorerPane', () => {
     })
 
     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['file-tree.title', 'tab.changes', 'tab.status', 'tab.history'])
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'file-tree.title',
+      'tab.changes',
+      'tab.status',
+      'tab.history',
+      'tab.remote-branches',
+    ])
     expect(container.querySelector('[data-testid="project-file-tree"]')).toBeTruthy()
 
     await act(async () => {
@@ -476,11 +488,12 @@ describe('RepoExplorerPane', () => {
       'tab.changes',
       'tab.status',
       'tab.history',
+      'tab.remote-branches',
       'ports.title',
     ])
 
     await act(async () => {
-      tabs[4]?.click()
+      tabs[5]?.click()
     })
 
     expect(container.querySelector('[data-testid="project-file-tree"]')).toBeNull()
@@ -488,6 +501,35 @@ describe('RepoExplorerPane', () => {
     expect(container.querySelector('[data-testid="project-status-panel"]')).toBeNull()
     expect(container.querySelector('[data-testid="project-ports-panel"]')?.getAttribute('data-repo-id')).toBe(
       'ssh-config://prod/srv/repo',
+    )
+    await act(async () => root.unmount())
+  })
+
+  test('renders remote branches tab for git repositories', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: true,
+      branches: [createRepoBranch('main')],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
+    })
+
+    const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+    const remoteTab = tabs.find((tab) => tab.textContent?.includes('tab.remote-branches'))
+    expect(remoteTab).toBeTruthy()
+
+    await act(async () => {
+      remoteTab?.click()
+    })
+
+    expect(container.querySelector('[data-testid="project-remote-branches-panel"]')?.getAttribute('data-repo-id')).toBe(
+      REPO_ID,
     )
     await act(async () => root.unmount())
   })
@@ -503,8 +545,9 @@ describe('RepoExplorerPane', () => {
     const tablist = container.querySelector<HTMLElement>('[role="tablist"]')
     expect(tablist?.className).toContain('w-max')
     expect(tablist?.className).toContain('min-w-full')
+    expect(tablist?.className).toContain('gap-0.5')
     expect(tablist?.getAttribute('aria-orientation')).toBe('horizontal')
-    expect(container.querySelectorAll('[role="tab"]').length).toBe(4)
+    expect(container.querySelectorAll('[role="tab"]').length).toBe(5)
     await act(async () => root.unmount())
   })
 

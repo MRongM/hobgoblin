@@ -221,9 +221,13 @@ describe('MergeDialog', () => {
     expect(buttonByText('Claude')).not.toBeNull()
   })
 
-  test('runs push after a successful merge from the merge and push action', async () => {
+  test('runs pull, merge and push from the pull-merge-push action', async () => {
     const calls: string[] = []
     const onClose = vi.fn(() => calls.push('close'))
+    const onPull = vi.fn(async () => {
+      calls.push('pull')
+      return { ok: true, message: 'pulled' }
+    })
     const onMerge = vi.fn(async (sourceBranch: string) => {
       calls.push(`merge:${sourceBranch}`)
       return { ok: true, message: 'merged' }
@@ -240,6 +244,7 @@ describe('MergeDialog', () => {
         branch={repoBranch('feature/current')}
         allBranches={[repoBranch('feature/current'), repoBranch('main')]}
         onClose={onClose}
+        onPull={onPull}
         onMerge={onMerge}
         onPush={onPush}
       />,
@@ -249,9 +254,10 @@ describe('MergeDialog', () => {
     clickButtonByText('action.merge-and-push-confirm')
     await flush()
 
+    expect(onPull).toHaveBeenCalled()
     expect(onMerge).toHaveBeenCalledWith('main')
     expect(onPush).toHaveBeenCalled()
-    expect(calls).toEqual(['merge:main', 'push', 'close'])
+    expect(calls).toEqual(['pull', 'merge:main', 'push', 'close'])
   })
 
   test('keeps long merge errors inside a bounded scroll area', async () => {

@@ -42,6 +42,36 @@ describe('remote command scripts', () => {
     )
   })
 
+  test('renders remote tag listing command for a concrete remote', () => {
+    expect(
+      buildRemoteCommandInvocation(TARGET, { type: 'gitRemoteTags', path: '/srv/repo', remote: 'origin' }).script,
+    ).toContain("ls-remote --tags --refs 'origin'")
+  })
+
+  test('renders remote server branch delete command', () => {
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'gitRemoteBranchDelete',
+      path: '/srv/repo',
+      remote: 'origin',
+      branch: 'feature/remove-me',
+    })
+
+    expect(invocation.script).toContain("git -C '/srv/repo' push --delete -- 'origin' 'feature/remove-me'")
+    expect(invocation.args).toContain(TARGET.alias)
+  })
+
+  test('renders remote server tag delete command', () => {
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'gitRemoteTagDelete',
+      path: '/srv/repo',
+      remote: 'origin',
+      tag: 'release/v1.0.0',
+    })
+
+    expect(invocation.script).toContain("git -C '/srv/repo' push -- 'origin' ':refs/tags/release/v1.0.0'")
+    expect(invocation.args).toContain(TARGET.alias)
+  })
+
   test('builds a quoted one-level remote directory listing command', () => {
     const invocation = buildRemoteCommandInvocation(TARGET, {
       type: 'listDirectoryEntries',

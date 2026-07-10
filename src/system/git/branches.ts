@@ -1,5 +1,12 @@
-import { git, gitResultWithOptions, NETWORK_TIMEOUT_MS } from '#/system/git/helper.ts'
+import {
+  git,
+  gitNetworkOptions,
+  gitResultWithOptions,
+  NETWORK_TIMEOUT_MS,
+  type GitNetworkOptions,
+} from '#/system/git/helper.ts'
 import { FIELD_SEP, parseBranches, parseLog } from '#/system/git/parsers.ts'
+import { isProtectedRemoteBranchRef, parseRemoteBranchInput } from '#/shared/remote-branches.ts'
 import { isSafeBranchName } from '#/shared/refnames.ts'
 import { isRemoteTrackingRef } from '#/shared/worktree-create.ts'
 import type { BranchSnapshotInfo, ExecResult, LogEntry, WorktreeInfo } from '#/shared/git-types.ts'
@@ -194,6 +201,26 @@ export async function deleteUpstreamBranch(
 ): Promise<ExecResult> {
   if (!isSafeBranchName(branch)) return { ok: false, message: 'error.invalid-arguments' }
   return gitResultWithOptions(cwd, { timeoutMs: NETWORK_TIMEOUT_MS, signal }, 'push', '--delete', '--', remote, branch)
+}
+
+export async function deleteRemoteServerBranch(
+  cwd: string,
+  remote: string,
+  branch: string,
+  signal?: AbortSignal,
+  networkOptions?: GitNetworkOptions,
+): Promise<ExecResult> {
+  const parsed = parseRemoteBranchInput(remote, branch)
+  if (!parsed || isProtectedRemoteBranchRef(parsed.fullRef)) return { ok: false, message: 'error.invalid-arguments' }
+  return gitResultWithOptions(
+    cwd,
+    gitNetworkOptions(networkOptions, NETWORK_TIMEOUT_MS, signal),
+    'push',
+    '--delete',
+    '--',
+    parsed.remote,
+    parsed.branch,
+  )
 }
 
 /** Resolve `branch`'s upstream short ref (e.g. "origin/feat") or null

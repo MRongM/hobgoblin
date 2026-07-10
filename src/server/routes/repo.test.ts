@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   exportRepositoryFilesToLocalDirectory: vi.fn(),
   getRepositoryWorktreeBootstrapPreview: vi.fn(),
   initializeRepositoryWorktreeBootstrapConfig: vi.fn(),
+  getRepositoryRemoteTags: vi.fn(),
+  deleteRepositoryRemoteTag: vi.fn(),
 }))
 
 vi.mock('#/server/modules/repo-read-paths.ts', () => ({
@@ -43,10 +45,12 @@ vi.mock('#/server/modules/repo-write-paths.ts', () => ({
   createRepositoryFileTreeFile: mocks.createRepositoryFileTreeFile,
   createRepositoryWorktree: vi.fn(),
   deleteRepositoryBranch: vi.fn(),
+  deleteRepositoryRemoteTag: mocks.deleteRepositoryRemoteTag,
   deleteRepositoryFileTreeEntries: vi.fn(),
   discardRepositoryChanges: mocks.discardRepositoryChanges,
   fetchRepository: vi.fn(),
   getRepositoryRemoteBranches: vi.fn(),
+  getRepositoryRemoteTags: mocks.getRepositoryRemoteTags,
   getRepositoryWorktreeBootstrapPreview: mocks.getRepositoryWorktreeBootstrapPreview,
   initializeRepositoryWorktreeBootstrapConfig: mocks.initializeRepositoryWorktreeBootstrapConfig,
   mergeRepositoryBranch: vi.fn(),
@@ -142,6 +146,8 @@ describe('repo routes', () => {
       },
     })
     mocks.initializeRepositoryWorktreeBootstrapConfig.mockResolvedValue({ ok: true, message: 'goblin.toml created' })
+    mocks.getRepositoryRemoteTags.mockResolvedValue(['origin/v1.0.0'])
+    mocks.deleteRepositoryRemoteTag.mockResolvedValue({ ok: true, message: 'deleted' })
   })
 
   test('serves repository history with normalized body values', async () => {
@@ -170,6 +176,42 @@ describe('repo routes', () => {
       'feature/history',
       { limit: 200, skip: 0 },
       expect.any(AbortSignal),
+    )
+  })
+
+  test('serves repository remote tags', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/remote-tags', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cwd: '/tmp/repo' }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual(['origin/v1.0.0'])
+    expect(mocks.getRepositoryRemoteTags).toHaveBeenCalledWith('/tmp/repo', expect.any(AbortSignal))
+  })
+
+  test('routes remote tag deletion', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/delete-remote-tag', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cwd: '/tmp/repo', remote: 'origin', tag: 'release/v1.0.0', sourceToken: 'repo_test' }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true, message: 'deleted' })
+    expect(mocks.deleteRepositoryRemoteTag).toHaveBeenCalledWith(
+      '/tmp/repo',
+      'origin',
+      'release/v1.0.0',
+      expect.any(AbortSignal),
+      'repo_test',
     )
   })
 

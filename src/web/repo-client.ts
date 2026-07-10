@@ -180,6 +180,26 @@ export async function deleteRepositoryBranch(
   )
 }
 
+export async function deleteRepositoryRemoteBranch(
+  cwd: string,
+  remote: string,
+  branch: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  return await postServerJson('/api/repo/delete-remote-branch', { cwd, remote, branch, sourceToken }, { signal })
+}
+
+export async function deleteRepositoryRemoteTag(
+  cwd: string,
+  remote: string,
+  tag: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  return await postServerJson('/api/repo/delete-remote-tag', { cwd, remote, tag, sourceToken }, { signal })
+}
+
 export async function removeRepositoryWorktree(
   cwd: string,
   options: {
@@ -351,6 +371,10 @@ export async function setBackgroundSyncRepos(repoIds: string[]): Promise<void> {
 
 export async function getRepositoryRemoteBranches(cwd: string, signal?: AbortSignal): Promise<string[]> {
   return await postServerJson('/api/repo/remote-branches', { cwd }, { signal })
+}
+
+export async function getRepositoryRemoteTags(cwd: string, signal?: AbortSignal): Promise<string[]> {
+  return await postServerJson('/api/repo/remote-tags', { cwd }, { signal })
 }
 
 export async function checkoutBranchInWorktree(

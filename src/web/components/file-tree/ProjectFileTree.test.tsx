@@ -296,6 +296,30 @@ describe('ProjectFileTree', () => {
     expect(getRepositoryFileTree).toHaveBeenCalledWith(repoId, '/srv/plain', '/srv/plain', expect.any(AbortSignal))
   })
 
+  test('opens a local worktree from the file tree toolbar', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const openLocalButton = container?.querySelector<HTMLButtonElement>('button[aria-label="file-tree.open-local"]')
+    expect(openLocalButton).toBeTruthy()
+
+    await act(async () => {
+      openLocalButton?.click()
+      await Promise.resolve()
+    })
+
+    expect(openInFinder).toHaveBeenCalledWith('/repo')
+  })
+
+  test('hides the local open toolbar action for SSH repositories', async () => {
+    seedRepoWithSelectedBranch({ repoId: 'ssh-config://prod/repo', hasWorktree: true, worktreePath: '/srv/repo' })
+
+    await render(<ProjectFileTree repoId="ssh-config://prod/repo" />)
+
+    expect(container?.querySelector('button[aria-label="file-tree.open-local"]')).toBeNull()
+  })
+
   test('shows empty state when selected branch has no worktree', async () => {
     seedRepoWithSelectedBranch({ hasWorktree: false })
 
@@ -441,6 +465,7 @@ describe('ProjectFileTree', () => {
       'file-tree.new-file',
       'file-tree.new-folder',
       'file-tree.refresh',
+      'file-tree.open-local',
       'file-tree.search-label',
     ])
     expect(toolbar.querySelector('input[aria-label="file-tree.search-label"]')).toBeNull()

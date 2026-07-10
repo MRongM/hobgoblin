@@ -61,6 +61,7 @@ describe('ProjectStatusPanel', () => {
   test('renders selected branch status in the explorer surface', async () => {
     seedRepoState({
       id: REPO_ID,
+      name: 'Status Project',
       branches: [
         createRepoBranch('feature/worktree', {
           lastCommitHash: 'abcdef1234567890',
@@ -80,6 +81,8 @@ describe('ProjectStatusPanel', () => {
     })
 
     expect(container?.textContent).toContain('feature/worktree')
+    expect(container?.textContent).toContain('Status Project')
+    expect(container?.textContent).toContain('branch-status.signal.project')
     expect(container?.textContent).toContain(WORKTREE_PATH)
     expect(container?.textContent).toContain('branch-status.signal.branch')
     expect(container?.textContent).toContain('branch-status.signal.worktree')
@@ -91,17 +94,43 @@ describe('ProjectStatusPanel', () => {
     expect(container?.textContent).toContain('Test Author')
     expect(container?.textContent).toContain('branch-status.signal.commit-time')
     expect(container?.textContent).toContain('2026')
+    const copyAllButton = container?.querySelector<HTMLButtonElement>('button[aria-label="branch-status.copy-all"]')
+    expect(container?.querySelector('[data-testid="project-status-left-actions"]')?.contains(copyAllButton ?? null)).toBe(
+      true,
+    )
+    expect(copyAllButton?.textContent).toBe('')
 
     await act(async () => {
+      container?.querySelector<HTMLButtonElement>('button[aria-label="branch-status.copy-project-name"]')?.click()
       container?.querySelector<HTMLButtonElement>('button[aria-label="branch-status.copy-commit-hash"]')?.click()
       container?.querySelector<HTMLButtonElement>('button[aria-label="branch-status.copy-commit-message"]')?.click()
       container?.querySelector<HTMLButtonElement>('button[aria-label="branch-status.copy-commit-author"]')?.click()
       container?.querySelector<HTMLButtonElement>('button[aria-label="branch-status.copy-commit-time"]')?.click()
     })
 
+    expect(writeText).toHaveBeenCalledWith('Status Project')
     expect(writeText).toHaveBeenCalledWith('abcdef1234567890')
     expect(writeText).toHaveBeenCalledWith('feat: expose commit metadata')
     expect(writeText).toHaveBeenCalledWith('Test Author')
     expect(writeText).toHaveBeenCalledWith('2026-06-26T09:30:00.000Z')
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('button[aria-label="branch-status.copy-all"]')?.click()
+    })
+
+    expect(writeText).toHaveBeenCalledWith(
+      [
+        'branch-status.signal.project: Status Project',
+        'branch-status.signal.branch: feature/worktree',
+        `branch-status.signal.worktree: ${WORKTREE_PATH}`,
+        'branch-status.signal.upstream: branches.no-upstream',
+        'branch-status.signal.sync: branches.no-upstream',
+        'branch-status.signal.commit-hash: abcdef1234567890',
+        'branch-status.signal.commit-message: feat: expose commit metadata',
+        'branch-status.signal.commit-author: Test Author',
+        'branch-status.signal.commit-time: 2026-06-26T09:30:00.000Z',
+        'branch-status.signal.merge: branch-status.merge-unknown',
+      ].join('\n'),
+    )
   })
 })
