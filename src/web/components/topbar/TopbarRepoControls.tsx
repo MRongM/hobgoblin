@@ -40,7 +40,9 @@ export function TopbarRepoControls({ repoId }: Props) {
   return (
     <div className="flex h-full shrink-0 items-center gap-1">
       {isGitRepo && focusMode && <FocusBranchControls repoId={repoId} />}
-      {!isGitRepo && <RepoActivityControl repoId={repoId} compact />}
+      {!isGitRepo && (
+        <RepoActivityControl repoId={repoId} compact mutedForegroundClassName="text-topbar-muted-foreground" />
+      )}
       <ProjectThemeMenuConnected repoId={repoId} />
       <WorkspaceLayoutControlConnected repoId={repoId} />
     </div>
@@ -170,7 +172,7 @@ function BranchSelector({
         <Button
           variant="ghost"
           size="sm"
-          className="gap-0.5 px-1.5 text-muted-foreground"
+          className="gap-0.5 px-1.5 text-topbar-muted-foreground"
           aria-label={t('branches.switch')}
           title={title}
         >

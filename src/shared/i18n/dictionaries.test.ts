@@ -30,6 +30,18 @@ describe('i18n dictionaries', () => {
     }
   })
 
+  test('preserves official classic theme names in every dictionary', () => {
+    const expected = {
+      'settings.theme-preset.catppuccin': 'Catppuccin',
+      'settings.theme-preset.solarized': 'Solarized',
+      'settings.theme-preset.tokyo-night': 'Tokyo Night',
+    }
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      expect(dict, lang).toMatchObject(expected)
+    }
+  })
+
   test('localizes menu and remote repository copy for non-English dictionaries', () => {
     expect(zh['menu.file.open-remote-repo']).toBe('打开远程仓库…')
     expect(ko['menu.file.open-remote-repo']).toBe('원격 리포지토리 열기…')

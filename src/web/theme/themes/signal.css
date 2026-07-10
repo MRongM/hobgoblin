@@ -73,8 +73,8 @@ html[data-color-theme='signal'][data-theme='light'] {
   --goblin-terminal-activity-rgb: 0 155 143;
   --goblin-terminal-activity-surface: rgb(var(--goblin-terminal-activity-rgb) / 0.11);
   --goblin-terminal-activity-border: rgb(var(--goblin-terminal-activity-rgb) / 0.36);
-  --goblin-terminal-bell: #c78b00;
-  --goblin-terminal-bell-rgb: 199 139 0;
+  --goblin-terminal-bell: #8a6400;
+  --goblin-terminal-bell-rgb: 138 100 0;
   --goblin-terminal-bell-surface: rgb(var(--goblin-terminal-bell-rgb) / 0.13);
   --goblin-terminal-bell-border: rgb(var(--goblin-terminal-bell-rgb) / 0.38);
 

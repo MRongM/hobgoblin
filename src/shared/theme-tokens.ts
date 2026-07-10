@@ -41,4 +41,26 @@ export const WINDOW_BACKGROUND_BY_COLOR_THEME: Record<ColorTheme, Record<Resolve
     light: '#f6f3ec',
     dark: '#18110d',
   },
+  catppuccin: {
+    light: '#eff1f5',
+    dark: '#1e1e2e',
+  },
+  solarized: {
+    light: '#fdf6e3',
+    dark: '#002b36',
+  },
+  'tokyo-night': {
+    light: '#e6e7ed',
+    dark: '#1a1b26',
+  },
+}
+
+// Native title bar overlays must match the renderer topbar rather than the
+// window canvas. Presets without a distinct topbar retain the canvas color.
+export const TOPBAR_BACKGROUND_BY_COLOR_THEME: Record<ColorTheme, Record<ResolvedTheme, string>> = {
+  ...WINDOW_BACKGROUND_BY_COLOR_THEME,
+  github: {
+    light: '#f6f8fa',
+    dark: '#161b22',
+  },
 }

@@ -129,7 +129,12 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
               className="h-4 gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums"
             >
               {hasTerminalOutputActivity ? (
-                <TerminalOutputActivityIndicator label={terminalOutputActiveLabel} className="size-2.5" size={10} />
+                <TerminalOutputActivityIndicator
+                  label={terminalOutputActiveLabel}
+                  className="size-2.5"
+                  size={10}
+                  tone="bell"
+                />
               ) : (
                 <Terminal size={10} aria-hidden="true" />
               )}

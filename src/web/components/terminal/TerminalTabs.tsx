@@ -239,7 +239,7 @@ export function TerminalTabs({
 
   function renderCompactTabsBody() {
     return (
-      <ToolbarTabStripBody>
+      <ToolbarTabStripBody className="gap-0">
         <TerminalTabTooltipLayer
           sessions={sessions}
           focusMode={focusMode}
@@ -319,7 +319,7 @@ export function TerminalTabs({
         modifiers={[restrictToVisibleTabStrip]}
         onDragEnd={handleDragEnd}
       >
-        <ToolbarTabStripBody scroll>
+        <ToolbarTabStripBody scroll className="gap-0">
           <SortableContext items={sortableIds} strategy={horizontalListSortingStrategy}>
             <TerminalTabTooltipLayer
               sessions={sessions}

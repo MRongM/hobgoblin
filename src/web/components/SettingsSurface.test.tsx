@@ -564,6 +564,53 @@ describe('SettingsSurface', () => {
     ).toBe(true)
   })
 
+  test('lists and writes every shared color theme from general settings', async () => {
+    await render(<SettingsSurface page="general" onPageChange={() => {}} />)
+
+    const trigger = document.getElementById('settings-theme-preset')
+    if (!(trigger instanceof HTMLButtonElement)) throw new Error('Missing theme preset select')
+    if (!Element.prototype.scrollIntoView) {
+      Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() })
+    }
+
+    await act(async () => {
+      trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+      await Promise.resolve()
+    })
+
+    const options = Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]'))
+    expect(options.map((option) => option.textContent?.trim())).toEqual([
+      'settings.theme-preset.macos',
+      'settings.theme-preset.mono',
+      'settings.theme-preset.github',
+      'settings.theme-preset.claude',
+      'settings.theme-preset.cursor',
+      'settings.theme-preset.airbnb',
+      'settings.theme-preset.bmw',
+      'settings.theme-preset.signal',
+      'settings.theme-preset.forge',
+      'settings.theme-preset.catppuccin',
+      'settings.theme-preset.solarized',
+      'settings.theme-preset.tokyo-night',
+    ])
+
+    const tokyoNight = options.find((option) => option.textContent?.trim() === 'settings.theme-preset.tokyo-night')
+    if (!tokyoNight) throw new Error('Missing Tokyo Night theme option')
+    await act(async () => {
+      tokyoNight.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [url, request] = call as unknown as [unknown, RequestInit | undefined]
+        if (new URL(String(url)).pathname !== '/api/settings/prefs') return false
+        const body = JSON.parse(String(request?.body ?? '{}')) as { settings?: Record<string, unknown> }
+        return body.settings?.colorTheme === 'tokyo-night'
+      }),
+    ).toBe(true)
+  })
+
   test('does not render the goblin.toml initializer in general settings', async () => {
     useReposStore.setState({
       repos: { '/repo-a': emptyRepo('/repo-a', 'Repo A') },

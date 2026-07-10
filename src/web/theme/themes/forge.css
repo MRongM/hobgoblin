@@ -73,8 +73,8 @@ html[data-color-theme='forge'][data-theme='light'] {
   --goblin-terminal-activity-rgb: 182 83 28;
   --goblin-terminal-activity-surface: rgb(var(--goblin-terminal-activity-rgb) / 0.12);
   --goblin-terminal-activity-border: rgb(var(--goblin-terminal-activity-rgb) / 0.38);
-  --goblin-terminal-bell: #c98a12;
-  --goblin-terminal-bell-rgb: 201 138 18;
+  --goblin-terminal-bell: #1f7a55;
+  --goblin-terminal-bell-rgb: 31 122 85;
   --goblin-terminal-bell-surface: rgb(var(--goblin-terminal-bell-rgb) / 0.13);
   --goblin-terminal-bell-border: rgb(var(--goblin-terminal-bell-rgb) / 0.38);
 
@@ -189,8 +189,8 @@ html[data-color-theme='forge'][data-theme='dark'] {
   --goblin-terminal-activity-rgb: 214 106 40;
   --goblin-terminal-activity-surface: rgb(var(--goblin-terminal-activity-rgb) / 0.16);
   --goblin-terminal-activity-border: rgb(var(--goblin-terminal-activity-rgb) / 0.44);
-  --goblin-terminal-bell: #f2bc5e;
-  --goblin-terminal-bell-rgb: 242 188 94;
+  --goblin-terminal-bell: #79c79a;
+  --goblin-terminal-bell-rgb: 121 199 154;
   --goblin-terminal-bell-surface: rgb(var(--goblin-terminal-bell-rgb) / 0.14);
   --goblin-terminal-bell-border: rgb(var(--goblin-terminal-bell-rgb) / 0.38);
 

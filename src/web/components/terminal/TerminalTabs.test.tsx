@@ -306,6 +306,7 @@ describe('TerminalTabs', () => {
     expect(document.body.querySelector('button[aria-label="terminal.sessions"]')).toBeNull()
     expect(tablist?.className).toContain('h-full')
     expect(tablist?.parentElement?.className).toContain('w-max')
+    expect(tablist?.parentElement?.className).toContain('gap-0')
     expect(
       [...document.body.querySelectorAll('[data-terminal-tab-tooltip-id]')].every((tab) => tab.className.includes('w-28')),
     ).toBe(true)

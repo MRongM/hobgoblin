@@ -46,5 +46,8 @@ describe('SettingsPageScreen', () => {
 
     const topbar = container!.querySelector<HTMLElement>('.topbar')
     expect(topbar?.style.height).toBe('39px')
+    const title = container!.querySelector<HTMLElement>('.topbar .font-semibold')
+    expect(title?.className).toContain('text-topbar-foreground')
+    expect(title?.className.split(/\s+/)).not.toContain('text-foreground')
   })
 })

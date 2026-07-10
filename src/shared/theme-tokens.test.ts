@@ -19,4 +19,12 @@ describe('native theme tokens', () => {
       })
     }
   })
+
+  test('uses each classic preset canvas for the native window background', () => {
+    expect(WINDOW_BACKGROUND_BY_COLOR_THEME).toMatchObject({
+      catppuccin: { light: '#eff1f5', dark: '#1e1e2e' },
+      solarized: { light: '#fdf6e3', dark: '#002b36' },
+      'tokyo-night': { light: '#e6e7ed', dark: '#1a1b26' },
+    })
+  })
 })

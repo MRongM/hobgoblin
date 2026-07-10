@@ -102,7 +102,7 @@ function RepoTabEdgeAction({
       {showSeparator && (
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute left-0 top-1/2 h-4 -translate-y-1/2 border-l border-separator"
+          className="pointer-events-none absolute left-0 top-1/2 h-4 -translate-y-1/2 border-l border-topbar-border"
         />
       )}
       {children}

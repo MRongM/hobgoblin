@@ -28,6 +28,21 @@ describe('window chrome helpers', () => {
     })
   })
 
+  test('matches GitHub title bar overlays to the web topbar', () => {
+    setPlatform('win32')
+
+    expect(titleBarOverlayForTheme('light', 'github', WINDOW_TOPBAR_HEIGHT_PX)).toEqual({
+      color: '#f6f8fa',
+      symbolColor: '#000000',
+      height: 34,
+    })
+    expect(titleBarOverlayForTheme('dark', 'github', WINDOW_TOPBAR_HEIGHT_PX)).toEqual({
+      color: '#161b22',
+      symbolColor: '#ffffff',
+      height: 34,
+    })
+  })
+
   test('centers macOS traffic lights in the shared window topbar height', () => {
     setPlatform('darwin')
 
