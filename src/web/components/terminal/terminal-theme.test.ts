@@ -104,6 +104,22 @@ describe('terminal theme tokens', () => {
     })
   })
 
+  test.each([
+    ['light', '#ffffff', '#1b1b1b', '#5b7fa3'],
+    ['dark', '#181818', '#ededed', '#8fb4d8'],
+  ] as const)('reads Cursor %s synchronized terminal tokens', (mode, background, foreground, blue) => {
+    installRealTerminalPresetStyles('cursor')
+    document.documentElement.dataset.theme = mode
+    document.documentElement.dataset.colorTheme = 'cursor'
+
+    expect(terminalThemeForCurrentDocument()).toMatchObject({
+      background,
+      foreground,
+      cursor: foreground,
+      blue,
+    })
+  })
+
   test('reads corrected BMW light terminal tokens from real preset css', () => {
     installRealTerminalPresetStyles('bmw')
     document.documentElement.setAttribute('data-theme', 'light')
@@ -142,6 +158,39 @@ describe('terminal theme tokens', () => {
       blue: '#0969da',
     })
   })
+
+  test.each([
+    ['catppuccin', 'light', '#eff1f5', '#4c4f69', 'rgb(136 57 239 / 0.24)', '#1e66f5', '#ea76cb', '#df8e1d', '#8839ef'],
+    ['catppuccin', 'dark', '#1e1e2e', '#cdd6f4', 'rgb(203 166 247 / 0.28)', '#89b4fa', '#f5c2e7', '#f9e2af', '#cba6f7'],
+    ['solarized', 'light', '#fdf6e3', '#475b62', 'rgb(38 139 210 / 0.22)', '#268bd2', '#6c71c4', '#b58900', '#268bd2'],
+    ['solarized', 'dark', '#002b36', '#93a1a1', 'rgb(38 139 210 / 0.28)', '#268bd2', '#6c71c4', '#b58900', '#268bd2'],
+    ['tokyo-night', 'light', '#e6e7ed', '#343b58', 'rgb(41 89 170 / 0.22)', '#2959aa', '#5a3e8e', '#8f5e15', '#2959aa'],
+    ['tokyo-night', 'dark', '#1a1b26', '#c0caf5', 'rgb(122 162 247 / 0.28)', '#7aa2f7', '#bb9af7', '#e0af68', '#7aa2f7'],
+  ] as const)(
+    'reads %s/%s synchronized terminal tokens',
+    (colorTheme, mode, background, foreground, selectionBackground, blue, brightMagenta, searchMatch, searchActive) => {
+      installRealTerminalPresetStyles(colorTheme)
+      document.documentElement.dataset.theme = mode
+      document.documentElement.dataset.colorTheme = colorTheme
+
+      const terminal = terminalThemeForCurrentDocument()
+      expect(terminal).toMatchObject({
+        background,
+        foreground,
+        cursor: foreground,
+        blue,
+        brightMagenta,
+      })
+      expect(String(terminal.selectionBackground).replace(/\s*\/\s*/g, '/')).toBe(
+        selectionBackground.replace(/\s*\/\s*/g, '/'),
+      )
+      expect(terminalSearchDecorationsForCurrentDocument()).toMatchObject({
+        matchBackground: searchMatch,
+        activeMatchBackground: searchActive,
+        activeMatchBorder: foreground,
+      })
+    },
+  )
 
   test('returns non-empty values for all required xterm theme fields', () => {
     installRealTerminalPresetStyles('github')

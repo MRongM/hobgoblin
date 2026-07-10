@@ -27,6 +27,11 @@ vi.mock('#/web/stores/i18n.ts', () => ({
       'settings.theme-preset.cursor': 'Cursor',
       'settings.theme-preset.airbnb': 'Airbnb',
       'settings.theme-preset.bmw': 'BMW',
+      'settings.theme-preset.signal': 'Signal',
+      'settings.theme-preset.forge': 'Forge',
+      'settings.theme-preset.catppuccin': 'Catppuccin',
+      'settings.theme-preset.solarized': 'Solarized',
+      'settings.theme-preset.tokyo-night': 'Tokyo Night',
     })[key] ?? key,
 }))
 
@@ -61,6 +66,25 @@ describe('ProjectThemeMenu', () => {
 
     expect(document.body.textContent).toContain('Follow global')
     expect(document.body.textContent).toContain('Cursor')
+    expect(
+      Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')).map((item) =>
+        item.textContent?.trim(),
+      ),
+    ).toEqual([
+      'Follow global',
+      'macOS',
+      'Mono',
+      'GitHub',
+      'Claude',
+      'Cursor',
+      'Airbnb',
+      'BMW',
+      'Signal',
+      'Forge',
+      'Catppuccin',
+      'Solarized',
+      'Tokyo Night',
+    ])
 
     await act(async () => {
       Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]'))
@@ -89,6 +113,28 @@ describe('ProjectThemeMenu', () => {
     })
 
     expect(writeMocks.setProjectColorThemePreference).toHaveBeenCalledWith('/repo-a', null)
+  })
+
+  test.each([
+    ['catppuccin', 'Catppuccin'],
+    ['solarized', 'Solarized'],
+    ['tokyo-night', 'Tokyo Night'],
+  ] as const)('writes %s project theme', async (colorTheme, label) => {
+    await render(<ProjectThemeMenu repoId="/repo-a" projectColorTheme={null} />)
+
+    await act(async () => {
+      openProjectThemeMenu()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]'))
+        .find((item) => item.textContent?.includes(label))
+        ?.click()
+      await Promise.resolve()
+    })
+
+    expect(writeMocks.setProjectColorThemePreference).toHaveBeenCalledWith('/repo-a', colorTheme)
   })
 })
 

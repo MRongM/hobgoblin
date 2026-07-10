@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { defaultSessionState } from '#/shared/settings-defaults.ts'
+import { COLOR_THEMES } from '#/shared/color-theme.ts'
 
 let tmp: string | null = null
 let previousDataDir = process.env.GOBLIN_SERVER_DATA_DIR
@@ -346,7 +347,7 @@ test('accepts current design color themes and normalizes legacy apple plus unkno
   process.env.GOBLIN_SERVER_DATA_DIR = tmp
 
   const mod = await import('#/server/modules/settings-source.ts')
-  for (const colorTheme of ['claude', 'cursor', 'airbnb', 'bmw'] as const) {
+  for (const colorTheme of COLOR_THEMES) {
     await mod.updateServerSettingsPrefs({ colorTheme })
     expect(await mod.getServerSettingsPrefs()).toMatchObject({ colorTheme })
   }
@@ -419,7 +420,7 @@ test('normalizes persisted project color themes and drops invalid project color 
   useTempServerSettingsDir()
   await writeSettingsFile({
     repoSettings: [
-      { repoId: '/repo-a', colorTheme: 'cursor' },
+      { repoId: '/repo-a', colorTheme: 'tokyo-night' },
       { repoId: '/repo-b', colorTheme: 'apple' },
       { repoId: '/repo-c', colorTheme: 'not-a-theme' },
       {
@@ -435,7 +436,7 @@ test('normalizes persisted project color themes and drops invalid project color 
 
   const mod = await import('#/server/modules/settings-source.ts')
   await expect(mod.getServerRepoSettings()).resolves.toEqual([
-    { repoId: '/repo-a', colorTheme: 'cursor' },
+    { repoId: '/repo-a', colorTheme: 'tokyo-night' },
     {
       repoId: '/repo-d',
       colorTheme: 'github',

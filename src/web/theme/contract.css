@@ -94,6 +94,23 @@
   --color-topbar: var(--goblin-topbar-bg, var(--goblin-surface-canvas));
   --color-topbar-border: var(--goblin-topbar-border, var(--goblin-border-subtle));
   --color-topbar-foreground: var(--goblin-topbar-fg, var(--goblin-text-primary));
+  --color-topbar-muted-foreground: var(--goblin-topbar-muted-fg, var(--goblin-text-secondary));
+  --color-topbar-control: var(
+    --goblin-topbar-control-bg,
+    var(--goblin-control-bg, var(--goblin-surface-control))
+  );
+  --color-topbar-control-hover: var(
+    --goblin-topbar-control-hover-bg,
+    var(--goblin-control-hover-bg, var(--goblin-surface-control-hover))
+  );
+  --color-topbar-control-border: var(
+    --goblin-topbar-control-border,
+    var(--goblin-control-border, var(--goblin-border-strong))
+  );
+  --color-topbar-control-foreground: var(
+    --goblin-topbar-control-fg,
+    var(--goblin-topbar-fg, var(--goblin-text-primary))
+  );
   --color-app-region: var(
     --goblin-app-region-bg,
     color-mix(in srgb, var(--goblin-pane-header-bg, var(--goblin-surface-raised)) 88%, var(--goblin-accent) 12%)
@@ -141,4 +158,12 @@
   --radius-brand-sm: var(--goblin-brand-radius-sm, var(--radius-sm));
   --radius-brand-md: var(--goblin-brand-radius-md, var(--radius-md));
   --radius-brand-lg: var(--goblin-brand-radius-lg, var(--radius-lg));
+}
+
+.topbar {
+  --color-control: var(--color-topbar-control);
+  --color-control-hover: var(--color-topbar-control-hover);
+  --color-input: var(--color-topbar-control-border);
+  --color-accent: var(--color-topbar-control-hover);
+  --color-accent-foreground: var(--color-topbar-control-foreground);
 }

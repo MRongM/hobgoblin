@@ -280,7 +280,11 @@ describe('RepoTabStrip', () => {
 
     render(
       <RepoTabStrip
-        repos={[repo('repo-a', '/tmp/repo-a'), repo('repo-b', '/tmp/repo-b')]}
+        repos={[
+          repo('repo-a', '/tmp/repo-a'),
+          repo('repo-b', '/tmp/repo-b'),
+          repo('repo-c', '/tmp/repo-c'),
+        ]}
         activeId="/tmp/repo-a"
         labels={labels}
         onActivate={() => {}}
@@ -294,6 +298,22 @@ describe('RepoTabStrip', () => {
 
     const tablist = document.body.querySelector('[role="tablist"]')
     expect(tablist?.className).toContain('gap-0.5')
+
+    const activeTab = container!.querySelector<HTMLElement>('[data-repo-tab-tooltip-id="/tmp/repo-a"]')!
+    const inactiveTab = container!.querySelector<HTMLElement>('[data-repo-tab-tooltip-id="/tmp/repo-b"]')!
+    expect(activeTab.className).toContain('text-foreground')
+    expect(inactiveTab.className).toContain('text-topbar-muted-foreground')
+    expect(inactiveTab.querySelector('svg')?.getAttribute('class')).toContain('text-topbar-muted-foreground')
+
+    const activeClose = activeTab.querySelector<HTMLButtonElement>('button[aria-label="Close repo-a"]')!
+    const inactiveClose = inactiveTab.querySelector<HTMLButtonElement>('button[aria-label="Close repo-b"]')!
+    expect(activeClose.className).toContain('text-muted-foreground')
+    expect(activeClose.className).not.toContain('text-topbar-muted-foreground')
+    expect(inactiveClose.className).toContain('text-topbar-muted-foreground')
+    expect(inactiveTab.querySelector('span.border-topbar-border')).not.toBeNull()
+
+    const openTrigger = container!.querySelector<HTMLButtonElement>('button[aria-label="Open"]')!
+    expect(openTrigger.parentElement?.querySelector('span.border-topbar-border')).not.toBeNull()
   })
 })
 

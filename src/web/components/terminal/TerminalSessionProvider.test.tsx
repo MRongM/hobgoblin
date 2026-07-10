@@ -1878,8 +1878,9 @@ describe('TerminalSessionProvider', () => {
       })
       expect(getProbe().summaries[0]?.isOutputActive).toBe(true)
 
-      act(() => {
+      await act(async () => {
         vi.advanceTimersByTime(1_200)
+        await Promise.resolve()
       })
       expect(getProbe().summaries[0]?.isOutputActive).toBe(false)
     } finally {

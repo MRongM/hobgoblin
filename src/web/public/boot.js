@@ -10,7 +10,20 @@
   if (theme !== 'light' && theme !== 'dark') theme = 'light'
   var colorTheme = qs.get('colorTheme')
   if (colorTheme === 'apple') colorTheme = 'macos'
-  var colorThemes = ['macos', 'mono', 'github', 'claude', 'cursor', 'airbnb', 'bmw', 'signal', 'forge']
+  var colorThemes = [
+    'macos',
+    'mono',
+    'github',
+    'claude',
+    'cursor',
+    'airbnb',
+    'bmw',
+    'signal',
+    'forge',
+    'catppuccin',
+    'solarized',
+    'tokyo-night',
+  ]
   if (colorThemes.indexOf(colorTheme) === -1) colorTheme = 'macos'
   document.documentElement.setAttribute('data-host', window.goblinNative ? 'electron' : 'web')
   if (window.goblinNative && !/Mac/i.test(navigator.platform))

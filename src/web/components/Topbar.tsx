@@ -31,7 +31,7 @@ export function Topbar({ onOpenSettings, children, actions }: Props) {
           <div data-testid="topbar-actions" className="flex h-full shrink-0 items-center gap-1">
             {actions}
           </div>
-          <div aria-hidden="true" className="h-4 w-px shrink-0 bg-separator/70" />
+          <div aria-hidden="true" className="h-4 w-px shrink-0 bg-topbar-border" />
         </>
       )}
       <Tip label={t('topbar.settings')}>

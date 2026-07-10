@@ -66,12 +66,20 @@ afterEach(() => {
 
 describe('TopbarRepoControls', () => {
   test('keeps workspace layout and refresh controls for non-git local workspaces while hiding git actions', () => {
-    seedRepoState({
+    const repo = seedRepoState({
       id: REPO_ID,
       isGitRepo: false,
       branches: [],
       currentBranch: '',
       selectedBranch: null,
+    })
+    useReposStore.setState({
+      repos: {
+        [REPO_ID]: {
+          ...repo,
+          projection: { source: 'cache', savedAt: 1 },
+        },
+      },
     })
 
     renderControls(navigationWith({}))
@@ -81,6 +89,9 @@ describe('TopbarRepoControls', () => {
     expect(container?.querySelector('button[aria-label="branches.switch"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="action.menu"]')).toBeNull()
     expect(workspaceLayoutButtons()).toHaveLength(1)
+    expect(container?.querySelector<HTMLElement>('[aria-label^="tab.projectiond"]')?.className).toContain(
+      'text-topbar-muted-foreground',
+    )
 
     act(() => {
       container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.layout-tooltip.top-bottom"]')?.click()
@@ -133,7 +144,9 @@ describe('TopbarRepoControls', () => {
 
     renderControls(navigationWith({}))
 
-    expect(container?.querySelector('button[aria-label="branches.switch"]')).not.toBeNull()
+    const branchSwitcher = container?.querySelector<HTMLButtonElement>('button[aria-label="branches.switch"]')
+    expect(branchSwitcher).not.toBeNull()
+    expect(branchSwitcher?.className).toContain('text-topbar-muted-foreground')
     expect(container?.querySelector('button[aria-label="worktrees.open-in-editor-label"]')).not.toBeNull()
     expect(container?.querySelector('button[aria-label="action.menu"]')).not.toBeNull()
     expect(container?.querySelector('[aria-label="branches.filter-label"]')).toBeNull()

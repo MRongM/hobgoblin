@@ -18,6 +18,7 @@ interface ToolbarClosableTabProps {
   buttonRef?: Ref<HTMLButtonElement>
   buttonProps?: ToolbarClosableTabButtonProps
   buttonClassName?: string
+  closeButtonClassName?: string
   closeLabel: string
   closeVisible: boolean
   onClose: (event: React.MouseEvent<HTMLButtonElement>) => void
@@ -32,6 +33,7 @@ export function ToolbarClosableTab({
   buttonRef,
   buttonProps,
   buttonClassName,
+  closeButtonClassName,
   closeLabel,
   closeVisible,
   onClose,
@@ -60,6 +62,7 @@ export function ToolbarClosableTab({
         className={cn(
           'cursor-pointer rounded-[var(--goblin-brand-radius-sm,var(--radius-sm))] border-0 bg-transparent p-0.5 text-muted-foreground transition-colors duration-100 hover:bg-tab-hover hover:text-foreground',
           closeVisible ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+          closeButtonClassName,
         )}
         title={closeLabel}
       >

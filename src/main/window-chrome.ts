@@ -1,5 +1,5 @@
 import type { TitleBarOverlayOptions } from 'electron'
-import { WINDOW_BACKGROUND_BY_COLOR_THEME } from '#/shared/theme-tokens.ts'
+import { TOPBAR_BACKGROUND_BY_COLOR_THEME } from '#/shared/theme-tokens.ts'
 import type { ColorTheme } from '#/shared/color-theme.ts'
 
 export function defaultTitleBarStyle(): 'hiddenInset' | 'hidden' {
@@ -24,10 +24,9 @@ export function titleBarOverlayForTheme(
   height: number,
 ): TitleBarOverlayOptions | undefined {
   if (!supportsTitleBarOverlay()) return undefined
-  // Match the overlay strip to the window canvas token, not generic white /
-  // black. Otherwise Win/Linux caption buttons render over a visibly
-  // different band when the user switches to non-default color themes.
-  const color = WINDOW_BACKGROUND_BY_COLOR_THEME[colorTheme][theme]
+  // Match the overlay strip to the renderer topbar. Otherwise Win/Linux
+  // caption buttons render over a visibly different band.
+  const color = TOPBAR_BACKGROUND_BY_COLOR_THEME[colorTheme][theme]
   return theme === 'dark'
     ? { color, symbolColor: '#ffffff', height }
     : { color, symbolColor: '#000000', height }

@@ -79,7 +79,7 @@ export function RepoTab({
       })}
       overlay={
         showSeparator ? (
-          <span className="pointer-events-none absolute right-0 top-1/2 h-4 -translate-y-1/2 border-r border-separator" />
+          <span className="pointer-events-none absolute right-0 top-1/2 h-4 -translate-y-1/2 border-r border-topbar-border" />
         ) : null
       }
       buttonRef={sortable.setButtonRef}
@@ -107,6 +107,7 @@ export function RepoTab({
         },
       }}
       buttonClassName={toolbarTabButtonClassName('repo')}
+      closeButtonClassName={isActive ? undefined : 'text-topbar-muted-foreground'}
       closeLabel={closeLabel(repo.name)}
       closeVisible={isActive}
       onClose={(e) => {

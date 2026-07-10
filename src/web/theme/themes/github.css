@@ -43,15 +43,15 @@ html[data-color-theme='github'][data-theme='light'] {
   --goblin-border-subtle: #d8dee4;
   --goblin-border-default: #d0d7de;
   --goblin-border-strong: #afb8c1;
-  --goblin-focus-ring: #0969da;
-  --goblin-action-primary: #0969da;
+  --goblin-focus-ring: #1a7f37;
+  --goblin-action-primary: #1f883d;
   --goblin-action-primary-foreground: #ffffff;
   --goblin-action-danger: #cf222e;
   --goblin-action-danger-foreground: #ffffff;
 
-  --goblin-accent: #0969da;
-  --goblin-accent-text: #0969da;
-  --goblin-accent-rgb: 9 105 218;
+  --goblin-accent: #1a7f37;
+  --goblin-accent-text: #116329;
+  --goblin-accent-rgb: 26 127 55;
   --goblin-accent-selection: rgb(var(--goblin-accent-rgb) / 0.12);
   --goblin-accent-surface: rgb(var(--goblin-accent-rgb) / 0.08);
   --goblin-accent-border: rgb(var(--goblin-accent-rgb) / 0.32);
@@ -69,6 +69,11 @@ html[data-color-theme='github'][data-theme='light'] {
   --goblin-status-danger-surface: #ffebe9;
   --goblin-status-danger-border: #ff8182;
 
+  --goblin-terminal-bell: #1f883d;
+  --goblin-terminal-bell-rgb: 31 136 61;
+  --goblin-terminal-bell-surface: rgb(var(--goblin-terminal-bell-rgb) / 0.13);
+  --goblin-terminal-bell-border: rgb(var(--goblin-terminal-bell-rgb) / 0.38);
+
   --color-overlay-scrim: rgb(31 35 40 / 0.4);
   --goblin-shadow-xs: 0 1px 1px rgb(31 35 40 / 0.04);
   --goblin-shadow-sm: 0 1px 2px rgb(31 35 40 / 0.06);
@@ -79,10 +84,16 @@ html[data-color-theme='github'][data-theme='light'] {
   --radius: 0.375rem;
 
   --goblin-app-bg: #ffffff;
-  --goblin-topbar-bg: #d7e5f7;
-  --goblin-topbar-border: #b9c9dd;
-  --goblin-toolbar-bg: #e3eefc;
-  --goblin-toolbar-border: var(--goblin-topbar-border);
+  --goblin-topbar-bg: #f6f8fa;
+  --goblin-topbar-border: #d0d7de;
+  --goblin-topbar-fg: #1f2328;
+  --goblin-topbar-muted-fg: #59636e;
+  --goblin-topbar-control-bg: #ffffff;
+  --goblin-topbar-control-hover-bg: #f3f4f6;
+  --goblin-topbar-control-border: #afb8c1;
+  --goblin-topbar-control-fg: #1f2328;
+  --goblin-toolbar-bg: #ffffff;
+  --goblin-toolbar-border: #d0d7de;
   --goblin-tab-bg: transparent;
   --goblin-tab-hover-bg: #f6f8fa;
   --goblin-tab-active-bg: #ffffff;
@@ -94,7 +105,7 @@ html[data-color-theme='github'][data-theme='light'] {
   --goblin-list-row-bg: transparent;
   --goblin-list-row-hover-bg: #f3f4f6;
   --goblin-list-row-selected-bg: rgb(var(--goblin-accent-rgb) / 0.12);
-  --goblin-list-row-selected-fg: #1f2328;
+  --goblin-list-row-selected-fg: #116329;
   --goblin-control-bg: #ffffff;
   --goblin-control-hover-bg: #f6f8fa;
   --goblin-control-border: #afb8c1;
@@ -109,7 +120,7 @@ html[data-color-theme='github'][data-theme='light'] {
   --color-terminal-background: #ffffff;
   --color-terminal-foreground: #1f2328;
   --color-terminal-cursor: #1f2328;
-  --color-terminal-selection-background: rgba(9, 105, 218, 0.18);
+  --color-terminal-selection-background: rgba(26, 127, 55, 0.18);
   --color-terminal-ansi-black: #24292f;
   --color-terminal-ansi-red: #cf222e;
   --color-terminal-ansi-green: #1a7f37;
@@ -150,15 +161,15 @@ html[data-color-theme='github'][data-theme='dark'] {
   --goblin-border-subtle: #30363d;
   --goblin-border-default: #30363d;
   --goblin-border-strong: #484f58;
-  --goblin-focus-ring: #1f6feb;
-  --goblin-action-primary: #2f81f7;
+  --goblin-focus-ring: #3fb950;
+  --goblin-action-primary: #238636;
   --goblin-action-primary-foreground: #ffffff;
   --goblin-action-danger: #f85149;
   --goblin-action-danger-foreground: #ffffff;
 
-  --goblin-accent: #2f81f7;
-  --goblin-accent-text: #58a6ff;
-  --goblin-accent-rgb: 47 129 247;
+  --goblin-accent: #3fb950;
+  --goblin-accent-text: #7ee787;
+  --goblin-accent-rgb: 63 185 80;
   --goblin-accent-selection: rgb(var(--goblin-accent-rgb) / 0.22);
   --goblin-accent-surface: rgb(var(--goblin-accent-rgb) / 0.14);
   --goblin-accent-border: rgb(var(--goblin-accent-rgb) / 0.42);
@@ -176,6 +187,11 @@ html[data-color-theme='github'][data-theme='dark'] {
   --goblin-status-danger-surface: rgb(var(--goblin-status-danger-rgb) / 0.12);
   --goblin-status-danger-border: #da3633;
 
+  --goblin-terminal-bell: #3fb950;
+  --goblin-terminal-bell-rgb: 63 185 80;
+  --goblin-terminal-bell-surface: rgb(var(--goblin-terminal-bell-rgb) / 0.14);
+  --goblin-terminal-bell-border: rgb(var(--goblin-terminal-bell-rgb) / 0.38);
+
   --color-overlay-scrim: rgb(1 4 9 / 0.55);
   --goblin-shadow-xs: 0 1px 1px rgb(1 4 9 / 0.3);
   --goblin-shadow-sm: 0 1px 2px rgb(1 4 9 / 0.35);
@@ -186,13 +202,19 @@ html[data-color-theme='github'][data-theme='dark'] {
   --radius: 0.375rem;
 
   --goblin-app-bg: #0d1117;
-  --goblin-topbar-bg: #0f1724;
-  --goblin-topbar-border: #303f55;
-  --goblin-toolbar-bg: #1d2f49;
-  --goblin-toolbar-border: var(--goblin-topbar-border);
+  --goblin-topbar-bg: #161b22;
+  --goblin-topbar-border: #30363d;
+  --goblin-topbar-fg: #e6edf3;
+  --goblin-topbar-muted-fg: #8b949e;
+  --goblin-topbar-control-bg: #21262d;
+  --goblin-topbar-control-hover-bg: #30363d;
+  --goblin-topbar-control-border: #484f58;
+  --goblin-topbar-control-fg: #e6edf3;
+  --goblin-toolbar-bg: #161b22;
+  --goblin-toolbar-border: #30363d;
   --goblin-tab-bg: transparent;
-  --goblin-tab-hover-bg: #182234;
-  --goblin-tab-active-bg: #222c3a;
+  --goblin-tab-hover-bg: #161b22;
+  --goblin-tab-active-bg: #21262d;
   --goblin-sidebar-bg: #161b22;
   --goblin-pane-bg: #0d1117;
   --goblin-pane-header-bg: #161b22;
@@ -200,8 +222,8 @@ html[data-color-theme='github'][data-theme='dark'] {
   --goblin-card-bg: #161b22;
   --goblin-list-row-bg: transparent;
   --goblin-list-row-hover-bg: #21262d;
-  --goblin-list-row-selected-bg: rgb(var(--goblin-accent-rgb) / 0.2);
-  --goblin-list-row-selected-fg: #e6edf3;
+  --goblin-list-row-selected-bg: rgb(var(--goblin-accent-rgb) / 0.17);
+  --goblin-list-row-selected-fg: #7ee787;
   --goblin-control-bg: #161b22;
   --goblin-control-hover-bg: #21262d;
   --goblin-control-border: #484f58;
@@ -216,7 +238,7 @@ html[data-color-theme='github'][data-theme='dark'] {
   --color-terminal-background: #0d1117;
   --color-terminal-foreground: #e6edf3;
   --color-terminal-cursor: #e6edf3;
-  --color-terminal-selection-background: rgba(47, 129, 247, 0.28);
+  --color-terminal-selection-background: rgba(63, 185, 80, 0.28);
   --color-terminal-ansi-black: #484f58;
   --color-terminal-ansi-red: #ff7b72;
   --color-terminal-ansi-green: #3fb950;
