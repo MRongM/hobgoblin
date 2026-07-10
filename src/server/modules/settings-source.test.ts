@@ -414,3 +414,85 @@ test('drops invalid persisted worktree bootstrap trust entries', async () => {
     },
   ])
 })
+
+test('normalizes persisted project color themes and drops invalid project color themes', async () => {
+  useTempServerSettingsDir()
+  await writeSettingsFile({
+    repoSettings: [
+      { repoId: '/repo-a', colorTheme: 'cursor' },
+      { repoId: '/repo-b', colorTheme: 'apple' },
+      { repoId: '/repo-c', colorTheme: 'not-a-theme' },
+      {
+        repoId: '/repo-d',
+        colorTheme: 'github',
+        worktreeBootstrapTrust: {
+          configHash: 'sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+          trustedAt: '2026-07-08T00:00:00.000Z',
+        },
+      },
+    ],
+  })
+
+  const mod = await import('#/server/modules/settings-source.ts')
+  await expect(mod.getServerRepoSettings()).resolves.toEqual([
+    { repoId: '/repo-a', colorTheme: 'cursor' },
+    {
+      repoId: '/repo-d',
+      colorTheme: 'github',
+      worktreeBootstrapTrust: {
+        configHash: 'sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+        trustedAt: '2026-07-08T00:00:00.000Z',
+      },
+    },
+  ])
+})
+
+test('sets and clears project color themes while preserving bootstrap trust', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+  const configHash = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+  await mod.trustServerRepoWorktreeBootstrapConfig({ repoId: '/repo-a', configHash })
+  await mod.setServerRepoColorTheme({ repoId: '/repo-a', colorTheme: 'cursor' })
+  await expect(mod.getServerRepoSettings()).resolves.toEqual([
+    {
+      repoId: '/repo-a',
+      colorTheme: 'cursor',
+      worktreeBootstrapTrust: { configHash, trustedAt: expect.any(String) },
+    },
+  ])
+
+  await mod.setServerRepoColorTheme({ repoId: '/repo-a', colorTheme: null })
+  await expect(mod.getServerRepoSettings()).resolves.toEqual([
+    {
+      repoId: '/repo-a',
+      worktreeBootstrapTrust: { configHash, trustedAt: expect.any(String) },
+    },
+  ])
+
+  await expect(mod.untrustServerRepoWorktreeBootstrapConfig({ repoId: '/repo-a', configHash })).resolves.toBe(true)
+  await expect(mod.getServerRepoSettings()).resolves.toEqual([])
+})
+
+test('ignores invalid project color theme writes', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await mod.setServerRepoColorTheme({ repoId: '/repo-a', colorTheme: 'cursor' })
+  await mod.setServerRepoColorTheme({ repoId: '/repo-a', colorTheme: 'not-a-theme' as never })
+  await mod.setServerRepoColorTheme({ repoId: '', colorTheme: 'github' })
+
+  await expect(mod.getServerRepoSettings()).resolves.toEqual([{ repoId: '/repo-a', colorTheme: 'cursor' }])
+})
+
+test('untrusting bootstrap config preserves project color theme', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+  const configHash = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+  await mod.trustServerRepoWorktreeBootstrapConfig({ repoId: '/repo-a', configHash })
+  await mod.setServerRepoColorTheme({ repoId: '/repo-a', colorTheme: 'cursor' })
+
+  await expect(mod.untrustServerRepoWorktreeBootstrapConfig({ repoId: '/repo-a', configHash })).resolves.toBe(true)
+  await expect(mod.getServerRepoSettings()).resolves.toEqual([{ repoId: '/repo-a', colorTheme: 'cursor' }])
+})

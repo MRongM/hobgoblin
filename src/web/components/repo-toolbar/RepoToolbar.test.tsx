@@ -4,9 +4,11 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { defaultSettingsSnapshot } from '#/shared/settings-defaults.ts'
 import { RepoToolbar } from '#/web/components/repo-toolbar/RepoToolbar.tsx'
 import { TopbarRepoControls } from '#/web/components/topbar/TopbarRepoControls.tsx'
 import { MainWindowNavigationProvider, type MainWindowNavigationActions } from '#/web/main-window-navigation.tsx'
+import { settingsSnapshotQueryKey } from '#/web/settings-query-cache.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { resetReposStore, seedRepoState, createRepoBranch } from '#/web/stores/repos/test-utils.ts'
 import { InlineCommitDraftProvider } from '#/web/components/branch-list/InlineCommitDraftProvider.tsx'
@@ -100,6 +102,7 @@ describe('TopbarRepoControls', () => {
     expect(container?.querySelector('button[aria-label="action.refresh"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="action.create-worktree-title"]')).toBeNull()
     expect(workspaceLayoutButtons()).toHaveLength(1)
+    expect(container?.querySelector('button[aria-label="project-theme.menu"]')).not.toBeNull()
     expect(container?.querySelector('[aria-label="branches.filter-label"]')).toBeNull()
     expect(container?.querySelector('[aria-label="branches.search-label"]')).toBeNull()
   })
@@ -179,6 +182,7 @@ describe('RepoToolbar', () => {
     expect(container?.querySelector('button[aria-label="action.refresh"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="action.create-worktree-title"]')).toBeNull()
     expect(workspaceLayoutButtons()).toHaveLength(1)
+    expect(container?.querySelector('button[aria-label="project-theme.menu"]')).not.toBeNull()
   })
 })
 
@@ -191,6 +195,7 @@ function renderWithProviders(element: React.ReactNode, navigation: MainWindowNav
   document.body.appendChild(container)
   root = createRoot(container)
   queryClient = new QueryClient()
+  queryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
   act(() => {
     root!.render(
       <QueryClientProvider client={queryClient!}>

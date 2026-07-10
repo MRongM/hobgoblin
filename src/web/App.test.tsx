@@ -53,7 +53,10 @@ vi.mock('#/web/hooks/useRendererEffectIntentRouter.ts', () => ({ useRendererEffe
 vi.mock('#/web/hooks/useSessionPersistence.ts', () => ({ useSessionPersistence: vi.fn() }))
 vi.mock('#/web/hooks/useSettingsWriteErrorToast.ts', () => ({ useSettingsWriteErrorToast: vi.fn() }))
 vi.mock('#/web/hooks/useRepoStoreInvalidationRefresh.ts', () => ({ useRepoStoreInvalidationRefresh: vi.fn() }))
-vi.mock('#/web/settings-queries.ts', () => ({ useSettingsQueryInvalidationSync: vi.fn() }))
+vi.mock('#/web/settings-queries.ts', () => ({
+  useSettingsQueryInvalidationSync: vi.fn(),
+  useSettingsSnapshotQuery: () => ({ data: { repoSettings: [] } }),
+}))
 
 vi.mock('#/web/stores/i18n.ts', () => ({
   useT: () => (key: string) => key,
