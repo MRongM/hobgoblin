@@ -686,6 +686,8 @@ export const ja: Record<DictKey, string> = {
 
   // ---- Settings panel ----------------------------------------------------
   'settings.title': '設定',
+  'project-theme.menu': 'プロジェクトテーマ',
+  'project-theme.follow-global': 'グローバルに従う',
   'settings.theme-preset': 'テーマ',
   'settings.theme-preset.macos': 'macOS',
   'settings.theme-preset.mono': 'Mono',

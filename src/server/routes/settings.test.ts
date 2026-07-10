@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   applyServerGlobalShortcutRegistrationWrite: vi.fn(),
   applyServerRecentRepoAddWrite: vi.fn(),
   applyServerRecentRepoClearWrite: vi.fn(),
+  applyServerRepoThemeWrite: vi.fn(),
   applyServerSessionWrite: vi.fn(),
   applyServerSettingsPrefsWrite: vi.fn(),
 }))
@@ -35,6 +36,7 @@ vi.mock('#/server/modules/settings-write-paths.ts', () => ({
   applyServerGlobalShortcutRegistrationWrite: mocks.applyServerGlobalShortcutRegistrationWrite,
   applyServerRecentRepoAddWrite: mocks.applyServerRecentRepoAddWrite,
   applyServerRecentRepoClearWrite: mocks.applyServerRecentRepoClearWrite,
+  applyServerRepoThemeWrite: mocks.applyServerRepoThemeWrite,
   applyServerSessionWrite: mocks.applyServerSessionWrite,
   applyServerSettingsPrefsWrite: mocks.applyServerSettingsPrefsWrite,
 }))
@@ -160,5 +162,41 @@ describe('settings routes', () => {
     )
     await expect(clearResponse.json()).resolves.toEqual({ ok: true })
     expect(mocks.applyServerRecentRepoClearWrite).toHaveBeenCalled()
+  })
+
+  test('delegates project theme writes to the settings write-path application layer', async () => {
+    const repoSettings = [{ repoId: '/tmp/repo-a', colorTheme: 'cursor' }] as const
+    mocks.applyServerRepoThemeWrite
+      .mockResolvedValueOnce({ ok: true, repoSettings })
+      .mockResolvedValueOnce({ ok: true, repoSettings: [] })
+    const { createSettingsRoutes } = await import('#/server/routes/settings.ts')
+    const app = createSettingsRoutes(createServerSettingsState())
+    const response = await app.request(
+      new Request('http://127.0.0.1:32100/repo-theme', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ repoId: '/tmp/repo-a', colorTheme: 'cursor' }),
+      }),
+    )
+
+    await expect(response.json()).resolves.toEqual({ ok: true, repoSettings })
+    expect(mocks.applyServerRepoThemeWrite).toHaveBeenNthCalledWith(1, {
+      repoId: '/tmp/repo-a',
+      colorTheme: 'cursor',
+    })
+
+    const clearResponse = await app.request(
+      new Request('http://127.0.0.1:32100/repo-theme', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ repoId: '/tmp/repo-a', colorTheme: null }),
+      }),
+    )
+
+    await expect(clearResponse.json()).resolves.toEqual({ ok: true, repoSettings: [] })
+    expect(mocks.applyServerRepoThemeWrite).toHaveBeenNthCalledWith(2, {
+      repoId: '/tmp/repo-a',
+      colorTheme: null,
+    })
   })
 })

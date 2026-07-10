@@ -24,6 +24,7 @@ import type {
   ThemeState,
 } from '#/shared/rpc.ts'
 import type { ColorTheme } from '#/shared/color-theme.ts'
+import type { RepoSettingsEntry } from '#/shared/repo-settings.ts'
 import { nativeSettingsProjectionStateFromSettings, pickNativeSettingsProjectionPatch } from '#/shared/native-shell-projection.ts'
 import { runtimeSettingsSnapshotFromSettingsSnapshot } from '#/shared/settings-snapshot.ts'
 
@@ -77,6 +78,17 @@ export async function setThemePref(pref: ThemePref): Promise<ThemeState> {
 
 export async function setThemeColorTheme(colorTheme: ColorTheme): Promise<ThemeState> {
   return resolveThemeStateFromPrefs((await updateSettingsPrefsPatch({ colorTheme })).settings)
+}
+
+export async function setProjectColorTheme(
+  repoId: string,
+  colorTheme: ColorTheme | null,
+): Promise<RepoSettingsEntry[]> {
+  const result = await postServerJson<
+    { repoId: string; colorTheme: ColorTheme | null },
+    { ok: true; repoSettings: RepoSettingsEntry[] }
+  >('/api/settings/repo-theme', { repoId, colorTheme })
+  return result.repoSettings
 }
 
 export async function getI18nSnapshot(): Promise<I18nSnapshot> {

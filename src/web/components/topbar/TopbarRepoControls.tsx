@@ -9,6 +9,7 @@ import {
 } from '#/web/components/ui/dropdown-menu.tsx'
 import { BranchActionControls } from '#/web/components/BranchActionControls.tsx'
 import { RepoActivityControl } from '#/web/components/repo-activity/RepoActivityControl.tsx'
+import { ProjectThemeMenuConnected } from '#/web/components/repo-toolbar/ProjectThemeMenu.tsx'
 import { WorkspaceLayoutControl } from '#/web/components/repo-toolbar/WorkspaceLayoutControl.tsx'
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import { useResponsiveUiMode } from '#/web/hooks/useResponsiveUiMode.tsx'
@@ -40,6 +41,7 @@ export function TopbarRepoControls({ repoId }: Props) {
     <div className="flex h-full shrink-0 items-center gap-1">
       {isGitRepo && focusMode && <FocusBranchControls repoId={repoId} />}
       {!isGitRepo && <RepoActivityControl repoId={repoId} compact />}
+      <ProjectThemeMenuConnected repoId={repoId} />
       <WorkspaceLayoutControlConnected repoId={repoId} />
     </div>
   )

@@ -28,6 +28,7 @@ import { SettingsPageScreen } from '#/web/components/SettingsPageScreen.tsx'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import { RepoView } from '#/web/components/RepoView.tsx'
 import { RepoWorkspaceSkeleton } from '#/web/components/Skeleton.tsx'
+import { EffectiveProjectThemeBridge } from '#/web/components/EffectiveProjectThemeBridge.tsx'
 import { RepoDropOverlay } from '#/web/components/RepoDropOverlay.tsx'
 import { TerminalSessionProvider } from '#/web/components/terminal/TerminalSessionProvider.tsx'
 import { TerminalDeepLinkConsumer } from '#/web/components/terminal/TerminalDeepLinkConsumer.tsx'
@@ -110,6 +111,7 @@ export function App({
 
   return (
     <ErrorBoundary>
+      <EffectiveProjectThemeBridge />
       <TerminalSessionProvider currentRepoId={visibleRepoId}>
         <TerminalDeepLinkConsumer sessionReady={sessionReady} navigation={navigation} />
         <InlineCommitDraftProvider>
