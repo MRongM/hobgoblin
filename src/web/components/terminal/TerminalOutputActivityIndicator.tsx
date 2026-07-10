@@ -1,37 +1,42 @@
 import { Terminal } from 'lucide-react'
 import { cn } from '#/web/lib/cn.ts'
 
-const activeGlowStyle = {
-  boxShadow: '0 0 10px rgb(var(--color-terminal-activity-rgb) / 0.82)',
-}
+const toneStyles = {
+  activity: {
+    glowClassName: 'bg-terminal-activity-surface',
+    pingClassName: 'border-terminal-activity-border bg-terminal-activity',
+    iconClassName: 'text-terminal-activity',
+    rgbToken: '--color-terminal-activity-rgb',
+  },
+  bell: {
+    glowClassName: 'bg-terminal-bell-surface',
+    pingClassName: 'border-terminal-bell-border bg-terminal-bell',
+    iconClassName: 'text-terminal-bell',
+    rgbToken: '--color-terminal-bell-rgb',
+  },
+} as const
 
-const activeIconStyle = {
-  filter: 'drop-shadow(0 0 4px rgb(var(--color-terminal-activity-rgb) / 0.9))',
-}
-
-const compactGlowStyle = {
-  boxShadow: '0 0 5px rgb(var(--color-terminal-activity-rgb) / 0.72)',
-}
-
-const compactIconStyle = {
-  filter: 'drop-shadow(0 0 2px rgb(var(--color-terminal-activity-rgb) / 0.82))',
-}
+type TerminalOutputActivityIndicatorTone = keyof typeof toneStyles
 
 const effectStyles = {
   default: {
     rootClassName: 'size-4',
     glowClassName: 'h-[145%] w-[145%]',
     pingClassName: 'h-[175%] w-[175%]',
-    glowStyle: activeGlowStyle,
-    iconStyle: activeIconStyle,
+    glowBlurPx: 10,
+    glowAlpha: 0.82,
+    iconBlurPx: 4,
+    iconAlpha: 0.9,
     iconSize: 12,
   },
   compact: {
     rootClassName: 'size-3',
     glowClassName: 'h-[120%] w-[120%]',
     pingClassName: 'h-[135%] w-[135%]',
-    glowStyle: compactGlowStyle,
-    iconStyle: compactIconStyle,
+    glowBlurPx: 5,
+    glowAlpha: 0.72,
+    iconBlurPx: 2,
+    iconAlpha: 0.82,
     iconSize: 11,
   },
 }
@@ -43,6 +48,7 @@ interface TerminalOutputActivityIndicatorProps {
   iconClassName?: string
   size?: number
   effectSize?: keyof typeof effectStyles
+  tone?: TerminalOutputActivityIndicatorTone
 }
 
 export function TerminalOutputActivityIndicator({
@@ -52,9 +58,17 @@ export function TerminalOutputActivityIndicator({
   iconClassName,
   size,
   effectSize = 'default',
+  tone = 'activity',
 }: TerminalOutputActivityIndicatorProps) {
   const effectStyle = effectStyles[effectSize]
+  const toneStyle = toneStyles[tone]
   const iconSize = size ?? effectStyle.iconSize
+  const glowStyle = {
+    boxShadow: `0 0 ${effectStyle.glowBlurPx}px rgb(var(${toneStyle.rgbToken}) / ${effectStyle.glowAlpha})`,
+  }
+  const iconStyle = {
+    filter: `drop-shadow(0 0 ${effectStyle.iconBlurPx}px rgb(var(${toneStyle.rgbToken}) / ${effectStyle.iconAlpha}))`,
+  }
 
   return (
     <span
@@ -73,16 +87,18 @@ export function TerminalOutputActivityIndicator({
           <span
             data-terminal-output-activity-glow
             className={cn(
-              'absolute inline-flex animate-pulse rounded-full bg-terminal-activity-surface opacity-100',
+              'absolute inline-flex animate-pulse rounded-full opacity-100',
+              toneStyle.glowClassName,
               effectStyle.glowClassName,
             )}
-            style={effectStyle.glowStyle}
+            style={glowStyle}
             aria-hidden="true"
           />
           <span
             data-terminal-output-activity-ping
             className={cn(
-              'absolute inline-flex animate-ping rounded-full border border-terminal-activity-border bg-terminal-activity opacity-60',
+              'absolute inline-flex animate-ping rounded-full border opacity-60',
+              toneStyle.pingClassName,
               effectStyle.pingClassName,
             )}
             aria-hidden="true"
@@ -93,10 +109,10 @@ export function TerminalOutputActivityIndicator({
         size={iconSize}
         className={cn(
           'relative shrink-0',
-          active ? 'animate-pulse text-terminal-activity' : 'text-current',
+          active ? cn('animate-pulse', toneStyle.iconClassName) : 'text-current',
           iconClassName,
         )}
-        style={active ? effectStyle.iconStyle : undefined}
+        style={active ? iconStyle : undefined}
         aria-hidden="true"
       />
     </span>

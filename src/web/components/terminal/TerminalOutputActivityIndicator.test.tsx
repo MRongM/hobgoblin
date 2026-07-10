@@ -46,6 +46,26 @@ describe('TerminalOutputActivityIndicator', () => {
     expect(indicator?.querySelector('svg')?.classList.contains('animate-pulse')).toBe(true)
   })
 
+  test('renders every active effect with the terminal bell palette when requested', () => {
+    act(() => {
+      root!.render(<TerminalOutputActivityIndicator label="Terminal output active" active tone="bell" />)
+    })
+
+    const indicator = document.body.querySelector('[data-terminal-output-activity-indicator="active"]')
+    const ping = indicator?.querySelector<HTMLElement>('[data-terminal-output-activity-ping]')
+    const glow = indicator?.querySelector<HTMLElement>('[data-terminal-output-activity-glow]')
+    const icon = indicator?.querySelector<SVGElement>('svg')
+
+    expect(ping?.classList.contains('border-terminal-bell-border')).toBe(true)
+    expect(ping?.classList.contains('bg-terminal-bell')).toBe(true)
+    expect(ping?.classList.contains('bg-terminal-activity')).toBe(false)
+    expect(glow?.classList.contains('bg-terminal-bell-surface')).toBe(true)
+    expect(glow?.style.boxShadow).toContain('var(--color-terminal-bell-rgb)')
+    expect(icon?.classList.contains('text-terminal-bell')).toBe(true)
+    expect(icon?.classList.contains('text-terminal-activity')).toBe(false)
+    expect(icon?.style.filter).toContain('var(--color-terminal-bell-rgb)')
+  })
+
   test('renders an idle icon without the ping layer', () => {
     act(() => {
       root!.render(<TerminalOutputActivityIndicator label="Terminal output active" active={false} />)
