@@ -690,6 +690,8 @@ export const ko: Record<DictKey, string> = {
   'settings.theme-preset.cursor': 'Cursor',
   'settings.theme-preset.airbnb': 'Airbnb',
   'settings.theme-preset.bmw': 'BMW',
+  'settings.theme-preset.signal': 'Signal',
+  'settings.theme-preset.forge': 'Forge',
   'settings.appearance': '외관',
   'settings.appearance.auto': '자동',
   'settings.appearance.light': '라이트',
@@ -949,7 +951,8 @@ export const ko: Record<DictKey, string> = {
   'remote-branches.delete': '원격 브랜치 삭제',
   'remote-branches.protected-delete-disabled': '보호된 브랜치는 여기에서 삭제할 수 없습니다.',
   'remote-branches.confirm-title': '원격 브랜치를 삭제할까요?',
-  'remote-branches.confirm-body': '이 작업은 원격 서버의 브랜치를 삭제합니다. 로컬 추적 참조만 제거하는 작업이 아닙니다.',
+  'remote-branches.confirm-body':
+    '이 작업은 원격 서버의 브랜치를 삭제합니다. 로컬 추적 참조만 제거하는 작업이 아닙니다.',
   'remote-branches.remote': '원격',
   'remote-branches.branch': '브랜치',
   'remote-branches.full-ref': '전체 참조',

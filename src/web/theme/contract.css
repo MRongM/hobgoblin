@@ -79,6 +79,14 @@
   --color-danger-rgb: var(--goblin-status-danger-rgb);
   --color-danger-surface: var(--goblin-status-danger-surface);
   --color-danger-border: var(--goblin-status-danger-border);
+  --color-terminal-activity: var(--goblin-terminal-activity, var(--goblin-accent));
+  --color-terminal-activity-rgb: var(--goblin-terminal-activity-rgb, var(--goblin-accent-rgb));
+  --color-terminal-activity-surface: var(--goblin-terminal-activity-surface, var(--goblin-accent-surface));
+  --color-terminal-activity-border: var(--goblin-terminal-activity-border, var(--goblin-accent-border));
+  --color-terminal-bell: var(--goblin-terminal-bell, var(--goblin-status-warning-text));
+  --color-terminal-bell-rgb: var(--goblin-terminal-bell-rgb, var(--goblin-status-warning-rgb));
+  --color-terminal-bell-surface: var(--goblin-terminal-bell-surface, var(--goblin-status-warning-surface));
+  --color-terminal-bell-border: var(--goblin-terminal-bell-border, var(--goblin-status-warning-border));
   --color-selected-muted-foreground: var(--goblin-text-selected-secondary, var(--goblin-text-secondary));
 
   /* App-region surfaces */

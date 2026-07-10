@@ -134,6 +134,17 @@ const APP_REGION_TOKENS = [
   '--goblin-brand-divider-strength',
 ] as const
 
+const TERMINAL_INDICATOR_TOKENS = [
+  '--goblin-terminal-activity',
+  '--goblin-terminal-activity-rgb',
+  '--goblin-terminal-activity-surface',
+  '--goblin-terminal-activity-border',
+  '--goblin-terminal-bell',
+  '--goblin-terminal-bell-rgb',
+  '--goblin-terminal-bell-surface',
+  '--goblin-terminal-bell-border',
+] as const
+
 const TOPBAR_BRAND_TINT_EXPECTATIONS = {
   macos: {
     light: {
@@ -247,6 +258,38 @@ const TOPBAR_BRAND_TINT_EXPECTATIONS = {
       tabActive: '#1f2a38',
     },
   },
+  signal: {
+    light: {
+      topbar: '#c8e4df',
+      border: '#95c7bf',
+      toolbar: '#ddf0ec',
+      tabHover: '#f1f8f6',
+      tabActive: '#ffffff',
+    },
+    dark: {
+      topbar: '#102522',
+      border: '#2a5a53',
+      toolbar: '#1b3934',
+      tabHover: '#182d2a',
+      tabActive: '#203c38',
+    },
+  },
+  forge: {
+    light: {
+      topbar: '#ded0ba',
+      border: '#c4ad8d',
+      toolbar: '#eadfcd',
+      tabHover: '#f4eee3',
+      tabActive: '#fffdf8',
+    },
+    dark: {
+      topbar: '#211813',
+      border: '#63442d',
+      toolbar: '#37261b',
+      tabHover: '#2b2019',
+      tabActive: '#3a2a20',
+    },
+  },
 } as const
 
 function themeCssPath(colorTheme: string): URL {
@@ -310,6 +353,18 @@ describe('theme preset css contracts', () => {
     }
   })
 
+  test('defines explicit terminal indicator tokens for original Hobgoblin themes', () => {
+    for (const colorTheme of ['signal', 'forge'] as const) {
+      const css = readThemeCss(colorTheme)
+      for (const theme of ['light', 'dark'] as const) {
+        const block = selectorBlock(css, colorTheme, theme)
+        for (const token of TERMINAL_INDICATOR_TOKENS) {
+          expect(block, `${colorTheme}/${theme} defines ${token}`).toContain(token)
+        }
+      }
+    }
+  })
+
   test('keeps topbar visually deeper than tab states for every color theme', () => {
     for (const colorTheme of COLOR_THEMES) {
       const css = readThemeCss(colorTheme)
@@ -321,7 +376,9 @@ describe('theme preset css contracts', () => {
         const tabActive = hexLuminance(cssTokenValue(block, '--goblin-tab-active-bg'))
 
         expect(topbar, `${colorTheme}/${theme} topbar is deeper than tab hover`).toBeLessThan(tabHover)
-        expect(tabHover, `${colorTheme}/${theme} tab hover is not brighter than active tab`).toBeLessThanOrEqual(tabActive)
+        expect(tabHover, `${colorTheme}/${theme} tab hover is not brighter than active tab`).toBeLessThanOrEqual(
+          tabActive,
+        )
       }
     }
   })
@@ -421,5 +478,24 @@ describe('theme preset css contracts', () => {
     expect(bmwDark).toContain('--goblin-surface-canvas: #000000;')
     expect(bmwDark).toContain('--goblin-action-primary: #ffffff;')
     expect(bmwDark).toContain('--goblin-control-radius: 0rem;')
+  })
+
+  test('keeps original Hobgoblin presets aligned with their design briefs', () => {
+    const signalLight = selectorBlock(readThemeCss('signal'), 'signal', 'light')
+    const signalDark = selectorBlock(readThemeCss('signal'), 'signal', 'dark')
+    const forgeLight = selectorBlock(readThemeCss('forge'), 'forge', 'light')
+    const forgeDark = selectorBlock(readThemeCss('forge'), 'forge', 'dark')
+
+    expect(signalLight).toContain('--goblin-surface-canvas: #f8fbfb;')
+    expect(signalLight).toContain('--goblin-action-primary: #009b8f;')
+    expect(signalLight).toContain('--goblin-terminal-bell: #c78b00;')
+    expect(signalDark).toContain('--goblin-surface-canvas: #0f1b1a;')
+    expect(signalDark).toContain('--color-terminal-background: #0f2423;')
+
+    expect(forgeLight).toContain('--goblin-surface-canvas: #f6f3ec;')
+    expect(forgeLight).toContain('--goblin-action-primary: #b6531c;')
+    expect(forgeLight).toContain('--goblin-terminal-bell: #c98a12;')
+    expect(forgeDark).toContain('--goblin-surface-canvas: #18110d;')
+    expect(forgeDark).toContain('--color-terminal-background: #201813;')
   })
 })

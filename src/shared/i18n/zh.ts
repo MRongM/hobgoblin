@@ -676,6 +676,8 @@ export const zh: Record<DictKey, string> = {
   'settings.theme-preset.cursor': 'Cursor',
   'settings.theme-preset.airbnb': 'Airbnb',
   'settings.theme-preset.bmw': 'BMW',
+  'settings.theme-preset.signal': 'Signal',
+  'settings.theme-preset.forge': 'Forge',
   'settings.appearance': '外观',
   'settings.appearance.auto': '跟随系统',
   'settings.appearance.light': '浅色',
