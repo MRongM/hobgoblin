@@ -33,4 +33,12 @@ export const WINDOW_BACKGROUND_BY_COLOR_THEME: Record<ColorTheme, Record<Resolve
     light: '#f5f5f5',
     dark: '#000000',
   },
+  signal: {
+    light: '#f8fbfb',
+    dark: '#0f1b1a',
+  },
+  forge: {
+    light: '#f6f3ec',
+    dark: '#18110d',
+  },
 }

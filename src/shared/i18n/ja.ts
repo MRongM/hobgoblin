@@ -701,6 +701,8 @@ export const ja: Record<DictKey, string> = {
   'settings.theme-preset.cursor': 'Cursor',
   'settings.theme-preset.airbnb': 'Airbnb',
   'settings.theme-preset.bmw': 'BMW',
+  'settings.theme-preset.signal': 'Signal',
+  'settings.theme-preset.forge': 'Forge',
   'settings.appearance': '外観',
   'settings.appearance.auto': '自動',
   'settings.appearance.light': 'ライト',

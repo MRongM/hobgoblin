@@ -701,6 +701,8 @@ export const en = {
   'settings.theme-preset.cursor': 'Cursor',
   'settings.theme-preset.airbnb': 'Airbnb',
   'settings.theme-preset.bmw': 'BMW',
+  'settings.theme-preset.signal': 'Signal',
+  'settings.theme-preset.forge': 'Forge',
   'settings.appearance': 'Appearance',
   'settings.appearance.auto': 'Auto',
   'settings.appearance.light': 'Light',

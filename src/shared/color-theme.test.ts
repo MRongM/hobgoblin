@@ -2,15 +2,16 @@ import { describe, expect, test } from 'vitest'
 import { COLOR_THEMES, DEFAULT_COLOR_THEME, isColorTheme, normalizeColorTheme } from '#/shared/color-theme.ts'
 
 const CURRENT_BRAND_THEMES = ['claude', 'cursor', 'airbnb', 'bmw'] as const
+const ORIGINAL_HOBGOBLIN_THEMES = ['signal', 'forge'] as const
 
 describe('color theme presets', () => {
   test('lists current theme presets in settings order', () => {
-    expect(COLOR_THEMES).toEqual(['macos', 'mono', 'github', 'claude', 'cursor', 'airbnb', 'bmw'])
+    expect(COLOR_THEMES).toEqual(['macos', 'mono', 'github', 'claude', 'cursor', 'airbnb', 'bmw', 'signal', 'forge'])
     expect(DEFAULT_COLOR_THEME).toBe('macos')
   })
 
   test('validates current theme presets only', () => {
-    for (const theme of CURRENT_BRAND_THEMES) {
+    for (const theme of [...CURRENT_BRAND_THEMES, ...ORIGINAL_HOBGOBLIN_THEMES]) {
       expect(isColorTheme(theme)).toBe(true)
     }
 

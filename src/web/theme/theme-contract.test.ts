@@ -14,6 +14,14 @@ const CONTRACT_TOKENS = [
   '--color-input-hover:',
   '--color-input-border:',
   '--color-input-placeholder:',
+  '--color-terminal-activity:',
+  '--color-terminal-activity-rgb:',
+  '--color-terminal-activity-surface:',
+  '--color-terminal-activity-border:',
+  '--color-terminal-bell:',
+  '--color-terminal-bell-rgb:',
+  '--color-terminal-bell-surface:',
+  '--color-terminal-bell-border:',
 ]
 
 const CLASSIC_TERMINAL_TOKENS = [
@@ -56,7 +64,9 @@ describe('web theme contract', () => {
   })
 
   test('defines classic terminal tokens for every color theme preset', () => {
-    const themeFiles = readdirSync(THEMES_ROOT).filter((file) => file.endsWith('.css')).sort()
+    const themeFiles = readdirSync(THEMES_ROOT)
+      .filter((file) => file.endsWith('.css'))
+      .sort()
     expect(themeFiles).not.toEqual([])
 
     for (const file of themeFiles) {

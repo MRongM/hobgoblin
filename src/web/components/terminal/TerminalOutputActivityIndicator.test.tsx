@@ -34,9 +34,15 @@ describe('TerminalOutputActivityIndicator', () => {
     expect(indicator?.getAttribute('aria-label')).toBe('Terminal output active')
     expect(indicator?.querySelector('[data-terminal-output-activity-ping]')).not.toBeNull()
     expect(indicator?.querySelector('[data-terminal-output-activity-glow]')).not.toBeNull()
-    expect(indicator?.querySelector('[data-terminal-output-activity-ping]')?.classList.contains('border-success')).toBe(
-      true,
-    )
+    const ping = indicator?.querySelector('[data-terminal-output-activity-ping]')
+    const glow = indicator?.querySelector('[data-terminal-output-activity-glow]')
+    const icon = indicator?.querySelector('svg')
+
+    expect(ping?.classList.contains('border-terminal-activity-border')).toBe(true)
+    expect(ping?.classList.contains('bg-terminal-activity')).toBe(true)
+    expect(glow?.classList.contains('bg-terminal-activity-surface')).toBe(true)
+    expect(icon?.classList.contains('text-terminal-activity')).toBe(true)
+    expect(icon?.classList.contains('text-success')).toBe(false)
     expect(indicator?.querySelector('svg')?.classList.contains('animate-pulse')).toBe(true)
   })
 
