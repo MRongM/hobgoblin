@@ -38,8 +38,23 @@ describe('TerminalBellDot', () => {
     expect(ping).not.toBeNull()
     expect(ping?.classList.contains('bg-terminal-bell')).toBe(true)
     expect(ping?.classList.contains('bg-attention')).toBe(false)
+    expect(ping?.classList.contains('opacity-75')).toBe(true)
     expect(core?.classList.contains('bg-terminal-bell')).toBe(true)
     expect(core?.classList.contains('bg-attention')).toBe(false)
+  })
+
+  test('allows a caller to override only the ping layer opacity', () => {
+    act(() => {
+      root!.render(<TerminalBellDot label="Unread terminal bell" pingClassName="opacity-100" />)
+    })
+
+    const ping = document.body.querySelector('[data-terminal-bell-ping]')
+    const core = document.body.querySelector('[data-terminal-bell-core]')
+
+    expect(ping?.classList.contains('opacity-100')).toBe(true)
+    expect(ping?.classList.contains('opacity-75')).toBe(false)
+    expect(ping?.classList.contains('bg-terminal-bell')).toBe(true)
+    expect(core?.classList.contains('bg-terminal-bell')).toBe(true)
   })
 
   test('renders the themed unread bell dot without ping when requested', () => {

@@ -307,9 +307,9 @@ describe('TerminalTabs', () => {
     expect(tablist?.className).toContain('h-full')
     expect(tablist?.parentElement?.className).toContain('w-max')
     expect(tablist?.parentElement?.className).toContain('gap-0')
-    expect(
-      [...document.body.querySelectorAll('[data-terminal-tab-tooltip-id]')].every((tab) => tab.className.includes('w-28')),
-    ).toBe(true)
+    const terminalTabs = [...document.body.querySelectorAll('[data-terminal-tab-tooltip-id]')]
+    expect(terminalTabs.every((tab) => tab.className.includes('w-36'))).toBe(true)
+    expect(terminalTabs.every((tab) => !tab.className.includes('w-28'))).toBe(true)
     expect(document.body.querySelectorAll('[role="tab"]').length).toBe(3)
     const firstTab = document.body.querySelector('#detail-terminal-tab')
     expect(firstTab?.getAttribute('aria-posinset')).toBe('1')
@@ -341,6 +341,9 @@ describe('TerminalTabs', () => {
     const tab = document.body.querySelector('#detail-terminal-tab')
     expect(tab?.getAttribute('aria-label')).toContain('~/repo/worktree — npm run dev')
     expect(tab?.getAttribute('aria-label')).toContain('terminal.bell-unread')
+    const ping = tab?.querySelector('[data-terminal-bell-ping]')
+    expect(ping?.classList.contains('opacity-100')).toBe(true)
+    expect(ping?.classList.contains('opacity-75')).toBe(false)
   })
 
   test('moves focus across the full terminal tab strip and only navigates out at arrow-key edges', () => {
@@ -756,7 +759,7 @@ describe('TerminalTabs', () => {
     )
 
     expect(document.body.querySelectorAll('[role="tab"]').length).toBe(1)
-    expect(document.body.querySelector('[data-terminal-tab-tooltip-id]')?.className).toContain('w-28')
+    expect(document.body.querySelector('[data-terminal-tab-tooltip-id]')?.className).toContain('w-36')
 
     rerender(
       <TerminalTabs

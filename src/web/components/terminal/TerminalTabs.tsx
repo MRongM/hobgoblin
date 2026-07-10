@@ -468,7 +468,9 @@ function TerminalTabChrome({
       onClose={(e) => onClose(e, session.key)}
     >
       <span className="truncate">{session.title}</span>
-      {session.hasBell && <TerminalBellDot label={t('terminal.bell-unread')} />}
+      {session.hasBell && (
+        <TerminalBellDot label={t('terminal.bell-unread')} pingClassName="opacity-100" />
+      )}
     </ToolbarClosableTab>
   )
 }

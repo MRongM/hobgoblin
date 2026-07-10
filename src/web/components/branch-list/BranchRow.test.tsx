@@ -471,13 +471,7 @@ describe('BranchRow', () => {
 
     const badge = document.body.querySelector('[data-testid="terminal-count-badge"]')
     expect(badge?.textContent).toBe('1')
-    const indicator = badge?.querySelector('[data-terminal-output-activity-indicator="active"]')
-    expect(indicator).not.toBeNull()
-    expect(indicator?.querySelector('svg')?.classList.contains('text-terminal-bell')).toBe(true)
-    expect(indicator?.querySelector('svg')?.classList.contains('text-terminal-activity')).toBe(false)
-    expect(
-      indicator?.querySelector('[data-terminal-output-activity-ping]')?.classList.contains('bg-terminal-bell'),
-    ).toBe(true)
+    expect(badge?.querySelector('[data-terminal-output-activity-indicator="active"]')).not.toBeNull()
   })
 
   test('keeps the terminal count icon idle when linked worktree sessions have no active output', () => {

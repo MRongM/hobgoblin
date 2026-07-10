@@ -4,9 +4,10 @@ interface TerminalBellDotProps {
   label: string
   className?: string
   ping?: boolean
+  pingClassName?: string
 }
 
-export function TerminalBellDot({ label, className, ping = true }: TerminalBellDotProps) {
+export function TerminalBellDot({ label, className, ping = true, pingClassName }: TerminalBellDotProps) {
   return (
     <span
       role="img"
@@ -18,7 +19,10 @@ export function TerminalBellDot({ label, className, ping = true }: TerminalBellD
       {ping && (
         <span
           data-terminal-bell-ping
-          className="absolute inline-flex h-full w-full animate-ping rounded-full bg-terminal-bell opacity-75"
+          className={cn(
+            'absolute inline-flex h-full w-full animate-ping rounded-full bg-terminal-bell opacity-75',
+            pingClassName,
+          )}
           aria-hidden="true"
         />
       )}
