@@ -686,6 +686,8 @@ export const en = {
   // ---- Settings panel -----------------------------------------------------
   'settings.title': 'Settings',
   'settings.back': 'Back',
+  'project-theme.menu': 'Project theme',
+  'project-theme.follow-global': 'Follow global',
   'settings.theme-preset': 'Theme',
   'settings.theme-preset.macos': 'macOS',
   'settings.theme-preset.mono': 'Mono',

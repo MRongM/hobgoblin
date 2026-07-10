@@ -9,6 +9,7 @@ import {
 } from '#/web/components/ui/dropdown-menu.tsx'
 import { BranchActionControls } from '#/web/components/BranchActionControls.tsx'
 import { BranchFilterControls } from '#/web/components/repo-toolbar/BranchFilterControls.tsx'
+import { ProjectThemeMenuConnected } from '#/web/components/repo-toolbar/ProjectThemeMenu.tsx'
 import { WorkspaceLayoutControl } from '#/web/components/repo-toolbar/WorkspaceLayoutControl.tsx'
 import { BranchSummaryInline } from '#/web/components/repo-workspace/BranchSummaryInline.tsx'
 import { Toolbar } from '#/web/components/Layout.tsx'
@@ -43,6 +44,7 @@ export function RepoToolbar({ repoId }: Props) {
         {isGitRepo && (focusMode ? <FocusBranchControls repoId={repoId} /> : <BranchFilterControls repoId={repoId} />)}
       </div>
       <div className="flex shrink-0 items-center gap-2">
+        <ProjectThemeMenuConnected repoId={repoId} />
         <WorkspaceLayoutControlConnected repoId={repoId} />
       </div>
     </Toolbar>
