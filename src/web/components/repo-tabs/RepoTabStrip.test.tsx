@@ -274,6 +274,27 @@ describe('RepoTabStrip', () => {
     expect(onActivate).toHaveBeenNthCalledWith(3, '/tmp/repo-a')
     expect(document.activeElement).toBe(repoA)
   })
+
+  test('uses tighter spacing between project tabs on large screens', () => {
+    vi.stubGlobal('matchMedia', createMatchMedia(false))
+
+    render(
+      <RepoTabStrip
+        repos={[repo('repo-a', '/tmp/repo-a'), repo('repo-b', '/tmp/repo-b')]}
+        activeId="/tmp/repo-a"
+        labels={labels}
+        onActivate={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+        onOpenLocal={() => {}}
+        onOpenRemote={() => {}}
+        onClone={() => {}}
+      />,
+    )
+
+    const tablist = document.body.querySelector('[role="tablist"]')
+    expect(tablist?.className).toContain('gap-0.5')
+  })
 })
 
 function render(

@@ -1,13 +1,14 @@
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { FolderTree, GitBranch, GitCompareArrows, History, RadioTower, type LucideIcon } from 'lucide-react'
+import { FolderTree, GitBranch, GitCompareArrows, GitFork, History, RadioTower, type LucideIcon } from 'lucide-react'
 import { BranchList } from '#/web/components/BranchList.tsx'
 import { SplitPane } from '#/web/components/SplitPane.tsx'
 import { ProjectFileTree } from '#/web/components/file-tree/ProjectFileTree.tsx'
 import { ProjectChangesPanel } from '#/web/components/repo-workspace/ProjectChangesPanel.tsx'
 import { ProjectHistoryPanel } from '#/web/components/repo-workspace/ProjectHistoryPanel.tsx'
 import { ProjectPortsPanel } from '#/web/components/repo-workspace/ProjectPortsPanel.tsx'
+import { ProjectRemoteBranchesPanel } from '#/web/components/repo-workspace/ProjectRemoteBranchesPanel.tsx'
 import { ProjectStatusPanel } from '#/web/components/repo-workspace/ProjectStatusPanel.tsx'
 import { PlainWorkspacePane } from '#/web/components/repo-workspace/PlainWorkspacePane.tsx'
 import { BranchFilterControls } from '#/web/components/repo-toolbar/BranchFilterControls.tsx'
@@ -24,7 +25,7 @@ import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 import { repoIsPlainWorkspace } from '#/web/stores/repos/capabilities.ts'
 
-type ExplorerTab = 'files' | 'changes' | 'status' | 'history' | 'ports'
+type ExplorerTab = 'files' | 'changes' | 'status' | 'history' | 'remoteBranches' | 'ports'
 
 export interface FileTreeRevealRequest {
   id: number
@@ -146,6 +147,7 @@ function ExplorerTabs({
     { id: 'changes' as const, label: t('tab.changes'), icon: GitCompareArrows },
     { id: 'status' as const, label: t('tab.status'), icon: GitBranch },
     { id: 'history' as const, label: t('tab.history'), icon: History },
+    { id: 'remoteBranches' as const, label: t('tab.remote-branches'), icon: GitFork },
     ...(isRemoteRepo ? [{ id: 'ports' as const, label: t('ports.title'), icon: RadioTower }] : []),
   ] satisfies { id: ExplorerTab; label: string; icon: LucideIcon }[]
 
@@ -167,7 +169,13 @@ function ExplorerTabs({
           compact={false}
           compactContent={null}
           scrollContent={
-            <ToolbarTabStripBody scroll role="tablist" aria-label={t('file-tree.title')} aria-orientation="horizontal">
+            <ToolbarTabStripBody
+              scroll
+              role="tablist"
+              aria-label={t('file-tree.title')}
+              aria-orientation="horizontal"
+              className="gap-0.5"
+            >
               {tabs.map((tab) => {
                 const selected = activeVisibleTab === tab.id
                 const Icon = tab.icon
@@ -211,6 +219,8 @@ function ExplorerTabs({
           <ProjectStatusPanel repoId={repoId} layout={layout} />
         ) : activeVisibleTab === 'history' ? (
           <ProjectHistoryPanel repoId={repoId} onRevealPath={handleRevealPath} />
+        ) : activeVisibleTab === 'remoteBranches' ? (
+          <ProjectRemoteBranchesPanel repoId={repoId} />
         ) : (
           <ProjectPortsPanel repoId={repoId} />
         )}

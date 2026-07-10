@@ -447,6 +447,7 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
         if (url.pathname === '/api/repo/create-branch') return call('repo.createBranch', body)
         if (url.pathname === '/api/repo/track-remote-branch') return call('repo.trackRemoteBranch', body)
         if (url.pathname === '/api/repo/delete-branch') return call('repo.deleteBranch', body)
+        if (url.pathname === '/api/repo/delete-remote-branch') return call('repo.deleteRemoteBranch', body)
         if (url.pathname === '/api/repo/remove-worktree') return call('repo.removeWorktree', body)
         if (url.pathname === '/api/repo/patch') return call('repo.patch', body)
         if (url.pathname === '/api/repo/open-remote') return call('repo.openRemote', body)

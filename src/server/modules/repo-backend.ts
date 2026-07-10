@@ -5,6 +5,7 @@ import {
   createBranch as createLocalBranch,
   createTrackingBranch,
   deleteBranch,
+  deleteRemoteServerBranch as deleteLocalRemoteServerBranch,
   deleteUpstreamBranch,
   getBranches,
   getCurrentBranch,
@@ -17,7 +18,11 @@ import {
 } from '#/system/git/branches.ts'
 import { getCommitDetail as getLocalCommitDetail, getCommitHistory as getLocalCommitHistory } from '#/system/git/history.ts'
 import { fetchAll, getBrowserRemoteUrl, getRemoteInfo, pickPreferredRemote, pullBranch, pushBranch } from '#/system/git/remote.ts'
-import { getRemoteTrackingBranches as getLocalRemoteTrackingBranches } from '#/system/git/remote-refs.ts'
+import {
+  deleteRemoteServerTag as deleteLocalRemoteServerTag,
+  getRemoteTags as getLocalRemoteTags,
+  getRemoteTrackingBranches as getLocalRemoteTrackingBranches,
+} from '#/system/git/remote-refs.ts'
 import { getWorkingStatus } from '#/system/git/status.ts'
 import { createWorktree, getWorktrees, removeWorktree } from '#/system/git/worktrees.ts'
 import { getWorktreePatch } from '#/system/git/patch.ts'
@@ -53,6 +58,8 @@ import {
   createRemoteWorktree,
   bootstrapRemoteWorktreeAfterCreate,
   deleteRemoteBranch,
+  deleteRemoteServerBranch as deleteSshRemoteServerBranch,
+  deleteRemoteServerTag as deleteSshRemoteServerTag,
   discardRemoteChangesForPaths,
   fetchRemoteRepository,
   getRemoteBrowserUrl,
@@ -61,6 +68,7 @@ import {
   getRemotePatch,
   getRemoteSnapshot,
   getRemoteStatus,
+  getRemoteTags as getSshRemoteTags,
   getRemoteTrackingBranches as getSshRemoteTrackingBranches,
   getRemoteWorktreeBootstrapPreview,
   mergeRemoteBranch,
@@ -101,6 +109,7 @@ export interface RepoBackend {
   getHistory(branch: string, input: { limit: number; skip: number }, signal?: AbortSignal): Promise<CommitHistoryEntry[]>
   getCommitDetail(commit: string, signal?: AbortSignal): Promise<CommitDetail | null>
   getRemoteBranches(signal?: AbortSignal): Promise<string[]>
+  getRemoteTags(signal?: AbortSignal, networkOptions?: GitNetworkOptions): Promise<string[]>
   fetch(signal: AbortSignal, networkOptions?: GitNetworkOptions): Promise<{ ok: boolean; message: string }>
   checkout(branch: string, signal?: AbortSignal): Promise<ExecResult>
   checkoutWorktree(worktreePath: string, branch: string, signal?: AbortSignal): Promise<ExecResult>
@@ -112,6 +121,18 @@ export interface RepoBackend {
   discardChanges(worktreePath: string, paths: string[], signal?: AbortSignal): Promise<ExecResult>
   createBranch(branch: string, baseBranch: string, signal?: AbortSignal): Promise<ExecResult>
   trackRemoteBranch(localBranch: string, remoteRef: string, signal?: AbortSignal): Promise<ExecResult>
+  deleteRemoteServerBranch(
+    remote: string,
+    branch: string,
+    signal?: AbortSignal,
+    networkOptions?: GitNetworkOptions,
+  ): Promise<ExecResult>
+  deleteRemoteServerTag(
+    remote: string,
+    tag: string,
+    signal?: AbortSignal,
+    networkOptions?: GitNetworkOptions,
+  ): Promise<ExecResult>
   getWorktreeBootstrapPreview(signal?: AbortSignal): Promise<WorktreeBootstrapPreviewResult>
   createWorktree(
     input: CreateWorktreeInput,
@@ -308,6 +329,10 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       if (!isValidCwd(repoId)) return []
       return await getLocalRemoteTrackingBranches(repoId, signal)
     },
+    async getRemoteTags(signal, networkOptions) {
+      if (!isValidCwd(repoId)) return []
+      return await getLocalRemoteTags(repoId, signal, networkOptions)
+    },
     async fetch(signal, networkOptions) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       const available = await probeGitRepository(repoId)
@@ -353,6 +378,14 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
     async trackRemoteBranch(localBranch, remoteRef, signal) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       return await createTrackingBranch(repoId, localBranch, remoteRef, signal)
+    },
+    async deleteRemoteServerBranch(remote, branch, signal, networkOptions) {
+      if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
+      return await deleteLocalRemoteServerBranch(repoId, remote, branch, signal, networkOptions)
+    },
+    async deleteRemoteServerTag(remote, tag, signal, networkOptions) {
+      if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
+      return await deleteLocalRemoteServerTag(repoId, remote, tag, signal, networkOptions)
     },
     async getWorktreeBootstrapPreview(signal) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
@@ -480,6 +513,9 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
     async getRemoteBranches(signal) {
       return await getSshRemoteTrackingBranches(target, { signal })
     },
+    async getRemoteTags(signal) {
+      return await getSshRemoteTags(target, { signal })
+    },
     async fetch(signal) {
       return await fetchRemoteRepository(target, { signal })
     },
@@ -512,6 +548,12 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
     },
     async trackRemoteBranch(localBranch, remoteRef, signal) {
       return await createRemoteTrackingBranch(target, { localBranch, remoteRef, signal })
+    },
+    async deleteRemoteServerBranch(remote, branch, signal) {
+      return await deleteSshRemoteServerBranch(target, { remote, branch, signal })
+    },
+    async deleteRemoteServerTag(remote, tag, signal) {
+      return await deleteSshRemoteServerTag(target, { remote, tag, signal })
     },
     async getWorktreeBootstrapPreview(signal) {
       return await getRemoteWorktreeBootstrapPreview(target, { signal })

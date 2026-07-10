@@ -21,6 +21,7 @@ import {
   checkoutBranchInWorktree,
   commitRepositoryChanges,
   mergeRepositoryBranch,
+  pullRepositoryBranch,
   resetRepositoryHard,
 } from '#/web/repo-client.ts'
 import { useT } from '#/web/stores/i18n.ts'
@@ -80,6 +81,13 @@ export function useBranchWriteActions(
   async function handleMerge(sourceBranch: string): Promise<ExecResult> {
     if (!worktreePath) return { ok: false, message: 'error.invalid-arguments' }
     const result = await mergeRepositoryBranch(repo.id, worktreePath, sourceBranch)
+    setLastResult(repo.id, result, repo.instanceToken)
+    return result
+  }
+
+  async function handlePull(): Promise<ExecResult> {
+    if (!worktreePath) return { ok: false, message: 'error.invalid-arguments' }
+    const result = await pullRepositoryBranch(repo.id, branch.name, worktreePath)
     setLastResult(repo.id, result, repo.instanceToken)
     return result
   }
@@ -212,6 +220,7 @@ export function useBranchWriteActions(
         branch={branch}
         allBranches={allBranches}
         onClose={mergeDialog.close}
+        onPull={options.canPush ? handlePull : undefined}
         onMerge={handleMerge}
         onPush={options.canPush ? options.onPush : undefined}
       />

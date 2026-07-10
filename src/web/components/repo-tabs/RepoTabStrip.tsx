@@ -154,7 +154,7 @@ function CompactRepoTabs({
 
   return (
     <ToolbarTabStripBody>
-      <RepoTabTooltipLayer repos={repos} role="tablist">
+      <RepoTabTooltipLayer repos={repos} role="tablist" className="gap-0.5">
         {repos.map((repo, index) => (
           <RepoTab
             key={repo.id}
@@ -202,7 +202,7 @@ function ScrollableRepoTabs({
 
   return (
     <ToolbarTabStripBody scroll>
-      <RepoTabTooltipLayer repos={repos} role="tablist">
+      <RepoTabTooltipLayer repos={repos} role="tablist" className="gap-0.5">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}

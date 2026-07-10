@@ -11,11 +11,14 @@ import {
   createRemoteWorktree,
   deleteRemoteBranch,
   deleteRemoteFileTreeEntries,
+  deleteRemoteServerBranch,
+  deleteRemoteServerTag,
   discardRemoteChangesForPaths,
   getRemoteBrowserUrl,
   getRemoteCommitDetail,
   getRemoteHistory,
   getRemoteSnapshot,
+  getRemoteTags,
   getRemoteWorktreeBootstrapPreview,
   inventoryRemoteFileTransfer,
   listRemoteFileTreeDirectory,
@@ -551,6 +554,102 @@ describe('remote git helpers', () => {
       TARGET,
       { signal: undefined },
     )
+  })
+
+  test('deleteRemoteServerBranch runs remote push delete for valid non-protected refs', async () => {
+    const run = vi.fn(async () => okRemoteResult('deleted'))
+
+    await expect(
+      deleteRemoteServerBranch(TARGET, { remote: 'origin', branch: 'feature/remove-me', run: run as any }),
+    ).resolves.toEqual({ ok: true, message: 'deleted' })
+
+    expect(run).toHaveBeenCalledWith(
+      { type: 'gitRemoteBranchDelete', path: '/srv/repo', remote: 'origin', branch: 'feature/remove-me' },
+      TARGET,
+      { signal: undefined, timeoutMs: 180_000 },
+    )
+  })
+
+  test('deleteRemoteServerBranch rejects invalid and protected refs before SSH execution', async () => {
+    const run = vi.fn(async () => okRemoteResult('deleted'))
+
+    await expect(
+      deleteRemoteServerBranch(TARGET, { remote: 'origin', branch: 'main', run: run as any }),
+    ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+    await expect(
+      deleteRemoteServerBranch(TARGET, { remote: 'bad/remote', branch: 'feature/a', run: run as any }),
+    ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+
+    expect(run).not.toHaveBeenCalled()
+  })
+
+  test('getRemoteTags reads tags from each configured remote', async () => {
+    const run = vi.fn(async (command: { type: string; remote?: string }) => {
+      switch (command.type) {
+        case 'gitRemoteVerbose':
+          return okRemoteResult(
+            [
+              'origin\tgit@example.com:acme/repo.git (fetch)',
+              'origin\tgit@example.com:acme/repo.git (push)',
+              'upstream\tgit@example.com:acme/upstream.git (fetch)',
+              'upstream\tgit@example.com:acme/upstream.git (push)',
+            ].join('\n'),
+          )
+        case 'gitRemoteTags':
+          return command.remote === 'origin'
+            ? okRemoteResult('abc123\trefs/tags/v1.0.0\ndef456\trefs/tags/release/1.0\n')
+            : okRemoteResult('abc123\trefs/tags/v1.0.0\nbad\trefs/heads/main\n')
+        default:
+          return okRemoteResult('')
+      }
+    })
+
+    await expect(getRemoteTags(TARGET, { run: run as any })).resolves.toEqual([
+      'origin/release/1.0',
+      'origin/v1.0.0',
+      'upstream/v1.0.0',
+    ])
+    expect(run).toHaveBeenCalledWith(
+      { type: 'gitRemoteTags', path: '/srv/repo', remote: 'origin' },
+      TARGET,
+      { signal: undefined },
+    )
+    expect(run).toHaveBeenCalledWith(
+      { type: 'gitRemoteTags', path: '/srv/repo', remote: 'upstream' },
+      TARGET,
+      { signal: undefined },
+    )
+  })
+
+  test('deleteRemoteServerTag runs explicit remote tag delete for valid refs', async () => {
+    const run = vi.fn(async () => okRemoteResult('deleted'))
+
+    await expect(
+      deleteRemoteServerTag(TARGET, { remote: 'origin', tag: 'release/v1.0.0', run: run as any }),
+    ).resolves.toEqual({ ok: true, message: 'deleted' })
+
+    expect(run).toHaveBeenCalledWith(
+      { type: 'gitRemoteTagDelete', path: '/srv/repo', remote: 'origin', tag: 'release/v1.0.0' },
+      TARGET,
+      { signal: undefined, timeoutMs: 180_000 },
+    )
+  })
+
+  test('deleteRemoteServerTag rejects invalid refs before SSH execution', async () => {
+    const run = vi.fn(async () => okRemoteResult('deleted'))
+
+    await expect(deleteRemoteServerTag(TARGET, { remote: 'origin', tag: '-bad', run: run as any })).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+    await expect(
+      deleteRemoteServerTag(TARGET, { remote: 'bad/remote', tag: 'release/v1.0.0', run: run as any }),
+    ).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+
+    expect(run).not.toHaveBeenCalled()
   })
 
   test('removeRemoteWorktree allows deleting branch when merged into current HEAD without upstream', async () => {
