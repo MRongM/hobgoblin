@@ -28,6 +28,7 @@ import {
   setLanEnabled,
   setPreferredEditorApp,
   setPreferredTerminalApp,
+  setProjectColorTheme,
   setRemoteTerminalTmuxEnabled,
   setSettingsFetchInterval,
   setShortcutsDisabled,
@@ -52,6 +53,7 @@ import {
   updateRestorableSessionStateCache,
   updateRuntimeRecentReposStateCache,
   updateRuntimeSettingsSnapshotCache,
+  updateSettingsSnapshotCache,
 } from '#/web/settings-query-cache.ts'
 
 export async function recordRecentRepo(repo: RepoSessionEntry): Promise<void> {
@@ -183,6 +185,17 @@ export async function setFontFamilyPreference(fontFamily: FontFamilyPref): Promi
   const nextFontFamily = await setFontFamily(fontFamily)
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, fontFamily: nextFontFamily }))
   return nextFontFamily
+}
+
+export async function setProjectColorThemePreference(
+  repoId: string,
+  colorTheme: Parameters<typeof setProjectColorTheme>[1],
+): Promise<void> {
+  const repoSettings = await setProjectColorTheme(repoId, colorTheme)
+  updateSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
+    ...current,
+    repoSettings,
+  }))
 }
 
 export async function setRemoteTerminalTmuxEnabledPreference(enabled: boolean): Promise<void> {

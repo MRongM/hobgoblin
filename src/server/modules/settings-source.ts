@@ -28,12 +28,15 @@ import {
 } from '#/shared/workspace-layout.ts'
 import { repoSessionEntryId, type RepoSessionEntry } from '#/shared/remote-repo.ts'
 import {
+  clearRepoSettingsEntryColorTheme,
   isWorktreeBootstrapConfigHash,
+  repoSettingsEntryHasPersistedFields,
+  setRepoSettingsEntryColorTheme,
   type RepoSettingsEntry,
   type WorktreeBootstrapTrust,
 } from '#/shared/repo-settings.ts'
 import { normalizeGlobalShortcut } from '#/shared/accelerator.ts'
-import { normalizeColorTheme, type ColorTheme } from '#/shared/color-theme.ts'
+import { isColorTheme, normalizeColorTheme, type ColorTheme } from '#/shared/color-theme.ts'
 import {
   DEFAULT_EDITOR_APP,
   DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
@@ -366,9 +369,10 @@ function normalizeRepoSettings(value: unknown): RepoSettingsEntry[] {
     const raw = item as Partial<RepoSettingsEntry>
     if (typeof raw.repoId !== 'string' || raw.repoId.length === 0) continue
     const next: RepoSettingsEntry = { repoId: raw.repoId }
+    if (isColorTheme(raw.colorTheme)) next.colorTheme = raw.colorTheme
     const trust = normalizeWorktreeBootstrapTrust(raw.worktreeBootstrapTrust)
     if (trust) next.worktreeBootstrapTrust = trust
-    if (next.worktreeBootstrapTrust) entries.set(next.repoId, next)
+    if (repoSettingsEntryHasPersistedFields(next)) entries.set(next.repoId, next)
   }
   return Array.from(entries.values())
 }
@@ -635,6 +639,23 @@ export async function getServerRepoSettings(): Promise<RepoSettingsEntry[]> {
   return cloneRepoSettings((await loadServerSettings()).repoSettings)
 }
 
+export async function setServerRepoColorTheme(input: {
+  repoId: string
+  colorTheme?: ColorTheme | null
+}): Promise<RepoSettingsEntry[]> {
+  const data = await loadServerSettings()
+  if (!input.repoId) return cloneRepoSettings(data.repoSettings)
+  if (input.colorTheme === null || input.colorTheme === undefined) {
+    data.repoSettings = clearRepoSettingsEntryColorTheme(data.repoSettings, input.repoId)
+    await writeServerSettingsFile(data)
+    return cloneRepoSettings(data.repoSettings)
+  }
+  if (!isColorTheme(input.colorTheme)) return cloneRepoSettings(data.repoSettings)
+  data.repoSettings = setRepoSettingsEntryColorTheme(data.repoSettings, input.repoId, input.colorTheme)
+  await writeServerSettingsFile(data)
+  return cloneRepoSettings(data.repoSettings)
+}
+
 export async function trustServerRepoWorktreeBootstrapConfig(input: {
   repoId: string
   configHash: string
@@ -645,8 +666,10 @@ export async function trustServerRepoWorktreeBootstrapConfig(input: {
     configHash: input.configHash,
     trustedAt: new Date().toISOString(),
   }
+  const existing = data.repoSettings.find((entry) => entry.repoId === input.repoId)
   data.repoSettings = upsertRepoSettingsEntry(data.repoSettings, {
     repoId: input.repoId,
+    ...(existing?.colorTheme ? { colorTheme: existing.colorTheme } : {}),
     worktreeBootstrapTrust,
   })
   await writeServerSettingsFile(data)
@@ -661,7 +684,13 @@ export async function untrustServerRepoWorktreeBootstrapConfig(input: {
   if (!input.repoId || !isWorktreeBootstrapConfigHash(input.configHash)) return false
   const existing = data.repoSettings.find((entry) => entry.repoId === input.repoId)
   if (existing?.worktreeBootstrapTrust?.configHash !== input.configHash) return false
-  data.repoSettings = data.repoSettings.filter((entry) => entry.repoId !== input.repoId)
+  const next: RepoSettingsEntry = {
+    repoId: input.repoId,
+    ...(existing.colorTheme ? { colorTheme: existing.colorTheme } : {}),
+  }
+  data.repoSettings = repoSettingsEntryHasPersistedFields(next)
+    ? [next, ...data.repoSettings.filter((entry) => entry.repoId !== input.repoId)]
+    : data.repoSettings.filter((entry) => entry.repoId !== input.repoId)
   await writeServerSettingsFile(data)
   return true
 }
@@ -669,6 +698,7 @@ export async function untrustServerRepoWorktreeBootstrapConfig(input: {
 function cloneRepoSettings(repoSettings: readonly RepoSettingsEntry[]): RepoSettingsEntry[] {
   return repoSettings.map((entry) => ({
     repoId: entry.repoId,
+    ...(entry.colorTheme ? { colorTheme: entry.colorTheme } : {}),
     ...(entry.worktreeBootstrapTrust
       ? {
           worktreeBootstrapTrust: {

@@ -10,6 +10,7 @@ import {
   settingsSnapshotQueryKey,
 } from '#/web/settings-query-cache.ts'
 import type { RepoSessionEntry } from '#/shared/remote-repo.ts'
+import type { RepoSettingsEntry } from '#/shared/repo-settings.ts'
 import type { GitHubCliState, TerminalCustomButton } from '#/shared/rpc.ts'
 
 type AddRecentRepoResult = {
@@ -66,6 +67,7 @@ const appDataClientMocks = vi.hoisted(() => ({
     appAvailability: { ghostty: false, terminal: false },
     detectedAt: 0,
   })),
+  setProjectColorTheme: vi.fn<() => Promise<RepoSettingsEntry[]>>(async () => []),
   setSettingsFetchInterval: vi.fn(async (sec) => sec),
   setShortcutsDisabled: vi.fn(async () => {}),
   setSwapCloseShortcuts: vi.fn(async () => {}),
@@ -96,6 +98,7 @@ vi.mock('#/web/settings-client.ts', () => ({
   setLanEnabled: appDataClientMocks.setLanEnabled,
   setPreferredEditorApp: appDataClientMocks.setPreferredEditorApp,
   setPreferredTerminalApp: appDataClientMocks.setPreferredTerminalApp,
+  setProjectColorTheme: appDataClientMocks.setProjectColorTheme,
   setSettingsFetchInterval: appDataClientMocks.setSettingsFetchInterval,
   setShortcutsDisabled: appDataClientMocks.setShortcutsDisabled,
   setSwapCloseShortcuts: appDataClientMocks.setSwapCloseShortcuts,
@@ -176,6 +179,8 @@ describe('settings write paths', () => {
       appAvailability: { ghostty: false, terminal: false },
       detectedAt: 0,
     }))
+    appDataClientMocks.setProjectColorTheme.mockReset()
+    appDataClientMocks.setProjectColorTheme.mockResolvedValue([])
     appDataClientMocks.setSettingsFetchInterval.mockReset()
     appDataClientMocks.setSettingsFetchInterval.mockImplementation(async (sec) => sec)
     appDataClientMocks.setShortcutsDisabled.mockReset()
@@ -319,6 +324,18 @@ describe('settings write paths', () => {
 
     expect(appDataClientMocks.setFontFamily).toHaveBeenCalledWith('system')
     expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({ fontFamily: 'system' })
+  })
+
+  test('setProjectColorThemePreference updates repo settings cache', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    const repoSettings = [{ repoId: '/tmp/repo-a', colorTheme: 'cursor' as const }]
+    appDataClientMocks.setProjectColorTheme.mockResolvedValue(repoSettings)
+    const { setProjectColorThemePreference } = await import('#/web/settings-write-paths.ts')
+
+    await setProjectColorThemePreference('/tmp/repo-a', 'cursor')
+
+    expect(appDataClientMocks.setProjectColorTheme).toHaveBeenCalledWith('/tmp/repo-a', 'cursor')
+    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({ repoSettings })
   })
 
   test('setGitNetworkProxyEnabledPreference updates runtime settings cache', async () => {

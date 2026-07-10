@@ -680,6 +680,8 @@ export const ko: Record<DictKey, string> = {
 
   // ---- Settings panel ----------------------------------------------------
   'settings.title': '설정',
+  'project-theme.menu': '프로젝트 테마',
+  'project-theme.follow-global': '전역 설정 따르기',
   'settings.theme-preset': '테마',
   'settings.theme-preset.macos': 'macOS',
   'settings.theme-preset.mono': 'Mono',

@@ -666,6 +666,8 @@ export const zh: Record<DictKey, string> = {
 
   // ---- Settings panel ----------------------------------------------------
   'settings.title': '设置',
+  'project-theme.menu': '项目主题',
+  'project-theme.follow-global': '跟随全局',
   'settings.theme-preset': '主题',
   'settings.theme-preset.macos': 'macOS',
   'settings.theme-preset.mono': 'Mono',
