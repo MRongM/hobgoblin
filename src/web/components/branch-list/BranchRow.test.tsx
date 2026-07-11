@@ -122,7 +122,7 @@ function terminalReadContextWithState(
 }
 
 describe('BranchRow', () => {
-  test('keeps dirty worktree label in the row title without visible badge text', () => {
+  test('keeps the changed-file count in the dirty worktree row title', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     repo.data.worktreesByPath['/tmp/worktree-a'] = {
       path: '/tmp/worktree-a',
@@ -148,10 +148,10 @@ describe('BranchRow', () => {
     )
 
     expect(document.body.textContent).not.toContain('有改动')
-    expect(document.body.querySelector('[title*="有改动"]')).not.toBeNull()
+    expect(document.body.querySelector('[title*="7 个改动"]')).not.toBeNull()
   })
 
-  test('uses a change icon inside the dirty worktree badge', () => {
+  test('shows the changed-file count beside the dirty worktree icon', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     repo.data.worktreesByPath['/tmp/worktree-a'] = {
       path: '/tmp/worktree-a',
@@ -179,9 +179,9 @@ describe('BranchRow', () => {
     const dirtyBadge = document.body.querySelector<HTMLElement>('[data-testid="dirty-worktree-badge"]')
     const badgeIcon = dirtyBadge?.querySelector('svg')
 
-    expect(dirtyBadge?.textContent).toBe('')
-    expect(dirtyBadge?.getAttribute('aria-label')).toBe('有改动')
-    expect(dirtyBadge?.getAttribute('title')).toBe('有改动')
+    expect(dirtyBadge?.textContent).toBe('7')
+    expect(dirtyBadge?.getAttribute('aria-label')).toBe('7 个改动')
+    expect(dirtyBadge?.getAttribute('title')).toBe('7 个改动')
     expect(badgeIcon?.classList.contains('lucide-git-compare-arrows')).toBe(true)
     expect(badgeIcon?.classList.contains('lucide-folder-tree')).toBe(false)
   })
@@ -212,6 +212,9 @@ describe('BranchRow', () => {
 
     expect(document.body.textContent).not.toContain('有改动')
     expect(document.body.querySelector('[title*="有改动"]')).not.toBeNull()
+    const dirtyBadge = document.body.querySelector<HTMLElement>('[data-testid="dirty-worktree-badge"]')
+    expect(dirtyBadge?.textContent).toBe('')
+    expect(dirtyBadge?.getAttribute('aria-label')).toBe('有改动')
   })
 
   test('does not render the default branch badge in branch rows', () => {

@@ -275,6 +275,32 @@ describe('RepoTabStrip', () => {
     expect(document.activeElement).toBe(repoA)
   })
 
+  test('keeps project tabs content-sized within the 144px to 256px bounds', () => {
+    vi.stubGlobal('matchMedia', createMatchMedia(false))
+
+    render(
+      <RepoTabStrip
+        repos={[repo('a-project-with-a-long-display-name', '/tmp/project')]}
+        activeId="/tmp/project"
+        labels={labels}
+        onActivate={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+        onOpenLocal={() => {}}
+        onOpenRemote={() => {}}
+        onClone={() => {}}
+      />,
+    )
+
+    const projectTab = container!.querySelector<HTMLElement>('[data-repo-tab-tooltip-id="/tmp/project"]')!
+    const classes = projectTab.className.split(/\s+/)
+
+    expect(classes).toContain('min-w-36')
+    expect(classes).toContain('max-w-64')
+    expect(classes).not.toContain('max-w-56')
+    expect(classes.some((className) => /^w-\d+$/.test(className))).toBe(false)
+  })
+
   test('uses tighter spacing between project tabs on large screens', () => {
     vi.stubGlobal('matchMedia', createMatchMedia(false))
 

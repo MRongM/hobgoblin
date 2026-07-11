@@ -49,6 +49,7 @@ type RestorableWorkspaceSelectionActions = Pick<
   | 'applySessionSelectedTerminalState'
   | 'setDetailPaneSize'
   | 'setDetailPaneSizes'
+  | 'setExplorerTab'
   | 'setRepoFileTreePaneSize'
   | 'setDefaultFileTreePaneSize'
   | 'resetLayout'
@@ -241,6 +242,22 @@ function createRestorableWorkspaceSelectionActions(
         }
         return { detailPaneSizes: next }
       })
+    },
+
+    setExplorerTab(id, tab) {
+      let changed = false
+      let token: number | undefined
+      set((state) => {
+        const repo = state.repos[id]
+        if (!repo || repo.ui.explorerTab === tab) return state
+        changed = true
+        token = repo.instanceToken
+        return replaceRepoState(state, repo, (draft) => {
+          draft.ui.explorerTab = tab
+        })
+      })
+      const repo = get().repos[id]
+      if (changed && token !== undefined && repo) persistRestorableRepoSnapshot(set, repo, token)
     },
 
     setRepoFileTreePaneSize(id: string, layout: RepoWorkspaceLayout, size: number) {

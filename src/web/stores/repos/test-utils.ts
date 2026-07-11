@@ -15,7 +15,7 @@ import type {
   TerminalTakeoverResult,
 } from '#/shared/terminal.ts'
 import type { BranchSnapshotInfo, PullRequestInfo, WorktreeStatus } from '#/web/types.ts'
-import type { DetailTab, RepoBranchState, RepoState } from '#/web/stores/repos/types.ts'
+import type { DetailTab, ExplorerTab, RepoBranchState, RepoState } from '#/web/stores/repos/types.ts'
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import {
   DEFAULT_DETAIL_COLLAPSED,
@@ -503,6 +503,7 @@ export function seedRepoState(options: {
   selectedBranch?: string | null
   branchViewMode?: RepoState['ui']['branchViewMode']
   detailTab?: DetailTab
+  explorerTab?: ExplorerTab
   workspaceLayout?: RepoWorkspaceLayout
   fileTreePaneSizes?: WorkspaceDetailPaneSizes
   worktreePathOrder?: string[]
@@ -536,6 +537,7 @@ export function seedRepoState(options: {
       selectedBranch: options.selectedBranch ?? base.ui.selectedBranch,
       branchViewMode: options.branchViewMode ?? base.ui.branchViewMode,
       detailTab: options.detailTab ?? base.ui.detailTab,
+      explorerTab: options.explorerTab ?? base.ui.explorerTab,
       workspaceLayout: options.workspaceLayout ?? base.ui.workspaceLayout,
       fileTreePaneSizes: options.fileTreePaneSizes ?? base.ui.fileTreePaneSizes,
       worktreePathOrder: options.worktreePathOrder ?? base.ui.worktreePathOrder,

@@ -105,6 +105,13 @@ describe('PlainWorkspaceTerminalPanel', () => {
     expect(terminalTabsProps[0]?.onFocusTerminal).toBe(focusTerminal)
   })
 
+  test('keeps terminal tabs content-sized in the plain-workspace toolbar', () => {
+    render(<PlainWorkspaceTerminalPanel repoId="/repo" />)
+
+    const terminalTabs = container!.querySelector('[data-testid="terminal-tabs"]')
+    expect(terminalTabs?.parentElement?.className).not.toContain('flex-1')
+  })
+
   test('auto-creates remote plain workspace sessions at the remote path', () => {
     seedRepoState({
       id: REMOTE_REPO_ID,

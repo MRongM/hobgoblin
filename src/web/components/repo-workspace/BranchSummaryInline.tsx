@@ -57,6 +57,14 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
   const hasWorktree = !!branch.worktree?.path
   const worktreeState = getBranchWorktreeState(repo, branch)
   const worktreeDirty = worktreeState?.dirty ?? false
+  const worktreeChangeCount =
+    worktreeDirty && worktreeState?.changeCountKnown && worktreeState.changeCount > 0
+      ? worktreeState.changeCount
+      : null
+  const worktreeDirtyLabel =
+    worktreeChangeCount === null
+      ? t('branches.dirty')
+      : t('branch-status.worktree-dirty', { n: worktreeChangeCount })
   const repoRoot = repo.remote?.target?.remotePath ?? repo.id
   const worktreePath = branch.worktree?.path
     ? lastPathSegment(branch.worktree.path) || formatWorktreeListPath(branch.worktree.path, repo.remote?.target, repoRoot)
@@ -74,7 +82,7 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
     commitHashTag,
     isCurrent ? t('branch-status.current') : null,
     branch.isDefault ? t('branches.default') : null,
-    hasWorktree ? t(worktreeDirty ? 'branches.dirty' : 'branches.worktree') : null,
+    hasWorktree ? (worktreeDirty ? worktreeDirtyLabel : t('branches.worktree')) : null,
     terminalCountLabel,
     hasTerminalBell ? terminalBellLabel : null,
     hasTerminalOutputActivity ? terminalOutputActiveLabel : null,
@@ -147,11 +155,16 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
               <Badge
                 data-testid="dirty-worktree-badge"
                 variant="attention"
-                aria-label={t('branches.dirty')}
-                title={t('branches.dirty')}
-                className="h-4 px-1"
+                aria-label={worktreeDirtyLabel}
+                title={worktreeDirtyLabel}
+                className={cn(
+                  'h-4 px-1',
+                  worktreeChangeCount !== null &&
+                    'gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums',
+                )}
               >
                 <GitCompareArrows size={10} aria-hidden="true" />
+                {worktreeChangeCount}
               </Badge>
             ) : null}
             {branch.trackingGone && <Badge variant="attention">{t('branches.gone')}</Badge>}

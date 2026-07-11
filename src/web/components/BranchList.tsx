@@ -32,6 +32,7 @@ import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 import type { RepoBranchState, RepoWorktreeState } from '#/web/stores/repos/types.ts'
 import { formatWorktreeListPath } from '#/web/lib/paths.ts'
+import { cn } from '#/web/lib/cn.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import { detailPanelStoreActionsEqual, detailPanelStoreActionsFromStore } from '#/web/stores/repos/selector-actions.ts'
 
@@ -285,11 +286,16 @@ function DetachedWorktreeRow({
   const displayPath = formatWorktreeListPath(worktree.path, remoteTarget, repoRoot)
   const head = worktree.head ? worktree.head.slice(0, 12) : t('branches.detached-head')
   const dirty = worktree.isDirty || (worktree.changeCount ?? 0) > 0
+  const dirtyChangeCount = dirty && (worktree.changeCount ?? 0) > 0 ? (worktree.changeCount ?? null) : null
+  const dirtyLabel =
+    dirtyChangeCount === null
+      ? t('branches.dirty')
+      : t('branch-status.worktree-dirty', { n: dirtyChangeCount })
   const title = [
     t('branches.detached-worktree'),
     worktree.head ?? null,
     displayPath,
-    dirty ? t('branches.dirty') : null,
+    dirty ? dirtyLabel : null,
   ]
     .filter(Boolean)
     .join(', ')
@@ -309,11 +315,16 @@ function DetachedWorktreeRow({
             <Badge
               data-testid="dirty-detached-worktree-badge"
               variant="attention"
-              aria-label={t('branches.dirty')}
-              title={t('branches.dirty')}
-              className="h-4 px-1"
+              aria-label={dirtyLabel}
+              title={dirtyLabel}
+              className={cn(
+                'h-4 px-1',
+                dirtyChangeCount !== null &&
+                  'gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums',
+              )}
             >
               <GitCompareArrows size={10} aria-hidden="true" />
+              {dirtyChangeCount}
             </Badge>
           ) : (
             <Badge variant="outline" className="gap-1">

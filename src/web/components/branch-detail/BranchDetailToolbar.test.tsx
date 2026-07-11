@@ -74,6 +74,24 @@ describe('BranchDetailToolbar', () => {
     expect(c.querySelector('#detail-terminal-tab')?.textContent).toContain('terminal.label')
   })
 
+  test('keeps terminal tabs content-sized beside the flexible detail toolbar blank area', () => {
+    const { container: c } = renderToolbar({
+      terminalCount: 2,
+      detailTab: 'terminal',
+      navigation: navigationWith({}),
+    })
+
+    const terminalTab = c.querySelector<HTMLElement>('[data-terminal-tab-tooltip-id="t1"]')
+    const scrollArea = terminalTab?.closest('.relative.overflow-hidden')
+    const terminalHost = scrollArea?.parentElement
+    const spacer = terminalHost?.nextElementSibling
+
+    expect(terminalHost?.className).not.toContain('flex-1')
+    expect(spacer?.className).toContain('min-w-2')
+    expect(spacer?.className).toContain('flex-1')
+    expect(spacer?.className).not.toContain('shrink-0')
+  })
+
   test('clicking the new-terminal button navigates and creates a terminal', async () => {
     const showRepoDetailTab = vi.fn()
     const { terminalTab, mocks } = renderToolbar({

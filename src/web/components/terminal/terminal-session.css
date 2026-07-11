@@ -100,9 +100,10 @@
 }
 
 .goblin-managed-terminal-host {
-  width: 100%;
+  width: auto;
   height: 100%;
   min-height: 0;
+  margin-right: 14px;
   overflow: hidden;
 }
 

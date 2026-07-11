@@ -121,6 +121,21 @@ describe('normalizeRestorableRepoCache', () => {
 
     expect(normalized.repo?.ui.fileTreePaneSizes).toBeUndefined()
   })
+
+  test('normalizes missing and invalid explorer tabs without dropping the repo snapshot', () => {
+    const now = Date.now()
+    const missing = cachedRepo(now)
+    const invalid = cachedRepo(now) as any
+    invalid.ui.explorerTab = 'not-a-tab'
+    const valid = cachedRepo(now)
+    valid.ui.explorerTab = 'remoteBranches'
+
+    const normalized = normalizeRestorableRepoCache({ missing, invalid, valid })
+
+    expect(normalized.missing?.ui.explorerTab).toBe('files')
+    expect(normalized.invalid?.ui.explorerTab).toBe('files')
+    expect(normalized.valid?.ui.explorerTab).toBe('remoteBranches')
+  })
 })
 
 describe('persistRestorableRepoSnapshot', () => {
@@ -206,6 +221,50 @@ describe('persistRestorableRepoSnapshot', () => {
       'left-right': 73.4,
     })
   })
+
+  test('persists the project explorer tab', () => {
+    const repo = seedRepoState({
+      id: '/repo',
+      instanceToken: 1,
+      branches: [createRepoBranch('main')],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+      explorerTab: 'history',
+    })
+
+    persistRestorableRepoSnapshot(useReposStore.setState, repo, 1)
+
+    expect(useReposStore.getState().restorableRepoCache['/repo']?.ui.explorerTab).toBe('history')
+  })
+
+  test('persists UI for an empty Git repo only after its snapshot has loaded', () => {
+    const loadedRepo = seedRepoState({
+      id: '/repo',
+      instanceToken: 1,
+      branches: [],
+      currentBranch: '',
+      explorerTab: 'changes',
+    })
+    loadedRepo.resources.snapshot.loadedAt = Date.now()
+
+    persistRestorableRepoSnapshot(useReposStore.setState, loadedRepo, 1)
+
+    expect(useReposStore.getState().restorableRepoCache['/repo']?.data.branches).toEqual([])
+    expect(useReposStore.getState().restorableRepoCache['/repo']?.ui.explorerTab).toBe('changes')
+
+    resetReposStore()
+    const unloadedRepo = seedRepoState({
+      id: '/unloaded',
+      instanceToken: 2,
+      branches: [],
+      currentBranch: '',
+      explorerTab: 'history',
+    })
+
+    persistRestorableRepoSnapshot(useReposStore.setState, unloadedRepo, 2)
+
+    expect(useReposStore.getState().restorableRepoCache['/unloaded']).toBeUndefined()
+  })
 })
 
 describe('restoreRepoProjectionFromSnapshot', () => {
@@ -241,5 +300,17 @@ describe('restoreRepoProjectionFromSnapshot', () => {
     const repo = restoreRepoProjectionFromSnapshot(emptyRepo('/repo', 'repo'), cached)
 
     expect(repo.ui.fileTreePaneSizes).toEqual({ 'top-bottom': 41.5, 'left-right': 70.5 })
+  })
+
+  test('restores the project explorer tab and defaults old snapshots to files', () => {
+    const now = Date.now()
+    const saved = cachedRepo(now)
+    saved.ui.explorerTab = 'status'
+
+    const restored = restoreRepoProjectionFromSnapshot(emptyRepo('/repo', 'repo'), saved)
+    const restoredOld = restoreRepoProjectionFromSnapshot(emptyRepo('/old', 'old'), cachedRepo(now))
+
+    expect(restored.ui.explorerTab).toBe('status')
+    expect(restoredOld.ui.explorerTab).toBe('files')
   })
 })

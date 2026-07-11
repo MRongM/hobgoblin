@@ -69,6 +69,36 @@ beforeEach(() => {
   rpcHandlers['repo.status'] = async () => []
 })
 
+describe('setExplorerTab', () => {
+  test('updates and persists only the requested repo', () => {
+    seedRepo({ selectedBranch: 'main' })
+    const repoB = emptyRepo(REPO_B_ID, 'repo-b')
+    useReposStore.setState((state) => ({
+      repos: { ...state.repos, [REPO_B_ID]: repoB },
+      order: [REPO_ID, REPO_B_ID],
+    }))
+
+    useReposStore.getState().setExplorerTab(REPO_ID, 'history')
+
+    expect(useReposStore.getState().repos[REPO_ID]?.ui.explorerTab).toBe('history')
+    expect(useReposStore.getState().repos[REPO_B_ID]?.ui.explorerTab).toBe('files')
+    expect(useReposStore.getState().restorableRepoCache[REPO_ID]?.ui.explorerTab).toBe('history')
+    expect(useReposStore.getState().restorableRepoCache[REPO_B_ID]).toBeUndefined()
+  })
+
+  test('does not rewrite state for the current value or a missing repo', () => {
+    seedRepo({ selectedBranch: 'main' })
+    const beforeRepo = useReposStore.getState().repos[REPO_ID]
+
+    useReposStore.getState().setExplorerTab(REPO_ID, 'files')
+    useReposStore.getState().setExplorerTab('/missing', 'changes')
+
+    expect(useReposStore.getState().repos[REPO_ID]).toBe(beforeRepo)
+    expect(useReposStore.getState().repos['/missing']).toBeUndefined()
+    expect(useReposStore.getState().restorableRepoCache[REPO_ID]).toBeUndefined()
+  })
+})
+
 describe('setBranchViewMode', () => {
   test('changes the selected branch when the previous selection is hidden', () => {
     seedRepo({ selectedBranch: 'feature/plain' })

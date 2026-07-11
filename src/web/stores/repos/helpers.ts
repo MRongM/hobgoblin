@@ -37,6 +37,7 @@ export function emptyRepo(id: string, name: string): RepoState {
       selectedBranch: null,
       branchViewMode: 'all',
       detailTab: 'status',
+      explorerTab: 'files',
       workspaceLayout: 'left-right',
       worktreePathOrder: [],
     },

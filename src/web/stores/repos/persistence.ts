@@ -2,7 +2,7 @@ import { LRUCache } from 'lru-cache'
 import * as v from 'valibot'
 import type { ReposSet } from '#/web/stores/repos/types.ts'
 import { selectedBranchForBranchSet } from '#/web/stores/repos/branch-view-mode.ts'
-import type { RestorableRepoSnapshot, RepoState } from '#/web/stores/repos/types.ts'
+import type { ExplorerTab, RestorableRepoSnapshot, RepoState } from '#/web/stores/repos/types.ts'
 import { finishResourceSuccess } from '#/web/stores/repos/resources.ts'
 import { stripBranchWorktreeMetadata } from '#/web/stores/repos/worktree-state.ts'
 import { DEFAULT_WORKSPACE_LAYOUT, normalizeFileTreePaneSizes } from '#/shared/workspace-layout.ts'
@@ -66,6 +66,7 @@ const RestorableRepoSnapshotSchema = v.object({
     selectedBranch: v.nullable(v.string()),
     branchViewMode: v.picklist(['all', 'worktrees', 'no-worktree']),
     detailTab: v.picklist(['status', 'changes', 'terminal']),
+    explorerTab: v.optional(v.unknown()),
     workspaceLayout: v.optional(v.picklist(['top-bottom', 'left-right']), DEFAULT_WORKSPACE_LAYOUT),
     fileTreePaneSizes: v.optional(v.unknown()),
     worktreePathOrder: v.optional(v.array(v.string()), []),
@@ -74,6 +75,20 @@ const RestorableRepoSnapshotSchema = v.object({
 
 function normalizeCachedDetailTab(tab: string): 'status' | 'changes' | 'terminal' {
   return tab === 'terminal' || tab === 'changes' ? tab : 'status'
+}
+
+function normalizeCachedExplorerTab(tab: unknown): ExplorerTab {
+  switch (tab) {
+    case 'files':
+    case 'changes':
+    case 'status':
+    case 'history':
+    case 'remoteBranches':
+    case 'ports':
+      return tab
+    default:
+      return 'files'
+  }
 }
 
 function cachedBranches(branches: RepoState['data']['branches']): RestorableRepoSnapshot['data']['branches'] {
@@ -107,6 +122,7 @@ function restoreProjectionFromSnapshot(repo: RepoState, snapshot: RestorableRepo
       selectedBranch,
       branchViewMode: snapshot.ui.branchViewMode,
       detailTab: normalizeCachedDetailTab(snapshot.ui.detailTab),
+      explorerTab: normalizeCachedExplorerTab(snapshot.ui.explorerTab),
       workspaceLayout: snapshot.ui.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT,
       fileTreePaneSizes: snapshot.ui.fileTreePaneSizes,
       worktreePathOrder: snapshot.ui.worktreePathOrder,
@@ -147,7 +163,7 @@ export function normalizeRestorableRepoCache(value: unknown): Record<string, Res
 }
 
 function restorableRepoSnapshotFromRepo(repo: RepoState): RestorableRepoSnapshot | null {
-  if (repo.data.branches.length === 0) return null
+  if (repo.data.branches.length === 0 && repo.resources.snapshot.loadedAt === null) return null
   return {
     savedAt: Date.now(),
     name: repo.name,
@@ -159,6 +175,7 @@ function restorableRepoSnapshotFromRepo(repo: RepoState): RestorableRepoSnapshot
       selectedBranch: repo.ui.selectedBranch,
       branchViewMode: repo.ui.branchViewMode,
       detailTab: normalizeCachedDetailTab(repo.ui.detailTab),
+      explorerTab: repo.ui.explorerTab,
       workspaceLayout: repo.ui.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT,
       ...(repo.ui.fileTreePaneSizes ? { fileTreePaneSizes: repo.ui.fileTreePaneSizes } : {}),
       worktreePathOrder: repo.ui.worktreePathOrder,
@@ -184,7 +201,7 @@ function normalizeRestorableRepoSnapshotEntry(value: unknown): RestorableRepoSna
   const snapshot = parsed.output
   const fileTreePaneSizes =
     snapshot.ui.fileTreePaneSizes === undefined ? undefined : normalizeFileTreePaneSizes(snapshot.ui.fileTreePaneSizes)
-  const { fileTreePaneSizes: _rawFileTreePaneSizes, ...ui } = snapshot.ui
+  const { fileTreePaneSizes: _rawFileTreePaneSizes, explorerTab: rawExplorerTab, ...ui } = snapshot.ui
   return {
     ...snapshot,
     data: {
@@ -194,6 +211,7 @@ function normalizeRestorableRepoSnapshotEntry(value: unknown): RestorableRepoSna
     ui: {
       ...ui,
       detailTab: normalizeCachedDetailTab(snapshot.ui.detailTab),
+      explorerTab: normalizeCachedExplorerTab(rawExplorerTab),
       workspaceLayout: snapshot.ui.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT,
       ...(fileTreePaneSizes ? { fileTreePaneSizes } : {}),
     },

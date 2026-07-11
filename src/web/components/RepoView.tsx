@@ -54,9 +54,12 @@ export function RepoView({ repoId }: Props) {
   const repo = useReposStore((s) => s.repos[repoId])
   useRepoToasts(repoId)
   const [terminalRevealRequest, setTerminalRevealRequest] = useState<FileTreeRevealRequest | null>(null)
-  const handleTerminalRevealPath = useCallback((relativePath: string) => {
-    setTerminalRevealRequest((current) => ({ id: (current?.id ?? 0) + 1, relativePath }))
-  }, [])
+  const handleTerminalRevealPath = useCallback(
+    (relativePath: string) => {
+      setTerminalRevealRequest((current) => ({ id: (current?.id ?? 0) + 1, repoId, relativePath }))
+    },
+    [repoId],
+  )
 
   const layout = view.workspaceLayout
   const behavior = repoWorkspaceBehavior(layout, view.detailCollapsed, view.detailFocusMode)

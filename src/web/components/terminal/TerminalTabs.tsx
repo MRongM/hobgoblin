@@ -319,13 +319,14 @@ export function TerminalTabs({
         modifiers={[restrictToVisibleTabStrip]}
         onDragEnd={handleDragEnd}
       >
-        <ToolbarTabStripBody scroll className="gap-0">
+        <ToolbarTabStripBody scroll className="w-fit gap-0">
           <SortableContext items={sortableIds} strategy={horizontalListSortingStrategy}>
             <TerminalTabTooltipLayer
               sessions={sessions}
               focusMode={focusMode}
               role="tablist"
               aria-label={t('terminal.sessions')}
+              className="min-w-min"
             >
               {sessions.map((session, index) => (
                 <SortableTerminalTab
@@ -413,6 +414,7 @@ interface TerminalTabChromeProps {
   index?: number
   total?: number
   isDragging?: boolean
+  fillWidth?: boolean
   tabId: string
   buttonRef: ((node: HTMLButtonElement | null) => void) | undefined
   buttonProps?: ComponentPropsWithoutRef<'button'>
@@ -429,6 +431,7 @@ function TerminalTabChrome({
   index,
   total,
   isDragging = false,
+  fillWidth = false,
   tabId,
   buttonRef,
   buttonProps,
@@ -449,7 +452,10 @@ function TerminalTabChrome({
   return (
     <ToolbarClosableTab
       containerProps={{ 'data-terminal-tab-tooltip-id': session.key }}
-      containerClassName={toolbarTabChromeClassName({ variant: 'terminal', active: isActive, dragging: isDragging })}
+      containerClassName={cn(
+        toolbarTabChromeClassName({ variant: 'terminal', active: isActive, dragging: isDragging }),
+        fillWidth && 'w-full',
+      )}
       buttonRef={buttonRef}
       buttonProps={{
         ...buttonProps,
@@ -521,7 +527,11 @@ function SortableTerminalTab({
   const sortable = useSortableTab(session.key, { onButtonRef: focusRegistry.setRef(session.key) })
 
   return (
-    <div ref={sortable.setContainerRef} style={sortable.style} className="touch-none select-none">
+    <div
+      ref={sortable.setContainerRef}
+      style={sortable.style}
+      className="min-w-28 max-w-56 flex-[1_1_14rem] touch-none select-none"
+    >
       <TerminalTabChrome
         session={session}
         isActive={isActive}
@@ -529,6 +539,7 @@ function SortableTerminalTab({
         index={index}
         total={total}
         isDragging={sortable.isDragging}
+        fillWidth
         tabId={tabId}
         buttonRef={sortable.setButtonRef}
         buttonProps={{ ...sortable.attributes, ...sortable.sortableListeners }}
