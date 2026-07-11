@@ -45,6 +45,7 @@ const DEFAULT_PARKING_WIDTH = 800
 const DEFAULT_PARKING_HEIGHT = 400
 const RESIZE_DEBOUNCE_MS = 80
 const FONT_REMEASURE_DEBOUNCE_MS = 80
+const ALTERNATE_SCREEN_SAFE_COLUMNS = 2
 
 export class TerminalSessionView {
   private readonly frame: HTMLDivElement
@@ -236,6 +237,7 @@ export class TerminalSessionView {
     this.disposables.push(term.onBinary((data) => this.handlers.onInput(this.inputFromXtermData(data, 'binary'))))
     this.disposables.push(term.onBell(() => this.handlers.onBell()))
     this.disposables.push(term.onResize((size) => this.handlers.onResize(size)))
+    this.disposables.push(term.buffer.onBufferChange(() => this.fitNow()))
     term.open(this.xtermHost)
     this.installResizeObserver()
     this.installFontObserver(term)
@@ -286,7 +288,9 @@ export class TerminalSessionView {
   fitSoon(): void {
     if (!this.term || !this.fitAddon || !hasMeasurableBox(this.xtermHost)) return
     const dimensions = this.fitAddon.proposeDimensions()
-    if (!dimensions || (dimensions.cols === this.term.cols && dimensions.rows === this.term.rows)) return
+    if (!dimensions) return
+    const cols = this.fittedColumns(dimensions.cols)
+    if (cols === this.term.cols && dimensions.rows === this.term.rows) return
     this.cancelFitFlush()
     this.fitFlushTimer = window.setTimeout(() => {
       this.fitFlushTimer = null
@@ -296,8 +300,19 @@ export class TerminalSessionView {
 
   fitNow(): void {
     if (!this.term || !this.fitAddon || !hasMeasurableBox(this.xtermHost)) return
-    this.fitAddon.fit()
+    if (this.term.buffer.active.type === 'alternate') {
+      const dimensions = this.fitAddon.proposeDimensions()
+      if (dimensions) this.term.resize(this.fittedColumns(dimensions.cols), dimensions.rows)
+    } else {
+      this.fitAddon.fit()
+    }
     this.pinToBottomSoon()
+  }
+
+  private fittedColumns(cols: number): number {
+    return this.term?.buffer.active.type === 'alternate'
+      ? Math.max(1, cols - ALTERNATE_SCREEN_SAFE_COLUMNS)
+      : cols
   }
 
   destroyTerminal(): void {

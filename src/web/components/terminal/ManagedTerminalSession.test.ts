@@ -103,6 +103,14 @@ const xtermMocks = vi.hoisted(() => {
           return typeof text === 'string' ? { translateToString: () => text } : undefined
         },
       },
+      onBufferChange: (cb: (buffer: { type: 'normal' | 'alternate' }) => void) => {
+        this.bufferChangeHandlers.push(cb)
+        return {
+          dispose: vi.fn(
+            () => (this.bufferChangeHandlers = this.bufferChangeHandlers.filter((handler) => handler !== cb)),
+          ),
+        }
+      },
     }
     private readonly charSizeService = { measure: vi.fn() }
     private readonly coreService = {
@@ -128,6 +136,7 @@ const xtermMocks = vi.hoisted(() => {
     private bellHandlers: Array<() => void> = []
     private scrollHandlers: Array<(position: number) => void> = []
     private titleHandlers: Array<(title: string) => void> = []
+    private bufferChangeHandlers: Array<(buffer: { type: 'normal' | 'alternate' }) => void> = []
     private themeValue: { background?: string; foreground?: string } | undefined
 
     constructor(options: {
@@ -242,6 +251,11 @@ const xtermMocks = vi.hoisted(() => {
       this.cols = cols
       this.rows = rows
       for (const handler of this.resizeHandlers) handler({ cols, rows })
+    }
+
+    emitBufferChange(type: 'normal' | 'alternate') {
+      this.buffer.active.type = type
+      for (const handler of this.bufferChangeHandlers) handler(this.buffer.active)
     }
 
     emitData(data: string) {
@@ -760,6 +774,32 @@ describe('ManagedTerminalSession', () => {
     expect(xtermMocks.terminals[0]!.options).not.toHaveProperty(deletedEraseOption)
     expect(terminalCalls.restart).not.toHaveBeenCalled()
     expect(session.snapshot().phase).toBe('open')
+  })
+
+  test('reserves two columns only while an alternate-screen TUI is active', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    terminalCalls.resize.mockClear()
+
+    term.emitBufferChange('alternate')
+    await flushResizeDebounce()
+
+    expect(term.cols).toBe(98)
+    expect(terminalCalls.resize).toHaveBeenLastCalledWith({ sessionId: 'session-1', cols: 98, rows: 30 })
+
+    term.emitBufferChange('normal')
+    await flushResizeDebounce()
+
+    expect(term.cols).toBe(100)
+    expect(terminalCalls.resize).toHaveBeenLastCalledWith({ sessionId: 'session-1', cols: 100, rows: 30 })
   })
 
   test('keeps scroll position when terminal viewport is already scrolled up during font refit', async () => {
