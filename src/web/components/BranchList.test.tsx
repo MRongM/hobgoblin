@@ -22,12 +22,13 @@ const dndState = vi.hoisted(() => ({
 
 vi.mock('#/web/stores/i18n.ts', () => ({
   useI18nStore: (selector: (state: { lang: string }) => string) => selector({ lang: 'zh' }),
-  useT: () => (key: string) => {
+  useT: () => (key: string, params?: Record<string, string | number>) => {
     if (key === 'branches.reorder-worktree') return '重新排序工作树'
     if (key === 'branches.empty') return '该仓库暂无分支。'
     if (key === 'branches.filter-empty') return '没有匹配当前筛选或搜索的分支。'
     if (key === 'branches.worktree') return '工作树'
     if (key === 'branches.dirty') return '有改动'
+    if (key === 'branch-status.worktree-dirty') return `${params?.n ?? 0} 个改动`
     if (key === 'branches.default') return '默认'
     if (key === 'branches.gone') return '已失联'
     if (key === 'branch-status.current') return '当前'
@@ -206,7 +207,7 @@ describe('BranchList worktree drag ordering', () => {
     expect(container?.textContent).not.toContain('/tmp/worktree-a')
   })
 
-  test('uses a change icon inside the dirty detached worktree badge', () => {
+  test('shows the changed-file count beside the dirty detached worktree icon', () => {
     seedRepoState({
       id: REPO_ID,
       branchViewMode: 'all',
@@ -236,11 +237,42 @@ describe('BranchList worktree drag ordering', () => {
     const dirtyBadge = document.body.querySelector<HTMLElement>('[data-testid="dirty-detached-worktree-badge"]')
     const badgeIcon = dirtyBadge?.querySelector('svg')
 
-    expect(dirtyBadge?.textContent).toBe('')
-    expect(dirtyBadge?.getAttribute('aria-label')).toBe('有改动')
-    expect(dirtyBadge?.getAttribute('title')).toBe('有改动')
+    expect(dirtyBadge?.textContent).toBe('3')
+    expect(dirtyBadge?.getAttribute('aria-label')).toBe('3 个改动')
+    expect(dirtyBadge?.getAttribute('title')).toBe('3 个改动')
     expect(badgeIcon?.classList.contains('lucide-git-compare-arrows')).toBe(true)
     expect(badgeIcon?.classList.contains('lucide-folder-tree')).toBe(false)
+  })
+
+  test('keeps the detached dirty badge icon-only when the exact count is unavailable', () => {
+    seedRepoState({
+      id: REPO_ID,
+      branchViewMode: 'all',
+      branches: [createRepoBranch('main', { worktree: { path: REPO_ID } })],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+      worktreesByPath: {
+        [REPO_ID]: {
+          path: REPO_ID,
+          branch: 'main',
+          isMain: true,
+          isDirty: false,
+        },
+        '/tmp/detached-worktree': {
+          path: '/tmp/detached-worktree',
+          head: '1234567890abcdef',
+          isDetached: true,
+          isMain: false,
+          isDirty: true,
+        },
+      },
+    })
+
+    renderList()
+
+    const dirtyBadge = document.body.querySelector<HTMLElement>('[data-testid="dirty-detached-worktree-badge"]')
+    expect(dirtyBadge?.textContent).toBe('')
+    expect(dirtyBadge?.getAttribute('aria-label')).toBe('有改动')
   })
 
   test('hides worktree drag icons while keeping worktree rows sortable', () => {

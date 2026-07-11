@@ -14,6 +14,7 @@ import type { RepoBranchAction, RunBranchActionOptions } from '#/web/stores/repo
 import type { RepoOperationsState } from '#/web/stores/repos/operations.ts'
 import type { RepoResourcesState } from '#/web/stores/repos/resources.ts'
 export type DetailTab = 'status' | 'changes' | 'terminal'
+export type ExplorerTab = 'files' | 'changes' | 'status' | 'history' | 'remoteBranches' | 'ports'
 export type BranchViewMode = 'all' | 'worktrees' | 'no-worktree'
 export type RepoWorkspaceLayout = WorkspaceLayout
 export type RepoDataSource = 'cache' | 'fresh'
@@ -68,6 +69,7 @@ export interface RepoUiState {
   selectedBranch: string | null
   branchViewMode: BranchViewMode
   detailTab: DetailTab
+  explorerTab: ExplorerTab
   workspaceLayout: RepoWorkspaceLayout
   fileTreePaneSizes?: WorkspaceDetailPaneSizes
   worktreePathOrder: string[]
@@ -105,6 +107,7 @@ export interface RestorableRepoSnapshot {
   name: string
   data: Pick<RepoDataState, 'branches' | 'currentBranch'>
   ui: Pick<RepoUiState, 'selectedBranch' | 'branchViewMode' | 'detailTab' | 'worktreePathOrder'> & {
+    explorerTab?: ExplorerTab
     workspaceLayout?: RepoWorkspaceLayout
     fileTreePaneSizes?: WorkspaceDetailPaneSizes
   }
@@ -197,6 +200,7 @@ export interface RestorableWorkspaceActions {
   applySessionSelectedTerminalState: (selectedTerminalByWorktree: Record<string, string>) => void
   setDetailPaneSize: (layout: RepoWorkspaceLayout, size: number) => void
   setDetailPaneSizes: (sizes: WorkspaceDetailPaneSizes) => void
+  setExplorerTab: (id: string, tab: ExplorerTab) => void
   setRepoFileTreePaneSize: (id: string, layout: RepoWorkspaceLayout, size: number) => void
   setDefaultFileTreePaneSize: (layout: RepoWorkspaceLayout, size: number) => void
   resetLayout: () => void

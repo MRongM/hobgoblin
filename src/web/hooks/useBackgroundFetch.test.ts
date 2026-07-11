@@ -113,6 +113,7 @@ function createRepo(input: {
       selectedBranch: null,
       branchViewMode: 'all',
       detailTab: 'status',
+      explorerTab: 'files',
       workspaceLayout: 'left-right',
       worktreePathOrder: [],
     },

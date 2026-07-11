@@ -1,5 +1,5 @@
 import { useStoreWithEqualityFn } from 'zustand/traditional'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { FolderTree, GitBranch, GitCompareArrows, GitFork, History, RadioTower, type LucideIcon } from 'lucide-react'
 import { BranchList } from '#/web/components/BranchList.tsx'
@@ -14,7 +14,7 @@ import { PlainWorkspacePane } from '#/web/components/repo-workspace/PlainWorkspa
 import { BranchFilterControls } from '#/web/components/repo-toolbar/BranchFilterControls.tsx'
 import { RepoToolbarActions } from '#/web/components/repo-toolbar/RepoToolbarActions.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
-import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
+import type { ExplorerTab, RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { Toolbar } from '#/web/components/Layout.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { Badge } from '#/web/components/ui/badge.tsx'
@@ -25,10 +25,9 @@ import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 import { repoIsPlainWorkspace } from '#/web/stores/repos/capabilities.ts'
 
-type ExplorerTab = 'files' | 'changes' | 'status' | 'history' | 'remoteBranches' | 'ports'
-
 export interface FileTreeRevealRequest {
   id: number
+  repoId: string
   relativePath: string
 }
 
@@ -40,32 +39,46 @@ interface RepoExplorerPaneProps {
 }
 
 export function RepoExplorerPane({ repoId, layout, showActions, revealRequest }: RepoExplorerPaneProps) {
-  const { repoFileTreePaneSizes, defaultFileTreePaneSizes, setRepoFileTreePaneSize, changeCount } =
-    useStoreWithEqualityFn(
-      useReposStore,
-      (state) => {
-        const repo = state.repos[repoId]
-        const selected = repo?.data.branches.find((branch) => branch.name === repo.ui.selectedBranch) ?? null
-        const worktreePath = selected?.worktree?.path
-        return {
-          repoFileTreePaneSizes: repo?.ui.fileTreePaneSizes,
-          defaultFileTreePaneSizes: state.fileTreePaneSizes,
-          setRepoFileTreePaneSize: state.setRepoFileTreePaneSize,
-          changeCount: worktreePath
-            ? (repo?.data.status.find((status) => status.path === worktreePath)?.entries.length ?? 0)
-            : 0,
-        }
-      },
-      (a, b) =>
-        a.repoFileTreePaneSizes === b.repoFileTreePaneSizes &&
-        a.defaultFileTreePaneSizes === b.defaultFileTreePaneSizes &&
-        a.setRepoFileTreePaneSize === b.setRepoFileTreePaneSize &&
-        a.changeCount === b.changeCount,
-    )
-  const [activeTab, setActiveTab] = useState<ExplorerTab>('files')
+  const {
+    activeTab,
+    repoFileTreePaneSizes,
+    defaultFileTreePaneSizes,
+    setExplorerTab,
+    setRepoFileTreePaneSize,
+    changeCount,
+  } = useStoreWithEqualityFn(
+    useReposStore,
+    (state) => {
+      const repo = state.repos[repoId]
+      const selected = repo?.data.branches.find((branch) => branch.name === repo.ui.selectedBranch) ?? null
+      const worktreePath = selected?.worktree?.path
+      return {
+        activeTab: repo?.ui.explorerTab ?? 'files',
+        repoFileTreePaneSizes: repo?.ui.fileTreePaneSizes,
+        defaultFileTreePaneSizes: state.fileTreePaneSizes,
+        setExplorerTab: state.setExplorerTab,
+        setRepoFileTreePaneSize: state.setRepoFileTreePaneSize,
+        changeCount: worktreePath
+          ? (repo?.data.status.find((status) => status.path === worktreePath)?.entries.length ?? 0)
+          : 0,
+      }
+    },
+    (a, b) =>
+      a.activeTab === b.activeTab &&
+      a.repoFileTreePaneSizes === b.repoFileTreePaneSizes &&
+      a.defaultFileTreePaneSizes === b.defaultFileTreePaneSizes &&
+      a.setExplorerTab === b.setExplorerTab &&
+      a.setRepoFileTreePaneSize === b.setRepoFileTreePaneSize &&
+      a.changeCount === b.changeCount,
+  )
+  const handleTabChange = useCallback(
+    (tab: ExplorerTab) => setExplorerTab(repoId, tab),
+    [repoId, setExplorerTab],
+  )
   const fileTreeSize = repoFileTreePaneSizes?.[layout] ?? defaultFileTreePaneSizes[layout]
   const splitOrientation = layout === 'top-bottom' ? 'horizontal' : 'vertical'
   const sideBySide = splitOrientation === 'horizontal'
+  const activeRevealRequest = revealRequest?.repoId === repoId ? revealRequest : null
   const isPlainWorkspace = useReposStore((s) => {
     const repo = s.repos[repoId]
     return repoIsPlainWorkspace(repo)
@@ -74,7 +87,7 @@ export function RepoExplorerPane({ repoId, layout, showActions, revealRequest }:
   if (isPlainWorkspace) {
     return (
       <div data-file-tree-layout={layout} className="flex min-h-0 min-w-0 flex-1">
-        <PlainWorkspacePane repoId={repoId} layout={layout} revealRequest={revealRequest ?? null} />
+        <PlainWorkspacePane repoId={repoId} layout={layout} revealRequest={activeRevealRequest} />
       </div>
     )
   }
@@ -90,8 +103,8 @@ export function RepoExplorerPane({ repoId, layout, showActions, revealRequest }:
             layout={layout}
             activeTab={activeTab}
             changeCount={changeCount}
-            revealRequest={revealRequest ?? null}
-            onTabChange={setActiveTab}
+            revealRequest={activeRevealRequest}
+            onTabChange={handleTabChange}
           />
         }
         afterSize={fileTreeSize}
@@ -137,6 +150,7 @@ function ExplorerTabs({
   const t = useT()
   const { fileTreeTopbarFontSize } = useRuntimeFontSettings()
   const [revealRequest, setRevealRequest] = useState<FileTreeRevealRequest | null>(null)
+  const activeRevealRequest = revealRequest?.repoId === repoId ? revealRequest : null
   const isRemoteRepo = isRemoteRepoId(repoId)
   const activeVisibleTab = activeTab === 'ports' && !isRemoteRepo ? 'files' : activeTab
   const toolbarStyle = {
@@ -153,7 +167,7 @@ function ExplorerTabs({
 
   function handleRevealPath(relativePath: string) {
     onTabChange('files')
-    setRevealRequest((current) => ({ id: (current?.id ?? 0) + 1, relativePath }))
+    setRevealRequest((current) => ({ id: (current?.id ?? 0) + 1, repoId, relativePath }))
   }
 
   useEffect(() => {
@@ -212,7 +226,7 @@ function ExplorerTabs({
       </Toolbar>
       <div id={`repo-explorer-${activeVisibleTab}-panel`} role="tabpanel" className="flex min-h-0 flex-1 flex-col">
         {activeVisibleTab === 'files' ? (
-          <ProjectFileTree repoId={repoId} revealRequest={revealRequest} toolbarHeight="detail" />
+          <ProjectFileTree repoId={repoId} revealRequest={activeRevealRequest} toolbarHeight="detail" />
         ) : activeVisibleTab === 'changes' ? (
           <ProjectChangesPanel repoId={repoId} onRevealPath={handleRevealPath} />
         ) : activeVisibleTab === 'status' ? (

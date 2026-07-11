@@ -305,11 +305,22 @@ describe('TerminalTabs', () => {
     expect(tablist?.getAttribute('aria-orientation')).toBe('horizontal')
     expect(document.body.querySelector('button[aria-label="terminal.sessions"]')).toBeNull()
     expect(tablist?.className).toContain('h-full')
-    expect(tablist?.parentElement?.className).toContain('w-max')
+    expect(tablist?.className).toContain('min-w-min')
+    expect(tablist?.className).not.toContain('flex-1')
+    expect(tablist?.parentElement?.className).toContain('w-fit')
+    expect(tablist?.parentElement?.className).not.toContain('w-max')
     expect(tablist?.parentElement?.className).toContain('gap-0')
-    const terminalTabs = [...document.body.querySelectorAll('[data-terminal-tab-tooltip-id]')]
-    expect(terminalTabs.every((tab) => tab.className.includes('w-36'))).toBe(true)
-    expect(terminalTabs.every((tab) => !tab.className.includes('w-28'))).toBe(true)
+    const terminalTabs = [...document.body.querySelectorAll<HTMLElement>('[data-terminal-tab-tooltip-id]')]
+    expect(terminalTabs).toHaveLength(3)
+    for (const tab of terminalTabs) {
+      expect(tab.className).toContain('w-full')
+      expect(tab.className).not.toContain('w-36')
+
+      const sortableItem = tab.parentElement
+      expect(sortableItem?.className).toContain('min-w-28')
+      expect(sortableItem?.className).toContain('max-w-56')
+      expect(sortableItem?.className).toContain('flex-[1_1_14rem]')
+    }
     expect(document.body.querySelectorAll('[role="tab"]').length).toBe(3)
     const firstTab = document.body.querySelector('#detail-terminal-tab')
     expect(firstTab?.getAttribute('aria-posinset')).toBe('1')
@@ -759,7 +770,9 @@ describe('TerminalTabs', () => {
     )
 
     expect(document.body.querySelectorAll('[role="tab"]').length).toBe(1)
-    expect(document.body.querySelector('[data-terminal-tab-tooltip-id]')?.className).toContain('w-36')
+    const compactTab = document.body.querySelector<HTMLElement>('[data-terminal-tab-tooltip-id]')
+    expect(compactTab?.className).toContain('w-36')
+    expect(compactTab?.className).not.toContain('w-full')
 
     rerender(
       <TerminalTabs
@@ -779,6 +792,12 @@ describe('TerminalTabs', () => {
 
     expect(document.body.querySelectorAll('[role="tab"]').length).toBe(2)
     expect(document.body.querySelector('button[aria-label="terminal.sessions"]')).toBeNull()
+    const expandedTab = document.body.querySelector<HTMLElement>('[data-terminal-tab-tooltip-id]')
+    expect(expandedTab?.className).toContain('w-full')
+    expect(expandedTab?.className).not.toContain('w-36')
+    expect(expandedTab?.parentElement?.className).toContain('min-w-28')
+    expect(expandedTab?.parentElement?.className).toContain('max-w-56')
+    expect(expandedTab?.parentElement?.className).toContain('flex-[1_1_14rem]')
   })
 })
 
