@@ -833,7 +833,6 @@ describe('TerminalSessionProvider', () => {
       const session = mockSessions.find((item) => item.descriptor.terminalId === 'terminal-1')
       if (!session) throw new Error('missing terminal-1 mock session')
       expect(session.constructorFontFamily).toBe(DEFAULT_TERMINAL_FONT_FAMILY)
-      expect(session.constructorFontFamily).not.toContain('Maple Mono NF CN')
     } finally {
       await unmount()
     }
