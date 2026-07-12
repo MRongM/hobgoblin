@@ -606,6 +606,20 @@ export async function deleteRepositoryLocalTag(
   })
 }
 
+export async function pushRepositoryLocalTag(
+  cwd: string,
+  name: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  if (!isValidRepoLocator(cwd)) return { ok: false, message: 'error.invalid-arguments' }
+  const backend = await resolveRepoBackend(cwd)
+  const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
+  return await runUserNetworkMutation(cwd, signal, sourceToken, async (mergedSignal) => {
+    return await backend.pushLocalTag(name, mergedSignal, networkOptions)
+  })
+}
+
 export async function removeRepositoryWorktree(
   cwd: string,
   input: {
