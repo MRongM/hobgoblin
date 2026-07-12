@@ -1,5 +1,5 @@
 import { useStoreWithEqualityFn } from 'zustand/traditional'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, createElement } from 'react'
 import type { CSSProperties } from 'react'
 import { FolderTree, GitBranch, GitCompareArrows, GitFork, History, RadioTower, type LucideIcon } from 'lucide-react'
 import { BranchList } from '#/web/components/BranchList.tsx'
@@ -24,6 +24,12 @@ import { cn } from '#/web/lib/cn.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 import { repoIsPlainWorkspace } from '#/web/stores/repos/capabilities.ts'
+import { AsyncButton } from '#/web/components/AsyncButton.tsx'
+import { Tip } from '#/web/components/Tip.tsx'
+import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
+import { useRuntimeExternalAppSettings } from '#/web/runtime-settings-external-apps.ts'
+import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.ts'
+import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 
 export interface FileTreeRevealRequest {
   id: number
@@ -124,11 +130,102 @@ function BranchArea({ repoId, showActions }: { repoId: string; showActions: bool
       <Toolbar data-testid="branch-area-toolbar" className="px-2" variant="detail">
         <BranchFilterControls repoId={repoId} className="h-full min-w-0 flex-1 gap-1" />
         <div className="flex shrink-0 items-center gap-1">
+          <BranchAreaQuickActions repoId={repoId} />
           <RepoToolbarActions repoId={repoId} compact />
         </div>
       </Toolbar>
       <BranchList repoId={repoId} showActions={showActions} />
     </section>
+  )
+}
+
+function BranchAreaQuickActions({ repoId }: { repoId: string }) {
+  const { terminalApp, resolvedTerminalApp, terminalAvailable, editorApp, resolvedEditorApp, editorAvailable } =
+    useRuntimeExternalAppSettings()
+
+  const { repo, branch } = useStoreWithEqualityFn(
+    useReposStore,
+    (s) => {
+      const r = s.repos[repoId]
+      if (!r) return { repo: null, branch: null }
+      const selectedBranch = r.ui.selectedBranch
+        ? (r.data.branches.find((b) => b.name === r.ui.selectedBranch) ?? null)
+        : null
+      const actionRepo: BranchActionRepo = {
+        id: r.id,
+        instanceToken: r.instanceToken,
+        data: {
+          currentBranch: r.data.currentBranch,
+          status: r.data.status,
+          worktreesByPath: r.data.worktreesByPath,
+        },
+        operations: {
+          branchAction: r.operations.branchAction,
+          fetch: r.operations.fetch,
+          manualRefresh: r.operations.manualRefresh,
+        },
+        remote: {
+          target: r.remote.target,
+          hasRemotes: r.remote.hasRemotes,
+          hasBrowserRemote: r.remote.hasBrowserRemote,
+          hasGitHubRemote: r.remote.hasGitHubRemote,
+          browserRemoteProvider: r.remote.browserRemoteProvider,
+          remoteProviders: r.remote.remoteProviders,
+        },
+      }
+      return { repo: actionRepo, branch: selectedBranch }
+    },
+    (a, b) =>
+      a.repo === b.repo &&
+      a.branch === b.branch,
+  )
+
+  if (!repo || !branch) return null
+
+  const actions = useBranchActionItems(repo, branch)
+  const editorItem = actions.externalItems.find((item) => item.id === 'editor')
+  const terminalItem = actions.externalItems.find((item) => item.id === 'terminal')
+
+  const editorIconPref = resolvedEditorApp ?? editorApp
+  const terminalIconPref = repo.remote.target ? 'auto' : (resolvedTerminalApp ?? terminalApp)
+
+  return (
+    <div className="flex shrink-0 items-center gap-0.5">
+      {editorItem && (
+        <Tip label={editorItem.title ?? editorItem.label}>
+          <span className="inline-flex">
+            <AsyncButton
+              data-testid="branch-area-editor-btn"
+              variant="ghost"
+              size="icon-sm"
+              loading={editorItem.busy}
+              disabled={editorItem.disabled || !editorAvailable}
+              onClick={editorItem.onSelect}
+              aria-label={editorItem.ariaLabel ?? editorItem.label}
+            >
+              {() => createElement(EditorAppIcon, { pref: editorIconPref })}
+            </AsyncButton>
+          </span>
+        </Tip>
+      )}
+      {terminalItem && (
+        <Tip label={terminalItem.title ?? terminalItem.label}>
+          <span className="inline-flex">
+            <AsyncButton
+              data-testid="branch-area-terminal-btn"
+              variant="ghost"
+              size="icon-sm"
+              loading={terminalItem.busy}
+              disabled={terminalItem.disabled || !terminalAvailable}
+              onClick={terminalItem.onSelect}
+              aria-label={terminalItem.ariaLabel ?? terminalItem.label}
+            >
+              {() => createElement(TerminalAppIcon, { pref: terminalIconPref })}
+            </AsyncButton>
+          </span>
+        </Tip>
+      )}
+    </div>
   )
 }
 
