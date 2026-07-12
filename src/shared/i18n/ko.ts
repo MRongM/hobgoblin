@@ -1000,6 +1000,8 @@ export const ko: Record<DictKey, string> = {
   'tags.search-label': '로컬 태그 검색',
   'tags.search-placeholder': '로컬 태그 검색',
   'tags.refresh': '태그 새로고침',
+  'tags.push': '태그 푸시',
+  'tags.push-success': '태그를 푸시했습니다',
 
   // ---- Generic dialog ----------------------------------------------------
   'dialog.cancel': '취소',

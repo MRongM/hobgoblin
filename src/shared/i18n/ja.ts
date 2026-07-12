@@ -1012,6 +1012,8 @@ export const ja: Record<DictKey, string> = {
   'tags.search-label': 'ローカルタグを検索',
   'tags.search-placeholder': 'ローカルタグを検索',
   'tags.refresh': 'タグを更新',
+  'tags.push': 'タグをプッシュ',
+  'tags.push-success': 'タグをプッシュしました',
 
   // ---- Generic dialog ----------------------------------------------------
   'dialog.cancel': 'キャンセル',
