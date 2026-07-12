@@ -83,6 +83,7 @@ function normalizeCachedExplorerTab(tab: unknown): ExplorerTab {
     case 'changes':
     case 'status':
     case 'history':
+    case 'tags':
     case 'remoteBranches':
     case 'ports':
       return tab

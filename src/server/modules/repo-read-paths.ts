@@ -72,6 +72,10 @@ export async function getRepositoryCommitDetail(
   return signal?.aborted ? null : await runWithRepoBackend(cwd, async (backend) => await backend.getCommitDetail(commit, signal))
 }
 
+export async function getRepositoryLocalTags(cwd: string, signal?: AbortSignal): Promise<string[]> {
+  return signal?.aborted ? [] : await runWithRepoBackend(cwd, async (backend) => await backend.getLocalTags(signal))
+}
+
 export async function getRepositoryPatch(cwd: string, worktreePath: string, signal?: AbortSignal): Promise<ExecResult> {
   return await runWithRepoBackend(cwd, async (backend) => await backend.getPatch(worktreePath, signal))
 }

@@ -25,7 +25,7 @@ import {
   resetRepositoryHard,
 } from '#/web/repo-client.ts'
 import { useT } from '#/web/stores/i18n.ts'
-import type { BranchActionItem } from '#/web/hooks/useBranchActionItems.ts'
+import type { BranchActionItem } from '#/web/hooks/useBranchActionItems.tsx'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 

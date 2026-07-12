@@ -18,6 +18,7 @@ import {
 } from '#/system/git/branches.ts'
 import { getCommitDetail as getLocalCommitDetail, getCommitHistory as getLocalCommitHistory } from '#/system/git/history.ts'
 import { fetchAll, getBrowserRemoteUrl, getRemoteInfo, pickPreferredRemote, pullBranch, pushBranch } from '#/system/git/remote.ts'
+import { createLocalTag as createLocalGitTag, deleteLocalTag as deleteLocalGitTag, getLocalTags as getLocalGitTags } from '#/system/git/tags.ts'
 import {
   deleteRemoteServerTag as deleteLocalRemoteServerTag,
   getRemoteTags as getLocalRemoteTags,
@@ -55,9 +56,11 @@ import {
   commitRemoteChanges,
   createRemoteBranch,
   createRemoteTrackingBranch,
+  createLocalTag as createRemoteLocalTag,
   createRemoteWorktree,
   bootstrapRemoteWorktreeAfterCreate,
   deleteRemoteBranch,
+  deleteLocalTag as deleteRemoteLocalTag,
   deleteRemoteServerBranch as deleteSshRemoteServerBranch,
   deleteRemoteServerTag as deleteSshRemoteServerTag,
   discardRemoteChangesForPaths,
@@ -68,6 +71,7 @@ import {
   getRemotePatch,
   getRemoteSnapshot,
   getRemoteStatus,
+  getLocalTags as getRemoteLocalTags,
   getRemoteTags as getSshRemoteTags,
   getRemoteTrackingBranches as getSshRemoteTrackingBranches,
   getRemoteWorktreeBootstrapPreview,
@@ -110,6 +114,7 @@ export interface RepoBackend {
   getCommitDetail(commit: string, signal?: AbortSignal): Promise<CommitDetail | null>
   getRemoteBranches(signal?: AbortSignal): Promise<string[]>
   getRemoteTags(signal?: AbortSignal, networkOptions?: GitNetworkOptions): Promise<string[]>
+  getLocalTags(signal?: AbortSignal): Promise<string[]>
   fetch(signal: AbortSignal, networkOptions?: GitNetworkOptions): Promise<{ ok: boolean; message: string }>
   checkout(branch: string, signal?: AbortSignal): Promise<ExecResult>
   checkoutWorktree(worktreePath: string, branch: string, signal?: AbortSignal): Promise<ExecResult>
@@ -121,6 +126,7 @@ export interface RepoBackend {
   discardChanges(worktreePath: string, paths: string[], signal?: AbortSignal): Promise<ExecResult>
   createBranch(branch: string, baseBranch: string, signal?: AbortSignal): Promise<ExecResult>
   trackRemoteBranch(localBranch: string, remoteRef: string, signal?: AbortSignal): Promise<ExecResult>
+  createLocalTag(name: string, ref: string, signal?: AbortSignal): Promise<ExecResult>
   deleteRemoteServerBranch(
     remote: string,
     branch: string,
@@ -133,6 +139,7 @@ export interface RepoBackend {
     signal?: AbortSignal,
     networkOptions?: GitNetworkOptions,
   ): Promise<ExecResult>
+  deleteLocalTag(name: string, signal?: AbortSignal): Promise<ExecResult>
   getWorktreeBootstrapPreview(signal?: AbortSignal): Promise<WorktreeBootstrapPreviewResult>
   createWorktree(
     input: CreateWorktreeInput,
@@ -333,6 +340,12 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       if (!isValidCwd(repoId)) return []
       return await getLocalRemoteTags(repoId, signal, networkOptions)
     },
+    async getLocalTags(signal) {
+      if (!isValidCwd(repoId)) return []
+      const available = await probeGitRepository(repoId)
+      if (!available.ok) throw new Error(available.message)
+      return await getLocalGitTags(repoId, signal)
+    },
     async fetch(signal, networkOptions) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       const available = await probeGitRepository(repoId)
@@ -379,6 +392,10 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       return await createTrackingBranch(repoId, localBranch, remoteRef, signal)
     },
+    async createLocalTag(name, ref, signal) {
+      if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
+      return await createLocalGitTag(repoId, name, ref, signal)
+    },
     async deleteRemoteServerBranch(remote, branch, signal, networkOptions) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       return await deleteLocalRemoteServerBranch(repoId, remote, branch, signal, networkOptions)
@@ -386,6 +403,10 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
     async deleteRemoteServerTag(remote, tag, signal, networkOptions) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       return await deleteLocalRemoteServerTag(repoId, remote, tag, signal, networkOptions)
+    },
+    async deleteLocalTag(name, signal) {
+      if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
+      return await deleteLocalGitTag(repoId, name, signal)
     },
     async getWorktreeBootstrapPreview(signal) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
@@ -516,6 +537,9 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
     async getRemoteTags(signal) {
       return await getSshRemoteTags(target, { signal })
     },
+    async getLocalTags(signal) {
+      return await getRemoteLocalTags(target, { signal })
+    },
     async fetch(signal) {
       return await fetchRemoteRepository(target, { signal })
     },
@@ -549,11 +573,17 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
     async trackRemoteBranch(localBranch, remoteRef, signal) {
       return await createRemoteTrackingBranch(target, { localBranch, remoteRef, signal })
     },
+    async createLocalTag(name, ref, signal) {
+      return await createRemoteLocalTag(target, { name, ref, signal })
+    },
     async deleteRemoteServerBranch(remote, branch, signal) {
       return await deleteSshRemoteServerBranch(target, { remote, branch, signal })
     },
     async deleteRemoteServerTag(remote, tag, signal) {
       return await deleteSshRemoteServerTag(target, { remote, tag, signal })
+    },
+    async deleteLocalTag(name, signal) {
+      return await deleteRemoteLocalTag(target, { name, signal })
     },
     async getWorktreeBootstrapPreview(signal) {
       return await getRemoteWorktreeBootstrapPreview(target, { signal })

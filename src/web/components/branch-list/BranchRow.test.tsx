@@ -43,7 +43,7 @@ vi.mock('#/web/stores/i18n.ts', () => ({
   },
 }))
 
-vi.mock('#/web/hooks/useBranchActionItems.ts', () => ({
+vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
   useBranchActionItems: () => ({
     patchItems: [],
     mainItems: [],

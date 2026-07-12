@@ -881,6 +881,48 @@ export async function getRemoteTrackingBranches(
   return result.ok ? parseRemoteTrackingRefs(result.stdout) : []
 }
 
+export async function getLocalTags(
+  target: RemoteRepoTarget,
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<string[]> {
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const result = await run({ type: 'gitTags', path: target.remotePath }, target, { signal: options.signal })
+  return result.ok
+    ? result.stdout
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+    : []
+}
+
+export async function createLocalTag(
+  target: RemoteRepoTarget,
+  input: { name: string; ref: string; signal?: AbortSignal; run?: RemoteGitRunner },
+): Promise<ExecResult> {
+  if (!isSafeBranchName(input.name)) return { ok: false, message: 'error.invalid-arguments' }
+  const run: RemoteGitRunner = input.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const result = await run(
+    { type: 'gitTagCreate', path: target.remotePath, name: input.name, ref: input.ref },
+    target,
+    { signal: input.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
+  )
+  return remoteExecResult(result)
+}
+
+export async function deleteLocalTag(
+  target: RemoteRepoTarget,
+  input: { name: string; signal?: AbortSignal; run?: RemoteGitRunner },
+): Promise<ExecResult> {
+  if (!isSafeBranchName(input.name)) return { ok: false, message: 'error.invalid-arguments' }
+  const run: RemoteGitRunner = input.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const result = await run(
+    { type: 'gitTagDelete', path: target.remotePath, name: input.name },
+    target,
+    { signal: input.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
+  )
+  return remoteExecResult(result)
+}
+
 export async function getRemoteTags(
   target: RemoteRepoTarget,
   options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},

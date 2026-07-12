@@ -6,7 +6,7 @@ import {
   type BranchActionItem,
   type BranchActionItemGroups,
   visibleBranchActionItems,
-} from '#/web/hooks/useBranchActionItems.ts'
+} from '#/web/hooks/useBranchActionItems.tsx'
 import { useOverflowCollapse } from '#/web/hooks/useOverflowCollapse.ts'
 import { cn } from '#/web/lib/cn.ts'
 type BranchActionControlsVariant = 'bar' | 'menu' | 'auto'

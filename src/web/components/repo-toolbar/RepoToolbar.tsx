@@ -15,7 +15,7 @@ import { BranchSummaryInline } from '#/web/components/repo-workspace/BranchSumma
 import { Toolbar } from '#/web/components/Layout.tsx'
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import { useResponsiveUiMode } from '#/web/hooks/useResponsiveUiMode.tsx'
-import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.ts'
+import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.tsx'
 import { useBranchActionShortcutRegistry } from '#/web/hooks/useBranchActionShortcutRegistry.ts'
 import { visibleBranches } from '#/web/stores/repos/branch-view-mode.ts'
 import { useT } from '#/web/stores/i18n.ts'

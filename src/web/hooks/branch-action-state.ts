@@ -12,6 +12,7 @@ export type BranchActionItemId =
   | 'closeAllTerminals'
   | 'editor'
   | 'createWorktree'
+  | 'createTag'
   | 'createBranch'
   | 'pullRemoteBranch'
   | 'deleteBranch'

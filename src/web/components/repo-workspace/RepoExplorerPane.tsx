@@ -1,7 +1,7 @@
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useCallback, useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { FolderTree, GitBranch, GitCompareArrows, GitFork, History, RadioTower, type LucideIcon } from 'lucide-react'
+import { FolderTree, GitBranch, GitCompareArrows, GitFork, History, RadioTower, Tag, type LucideIcon } from 'lucide-react'
 import { BranchList } from '#/web/components/BranchList.tsx'
 import { SplitPane } from '#/web/components/SplitPane.tsx'
 import { ProjectFileTree } from '#/web/components/file-tree/ProjectFileTree.tsx'
@@ -9,6 +9,7 @@ import { ProjectChangesPanel } from '#/web/components/repo-workspace/ProjectChan
 import { ProjectHistoryPanel } from '#/web/components/repo-workspace/ProjectHistoryPanel.tsx'
 import { ProjectPortsPanel } from '#/web/components/repo-workspace/ProjectPortsPanel.tsx'
 import { ProjectRemoteBranchesPanel } from '#/web/components/repo-workspace/ProjectRemoteBranchesPanel.tsx'
+import { ProjectTagsPanel } from '#/web/components/repo-workspace/ProjectTagsPanel.tsx'
 import { ProjectStatusPanel } from '#/web/components/repo-workspace/ProjectStatusPanel.tsx'
 import { PlainWorkspacePane } from '#/web/components/repo-workspace/PlainWorkspacePane.tsx'
 import { BranchFilterControls } from '#/web/components/repo-toolbar/BranchFilterControls.tsx'
@@ -161,6 +162,7 @@ function ExplorerTabs({
     { id: 'changes' as const, label: t('tab.changes'), icon: GitCompareArrows },
     { id: 'status' as const, label: t('tab.status'), icon: GitBranch },
     { id: 'history' as const, label: t('tab.history'), icon: History },
+    { id: 'tags' as const, label: t('tab.tags'), icon: Tag },
     { id: 'remoteBranches' as const, label: t('tab.remote-branches'), icon: GitFork },
     ...(isRemoteRepo ? [{ id: 'ports' as const, label: t('ports.title'), icon: RadioTower }] : []),
   ] satisfies { id: ExplorerTab; label: string; icon: LucideIcon }[]
@@ -233,6 +235,8 @@ function ExplorerTabs({
           <ProjectStatusPanel repoId={repoId} layout={layout} />
         ) : activeVisibleTab === 'history' ? (
           <ProjectHistoryPanel repoId={repoId} onRevealPath={handleRevealPath} />
+        ) : activeVisibleTab === 'tags' ? (
+          <ProjectTagsPanel repoId={repoId} />
         ) : activeVisibleTab === 'remoteBranches' ? (
           <ProjectRemoteBranchesPanel repoId={repoId} />
         ) : (

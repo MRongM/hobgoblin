@@ -14,6 +14,9 @@ const mocks = vi.hoisted(() => ({
   exportRepositoryFilesToLocalDirectory: vi.fn(),
   getRepositoryWorktreeBootstrapPreview: vi.fn(),
   initializeRepositoryWorktreeBootstrapConfig: vi.fn(),
+  getRepositoryLocalTags: vi.fn(),
+  createRepositoryLocalTag: vi.fn(),
+  deleteRepositoryLocalTag: vi.fn(),
   getRepositoryRemoteTags: vi.fn(),
   deleteRepositoryRemoteTag: vi.fn(),
 }))
@@ -24,6 +27,7 @@ vi.mock('#/server/modules/repo-read-paths.ts', () => ({
   getRepositoryCommitDetail: mocks.getRepositoryCommitDetail,
   getRepositoryFileTree: vi.fn(),
   getRepositoryHistory: mocks.getRepositoryHistory,
+  getRepositoryLocalTags: mocks.getRepositoryLocalTags,
   getRepositoryPatch: vi.fn(),
   getRepositoryPullRequests: vi.fn(),
   getRepositorySnapshot: vi.fn(),
@@ -53,6 +57,9 @@ vi.mock('#/server/modules/repo-write-paths.ts', () => ({
   getRepositoryRemoteTags: mocks.getRepositoryRemoteTags,
   getRepositoryWorktreeBootstrapPreview: mocks.getRepositoryWorktreeBootstrapPreview,
   initializeRepositoryWorktreeBootstrapConfig: mocks.initializeRepositoryWorktreeBootstrapConfig,
+  getRepositoryLocalTags: mocks.getRepositoryLocalTags,
+  createRepositoryLocalTag: mocks.createRepositoryLocalTag,
+  deleteRepositoryLocalTag: mocks.deleteRepositoryLocalTag,
   mergeRepositoryBranch: vi.fn(),
   moveRepositoryFileTreeEntries: vi.fn(),
   openRepositoryEditor: mocks.openRepositoryEditor,
@@ -146,6 +153,9 @@ describe('repo routes', () => {
       },
     })
     mocks.initializeRepositoryWorktreeBootstrapConfig.mockResolvedValue({ ok: true, message: 'goblin.toml created' })
+    mocks.getRepositoryLocalTags.mockResolvedValue(['v1.0.0'])
+    mocks.createRepositoryLocalTag.mockResolvedValue({ ok: true, message: 'created' })
+    mocks.deleteRepositoryLocalTag.mockResolvedValue({ ok: true, message: 'deleted' })
     mocks.getRepositoryRemoteTags.mockResolvedValue(['origin/v1.0.0'])
     mocks.deleteRepositoryRemoteTag.mockResolvedValue({ ok: true, message: 'deleted' })
   })
@@ -192,6 +202,57 @@ describe('repo routes', () => {
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual(['origin/v1.0.0'])
     expect(mocks.getRepositoryRemoteTags).toHaveBeenCalledWith('/tmp/repo', expect.any(AbortSignal))
+  })
+
+  test('serves repository local tags', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/local-tags', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cwd: '/tmp/repo' }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual(['v1.0.0'])
+    expect(mocks.getRepositoryLocalTags).toHaveBeenCalledWith('/tmp/repo', expect.any(AbortSignal))
+  })
+
+  test('routes local tag creation', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/create-local-tag', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cwd: '/tmp/repo', name: 'v1.0.0', ref: 'HEAD', sourceToken: 'repo_test' }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true, message: 'created' })
+    expect(mocks.createRepositoryLocalTag).toHaveBeenCalledWith(
+      '/tmp/repo',
+      'v1.0.0',
+      'HEAD',
+      expect.any(AbortSignal),
+      'repo_test',
+    )
+  })
+
+  test('routes local tag deletion', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/delete-local-tag', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cwd: '/tmp/repo', name: 'v1.0.0', sourceToken: 'repo_test' }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true, message: 'deleted' })
+    expect(mocks.deleteRepositoryLocalTag).toHaveBeenCalledWith('/tmp/repo', 'v1.0.0', expect.any(AbortSignal), 'repo_test')
   })
 
   test('routes remote tag deletion', async () => {

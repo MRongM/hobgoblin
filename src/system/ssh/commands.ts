@@ -65,6 +65,9 @@ export type RemoteCommandKind =
   | { type: 'gitBranchTrackRemote'; path: string; localBranch: string; remoteRef: string }
   | { type: 'gitFetchBranch'; path: string; remote: string; remoteBranch: string; branch: string }
   | { type: 'gitPush'; path: string; remote: string; branch: string; targetBranch: string; setUpstream: boolean }
+  | { type: 'gitTags'; path: string }
+  | { type: 'gitTagCreate'; path: string; name: string; ref: string }
+  | { type: 'gitTagDelete'; path: string; name: string }
   | { type: 'gitRemoteBranches'; path: string }
   | { type: 'gitRemoteTags'; path: string; remote: string }
   | { type: 'gitRemoteBranchDelete'; path: string; remote: string; branch: string }
@@ -394,6 +397,12 @@ function scriptForCommand(command: RemoteCommandKind): string {
       ]
         .filter(Boolean)
         .join(' ')
+    case 'gitTags':
+      return `git -C ${shellQuote(command.path)} tag --sort=-creatordate`
+    case 'gitTagCreate':
+      return `git -C ${shellQuote(command.path)} tag ${shellQuote(command.name)} ${shellQuote(command.ref)}`
+    case 'gitTagDelete':
+      return `git -C ${shellQuote(command.path)} tag -d ${shellQuote(command.name)}`
     case 'gitRemoteBranches':
       return `git -C ${shellQuote(command.path)} for-each-ref ${shellQuote('--format=%(refname:short)')} refs/remotes/`
     case 'gitRemoteTags':
