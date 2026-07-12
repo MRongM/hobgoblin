@@ -980,6 +980,10 @@ export const zh: Record<DictKey, string> = {
   'history.parents': '父提交',
   'history.copy-commit': '复制提交详情',
   'history.copy-file-paths': '复制改动文件路径',
+  'history.search-placeholder': '搜索消息、哈希、提交人或时间',
+  'history.search-label': '搜索提交',
+  'history.search-clear': '清除搜索',
+  'history.search-no-results': '没有匹配的提交',
 
   // ---- Commit detail -----------------------------------------------------
   'commit.parent': '父提交',
