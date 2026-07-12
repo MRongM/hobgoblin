@@ -796,7 +796,7 @@ describe('RepoExplorerPane', () => {
   test('branch area toolbar shows enabled editor and terminal buttons when selected branch has a worktree', async () => {
     seedRepoState({
       id: REPO_ID,
-      branches: [createRepoBranch('main', { worktree: { path: '/repos/main', isDetached: false } })],
+      branches: [createRepoBranch('main', { worktree: { path: '/repos/main' } })],
       currentBranch: 'main',
       selectedBranch: 'main',
     })

@@ -29,7 +29,7 @@ import { AsyncButton } from '#/web/components/AsyncButton.tsx'
 import { Tip } from '#/web/components/Tip.tsx'
 import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
 import { useRuntimeExternalAppSettings } from '#/web/runtime-settings-external-apps.ts'
-import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.ts'
+import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.tsx'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 
 export interface FileTreeRevealRequest {
