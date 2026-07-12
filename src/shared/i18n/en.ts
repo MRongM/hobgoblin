@@ -1010,6 +1010,8 @@ export const en = {
   'tags.search-label': 'Search local tags',
   'tags.search-placeholder': 'Search local tags',
   'tags.refresh': 'Refresh tags',
+  'tags.push': 'Push tag',
+  'tags.push-success': 'Tag pushed',
 
   // ---- Generic dialog -----------------------------------------------------
   'dialog.cancel': 'Cancel',

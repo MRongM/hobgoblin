@@ -977,6 +977,8 @@ export const zh: Record<DictKey, string> = {
   'tags.search-label': '搜索本地标签',
   'tags.search-placeholder': '搜索本地标签',
   'tags.refresh': '刷新标签',
+  'tags.push': '推送标签',
+  'tags.push-success': '标签已推送',
 
   // ---- Generic dialog ----------------------------------------------------
   'dialog.cancel': '取消',
