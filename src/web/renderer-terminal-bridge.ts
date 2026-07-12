@@ -207,7 +207,10 @@ export function createServerTerminalBridge(options: {
       return requestOverSocket('restart', input)
     },
     write(input) {
-      return requestOverSocket('write', input).then((result) => result)
+      // Fire-and-forget: don't wait for server ack to avoid blocking mobile input pipeline.
+      // PTY exit is signaled independently via the 'exit' event.
+      void requestOverSocket('write', input).catch(() => {})
+      return Promise.resolve(true)
     },
     resize(input) {
       return requestOverSocket('resize', input).then((result) => result)
