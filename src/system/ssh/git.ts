@@ -1079,6 +1079,23 @@ export async function deleteRemoteServerTag(
   return remoteExecResult(result)
 }
 
+export async function pushLocalTag(
+  target: RemoteRepoTarget,
+  input: { name: string; signal?: AbortSignal; run?: RemoteGitRunner },
+): Promise<ExecResult> {
+  if (!isSafeBranchName(input.name)) return { ok: false, message: 'error.invalid-arguments' }
+  const run: RemoteGitRunner = input.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const pushTarget = await resolveRemotePushTarget(target, input.name, { signal: input.signal, run })
+  if (input.signal?.aborted) return { ok: false, message: 'cancelled' }
+  if ('ok' in pushTarget) return pushTarget
+  const result = await run(
+    { type: 'gitTagPush', path: target.remotePath, remote: pushTarget.remote, tag: input.name },
+    target,
+    { signal: input.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
+  )
+  return remoteExecResult(result)
+}
+
 export async function getRemoteBrowserUrl(
   target: RemoteRepoTarget,
   branch?: string,
