@@ -10,6 +10,7 @@ function readText(relativePath: string): string {
 }
 
 interface DesktopBuilderConfig {
+  files?: string[]
   win?: {
     target?: unknown
     artifactName?: string
@@ -165,6 +166,14 @@ describe('desktop build scripts', () => {
     expect(releaseScript).toContain("const publishArgs = ['--publish', 'never']")
     expect(releaseScript).toContain("const electronBuilderCli = path.join(repoRoot, 'node_modules/electron-builder/cli.js')")
     expect(releaseScript).toContain('await $`bun ${electronBuilderCli} ${platformArgs} ${archFlag} ${publishArgs}`')
+  })
+
+  test('desktop packaging includes bundled font notices and licenses', () => {
+    const config = electronBuilderConfig as unknown as DesktopBuilderConfig
+
+    expect(config.files).toEqual(
+      expect.arrayContaining(['THIRD_PARTY_NOTICES.md', 'LICENSES/**/*']),
+    )
   })
 
   test('desktop release packaging config includes Windows x64 NSIS output', () => {

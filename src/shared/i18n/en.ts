@@ -920,6 +920,12 @@ export const en = {
   'about.build.unknown': 'dev',
   'about.github': 'Source code',
   'about.github.body': 'View on GitHub',
+  'about.third-party-licenses': 'Third-party licenses',
+  'about.third-party-licenses.body': 'Licenses for bundled fonts.',
+  'about.third-party-licenses.open': 'View licenses',
+  'about.third-party-licenses.dialog-title': 'Third-party font licenses',
+  'about.third-party-licenses.dialog-description':
+    'Copyright notices and licenses for fonts bundled with Hobgoblin.',
 
   // ---- Help overlay -------------------------------------------------------
   'help.title': 'Keyboard shortcuts',

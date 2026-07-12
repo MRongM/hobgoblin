@@ -889,6 +889,11 @@ export const zh: Record<DictKey, string> = {
   'about.build.unknown': 'dev',
   'about.github': '源代码',
   'about.github.body': '在 GitHub 查看',
+  'about.third-party-licenses': '第三方许可',
+  'about.third-party-licenses.body': '查看内置字体的许可信息。',
+  'about.third-party-licenses.open': '查看许可',
+  'about.third-party-licenses.dialog-title': '第三方字体许可',
+  'about.third-party-licenses.dialog-description': 'Hobgoblin 内置字体的版权声明和许可条款。',
 
   // ---- Help overlay ------------------------------------------------------
   'help.title': '键盘快捷键',
