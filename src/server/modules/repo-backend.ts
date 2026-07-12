@@ -18,7 +18,7 @@ import {
 } from '#/system/git/branches.ts'
 import { getCommitDetail as getLocalCommitDetail, getCommitHistory as getLocalCommitHistory } from '#/system/git/history.ts'
 import { fetchAll, getBrowserRemoteUrl, getRemoteInfo, pickPreferredRemote, pullBranch, pushBranch } from '#/system/git/remote.ts'
-import { createLocalTag as createLocalGitTag, deleteLocalTag as deleteLocalGitTag, getLocalTags as getLocalGitTags } from '#/system/git/tags.ts'
+import { createLocalTag as createLocalGitTag, deleteLocalTag as deleteLocalGitTag, getLocalTags as getLocalGitTags, pushLocalTag as pushLocalGitTag } from '#/system/git/tags.ts'
 import {
   deleteRemoteServerTag as deleteLocalRemoteServerTag,
   getRemoteTags as getLocalRemoteTags,
@@ -63,6 +63,7 @@ import {
   deleteLocalTag as deleteRemoteLocalTag,
   deleteRemoteServerBranch as deleteSshRemoteServerBranch,
   deleteRemoteServerTag as deleteSshRemoteServerTag,
+  pushLocalTag as pushRemoteLocalTag,
   discardRemoteChangesForPaths,
   fetchRemoteRepository,
   getRemoteBrowserUrl,
@@ -140,6 +141,7 @@ export interface RepoBackend {
     networkOptions?: GitNetworkOptions,
   ): Promise<ExecResult>
   deleteLocalTag(name: string, signal?: AbortSignal): Promise<ExecResult>
+  pushLocalTag(name: string, signal?: AbortSignal, networkOptions?: GitNetworkOptions): Promise<ExecResult>
   getWorktreeBootstrapPreview(signal?: AbortSignal): Promise<WorktreeBootstrapPreviewResult>
   createWorktree(
     input: CreateWorktreeInput,
@@ -408,6 +410,10 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       return await deleteLocalGitTag(repoId, name, signal)
     },
+    async pushLocalTag(name, signal, networkOptions) {
+      if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
+      return await pushLocalGitTag(repoId, name, signal, networkOptions)
+    },
     async getWorktreeBootstrapPreview(signal) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       return await getLocalWorktreeBootstrapPreview(repoId, { signal })
@@ -584,6 +590,9 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
     },
     async deleteLocalTag(name, signal) {
       return await deleteRemoteLocalTag(target, { name, signal })
+    },
+    async pushLocalTag(name, signal) {
+      return await pushRemoteLocalTag(target, { name, signal })
     },
     async getWorktreeBootstrapPreview(signal) {
       return await getRemoteWorktreeBootstrapPreview(target, { signal })
