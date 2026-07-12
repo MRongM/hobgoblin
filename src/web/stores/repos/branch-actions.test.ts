@@ -3,7 +3,7 @@ import { useReposStore } from '#/web/stores/repos/store.ts'
 import { markRepoOperationTargets, nextRepoOperationId, repoOperation } from '#/web/stores/repos/runtime.ts'
 import { replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { getBranchActionCapabilities } from '#/web/hooks/useBranchActions.tsx'
-import { branchBrowserRemoteProvider } from '#/web/hooks/useBranchActionItems.ts'
+import { branchBrowserRemoteProvider } from '#/web/hooks/useBranchActionItems.tsx'
 import {
   createBranchSnapshot,
   createRepoBranch,

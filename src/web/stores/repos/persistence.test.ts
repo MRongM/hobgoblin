@@ -128,13 +128,13 @@ describe('normalizeRestorableRepoCache', () => {
     const invalid = cachedRepo(now) as any
     invalid.ui.explorerTab = 'not-a-tab'
     const valid = cachedRepo(now)
-    valid.ui.explorerTab = 'remoteBranches'
+    valid.ui.explorerTab = 'tags'
 
     const normalized = normalizeRestorableRepoCache({ missing, invalid, valid })
 
     expect(normalized.missing?.ui.explorerTab).toBe('files')
     expect(normalized.invalid?.ui.explorerTab).toBe('files')
-    expect(normalized.valid?.ui.explorerTab).toBe('remoteBranches')
+    expect(normalized.valid?.ui.explorerTab).toBe('tags')
   })
 })
 

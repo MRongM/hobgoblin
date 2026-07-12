@@ -4,7 +4,7 @@ import { BranchActionsDropdown } from '#/web/components/BranchActionsMenu.tsx'
 import { BranchSummaryInline } from '#/web/components/repo-workspace/BranchSummaryInline.tsx'
 import { cn } from '#/web/lib/cn.ts'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
-import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.ts'
+import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.tsx'
 
 interface BranchRowSortable {
   setNodeRef: (node: HTMLLIElement | null) => void

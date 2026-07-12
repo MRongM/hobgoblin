@@ -7,6 +7,7 @@ import {
   GitBranch,
   GitPullRequest,
   RefreshCw,
+  Tag,
   Trash2,
   X,
 } from 'lucide-react'
@@ -18,6 +19,7 @@ import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
+import { CreateTagDialog } from '#/web/components/CreateTagDialog.tsx'
 import { useBranchActions, type BranchActionItemId } from '#/web/hooks/useBranchActions.tsx'
 import { branchActionDisplayPhase, type BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 import { branchPullRequestBelongsToBranch } from '#/shared/git-types.ts'
@@ -26,7 +28,7 @@ import { useRuntimeExternalAppSettings } from '#/web/runtime-settings-external-a
 import { useBranchWriteActions } from '#/web/hooks/useBranchWriteActions.tsx'
 import { useRetainedDialogState } from '#/web/hooks/useRetainedDialogState.ts'
 import { CreateWorktreeDialog, type CreateWorktreeRequest } from '#/web/components/CreateWorktreeDialog.tsx'
-import { getRepositoryWorktreeBootstrapPreview } from '#/web/repo-client.ts'
+import { createRepositoryLocalTag, getRepositoryWorktreeBootstrapPreview } from '#/web/repo-client.ts'
 import { useSettingsSnapshotQuery } from '#/web/settings-queries.ts'
 import { isRepoWorktreeBootstrapConfigTrusted } from '#/shared/repo-settings.ts'
 import type { WorktreeBootstrapDecision, WorktreeBootstrapPreview } from '#/shared/worktree-bootstrap-summary.ts'
@@ -104,6 +106,7 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
     onPush: actions.push,
   })
   const createWorktreeDialog = useRetainedDialogState<string>()
+  const createTagDialog = useRetainedDialogState<string>()
   const closeAllTerminalsConfirm = useRetainedDialogState<string>()
   const { closeTerminalAndDismissDetailIfLast } = useTerminalSessionContext()
   const disabled = blocked
@@ -178,6 +181,16 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
     visible: true,
     icon: createElement(ClipboardCopy),
     onSelect: actions.copyPatch,
+  }
+
+  const createTagTarget = branch.lastCommitHash.trim()
+  const createTagItem: BranchActionItem = {
+    id: 'createTag',
+    label: t('action.create-tag'),
+    disabled: disabled || busyAction !== null,
+    visible: createTagTarget.length > 0,
+    icon: createElement(Tag),
+    onSelect: () => createTagDialog.openWith(createTagTarget),
   }
 
   const mainItems: BranchActionItem[] = [
@@ -315,7 +328,7 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
   ]
 
   return {
-    patchItems: [],
+    patchItems: [createTagItem],
     mainItems: [...mainItems, ...writeActions.mainItems, copyPatchItem],
     externalItems,
     destructiveItems: [...destructiveItems, ...writeActions.destructiveItems],
@@ -324,6 +337,15 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
       null,
       dialogs,
       writeActions.dialogs,
+      createElement(CreateTagDialogConnected, {
+        open: createTagDialog.open,
+        defaultRef: createTagDialog.payload ?? 'HEAD',
+        onClose: createTagDialog.close,
+        onCreate: async ({ name, ref }) => {
+          const result = await createRepositoryLocalTag(repo.id, name, ref, undefined, String(repo.instanceToken))
+          if (!result.ok) throw new Error(t(result.message))
+        },
+      }),
       createElement(ConfirmDialog, {
         open: closeAllTerminalsConfirm.open,
         title: t('terminal.close-all-confirm-title'),
@@ -427,4 +449,25 @@ function CreateWorktreeDialogConnected({
     onClose,
     onCreate: handleCreate,
   })
+}
+
+function CreateTagDialogConnected({
+  open,
+  defaultRef,
+  onClose,
+  onCreate,
+}: {
+  open: boolean
+  defaultRef?: string
+  onClose: () => void
+  onCreate: (request: { name: string; ref: string }) => void | Promise<void>
+}) {
+  return (
+    <CreateTagDialog
+      open={open}
+      defaultRef={defaultRef}
+      onClose={onClose}
+      onCreate={onCreate}
+    />
+  )
 }

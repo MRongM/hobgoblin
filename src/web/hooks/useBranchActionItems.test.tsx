@@ -19,7 +19,7 @@ import type {
   TerminalSessionSummary,
   WorktreeTerminalSnapshot,
 } from '#/web/components/terminal/types.ts'
-import type { useBranchActionItems } from '#/web/hooks/useBranchActionItems.ts'
+import type { useBranchActionItems } from '#/web/hooks/useBranchActionItems.tsx'
 
 const mocks = vi.hoisted(() => ({
   useRuntimeExternalAppSettings: vi.fn(),
@@ -165,7 +165,7 @@ describe('useBranchActionItems', () => {
       remote: { target: target!, hasRemotes: true, hasBrowserRemote: true, hasGitHubRemote: true },
     })
 
-    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.ts')
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
     const itemIds = await renderItems(useItems, repo, branch)
 
     expect(itemIds).toContain('terminal')
@@ -212,6 +212,7 @@ describe('useBranchActionItems', () => {
     const branch = createRepoBranch('feature/local', {
       tracking: 'origin/feature/local',
       worktree: { path: '/tmp/repo-feature' },
+      lastCommitHash: 'abc123456789',
     })
     const repo = seedRepoState({
       id: '/tmp/repo',
@@ -219,7 +220,7 @@ describe('useBranchActionItems', () => {
       remote: { hasRemotes: true, hasBrowserRemote: true, hasGitHubRemote: true },
     })
 
-    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.ts')
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
     const groups = await renderItemGroups(useItems, repo, branch)
 
     expect(groups.externalItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
@@ -227,7 +228,7 @@ describe('useBranchActionItems', () => {
       'terminal',
       'remote',
     ])
-    expect(groups.patchItems.filter((item) => item.visible).map((item) => item.id)).toEqual([])
+    expect(groups.patchItems.filter((item) => item.visible).map((item) => item.id)).toEqual(['createTag'])
     expect(groups.mainItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
       'pull',
       'push',
@@ -287,7 +288,7 @@ describe('useBranchActionItems', () => {
       remote: { hasRemotes: false, hasBrowserRemote: false, hasGitHubRemote: false },
     })
 
-    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.ts')
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
     const groups = await renderItemGroups(useItems, repo, branch)
     const allItems = [...groups.patchItems, ...groups.mainItems, ...groups.externalItems, ...groups.destructiveItems]
     const disabledById = new Map(allItems.map((item) => [item.id, item.disabled]))
@@ -372,7 +373,7 @@ describe('useBranchActionItems', () => {
       remote: { hasRemotes: true },
     })
 
-    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.ts')
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
     const groups = await renderItemGroups(useItems, repo, branch)
     const destructiveItems = groups.destructiveItems.filter((item) => item.visible)
 
@@ -417,7 +418,7 @@ describe('useBranchActionItems', () => {
       branches: [branch],
     })
 
-    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.ts')
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
     const groups = await renderItemGroups(useItems, repo, branch)
 
     expect(groups.destructiveItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
@@ -471,7 +472,7 @@ describe('useBranchActionItems', () => {
       terminalSession({ key: 't2', worktreeTerminalKey: terminalWorktreeKey }),
     ])
 
-    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.ts')
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
     const groups = await renderItemGroups(useItems, repo, branch)
     const destructiveItems = groups.destructiveItems.filter((item) => item.visible)
     const closeAllTerminals = destructiveItems.find((item) => item.id === 'closeAllTerminals')
@@ -558,7 +559,7 @@ describe('useBranchActionItems', () => {
       error: null,
     }
 
-    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.ts')
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
     const groups = await renderItemGroups(useItems, repo, branch)
     const visibleItems = [...groups.mainItems, ...groups.externalItems, ...groups.destructiveItems].filter(
       (item) => item.visible,
@@ -614,7 +615,7 @@ describe('useBranchActionItems', () => {
       error: null,
     }
 
-    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.ts')
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
     const groups = await renderItemGroups(useItems, repo, branch)
     const createWorktree = groups.mainItems.find((item) => item.id === 'createWorktree')
 
@@ -630,7 +631,7 @@ describe('useBranchActionItems', () => {
       branches: [branch],
     })
 
-    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.ts')
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
     const groups = await renderItemGroups(useItems, repo, branch)
     const commit = groups.mainItems.find((item) => item.id === 'commit')
     if (!commit) throw new Error('missing commit action')
@@ -679,7 +680,7 @@ describe('useBranchActionItems', () => {
       remote: { hasRemotes: true },
     })
 
-    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.ts')
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
     const groups = await renderItemGroups(useItems, repo, branch)
     const commit = groups.mainItems.find((item) => item.id === 'commit')
     if (!commit) throw new Error('missing commit action')
@@ -711,7 +712,7 @@ describe('useBranchActionItems', () => {
       selectedBranch: branch.name,
     })
 
-    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.ts')
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
     const groups = await renderItemGroups(useItems, repo, branch)
     const createWorktree = groups.mainItems.find((item) => item.id === 'createWorktree')
     if (!createWorktree) throw new Error('missing create-worktree action')

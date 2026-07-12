@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import type { BranchActionItemGroups } from '#/web/hooks/useBranchActionItems.ts'
+import type { BranchActionItemGroups } from '#/web/hooks/useBranchActionItems.tsx'
 import { useBranchActionShortcutRegistry } from '#/web/hooks/useBranchActionShortcutRegistry.ts'
 import { runBranchActionShortcut } from '#/web/keyboard/branch-action-shortcuts.ts'
 

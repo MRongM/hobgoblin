@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { type BranchActionItemGroups, visibleBranchActionItems } from '#/web/hooks/useBranchActionItems.ts'
+import { type BranchActionItemGroups, visibleBranchActionItems } from '#/web/hooks/useBranchActionItems.tsx'
 import { setBranchActionShortcutHandler } from '#/web/keyboard/branch-action-shortcuts.ts'
 
 export function useBranchActionShortcutRegistry(actions: BranchActionItemGroups): void {

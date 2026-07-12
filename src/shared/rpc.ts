@@ -275,6 +275,9 @@ export interface AppRpcHandlers {
     initializeWorktreeBootstrapConfig: (input: { repoId: string; worktreePath: string }) => Promise<ExecResult>
     remoteBranches: (input: { cwd: string }) => Promise<string[]>
     remoteTags: (input: { cwd: string }) => Promise<string[]>
+    localTags: (input: { cwd: string }) => Promise<string[]>
+    createLocalTag: (input: { cwd: string; name: string; ref: string }) => Promise<ExecResult>
+    deleteLocalTag: (input: { cwd: string; name: string }) => Promise<ExecResult>
     pull: (input: { cwd: string; branch: string; worktreePath?: string }) => Promise<ExecResult>
     push: (input: { cwd: string; branch: string }) => Promise<ExecResult>
     fetch: (input: { cwd: string; kind?: NetworkOpKind }) => Promise<ExecResult>

@@ -16,12 +16,12 @@ import {
   useBranchActionItems,
   type BranchActionItem,
   type BranchActionItemGroups,
-} from '#/web/hooks/useBranchActionItems.ts'
+} from '#/web/hooks/useBranchActionItems.tsx'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 import { useAsyncPending } from '#/web/hooks/useAsyncPending.ts'
 import { cn } from '#/web/lib/cn.ts'
 
-export type { BranchActionItem } from '#/web/hooks/useBranchActionItems.ts'
+export type { BranchActionItem } from '#/web/hooks/useBranchActionItems.tsx'
 
 interface Props {
   repo: BranchActionRepo

@@ -66,6 +66,10 @@ vi.mock('#/web/components/repo-workspace/ProjectHistoryPanel.tsx', () => ({
   ),
 }))
 
+vi.mock('#/web/components/repo-workspace/ProjectTagsPanel.tsx', () => ({
+  ProjectTagsPanel: ({ repoId }: { repoId: string }) => <div data-testid="project-tags-panel" data-repo-id={repoId} />,
+}))
+
 vi.mock('#/web/components/repo-workspace/ProjectRemoteBranchesPanel.tsx', () => ({
   ProjectRemoteBranchesPanel: ({ repoId }: { repoId: string }) => (
     <div data-testid="project-remote-branches-panel" data-repo-id={repoId} />
@@ -153,6 +157,7 @@ describe('RepoExplorerPane', () => {
     expect(container.querySelector('[data-testid="project-changes-panel"]')).toBeNull()
     expect(container.querySelector('[data-testid="project-status-panel"]')).toBeNull()
     expect(container.querySelector('[data-testid="project-history-panel"]')).toBeNull()
+    expect(container.querySelector('[data-testid="project-tags-panel"]')).toBeNull()
     expect(container.querySelector('[data-testid="project-ports-panel"]')).toBeNull()
     expect(container.textContent).not.toContain('branches.empty')
     await act(async () => root.unmount())
@@ -190,6 +195,7 @@ describe('RepoExplorerPane', () => {
     expect(container.querySelector('[data-testid="plain-workspace-terminal"]')?.getAttribute('data-repo-id')).toBe(
       REMOTE_REPO_ID,
     )
+    expect(container.querySelector('[data-testid="project-tags-panel"]')).toBeNull()
 
     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
     expect(tabs).toEqual([])
@@ -346,7 +352,7 @@ describe('RepoExplorerPane', () => {
     expect(fileTree?.getAttribute('data-toolbar-height')).toBe('detail')
     expect(explorerToolbar?.style.getPropertyValue('--goblin-file-tree-topbar-font-size')).toBe('13px')
     expect(firstTab?.className).toContain('text-[length:var(--goblin-file-tree-topbar-font-size)]')
-    expect(tabIcons).toHaveLength(5)
+    expect(tabIcons).toHaveLength(6)
     expect(tabIcons.every((icon) => icon.classList.contains('size-3.5'))).toBe(true)
     await act(async () => root.unmount())
   })
@@ -460,6 +466,7 @@ describe('RepoExplorerPane', () => {
       'tab.changes',
       'tab.status',
       'tab.history',
+      'tab.tags',
       'tab.remote-branches',
     ])
     expect(container.querySelector('[data-testid="project-file-tree"]')).toBeTruthy()
@@ -480,6 +487,7 @@ describe('RepoExplorerPane', () => {
     expect(container.querySelector('[data-testid="project-changes-panel"]')).toBeNull()
     expect(container.querySelector('[data-testid="project-status-panel"]')).toBeTruthy()
     expect(container.querySelector('[data-testid="project-ports-panel"]')).toBeNull()
+    expect(container.querySelector('[data-testid="project-tags-panel"]')).toBeNull()
     expect(useReposStore.getState().repos[REPO_ID]?.ui.explorerTab).toBe('status')
     await act(async () => root.unmount())
   })
@@ -572,17 +580,19 @@ describe('RepoExplorerPane', () => {
       'tab.changes',
       'tab.status',
       'tab.history',
+      'tab.tags',
       'tab.remote-branches',
       'ports.title',
     ])
 
     await act(async () => {
-      tabs[5]?.click()
+      tabs[6]?.click()
     })
 
     expect(container.querySelector('[data-testid="project-file-tree"]')).toBeNull()
     expect(container.querySelector('[data-testid="project-changes-panel"]')).toBeNull()
     expect(container.querySelector('[data-testid="project-status-panel"]')).toBeNull()
+    expect(container.querySelector('[data-testid="project-tags-panel"]')).toBeNull()
     expect(container.querySelector('[data-testid="project-ports-panel"]')?.getAttribute('data-repo-id')).toBe(
       'ssh-config://prod/srv/repo',
     )
@@ -632,7 +642,7 @@ describe('RepoExplorerPane', () => {
     expect(tablist?.className).toContain('min-w-full')
     expect(tablist?.className).toContain('gap-0.5')
     expect(tablist?.getAttribute('aria-orientation')).toBe('horizontal')
-    expect(container.querySelectorAll('[role="tab"]').length).toBe(5)
+    expect(container.querySelectorAll('[role="tab"]').length).toBe(6)
     await act(async () => root.unmount())
   })
 

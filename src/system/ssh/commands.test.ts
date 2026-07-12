@@ -48,6 +48,27 @@ describe('remote command scripts', () => {
     ).toContain("ls-remote --tags --refs 'origin'")
   })
 
+  test('renders local tag list, create, and delete commands', () => {
+    expect(buildRemoteCommandInvocation(TARGET, { type: 'gitTags', path: '/srv/repo' }).script).toContain(
+      "git -C '/srv/repo' tag --sort=-creatordate",
+    )
+    expect(
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'gitTagCreate',
+        path: '/srv/repo',
+        name: 'v1.0.0',
+        ref: 'HEAD',
+      }).script,
+    ).toContain("git -C '/srv/repo' tag 'v1.0.0' 'HEAD'")
+    expect(
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'gitTagDelete',
+        path: '/srv/repo',
+        name: 'v1.0.0',
+      }).script,
+    ).toContain("git -C '/srv/repo' tag -d 'v1.0.0'")
+  })
+
   test('renders remote server branch delete command', () => {
     const invocation = buildRemoteCommandInvocation(TARGET, {
       type: 'gitRemoteBranchDelete',
