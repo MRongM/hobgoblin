@@ -72,6 +72,7 @@ export type RemoteCommandKind =
   | { type: 'gitRemoteTags'; path: string; remote: string }
   | { type: 'gitRemoteBranchDelete'; path: string; remote: string; branch: string }
   | { type: 'gitRemoteTagDelete'; path: string; remote: string; tag: string }
+  | { type: 'gitTagPush'; path: string; remote: string; tag: string }
   | { type: 'gitWorktreeAdd'; path: string; input: CreateWorktreeInput }
   | { type: 'gitWorktreeRemove'; path: string; worktreePath: string }
   | { type: 'gitBranchDelete'; path: string; branch: string; force?: boolean }
@@ -413,6 +414,8 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return `git -C ${shellQuote(command.path)} push -- ${shellQuote(command.remote)} ${shellQuote(
         `:refs/tags/${command.tag}`,
       )}`
+    case 'gitTagPush':
+      return `git -C ${shellQuote(command.path)} push -- ${shellQuote(command.remote)} ${shellQuote(`refs/tags/${command.tag}`)}`
     case 'gitWorktreeAdd':
       return `git -C ${shellQuote(command.path)} worktree add ${remoteWorktreeAddArgs(command.input)}`
     case 'bootstrapRemoteWorktree':

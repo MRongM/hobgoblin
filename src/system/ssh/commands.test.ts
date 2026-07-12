@@ -93,6 +93,18 @@ describe('remote command scripts', () => {
     expect(invocation.args).toContain(TARGET.alias)
   })
 
+  test('renders remote server tag push command', () => {
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'gitTagPush',
+      path: '/srv/repo',
+      remote: 'origin',
+      tag: 'v1.0.0',
+    })
+
+    expect(invocation.script).toContain("git -C '/srv/repo' push -- 'origin' 'refs/tags/v1.0.0'")
+    expect(invocation.args).toContain(TARGET.alias)
+  })
+
   test('builds a quoted one-level remote directory listing command', () => {
     const invocation = buildRemoteCommandInvocation(TARGET, {
       type: 'listDirectoryEntries',
