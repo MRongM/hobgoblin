@@ -26,6 +26,48 @@ vi.mock('#/web/runtime-settings-chrome.ts', () => ({
   useRuntimeChromeSettings: () => ({ topbarHeightPx: 39, toolbarHeightPx: 41 }),
 }))
 
+vi.mock('#/web/runtime-settings-external-apps.ts', () => ({
+  useRuntimeExternalAppSettings: () => ({
+    terminalApp: 'auto',
+    resolvedTerminalApp: null,
+    terminalAvailable: true,
+    editorApp: 'auto',
+    resolvedEditorApp: null,
+    editorAvailable: true,
+  }),
+}))
+
+vi.mock('#/web/hooks/useBranchActionItems.ts', () => ({
+  useBranchActionItems: (_repo: unknown, branch: unknown) => ({
+    patchItems: [],
+    mainItems: [],
+    externalItems: [
+      {
+        id: 'editor',
+        label: 'Open in Editor',
+        title: 'Open in Editor',
+        disabled: !(branch as { worktree?: { path: string } })?.worktree?.path,
+        busy: false,
+        visible: true,
+        icon: null,
+        onSelect: () => {},
+      },
+      {
+        id: 'terminal',
+        label: 'Open in Terminal',
+        title: 'Open in Terminal',
+        disabled: !(branch as { worktree?: { path: string } })?.worktree?.path,
+        busy: false,
+        visible: true,
+        icon: null,
+        onSelect: () => {},
+      },
+    ],
+    destructiveItems: [],
+    dialogs: null,
+  }),
+}))
+
 vi.mock('#/web/components/BranchList.tsx', () => ({
   BranchList: () => <div data-testid="branch-list" />,
 }))
@@ -721,6 +763,58 @@ describe('RepoExplorerPane', () => {
       'src/from-terminal.ts',
     )
     expect(useReposStore.getState().repos[REPO_ID]?.ui.explorerTab).toBe('files')
+    await act(async () => root.unmount())
+  })
+
+  test('branch area toolbar shows disabled editor and terminal buttons when selected branch has no worktree', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main')], // no worktree
+      currentBranch: 'main',
+      selectedBranch: 'main',
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
+    })
+
+    const toolbar = container.querySelector('[data-testid="branch-area-toolbar"]')
+    expect(toolbar).toBeTruthy()
+
+    const editorBtn = toolbar?.querySelector('[data-testid="branch-area-editor-btn"]') as HTMLButtonElement | null
+    const terminalBtn = toolbar?.querySelector('[data-testid="branch-area-terminal-btn"]') as HTMLButtonElement | null
+    expect(editorBtn).toBeTruthy()
+    expect(terminalBtn).toBeTruthy()
+    expect(editorBtn?.disabled).toBe(true)
+    expect(terminalBtn?.disabled).toBe(true)
+
+    await act(async () => root.unmount())
+  })
+
+  test('branch area toolbar shows enabled editor and terminal buttons when selected branch has a worktree', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main', { worktree: { path: '/repos/main', isDetached: false } })],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
+    })
+
+    const toolbar = container.querySelector('[data-testid="branch-area-toolbar"]')
+    const editorBtn = toolbar?.querySelector('[data-testid="branch-area-editor-btn"]') as HTMLButtonElement | null
+    const terminalBtn = toolbar?.querySelector('[data-testid="branch-area-terminal-btn"]') as HTMLButtonElement | null
+    expect(editorBtn).toBeTruthy()
+    expect(terminalBtn).toBeTruthy()
+    expect(editorBtn?.disabled).toBe(false)
+    expect(terminalBtn?.disabled).toBe(false)
+
     await act(async () => root.unmount())
   })
 })
