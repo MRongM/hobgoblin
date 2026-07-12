@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   getRepositoryLocalTags: vi.fn(),
   createRepositoryLocalTag: vi.fn(),
   deleteRepositoryLocalTag: vi.fn(),
+  fetchRepository: vi.fn(),
+  pushRepositoryLocalTag: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
 }))
@@ -18,6 +20,8 @@ vi.mock('#/web/repo-client.ts', () => ({
   getRepositoryLocalTags: mocks.getRepositoryLocalTags,
   createRepositoryLocalTag: mocks.createRepositoryLocalTag,
   deleteRepositoryLocalTag: mocks.deleteRepositoryLocalTag,
+  fetchRepository: mocks.fetchRepository,
+  pushRepositoryLocalTag: mocks.pushRepositoryLocalTag,
 }))
 
 vi.mock('sonner', () => ({
@@ -53,11 +57,15 @@ beforeEach(() => {
   mocks.getRepositoryLocalTags.mockReset()
   mocks.createRepositoryLocalTag.mockReset()
   mocks.deleteRepositoryLocalTag.mockReset()
+  mocks.fetchRepository.mockReset()
+  mocks.pushRepositoryLocalTag.mockReset()
   mocks.toastSuccess.mockReset()
   mocks.toastError.mockReset()
   mocks.getRepositoryLocalTags.mockResolvedValue(['v1.0.0', 'release/v2.0.0'])
   mocks.createRepositoryLocalTag.mockResolvedValue({ ok: true, message: 'created' })
   mocks.deleteRepositoryLocalTag.mockResolvedValue({ ok: true, message: 'deleted' })
+  mocks.fetchRepository.mockResolvedValue({ ok: true, message: '' })
+  mocks.pushRepositoryLocalTag.mockResolvedValue({ ok: true, message: '' })
   document.body.innerHTML = ''
 })
 
@@ -83,6 +91,59 @@ describe('ProjectTagsPanel', () => {
     })
 
     expect(mocks.getRepositoryLocalTags).toHaveBeenCalledTimes(2)
+    await act(async () => root.unmount())
+  })
+
+  test('refresh button calls fetchRepository then loadTags', async () => {
+    const { container, root } = await renderPanel()
+
+    const refresh = container.querySelector<HTMLButtonElement>('[data-testid="tags-refresh"]')!
+    await act(async () => {
+      refresh.click()
+    })
+
+    expect(mocks.fetchRepository).toHaveBeenCalledWith('/repo', 'user')
+    expect(mocks.getRepositoryLocalTags).toHaveBeenCalledTimes(2)
+    await act(async () => root.unmount())
+  })
+
+  test('refresh shows error toast when fetchRepository fails', async () => {
+    mocks.fetchRepository.mockResolvedValue({ ok: false, message: 'error.network' })
+    const { container, root } = await renderPanel()
+
+    const refresh = container.querySelector<HTMLButtonElement>('[data-testid="tags-refresh"]')!
+    await act(async () => {
+      refresh.click()
+    })
+
+    expect(mocks.toastError).toHaveBeenCalledWith('error.network')
+    expect(mocks.getRepositoryLocalTags).toHaveBeenCalledTimes(1)
+    await act(async () => root.unmount())
+  })
+
+  test('push button calls pushRepositoryLocalTag and shows success toast', async () => {
+    const { container, root } = await renderPanel()
+
+    const pushBtn = container.querySelector<HTMLButtonElement>('[data-testid="tag-push-v1-0-0"]')!
+    await act(async () => {
+      pushBtn.click()
+    })
+
+    expect(mocks.pushRepositoryLocalTag).toHaveBeenCalledWith('/repo', 'v1.0.0', expect.any(AbortSignal), expect.any(String))
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('tags.push-success')
+    await act(async () => root.unmount())
+  })
+
+  test('push button shows error toast when push fails', async () => {
+    mocks.pushRepositoryLocalTag.mockResolvedValue({ ok: false, message: 'error.push-no-remote' })
+    const { container, root } = await renderPanel()
+
+    const pushBtn = container.querySelector<HTMLButtonElement>('[data-testid="tag-push-v1-0-0"]')!
+    await act(async () => {
+      pushBtn.click()
+    })
+
+    expect(mocks.toastError).toHaveBeenCalledWith('error.push-no-remote')
     await act(async () => root.unmount())
   })
 

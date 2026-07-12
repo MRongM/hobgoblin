@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, RefreshCw, Search, Tag, Trash2, X } from 'lucide-react'
+import { ArrowUpFromLine, Loader2, RefreshCw, Search, Tag, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import { CreateTagDialog, type CreateTagRequest } from '#/web/components/CreateTagDialog.tsx'
@@ -10,8 +10,11 @@ import { cn } from '#/web/lib/cn.ts'
 import {
   createRepositoryLocalTag,
   deleteRepositoryLocalTag,
+  fetchRepository,
   getRepositoryLocalTags,
+  pushRepositoryLocalTag,
 } from '#/web/repo-client.ts'
+import { useAsyncPending } from '#/web/hooks/useAsyncPending.ts'
 import { useT } from '#/web/stores/i18n.ts'
 
 interface ProjectTagsPanelProps {
@@ -26,6 +29,8 @@ export function ProjectTagsPanel({ repoId }: ProjectTagsPanelProps) {
   const [error, setError] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [pushingTag, setPushingTag] = useState<string | null>(null)
+  const { pending: pushPending, isPending: isPushPending, run: runPush } = useAsyncPending<'push'>()
   const loadController = useRef<AbortController | null>(null)
 
   async function loadTags() {
@@ -76,6 +81,31 @@ export function ProjectTagsPanel({ repoId }: ProjectTagsPanelProps) {
     await loadTags()
   }
 
+  async function handleRefresh() {
+    const result = await fetchRepository(repoId, 'user')
+    if (!result.ok) {
+      toast.error(t(result.message))
+      return
+    }
+    await loadTags()
+  }
+
+  async function handlePushTag(tag: string) {
+    setPushingTag(tag)
+    try {
+      const ctrl = new AbortController()
+      const sourceToken = `push-tag-${Date.now()}`
+      const result = await pushRepositoryLocalTag(repoId, tag, ctrl.signal, sourceToken)
+      if (!result.ok) {
+        toast.error(t(result.message))
+        return
+      }
+      toast.success(t('tags.push-success'))
+    } finally {
+      setPushingTag(null)
+    }
+  }
+
   const isSearching = trimmedQuery.length > 0
   const showErrorState = error && tags.length === 0
   const showEmptyState = !showErrorState && !loading && visibleTags.length === 0
@@ -112,7 +142,7 @@ export function ProjectTagsPanel({ repoId }: ProjectTagsPanelProps) {
           size="sm"
           data-testid="tags-refresh"
           disabled={loading}
-          onClick={() => void loadTags()}
+          onClick={() => void handleRefresh()}
           className="h-7 gap-1 px-2 text-xs"
         >
           {loading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
@@ -140,6 +170,23 @@ export function ProjectTagsPanel({ repoId }: ProjectTagsPanelProps) {
             {visibleTags.map((tag) => (
               <div key={tag} className="group flex items-center gap-2 px-3 py-2 text-sm">
                 <span className="min-w-0 flex-1 truncate font-mono text-xs text-foreground">{tag}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  data-testid={`tag-push-${tagToTestId(tag)}`}
+                  disabled={isPushPending}
+                  aria-label={t('tags.push')}
+                  title={t('tags.push')}
+                  onClick={() => void runPush('push', () => handlePushTag(tag))}
+                  className="h-6 w-6 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                >
+                  {pushPending === 'push' && pushingTag === tag ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <ArrowUpFromLine className="size-3.5" />
+                  )}
+                </Button>
                 <Button
                   type="button"
                   variant="ghost"
