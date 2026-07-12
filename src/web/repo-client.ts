@@ -223,6 +223,15 @@ export async function deleteRepositoryLocalTag(
   return await postServerJson('/api/repo/delete-local-tag', { cwd, name, sourceToken }, { signal })
 }
 
+export async function pushRepositoryLocalTag(
+  cwd: string,
+  name: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  return await postServerJson('/api/repo/push-local-tag', { cwd, name, sourceToken }, { signal })
+}
+
 export async function removeRepositoryWorktree(
   cwd: string,
   options: {

@@ -10,6 +10,7 @@ export const EMBEDDED_SERVER_RPC_ROUTES = {
   'repo.localTags': { route: '/api/repo/local-tags', method: 'POST' },
   'repo.createLocalTag': { route: '/api/repo/create-local-tag', method: 'POST' },
   'repo.deleteLocalTag': { route: '/api/repo/delete-local-tag', method: 'POST' },
+  'repo.pushLocalTag': { route: '/api/repo/push-local-tag', method: 'POST' },
   'repo.patch': { route: '/api/repo/patch', method: 'POST' },
   'repo.checkout': { route: '/api/repo/checkout', method: 'POST' },
   'repo.deleteBranch': { route: '/api/repo/delete-branch', method: 'POST' },
