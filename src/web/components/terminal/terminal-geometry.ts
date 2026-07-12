@@ -1,7 +1,6 @@
 import { TERMINAL_SIZE_LIMITS, normalizeTerminalSize } from '#/shared/terminal.ts'
 
-export const DEFAULT_TERMINAL_FONT_FAMILY =
-  "ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace"
+export const DEFAULT_TERMINAL_FONT_FAMILY = "'Maple Mono NF CN', monospace"
 
 export interface TerminalGeometry {
   cols: number

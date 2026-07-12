@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { ELECTRON_RENDERER_CAPABILITIES, RENDERER_BRIDGE_VERSION } from '#/shared/bootstrap.ts'
 import { TERMINAL_SCROLLBACK_LINES } from '#/shared/terminal.ts'
 import { ManagedTerminalSession } from '#/web/components/terminal/ManagedTerminalSession.ts'
+import { DEFAULT_TERMINAL_FONT_FAMILY } from '#/web/components/terminal/terminal-geometry.ts'
 import { installTerminalThemeStyles } from '#/web/components/terminal/terminal-theme-test-utils.ts'
 import { isTerminalFocused } from '#/web/terminal-focus.ts'
 import { setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
@@ -93,7 +94,7 @@ const xtermMocks = vi.hoisted(() => {
     linkProviders: Array<{ provideLinks: (line: number, cb: (links: unknown[] | undefined) => void) => void }> = []
     buffer = {
       active: {
-        type: 'normal',
+        type: 'normal' as 'normal' | 'alternate',
         cursorX: 4,
         cursorY: 2,
         viewportY: 0,
@@ -764,7 +765,7 @@ describe('ManagedTerminalSession', () => {
     expect(xtermMocks.terminals[0]!.options.minimumContrastRatio).toBe(4.5)
     expect(xtermMocks.terminals[0]!.options.allowProposedApi).toBe(true)
     expect(xtermMocks.terminals[0]!.options.cursorStyle).toBe('bar')
-    expect(xtermMocks.terminals[0]!.options.fontFamily).toContain('ui-monospace')
+    expect(xtermMocks.terminals[0]!.options.fontFamily).toBe(DEFAULT_TERMINAL_FONT_FAMILY)
     expect(xtermMocks.terminals[0]!.options.fontSize).toBe(14)
     expect(xtermMocks.terminals[0]!.initialCols).toBe(95)
     expect(xtermMocks.terminals[0]!.initialRows).toBe(28)
@@ -776,7 +777,7 @@ describe('ManagedTerminalSession', () => {
     expect(session.snapshot().phase).toBe('open')
   })
 
-  test('reserves two columns only while an alternate-screen TUI is active', async () => {
+  test('uses the full fitted width while an alternate-screen TUI is active', async () => {
     const host = document.createElement('div')
     document.body.appendChild(host)
     const session = new ManagedTerminalSession(descriptor, vi.fn())
@@ -787,19 +788,21 @@ describe('ManagedTerminalSession', () => {
     await flushUntil(() => session.snapshot().phase === 'open')
 
     const term = xtermMocks.terminals[0]!
+    const fitAddon = xtermMocks.fitAddons[0]!
+    fitAddon.fit.mockClear()
     terminalCalls.resize.mockClear()
 
     term.emitBufferChange('alternate')
-    await flushResizeDebounce()
 
-    expect(term.cols).toBe(98)
-    expect(terminalCalls.resize).toHaveBeenLastCalledWith({ sessionId: 'session-1', cols: 98, rows: 30 })
+    expect(fitAddon.fit).toHaveBeenCalledTimes(1)
+    expect(term.cols).toBe(100)
+    expect(terminalCalls.resize).not.toHaveBeenCalled()
 
     term.emitBufferChange('normal')
-    await flushResizeDebounce()
 
+    expect(fitAddon.fit).toHaveBeenCalledTimes(2)
     expect(term.cols).toBe(100)
-    expect(terminalCalls.resize).toHaveBeenLastCalledWith({ sessionId: 'session-1', cols: 100, rows: 30 })
+    expect(terminalCalls.resize).not.toHaveBeenCalled()
   })
 
   test('keeps scroll position when terminal viewport is already scrolled up during font refit', async () => {

@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 
 import { describe, expect, test, vi } from 'vitest'
-import { measureTerminalGeometry } from '#/web/components/terminal/terminal-geometry.ts'
+import {
+  DEFAULT_TERMINAL_FONT_FAMILY,
+  measureTerminalGeometry,
+} from '#/web/components/terminal/terminal-geometry.ts'
 
 function measurableHost(width: number, height: number): HTMLElement {
   const host = document.createElement('div')
@@ -18,6 +21,12 @@ function measurableHost(width: number, height: number): HTMLElement {
   })
   return host
 }
+
+describe('DEFAULT_TERMINAL_FONT_FAMILY', () => {
+  test('uses the bundled CJK monospace font for stable terminal cell metrics', () => {
+    expect(DEFAULT_TERMINAL_FONT_FAMILY).toBe("'Maple Mono NF CN', monospace")
+  })
+})
 
 describe('measureTerminalGeometry', () => {
   test('derives terminal columns and rows from host and cell size', () => {
@@ -66,6 +75,19 @@ describe('measureTerminalGeometry', () => {
     ).toEqual({ cols: 35, rows: 21 })
     expect(measureCell).toHaveBeenCalledWith(14, "'Maple Mono NF CN', monospace")
     expect(measureCell).toHaveBeenCalledWith(20, 'system-ui, sans-serif')
+  })
+
+  test('uses the shared terminal font when no font family is provided', () => {
+    const measureCell = vi.fn(() => ({ width: 7, height: 14 }))
+
+    expect(
+      measureTerminalGeometry({
+        host: measurableHost(700, 420),
+        fontSize: 14,
+        measureCell,
+      }),
+    ).toEqual({ cols: 100, rows: 30 })
+    expect(measureCell).toHaveBeenCalledWith(14, DEFAULT_TERMINAL_FONT_FAMILY)
   })
 
   test('uses unit line height when measuring the default cell box', () => {

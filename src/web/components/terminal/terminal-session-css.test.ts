@@ -28,6 +28,9 @@ describe('terminal session CSS layout contract', () => {
     expect(css).toContain('background: color-mix(in srgb, var(--color-terminal-foreground) 28%, transparent);')
     expect(css).toContain('.goblin-managed-terminal-host .xterm-viewport::-webkit-scrollbar-corner')
     expect(css).toContain('background: transparent;')
+    expect(css).toMatch(
+      /\.goblin-managed-terminal-host \.xterm-scrollable-element > \.scrollbar\.vertical\s*\{[^}]*background:\s*transparent;/,
+    )
   })
 
   test('uses xterm native scrollbar geometry without extra layout clearance', () => {
@@ -35,7 +38,6 @@ describe('terminal session CSS layout contract', () => {
   width: 100%;`)
     expect(css).not.toContain('--goblin-terminal-scrollbar-clearance')
     expect(css).not.toContain('padding-right: var(--goblin-terminal-scrollbar-clearance);')
-    expect(css).not.toContain('.goblin-managed-terminal-host .xterm-scrollable-element')
     expect(css).not.toMatch(/\.goblin-managed-terminal-host\s*\{[^}]*margin-right:\s*14px;/)
     expect(css).not.toMatch(
       /\.goblin-managed-terminal-host \.xterm-scrollable-element > \.scrollbar\.vertical\s*\{[^}]*margin-left:\s*14px;/,

@@ -118,6 +118,10 @@
   scrollbar-width: thin;
 }
 
+.goblin-managed-terminal-host .xterm-scrollable-element > .scrollbar.vertical {
+  background: transparent;
+}
+
 .goblin-managed-terminal-host .xterm-viewport::-webkit-scrollbar {
   width: 10px;
   height: 10px;
