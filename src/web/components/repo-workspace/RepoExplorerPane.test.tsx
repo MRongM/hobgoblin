@@ -37,7 +37,7 @@ vi.mock('#/web/runtime-settings-external-apps.ts', () => ({
   }),
 }))
 
-vi.mock('#/web/hooks/useBranchActionItems.ts', () => ({
+vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
   useBranchActionItems: (_repo: unknown, branch: unknown) => ({
     patchItems: [],
     mainItems: [],
