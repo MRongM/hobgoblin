@@ -35,6 +35,7 @@ import {
   deleteRepositoryRemoteBranch,
   deleteRepositoryRemoteTag,
   deleteRepositoryLocalTag,
+  pushRepositoryLocalTag,
   fetchRepository,
   getRepositoryRemoteBranches,
   getRepositoryRemoteTags,
@@ -554,6 +555,19 @@ export function createRepoRoutes() {
         () => deleteRepositoryLocalTag(cwd, name, c.req.raw.signal, sourceToken),
         { ok: false, message: 'error.failed-read-repo' },
         'delete-local-tag',
+      ),
+    )
+  })
+  app.post('/push-local-tag', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const name = typeof body?.name === 'string' ? body.name : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => pushRepositoryLocalTag(cwd, name, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'push-local-tag',
       ),
     )
   })
