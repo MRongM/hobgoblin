@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { FolderTree } from 'lucide-react'
+import { FolderTree, Search, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { EmptyState, ScrollPane } from '#/web/components/Layout.tsx'
@@ -63,6 +63,7 @@ export function ProjectHistoryPanel({ repoId, onRevealPath }: ProjectHistoryPane
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
   const requestSeq = useRef(0)
 
   useEffect(() => {
@@ -149,6 +150,18 @@ export function ProjectHistoryPanel({ repoId, onRevealPath }: ProjectHistoryPane
     if (!result.ok) toast.error(t(result.message))
   }
 
+  const trimmedQuery = searchQuery.trim().toLowerCase()
+  const filteredCommits = trimmedQuery
+    ? commits.filter(
+        (c) =>
+          c.subject.toLowerCase().includes(trimmedQuery) ||
+          c.hash.toLowerCase().includes(trimmedQuery) ||
+          c.shortHash.toLowerCase().includes(trimmedQuery) ||
+          c.author.toLowerCase().includes(trimmedQuery) ||
+          formatHistoryDate(c.date).toLowerCase().includes(trimmedQuery),
+      )
+    : commits
+
   if (!view.branchName) {
     return <EmptyState icon={<FolderTree size={16} />} title={t('branches.empty')} body={t('history.no-branch')} />
   }
@@ -156,11 +169,14 @@ export function ProjectHistoryPanel({ repoId, onRevealPath }: ProjectHistoryPane
   return (
     <section className="grid min-h-0 flex-1 grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] border-t border-separator/70 bg-pane">
       <HistoryList
-        commits={commits}
+        commits={filteredCommits}
+        allCommitsCount={commits.length}
         selectedHash={selectedHash}
         loading={historyLoading}
         error={historyError}
-        hasMore={hasMore}
+        hasMore={hasMore && !trimmedQuery}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
         onSelect={setSelectedHash}
         onLoadMore={loadMore}
       />
@@ -191,52 +207,85 @@ function useProjectHistoryView(repoId: string): HistoryView {
 
 function HistoryList({
   commits,
+  allCommitsCount,
   selectedHash,
   loading,
   error,
   hasMore,
+  searchQuery,
+  onSearchChange,
   onSelect,
   onLoadMore,
 }: {
   commits: CommitHistoryEntry[]
+  allCommitsCount: number
   selectedHash: string | null
   loading: boolean
   error: string | null
   hasMore: boolean
+  searchQuery: string
+  onSearchChange: (query: string) => void
   onSelect: (hash: string) => void
   onLoadMore: () => void
 }) {
   const t = useT()
-  if (error && commits.length === 0) return <EmptyState title={t('history.load-error')} body={t(error)} />
-  if (!loading && commits.length === 0)
+  const isSearching = searchQuery.trim().length > 0
+
+  if (error && commits.length === 0 && !isSearching) return <EmptyState title={t('history.load-error')} body={t(error)} />
+  if (!loading && allCommitsCount === 0)
     return <EmptyState title={t('history.empty-title')} body={t('history.empty-body')} />
 
   return (
     <div className="flex min-h-0 flex-col border-r border-separator/70">
-      <ScrollPane>
-        <ul className="py-1.5">
-          {commits.map((commit) => (
-            <li key={commit.hash}>
-              <button
-                type="button"
-                aria-label={commit.hash}
-                onClick={() => onSelect(commit.hash)}
-                className={cn(
-                  'block w-full px-2 py-1.5 text-left hover:bg-list-row-hover',
-                  selectedHash === commit.hash && 'bg-list-row-selected text-list-row-selected-foreground',
-                )}
-              >
-                <span className="block min-w-0">
-                  <span className="block truncate text-sm">{commit.subject}</span>
-                  <span className="block truncate font-mono text-xs text-muted-foreground">
-                    {commit.shortHash} · {commit.author} · {formatHistoryDate(commit.date)}
+      <div className="flex items-center gap-1 border-b border-toolbar-border bg-toolbar px-2 py-1">
+        <Search className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <input
+          type="text"
+          aria-label={t('history.search-label')}
+          placeholder={t('history.search-placeholder')}
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          className="min-w-0 flex-1 bg-transparent py-0.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
+        />
+        {isSearching && (
+          <button
+            type="button"
+            aria-label={t('history.search-clear')}
+            onClick={() => onSearchChange('')}
+            className="flex shrink-0 items-center rounded p-0.5 text-muted-foreground hover:text-foreground"
+          >
+            <X className="size-3.5" aria-hidden="true" />
+          </button>
+        )}
+      </div>
+      {!loading && isSearching && commits.length === 0 ? (
+        <EmptyState title={t('history.search-no-results')} />
+      ) : (
+        <ScrollPane>
+          <ul className="py-1.5">
+            {commits.map((commit) => (
+              <li key={commit.hash}>
+                <button
+                  type="button"
+                  aria-label={commit.hash}
+                  onClick={() => onSelect(commit.hash)}
+                  className={cn(
+                    'block w-full px-2 py-1.5 text-left hover:bg-list-row-hover',
+                    selectedHash === commit.hash && 'bg-list-row-selected text-list-row-selected-foreground',
+                  )}
+                >
+                  <span className="block min-w-0">
+                    <span className="block truncate text-sm">{commit.subject}</span>
+                    <span className="block truncate font-mono text-xs text-muted-foreground">
+                      {commit.shortHash} · {commit.author} · {formatHistoryDate(commit.date)}
+                    </span>
                   </span>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </ScrollPane>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </ScrollPane>
+      )}
       <div className="flex min-h-9 items-center justify-end border-t border-separator/70 px-2">
         {error && <span className="mr-auto text-xs text-danger">{t(error)}</span>}
         <Button

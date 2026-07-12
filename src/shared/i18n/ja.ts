@@ -1015,6 +1015,10 @@ export const ja: Record<DictKey, string> = {
   'history.parents': 'Parents',
   'history.copy-commit': 'Copy commit details',
   'history.copy-file-paths': 'Copy changed file paths',
+  'history.search-placeholder': 'Search by message, hash, author, or date',
+  'history.search-label': 'Search commits',
+  'history.search-clear': 'Clear search',
+  'history.search-no-results': 'No commits match your search',
 
   // ---- Commit detail -----------------------------------------------------
   'commit.parent': '親コミット',
