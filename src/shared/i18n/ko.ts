@@ -911,6 +911,11 @@ export const ko: Record<DictKey, string> = {
   'about.build.unknown': 'dev',
   'about.github': '소스 코드',
   'about.github.body': 'GitHub에서 보기',
+  'about.third-party-licenses': '서드 파티 라이선스',
+  'about.third-party-licenses.body': '번들 글꼴의 라이선스를 확인합니다.',
+  'about.third-party-licenses.open': '라이선스 보기',
+  'about.third-party-licenses.dialog-title': '서드 파티 글꼴 라이선스',
+  'about.third-party-licenses.dialog-description': 'Hobgoblin에 포함된 글꼴의 저작권 고지 및 라이선스입니다.',
 
   // ---- Help overlay ------------------------------------------------------
   'help.title': '키보드 단축키',

@@ -923,6 +923,11 @@ export const ja: Record<DictKey, string> = {
   'about.build.unknown': 'dev',
   'about.github': 'ソースコード',
   'about.github.body': 'GitHub で表示',
+  'about.third-party-licenses': 'サードパーティライセンス',
+  'about.third-party-licenses.body': '同梱フォントのライセンスを確認します。',
+  'about.third-party-licenses.open': 'ライセンスを表示',
+  'about.third-party-licenses.dialog-title': 'サードパーティフォントライセンス',
+  'about.third-party-licenses.dialog-description': 'Hobgoblin に同梱されたフォントの著作権表示とライセンスです。',
 
   // ---- Help overlay ------------------------------------------------------
   'help.title': 'キーボードショートカット',

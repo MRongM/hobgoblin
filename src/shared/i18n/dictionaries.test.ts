@@ -111,6 +111,22 @@ describe('i18n dictionaries', () => {
     }
   })
 
+  test('includes bundled font license copy in every dictionary', () => {
+    const keys = [
+      'about.third-party-licenses',
+      'about.third-party-licenses.body',
+      'about.third-party-licenses.open',
+      'about.third-party-licenses.dialog-title',
+      'about.third-party-licenses.dialog-description',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) {
+        expect(dict[key], `${lang}.${key}`).toBeTruthy()
+      }
+    }
+  })
+
   test('uses Hobgoblin in user-visible product copy', () => {
     for (const [lang, dict] of Object.entries(dicts)) {
       expect(dict['about.app'], `${lang}.about.app`).toBe('Hobgoblin')

@@ -19,6 +19,8 @@ const config: Configuration = {
     'src/shared/**/*.ts',
     'dist/web/**/*',
     'package.json',
+    'THIRD_PARTY_NOTICES.md',
+    'LICENSES/**/*',
     '!src/**/*.test.ts',
     '!**/*.map',
   ],
