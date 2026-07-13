@@ -25,6 +25,7 @@ import {
   resetRepositoryHard,
 } from '#/web/repo-client.ts'
 import { useT } from '#/web/stores/i18n.ts'
+import { toast } from 'sonner'
 import type { BranchActionItem } from '#/web/hooks/useBranchActionItems.tsx'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
@@ -171,7 +172,13 @@ export function useBranchWriteActions(
       visible: true,
       icon: createElement(SendHorizontal),
       onSelect: () => {
-        if (worktreePath) inlineCommitDraftActions.openDraft(repo.id, worktreePath)
+        if (!worktreePath) return
+        const worktreeStatus = repo.data.status.find((s) => s.path === worktreePath)
+        if (!worktreeStatus || worktreeStatus.entries.length === 0) {
+          toast.info(t('action.commit-no-changes'))
+          return
+        }
+        inlineCommitDraftActions.openDraft(repo.id, worktreePath)
       },
     },
   ]
