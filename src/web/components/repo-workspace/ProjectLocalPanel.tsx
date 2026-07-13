@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
-import { GitBranch, Loader2, Search, Tag, Trash2, X } from 'lucide-react'
+import { GitBranch, Loader2, Search, Tag, Trash2, X, ArrowDownToLine, ArrowUpFromLine } from 'lucide-react'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import { EmptyState, ScrollPane } from '#/web/components/Layout.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { Input } from '#/web/components/ui/input.tsx'
 import { cn } from '#/web/lib/cn.ts'
-import { deleteRepositoryBranch, deleteRepositoryLocalTag, getRepositoryLocalTags } from '#/web/repo-client.ts'
+import { deleteRepositoryBranch, deleteRepositoryLocalTag, getRepositoryLocalTags, pushRepositoryLocalTag } from '#/web/repo-client.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useT } from '#/web/stores/i18n.ts'
+import { isPushProtected } from '#/web/stores/repos/branch-action-write-paths.ts'
+import { useAsyncPending } from '#/web/hooks/useAsyncPending.ts'
 
 type LocalTab = 'branches' | 'tags'
 
@@ -91,6 +93,18 @@ export function ProjectLocalPanel({ repoId }: { repoId: string }) {
 function LocalBranchesPane({ repoId, query }: { repoId: string; query: string }) {
   const t = useT()
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const submitBranchAction = useReposStore((s) => s.submitBranchAction)
+  const [pushTarget, setPushTarget] = useState<string | null>(null)
+
+  const repo = useStoreWithEqualityFn(
+    useReposStore,
+    (s) => s.repos[repoId],
+    (a, b) => a?.instanceToken === b?.instanceToken && a?.operations === b?.operations && a?.resources === b?.resources,
+  )
+
+  const isPending =
+    repo?.operations.branchAction.phase !== 'idle' ||
+    repo?.resources.fetch.phase === 'loading'
 
   const { branches, currentBranch } = useStoreWithEqualityFn(
     useReposStore,
@@ -119,6 +133,25 @@ function LocalBranchesPane({ repoId, query }: { repoId: string; query: string })
     toast.success(t('local.branch-delete-success'))
   }
 
+  function handlePull(branchName: string) {
+    submitBranchAction(repoId, { kind: 'pull', branch: branchName })
+  }
+
+  function handlePush(branchName: string) {
+    if (isPushProtected(branchName)) {
+      setPushTarget(branchName)
+      return
+    }
+    submitBranchAction(repoId, { kind: 'push', branch: branchName })
+  }
+
+  function confirmPush() {
+    if (!pushTarget) return
+    const target = pushTarget
+    setPushTarget(null)
+    submitBranchAction(repoId, { kind: 'push', branch: target })
+  }
+
   return (
     <>
       <ScrollPane>
@@ -140,6 +173,38 @@ function LocalBranchesPane({ repoId, query }: { repoId: string; query: string })
                 >
                   {branch.name}
                 </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  disabled={isPending}
+                  aria-label={t('local.branch-pull')}
+                  title={t('local.branch-pull')}
+                  onClick={() => handlePull(branch.name)}
+                  className="h-6 w-6 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                >
+                  {isPending ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <ArrowDownToLine className="size-3.5" />
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  disabled={isPending}
+                  aria-label={t('local.branch-push')}
+                  title={t('local.branch-push')}
+                  onClick={() => handlePush(branch.name)}
+                  className="h-6 w-6 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                >
+                  {isPending ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <ArrowUpFromLine className="size-3.5" />
+                  )}
+                </Button>
                 {branch.name !== currentBranch && !branch.worktree?.path && (
                   <Button
                     type="button"
@@ -169,6 +234,14 @@ function LocalBranchesPane({ repoId, query }: { repoId: string; query: string })
         destructive
         onCancel={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
+      />
+      <ConfirmDialog
+        open={pushTarget !== null}
+        title={pushTarget ? t('branch-menu.push-protected-title', { name: pushTarget }) : ''}
+        message={t('branch-menu.push-protected-body')}
+        confirmLabel={t('branch-menu.push-protected-confirm')}
+        onCancel={() => setPushTarget(null)}
+        onConfirm={confirmPush}
       />
     </>
   )
