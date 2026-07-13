@@ -6,8 +6,9 @@ import type { ExplorerTab, RestorableRepoSnapshot, RepoState } from '#/web/store
 import { finishResourceSuccess } from '#/web/stores/repos/resources.ts'
 import { stripBranchWorktreeMetadata } from '#/web/stores/repos/worktree-state.ts'
 import { DEFAULT_WORKSPACE_LAYOUT, normalizeFileTreePaneSizes } from '#/shared/workspace-layout.ts'
+import type { BranchActionItemId } from '#/web/hooks/branch-action-state.ts'
 
-export const rememberedQuickActions = new Map<string, string>()
+export const rememberedQuickActions = new Map<string, BranchActionItemId>()
 
 const MAX_CACHE_AGE_MS = 14 * 24 * 60 * 60 * 1000
 const MAX_REPOS = 50
@@ -105,7 +106,7 @@ function cachedBranches(branches: RepoState['data']['branches']): RestorableRepo
 function restoreProjectionFromSnapshot(repo: RepoState, snapshot: RestorableRepoSnapshot): RepoState {
   if (snapshot.ui.quickActions) {
     for (const [branchName, actionId] of Object.entries(snapshot.ui.quickActions)) {
-      rememberedQuickActions.set(`${repo.id}\0${branchName}`, actionId)
+      rememberedQuickActions.set(`${repo.id}\0${branchName}`, actionId as BranchActionItemId)
     }
   }
 
