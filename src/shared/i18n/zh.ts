@@ -1040,4 +1040,8 @@ export const zh: Record<DictKey, string> = {
   'local.tag-confirm-body': '这会删除本地标签。',
   'local.tag-confirm-delete': '删除标签',
   'local.tag-delete-success': '标签已删除。',
+  'local.branch-pull': '拉取分支',
+  'local.branch-push': '推送分支',
+  'local.tag-push': '推送标签',
+  'local.tag-push-success': '标签推送成功',
 }
