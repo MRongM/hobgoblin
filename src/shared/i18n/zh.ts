@@ -194,6 +194,7 @@ export const zh: Record<DictKey, string> = {
   'tab.changes': '变更',
   'tab.history': '历史',
   'tab.tags': '标签',
+  'tab.local': '本地',
   'tab.remote-branches': '远程',
   'tab.log': '历史',
   'tab.terminal': '终端',
@@ -475,6 +476,7 @@ export const zh: Record<DictKey, string> = {
   'action.merge-conflict-ai-prefill-failed': '无法填入终端输入框。',
   'action.commit': '提交',
   'action.commit-title': '提交所有更改',
+  'action.commit-no-changes': '没有待提交的改动。',
   'action.commit-message-label': '提交信息',
   'action.commit-message-placeholder': '描述你的更改',
   'action.commit-confirm': '提交',
@@ -947,7 +949,7 @@ export const zh: Record<DictKey, string> = {
   'remote-branches.delete-success': '远程分支已删除',
 
   // ---- Remote tags ------------------------------------------------------
-  'remote-tags.tab': 'Tag',
+  'remote-tags.tab': '标签',
   'remote-tags.search-label': '搜索远程 Tag',
   'remote-tags.search-placeholder': '搜索远程 Tag',
   'remote-tags.refresh': '刷新远程 Tag',
