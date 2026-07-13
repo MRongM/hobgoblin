@@ -10,6 +10,7 @@ import {
 import { BranchActionControls } from '#/web/components/BranchActionControls.tsx'
 import { ProjectThemeMenuConnected } from '#/web/components/repo-toolbar/ProjectThemeMenu.tsx'
 import { WorkspaceLayoutControl } from '#/web/components/repo-toolbar/WorkspaceLayoutControl.tsx'
+import { WorktreeActionHistory } from '#/web/components/repo-toolbar/WorktreeActionHistory.tsx'
 import { BranchSummaryInline } from '#/web/components/repo-workspace/BranchSummaryInline.tsx'
 import { Toolbar } from '#/web/components/Layout.tsx'
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
@@ -43,6 +44,7 @@ export function RepoToolbar({ repoId }: Props) {
         {isGitRepo && focusMode && <FocusBranchControls repoId={repoId} />}
       </div>
       <div className="flex shrink-0 items-center gap-2">
+        {isGitRepo && <WorktreeActionHistory repoId={repoId} />}
         <ProjectThemeMenuConnected repoId={repoId} />
         <WorkspaceLayoutControlConnected repoId={repoId} />
       </div>

@@ -1,7 +1,7 @@
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useCallback, useEffect, useMemo, useState, createElement } from 'react'
 import type { CSSProperties } from 'react'
-import { FolderTree, GitBranch, GitCompareArrows, GitFork, History, RadioTower, Tag, ChevronDown, type LucideIcon } from 'lucide-react'
+import { FolderTree, FolderGit, GitBranch, GitCompareArrows, GitFork, History, RadioTower, Tag, ChevronDown, type LucideIcon } from 'lucide-react'
 import { BranchList } from '#/web/components/BranchList.tsx'
 import { SplitPane } from '#/web/components/SplitPane.tsx'
 import { ProjectFileTree } from '#/web/components/file-tree/ProjectFileTree.tsx'
@@ -141,9 +141,6 @@ function BranchArea({ repoId, showActions }: { repoId: string; showActions: bool
 }
 
 function BranchAreaQuickActions({ repoId }: { repoId: string }) {
-  const { terminalApp, resolvedTerminalApp, terminalAvailable, editorApp, resolvedEditorApp, editorAvailable } =
-    useRuntimeExternalAppSettings()
-
   const { repo, branch } = useStoreWithEqualityFn(
     useReposStore,
     (s) => {
@@ -182,6 +179,12 @@ function BranchAreaQuickActions({ repoId }: { repoId: string }) {
   )
 
   if (!repo || !branch) return null
+  return <BranchAreaQuickActionsInner repo={repo} branch={branch} />
+}
+
+function BranchAreaQuickActionsInner({ repo, branch }: { repo: BranchActionRepo; branch: RepoBranchState }) {
+  const { terminalApp, resolvedTerminalApp, terminalAvailable, editorApp, resolvedEditorApp, editorAvailable } =
+    useRuntimeExternalAppSettings()
 
   const actions = useBranchActionItems(repo, branch)
   const editorItem = actions.externalItems.find((item) => item.id === 'editor')
@@ -352,7 +355,7 @@ function ExplorerTabs({
     { id: 'changes' as const, label: t('tab.changes'), icon: GitCompareArrows },
     { id: 'status' as const, label: t('tab.status'), icon: GitBranch },
     { id: 'history' as const, label: t('tab.history'), icon: History },
-    { id: 'local' as const, label: t('tab.local'), icon: Tag },
+    { id: 'local' as const, label: t('tab.local'), icon: FolderGit },
     { id: 'remoteBranches' as const, label: t('tab.remote-branches'), icon: GitFork },
     ...(isRemoteRepo ? [{ id: 'ports' as const, label: t('ports.title'), icon: RadioTower }] : []),
   ] satisfies { id: ExplorerTab; label: string; icon: LucideIcon }[]
