@@ -73,7 +73,7 @@ describe('useBranchWriteActions', () => {
       id: REPO_ID,
       branches: [createRepoBranch('feature/current', { worktree: { path: '/tmp/repo-feature' } })],
       currentBranch: 'feature/current',
-      status: [{ path: '/tmp/repo-feature', entries: [] }],
+      status: [{ path: '/tmp/repo-feature', isMain: false, entries: [] }],
     })
     let actions: ReturnType<typeof useBranchWriteActions> | null = null
 
@@ -97,7 +97,7 @@ describe('useBranchWriteActions', () => {
       id: REPO_ID,
       branches: [createRepoBranch('feature/current', { worktree: { path: '/tmp/repo-feature' } })],
       currentBranch: 'feature/current',
-      status: [{ path: '/tmp/repo-feature', entries: [{ path: 'README.md', status: 'M' as const, staged: false }] }],
+      status: [{ path: '/tmp/repo-feature', isMain: false, entries: [{ path: 'README.md', x: ' ', y: 'M' }] }],
     })
     let actions: ReturnType<typeof useBranchWriteActions> | null = null
 

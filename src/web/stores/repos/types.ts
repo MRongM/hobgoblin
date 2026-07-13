@@ -14,7 +14,7 @@ import type { RepoBranchAction, RunBranchActionOptions } from '#/web/stores/repo
 import type { RepoOperationsState } from '#/web/stores/repos/operations.ts'
 import type { RepoResourcesState } from '#/web/stores/repos/resources.ts'
 export type DetailTab = 'status' | 'changes' | 'terminal'
-export type ExplorerTab = 'files' | 'changes' | 'status' | 'history' | 'tags' | 'remoteBranches' | 'ports'
+export type ExplorerTab = 'files' | 'changes' | 'status' | 'history' | 'local' | 'remoteBranches' | 'ports'
 export type BranchViewMode = 'all' | 'worktrees' | 'no-worktree'
 export type RepoWorkspaceLayout = WorkspaceLayout
 export type RepoDataSource = 'cache' | 'fresh'
@@ -110,6 +110,7 @@ export interface RestorableRepoSnapshot {
     explorerTab?: ExplorerTab
     workspaceLayout?: RepoWorkspaceLayout
     fileTreePaneSizes?: WorkspaceDetailPaneSizes
+    quickActions?: Record<string, string>
   }
 }
 
