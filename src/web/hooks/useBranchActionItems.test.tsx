@@ -629,6 +629,7 @@ describe('useBranchActionItems', () => {
     const repo = seedRepoState({
       id: '/tmp/repo',
       branches: [branch],
+      status: [{ path: '/tmp/repo-feature', entries: [{ path: 'README.md', status: 'M' as const, staged: false }] }],
     })
 
     const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
@@ -678,6 +679,7 @@ describe('useBranchActionItems', () => {
       id: '/tmp/repo',
       branches: [branch],
       remote: { hasRemotes: true },
+      status: [{ path: '/tmp/repo-feature', entries: [{ path: 'README.md', status: 'M' as const, staged: false }] }],
     })
 
     const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
