@@ -1075,5 +1075,9 @@ export const ja: Record<DictKey, string> = {
   'local.tag-confirm-body': 'ローカルタグが削除されます。',
   'local.tag-confirm-delete': 'タグを削除',
   'local.tag-delete-success': 'タグを削除しました。',
+  'local.branch-pull': 'ブランチをプル',
+  'local.branch-push': 'ブランチをプッシュ',
+  'local.tag-push': 'タグをプッシュ',
+  'local.tag-push-success': 'タグが正常にプッシュされました',
 }
 

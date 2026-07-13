@@ -1073,6 +1073,10 @@ export const en = {
   'local.tag-confirm-body': 'This will delete the local tag.',
   'local.tag-confirm-delete': 'Delete tag',
   'local.tag-delete-success': 'Tag deleted.',
+  'local.branch-pull': 'Pull branch',
+  'local.branch-push': 'Push branch',
+  'local.tag-push': 'Push tag',
+  'local.tag-push-success': 'Tag pushed successfully',
 } as const
 
 export type DictKey = keyof typeof en

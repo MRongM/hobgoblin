@@ -1063,5 +1063,9 @@ export const ko: Record<DictKey, string> = {
   'local.tag-confirm-body': '로컬 태그가 삭제됩니다.',
   'local.tag-confirm-delete': '태그 삭제',
   'local.tag-delete-success': '태그가 삭제되었습니다.',
+  'local.branch-pull': '브랜치 가져오기',
+  'local.branch-push': '브랜치 푸시',
+  'local.tag-push': '태그 푸시',
+  'local.tag-push-success': '태그가 성공적으로 푸시되었습니다',
 }
 
