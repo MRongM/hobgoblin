@@ -244,17 +244,18 @@ function BranchAreaRecentActions({ repoId }: { repoId: string }) {
       if (!r || !r.ui.selectedBranch) return null
       const branch = r.data.branches.find((b) => b.name === r.ui.selectedBranch) ?? null
       if (!branch) return null
+      const worktreePath = branch.worktree?.path
       const ids: RepeatableActionId[] = []
-      for (let i = r.events.length - 1; i >= 0 && ids.length < 3; i--) {
-        const ev = r.events[i]
-        if (
-          ev.kind === 'result' &&
-          ev.action &&
-          (REPEATABLE_ACTION_IDS as readonly string[]).includes(ev.action.kind) &&
-          ev.action.branch === r.ui.selectedBranch
-        ) {
-          const id = ev.action.kind as RepeatableActionId
-          if (!ids.includes(id)) ids.push(id)
+      if (worktreePath) {
+        const history = s.restorableRepoCache[repoId]?.ui?.worktreeActionHistories?.[worktreePath]
+        if (history) {
+          for (let i = 0; i < history.length && ids.length < 3; i++) {
+            const action = history[i]
+            if ((REPEATABLE_ACTION_IDS as readonly string[]).includes(action.kind)) {
+              const id = action.kind as RepeatableActionId
+              if (!ids.includes(id)) ids.push(id)
+            }
+          }
         }
       }
       if (ids.length === 0) return null
