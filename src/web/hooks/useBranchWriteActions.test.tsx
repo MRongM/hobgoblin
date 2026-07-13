@@ -27,10 +27,14 @@ vi.mock('#/web/repo-client.ts', () => ({
   resetRepositoryHard: mocks.resetRepositoryHard,
 }))
 
+const toastMock = vi.hoisted(() => ({ info: vi.fn() }))
+vi.mock('sonner', () => ({ toast: toastMock }))
+
+const draftMocks = vi.hoisted(() => ({ openDraft: vi.fn() }))
 vi.mock('#/web/components/branch-list/InlineCommitDraftProvider.tsx', () => ({
   useInlineCommitDraft: () => null,
   useInlineCommitDraftActions: () => ({
-    openDraft: vi.fn(),
+    openDraft: draftMocks.openDraft,
     clearDraft: vi.fn(),
     setMessage: vi.fn(),
     setError: vi.fn(),
@@ -62,6 +66,54 @@ describe('useBranchWriteActions', () => {
     document.body.innerHTML = ''
     root = null
     reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
+  })
+
+  test('commit action shows toast and does not open draft when worktree has no changes', async () => {
+    const repo = seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/current', { worktree: { path: '/tmp/repo-feature' } })],
+      currentBranch: 'feature/current',
+      status: [{ path: '/tmp/repo-feature', entries: [] }],
+    })
+    let actions: ReturnType<typeof useBranchWriteActions> | null = null
+
+    root = createRoot(container)
+    await act(async () => {
+      root!.render(
+        <BranchWriteActionsHarness repo={repo} onPush={vi.fn()} onReady={(value) => (actions = value)} />,
+      )
+    })
+
+    await act(async () => {
+      actions?.mainItems.find((item) => item.id === 'commit')?.onSelect()
+    })
+
+    expect(toastMock.info).toHaveBeenCalledWith('action.commit-no-changes')
+    expect(draftMocks.openDraft).not.toHaveBeenCalled()
+  })
+
+  test('commit action opens draft when worktree has changes', async () => {
+    const repo = seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/current', { worktree: { path: '/tmp/repo-feature' } })],
+      currentBranch: 'feature/current',
+      status: [{ path: '/tmp/repo-feature', entries: [{ path: 'README.md', status: 'M' as const, staged: false }] }],
+    })
+    let actions: ReturnType<typeof useBranchWriteActions> | null = null
+
+    root = createRoot(container)
+    await act(async () => {
+      root!.render(
+        <BranchWriteActionsHarness repo={repo} onPush={vi.fn()} onReady={(value) => (actions = value)} />,
+      )
+    })
+
+    await act(async () => {
+      actions?.mainItems.find((item) => item.id === 'commit')?.onSelect()
+    })
+
+    expect(toastMock.info).not.toHaveBeenCalled()
+    expect(draftMocks.openDraft).toHaveBeenCalledWith(REPO_ID, '/tmp/repo-feature')
   })
 
   test('wires pull, merge and push from the branch write merge dialog', async () => {
