@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from 'vitest'
-import { restoreRepoProjectionFromSnapshot, normalizeRestorableRepoCache, persistRestorableRepoSnapshot } from '#/web/stores/repos/persistence.ts'
+import { restoreRepoProjectionFromSnapshot, normalizeRestorableRepoCache, persistRestorableRepoSnapshot, rememberedQuickActions } from '#/web/stores/repos/persistence.ts'
 import { emptyRepo } from '#/web/stores/repos/helpers.ts'
 import {
   createBranchSnapshot,
@@ -27,7 +27,10 @@ function cachedRepo(savedAt: number): RestorableRepoSnapshot {
   }
 }
 
-beforeEach(resetReposStore)
+beforeEach(() => {
+  resetReposStore()
+  rememberedQuickActions.clear()
+})
 
 describe('normalizeRestorableRepoCache', () => {
   test('keeps only the newest 50 valid cache entries', () => {
@@ -128,13 +131,55 @@ describe('normalizeRestorableRepoCache', () => {
     const invalid = cachedRepo(now) as any
     invalid.ui.explorerTab = 'not-a-tab'
     const valid = cachedRepo(now)
-    valid.ui.explorerTab = 'tags'
+    valid.ui.explorerTab = 'local'
+    const legacyTags = cachedRepo(now)
+    legacyTags.ui.explorerTab = 'tags' as any
 
-    const normalized = normalizeRestorableRepoCache({ missing, invalid, valid })
+    const normalized = normalizeRestorableRepoCache({ missing, invalid, valid, legacyTags })
 
     expect(normalized.missing?.ui.explorerTab).toBe('files')
     expect(normalized.invalid?.ui.explorerTab).toBe('files')
-    expect(normalized.valid?.ui.explorerTab).toBe('tags')
+    expect(normalized.valid?.ui.explorerTab).toBe('local')
+    expect(normalized.legacyTags?.ui.explorerTab).toBe('local')
+  })
+
+  test('preserves quickActions field through normalization', () => {
+    const now = Date.now()
+    const raw = {
+      savedAt: now,
+      name: 'repo',
+      data: { branches: [], currentBranch: 'main' },
+      ui: {
+        selectedBranch: null,
+        branchViewMode: 'all',
+        detailTab: 'status',
+        worktreePathOrder: [],
+        quickActions: { main: 'editor' },
+      },
+    }
+
+    const normalized = normalizeRestorableRepoCache({ repo: raw })
+
+    expect(normalized.repo?.ui.quickActions).toEqual({ main: 'editor' })
+  })
+
+  test('accepts snapshot without quickActions field', () => {
+    const now = Date.now()
+    const raw = {
+      savedAt: now,
+      name: 'repo',
+      data: { branches: [], currentBranch: 'main' },
+      ui: {
+        selectedBranch: null,
+        branchViewMode: 'all',
+        detailTab: 'status',
+        worktreePathOrder: [],
+      },
+    }
+
+    const normalized = normalizeRestorableRepoCache({ repo: raw })
+
+    expect(normalized.repo?.ui.quickActions).toBeUndefined()
   })
 })
 
@@ -265,6 +310,52 @@ describe('persistRestorableRepoSnapshot', () => {
 
     expect(useReposStore.getState().restorableRepoCache['/unloaded']).toBeUndefined()
   })
+
+  test('serializes quickActions from rememberedQuickActions map', () => {
+    const repo = seedRepoState({
+      id: '/repo',
+      instanceToken: 1,
+      branches: [createRepoBranch('main'), createRepoBranch('feature/auth')],
+      currentBranch: 'main',
+    })
+    rememberedQuickActions.set('/repo\0main', 'editor')
+    rememberedQuickActions.set('/repo\0feature/auth', 'terminal')
+
+    persistRestorableRepoSnapshot(useReposStore.setState, repo, 1)
+
+    const saved = useReposStore.getState().restorableRepoCache['/repo']
+    expect(saved?.ui.quickActions).toEqual({ main: 'editor', 'feature/auth': 'terminal' })
+  })
+
+  test('omits quickActions from snapshot when map has no entries for repo', () => {
+    const repo = seedRepoState({
+      id: '/repo',
+      instanceToken: 1,
+      branches: [createRepoBranch('main')],
+      currentBranch: 'main',
+    })
+
+    persistRestorableRepoSnapshot(useReposStore.setState, repo, 1)
+
+    const saved = useReposStore.getState().restorableRepoCache['/repo']
+    expect(saved?.ui.quickActions).toBeUndefined()
+  })
+
+  test('only serializes quickActions for branches that currently exist', () => {
+    const repo = seedRepoState({
+      id: '/repo',
+      instanceToken: 1,
+      branches: [createRepoBranch('main')],
+      currentBranch: 'main',
+    })
+    rememberedQuickActions.set('/repo\0main', 'editor')
+    rememberedQuickActions.set('/repo\0deleted-branch', 'terminal')
+
+    persistRestorableRepoSnapshot(useReposStore.setState, repo, 1)
+
+    const saved = useReposStore.getState().restorableRepoCache['/repo']
+    expect(saved?.ui.quickActions).toEqual({ main: 'editor' })
+  })
 })
 
 describe('restoreRepoProjectionFromSnapshot', () => {
@@ -312,5 +403,44 @@ describe('restoreRepoProjectionFromSnapshot', () => {
 
     expect(restored.ui.explorerTab).toBe('status')
     expect(restoredOld.ui.explorerTab).toBe('files')
+  })
+
+  test('restores quickActions from snapshot into rememberedQuickActions map', () => {
+    const now = Date.now()
+    const snapshot: RestorableRepoSnapshot = {
+      savedAt: now,
+      name: 'repo',
+      data: { branches: [], currentBranch: 'main' },
+      ui: {
+        selectedBranch: null,
+        branchViewMode: 'all',
+        detailTab: 'status',
+        worktreePathOrder: [],
+        quickActions: { main: 'editor', 'feature/auth': 'terminal' },
+      },
+    }
+
+    restoreRepoProjectionFromSnapshot(emptyRepo('/repo', 'repo'), snapshot)
+
+    expect(rememberedQuickActions.get('/repo\0main')).toBe('editor')
+    expect(rememberedQuickActions.get('/repo\0feature/auth')).toBe('terminal')
+  })
+
+  test('does not throw when snapshot has no quickActions', () => {
+    const now = Date.now()
+    const snapshot: RestorableRepoSnapshot = {
+      savedAt: now,
+      name: 'repo',
+      data: { branches: [], currentBranch: 'main' },
+      ui: {
+        selectedBranch: null,
+        branchViewMode: 'all',
+        detailTab: 'status',
+        worktreePathOrder: [],
+      },
+    }
+
+    expect(() => restoreRepoProjectionFromSnapshot(emptyRepo('/repo', 'repo'), snapshot)).not.toThrow()
+    expect(rememberedQuickActions.size).toBe(0)
   })
 })
