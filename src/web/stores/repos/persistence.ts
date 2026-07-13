@@ -6,6 +6,9 @@ import type { ExplorerTab, RestorableRepoSnapshot, RepoState } from '#/web/store
 import { finishResourceSuccess } from '#/web/stores/repos/resources.ts'
 import { stripBranchWorktreeMetadata } from '#/web/stores/repos/worktree-state.ts'
 import { DEFAULT_WORKSPACE_LAYOUT, normalizeFileTreePaneSizes } from '#/shared/workspace-layout.ts'
+
+export const rememberedQuickActions = new Map<string, string>()
+
 const MAX_CACHE_AGE_MS = 14 * 24 * 60 * 60 * 1000
 const MAX_REPOS = 50
 const FiniteNumber = v.pipe(v.number(), v.finite())
@@ -70,6 +73,7 @@ const RestorableRepoSnapshotSchema = v.object({
     workspaceLayout: v.optional(v.picklist(['top-bottom', 'left-right']), DEFAULT_WORKSPACE_LAYOUT),
     fileTreePaneSizes: v.optional(v.unknown()),
     worktreePathOrder: v.optional(v.array(v.string()), []),
+    quickActions: v.optional(v.record(v.string(), v.string())),
   }),
 })
 
@@ -83,10 +87,12 @@ function normalizeCachedExplorerTab(tab: unknown): ExplorerTab {
     case 'changes':
     case 'status':
     case 'history':
-    case 'tags':
+    case 'local':
     case 'remoteBranches':
     case 'ports':
       return tab
+    case 'tags':
+      return 'local'
     default:
       return 'files'
   }
@@ -97,6 +103,12 @@ function cachedBranches(branches: RepoState['data']['branches']): RestorableRepo
 }
 
 function restoreProjectionFromSnapshot(repo: RepoState, snapshot: RestorableRepoSnapshot): RepoState {
+  if (snapshot.ui.quickActions) {
+    for (const [branchName, actionId] of Object.entries(snapshot.ui.quickActions)) {
+      rememberedQuickActions.set(`${repo.id}\0${branchName}`, actionId)
+    }
+  }
+
   const selectedBranch = selectedBranchForBranchSet({
     branches: snapshot.data.branches,
     currentBranch: snapshot.data.currentBranch,
@@ -165,6 +177,14 @@ export function normalizeRestorableRepoCache(value: unknown): Record<string, Res
 
 function restorableRepoSnapshotFromRepo(repo: RepoState): RestorableRepoSnapshot | null {
   if (repo.data.branches.length === 0 && repo.resources.snapshot.loadedAt === null) return null
+
+  const quickActions: Record<string, string> = {}
+  for (const branch of repo.data.branches) {
+    const key = `${repo.id}\0${branch.name}`
+    const actionId = rememberedQuickActions.get(key)
+    if (actionId) quickActions[branch.name] = actionId
+  }
+
   return {
     savedAt: Date.now(),
     name: repo.name,
@@ -180,6 +200,7 @@ function restorableRepoSnapshotFromRepo(repo: RepoState): RestorableRepoSnapshot
       workspaceLayout: repo.ui.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT,
       ...(repo.ui.fileTreePaneSizes ? { fileTreePaneSizes: repo.ui.fileTreePaneSizes } : {}),
       worktreePathOrder: repo.ui.worktreePathOrder,
+      ...(Object.keys(quickActions).length > 0 ? { quickActions } : {}),
     },
   }
 }
