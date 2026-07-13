@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { Button } from '#/web/components/ui/button.tsx'
-import { Tooltip, TooltipContent, TooltipTrigger } from '#/web/components/ui/tooltip.tsx'
+import { Tip } from '#/web/components/Tip.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useResponsiveUiMode } from '#/web/hooks/useResponsiveUiMode.tsx'
 import type { RepoEventAction } from '#/web/stores/repos/types.ts'
@@ -91,19 +91,16 @@ const ActionButton = memo(function ActionButton({
   }
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={actionTooltip(action)}
-          onClick={handleClick}
-        >
-          <Icon className="size-3.5" />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent side="bottom">{actionTooltip(action)}</TooltipContent>
-    </Tooltip>
+    <Tip label={actionTooltip(action)}>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label={actionTooltip(action)}
+        onClick={handleClick}
+      >
+        <Icon className="size-3.5" />
+      </Button>
+    </Tip>
   )
 })
 
