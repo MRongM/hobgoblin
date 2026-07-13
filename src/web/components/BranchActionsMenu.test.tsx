@@ -102,7 +102,6 @@ describe('BranchActionsDropdown split button', () => {
   test('weights the split button hit targets toward the dropdown trigger', () => {
     renderDropdown()
 
-    expect(button('Edit').className).toContain('gap-0.5')
     expect(button('Edit').className).toContain('px-1.5')
     expect(button('Actions').className).toContain('w-7')
     expect(button('Actions').className).toContain('px-1.5')
@@ -112,8 +111,6 @@ describe('BranchActionsDropdown split button', () => {
     const onEdit = vi.fn()
 
     renderDropdown({ repoId: '/repo/default', branchName: 'feature/default', editor: item('editor', 'Edit', onEdit) })
-
-    expect(button('Edit').textContent).toContain('Edit')
 
     act(() => {
       button('Edit').click()
@@ -135,15 +132,13 @@ describe('BranchActionsDropdown split button', () => {
       menuItem('Terminal A').click()
     })
 
-    expect(button('Terminal A').textContent).toContain('Terminal A')
-
     renderDropdown({
       repoId: '/repo/memory',
       branchName: 'feature/b',
       terminal: item('terminal', 'Terminal B'),
     })
 
-    expect(button('Edit').textContent).toContain('Edit')
+    expect(button('Edit')).toBeTruthy()
 
     renderDropdown({
       repoId: '/repo/memory',
@@ -151,7 +146,7 @@ describe('BranchActionsDropdown split button', () => {
       terminal: terminalA,
     })
 
-    expect(button('Terminal A').textContent).toContain('Terminal A')
+    expect(button('Terminal A')).toBeTruthy()
   })
 
   test('does not remember destructive menu actions', () => {
@@ -168,7 +163,7 @@ describe('BranchActionsDropdown split button', () => {
     })
 
     expect(onDelete).toHaveBeenCalledTimes(1)
-    expect(button('Edit').textContent).toContain('Edit')
+    expect(button('Edit')).toBeTruthy()
   })
 
   test('falls back to edit when the remembered action becomes disabled', () => {
@@ -188,7 +183,7 @@ describe('BranchActionsDropdown split button', () => {
       terminal: item('terminal', 'Terminal', vi.fn(), { disabled: true }),
     })
 
-    expect(button('Edit').textContent).toContain('Edit')
+    expect(button('Edit')).toBeTruthy()
   })
 
   test('disables the edit quick action when edit is unavailable', () => {

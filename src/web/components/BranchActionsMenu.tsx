@@ -141,21 +141,20 @@ export function BranchActionsDropdown({
       >
         <AsyncButton
           variant="ghost"
-          size="sm"
+          size="icon-sm"
           loading={quickAction?.busy}
           disabled={quickActionDisabled}
           onClick={runQuickAction}
           title={quickAction?.title ?? quickAction?.label ?? t('action.menu')}
           aria-label={quickAction?.ariaLabel ?? quickAction?.title ?? quickAction?.label ?? t('action.menu')}
           className={cn(
-            'gap-0.5 rounded-r-none px-1.5 pr-1.5',
+            'rounded-r-none px-1.5',
             quickAction?.destructive && 'text-danger hover:bg-danger-surface hover:text-danger',
           )}
         >
           {({ busy }) => (
             <>
               {busy ? <Loader2 className="size-4 animate-spin" /> : quickAction?.icon}
-              {quickAction?.label ?? t('action.menu')}
             </>
           )}
         </AsyncButton>
