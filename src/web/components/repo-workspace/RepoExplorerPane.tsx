@@ -1,7 +1,7 @@
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useCallback, useEffect, useState, createElement } from 'react'
 import type { CSSProperties } from 'react'
-import { FolderTree, FolderPlus, FolderGit, FolderMinus, GitBranch, GitBranchPlus, SendHorizontal, GitCompareArrows, GitFork, GitMerge, History, RadioTower, Tag, ChevronDown, ArrowDown, ArrowUp, CloudDownload, Trash2, type LucideIcon } from 'lucide-react'
+import { FolderTree, FolderPlus, FolderGit, FolderMinus, GitBranch, GitBranchPlus, SendHorizontal, GitCompareArrows, GitFork, GitMerge, History, RadioTower, Tag, Terminal, ChevronDown, ArrowDown, ArrowUp, CloudDownload, Trash2, type LucideIcon } from 'lucide-react'
 import { BranchList } from '#/web/components/BranchList.tsx'
 import { SplitPane } from '#/web/components/SplitPane.tsx'
 import { ProjectFileTree } from '#/web/components/file-tree/ProjectFileTree.tsx'
@@ -25,7 +25,7 @@ import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 import { repoIsPlainWorkspace } from '#/web/stores/repos/capabilities.ts'
 import { AsyncButton } from '#/web/components/AsyncButton.tsx'
 import { Tip } from '#/web/components/Tip.tsx'
-import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
+import { EditorAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
 import { useRuntimeExternalAppSettings } from '#/web/runtime-settings-external-apps.ts'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '#/web/components/ui/dropdown-menu.tsx'
 import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.tsx'
@@ -183,7 +183,7 @@ function BranchAreaQuickActions({ repoId }: { repoId: string }) {
 }
 
 function BranchAreaQuickActionsInner({ repo, branch }: { repo: BranchActionRepo; branch: RepoBranchState }) {
-  const { terminalApp, resolvedTerminalApp, terminalAvailable, editorApp, resolvedEditorApp, editorAvailable } =
+  const { terminalAvailable, editorApp, resolvedEditorApp, editorAvailable } =
     useRuntimeExternalAppSettings()
 
   const actions = useBranchActionItems(repo, branch)
@@ -191,7 +191,6 @@ function BranchAreaQuickActionsInner({ repo, branch }: { repo: BranchActionRepo;
   const terminalItem = actions.externalItems.find((item) => item.id === 'terminal')
 
   const editorIconPref = resolvedEditorApp ?? editorApp
-  const terminalIconPref = repo.remote.target ? 'auto' : (resolvedTerminalApp ?? terminalApp)
 
   return (
     <div className="flex shrink-0 items-center gap-0.5">
@@ -224,7 +223,7 @@ function BranchAreaQuickActionsInner({ repo, branch }: { repo: BranchActionRepo;
               onClick={terminalItem.onSelect}
               aria-label={terminalItem.ariaLabel ?? terminalItem.label}
             >
-              {() => createElement(TerminalAppIcon, { pref: terminalIconPref })}
+              {() => <Terminal className="size-4" />}
             </AsyncButton>
           </span>
         </Tip>
