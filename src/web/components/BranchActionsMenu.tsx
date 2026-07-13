@@ -20,6 +20,8 @@ import {
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 import { useAsyncPending } from '#/web/hooks/useAsyncPending.ts'
 import { cn } from '#/web/lib/cn.ts'
+import { rememberedQuickActions, persistRestorableRepoSnapshot } from '#/web/stores/repos/persistence.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
 
 export type { BranchActionItem } from '#/web/hooks/useBranchActionItems.tsx'
 
@@ -52,7 +54,6 @@ export function BranchActionsMenu({ repo, branch, open, onOpenChange }: Props) {
 }
 
 const DEFAULT_QUICK_ACTION_ID: BranchActionItem['id'] = 'editor'
-const rememberedQuickActions = new Map<string, BranchActionItem['id']>()
 
 function branchQuickActionKey(repoId: string, branchName: string): string {
   return `${repoId}\0${branchName}`
@@ -112,6 +113,16 @@ export function BranchActionsDropdown({
     if (memoryKey && !item.destructive) {
       rememberedQuickActions.set(memoryKey, item.id)
       setQuickActionRevision((revision) => revision + 1)
+
+      // 触发持久化：读取当前 repo state 并写入 snapshot
+      if (repoId) {
+        const store = useReposStore.getState()
+        const repo = store.repos[repoId]
+        const token = repo?.instanceToken
+        if (repo && token !== undefined) {
+          persistRestorableRepoSnapshot(useReposStore.setState, repo, token)
+        }
+      }
     }
     void run(item.id, item.onSelect)
   }
