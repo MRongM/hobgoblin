@@ -93,6 +93,7 @@ export function ProjectLocalPanel({ repoId }: { repoId: string }) {
 function LocalBranchesPane({ repoId, query }: { repoId: string; query: string }) {
   const t = useT()
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [unmergedDeleteTarget, setUnmergedDeleteTarget] = useState<string | null>(null)
   const submitBranchAction = useReposStore((s) => s.submitBranchAction)
   const [pushTarget, setPushTarget] = useState<string | null>(null)
 
@@ -126,10 +127,28 @@ function LocalBranchesPane({ repoId, query }: { repoId: string; query: string })
     const target = deleteTarget
     const result = await deleteRepositoryBranch(repoId, target)
     if (!result.ok) {
+      if (result.message === 'error.branch-not-fully-merged') {
+        setDeleteTarget(null)
+        setUnmergedDeleteTarget(target)
+        return
+      }
       toast.error(result.message)
       return
     }
     setDeleteTarget(null)
+    toast.success(t('local.branch-delete-success'))
+  }
+
+  async function handleForceDelete() {
+    if (!unmergedDeleteTarget) return
+    const target = unmergedDeleteTarget
+    const result = await deleteRepositoryBranch(repoId, target, { force: true })
+    if (!result.ok) {
+      toast.error(result.message)
+      setUnmergedDeleteTarget(null)
+      return
+    }
+    setUnmergedDeleteTarget(null)
     toast.success(t('local.branch-delete-success'))
   }
 
@@ -242,6 +261,19 @@ function LocalBranchesPane({ repoId, query }: { repoId: string; query: string })
         confirmLabel={t('branch-menu.push-protected-confirm')}
         onCancel={() => setPushTarget(null)}
         onConfirm={confirmPush}
+      />
+      <ConfirmDialog
+        open={unmergedDeleteTarget !== null}
+        title={
+          unmergedDeleteTarget
+            ? t('local.branch-unmerged-confirm-title', { name: unmergedDeleteTarget })
+            : t('local.branch-unmerged-confirm-title')
+        }
+        message={t('local.branch-unmerged-confirm-body')}
+        confirmLabel={t('local.branch-force-delete')}
+        destructive
+        onCancel={() => setUnmergedDeleteTarget(null)}
+        onConfirm={handleForceDelete}
       />
     </>
   )
