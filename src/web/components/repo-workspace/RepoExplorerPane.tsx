@@ -1,7 +1,7 @@
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useCallback, useEffect, useState, createElement } from 'react'
 import type { CSSProperties } from 'react'
-import { FolderTree, FolderGit, FolderMinus, GitBranch, GitBranchPlus, GitCommitHorizontal, GitCompareArrows, GitFork, GitMerge, History, RadioTower, Tag, ChevronDown, ArrowDown, ArrowUp, CloudDownload, Trash2, type LucideIcon } from 'lucide-react'
+import { FolderTree, FolderPlus, FolderGit, FolderMinus, GitBranch, GitBranchPlus, SendHorizontal, GitCompareArrows, GitFork, GitMerge, History, RadioTower, Tag, ChevronDown, ArrowDown, ArrowUp, CloudDownload, Trash2, type LucideIcon } from 'lucide-react'
 import { BranchList } from '#/web/components/BranchList.tsx'
 import { SplitPane } from '#/web/components/SplitPane.tsx'
 import { ProjectFileTree } from '#/web/components/file-tree/ProjectFileTree.tsx'
@@ -234,8 +234,8 @@ function BranchAreaQuickActionsInner({ repo, branch }: { repo: BranchActionRepo;
 }
 
 const RECENT_ACTION_ICONS: Record<RepoEventAction['kind'], typeof GitBranch> = {
-  checkout: GitBranch, pull: ArrowDown, push: ArrowUp, commit: GitCommitHorizontal,
-  merge: GitMerge, createWorktree: FolderTree, createBranch: GitBranchPlus,
+  checkout: GitBranch, pull: ArrowDown, push: ArrowUp, commit: SendHorizontal,
+  merge: GitMerge, createWorktree: FolderPlus, createBranch: GitBranchPlus,
   trackRemoteBranch: CloudDownload, deleteBranch: Trash2, removeWorktree: FolderMinus,
 }
 
