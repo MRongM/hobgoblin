@@ -59,6 +59,19 @@ const WorktreeStateSchema = v.object({
   isLocked: v.optional(v.boolean()),
 })
 
+const RepoEventActionSchema = v.union([
+  v.object({ kind: v.literal('checkout'), branch: v.string(), worktreePath: v.optional(v.string()) }),
+  v.object({ kind: v.literal('pull'), branch: v.string(), worktreePath: v.string() }),
+  v.object({ kind: v.literal('push'), branch: v.string(), worktreePath: v.optional(v.string()) }),
+  v.object({ kind: v.literal('commit'), branch: v.string(), message: v.string(), worktreePath: v.string() }),
+  v.object({ kind: v.literal('merge'), branch: v.string(), sourceBranch: v.string(), worktreePath: v.string() }),
+  v.object({ kind: v.literal('createWorktree'), branch: v.string(), worktreePath: v.string() }),
+  v.object({ kind: v.literal('createBranch'), branch: v.string(), baseBranch: v.string() }),
+  v.object({ kind: v.literal('trackRemoteBranch'), branch: v.string(), remoteRef: v.string() }),
+  v.object({ kind: v.literal('deleteBranch'), branch: v.string() }),
+  v.object({ kind: v.literal('removeWorktree'), branch: v.string(), worktreePath: v.string(), alsoDeleteBranch: v.boolean() }),
+])
+
 const RestorableRepoSnapshotSchema = v.object({
   savedAt: FiniteNumber,
   name: v.string(),
@@ -74,6 +87,7 @@ const RestorableRepoSnapshotSchema = v.object({
     fileTreePaneSizes: v.optional(v.unknown()),
     worktreePathOrder: v.optional(v.array(v.string()), []),
     quickActions: v.optional(v.record(v.string(), v.string())),
+    worktreeActionHistories: v.optional(v.record(v.string(), v.array(RepoEventActionSchema))),
   }),
 })
 
@@ -161,7 +175,11 @@ export function persistRestorableRepoSnapshot(set: ReposSet, repo: RepoState | u
   if (!entry) return
   set((s) => {
     if (s.repos[repo.id]?.instanceToken !== token) return s
-    const restorableRepoCache = trimRepoCache({ ...s.restorableRepoCache, [repo.id]: entry })
+    const existing = s.restorableRepoCache[repo.id]
+    const merged = existing?.ui?.worktreeActionHistories
+      ? { ...entry, ui: { ...entry.ui, worktreeActionHistories: existing.ui.worktreeActionHistories } }
+      : entry
+    const restorableRepoCache = trimRepoCache({ ...s.restorableRepoCache, [repo.id]: merged })
     return { restorableRepoCache }
   })
 }

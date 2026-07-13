@@ -59,6 +59,8 @@ export function repoEventActionSuccessLabel(action: RepoEventAction | undefined)
     case 'checkout':
     case 'pull':
     case 'push':
+    case 'commit':
+    case 'merge':
       return null
   }
 }

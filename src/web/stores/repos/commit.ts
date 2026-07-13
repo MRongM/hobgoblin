@@ -1,6 +1,8 @@
 import { appendRepoEvent, replaceRepoState, resultEvent } from '#/web/stores/repos/helpers.ts'
 import type { RepoResultEventOptions, ReposGet, ReposSet } from '#/web/stores/repos/types.ts'
 import type { ExecResult } from '#/web/types.ts'
+import { addActionToWorktreeHistory } from '#/web/stores/repos/action-history.ts'
+import { persistRestorableRepoSnapshot } from '#/web/stores/repos/persistence.ts'
 export function createCommitActions(set: ReposSet, get: ReposGet) {
   return {
     setLastResult(
@@ -16,6 +18,17 @@ export function createCommitActions(set: ReposSet, get: ReposGet) {
           r.events = appendRepoEvent(r.events, resultEvent(result, options))
         })
       })
+
+      if (result.ok && options?.action) {
+        const snapshot = get().restorableRepoCache[id]
+        if (snapshot) {
+          const updated = addActionToWorktreeHistory(snapshot, options.action)
+          if (updated) {
+            set((s) => ({ restorableRepoCache: { ...s.restorableRepoCache, [id]: updated } }))
+            persistRestorableRepoSnapshot(set, get().repos[id], token)
+          }
+        }
+      }
     },
 
     clearEvents(id: string, eventIds: number[]) {

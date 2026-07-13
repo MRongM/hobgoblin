@@ -74,7 +74,9 @@ export function useBranchWriteActions(
   async function handleCheckoutTo(targetBranch: string) {
     if (!worktreePath) return
     const result = await checkoutBranchInWorktree(repo.id, worktreePath, targetBranch)
-    setLastResult(repo.id, result, repo.instanceToken)
+    setLastResult(repo.id, result, repo.instanceToken, {
+      action: { kind: 'checkout', branch: targetBranch, worktreePath },
+    })
     if (!result.ok) throw new Error(result.message)
     checkoutToDialog.close()
   }
@@ -82,21 +84,27 @@ export function useBranchWriteActions(
   async function handleMerge(sourceBranch: string): Promise<ExecResult> {
     if (!worktreePath) return { ok: false, message: 'error.invalid-arguments' }
     const result = await mergeRepositoryBranch(repo.id, worktreePath, sourceBranch)
-    setLastResult(repo.id, result, repo.instanceToken)
+    setLastResult(repo.id, result, repo.instanceToken, {
+      action: { kind: 'merge', branch: branch.name, sourceBranch, worktreePath },
+    })
     return result
   }
 
   async function handlePull(): Promise<ExecResult> {
     if (!worktreePath) return { ok: false, message: 'error.invalid-arguments' }
     const result = await pullRepositoryBranch(repo.id, branch.name, worktreePath)
-    setLastResult(repo.id, result, repo.instanceToken)
+    setLastResult(repo.id, result, repo.instanceToken, {
+      action: { kind: 'pull', branch: branch.name, worktreePath },
+    })
     return result
   }
 
   async function handleCommit(message: string) {
     if (!worktreePath) return
     const result = await commitRepositoryChanges(repo.id, worktreePath, message)
-    setLastResult(repo.id, result, repo.instanceToken)
+    setLastResult(repo.id, result, repo.instanceToken, {
+      action: { kind: 'commit', branch: branch.name, message, worktreePath },
+    })
     if (!result.ok) throw new Error(result.message)
   }
 

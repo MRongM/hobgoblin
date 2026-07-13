@@ -23,9 +23,11 @@ export type RepoBranchState = Omit<BranchSnapshotInfo, 'worktree'> & {
 }
 
 export type RepoEventAction =
-  | { kind: 'checkout'; branch: string }
-  | { kind: 'pull'; branch: string }
-  | { kind: 'push'; branch: string }
+  | { kind: 'checkout'; branch: string; worktreePath?: string }
+  | { kind: 'pull'; branch: string; worktreePath: string }
+  | { kind: 'push'; branch: string; worktreePath?: string }
+  | { kind: 'commit'; branch: string; message: string; worktreePath: string }
+  | { kind: 'merge'; branch: string; sourceBranch: string; worktreePath: string }
   | { kind: 'createWorktree'; branch: string; worktreePath: string }
   | { kind: 'createBranch'; branch: string; baseBranch: string }
   | { kind: 'trackRemoteBranch'; branch: string; remoteRef: string }
@@ -109,6 +111,7 @@ export interface RestorableRepoSnapshot {
     workspaceLayout?: RepoWorkspaceLayout
     fileTreePaneSizes?: WorkspaceDetailPaneSizes
     quickActions?: Record<string, string>
+    worktreeActionHistories?: Record<string, RepoEventAction[]>
   }
 }
 

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { GitBranch, Loader2, Search, Tag, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
@@ -91,13 +92,17 @@ function LocalBranchesPane({ repoId, query }: { repoId: string; query: string })
   const t = useT()
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
-  const { branches, currentBranch } = useReposStore((s) => {
-    const r = s.repos[repoId]
-    return {
-      branches: r?.data.branches ?? [],
-      currentBranch: r?.data.currentBranch ?? '',
-    }
-  })
+  const { branches, currentBranch } = useStoreWithEqualityFn(
+    useReposStore,
+    (s) => {
+      const r = s.repos[repoId]
+      return {
+        branches: r?.data.branches ?? [],
+        currentBranch: r?.data.currentBranch ?? '',
+      }
+    },
+    (a, b) => a.branches === b.branches && a.currentBranch === b.currentBranch,
+  )
 
   const trimmed = query.trim().toLowerCase()
   const visible = trimmed ? branches.filter((b) => b.name.toLowerCase().includes(trimmed)) : branches
@@ -186,7 +191,7 @@ function LocalTagsPane({ repoId, query }: { repoId: string; query: string }) {
     try {
       const nextTags = await getRepositoryLocalTags(repoId, controller.signal)
       if (controller.signal.aborted) return
-      setTags(nextTags.filter(Boolean))
+      setTags(Array.isArray(nextTags) ? nextTags.filter(Boolean) : [])
     } catch (err) {
       if (controller.signal.aborted) return
       setTags([])
