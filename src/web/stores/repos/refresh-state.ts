@@ -70,7 +70,7 @@ export function applySnapshotToRepoProjection(r: RepoState, snap: RepoSnapshot, 
     branches: snap.branches,
     currentBranch: snap.current,
     selectedBranch: r.ui.selectedBranch,
-    viewMode: r.ui.branchViewMode,
+    viewMode: 'worktrees',
   })
   const preservePullRequests = snap.remote ? snap.remote.hasGitHubRemote === true : r.remote.hasGitHubRemote === true
   const pullRequestsByBranch = preservePullRequests

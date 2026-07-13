@@ -88,6 +88,7 @@ export function RepoTabs({ currentRepoId, onOpenRepoPathDialog, onOpenRemote, on
         openRemoteShortcut: shortcutsDisabled ? null : '⌘⇧R',
         clone: t('repo-tabs.clone'),
         cloneShortcut: shortcutsDisabled ? null : '⌘⇧O',
+        clearCache: t('error.clear-cache'),
         unavailable: t('repo-unavailable.title'),
       }}
       onActivate={navigation.activateRepo}

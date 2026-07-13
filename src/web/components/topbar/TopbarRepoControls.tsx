@@ -59,7 +59,7 @@ function FocusBranchControls({ repoId }: Props) {
         branches: repo
           ? visibleBranches({
               branches: repo.data.branches,
-              viewMode: repo.ui.branchViewMode,
+              viewMode: 'worktrees',
             })
           : [],
         selectedBranch: repo?.ui.selectedBranch ?? null,

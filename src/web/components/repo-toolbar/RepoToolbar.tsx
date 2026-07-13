@@ -8,7 +8,6 @@ import {
   DropdownMenuTrigger,
 } from '#/web/components/ui/dropdown-menu.tsx'
 import { BranchActionControls } from '#/web/components/BranchActionControls.tsx'
-import { BranchFilterControls } from '#/web/components/repo-toolbar/BranchFilterControls.tsx'
 import { ProjectThemeMenuConnected } from '#/web/components/repo-toolbar/ProjectThemeMenu.tsx'
 import { WorkspaceLayoutControl } from '#/web/components/repo-toolbar/WorkspaceLayoutControl.tsx'
 import { BranchSummaryInline } from '#/web/components/repo-workspace/BranchSummaryInline.tsx'
@@ -41,7 +40,7 @@ export function RepoToolbar({ repoId }: Props) {
   return (
     <Toolbar variant="repo" className="justify-between gap-3">
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        {isGitRepo && (focusMode ? <FocusBranchControls repoId={repoId} /> : <BranchFilterControls repoId={repoId} />)}
+        {isGitRepo && focusMode && <FocusBranchControls repoId={repoId} />}
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <ProjectThemeMenuConnected repoId={repoId} />
@@ -61,7 +60,7 @@ function FocusBranchControls({ repoId }: Props) {
         branches: repo
           ? visibleBranches({
               branches: repo.data.branches,
-              viewMode: repo.ui.branchViewMode,
+              viewMode: 'worktrees',
             })
           : [],
         selectedBranch: repo?.ui.selectedBranch ?? null,

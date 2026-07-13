@@ -67,7 +67,7 @@ function moveBranchSelectionWithNavigation(
 ): boolean {
   const branches = visibleBranches({
     branches: input.repo.data.branches,
-    viewMode: input.repo.ui.branchViewMode,
+    viewMode: 'worktrees',
     searchQuery: input.searchQuery,
   })
   if (branches.length === 0) return false

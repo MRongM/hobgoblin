@@ -49,7 +49,6 @@ type BranchListRepo = BranchActionRepo & {
   }
   ui: {
     selectedBranch: string | null
-    branchViewMode: 'all' | 'worktrees' | 'no-worktree'
     worktreePathOrder: string[]
   }
 }
@@ -68,7 +67,6 @@ function branchListRepoEqual(a: BranchListRepo | undefined, b: BranchListRepo | 
       a.data.status === b.data.status &&
       a.data.worktreesByPath === b.data.worktreesByPath &&
       a.ui.selectedBranch === b.ui.selectedBranch &&
-      a.ui.branchViewMode === b.ui.branchViewMode &&
       a.ui.worktreePathOrder === b.ui.worktreePathOrder &&
       a.operations.branchAction === b.operations.branchAction &&
       a.operations.fetch === b.operations.fetch &&
@@ -124,7 +122,6 @@ export function BranchList({ repoId, showActions = true }: Props) {
             },
             ui: {
               selectedBranch: repo.ui.selectedBranch,
-              branchViewMode: repo.ui.branchViewMode,
               worktreePathOrder: repo.ui.worktreePathOrder,
             },
             operations: {
@@ -157,10 +154,10 @@ export function BranchList({ repoId, showActions = true }: Props) {
   const repoRoot = repo.remote.target?.remotePath ?? repo.id
   const branches = visibleBranches({
     branches: repo.data.branches,
-    viewMode: repo.ui.branchViewMode,
+    viewMode: 'worktrees',
     worktreePathOrder: repo.ui.worktreePathOrder,
   })
-  const dragEnabled = repo.ui.branchViewMode === 'worktrees'
+  const dragEnabled = true
   const sortableWorktreePaths = dragEnabled
     ? branches.map((branch) => branch.worktree?.path).filter((path): path is string => !!path)
     : []
@@ -169,10 +166,7 @@ export function BranchList({ repoId, showActions = true }: Props) {
     if (!over || active.id === over.id) return
     reorderWorktrees(repoId, String(active.id), String(over.id))
   }
-  const detachedWorktrees =
-    repo.ui.branchViewMode === 'no-worktree'
-      ? []
-      : Object.values(repo.data.worktreesByPath).filter((worktree) => worktree.isDetached)
+  const detachedWorktrees = Object.values(repo.data.worktreesByPath).filter((worktree) => worktree.isDetached)
   useEffect(() => {
     if (!openActionMenu) return
     if (

@@ -345,25 +345,21 @@ describe('RepoExplorerPane', () => {
 
     const branchToolbar = container.querySelector<HTMLElement>('[data-testid="branch-area-toolbar"]')
     const branchList = container.querySelector('[data-testid="branch-list"]')
-    const branchViewToggle = branchToolbar?.querySelector<HTMLButtonElement>(
-      'button[aria-label="branches.filter-tooltip.worktrees"]',
-    )
     const search = branchToolbar?.querySelector('[aria-label="branches.search-label"]')
     const refresh = branchToolbar?.querySelector('button[aria-label="action.refresh"]')
     const createWorktree = branchToolbar?.querySelector('button[aria-label="action.create-worktree-title"]')
     const allBranchesFilter = branchToolbar?.querySelector('[aria-label="branches.filter-tooltip.all"]')
     const noWorktreeFilter = branchToolbar?.querySelector('[aria-label="branches.filter-tooltip.no-worktree"]')
+    const branchViewToggle = branchToolbar?.querySelector('[aria-label="branches.filter-tooltip.worktrees"]')
     expect(branchToolbar).toBeTruthy()
     expect(branchToolbar?.style.height).toBe('41px')
     expect(branchToolbar?.className).not.toContain('h-8')
-    expect(branchViewToggle).toBeTruthy()
+    expect(branchViewToggle).toBeNull()
     expect(search).toBeNull()
-    expect(refresh).toBeTruthy()
-    expect(createWorktree).toBeTruthy()
+    expect(refresh).toBeNull()
+    expect(createWorktree).toBeNull()
     expect(allBranchesFilter).toBeNull()
     expect(noWorktreeFilter).toBeNull()
-    expect(branchViewToggle!.compareDocumentPosition(refresh!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(branchViewToggle!.compareDocumentPosition(createWorktree!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(branchList).toBeTruthy()
     expect(branchToolbar!.compareDocumentPosition(branchList!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     await act(async () => root.unmount())
@@ -394,7 +390,7 @@ describe('RepoExplorerPane', () => {
     expect(fileTree?.getAttribute('data-toolbar-height')).toBe('detail')
     expect(explorerToolbar?.style.getPropertyValue('--goblin-file-tree-topbar-font-size')).toBe('13px')
     expect(firstTab?.className).toContain('text-[length:var(--goblin-file-tree-topbar-font-size)]')
-    expect(tabIcons).toHaveLength(6)
+    expect(tabIcons).toHaveLength(5)
     expect(tabIcons.every((icon) => icon.classList.contains('size-3.5'))).toBe(true)
     await act(async () => root.unmount())
   })
@@ -508,8 +504,7 @@ describe('RepoExplorerPane', () => {
       'tab.changes',
       'tab.status',
       'tab.history',
-      'tab.tags',
-      'tab.remote-branches',
+      '',
     ])
     expect(container.querySelector('[data-testid="project-file-tree"]')).toBeTruthy()
 
@@ -622,13 +617,12 @@ describe('RepoExplorerPane', () => {
       'tab.changes',
       'tab.status',
       'tab.history',
-      'tab.tags',
-      'tab.remote-branches',
-      'ports.title',
+      '',
     ])
 
+    // ports is in the overflow dropdown — activate it via the store action
     await act(async () => {
-      tabs[6]?.click()
+      useReposStore.getState().setExplorerTab('ssh-config://prod/srv/repo', 'ports')
     })
 
     expect(container.querySelector('[data-testid="project-file-tree"]')).toBeNull()
@@ -658,11 +652,13 @@ describe('RepoExplorerPane', () => {
     })
 
     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-    const remoteTab = tabs.find((tab) => tab.textContent?.includes('tab.remote-branches'))
-    expect(remoteTab).toBeTruthy()
+    // remote-branches is in the overflow dropdown
+    const overflowTrigger = tabs[4]
+    expect(overflowTrigger).toBeTruthy()
 
+    // activate remote-branches via the store action since Radix dropdown portals don't open in jsdom
     await act(async () => {
-      remoteTab?.click()
+      useReposStore.getState().setExplorerTab(REPO_ID, 'remoteBranches')
     })
 
     expect(container.querySelector('[data-testid="project-remote-branches-panel"]')?.getAttribute('data-repo-id')).toBe(
@@ -684,7 +680,7 @@ describe('RepoExplorerPane', () => {
     expect(tablist?.className).toContain('min-w-full')
     expect(tablist?.className).toContain('gap-0.5')
     expect(tablist?.getAttribute('aria-orientation')).toBe('horizontal')
-    expect(container.querySelectorAll('[role="tab"]').length).toBe(6)
+    expect(container.querySelectorAll('[role="tab"]').length).toBe(5)
     await act(async () => root.unmount())
   })
 

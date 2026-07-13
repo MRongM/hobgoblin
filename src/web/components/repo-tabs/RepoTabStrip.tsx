@@ -1,5 +1,5 @@
 import { type ReactNode, type Ref, useCallback, useMemo, useRef, useState } from 'react'
-import { ChevronDown, Download, FolderOpen, Plus, Server } from 'lucide-react'
+import { ChevronDown, Download, FolderOpen, Plus, Server, Trash2 } from 'lucide-react'
 import {
   DndContext,
   type DragEndEvent,
@@ -116,6 +116,16 @@ function OpenRepoMenuItems({
   onOpenRemote,
   onClone,
 }: Pick<RepoTabStripProps, 'labels' | 'onOpenLocal' | 'onOpenRemote' | 'onClone'>) {
+  const handleClearCache = () => {
+    try {
+      localStorage.clear()
+      sessionStorage.clear()
+      window.location.reload()
+    } catch (err) {
+      console.error('[gbl] failed to clear cache', err)
+    }
+  }
+
   return (
     <>
       <DropdownMenuItem className="whitespace-nowrap" onSelect={onOpenLocal}>
@@ -132,6 +142,11 @@ function OpenRepoMenuItems({
         <Download />
         {labels.clone}
         {labels.cloneShortcut && <DropdownMenuShortcut>{labels.cloneShortcut}</DropdownMenuShortcut>}
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem className="whitespace-nowrap" onSelect={handleClearCache}>
+        <Trash2 />
+        {labels.clearCache}
       </DropdownMenuItem>
     </>
   )

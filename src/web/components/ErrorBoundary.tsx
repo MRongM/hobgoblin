@@ -22,6 +22,18 @@ function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
   const t = useT()
   const message = getErrorMessage(error) ?? t('error.render-crash-unknown')
 
+  const handleClearCache = () => {
+    // 清除本地存储缓存
+    try {
+      localStorage.clear()
+      sessionStorage.clear()
+      // 重新加载页面以应用更改
+      window.location.reload()
+    } catch (err) {
+      console.error('[gbl] failed to clear cache', err)
+    }
+  }
+
   return (
     <div className="flex flex-1 items-center justify-center p-8">
       <div className="max-w-md space-y-3 text-center">
@@ -32,15 +44,25 @@ function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
           <div className="text-sm font-semibold text-foreground">{t('error.render-crash-title')}</div>
           <div className="text-xs leading-relaxed text-muted-foreground">{message}</div>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={resetErrorBoundary}
-          className="h-8 px-3"
-        >
-          <RefreshCw className="size-3" />
-          {t('error.try-again')}
-        </Button>
+        <div className="flex gap-2 justify-center">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={resetErrorBoundary}
+            className="h-8 px-3"
+          >
+            <RefreshCw className="size-3" />
+            {t('error.try-again')}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleClearCache}
+            className="h-8 px-3"
+          >
+            {t('error.clear-cache')}
+          </Button>
+        </div>
       </div>
     </div>
   )

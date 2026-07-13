@@ -39,12 +39,11 @@ describe('repo session hydration', () => {
           savedAt,
           name: 'cached-a',
           data: {
-            branches: [branchSnapshot('cached')],
+            branches: [branchSnapshot('cached', { worktree: { path: '/tmp/cached-wt' } })],
             currentBranch: 'cached',
           },
           ui: {
             selectedBranch: 'cached',
-            branchViewMode: 'all',
             detailTab: 'status',
             worktreePathOrder: [],
           },
@@ -94,7 +93,6 @@ describe('repo session hydration', () => {
           },
           ui: {
             selectedBranch: 'cached',
-            branchViewMode: 'all',
             detailTab: 'status',
             worktreePathOrder: [],
           },

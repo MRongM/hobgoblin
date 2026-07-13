@@ -140,7 +140,7 @@ describe('remote fetch timestamps', () => {
   })
 
   test('manual sync refreshes fetch, snapshot, status, and pull request data for the active repo', async () => {
-    const token = seedRepo([branch('feature/a')])
+    const token = seedRepo([branch('feature/a', undefined, { worktree: { path: '/tmp/worktree-a' } })])
     let fetchCount = 0
     let snapshotCount = 0
     let statusCount = 0
@@ -151,7 +151,13 @@ describe('remote fetch timestamps', () => {
     }
     rpcHandlers['repo.snapshot'] = async () => {
       snapshotCount += 1
-      return { branches: [branch('feature/a'), branch('feature/b')], current: 'feature/a' }
+      return {
+        branches: [
+          branch('feature/a', undefined, { worktree: { path: '/tmp/worktree-a' } }),
+          branch('feature/b'),
+        ],
+        current: 'feature/a',
+      }
     }
     rpcHandlers['repo.status'] = async () => {
       statusCount += 1
@@ -794,7 +800,8 @@ describe('core refresh request ordering', () => {
     await useReposStore.getState().refreshSnapshot(REPO_ID, { token })
 
     const repo = useReposStore.getState().repos[REPO_ID]
-    expect(repo?.ui.selectedBranch).toBe('feature/a')
+    // In worktrees-only mode, feature/a has no worktree so it's not visible — selection falls to null
+    expect(repo?.ui.selectedBranch).toBeNull()
     expect(repo?.ui.detailTab).toBe('status')
   })
 

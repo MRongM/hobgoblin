@@ -20,7 +20,6 @@ function cachedRepo(savedAt: number): RestorableRepoSnapshot {
     },
     ui: {
       selectedBranch: null,
-      branchViewMode: 'all',
       detailTab: 'status',
       worktreePathOrder: [],
     },
@@ -151,7 +150,6 @@ describe('normalizeRestorableRepoCache', () => {
       data: { branches: [], currentBranch: 'main' },
       ui: {
         selectedBranch: null,
-        branchViewMode: 'all',
         detailTab: 'status',
         worktreePathOrder: [],
         quickActions: { main: 'editor' },
@@ -171,7 +169,6 @@ describe('normalizeRestorableRepoCache', () => {
       data: { branches: [], currentBranch: 'main' },
       ui: {
         selectedBranch: null,
-        branchViewMode: 'all',
         detailTab: 'status',
         worktreePathOrder: [],
       },
@@ -413,7 +410,6 @@ describe('restoreRepoProjectionFromSnapshot', () => {
       data: { branches: [], currentBranch: 'main' },
       ui: {
         selectedBranch: null,
-        branchViewMode: 'all',
         detailTab: 'status',
         worktreePathOrder: [],
         quickActions: { main: 'editor', 'feature/auth': 'terminal' },
@@ -434,7 +430,6 @@ describe('restoreRepoProjectionFromSnapshot', () => {
       data: { branches: [], currentBranch: 'main' },
       ui: {
         selectedBranch: null,
-        branchViewMode: 'all',
         detailTab: 'status',
         worktreePathOrder: [],
       },

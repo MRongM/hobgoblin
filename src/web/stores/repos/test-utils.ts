@@ -504,7 +504,7 @@ export function seedRepoState(options: {
   branchSnapshots?: BranchSnapshotInfo[]
   currentBranch?: string
   selectedBranch?: string | null
-  branchViewMode?: RepoState['ui']['branchViewMode']
+  branchViewMode?: never
   detailTab?: DetailTab
   explorerTab?: ExplorerTab
   workspaceLayout?: RepoWorkspaceLayout
@@ -538,7 +538,6 @@ export function seedRepoState(options: {
     ui: {
       ...base.ui,
       selectedBranch: options.selectedBranch ?? base.ui.selectedBranch,
-      branchViewMode: options.branchViewMode ?? base.ui.branchViewMode,
       detailTab: options.detailTab ?? base.ui.detailTab,
       explorerTab: options.explorerTab ?? base.ui.explorerTab,
       workspaceLayout: options.workspaceLayout ?? base.ui.workspaceLayout,
