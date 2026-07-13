@@ -929,8 +929,7 @@ export const en = {
   'about.third-party-licenses.body': 'Licenses for bundled fonts.',
   'about.third-party-licenses.open': 'View licenses',
   'about.third-party-licenses.dialog-title': 'Third-party font licenses',
-  'about.third-party-licenses.dialog-description':
-    'Copyright notices and licenses for fonts bundled with Hobgoblin.',
+  'about.third-party-licenses.dialog-description': 'Copyright notices and licenses for fonts bundled with Hobgoblin.',
 
   // ---- Help overlay -------------------------------------------------------
   'help.title': 'Keyboard shortcuts',
@@ -1066,7 +1065,8 @@ export const en = {
   'local.branch-confirm-delete': 'Delete branch',
   'local.branch-delete-success': 'Branch deleted.',
   'local.branch-unmerged-confirm-title': 'Force delete unmerged branch {name}?',
-  'local.branch-unmerged-confirm-body': 'This branch has commits that are not merged. Deleting it may cause work to be lost. Continue?',
+  'local.branch-unmerged-confirm-body':
+    'This branch has commits that are not merged. Deleting it may cause work to be lost. Continue?',
   'local.branch-force-delete': 'Force delete',
   'local.tags-empty': 'No local tags',
   'local.tags-filter-empty': 'No matching tags',

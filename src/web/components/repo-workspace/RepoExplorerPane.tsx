@@ -1,7 +1,28 @@
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useCallback, useEffect, useState, createElement } from 'react'
 import type { CSSProperties } from 'react'
-import { FolderTree, FolderPlus, FolderGit, FolderMinus, GitBranch, GitBranchPlus, SendHorizontal, GitCompareArrows, GitFork, GitMerge, History, RadioTower, Tag, Terminal, ChevronDown, ArrowDown, ArrowUp, CloudDownload, Trash2, type LucideIcon } from 'lucide-react'
+import {
+  FolderTree,
+  FolderPlus,
+  FolderGit,
+  FolderMinus,
+  GitBranch,
+  GitBranchPlus,
+  SendHorizontal,
+  GitCompareArrows,
+  GitFork,
+  GitMerge,
+  History,
+  RadioTower,
+  Tag,
+  Terminal,
+  ChevronDown,
+  ArrowDown,
+  ArrowUp,
+  CloudDownload,
+  Trash2,
+  type LucideIcon,
+} from 'lucide-react'
 import { BranchList } from '#/web/components/BranchList.tsx'
 import { SplitPane } from '#/web/components/SplitPane.tsx'
 import { ProjectFileTree } from '#/web/components/file-tree/ProjectFileTree.tsx'
@@ -27,7 +48,12 @@ import { AsyncButton } from '#/web/components/AsyncButton.tsx'
 import { Tip } from '#/web/components/Tip.tsx'
 import { EditorAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
 import { useRuntimeExternalAppSettings } from '#/web/runtime-settings-external-apps.ts'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '#/web/components/ui/dropdown-menu.tsx'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '#/web/components/ui/dropdown-menu.tsx'
 import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.tsx'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 
@@ -77,10 +103,7 @@ export function RepoExplorerPane({ repoId, layout, showActions, revealRequest }:
       a.setRepoFileTreePaneSize === b.setRepoFileTreePaneSize &&
       a.changeCount === b.changeCount,
   )
-  const handleTabChange = useCallback(
-    (tab: ExplorerTab) => setExplorerTab(repoId, tab),
-    [repoId, setExplorerTab],
-  )
+  const handleTabChange = useCallback((tab: ExplorerTab) => setExplorerTab(repoId, tab), [repoId, setExplorerTab])
   const fileTreeSize = repoFileTreePaneSizes?.[layout] ?? defaultFileTreePaneSizes[layout]
   const splitOrientation = layout === 'top-bottom' ? 'horizontal' : 'vertical'
   const sideBySide = splitOrientation === 'horizontal'
@@ -173,9 +196,7 @@ function BranchAreaQuickActions({ repoId }: { repoId: string }) {
       }
       return { repo: actionRepo, branch: selectedBranch }
     },
-    (a, b) =>
-      a.repo === b.repo &&
-      a.branch === b.branch,
+    (a, b) => a.repo === b.repo && a.branch === b.branch,
   )
 
   if (!repo || !branch) return null
@@ -183,8 +204,7 @@ function BranchAreaQuickActions({ repoId }: { repoId: string }) {
 }
 
 function BranchAreaQuickActionsInner({ repo, branch }: { repo: BranchActionRepo; branch: RepoBranchState }) {
-  const { terminalAvailable, editorApp, resolvedEditorApp, editorAvailable } =
-    useRuntimeExternalAppSettings()
+  const { terminalAvailable, editorApp, resolvedEditorApp, editorAvailable } = useRuntimeExternalAppSettings()
 
   const actions = useBranchActionItems(repo, branch)
   const editorItem = actions.externalItems.find((item) => item.id === 'editor')
@@ -233,23 +253,40 @@ function BranchAreaQuickActionsInner({ repo, branch }: { repo: BranchActionRepo;
 }
 
 const RECENT_ACTION_ICONS: Record<RepoEventAction['kind'], typeof GitBranch> = {
-  checkout: GitBranch, pull: ArrowDown, push: ArrowUp, commit: SendHorizontal,
-  merge: GitMerge, createWorktree: FolderPlus, createBranch: GitBranchPlus,
-  trackRemoteBranch: CloudDownload, deleteBranch: Trash2, removeWorktree: FolderMinus,
+  checkout: GitBranch,
+  pull: ArrowDown,
+  push: ArrowUp,
+  commit: SendHorizontal,
+  merge: GitMerge,
+  createWorktree: FolderPlus,
+  createBranch: GitBranchPlus,
+  trackRemoteBranch: CloudDownload,
+  deleteBranch: Trash2,
+  removeWorktree: FolderMinus,
 }
 
 function recentActionTooltip(action: RepoEventAction): string {
   switch (action.kind) {
-    case 'checkout': return `checkout: ${action.branch}`
-    case 'pull': return `pull: ${action.branch}`
-    case 'push': return `push: ${action.branch}`
-    case 'commit': return `commit: ${action.message}`
-    case 'merge': return `merge: ${action.sourceBranch}`
-    case 'createWorktree': return `create worktree: ${action.branch}`
-    case 'createBranch': return `create branch: ${action.branch}`
-    case 'trackRemoteBranch': return `track: ${action.remoteRef}`
-    case 'deleteBranch': return `delete: ${action.branch}`
-    case 'removeWorktree': return `remove worktree: ${action.branch}`
+    case 'checkout':
+      return `checkout: ${action.branch}`
+    case 'pull':
+      return `pull: ${action.branch}`
+    case 'push':
+      return `push: ${action.branch}`
+    case 'commit':
+      return `commit: ${action.message}`
+    case 'merge':
+      return `merge: ${action.sourceBranch}`
+    case 'createWorktree':
+      return `create worktree: ${action.branch}`
+    case 'createBranch':
+      return `create branch: ${action.branch}`
+    case 'trackRemoteBranch':
+      return `track: ${action.remoteRef}`
+    case 'deleteBranch':
+      return `delete: ${action.branch}`
+    case 'removeWorktree':
+      return `remove worktree: ${action.branch}`
   }
 }
 
@@ -427,12 +464,13 @@ function ExplorerTabs({
                           : 'border-separator text-muted-foreground hover:bg-tab-hover hover:text-foreground',
                       )}
                     >
-                      {overflowActive && (() => {
-                        const active = overflowTabs.find((t) => t.id === activeVisibleTab)
-                        if (!active) return null
-                        const Icon = active.icon
-                        return <Icon className="size-3.5 shrink-0" aria-hidden="true" />
-                      })()}
+                      {overflowActive &&
+                        (() => {
+                          const active = overflowTabs.find((t) => t.id === activeVisibleTab)
+                          if (!active) return null
+                          const Icon = active.icon
+                          return <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+                        })()}
                       <ChevronDown className="size-3.5 shrink-0" aria-hidden="true" />
                     </Button>
                   </DropdownMenuTrigger>

@@ -971,7 +971,7 @@ export const zh: Record<DictKey, string> = {
   'tags.ref-label': '引用（分支、提交或 HEAD）',
   'tags.create': '创建标签',
   'tags.delete': '删除标签',
-  'tags.confirm-title': "删除标签“{name}”？",
+  'tags.confirm-title': '删除标签“{name}”？',
   'tags.confirm-body': '这会删除本地标签，不会影响远程标签。',
   'tags.confirm-delete': '删除',
   'tags.create-success': '标签已创建',

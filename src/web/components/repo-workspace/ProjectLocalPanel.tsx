@@ -7,7 +7,12 @@ import { EmptyState, ScrollPane } from '#/web/components/Layout.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { Input } from '#/web/components/ui/input.tsx'
 import { cn } from '#/web/lib/cn.ts'
-import { deleteRepositoryBranch, deleteRepositoryLocalTag, getRepositoryLocalTags, pushRepositoryLocalTag } from '#/web/repo-client.ts'
+import {
+  deleteRepositoryBranch,
+  deleteRepositoryLocalTag,
+  getRepositoryLocalTags,
+  pushRepositoryLocalTag,
+} from '#/web/repo-client.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { isPushProtected } from '#/web/stores/repos/branch-action-write-paths.ts'
@@ -64,7 +69,9 @@ export function ProjectLocalPanel({ repoId }: { repoId: string }) {
             aria-label={activeTab === 'branches' ? t('local.branches-search-label') : t('local.tags-search-label')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={activeTab === 'branches' ? t('local.branches-search-placeholder') : t('local.tags-search-placeholder')}
+            placeholder={
+              activeTab === 'branches' ? t('local.branches-search-placeholder') : t('local.tags-search-placeholder')
+            }
             className="h-6 pl-7 pr-6 text-xs"
           />
           {query && (
@@ -103,9 +110,7 @@ function LocalBranchesPane({ repoId, query }: { repoId: string; query: string })
     (a, b) => a?.instanceToken === b?.instanceToken && a?.operations === b?.operations && a?.resources === b?.resources,
   )
 
-  const isPending =
-    repo?.operations.branchAction.phase !== 'idle' ||
-    repo?.resources.fetch.phase === 'loading'
+  const isPending = repo?.operations.branchAction.phase !== 'idle' || repo?.resources.fetch.phase === 'loading'
 
   const { branches, currentBranch } = useStoreWithEqualityFn(
     useReposStore,
@@ -179,10 +184,7 @@ function LocalBranchesPane({ repoId, query }: { repoId: string; query: string })
         ) : (
           <div className="py-1">
             {visible.map((branch) => (
-              <div
-                key={branch.name}
-                className="group flex min-h-7 items-center gap-1 px-3 hover:bg-list-row-hover"
-              >
+              <div key={branch.name} className="group flex min-h-7 items-center gap-1 px-3 hover:bg-list-row-hover">
                 <span
                   className={cn(
                     'min-w-0 flex-1 truncate font-mono text-xs',
@@ -202,11 +204,7 @@ function LocalBranchesPane({ repoId, query }: { repoId: string; query: string })
                   onClick={() => handlePull(branch.name)}
                   className="h-6 w-6 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
                 >
-                  {isPending ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    <ArrowDownToLine className="size-3.5" />
-                  )}
+                  {isPending ? <Loader2 className="size-3.5 animate-spin" /> : <ArrowDownToLine className="size-3.5" />}
                 </Button>
                 <Button
                   type="button"
@@ -218,11 +216,7 @@ function LocalBranchesPane({ repoId, query }: { repoId: string; query: string })
                   onClick={() => handlePush(branch.name)}
                   className="h-6 w-6 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
                 >
-                  {isPending ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    <ArrowUpFromLine className="size-3.5" />
-                  )}
+                  {isPending ? <Loader2 className="size-3.5 animate-spin" /> : <ArrowUpFromLine className="size-3.5" />}
                 </Button>
                 {branch.name !== currentBranch && !branch.worktree?.path && (
                   <Button

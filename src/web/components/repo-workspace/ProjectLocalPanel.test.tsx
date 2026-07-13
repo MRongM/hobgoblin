@@ -72,9 +72,11 @@ function findButtonByLabel(root: ParentNode, label: string): HTMLButtonElement |
 }
 
 function findButtonByText(root: ParentNode, text: string): HTMLButtonElement | null {
-  return Array.from(root.querySelectorAll<HTMLButtonElement>('button')).find(
-    (button) => button.textContent?.trim() === text,
-  ) ?? null
+  return (
+    Array.from(root.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent?.trim() === text,
+    ) ?? null
+  )
 }
 
 describe('ProjectLocalPanel branch deletion', () => {

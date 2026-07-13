@@ -1068,7 +1068,8 @@ export const ja: Record<DictKey, string> = {
   'local.branch-confirm-delete': 'ブランチを削除',
   'local.branch-delete-success': 'ブランチを削除しました。',
   'local.branch-unmerged-confirm-title': '未マージのブランチ {name} を強制削除しますか?',
-  'local.branch-unmerged-confirm-body': 'このブランチには未マージのコミットがあります。削除すると作業内容が失われる可能性があります。続行しますか?',
+  'local.branch-unmerged-confirm-body':
+    'このブランチには未マージのコミットがあります。削除すると作業内容が失われる可能性があります。続行しますか?',
   'local.branch-force-delete': '強制削除',
   'local.tags-empty': 'ローカルタグなし',
   'local.tags-filter-empty': '一致するタグなし',
@@ -1083,4 +1084,3 @@ export const ja: Record<DictKey, string> = {
   'local.tag-push': 'タグをプッシュ',
   'local.tag-push-success': 'タグが正常にプッシュされました',
 }
-
