@@ -254,6 +254,8 @@ function LocalTagsPane({ repoId, query }: { repoId: string; query: string }) {
   const [error, setError] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const loadController = useRef<AbortController | null>(null)
+  const [pushingTag, setPushingTag] = useState<string | null>(null)
+  const { pending: pushPending, isPending: isPushPending, run: runPush } = useAsyncPending<'push'>()
 
   async function loadTags() {
     loadController.current?.abort()
@@ -296,6 +298,22 @@ function LocalTagsPane({ repoId, query }: { repoId: string; query: string }) {
     await loadTags()
   }
 
+  async function handlePushTag(tag: string) {
+    setPushingTag(tag)
+    try {
+      const ctrl = new AbortController()
+      const sourceToken = `push-tag-${Date.now()}`
+      const result = await pushRepositoryLocalTag(repoId, tag, ctrl.signal, sourceToken)
+      if (!result.ok) {
+        toast.error(t(result.message))
+        return
+      }
+      toast.success(t('local.tag-push-success'))
+    } finally {
+      setPushingTag(null)
+    }
+  }
+
   return (
     <>
       <ScrollPane>
@@ -312,6 +330,22 @@ function LocalTagsPane({ repoId, query }: { repoId: string; query: string }) {
                 <span className="min-w-0 flex-1 truncate font-mono text-xs text-foreground" title={tag}>
                   {tag}
                 </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  disabled={isPushPending}
+                  aria-label={t('local.tag-push')}
+                  title={t('local.tag-push')}
+                  onClick={() => void runPush('push', () => handlePushTag(tag))}
+                  className="h-6 w-6 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                >
+                  {pushPending === 'push' && pushingTag === tag ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <ArrowUpFromLine className="size-3.5" />
+                  )}
+                </Button>
                 <Button
                   type="button"
                   variant="ghost"
