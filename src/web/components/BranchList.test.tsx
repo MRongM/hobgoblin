@@ -144,10 +144,9 @@ function terminalReadContextWithState(
   }
 }
 
-function seedWorktreeRepo(branchViewMode: 'all' | 'worktrees' | 'no-worktree' = 'worktrees') {
+function seedWorktreeRepo() {
   seedRepoState({
     id: REPO_ID,
-    branchViewMode,
     branches: [
       createRepoBranch('main', { worktree: { path: '/repo' } }),
       createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } }),
@@ -183,7 +182,6 @@ describe('BranchList worktree drag ordering', () => {
   test('renders branch names first and worktree paths as project directory names', () => {
     seedRepoState({
       id: REPO_ID,
-      branchViewMode: 'all',
       branches: [
         createRepoBranch('main', { worktree: { path: REPO_ID } }),
         createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } }),
@@ -210,7 +208,6 @@ describe('BranchList worktree drag ordering', () => {
   test('shows the changed-file count beside the dirty detached worktree icon', () => {
     seedRepoState({
       id: REPO_ID,
-      branchViewMode: 'all',
       branches: [createRepoBranch('main', { worktree: { path: REPO_ID } })],
       currentBranch: 'main',
       selectedBranch: 'main',
@@ -247,7 +244,6 @@ describe('BranchList worktree drag ordering', () => {
   test('keeps the detached dirty badge icon-only when the exact count is unavailable', () => {
     seedRepoState({
       id: REPO_ID,
-      branchViewMode: 'all',
       branches: [createRepoBranch('main', { worktree: { path: REPO_ID } })],
       currentBranch: 'main',
       selectedBranch: 'main',
@@ -276,7 +272,7 @@ describe('BranchList worktree drag ordering', () => {
   })
 
   test('hides worktree drag icons while keeping worktree rows sortable', () => {
-    seedWorktreeRepo('worktrees')
+    seedWorktreeRepo()
 
     renderList()
 
@@ -288,18 +284,18 @@ describe('BranchList worktree drag ordering', () => {
     expect(sortableRows.every((row) => !row.className.includes('1.75rem'))).toBe(true)
   })
 
-  test('does not mark branch rows sortable in all view', () => {
-    seedWorktreeRepo('all')
+  test('marks worktree branch rows as sortable', () => {
+    seedWorktreeRepo()
 
     renderList()
 
     expect(document.querySelectorAll('[aria-label="重新排序工作树"]')).toHaveLength(0)
     expect(document.querySelectorAll('.lucide-grip-vertical')).toHaveLength(0)
-    expect(container?.querySelectorAll('li[data-sortable-id]')).toHaveLength(0)
+    expect(container?.querySelectorAll('li[data-sortable-id]')).not.toHaveLength(0)
   })
 
   test('keeps worktree rows visible with stale branch search state without showing drag icons', () => {
-    seedWorktreeRepo('worktrees')
+    seedWorktreeRepo()
     useReposStore.getState().setBranchSearchQuery(REPO_ID, 'feature')
 
     renderList()
@@ -311,7 +307,7 @@ describe('BranchList worktree drag ordering', () => {
   })
 
   test('reorders worktrees when drag ends over another worktree', () => {
-    seedWorktreeRepo('worktrees')
+    seedWorktreeRepo()
     renderList()
 
     act(() => {

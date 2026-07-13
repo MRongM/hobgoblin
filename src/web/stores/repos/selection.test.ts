@@ -99,95 +99,6 @@ describe('setExplorerTab', () => {
   })
 })
 
-describe('setBranchViewMode', () => {
-  test('changes the selected branch when the previous selection is hidden', () => {
-    seedRepo({ selectedBranch: 'feature/plain' })
-
-    useReposStore.getState().setBranchViewMode(REPO_ID, 'worktrees')
-
-    const repo = useReposStore.getState().repos[REPO_ID]
-    expect(repo?.ui.branchViewMode).toBe('worktrees')
-    expect(repo?.ui.selectedBranch).toBe('main')
-    expect(useReposStore.getState().restorableRepoCache[REPO_ID]?.ui).toMatchObject({
-      branchViewMode: 'worktrees',
-      selectedBranch: 'main',
-    })
-  })
-
-  test('keeps the selected branch when it remains visible', () => {
-    seedRepo({ selectedBranch: 'feature/worktree' })
-
-    useReposStore.getState().setBranchViewMode(REPO_ID, 'worktrees')
-
-    expect(useReposStore.getState().repos[REPO_ID]?.ui.selectedBranch).toBe('feature/worktree')
-  })
-
-  test('clears the selection when the new view mode has no visible branches', () => {
-    seedRepo({ selectedBranch: 'main', branches: [branch('main')] })
-
-    useReposStore.getState().setBranchViewMode(REPO_ID, 'worktrees')
-
-    const repo = useReposStore.getState().repos[REPO_ID]
-    expect(repo?.ui.branchViewMode).toBe('worktrees')
-    expect(repo?.ui.selectedBranch).toBeNull()
-    expect(useReposStore.getState().restorableRepoCache[REPO_ID]?.ui.selectedBranch).toBeNull()
-  })
-
-  test('passes the current repo token to follow-up refreshes', () => {
-    seedRepo({ selectedBranch: 'feature/plain', detailTab: 'status' })
-    const token = useReposStore.getState().repos[REPO_ID]!.instanceToken
-    const pullRequestCalls: Parameters<ReturnType<typeof useReposStore.getState>['refreshPullRequests']>[] = []
-    const restore = stubRefreshActions({
-      refreshPullRequests: async (...args) => {
-        pullRequestCalls.push(args)
-      },
-    })
-
-    try {
-      useReposStore.getState().setBranchViewMode(REPO_ID, 'worktrees')
-
-      expect(pullRequestCalls[0]).toEqual([REPO_ID, ['main'], { token, mode: 'full' }])
-    } finally {
-      restore()
-    }
-  })
-
-  test('refreshes pull request details when the selected branch changes', async () => {
-    const calls: Array<{ branches?: string[]; mode?: string }> = []
-    rpcHandlers['repo.pullRequests'] = async ({
-      branches,
-      options,
-    }: {
-      branches?: string[]
-      options?: { mode?: string }
-    }) => {
-      calls.push({ branches, mode: options?.mode })
-      return []
-    }
-    seedRepo({ selectedBranch: 'feature/plain' })
-
-    useReposStore.getState().setBranchViewMode(REPO_ID, 'worktrees')
-    await flushAsyncWork()
-
-    expect(calls).toEqual([{ branches: ['main'], mode: 'full' }])
-  })
-
-  test('falls back from terminal when the new view selection has no worktree', () => {
-    seedRepo({
-      selectedBranch: 'main',
-      detailTab: 'terminal',
-      branches: [branch('main', { worktree: { path: '/repo' } }), branch('feature/plain')],
-    })
-
-    useReposStore.getState().setBranchViewMode(REPO_ID, 'no-worktree')
-
-    const repo = useReposStore.getState().repos[REPO_ID]
-    expect(repo?.ui.selectedBranch).toBe('feature/plain')
-    expect(repo?.ui.detailTab).toBe('status')
-    expect(useReposStore.getState().restorableRepoCache[REPO_ID]?.ui.detailTab).toBe('status')
-  })
-})
-
 describe('reorderWorktrees', () => {
   test('moves worktree paths and persists repo cache', () => {
     seedRepo({
@@ -641,17 +552,6 @@ describe('setDetailFocusMode', () => {
     expect(useReposStore.getState().detailFocusMode).toBe(true)
   })
 
-  test('preserves focus preference when filtering leaves no selected branch', () => {
-    seedRepo({ selectedBranch: 'main', branches: [branch('main')] })
-    useReposStore.getState().setWorkspaceLayout('top-bottom')
-    useReposStore.getState().setDetailFocusMode(true)
-
-    useReposStore.getState().setBranchViewMode(REPO_ID, 'worktrees')
-
-    expect(useReposStore.getState().repos[REPO_ID]?.ui.selectedBranch).toBeNull()
-    expect(useReposStore.getState().detailFocusMode).toBe(true)
-    expect(useReposStore.getState().detailCollapsed).toBe(false)
-  })
 })
 
 describe('setDetailPaneSize', () => {
@@ -770,7 +670,6 @@ describe('setBranchSearchQuery', () => {
       },
       ui: {
         selectedBranch: repo.ui.selectedBranch,
-        branchViewMode: repo.ui.branchViewMode,
         detailTab: repo.ui.detailTab,
         worktreePathOrder: repo.ui.worktreePathOrder,
       },

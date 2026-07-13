@@ -243,7 +243,7 @@ describe('repo lifecycle', () => {
           savedAt: Date.now(),
           name: 'cached',
           data: { branches: [branchSnapshot('cached')], currentBranch: 'cached' },
-          ui: { selectedBranch: 'cached', branchViewMode: 'all', detailTab: 'status', worktreePathOrder: [REPO_A] },
+          ui: { selectedBranch: 'cached', detailTab: 'status', worktreePathOrder: [REPO_A] },
         },
       },
     })

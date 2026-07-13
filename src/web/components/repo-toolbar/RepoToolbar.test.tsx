@@ -135,7 +135,10 @@ describe('TopbarRepoControls', () => {
   test('shows focus-mode branch switcher and branch action menu', () => {
     seedRepoState({
       id: REPO_ID,
-      branches: [createRepoBranch('main'), createRepoBranch('feature/a')],
+      branches: [
+        createRepoBranch('main', { worktree: { path: REPO_ID } }),
+        createRepoBranch('feature/a', { worktree: { path: `${REPO_ID}-feature-a` } }),
+      ],
       currentBranch: 'main',
       selectedBranch: 'feature/a',
       workspaceLayout: 'top-bottom',
@@ -147,7 +150,6 @@ describe('TopbarRepoControls', () => {
     const branchSwitcher = container?.querySelector<HTMLButtonElement>('button[aria-label="branches.switch"]')
     expect(branchSwitcher).not.toBeNull()
     expect(branchSwitcher?.className).toContain('text-topbar-muted-foreground')
-    expect(container?.querySelector('button[aria-label="worktrees.open-in-editor-label"]')).not.toBeNull()
     expect(container?.querySelector('button[aria-label="action.menu"]')).not.toBeNull()
     expect(container?.querySelector('[aria-label="branches.filter-label"]')).toBeNull()
     expect(container?.querySelector('[aria-label="branches.search-label"]')).toBeNull()
@@ -189,7 +191,7 @@ describe('RepoToolbar', () => {
 
     renderWithProviders(<RepoToolbar repoId={REPO_ID} />, navigationWith({}))
 
-    expect(container?.querySelector('button[aria-label="branches.filter-tooltip.worktrees"]')).not.toBeNull()
+    expect(container?.querySelector('button[aria-label="branches.filter-tooltip.worktrees"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="branches.filter-tooltip.all"]')).toBeNull()
     expect(container?.querySelector('[aria-label="branches.search-label"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="action.refresh"]')).toBeNull()

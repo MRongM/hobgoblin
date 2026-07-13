@@ -687,6 +687,7 @@ export const en = {
   'error.remote-terminal-not-supported': 'The selected terminal cannot open remote SSH workspaces',
   'error.render-crash-title': 'Something broke while rendering this view',
   'error.render-crash-unknown': 'Unknown render error.',
+  'error.clear-cache': 'Clear cache',
   'error.try-again': 'Try again',
   'error.back': 'Back (Esc)',
   'error.settings-write-title': 'Failed to save settings',

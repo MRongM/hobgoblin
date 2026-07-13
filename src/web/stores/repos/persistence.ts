@@ -68,7 +68,6 @@ const RestorableRepoSnapshotSchema = v.object({
   }),
   ui: v.object({
     selectedBranch: v.nullable(v.string()),
-    branchViewMode: v.picklist(['all', 'worktrees', 'no-worktree']),
     detailTab: v.picklist(['status', 'changes', 'terminal']),
     explorerTab: v.optional(v.unknown()),
     workspaceLayout: v.optional(v.picklist(['top-bottom', 'left-right']), DEFAULT_WORKSPACE_LAYOUT),
@@ -114,7 +113,7 @@ function restoreProjectionFromSnapshot(repo: RepoState, snapshot: RestorableRepo
     branches: snapshot.data.branches,
     currentBranch: snapshot.data.currentBranch,
     selectedBranch: snapshot.ui.selectedBranch,
-    viewMode: snapshot.ui.branchViewMode,
+    viewMode: 'worktrees',
   })
   const resources = {
     ...repo.resources,
@@ -134,7 +133,6 @@ function restoreProjectionFromSnapshot(repo: RepoState, snapshot: RestorableRepo
     ui: {
       ...repo.ui,
       selectedBranch,
-      branchViewMode: snapshot.ui.branchViewMode,
       detailTab: normalizeCachedDetailTab(snapshot.ui.detailTab),
       explorerTab: normalizeCachedExplorerTab(snapshot.ui.explorerTab),
       workspaceLayout: snapshot.ui.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT,
@@ -195,7 +193,6 @@ function restorableRepoSnapshotFromRepo(repo: RepoState): RestorableRepoSnapshot
     },
     ui: {
       selectedBranch: repo.ui.selectedBranch,
-      branchViewMode: repo.ui.branchViewMode,
       detailTab: normalizeCachedDetailTab(repo.ui.detailTab),
       explorerTab: repo.ui.explorerTab,
       workspaceLayout: repo.ui.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT,

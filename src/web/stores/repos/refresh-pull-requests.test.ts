@@ -107,7 +107,10 @@ describe('refreshPullRequests', () => {
 
   test('snapshot refresh writes a durable repo cache entry', async () => {
     const token = seedRepo([])
-    rpcHandlers['repo.snapshot'] = async () => ({ branches: [branch('feature/a')], current: 'feature/a' })
+    rpcHandlers['repo.snapshot'] = async () => ({
+      branches: [branch('feature/a', undefined, { worktree: { path: '/tmp/feature-a-wt' } })],
+      current: 'feature/a',
+    })
 
     await useReposStore.getState().refreshSnapshot(REPO_ID, { token })
 
@@ -310,10 +313,13 @@ describe('refreshPullRequests', () => {
   })
 
   test('snapshot refresh performs summary lookup then selected full lookup for visible detail', async () => {
-    const token = seedRepo([branch('feature/a')])
+    const token = seedRepo([branch('feature/a', undefined, { worktree: { path: '/tmp/feature-a-wt' } })])
     const calls: Array<{ branches?: string[]; mode?: string; loadingAtStart?: boolean }> = []
     rpcHandlers['repo.snapshot'] = async () => ({
-      branches: [branch('feature/a'), branch('feature/b')],
+      branches: [
+        branch('feature/a', undefined, { worktree: { path: '/tmp/feature-a-wt' } }),
+        branch('feature/b'),
+      ],
       current: 'feature/a',
     })
     rpcHandlers['repo.pullRequests'] = async ({
@@ -342,11 +348,11 @@ describe('refreshPullRequests', () => {
 
   test('snapshot refresh retries visible full lookup when merge status is still pending', async () => {
     vi.useFakeTimers()
-    const token = seedRepo([branch('feature/a')])
+    const token = seedRepo([branch('feature/a', undefined, { worktree: { path: '/tmp/feature-a-wt' } })])
     const calls: Array<{ branches?: string[]; mode?: string }> = []
     let fullCalls = 0
     rpcHandlers['repo.snapshot'] = async () => ({
-      branches: [branch('feature/a')],
+      branches: [branch('feature/a', undefined, { worktree: { path: '/tmp/feature-a-wt' } })],
       current: 'feature/a',
     })
     rpcHandlers['repo.pullRequests'] = async ({

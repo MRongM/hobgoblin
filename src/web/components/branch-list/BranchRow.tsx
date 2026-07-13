@@ -1,10 +1,14 @@
-import { type CSSProperties, type HTMLAttributes, type RefObject, useCallback } from 'react'
+import { type CSSProperties, type HTMLAttributes, type RefObject, useCallback, useMemo } from 'react'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import { BranchActionsDropdown } from '#/web/components/BranchActionsMenu.tsx'
 import { BranchSummaryInline } from '#/web/components/repo-workspace/BranchSummaryInline.tsx'
 import { cn } from '#/web/lib/cn.ts'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
-import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.tsx'
+import { useBranchActionItems, type BranchActionItem } from '#/web/hooks/useBranchActionItems.tsx'
+import { useStoreWithEqualityFn } from 'zustand/traditional'
+import { useReposStore } from '#/web/stores/repos/store.ts'
+import { AsyncButton } from '#/web/components/AsyncButton.tsx'
+import { Tip } from '#/web/components/Tip.tsx'
 
 interface BranchRowSortable {
   setNodeRef: (node: HTMLLIElement | null) => void
@@ -96,7 +100,12 @@ function BranchRowActions({
   return (
     <>
       <div className="pointer-events-none relative z-20 flex shrink-0 items-center py-1 pr-4">
-        <div className="pointer-events-auto">
+        <div className="pointer-events-auto flex items-center gap-0.5">
+          {branch.worktree?.path && (
+            <div className="hidden md:flex">
+              <BranchRowRecentActions repo={repo} branch={branch} />
+            </div>
+          )}
           <BranchActionsDropdown
             repoId={repo.id}
             branchName={branch.name}
@@ -120,5 +129,73 @@ function BranchRowActions({
       ) : null}
       {actions.dialogs}
     </>
+  )
+}
+
+const REPEATABLE_ACTION_IDS = ['checkout', 'pull', 'push'] as const
+type RepeatableActionId = (typeof REPEATABLE_ACTION_IDS)[number]
+
+function BranchRowRecentActions({ repo, branch }: { repo: BranchActionRepo; branch: RepoBranchState }) {
+  const ids = useStoreWithEqualityFn(
+    useReposStore,
+    (s) => {
+      const r = s.repos[repo.id]
+      if (!r) return [] as RepeatableActionId[]
+      const found: RepeatableActionId[] = []
+      for (let i = r.events.length - 1; i >= 0 && found.length < 3; i--) {
+        const ev = r.events[i]
+        if (
+          ev.kind === 'result' &&
+          ev.action &&
+          (REPEATABLE_ACTION_IDS as readonly string[]).includes(ev.action.kind) &&
+          ev.action.branch === branch.name
+        ) {
+          const id = ev.action.kind as RepeatableActionId
+          if (!found.includes(id)) found.push(id)
+        }
+      }
+      return found
+    },
+    (a, b) => a.length === b.length && a.every((id, i) => id === b[i]),
+  )
+
+  if (ids.length === 0) return null
+  return <BranchRowRecentActionsInner repo={repo} branch={branch} ids={ids} />
+}
+
+function BranchRowRecentActionsInner({
+  repo,
+  branch,
+  ids,
+}: {
+  repo: BranchActionRepo
+  branch: RepoBranchState
+  ids: RepeatableActionId[]
+}) {
+  const actions = useBranchActionItems(repo, branch)
+  const itemMap = useMemo(() => new Map(actions.mainItems.map((item) => [item.id, item])), [actions.mainItems])
+
+  return (
+    <div className="flex items-center gap-0.5">
+      {ids
+        .map((id) => itemMap.get(id))
+        .filter((item): item is BranchActionItem => item !== undefined)
+        .map((item) => (
+          <Tip key={item.id} label={item.title ?? item.label}>
+            <span className="inline-flex">
+              <AsyncButton
+                variant="ghost"
+                size="icon-sm"
+                loading={item.busy}
+                disabled={item.disabled}
+                onClick={(e) => { e.stopPropagation(); return item.onSelect() }}
+                aria-label={item.ariaLabel ?? item.label}
+              >
+                {() => item.icon}
+              </AsyncButton>
+            </span>
+          </Tip>
+        ))}
+    </div>
   )
 }

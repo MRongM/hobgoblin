@@ -1,7 +1,7 @@
 import { useStoreWithEqualityFn } from 'zustand/traditional'
-import { useCallback, useEffect, useState, createElement } from 'react'
+import { useCallback, useEffect, useMemo, useState, createElement } from 'react'
 import type { CSSProperties } from 'react'
-import { FolderTree, GitBranch, GitCompareArrows, GitFork, History, RadioTower, Tag, type LucideIcon } from 'lucide-react'
+import { FolderTree, GitBranch, GitCompareArrows, GitFork, History, RadioTower, Tag, ChevronDown, type LucideIcon } from 'lucide-react'
 import { BranchList } from '#/web/components/BranchList.tsx'
 import { SplitPane } from '#/web/components/SplitPane.tsx'
 import { ProjectFileTree } from '#/web/components/file-tree/ProjectFileTree.tsx'
@@ -9,13 +9,11 @@ import { ProjectChangesPanel } from '#/web/components/repo-workspace/ProjectChan
 import { ProjectHistoryPanel } from '#/web/components/repo-workspace/ProjectHistoryPanel.tsx'
 import { ProjectPortsPanel } from '#/web/components/repo-workspace/ProjectPortsPanel.tsx'
 import { ProjectRemoteBranchesPanel } from '#/web/components/repo-workspace/ProjectRemoteBranchesPanel.tsx'
-import { ProjectTagsPanel } from '#/web/components/repo-workspace/ProjectTagsPanel.tsx'
+import { ProjectLocalPanel } from '#/web/components/repo-workspace/ProjectLocalPanel.tsx'
 import { ProjectStatusPanel } from '#/web/components/repo-workspace/ProjectStatusPanel.tsx'
 import { PlainWorkspacePane } from '#/web/components/repo-workspace/PlainWorkspacePane.tsx'
-import { BranchFilterControls } from '#/web/components/repo-toolbar/BranchFilterControls.tsx'
-import { RepoToolbarActions } from '#/web/components/repo-toolbar/RepoToolbarActions.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
-import type { ExplorerTab, RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
+import type { ExplorerTab, RepoBranchState, RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { Toolbar } from '#/web/components/Layout.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { Badge } from '#/web/components/ui/badge.tsx'
@@ -29,6 +27,7 @@ import { AsyncButton } from '#/web/components/AsyncButton.tsx'
 import { Tip } from '#/web/components/Tip.tsx'
 import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
 import { useRuntimeExternalAppSettings } from '#/web/runtime-settings-external-apps.ts'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '#/web/components/ui/dropdown-menu.tsx'
 import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.tsx'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 
@@ -129,10 +128,11 @@ function BranchArea({ repoId, showActions }: { repoId: string; showActions: bool
   return (
     <section className="flex min-h-0 flex-1 flex-col">
       <Toolbar data-testid="branch-area-toolbar" className="px-2" variant="detail">
-        <BranchFilterControls repoId={repoId} className="h-full min-w-0 flex-1 gap-1" />
         <div className="flex shrink-0 items-center gap-1">
           <BranchAreaQuickActions repoId={repoId} />
-          <RepoToolbarActions repoId={repoId} compact />
+        </div>
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-1">
+          <BranchAreaRecentActions repoId={repoId} />
         </div>
       </Toolbar>
       <BranchList repoId={repoId} showActions={showActions} />
@@ -230,6 +230,99 @@ function BranchAreaQuickActions({ repoId }: { repoId: string }) {
   )
 }
 
+const REPEATABLE_ACTION_IDS = ['checkout', 'pull', 'push'] as const
+type RepeatableActionId = (typeof REPEATABLE_ACTION_IDS)[number]
+
+function BranchAreaRecentActions({ repoId }: { repoId: string }) {
+  const state = useStoreWithEqualityFn(
+    useReposStore,
+    (s) => {
+      const r = s.repos[repoId]
+      if (!r || !r.ui.selectedBranch) return null
+      const branch = r.data.branches.find((b) => b.name === r.ui.selectedBranch) ?? null
+      if (!branch) return null
+      const ids: RepeatableActionId[] = []
+      for (let i = r.events.length - 1; i >= 0 && ids.length < 3; i--) {
+        const ev = r.events[i]
+        if (
+          ev.kind === 'result' &&
+          ev.action &&
+          (REPEATABLE_ACTION_IDS as readonly string[]).includes(ev.action.kind) &&
+          ev.action.branch === r.ui.selectedBranch
+        ) {
+          const id = ev.action.kind as RepeatableActionId
+          if (!ids.includes(id)) ids.push(id)
+        }
+      }
+      if (ids.length === 0) return null
+      const repo: BranchActionRepo = {
+        id: r.id,
+        instanceToken: r.instanceToken,
+        data: { currentBranch: r.data.currentBranch, status: r.data.status, worktreesByPath: r.data.worktreesByPath },
+        operations: { branchAction: r.operations.branchAction, fetch: r.operations.fetch, manualRefresh: r.operations.manualRefresh },
+        remote: {
+          target: r.remote.target,
+          hasRemotes: r.remote.hasRemotes,
+          hasBrowserRemote: r.remote.hasBrowserRemote,
+          hasGitHubRemote: r.remote.hasGitHubRemote,
+          browserRemoteProvider: r.remote.browserRemoteProvider,
+          remoteProviders: r.remote.remoteProviders,
+        },
+      }
+      return { repo, branch, ids }
+    },
+    (a, b) => {
+      if (a === b) return true
+      if (!a || !b) return false
+      return a.repo === b.repo && a.branch === b.branch && a.ids.length === b.ids.length && a.ids.every((id, i) => id === b.ids[i])
+    },
+  )
+
+  if (!state) return null
+  return <BranchAreaRecentActionsInner repo={state.repo} branch={state.branch} ids={state.ids} />
+}
+
+function BranchAreaRecentActionsInner({
+  repo,
+  branch,
+  ids,
+}: {
+  repo: BranchActionRepo
+  branch: RepoBranchState
+  ids: RepeatableActionId[]
+}) {
+  const actions = useBranchActionItems(repo, branch)
+  const itemMap = useMemo(
+    () => new Map(actions.mainItems.map((item) => [item.id, item])),
+    [actions.mainItems],
+  )
+
+  return (
+    <div className="flex shrink-0 items-center gap-0.5">
+      {ids.map((id) => {
+        const item = itemMap.get(id)
+        if (!item) return null
+        return (
+          <Tip key={id} label={item.title ?? item.label}>
+            <span className="inline-flex">
+              <AsyncButton
+                variant="ghost"
+                size="icon-sm"
+                loading={item.busy}
+                disabled={item.disabled}
+                onClick={item.onSelect}
+                aria-label={item.ariaLabel ?? item.label}
+              >
+                {() => item.icon}
+              </AsyncButton>
+            </span>
+          </Tip>
+        )
+      })}
+    </div>
+  )
+}
+
 function ExplorerTabs({
   repoId,
   layout,
@@ -259,10 +352,14 @@ function ExplorerTabs({
     { id: 'changes' as const, label: t('tab.changes'), icon: GitCompareArrows },
     { id: 'status' as const, label: t('tab.status'), icon: GitBranch },
     { id: 'history' as const, label: t('tab.history'), icon: History },
-    { id: 'tags' as const, label: t('tab.tags'), icon: Tag },
+    { id: 'local' as const, label: t('tab.local'), icon: Tag },
     { id: 'remoteBranches' as const, label: t('tab.remote-branches'), icon: GitFork },
     ...(isRemoteRepo ? [{ id: 'ports' as const, label: t('ports.title'), icon: RadioTower }] : []),
   ] satisfies { id: ExplorerTab; label: string; icon: LucideIcon }[]
+
+  const primaryTabs = tabs.slice(0, 4)
+  const overflowTabs = tabs.slice(4)
+  const overflowActive = overflowTabs.some((tab) => tab.id === activeVisibleTab)
 
   function handleRevealPath(relativePath: string) {
     onTabChange('files')
@@ -289,7 +386,7 @@ function ExplorerTabs({
               aria-orientation="horizontal"
               className="gap-0.5"
             >
-              {tabs.map((tab) => {
+              {primaryTabs.map((tab) => {
                 const selected = activeVisibleTab === tab.id
                 const Icon = tab.icon
                 return (
@@ -319,6 +416,48 @@ function ExplorerTabs({
                   </Button>
                 )
               })}
+              {overflowTabs.length > 0 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      role="tab"
+                      aria-selected={overflowActive}
+                      tabIndex={overflowActive ? 0 : -1}
+                      className={cn(
+                        'h-7 gap-1 border px-2 text-[length:var(--goblin-file-tree-topbar-font-size)] font-normal',
+                        overflowActive
+                          ? 'border-transparent bg-tab-active text-foreground'
+                          : 'border-separator text-muted-foreground hover:bg-tab-hover hover:text-foreground',
+                      )}
+                    >
+                      {overflowActive && (() => {
+                        const active = overflowTabs.find((t) => t.id === activeVisibleTab)
+                        if (!active) return null
+                        const Icon = active.icon
+                        return <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+                      })()}
+                      <ChevronDown className="size-3.5 shrink-0" aria-hidden="true" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {overflowTabs.map((tab) => {
+                      const Icon = tab.icon
+                      return (
+                        <DropdownMenuItem
+                          key={tab.id}
+                          onSelect={() => onTabChange(tab.id)}
+                          className={cn(activeVisibleTab === tab.id && 'bg-tab-active text-foreground')}
+                        >
+                          <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+                          {tab.label}
+                        </DropdownMenuItem>
+                      )
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </ToolbarTabStripBody>
           }
         />
@@ -332,8 +471,8 @@ function ExplorerTabs({
           <ProjectStatusPanel repoId={repoId} layout={layout} />
         ) : activeVisibleTab === 'history' ? (
           <ProjectHistoryPanel repoId={repoId} onRevealPath={handleRevealPath} />
-        ) : activeVisibleTab === 'tags' ? (
-          <ProjectTagsPanel repoId={repoId} />
+        ) : activeVisibleTab === 'local' ? (
+          <ProjectLocalPanel repoId={repoId} />
         ) : activeVisibleTab === 'remoteBranches' ? (
           <ProjectRemoteBranchesPanel repoId={repoId} />
         ) : (
