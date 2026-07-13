@@ -24,7 +24,7 @@ export type RepoBranchState = Omit<BranchSnapshotInfo, 'worktree'> & {
 
 export type RepoEventAction =
   | { kind: 'checkout'; branch: string; worktreePath?: string }
-  | { kind: 'pull'; branch: string; worktreePath: string }
+  | { kind: 'pull'; branch: string; worktreePath?: string }
   | { kind: 'push'; branch: string; worktreePath?: string }
   | { kind: 'commit'; branch: string; message: string; worktreePath: string }
   | { kind: 'merge'; branch: string; sourceBranch: string; worktreePath: string }
