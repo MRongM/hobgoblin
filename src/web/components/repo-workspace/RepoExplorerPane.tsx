@@ -1,7 +1,7 @@
 import { useStoreWithEqualityFn } from 'zustand/traditional'
-import { useCallback, useEffect, useMemo, useState, createElement } from 'react'
+import { useCallback, useEffect, useState, createElement } from 'react'
 import type { CSSProperties } from 'react'
-import { FolderTree, FolderGit, GitBranch, GitCompareArrows, GitFork, History, RadioTower, Tag, ChevronDown, type LucideIcon } from 'lucide-react'
+import { FolderTree, FolderGit, FolderMinus, GitBranch, GitBranchPlus, GitCommitHorizontal, GitCompareArrows, GitFork, GitMerge, History, RadioTower, Tag, ChevronDown, ArrowDown, ArrowUp, CloudDownload, Trash2, type LucideIcon } from 'lucide-react'
 import { BranchList } from '#/web/components/BranchList.tsx'
 import { SplitPane } from '#/web/components/SplitPane.tsx'
 import { ProjectFileTree } from '#/web/components/file-tree/ProjectFileTree.tsx'
@@ -13,7 +13,7 @@ import { ProjectLocalPanel } from '#/web/components/repo-workspace/ProjectLocalP
 import { ProjectStatusPanel } from '#/web/components/repo-workspace/ProjectStatusPanel.tsx'
 import { PlainWorkspacePane } from '#/web/components/repo-workspace/PlainWorkspacePane.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
-import type { ExplorerTab, RepoBranchState, RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
+import type { ExplorerTab, RepoBranchState, RepoEventAction, RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { Toolbar } from '#/web/components/Layout.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { Badge } from '#/web/components/ui/badge.tsx'
@@ -233,97 +233,89 @@ function BranchAreaQuickActionsInner({ repo, branch }: { repo: BranchActionRepo;
   )
 }
 
-const REPEATABLE_ACTION_IDS = ['checkout', 'pull', 'push'] as const
-type RepeatableActionId = (typeof REPEATABLE_ACTION_IDS)[number]
+const RECENT_ACTION_ICONS: Record<RepoEventAction['kind'], typeof GitBranch> = {
+  checkout: GitBranch, pull: ArrowDown, push: ArrowUp, commit: GitCommitHorizontal,
+  merge: GitMerge, createWorktree: FolderTree, createBranch: GitBranchPlus,
+  trackRemoteBranch: CloudDownload, deleteBranch: Trash2, removeWorktree: FolderMinus,
+}
+
+function recentActionTooltip(action: RepoEventAction): string {
+  switch (action.kind) {
+    case 'checkout': return `checkout: ${action.branch}`
+    case 'pull': return `pull: ${action.branch}`
+    case 'push': return `push: ${action.branch}`
+    case 'commit': return `commit: ${action.message}`
+    case 'merge': return `merge: ${action.sourceBranch}`
+    case 'createWorktree': return `create worktree: ${action.branch}`
+    case 'createBranch': return `create branch: ${action.branch}`
+    case 'trackRemoteBranch': return `track: ${action.remoteRef}`
+    case 'deleteBranch': return `delete: ${action.branch}`
+    case 'removeWorktree': return `remove worktree: ${action.branch}`
+  }
+}
 
 function BranchAreaRecentActions({ repoId }: { repoId: string }) {
-  const state = useStoreWithEqualityFn(
+  const actions = useStoreWithEqualityFn(
     useReposStore,
     (s) => {
       const r = s.repos[repoId]
-      if (!r || !r.ui.selectedBranch) return null
-      const branch = r.data.branches.find((b) => b.name === r.ui.selectedBranch) ?? null
-      if (!branch) return null
-      const worktreePath = branch.worktree?.path
-      const ids: RepeatableActionId[] = []
-      if (worktreePath) {
-        const history = s.restorableRepoCache[repoId]?.ui?.worktreeActionHistories?.[worktreePath]
-        if (history) {
-          for (let i = 0; i < history.length && ids.length < 3; i++) {
-            const action = history[i]
-            if ((REPEATABLE_ACTION_IDS as readonly string[]).includes(action.kind)) {
-              const id = action.kind as RepeatableActionId
-              if (!ids.includes(id)) ids.push(id)
-            }
-          }
-        }
+      if (!r || !r.ui.selectedBranch) return []
+      const branch = r.data.branches.find((b) => b.name === r.ui.selectedBranch)
+      const worktreePath = branch?.worktree?.path
+      if (!worktreePath) return []
+      const history = s.restorableRepoCache[repoId]?.ui?.worktreeActionHistories?.[worktreePath] ?? []
+      // Dedupe by action kind: keep the most recent occurrence of each kind, up to 3.
+      const seen = new Set<string>()
+      const result: RepoEventAction[] = []
+      for (const action of history) {
+        if (seen.has(action.kind)) continue
+        seen.add(action.kind)
+        result.push(action)
+        if (result.length >= 3) break
       }
-      if (ids.length === 0) return null
-      const repo: BranchActionRepo = {
-        id: r.id,
-        instanceToken: r.instanceToken,
-        data: { currentBranch: r.data.currentBranch, status: r.data.status, worktreesByPath: r.data.worktreesByPath },
-        operations: { branchAction: r.operations.branchAction, fetch: r.operations.fetch, manualRefresh: r.operations.manualRefresh },
-        remote: {
-          target: r.remote.target,
-          hasRemotes: r.remote.hasRemotes,
-          hasBrowserRemote: r.remote.hasBrowserRemote,
-          hasGitHubRemote: r.remote.hasGitHubRemote,
-          browserRemoteProvider: r.remote.browserRemoteProvider,
-          remoteProviders: r.remote.remoteProviders,
-        },
-      }
-      return { repo, branch, ids }
+      return result
     },
-    (a, b) => {
-      if (a === b) return true
-      if (!a || !b) return false
-      return a.repo === b.repo && a.branch === b.branch && a.ids.length === b.ids.length && a.ids.every((id, i) => id === b.ids[i])
-    },
+    (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
   )
 
-  if (!state) return null
-  return <BranchAreaRecentActionsInner repo={state.repo} branch={state.branch} ids={state.ids} />
-}
-
-function BranchAreaRecentActionsInner({
-  repo,
-  branch,
-  ids,
-}: {
-  repo: BranchActionRepo
-  branch: RepoBranchState
-  ids: RepeatableActionId[]
-}) {
-  const actions = useBranchActionItems(repo, branch)
-  const itemMap = useMemo(
-    () => new Map(actions.mainItems.map((item) => [item.id, item])),
-    [actions.mainItems],
-  )
+  if (actions.length === 0) return null
 
   return (
     <div className="flex shrink-0 items-center gap-0.5">
-      {ids.map((id) => {
-        const item = itemMap.get(id)
-        if (!item) return null
-        return (
-          <Tip key={id} label={item.title ?? item.label}>
-            <span className="inline-flex">
-              <AsyncButton
-                variant="ghost"
-                size="icon-sm"
-                loading={item.busy}
-                disabled={item.disabled}
-                onClick={item.onSelect}
-                aria-label={item.ariaLabel ?? item.label}
-              >
-                {() => item.icon}
-              </AsyncButton>
-            </span>
-          </Tip>
-        )
-      })}
+      {actions.map((action, i) => (
+        <BranchAreaRecentActionButton key={i} action={action} repoId={repoId} />
+      ))}
     </div>
+  )
+}
+
+function BranchAreaRecentActionButton({ action, repoId }: { action: RepoEventAction; repoId: string }) {
+  const submitBranchAction = useReposStore((s) => s.submitBranchAction)
+  const Icon = RECENT_ACTION_ICONS[action.kind]
+  const label = recentActionTooltip(action)
+
+  function handleClick() {
+    switch (action.kind) {
+      case 'pull':
+        submitBranchAction(repoId, { kind: 'pull', branch: action.branch, worktreePath: action.worktreePath })
+        break
+      case 'push':
+        if (action.worktreePath) submitBranchAction(repoId, { kind: 'push', branch: action.branch })
+        break
+      case 'checkout':
+        if (action.worktreePath) submitBranchAction(repoId, { kind: 'checkout', branch: action.branch })
+        break
+    }
+  }
+
+  return (
+    <Tip label={label}>
+      <span className="inline-flex">
+        <Button variant="ghost" size="icon-sm" onClick={handleClick} aria-label={label}>
+          <Icon className="size-3.5" />
+        </Button>
+      </span>
+    </Tip>
   )
 }
 
