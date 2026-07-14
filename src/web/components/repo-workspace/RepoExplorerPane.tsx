@@ -15,7 +15,6 @@ import {
   History,
   RadioTower,
   Tag,
-  Terminal,
   ChevronDown,
   ArrowDown,
   ArrowUp,
@@ -47,7 +46,7 @@ import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 import { repoIsPlainWorkspace } from '#/web/stores/repos/capabilities.ts'
 import { AsyncButton } from '#/web/components/AsyncButton.tsx'
 import { Tip } from '#/web/components/Tip.tsx'
-import { EditorAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
+import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
 import { useRuntimeExternalAppSettings } from '#/web/runtime-settings-external-apps.ts'
 import {
   DropdownMenu,
@@ -205,13 +204,15 @@ function BranchAreaQuickActions({ repoId }: { repoId: string }) {
 }
 
 function BranchAreaQuickActionsInner({ repo, branch }: { repo: BranchActionRepo; branch: RepoBranchState }) {
-  const { terminalAvailable, editorApp, resolvedEditorApp, editorAvailable } = useRuntimeExternalAppSettings()
+  const { terminalApp, resolvedTerminalApp, terminalAvailable, editorApp, resolvedEditorApp, editorAvailable } =
+    useRuntimeExternalAppSettings()
 
   const actions = useBranchActionItems(repo, branch)
   const editorItem = actions.externalItems.find((item) => item.id === 'editor')
   const terminalItem = actions.externalItems.find((item) => item.id === 'terminal')
 
   const editorIconPref = resolvedEditorApp ?? editorApp
+  const terminalIconPref = resolvedTerminalApp ?? terminalApp
 
   return (
     <div className="flex shrink-0 items-center gap-0.5">
@@ -244,7 +245,7 @@ function BranchAreaQuickActionsInner({ repo, branch }: { repo: BranchActionRepo;
               onClick={terminalItem.onSelect}
               aria-label={terminalItem.ariaLabel ?? terminalItem.label}
             >
-              {() => <Terminal className="size-4" />}
+              {() => createElement(TerminalAppIcon, { pref: terminalIconPref })}
             </AsyncButton>
           </span>
         </Tip>
