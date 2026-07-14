@@ -290,6 +290,8 @@ export const en = {
   'branch-status.protected': 'protected',
   'branch-status.copy-worktree-path': 'Copy worktree path',
   'branch-status.copied': 'Copied',
+  'branch-status.copy-folder-name': 'Copy folder name',
+  'branch-status.signal.folder': 'Project Folder',
   'branch-status.signal.project': 'Project',
   'branch-status.signal.branch': 'Branch',
   'branch-status.signal.upstream': 'Upstream',

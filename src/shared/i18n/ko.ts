@@ -279,6 +279,8 @@ export const ko: Record<DictKey, string> = {
   'branch-status.protected': '보호됨',
   'branch-status.copy-worktree-path': '워크트리 경로 복사',
   'branch-status.copied': '복사됨',
+  'branch-status.copy-folder-name': '폴더 이름 복사',
+  'branch-status.signal.folder': '프로젝트 폴더',
   'branch-status.signal.project': '프로젝트',
   'branch-status.signal.branch': '브랜치',
   'branch-status.signal.upstream': '업스트림',
