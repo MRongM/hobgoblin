@@ -161,16 +161,35 @@ function ExplorerTabs({
   const activeRevealRequest = revealRequest?.repoId === repoId ? revealRequest : null
   const isRemoteRepo = isRemoteRepoId(repoId)
   const activeVisibleTab = activeTab === 'ports' && !isRemoteRepo ? 'files' : activeTab
+
+  // 检查是否有工作树
+  const hasWorktree = useReposStore((s) => {
+    const repo = s.repos[repoId]
+    const selected = repo?.data.branches.find(branch => branch.name === repo.ui.selectedBranch)
+    return !!selected?.worktree?.path
+  })
+
   const toolbarStyle = {
     '--goblin-file-tree-topbar-font-size': `${fileTreeTopbarFontSize}px`,
   } as CSSProperties
-  const tabs = [
+
+  // 基础 tab 列表
+  const baseTabs = [
     { id: 'files' as const, label: t('file-tree.title'), icon: FolderTree },
     { id: 'changes' as const, label: t('tab.changes'), icon: GitCompareArrows },
     { id: 'status' as const, label: t('tab.status'), icon: GitBranch },
     { id: 'history' as const, label: t('tab.history'), icon: History },
     { id: 'local' as const, label: t('tab.local'), icon: FolderGit },
     { id: 'remoteBranches' as const, label: t('tab.remote-branches'), icon: GitFork },
+  ]
+
+  // 有工作树时，status 移到第一位
+  const orderedTabs = hasWorktree
+    ? [baseTabs[2], baseTabs[0], baseTabs[1], ...baseTabs.slice(3)]
+    : baseTabs
+
+  const tabs = [
+    ...orderedTabs,
     ...(isRemoteRepo ? [{ id: 'ports' as const, label: t('ports.title'), icon: RadioTower }] : []),
   ] satisfies { id: ExplorerTab; label: string; icon: LucideIcon }[]
 
