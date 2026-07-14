@@ -107,7 +107,8 @@ describe('setExplorerTab', () => {
     seedRepo({ selectedBranch: 'main' })
     const beforeRepo = useReposStore.getState().repos[REPO_ID]
 
-    useReposStore.getState().setExplorerTab(REPO_ID, 'files')
+    // main 分支有工作树，所以默认 tab 是 'status'
+    useReposStore.getState().setExplorerTab(REPO_ID, 'status')
     useReposStore.getState().setExplorerTab('/missing', 'changes')
 
     expect(useReposStore.getState().repos[REPO_ID]).toBe(beforeRepo)
