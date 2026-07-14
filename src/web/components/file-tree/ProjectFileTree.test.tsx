@@ -15,13 +15,6 @@ import type { WorktreeBootstrapPreviewResult } from '#/shared/worktree-bootstrap
 type GetRepositoryFileTreeArgs = [repoId: string, worktreePath: string, dirPath: string, signal?: AbortSignal]
 type GetRepositoryWorktreeBootstrapPreviewArgs = [repoId: string, worktreePath: string, signal?: AbortSignal]
 type InitializeRepositoryWorktreeBootstrapConfigArgs = [repoId: string, worktreePath: string]
-type SearchRepositoryFileTreeArgs = [
-  repoId: string,
-  worktreePath: string,
-  query: string,
-  limit?: number,
-  signal?: AbortSignal,
-]
 
 const toastMocks = vi.hoisted(() => ({
   success: vi.fn(),
@@ -76,12 +69,6 @@ const replaceRepositoryFileTreeBinaryFile = vi.fn(async (..._args: unknown[]) =>
   previousBytesBase64: Buffer.from('old contents\n', 'utf8').toString('base64'),
   previousByteLength: 13,
 }))
-const searchRepositoryFileTree = vi.fn(async (..._args: SearchRepositoryFileTreeArgs) => ({
-  ok: true as const,
-  matches: [{ relativePath: 'src/app.ts', kind: 'file' as const }],
-  truncated: false,
-  limit: 100,
-}))
 const getRepositoryWorktreeBootstrapPreview = vi.fn(
   async (..._args: GetRepositoryWorktreeBootstrapPreviewArgs): Promise<WorktreeBootstrapPreviewResult> => ({
     ok: true,
@@ -133,7 +120,6 @@ vi.mock('#/web/repo-client.ts', () => ({
   renameRepositoryFileTreeEntry: (...args: unknown[]) => renameRepositoryFileTreeEntry(...args),
   deleteRepositoryFileTreeEntries: (...args: unknown[]) => deleteRepositoryFileTreeEntries(...args),
   moveRepositoryFileTreeEntries: (...args: unknown[]) => moveRepositoryFileTreeEntries(...args),
-  searchRepositoryFileTree: (...args: SearchRepositoryFileTreeArgs) => searchRepositoryFileTree(...args),
   getRepositoryWorktreeBootstrapPreview: (...args: GetRepositoryWorktreeBootstrapPreviewArgs) =>
     getRepositoryWorktreeBootstrapPreview(...args),
   initializeRepositoryWorktreeBootstrapConfig: (...args: InitializeRepositoryWorktreeBootstrapConfigArgs) =>
@@ -199,7 +185,6 @@ beforeEach(() => {
   createRepositoryFileTreeDirectory.mockClear()
   readRepositoryFileTreeBinaryFile.mockClear()
   replaceRepositoryFileTreeBinaryFile.mockClear()
-  searchRepositoryFileTree.mockClear()
   getRepositoryWorktreeBootstrapPreview.mockClear()
   getRepositoryWorktreeBootstrapPreview.mockResolvedValue({
     ok: true,
@@ -395,62 +380,7 @@ describe('ProjectFileTree', () => {
     expect(row.getAttribute('aria-selected')).toBe('true')
   })
 
-  test('searches loaded file tree nodes and jumps between matches', async () => {
-    seedRepoWithSelectedBranch({ hasWorktree: true })
-
-    await render(<ProjectFileTree repoId="/repo" />)
-
-    expect(container?.querySelector('input[aria-label="file-tree.search-label"]')).toBeNull()
-    const searchButton = container?.querySelector<HTMLButtonElement>('button[aria-label="file-tree.search-label"]')
-    expect(searchButton).toBeTruthy()
-    await act(async () => {
-      searchButton!.click()
-      await Promise.resolve()
-    })
-
-    const input = container?.querySelector<HTMLInputElement>('input[aria-label="file-tree.search-label"]')
-    expect(input).toBeTruthy()
-    expect(document.activeElement).toBe(input)
-    await act(async () => {
-      input!.value = 'readme'
-      input!.dispatchEvent(new Event('input', { bubbles: true }))
-      await Promise.resolve()
-    })
-
-    expect(container?.textContent).toContain('1 / 1')
-    expect(treeItemByText('README.md').getAttribute('aria-selected')).toBe('true')
-    expect(searchRepositoryFileTree).not.toHaveBeenCalled()
-  })
-
-  test('falls back to whole-worktree search when loaded nodes do not match', async () => {
-    vi.useFakeTimers()
-    seedRepoWithSelectedBranch({ hasWorktree: true })
-
-    await render(<ProjectFileTree repoId="/repo" />)
-
-    const searchButton = container?.querySelector<HTMLButtonElement>('button[aria-label="file-tree.search-label"]')
-    await act(async () => {
-      searchButton?.click()
-      await Promise.resolve()
-    })
-
-    const input = container?.querySelector<HTMLInputElement>('input[aria-label="file-tree.search-label"]')
-    await act(async () => {
-      input!.value = 'app'
-      input!.dispatchEvent(new Event('input', { bubbles: true }))
-      await Promise.resolve()
-      await vi.advanceTimersByTimeAsync(300)
-      await Promise.resolve()
-      await Promise.resolve()
-    })
-
-    expect(searchRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', 'app', 100, expect.any(AbortSignal))
-    expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', '/repo/src', undefined)
-    expect(treeItemByText('app.ts').getAttribute('aria-selected')).toBe('true')
-    vi.useRealTimers()
-  })
-
-  test('places file tree refresh directly before collapsed search', async () => {
+  test('renders the file tree toolbar buttons in order without a search entry', async () => {
     seedRepoWithSelectedBranch({ hasWorktree: true })
 
     await render(<ProjectFileTree repoId="/repo" />)
@@ -466,9 +396,9 @@ describe('ProjectFileTree', () => {
       'file-tree.new-folder',
       'file-tree.refresh',
       'file-tree.open-local',
-      'file-tree.search-label',
     ])
     expect(toolbar.querySelector('input[aria-label="file-tree.search-label"]')).toBeNull()
+    expect(toolbar.querySelector('button[aria-label="file-tree.search-label"]')).toBeNull()
   })
 
   test('initializes missing goblin.toml from the file tree toolbar', async () => {
@@ -1279,7 +1209,6 @@ describe('ProjectFileTree', () => {
     const toolbar = fileTreeToolbar()
 
     expect(toolbar.className).toContain('min-h-8')
-    expect(toolbar.className).toContain('justify-end')
     expect(toolbar.className).toContain('border-toolbar-border')
     expect(toolbar.className).toContain('bg-toolbar')
     expect(toolbar.className).toContain('px-2')

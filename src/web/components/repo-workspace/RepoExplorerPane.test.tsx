@@ -330,7 +330,7 @@ describe('RepoExplorerPane', () => {
     await act(async () => root.unmount())
   })
 
-  test('places branch filters and repo actions above the branch list', async () => {
+  test('renders branch list without a branch-area toolbar above it', async () => {
     seedRepoState({
       id: REPO_ID,
       branches: [createRepoBranch('main'), createRepoBranch('feature/a')],
@@ -346,23 +346,8 @@ describe('RepoExplorerPane', () => {
 
     const branchToolbar = container.querySelector<HTMLElement>('[data-testid="branch-area-toolbar"]')
     const branchList = container.querySelector('[data-testid="branch-list"]')
-    const search = branchToolbar?.querySelector('[aria-label="branches.search-label"]')
-    const refresh = branchToolbar?.querySelector('button[aria-label="action.refresh"]')
-    const createWorktree = branchToolbar?.querySelector('button[aria-label="action.create-worktree-title"]')
-    const allBranchesFilter = branchToolbar?.querySelector('[aria-label="branches.filter-tooltip.all"]')
-    const noWorktreeFilter = branchToolbar?.querySelector('[aria-label="branches.filter-tooltip.no-worktree"]')
-    const branchViewToggle = branchToolbar?.querySelector('[aria-label="branches.filter-tooltip.worktrees"]')
-    expect(branchToolbar).toBeTruthy()
-    expect(branchToolbar?.style.height).toBe('41px')
-    expect(branchToolbar?.className).not.toContain('h-8')
-    expect(branchViewToggle).toBeNull()
-    expect(search).toBeNull()
-    expect(refresh).toBeNull()
-    expect(createWorktree).toBeNull()
-    expect(allBranchesFilter).toBeNull()
-    expect(noWorktreeFilter).toBeNull()
+    expect(branchToolbar).toBeNull()
     expect(branchList).toBeTruthy()
-    expect(branchToolbar!.compareDocumentPosition(branchList!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     await act(async () => root.unmount())
   })
 
@@ -385,7 +370,7 @@ describe('RepoExplorerPane', () => {
     const fileTree = container.querySelector<HTMLElement>('[data-testid="project-file-tree"]')
     const firstTab = container.querySelector<HTMLButtonElement>('[role="tab"]')
     const tabIcons = Array.from(container.querySelectorAll<SVGElement>('[role="tab"] svg'))
-    expect(branchToolbar?.style.height).toBe('41px')
+    expect(branchToolbar).toBeNull()
     expect(explorerToolbar?.style.height).toBe('41px')
     expect(explorerToolbar?.className).not.toContain('h-8')
     expect(fileTree?.getAttribute('data-toolbar-height')).toBe('detail')
@@ -571,28 +556,14 @@ describe('RepoExplorerPane', () => {
     const root = createRoot(container)
 
     await act(async () => {
-      root.render(
-        <RepoExplorerPane
-          repoId={REPO_ID}
-          layout="top-bottom"
-          showActions
-          revealRequest={revealRequest}
-        />,
-      )
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions revealRequest={revealRequest} />)
     })
     const revealRepo = useReposStore.getState().repos[REPO_ID]
     expect(revealRepo).toBeTruthy()
     expect(explorerTabForRepo(revealRepo!)).toBe('files')
 
     await act(async () => {
-      root.render(
-        <RepoExplorerPane
-          repoId={REPO_B_ID}
-          layout="top-bottom"
-          showActions
-          revealRequest={revealRequest}
-        />,
-      )
+      root.render(<RepoExplorerPane repoId={REPO_B_ID} layout="top-bottom" showActions revealRequest={revealRequest} />)
     })
     expect(container.querySelector('[data-testid="project-changes-panel"]')).toBeTruthy()
     expect(useReposStore.getState().repos[REPO_B_ID]?.ui.explorerTabByBranch.main).toBe('changes')
@@ -767,34 +738,7 @@ describe('RepoExplorerPane', () => {
     await act(async () => root.unmount())
   })
 
-  test('branch area toolbar shows disabled editor and terminal buttons when selected branch has no worktree', async () => {
-    seedRepoState({
-      id: REPO_ID,
-      branches: [createRepoBranch('main')], // no worktree
-      currentBranch: 'main',
-      selectedBranch: 'main',
-    })
-    const container = document.createElement('div')
-    document.body.appendChild(container)
-    const root = createRoot(container)
-    await act(async () => {
-      root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
-    })
-
-    const toolbar = container.querySelector('[data-testid="branch-area-toolbar"]')
-    expect(toolbar).toBeTruthy()
-
-    const editorBtn = toolbar?.querySelector('[data-testid="branch-area-editor-btn"]') as HTMLButtonElement | null
-    const terminalBtn = toolbar?.querySelector('[data-testid="branch-area-terminal-btn"]') as HTMLButtonElement | null
-    expect(editorBtn).toBeTruthy()
-    expect(terminalBtn).toBeTruthy()
-    expect(editorBtn?.disabled).toBe(true)
-    expect(terminalBtn?.disabled).toBe(true)
-
-    await act(async () => root.unmount())
-  })
-
-  test('branch area toolbar shows enabled editor and terminal buttons when selected branch has a worktree', async () => {
+  test('branch area no longer renders a toolbar for external app buttons (moved to inline rows)', async () => {
     seedRepoState({
       id: REPO_ID,
       branches: [createRepoBranch('main', { worktree: { path: '/repos/main' } })],
@@ -808,13 +752,10 @@ describe('RepoExplorerPane', () => {
       root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
     })
 
-    const toolbar = container.querySelector('[data-testid="branch-area-toolbar"]')
-    const editorBtn = toolbar?.querySelector('[data-testid="branch-area-editor-btn"]') as HTMLButtonElement | null
-    const terminalBtn = toolbar?.querySelector('[data-testid="branch-area-terminal-btn"]') as HTMLButtonElement | null
-    expect(editorBtn).toBeTruthy()
-    expect(terminalBtn).toBeTruthy()
-    expect(editorBtn?.disabled).toBe(false)
-    expect(terminalBtn?.disabled).toBe(false)
+    // toolbar removed entirely — editor/terminal buttons are on individual branch rows now
+    expect(container.querySelector('[data-testid="branch-area-toolbar"]')).toBeNull()
+    expect(container.querySelector('[data-testid="branch-area-editor-btn"]')).toBeNull()
+    expect(container.querySelector('[data-testid="branch-area-terminal-btn"]')).toBeNull()
 
     await act(async () => root.unmount())
   })

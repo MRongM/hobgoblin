@@ -47,7 +47,30 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
   useBranchActionItems: () => ({
     patchItems: [],
     mainItems: [],
-    externalItems: [],
+    externalItems: [
+      {
+        id: 'editor',
+        label: 'open-in-editor',
+        title: 'open-in-editor',
+        ariaLabel: 'open-in-editor',
+        icon: <span data-testid="editor-icon" />,
+        disabled: false,
+        busy: false,
+        visible: true,
+        onSelect: vi.fn(),
+      },
+      {
+        id: 'terminal',
+        label: 'open-in-terminal',
+        title: 'open-in-terminal',
+        ariaLabel: 'open-in-terminal',
+        icon: <span data-testid="terminal-icon" />,
+        disabled: false,
+        busy: false,
+        visible: true,
+        onSelect: vi.fn(),
+      },
+    ],
     destructiveItems: [],
     dialogs: null,
     inlinePanel: <div data-testid="inline-commit-form">inline commit</div>,
@@ -56,7 +79,11 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
 
 vi.mock('#/web/components/BranchActionsMenu.tsx', () => ({
   BranchActionsMenu: () => null,
-  BranchActionsDropdown: () => <button type="button" aria-label="action.menu">...</button>,
+  BranchActionsDropdown: () => (
+    <button type="button" aria-label="action.menu">
+      ...
+    </button>
+  ),
 }))
 
 let container: HTMLDivElement | null = null
@@ -95,21 +122,22 @@ function terminalReadContextWithState(
       return {
         worktreeTerminalKey,
         selectedDescriptor: null,
-        sessions: count > 0
-          ? [
-              {
-                key: `${worktreeTerminalKey}\0terminal-1`,
-                worktreeTerminalKey,
-                terminalId: 'terminal-1',
-                index: 1,
-                title: 'terminal',
-                phase: 'open',
-                selected: true,
-                hasBell,
-                isOutputActive,
-              },
-            ]
-          : [],
+        sessions:
+          count > 0
+            ? [
+                {
+                  key: `${worktreeTerminalKey}\0terminal-1`,
+                  worktreeTerminalKey,
+                  terminalId: 'terminal-1',
+                  index: 1,
+                  title: 'terminal',
+                  phase: 'open',
+                  selected: true,
+                  hasBell,
+                  isOutputActive,
+                },
+              ]
+            : [],
         count,
       }
     },
@@ -240,7 +268,7 @@ describe('BranchRow', () => {
     expect(document.body.querySelector('[title*="默认"]')).not.toBeNull()
   })
 
-  test('shows the branch name first and the project directory name as secondary worktree text', () => {
+  test('shows the branch name only; worktree path lives in the row title', () => {
     const repo = emptyRepo('/Users/test/Desktop/src/tries/2026-06-13-hobgoblin/hobgoblin-feat-optimize', 'repo')
     const branch = createRepoBranch('feature/a', {
       worktree: { path: '/Users/test/Desktop/src/tries/2026-06-13-hobgoblin/hobgoblin-feat-optimize' },
@@ -261,11 +289,11 @@ describe('BranchRow', () => {
     )
 
     expect(document.body.querySelector('.text-sm.font-medium')?.textContent).toBe('feature/a')
-    expect(document.body.querySelector('[aria-label="hobgoblin-feat-optimize"]')).not.toBeNull()
-    expect(document.body.textContent).toContain('hobgoblin-feat-optimize')
-    expect(document.body.textContent).not.toContain(
-      '/Users/test/Desktop/src/tries/2026-06-13-hobgoblin/hobgoblin-feat-optimize',
-    )
+    // worktree 路径不再作为独立 aria-label 元素显示
+    expect(document.body.querySelector('[aria-label="hobgoblin-feat-optimize"]')).toBeNull()
+    // 但仍出现在整行的 title 悬停中
+    const rowSummary = document.body.querySelector<HTMLElement>('[title*="hobgoblin-feat-optimize"]')
+    expect(rowSummary).not.toBeNull()
   })
 
   test('shows the abbreviated commit hash tag after the branch name', () => {
@@ -287,13 +315,18 @@ describe('BranchRow', () => {
     )
 
     const branchName = document.body.querySelector('.text-sm.font-medium')
-    const hashBadge = document.body.querySelector('[data-testid="branch-hash-tag"]')
+    const hashTag = document.body.querySelector<HTMLElement>('[data-testid="branch-hash-tag"]')
 
     expect(branchName?.textContent).toBe('feature/a')
-    expect(hashBadge?.textContent).toBe('#abc1234')
+    expect(hashTag?.tagName).toBe('SPAN')
+    expect(hashTag?.textContent).toBe('#abc1234')
+    expect(hashTag?.hasAttribute('title')).toBe(false)
+    expect(hashTag?.className).toContain('font-mono')
+    expect(hashTag?.className).toContain('text-muted-foreground')
+    expect(hashTag?.className).not.toMatch(/border-/)
   })
 
-  test('centers the worktree icon beside the full two-line worktree summary', () => {
+  test('centers the worktree icon beside the single-line branch summary', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
 
@@ -318,7 +351,8 @@ describe('BranchRow', () => {
     expect(summary?.className).toContain('items-center')
     expect(iconColumn?.querySelector('svg')?.classList.contains('lucide-folder-tree')).toBe(true)
     expect(textColumn?.textContent).toContain('feature/a')
-    expect(textColumn?.textContent).toContain('worktree-a')
+    // 单行显示：worktree 路径不再作为文本内容出现在 textColumn
+    expect(textColumn?.textContent).not.toContain('worktree-a')
   })
 
   test('does not render the neutral worktree badge for clean linked worktree rows', () => {
@@ -340,8 +374,8 @@ describe('BranchRow', () => {
     )
 
     expect(document.body.querySelector('.text-sm.font-medium')?.textContent).toBe('feature/a')
-    expect(document.body.querySelector('[aria-label="worktree-a"]')).not.toBeNull()
-    expect(document.body.textContent).toContain('worktree-a')
+    // worktree 路径不再作为独立 aria-label / 文本内容显示（已移入整行的 title 悬停）
+    expect(document.body.querySelector('[aria-label="worktree-a"]')).toBeNull()
     expect(document.body.textContent).not.toContain('工作树')
   })
 
@@ -392,10 +426,11 @@ describe('BranchRow', () => {
 
     const text = document.body.textContent ?? ''
     expect(document.body.querySelector('.text-sm.font-medium')?.textContent).toBe('feature/a')
-    expect(text).toContain('worktree-a')
     expect(text).not.toContain('Add workspace branch summary')
     expect(text).not.toContain('../worktree-a')
-    expect(document.body.querySelector('[aria-label="worktree-a"]')).not.toBeNull()
+    // worktree 路径不再作为独立 aria-label 显示，但仍存在于行 title 悬停中
+    expect(document.body.querySelector('[aria-label="worktree-a"]')).toBeNull()
+    expect(document.body.querySelector('[title*="worktree-a"]')).not.toBeNull()
   })
 
   test('shows an unread terminal bell marker for linked worktrees', () => {
@@ -554,9 +589,9 @@ describe('BranchRow', () => {
     )
 
     expect(document.body.querySelector('.text-sm.font-medium')?.textContent).toBe('feature/a')
-    expect(document.body.querySelector('[aria-label="repo-feature"]')).not.toBeNull()
-    expect(document.body.textContent).toContain('repo-feature')
-    expect(document.body.textContent).not.toContain('/srv/repo-feature')
+    // 目录名不再作为独立 aria-label 元素显示，但仍出现在整行 title 悬停中
+    expect(document.body.querySelector('[aria-label="repo-feature"]')).toBeNull()
+    expect(document.body.querySelector('[title*="repo-feature"]')).not.toBeNull()
     expect(document.body.textContent).not.toContain('tester@192.0.2.10')
   })
 
@@ -657,7 +692,8 @@ describe('BranchRow', () => {
 
     const text = document.body.textContent ?? ''
     expect(text).toContain('feature/a')
-    expect(text).toContain('worktree-a')
+    // worktree 路径不再作为可见文本
+    expect(text).not.toContain('worktree-a')
     expect(text).not.toContain('MRongM')
   })
 
@@ -743,6 +779,60 @@ describe('BranchRow', () => {
     const panel = document.body.querySelector('[data-testid="inline-commit-form"]')
     expect(panel).not.toBeNull()
     expect(panel?.parentElement?.className).toContain('col-span-full')
+  })
+
+  test('renders inline editor and terminal buttons before the actions dropdown when worktree exists', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions
+        />
+      </ul>,
+    )
+
+    const editorBtn = document.body.querySelector<HTMLButtonElement>('[data-testid="branch-row-editor-btn"]')
+    const terminalBtn = document.body.querySelector<HTMLButtonElement>('[data-testid="branch-row-terminal-btn"]')
+    const dropdown = document.body.querySelector<HTMLButtonElement>('[aria-label="action.menu"]')
+
+    expect(editorBtn).not.toBeNull()
+    expect(terminalBtn).not.toBeNull()
+    expect(dropdown).not.toBeNull()
+    // 编辑/终端按钮位于 dropdown 之前
+    expect(editorBtn!.compareDocumentPosition(dropdown!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(terminalBtn!.compareDocumentPosition(dropdown!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  test('does not render inline editor/terminal buttons for branches without a worktree', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a')
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions
+        />
+      </ul>,
+    )
+
+    expect(document.body.querySelector('[data-testid="branch-row-editor-btn"]')).toBeNull()
+    expect(document.body.querySelector('[data-testid="branch-row-terminal-btn"]')).toBeNull()
+    // dropdown 仍然存在
+    expect(document.body.querySelector('[aria-label="action.menu"]')).not.toBeNull()
   })
 })
 

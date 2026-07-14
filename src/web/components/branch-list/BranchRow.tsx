@@ -102,7 +102,8 @@ function BranchRowActions({
       <div className="pointer-events-none relative z-20 flex shrink-0 items-center py-1 pr-4">
         <div className="pointer-events-auto flex items-center gap-0.5">
           {branch.worktree?.path && (
-            <div className="hidden md:flex">
+            <div className="hidden md:flex items-center gap-0.5">
+              <BranchRowExternalActions actions={actions} />
               <BranchRowRecentActions repo={repo} branch={branch} />
             </div>
           )}
@@ -135,6 +136,55 @@ function BranchRowActions({
 const REPEATABLE_ACTION_IDS = ['checkout', 'pull', 'push'] as const
 type RepeatableActionId = (typeof REPEATABLE_ACTION_IDS)[number]
 
+function BranchRowExternalActions({ actions }: { actions: ReturnType<typeof useBranchActionItems> }) {
+  const editorItem = actions.externalItems.find((item) => item.id === 'editor')
+  const terminalItem = actions.externalItems.find((item) => item.id === 'terminal')
+  return (
+    <>
+      {editorItem && (
+        <Tip label={editorItem.title ?? editorItem.label}>
+          <span className="inline-flex">
+            <AsyncButton
+              data-testid="branch-row-editor-btn"
+              variant="ghost"
+              size="icon-sm"
+              loading={editorItem.busy}
+              disabled={editorItem.disabled}
+              onClick={(e) => {
+                e.stopPropagation()
+                return editorItem.onSelect()
+              }}
+              aria-label={editorItem.ariaLabel ?? editorItem.label}
+            >
+              {() => editorItem.icon}
+            </AsyncButton>
+          </span>
+        </Tip>
+      )}
+      {terminalItem && (
+        <Tip label={terminalItem.title ?? terminalItem.label}>
+          <span className="inline-flex">
+            <AsyncButton
+              data-testid="branch-row-terminal-btn"
+              variant="ghost"
+              size="icon-sm"
+              loading={terminalItem.busy}
+              disabled={terminalItem.disabled}
+              onClick={(e) => {
+                e.stopPropagation()
+                return terminalItem.onSelect()
+              }}
+              aria-label={terminalItem.ariaLabel ?? terminalItem.label}
+            >
+              {() => terminalItem.icon}
+            </AsyncButton>
+          </span>
+        </Tip>
+      )}
+    </>
+  )
+}
+
 function BranchRowRecentActions({ repo, branch }: { repo: BranchActionRepo; branch: RepoBranchState }) {
   const ids = useStoreWithEqualityFn(
     useReposStore,
@@ -142,7 +192,7 @@ function BranchRowRecentActions({ repo, branch }: { repo: BranchActionRepo; bran
       const r = s.repos[repo.id]
       if (!r) return [] as RepeatableActionId[]
       const found: RepeatableActionId[] = []
-      for (let i = r.events.length - 1; i >= 0 && found.length < 3; i--) {
+      for (let i = r.events.length - 1; i >= 0 && found.length < 1; i--) {
         const ev = r.events[i]
         if (
           ev.kind === 'result' &&
@@ -188,7 +238,10 @@ function BranchRowRecentActionsInner({
                 size="icon-sm"
                 loading={item.busy}
                 disabled={item.disabled}
-                onClick={(e) => { e.stopPropagation(); return item.onSelect() }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  return item.onSelect()
+                }}
                 aria-label={item.ariaLabel ?? item.label}
               >
                 {() => item.icon}

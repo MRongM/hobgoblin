@@ -58,16 +58,13 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
   const worktreeState = getBranchWorktreeState(repo, branch)
   const worktreeDirty = worktreeState?.dirty ?? false
   const worktreeChangeCount =
-    worktreeDirty && worktreeState?.changeCountKnown && worktreeState.changeCount > 0
-      ? worktreeState.changeCount
-      : null
+    worktreeDirty && worktreeState?.changeCountKnown && worktreeState.changeCount > 0 ? worktreeState.changeCount : null
   const worktreeDirtyLabel =
-    worktreeChangeCount === null
-      ? t('branches.dirty')
-      : t('branch-status.worktree-dirty', { n: worktreeChangeCount })
+    worktreeChangeCount === null ? t('branches.dirty') : t('branch-status.worktree-dirty', { n: worktreeChangeCount })
   const repoRoot = repo.remote?.target?.remotePath ?? repo.id
   const worktreePath = branch.worktree?.path
-    ? lastPathSegment(branch.worktree.path) || formatWorktreeListPath(branch.worktree.path, repo.remote?.target, repoRoot)
+    ? lastPathSegment(branch.worktree.path) ||
+      formatWorktreeListPath(branch.worktree.path, repo.remote?.target, repoRoot)
     : null
   const terminalWorktreeKey = branch.worktree?.path ? worktreeTerminalKey(repo.id, branch.worktree.path) : null
   const terminalCount = useWorktreeTerminalCount(terminalWorktreeKey)
@@ -103,7 +100,7 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
           <GitBranch size={13} className={selected ? 'text-selected-muted-foreground' : 'text-muted-foreground'} />
         )}
       </span>
-      <div className="flex min-w-0 flex-col gap-px">
+      <div className="flex min-w-0 items-center">
         <div className="flex min-w-0 items-center gap-1.5">
           <span
             className={cn(
@@ -114,19 +111,15 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
             {branch.name}
           </span>
           {commitHashTag && (
-            <Badge
+            <span
               data-testid="branch-hash-tag"
-              variant="outline"
-              title={commitHashTag}
               className={cn(
-                'h-4 border-border/60 px-1 font-mono text-[10px] font-medium tabular-nums',
-                selected
-                  ? 'text-selected-muted-foreground border-selected-muted-foreground/40'
-                  : 'text-muted-foreground',
+                'font-mono text-[10px] font-medium tabular-nums',
+                selected ? 'text-selected-muted-foreground' : 'text-muted-foreground',
               )}
             >
               {commitHashTag}
-            </Badge>
+            </span>
           )}
           {terminalCount > 0 && (
             <Badge
@@ -159,8 +152,7 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
                 title={worktreeDirtyLabel}
                 className={cn(
                   'h-4 px-1',
-                  worktreeChangeCount !== null &&
-                    'gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums',
+                  worktreeChangeCount !== null && 'gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums',
                 )}
               >
                 <GitCompareArrows size={10} aria-hidden="true" />
@@ -184,18 +176,6 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
             )}
           </span>
         </div>
-        {worktreePath && (
-          <span
-            title={worktreePath}
-            aria-label={worktreePath}
-            className={cn(
-              'block min-w-0 truncate font-mono text-[11px] leading-3',
-              selected ? 'text-selected-muted-foreground/90' : 'text-muted-foreground/85',
-            )}
-          >
-            {worktreePath}
-          </span>
-        )}
       </div>
     </div>
   )

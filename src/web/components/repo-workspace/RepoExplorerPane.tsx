@@ -1,25 +1,16 @@
 import { useStoreWithEqualityFn } from 'zustand/traditional'
-import { useCallback, useEffect, useState, createElement } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import {
   FolderTree,
-  FolderPlus,
   FolderGit,
-  FolderMinus,
   GitBranch,
-  GitBranchPlus,
-  SendHorizontal,
   GitCompareArrows,
   GitFork,
-  GitMerge,
   History,
   RadioTower,
   Tag,
   ChevronDown,
-  ArrowDown,
-  ArrowUp,
-  CloudDownload,
-  Trash2,
   type LucideIcon,
 } from 'lucide-react'
 import { BranchList } from '#/web/components/BranchList.tsx'
@@ -34,7 +25,7 @@ import { ProjectStatusPanel } from '#/web/components/repo-workspace/ProjectStatu
 import { PlainWorkspacePane } from '#/web/components/repo-workspace/PlainWorkspacePane.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { explorerTabForRepo } from '#/web/stores/repos/helpers.ts'
-import type { ExplorerTab, RepoBranchState, RepoEventAction, RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
+import type { ExplorerTab, RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { Toolbar } from '#/web/components/Layout.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { Badge } from '#/web/components/ui/badge.tsx'
@@ -44,18 +35,12 @@ import { cn } from '#/web/lib/cn.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 import { repoIsPlainWorkspace } from '#/web/stores/repos/capabilities.ts'
-import { AsyncButton } from '#/web/components/AsyncButton.tsx'
-import { Tip } from '#/web/components/Tip.tsx'
-import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
-import { useRuntimeExternalAppSettings } from '#/web/runtime-settings-external-apps.ts'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '#/web/components/ui/dropdown-menu.tsx'
-import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.tsx'
-import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 
 export interface FileTreeRevealRequest {
   id: number
@@ -150,210 +135,8 @@ export function RepoExplorerPane({ repoId, layout, showActions, revealRequest }:
 function BranchArea({ repoId, showActions }: { repoId: string; showActions: boolean }) {
   return (
     <section className="flex min-h-0 flex-1 flex-col">
-      <Toolbar data-testid="branch-area-toolbar" className="px-2" variant="detail">
-        <div className="flex shrink-0 items-center gap-1">
-          <BranchAreaQuickActions repoId={repoId} />
-        </div>
-        <div className="flex min-w-0 flex-1 items-center justify-end gap-1">
-          <BranchAreaRecentActions repoId={repoId} />
-        </div>
-      </Toolbar>
       <BranchList repoId={repoId} showActions={showActions} />
     </section>
-  )
-}
-
-function BranchAreaQuickActions({ repoId }: { repoId: string }) {
-  const { repo, branch } = useStoreWithEqualityFn(
-    useReposStore,
-    (s) => {
-      const r = s.repos[repoId]
-      if (!r) return { repo: null, branch: null }
-      const selectedBranch = r.ui.selectedBranch
-        ? (r.data.branches.find((b) => b.name === r.ui.selectedBranch) ?? null)
-        : null
-      const actionRepo: BranchActionRepo = {
-        id: r.id,
-        instanceToken: r.instanceToken,
-        data: {
-          currentBranch: r.data.currentBranch,
-          status: r.data.status,
-          worktreesByPath: r.data.worktreesByPath,
-        },
-        operations: {
-          branchAction: r.operations.branchAction,
-          fetch: r.operations.fetch,
-          manualRefresh: r.operations.manualRefresh,
-        },
-        remote: {
-          target: r.remote.target,
-          hasRemotes: r.remote.hasRemotes,
-          hasBrowserRemote: r.remote.hasBrowserRemote,
-          hasGitHubRemote: r.remote.hasGitHubRemote,
-          browserRemoteProvider: r.remote.browserRemoteProvider,
-          remoteProviders: r.remote.remoteProviders,
-        },
-      }
-      return { repo: actionRepo, branch: selectedBranch }
-    },
-    (a, b) => a.repo === b.repo && a.branch === b.branch,
-  )
-
-  if (!repo || !branch) return null
-  return <BranchAreaQuickActionsInner repo={repo} branch={branch} />
-}
-
-function BranchAreaQuickActionsInner({ repo, branch }: { repo: BranchActionRepo; branch: RepoBranchState }) {
-  const { terminalApp, resolvedTerminalApp, terminalAvailable, editorApp, resolvedEditorApp, editorAvailable } =
-    useRuntimeExternalAppSettings()
-
-  const actions = useBranchActionItems(repo, branch)
-  const editorItem = actions.externalItems.find((item) => item.id === 'editor')
-  const terminalItem = actions.externalItems.find((item) => item.id === 'terminal')
-
-  const editorIconPref = resolvedEditorApp ?? editorApp
-  const terminalIconPref = resolvedTerminalApp ?? terminalApp
-
-  return (
-    <div className="flex shrink-0 items-center gap-0.5">
-      {editorItem && (
-        <Tip label={editorItem.title ?? editorItem.label}>
-          <span className="inline-flex">
-            <AsyncButton
-              data-testid="branch-area-editor-btn"
-              variant="ghost"
-              size="icon-sm"
-              loading={editorItem.busy}
-              disabled={editorItem.disabled || !editorAvailable}
-              onClick={editorItem.onSelect}
-              aria-label={editorItem.ariaLabel ?? editorItem.label}
-            >
-              {() => createElement(EditorAppIcon, { pref: editorIconPref })}
-            </AsyncButton>
-          </span>
-        </Tip>
-      )}
-      {terminalItem && (
-        <Tip label={terminalItem.title ?? terminalItem.label}>
-          <span className="inline-flex">
-            <AsyncButton
-              data-testid="branch-area-terminal-btn"
-              variant="ghost"
-              size="icon-sm"
-              loading={terminalItem.busy}
-              disabled={terminalItem.disabled || !terminalAvailable}
-              onClick={terminalItem.onSelect}
-              aria-label={terminalItem.ariaLabel ?? terminalItem.label}
-            >
-              {() => createElement(TerminalAppIcon, { pref: terminalIconPref })}
-            </AsyncButton>
-          </span>
-        </Tip>
-      )}
-    </div>
-  )
-}
-
-const RECENT_ACTION_ICONS: Record<RepoEventAction['kind'], typeof GitBranch> = {
-  checkout: GitBranch,
-  pull: ArrowDown,
-  push: ArrowUp,
-  commit: SendHorizontal,
-  merge: GitMerge,
-  createWorktree: FolderPlus,
-  createBranch: GitBranchPlus,
-  trackRemoteBranch: CloudDownload,
-  deleteBranch: Trash2,
-  removeWorktree: FolderMinus,
-}
-
-function recentActionTooltip(action: RepoEventAction): string {
-  switch (action.kind) {
-    case 'checkout':
-      return `checkout: ${action.branch}`
-    case 'pull':
-      return `pull: ${action.branch}`
-    case 'push':
-      return `push: ${action.branch}`
-    case 'commit':
-      return `commit: ${action.message}`
-    case 'merge':
-      return `merge: ${action.sourceBranch}`
-    case 'createWorktree':
-      return `create worktree: ${action.branch}`
-    case 'createBranch':
-      return `create branch: ${action.branch}`
-    case 'trackRemoteBranch':
-      return `track: ${action.remoteRef}`
-    case 'deleteBranch':
-      return `delete: ${action.branch}`
-    case 'removeWorktree':
-      return `remove worktree: ${action.branch}`
-  }
-}
-
-function BranchAreaRecentActions({ repoId }: { repoId: string }) {
-  const actions = useStoreWithEqualityFn(
-    useReposStore,
-    (s) => {
-      const r = s.repos[repoId]
-      if (!r || !r.ui.selectedBranch) return []
-      const branch = r.data.branches.find((b) => b.name === r.ui.selectedBranch)
-      const worktreePath = branch?.worktree?.path
-      if (!worktreePath) return []
-      const history = s.restorableRepoCache[repoId]?.ui?.worktreeActionHistories?.[worktreePath] ?? []
-      // Dedupe by action kind: keep the most recent occurrence of each kind, up to 3.
-      const seen = new Set<string>()
-      const result: RepoEventAction[] = []
-      for (const action of history) {
-        if (seen.has(action.kind)) continue
-        seen.add(action.kind)
-        result.push(action)
-        if (result.length >= 3) break
-      }
-      return result
-    },
-    (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
-  )
-
-  if (actions.length === 0) return null
-
-  return (
-    <div className="flex shrink-0 items-center gap-0.5">
-      {actions.map((action, i) => (
-        <BranchAreaRecentActionButton key={i} action={action} repoId={repoId} />
-      ))}
-    </div>
-  )
-}
-
-function BranchAreaRecentActionButton({ action, repoId }: { action: RepoEventAction; repoId: string }) {
-  const submitBranchAction = useReposStore((s) => s.submitBranchAction)
-  const Icon = RECENT_ACTION_ICONS[action.kind]
-  const label = recentActionTooltip(action)
-
-  function handleClick() {
-    switch (action.kind) {
-      case 'pull':
-        submitBranchAction(repoId, { kind: 'pull', branch: action.branch, worktreePath: action.worktreePath })
-        break
-      case 'push':
-        if (action.worktreePath) submitBranchAction(repoId, { kind: 'push', branch: action.branch })
-        break
-      case 'checkout':
-        if (action.worktreePath) submitBranchAction(repoId, { kind: 'checkout', branch: action.branch })
-        break
-    }
-  }
-
-  return (
-    <Tip label={label}>
-      <span className="inline-flex">
-        <Button variant="ghost" size="icon-sm" onClick={handleClick} aria-label={label}>
-          <Icon className="size-3.5" />
-        </Button>
-      </span>
-    </Tip>
   )
 }
 
