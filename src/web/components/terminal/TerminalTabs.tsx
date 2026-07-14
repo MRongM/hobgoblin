@@ -1,4 +1,4 @@
-import { Plus, X, ChevronDown } from 'lucide-react'
+import { Plus, X, ChevronDown, Terminal } from 'lucide-react'
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ComponentPropsWithoutRef } from 'react'
 import { cn } from '#/web/lib/cn.ts'
 import { Button } from '#/web/components/ui/button.tsx'
@@ -224,13 +224,14 @@ export function TerminalTabs({
         ref={focusRegistry.setRef(emptyFocusKey)}
         type="button"
         variant="ghost"
-        className="h-7 border border-separator px-2.5 text-sm font-normal text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+        size="icon-sm"
+        className="h-7 border border-separator"
         id={`${detailId}-terminal-tab`}
         onClick={onNew}
         aria-label={t('terminal.new')}
         title={t('terminal.new')}
       >
-        {t('terminal.label')}
+        <Terminal className="size-4" />
       </Button>
     )
   }
