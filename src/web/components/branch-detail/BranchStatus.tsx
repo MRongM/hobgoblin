@@ -4,6 +4,7 @@ import {
   Check,
   Clock,
   FolderGit2,
+  FolderOpen,
   FolderTree,
   GitBranch,
   GitMerge,
@@ -39,6 +40,7 @@ import { cn } from '#/web/lib/cn.ts'
 interface Props {
   detail: SelectedBranchDetail
   repoName: string
+  repoId: string
   layout: RepoWorkspaceLayout
 }
 
@@ -117,13 +119,17 @@ function emptyClipboardValue(value: string): string {
   return value.trim().length > 0 ? value : '—'
 }
 
-export function branchStatusClipboardText(detail: SelectedBranchDetail, repoName: string, t: TFn): string {
+export function branchStatusClipboardText(detail: SelectedBranchDetail, repoName: string, repoId: string, t: TFn): string {
   const { branch } = detail
   if (!branch) return ''
+
+  // 从 repoId 提取文件夹名
+  const folderName = repoId.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? repoId
 
   const pullRequest =
     branch.pullRequest && branchPullRequestBelongsToBranch(branch, branch.pullRequest) ? branch.pullRequest : undefined
   const rows: Array<[string, string]> = [
+    [t('branch-status.signal.folder'), folderName],
     [t('branch-status.signal.project'), repoName],
     [t('branch-status.signal.branch'), branch.name],
     [t('branch-status.signal.worktree'), branch.worktree?.path ?? t('branch-status.worktree.none')],
@@ -174,12 +180,15 @@ function CommitMetadataValue({
   )
 }
 
-export function BranchStatus({ detail, repoName, layout }: Props) {
+export function BranchStatus({ detail, repoName, repoId, layout }: Props) {
   const t = useT()
   const compact = useIsCompactUi()
   const { branch, statusCount } = detail
   const behavior = repoWorkspaceBehavior(layout, false)
   if (!branch) return <EmptyState title={t('branches.empty')} />
+
+  // 从 repoId 提取文件夹名
+  const folderName = repoId.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? repoId
 
   const protectedBranch = PROTECTED_BRANCHES.has(branch.name)
   const worktreePath = branch.worktree?.path ?? ''
@@ -242,6 +251,19 @@ export function BranchStatus({ detail, repoName, layout }: Props) {
   ) : undefined
   return (
     <StatusRows>
+      <StatusRow
+        icon={<FolderOpen size={14} />}
+        label={t('branch-status.signal.folder')}
+        value={
+          <CommitMetadataValue
+            value={folderName}
+            copyLabel={t('branch-status.copy-folder-name')}
+            copiedLabel={t('branch-status.copied')}
+          />
+        }
+        valueLayout="fill"
+        tone="neutral"
+      />
       <StatusRow
         icon={<FolderGit2 size={14} />}
         label={t('branch-status.signal.project')}

@@ -98,13 +98,13 @@ export function ProjectStatusPanel({ repoId, layout }: ProjectStatusPanelProps) 
     return <EmptyState title={t(repo.data.branches.length === 0 ? 'branches.empty' : 'branches.filter-empty')} />
   }
 
-  const copyAllValue = branchStatusClipboardText(detail, repo.name, t)
+  const copyAllValue = branchStatusClipboardText(detail, repo.name, repo.id, t)
 
   return (
     <section className="flex min-h-0 flex-1 flex-col bg-pane">
       <ProjectStatusToolbar copyAllValue={copyAllValue} />
       <ScrollPane>
-        <BranchStatus detail={detail} repoName={repo.name} layout={layout} />
+        <BranchStatus detail={detail} repoName={repo.name} repoId={repo.id} layout={layout} />
       </ScrollPane>
     </section>
   )
