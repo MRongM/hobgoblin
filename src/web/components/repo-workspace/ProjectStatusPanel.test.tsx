@@ -120,6 +120,7 @@ describe('ProjectStatusPanel', () => {
 
     expect(writeText).toHaveBeenCalledWith(
       [
+        'branch-status.signal.folder: gbl-project-status-repo',
         'branch-status.signal.project: Status Project',
         'branch-status.signal.branch: feature/worktree',
         `branch-status.signal.worktree: ${WORKTREE_PATH}`,
