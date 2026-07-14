@@ -124,22 +124,52 @@ describe('normalizeRestorableRepoCache', () => {
     expect(normalized.repo?.ui.fileTreePaneSizes).toBeUndefined()
   })
 
-  test('normalizes missing and invalid explorer tabs without dropping the repo snapshot', () => {
+  test('migrates legacy per-repo explorerTab into explorerTabByBranch fallback slot', () => {
     const now = Date.now()
     const missing = cachedRepo(now)
     const invalid = cachedRepo(now) as any
     invalid.ui.explorerTab = 'not-a-tab'
     const valid = cachedRepo(now)
-    valid.ui.explorerTab = 'local'
+    ;(valid.ui as any).explorerTab = 'local'
     const legacyTags = cachedRepo(now)
-    legacyTags.ui.explorerTab = 'tags' as any
+    ;(legacyTags.ui as any).explorerTab = 'tags'
 
     const normalized = normalizeRestorableRepoCache({ missing, invalid, valid, legacyTags })
 
-    expect(normalized.missing?.ui.explorerTab).toBe('files')
-    expect(normalized.invalid?.ui.explorerTab).toBe('files')
-    expect(normalized.valid?.ui.explorerTab).toBe('local')
-    expect(normalized.legacyTags?.ui.explorerTab).toBe('local')
+    expect(normalized.missing?.ui.explorerTabByBranch).toBeUndefined()
+    expect(normalized.invalid?.ui.explorerTabByBranch).toBeUndefined()
+    expect(normalized.valid?.ui.explorerTabByBranch).toEqual({ '': 'local' })
+    expect(normalized.legacyTags?.ui.explorerTabByBranch).toEqual({ '': 'local' })
+  })
+
+  test('preserves per-branch explorer tabs and drops invalid entries', () => {
+    const now = Date.now()
+    const raw = cachedRepo(now) as any
+    raw.ui.explorerTabByBranch = {
+      main: 'history',
+      'feature/a': 'changes',
+      bogus: 'not-a-tab',
+      literal: 'files',
+    }
+
+    const normalized = normalizeRestorableRepoCache({ repo: raw })
+
+    expect(normalized.repo?.ui.explorerTabByBranch).toEqual({
+      main: 'history',
+      'feature/a': 'changes',
+      literal: 'files',
+    })
+  })
+
+  test('prefers explorerTabByBranch over legacy explorerTab when both are present', () => {
+    const now = Date.now()
+    const raw = cachedRepo(now) as any
+    raw.ui.explorerTab = 'status'
+    raw.ui.explorerTabByBranch = { '': 'local' }
+
+    const normalized = normalizeRestorableRepoCache({ repo: raw })
+
+    expect(normalized.repo?.ui.explorerTabByBranch).toEqual({ '': 'local' })
   })
 
   test('preserves quickActions field through normalization', () => {
@@ -264,7 +294,7 @@ describe('persistRestorableRepoSnapshot', () => {
     })
   })
 
-  test('persists the project explorer tab', () => {
+  test('persists the project explorer tab per branch', () => {
     const repo = seedRepoState({
       id: '/repo',
       instanceToken: 1,
@@ -276,7 +306,7 @@ describe('persistRestorableRepoSnapshot', () => {
 
     persistRestorableRepoSnapshot(useReposStore.setState, repo, 1)
 
-    expect(useReposStore.getState().restorableRepoCache['/repo']?.ui.explorerTab).toBe('history')
+    expect(useReposStore.getState().restorableRepoCache['/repo']?.ui.explorerTabByBranch).toEqual({ main: 'history' })
   })
 
   test('persists UI for an empty Git repo only after its snapshot has loaded', () => {
@@ -292,7 +322,7 @@ describe('persistRestorableRepoSnapshot', () => {
     persistRestorableRepoSnapshot(useReposStore.setState, loadedRepo, 1)
 
     expect(useReposStore.getState().restorableRepoCache['/repo']?.data.branches).toEqual([])
-    expect(useReposStore.getState().restorableRepoCache['/repo']?.ui.explorerTab).toBe('changes')
+    expect(useReposStore.getState().restorableRepoCache['/repo']?.ui.explorerTabByBranch).toEqual({ '': 'changes' })
 
     resetReposStore()
     const unloadedRepo = seedRepoState({
@@ -390,16 +420,16 @@ describe('restoreRepoProjectionFromSnapshot', () => {
     expect(repo.ui.fileTreePaneSizes).toEqual({ 'top-bottom': 41.5, 'left-right': 70.5 })
   })
 
-  test('restores the project explorer tab and defaults old snapshots to files', () => {
+  test('restores per-branch explorer tabs and defaults old snapshots to empty', () => {
     const now = Date.now()
     const saved = cachedRepo(now)
-    saved.ui.explorerTab = 'status'
+    saved.ui.explorerTabByBranch = { main: 'status', 'feature/a': 'history' }
 
     const restored = restoreRepoProjectionFromSnapshot(emptyRepo('/repo', 'repo'), saved)
     const restoredOld = restoreRepoProjectionFromSnapshot(emptyRepo('/old', 'old'), cachedRepo(now))
 
-    expect(restored.ui.explorerTab).toBe('status')
-    expect(restoredOld.ui.explorerTab).toBe('files')
+    expect(restored.ui.explorerTabByBranch).toEqual({ main: 'status', 'feature/a': 'history' })
+    expect(restoredOld.ui.explorerTabByBranch).toEqual({})
   })
 
   test('restores quickActions from snapshot into rememberedQuickActions map', () => {

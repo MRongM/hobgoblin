@@ -69,7 +69,11 @@ export interface RepoWorktreeState {
 export interface RepoUiState {
   selectedBranch: string | null
   detailTab: DetailTab
-  explorerTab: ExplorerTab
+  /** Per-branch explorer tab state. Each branch remembers its own last-viewed
+   *  tab; switching branches restores that branch's tab. Absent branches fall
+   *  back to `'files'`. Key `''` holds the fallback used when no branch is
+   *  selected — this also preserves legacy per-repo tab state during migration. */
+  explorerTabByBranch: Record<string, ExplorerTab>
   workspaceLayout: RepoWorkspaceLayout
   fileTreePaneSizes?: WorkspaceDetailPaneSizes
   worktreePathOrder: string[]
@@ -107,7 +111,7 @@ export interface RestorableRepoSnapshot {
   name: string
   data: Pick<RepoDataState, 'branches' | 'currentBranch'>
   ui: Pick<RepoUiState, 'selectedBranch' | 'detailTab' | 'worktreePathOrder'> & {
-    explorerTab?: ExplorerTab
+    explorerTabByBranch?: Record<string, ExplorerTab>
     workspaceLayout?: RepoWorkspaceLayout
     fileTreePaneSizes?: WorkspaceDetailPaneSizes
     quickActions?: Record<string, string>

@@ -80,10 +80,27 @@ describe('setExplorerTab', () => {
 
     useReposStore.getState().setExplorerTab(REPO_ID, 'history')
 
-    expect(useReposStore.getState().repos[REPO_ID]?.ui.explorerTab).toBe('history')
-    expect(useReposStore.getState().repos[REPO_B_ID]?.ui.explorerTab).toBe('files')
-    expect(useReposStore.getState().restorableRepoCache[REPO_ID]?.ui.explorerTab).toBe('history')
+    expect(useReposStore.getState().repos[REPO_ID]?.ui.explorerTabByBranch.main).toBe('history')
+    expect(useReposStore.getState().repos[REPO_B_ID]?.ui.explorerTabByBranch).toEqual({})
+    expect(useReposStore.getState().restorableRepoCache[REPO_ID]?.ui.explorerTabByBranch).toEqual({ main: 'history' })
     expect(useReposStore.getState().restorableRepoCache[REPO_B_ID]).toBeUndefined()
+  })
+
+  test('remembers explorer tab per branch and restores it on branch switch', () => {
+    seedRepo({ selectedBranch: 'main' })
+
+    useReposStore.getState().setExplorerTab(REPO_ID, 'history')
+    useReposStore.getState().selectBranch(REPO_ID, 'feature/plain')
+    useReposStore.getState().setExplorerTab(REPO_ID, 'changes')
+
+    expect(useReposStore.getState().repos[REPO_ID]?.ui.explorerTabByBranch).toEqual({
+      main: 'history',
+      'feature/plain': 'changes',
+    })
+
+    useReposStore.getState().selectBranch(REPO_ID, 'main')
+    expect(useReposStore.getState().repos[REPO_ID]?.ui.selectedBranch).toBe('main')
+    expect(useReposStore.getState().repos[REPO_ID]?.ui.explorerTabByBranch.main).toBe('history')
   })
 
   test('does not rewrite state for the current value or a missing repo', () => {

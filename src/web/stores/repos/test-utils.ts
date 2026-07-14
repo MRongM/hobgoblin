@@ -539,7 +539,9 @@ export function seedRepoState(options: {
       ...base.ui,
       selectedBranch: options.selectedBranch ?? base.ui.selectedBranch,
       detailTab: options.detailTab ?? base.ui.detailTab,
-      explorerTab: options.explorerTab ?? base.ui.explorerTab,
+      explorerTabByBranch: options.explorerTab
+        ? { [options.selectedBranch ?? '']: options.explorerTab }
+        : base.ui.explorerTabByBranch,
       workspaceLayout: options.workspaceLayout ?? base.ui.workspaceLayout,
       fileTreePaneSizes: options.fileTreePaneSizes ?? base.ui.fileTreePaneSizes,
       worktreePathOrder: options.worktreePathOrder ?? base.ui.worktreePathOrder,

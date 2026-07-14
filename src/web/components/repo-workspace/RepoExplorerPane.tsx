@@ -34,6 +34,7 @@ import { ProjectLocalPanel } from '#/web/components/repo-workspace/ProjectLocalP
 import { ProjectStatusPanel } from '#/web/components/repo-workspace/ProjectStatusPanel.tsx'
 import { PlainWorkspacePane } from '#/web/components/repo-workspace/PlainWorkspacePane.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
+import { explorerTabForRepo } from '#/web/stores/repos/helpers.ts'
 import type { ExplorerTab, RepoBranchState, RepoEventAction, RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { Toolbar } from '#/web/components/Layout.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
@@ -85,7 +86,7 @@ export function RepoExplorerPane({ repoId, layout, showActions, revealRequest }:
       const selected = repo?.data.branches.find((branch) => branch.name === repo.ui.selectedBranch) ?? null
       const worktreePath = selected?.worktree?.path
       return {
-        activeTab: repo?.ui.explorerTab ?? 'files',
+        activeTab: repo ? explorerTabForRepo(repo) : 'files',
         repoFileTreePaneSizes: repo?.ui.fileTreePaneSizes,
         defaultFileTreePaneSizes: state.fileTreePaneSizes,
         setExplorerTab: state.setExplorerTab,

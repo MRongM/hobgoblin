@@ -2,6 +2,7 @@ import { produce, type Draft } from 'immer'
 import { emptyRepoOperations } from '#/web/stores/repos/operations.ts'
 import { emptyRepoResources } from '#/web/stores/repos/resources.ts'
 import type {
+  ExplorerTab,
   RepoEvent,
   RepoResultEventOptions,
   RepoState,
@@ -9,6 +10,17 @@ import type {
   ReposStore,
 } from '#/web/stores/repos/types.ts'
 import type { ExecResult } from '#/web/types.ts'
+
+/** Resolve the explorer tab for the repo's currently selected branch. Falls
+ *  back to the `''` key (used when no branch is selected, or as legacy
+ *  per-repo state carried over from before per-branch tabs) and finally to
+ *  `'files'`. */
+export function explorerTabForRepo(repo: {
+  ui: Pick<RepoState['ui'], 'selectedBranch' | 'explorerTabByBranch'>
+}): ExplorerTab {
+  const key = repo.ui.selectedBranch ?? ''
+  return repo.ui.explorerTabByBranch[key] ?? repo.ui.explorerTabByBranch[''] ?? 'files'
+}
 
 let nextInstanceToken = 1
 let nextEventId = 1
@@ -36,7 +48,7 @@ export function emptyRepo(id: string, name: string): RepoState {
     ui: {
       selectedBranch: null,
       detailTab: 'status',
-      explorerTab: 'files',
+      explorerTabByBranch: {},
       workspaceLayout: 'left-right',
       worktreePathOrder: [],
     },

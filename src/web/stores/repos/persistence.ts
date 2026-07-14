@@ -82,7 +82,10 @@ const RestorableRepoSnapshotSchema = v.object({
   ui: v.object({
     selectedBranch: v.nullable(v.string()),
     detailTab: v.picklist(['status', 'changes', 'terminal']),
+    // Legacy per-repo explorer tab. Migrated into `explorerTabByBranch['']` on
+    // restore so old snapshots continue to hydrate a sensible tab state.
     explorerTab: v.optional(v.unknown()),
+    explorerTabByBranch: v.optional(v.unknown()),
     workspaceLayout: v.optional(v.picklist(['top-bottom', 'left-right']), DEFAULT_WORKSPACE_LAYOUT),
     fileTreePaneSizes: v.optional(v.unknown()),
     worktreePathOrder: v.optional(v.array(v.string()), []),
@@ -110,6 +113,31 @@ function normalizeCachedExplorerTab(tab: unknown): ExplorerTab {
     default:
       return 'files'
   }
+}
+
+function normalizeCachedExplorerTabByBranch(
+  raw: unknown,
+  legacyTab: unknown,
+): Record<string, ExplorerTab> {
+  const result: Record<string, ExplorerTab> = {}
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+      if (typeof key !== 'string' || typeof value !== 'string') continue
+      const normalized = normalizeCachedExplorerTab(value)
+      // Only keep entries whose stored value is a real tab — dropping
+      // unknown strings prevents `'files'` fallback rows from bloating
+      // the map.
+      if (normalized !== 'files' || value === 'files') result[key] = normalized
+    }
+  }
+  // Migrate legacy per-repo `explorerTab` into the fallback slot only when the
+  // map doesn't already carry one, so that once a user starts using per-branch
+  // tabs the fallback stops overriding it.
+  if (!(('' in result)) && legacyTab !== undefined) {
+    const migrated = normalizeCachedExplorerTab(legacyTab)
+    if (migrated !== 'files' || legacyTab === 'files') result[''] = migrated
+  }
+  return result
 }
 
 function cachedBranches(branches: RepoState['data']['branches']): RestorableRepoSnapshot['data']['branches'] {
@@ -148,7 +176,7 @@ function restoreProjectionFromSnapshot(repo: RepoState, snapshot: RestorableRepo
       ...repo.ui,
       selectedBranch,
       detailTab: normalizeCachedDetailTab(snapshot.ui.detailTab),
-      explorerTab: normalizeCachedExplorerTab(snapshot.ui.explorerTab),
+      explorerTabByBranch: snapshot.ui.explorerTabByBranch ?? {},
       workspaceLayout: snapshot.ui.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT,
       fileTreePaneSizes: snapshot.ui.fileTreePaneSizes,
       worktreePathOrder: snapshot.ui.worktreePathOrder,
@@ -202,6 +230,7 @@ function restorableRepoSnapshotFromRepo(repo: RepoState): RestorableRepoSnapshot
     if (actionId) quickActions[branch.name] = actionId
   }
 
+  const explorerTabByBranch = repo.ui.explorerTabByBranch ?? {}
   return {
     savedAt: Date.now(),
     name: repo.name,
@@ -212,7 +241,7 @@ function restorableRepoSnapshotFromRepo(repo: RepoState): RestorableRepoSnapshot
     ui: {
       selectedBranch: repo.ui.selectedBranch,
       detailTab: normalizeCachedDetailTab(repo.ui.detailTab),
-      explorerTab: repo.ui.explorerTab,
+      ...(Object.keys(explorerTabByBranch).length > 0 ? { explorerTabByBranch } : {}),
       workspaceLayout: repo.ui.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT,
       ...(repo.ui.fileTreePaneSizes ? { fileTreePaneSizes: repo.ui.fileTreePaneSizes } : {}),
       worktreePathOrder: repo.ui.worktreePathOrder,
@@ -239,7 +268,13 @@ function normalizeRestorableRepoSnapshotEntry(value: unknown): RestorableRepoSna
   const snapshot = parsed.output
   const fileTreePaneSizes =
     snapshot.ui.fileTreePaneSizes === undefined ? undefined : normalizeFileTreePaneSizes(snapshot.ui.fileTreePaneSizes)
-  const { fileTreePaneSizes: _rawFileTreePaneSizes, explorerTab: rawExplorerTab, ...ui } = snapshot.ui
+  const {
+    fileTreePaneSizes: _rawFileTreePaneSizes,
+    explorerTab: rawExplorerTab,
+    explorerTabByBranch: rawExplorerTabByBranch,
+    ...ui
+  } = snapshot.ui
+  const explorerTabByBranch = normalizeCachedExplorerTabByBranch(rawExplorerTabByBranch, rawExplorerTab)
   return {
     ...snapshot,
     data: {
@@ -249,7 +284,7 @@ function normalizeRestorableRepoSnapshotEntry(value: unknown): RestorableRepoSna
     ui: {
       ...ui,
       detailTab: normalizeCachedDetailTab(snapshot.ui.detailTab),
-      explorerTab: normalizeCachedExplorerTab(rawExplorerTab),
+      ...(Object.keys(explorerTabByBranch).length > 0 ? { explorerTabByBranch } : {}),
       workspaceLayout: snapshot.ui.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT,
       ...(fileTreePaneSizes ? { fileTreePaneSizes } : {}),
     },

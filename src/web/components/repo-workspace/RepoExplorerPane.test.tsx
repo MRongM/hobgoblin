@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { RepoExplorerPane } from '#/web/components/repo-workspace/RepoExplorerPane.tsx'
 import { emptyRepo } from '#/web/stores/repos/helpers.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
+import { explorerTabForRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -514,7 +515,7 @@ describe('RepoExplorerPane', () => {
 
     expect(container.querySelector('[data-testid="project-file-tree"]')).toBeNull()
     expect(container.querySelector('[data-testid="project-changes-panel"]')).toBeTruthy()
-    expect(useReposStore.getState().repos[REPO_ID]?.ui.explorerTab).toBe('changes')
+    expect(useReposStore.getState().repos[REPO_ID]?.ui.explorerTabByBranch.main).toBe('changes')
 
     await act(async () => {
       tabs[2]?.click()
@@ -525,18 +526,17 @@ describe('RepoExplorerPane', () => {
     expect(container.querySelector('[data-testid="project-status-panel"]')).toBeTruthy()
     expect(container.querySelector('[data-testid="project-ports-panel"]')).toBeNull()
     expect(container.querySelector('[data-testid="project-tags-panel"]')).toBeNull()
-    expect(useReposStore.getState().repos[REPO_ID]?.ui.explorerTab).toBe('status')
+    expect(useReposStore.getState().repos[REPO_ID]?.ui.explorerTabByBranch.main).toBe('status')
     await act(async () => root.unmount())
   })
 
   test('restores each repo explorer tab when the same component position changes repoId', async () => {
-    useReposStore.getState().setExplorerTab(REPO_ID, 'history')
-    const repoB = emptyRepo(REPO_B_ID, 'repo-b')
-    repoB.ui.explorerTab = 'changes'
-    useReposStore.setState((state) => ({
-      repos: { ...state.repos, [REPO_B_ID]: repoB },
+    const repoA = seedRepoState({ id: REPO_ID, selectedBranch: 'main', explorerTab: 'history' })
+    const repoB = seedRepoState({ id: REPO_B_ID, selectedBranch: 'main', explorerTab: 'changes' })
+    useReposStore.setState({
+      repos: { [REPO_ID]: repoA, [REPO_B_ID]: repoB },
       order: [REPO_ID, REPO_B_ID],
-    }))
+    })
     const container = document.createElement('div')
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -559,10 +559,10 @@ describe('RepoExplorerPane', () => {
   })
 
   test('does not replay a file reveal request in another repo', async () => {
-    const repoB = emptyRepo(REPO_B_ID, 'repo-b')
-    repoB.ui.explorerTab = 'changes'
+    const repoA = useReposStore.getState().repos[REPO_ID]
+    const repoB = seedRepoState({ id: REPO_B_ID, selectedBranch: 'main', explorerTab: 'changes' })
     useReposStore.setState((state) => ({
-      repos: { ...state.repos, [REPO_B_ID]: repoB },
+      repos: { [REPO_ID]: repoA!, [REPO_B_ID]: repoB },
       order: [REPO_ID, REPO_B_ID],
     }))
     const revealRequest = { id: 1, repoId: REPO_ID, relativePath: 'src/from-terminal.ts' }
@@ -580,7 +580,9 @@ describe('RepoExplorerPane', () => {
         />,
       )
     })
-    expect(useReposStore.getState().repos[REPO_ID]?.ui.explorerTab).toBe('files')
+    const revealRepo = useReposStore.getState().repos[REPO_ID]
+    expect(revealRepo).toBeTruthy()
+    expect(explorerTabForRepo(revealRepo!)).toBe('files')
 
     await act(async () => {
       root.render(
@@ -593,7 +595,7 @@ describe('RepoExplorerPane', () => {
       )
     })
     expect(container.querySelector('[data-testid="project-changes-panel"]')).toBeTruthy()
-    expect(useReposStore.getState().repos[REPO_B_ID]?.ui.explorerTab).toBe('changes')
+    expect(useReposStore.getState().repos[REPO_B_ID]?.ui.explorerTabByBranch.main).toBe('changes')
     await act(async () => root.unmount())
   })
 
@@ -632,7 +634,7 @@ describe('RepoExplorerPane', () => {
     expect(container.querySelector('[data-testid="project-ports-panel"]')?.getAttribute('data-repo-id')).toBe(
       'ssh-config://prod/srv/repo',
     )
-    expect(useReposStore.getState().repos['ssh-config://prod/srv/repo']?.ui.explorerTab).toBe('ports')
+    expect(useReposStore.getState().repos['ssh-config://prod/srv/repo']?.ui.explorerTabByBranch.main).toBe('ports')
     await act(async () => root.unmount())
   })
 
@@ -703,7 +705,8 @@ describe('RepoExplorerPane', () => {
     expect(container.querySelector('[data-testid="project-file-tree"]')?.getAttribute('data-reveal-path')).toBe(
       'src/app.ts',
     )
-    expect(useReposStore.getState().repos[REPO_ID]?.ui.explorerTab).toBe('files')
+    const repo = useReposStore.getState().repos[REPO_ID]
+    expect(repo && explorerTabForRepo(repo)).toBe('files')
     await act(async () => root.unmount())
   })
 
@@ -726,7 +729,8 @@ describe('RepoExplorerPane', () => {
     expect(container.querySelector('[data-testid="project-file-tree"]')?.getAttribute('data-reveal-path')).toBe(
       'src/from-history.ts',
     )
-    expect(useReposStore.getState().repos[REPO_ID]?.ui.explorerTab).toBe('files')
+    const repo2 = useReposStore.getState().repos[REPO_ID]
+    expect(repo2 && explorerTabForRepo(repo2)).toBe('files')
     await act(async () => root.unmount())
   })
 
@@ -758,7 +762,8 @@ describe('RepoExplorerPane', () => {
     expect(container.querySelector('[data-testid="project-file-tree"]')?.getAttribute('data-reveal-path')).toBe(
       'src/from-terminal.ts',
     )
-    expect(useReposStore.getState().repos[REPO_ID]?.ui.explorerTab).toBe('files')
+    const repo3 = useReposStore.getState().repos[REPO_ID]
+    expect(repo3 && explorerTabForRepo(repo3)).toBe('files')
     await act(async () => root.unmount())
   })
 

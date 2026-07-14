@@ -1,6 +1,6 @@
 import { arrayMove } from '@dnd-kit/sortable'
 import { normalizeWorktreePathOrder } from '#/web/stores/repos/branch-view-mode.ts'
-import { replaceRepo, replaceRepoState } from '#/web/stores/repos/helpers.ts'
+import { explorerTabForRepo as explorerTabForRepoSelection, replaceRepo, replaceRepoState } from '#/web/stores/repos/helpers.ts'
 import { persistRestorableRepoSnapshot } from '#/web/stores/repos/persistence.ts'
 import {
   DEFAULT_DETAIL_COLLAPSED,
@@ -248,11 +248,17 @@ function createRestorableWorkspaceSelectionActions(
       let token: number | undefined
       set((state) => {
         const repo = state.repos[id]
-        if (!repo || repo.ui.explorerTab === tab) return state
+        if (!repo) return state
+        // Compare against the effective tab (with fallback) so setting
+        // the default `'files'` on an untouched branch stays a no-op —
+        // matches the pre-migration behavior where an implicit 'files'
+        // was already the value.
+        if (explorerTabForRepoSelection(repo) === tab) return state
+        const key = repo.ui.selectedBranch ?? ''
         changed = true
         token = repo.instanceToken
         return replaceRepoState(state, repo, (draft) => {
-          draft.ui.explorerTab = tab
+          draft.ui.explorerTabByBranch[key] = tab
         })
       })
       const repo = get().repos[id]
