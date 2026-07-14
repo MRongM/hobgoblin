@@ -157,7 +157,7 @@ describe('TopbarRepoControls', () => {
 })
 
 describe('RepoToolbar', () => {
-  test('keeps body layout controls for non-git local workspaces while hiding branch controls', () => {
+  test('hides branch controls for non-git local workspaces', () => {
     seedRepoState({
       id: REPO_ID,
       isGitRepo: false,
@@ -172,13 +172,8 @@ describe('RepoToolbar', () => {
     expect(container?.querySelector('button[aria-label="branches.filter-tooltip.worktrees"]')).toBeNull()
     expect(container?.querySelector('[aria-label="branches.search-label"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="action.create-worktree-title"]')).toBeNull()
-    expect(workspaceLayoutButtons()).toHaveLength(1)
-
-    act(() => {
-      container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.layout-tooltip.top-bottom"]')?.click()
-    })
-
-    expect(useReposStore.getState().workspaceLayout).toBe('top-bottom')
+    // 布局控件已移除，由响应式模式自动决定
+    expect(workspaceLayoutButtons()).toHaveLength(0)
   })
 
   test('keeps body toolbar branch filters and layout for git-capable repositories', () => {
@@ -196,7 +191,8 @@ describe('RepoToolbar', () => {
     expect(container?.querySelector('[aria-label="branches.search-label"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="action.refresh"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="action.create-worktree-title"]')).toBeNull()
-    expect(workspaceLayoutButtons()).toHaveLength(1)
+    // 布局控件已移除，由响应式模式自动决定
+    expect(workspaceLayoutButtons()).toHaveLength(0)
     expect(container?.querySelector('button[aria-label="project-theme.menu"]')).not.toBeNull()
   })
 })
