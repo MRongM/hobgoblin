@@ -471,7 +471,12 @@ function ExplorerTabs({
                           const active = overflowTabs.find((t) => t.id === activeVisibleTab)
                           if (!active) return null
                           const Icon = active.icon
-                          return <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+                          return (
+                            <>
+                              <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+                              {active.label}
+                            </>
+                          )
                         })()}
                       <ChevronDown className="size-3.5 shrink-0" aria-hidden="true" />
                     </Button>
