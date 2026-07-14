@@ -14,12 +14,22 @@ import type { ExecResult } from '#/web/types.ts'
 /** Resolve the explorer tab for the repo's currently selected branch. Falls
  *  back to the `''` key (used when no branch is selected, or as legacy
  *  per-repo state carried over from before per-branch tabs) and finally to
- *  `'files'`. */
+ *  a default based on worktree existence. */
 export function explorerTabForRepo(repo: {
   ui: Pick<RepoState['ui'], 'selectedBranch' | 'explorerTabByBranch'>
+  data: Pick<RepoState['data'], 'branches'>
 }): ExplorerTab {
   const key = repo.ui.selectedBranch ?? ''
-  return repo.ui.explorerTabByBranch[key] ?? repo.ui.explorerTabByBranch[''] ?? 'files'
+  const savedTab = repo.ui.explorerTabByBranch[key] ?? repo.ui.explorerTabByBranch['']
+
+  if (savedTab) return savedTab
+
+  // 检查是否有工作树
+  const selectedBranch = repo.data.branches.find(branch => branch.name === repo.ui.selectedBranch)
+  const hasWorktree = !!selectedBranch?.worktree?.path
+
+  // 有工作树默认为 status，否则默认为 files
+  return hasWorktree ? 'status' : 'files'
 }
 
 let nextInstanceToken = 1
