@@ -9,7 +9,6 @@ import {
 } from '#/web/components/ui/dropdown-menu.tsx'
 import { BranchActionControls } from '#/web/components/BranchActionControls.tsx'
 import { ProjectThemeMenuConnected } from '#/web/components/repo-toolbar/ProjectThemeMenu.tsx'
-import { WorkspaceLayoutControl } from '#/web/components/repo-toolbar/WorkspaceLayoutControl.tsx'
 import { WorktreeActionHistory } from '#/web/components/repo-toolbar/WorktreeActionHistory.tsx'
 import { BranchSummaryInline } from '#/web/components/repo-workspace/BranchSummaryInline.tsx'
 import { Toolbar } from '#/web/components/Layout.tsx'
@@ -23,6 +22,7 @@ import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 import { repoWorkspaceBehavior } from '#/web/lib/workspace-layout.ts'
+import { useEffectiveWorkspaceLayout } from '#/web/lib/effective-workspace-layout.ts'
 
 interface Props {
   repoId: string
@@ -31,7 +31,7 @@ interface Props {
 export function RepoToolbar({ repoId }: Props) {
   const exists = useReposStore((s) => !!s.repos[repoId])
   const isGitRepo = useReposStore((s) => s.repos[repoId]?.isGitRepo ?? true)
-  const workspaceLayout = useReposStore((s) => s.repos[repoId]?.ui.workspaceLayout ?? s.workspaceLayout)
+  const workspaceLayout = useEffectiveWorkspaceLayout()
   const focusMode = useReposStore((s) => {
     const behavior = repoWorkspaceBehavior(workspaceLayout, s.detailCollapsed, s.detailFocusMode)
     return behavior.mode === 'focus'
@@ -46,7 +46,6 @@ export function RepoToolbar({ repoId }: Props) {
       <div className="flex shrink-0 items-center gap-2">
         {isGitRepo && <WorktreeActionHistory repoId={repoId} />}
         <ProjectThemeMenuConnected repoId={repoId} />
-        <WorkspaceLayoutControlConnected repoId={repoId} />
       </div>
     </Toolbar>
   )
@@ -219,13 +218,4 @@ function BranchSelector({
       </DropdownMenuContent>
     </DropdownMenu>
   )
-}
-
-function WorkspaceLayoutControlConnected({ repoId }: Props) {
-  const uiMode = useResponsiveUiMode()
-  const workspaceLayout = useReposStore((s) => s.repos[repoId]?.ui.workspaceLayout ?? s.workspaceLayout)
-  const setWorkspaceLayout = useReposStore((s) => s.setWorkspaceLayout)
-  if (uiMode === 'compact') return null
-
-  return <WorkspaceLayoutControl value={workspaceLayout} onChange={(layout) => setWorkspaceLayout(repoId, layout)} />
 }
