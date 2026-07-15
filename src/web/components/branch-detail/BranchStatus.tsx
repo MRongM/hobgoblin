@@ -37,6 +37,13 @@ import type { SelectedBranchDetail } from '#/web/components/branch-detail/model.
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { repoWorkspaceBehavior } from '#/web/lib/workspace-layout.ts'
 import { cn } from '#/web/lib/cn.ts'
+import { lastPathSegment } from '#/web/lib/paths.ts'
+
+function worktreeFolderName(worktreePath: string | undefined, repoId: string): string {
+  const fromWorktree = worktreePath ? lastPathSegment(worktreePath) : ''
+  if (fromWorktree) return fromWorktree
+  return lastPathSegment(repoId) || repoId
+}
 interface Props {
   detail: SelectedBranchDetail
   repoName: string
@@ -123,8 +130,7 @@ export function branchStatusClipboardText(detail: SelectedBranchDetail, repoName
   const { branch } = detail
   if (!branch) return ''
 
-  // 从 repoId 提取文件夹名
-  const folderName = repoId.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? repoId
+  const folderName = worktreeFolderName(branch.worktree?.path, repoId)
 
   const pullRequest =
     branch.pullRequest && branchPullRequestBelongsToBranch(branch, branch.pullRequest) ? branch.pullRequest : undefined
@@ -187,8 +193,7 @@ export function BranchStatus({ detail, repoName, repoId, layout }: Props) {
   const behavior = repoWorkspaceBehavior(layout, false)
   if (!branch) return <EmptyState title={t('branches.empty')} />
 
-  // 从 repoId 提取文件夹名
-  const folderName = repoId.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? repoId
+  const folderName = worktreeFolderName(branch.worktree?.path, repoId)
 
   const protectedBranch = PROTECTED_BRANCHES.has(branch.name)
   const worktreePath = branch.worktree?.path ?? ''

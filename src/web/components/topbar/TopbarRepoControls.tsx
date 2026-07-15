@@ -10,9 +10,7 @@ import {
 import { BranchActionControls } from '#/web/components/BranchActionControls.tsx'
 import { RepoActivityControl } from '#/web/components/repo-activity/RepoActivityControl.tsx'
 import { ProjectThemeMenuConnected } from '#/web/components/repo-toolbar/ProjectThemeMenu.tsx'
-import { WorkspaceLayoutControl } from '#/web/components/repo-toolbar/WorkspaceLayoutControl.tsx'
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
-import { useResponsiveUiMode } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.tsx'
 import { useBranchActionShortcutRegistry } from '#/web/hooks/useBranchActionShortcutRegistry.ts'
 import { visibleBranches } from '#/web/stores/repos/branch-view-mode.ts'
@@ -44,7 +42,6 @@ export function TopbarRepoControls({ repoId }: Props) {
         <RepoActivityControl repoId={repoId} compact mutedForegroundClassName="text-topbar-muted-foreground" />
       )}
       <ProjectThemeMenuConnected repoId={repoId} />
-      <WorkspaceLayoutControlConnected repoId={repoId} />
     </div>
   )
 }
@@ -194,13 +191,4 @@ function BranchSelector({
       </DropdownMenuContent>
     </DropdownMenu>
   )
-}
-
-function WorkspaceLayoutControlConnected({ repoId }: Props) {
-  const uiMode = useResponsiveUiMode()
-  const workspaceLayout = useReposStore((s) => s.repos[repoId]?.ui.workspaceLayout ?? s.workspaceLayout)
-  const setWorkspaceLayout = useReposStore((s) => s.setWorkspaceLayout)
-  if (uiMode === 'compact') return null
-
-  return <WorkspaceLayoutControl value={workspaceLayout} onChange={(layout) => setWorkspaceLayout(repoId, layout)} />
 }

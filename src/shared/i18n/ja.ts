@@ -288,7 +288,7 @@ export const ja: Record<DictKey, string> = {
   'branch-status.copy-worktree-path': 'ワークツリーパスをコピー',
   'branch-status.copied': 'コピー済み',
   'branch-status.copy-folder-name': 'フォルダー名をコピー',
-  'branch-status.signal.folder': 'プロジェクトフォルダー',
+  'branch-status.signal.folder': 'ワークツリーフォルダー',
   'branch-status.signal.project': 'プロジェクト',
   'branch-status.signal.branch': 'ブランチ',
   'branch-status.signal.upstream': '上流',

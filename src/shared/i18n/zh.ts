@@ -272,7 +272,7 @@ export const zh: Record<DictKey, string> = {
   'branch-status.copy-worktree-path': '复制工作树路径',
   'branch-status.copied': '已复制',
   'branch-status.copy-folder-name': '复制文件夹名称',
-  'branch-status.signal.folder': '项目文件夹',
+  'branch-status.signal.folder': '工作树文件夹',
   'branch-status.signal.project': '项目',
   'branch-status.signal.branch': '分支',
   'branch-status.signal.upstream': '上游',
