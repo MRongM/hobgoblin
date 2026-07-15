@@ -31,6 +31,17 @@ import { useFocusRegistry, type FocusRegistry } from '#/web/components/tab-strip
 import type { RepoTabStripLabels, RepoTabSummary } from '#/web/components/repo-tabs/types.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { GroupedRepoTabs } from '#/web/components/repo-tabs/GroupedRepoTabs.tsx'
+import { CreateGroupDialog } from '#/web/components/repo-tabs/CreateGroupDialog.tsx'
+import type { RepoGroupColor } from '#/web/stores/repos/types.ts'
+import { ALL_GROUP_COLORS, getGroupColorClasses } from '#/web/components/repo-tabs/group-colors.ts'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '#/web/components/ui/context-menu.tsx'
+import { FolderPlus, FolderMinus, Pencil, Palette, X } from 'lucide-react'
 
 function shouldShowInactiveSeparator({
   leftId,
@@ -278,7 +289,40 @@ export function RepoTabStrip({
   const repoGroups = useReposStore((s) => s.repoGroups)
   const groupOf = useReposStore((s) => s.groupOf)
   const toggleGroupCollapsed = useReposStore((s) => s.toggleGroupCollapsed)
+  const createRepoGroup = useReposStore((s) => s.createRepoGroup)
+  const updateRepoGroup = useReposStore((s) => s.updateRepoGroup)
+  const deleteRepoGroup = useReposStore((s) => s.deleteRepoGroup)
+  const addRepoToGroup = useReposStore((s) => s.addRepoToGroup)
+  const removeRepoFromGroup = useReposStore((s) => s.removeRepoFromGroup)
+  const moveTabDrag = useReposStore((s) => s.moveTabDrag)
   const hasAnyGroups = Object.keys(repoGroups).length > 0
+
+  // Dialog state for creating a new group
+  const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false)
+  const [pendingRepoForGroup, setPendingRepoForGroup] = useState<string | null>(null)
+
+  const openCreateGroupDialog = useCallback((repoId: string) => {
+    setPendingRepoForGroup(repoId)
+    setCreateGroupDialogOpen(true)
+  }, [])
+
+  const handleCreateGroupConfirm = useCallback(
+    (name: string, color: RepoGroupColor) => {
+      if (pendingRepoForGroup) {
+        createRepoGroup(name, color, [pendingRepoForGroup])
+      }
+      setPendingRepoForGroup(null)
+      setCreateGroupDialogOpen(false)
+    },
+    [pendingRepoForGroup, createRepoGroup],
+  )
+
+  const handleAddToExistingGroup = useCallback(
+    (repoId: string, groupId: string) => {
+      addRepoToGroup(repoId, groupId)
+    },
+    [addRepoToGroup],
+  )
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -304,7 +348,14 @@ export function RepoTabStrip({
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
     if (!over || active.id === over.id) return
-    onReorder(String(active.id), String(over.id))
+    const fromId = String(active.id)
+    const toId = String(over.id)
+    // When groups exist, route through moveTabDrag which preserves the same-group-adjacency invariant.
+    if (hasAnyGroups || fromId.startsWith('group:') || toId.startsWith('group:')) {
+      moveTabDrag(fromId, toId)
+      return
+    }
+    onReorder(fromId, toId)
   }
 
   const handleKeyboardNavigate = (id: string, direction: 'prev' | 'next' | 'first' | 'last') => {
@@ -339,8 +390,38 @@ export function RepoTabStrip({
     </RepoTabEdgeAction>
   )
 
+  // Tracks which repo/group the user right-clicked; drives the context menu content
+  const [contextTarget, setContextTarget] = useState<
+    { kind: 'repo'; repoId: string } | { kind: 'group'; groupId: string } | null
+  >(null)
+
+  const handleContextMenu = (event: React.MouseEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement | null
+    const repoTab = target?.closest<HTMLElement>('[data-repo-tab-id]')
+    const groupChip = target?.closest<HTMLElement>('[data-group-id]')
+    if (repoTab) {
+      const repoId = repoTab.getAttribute('data-repo-tab-id')
+      if (repoId) setContextTarget({ kind: 'repo', repoId })
+      return
+    }
+    if (groupChip) {
+      const groupId = groupChip.getAttribute('data-group-id')
+      if (groupId) setContextTarget({ kind: 'group', groupId })
+      return
+    }
+    setContextTarget(null)
+  }
+
+  const groupList = Object.values(repoGroups)
+  const targetRepoGroupId = contextTarget?.kind === 'repo' ? groupOf[contextTarget.repoId] : undefined
+  const targetGroup =
+    contextTarget?.kind === 'group' ? repoGroups[contextTarget.groupId] : undefined
+
   return (
     <nav className="flex h-full min-w-0 flex-1 items-center" aria-label={labels.repositories}>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div className="flex h-full min-w-0 flex-1 items-center" onContextMenu={handleContextMenu}>
       {repos.length === 0 ? (
         openMenu
       ) : (
@@ -436,6 +517,121 @@ export function RepoTabStrip({
           }
         />
       )}
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent className="w-56">
+          {contextTarget?.kind === 'repo' && (
+            <>
+              <ContextMenuItem onSelect={() => openCreateGroupDialog(contextTarget.repoId)}>
+                <FolderPlus />
+                Add to new group…
+              </ContextMenuItem>
+              {groupList.length > 0 && (
+                <>
+                  <ContextMenuSeparator />
+                  {groupList.map((g) => {
+                    const isCurrent = targetRepoGroupId === g.id
+                    if (isCurrent) return null
+                    const colorClasses = getGroupColorClasses(g.color)
+                    return (
+                      <ContextMenuItem
+                        key={g.id}
+                        onSelect={() => handleAddToExistingGroup(contextTarget.repoId, g.id)}
+                      >
+                        <span className={cn('inline-block size-2 rounded-full', colorClasses.dot)} aria-hidden />
+                        <span className="truncate">Add to “{g.name}”</span>
+                      </ContextMenuItem>
+                    )
+                  })}
+                </>
+              )}
+              {targetRepoGroupId && (
+                <>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem onSelect={() => removeRepoFromGroup(contextTarget.repoId)}>
+                    <FolderMinus />
+                    Remove from group
+                  </ContextMenuItem>
+                </>
+              )}
+            </>
+          )}
+          {contextTarget?.kind === 'group' && targetGroup && (
+            <>
+              <ContextMenuItem
+                onSelect={() => {
+                  const next = window.prompt('Rename group', targetGroup.name)
+                  if (next && next.trim()) updateRepoGroup(targetGroup.id, { name: next.trim() })
+                }}
+              >
+                <Pencil />
+                Rename…
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <div className="px-2 py-1 text-xs text-muted-foreground">
+                <div className="mb-1 flex items-center gap-1">
+                  <Palette className="size-3" />
+                  Color
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {ALL_GROUP_COLORS.map((c) => {
+                    const cc = getGroupColorClasses(c)
+                    const selected = targetGroup.color === c
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        className={cn(
+                          'size-5 rounded border',
+                          cc.bg,
+                          selected ? 'border-foreground' : 'border-transparent hover:border-muted-foreground/40',
+                        )}
+                        onClick={() => updateRepoGroup(targetGroup.id, { color: c })}
+                        aria-label={c}
+                      >
+                        <span className={cn('m-auto block size-2 rounded-full', cc.dot)} />
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+              <ContextMenuSeparator />
+              <ContextMenuItem onSelect={() => deleteRepoGroup(targetGroup.id)}>
+                <X />
+                Ungroup
+              </ContextMenuItem>
+              <ContextMenuItem
+                variant="destructive"
+                onSelect={() => {
+                  // Close all repos in this group
+                  const memberIds = repos.filter((r) => groupOf[r.id] === targetGroup.id).map((r) => r.id)
+                  for (const id of memberIds) onClose(id)
+                }}
+              >
+                <X />
+                Close all in group
+              </ContextMenuItem>
+            </>
+          )}
+        </ContextMenuContent>
+      </ContextMenu>
+
+      <CreateGroupDialog
+        open={createGroupDialogOpen}
+        onClose={() => {
+          setCreateGroupDialogOpen(false)
+          setPendingRepoForGroup(null)
+        }}
+        onCreate={handleCreateGroupConfirm}
+        labels={{
+          title: 'Create group',
+          nameLabel: 'Group name',
+          namePlaceholder: 'e.g. Frontend',
+          colorLabel: 'Color',
+          cancel: 'Cancel',
+          create: 'Create',
+        }}
+      />
     </nav>
   )
 }

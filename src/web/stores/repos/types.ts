@@ -224,6 +224,11 @@ export interface RestorableWorkspaceActions {
   addRepoToGroup: (repoId: string, groupId: string) => void
   removeRepoFromGroup: (repoId: string) => void
   toggleGroupCollapsed: (groupId: string) => void
+  /** Drag-aware move: places `fromId` at `toId`'s slot while keeping the same-group-adjacency invariant.
+   *  - toId is a repo id: moves next to that repo. If joining that repo's group, membership updates too.
+   *  - toId is a group id prefixed with `group:`: moves to the head/tail of that group depending on drag direction.
+   *  When `fromId` is `group:<id>`, moves the whole group block. */
+  moveTabDrag: (fromId: string, toId: string) => void
 }
 
 export interface RuntimeCoherentRepoProjectionActions {
