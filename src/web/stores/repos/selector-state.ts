@@ -48,6 +48,8 @@ export function restorableWorkspaceStateFromStore(
     | 'detailPaneSizes'
     | 'fileTreePaneSizes'
     | 'selectedTerminalByWorktree'
+    | 'repoGroups'
+    | 'groupOf'
   > & { repos?: ReposStore['repos'] },
 ): RestorableWorkspaceState {
   const workspaceLayout = state.activeId
@@ -62,6 +64,8 @@ export function restorableWorkspaceStateFromStore(
     detailPaneSizes: state.detailPaneSizes,
     fileTreePaneSizes: state.fileTreePaneSizes,
     selectedTerminalByWorktree: state.selectedTerminalByWorktree,
+    repoGroups: state.repoGroups,
+    groupOf: state.groupOf,
   }
 }
 

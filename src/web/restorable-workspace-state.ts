@@ -21,6 +21,8 @@ export function sessionStateFromRestorableWorkspaceState(input: {
       restorableWorkspaceState.selectedTerminalByWorktree,
       repos,
     ),
+    repoGroups: restorableWorkspaceState.repoGroups,
+    groupOf: restorableWorkspaceState.groupOf,
   }
 }
 
@@ -39,6 +41,8 @@ export function restoreRestorableWorkspaceStateFromSession(
   | 'detailPaneSizes'
   | 'fileTreePaneSizes'
   | 'selectedTerminalByWorktree'
+  | 'repoGroups'
+  | 'groupOf'
 > {
   return {
     activeId,
@@ -48,5 +52,7 @@ export function restoreRestorableWorkspaceStateFromSession(
     detailPaneSizes: session.detailPaneSizes,
     fileTreePaneSizes: session.fileTreePaneSizes ?? DEFAULT_FILE_TREE_PANE_SIZES,
     selectedTerminalByWorktree: session.selectedTerminalByWorktree ?? {},
+    repoGroups: session.repoGroups ?? {},
+    groupOf: session.groupOf ?? {},
   }
 }

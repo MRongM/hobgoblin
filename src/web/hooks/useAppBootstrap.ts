@@ -36,6 +36,11 @@ export function useAppBootstrap() {
         const restoredWorkspaceState = restoreRestorableWorkspaceStateFromSession(session)
         applySessionLayoutState(normalizedLayout)
         applySessionSelectedTerminalState(restoredWorkspaceState.selectedTerminalByWorktree)
+        // Restore group data before hydrateSession so order/repos are populated with group context
+        useReposStore.setState({
+          repoGroups: restoredWorkspaceState.repoGroups,
+          groupOf: restoredWorkspaceState.groupOf,
+        })
         await hydrateSession(session.openRepos, session.activeRepo)
       } catch (err) {
         console.warn('[bootstrap] failed', err)

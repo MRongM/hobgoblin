@@ -9,10 +9,11 @@ import type {
 } from '#/web/types.ts'
 import type { RemoteRepoTarget, RepoSessionEntry } from '#/shared/remote-repo.ts'
 import type { WorkspaceDetailPaneSizes, WorkspaceLayout } from '#/shared/workspace-layout.ts'
-import type { SessionState } from '#/shared/rpc.ts'
+import type { SessionState, RepoGroupMeta, RepoGroupColor } from '#/shared/rpc.ts'
 import type { RepoBranchAction, RunBranchActionOptions } from '#/web/stores/repos/branch-action-types.ts'
 import type { RepoOperationsState } from '#/web/stores/repos/operations.ts'
 import type { RepoResourcesState } from '#/web/stores/repos/resources.ts'
+export type { RepoGroupMeta, RepoGroupColor } from '#/shared/rpc.ts'
 export type DetailTab = 'status' | 'changes' | 'terminal'
 export type ExplorerTab = 'files' | 'changes' | 'status' | 'history' | 'local' | 'remoteBranches' | 'ports'
 export type RepoWorkspaceLayout = WorkspaceLayout
@@ -167,6 +168,10 @@ export interface RestorableWorkspaceState {
   fileTreePaneSizes: WorkspaceDetailPaneSizes
   /** Per worktree terminal selection restored from SessionState.selectedTerminalByWorktree. */
   selectedTerminalByWorktree: Record<string, string>
+  /** Repo group metadata indexed by group id. */
+  repoGroups: Record<string, RepoGroupMeta>
+  /** Maps repo id to its group id. Only grouped repos appear here. */
+  groupOf: Record<string, string>
 }
 
 export interface LocalWorkspaceState {
@@ -213,6 +218,12 @@ export interface RestorableWorkspaceActions {
   setSelectedTerminal: (worktreeTerminalKey: string, key: string | null) => void
   reorderWorktrees: (id: string, fromPath: string, toPath: string) => void
   cycleActive: (direction: 1 | -1) => void
+  createRepoGroup: (name: string, color: RepoGroupColor, repoIds: string[]) => string
+  updateRepoGroup: (groupId: string, updates: Partial<Pick<RepoGroupMeta, 'name' | 'color' | 'collapsed'>>) => void
+  deleteRepoGroup: (groupId: string) => void
+  addRepoToGroup: (repoId: string, groupId: string) => void
+  removeRepoFromGroup: (repoId: string) => void
+  toggleGroupCollapsed: (groupId: string) => void
 }
 
 export interface RuntimeCoherentRepoProjectionActions {

@@ -314,7 +314,23 @@ export function createRuntimeRepoLifecycleActions(set: ReposSet, get: ReposGet):
         }
         const order = s.order.filter((x) => x !== id)
         const activeId = nextActiveRepoIdAfterWorkspaceClose(s.order, s.activeId, id)
-        return { repos, branchSearchQueries, selectedTerminalByWorktree, order, activeId }
+
+        // Clean up group membership and delete empty groups
+        const groupId = s.groupOf[id]
+        let groupOf = s.groupOf
+        let repoGroups = s.repoGroups
+        if (groupId) {
+          groupOf = { ...s.groupOf }
+          delete groupOf[id]
+          // Check if group is now empty
+          const hasMembers = order.some((repoId) => groupOf[repoId] === groupId)
+          if (!hasMembers) {
+            repoGroups = { ...s.repoGroups }
+            delete repoGroups[groupId]
+          }
+        }
+
+        return { repos, branchSearchQueries, selectedTerminalByWorktree, order, activeId, groupOf, repoGroups }
       })
     },
 

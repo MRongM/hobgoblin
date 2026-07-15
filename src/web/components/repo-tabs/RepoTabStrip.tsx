@@ -29,6 +29,8 @@ import { RepoTab } from '#/web/components/repo-tabs/RepoTab.tsx'
 import { RepoTabTooltipLayer } from '#/web/components/repo-tabs/RepoTabTooltipLayer.tsx'
 import { useFocusRegistry, type FocusRegistry } from '#/web/components/tab-strip/useFocusRegistry.ts'
 import type { RepoTabStripLabels, RepoTabSummary } from '#/web/components/repo-tabs/types.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
+import { GroupedRepoTabs } from '#/web/components/repo-tabs/GroupedRepoTabs.tsx'
 
 function shouldShowInactiveSeparator({
   leftId,
@@ -271,6 +273,13 @@ export function RepoTabStrip({
 }: RepoTabStripProps) {
   const isSmallScreen = useIsSmallScreen()
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+
+  // Grouping state
+  const repoGroups = useReposStore((s) => s.repoGroups)
+  const groupOf = useReposStore((s) => s.groupOf)
+  const toggleGroupCollapsed = useReposStore((s) => s.toggleGroupCollapsed)
+  const hasAnyGroups = Object.keys(repoGroups).length > 0
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -386,21 +395,44 @@ export function RepoTabStrip({
             />
           }
           scrollContent={
-            <ScrollableRepoTabs
-              repos={repos}
-              activeId={activeId}
-              hoveredId={hoveredId}
-              labels={labels}
-              focusRegistry={focusRegistry}
-              onHoverChange={setHoveredId}
-              onActivate={onActivate}
-              onClose={handleClose}
-              onKeyboardNavigate={handleKeyboardNavigate}
-              sensors={sensors}
-              onDragEnd={handleDragEnd}
-              restrictToVisibleTabStrip={restrictToVisibleTabStrip}
-              openMenu={openMenu}
-            />
+            // Use grouped tabs if any groups exist and not on small screen
+            hasAnyGroups && !isSmallScreen ? (
+              <GroupedRepoTabs
+                repos={repos}
+                repoGroups={repoGroups}
+                groupOf={groupOf}
+                activeId={activeId}
+                hoveredId={hoveredId}
+                focusRegistry={focusRegistry}
+                sensors={sensors}
+                restrictToVisibleTabStrip={restrictToVisibleTabStrip}
+                onHoverChange={setHoveredId}
+                onActivate={onActivate}
+                onClose={handleClose}
+                onKeyboardNavigate={handleKeyboardNavigate}
+                onDragEnd={handleDragEnd}
+                onToggleGroupCollapsed={toggleGroupCollapsed}
+                openMenu={openMenu}
+                closeLabel={labels.closeWithName}
+                unavailableLabel={labels.unavailable}
+              />
+            ) : (
+              <ScrollableRepoTabs
+                repos={repos}
+                activeId={activeId}
+                hoveredId={hoveredId}
+                labels={labels}
+                focusRegistry={focusRegistry}
+                onHoverChange={setHoveredId}
+                onActivate={onActivate}
+                onClose={handleClose}
+                onKeyboardNavigate={handleKeyboardNavigate}
+                sensors={sensors}
+                onDragEnd={handleDragEnd}
+                restrictToVisibleTabStrip={restrictToVisibleTabStrip}
+                openMenu={openMenu}
+              />
+            )
           }
         />
       )}

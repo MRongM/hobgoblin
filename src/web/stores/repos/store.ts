@@ -20,6 +20,7 @@ import { createCommitActions } from '#/web/stores/repos/commit.ts'
 import { createLifecycleActions } from '#/web/stores/repos/lifecycle.ts'
 import { createRefreshActions } from '#/web/stores/repos/refresh.ts'
 import { createSelectionActions } from '#/web/stores/repos/selection.ts'
+import { createGroupActions } from '#/web/stores/repos/group-actions.ts'
 import { normalizeRestorableRepoCache } from '#/web/stores/repos/persistence.ts'
 import {
   DEFAULT_DETAIL_COLLAPSED,
@@ -111,6 +112,8 @@ export const useReposStore = create<ReposStore>()(
       detailPaneSizes: DEFAULT_DETAIL_PANE_SIZES,
       fileTreePaneSizes: DEFAULT_FILE_TREE_PANE_SIZES,
       selectedTerminalByWorktree: {},
+      repoGroups: {},
+      groupOf: {},
 
       // Local renderer-only state.
       sessionReady: false,
@@ -121,6 +124,7 @@ export const useReposStore = create<ReposStore>()(
       ...createRefreshActions(set, get),
       ...createBranchActions(set, get),
       ...createCommitActions(set, get),
+      ...createGroupActions(set, get),
     }),
     {
       name: 'goblin.repo-store',

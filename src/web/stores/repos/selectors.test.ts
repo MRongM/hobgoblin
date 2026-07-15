@@ -97,6 +97,8 @@ describe('repo selectors', () => {
         selectedTerminalByWorktree: {
           '/tmp/repo\0/tmp/repo': 'terminal-1',
         },
+        repoGroups: {},
+        groupOf: {},
       }),
     ).toEqual({
       order: ['/tmp/repo'],
@@ -115,6 +117,8 @@ describe('repo selectors', () => {
       selectedTerminalByWorktree: {
         '/tmp/repo\0/tmp/repo': 'terminal-1',
       },
+      repoGroups: {},
+      groupOf: {},
     })
   })
 

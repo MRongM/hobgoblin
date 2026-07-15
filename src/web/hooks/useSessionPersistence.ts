@@ -14,6 +14,8 @@ export function useSessionPersistence() {
   const detailPaneSizes = useReposStore((s) => s.detailPaneSizes)
   const fileTreePaneSizes = useReposStore((s) => s.fileTreePaneSizes)
   const selectedTerminalByWorktree = useReposStore((s) => s.selectedTerminalByWorktree)
+  const repoGroups = useReposStore((s) => s.repoGroups)
+  const groupOf = useReposStore((s) => s.groupOf)
   const sessionReady = useReposStore((s) => s.sessionReady)
   const repos = useReposStore((s) => s.repos)
   const lastSavedRef = useRef<string | null>(null)
@@ -34,6 +36,8 @@ export function useSessionPersistence() {
       detailPaneSizes,
       fileTreePaneSizes,
       selectedTerminalByWorktree,
+      repoGroups,
+      groupOf,
     })
     const session = sessionStateFromRestorableWorkspaceState({
       repos,

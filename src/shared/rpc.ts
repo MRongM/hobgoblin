@@ -86,6 +86,15 @@ export interface ThemeState {
   colorTheme: ColorTheme
 }
 
+export type RepoGroupColor = 'gray' | 'blue' | 'red' | 'yellow' | 'green' | 'pink' | 'purple' | 'cyan'
+
+export interface RepoGroupMeta {
+  id: string
+  name: string
+  color: RepoGroupColor
+  collapsed: boolean
+}
+
 export interface SessionState {
   /** Repo entries that were open, in tab order. */
   openRepos: RepoSessionEntry[]
@@ -97,6 +106,10 @@ export interface SessionState {
   detailPaneSizes: WorkspaceDetailPaneSizes
   fileTreePaneSizes?: WorkspaceDetailPaneSizes
   selectedTerminalByWorktree?: Record<string, string>
+  /** Repo group metadata indexed by group id. */
+  repoGroups?: Record<string, RepoGroupMeta>
+  /** Maps repo id to its group id. Only grouped repos appear here. */
+  groupOf?: Record<string, string>
 }
 
 export interface RuntimeSettingsSnapshot extends SettingsPrefs {

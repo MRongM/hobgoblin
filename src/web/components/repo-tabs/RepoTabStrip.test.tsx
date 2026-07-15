@@ -423,6 +423,7 @@ const labels = {
   openRemoteShortcut: '⌘⇧R',
   clone: 'Clone repository…',
   cloneShortcut: '⌘⇧O',
+  clearCache: 'Clear cache',
   unavailable: 'Unavailable',
 }
 

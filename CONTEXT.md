@@ -6,6 +6,14 @@ Hobgoblin is a high-productivity workspace for Git worktree-based development wi
 
 Core model: **multi-project × multi-worktree/branch × multi-terminal**. Users open several repositories, isolate parallel branches in separate worktrees, and attach server-backed terminals to the right branch context — keeping Git state and AI CLI sessions (Claude Code, Codex, etc.) together.
 
+## Glossary
+
+**Repo Group**: A named, colored collection of repository tabs in the topbar. Users manually create groups, assign names and colors, and drag repos into them. Groups can be collapsed to save topbar space (hiding member tabs while showing a group chip). Inspired by Chrome's tab groups.
+
+**Group Chip**: The visual representation of a collapsed repo group — a compact pill showing the group's color dot, name, and collapse/expand icon. Clicking toggles collapse state; right-click opens group actions (rename, change color, ungroup, close all).
+
+**Ungrouped Repo**: A repository tab that does not belong to any group. These tabs appear individually in the topbar, outside of group boundaries.
+
 ## Stack
 
 | Layer | Technology |
@@ -79,7 +87,7 @@ Three classes — pick the right one before deciding ownership:
 |---|---|---|
 | **Local** | Short-lived interaction state, never synced | dialog inputs, hover state, `branchSearchQueries` |
 | **Runtime-coherent** | Must converge across windows during this run; server is the source of truth | settings snapshots, repo/branch/status data, terminal sessions |
-| **Restorable** | Survives relaunch but needs no live sync | workspace layout, active repo set, `restorableRepoCache` |
+| **Restorable** | Survives relaunch but needs no live sync | workspace layout, active repo set, `restorableRepoCache`, **repo groups** |
 
 ## Feature layering
 
