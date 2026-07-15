@@ -121,7 +121,32 @@ describe('RepoTabStrip', () => {
     expect(tab?.querySelector('[data-terminal-output-activity-indicator="active"]')).not.toBeNull()
   })
 
-  test('uses a smaller terminal output activity effect on repo tabs', () => {
+  test('shows a persistent terminal count badge when a repo worktree has open terminals', () => {
+    render(
+      <RepoTabStrip
+        repos={[repo('repo-a', '/tmp/repo-a', { worktreePaths: ['/tmp/repo-a', '/tmp/repo-a-feature'] })]}
+        activeId="/tmp/repo-a"
+        labels={labels}
+        onActivate={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+        onOpenLocal={() => {}}
+        onOpenRemote={() => {}}
+        onClone={() => {}}
+      />,
+      { openWorktreeKeys: ['/tmp/repo-a\0/tmp/repo-a', '/tmp/repo-a\0/tmp/repo-a-feature'] },
+    )
+
+    const tab = document.body.querySelector('[data-repo-tab-id="/tmp/repo-a"]')
+    expect(tab?.getAttribute('aria-label')).toContain('terminal.open-count')
+    const badge = tab?.querySelector('[data-testid="repo-tab-terminal-count-badge"]')
+    expect(badge).not.toBeNull()
+    expect(badge?.textContent).toContain('2')
+    expect(badge?.querySelector('svg')).not.toBeNull()
+    expect(badge?.querySelector('[data-terminal-output-activity-indicator]')).toBeNull()
+  })
+
+  test('renders the terminal output activity effect inside the terminal count badge', () => {
     render(
       <RepoTabStrip
         repos={[repo('repo-a', '/tmp/repo-a', { worktreePaths: ['/tmp/repo-a'] })]}
@@ -137,10 +162,12 @@ describe('RepoTabStrip', () => {
       { outputActiveWorktreeKeys: ['/tmp/repo-a\0/tmp/repo-a'] },
     )
 
-    const indicator = document.body.querySelector('[data-terminal-output-activity-indicator="active"]')
-    expect(indicator?.className).toContain('size-3')
-    expect(indicator?.querySelector('[data-terminal-output-activity-glow]')?.className).toContain('h-[120%]')
-    expect(indicator?.querySelector('[data-terminal-output-activity-ping]')?.className).toContain('h-[135%]')
+    const badge = document.body.querySelector('[data-testid="repo-tab-terminal-count-badge"]')
+    expect(badge).not.toBeNull()
+    expect(badge?.textContent).toContain('1')
+    const indicator = badge?.querySelector('[data-terminal-output-activity-indicator="active"]')
+    expect(indicator).not.toBeNull()
+    expect(indicator?.className).toContain('size-2.5')
   })
 
   test('shows active terminal output and unread bell independently on a repo tab', () => {
@@ -348,6 +375,7 @@ function render(
   fixture: {
     bellWorktreeKeys?: string[]
     outputActiveWorktreeKeys?: string[]
+    openWorktreeKeys?: string[]
   } = {},
 ) {
   container = document.createElement('div')
@@ -356,6 +384,7 @@ function render(
   const readContext = terminalReadContextWithState(
     new Set(fixture.bellWorktreeKeys ?? []),
     new Set(fixture.outputActiveWorktreeKeys ?? []),
+    new Set(fixture.openWorktreeKeys ?? []),
   )
   act(() => {
     root!.render(
@@ -377,15 +406,15 @@ function repo(name: string, id: string, options: { worktreePaths?: string[]; isG
 function terminalReadContextWithState(
   bellKeys: ReadonlySet<string>,
   outputActiveKeys: ReadonlySet<string>,
+  openKeys: ReadonlySet<string> = new Set(),
 ): TerminalSessionReadContextValue {
   return {
     worktreeSnapshot: (worktreeTerminalKey) => {
       const hasBell = bellKeys.has(worktreeTerminalKey)
       const isOutputActive = outputActiveKeys.has(worktreeTerminalKey)
-      return {
-        worktreeTerminalKey,
-        selectedDescriptor: null,
-        sessions: hasBell || isOutputActive
+      const isOpen = openKeys.has(worktreeTerminalKey)
+      const sessions =
+        hasBell || isOutputActive || isOpen
           ? [
               {
                 key: `${worktreeTerminalKey}\0terminal-1`,
@@ -393,14 +422,18 @@ function terminalReadContextWithState(
                 terminalId: 'terminal-1',
                 index: 1,
                 title: 'terminal',
-                phase: 'open',
+                phase: 'open' as const,
                 selected: true,
                 hasBell,
                 isOutputActive,
               },
             ]
-          : [],
-        count: hasBell || isOutputActive ? 1 : 0,
+          : []
+      return {
+        worktreeTerminalKey,
+        selectedDescriptor: null,
+        sessions,
+        count: sessions.length,
       }
     },
     subscribeWorktree: () => () => {},
@@ -424,6 +457,7 @@ const labels = {
   clone: 'Clone repository…',
   cloneShortcut: '⌘⇧O',
   unavailable: 'Unavailable',
+  clearCache: 'Clear cache',
 }
 
 function createMatchMedia(matches: boolean) {
