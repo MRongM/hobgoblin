@@ -213,7 +213,7 @@ describe('TerminalSessionRegistry', () => {
       expect(handleOutputSpy).toHaveBeenCalledTimes(1)
     })
 
-    test('marks a terminal session output-active while recent output is flowing', () => {
+    test('marks a terminal session output-active only after output sustains', () => {
       vi.useFakeTimers()
       try {
         registry.setRepoIndex(makeRepoIndex())
@@ -224,25 +224,93 @@ describe('TerminalSessionRegistry', () => {
           new Map(),
         )
 
-        registry.worktreeSnapshot(WORKTREE_KEY)
-        const listener = vi.fn()
-        const unsubscribe = registry.subscribeWorktree(WORKTREE_KEY, listener)
-
-        registry.handleOutput({ sessionId: 'session-a', data: 'hello', seq: 1, processName: 'bash' })
-
-        expect(listener).toHaveBeenCalledTimes(1)
+        for (let elapsed = 0; elapsed < 1_000; elapsed += 100) {
+          registry.handleOutput({ sessionId: 'session-a', data: 'tick', seq: elapsed, processName: 'bash' })
+          expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]?.isOutputActive).toBe(false)
+          vi.advanceTimersByTime(100)
+        }
+        registry.handleOutput({ sessionId: 'session-a', data: 'tick', seq: 1_000, processName: 'bash' })
         expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]?.isOutputActive).toBe(true)
 
-        listener.mockClear()
         vi.advanceTimersByTime(1_199)
         expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]?.isOutputActive).toBe(true)
-        expect(listener).not.toHaveBeenCalled()
 
         vi.advanceTimersByTime(1)
         expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]?.isOutputActive).toBe(false)
-        expect(listener).toHaveBeenCalledTimes(1)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
 
-        unsubscribe()
+    test('does not mark output-active for a brief output burst', () => {
+      vi.useFakeTimers()
+      try {
+        registry.setRepoIndex(makeRepoIndex())
+        registry.reconcileServerSessions(
+          REPO_ROOT,
+          [makeServerSession('session-a', 'terminal-1')],
+          'attachment_local',
+          new Map(),
+        )
+
+        registry.handleOutput({ sessionId: 'session-a', data: 'redraw', seq: 1, processName: 'bash' })
+        vi.advanceTimersByTime(300)
+        registry.handleOutput({ sessionId: 'session-a', data: 'redraw', seq: 2, processName: 'bash' })
+        expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]?.isOutputActive).toBe(false)
+
+        vi.advanceTimersByTime(30_000)
+        expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]?.isOutputActive).toBe(false)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    test('does not mark output-active for keystroke echo', () => {
+      vi.useFakeTimers()
+      try {
+        registry.setRepoIndex(makeRepoIndex())
+        registry.reconcileServerSessions(
+          REPO_ROOT,
+          [makeServerSession('session-a', 'terminal-1')],
+          'attachment_local',
+          new Map(),
+        )
+        const key = registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]!.key
+
+        for (let i = 0; i < 15; i += 1) {
+          registry.writeInput(key, 'a')
+          vi.advanceTimersByTime(50)
+          registry.handleOutput({ sessionId: 'session-a', data: 'a', seq: i, processName: 'bash' })
+          expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]?.isOutputActive).toBe(false)
+          vi.advanceTimersByTime(150)
+        }
+
+        vi.advanceTimersByTime(30_000)
+        expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]?.isOutputActive).toBe(false)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    test('marks output-active for a sustained run that starts after the echo window', () => {
+      vi.useFakeTimers()
+      try {
+        registry.setRepoIndex(makeRepoIndex())
+        registry.reconcileServerSessions(
+          REPO_ROOT,
+          [makeServerSession('session-a', 'terminal-1')],
+          'attachment_local',
+          new Map(),
+        )
+        const key = registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]!.key
+
+        registry.writeInput(key, '\r')
+        vi.advanceTimersByTime(600)
+        for (let elapsed = 0; elapsed <= 1_000; elapsed += 100) {
+          registry.handleOutput({ sessionId: 'session-a', data: 'tick', seq: elapsed, processName: 'bash' })
+          vi.advanceTimersByTime(100)
+        }
+        expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]?.isOutputActive).toBe(true)
       } finally {
         vi.useRealTimers()
       }

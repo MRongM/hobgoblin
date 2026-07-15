@@ -1875,6 +1875,14 @@ describe('TerminalSessionProvider', () => {
       act(() => {
         outputHandler?.({ sessionId: 'terminal-1', data: 'hello', seq: 1, processName: 'terminal-1' })
       })
+      expect(getProbe().summaries[0]?.isOutputActive).toBe(false)
+
+      act(() => {
+        for (let elapsed = 100; elapsed <= 1_100; elapsed += 100) {
+          vi.advanceTimersByTime(100)
+          outputHandler?.({ sessionId: 'terminal-1', data: 'hello', seq: 1 + elapsed, processName: 'terminal-1' })
+        }
+      })
       expect(getProbe().summaries[0]?.isOutputActive).toBe(true)
 
       await act(async () => {

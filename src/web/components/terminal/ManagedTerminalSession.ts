@@ -44,6 +44,7 @@ export class ManagedTerminalSession {
   descriptor: TerminalDescriptor
   private readonly notify: (reason: TerminalNotifyReason) => void
   private readonly onBell: ((descriptor: TerminalDescriptor, event: TerminalBellEvent) => void) | null
+  private readonly onInput: ((descriptor: TerminalDescriptor) => void) | null
   private readonly runtime = new TerminalSessionRuntime()
   private readonly view: TerminalSessionView
   private readonly backgroundBellScanner = createTerminalBellScanner()
@@ -67,10 +68,12 @@ export class ManagedTerminalSession {
     fontSize = DEFAULT_TERMINAL_FONT_SIZE,
     fontFamily = DEFAULT_TERMINAL_FONT_FAMILY,
     terminalThemeMode: () => TerminalThemeMode = () => 'theme',
+    onInput: ((descriptor: TerminalDescriptor) => void) | null = null,
   ) {
     this.descriptor = descriptor
     this.notify = notify
     this.onBell = onBell
+    this.onInput = onInput
     this.view = new TerminalSessionView({
       onInput: (data) => this.writeInput(data),
       onBell: () => this.handleBell(),
@@ -166,6 +169,7 @@ export class ManagedTerminalSession {
     const data = typeof input === 'string' ? input : input.data
     const sessionId = this.runtime.currentSessionId()
     if (!sessionId) return
+    this.onInput?.(this.descriptor)
     this.pendingWriteBuffer += data
     this.scheduleInputFlush()
   }
