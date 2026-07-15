@@ -79,8 +79,10 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
 
 vi.mock('#/web/components/BranchActionsMenu.tsx', () => ({
   BranchActionsMenu: () => null,
+  // Mirrors the real dropdown wrapper, which stops click propagation
+  // (BranchActionsMenu.tsx) so row-level onClick never fires from it.
   BranchActionsDropdown: () => (
-    <button type="button" aria-label="action.menu">
+    <button type="button" aria-label="action.menu" onClick={(e) => e.stopPropagation()}>
       ...
     </button>
   ),
@@ -809,6 +811,87 @@ describe('BranchRow', () => {
     // 编辑/终端按钮位于 dropdown 之前
     expect(editorBtn!.compareDocumentPosition(dropdown!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(terminalBtn!.compareDocumentPosition(dropdown!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  test('clicking the inline editor button also selects its branch', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+    const onSelectBranch = vi.fn()
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={onSelectBranch}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions
+        />
+      </ul>,
+    )
+
+    const editorBtn = document.body.querySelector<HTMLButtonElement>('[data-testid="branch-row-editor-btn"]')
+    act(() => {
+      editorBtn!.click()
+    })
+
+    expect(onSelectBranch).toHaveBeenCalledWith('feature/a')
+  })
+
+  test('clicking the inline terminal button also selects its branch', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+    const onSelectBranch = vi.fn()
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={onSelectBranch}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions
+        />
+      </ul>,
+    )
+
+    const terminalBtn = document.body.querySelector<HTMLButtonElement>('[data-testid="branch-row-terminal-btn"]')
+    act(() => {
+      terminalBtn!.click()
+    })
+
+    expect(onSelectBranch).toHaveBeenCalledWith('feature/a')
+  })
+
+  test('clicking the actions dropdown also selects its branch', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+    const onSelectBranch = vi.fn()
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={onSelectBranch}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions
+        />
+      </ul>,
+    )
+
+    const dropdown = document.body.querySelector<HTMLButtonElement>('[aria-label="action.menu"]')
+    act(() => {
+      dropdown!.click()
+    })
+
+    expect(onSelectBranch).toHaveBeenCalledWith('feature/a')
   })
 
   test('does not render inline editor/terminal buttons for branches without a worktree', () => {

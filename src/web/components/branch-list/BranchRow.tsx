@@ -77,6 +77,7 @@ export function BranchRow({
         <BranchRowActions
           repo={repo}
           branch={branch}
+          onSelectBranch={onSelectBranch}
           actionMenuOpen={actionMenuOpen}
           onActionMenuOpenChange={onActionMenuOpenChange}
         />
@@ -88,18 +89,26 @@ export function BranchRow({
 function BranchRowActions({
   repo,
   branch,
+  onSelectBranch,
   actionMenuOpen,
   onActionMenuOpenChange,
 }: {
   repo: BranchActionRepo
   branch: RepoBranchState
+  onSelectBranch: (branch: string) => void
   actionMenuOpen?: boolean
   onActionMenuOpenChange?: (open: boolean) => void
 }) {
   const actions = useBranchActionItems(repo, branch)
   return (
     <>
-      <div className="pointer-events-none relative z-20 flex shrink-0 items-center py-1 pr-4">
+      {/* Capture-phase so the buttons' stopPropagation can't skip it: any
+          row action must first move the selection (and thus the file tree)
+          to this branch, keeping the opened directory and the tree in sync. */}
+      <div
+        className="pointer-events-none relative z-20 flex shrink-0 items-center py-1 pr-4"
+        onClickCapture={() => onSelectBranch(branch.name)}
+      >
         <div className="pointer-events-auto flex items-center gap-0.5">
           {branch.worktree?.path && (
             <div className="hidden md:flex items-center gap-0.5">
