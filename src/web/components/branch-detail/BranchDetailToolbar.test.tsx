@@ -70,8 +70,10 @@ describe('BranchDetailToolbar', () => {
 
     expect(c.querySelector('#detail-status-tab')).toBeNull()
     expect(c.querySelector('#detail-changes-tab')).toBeNull()
-    // useT is mocked to return the i18n key, so we assert against the key here.
-    expect(c.querySelector('#detail-terminal-tab')?.textContent).toContain('terminal.label')
+    // The empty-state terminal button renders an icon; useT is mocked to
+    // return the i18n key, so we assert the aria-label against the key here.
+    expect(c.querySelector('#detail-terminal-tab')?.getAttribute('aria-label')).toBe('terminal.new')
+    expect(c.querySelector('#detail-terminal-tab svg')).not.toBeNull()
   })
 
   test('keeps terminal tabs content-sized beside the flexible detail toolbar blank area', () => {

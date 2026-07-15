@@ -79,6 +79,20 @@
   --color-danger-rgb: var(--goblin-status-danger-rgb);
   --color-danger-surface: var(--goblin-status-danger-surface);
   --color-danger-border: var(--goblin-status-danger-border);
+  /* Repo tab group palette — hues derive from the theme's terminal ANSI
+   * ramp so group chips follow each theme's character in both modes;
+   * themes may override via --goblin-group-*. */
+  --color-group-gray: var(--goblin-group-gray, var(--goblin-text-secondary));
+  --color-group-blue: var(--goblin-group-blue, var(--color-terminal-ansi-blue));
+  --color-group-red: var(--goblin-group-red, var(--color-terminal-ansi-red));
+  --color-group-yellow: var(--goblin-group-yellow, var(--color-terminal-ansi-yellow));
+  --color-group-green: var(--goblin-group-green, var(--color-terminal-ansi-green));
+  --color-group-pink: var(
+    --goblin-group-pink,
+    color-mix(in srgb, var(--color-terminal-ansi-magenta) 55%, var(--color-terminal-ansi-bright-red) 45%)
+  );
+  --color-group-purple: var(--goblin-group-purple, var(--color-terminal-ansi-magenta));
+  --color-group-cyan: var(--goblin-group-cyan, var(--color-terminal-ansi-cyan));
   --color-terminal-activity: var(--goblin-terminal-activity, var(--goblin-accent));
   --color-terminal-activity-rgb: var(--goblin-terminal-activity-rgb, var(--goblin-accent-rgb));
   --color-terminal-activity-surface: var(--goblin-terminal-activity-surface, var(--goblin-accent-surface));
