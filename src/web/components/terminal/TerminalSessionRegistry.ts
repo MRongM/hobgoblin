@@ -252,6 +252,14 @@ export class TerminalSessionRegistry {
         snapshotSeq: serverSnapshot?.snapshotSeq ?? (isReattachMatch ? reattachCache?.snapshotSeq : undefined),
       })
       this.syncSessionIdIndex(descriptor.key, serverSession.sessionId)
+      // The server releases the controller when the previous app instance
+      // disconnects; reclaim live unowned sessions instead of waiting for a
+      // manual takeover. Races between windows are resolved server-side via
+      // authoritative ownership events (last claim wins, losers become viewers).
+      if (ownership.role === 'unowned' && serverSession.phase === 'open') {
+        const session = this.sessions.get(descriptor.key)
+        if (session && !session.snapshot().takeoverPending) session.takeover()
+      }
       if (serverSession.controller?.attachmentId === attachmentId) {
         controllerKeyByWorktree.set(terminalWorktreeKey, descriptor.key)
       }
