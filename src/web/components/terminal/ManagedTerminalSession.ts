@@ -13,6 +13,7 @@ import { resolveTerminalOwnership } from '#/shared/terminal.ts'
 import { terminalBridge } from '#/web/terminal.ts'
 import { setTerminalFocused } from '#/web/terminal-focus.ts'
 import { openExternalUrl } from '#/web/app-shell-client.ts'
+import { createTerminalBellScanner } from '#/web/components/terminal/terminal-bell-scan.ts'
 import { TerminalSessionRuntime } from '#/web/components/terminal/terminal-session-runtime.ts'
 import { writeWithTerminalAuthority } from '#/web/components/terminal/authority-gate.ts'
 import { isMobileDevice } from '#/web/components/terminal/mobile-detection.ts'
@@ -45,6 +46,7 @@ export class ManagedTerminalSession {
   private readonly onBell: ((descriptor: TerminalDescriptor, event: TerminalBellEvent) => void) | null
   private readonly runtime = new TerminalSessionRuntime()
   private readonly view: TerminalSessionView
+  private readonly backgroundBellScanner = createTerminalBellScanner()
   private startToken = 0
   private resizeFlushTimer: number | null = null
   private outputFlushFrame: number | null = null
@@ -259,6 +261,7 @@ export class ManagedTerminalSession {
       phase: input.phase,
       message: input.message,
     })
+    if (previousSessionId !== input.sessionId) this.backgroundBellScanner.reset()
     if (previousSessionId && previousSessionId !== input.sessionId) this.applyHydratedSnapshotToActiveView()
     if (changed) this.notify('metadata')
   }
@@ -267,7 +270,14 @@ export class ManagedTerminalSession {
     const result = this.runtime.handleOutput(event)
     if (result.changed) this.notify('metadata')
     if (result.summaryChanged) this.scheduleSummaryNotify()
-    if (result.output && this.runtime.canResize()) this.queueOutput(result.output)
+    if (!result.output) return
+    if (this.runtime.canResize() && this.view.currentTerminal()) {
+      this.queueOutput(result.output)
+      return
+    }
+    // No live xterm parses this output (background project, viewer role, or
+    // never-attached session) — detect BEL here so the bell still goes unread.
+    if (this.backgroundBellScanner.scan(result.output)) this.handleBell()
   }
 
   handleOwnership(event: TerminalOwnershipViewModel): void {
@@ -297,6 +307,7 @@ export class ManagedTerminalSession {
 
   handleExit(event: TerminalExitEvent): boolean {
     if (!this.runtime.handleExit(event)) return false
+    this.backgroundBellScanner.reset()
     this.flushOutput()
     this.clearTerminalFocusIfOwned()
     this.view.blurIfFocused()
@@ -630,6 +641,9 @@ export class ManagedTerminalSession {
     this.pendingOutput = []
     this.pendingWriteBuffer = ''
     this.inputFlushScheduled = false
+    // The xterm view was parsing the stream up to now; scanning resumes from a
+    // clean state rather than the middle of whatever sequence it last saw.
+    this.backgroundBellScanner.reset()
     this.startToken += 1
     if (!options?.preserveTransientState) this.runtime.resetTransientState()
     this.view.destroyTerminal()

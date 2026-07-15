@@ -2392,6 +2392,29 @@ describe('ManagedTerminalSession', () => {
     expect(onBell).toHaveBeenCalledWith(descriptor, { processName: 'zsh', canonicalTitle: null, visible: true })
   })
 
+  test('emits bell events for BEL output when no xterm view is attached', () => {
+    const notify = vi.fn()
+    const onBell = vi.fn()
+    const session = new ManagedTerminalSession(descriptor, notify, onBell)
+    hydrateManagedSession(session)
+
+    session.handleOutput({ sessionId: 'session-1', data: '\x1b]0;title\x07working…', seq: 1, processName: 'zsh' })
+    expect(onBell).not.toHaveBeenCalled()
+
+    session.handleOutput({ sessionId: 'session-1', data: 'done\x07', seq: 2, processName: 'claude' })
+    expect(onBell).toHaveBeenCalledWith(descriptor, { processName: 'claude', canonicalTitle: null, visible: false })
+  })
+
+  test('emits bell events for BEL output when the session is not the controller', () => {
+    const notify = vi.fn()
+    const onBell = vi.fn()
+    const session = new ManagedTerminalSession(descriptor, notify, onBell)
+    hydrateManagedSession(session, { role: 'viewer' })
+
+    session.handleOutput({ sessionId: 'session-1', data: 'finished\x07', seq: 1, processName: 'zsh' })
+    expect(onBell).toHaveBeenCalledWith(descriptor, { processName: 'zsh', canonicalTitle: null, visible: false })
+  })
+
   test('progress state appears in snapshot and clears on state 0', async () => {
     const notify = vi.fn()
     const host = document.createElement('div')
