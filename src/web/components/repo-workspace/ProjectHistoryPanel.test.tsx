@@ -236,6 +236,33 @@ describe('ProjectHistoryPanel', () => {
     expect(container?.textContent).toContain('feat: more')
   })
 
+  test('reloads history from the refresh button before the search box', async () => {
+    await act(async () => {
+      root!.render(<ProjectHistoryPanel repoId={REPO_ID} onRevealPath={vi.fn()} />)
+    })
+    await act(async () => {})
+
+    const refreshButton = container?.querySelector<HTMLButtonElement>('[data-testid="history-refresh"]')
+    const searchInput = container?.querySelector<HTMLInputElement>('input[aria-label="history.search-label"]')
+    expect(refreshButton).toBeTruthy()
+    expect(searchInput).toBeTruthy()
+    expect(refreshButton!.compareDocumentPosition(searchInput!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    await act(async () => {
+      refreshButton?.click()
+    })
+    await act(async () => {})
+
+    expect(mocks.getRepositoryHistory).toHaveBeenNthCalledWith(
+      2,
+      REPO_ID,
+      'feature/history',
+      { limit: 100, skip: 0 },
+      expect.any(AbortSignal),
+    )
+    expect(container?.textContent).toContain('feat: first')
+  })
+
   test('reveals a file path when detail file row is clicked', async () => {
     const onRevealPath = vi.fn()
     await act(async () => {

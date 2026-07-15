@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { FolderTree, Search, X } from 'lucide-react'
+import { FolderTree, RefreshCw, Search, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { EmptyState, ScrollPane } from '#/web/components/Layout.tsx'
@@ -64,6 +64,7 @@ export function ProjectHistoryPanel({ repoId, onRevealPath }: ProjectHistoryPane
   const [detailError, setDetailError] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [refreshToken, setRefreshToken] = useState(0)
   const requestSeq = useRef(0)
 
   useEffect(() => {
@@ -95,7 +96,7 @@ export function ProjectHistoryPanel({ repoId, onRevealPath }: ProjectHistoryPane
       })
 
     return () => controller.abort()
-  }, [repoId, view.branchName])
+  }, [repoId, view.branchName, refreshToken])
 
   useEffect(() => {
     if (!selectedHash || detailByHash[selectedHash] !== undefined) return
@@ -179,6 +180,7 @@ export function ProjectHistoryPanel({ repoId, onRevealPath }: ProjectHistoryPane
         onSearchChange={setSearchQuery}
         onSelect={setSelectedHash}
         onLoadMore={loadMore}
+        onRefresh={() => setRefreshToken((token) => token + 1)}
       />
       <CommitDetailPane
         detail={selectedDetail ?? null}
@@ -216,6 +218,7 @@ function HistoryList({
   onSearchChange,
   onSelect,
   onLoadMore,
+  onRefresh,
 }: {
   commits: CommitHistoryEntry[]
   allCommitsCount: number
@@ -227,6 +230,7 @@ function HistoryList({
   onSearchChange: (query: string) => void
   onSelect: (hash: string) => void
   onLoadMore: () => void
+  onRefresh: () => void
 }) {
   const t = useT()
   const isSearching = searchQuery.trim().length > 0
@@ -238,6 +242,17 @@ function HistoryList({
   return (
     <div className="flex min-h-0 flex-col border-r border-separator/70">
       <div className="flex items-center gap-1 border-b border-toolbar-border bg-toolbar px-2 py-1">
+        <button
+          data-testid="history-refresh"
+          type="button"
+          aria-label={t('history.refresh')}
+          title={t('history.refresh')}
+          disabled={loading}
+          onClick={onRefresh}
+          className="flex shrink-0 items-center rounded p-0.5 text-muted-foreground hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+        >
+          <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} aria-hidden="true" />
+        </button>
         <Search className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
         <input
           type="text"

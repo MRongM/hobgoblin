@@ -10,6 +10,8 @@
  */
 
 const BEL = 0x07
+const CAN = 0x18
+const SUB = 0x1a
 const ESC = 0x1b
 const BACKSLASH = 0x5c
 const C1_DCS = 0x90
@@ -50,6 +52,13 @@ export function createTerminalBellScanner(): TerminalBellScanner {
       let found = false
       for (let i = 0; i < data.length; i++) {
         const code = data.charCodeAt(i)
+        // CAN/SUB abort any in-flight sequence (VT "anywhere" transitions);
+        // without this a stream cut off mid-DCS would swallow every later ring
+        // until an ST happens to arrive.
+        if ((code === CAN || code === SUB) && state !== 'normal') {
+          state = 'normal'
+          continue
+        }
         switch (state) {
           case 'normal':
             if (code === BEL) found = true

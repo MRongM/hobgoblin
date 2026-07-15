@@ -50,6 +50,30 @@ describe('createTerminalBellScanner', () => {
     expect(scanner.scan('\x07')).toBe(true)
   })
 
+  test('CAN aborts a dangling DCS so later rings are not swallowed', () => {
+    const scanner = createTerminalBellScanner()
+    expect(scanner.scan('\x1bPq;sixel-data-cut-off')).toBe(false)
+    expect(scanner.scan('\x18')).toBe(false)
+    expect(scanner.scan('\x07')).toBe(true)
+  })
+
+  test('SUB aborts an OSC payload; the trailing BEL rings', () => {
+    const scanner = createTerminalBellScanner()
+    expect(scanner.scan('\x1b]0;title\x1a\x07')).toBe(true)
+  })
+
+  test('CAN aborts escape and string-escape states', () => {
+    const scanner = createTerminalBellScanner()
+    expect(scanner.scan('\x1b\x18\x07')).toBe(true)
+    expect(scanner.scan('\x1bPdata\x1b\x18\x07')).toBe(true)
+  })
+
+  test('CAN/SUB in normal state are inert', () => {
+    const scanner = createTerminalBellScanner()
+    expect(scanner.scan('\x18\x1aplain')).toBe(false)
+    expect(scanner.scan('\x1b]0;title\x07')).toBe(false)
+  })
+
   test('reset clears mid-sequence state', () => {
     const scanner = createTerminalBellScanner()
     expect(scanner.scan('\x1b]0;dangling')).toBe(false)
