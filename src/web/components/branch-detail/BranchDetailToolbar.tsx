@@ -6,13 +6,7 @@ import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { Button } from '#/web/components/ui/button.tsx'
 import { Toolbar } from '#/web/components/Layout.tsx'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '#/web/components/ui/dialog.tsx'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '#/web/components/ui/dialog.tsx'
 import { detailTabForWorktree } from '#/web/lib/detail-tabs.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { repoWorkspaceBehavior } from '#/web/lib/workspace-layout.ts'
@@ -29,6 +23,7 @@ import { useRuntimeShortcutSettings } from '#/web/runtime-settings-shortcuts.ts'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { useFocusRegistry } from '#/web/components/tab-strip/useFocusRegistry.ts'
 import { useLanInfoQuery } from '#/web/settings-queries.ts'
+import { getInitialBootstrap } from '#/web/bootstrap.ts'
 import {
   branchDetailToolbarStoreActionsEqual,
   branchDetailToolbarStoreActionsFromStore,
@@ -159,10 +154,15 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
   )
   const focusTogglePressed = behavior.detailFocusMode
   const showCollapseControl = behavior.detailCollapseAllowed && layout !== 'left-right'
+  // Terminal tabs normally live in the global topbar. Keep them here only
+  // where that topbar is unavailable: compact (mobile) UI, and web focus
+  // mode (App hides the topbar entirely there).
+  const topbarHidden = getInitialBootstrap().runtime.kind === 'web' && behavior.mode === 'focus'
+  const showTerminalTabs = compact || topbarHidden
   return (
     <Toolbar variant="detail">
       <div className="flex h-full min-w-0 items-center gap-1 overflow-hidden">
-        {terminalWorktreeKey && (
+        {showTerminalTabs && terminalWorktreeKey && (
           <TerminalTabs
             worktreeTerminalKey={terminalWorktreeKey}
             sessions={terminalSessions}

@@ -113,7 +113,8 @@ export const ja: Record<DictKey, string> = {
   'repo-tabs.clone-cloning': 'クローン中…',
   'repo-tabs.clone-opened': 'リポジトリをクローンしました',
   'repo-tabs.clear-cache-confirm-title': 'キャッシュをクリアしますか？',
-  'repo-tabs.clear-cache-confirm-message': 'このサーバー上のすべてのリポジトリのローカルキャッシュをクリアし、ページを再読み込みします。サーバーのデータには影響せず、リポジトリは再読み込みされます。',
+  'repo-tabs.clear-cache-confirm-message':
+    'このサーバー上のすべてのリポジトリのローカルキャッシュをクリアし、ページを再読み込みします。サーバーのデータには影響せず、リポジトリは再読み込みされます。',
   'repo-tabs.clear-cache-confirm': 'クリアして再読み込み',
   'repo-tabs.open-remote-title': 'リモートリポジトリを開く',
   'repo-tabs.open-remote-description': 'SSH エイリアスを選び、リポジトリのパスを入力します。',
@@ -198,8 +199,7 @@ export const ja: Record<DictKey, string> = {
 
   // ---- Empty state -------------------------------------------------------
   'empty.title': 'リポジトリが開かれていません',
-  'empty.body':
-    '上部タブバーの <open>開く</open> から Git リポジトリを追加するか、リポジトリフォルダをこのウィンドウにドロップします。',
+  'empty.body': 'Git リポジトリを開いて始めるか、リポジトリフォルダをこのウィンドウにドロップします。',
 
   // ---- Drag and drop -----------------------------------------------------
   'drop.title': 'ドロップしてローカルリポジトリを開く',

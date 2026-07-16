@@ -6,8 +6,17 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { BranchDetailToolbar } from '#/web/components/branch-detail/BranchDetailToolbar.tsx'
 import { getSelectedBranchDetailPresentation } from '#/web/components/branch-detail/model.ts'
-import { TerminalSessionContext, TerminalSessionReadContext } from '#/web/components/terminal/terminal-session-context.ts'
-import type { TerminalSessionContextValue, TerminalSessionReadContextValue, TerminalSessionSummary, TerminalDescriptor, WorktreeTerminalSnapshot } from '#/web/components/terminal/types.ts'
+import {
+  TerminalSessionContext,
+  TerminalSessionReadContext,
+} from '#/web/components/terminal/terminal-session-context.ts'
+import type {
+  TerminalSessionContextValue,
+  TerminalSessionReadContextValue,
+  TerminalSessionSummary,
+  TerminalDescriptor,
+  WorktreeTerminalSnapshot,
+} from '#/web/components/terminal/types.ts'
 import { buildTerminalDeepLinkUrl } from '#/web/lib/terminal-deep-link.ts'
 import { MainWindowNavigationProvider, type MainWindowNavigationActions } from '#/web/main-window-navigation.tsx'
 import { emptyRendererBridgeBootstrap, setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
@@ -32,7 +41,6 @@ vi.stubGlobal('requestAnimationFrame', ((cb: FrameRequestCallback) => {
 
 const REPO_ID = '/tmp/gbl-branch-detail-toolbar-repo'
 const WORKTREE_PATH = '/tmp/gbl-branch-detail-toolbar-worktree'
-  compactUi = false
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -41,6 +49,7 @@ const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENV
 
 beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
+  compactUi = false
   resetReposStore()
   setRendererBridgeForTests(null)
 })
@@ -65,106 +74,24 @@ describe('BranchDetailToolbar', () => {
     expect(c.querySelector(`[role="tab"][id$="-status-tab"]`)).toBeNull()
   })
 
-  test('renders terminal area without moved status or changes tabs', () => {
-    const { container: c } = renderToolbar({ terminalCount: 0, changeCount: 3, navigation: navigationWith({}) })
+  test('renders no terminal tabs on desktop (tabs moved to the global topbar)', () => {
+    const { container: c } = renderToolbar({ terminalCount: 2, changeCount: 3, navigation: navigationWith({}) })
 
     expect(c.querySelector('#detail-status-tab')).toBeNull()
     expect(c.querySelector('#detail-changes-tab')).toBeNull()
-    // useT is mocked to return the i18n key, so we assert against the key here.
-    expect(c.querySelector('#detail-terminal-tab')?.textContent).toContain('terminal.label')
+    expect(c.querySelector('#detail-terminal-tab')).toBeNull()
+    expect(c.querySelector('[data-terminal-tab-tooltip-id]')).toBeNull()
   })
 
-  test('keeps terminal tabs content-sized beside the flexible detail toolbar blank area', () => {
+  test('keeps terminal tabs in the toolbar for compact UI', () => {
+    compactUi = true
     const { container: c } = renderToolbar({
       terminalCount: 2,
       detailTab: 'terminal',
       navigation: navigationWith({}),
     })
 
-    const terminalTab = c.querySelector<HTMLElement>('[data-terminal-tab-tooltip-id="t1"]')
-    const scrollArea = terminalTab?.closest('.relative.overflow-hidden')
-    const terminalHost = scrollArea?.parentElement
-    const spacer = terminalHost?.nextElementSibling
-
-    expect(terminalHost?.className).not.toContain('flex-1')
-    expect(spacer?.className).toContain('min-w-2')
-    expect(spacer?.className).toContain('flex-1')
-    expect(spacer?.className).not.toContain('shrink-0')
-  })
-
-  test('clicking the new-terminal button navigates and creates a terminal', async () => {
-    const showRepoDetailTab = vi.fn()
-    const { terminalTab, mocks } = renderToolbar({
-      terminalCount: 0,
-      navigation: navigationWith({ showRepoDetailTab }),
-    })
-
-    act(() => {
-      terminalTab.click()
-    })
-    await flush()
-
-    expect(showRepoDetailTab).toHaveBeenCalledWith(REPO_ID, 'terminal')
-    expect(mocks.createTerminal).toHaveBeenCalledTimes(1)
-  })
-
-  test('clicking a selected session tab when not in terminal panel navigates to terminal', async () => {
-    const showRepoDetailTab = vi.fn()
-    const { terminalTab, mocks } = renderToolbar({
-      terminalCount: 2,
-      navigation: navigationWith({ showRepoDetailTab }),
-    })
-
-    act(() => {
-      terminalTab.click()
-    })
-    await flush()
-
-    expect(showRepoDetailTab).toHaveBeenCalledWith(REPO_ID, 'terminal')
-    expect(mocks.createTerminal).not.toHaveBeenCalled()
-    expect(mocks.selectTerminal).toHaveBeenCalledWith(`${REPO_ID}\0${WORKTREE_PATH}`, 't1')
-    expect(mocks.focusTerminal).toHaveBeenCalledWith('t1')
-  })
-
-  test('clicking a selected session tab in terminal panel scrolls to bottom', async () => {
-    const showRepoDetailTab = vi.fn()
-    const { terminalTab, mocks } = renderToolbar({
-      terminalCount: 2,
-      detailTab: 'terminal',
-      navigation: navigationWith({ showRepoDetailTab }),
-    })
-
-    act(() => {
-      terminalTab.click()
-    })
-    await flush()
-
-    expect(showRepoDetailTab).not.toHaveBeenCalled()
-    expect(mocks.createTerminal).not.toHaveBeenCalled()
-    expect(mocks.selectTerminal).not.toHaveBeenCalled()
-    expect(mocks.scrollToBottom).toHaveBeenCalledWith('t1')
-    expect(mocks.focusTerminal).toHaveBeenCalledWith('t1')
-  })
-
-  test('clicking an unselected session tab navigates and selects it', async () => {
-    const showRepoDetailTab = vi.fn()
-    const { container: c, mocks } = renderToolbar({
-      terminalCount: 2,
-      navigation: navigationWith({ showRepoDetailTab }),
-    })
-
-    const unselectedTab = c.querySelector<HTMLButtonElement>('[data-terminal-tab-tooltip-id="t2"] button[role="tab"]')
-    expect(unselectedTab).not.toBeNull()
-
-    act(() => {
-      unselectedTab?.click()
-    })
-    await flush()
-
-    expect(showRepoDetailTab).toHaveBeenCalledWith(REPO_ID, 'terminal')
-    expect(mocks.createTerminal).not.toHaveBeenCalled()
-    expect(mocks.selectTerminal).toHaveBeenCalledWith(`${REPO_ID}\0${WORKTREE_PATH}`, 't2')
-    expect(mocks.focusTerminal).toHaveBeenCalledWith('t2')
+    expect(c.querySelector('#detail-terminal-tab')).not.toBeNull()
   })
 
   test('does not show branch actions in the detail bar (actions moved to branch rows)', () => {
@@ -266,26 +193,6 @@ describe('BranchDetailToolbar', () => {
     expect(showRepoDetailTab).not.toHaveBeenCalled()
     expect(document.activeElement?.id).toBe('detail-terminal-tab')
   })
-
-  test('keeps terminal focus when keyboard navigation leaves terminal tabs', async () => {
-    const showRepoDetailTab = vi.fn()
-    const { container: c } = renderToolbar({
-      terminalCount: 2,
-      detailTab: 'terminal',
-      navigation: navigationWith({ showRepoDetailTab }),
-    })
-
-    const terminalTab = c.querySelector<HTMLButtonElement>('#detail-terminal-tab')
-    if (!terminalTab) throw new Error('missing terminal tab')
-
-    act(() => {
-      terminalTab.focus()
-      terminalTab.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }))
-    })
-    await flush()
-    expect(showRepoDetailTab).not.toHaveBeenCalledWith(REPO_ID, 'status')
-    expect(document.activeElement).toBe(terminalTab)
-  })
 })
 
 function renderToolbar(options: {
@@ -299,7 +206,6 @@ function renderToolbar(options: {
   lanInfo?: LanInfoWithQrCodes
 }): {
   container: HTMLDivElement
-  terminalTab: HTMLButtonElement
   mocks: {
     createTerminal: ReturnType<typeof vi.fn>
     selectTerminal: ReturnType<typeof vi.fn>
@@ -399,7 +305,10 @@ function renderToolbar(options: {
   document.body.appendChild(container)
   root = createRoot(container)
   queryClient = new QueryClient()
-  queryClient.setQueryData(lanInfoQueryKey(), options.lanInfo ?? { host: '127.0.0.1', port: 32200, lanUrls: [], qrCodes: {} })
+  queryClient.setQueryData(
+    lanInfoQueryKey(),
+    options.lanInfo ?? { host: '127.0.0.1', port: 32200, lanUrls: [], qrCodes: {} },
+  )
   act(() => {
     root!.render(
       <QueryClientProvider client={queryClient!}>
@@ -422,11 +331,8 @@ function renderToolbar(options: {
     )
   })
 
-  const tab = container.querySelector<HTMLButtonElement>('#detail-terminal-tab')
-  if (!tab) throw new Error('missing terminal tab')
   return {
     container,
-    terminalTab: tab,
     mocks: {
       createTerminal,
       selectTerminal,

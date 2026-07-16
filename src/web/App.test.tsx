@@ -102,6 +102,14 @@ vi.mock('#/web/components/topbar/TopbarRepoControls.tsx', () => ({
   TopbarRepoControls: () => <div data-testid="topbar-repo-controls" />,
 }))
 
+vi.mock('#/web/components/topbar/TopbarTerminalTabs.tsx', () => ({
+  TopbarTerminalTabs: () => <div data-testid="topbar-terminal-tabs" />,
+}))
+
+vi.mock('#/web/components/StatusBar.tsx', () => ({
+  StatusBar: () => <footer data-testid="statusbar" />,
+}))
+
 vi.mock('#/web/components/RepoView.tsx', () => ({
   RepoView: ({ repoId }: { repoId: string }) => <div data-testid="repo-view">{repoId}</div>,
 }))
@@ -197,6 +205,20 @@ describe('App shell topbar visibility', () => {
     expect(container?.querySelector('[data-testid="global-topbar"]')).not.toBeNull()
     expect(container?.querySelector('[data-testid="topbar-repo-controls"]')).not.toBeNull()
     expect(container?.querySelector('[data-testid="repo-view"]')?.textContent).toBe('/repo')
+  })
+
+  test('hosts terminal tabs in the topbar and a status bar below on desktop', async () => {
+    await renderApp({ runtime: 'web', workspaceMode: 'split' })
+
+    expect(container?.querySelector('[data-testid="topbar-terminal-tabs"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="repo-tabs"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="statusbar"]')).not.toBeNull()
+  })
+
+  test('hides the status bar with the topbar for focused web workspaces', async () => {
+    await renderApp({ runtime: 'web', workspaceMode: 'focus' })
+
+    expect(container?.querySelector('[data-testid="statusbar"]')).toBeNull()
   })
 
   test('renders the close project confirmation overlay', async () => {

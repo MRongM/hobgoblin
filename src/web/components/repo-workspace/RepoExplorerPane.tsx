@@ -23,6 +23,8 @@ import { ProjectRemoteBranchesPanel } from '#/web/components/repo-workspace/Proj
 import { ProjectLocalPanel } from '#/web/components/repo-workspace/ProjectLocalPanel.tsx'
 import { ProjectStatusPanel } from '#/web/components/repo-workspace/ProjectStatusPanel.tsx'
 import { PlainWorkspacePane } from '#/web/components/repo-workspace/PlainWorkspacePane.tsx'
+import { ProjectListSection } from '#/web/components/repo-workspace/ProjectListSection.tsx'
+import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { explorerTabForRepo } from '#/web/stores/repos/helpers.ts'
 import type { ExplorerTab, RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
@@ -98,9 +100,14 @@ export function RepoExplorerPane({ repoId, layout, showActions, revealRequest }:
     return repoIsPlainWorkspace(repo)
   })
 
+  // Compact UI keeps the repo tab strip in the topbar, so the sidebar
+  // project list only renders on desktop layouts.
+  const compact = useIsCompactUi()
+
   if (isPlainWorkspace) {
     return (
-      <div data-file-tree-layout={layout} className="flex min-h-0 min-w-0 flex-1">
+      <div data-file-tree-layout={layout} className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {!compact && <ProjectListSection activeRepoId={repoId} />}
         <PlainWorkspacePane repoId={repoId} layout={layout} revealRequest={activeRevealRequest} />
       </div>
     )
@@ -110,7 +117,12 @@ export function RepoExplorerPane({ repoId, layout, showActions, revealRequest }:
     <div data-file-tree-layout={layout} className="flex min-h-0 min-w-0 flex-1">
       <SplitPane
         orientation={splitOrientation}
-        before={<BranchArea repoId={repoId} showActions={showActions} />}
+        before={
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            {!compact && <ProjectListSection activeRepoId={repoId} />}
+            <BranchArea repoId={repoId} showActions={showActions} />
+          </div>
+        }
         after={
           <ExplorerTabs
             repoId={repoId}
@@ -165,7 +177,7 @@ function ExplorerTabs({
   // 检查是否有工作树
   const hasWorktree = useReposStore((s) => {
     const repo = s.repos[repoId]
-    const selected = repo?.data.branches.find(branch => branch.name === repo.ui.selectedBranch)
+    const selected = repo?.data.branches.find((branch) => branch.name === repo.ui.selectedBranch)
     return !!selected?.worktree?.path
   })
 
@@ -184,9 +196,7 @@ function ExplorerTabs({
   ]
 
   // 有工作树时，status 移到第一位
-  const orderedTabs = hasWorktree
-    ? [baseTabs[2], baseTabs[0], baseTabs[1], ...baseTabs.slice(3)]
-    : baseTabs
+  const orderedTabs = hasWorktree ? [baseTabs[2], baseTabs[0], baseTabs[1], ...baseTabs.slice(3)] : baseTabs
 
   const tabs = [
     ...orderedTabs,

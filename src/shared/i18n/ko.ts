@@ -106,7 +106,8 @@ export const ko: Record<DictKey, string> = {
   'repo-tabs.clone-cloning': '클론 중…',
   'repo-tabs.clone-opened': '리포지토리를 클론했습니다',
   'repo-tabs.clear-cache-confirm-title': '캐시를 지울까요?',
-  'repo-tabs.clear-cache-confirm-message': '이 서버의 모든 리포지토리 로컬 캐시를 지우고 페이지를 새로 고칩니다. 서버 데이터는 영향을 받지 않으며 리포지토리는 다시 로드됩니다.',
+  'repo-tabs.clear-cache-confirm-message':
+    '이 서버의 모든 리포지토리 로컬 캐시를 지우고 페이지를 새로 고칩니다. 서버 데이터는 영향을 받지 않으며 리포지토리는 다시 로드됩니다.',
   'repo-tabs.clear-cache-confirm': '지우고 새로 고침',
   'repo-tabs.open-remote-title': '원격 리포지토리 열기',
   'repo-tabs.open-remote-description': 'SSH 별칭을 고르고 리포지토리 경로를 입력하세요.',
@@ -190,8 +191,7 @@ export const ko: Record<DictKey, string> = {
 
   // ---- Empty state -------------------------------------------------------
   'empty.title': '열린 리포지토리가 없습니다',
-  'empty.body':
-    '상단 탭 막대의 <open>열기</open> 를 눌러 Git 리포지토리를 추가하거나, 리포지토리 폴더를 이 창으로 드롭하세요.',
+  'empty.body': 'Git 리포지토리를 열어 시작하거나, 리포지토리 폴더를 이 창으로 드롭하세요.',
 
   // ---- Drag and drop -----------------------------------------------------
   'drop.title': '놓아서 로컬 리포지토리 열기',

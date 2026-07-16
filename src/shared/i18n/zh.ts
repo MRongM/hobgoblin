@@ -105,7 +105,8 @@ export const zh: Record<DictKey, string> = {
   'repo-tabs.clone-cloning': '正在克隆…',
   'repo-tabs.clone-opened': '仓库已克隆',
   'repo-tabs.clear-cache-confirm-title': '清除缓存？',
-  'repo-tabs.clear-cache-confirm-message': '将清除此服务器下所有仓库的本地缓存并刷新页面。服务器数据不受影响，仓库将重新加载。',
+  'repo-tabs.clear-cache-confirm-message':
+    '将清除此服务器下所有仓库的本地缓存并刷新页面。服务器数据不受影响，仓库将重新加载。',
   'repo-tabs.clear-cache-confirm': '清除并刷新',
   'repo-tabs.open-remote-title': '打开远程仓库',
   'repo-tabs.open-remote-description': '选择一个 SSH 别名并填写仓库路径。',
@@ -183,7 +184,7 @@ export const zh: Record<DictKey, string> = {
 
   // ---- Empty state -------------------------------------------------------
   'empty.title': '没有打开的仓库',
-  'empty.body': '点击顶部标签栏的 <open>打开</open> 添加一个 Git 仓库，或把仓库文件夹拖到窗口中。',
+  'empty.body': '打开一个 Git 仓库开始使用，或把仓库文件夹拖到窗口中。',
 
   // ---- Drag and drop -----------------------------------------------------
   'drop.title': '松手打开本地仓库',

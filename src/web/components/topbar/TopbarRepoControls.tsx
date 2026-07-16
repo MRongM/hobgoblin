@@ -9,7 +9,6 @@ import {
 } from '#/web/components/ui/dropdown-menu.tsx'
 import { BranchActionControls } from '#/web/components/BranchActionControls.tsx'
 import { RepoActivityControl } from '#/web/components/repo-activity/RepoActivityControl.tsx'
-import { ProjectThemeMenuConnected } from '#/web/components/repo-toolbar/ProjectThemeMenu.tsx'
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.tsx'
 import { useBranchActionShortcutRegistry } from '#/web/hooks/useBranchActionShortcutRegistry.ts'
@@ -34,6 +33,10 @@ export function TopbarRepoControls({ repoId }: Props) {
   })
 
   if (!exists) return null
+  // The project theme menu moved to the bottom status bar; without it this
+  // control only has content for focus mode (branch switcher) and non-git
+  // workspaces (activity), so render nothing otherwise.
+  if (!(isGitRepo && focusMode) && isGitRepo) return null
 
   return (
     <div className="flex h-full shrink-0 items-center gap-1">
@@ -41,7 +44,6 @@ export function TopbarRepoControls({ repoId }: Props) {
       {!isGitRepo && (
         <RepoActivityControl repoId={repoId} compact mutedForegroundClassName="text-topbar-muted-foreground" />
       )}
-      <ProjectThemeMenuConnected repoId={repoId} />
     </div>
   )
 }

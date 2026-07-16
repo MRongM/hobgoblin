@@ -38,7 +38,7 @@ describe('Topbar', () => {
   test('uses runtime topbar height', () => {
     act(() => {
       root!.render(
-        <Topbar onOpenSettings={() => {}} actions={<button type="button">action</button>}>
+        <Topbar actions={<button type="button">action</button>}>
           <div data-testid="tabs" />
         </Topbar>,
       )
@@ -46,7 +46,7 @@ describe('Topbar', () => {
 
     expect(container!.firstElementChild).toBeInstanceOf(HTMLElement)
     expect((container!.firstElementChild as HTMLElement).style.height).toBe('39px')
-    const divider = container!.querySelector<HTMLElement>('div[aria-hidden="true"]')
-    expect(divider?.className).toContain('bg-topbar-border')
+    const actions = container!.querySelector<HTMLElement>('[data-testid="topbar-actions"]')
+    expect(actions?.textContent).toBe('action')
   })
 })

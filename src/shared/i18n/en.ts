@@ -198,10 +198,7 @@ export const en = {
 
   // ---- Empty state --------------------------------------------------------
   'empty.title': 'No repository open',
-  // Body uses <Trans> so React renders the highlighted label as a real
-  // element (no dangerouslySetInnerHTML).
-  'empty.body':
-    'Click <open>Open</open> in the tab strip to add a Git repository, or drop a repository folder into this window.',
+  'empty.body': 'Open a Git repository to get started, or drop a repository folder into this window.',
 
   // ---- Drag and drop ------------------------------------------------------
   'drop.title': 'Drop to open local repository',

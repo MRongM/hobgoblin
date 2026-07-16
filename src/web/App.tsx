@@ -1,6 +1,9 @@
-// Root layout — two-region shell:
-//   row 1 (40px): Topbar with embedded RepoTabs strip
+// Root layout — three-region shell:
+//   row 1 (40px): Topbar — terminal tabs on desktop, RepoTabs strip in
+//                 compact UI (the desktop project list lives in the sidebar)
 //   row 2 (1fr):  active RepoView body
+//   row 3 (28px): StatusBar — settings + project theme bottom-left,
+//                 active repo · branch bottom-right (desktop only)
 //
 // Boots in this order:
 //   1. theme.hydrate()       — reads server-backed theme settings
@@ -15,10 +18,14 @@
 //   - settings write-error toast (warns the user if prefs aren't
 //     persisting instead of silently dropping their changes)
 
-import { Trans } from 'react-i18next'
+import { useMemo } from 'react'
 import { Toaster } from '#/web/components/ui/sonner.tsx'
 import { Topbar } from '#/web/components/Topbar.tsx'
 import { TopbarRepoControls } from '#/web/components/topbar/TopbarRepoControls.tsx'
+import { TopbarTerminalTabs } from '#/web/components/topbar/TopbarTerminalTabs.tsx'
+import { StatusBar } from '#/web/components/StatusBar.tsx'
+import { Logo } from '#/web/components/Logo.tsx'
+import { Button } from '#/web/components/ui/button.tsx'
 import { ErrorBoundary } from '#/web/components/ErrorBoundary.tsx'
 import { RepoTabs } from '#/web/components/RepoTabs.tsx'
 import { RepoCloneDialog } from '#/web/components/RepoCloneDialog.tsx'
@@ -34,6 +41,9 @@ import { TerminalSessionProvider } from '#/web/components/terminal/TerminalSessi
 import { TerminalDeepLinkConsumer } from '#/web/components/terminal/TerminalDeepLinkConsumer.tsx'
 import { InlineCommitDraftProvider } from '#/web/components/branch-list/InlineCommitDraftProvider.tsx'
 import { useT } from '#/web/stores/i18n.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
+import { openRepoFromDialog } from '#/web/lib/open-repo-dialog.ts'
+import { ShellOverlayActionsProvider, useShellOverlayActions } from '#/web/shell-overlay-actions.tsx'
 import { useKeyboard } from '#/web/hooks/useKeyboard.ts'
 import { useMainWindowShellState } from '#/web/hooks/useMainWindowShellState.ts'
 import { useRepoDrop } from '#/web/hooks/useRepoDrop.ts'
@@ -45,7 +55,7 @@ import { useSessionPersistence } from '#/web/hooks/useSessionPersistence.ts'
 import { useSettingsWriteErrorToast } from '#/web/hooks/useSettingsWriteErrorToast.ts'
 import { useRepoStoreInvalidationRefresh } from '#/web/hooks/useRepoStoreInvalidationRefresh.ts'
 import { useSettingsQueryInvalidationSync } from '#/web/settings-queries.ts'
-import { MainWindowNavigationProvider } from '#/web/main-window-navigation.tsx'
+import { MainWindowNavigationProvider, useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import { useResponsiveUiMode } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { getInitialBootstrap } from '#/web/bootstrap.ts'
 import type { RepoWorkspaceMode } from '#/web/lib/workspace-layout.ts'
@@ -56,10 +66,7 @@ interface AppProps {
   onRouteSettingsPageChange?: (page: SettingsPage | null) => void
 }
 
-export function App({
-  routeSettingsPage = null,
-  onRouteSettingsPageChange,
-}: AppProps) {
+export function App({ routeSettingsPage = null, onRouteSettingsPageChange }: AppProps) {
   const {
     overlays,
     closeRepoConfirmation,
@@ -109,6 +116,16 @@ export function App({
     onExitSettings: exitSettings,
   })
 
+  const shellOverlayActions = useMemo(
+    () => ({
+      openRepoPathDialog: overlays.openRepoPathDialog,
+      openRemoteRepo: overlays.openRemoteRepo,
+      openCloneRepo: overlays.openCloneRepo,
+      openSettings: () => openSettings(),
+    }),
+    [overlays.openRepoPathDialog, overlays.openRemoteRepo, overlays.openCloneRepo, openSettings],
+  )
+
   return (
     <ErrorBoundary>
       <EffectiveProjectThemeBridge />
@@ -116,20 +133,22 @@ export function App({
         <TerminalDeepLinkConsumer sessionReady={sessionReady} navigation={navigation} />
         <InlineCommitDraftProvider>
           <MainWindowNavigationProvider value={navigation}>
-            <MainWindowViewport
-              routeSettingsPage={routeSettingsPage}
-              onRouteSettingsPageChange={onRouteSettingsPageChange}
-              openSettings={openSettings}
-              visibleRepoId={visibleRepoId}
-              sessionReady={sessionReady}
-              workspaceLayout={workspaceLayout}
-              workspaceMode={workspaceBehavior.mode}
-              detailCollapsed={workspaceBehavior.detailCollapsed}
-              detailFocusMode={workspaceBehavior.detailFocusMode}
-              overlays={overlays}
-              closeRepoConfirmation={closeRepoConfirmation}
-              repoDrop={repoDrop}
-            />
+            <ShellOverlayActionsProvider value={shellOverlayActions}>
+              <MainWindowViewport
+                routeSettingsPage={routeSettingsPage}
+                onRouteSettingsPageChange={onRouteSettingsPageChange}
+                openSettings={openSettings}
+                visibleRepoId={visibleRepoId}
+                sessionReady={sessionReady}
+                workspaceLayout={workspaceLayout}
+                workspaceMode={workspaceBehavior.mode}
+                detailCollapsed={workspaceBehavior.detailCollapsed}
+                detailFocusMode={workspaceBehavior.detailFocusMode}
+                overlays={overlays}
+                closeRepoConfirmation={closeRepoConfirmation}
+                repoDrop={repoDrop}
+              />
+            </ShellOverlayActionsProvider>
           </MainWindowNavigationProvider>
         </InlineCommitDraftProvider>
       </TerminalSessionProvider>
@@ -210,11 +229,7 @@ function MainWindowViewport({
         detailFocusMode={detailFocusMode}
         overlays={overlays}
       />
-      <MainWindowOverlays
-        overlays={overlays}
-        closeRepoConfirmation={closeRepoConfirmation}
-        repoDrop={repoDrop}
-      />
+      <MainWindowOverlays overlays={overlays} closeRepoConfirmation={closeRepoConfirmation} repoDrop={repoDrop} />
     </div>
   )
 }
@@ -243,19 +258,24 @@ function MainWindowViewportContent({
   }
   const runtimeKind = getInitialBootstrap().runtime.kind
   const hideGlobalTopbar = runtimeKind === 'web' && workspaceMode === 'focus'
+  const compact = uiMode === 'compact'
   return (
     <>
       {!hideGlobalTopbar && (
-        <Topbar
-          onOpenSettings={() => openSettings()}
-          actions={visibleRepoId ? <TopbarRepoControls repoId={visibleRepoId} /> : null}
-        >
-          <RepoTabs
-            currentRepoId={visibleRepoId}
-            onOpenRepoPathDialog={overlays.openRepoPathDialog}
-            onOpenRemote={overlays.openRemoteRepo}
-            onClone={overlays.openCloneRepo}
-          />
+        <Topbar actions={visibleRepoId ? <TopbarRepoControls repoId={visibleRepoId} /> : null}>
+          {compact ? (
+            <RepoTabs
+              currentRepoId={visibleRepoId}
+              onOpenRepoPathDialog={overlays.openRepoPathDialog}
+              onOpenRemote={overlays.openRemoteRepo}
+              onClone={overlays.openCloneRepo}
+            />
+          ) : (
+            <>
+              <Logo className="shrink-0 text-topbar-foreground" />
+              {visibleRepoId && <TopbarTerminalTabs repoId={visibleRepoId} />}
+            </>
+          )}
         </Topbar>
       )}
       <main className="flex flex-1 min-h-0 min-w-0">
@@ -267,13 +287,14 @@ function MainWindowViewportContent({
               layout={workspaceLayout}
               detailCollapsed={detailCollapsed}
               detailFocusMode={detailFocusMode}
-              compact={uiMode === 'compact'}
+              compact={compact}
             />
           ) : (
             <EmptyState />
           )}
         </ErrorBoundary>
       </main>
+      {!compact && !hideGlobalTopbar && <StatusBar repoId={visibleRepoId} onOpenSettings={() => openSettings()} />}
     </>
   )
 }
@@ -308,17 +329,41 @@ function MainWindowOverlays({ overlays, closeRepoConfirmation, repoDrop }: MainW
 
 function EmptyState() {
   const t = useT()
-  // Body is rendered as React fragments rather than dangerouslySet
-  // because the dictionary text contains a placeholder for "Open" and
-  // the highlighted label is easier to express as a real element and
-  // removes the only XSS risk vector for this string.
+  // With the repo tab strip gone from the desktop topbar, the empty state
+  // is the only visible home for the open actions, so it renders them as
+  // real buttons instead of pointing at chrome that no longer exists.
+  const shellActions = useShellOverlayActions()
+  const navigation = useMainWindowNavigation()
+  const ensureWorkspaceOpen = useReposStore((s) => s.ensureWorkspaceOpen)
+
+  async function handleOpenLocal() {
+    if (!shellActions) return
+    await openRepoFromDialog({
+      ensureWorkspaceOpen,
+      activateRepo: navigation.activateRepo,
+      openRepoPathDialog: shellActions.openRepoPathDialog,
+      t,
+    })
+  }
+
   return (
     <div className="flex flex-1 items-center justify-center">
       <div className="text-center max-w-sm">
         <div className="text-sm font-medium text-foreground mb-1">{t('empty.title')}</div>
-        <div className="text-xs text-muted-foreground leading-relaxed">
-          <Trans i18nKey="empty.body" components={{ open: <span className="text-foreground" /> }} />
-        </div>
+        <div className="text-xs text-muted-foreground leading-relaxed">{t('empty.body')}</div>
+        {shellActions && (
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => void handleOpenLocal()}>
+              {t('repo-tabs.open-local')}
+            </Button>
+            <Button variant="outline" size="sm" onClick={shellActions.openRemoteRepo}>
+              {t('repo-tabs.open-remote')}
+            </Button>
+            <Button variant="outline" size="sm" onClick={shellActions.openCloneRepo}>
+              {t('repo-tabs.clone')}
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   )
