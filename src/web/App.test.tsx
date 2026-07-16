@@ -100,9 +100,6 @@ vi.mock('#/web/components/Topbar.tsx', () => ({
     <div data-testid="global-topbar">
       <div data-testid="topbar-tabs">{children}</div>
       {actions && <div data-testid="topbar-actions">{actions}</div>}
-      <button type="button" aria-label="topbar.settings">
-        settings
-      </button>
     </div>
   ),
 }))
@@ -113,6 +110,10 @@ vi.mock('#/web/components/RepoTabs.tsx', () => ({
 
 vi.mock('#/web/components/topbar/TopbarRepoControls.tsx', () => ({
   TopbarRepoControls: () => <div data-testid="topbar-repo-controls" />,
+}))
+
+vi.mock('#/web/components/repo-toolbar/ProjectThemeMenu.tsx', () => ({
+  ProjectThemeMenuConnected: () => <div data-testid="project-theme-menu" />,
 }))
 
 vi.mock('#/web/components/StatusBar.tsx', () => ({
@@ -222,6 +223,43 @@ describe('App shell topbar visibility', () => {
     expect(container?.querySelector('[data-testid="global-topbar"]')).not.toBeNull()
     expect(container?.querySelector('[data-testid="repo-tabs"]')).not.toBeNull()
     expect(container?.querySelector('[data-testid="topbar-repo-controls"]')).not.toBeNull()
+  })
+
+  test('keeps settings and project theme entries in the compact topbar', async () => {
+    // Compact UI never renders the status bar, so the ambient controls it
+    // hosts on desktop (settings entry, project theme menu) live in the
+    // compact topbar instead.
+    uiModeMock.mode = 'compact'
+    await renderApp({ runtime: 'web', workspaceMode: 'split' })
+
+    const actions = container?.querySelector('[data-testid="topbar-actions"]')
+    expect(actions?.querySelector('[data-testid="project-theme-menu"]')).not.toBeNull()
+
+    const settingsButton = actions?.querySelector<HTMLButtonElement>('button[aria-label="topbar.settings"]')
+    expect(settingsButton).not.toBeNull()
+    await act(async () => {
+      settingsButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+    expect(shellMock.state?.openSettings).toHaveBeenCalledTimes(1)
+  })
+
+  test('keeps the settings entry in the compact empty-state topbar but not on desktop', async () => {
+    uiModeMock.mode = 'compact'
+    await renderApp({ runtime: 'web', workspaceMode: 'split', visibleRepoId: null })
+
+    expect(container?.querySelector('button[aria-label="topbar.settings"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="project-theme-menu"]')).toBeNull()
+
+    act(() => {
+      root?.unmount()
+    })
+    container?.remove()
+
+    // Desktop keeps its settings entry in the status bar, not the topbar.
+    uiModeMock.mode = 'default'
+    await renderApp({ runtime: 'web', workspaceMode: 'split', visibleRepoId: null })
+    expect(container?.querySelector('button[aria-label="topbar.settings"]')).toBeNull()
   })
 
   test('keeps a full-width status bar only for the desktop empty state', async () => {

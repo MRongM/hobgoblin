@@ -22,9 +22,12 @@
 //     persisting instead of silently dropping their changes)
 
 import { useMemo } from 'react'
+import { Settings } from 'lucide-react'
 import { Toaster } from '#/web/components/ui/sonner.tsx'
+import { Tip } from '#/web/components/Tip.tsx'
 import { Topbar } from '#/web/components/Topbar.tsx'
 import { TopbarRepoControls } from '#/web/components/topbar/TopbarRepoControls.tsx'
+import { ProjectThemeMenuConnected } from '#/web/components/repo-toolbar/ProjectThemeMenu.tsx'
 import { StatusBar } from '#/web/components/StatusBar.tsx'
 import { Logo } from '#/web/components/Logo.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
@@ -268,7 +271,20 @@ function MainWindowViewportContent({
   return (
     <>
       {showGlobalTopbar && (
-        <Topbar actions={compact && visibleRepoId ? <TopbarRepoControls repoId={visibleRepoId} /> : null}>
+        <Topbar
+          actions={
+            // Compact UI never shows the status bar, so the ambient controls
+            // it hosts on desktop (project theme menu, settings entry) live
+            // here instead.
+            compact ? (
+              <>
+                {visibleRepoId && <TopbarRepoControls repoId={visibleRepoId} />}
+                {visibleRepoId && <ProjectThemeMenuConnected repoId={visibleRepoId} />}
+                <CompactSettingsButton onOpenSettings={() => openSettings()} />
+              </>
+            ) : null
+          }
+        >
           {compact ? (
             <RepoTabs
               currentRepoId={visibleRepoId}
@@ -331,6 +347,17 @@ function MainWindowOverlays({ overlays, closeRepoConfirmation, repoDrop }: MainW
        * visual contract is in components/ui/sonner.tsx. */}
       <Toaster position="bottom-right" closeButton />
     </>
+  )
+}
+
+function CompactSettingsButton({ onOpenSettings }: { onOpenSettings: () => void }) {
+  const t = useT()
+  return (
+    <Tip label={t('topbar.settings')}>
+      <Button variant="ghost" size="icon" onClick={onOpenSettings} aria-label={t('topbar.settings')}>
+        <Settings />
+      </Button>
+    </Tip>
   )
 }
 
