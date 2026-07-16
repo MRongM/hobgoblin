@@ -522,7 +522,9 @@ function pullRequest(number: number): PullRequestInfo {
 
 describe('getRepositorySnapshot', () => {
   test('reads git state directly without publishing invalidation', async () => {
-    mocks.getWorktrees.mockResolvedValueOnce([])
+    mocks.getWorktrees.mockResolvedValueOnce([
+      { path: '/tmp/repo', branch: 'fresh', isBare: false, isPrimary: true },
+    ])
     const snapshot = repoSnapshot('fresh')
     mocks.getBranches.mockResolvedValueOnce(snapshot.branches)
     mocks.getCurrentBranch.mockResolvedValueOnce(snapshot.current)
@@ -532,6 +534,17 @@ describe('getRepositorySnapshot', () => {
     const result = await getRepositorySnapshot('/tmp/repo')
 
     expect(result).toEqual(snapshot)
+    expect(mocks.getWorktrees).toHaveBeenCalledWith('/tmp/repo', { signal: undefined, throwOnError: true })
+    expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
+  })
+
+  test('fails local git snapshots when the authoritative worktree list is empty', async () => {
+    mocks.getWorktrees.mockResolvedValueOnce([])
+
+    const { getRepositorySnapshot } = await import('#/server/modules/repo-read-paths.ts')
+
+    await expect(getRepositorySnapshot('/tmp/repo')).rejects.toThrow('error.failed-read-repo')
+    expect(mocks.getBranches).not.toHaveBeenCalled()
     expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
   })
 })

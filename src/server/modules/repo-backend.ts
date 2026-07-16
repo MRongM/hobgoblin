@@ -293,8 +293,9 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       const available = await probeGitRepository(repoId)
       if (!available.ok) throw new Error(available.message)
       try {
-        const worktrees = await getWorktrees(repoId, { signal })
+        const worktrees = await getWorktrees(repoId, { signal, throwOnError: true })
         if (signal?.aborted) return null
+        if (worktrees.length === 0) throw new Error('error.failed-read-repo')
         const branches = await getBranches(repoId, worktrees, { signal })
         if (signal?.aborted) return null
         const current = await getCurrentBranch(repoId, { signal })

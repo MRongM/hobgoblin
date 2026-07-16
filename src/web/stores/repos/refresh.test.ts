@@ -805,7 +805,7 @@ describe('core refresh request ordering', () => {
     expect(repo?.ui.detailTab).toBe('status')
   })
 
-  test('snapshot refresh prunes terminal sessions to current worktree paths', async () => {
+  test('snapshot refresh asks server to prune terminal sessions for the repo', async () => {
     const token = seedRepo([branch('stale', undefined, { worktree: { path: '/tmp/stale-worktree' } })])
     const calls: Array<{ repoRoot: string }> = []
     rpcHandlers['terminal.prune'] = async (input: { repoRoot: string }) => {
@@ -824,9 +824,9 @@ describe('core refresh request ordering', () => {
     await useReposStore.getState().refreshSnapshot(REPO_ID, { token })
 
     expect(calls).toEqual([
-      expect.objectContaining({
+      {
         repoRoot: REPO_ID,
-      }),
+      },
     ])
     const worktreesByPath = useReposStore.getState().repos[REPO_ID]?.data.worktreesByPath
     expect(worktreesByPath?.['/tmp/stale-worktree']).toBeUndefined()
