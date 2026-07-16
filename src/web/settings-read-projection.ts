@@ -179,10 +179,6 @@ export function readRuntimeGitNetworkSettings(data: RuntimeSettingsSnapshot | un
   }
 }
 
-export function getRuntimeRecentRepos() {
-  return currentRuntimeRecentReposState()?.recentRepos ?? []
-}
-
 export function useRuntimeRecentRepos() {
   return useRuntimeRecentReposState()?.recentRepos ?? []
 }

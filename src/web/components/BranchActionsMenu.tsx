@@ -1,6 +1,5 @@
 import { ChevronDown, Loader2 } from 'lucide-react'
 import { Fragment, useState } from 'react'
-import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { AsyncButton } from '#/web/components/AsyncButton.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
@@ -12,46 +11,13 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from '#/web/components/ui/dropdown-menu.tsx'
-import {
-  useBranchActionItems,
-  type BranchActionItem,
-  type BranchActionItemGroups,
-} from '#/web/hooks/useBranchActionItems.tsx'
-import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
+import { type BranchActionItem, type BranchActionItemGroups } from '#/web/hooks/useBranchActionItems.tsx'
 import { useAsyncPending } from '#/web/hooks/useAsyncPending.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { rememberedQuickActions, persistRestorableRepoSnapshot } from '#/web/stores/repos/persistence.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 
 export type { BranchActionItem } from '#/web/hooks/useBranchActionItems.tsx'
-
-interface Props {
-  repo: BranchActionRepo
-  branch: RepoBranchState
-  open?: boolean
-  onOpenChange?: (open: boolean) => void
-}
-
-export function BranchActionsMenu({ repo, branch, open, onOpenChange }: Props) {
-  const { patchItems, mainItems, externalItems, destructiveItems, dialogs } = useBranchActionItems(repo, branch)
-
-  return (
-    <>
-      <BranchActionsDropdown
-        repoId={repo.id}
-        branchName={branch.name}
-        patchItems={patchItems}
-        mainItems={mainItems}
-        externalItems={externalItems}
-        destructiveItems={destructiveItems}
-        open={open}
-        onOpenChange={onOpenChange}
-      />
-
-      {dialogs}
-    </>
-  )
-}
 
 const DEFAULT_QUICK_ACTION_ID: BranchActionItem['id'] = 'editor'
 

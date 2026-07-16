@@ -48,7 +48,7 @@ vi.mock('#/web/components/ui/scroll-area.tsx', () => ({
 }))
 
 vi.mock('#/web/components/BranchActionsMenu.tsx', () => ({
-  BranchActionsMenu: () => null,
+  BranchActionsDropdown: () => null,
 }))
 
 vi.mock('@dnd-kit/core', async () => {

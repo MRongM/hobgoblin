@@ -78,7 +78,6 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
 }))
 
 vi.mock('#/web/components/BranchActionsMenu.tsx', () => ({
-  BranchActionsMenu: () => null,
   // Mirrors the real dropdown wrapper, which stops click propagation
   // (BranchActionsMenu.tsx) so row-level onClick never fires from it.
   BranchActionsDropdown: () => (
