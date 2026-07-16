@@ -117,6 +117,39 @@ Override the listen address when you need to expose it on a different interface 
 ./serve.sh --host 127.0.0.1 --port 32200
 ```
 
+### Linux systemd deployment
+
+On a Linux host that uses systemd, install Node.js 24+ and Bun, clone the repository, then run the deployment script from the repository root:
+
+```sh
+./scripts/serve-systemd.sh
+```
+
+On the first run, the command installs the service. On later runs, it updates the existing deployment. To configure the listen address, port, and persistent data directory explicitly during the first installation:
+
+```sh
+./scripts/serve-systemd.sh install \
+  --host 0.0.0.0 \
+  --port 32200 \
+  --data-dir ./data/server
+```
+
+`0.0.0.0` listens on all network interfaces. Use `127.0.0.1` instead when the service should only be reachable from the local host.
+
+Installation runs `bun install`, builds the Web UI, writes `/etc/systemd/system/hobgoblin.service` and `/etc/hobgoblin/server.env`, then enables and starts the service. The script uses `sudo` when it is not run as root.
+
+Common maintenance commands:
+
+```sh
+./scripts/serve-systemd.sh update
+./scripts/serve-systemd.sh update --no-pull
+./scripts/serve-systemd.sh status
+./scripts/serve-systemd.sh logs
+./scripts/serve-systemd.sh uninstall
+```
+
+`update` attempts `git pull --ff-only` by default, then installs dependencies, rebuilds the Web UI, and restarts the service. Use `--no-pull` to deploy the current checkout without pulling. `uninstall` stops and removes the service but keeps `/etc/hobgoblin/server.env`; delete that file manually if it is no longer needed.
+
 ## Links
 
 - [GitHub Pages](https://mrongm.github.io/hobgoblin/)

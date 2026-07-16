@@ -117,6 +117,39 @@ http://127.0.0.1:32200
 ./serve.sh --host 127.0.0.1 --port 32200
 ```
 
+### Linux systemd デプロイ
+
+systemd を使用する Linux ホストに Node.js 24+ と Bun をインストールし、リポジトリをクローンした後、リポジトリのルートでデプロイスクリプトを実行します:
+
+```sh
+./scripts/serve-systemd.sh
+```
+
+初回の実行ではサービスがインストールされ、2 回目以降は既存のデプロイが更新されます。初回インストール時に待ち受けアドレス、ポート、永続データディレクトリを明示する場合は、次のように実行します:
+
+```sh
+./scripts/serve-systemd.sh install \
+  --host 0.0.0.0 \
+  --port 32200 \
+  --data-dir ./data/server
+```
+
+`0.0.0.0` はすべてのネットワークインターフェースで待ち受けます。ローカルホストからのみアクセス可能にする場合は、代わりに `127.0.0.1` を使用してください。
+
+インストール処理では `bun install` の実行、Web UI のビルド、`/etc/systemd/system/hobgoblin.service` と `/etc/hobgoblin/server.env` の書き込みを行い、サービスを有効化して起動します。root 以外のユーザーで実行した場合、スクリプトは `sudo` を使用します。
+
+よく使うメンテナンスコマンド:
+
+```sh
+./scripts/serve-systemd.sh update
+./scripts/serve-systemd.sh update --no-pull
+./scripts/serve-systemd.sh status
+./scripts/serve-systemd.sh logs
+./scripts/serve-systemd.sh uninstall
+```
+
+`update` はデフォルトで `git pull --ff-only` を試行し、依存関係をインストールして Web UI を再ビルドした後、サービスを再起動します。pull せずに現在の checkout をデプロイするには `--no-pull` を使用してください。`uninstall` はサービスを停止して削除しますが、`/etc/hobgoblin/server.env` は保持します。不要になった場合は、このファイルを手動で削除してください。
+
 ## リンク
 
 - [GitHub Pages](https://mrongm.github.io/hobgoblin/)
