@@ -1,4 +1,4 @@
-import { ArrowUp, Maximize2, Minimize2, Minus, QrCode } from 'lucide-react'
+import { ArrowUp, Maximize2, Minus, PanelLeftOpen, QrCode } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useReposStore } from '#/web/stores/repos/store.ts'
@@ -23,7 +23,7 @@ import { useRuntimeShortcutSettings } from '#/web/runtime-settings-shortcuts.ts'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { useFocusRegistry } from '#/web/components/tab-strip/useFocusRegistry.ts'
 import { useLanInfoQuery } from '#/web/settings-queries.ts'
-import { getInitialBootstrap } from '#/web/bootstrap.ts'
+import { TopbarRepoControls } from '#/web/components/topbar/TopbarRepoControls.tsx'
 import {
   branchDetailToolbarStoreActionsEqual,
   branchDetailToolbarStoreActionsFromStore,
@@ -154,15 +154,27 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
   )
   const focusTogglePressed = behavior.detailFocusMode
   const showCollapseControl = behavior.detailCollapseAllowed && layout !== 'left-right'
-  // Terminal tabs normally live in the global topbar. Keep them here only
-  // where that topbar is unavailable: compact (mobile) UI, and web focus
-  // mode (App hides the topbar entirely there).
-  const topbarHidden = getInitialBootstrap().runtime.kind === 'web' && behavior.mode === 'focus'
-  const showTerminalTabs = compact || topbarHidden
+  // With no global topbar on desktop, this toolbar is the top edge of the
+  // window in focus mode (the sidebar and its drag region are hidden), so
+  // it takes over as the OS drag region there.
+  const isWindowChrome = behavior.mode === 'focus'
   return (
-    <Toolbar variant="detail">
+    <Toolbar variant="detail" className={cn(isWindowChrome && 'topbar')}>
       <div className="flex h-full min-w-0 items-center gap-1 overflow-hidden">
-        {showTerminalTabs && terminalWorktreeKey && (
+        {/* Focus mode hides the sidebar, so its collapse control mirrors
+         * here at the window's top-left to bring the sidebar back. */}
+        {isWindowChrome && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleDetailFocusMode}
+            aria-label={t('branch-detail.exit-focus')}
+            title={t('branch-detail.exit-focus-title')}
+          >
+            <PanelLeftOpen />
+          </Button>
+        )}
+        {terminalWorktreeKey && (
           <TerminalTabs
             worktreeTerminalKey={terminalWorktreeKey}
             sessions={terminalSessions}
@@ -196,6 +208,9 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
         }
       />
       <div className="flex shrink-0 items-center gap-1">
+        {/* Focus-mode branch switcher / actions — previously topbar content;
+         * the component renders nothing outside focus mode. */}
+        <TopbarRepoControls repoId={repo.id} />
         {layout === 'top-bottom' && <div className="mx-1 h-4 w-px bg-separator/70" aria-hidden="true" />}
         {terminalWorktreeKey && (
           <>
@@ -211,19 +226,18 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
             <TerminalLanQrDialog open={lanQrOpen} onOpenChange={setLanQrOpen} urls={terminalLanUrls} />
           </>
         )}
-        {behavior.detailFocusAllowed && (
+        {/* In focus mode the exit control sits at the toolbar's left edge
+         * (PanelLeftOpen), so the maximize toggle only shows outside it. */}
+        {behavior.detailFocusAllowed && !focusTogglePressed && (
           <Button
             variant="ghost"
             size="icon"
             onClick={toggleDetailFocusMode}
-            aria-label={t(focusTogglePressed ? 'branch-detail.exit-focus' : 'branch-detail.focus')}
-            title={t(focusTogglePressed ? 'branch-detail.exit-focus-title' : 'branch-detail.focus-title')}
+            aria-label={t('branch-detail.focus')}
+            title={t('branch-detail.focus-title')}
             aria-pressed={focusTogglePressed}
-            className={cn(
-              focusTogglePressed && 'bg-tab-active text-foreground shadow-xs hover:bg-tab-active hover:text-foreground',
-            )}
           >
-            {focusTogglePressed ? <Minimize2 /> : <Maximize2 />}
+            <Maximize2 />
           </Button>
         )}
         {showCollapseControl && (

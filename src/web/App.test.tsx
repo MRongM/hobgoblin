@@ -17,6 +17,10 @@ const bootstrapMock = vi.hoisted(() => ({
   runtimeKind: 'web' as 'web' | 'electron',
 }))
 
+const uiModeMock = vi.hoisted(() => ({
+  mode: 'default' as 'default' | 'compact',
+}))
+
 vi.mock('#/web/bootstrap.ts', () => ({
   getInitialBootstrap: () => ({
     runtime: { kind: bootstrapMock.runtimeKind, bridgeVersion: 1, capabilities: [] },
@@ -42,7 +46,7 @@ vi.mock('#/web/hooks/useRepoDrop.ts', () => ({
 }))
 
 vi.mock('#/web/hooks/useResponsiveUiMode.tsx', () => ({
-  useResponsiveUiMode: () => 'default',
+  useResponsiveUiMode: () => uiModeMock.mode,
 }))
 
 vi.mock('#/web/hooks/useKeyboard.ts', () => ({ useKeyboard: vi.fn() }))
@@ -80,6 +84,15 @@ vi.mock('#/web/components/branch-list/InlineCommitDraftProvider.tsx', () => ({
 
 vi.mock('#/web/main-window-navigation.tsx', () => ({
   MainWindowNavigationProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
+  useMainWindowNavigation: () => ({
+    activateRepo: vi.fn(),
+    closeRepo: vi.fn(),
+    cycleRepo: vi.fn(),
+    selectRepoBranch: vi.fn(),
+    showRepoDetailTab: vi.fn(),
+    showRepoBranchDetailTab: vi.fn(),
+    openSettings: vi.fn(),
+  }),
 }))
 
 vi.mock('#/web/components/Topbar.tsx', () => ({
@@ -100,10 +113,6 @@ vi.mock('#/web/components/RepoTabs.tsx', () => ({
 
 vi.mock('#/web/components/topbar/TopbarRepoControls.tsx', () => ({
   TopbarRepoControls: () => <div data-testid="topbar-repo-controls" />,
-}))
-
-vi.mock('#/web/components/topbar/TopbarTerminalTabs.tsx', () => ({
-  TopbarTerminalTabs: () => <div data-testid="topbar-terminal-tabs" />,
 }))
 
 vi.mock('#/web/components/StatusBar.tsx', () => ({
@@ -180,45 +189,95 @@ afterEach(() => {
   container = null
   shellMock.state = null
   bootstrapMock.runtimeKind = 'web'
+  uiModeMock.mode = 'default'
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
 })
 
 describe('App shell topbar visibility', () => {
-  test('hides the global topbar for focused web workspaces', async () => {
-    await renderApp({ runtime: 'web', workspaceMode: 'focus' })
+  test('renders no global topbar on desktop while a repo is open', async () => {
+    await renderApp({ runtime: 'web', workspaceMode: 'split' })
 
     expect(container?.querySelector('[data-testid="global-topbar"]')).toBeNull()
     expect(container?.querySelector('[data-testid="repo-view"]')?.textContent).toBe('/repo')
   })
 
-  test('keeps the global topbar for focused Electron workspaces', async () => {
+  test('renders no global topbar on focused desktop workspaces either', async () => {
     await renderApp({ runtime: 'electron', workspaceMode: 'focus' })
 
-    expect(container?.querySelector('[data-testid="global-topbar"]')).not.toBeNull()
-    expect(container?.querySelector('[data-testid="topbar-repo-controls"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="global-topbar"]')).toBeNull()
     expect(container?.querySelector('[data-testid="repo-view"]')?.textContent).toBe('/repo')
   })
 
-  test('keeps the global topbar for non-focused web workspaces', async () => {
-    await renderApp({ runtime: 'web', workspaceMode: 'split' })
+  test('shows a plain topbar on desktop when no repo is open', async () => {
+    await renderApp({ runtime: 'web', workspaceMode: 'split', visibleRepoId: null })
 
     expect(container?.querySelector('[data-testid="global-topbar"]')).not.toBeNull()
-    expect(container?.querySelector('[data-testid="topbar-repo-controls"]')).not.toBeNull()
-    expect(container?.querySelector('[data-testid="repo-view"]')?.textContent).toBe('/repo')
-  })
-
-  test('hosts terminal tabs in the topbar and a status bar below on desktop', async () => {
-    await renderApp({ runtime: 'web', workspaceMode: 'split' })
-
-    expect(container?.querySelector('[data-testid="topbar-terminal-tabs"]')).not.toBeNull()
     expect(container?.querySelector('[data-testid="repo-tabs"]')).toBeNull()
-    expect(container?.querySelector('[data-testid="statusbar"]')).not.toBeNull()
   })
 
-  test('hides the status bar with the topbar for focused web workspaces', async () => {
+  test('keeps the repo tab strip topbar in compact UI', async () => {
+    uiModeMock.mode = 'compact'
+    await renderApp({ runtime: 'web', workspaceMode: 'split' })
+
+    expect(container?.querySelector('[data-testid="global-topbar"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="repo-tabs"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="topbar-repo-controls"]')).not.toBeNull()
+  })
+
+  test('keeps a full-width status bar only for the desktop empty state', async () => {
+    // Repo open: the status bar lives inside the sidebar (RepoView), not the shell.
+    await renderApp({ runtime: 'web', workspaceMode: 'split' })
+    expect(container?.querySelector('[data-testid="statusbar"]')).toBeNull()
+
+    act(() => {
+      root?.unmount()
+    })
+    container?.remove()
+
+    await renderApp({ runtime: 'web', workspaceMode: 'split', visibleRepoId: null })
+    expect(container?.querySelector('[data-testid="statusbar"]')).not.toBeNull()
+
+    act(() => {
+      root?.unmount()
+    })
+    container?.remove()
+
+    uiModeMock.mode = 'compact'
+    await renderApp({ runtime: 'web', workspaceMode: 'split', visibleRepoId: null })
+    expect(container?.querySelector('[data-testid="statusbar"]')).toBeNull()
+  })
+
+  test('keeps the same focus-mode shell on web as on Electron', async () => {
     await renderApp({ runtime: 'web', workspaceMode: 'focus' })
 
-    expect(container?.querySelector('[data-testid="statusbar"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="global-topbar"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-view"]')).not.toBeNull()
+
+    act(() => {
+      root?.unmount()
+    })
+    container?.remove()
+
+    await renderApp({ runtime: 'electron', workspaceMode: 'focus' })
+
+    expect(container?.querySelector('[data-testid="global-topbar"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-view"]')).not.toBeNull()
+  })
+
+  test('hides the compact topbar in focus mode on both runtimes', async () => {
+    uiModeMock.mode = 'compact'
+    await renderApp({ runtime: 'web', workspaceMode: 'focus' })
+
+    expect(container?.querySelector('[data-testid="global-topbar"]')).toBeNull()
+
+    act(() => {
+      root?.unmount()
+    })
+    container?.remove()
+
+    await renderApp({ runtime: 'electron', workspaceMode: 'focus' })
+
+    expect(container?.querySelector('[data-testid="global-topbar"]')).toBeNull()
   })
 
   test('renders the close project confirmation overlay', async () => {
@@ -240,15 +299,17 @@ async function renderApp({
   workspaceMode,
   closeConfirmOpen = false,
   confirmCloseRepo = vi.fn(),
+  visibleRepoId = '/repo',
 }: {
   runtime: 'web' | 'electron'
   workspaceMode: RepoWorkspaceMode
   closeConfirmOpen?: boolean
   confirmCloseRepo?: () => void
+  visibleRepoId?: string | null
 }) {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   bootstrapMock.runtimeKind = runtime
-  shellMock.state = shellStateWith(workspaceMode, { closeConfirmOpen, confirmCloseRepo })
+  shellMock.state = shellStateWith(workspaceMode, { closeConfirmOpen, confirmCloseRepo, visibleRepoId })
 
   container = document.createElement('div')
   document.body.append(container)
@@ -271,7 +332,7 @@ async function clickButton(text: string) {
 
 function shellStateWith(
   workspaceMode: RepoWorkspaceMode,
-  options: { closeConfirmOpen?: boolean; confirmCloseRepo?: () => void } = {},
+  options: { closeConfirmOpen?: boolean; confirmCloseRepo?: () => void; visibleRepoId?: string | null } = {},
 ): MainWindowShellState {
   const overlays = {
     anyOpen: false,
@@ -299,7 +360,7 @@ function shellStateWith(
       confirm: options.confirmCloseRepo ?? vi.fn(),
     },
     sessionReady: true,
-    visibleRepoId: '/repo',
+    visibleRepoId: options.visibleRepoId === undefined ? '/repo' : options.visibleRepoId,
     workspaceLayout: 'left-right' as const,
     workspaceBehavior: {
       mode: workspaceMode,

@@ -2,70 +2,84 @@
 
 Date: 2026-07-16
 Branch: design
+Revised: same day, after mockup feedback (full-height sidebar shell).
 
 ## Brief
 
-1. Desktop web layout uses the left-right workspace split.
-2. Add a bottom status bar.
-3. Move the topbar project list into a new project-list section above the
-   branch area in the sidebar; move theme + settings into the bottom-left
-   of the status bar.
-4. Move the terminal tabs from the detail toolbar directly into the topbar.
+Match the provided mockup: a full-height left sidebar that owns the window's
+top-left corner (macOS traffic lights sit inside it), a right pane whose
+terminal tab strip forms the window's top edge, no full-width topbar — while
+keeping a project list and a bottom status bar.
 
 ## Target shell (desktop / left-right)
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│ TOPBAR   Hobgoblin  [term-tab][term-tab][+]    [actions] │  drag region, 40px
-├──────────────┬───────────────────────────────────────────┤
-│ REPOSITORIES │                                           │
-│  ● hobgoblin │                                           │
-│    website   │            Detail pane                    │
-│  [+ Open ▾]  │        (terminal / status)                │
-│──────────────│                                           │
-│ BRANCHES     │                                           │
-│  main        │                                           │
-│──────────────│                                           │
-│ files/changes│                                           │
-├──────────────┴───────────────────────────────────────────┤
-│ [⚙][🎨 theme]                   repo · branch            │  28px status bar
-└──────────────────────────────────────────────────────────┘
+┌────────────────────┬─────────────────────────────────┐
+│ ⚫🟡🟢               │ [zsh ×][+]           [QR][max]  │ ← detail toolbar = right pane top
+│ 📁 HOBGOBLIN ▾ + ⧉ │─────────────────────────────────│
+│  (▾ = flat list)   │                                 │
+│────────────────────│                                 │
+│ 分支                │       Terminal / detail         │
+│  main 默认          │      (full window height)       │
+│  design            │                                 │
+│────────────────────│                                 │
+│ files/changes      │                                 │
+│────────────────────│                                 │
+│ [⚙][🎨]    branch  │ ← status bar inside the sidebar │
+└────────────────────┴─────────────────────────────────┘
 ```
+
+The split is pure left-right: the terminal column owns the window's full
+height (no bar above or below it). ⧉ is the sidebar collapse control — it
+maximizes the terminal via the existing detail focus mode; focus mode
+mirrors a PanelLeftOpen control at the toolbar's left edge to restore the
+sidebar. Clicking the project name toggles a flat inline project list
+(styled like the branch rows) instead of a dropdown.
 
 ## Decisions
 
-- **Chrome band symmetry.** The status bar reuses the `topbar` theme-token
-  family (`bg-topbar`, `border-topbar-border`, `text-topbar-*`) so the window
-  reads as one framed surface top and bottom. No new theme-contract variables:
-  every theme CSS file keeps passing the contract tests unchanged.
-- **Project list = sidebar section, not a second tab strip.** A slim vertical
-  list with an uppercase eyebrow header ("Repositories"), active-row highlight
-  via the existing `bg-selected` token, hover-reveal close buttons, and a `+`
-  dropdown carrying the previous Open local / Open remote / Clone actions.
-- **Terminal tabs in the topbar** only on desktop. The wiring
-  (create/select/close/reorder against the terminal session context) is
-  extracted from `BranchDetailToolbar` into `TopbarTerminalTabs`.
-- **Compact (mobile) mode is unchanged**: repo tabs stay in the topbar,
-  terminal tabs stay in the detail toolbar, no status bar. The web focus mode
-  (topbar hidden) also keeps terminal tabs in the detail toolbar so sessions
-  stay reachable.
-- **Empty state gains real Open actions** (local / remote / clone) because the
-  topbar strip — the previous home of "Open" — no longer exists on desktop.
-  `empty.body` copy is updated in all four dictionaries.
-- **i18n reuse over new keys**: `repo-tabs.repos`, `repo-tabs.open-*`,
-  `topbar.open`, `topbar.settings`, `repo-tabs.close-named` all keep their
-  meaning in the new placements. No new dictionary keys.
+- **No global topbar on desktop while a repo is open.** The sidebar's project
+  header and the detail toolbar together form the window's top edge. The
+  `Topbar` component survives for two cases: compact UI (classic RepoTabs
+  strip) and the desktop empty state (plain drag-region strip + wordmark).
+- **Sidebar project header = window chrome + project switcher.** A
+  `.topbar`-classed row (drag region; its padding rules already clear the
+  macOS traffic lights) showing the current repository name. Its dropdown is
+  the project list: every open project (activate on click, hover-reveal close)
+  plus the Open local / Open remote / Clone entries.
+- **Terminal tabs live in the detail toolbar** (`BranchDetailToolbar`), which
+  in the left-right layout is visually the right pane's top bar — exactly the
+  mockup. In focus mode the sidebar is gone, so the toolbar takes the `topbar`
+  class and becomes the drag region; the focus-mode branch switcher
+  (`TopbarRepoControls`) renders in its right-hand cluster.
+- **Status bar** (28 px) reuses the `topbar` token family so the window is
+  framed by one chrome band top and bottom. Left: settings + project theme.
+  Right: activity (plain workspaces) + repository · branch.
+- **Branch section eyebrow** ("分支" / tab.branches) above the branch rows,
+  styled like the existing detached-worktrees list label.
+- **Web and Electron render the identical shell.** The layout is decided only
+  by viewport (default vs compact), never by runtime kind — the old web-only
+  focus-mode special cases (hidden status bar, hidden compact topbar) were
+  unified. The only runtime differences left are native window chrome: the
+  `.topbar` CSS pads past macOS traffic lights / Windows overlay controls on
+  Electron, while the browser supplies its own chrome on web.
+- **Compact (mobile) unchanged**: RepoTabs topbar (hidden in focus mode on
+  both runtimes), terminal tabs in the detail toolbar, no status bar, no
+  sidebar header.
+- **Empty state keeps real Open actions** (local / remote / clone); `empty.body`
+  no longer references the removed tab strip (updated in all four dictionaries).
+- **i18n reuse over new keys**: `repo-tabs.*`, `topbar.open`, `topbar.settings`,
+  `tab.branches`, `repo-unavailable.title` all keep their meaning. No new keys.
 
 ## Component map
 
-| Piece                   | File                                                       | Change                                    |
-| ----------------------- | ---------------------------------------------------------- | ----------------------------------------- |
-| Status bar              | `src/web/components/StatusBar.tsx`                         | new                                       |
-| Project list section    | `src/web/components/repo-workspace/ProjectListSection.tsx` | new                                       |
-| Topbar terminal tabs    | `src/web/components/topbar/TopbarTerminalTabs.tsx`         | new                                       |
-| Overlay actions context | `src/web/shell-overlay-actions.tsx`                        | new                                       |
-| Topbar                  | `src/web/components/Topbar.tsx`                            | drop settings button                      |
-| Topbar repo controls    | `src/web/components/topbar/TopbarRepoControls.tsx`         | drop theme menu                           |
-| Detail toolbar          | `src/web/components/branch-detail/BranchDetailToolbar.tsx` | terminal tabs only in compact / web-focus |
-| Sidebar                 | `src/web/components/repo-workspace/RepoExplorerPane.tsx`   | project list above branch area            |
-| Shell                   | `src/web/App.tsx`                                          | wire all of the above                     |
+| Piece                   | File                                                         | Change                                           |
+| ----------------------- | ------------------------------------------------------------ | ------------------------------------------------ |
+| Status bar              | `src/web/components/StatusBar.tsx`                           | new                                              |
+| Sidebar project header  | `src/web/components/repo-workspace/SidebarProjectHeader.tsx` | new (project list dropdown + drag region)        |
+| Overlay actions context | `src/web/shell-overlay-actions.tsx`                          | new                                              |
+| Topbar                  | `src/web/components/Topbar.tsx`                              | compact + empty-state only; no settings button   |
+| Topbar repo controls    | `src/web/components/topbar/TopbarRepoControls.tsx`           | focus/non-git only; rendered from detail toolbar |
+| Detail toolbar          | `src/web/components/branch-detail/BranchDetailToolbar.tsx`   | hosts terminal tabs; drag region in focus mode   |
+| Sidebar                 | `src/web/components/repo-workspace/RepoExplorerPane.tsx`     | project header on top, branch eyebrow above rows |
+| Shell                   | `src/web/App.tsx`                                            | wire all of the above                            |

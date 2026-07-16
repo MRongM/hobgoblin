@@ -1,9 +1,12 @@
-// Root layout — three-region shell:
-//   row 1 (40px): Topbar — terminal tabs on desktop, RepoTabs strip in
-//                 compact UI (the desktop project list lives in the sidebar)
-//   row 2 (1fr):  active RepoView body
-//   row 3 (28px): StatusBar — settings + project theme bottom-left,
-//                 active repo · branch bottom-right (desktop only)
+// Root layout. Desktop shell is a pure left-right split while a repo is
+// open — no global topbar and no full-width bottom bar:
+//   left column:  sidebar (project header = window drag region + collapse,
+//                 branches, files) with the StatusBar at its bottom
+//   right column: detail pane at full window height, its toolbar carrying
+//                 the terminal tabs at the window's top edge
+// Compact UI keeps the classic Topbar with the RepoTabs strip; desktop
+// shows a plain Topbar (drag region + wordmark) plus a full-width
+// StatusBar only when no repo is open.
 //
 // Boots in this order:
 //   1. theme.hydrate()       — reads server-backed theme settings
@@ -22,7 +25,6 @@ import { useMemo } from 'react'
 import { Toaster } from '#/web/components/ui/sonner.tsx'
 import { Topbar } from '#/web/components/Topbar.tsx'
 import { TopbarRepoControls } from '#/web/components/topbar/TopbarRepoControls.tsx'
-import { TopbarTerminalTabs } from '#/web/components/topbar/TopbarTerminalTabs.tsx'
 import { StatusBar } from '#/web/components/StatusBar.tsx'
 import { Logo } from '#/web/components/Logo.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
@@ -57,7 +59,6 @@ import { useRepoStoreInvalidationRefresh } from '#/web/hooks/useRepoStoreInvalid
 import { useSettingsQueryInvalidationSync } from '#/web/settings-queries.ts'
 import { MainWindowNavigationProvider, useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import { useResponsiveUiMode } from '#/web/hooks/useResponsiveUiMode.tsx'
-import { getInitialBootstrap } from '#/web/bootstrap.ts'
 import type { RepoWorkspaceMode } from '#/web/lib/workspace-layout.ts'
 import type { SettingsPage } from '#/shared/settings-pages.ts'
 
@@ -256,13 +257,18 @@ function MainWindowViewportContent({
       />
     )
   }
-  const runtimeKind = getInitialBootstrap().runtime.kind
-  const hideGlobalTopbar = runtimeKind === 'web' && workspaceMode === 'focus'
   const compact = uiMode === 'compact'
+  // Desktop has no global topbar while a repo is open — the sidebar's
+  // project header and the detail toolbar form the window's top edge.
+  // It comes back as a plain chrome strip (drag region + wordmark) when
+  // nothing is open. Compact UI keeps the classic repo tab strip except
+  // in focus mode, where the detail pane takes the whole viewport. Same
+  // rules for web and Electron so both shells look identical.
+  const showGlobalTopbar = compact ? workspaceMode !== 'focus' : !visibleRepoId
   return (
     <>
-      {!hideGlobalTopbar && (
-        <Topbar actions={visibleRepoId ? <TopbarRepoControls repoId={visibleRepoId} /> : null}>
+      {showGlobalTopbar && (
+        <Topbar actions={compact && visibleRepoId ? <TopbarRepoControls repoId={visibleRepoId} /> : null}>
           {compact ? (
             <RepoTabs
               currentRepoId={visibleRepoId}
@@ -271,10 +277,7 @@ function MainWindowViewportContent({
               onClone={overlays.openCloneRepo}
             />
           ) : (
-            <>
-              <Logo className="shrink-0 text-topbar-foreground" />
-              {visibleRepoId && <TopbarTerminalTabs repoId={visibleRepoId} />}
-            </>
+            <Logo className="shrink-0 text-topbar-foreground" />
           )}
         </Topbar>
       )}
@@ -294,7 +297,11 @@ function MainWindowViewportContent({
           )}
         </ErrorBoundary>
       </main>
-      {!compact && !hideGlobalTopbar && <StatusBar repoId={visibleRepoId} onOpenSettings={() => openSettings()} />}
+      {/* With a repo open the status bar lives at the bottom of the sidebar
+       * (inside RepoView) so the terminal pane owns the window's full
+       * height; the empty state keeps a full-width one for the settings
+       * entry. */}
+      {!compact && !visibleRepoId && <StatusBar repoId={null} />}
     </>
   )
 }

@@ -131,6 +131,18 @@ vi.mock('#/web/components/repo-workspace/PlainWorkspaceTerminalPanel.tsx', () =>
   ),
 }))
 
+// Sidebar chrome — exercised by their own suites; the status bar pulls in
+// react-query (project theme menu) which this harness doesn't provide.
+vi.mock('#/web/components/repo-workspace/SidebarProjectHeader.tsx', () => ({
+  SidebarProjectHeader: ({ repoId }: { repoId: string }) => (
+    <div data-testid="sidebar-project-header" data-repo-id={repoId} />
+  ),
+}))
+
+vi.mock('#/web/components/StatusBar.tsx', () => ({
+  StatusBar: ({ repoId }: { repoId: string | null }) => <footer data-testid="statusbar" data-repo-id={repoId} />,
+}))
+
 vi.mock('#/web/components/SplitPane.tsx', () => ({
   SplitPane: ({
     before,

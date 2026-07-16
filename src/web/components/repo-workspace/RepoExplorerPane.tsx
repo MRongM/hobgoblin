@@ -23,7 +23,8 @@ import { ProjectRemoteBranchesPanel } from '#/web/components/repo-workspace/Proj
 import { ProjectLocalPanel } from '#/web/components/repo-workspace/ProjectLocalPanel.tsx'
 import { ProjectStatusPanel } from '#/web/components/repo-workspace/ProjectStatusPanel.tsx'
 import { PlainWorkspacePane } from '#/web/components/repo-workspace/PlainWorkspacePane.tsx'
-import { ProjectListSection } from '#/web/components/repo-workspace/ProjectListSection.tsx'
+import { SidebarProjectHeader } from '#/web/components/repo-workspace/SidebarProjectHeader.tsx'
+import { StatusBar } from '#/web/components/StatusBar.tsx'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { explorerTabForRepo } from '#/web/stores/repos/helpers.ts'
@@ -101,25 +102,28 @@ export function RepoExplorerPane({ repoId, layout, showActions, revealRequest }:
   })
 
   // Compact UI keeps the repo tab strip in the topbar, so the sidebar
-  // project list only renders on desktop layouts.
+  // project header (window chrome + project switcher) only renders on
+  // desktop layouts.
   const compact = useIsCompactUi()
 
   if (isPlainWorkspace) {
     return (
       <div data-file-tree-layout={layout} className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {!compact && <ProjectListSection activeRepoId={repoId} />}
+        {!compact && <SidebarProjectHeader repoId={repoId} />}
         <PlainWorkspacePane repoId={repoId} layout={layout} revealRequest={activeRevealRequest} />
+        {!compact && <StatusBar repoId={repoId} />}
       </div>
     )
   }
 
   return (
-    <div data-file-tree-layout={layout} className="flex min-h-0 min-w-0 flex-1">
+    <div data-file-tree-layout={layout} className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {!compact && <SidebarProjectHeader repoId={repoId} />}
       <SplitPane
         orientation={splitOrientation}
         before={
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            {!compact && <ProjectListSection activeRepoId={repoId} />}
+            {!compact && <BranchSectionLabel />}
             <BranchArea repoId={repoId} showActions={showActions} />
           </div>
         }
@@ -138,8 +142,20 @@ export function RepoExplorerPane({ repoId, layout, showActions, revealRequest }:
         beforeMinSize={sideBySide ? '12rem' : '8rem'}
         afterMinSize={sideBySide ? '12rem' : '8rem'}
         afterMaxSize="80%"
-        className="flex-1"
+        className="min-h-0 flex-1"
       />
+      {!compact && <StatusBar repoId={repoId} />}
+    </div>
+  )
+}
+
+// Slim eyebrow above the branch rows — mirrors the detached-worktrees
+// list label so the sidebar sections read as one system.
+function BranchSectionLabel() {
+  const t = useT()
+  return (
+    <div className="flex h-7 shrink-0 items-center px-4 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+      {t('tab.branches')}
     </div>
   )
 }
