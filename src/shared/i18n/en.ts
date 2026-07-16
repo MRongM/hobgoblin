@@ -112,6 +112,10 @@ export const en = {
   'repo-tabs.clone-confirm': 'Clone and open',
   'repo-tabs.clone-cloning': 'Cloning…',
   'repo-tabs.clone-opened': 'Repository cloned',
+  'repo-tabs.clear-cache-confirm-title': 'Clear cache?',
+  'repo-tabs.clear-cache-confirm-message':
+    'This clears the locally cached data for all repositories on this server and reloads the page. Server data is not affected; repositories will reload from the server.',
+  'repo-tabs.clear-cache-confirm': 'Clear and reload',
   'repo-tabs.open-remote-title': 'Open remote repository',
   'repo-tabs.open-remote-description': 'Select an SSH alias and enter the repository path.',
   'repo-tabs.open-remote-host-label': 'Host',
