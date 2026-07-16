@@ -394,6 +394,9 @@ describe('RepoTabStrip', () => {
       renderEmptyStrip()
       await selectClearCacheMenuItem()
 
+      expect(document.body.querySelector('[role="alertdialog"]')).not.toBeNull()
+      expect(localStorage.getItem('probe')).toBe('kept')
+
       await act(async () => {
         Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'))
           .find((button) => button.textContent?.includes('Clear and reload'))
@@ -404,6 +407,7 @@ describe('RepoTabStrip', () => {
       expect(localStorage.getItem('probe')).toBeNull()
       expect(sessionStorage.getItem('probe-session')).toBeNull()
       expect(location.reload).toHaveBeenCalledTimes(1)
+      expect(document.body.querySelector('[role="alertdialog"]')).toBeNull()
     } finally {
       location.restore()
       localStorage.clear()
