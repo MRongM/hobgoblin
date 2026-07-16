@@ -10,6 +10,7 @@ import {
   useSensors,
 } from '@dnd-kit/core'
 import { SortableContext, horizontalListSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
+import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { ScrollArea } from '#/web/components/ui/scroll-area.tsx'
 import { Tip } from '#/web/components/Tip.tsx'
@@ -115,17 +116,8 @@ function OpenRepoMenuItems({
   onOpenLocal,
   onOpenRemote,
   onClone,
-}: Pick<RepoTabStripProps, 'labels' | 'onOpenLocal' | 'onOpenRemote' | 'onClone'>) {
-  const handleClearCache = () => {
-    try {
-      localStorage.clear()
-      sessionStorage.clear()
-      window.location.reload()
-    } catch (err) {
-      console.error('[gbl] failed to clear cache', err)
-    }
-  }
-
+  onClearCache,
+}: Pick<RepoTabStripProps, 'labels' | 'onOpenLocal' | 'onOpenRemote' | 'onClone'> & { onClearCache: () => void }) {
   return (
     <>
       <DropdownMenuItem className="whitespace-nowrap" onSelect={onOpenLocal}>
@@ -144,7 +136,7 @@ function OpenRepoMenuItems({
         {labels.cloneShortcut && <DropdownMenuShortcut>{labels.cloneShortcut}</DropdownMenuShortcut>}
       </DropdownMenuItem>
       <DropdownMenuSeparator />
-      <DropdownMenuItem className="whitespace-nowrap" onSelect={handleClearCache}>
+      <DropdownMenuItem className="whitespace-nowrap" onSelect={onClearCache}>
         <Trash2 />
         {labels.clearCache}
       </DropdownMenuItem>
@@ -271,6 +263,24 @@ export function RepoTabStrip({
 }: RepoTabStripProps) {
   const isSmallScreen = useIsSmallScreen()
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [confirmClearCacheOpen, setConfirmClearCacheOpen] = useState(false)
+
+  const requestClearCache = () => setConfirmClearCacheOpen(true)
+
+  const handleClearCacheConfirmed = () => {
+    // Clears the storage for ALL repos on this origin (goblin.repo-store,
+    // terminal client id) — hence the confirm gate before it runs.
+    try {
+      localStorage.clear()
+      sessionStorage.clear()
+      window.location.reload()
+    } catch (err) {
+      console.error('[gbl] failed to clear cache', err)
+    } finally {
+      setConfirmClearCacheOpen(false)
+    }
+  }
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -324,7 +334,13 @@ export function RepoTabStrip({
           </DropdownMenuTrigger>
         </Tip>
         <DropdownMenuContent side="bottom" align="start" className="w-max">
-          <OpenRepoMenuItems labels={labels} onOpenLocal={onOpenLocal} onOpenRemote={onOpenRemote} onClone={onClone} />
+          <OpenRepoMenuItems
+            labels={labels}
+            onOpenLocal={onOpenLocal}
+            onOpenRemote={onOpenRemote}
+            onClone={onClone}
+            onClearCache={requestClearCache}
+          />
         </DropdownMenuContent>
       </DropdownMenu>
     </RepoTabEdgeAction>
@@ -379,6 +395,7 @@ export function RepoTabStrip({
                       onOpenLocal={onOpenLocal}
                       onOpenRemote={onOpenRemote}
                       onClone={onClone}
+                      onClearCache={requestClearCache}
                     />
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -404,6 +421,15 @@ export function RepoTabStrip({
           }
         />
       )}
+      <ConfirmDialog
+        open={confirmClearCacheOpen}
+        title={labels.clearCacheConfirmTitle}
+        message={labels.clearCacheConfirmMessage}
+        confirmLabel={labels.clearCacheConfirmLabel}
+        destructive
+        onCancel={() => setConfirmClearCacheOpen(false)}
+        onConfirm={handleClearCacheConfirmed}
+      />
     </nav>
   )
 }

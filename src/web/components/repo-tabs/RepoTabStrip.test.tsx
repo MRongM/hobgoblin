@@ -368,6 +368,71 @@ describe('RepoTabStrip', () => {
     const openTrigger = container!.querySelector<HTMLButtonElement>('button[aria-label="Open"]')!
     expect(openTrigger.parentElement?.querySelector('span.border-topbar-border')).not.toBeNull()
   })
+
+  test('asks for confirmation before clearing cache', async () => {
+    localStorage.setItem('probe', 'kept')
+    const location = stubLocationReload()
+    try {
+      renderEmptyStrip()
+      await selectClearCacheMenuItem()
+
+      expect(document.body.querySelector('[role="alertdialog"]')).not.toBeNull()
+      expect(document.body.textContent).toContain('Clear cache?')
+      expect(localStorage.getItem('probe')).toBe('kept')
+      expect(location.reload).not.toHaveBeenCalled()
+    } finally {
+      location.restore()
+      localStorage.clear()
+    }
+  })
+
+  test('clears storage and reloads after confirming', async () => {
+    localStorage.setItem('probe', 'kept')
+    sessionStorage.setItem('probe-session', 'kept')
+    const location = stubLocationReload()
+    try {
+      renderEmptyStrip()
+      await selectClearCacheMenuItem()
+
+      await act(async () => {
+        Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'))
+          .find((button) => button.textContent?.includes('Clear and reload'))
+          ?.click()
+        await Promise.resolve()
+      })
+
+      expect(localStorage.getItem('probe')).toBeNull()
+      expect(sessionStorage.getItem('probe-session')).toBeNull()
+      expect(location.reload).toHaveBeenCalledTimes(1)
+    } finally {
+      location.restore()
+      localStorage.clear()
+      sessionStorage.clear()
+    }
+  })
+
+  test('cancelling the clear-cache dialog has no side effects', async () => {
+    localStorage.setItem('probe', 'kept')
+    const location = stubLocationReload()
+    try {
+      renderEmptyStrip()
+      await selectClearCacheMenuItem()
+
+      await act(async () => {
+        Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'))
+          .find((button) => button.textContent?.includes('dialog.cancel'))
+          ?.click()
+        await Promise.resolve()
+      })
+
+      expect(document.body.querySelector('[role="alertdialog"]')).toBeNull()
+      expect(localStorage.getItem('probe')).toBe('kept')
+      expect(location.reload).not.toHaveBeenCalled()
+    } finally {
+      location.restore()
+      localStorage.clear()
+    }
+  })
 })
 
 function render(
@@ -458,6 +523,51 @@ const labels = {
   cloneShortcut: '⌘⇧O',
   unavailable: 'Unavailable',
   clearCache: 'Clear cache',
+  clearCacheConfirmTitle: 'Clear cache?',
+  clearCacheConfirmMessage: 'Clears cached data for all repositories on this server and reloads the page.',
+  clearCacheConfirmLabel: 'Clear and reload',
+}
+
+function renderEmptyStrip() {
+  render(
+    <RepoTabStrip
+      repos={[]}
+      activeId={null}
+      labels={labels}
+      onActivate={() => {}}
+      onClose={() => {}}
+      onReorder={() => {}}
+      onOpenLocal={() => {}}
+      onOpenRemote={() => {}}
+      onClone={() => {}}
+    />,
+  )
+}
+
+async function selectClearCacheMenuItem() {
+  const trigger = document.body.querySelector('button[aria-label="Open"]')
+  if (!(trigger instanceof HTMLButtonElement)) throw new Error('missing open trigger')
+  await act(async () => {
+    trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+    trigger.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }))
+    await Promise.resolve()
+  })
+  await act(async () => {
+    Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+      .find((item) => item.textContent?.includes('Clear cache'))
+      ?.click()
+    await Promise.resolve()
+  })
+}
+
+function stubLocationReload(): { reload: ReturnType<typeof vi.fn>; restore: () => void } {
+  const originalLocation = window.location
+  const reload = vi.fn()
+  Object.defineProperty(window, 'location', { configurable: true, value: { reload } })
+  return {
+    reload,
+    restore: () => Object.defineProperty(window, 'location', { configurable: true, value: originalLocation }),
+  }
 }
 
 function createMatchMedia(matches: boolean) {

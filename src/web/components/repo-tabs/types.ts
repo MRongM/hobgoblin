@@ -23,5 +23,8 @@ export interface RepoTabStripLabels {
   clone: string
   cloneShortcut: string | null
   clearCache: string
+  clearCacheConfirmTitle: string
+  clearCacheConfirmMessage: string
+  clearCacheConfirmLabel: string
   unavailable: string
 }
