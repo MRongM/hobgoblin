@@ -104,7 +104,10 @@ export function RepoTabs({ currentRepoId, onOpenRepoPathDialog, onOpenRemote, on
   )
 }
 
-function repoTerminalWorktreePaths(repo: {
+// Also feeds the sidebar project list's terminal indicators
+// (SidebarProjectHeader), so both surfaces agree on which worktrees
+// count toward a repo's terminal state.
+export function repoTerminalWorktreePaths(repo: {
   id: string
   isGitRepo?: boolean
   data: {
