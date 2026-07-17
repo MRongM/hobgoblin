@@ -10,7 +10,8 @@ import {
   History,
   RadioTower,
   Tag,
-  ChevronDown,
+  ChevronsLeft,
+  ChevronsRight,
   type LucideIcon,
 } from 'lucide-react'
 import { BranchList } from '#/web/components/BranchList.tsx'
@@ -38,12 +39,6 @@ import { cn } from '#/web/lib/cn.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 import { repoIsPlainWorkspace } from '#/web/stores/repos/capabilities.ts'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '#/web/components/ui/dropdown-menu.tsx'
 
 export interface FileTreeRevealRequest {
   id: number
@@ -189,6 +184,14 @@ function BranchArea({ repoId, showActions }: { repoId: string; showActions: bool
   )
 }
 
+// Session-only memory for the file-area overflow tab strip: survives
+// remounts (project switches) but intentionally resets on page reload.
+let lastOverflowExpanded = false
+
+export function resetExplorerOverflowExpanded() {
+  lastOverflowExpanded = false
+}
+
 function ExplorerTabs({
   repoId,
   layout,
@@ -242,7 +245,43 @@ function ExplorerTabs({
 
   const primaryTabs = tabs.slice(0, 4)
   const overflowTabs = tabs.slice(4)
-  const overflowActive = overflowTabs.some((tab) => tab.id === activeVisibleTab)
+  const [overflowExpanded, setOverflowExpanded] = useState(() => lastOverflowExpanded)
+  const toggleOverflow = () =>
+    setOverflowExpanded((current) => {
+      lastOverflowExpanded = !current
+      return !current
+    })
+
+  const renderTab = (tab: (typeof tabs)[number]) => {
+    const selected = activeVisibleTab === tab.id
+    const Icon = tab.icon
+    return (
+      <Button
+        key={tab.id}
+        type="button"
+        variant="ghost"
+        role="tab"
+        aria-selected={selected}
+        aria-controls={`repo-explorer-${tab.id}-panel`}
+        tabIndex={selected ? 0 : -1}
+        onClick={() => onTabChange(tab.id)}
+        className={cn(
+          'h-7 gap-1.5 border px-2.5 text-[length:var(--goblin-file-tree-topbar-font-size)] font-normal',
+          selected
+            ? 'border-transparent bg-tab-active text-foreground'
+            : 'border-separator text-muted-foreground hover:bg-tab-hover hover:text-foreground',
+        )}
+      >
+        <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+        {tab.label}
+        {tab.id === 'changes' && changeCount > 0 && (
+          <Badge variant="attention" className="font-normal font-mono tabular-nums">
+            {changeCount}
+          </Badge>
+        )}
+      </Button>
+    )
+  }
 
   function handleRevealPath(relativePath: string) {
     onTabChange('files')
@@ -269,83 +308,29 @@ function ExplorerTabs({
               aria-orientation="horizontal"
               className="gap-0.5"
             >
-              {primaryTabs.map((tab) => {
-                const selected = activeVisibleTab === tab.id
-                const Icon = tab.icon
-                return (
+              {primaryTabs.map(renderTab)}
+              {overflowTabs.length > 0 && (
+                <>
+                  {(overflowExpanded
+                    ? overflowTabs
+                    : overflowTabs.filter((tab) => tab.id === activeVisibleTab)
+                  ).map(renderTab)}
                   <Button
-                    key={tab.id}
                     type="button"
                     variant="ghost"
-                    role="tab"
-                    aria-selected={selected}
-                    aria-controls={`repo-explorer-${tab.id}-panel`}
-                    tabIndex={selected ? 0 : -1}
-                    onClick={() => onTabChange(tab.id)}
-                    className={cn(
-                      'h-7 gap-1.5 border px-2.5 text-[length:var(--goblin-file-tree-topbar-font-size)] font-normal',
-                      selected
-                        ? 'border-transparent bg-tab-active text-foreground'
-                        : 'border-separator text-muted-foreground hover:bg-tab-hover hover:text-foreground',
-                    )}
+                    data-testid="explorer-tabs-overflow-toggle"
+                    aria-expanded={overflowExpanded}
+                    aria-label={t(overflowExpanded ? 'file-tree.tabs.collapse' : 'file-tree.tabs.expand')}
+                    onClick={toggleOverflow}
+                    className="h-7 border border-separator px-2 text-muted-foreground hover:bg-tab-hover hover:text-foreground"
                   >
-                    <Icon className="size-3.5 shrink-0" aria-hidden="true" />
-                    {tab.label}
-                    {tab.id === 'changes' && changeCount > 0 && (
-                      <Badge variant="attention" className="font-normal font-mono tabular-nums">
-                        {changeCount}
-                      </Badge>
+                    {overflowExpanded ? (
+                      <ChevronsLeft className="size-3.5 shrink-0" aria-hidden="true" />
+                    ) : (
+                      <ChevronsRight className="size-3.5 shrink-0" aria-hidden="true" />
                     )}
                   </Button>
-                )
-              })}
-              {overflowTabs.length > 0 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      role="tab"
-                      aria-selected={overflowActive}
-                      tabIndex={overflowActive ? 0 : -1}
-                      className={cn(
-                        'h-7 gap-1 border px-2 text-[length:var(--goblin-file-tree-topbar-font-size)] font-normal',
-                        overflowActive
-                          ? 'border-transparent bg-tab-active text-foreground'
-                          : 'border-separator text-muted-foreground hover:bg-tab-hover hover:text-foreground',
-                      )}
-                    >
-                      {overflowActive &&
-                        (() => {
-                          const active = overflowTabs.find((t) => t.id === activeVisibleTab)
-                          if (!active) return null
-                          const Icon = active.icon
-                          return (
-                            <>
-                              <Icon className="size-3.5 shrink-0" aria-hidden="true" />
-                              {active.label}
-                            </>
-                          )
-                        })()}
-                      <ChevronDown className="size-3.5 shrink-0" aria-hidden="true" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {overflowTabs.map((tab) => {
-                      const Icon = tab.icon
-                      return (
-                        <DropdownMenuItem
-                          key={tab.id}
-                          onSelect={() => onTabChange(tab.id)}
-                          className={cn(activeVisibleTab === tab.id && 'bg-tab-active text-foreground')}
-                        >
-                          <Icon className="size-3.5 shrink-0" aria-hidden="true" />
-                          {tab.label}
-                        </DropdownMenuItem>
-                      )
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                </>
               )}
             </ToolbarTabStripBody>
           }
