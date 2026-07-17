@@ -172,31 +172,21 @@ export function SidebarProjectHeader({ repoId }: Props) {
                     aria-current={active ? 'true' : undefined}
                     title={project.unavailable ? t('repo-unavailable.title') : location}
                     className={cn(
-                      'flex w-full min-w-0 items-start gap-2.5 rounded-[var(--goblin-brand-radius-md,var(--radius-md))] py-2 pl-2.5 pr-9 text-left transition-colors duration-100',
+                      'flex w-full min-w-0 items-center gap-2.5 rounded-[var(--goblin-brand-radius-md,var(--radius-md))] py-2 pl-2.5 pr-9 text-left transition-colors duration-100',
                       active ? 'bg-selected text-selected-foreground' : 'text-foreground hover:bg-tab-hover',
                       project.unavailable && 'opacity-60',
                     )}
                   >
                     <FolderGit2
                       className={cn(
-                        'mt-px size-4 shrink-0',
+                        'size-4 shrink-0',
                         active ? 'text-selected-muted-foreground' : 'text-muted-foreground',
                       )}
                       aria-hidden="true"
                     />
-                    <span className="flex min-w-0 flex-1 flex-col gap-1">
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span className="min-w-0 truncate text-[13px] font-medium leading-none">{project.name}</span>
-                        <ProjectTerminalStatus repoId={project.id} worktreePaths={project.worktreePaths} />
-                      </span>
-                      <span
-                        className={cn(
-                          'min-w-0 truncate font-mono text-[11px] leading-none',
-                          active ? 'text-selected-muted-foreground' : 'text-muted-foreground',
-                        )}
-                      >
-                        {location}
-                      </span>
+                    <span className="flex min-w-0 flex-1 items-center gap-2">
+                      <span className="min-w-0 truncate text-[13px] font-medium leading-none">{project.name}</span>
+                      <ProjectTerminalStatus repoId={project.id} worktreePaths={project.worktreePaths} />
                     </span>
                   </button>
                   <Button
