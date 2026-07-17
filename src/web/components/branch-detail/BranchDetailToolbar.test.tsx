@@ -214,6 +214,35 @@ describe('BranchDetailToolbar', () => {
     expect(useReposStore.getState().detailCollapsed).toBe(false)
   })
 
+  test('marks the desktop left-right detail toolbar as a window drag region', () => {
+    const { container: c } = renderToolbar({
+      terminalCount: 1,
+      detailTab: 'terminal',
+      layout: 'left-right',
+      navigation: navigationWith({}),
+    })
+
+    const toolbar = c.firstElementChild
+    expect(toolbar?.className).toContain('[-webkit-app-region:drag]')
+    expect(toolbar?.className).toContain('topbar-tone')
+    expect(toolbar?.className).toContain('border-topbar-border')
+    expect(toolbar?.className).toContain('bg-topbar')
+    expect(toolbar?.className).toContain('text-topbar-foreground')
+  })
+
+  test('keeps the compact detail toolbar on the generic toolbar tone', () => {
+    compactUi = true
+    const { container: c } = renderToolbar({
+      terminalCount: 1,
+      detailTab: 'terminal',
+      layout: 'left-right',
+      navigation: navigationWith({}),
+    })
+
+    expect(c.firstElementChild?.className).toContain('bg-toolbar')
+    expect(c.firstElementChild?.className).not.toContain('topbar-tone')
+  })
+
   test('does not render the removed terminal redraw control', () => {
     const { container: c } = renderToolbar({
       terminalCount: 1,

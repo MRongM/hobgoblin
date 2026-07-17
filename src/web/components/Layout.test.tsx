@@ -44,6 +44,23 @@ describe('Layout chrome', () => {
     expect(toolbar?.className).not.toContain('h-9')
   })
 
+  test('can apply the topbar tone without changing toolbar sizing', () => {
+    render(
+      <Toolbar data-testid="toolbar" tone="topbar">
+        <span>Terminal toolbar</span>
+      </Toolbar>,
+    )
+
+    const toolbar = container!.querySelector<HTMLElement>('[data-testid="toolbar"]')
+    expect(toolbar?.style.height).toBe('41px')
+    expect(toolbar?.className).toContain('topbar-tone')
+    expect(toolbar?.className).toContain('border-topbar-border')
+    expect(toolbar?.className).toContain('bg-topbar')
+    expect(toolbar?.className).toContain('text-topbar-foreground')
+    expect(toolbar?.className).not.toContain('border-toolbar-border')
+    expect(toolbar?.className).not.toContain('bg-toolbar')
+  })
+
   test('uses the runtime app toolbar height for collapsed top-bottom detail row', () => {
     render(
       <RepoWorkspace

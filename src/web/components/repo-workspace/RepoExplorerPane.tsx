@@ -155,7 +155,7 @@ function BranchSectionLabel() {
   const t = useT()
   return (
     <div className="flex h-7 shrink-0 items-center px-4 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-      {t('tab.branches')}
+      {t('branches.filter.worktrees')}
     </div>
   )
 }

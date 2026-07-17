@@ -160,7 +160,8 @@
   --radius-brand-lg: var(--goblin-brand-radius-lg, var(--radius-lg));
 }
 
-.topbar {
+.topbar,
+.topbar-tone {
   --color-control: var(--color-topbar-control);
   --color-control-hover: var(--color-topbar-control-hover);
   --color-input: var(--color-topbar-control-border);

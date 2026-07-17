@@ -154,12 +154,17 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
   )
   const focusTogglePressed = behavior.detailFocusMode
   const showCollapseControl = behavior.detailCollapseAllowed && layout !== 'left-right'
-  // With no global topbar on desktop, this toolbar is the top edge of the
-  // window in focus mode (the sidebar and its drag region are hidden), so
-  // it takes over as the OS drag region there.
+  // In the desktop left-right layout this toolbar is the right half of the
+  // window's top edge, so its unused surface is a drag region without the
+  // traffic-light padding owned by `.topbar`. Focus mode hides the sidebar,
+  // making this toolbar the full native window chrome instead.
   const isWindowChrome = behavior.mode === 'focus'
   return (
-    <Toolbar variant="detail" className={cn(isWindowChrome && 'topbar')}>
+    <Toolbar
+      variant="detail"
+      tone={compact ? 'toolbar' : 'topbar'}
+      className={cn(layout === 'left-right' && '[-webkit-app-region:drag]', isWindowChrome && 'topbar')}
+    >
       <div className="flex h-full min-w-0 items-center gap-1 overflow-hidden">
         {/* Focus mode hides the sidebar, so its collapse control mirrors
          * here at the window's top-left to bring the sidebar back. */}

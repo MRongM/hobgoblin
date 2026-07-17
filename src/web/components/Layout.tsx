@@ -28,6 +28,7 @@ interface ToolbarProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode
   className?: string
   variant?: 'plain' | 'repo' | 'detail'
+  tone?: 'toolbar' | 'topbar'
 }
 
 interface PaneProps {
@@ -47,13 +48,16 @@ interface EmptyStateProps {
   tone?: 'neutral' | 'success'
 }
 
-export function Toolbar({ children, className, variant = 'plain', style, ...props }: ToolbarProps) {
+export function Toolbar({ children, className, variant = 'plain', tone = 'toolbar', style, ...props }: ToolbarProps) {
   const { toolbarHeightPx } = useRuntimeChromeSettings()
 
   return (
     <div
       className={cn(
-        'flex shrink-0 items-center border-b border-toolbar-border bg-toolbar text-toolbar-foreground',
+        'flex shrink-0 items-center border-b',
+        tone === 'topbar'
+          ? 'topbar-tone border-topbar-border bg-topbar text-topbar-foreground'
+          : 'border-toolbar-border bg-toolbar text-toolbar-foreground',
         variant === 'repo' && 'gap-3 px-4',
         variant === 'detail' && 'min-w-0 justify-between gap-2 px-2',
         className,
