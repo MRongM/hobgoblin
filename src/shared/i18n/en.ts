@@ -446,6 +446,8 @@ export const en = {
   'terminal.open-count': '{count} terminals',
   'terminal.bell-unread': 'Unread terminal bell',
   'terminal.bell-unread-count': '{count} unread bell',
+  'terminal.open-in-browser': 'Open in browser',
+  'terminal.open-in-browser-title': 'Open this workspace in the browser',
   'terminal.lan-qr': 'LAN terminal QR code',
   'terminal.lan-qr-title': 'LAN terminal QR code',
   'terminal.lan-qr-description': 'Scan from another device on the same network to open this workspace terminal.',
@@ -740,6 +742,9 @@ export const en = {
   'settings.action-bar-blank-toggle': 'Toggle details from action bar',
   'settings.action-bar-blank-toggle-hint':
     'Top/bottom layout only. Click empty action bar space to show or hide details.',
+  'settings.server-port': 'Project port',
+  'settings.server-port-hint':
+    'Port for the local project server (default 32200). Takes effect after restarting Hobgoblin.',
   'settings.temporary-files-directory': 'Temporary files directory',
   'settings.temporary-files-directory-hint':
     'Used when terminal binary paste creates files. Supports absolute paths or paths relative to the current project, such as tmp/cache. Leave empty to use the current project tmp folder.',

@@ -72,7 +72,7 @@ export const zh: Record<DictKey, string> = {
   // ---- Dependencies ------------------------------------------------------
 
   // ---- Repository tabs ---------------------------------------------------
-  'repo-tabs.repos': '仓库',
+  'repo-tabs.repos': '项目',
   'repo-tabs.close': '关闭',
   'repo-tabs.close-named': '关闭 {name}',
   'repo-tabs.close-confirm-title': '关闭项目？',
@@ -430,6 +430,8 @@ export const zh: Record<DictKey, string> = {
   'terminal.open-count': '{count} 个终端',
   'terminal.bell-unread': '终端有未读提醒',
   'terminal.bell-unread-count': '{count} 个未读终端提醒',
+  'terminal.open-in-browser': '在浏览器中打开',
+  'terminal.open-in-browser-title': '在浏览器中打开此工作区',
   'terminal.lan-qr': '局域网终端二维码',
   'terminal.lan-qr-title': '局域网终端二维码',
   'terminal.lan-qr-description': '用同一局域网内的其他设备扫码，直接打开当前工作区终端。',
@@ -717,6 +719,8 @@ export const zh: Record<DictKey, string> = {
   'settings.back': '返回',
   'settings.action-bar-blank-toggle': '点击操作栏空白处展开/收起详情',
   'settings.action-bar-blank-toggle-hint': '仅上下布局生效。点击操作栏空白处展开或收起详情。',
+  'settings.server-port': '项目端口',
+  'settings.server-port-hint': '本地项目服务端口(默认 32200),重启 Hobgoblin 后生效。',
   'settings.temporary-files-directory': '临时文件目录',
   'settings.temporary-files-directory-hint':
     '用于终端二进制粘贴生成文件。支持绝对路径，或相对当前项目的路径（如 tmp/cache）；留空时使用当前项目的 tmp 目录。',

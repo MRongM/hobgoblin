@@ -1,6 +1,8 @@
+import { readFileSync } from 'node:fs'
 import type { Socket } from 'node:net'
 import { serve, type ServerType } from '@hono/node-server'
 import { WebSocketServer } from 'ws'
+import { serverDataFile } from '#/server/common/data-dir.ts'
 import { serverLogger } from '#/server/logger.ts'
 import { disconnectAllInvalidationSockets } from '#/server/modules/invalidation-broker.ts'
 import { createServerRuntime } from '#/server/runtime.ts'
@@ -14,6 +16,18 @@ const SHUTDOWN_TIMEOUT_MS = 1_000
 function parsePort(value: string | undefined): number {
   const port = Number(value)
   return Number.isInteger(port) && port > 0 && port <= 65535 ? port : DEFAULT_PORT
+}
+
+// Standalone servers (no Electron main process setting GOBLIN_SERVER_PORT)
+// honor the restart-effective port preference persisted by the settings UI.
+function readConfiguredPort(): number {
+  try {
+    const raw = readFileSync(serverDataFile('server-settings.json'), 'utf-8')
+    const port = Number((JSON.parse(raw) as { serverPort?: unknown }).serverPort)
+    return Number.isInteger(port) && port >= 1024 && port <= 65535 ? port : DEFAULT_PORT
+  } catch {
+    return DEFAULT_PORT
+  }
 }
 
 export interface BootstrappedServer {
@@ -31,7 +45,10 @@ export interface BootstrapServerOptions {
 export function bootstrapServer(options: BootstrapServerOptions = {}): BootstrappedServer {
   const startedAt = Date.now()
   const hostname = process.env.GOBLIN_SERVER_HOST?.trim() || DEFAULT_HOST
-  const port = parsePort(process.env.GOBLIN_SERVER_PORT)
+  const port = process.env.GOBLIN_SERVER_PORT ? parsePort(process.env.GOBLIN_SERVER_PORT) : readConfiguredPort()
+  // Keep downstream env readers (e.g. the /lan route) in sync with the
+  // actually bound port when it came from settings instead of the env.
+  process.env.GOBLIN_SERVER_PORT = String(port)
   const terminalWorkerEntry =
     options.terminalWorkerEntry ??
     (options.terminalWorkerDir ? resolveTerminalWorkerEntry(options.terminalWorkerDir) : null)

@@ -58,6 +58,7 @@ describe('renderer bootstrap seeding', () => {
         terminalCustomButtons: [],
         fontFamily: 'mono',
         lanEnabled: false,
+        serverPort: 32200,
       },
     })
 

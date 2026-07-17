@@ -1,15 +1,24 @@
 import { getInitialBootstrap } from '#/web/bootstrap.ts'
 import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
 import { externalAppsQueryKey, settingsSnapshotQueryKey, useSettingsSnapshotQuery } from '#/web/settings-queries.ts'
-import type { ExternalAppsSnapshot, RuntimeRecentReposState, RuntimeSettingsSnapshot, SettingsSnapshot } from '#/shared/rpc.ts'
+import type {
+  ExternalAppsSnapshot,
+  RuntimeRecentReposState,
+  RuntimeSettingsSnapshot,
+  SettingsSnapshot,
+} from '#/shared/rpc.ts'
 import type { EditorPref, TerminalPref } from '#/shared/rpc.ts'
-import { runtimeRecentReposStateFromSettingsSnapshot, runtimeSettingsSnapshotFromSettingsSnapshot } from '#/shared/settings-snapshot.ts'
+import {
+  runtimeRecentReposStateFromSettingsSnapshot,
+  runtimeSettingsSnapshotFromSettingsSnapshot,
+} from '#/shared/settings-snapshot.ts'
 import {
   DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   DEFAULT_FILE_TREE_FONT_SIZE,
   DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
   DEFAULT_FONT_FAMILY,
   DEFAULT_GIT_NETWORK_TIMEOUT_SEC,
+  DEFAULT_SERVER_PORT,
   DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
   DEFAULT_TERMINAL_FONT_SIZE,
   DEFAULT_TOOLBAR_HEIGHT_PX,
@@ -98,9 +107,9 @@ export function readRuntimeGeneralSettings(data: RuntimeSettingsSnapshot | undef
   return {
     toggleDetailOnActionBarBlankClick:
       data?.toggleDetailOnActionBarBlankClick ?? fallback?.toggleDetailOnActionBarBlankClick ?? false,
-    terminalThemeSyncEnabled:
-      data?.terminalThemeSyncEnabled ?? fallback?.terminalThemeSyncEnabled ?? true,
+    terminalThemeSyncEnabled: data?.terminalThemeSyncEnabled ?? fallback?.terminalThemeSyncEnabled ?? true,
     temporaryFilesDirectory: data?.temporaryFilesDirectory ?? fallback?.temporaryFilesDirectory ?? '',
+    serverPort: data?.serverPort ?? fallback?.serverPort ?? DEFAULT_SERVER_PORT,
   }
 }
 
@@ -108,12 +117,10 @@ export function readRuntimeFontSettings(data: RuntimeSettingsSnapshot | undefine
   const fallback = fallbackInitialSettings()
   return {
     fontFamily: data?.fontFamily ?? fallback?.fontFamily ?? DEFAULT_FONT_FAMILY,
-    fileTreeFontSize:
-      data?.fileTreeFontSize ?? fallback?.fileTreeFontSize ?? DEFAULT_FILE_TREE_FONT_SIZE,
+    fileTreeFontSize: data?.fileTreeFontSize ?? fallback?.fileTreeFontSize ?? DEFAULT_FILE_TREE_FONT_SIZE,
     fileTreeTopbarFontSize:
       data?.fileTreeTopbarFontSize ?? fallback?.fileTreeTopbarFontSize ?? DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
-    terminalFontSize:
-      data?.terminalFontSize ?? fallback?.terminalFontSize ?? DEFAULT_TERMINAL_FONT_SIZE,
+    terminalFontSize: data?.terminalFontSize ?? fallback?.terminalFontSize ?? DEFAULT_TERMINAL_FONT_SIZE,
   }
 }
 
@@ -128,8 +135,7 @@ export function readRuntimeChromeSettings(data: RuntimeSettingsSnapshot | undefi
 export function readRuntimeFileAreaSettings(data: RuntimeSettingsSnapshot | undefined) {
   const fallback = fallbackInitialSettings()
   return {
-    fileTreeFontSize:
-      data?.fileTreeFontSize ?? fallback?.fileTreeFontSize ?? DEFAULT_FILE_TREE_FONT_SIZE,
+    fileTreeFontSize: data?.fileTreeFontSize ?? fallback?.fileTreeFontSize ?? DEFAULT_FILE_TREE_FONT_SIZE,
     fileTreeTopbarFontSize:
       data?.fileTreeTopbarFontSize ?? fallback?.fileTreeTopbarFontSize ?? DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
     fileTreeClipboardMaxBytesMb:
@@ -147,15 +153,11 @@ export function readRuntimeTerminalSettings(data: RuntimeSettingsSnapshot | unde
   const fallback = fallbackInitialSettings()
   return {
     fontFamily: data?.fontFamily ?? fallback?.fontFamily ?? DEFAULT_FONT_FAMILY,
-    terminalFontSize:
-      data?.terminalFontSize ?? fallback?.terminalFontSize ?? DEFAULT_TERMINAL_FONT_SIZE,
-    terminalThemeSyncEnabled:
-      data?.terminalThemeSyncEnabled ?? fallback?.terminalThemeSyncEnabled ?? true,
-    remoteTerminalTmuxEnabled:
-      data?.remoteTerminalTmuxEnabled ?? fallback?.remoteTerminalTmuxEnabled ?? false,
+    terminalFontSize: data?.terminalFontSize ?? fallback?.terminalFontSize ?? DEFAULT_TERMINAL_FONT_SIZE,
+    terminalThemeSyncEnabled: data?.terminalThemeSyncEnabled ?? fallback?.terminalThemeSyncEnabled ?? true,
+    remoteTerminalTmuxEnabled: data?.remoteTerminalTmuxEnabled ?? fallback?.remoteTerminalTmuxEnabled ?? false,
     temporaryFilesDirectory: data?.temporaryFilesDirectory ?? fallback?.temporaryFilesDirectory ?? '',
-    terminalCustomButtonsVisible:
-      data?.terminalCustomButtonsVisible ?? fallback?.terminalCustomButtonsVisible ?? true,
+    terminalCustomButtonsVisible: data?.terminalCustomButtonsVisible ?? fallback?.terminalCustomButtonsVisible ?? true,
     terminalCustomButtonSize:
       data?.terminalCustomButtonSize ?? fallback?.terminalCustomButtonSize ?? DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
     terminalCustomButtons: data?.terminalCustomButtons ?? fallback?.terminalCustomButtons ?? [],

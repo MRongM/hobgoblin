@@ -437,6 +437,8 @@ export const ko: Record<DictKey, string> = {
   'terminal.open-count': '터미널 {count}개',
   'terminal.bell-unread': '읽지 않은 터미널 벨',
   'terminal.bell-unread-count': '읽지 않은 벨 {count}개',
+  'terminal.open-in-browser': '브라우저에서 열기',
+  'terminal.open-in-browser-title': '이 작업 공간을 브라우저에서 엽니다',
   'terminal.lan-qr': 'LAN 터미널 QR 코드',
   'terminal.lan-qr-title': 'LAN 터미널 QR 코드',
   'terminal.lan-qr-description': '같은 네트워크의 다른 기기에서 스캔해 이 작업 공간 터미널을 엽니다.',
@@ -732,6 +734,8 @@ export const ko: Record<DictKey, string> = {
   'settings.action-bar-blank-toggle': '작업 막대 빈 영역으로 세부 패널 접기/펼치기',
   'settings.action-bar-blank-toggle-hint':
     '상하 레이아웃에서만 작동합니다. 작업 막대 빈 공간을 클릭해 세부 정보를 표시하거나 숨깁니다.',
+  'settings.server-port': '프로젝트 포트',
+  'settings.server-port-hint': '로컬 프로젝트 서버 포트(기본 32200). Hobgoblin을 다시 시작하면 적용됩니다.',
   'settings.temporary-files-directory': '임시 파일 디렉터리',
   'settings.temporary-files-directory-hint':
     '터미널에서 바이너리를 붙여넣을 때 생성되는 파일에 사용합니다. 절대 경로 또는 현재 프로젝트 기준 상대 경로(예: tmp/cache)를 지원합니다. 비워 두면 현재 프로젝트의 tmp 폴더를 사용합니다.',

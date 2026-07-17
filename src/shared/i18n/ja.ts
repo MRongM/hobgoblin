@@ -446,6 +446,8 @@ export const ja: Record<DictKey, string> = {
   'terminal.open-count': 'ターミナル {count} 件',
   'terminal.bell-unread': '未読のターミナルベル',
   'terminal.bell-unread-count': '未読ベル {count} 件',
+  'terminal.open-in-browser': 'ブラウザで開く',
+  'terminal.open-in-browser-title': 'このワークスペースをブラウザで開きます',
   'terminal.lan-qr': 'LAN ターミナル QR コード',
   'terminal.lan-qr-title': 'LAN ターミナル QR コード',
   'terminal.lan-qr-description':
@@ -744,6 +746,9 @@ export const ja: Record<DictKey, string> = {
   'settings.action-bar-blank-toggle': 'アクションバーの空白で詳細を折りたたむ/展開',
   'settings.action-bar-blank-toggle-hint':
     '上下レイアウトでのみ有効です。アクションバーの空白をクリックして詳細を表示/非表示にします。',
+  'settings.server-port': 'プロジェクトポート',
+  'settings.server-port-hint':
+    'ローカルプロジェクトサーバーのポート(デフォルト 32200)。Hobgoblin の再起動後に有効になります。',
   'settings.temporary-files-directory': '一時ファイルディレクトリ',
   'settings.temporary-files-directory-hint':
     'ターミナルでバイナリを貼り付けたときに作成するファイルに使用します。絶対パス、または現在のプロジェクトからの相対パス（例: tmp/cache）をサポートします。空の場合は現在のプロジェクトの tmp フォルダを使用します。',
