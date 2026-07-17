@@ -30,6 +30,18 @@ describe('i18n dictionaries', () => {
     }
   })
 
+  test('preserves official classic theme names in every dictionary', () => {
+    const expected = {
+      'settings.theme-preset.catppuccin': 'Catppuccin',
+      'settings.theme-preset.solarized': 'Solarized',
+      'settings.theme-preset.tokyo-night': 'Tokyo Night',
+    }
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      expect(dict, lang).toMatchObject(expected)
+    }
+  })
+
   test('localizes menu and remote repository copy for non-English dictionaries', () => {
     expect(zh['menu.file.open-remote-repo']).toBe('打开远程仓库…')
     expect(ko['menu.file.open-remote-repo']).toBe('원격 리포지토리 열기…')
@@ -54,11 +66,13 @@ describe('i18n dictionaries', () => {
   })
 
   test('distinguishes Chinese pull and remote tracking branch actions', () => {
+    expect(zh['tab.remote-branches']).toBe('远程')
     expect(zh['action.pull']).toBe('拉取')
     expect(zh['action.create-branch']).toBe('从本地新建分支')
     expect(zh['action.create-branch-title']).toBe('从本地新建分支')
     expect(zh['action.pull-remote-branch']).toBe('从远程新建分支')
     expect(zh['action.pull-remote-branch-title']).toBe('从远程分支创建本地分支')
+    expect(zh['action.merge-and-push-confirm']).toBe('拉合推')
   })
 
   test('distinguishes Chinese destructive branch actions', () => {
@@ -89,6 +103,32 @@ describe('i18n dictionaries', () => {
       'error.file-tree-not-regular-file',
       'error.file-tree-clipboard-unsupported-content',
     ] satisfies DictKey[]
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) {
+        expect(dict[key], `${lang}.${key}`).toBeTruthy()
+      }
+    }
+  })
+
+  test('includes file area collapse copy in every dictionary', () => {
+    const keys = ['file-area.collapse', 'file-area.expand'] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) {
+        expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+      }
+    }
+  })
+
+  test('includes bundled font license copy in every dictionary', () => {
+    const keys = [
+      'about.third-party-licenses',
+      'about.third-party-licenses.body',
+      'about.third-party-licenses.open',
+      'about.third-party-licenses.dialog-title',
+      'about.third-party-licenses.dialog-description',
+    ] as const
 
     for (const [lang, dict] of Object.entries(dicts)) {
       for (const key of keys) {

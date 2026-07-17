@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { ProjectFileTree } from '#/web/components/file-tree/ProjectFileTree.tsx'
 import { PlainWorkspaceTerminalPanel } from '#/web/components/repo-workspace/PlainWorkspaceTerminalPanel.tsx'
@@ -9,9 +10,10 @@ interface PlainWorkspacePaneProps {
   repoId: string
   layout: RepoWorkspaceLayout
   revealRequest?: FileTreeRevealRequest | null
+  terminalPanel?: ReactNode
 }
 
-export function PlainWorkspacePane({ repoId, layout, revealRequest }: PlainWorkspacePaneProps) {
+export function PlainWorkspacePane({ repoId, layout, revealRequest, terminalPanel }: PlainWorkspacePaneProps) {
   const terminalPaneSize = useReposStore((s) => s.detailPaneSizes[layout])
   const setDetailPaneSize = useReposStore((s) => s.setDetailPaneSize)
 
@@ -27,9 +29,7 @@ export function PlainWorkspacePane({ repoId, layout, revealRequest }: PlainWorks
         </RepoWorkspacePane>
       }
       detailPane={
-        <RepoWorkspacePane>
-          <PlainWorkspaceTerminalPanel repoId={repoId} />
-        </RepoWorkspacePane>
+        <RepoWorkspacePane>{terminalPanel ?? <PlainWorkspaceTerminalPanel repoId={repoId} />}</RepoWorkspacePane>
       }
     />
   )

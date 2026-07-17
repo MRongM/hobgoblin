@@ -1,6 +1,5 @@
 import { ChevronDown, Loader2 } from 'lucide-react'
 import { Fragment, useState } from 'react'
-import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { AsyncButton } from '#/web/components/AsyncButton.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
@@ -12,47 +11,15 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from '#/web/components/ui/dropdown-menu.tsx'
-import {
-  useBranchActionItems,
-  type BranchActionItem,
-  type BranchActionItemGroups,
-} from '#/web/hooks/useBranchActionItems.ts'
-import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
+import { type BranchActionItem, type BranchActionItemGroups } from '#/web/hooks/useBranchActionItems.tsx'
 import { useAsyncPending } from '#/web/hooks/useAsyncPending.ts'
 import { cn } from '#/web/lib/cn.ts'
+import { rememberedQuickActions, persistRestorableRepoSnapshot } from '#/web/stores/repos/persistence.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
 
-export type { BranchActionItem } from '#/web/hooks/useBranchActionItems.ts'
-
-interface Props {
-  repo: BranchActionRepo
-  branch: RepoBranchState
-  open?: boolean
-  onOpenChange?: (open: boolean) => void
-}
-
-export function BranchActionsMenu({ repo, branch, open, onOpenChange }: Props) {
-  const { patchItems, mainItems, externalItems, destructiveItems, dialogs } = useBranchActionItems(repo, branch)
-
-  return (
-    <>
-      <BranchActionsDropdown
-        repoId={repo.id}
-        branchName={branch.name}
-        patchItems={patchItems}
-        mainItems={mainItems}
-        externalItems={externalItems}
-        destructiveItems={destructiveItems}
-        open={open}
-        onOpenChange={onOpenChange}
-      />
-
-      {dialogs}
-    </>
-  )
-}
+export type { BranchActionItem } from '#/web/hooks/useBranchActionItems.tsx'
 
 const DEFAULT_QUICK_ACTION_ID: BranchActionItem['id'] = 'editor'
-const rememberedQuickActions = new Map<string, BranchActionItem['id']>()
 
 function branchQuickActionKey(repoId: string, branchName: string): string {
   return `${repoId}\0${branchName}`
@@ -84,11 +51,15 @@ export function BranchActionsDropdown({
   destructiveItems,
   open,
   onOpenChange,
+  hideQuickAction = false,
 }: Pick<BranchActionItemGroups, 'patchItems' | 'mainItems' | 'externalItems' | 'destructiveItems'> & {
   repoId?: string
   branchName?: string
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  /** Render only the menu trigger, without the remembered quick-action
+   *  split button (used by the focus-mode toolbar chrome). */
+  hideQuickAction?: boolean
 }) {
   const t = useT()
   const [, setQuickActionRevision] = useState(0)
@@ -112,6 +83,16 @@ export function BranchActionsDropdown({
     if (memoryKey && !item.destructive) {
       rememberedQuickActions.set(memoryKey, item.id)
       setQuickActionRevision((revision) => revision + 1)
+
+      // 触发持久化：读取当前 repo state 并写入 snapshot
+      if (repoId) {
+        const store = useReposStore.getState()
+        const repo = store.repos[repoId]
+        const token = repo?.instanceToken
+        if (repo && token !== undefined) {
+          persistRestorableRepoSnapshot(useReposStore.setState, repo, token)
+        }
+      }
     }
     void run(item.id, item.onSelect)
   }
@@ -128,26 +109,23 @@ export function BranchActionsDropdown({
         onClick={(e) => e.stopPropagation()}
         onDoubleClick={(e) => e.stopPropagation()}
       >
-        <AsyncButton
-          variant="ghost"
-          size="sm"
-          loading={quickAction?.busy}
-          disabled={quickActionDisabled}
-          onClick={runQuickAction}
-          title={quickAction?.title ?? quickAction?.label ?? t('action.menu')}
-          aria-label={quickAction?.ariaLabel ?? quickAction?.title ?? quickAction?.label ?? t('action.menu')}
-          className={cn(
-            'gap-0.5 rounded-r-none px-1.5 pr-1.5',
-            quickAction?.destructive && 'text-danger hover:bg-danger-surface hover:text-danger',
-          )}
-        >
-          {({ busy }) => (
-            <>
-              {busy ? <Loader2 className="size-4 animate-spin" /> : quickAction?.icon}
-              {quickAction?.label ?? t('action.menu')}
-            </>
-          )}
-        </AsyncButton>
+        {!hideQuickAction && (
+          <AsyncButton
+            variant="ghost"
+            size="icon-sm"
+            loading={quickAction?.busy}
+            disabled={quickActionDisabled}
+            onClick={runQuickAction}
+            title={quickAction?.title ?? quickAction?.label ?? t('action.menu')}
+            aria-label={quickAction?.ariaLabel ?? quickAction?.title ?? quickAction?.label ?? t('action.menu')}
+            className={cn(
+              'rounded-r-none px-1.5',
+              quickAction?.destructive && 'text-danger hover:bg-danger-surface hover:text-danger',
+            )}
+          >
+            {({ busy }) => <>{busy ? <Loader2 className="size-4 animate-spin" /> : quickAction?.icon}</>}
+          </AsyncButton>
+        )}
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
@@ -155,7 +133,10 @@ export function BranchActionsDropdown({
             title={t('action.menu')}
             aria-label={t('action.menu')}
             aria-busy={busyAction ? true : undefined}
-            className="h-6 w-7 rounded-l-none px-1.5 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground"
+            className={cn(
+              hideQuickAction ? 'px-1.5' : 'h-6 w-7 rounded-l-none px-1.5',
+              'data-[state=open]:bg-accent data-[state=open]:text-accent-foreground',
+            )}
           >
             {busyAction ? <Loader2 className="size-4 animate-spin" /> : <ChevronDown className="size-3.5" />}
           </Button>

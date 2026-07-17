@@ -5,6 +5,7 @@ import {
   nativeSettingsProjectionStateFromSettings,
   pickNativeSettingsProjectionPatch,
 } from '#/shared/native-shell-projection.ts'
+import { COLOR_THEMES } from '#/shared/color-theme.ts'
 
 describe('native shell projection helpers', () => {
   test('picks only settings that affect native projection', () => {
@@ -65,6 +66,7 @@ describe('native shell projection helpers', () => {
         terminalCustomButtons: [],
         fontFamily: 'mono',
         lanEnabled: false,
+        serverPort: 32200,
       }),
     ).toEqual({
       lang: 'ko',
@@ -83,7 +85,7 @@ describe('native shell projection helpers', () => {
   })
 
   test('accepts current design color theme presets in native projection payloads', () => {
-    for (const colorTheme of ['claude', 'cursor', 'airbnb', 'bmw'] as const) {
+    for (const colorTheme of COLOR_THEMES) {
       expect(
         v.safeParse(NativeShellProjectionSchema, {
           prefs: {

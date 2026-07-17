@@ -24,16 +24,20 @@ import {
   DEFAULT_DETAIL_COLLAPSED,
   effectiveDetailCollapsed,
   normalizeDetailPaneSizes,
+  normalizeFileTreePaneSizes,
   normalizeWorkspaceLayout,
 } from '#/shared/workspace-layout.ts'
 import { repoSessionEntryId, type RepoSessionEntry } from '#/shared/remote-repo.ts'
 import {
+  clearRepoSettingsEntryColorTheme,
   isWorktreeBootstrapConfigHash,
+  repoSettingsEntryHasPersistedFields,
+  setRepoSettingsEntryColorTheme,
   type RepoSettingsEntry,
   type WorktreeBootstrapTrust,
 } from '#/shared/repo-settings.ts'
 import { normalizeGlobalShortcut } from '#/shared/accelerator.ts'
-import { normalizeColorTheme, type ColorTheme } from '#/shared/color-theme.ts'
+import { isColorTheme, normalizeColorTheme, type ColorTheme } from '#/shared/color-theme.ts'
 import {
   DEFAULT_EDITOR_APP,
   DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
@@ -65,7 +69,10 @@ import {
   MIN_FILE_TREE_FONT_SIZE,
   MIN_FILE_TREE_TOPBAR_FONT_SIZE,
   MIN_GIT_NETWORK_TIMEOUT_SEC,
+  MIN_SERVER_PORT,
   MIN_TERMINAL_FONT_SIZE,
+  MAX_SERVER_PORT,
+  DEFAULT_SERVER_PORT,
   defaultSessionState,
   defaultSettingsPrefs,
 } from '#/shared/settings-defaults.ts'
@@ -102,6 +109,7 @@ interface ServerSettingsData {
   terminalCustomButtonSize: TerminalCustomButtonSize
   terminalCustomButtons: TerminalCustomButton[]
   lanEnabled: boolean
+  serverPort: number
   session: SessionState
   recentRepos: RepoSessionEntry[]
   repoSettings: RepoSettingsEntry[]
@@ -240,6 +248,12 @@ function normalizeLanEnabled(value: unknown): boolean {
   return value === true
 }
 
+function normalizeServerPort(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_SERVER_PORT
+  const port = Math.round(value)
+  return port >= MIN_SERVER_PORT && port <= MAX_SERVER_PORT ? port : DEFAULT_SERVER_PORT
+}
+
 function normalizeGitNetworkProxyEnabled(value: unknown): boolean {
   return value === true
 }
@@ -292,6 +306,7 @@ function settingsPrefsFromData(data: ServerSettingsData): SettingsPrefs {
     terminalCustomButtonSize: data.terminalCustomButtonSize,
     terminalCustomButtons: data.terminalCustomButtons,
     lanEnabled: data.lanEnabled,
+    serverPort: data.serverPort,
   }
 }
 
@@ -345,6 +360,7 @@ function normalizeSession(value: unknown): SessionState {
     detailFocusMode,
     workspaceLayout,
     detailPaneSizes: normalizeDetailPaneSizes(partial.detailPaneSizes),
+    fileTreePaneSizes: normalizeFileTreePaneSizes(partial.fileTreePaneSizes),
     selectedTerminalByWorktree: normalizeSelectedTerminalByWorktree(
       partial.selectedTerminalByWorktree ?? partial.activeTerminalByGroup,
     ),
@@ -366,9 +382,10 @@ function normalizeRepoSettings(value: unknown): RepoSettingsEntry[] {
     const raw = item as Partial<RepoSettingsEntry>
     if (typeof raw.repoId !== 'string' || raw.repoId.length === 0) continue
     const next: RepoSettingsEntry = { repoId: raw.repoId }
+    if (isColorTheme(raw.colorTheme)) next.colorTheme = raw.colorTheme
     const trust = normalizeWorktreeBootstrapTrust(raw.worktreeBootstrapTrust)
     if (trust) next.worktreeBootstrapTrust = trust
-    if (next.worktreeBootstrapTrust) entries.set(next.repoId, next)
+    if (repoSettingsEntryHasPersistedFields(next)) entries.set(next.repoId, next)
   }
   return Array.from(entries.values())
 }
@@ -415,6 +432,7 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       terminalCustomButtonSize: normalizeTerminalCustomButtonSize(parsed.terminalCustomButtonSize),
       terminalCustomButtons: normalizeTerminalCustomButtons(parsed.terminalCustomButtons),
       lanEnabled: normalizeLanEnabled(parsed.lanEnabled),
+      serverPort: normalizeServerPort(parsed.serverPort),
       session: normalizeSession(parsed.session),
       recentRepos: normalizeRecentRepos(parsed.recentRepos),
       repoSettings: normalizeRepoSettings(parsed.repoSettings),
@@ -433,7 +451,12 @@ async function writeServerSettingsFile(data: ServerSettingsData): Promise<void> 
 async function loadServerSettings(): Promise<ServerSettingsData> {
   settingsPromise ??= (async () => {
     const persisted = await readServerSettingsFile()
-    const data = persisted ?? { ...defaultSettingsPrefs(), session: defaultSession(), recentRepos: [], repoSettings: [] }
+    const data = persisted ?? {
+      ...defaultSettingsPrefs(),
+      session: defaultSession(),
+      recentRepos: [],
+      repoSettings: [],
+    }
     await writeServerSettingsFile(data)
     cachedFetchIntervalSec = data.fetchIntervalSec
     return data
@@ -548,6 +571,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
       ? data.terminalCustomButtons
       : normalizeTerminalCustomButtons(patch.terminalCustomButtons)
   const nextLanEnabled = patch.lanEnabled === undefined ? data.lanEnabled : normalizeLanEnabled(patch.lanEnabled)
+  const nextServerPort = patch.serverPort === undefined ? data.serverPort : normalizeServerPort(patch.serverPort)
   const changed =
     data.lang !== nextLang ||
     data.theme !== nextTheme ||
@@ -577,7 +601,8 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     data.terminalCustomButtonsVisible !== nextTerminalCustomButtonsVisible ||
     data.terminalCustomButtonSize !== nextTerminalCustomButtonSize ||
     JSON.stringify(data.terminalCustomButtons) !== JSON.stringify(nextTerminalCustomButtons) ||
-    data.lanEnabled !== nextLanEnabled
+    data.lanEnabled !== nextLanEnabled ||
+    data.serverPort !== nextServerPort
   data.lang = nextLang
   data.theme = nextTheme
   data.colorTheme = nextColorTheme
@@ -607,6 +632,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   data.terminalCustomButtonSize = nextTerminalCustomButtonSize
   data.terminalCustomButtons = nextTerminalCustomButtons
   data.lanEnabled = nextLanEnabled
+  data.serverPort = nextServerPort
   if (changed) await writeServerSettingsFile(data)
   if (cachedFetchIntervalSec !== nextFetchIntervalSec) {
     cachedFetchIntervalSec = nextFetchIntervalSec
@@ -635,6 +661,23 @@ export async function getServerRepoSettings(): Promise<RepoSettingsEntry[]> {
   return cloneRepoSettings((await loadServerSettings()).repoSettings)
 }
 
+export async function setServerRepoColorTheme(input: {
+  repoId: string
+  colorTheme?: ColorTheme | null
+}): Promise<RepoSettingsEntry[]> {
+  const data = await loadServerSettings()
+  if (!input.repoId) return cloneRepoSettings(data.repoSettings)
+  if (input.colorTheme === null || input.colorTheme === undefined) {
+    data.repoSettings = clearRepoSettingsEntryColorTheme(data.repoSettings, input.repoId)
+    await writeServerSettingsFile(data)
+    return cloneRepoSettings(data.repoSettings)
+  }
+  if (!isColorTheme(input.colorTheme)) return cloneRepoSettings(data.repoSettings)
+  data.repoSettings = setRepoSettingsEntryColorTheme(data.repoSettings, input.repoId, input.colorTheme)
+  await writeServerSettingsFile(data)
+  return cloneRepoSettings(data.repoSettings)
+}
+
 export async function trustServerRepoWorktreeBootstrapConfig(input: {
   repoId: string
   configHash: string
@@ -645,8 +688,10 @@ export async function trustServerRepoWorktreeBootstrapConfig(input: {
     configHash: input.configHash,
     trustedAt: new Date().toISOString(),
   }
+  const existing = data.repoSettings.find((entry) => entry.repoId === input.repoId)
   data.repoSettings = upsertRepoSettingsEntry(data.repoSettings, {
     repoId: input.repoId,
+    ...(existing?.colorTheme ? { colorTheme: existing.colorTheme } : {}),
     worktreeBootstrapTrust,
   })
   await writeServerSettingsFile(data)
@@ -661,7 +706,13 @@ export async function untrustServerRepoWorktreeBootstrapConfig(input: {
   if (!input.repoId || !isWorktreeBootstrapConfigHash(input.configHash)) return false
   const existing = data.repoSettings.find((entry) => entry.repoId === input.repoId)
   if (existing?.worktreeBootstrapTrust?.configHash !== input.configHash) return false
-  data.repoSettings = data.repoSettings.filter((entry) => entry.repoId !== input.repoId)
+  const next: RepoSettingsEntry = {
+    repoId: input.repoId,
+    ...(existing.colorTheme ? { colorTheme: existing.colorTheme } : {}),
+  }
+  data.repoSettings = repoSettingsEntryHasPersistedFields(next)
+    ? [next, ...data.repoSettings.filter((entry) => entry.repoId !== input.repoId)]
+    : data.repoSettings.filter((entry) => entry.repoId !== input.repoId)
   await writeServerSettingsFile(data)
   return true
 }
@@ -669,6 +720,7 @@ export async function untrustServerRepoWorktreeBootstrapConfig(input: {
 function cloneRepoSettings(repoSettings: readonly RepoSettingsEntry[]): RepoSettingsEntry[] {
   return repoSettings.map((entry) => ({
     repoId: entry.repoId,
+    ...(entry.colorTheme ? { colorTheme: entry.colorTheme } : {}),
     ...(entry.worktreeBootstrapTrust
       ? {
           worktreeBootstrapTrust: {
@@ -680,10 +732,7 @@ function cloneRepoSettings(repoSettings: readonly RepoSettingsEntry[]): RepoSett
   }))
 }
 
-function upsertRepoSettingsEntry(
-  entries: readonly RepoSettingsEntry[],
-  next: RepoSettingsEntry,
-): RepoSettingsEntry[] {
+function upsertRepoSettingsEntry(entries: readonly RepoSettingsEntry[], next: RepoSettingsEntry): RepoSettingsEntry[] {
   return [next, ...entries.filter((entry) => entry.repoId !== next.repoId)]
 }
 

@@ -58,6 +58,7 @@ function renderDropdown({
   repoId = '/repo',
   branchName = 'feature/a',
   open = true,
+  hideQuickAction = false,
   editor = item('editor', 'Edit'),
   terminal = item('terminal', 'Terminal'),
   destructive = item('deleteBranch', 'Delete branch', vi.fn(), { destructive: true }),
@@ -65,6 +66,7 @@ function renderDropdown({
   repoId?: string
   branchName?: string
   open?: boolean
+  hideQuickAction?: boolean
   editor?: BranchActionItem
   terminal?: BranchActionItem
   destructive?: BranchActionItem
@@ -79,6 +81,7 @@ function renderDropdown({
         mainItems={[]}
         destructiveItems={[destructive]}
         open={open}
+        hideQuickAction={hideQuickAction}
       />,
     )
   })
@@ -102,18 +105,26 @@ describe('BranchActionsDropdown split button', () => {
   test('weights the split button hit targets toward the dropdown trigger', () => {
     renderDropdown()
 
-    expect(button('Edit').className).toContain('gap-0.5')
     expect(button('Edit').className).toContain('px-1.5')
     expect(button('Actions').className).toContain('w-7')
     expect(button('Actions').className).toContain('px-1.5')
+  })
+
+  test('hideQuickAction renders only the menu trigger with the full items list', () => {
+    renderDropdown({ hideQuickAction: true })
+
+    expect(document.body.querySelector('button[aria-label="Edit"]')).toBeNull()
+    const trigger = button('Actions')
+    expect(trigger.className).not.toContain('rounded-l-none')
+    menuItem('Edit')
+    menuItem('Terminal')
+    menuItem('Delete branch')
   })
 
   test('renders edit as the default quick action and runs it from the left button', () => {
     const onEdit = vi.fn()
 
     renderDropdown({ repoId: '/repo/default', branchName: 'feature/default', editor: item('editor', 'Edit', onEdit) })
-
-    expect(button('Edit').textContent).toContain('Edit')
 
     act(() => {
       button('Edit').click()
@@ -135,15 +146,13 @@ describe('BranchActionsDropdown split button', () => {
       menuItem('Terminal A').click()
     })
 
-    expect(button('Terminal A').textContent).toContain('Terminal A')
-
     renderDropdown({
       repoId: '/repo/memory',
       branchName: 'feature/b',
       terminal: item('terminal', 'Terminal B'),
     })
 
-    expect(button('Edit').textContent).toContain('Edit')
+    expect(button('Edit')).toBeTruthy()
 
     renderDropdown({
       repoId: '/repo/memory',
@@ -151,7 +160,7 @@ describe('BranchActionsDropdown split button', () => {
       terminal: terminalA,
     })
 
-    expect(button('Terminal A').textContent).toContain('Terminal A')
+    expect(button('Terminal A')).toBeTruthy()
   })
 
   test('does not remember destructive menu actions', () => {
@@ -168,7 +177,7 @@ describe('BranchActionsDropdown split button', () => {
     })
 
     expect(onDelete).toHaveBeenCalledTimes(1)
-    expect(button('Edit').textContent).toContain('Edit')
+    expect(button('Edit')).toBeTruthy()
   })
 
   test('falls back to edit when the remembered action becomes disabled', () => {
@@ -188,7 +197,7 @@ describe('BranchActionsDropdown split button', () => {
       terminal: item('terminal', 'Terminal', vi.fn(), { disabled: true }),
     })
 
-    expect(button('Edit').textContent).toContain('Edit')
+    expect(button('Edit')).toBeTruthy()
   })
 
   test('disables the edit quick action when edit is unavailable', () => {

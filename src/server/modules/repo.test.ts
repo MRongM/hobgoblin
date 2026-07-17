@@ -22,6 +22,10 @@ const mocks = vi.hoisted(() => ({
   deleteBranch: vi.fn(),
   deleteLocalFileTreeEntries: vi.fn(),
   deleteRemoteBranch: vi.fn(),
+  deleteLocalRemoteServerBranch: vi.fn(),
+  deleteLocalRemoteServerTag: vi.fn(),
+  deleteSshRemoteServerBranch: vi.fn(),
+  deleteSshRemoteServerTag: vi.fn(),
   deleteRemoteFileTreeEntries: vi.fn(),
   discardChangesForPaths: vi.fn(),
   discardRemoteChangesForPaths: vi.fn(),
@@ -41,6 +45,7 @@ const mocks = vi.hoisted(() => ({
   getRepoRoot: vi.fn(),
   getRemoteInfo: vi.fn(),
   getRemoteSnapshot: vi.fn(),
+  getRemoteTags: vi.fn(),
   getRemoteTrackingBranches: vi.fn(),
   getUpstream: vi.fn(),
   getWorktreeCommitMessageContext: vi.fn(),
@@ -99,6 +104,7 @@ vi.mock('#/system/git/branches.ts', () => ({
   createBranch: mocks.createBranch,
   createTrackingBranch: mocks.createTrackingBranch,
   deleteBranch: mocks.deleteBranch,
+  deleteRemoteServerBranch: mocks.deleteLocalRemoteServerBranch,
   deleteUpstreamBranch: mocks.deleteUpstreamBranch,
   getBranches: mocks.getBranches,
   getCurrentBranch: mocks.getCurrentBranch,
@@ -170,6 +176,8 @@ vi.mock('#/system/git/remote.ts', () => ({
 }))
 
 vi.mock('#/system/git/remote-refs.ts', () => ({
+  deleteRemoteServerTag: mocks.deleteLocalRemoteServerTag,
+  getRemoteTags: mocks.getRemoteTags,
   getRemoteTrackingBranches: mocks.getRemoteTrackingBranches,
 }))
 
@@ -225,6 +233,8 @@ vi.mock('#/system/ssh/git.ts', () => ({
   createRemoteTrackingBranch: mocks.createRemoteTrackingBranch,
   createRemoteWorktree: vi.fn(),
   deleteRemoteBranch: mocks.deleteRemoteBranch,
+  deleteRemoteServerBranch: mocks.deleteSshRemoteServerBranch,
+  deleteRemoteServerTag: mocks.deleteSshRemoteServerTag,
   deleteRemoteFileTreeEntries: mocks.deleteRemoteFileTreeEntries,
   discardRemoteChangesForPaths: mocks.discardRemoteChangesForPaths,
   fetchRemoteRepository: mocks.fetchRemoteRepository,
@@ -234,6 +244,7 @@ vi.mock('#/system/ssh/git.ts', () => ({
   getRemoteCommitDetail: mocks.getRemoteCommitDetail,
   getRemoteHistory: mocks.getRemoteHistory,
   getRemotePatch: vi.fn(),
+  getRemoteTags: mocks.getRemoteTags,
   getRemoteTrackingBranches: mocks.getRemoteTrackingBranches,
   getRemoteLog: vi.fn(),
   getRemoteSnapshot: mocks.getRemoteSnapshot,
@@ -323,6 +334,10 @@ beforeEach(() => {
   mocks.fetchRemoteRepository.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.createWorktree.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.deleteRemoteBranch.mockResolvedValue({ ok: true, message: 'ok' })
+  mocks.deleteLocalRemoteServerBranch.mockResolvedValue({ ok: true, message: 'deleted local remote' })
+  mocks.deleteLocalRemoteServerTag.mockResolvedValue({ ok: true, message: 'deleted local remote tag' })
+  mocks.deleteSshRemoteServerBranch.mockResolvedValue({ ok: true, message: 'deleted ssh remote' })
+  mocks.deleteSshRemoteServerTag.mockResolvedValue({ ok: true, message: 'deleted ssh remote tag' })
   mocks.deleteBranch.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.deleteLocalFileTreeEntries.mockResolvedValue({ ok: true, message: '' })
   mocks.deleteRemoteFileTreeEntries.mockResolvedValue({ ok: true, message: '' })
@@ -465,6 +480,7 @@ beforeEach(() => {
   })
   mocks.getWorktreePatch.mockResolvedValue('diff --git a/a b/a\n+hello\n')
   mocks.getRemoteTrackingBranches.mockResolvedValue([])
+  mocks.getRemoteTags.mockResolvedValue([])
   mocks.getDefaultBranch.mockResolvedValue('main')
   mocks.getUpstream.mockResolvedValue(null)
   mocks.isAncestor.mockResolvedValue(true)
@@ -506,7 +522,9 @@ function pullRequest(number: number): PullRequestInfo {
 
 describe('getRepositorySnapshot', () => {
   test('reads git state directly without publishing invalidation', async () => {
-    mocks.getWorktrees.mockResolvedValueOnce([])
+    mocks.getWorktrees.mockResolvedValueOnce([
+      { path: '/tmp/repo', branch: 'fresh', isBare: false, isPrimary: true },
+    ])
     const snapshot = repoSnapshot('fresh')
     mocks.getBranches.mockResolvedValueOnce(snapshot.branches)
     mocks.getCurrentBranch.mockResolvedValueOnce(snapshot.current)
@@ -516,6 +534,17 @@ describe('getRepositorySnapshot', () => {
     const result = await getRepositorySnapshot('/tmp/repo')
 
     expect(result).toEqual(snapshot)
+    expect(mocks.getWorktrees).toHaveBeenCalledWith('/tmp/repo', { signal: undefined, throwOnError: true })
+    expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
+  })
+
+  test('fails local git snapshots when the authoritative worktree list is empty', async () => {
+    mocks.getWorktrees.mockResolvedValueOnce([])
+
+    const { getRepositorySnapshot } = await import('#/server/modules/repo-read-paths.ts')
+
+    await expect(getRepositorySnapshot('/tmp/repo')).rejects.toThrow('error.failed-read-repo')
+    expect(mocks.getBranches).not.toHaveBeenCalled()
     expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
   })
 })
@@ -795,6 +824,92 @@ describe('git network settings for local repository network operations', () => {
     )
   })
 
+  test('deleteRepositoryRemoteBranch passes configured network options to local push delete', async () => {
+    const { deleteRepositoryRemoteBranch } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(deleteRepositoryRemoteBranch('/tmp/repo', 'origin', 'feature/remove-me')).resolves.toEqual({
+      ok: true,
+      message: 'deleted local remote',
+    })
+
+    expect(mocks.deleteLocalRemoteServerBranch).toHaveBeenCalledWith(
+      '/tmp/repo',
+      'origin',
+      'feature/remove-me',
+      expect.any(AbortSignal),
+      { timeoutMs: 240_000, proxyUrl: 'socks5://127.0.0.1:7890' },
+    )
+  })
+
+  test('deleteRepositoryRemoteTag passes configured network options to local push delete', async () => {
+    const { deleteRepositoryRemoteTag } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(deleteRepositoryRemoteTag('/tmp/repo', 'origin', 'release/v1.0.0')).resolves.toEqual({
+      ok: true,
+      message: 'deleted local remote tag',
+    })
+
+    expect(mocks.deleteLocalRemoteServerTag).toHaveBeenCalledWith(
+      '/tmp/repo',
+      'origin',
+      'release/v1.0.0',
+      expect.any(AbortSignal),
+      { timeoutMs: 240_000, proxyUrl: 'socks5://127.0.0.1:7890' },
+    )
+  })
+
+  test('deleteRepositoryRemoteBranch publishes snapshot invalidation after success', async () => {
+    const { deleteRepositoryRemoteBranch } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(deleteRepositoryRemoteBranch('/tmp/repo', 'origin', 'feature/remove-me')).resolves.toEqual({
+      ok: true,
+      message: 'deleted local remote',
+    })
+
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: '/tmp/repo',
+      query: 'repo-snapshot',
+    })
+  })
+
+  test('deleteRepositoryRemoteTag publishes snapshot invalidation after success', async () => {
+    const { deleteRepositoryRemoteTag } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(deleteRepositoryRemoteTag('/tmp/repo', 'origin', 'release/v1.0.0')).resolves.toEqual({
+      ok: true,
+      message: 'deleted local remote tag',
+    })
+
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: '/tmp/repo',
+      query: 'repo-snapshot',
+    })
+  })
+
+  test('deleteRepositoryRemoteBranch rejects protected refs before backend dispatch', async () => {
+    const { deleteRepositoryRemoteBranch } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(deleteRepositoryRemoteBranch('/tmp/repo', 'origin', 'main')).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+
+    expect(mocks.deleteLocalRemoteServerBranch).not.toHaveBeenCalled()
+    expect(mocks.deleteSshRemoteServerBranch).not.toHaveBeenCalled()
+  })
+
+  test('deleteRepositoryRemoteTag rejects invalid refs before backend dispatch', async () => {
+    const { deleteRepositoryRemoteTag } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(deleteRepositoryRemoteTag('/tmp/repo', 'origin', '-bad')).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+
+    expect(mocks.deleteLocalRemoteServerTag).not.toHaveBeenCalled()
+    expect(mocks.deleteSshRemoteServerTag).not.toHaveBeenCalled()
+  })
+
   test('cloneRepository passes configured network options to local clone', async () => {
     const { cloneRepository } = await import('#/server/modules/repo-write-paths.ts')
 
@@ -821,6 +936,34 @@ describe('git network settings for SSH repository network operations', () => {
     expect(mocks.fetchRemoteRepository).toHaveBeenCalledWith(
       expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
       { signal: expect.any(AbortSignal) },
+    )
+  })
+
+  test('deleteRepositoryRemoteBranch dispatches SSH repos without local network options', async () => {
+    const { deleteRepositoryRemoteBranch } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(deleteRepositoryRemoteBranch('ssh-config://prod/srv/repo', 'origin', 'feature/remove-me')).resolves.toEqual({
+      ok: true,
+      message: 'deleted ssh remote',
+    })
+
+    expect(mocks.deleteSshRemoteServerBranch).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
+      { remote: 'origin', branch: 'feature/remove-me', signal: expect.any(AbortSignal) },
+    )
+  })
+
+  test('deleteRepositoryRemoteTag dispatches SSH repos without local network options', async () => {
+    const { deleteRepositoryRemoteTag } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(deleteRepositoryRemoteTag('ssh-config://prod/srv/repo', 'origin', 'release/v1.0.0')).resolves.toEqual({
+      ok: true,
+      message: 'deleted ssh remote tag',
+    })
+
+    expect(mocks.deleteSshRemoteServerTag).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
+      { remote: 'origin', tag: 'release/v1.0.0', signal: expect.any(AbortSignal) },
     )
   })
 })
@@ -1109,6 +1252,17 @@ describe('repo mutation invalidation publishing', () => {
 
     await expect(getRepositoryRemoteBranches('/tmp/repo')).resolves.toEqual(['origin/main', 'origin/feature/a'])
     expect(mocks.getRemoteTrackingBranches).toHaveBeenCalledWith('/tmp/repo', undefined)
+  })
+
+  test('getRepositoryRemoteTags returns remote tag refs', async () => {
+    mocks.getRemoteTags.mockResolvedValueOnce(['origin/v1.0.0', 'upstream/release/1.0'])
+    const { getRepositoryRemoteTags } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(getRepositoryRemoteTags('/tmp/repo')).resolves.toEqual(['origin/v1.0.0', 'upstream/release/1.0'])
+    expect(mocks.getRemoteTags).toHaveBeenCalledWith('/tmp/repo', undefined, {
+      timeoutMs: 240_000,
+      proxyUrl: 'socks5://127.0.0.1:7890',
+    })
   })
 
   test('renameRepositoryFileTreeEntry publishes snapshot invalidation after local success', async () => {

@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   buildServerExternalAppsSnapshot: vi.fn(),
   addServerRecentRepo: vi.fn(),
   clearServerRecentRepos: vi.fn(),
+  setServerRepoColorTheme: vi.fn(),
   setServerFetchIntervalSec: vi.fn(),
   setServerSessionState: vi.fn(),
   updateServerSettingsPrefs: vi.fn(),
@@ -23,6 +24,7 @@ vi.mock('#/server/modules/external-apps.ts', () => ({
 vi.mock('#/server/modules/settings-source.ts', () => ({
   addServerRecentRepo: mocks.addServerRecentRepo,
   clearServerRecentRepos: mocks.clearServerRecentRepos,
+  setServerRepoColorTheme: mocks.setServerRepoColorTheme,
   setServerFetchIntervalSec: mocks.setServerFetchIntervalSec,
   setServerSessionState: mocks.setServerSessionState,
   updateServerSettingsPrefs: mocks.updateServerSettingsPrefs,
@@ -170,6 +172,19 @@ describe('settings write paths', () => {
       recentRepos: [repo],
       addedRepo: repo,
     })
+    expect(mocks.publishSettingsInvalidation).toHaveBeenCalledWith(['settings-snapshot'])
+  })
+
+  test('sets project theme and publishes settings snapshot invalidation', async () => {
+    const repoSettings = [{ repoId: '/repo-a', colorTheme: 'cursor' }] as const
+    mocks.setServerRepoColorTheme.mockResolvedValue(repoSettings)
+    const { applyServerRepoThemeWrite } = await import('#/server/modules/settings-write-paths.ts')
+
+    await expect(applyServerRepoThemeWrite({ repoId: '/repo-a', colorTheme: 'cursor' })).resolves.toEqual({
+      ok: true,
+      repoSettings,
+    })
+    expect(mocks.setServerRepoColorTheme).toHaveBeenCalledWith({ repoId: '/repo-a', colorTheme: 'cursor' })
     expect(mocks.publishSettingsInvalidation).toHaveBeenCalledWith(['settings-snapshot'])
   })
 })

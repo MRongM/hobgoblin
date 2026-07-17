@@ -1,7 +1,8 @@
-import { ExternalLink, Hash, Tag } from 'lucide-react'
+import { ExternalLink, FileText, Hash, Tag } from 'lucide-react'
 import { Button } from '#/web/components/ui/button.tsx'
 import { GitHubMark } from '#/web/components/GitHubMark.tsx'
 import { SettingsCard, SettingsListItem } from '#/web/components/settings/SettingsPrimitives.tsx'
+import { ThirdPartyLicensesDialog } from '#/web/components/settings/pages/ThirdPartyLicensesDialog.tsx'
 import { openProjectGitHub } from '#/web/app-shell-client.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { cn } from '#/web/lib/cn.ts'
@@ -58,6 +59,20 @@ export function AboutSettings() {
         >
           <ExternalLink className="size-3.5" />
         </Button>
+      </SettingsListItem>
+      <SettingsListItem as="li" size="xl">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-[var(--goblin-brand-radius-md,var(--radius-md))] bg-control text-muted-foreground">
+          <FileText size={16} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <span className="truncate text-sm font-medium text-foreground">
+            {t('about.third-party-licenses')}
+          </span>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            {t('about.third-party-licenses.body')}
+          </p>
+        </div>
+        <ThirdPartyLicensesDialog />
       </SettingsListItem>
     </SettingsCard>
   )

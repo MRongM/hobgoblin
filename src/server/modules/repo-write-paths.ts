@@ -10,6 +10,7 @@ import {
 } from '#/server/modules/settings-source.ts'
 import { cloneRepository as cloneGitRepository } from '#/system/git/clone.ts'
 import { initRepository as gitInit } from '#/system/git/init.ts'
+import { createLocalTag as createLocalGitTag, deleteLocalTag as deleteLocalGitTag } from '#/system/git/tags.ts'
 import {
   createLocalFileTreeDirectory,
   createLocalFileTreeFile,
@@ -39,6 +40,8 @@ import { isRemoteRepoId, type NetworkOpKind } from '#/shared/rpc.ts'
 import { checkGitAvailable } from '#/system/git/helper.ts'
 import { isValidCwd, isValidRepoLocator, MAX_IPC_PATH_LENGTH } from '#/shared/input-validation.ts'
 import { type CloneRepoResult, type ProbeResult } from '#/shared/rpc.ts'
+import { isProtectedRemoteBranchRef, parseRemoteBranchInput } from '#/shared/remote-branches.ts'
+import { parseRemoteTagInput } from '#/shared/remote-tags.ts'
 import { constants as fsConstants, promises as fs } from 'node:fs'
 import path from 'node:path'
 import PQueue from 'p-queue'
@@ -508,6 +511,18 @@ export async function getRepositoryRemoteBranches(cwd: string, signal?: AbortSig
   return await runWithRepoBackend(cwd, async (backend) => await backend.getRemoteBranches(signal))
 }
 
+export async function getRepositoryRemoteTags(cwd: string, signal?: AbortSignal): Promise<string[]> {
+  if (!isValidRepoLocator(cwd)) return []
+  const backend = await resolveRepoBackend(cwd)
+  const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
+  return await backend.getRemoteTags(signal, networkOptions)
+}
+
+export async function getRepositoryLocalTags(cwd: string, signal?: AbortSignal): Promise<string[]> {
+  if (!isValidRepoLocator(cwd)) return []
+  return await runWithRepoBackend(cwd, async (backend) => await backend.getLocalTags(signal))
+}
+
 export async function deleteRepositoryBranch(
   cwd: string,
   branch: string,
@@ -517,6 +532,91 @@ export async function deleteRepositoryBranch(
 ): Promise<ExecResult> {
   return await runWithRepoBackend(cwd, async (backend) => {
     return await publishSnapshotInvalidationAfterMutation(cwd, await backend.deleteBranch(branch, options, signal), sourceToken)
+  })
+}
+
+export async function deleteRepositoryRemoteBranch(
+  cwd: string,
+  remote: string,
+  branch: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  if (!isValidRepoLocator(cwd)) return { ok: false, message: 'error.invalid-arguments' }
+  const parsed = parseRemoteBranchInput(remote, branch)
+  if (!parsed || isProtectedRemoteBranchRef(parsed.fullRef)) return { ok: false, message: 'error.invalid-arguments' }
+  const backend = await resolveRepoBackend(cwd)
+  const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
+  return await runUserNetworkMutation(cwd, signal, sourceToken, async (mergedSignal) => {
+    return await backend.deleteRemoteServerBranch(parsed.remote, parsed.branch, mergedSignal, networkOptions)
+  })
+}
+
+export async function deleteRepositoryRemoteTag(
+  cwd: string,
+  remote: string,
+  tag: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  if (!isValidRepoLocator(cwd)) return { ok: false, message: 'error.invalid-arguments' }
+  const parsed = parseRemoteTagInput(remote, tag)
+  if (!parsed) return { ok: false, message: 'error.invalid-arguments' }
+  const backend = await resolveRepoBackend(cwd)
+  const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
+  return await runUserNetworkMutation(cwd, signal, sourceToken, async (mergedSignal) => {
+    return await backend.deleteRemoteServerTag(parsed.remote, parsed.tag, mergedSignal, networkOptions)
+  })
+}
+
+export async function createRepositoryLocalTag(
+  cwd: string,
+  name: string,
+  ref: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  if (!isValidRepoLocator(cwd)) return { ok: false, message: 'error.invalid-arguments' }
+  const backend = await resolveRepoBackend(cwd)
+  if (backend.kind === 'local') {
+    const result = await createLocalGitTag(cwd, name, ref, signal)
+    if (result.ok) publishSnapshotInvalidationAfterMutation(cwd, result, sourceToken)
+    return result
+  }
+  return await runUserNetworkMutation(cwd, signal, sourceToken, async (mergedSignal) => {
+    return await backend.createLocalTag(name, ref, mergedSignal)
+  })
+}
+
+export async function deleteRepositoryLocalTag(
+  cwd: string,
+  name: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  if (!isValidRepoLocator(cwd)) return { ok: false, message: 'error.invalid-arguments' }
+  const backend = await resolveRepoBackend(cwd)
+  if (backend.kind === 'local') {
+    const result = await deleteLocalGitTag(cwd, name, signal)
+    if (result.ok) publishSnapshotInvalidationAfterMutation(cwd, result, sourceToken)
+    return result
+  }
+  return await runUserNetworkMutation(cwd, signal, sourceToken, async (mergedSignal) => {
+    return await backend.deleteLocalTag(name, mergedSignal)
+  })
+}
+
+export async function pushRepositoryLocalTag(
+  cwd: string,
+  name: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  if (!isValidRepoLocator(cwd)) return { ok: false, message: 'error.invalid-arguments' }
+  const backend = await resolveRepoBackend(cwd)
+  const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
+  return await runUserNetworkMutation(cwd, signal, sourceToken, async (mergedSignal) => {
+    return await backend.pushLocalTag(name, mergedSignal, networkOptions)
   })
 }
 

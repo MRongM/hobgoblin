@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { ELECTRON_RENDERER_CAPABILITIES, RENDERER_BRIDGE_VERSION } from '#/shared/bootstrap.ts'
 import { TERMINAL_SCROLLBACK_LINES } from '#/shared/terminal.ts'
 import { ManagedTerminalSession } from '#/web/components/terminal/ManagedTerminalSession.ts'
+import { DEFAULT_TERMINAL_FONT_FAMILY } from '#/web/components/terminal/terminal-geometry.ts'
 import { installTerminalThemeStyles } from '#/web/components/terminal/terminal-theme-test-utils.ts'
 import { isTerminalFocused } from '#/web/terminal-focus.ts'
 import { setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
@@ -93,7 +94,7 @@ const xtermMocks = vi.hoisted(() => {
     linkProviders: Array<{ provideLinks: (line: number, cb: (links: unknown[] | undefined) => void) => void }> = []
     buffer = {
       active: {
-        type: 'normal',
+        type: 'normal' as 'normal' | 'alternate',
         cursorX: 4,
         cursorY: 2,
         viewportY: 0,
@@ -102,6 +103,14 @@ const xtermMocks = vi.hoisted(() => {
           const text = this.bufferLines[index]
           return typeof text === 'string' ? { translateToString: () => text } : undefined
         },
+      },
+      onBufferChange: (cb: (buffer: { type: 'normal' | 'alternate' }) => void) => {
+        this.bufferChangeHandlers.push(cb)
+        return {
+          dispose: vi.fn(
+            () => (this.bufferChangeHandlers = this.bufferChangeHandlers.filter((handler) => handler !== cb)),
+          ),
+        }
       },
     }
     private readonly charSizeService = { measure: vi.fn() }
@@ -128,6 +137,7 @@ const xtermMocks = vi.hoisted(() => {
     private bellHandlers: Array<() => void> = []
     private scrollHandlers: Array<(position: number) => void> = []
     private titleHandlers: Array<(title: string) => void> = []
+    private bufferChangeHandlers: Array<(buffer: { type: 'normal' | 'alternate' }) => void> = []
     private themeValue: { background?: string; foreground?: string } | undefined
 
     constructor(options: {
@@ -242,6 +252,11 @@ const xtermMocks = vi.hoisted(() => {
       this.cols = cols
       this.rows = rows
       for (const handler of this.resizeHandlers) handler({ cols, rows })
+    }
+
+    emitBufferChange(type: 'normal' | 'alternate') {
+      this.buffer.active.type = type
+      for (const handler of this.bufferChangeHandlers) handler(this.buffer.active)
     }
 
     emitData(data: string) {
@@ -750,7 +765,7 @@ describe('ManagedTerminalSession', () => {
     expect(xtermMocks.terminals[0]!.options.minimumContrastRatio).toBe(4.5)
     expect(xtermMocks.terminals[0]!.options.allowProposedApi).toBe(true)
     expect(xtermMocks.terminals[0]!.options.cursorStyle).toBe('bar')
-    expect(xtermMocks.terminals[0]!.options.fontFamily).toContain('ui-monospace')
+    expect(xtermMocks.terminals[0]!.options.fontFamily).toBe(DEFAULT_TERMINAL_FONT_FAMILY)
     expect(xtermMocks.terminals[0]!.options.fontSize).toBe(14)
     expect(xtermMocks.terminals[0]!.initialCols).toBe(95)
     expect(xtermMocks.terminals[0]!.initialRows).toBe(28)
@@ -760,6 +775,34 @@ describe('ManagedTerminalSession', () => {
     expect(xtermMocks.terminals[0]!.options).not.toHaveProperty(deletedEraseOption)
     expect(terminalCalls.restart).not.toHaveBeenCalled()
     expect(session.snapshot().phase).toBe('open')
+  })
+
+  test('uses the full fitted width while an alternate-screen TUI is active', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    const fitAddon = xtermMocks.fitAddons[0]!
+    fitAddon.fit.mockClear()
+    terminalCalls.resize.mockClear()
+
+    term.emitBufferChange('alternate')
+
+    expect(fitAddon.fit).toHaveBeenCalledTimes(1)
+    expect(term.cols).toBe(100)
+    expect(terminalCalls.resize).not.toHaveBeenCalled()
+
+    term.emitBufferChange('normal')
+
+    expect(fitAddon.fit).toHaveBeenCalledTimes(2)
+    expect(term.cols).toBe(100)
+    expect(terminalCalls.resize).not.toHaveBeenCalled()
   })
 
   test('keeps scroll position when terminal viewport is already scrolled up during font refit', async () => {
@@ -2347,6 +2390,29 @@ describe('ManagedTerminalSession', () => {
 
     xtermMocks.terminals[0]!.emitBell()
     expect(onBell).toHaveBeenCalledWith(descriptor, { processName: 'zsh', canonicalTitle: null, visible: true })
+  })
+
+  test('emits bell events for BEL output when no xterm view is attached', () => {
+    const notify = vi.fn()
+    const onBell = vi.fn()
+    const session = new ManagedTerminalSession(descriptor, notify, onBell)
+    hydrateManagedSession(session)
+
+    session.handleOutput({ sessionId: 'session-1', data: '\x1b]0;title\x07working…', seq: 1, processName: 'zsh' })
+    expect(onBell).not.toHaveBeenCalled()
+
+    session.handleOutput({ sessionId: 'session-1', data: 'done\x07', seq: 2, processName: 'claude' })
+    expect(onBell).toHaveBeenCalledWith(descriptor, { processName: 'claude', canonicalTitle: null, visible: false })
+  })
+
+  test('emits bell events for BEL output when the session is not the controller', () => {
+    const notify = vi.fn()
+    const onBell = vi.fn()
+    const session = new ManagedTerminalSession(descriptor, notify, onBell)
+    hydrateManagedSession(session, { role: 'viewer' })
+
+    session.handleOutput({ sessionId: 'session-1', data: 'finished\x07', seq: 1, processName: 'zsh' })
+    expect(onBell).toHaveBeenCalledWith(descriptor, { processName: 'zsh', canonicalTitle: null, visible: false })
   })
 
   test('progress state appears in snapshot and clears on state 0', async () => {

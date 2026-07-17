@@ -6,14 +6,24 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { BranchDetailToolbar } from '#/web/components/branch-detail/BranchDetailToolbar.tsx'
 import { getSelectedBranchDetailPresentation } from '#/web/components/branch-detail/model.ts'
-import { TerminalSessionContext, TerminalSessionReadContext } from '#/web/components/terminal/terminal-session-context.ts'
-import type { TerminalSessionContextValue, TerminalSessionReadContextValue, TerminalSessionSummary, TerminalDescriptor, WorktreeTerminalSnapshot } from '#/web/components/terminal/types.ts'
+import {
+  TerminalSessionContext,
+  TerminalSessionReadContext,
+} from '#/web/components/terminal/terminal-session-context.ts'
+import type {
+  TerminalSessionContextValue,
+  TerminalSessionReadContextValue,
+  TerminalSessionSummary,
+  TerminalDescriptor,
+  WorktreeTerminalSnapshot,
+} from '#/web/components/terminal/types.ts'
 import { buildTerminalDeepLinkUrl } from '#/web/lib/terminal-deep-link.ts'
 import { MainWindowNavigationProvider, type MainWindowNavigationActions } from '#/web/main-window-navigation.tsx'
 import { emptyRendererBridgeBootstrap, setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
 import { lanInfoQueryKey } from '#/web/settings-query-cache.ts'
 import type { LanInfoWithQrCodes } from '#/web/settings-queries.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
+import { emptyRepo } from '#/web/stores/repos/helpers.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { DEFAULT_WORKSPACE_LAYOUT } from '#/shared/workspace-layout.ts'
 import type { RendererBridge } from '#/web/renderer-bridge-types.ts'
@@ -21,8 +31,28 @@ import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 
 let compactUi = false
 
+const { openExternalUrlMock } = vi.hoisted(() => ({
+  openExternalUrlMock: vi.fn(async (_url: string) => ({ ok: true, message: '' })),
+}))
+
+vi.mock('#/web/app-shell-client.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('#/web/app-shell-client.ts')>()),
+  openExternalUrl: (url: string) => openExternalUrlMock(url),
+}))
+
 vi.mock('#/web/hooks/useResponsiveUiMode.tsx', () => ({
   useIsCompactUi: () => compactUi,
+}))
+
+vi.mock('#/web/runtime-settings-chrome.ts', () => ({
+  useRuntimeChromeSettings: () => ({ topbarHeightPx: 39, toolbarHeightPx: 41 }),
+}))
+
+// Focus-mode branch controls live in their own component with their own
+// providers (commit drafts etc.); this suite only exercises the toolbar,
+// so the mock is just a placement marker.
+vi.mock('#/web/components/topbar/TopbarRepoControls.tsx', () => ({
+  TopbarRepoControls: () => <div data-testid="topbar-repo-controls" />,
 }))
 
 vi.stubGlobal('requestAnimationFrame', ((cb: FrameRequestCallback) => {
@@ -31,8 +61,8 @@ vi.stubGlobal('requestAnimationFrame', ((cb: FrameRequestCallback) => {
 }) as typeof requestAnimationFrame)
 
 const REPO_ID = '/tmp/gbl-branch-detail-toolbar-repo'
+const SECOND_REPO_ID = '/tmp/gbl-branch-detail-toolbar-repo-b'
 const WORKTREE_PATH = '/tmp/gbl-branch-detail-toolbar-worktree'
-  compactUi = false
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -41,6 +71,7 @@ const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENV
 
 beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
+  compactUi = false
   resetReposStore()
   setRendererBridgeForTests(null)
 })
@@ -70,8 +101,27 @@ describe('BranchDetailToolbar', () => {
 
     expect(c.querySelector('#detail-status-tab')).toBeNull()
     expect(c.querySelector('#detail-changes-tab')).toBeNull()
-    // useT is mocked to return the i18n key, so we assert against the key here.
-    expect(c.querySelector('#detail-terminal-tab')?.textContent).toContain('terminal.label')
+    // With zero sessions the terminal area renders the icon-only
+    // new-terminal button, still addressable as the terminal tab.
+    expect(c.querySelector('#detail-terminal-tab')).not.toBeNull()
+  })
+
+  test('keeps terminal tabs content-sized beside the flexible detail toolbar blank area', () => {
+    const { container: c } = renderToolbar({
+      terminalCount: 2,
+      detailTab: 'terminal',
+      navigation: navigationWith({}),
+    })
+
+    const terminalTab = c.querySelector<HTMLElement>('[data-terminal-tab-tooltip-id="t1"]')
+    const scrollArea = terminalTab?.closest('.relative.overflow-hidden')
+    const terminalHost = scrollArea?.parentElement
+    const spacer = terminalHost?.nextElementSibling
+
+    expect(terminalHost?.className).not.toContain('flex-1')
+    expect(spacer?.className).toContain('min-w-2')
+    expect(spacer?.className).toContain('flex-1')
+    expect(spacer?.className).not.toContain('shrink-0')
   })
 
   test('clicking the new-terminal button navigates and creates a terminal', async () => {
@@ -159,7 +209,7 @@ describe('BranchDetailToolbar', () => {
     expect(c.querySelector('[data-testid="branch-detail-toolbar-divider"]')).toBeNull()
   })
 
-  test('shows terminal focus control without collapse control in left-right layout', () => {
+  test('renders neither the focus entry nor the collapse control in left-right layout', () => {
     const { container: c } = renderToolbar({
       terminalCount: 1,
       detailTab: 'terminal',
@@ -167,17 +217,45 @@ describe('BranchDetailToolbar', () => {
       navigation: navigationWith({}),
     })
 
+    // The sidebar collapse control owns focus-mode entry, so the toolbar
+    // no longer renders its own maximize toggle.
     const focusButton = c.querySelector<HTMLButtonElement>('button[aria-label="branch-detail.focus"]')
     const collapseButton = c.querySelector<HTMLButtonElement>('button[aria-label="branch-detail.collapse"]')
 
-    expect(focusButton).not.toBeNull()
+    expect(focusButton).toBeNull()
     expect(collapseButton).toBeNull()
+  })
 
-    act(() => {
-      focusButton?.click()
+  test('marks the desktop left-right detail toolbar as a window drag region', () => {
+    const { container: c } = renderToolbar({
+      terminalCount: 1,
+      detailTab: 'terminal',
+      layout: 'left-right',
+      navigation: navigationWith({}),
     })
-    expect(useReposStore.getState().detailFocusMode).toBe(true)
-    expect(useReposStore.getState().detailCollapsed).toBe(false)
+
+    const toolbar = c.firstElementChild
+    expect((toolbar as HTMLElement | null)?.style.height).toBe('39px')
+    expect(toolbar?.className).toContain('[-webkit-app-region:drag]')
+    expect(toolbar?.className).toContain('topbar-tone')
+    expect(toolbar?.className).toContain('border-topbar-border')
+    expect(toolbar?.className).toContain('bg-topbar')
+    expect(toolbar?.className).toContain('text-topbar-foreground')
+  })
+
+  test('keeps the compact detail toolbar on the generic toolbar tone', () => {
+    compactUi = true
+    const { container: c } = renderToolbar({
+      terminalCount: 1,
+      detailTab: 'terminal',
+      layout: 'left-right',
+      navigation: navigationWith({}),
+    })
+
+    const toolbar = c.firstElementChild as HTMLElement | null
+    expect(toolbar?.style.height).toBe('41px')
+    expect(toolbar?.className).toContain('bg-toolbar')
+    expect(toolbar?.className).not.toContain('topbar-tone')
   })
 
   test('does not render the removed terminal redraw control', () => {
@@ -191,7 +269,7 @@ describe('BranchDetailToolbar', () => {
     const focusButton = c.querySelector<HTMLButtonElement>('button[aria-label="branch-detail.focus"]')
 
     expect(redrawButton).toBeNull()
-    expect(focusButton).not.toBeNull()
+    expect(focusButton).toBeNull()
   })
 
   test('opens LAN QR dialog with one current terminal target per LAN URL', async () => {
@@ -228,6 +306,33 @@ describe('BranchDetailToolbar', () => {
     expect(document.body.querySelectorAll('[data-testid="terminal-lan-qr-image"]')).toHaveLength(2)
   })
 
+  test('opens the current terminal target in the browser via the loopback server URL', async () => {
+    openExternalUrlMock.mockClear()
+    const { container: c } = renderToolbar({
+      terminalCount: 2,
+      detailTab: 'terminal',
+      navigation: navigationWith({}),
+      lanInfo: { host: '0.0.0.0', port: 32215, lanUrls: [], qrCodes: {} },
+    })
+
+    const browserButton = c.querySelector<HTMLButtonElement>('button[aria-label="terminal.open-in-browser"]')
+    expect(browserButton).not.toBeNull()
+
+    act(() => {
+      browserButton?.click()
+    })
+    await flush()
+
+    expect(openExternalUrlMock).toHaveBeenCalledWith(
+      buildTerminalDeepLinkUrl('http://127.0.0.1:32215', {
+        repoId: REPO_ID,
+        worktreePath: WORKTREE_PATH,
+        branch: 'feature/worktree',
+        terminalId: 't1',
+      }),
+    )
+  })
+
   test('keeps terminal focus when pressing End on the compact terminal tab', async () => {
     compactUi = true
     const showRepoDetailTab = vi.fn()
@@ -247,6 +352,94 @@ describe('BranchDetailToolbar', () => {
 
     expect(showRepoDetailTab).not.toHaveBeenCalled()
     expect(document.activeElement?.id).toBe('detail-terminal-tab')
+  })
+
+  test('does not render the project switcher outside focus mode', () => {
+    const { container: c } = renderToolbar({ terminalCount: 0, navigation: navigationWith({}) })
+
+    expect(c.querySelector('[data-testid="focus-project-switcher"]')).toBeNull()
+  })
+
+  test('focus mode shows the project switcher with the active project name', () => {
+    const { container: c } = renderToolbar({
+      terminalCount: 0,
+      detailFocusMode: true,
+      navigation: navigationWith({}),
+    })
+
+    const trigger = c.querySelector<HTMLButtonElement>('[data-testid="focus-project-switcher"]')
+    expect(trigger).not.toBeNull()
+    expect(trigger?.textContent).toContain('repo')
+  })
+
+  test('focus mode places the branch controls right after the project switcher', () => {
+    const { container: c } = renderToolbar({
+      terminalCount: 0,
+      detailFocusMode: true,
+      navigation: navigationWith({}),
+    })
+
+    const switcher = c.querySelector('[data-testid="focus-project-switcher"]')
+    const controls = c.querySelector('[data-testid="topbar-repo-controls"]')
+    expect(switcher).not.toBeNull()
+    expect(controls).not.toBeNull()
+    expect(switcher?.nextElementSibling).toBe(controls)
+  })
+
+  test('does not render the branch controls outside focus mode', () => {
+    const { container: c } = renderToolbar({ terminalCount: 0, navigation: navigationWith({}) })
+
+    expect(c.querySelector('[data-testid="topbar-repo-controls"]')).toBeNull()
+  })
+
+  test('focus switcher lists open projects and activates the selected one', async () => {
+    const activateRepo = vi.fn()
+    const { container: c } = renderToolbar({
+      terminalCount: 0,
+      detailFocusMode: true,
+      navigation: navigationWith({ activateRepo }),
+    })
+
+    act(() => {
+      useReposStore.setState((s) => ({
+        repos: { ...s.repos, [SECOND_REPO_ID]: emptyRepo(SECOND_REPO_ID, 'other-repo') },
+        order: [...s.order, SECOND_REPO_ID],
+      }))
+    })
+
+    await act(async () => {
+      c.querySelector<HTMLButtonElement>('[data-testid="focus-project-switcher"]')?.dispatchEvent(
+        new MouseEvent('pointerdown', { bubbles: true, button: 0 }),
+      )
+      await Promise.resolve()
+    })
+
+    const items = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+    expect(items).toHaveLength(2)
+    expect(items[0]?.getAttribute('aria-current')).toBe('true')
+    expect(items[1]?.textContent).toContain('other-repo')
+
+    // Selecting the already-active project is a no-op.
+    await act(async () => {
+      items[0]?.click()
+      await Promise.resolve()
+    })
+    expect(activateRepo).not.toHaveBeenCalled()
+
+    await act(async () => {
+      c.querySelector<HTMLButtonElement>('[data-testid="focus-project-switcher"]')?.dispatchEvent(
+        new MouseEvent('pointerdown', { bubbles: true, button: 0 }),
+      )
+      await Promise.resolve()
+    })
+    await act(async () => {
+      Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+        .find((item) => item.textContent?.includes('other-repo'))
+        ?.click()
+      await Promise.resolve()
+    })
+
+    expect(activateRepo).toHaveBeenCalledWith(SECOND_REPO_ID)
   })
 
   test('keeps terminal focus when keyboard navigation leaves terminal tabs', async () => {
@@ -381,7 +574,10 @@ function renderToolbar(options: {
   document.body.appendChild(container)
   root = createRoot(container)
   queryClient = new QueryClient()
-  queryClient.setQueryData(lanInfoQueryKey(), options.lanInfo ?? { host: '127.0.0.1', port: 32200, lanUrls: [], qrCodes: {} })
+  queryClient.setQueryData(
+    lanInfoQueryKey(),
+    options.lanInfo ?? { host: '127.0.0.1', port: 32200, lanUrls: [], qrCodes: {} },
+  )
   act(() => {
     root!.render(
       <QueryClientProvider client={queryClient!}>

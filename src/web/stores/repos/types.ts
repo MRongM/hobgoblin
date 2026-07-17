@@ -14,7 +14,7 @@ import type { RepoBranchAction, RunBranchActionOptions } from '#/web/stores/repo
 import type { RepoOperationsState } from '#/web/stores/repos/operations.ts'
 import type { RepoResourcesState } from '#/web/stores/repos/resources.ts'
 export type DetailTab = 'status' | 'changes' | 'terminal'
-export type BranchViewMode = 'all' | 'worktrees' | 'no-worktree'
+export type ExplorerTab = 'files' | 'changes' | 'status' | 'history' | 'local' | 'remoteBranches' | 'ports'
 export type RepoWorkspaceLayout = WorkspaceLayout
 export type RepoDataSource = 'cache' | 'fresh'
 // Renderer branches keep only the worktree reference; metadata lives in worktreesByPath.
@@ -23,9 +23,11 @@ export type RepoBranchState = Omit<BranchSnapshotInfo, 'worktree'> & {
 }
 
 export type RepoEventAction =
-  | { kind: 'checkout'; branch: string }
-  | { kind: 'pull'; branch: string }
-  | { kind: 'push'; branch: string }
+  | { kind: 'checkout'; branch: string; worktreePath?: string }
+  | { kind: 'pull'; branch: string; worktreePath?: string }
+  | { kind: 'push'; branch: string; worktreePath?: string }
+  | { kind: 'commit'; branch: string; message: string; worktreePath: string }
+  | { kind: 'merge'; branch: string; sourceBranch: string; worktreePath: string }
   | { kind: 'createWorktree'; branch: string; worktreePath: string }
   | { kind: 'createBranch'; branch: string; baseBranch: string }
   | { kind: 'trackRemoteBranch'; branch: string; remoteRef: string }
@@ -66,8 +68,12 @@ export interface RepoWorktreeState {
 
 export interface RepoUiState {
   selectedBranch: string | null
-  branchViewMode: BranchViewMode
   detailTab: DetailTab
+  /** Per-branch explorer tab state. Each branch remembers its own last-viewed
+   *  tab; switching branches restores that branch's tab. Absent branches fall
+   *  back to `'files'`. Key `''` holds the fallback used when no branch is
+   *  selected — this also preserves legacy per-repo tab state during migration. */
+  explorerTabByBranch: Record<string, ExplorerTab>
   workspaceLayout: RepoWorkspaceLayout
   fileTreePaneSizes?: WorkspaceDetailPaneSizes
   worktreePathOrder: string[]
@@ -104,9 +110,12 @@ export interface RestorableRepoSnapshot {
   savedAt: number
   name: string
   data: Pick<RepoDataState, 'branches' | 'currentBranch'>
-  ui: Pick<RepoUiState, 'selectedBranch' | 'branchViewMode' | 'detailTab' | 'worktreePathOrder'> & {
+  ui: Pick<RepoUiState, 'selectedBranch' | 'detailTab' | 'worktreePathOrder'> & {
+    explorerTabByBranch?: Record<string, ExplorerTab>
     workspaceLayout?: RepoWorkspaceLayout
     fileTreePaneSizes?: WorkspaceDetailPaneSizes
+    quickActions?: Record<string, string>
+    worktreeActionHistories?: Record<string, RepoEventAction[]>
   }
 }
 
@@ -197,6 +206,7 @@ export interface RestorableWorkspaceActions {
   applySessionSelectedTerminalState: (selectedTerminalByWorktree: Record<string, string>) => void
   setDetailPaneSize: (layout: RepoWorkspaceLayout, size: number) => void
   setDetailPaneSizes: (sizes: WorkspaceDetailPaneSizes) => void
+  setExplorerTab: (id: string, tab: ExplorerTab) => void
   setRepoFileTreePaneSize: (id: string, layout: RepoWorkspaceLayout, size: number) => void
   setDefaultFileTreePaneSize: (layout: RepoWorkspaceLayout, size: number) => void
   resetLayout: () => void
@@ -216,7 +226,6 @@ export interface RuntimeCoherentRepoProjectionActions {
     worktreePath: string,
     options?: { affectVisibleWorkspace?: boolean },
   ) => void
-  setBranchViewMode: (id: string, viewMode: BranchViewMode) => void
   selectBranch: (id: string, branch: string) => void
   refreshSnapshot: (id: string, options?: { skipLogBackfill?: boolean; token?: number }) => Promise<void>
   refreshPullRequests: (

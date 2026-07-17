@@ -11,6 +11,7 @@ import { useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
 import type { TerminalSessionBase } from '#/web/components/terminal/types.ts'
+import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 
 interface PlainWorkspaceTerminalPanelProps {
   repoId: string
@@ -20,6 +21,7 @@ const DETAIL_ID = 'plain-workspace-terminal'
 
 export function PlainWorkspaceTerminalPanel({ repoId }: PlainWorkspaceTerminalPanelProps) {
   const t = useT()
+  const compact = useIsCompactUi()
   const repo = useReposStore((state) => state.repos[repoId])
   const workspacePath = repoPlainWorkspacePath(repo) ?? repoId
   const terminalWorktreeKey = worktreeTerminalKey(repoId, workspacePath)
@@ -82,7 +84,7 @@ export function PlainWorkspaceTerminalPanel({ repoId }: PlainWorkspaceTerminalPa
 
   return (
     <section className="flex min-h-0 flex-1 flex-col bg-pane">
-      <Toolbar variant="detail">
+      <Toolbar data-testid="plain-workspace-terminal-toolbar" variant="detail" chrome={compact ? 'toolbar' : 'topbar'}>
         <div className="flex h-full min-w-0 items-center gap-1 overflow-hidden">
           <TerminalTabs
             worktreeTerminalKey={terminalWorktreeKey}

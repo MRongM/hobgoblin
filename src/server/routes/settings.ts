@@ -10,6 +10,7 @@ import {
   applyServerGlobalShortcutRegistrationWrite,
   applyServerRecentRepoAddWrite,
   applyServerRecentRepoClearWrite,
+  applyServerRepoThemeWrite,
   applyServerSessionWrite,
   applyServerSettingsPrefsWrite,
 } from '#/server/modules/settings-write-paths.ts'
@@ -66,5 +67,9 @@ export function createSettingsRoutes(settingsState: ServerSettingsState) {
     return c.json(await applyServerRecentRepoAddWrite(body))
   })
   app.post('/recent-repos/clear', async (c) => c.json(await applyServerRecentRepoClearWrite()))
+  app.post('/repo-theme', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    return c.json(await applyServerRepoThemeWrite(body))
+  })
   return app
 }

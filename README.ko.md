@@ -117,6 +117,39 @@ http://127.0.0.1:32200
 ./serve.sh --host 127.0.0.1 --port 32200
 ```
 
+### Linux systemd 배포
+
+systemd를 사용하는 Linux 호스트에 Node.js 24+와 Bun을 설치하고 리포지토리를 복제한 다음, 리포지토리 루트에서 배포 스크립트를 실행합니다:
+
+```sh
+./scripts/serve-systemd.sh
+```
+
+처음 실행하면 서비스가 설치되고, 이후 실행하면 기존 배포가 업데이트됩니다. 최초 설치 시 수신 주소, 포트, 영구 데이터 디렉터리를 명시하려면 다음과 같이 실행합니다:
+
+```sh
+./scripts/serve-systemd.sh install \
+  --host 0.0.0.0 \
+  --port 32200 \
+  --data-dir ./data/server
+```
+
+`0.0.0.0`은 모든 네트워크 인터페이스에서 수신합니다. 로컬 호스트에서만 접근할 수 있게 하려면 대신 `127.0.0.1`을 사용하세요.
+
+설치 과정에서는 `bun install`을 실행하고 Web UI를 빌드하며, `/etc/systemd/system/hobgoblin.service`와 `/etc/hobgoblin/server.env`를 작성한 다음 서비스를 활성화하고 시작합니다. root가 아닌 사용자로 실행하면 스크립트가 `sudo`를 사용합니다.
+
+자주 사용하는 유지 관리 명령:
+
+```sh
+./scripts/serve-systemd.sh update
+./scripts/serve-systemd.sh update --no-pull
+./scripts/serve-systemd.sh status
+./scripts/serve-systemd.sh logs
+./scripts/serve-systemd.sh uninstall
+```
+
+`update`는 기본적으로 `git pull --ff-only`를 시도한 뒤 의존성을 설치하고 Web UI를 다시 빌드한 다음 서비스를 재시작합니다. pull하지 않고 현재 checkout을 배포하려면 `--no-pull`을 사용하세요. `uninstall`은 서비스를 중지하고 제거하지만 `/etc/hobgoblin/server.env`는 보존합니다. 더 이상 필요하지 않으면 이 파일을 직접 삭제하세요.
+
 ## 링크
 
 - [GitHub Pages](https://mrongm.github.io/hobgoblin/)

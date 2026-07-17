@@ -107,7 +107,9 @@ function branchActionOperationTarget(action: RepoBranchAction): string | null {
 function branchActionEventAction(action: RepoBranchAction): RepoEventAction {
   switch (action.kind) {
     case 'checkout':
+      return { kind: action.kind, branch: action.branch }
     case 'pull':
+      return { kind: action.kind, branch: action.branch, worktreePath: action.worktreePath ?? '' }
     case 'push':
     case 'deleteBranch':
       return { kind: action.kind, branch: action.branch }

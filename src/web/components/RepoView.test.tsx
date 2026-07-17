@@ -17,8 +17,29 @@ vi.mock('#/web/components/BranchDetail.tsx', () => ({
 }))
 
 vi.mock('#/web/components/repo-workspace/RepoExplorerPane.tsx', () => ({
-  RepoExplorerPane: ({ revealRequest }: { revealRequest?: { relativePath: string } | null }) => (
-    <div data-testid="repo-explorer-pane" data-reveal-path={revealRequest?.relativePath ?? ''} />
+  RepoExplorerPane: ({
+    revealRequest,
+    plainWorkspaceTerminalPanel,
+    fileAreaCollapsed,
+    onToggleFileArea,
+  }: {
+    revealRequest?: { relativePath: string } | null
+    plainWorkspaceTerminalPanel?: ReactNode
+    fileAreaCollapsed?: boolean
+    onToggleFileArea?: () => void
+  }) => (
+    <div
+      data-testid="repo-explorer-pane"
+      data-reveal-path={revealRequest?.relativePath ?? ''}
+      data-file-area-collapsed={fileAreaCollapsed === undefined ? 'unset' : String(fileAreaCollapsed)}
+    >
+      {onToggleFileArea && (
+        <button type="button" data-testid="toggle-file-area" onClick={onToggleFileArea}>
+          toggle files
+        </button>
+      )}
+      {plainWorkspaceTerminalPanel}
+    </div>
   ),
 }))
 
@@ -78,6 +99,10 @@ describe('RepoView', () => {
 
     expect(container?.querySelector('[data-testid="branch-detail"]')).toBeNull()
     expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).not.toBeNull()
+    expect(
+      container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-file-area-collapsed'),
+    ).toBe('unset')
+    expect(container?.querySelector('[data-testid="toggle-file-area"]')).toBeNull()
     expect(container?.textContent).not.toContain('branches.empty')
   })
 
@@ -127,6 +152,41 @@ describe('RepoView', () => {
     expect(container?.querySelector('button[aria-label="action.create-worktree-title"]')).toBeNull()
   })
 
+  test('keeps project navigation beside the unavailable view even when detail focus was active', () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main')],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+    })
+    useReposStore.setState({ detailFocusMode: true })
+    markTestRepoUnavailable()
+
+    renderRepoView()
+
+    expect(container?.querySelector('[data-testid="split-pane"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="branch-detail"]')).toBeNull()
+    expect(container?.textContent).toContain('repo-unavailable.title')
+  })
+
+  test('replaces the plain workspace terminal panel with the unavailable view', () => {
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    markTestRepoUnavailable()
+
+    renderRepoView()
+
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="branch-detail"]')).toBeNull()
+    expect(container?.textContent).toContain('repo-unavailable.title')
+  })
+
   test('routes terminal reveal requests to the repository explorer', async () => {
     seedRepoState({
       id: REPO_ID,
@@ -139,12 +199,42 @@ describe('RepoView', () => {
     renderRepoView()
 
     await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="toggle-file-area"]')?.click()
+    })
+    expect(
+      container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-file-area-collapsed'),
+    ).toBe('true')
+
+    await act(async () => {
       container?.querySelector<HTMLButtonElement>('[data-testid="branch-detail"]')?.click()
     })
 
+    expect(
+      container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-file-area-collapsed'),
+    ).toBe('false')
     expect(container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-reveal-path')).toBe(
       'src/from-terminal.ts',
     )
+  })
+
+  test('toggles the Git workspace file area locally', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main')],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+    })
+
+    renderRepoView()
+
+    const explorer = () => container?.querySelector('[data-testid="repo-explorer-pane"]')
+    expect(explorer()?.getAttribute('data-file-area-collapsed')).toBe('false')
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="toggle-file-area"]')?.click()
+    })
+
+    expect(explorer()?.getAttribute('data-file-area-collapsed')).toBe('true')
   })
 
   test('switches from plain workspace shell to git workspace shell when repo capability changes', () => {
@@ -189,6 +279,22 @@ describe('RepoView', () => {
     expect(container?.querySelector('[data-testid="branch-detail"]')).not.toBeNull()
   })
 })
+
+function markTestRepoUnavailable(repoId = REPO_ID) {
+  useReposStore.setState((state) => {
+    const repo = state.repos[repoId]
+    if (!repo) return state
+    return {
+      repos: {
+        ...state.repos,
+        [repoId]: {
+          ...repo,
+          availability: { phase: 'unavailable' as const, reason: 'path-missing', checkedAt: 1 },
+        },
+      },
+    }
+  })
+}
 
 function renderRepoView(repoId = REPO_ID) {
   container = document.createElement('div')

@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   getCommitMessageProviders: vi.fn(),
   generateRepositoryCommitMessage: vi.fn(),
   mergeRepositoryBranch: vi.fn(),
+  pullRepositoryBranch: vi.fn(),
   resetRepositoryHard: vi.fn(),
 }))
 
@@ -22,13 +23,18 @@ vi.mock('#/web/repo-client.ts', () => ({
   getCommitMessageProviders: mocks.getCommitMessageProviders,
   generateRepositoryCommitMessage: mocks.generateRepositoryCommitMessage,
   mergeRepositoryBranch: mocks.mergeRepositoryBranch,
+  pullRepositoryBranch: mocks.pullRepositoryBranch,
   resetRepositoryHard: mocks.resetRepositoryHard,
 }))
 
+const toastMock = vi.hoisted(() => ({ info: vi.fn() }))
+vi.mock('sonner', () => ({ toast: toastMock }))
+
+const draftMocks = vi.hoisted(() => ({ openDraft: vi.fn() }))
 vi.mock('#/web/components/branch-list/InlineCommitDraftProvider.tsx', () => ({
   useInlineCommitDraft: () => null,
   useInlineCommitDraftActions: () => ({
-    openDraft: vi.fn(),
+    openDraft: draftMocks.openDraft,
     clearDraft: vi.fn(),
     setMessage: vi.fn(),
     setError: vi.fn(),
@@ -62,7 +68,55 @@ describe('useBranchWriteActions', () => {
     reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
   })
 
-  test('wires merge and push from the branch write merge dialog', async () => {
+  test('commit action shows toast and does not open draft when worktree has no changes', async () => {
+    const repo = seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/current', { worktree: { path: '/tmp/repo-feature' } })],
+      currentBranch: 'feature/current',
+      status: [{ path: '/tmp/repo-feature', isMain: false, entries: [] }],
+    })
+    let actions: ReturnType<typeof useBranchWriteActions> | null = null
+
+    root = createRoot(container)
+    await act(async () => {
+      root!.render(
+        <BranchWriteActionsHarness repo={repo} onPush={vi.fn()} onReady={(value) => (actions = value)} />,
+      )
+    })
+
+    await act(async () => {
+      actions?.mainItems.find((item) => item.id === 'commit')?.onSelect()
+    })
+
+    expect(toastMock.info).toHaveBeenCalledWith('action.commit-no-changes')
+    expect(draftMocks.openDraft).not.toHaveBeenCalled()
+  })
+
+  test('commit action opens draft when worktree has changes', async () => {
+    const repo = seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/current', { worktree: { path: '/tmp/repo-feature' } })],
+      currentBranch: 'feature/current',
+      status: [{ path: '/tmp/repo-feature', isMain: false, entries: [{ path: 'README.md', x: ' ', y: 'M' }] }],
+    })
+    let actions: ReturnType<typeof useBranchWriteActions> | null = null
+
+    root = createRoot(container)
+    await act(async () => {
+      root!.render(
+        <BranchWriteActionsHarness repo={repo} onPush={vi.fn()} onReady={(value) => (actions = value)} />,
+      )
+    })
+
+    await act(async () => {
+      actions?.mainItems.find((item) => item.id === 'commit')?.onSelect()
+    })
+
+    expect(toastMock.info).not.toHaveBeenCalled()
+    expect(draftMocks.openDraft).toHaveBeenCalledWith(REPO_ID, '/tmp/repo-feature')
+  })
+
+  test('wires pull, merge and push from the branch write merge dialog', async () => {
     const calls: string[] = []
     const repo = seedRepoState({
       id: REPO_ID,
@@ -76,6 +130,10 @@ describe('useBranchWriteActions', () => {
     mocks.mergeRepositoryBranch.mockImplementation(async () => {
       calls.push('merge')
       return { ok: true, message: 'merged' }
+    })
+    mocks.pullRepositoryBranch.mockImplementation(async () => {
+      calls.push('pull')
+      return { ok: true, message: 'pulled' }
     })
     const onPush = vi.fn(() => {
       calls.push('push')
@@ -94,9 +152,10 @@ describe('useBranchWriteActions', () => {
     clickButtonByText('action.merge-and-push-confirm')
     await flush()
 
+    expect(mocks.pullRepositoryBranch).toHaveBeenCalledWith(REPO_ID, 'feature/current', '/tmp/repo-feature')
     expect(mocks.mergeRepositoryBranch).toHaveBeenCalledWith(REPO_ID, '/tmp/repo-feature', 'main')
     expect(onPush).toHaveBeenCalled()
-    expect(calls).toEqual(['merge', 'push'])
+    expect(calls).toEqual(['pull', 'merge', 'push'])
   })
 })
 

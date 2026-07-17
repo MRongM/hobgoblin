@@ -1,4 +1,4 @@
-import { AlertCircle, Folder, FolderGit2, Server } from 'lucide-react'
+import { AlertCircle, Folder, FolderGit2, Server, Terminal } from 'lucide-react'
 import type { RepoTabSummary } from '#/web/components/repo-tabs/types.ts'
 import type { FocusRegistry } from '#/web/components/tab-strip/useFocusRegistry.ts'
 import { ToolbarClosableTab } from '#/web/components/tab-strip/ToolbarClosableTab.tsx'
@@ -9,9 +9,11 @@ import {
 } from '#/web/components/tab-strip/tab-variants.ts'
 import { useSortableTab } from '#/web/components/tab-strip/useSortableTab.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
+import { Badge } from '#/web/components/ui/badge.tsx'
 import { TerminalBellDot } from '#/web/components/terminal/TerminalBellDot.tsx'
 import { TerminalOutputActivityIndicator } from '#/web/components/terminal/TerminalOutputActivityIndicator.tsx'
 import {
+  useRepoTerminalCount,
   useRepoTerminalHasBell,
   useRepoTerminalHasOutputActivity,
 } from '#/web/components/terminal/terminal-session-store.ts'
@@ -46,13 +48,16 @@ export function RepoTab({
   unavailableLabel,
 }: RepoTabProps) {
   const t = useT()
+  const terminalCount = useRepoTerminalCount(repo.id, repo.worktreePaths ?? [])
   const hasTerminalBell = useRepoTerminalHasBell(repo.id, repo.worktreePaths ?? [])
   const hasTerminalOutputActivity = useRepoTerminalHasOutputActivity(repo.id, repo.worktreePaths ?? [])
+  const terminalCountLabel = terminalCount > 0 ? t('terminal.open-count', { count: terminalCount }) : null
   const terminalBellLabel = t('terminal.bell-unread')
   const terminalOutputActiveLabel = t('terminal.output-active')
   const tabLabelBase = repo.unavailable ? `${repo.name} — ${unavailableLabel}` : repo.name
   const tabLabel = [
     tabLabelBase,
+    terminalCountLabel,
     hasTerminalOutputActivity ? terminalOutputActiveLabel : null,
     hasTerminalBell ? terminalBellLabel : null,
   ]
@@ -79,7 +84,7 @@ export function RepoTab({
       })}
       overlay={
         showSeparator ? (
-          <span className="pointer-events-none absolute right-0 top-1/2 h-4 -translate-y-1/2 border-r border-separator" />
+          <span className="pointer-events-none absolute right-0 top-1/2 h-4 -translate-y-1/2 border-r border-topbar-border" />
         ) : null
       }
       buttonRef={sortable.setButtonRef}
@@ -107,6 +112,7 @@ export function RepoTab({
         },
       }}
       buttonClassName={toolbarTabButtonClassName('repo')}
+      closeButtonClassName={isActive ? undefined : 'text-topbar-muted-foreground'}
       closeLabel={closeLabel(repo.name)}
       closeVisible={isActive}
       onClose={(e) => {
@@ -122,8 +128,21 @@ export function RepoTab({
         <FolderGit2 size={13} className={toolbarTabIconClassName(isActive)} />
       )}
       <span className="truncate font-medium">{repo.name}</span>
-      {hasTerminalOutputActivity && (
-        <TerminalOutputActivityIndicator label={terminalOutputActiveLabel} effectSize="compact" />
+      {terminalCount > 0 && (
+        <Badge
+          data-testid="repo-tab-terminal-count-badge"
+          aria-label={terminalCountLabel ?? undefined}
+          title={terminalCountLabel ?? undefined}
+          variant="brand"
+          className="h-4 gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums"
+        >
+          {hasTerminalOutputActivity ? (
+            <TerminalOutputActivityIndicator label={terminalOutputActiveLabel} className="size-2.5" size={10} />
+          ) : (
+            <Terminal size={10} aria-hidden="true" />
+          )}
+          {terminalCount}
+        </Badge>
       )}
       {hasTerminalBell && <TerminalBellDot label={terminalBellLabel} />}
       {repo.unavailable && <AlertCircle size={12} className="shrink-0 text-warning" aria-hidden />}

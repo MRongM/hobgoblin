@@ -5,10 +5,6 @@ export const DETAIL_TABS = [
   { id: 'terminal', labelKey: 'tab.terminal' },
 ] as const satisfies readonly { id: DetailTab; labelKey: string }[]
 
-export function isDetailTab(value: string | null | undefined): value is DetailTab {
-  return value === 'status' || value === 'changes' || value === 'terminal'
-}
-
 export function visibleDetailTabs(hasWorktree: boolean) {
   return hasWorktree ? DETAIL_TABS : []
 }

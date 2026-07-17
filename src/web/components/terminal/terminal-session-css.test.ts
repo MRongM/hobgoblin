@@ -4,12 +4,11 @@ import { describe, expect, test } from 'vitest'
 const css = readFileSync(new URL('./terminal-session.css', import.meta.url), 'utf8')
 
 describe('terminal session CSS layout contract', () => {
-  test('keeps button dock padding tight without an extra top margin', () => {
+  test('keeps the button dock flush with the terminal bottom edge', () => {
     expect(css).toContain('--goblin-terminal-bottom-dock-height: 44px;')
-    expect(css).toContain(
-      'padding-bottom: calc(var(--goblin-terminal-bottom-dock-height) + var(--goblin-terminal-overlay-offset));',
-    )
-    expect(css).not.toContain('padding-bottom: calc(var(--goblin-terminal-bottom-dock-height) + 24px);')
+    expect(css).toContain('padding-bottom: var(--goblin-terminal-bottom-dock-height);')
+    expect(css).toMatch(/\.goblin-terminal-bottom-dock\s*\{[^}]*bottom:\s*0;/)
+    expect(css).not.toMatch(/\.goblin-terminal-bottom-dock\s*\{[^}]*bottom:\s*var\(--goblin-terminal-overlay-offset\);/)
   })
 
   test('keeps only custom button styles in the terminal dock', () => {
@@ -29,5 +28,19 @@ describe('terminal session CSS layout contract', () => {
     expect(css).toContain('background: color-mix(in srgb, var(--color-terminal-foreground) 28%, transparent);')
     expect(css).toContain('.goblin-managed-terminal-host .xterm-viewport::-webkit-scrollbar-corner')
     expect(css).toContain('background: transparent;')
+    expect(css).toMatch(
+      /\.goblin-managed-terminal-host \.xterm-scrollable-element > \.scrollbar\.vertical\s*\{[^}]*background:\s*transparent;/,
+    )
+  })
+
+  test('uses xterm native scrollbar geometry without extra layout clearance', () => {
+    expect(css).toContain(`.goblin-managed-terminal-host {
+  width: 100%;`)
+    expect(css).not.toContain('--goblin-terminal-scrollbar-clearance')
+    expect(css).not.toContain('padding-right: var(--goblin-terminal-scrollbar-clearance);')
+    expect(css).not.toMatch(/\.goblin-managed-terminal-host\s*\{[^}]*margin-right:\s*14px;/)
+    expect(css).not.toMatch(
+      /\.goblin-managed-terminal-host \.xterm-scrollable-element > \.scrollbar\.vertical\s*\{[^}]*margin-left:\s*14px;/,
+    )
   })
 })

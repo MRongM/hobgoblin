@@ -32,6 +32,7 @@ import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 import type { RepoBranchState, RepoWorktreeState } from '#/web/stores/repos/types.ts'
 import { formatWorktreeListPath } from '#/web/lib/paths.ts'
+import { cn } from '#/web/lib/cn.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import { detailPanelStoreActionsEqual, detailPanelStoreActionsFromStore } from '#/web/stores/repos/selector-actions.ts'
 
@@ -48,7 +49,6 @@ type BranchListRepo = BranchActionRepo & {
   }
   ui: {
     selectedBranch: string | null
-    branchViewMode: 'all' | 'worktrees' | 'no-worktree'
     worktreePathOrder: string[]
   }
 }
@@ -67,7 +67,6 @@ function branchListRepoEqual(a: BranchListRepo | undefined, b: BranchListRepo | 
       a.data.status === b.data.status &&
       a.data.worktreesByPath === b.data.worktreesByPath &&
       a.ui.selectedBranch === b.ui.selectedBranch &&
-      a.ui.branchViewMode === b.ui.branchViewMode &&
       a.ui.worktreePathOrder === b.ui.worktreePathOrder &&
       a.operations.branchAction === b.operations.branchAction &&
       a.operations.fetch === b.operations.fetch &&
@@ -123,7 +122,6 @@ export function BranchList({ repoId, showActions = true }: Props) {
             },
             ui: {
               selectedBranch: repo.ui.selectedBranch,
-              branchViewMode: repo.ui.branchViewMode,
               worktreePathOrder: repo.ui.worktreePathOrder,
             },
             operations: {
@@ -156,10 +154,10 @@ export function BranchList({ repoId, showActions = true }: Props) {
   const repoRoot = repo.remote.target?.remotePath ?? repo.id
   const branches = visibleBranches({
     branches: repo.data.branches,
-    viewMode: repo.ui.branchViewMode,
+    viewMode: 'worktrees',
     worktreePathOrder: repo.ui.worktreePathOrder,
   })
-  const dragEnabled = repo.ui.branchViewMode === 'worktrees'
+  const dragEnabled = true
   const sortableWorktreePaths = dragEnabled
     ? branches.map((branch) => branch.worktree?.path).filter((path): path is string => !!path)
     : []
@@ -168,10 +166,7 @@ export function BranchList({ repoId, showActions = true }: Props) {
     if (!over || active.id === over.id) return
     reorderWorktrees(repoId, String(active.id), String(over.id))
   }
-  const detachedWorktrees =
-    repo.ui.branchViewMode === 'no-worktree'
-      ? []
-      : Object.values(repo.data.worktreesByPath).filter((worktree) => worktree.isDetached)
+  const detachedWorktrees = Object.values(repo.data.worktreesByPath).filter((worktree) => worktree.isDetached)
   useEffect(() => {
     if (!openActionMenu) return
     if (
@@ -214,7 +209,7 @@ export function BranchList({ repoId, showActions = true }: Props) {
   })
 
   const list = (
-    <ul>
+    <ul className="pb-1.5">
       {dragEnabled ? (
         <DndContext
           sensors={sensors}
@@ -231,7 +226,7 @@ export function BranchList({ repoId, showActions = true }: Props) {
       )}
       {detachedWorktrees.length > 0 && (
         <>
-          <li className="px-4 pb-1 pt-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <li className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
             {t('branches.detached-worktrees')}
           </li>
           {detachedWorktrees.map((worktree) => (
@@ -285,11 +280,16 @@ function DetachedWorktreeRow({
   const displayPath = formatWorktreeListPath(worktree.path, remoteTarget, repoRoot)
   const head = worktree.head ? worktree.head.slice(0, 12) : t('branches.detached-head')
   const dirty = worktree.isDirty || (worktree.changeCount ?? 0) > 0
+  const dirtyChangeCount = dirty && (worktree.changeCount ?? 0) > 0 ? (worktree.changeCount ?? null) : null
+  const dirtyLabel =
+    dirtyChangeCount === null
+      ? t('branches.dirty')
+      : t('branch-status.worktree-dirty', { n: dirtyChangeCount })
   const title = [
     t('branches.detached-worktree'),
     worktree.head ?? null,
     displayPath,
-    dirty ? t('branches.dirty') : null,
+    dirty ? dirtyLabel : null,
   ]
     .filter(Boolean)
     .join(', ')
@@ -297,9 +297,9 @@ function DetachedWorktreeRow({
   return (
     <li
       title={title}
-      className="relative grid min-h-9 grid-cols-1 items-stretch text-muted-foreground transition-colors duration-100 hover:bg-list-row-hover"
+      className="relative mx-1.5 grid min-h-9 grid-cols-1 items-stretch rounded-[var(--goblin-brand-radius-md,var(--radius-md))] text-muted-foreground transition-colors duration-100 hover:bg-list-row-hover"
     >
-      <div className="pointer-events-none relative z-10 flex min-w-0 items-center gap-2 px-4 py-1.5">
+      <div className="pointer-events-none relative z-10 flex min-w-0 items-center gap-2 px-2.5 py-1.5">
         <span className="flex w-4 shrink-0 items-center justify-center">
           <GitCommitHorizontal size={14} className={dirty ? 'text-attention' : 'text-muted-foreground'} />
         </span>
@@ -309,11 +309,16 @@ function DetachedWorktreeRow({
             <Badge
               data-testid="dirty-detached-worktree-badge"
               variant="attention"
-              aria-label={t('branches.dirty')}
-              title={t('branches.dirty')}
-              className="h-4 px-1"
+              aria-label={dirtyLabel}
+              title={dirtyLabel}
+              className={cn(
+                'h-4 px-1',
+                dirtyChangeCount !== null &&
+                  'gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums',
+              )}
             >
               <GitCompareArrows size={10} aria-hidden="true" />
+              {dirtyChangeCount}
             </Badge>
           ) : (
             <Badge variant="outline" className="gap-1">

@@ -17,6 +17,7 @@ import { repoEventActionSuccessLabel } from '#/web/stores/repos/action-labels.ts
 interface Props {
   repoId: string
   compact?: boolean
+  mutedForegroundClassName?: string
 }
 
 const COMPLETION_VISIBLE_MS = 1500
@@ -48,15 +49,29 @@ function repoActivityControlRepoEqual(a: RepoState | undefined, b: RepoState | u
   )
 }
 
-export function RepoActivityControl({ repoId, compact: compactOverride }: Props) {
+export function RepoActivityControl({ repoId, compact: compactOverride, mutedForegroundClassName }: Props) {
   const repo = useStoreWithEqualityFn(useReposStore, (s) => s.repos[repoId], repoActivityControlRepoEqual)
   const responsiveCompact = useIsCompactUi()
   const compact = compactOverride ?? responsiveCompact
   if (!repo) return null
-  return <RepoActivityControlView repo={repo} compact={compact} />
+  return (
+    <RepoActivityControlView
+      repo={repo}
+      compact={compact}
+      mutedForegroundClassName={mutedForegroundClassName}
+    />
+  )
 }
 
-function RepoActivityControlView({ repo, compact }: { repo: RepoState; compact: boolean }) {
+function RepoActivityControlView({
+  repo,
+  compact,
+  mutedForegroundClassName,
+}: {
+  repo: RepoState
+  compact: boolean
+  mutedForegroundClassName?: string
+}) {
   const visibleActivity = useRepoActivityControlPresentation(repo)
   const completion = useRepoCompletion(repo.id)
   const view = getRepoActivityControlView({
@@ -74,7 +89,7 @@ function RepoActivityControlView({ repo, compact }: { repo: RepoState; compact: 
       return (
         <div className="flex items-center gap-2">
           <RepoRefreshButton repo={repo} manualSyncBusy={view.manualSyncBusy} compact={compact} />
-          <RepoCacheIndicator repo={repo} />
+          <RepoCacheIndicator repo={repo} className={mutedForegroundClassName} />
           <RepoFetchFailureIndicator repo={repo} />
         </div>
       )
@@ -206,7 +221,7 @@ function RepoCompletionIndicator({ completion, compact }: { completion: RepoComp
   )
 }
 
-function RepoCacheIndicator({ repo }: { repo: RepoState }) {
+function RepoCacheIndicator({ repo, className }: { repo: RepoState; className?: string }) {
   const t = useT()
 
   if (repo.projection.source !== 'cache') return null
@@ -215,8 +230,12 @@ function RepoCacheIndicator({ repo }: { repo: RepoState }) {
   const title = time ? t('tab.projectiond-title', { time }) : t('tab.projectiond')
 
   return (
-    <span className="flex items-center gap-1 text-xs text-muted-foreground" title={title} aria-label={title}>
-      <span className="inline-block w-1.5 h-1.5 rounded-full bg-muted-foreground/70" />
+    <span
+      className={cn('flex items-center gap-1 text-xs text-muted-foreground', className)}
+      title={title}
+      aria-label={title}
+    >
+      <span className="inline-block h-1.5 w-1.5 rounded-full bg-current opacity-70" />
       {t('tab.projectiond')}
     </span>
   )

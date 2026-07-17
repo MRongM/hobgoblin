@@ -8,6 +8,7 @@ import {
   getRepositoryCommitDetail,
   getRepositoryFileTree,
   getRepositoryHistory,
+  getRepositoryLocalTags,
   getRepositoryPatch,
   getRepositoryPullRequests,
   searchRepositoryFileTree,
@@ -31,8 +32,14 @@ import {
   discardRepositoryChanges,
   deleteRepositoryFileTreeEntries,
   deleteRepositoryBranch,
+  deleteRepositoryRemoteBranch,
+  deleteRepositoryRemoteTag,
+  deleteRepositoryLocalTag,
+  pushRepositoryLocalTag,
   fetchRepository,
   getRepositoryRemoteBranches,
+  getRepositoryRemoteTags,
+  createRepositoryLocalTag,
   getRepositoryWorktreeBootstrapPreview,
   initializeRepositoryWorktreeBootstrapConfig,
   initRepository,
@@ -134,6 +141,16 @@ export function createRepoRoutes() {
     const body = await c.req.json().catch(() => null)
     const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
     return c.json(await jsonOr(() => getRepositoryRemoteBranches(cwd, c.req.raw.signal), [], 'remote-branches'))
+  })
+  app.post('/remote-tags', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    return c.json(await jsonOr(() => getRepositoryRemoteTags(cwd, c.req.raw.signal), [], 'remote-tags'))
+  })
+  app.post('/local-tags', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    return c.json(await jsonOr(() => getRepositoryLocalTags(cwd, c.req.raw.signal), [], 'local-tags'))
   })
   app.post('/worktree-bootstrap-preview', async (c) => {
     const body = await c.req.json().catch(() => null)
@@ -485,6 +502,74 @@ export function createRepoRoutes() {
     const alsoDeleteUpstream = body?.alsoDeleteUpstream === true
     const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
     return c.json(await jsonOr(() => deleteRepositoryBranch(cwd, branch, { force, alsoDeleteUpstream }, c.req.raw.signal, sourceToken), { ok: false, message: 'error.failed-read-repo' }, 'delete-branch'))
+  })
+  app.post('/delete-remote-branch', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const remote = typeof body?.remote === 'string' ? body.remote : ''
+    const branch = typeof body?.branch === 'string' ? body.branch : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => deleteRepositoryRemoteBranch(cwd, remote, branch, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'delete-remote-branch',
+      ),
+    )
+  })
+  app.post('/delete-remote-tag', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const remote = typeof body?.remote === 'string' ? body.remote : ''
+    const tag = typeof body?.tag === 'string' ? body.tag : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => deleteRepositoryRemoteTag(cwd, remote, tag, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'delete-remote-tag',
+      ),
+    )
+  })
+  app.post('/create-local-tag', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const name = typeof body?.name === 'string' ? body.name : ''
+    const ref = typeof body?.ref === 'string' ? body.ref : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => createRepositoryLocalTag(cwd, name, ref, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'create-local-tag',
+      ),
+    )
+  })
+  app.post('/delete-local-tag', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const name = typeof body?.name === 'string' ? body.name : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => deleteRepositoryLocalTag(cwd, name, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'delete-local-tag',
+      ),
+    )
+  })
+  app.post('/push-local-tag', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const name = typeof body?.name === 'string' ? body.name : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => pushRepositoryLocalTag(cwd, name, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'push-local-tag',
+      ),
+    )
   })
   app.post('/remove-worktree', async (c) => {
     const body = await c.req.json().catch(() => null)

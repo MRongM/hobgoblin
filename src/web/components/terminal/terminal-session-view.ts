@@ -27,6 +27,7 @@ import {
 } from '#/web/components/terminal/terminal-keyboard.ts'
 import { registerTerminalRelativePathLinkProvider } from '#/web/components/terminal/terminal-path-links.ts'
 import { registerTerminalLocalUrlLinkProvider } from '#/web/components/terminal/terminal-local-url-links.ts'
+import { registerTerminalOsc52ClipboardHandler } from '#/web/components/terminal/terminal-osc52-clipboard.ts'
 import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
 import {
   DEFAULT_TERMINAL_FONT_FAMILY,
@@ -236,6 +237,7 @@ export class TerminalSessionView {
     this.disposables.push(term.onBinary((data) => this.handlers.onInput(this.inputFromXtermData(data, 'binary'))))
     this.disposables.push(term.onBell(() => this.handlers.onBell()))
     this.disposables.push(term.onResize((size) => this.handlers.onResize(size)))
+    this.disposables.push(term.buffer.onBufferChange(() => this.fitNow()))
     term.open(this.xtermHost)
     this.installResizeObserver()
     this.installFontObserver(term)
@@ -418,6 +420,15 @@ export class TerminalSessionView {
     this.installSerializeAddon(term)
     this.installImageAddon(term)
     this.installProgressAddon(term)
+    this.installOsc52ClipboardHandler(term)
+  }
+
+  private installOsc52ClipboardHandler(term: XTermTerminal): void {
+    try {
+      this.disposables.push(registerTerminalOsc52ClipboardHandler(term))
+    } catch (err) {
+      console.warn('[terminal] failed to register osc52 clipboard handler', err)
+    }
   }
 
   private installUnicode11Addon(term: XTermTerminal): void {

@@ -15,7 +15,7 @@ import type {
   TerminalTakeoverResult,
 } from '#/shared/terminal.ts'
 import type { BranchSnapshotInfo, PullRequestInfo, WorktreeStatus } from '#/web/types.ts'
-import type { DetailTab, RepoBranchState, RepoState } from '#/web/stores/repos/types.ts'
+import type { DetailTab, ExplorerTab, RepoBranchState, RepoState } from '#/web/stores/repos/types.ts'
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import {
   DEFAULT_DETAIL_COLLAPSED,
@@ -437,6 +437,9 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
         if (url.pathname === '/api/repo/status') return call('repo.status', body)
         if (url.pathname === '/api/repo/remote-branches') return call('repo.remoteBranches', body)
         if (url.pathname === '/api/repo/pull-requests') return call('repo.pullRequests', body)
+        if (url.pathname === '/api/repo/local-tags') return call('repo.localTags', body)
+        if (url.pathname === '/api/repo/create-local-tag') return call('repo.createLocalTag', body)
+        if (url.pathname === '/api/repo/delete-local-tag') return call('repo.deleteLocalTag', body)
         if (url.pathname === '/api/repo/fetch') return call('repo.fetch', body)
         if (url.pathname === '/api/repo/clone') return call('repo.clone', body)
         if (url.pathname === '/api/repo/abort-clone') return call('repo.abortClone', body)
@@ -447,6 +450,7 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
         if (url.pathname === '/api/repo/create-branch') return call('repo.createBranch', body)
         if (url.pathname === '/api/repo/track-remote-branch') return call('repo.trackRemoteBranch', body)
         if (url.pathname === '/api/repo/delete-branch') return call('repo.deleteBranch', body)
+        if (url.pathname === '/api/repo/delete-remote-branch') return call('repo.deleteRemoteBranch', body)
         if (url.pathname === '/api/repo/remove-worktree') return call('repo.removeWorktree', body)
         if (url.pathname === '/api/repo/patch') return call('repo.patch', body)
         if (url.pathname === '/api/repo/open-remote') return call('repo.openRemote', body)
@@ -500,8 +504,9 @@ export function seedRepoState(options: {
   branchSnapshots?: BranchSnapshotInfo[]
   currentBranch?: string
   selectedBranch?: string | null
-  branchViewMode?: RepoState['ui']['branchViewMode']
+  branchViewMode?: never
   detailTab?: DetailTab
+  explorerTab?: ExplorerTab
   workspaceLayout?: RepoWorkspaceLayout
   fileTreePaneSizes?: WorkspaceDetailPaneSizes
   worktreePathOrder?: string[]
@@ -533,8 +538,10 @@ export function seedRepoState(options: {
     ui: {
       ...base.ui,
       selectedBranch: options.selectedBranch ?? base.ui.selectedBranch,
-      branchViewMode: options.branchViewMode ?? base.ui.branchViewMode,
       detailTab: options.detailTab ?? base.ui.detailTab,
+      explorerTabByBranch: options.explorerTab
+        ? { [options.selectedBranch ?? '']: options.explorerTab }
+        : base.ui.explorerTabByBranch,
       workspaceLayout: options.workspaceLayout ?? base.ui.workspaceLayout,
       fileTreePaneSizes: options.fileTreePaneSizes ?? base.ui.fileTreePaneSizes,
       worktreePathOrder: options.worktreePathOrder ?? base.ui.worktreePathOrder,

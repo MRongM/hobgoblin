@@ -88,6 +88,10 @@ export function RepoTabs({ currentRepoId, onOpenRepoPathDialog, onOpenRemote, on
         openRemoteShortcut: shortcutsDisabled ? null : '⌘⇧R',
         clone: t('repo-tabs.clone'),
         cloneShortcut: shortcutsDisabled ? null : '⌘⇧O',
+        clearCache: t('error.clear-cache'),
+        clearCacheConfirmTitle: t('repo-tabs.clear-cache-confirm-title'),
+        clearCacheConfirmMessage: t('repo-tabs.clear-cache-confirm-message'),
+        clearCacheConfirmLabel: t('repo-tabs.clear-cache-confirm'),
         unavailable: t('repo-unavailable.title'),
       }}
       onActivate={navigation.activateRepo}
@@ -100,7 +104,10 @@ export function RepoTabs({ currentRepoId, onOpenRepoPathDialog, onOpenRemote, on
   )
 }
 
-function repoTerminalWorktreePaths(repo: {
+// Also feeds the sidebar project list's terminal indicators
+// (SidebarProjectHeader), so both surfaces agree on which worktrees
+// count toward a repo's terminal state.
+export function repoTerminalWorktreePaths(repo: {
   id: string
   isGitRepo?: boolean
   data: {

@@ -120,6 +120,10 @@ const labels = {
   clone: 'Clone repository…',
   cloneShortcut: '⌘⇧O',
   unavailable: 'Unavailable',
+  clearCache: 'Clear cache',
+  clearCacheConfirmTitle: 'Clear cache?',
+  clearCacheConfirmMessage: 'Clears cached data for all repositories on this server and reloads the page.',
+  clearCacheConfirmLabel: 'Clear and reload',
 }
 
 function createMatchMedia(matches: boolean) {

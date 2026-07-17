@@ -17,6 +17,10 @@ describe('boot color theme allowlist', () => {
     expect(readBootColorThemes()).toEqual([...COLOR_THEMES])
   })
 
+  test('allows classic presets before React boots', () => {
+    expect(readBootColorThemes()).toEqual(expect.arrayContaining(['catppuccin', 'solarized', 'tokyo-night']))
+  })
+
   test('falls back to the shared default color theme', () => {
     const boot = readFileSync(new URL('./boot.js', import.meta.url), 'utf8')
     expect(boot).toContain(`colorTheme = '${DEFAULT_COLOR_THEME}'`)

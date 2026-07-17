@@ -18,7 +18,7 @@ import {
 } from '#/web/components/branch-detail/status-ui.tsx'
 import type { PullRequestInfo } from '#/shared/git-types.ts'
 import type { Lang } from '#/shared/rpc.ts'
-type TFn = (key: string, params?: Record<string, string | number>) => string
+export type TFn = (key: string, params?: Record<string, string | number>) => string
 type TooltipSide = 'top' | 'right' | 'bottom' | 'left'
 
 function prChecksSignal(pr: PullRequestInfo, t: TFn): PrHealthSignal | null {
@@ -57,11 +57,17 @@ function prHealthSignals(pr: PullRequestInfo | undefined, t: TFn): PrHealthSigna
   )
 }
 
-function prSummary(pr: PullRequestInfo, t: TFn): string {
+export function pullRequestSummary(pr: PullRequestInfo, t: TFn): string {
   return t('branch-status.pr.summary', {
     n: pr.number,
     state: pr.isDraft && pr.state === 'open' ? t('branch-status.pr.draft') : t(`branch-status.pr.${pr.state}`),
   })
+}
+
+export function pullRequestClipboardValue(pr: PullRequestInfo, t: TFn): string {
+  return [pullRequestSummary(pr, t), ...prHealthSignals(pr, t).map((signal) => signal.label), pr.title, pr.url]
+    .filter(Boolean)
+    .join(' · ')
 }
 
 function prSummaryTone(pr: PullRequestInfo): Tone {
@@ -170,7 +176,7 @@ export function PullRequestStatusRow({
 
   const signals = prHealthSignals(pullRequest, t)
   const tone = prChipTone(pullRequest, signals)
-  const summary = prSummary(pullRequest, t)
+  const summary = pullRequestSummary(pullRequest, t)
   const summaryTone = prSummaryTone(pullRequest)
   const tooltip = prTooltip(pullRequest, lang, t)
 

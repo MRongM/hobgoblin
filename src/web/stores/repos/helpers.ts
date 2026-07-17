@@ -2,6 +2,7 @@ import { produce, type Draft } from 'immer'
 import { emptyRepoOperations } from '#/web/stores/repos/operations.ts'
 import { emptyRepoResources } from '#/web/stores/repos/resources.ts'
 import type {
+  ExplorerTab,
   RepoEvent,
   RepoResultEventOptions,
   RepoState,
@@ -9,6 +10,27 @@ import type {
   ReposStore,
 } from '#/web/stores/repos/types.ts'
 import type { ExecResult } from '#/web/types.ts'
+
+/** Resolve the explorer tab for the repo's currently selected branch. Falls
+ *  back to the `''` key (used when no branch is selected, or as legacy
+ *  per-repo state carried over from before per-branch tabs) and finally to
+ *  a default based on worktree existence. */
+export function explorerTabForRepo(repo: {
+  ui: Pick<RepoState['ui'], 'selectedBranch' | 'explorerTabByBranch'>
+  data: Pick<RepoState['data'], 'branches'>
+}): ExplorerTab {
+  const key = repo.ui.selectedBranch ?? ''
+  const savedTab = repo.ui.explorerTabByBranch[key] ?? repo.ui.explorerTabByBranch['']
+
+  if (savedTab) return savedTab
+
+  // 检查是否有工作树
+  const selectedBranch = repo.data.branches.find(branch => branch.name === repo.ui.selectedBranch)
+  const hasWorktree = !!selectedBranch?.worktree?.path
+
+  // 有工作树默认为 status，否则默认为 files
+  return hasWorktree ? 'status' : 'files'
+}
 
 let nextInstanceToken = 1
 let nextEventId = 1
@@ -35,8 +57,8 @@ export function emptyRepo(id: string, name: string): RepoState {
     operations: emptyRepoOperations(),
     ui: {
       selectedBranch: null,
-      branchViewMode: 'all',
       detailTab: 'status',
+      explorerTabByBranch: {},
       workspaceLayout: 'left-right',
       worktreePathOrder: [],
     },

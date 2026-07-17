@@ -66,6 +66,7 @@ describe('renderer bootstrap', () => {
       terminalCustomButtons: [],
       fontFamily: 'mono',
       lanEnabled: false,
+      serverPort: 32200,
     }
     const bootstrap: RendererBootstrapSnapshot = electronBootstrap({
       initialI18n: { lang: 'ko', pref: 'ko', dict: { hello: '안녕' } },

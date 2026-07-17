@@ -1,5 +1,5 @@
 import { type ReactNode, type Ref, useCallback, useMemo, useRef, useState } from 'react'
-import { ChevronDown, Download, FolderOpen, Plus, Server } from 'lucide-react'
+import { ChevronDown, Download, FolderOpen, Plus, Server, Trash2 } from 'lucide-react'
 import {
   DndContext,
   type DragEndEvent,
@@ -10,6 +10,7 @@ import {
   useSensors,
 } from '@dnd-kit/core'
 import { SortableContext, horizontalListSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
+import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { ScrollArea } from '#/web/components/ui/scroll-area.tsx'
 import { Tip } from '#/web/components/Tip.tsx'
@@ -102,7 +103,7 @@ function RepoTabEdgeAction({
       {showSeparator && (
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute left-0 top-1/2 h-4 -translate-y-1/2 border-l border-separator"
+          className="pointer-events-none absolute left-0 top-1/2 h-4 -translate-y-1/2 border-l border-topbar-border"
         />
       )}
       {children}
@@ -115,7 +116,8 @@ function OpenRepoMenuItems({
   onOpenLocal,
   onOpenRemote,
   onClone,
-}: Pick<RepoTabStripProps, 'labels' | 'onOpenLocal' | 'onOpenRemote' | 'onClone'>) {
+  onClearCache,
+}: Pick<RepoTabStripProps, 'labels' | 'onOpenLocal' | 'onOpenRemote' | 'onClone'> & { onClearCache: () => void }) {
   return (
     <>
       <DropdownMenuItem className="whitespace-nowrap" onSelect={onOpenLocal}>
@@ -132,6 +134,11 @@ function OpenRepoMenuItems({
         <Download />
         {labels.clone}
         {labels.cloneShortcut && <DropdownMenuShortcut>{labels.cloneShortcut}</DropdownMenuShortcut>}
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem className="whitespace-nowrap" onSelect={onClearCache}>
+        <Trash2 />
+        {labels.clearCache}
       </DropdownMenuItem>
     </>
   )
@@ -154,7 +161,7 @@ function CompactRepoTabs({
 
   return (
     <ToolbarTabStripBody>
-      <RepoTabTooltipLayer repos={repos} role="tablist">
+      <RepoTabTooltipLayer repos={repos} role="tablist" className="gap-0.5">
         {repos.map((repo, index) => (
           <RepoTab
             key={repo.id}
@@ -202,7 +209,7 @@ function ScrollableRepoTabs({
 
   return (
     <ToolbarTabStripBody scroll>
-      <RepoTabTooltipLayer repos={repos} role="tablist">
+      <RepoTabTooltipLayer repos={repos} role="tablist" className="gap-0.5">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -256,6 +263,24 @@ export function RepoTabStrip({
 }: RepoTabStripProps) {
   const isSmallScreen = useIsSmallScreen()
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [confirmClearCacheOpen, setConfirmClearCacheOpen] = useState(false)
+
+  const requestClearCache = () => setConfirmClearCacheOpen(true)
+
+  const handleClearCacheConfirmed = () => {
+    // Clears the storage for ALL repos on this origin (goblin.repo-store,
+    // terminal client id) — hence the confirm gate before it runs.
+    try {
+      localStorage.clear()
+      sessionStorage.clear()
+      window.location.reload()
+    } catch (err) {
+      console.error('[gbl] failed to clear cache', err)
+    } finally {
+      setConfirmClearCacheOpen(false)
+    }
+  }
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -309,7 +334,13 @@ export function RepoTabStrip({
           </DropdownMenuTrigger>
         </Tip>
         <DropdownMenuContent side="bottom" align="start" className="w-max">
-          <OpenRepoMenuItems labels={labels} onOpenLocal={onOpenLocal} onOpenRemote={onOpenRemote} onClone={onClone} />
+          <OpenRepoMenuItems
+            labels={labels}
+            onOpenLocal={onOpenLocal}
+            onOpenRemote={onOpenRemote}
+            onClone={onClone}
+            onClearCache={requestClearCache}
+          />
         </DropdownMenuContent>
       </DropdownMenu>
     </RepoTabEdgeAction>
@@ -364,6 +395,7 @@ export function RepoTabStrip({
                       onOpenLocal={onOpenLocal}
                       onOpenRemote={onOpenRemote}
                       onClone={onClone}
+                      onClearCache={requestClearCache}
                     />
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -389,6 +421,15 @@ export function RepoTabStrip({
           }
         />
       )}
+      <ConfirmDialog
+        open={confirmClearCacheOpen}
+        title={labels.clearCacheConfirmTitle}
+        message={labels.clearCacheConfirmMessage}
+        confirmLabel={labels.clearCacheConfirmLabel}
+        destructive
+        onCancel={() => setConfirmClearCacheOpen(false)}
+        onConfirm={handleClearCacheConfirmed}
+      />
     </nav>
   )
 }

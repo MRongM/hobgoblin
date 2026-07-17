@@ -1,6 +1,7 @@
 import { readRuntimeGeneralSettings, useRuntimeSettingsSnapshot } from '#/web/settings-read-projection.ts'
 import {
   runSettingsControllerAction,
+  setServerPortPreference,
   setTemporaryFilesDirectoryPreference,
   setTerminalThemeSyncEnabledPreference,
   setToggleDetailOnActionBarBlankClickPreference,
@@ -26,6 +27,11 @@ export function useGeneralSettingsController() {
     async setTemporaryFilesDirectory(path: string): Promise<void> {
       await runSettingsControllerAction('temporary files directory update', async () => {
         await setTemporaryFilesDirectoryPreference(path)
+      })
+    },
+    async setServerPort(port: number): Promise<void> {
+      await runSettingsControllerAction('server port update', async () => {
+        await setServerPortPreference(port)
       })
     },
   }

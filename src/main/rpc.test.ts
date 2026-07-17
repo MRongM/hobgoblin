@@ -53,6 +53,7 @@ function settingsPrefs(overrides: Partial<SettingsPrefs> = {}): SettingsPrefs {
     terminalCustomButtonSize: 'medium',
     terminalCustomButtons: [],
     lanEnabled: false,
+    serverPort: 32200,
     ...overrides,
     topbarHeightPx: overrides.topbarHeightPx ?? 34,
     toolbarHeightPx: overrides.toolbarHeightPx ?? 34,

@@ -10,7 +10,7 @@ import {
 import { BranchDetailToolbar } from '#/web/components/branch-detail/BranchDetailToolbar.tsx'
 import { BranchDetailContent } from '#/web/components/branch-detail/BranchDetailContent.tsx'
 import { DEFAULT_WORKSPACE_LAYOUT } from '#/shared/workspace-layout.ts'
-import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.ts'
+import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.tsx'
 import { useBranchActionShortcutRegistry } from '#/web/hooks/useBranchActionShortcutRegistry.ts'
 interface Props {
   repoId: string

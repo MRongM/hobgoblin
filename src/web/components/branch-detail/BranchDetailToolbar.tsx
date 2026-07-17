@@ -1,4 +1,4 @@
-import { ArrowUp, Maximize2, Minimize2, Minus, QrCode } from 'lucide-react'
+import { ArrowUp, Globe, Minus, PanelLeftOpen, QrCode } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useReposStore } from '#/web/stores/repos/store.ts'
@@ -6,13 +6,7 @@ import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { Button } from '#/web/components/ui/button.tsx'
 import { Toolbar } from '#/web/components/Layout.tsx'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '#/web/components/ui/dialog.tsx'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '#/web/components/ui/dialog.tsx'
 import { detailTabForWorktree } from '#/web/lib/detail-tabs.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { repoWorkspaceBehavior } from '#/web/lib/workspace-layout.ts'
@@ -29,6 +23,9 @@ import { useRuntimeShortcutSettings } from '#/web/runtime-settings-shortcuts.ts'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { useFocusRegistry } from '#/web/components/tab-strip/useFocusRegistry.ts'
 import { useLanInfoQuery } from '#/web/settings-queries.ts'
+import { openExternalUrl } from '#/web/app-shell-client.ts'
+import { TopbarRepoControls } from '#/web/components/topbar/TopbarRepoControls.tsx'
+import { FocusProjectSwitcher } from '#/web/components/repo-workspace/FocusProjectSwitcher.tsx'
 import {
   branchDetailToolbarStoreActionsEqual,
   branchDetailToolbarStoreActionsFromStore,
@@ -140,6 +137,16 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
       }),
     )
   }, [detail.branch, focusedTerminalSession?.terminalId, lanInfo?.lanUrls, repo.id])
+  const terminalBrowserUrl = useMemo(() => {
+    if (!detail.branch?.worktree?.path || !lanInfo) return null
+    const accessHost = lanInfo.host === '0.0.0.0' ? '127.0.0.1' : lanInfo.host
+    return buildTerminalDeepLinkUrl(`http://${accessHost}:${lanInfo.port}`, {
+      repoId: repo.id,
+      worktreePath: detail.branch.worktree.path,
+      branch: detail.branch.name,
+      terminalId: focusedTerminalSession?.terminalId,
+    })
+  }, [detail.branch, focusedTerminalSession?.terminalId, lanInfo, repo.id])
 
   // No selected branch means there is no tab/action target; BranchDetailContent renders the empty state.
   if (!detail.branch) return null
@@ -157,11 +164,39 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
         ? 'branch-detail.expand-title'
         : 'branch-detail.collapse-title',
   )
-  const focusTogglePressed = behavior.detailFocusMode
   const showCollapseControl = behavior.detailCollapseAllowed && layout !== 'left-right'
+  // In the desktop left-right layout this toolbar is the right half of the
+  // window's top edge, so its unused surface is a drag region without the
+  // traffic-light padding owned by `.topbar`. Focus mode hides the sidebar,
+  // making this toolbar the full native window chrome instead.
+  const isWindowChrome = behavior.mode === 'focus'
   return (
-    <Toolbar variant="detail">
+    <Toolbar
+      variant="detail"
+      chrome={compact ? 'toolbar' : 'topbar'}
+      className={cn(layout === 'left-right' && '[-webkit-app-region:drag]', isWindowChrome && 'topbar')}
+    >
       <div className="flex h-full min-w-0 items-center gap-1 overflow-hidden">
+        {/* Focus mode hides the sidebar, so its collapse control mirrors
+         * here at the window's top-left to bring the sidebar back, and the
+         * project switcher stays reachable as a dropdown next to it. */}
+        {isWindowChrome && (
+          <>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleDetailFocusMode}
+              aria-label={t('branch-detail.exit-focus')}
+              title={t('branch-detail.exit-focus-title')}
+            >
+              <PanelLeftOpen />
+            </Button>
+            <FocusProjectSwitcher repoId={repo.id} />
+            {/* Focus-mode branch switcher / actions — previously topbar
+             * content; the component renders nothing outside focus mode. */}
+            <TopbarRepoControls repoId={repo.id} menuAlign="start" />
+          </>
+        )}
         {terminalWorktreeKey && (
           <TerminalTabs
             worktreeTerminalKey={terminalWorktreeKey}
@@ -202,6 +237,18 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
             <Button
               variant="ghost"
               size="icon"
+              onClick={() => {
+                if (terminalBrowserUrl) void openExternalUrl(terminalBrowserUrl)
+              }}
+              disabled={!terminalBrowserUrl}
+              aria-label={t('terminal.open-in-browser')}
+              title={t('terminal.open-in-browser-title')}
+            >
+              <Globe />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => setLanQrOpen(true)}
               aria-label={t('terminal.lan-qr')}
               title={t('terminal.lan-qr-title')}
@@ -210,21 +257,6 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
             </Button>
             <TerminalLanQrDialog open={lanQrOpen} onOpenChange={setLanQrOpen} urls={terminalLanUrls} />
           </>
-        )}
-        {behavior.detailFocusAllowed && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleDetailFocusMode}
-            aria-label={t(focusTogglePressed ? 'branch-detail.exit-focus' : 'branch-detail.focus')}
-            title={t(focusTogglePressed ? 'branch-detail.exit-focus-title' : 'branch-detail.focus-title')}
-            aria-pressed={focusTogglePressed}
-            className={cn(
-              focusTogglePressed && 'bg-tab-active text-foreground shadow-xs hover:bg-tab-active hover:text-foreground',
-            )}
-          >
-            {focusTogglePressed ? <Minimize2 /> : <Maximize2 />}
-          </Button>
         )}
         {showCollapseControl && (
           <Button

@@ -1,10 +1,14 @@
-import { type CSSProperties, type HTMLAttributes, type RefObject, useCallback } from 'react'
+import { type CSSProperties, type HTMLAttributes, type RefObject, useCallback, useMemo } from 'react'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import { BranchActionsDropdown } from '#/web/components/BranchActionsMenu.tsx'
 import { BranchSummaryInline } from '#/web/components/repo-workspace/BranchSummaryInline.tsx'
 import { cn } from '#/web/lib/cn.ts'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
-import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.ts'
+import { useBranchActionItems, type BranchActionItem } from '#/web/hooks/useBranchActionItems.tsx'
+import { useStoreWithEqualityFn } from 'zustand/traditional'
+import { useReposStore } from '#/web/stores/repos/store.ts'
+import { AsyncButton } from '#/web/components/AsyncButton.tsx'
+import { Tip } from '#/web/components/Tip.tsx'
 
 interface BranchRowSortable {
   setNodeRef: (node: HTMLLIElement | null) => void
@@ -57,7 +61,7 @@ export function BranchRow({
       onClick={() => onSelectBranch(branch.name)}
       onDoubleClick={() => onOpenBranchStatus(branch.name)}
       className={cn(
-        'relative grid min-h-8 items-stretch cursor-pointer',
+        'relative mx-1.5 grid min-h-8 items-stretch cursor-pointer rounded-[var(--goblin-brand-radius-md,var(--radius-md))]',
         showActions ? 'grid-cols-[minmax(0,1fr)_auto]' : 'grid-cols-1',
         'transition-colors duration-100',
         isSelected
@@ -66,13 +70,14 @@ export function BranchRow({
         sortable?.isDragging && 'z-10 bg-[var(--goblin-card-bg,var(--color-card))] text-foreground shadow-sm',
       )}
     >
-      <div className="pointer-events-none relative z-10 flex min-w-0 items-center px-4 py-1">
+      <div className="pointer-events-none relative z-10 flex min-w-0 items-center py-1 pl-2.5">
         <BranchSummaryInline repo={repo} branch={branch} selected={isSelected} />
       </div>
       {showActions && (
         <BranchRowActions
           repo={repo}
           branch={branch}
+          onSelectBranch={onSelectBranch}
           actionMenuOpen={actionMenuOpen}
           onActionMenuOpenChange={onActionMenuOpenChange}
         />
@@ -84,19 +89,33 @@ export function BranchRow({
 function BranchRowActions({
   repo,
   branch,
+  onSelectBranch,
   actionMenuOpen,
   onActionMenuOpenChange,
 }: {
   repo: BranchActionRepo
   branch: RepoBranchState
+  onSelectBranch: (branch: string) => void
   actionMenuOpen?: boolean
   onActionMenuOpenChange?: (open: boolean) => void
 }) {
   const actions = useBranchActionItems(repo, branch)
   return (
     <>
-      <div className="pointer-events-none relative z-20 flex shrink-0 items-center py-1 pr-4">
-        <div className="pointer-events-auto">
+      {/* Capture-phase so the buttons' stopPropagation can't skip it: any
+          row action must first move the selection (and thus the file tree)
+          to this branch, keeping the opened directory and the tree in sync. */}
+      <div
+        className="pointer-events-none relative z-20 flex shrink-0 items-center py-1 pr-2.5"
+        onClickCapture={() => onSelectBranch(branch.name)}
+      >
+        <div className="pointer-events-auto flex items-center gap-0.5">
+          {branch.worktree?.path && (
+            <div className="hidden md:flex items-center gap-0.5">
+              <BranchRowExternalActions actions={actions} />
+              <BranchRowRecentActions repo={repo} branch={branch} />
+            </div>
+          )}
           <BranchActionsDropdown
             repoId={repo.id}
             branchName={branch.name}
@@ -120,5 +139,125 @@ function BranchRowActions({
       ) : null}
       {actions.dialogs}
     </>
+  )
+}
+
+const REPEATABLE_ACTION_IDS = ['checkout', 'pull', 'push'] as const
+type RepeatableActionId = (typeof REPEATABLE_ACTION_IDS)[number]
+
+function BranchRowExternalActions({ actions }: { actions: ReturnType<typeof useBranchActionItems> }) {
+  const editorItem = actions.externalItems.find((item) => item.id === 'editor')
+  const terminalItem = actions.externalItems.find((item) => item.id === 'terminal')
+  return (
+    <>
+      {editorItem && (
+        <Tip label={editorItem.title ?? editorItem.label}>
+          <span className="inline-flex">
+            <AsyncButton
+              data-testid="branch-row-editor-btn"
+              variant="ghost"
+              size="icon-sm"
+              loading={editorItem.busy}
+              disabled={editorItem.disabled}
+              onClick={(e) => {
+                e.stopPropagation()
+                return editorItem.onSelect()
+              }}
+              aria-label={editorItem.ariaLabel ?? editorItem.label}
+            >
+              {() => editorItem.icon}
+            </AsyncButton>
+          </span>
+        </Tip>
+      )}
+      {terminalItem && (
+        <Tip label={terminalItem.title ?? terminalItem.label}>
+          <span className="inline-flex">
+            <AsyncButton
+              data-testid="branch-row-terminal-btn"
+              variant="ghost"
+              size="icon-sm"
+              loading={terminalItem.busy}
+              disabled={terminalItem.disabled}
+              onClick={(e) => {
+                e.stopPropagation()
+                return terminalItem.onSelect()
+              }}
+              aria-label={terminalItem.ariaLabel ?? terminalItem.label}
+            >
+              {() => terminalItem.icon}
+            </AsyncButton>
+          </span>
+        </Tip>
+      )}
+    </>
+  )
+}
+
+function BranchRowRecentActions({ repo, branch }: { repo: BranchActionRepo; branch: RepoBranchState }) {
+  const ids = useStoreWithEqualityFn(
+    useReposStore,
+    (s) => {
+      const r = s.repos[repo.id]
+      if (!r) return [] as RepeatableActionId[]
+      const found: RepeatableActionId[] = []
+      for (let i = r.events.length - 1; i >= 0 && found.length < 1; i--) {
+        const ev = r.events[i]
+        if (
+          ev.kind === 'result' &&
+          ev.action &&
+          (REPEATABLE_ACTION_IDS as readonly string[]).includes(ev.action.kind) &&
+          ev.action.branch === branch.name
+        ) {
+          const id = ev.action.kind as RepeatableActionId
+          if (!found.includes(id)) found.push(id)
+        }
+      }
+      return found
+    },
+    (a, b) => a.length === b.length && a.every((id, i) => id === b[i]),
+  )
+
+  if (ids.length === 0) return null
+  return <BranchRowRecentActionsInner repo={repo} branch={branch} ids={ids} />
+}
+
+function BranchRowRecentActionsInner({
+  repo,
+  branch,
+  ids,
+}: {
+  repo: BranchActionRepo
+  branch: RepoBranchState
+  ids: RepeatableActionId[]
+}) {
+  const actions = useBranchActionItems(repo, branch)
+  const itemMap = useMemo(() => new Map(actions.mainItems.map((item) => [item.id, item])), [actions.mainItems])
+
+  return (
+    <div className="flex items-center gap-0.5">
+      {ids
+        .map((id) => itemMap.get(id))
+        .filter((item): item is BranchActionItem => item !== undefined)
+        .map((item) => (
+          <Tip key={item.id} label={item.title ?? item.label}>
+            <span className="inline-flex">
+              <AsyncButton
+                variant="ghost"
+                size="icon-sm"
+                loading={item.busy}
+                disabled={item.disabled}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  return item.onSelect()
+                }}
+                aria-label={item.ariaLabel ?? item.label}
+              >
+                {() => item.icon}
+              </AsyncButton>
+            </span>
+          </Tip>
+        ))}
+    </div>
   )
 }

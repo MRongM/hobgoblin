@@ -147,6 +147,44 @@ describe('settings-client', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  test('sets project color themes through the embedded server', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const repoSettings = [{ repoId: '/tmp/repo-a', colorTheme: 'cursor' }]
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ ok: true, repoSettings }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ ok: true, repoSettings: [] }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { setProjectColorTheme } = await import('#/web/settings-client.ts')
+    await expect(setProjectColorTheme('/tmp/repo-a', 'cursor')).resolves.toEqual(repoSettings)
+    await expect(setProjectColorTheme('/tmp/repo-a', null)).resolves.toEqual([])
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'http://127.0.0.1:32100/api/settings/repo-theme',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
+        body: JSON.stringify({ repoId: '/tmp/repo-a', colorTheme: 'cursor' }),
+      }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'http://127.0.0.1:32100/api/settings/repo-theme',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
+        body: JSON.stringify({ repoId: '/tmp/repo-a', colorTheme: null }),
+      }),
+    )
+  })
+
   test('fetches i18n payload from embedded server when no Electron bridge exists', async () => {
     installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
     const fetchMock = vi.fn(async () => ({

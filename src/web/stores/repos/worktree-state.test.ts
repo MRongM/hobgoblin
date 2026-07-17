@@ -151,6 +151,29 @@ describe('worktree state selectors', () => {
     expect(getBranchWorktreeState(repo, branch)).toMatchObject({
       dirty: false,
       changeCount: 0,
+      changeCountKnown: false,
+    })
+  })
+
+  test('marks status-derived worktree change counts as known', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    repo.data.status = [
+      {
+        path: '/tmp/worktree-a',
+        branch: 'feature/a',
+        isMain: false,
+        entries: [
+          { x: 'M', y: ' ', path: 'src/a.ts' },
+          { x: '?', y: '?', path: 'src/b.ts' },
+        ],
+      },
+    ]
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+
+    expect(getBranchWorktreeState(repo, branch)).toMatchObject({
+      dirty: true,
+      changeCount: 2,
+      changeCountKnown: true,
     })
   })
 
@@ -171,6 +194,7 @@ describe('worktree state selectors', () => {
     expect(getBranchWorktreeState(repo, branch)).toMatchObject({
       dirty: true,
       changeCount: 1,
+      changeCountKnown: false,
     })
   })
 })

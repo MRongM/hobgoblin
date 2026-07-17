@@ -691,4 +691,142 @@ describe('repo-client', () => {
       }),
     )
   })
+
+  test('deletes remote server branch through the embedded server', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, message: 'deleted' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { deleteRepositoryRemoteBranch } = await import('#/web/repo-client.ts')
+    await expect(deleteRepositoryRemoteBranch('/tmp/repo', 'origin', 'feature/remove-me')).resolves.toEqual({
+      ok: true,
+      message: 'deleted',
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:32100/api/repo/delete-remote-branch',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
+        body: JSON.stringify({ cwd: '/tmp/repo', remote: 'origin', branch: 'feature/remove-me' }),
+      }),
+    )
+  })
+
+  test('loads remote tags through the embedded server', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ['origin/v1.0.0'],
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { getRepositoryRemoteTags } = await import('#/web/repo-client.ts')
+    await expect(getRepositoryRemoteTags('/tmp/repo')).resolves.toEqual(['origin/v1.0.0'])
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:32100/api/repo/remote-tags',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
+        body: JSON.stringify({ cwd: '/tmp/repo' }),
+      }),
+    )
+  })
+
+  test('loads local tags through the embedded server', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ['v1.0.0'],
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { getRepositoryLocalTags } = await import('#/web/repo-client.ts')
+    await expect(getRepositoryLocalTags('/tmp/repo')).resolves.toEqual(['v1.0.0'])
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:32100/api/repo/local-tags',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
+        body: JSON.stringify({ cwd: '/tmp/repo' }),
+      }),
+    )
+  })
+
+  test('creates local tags through the embedded server', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, message: 'created' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { createRepositoryLocalTag } = await import('#/web/repo-client.ts')
+    await expect(createRepositoryLocalTag('/tmp/repo', 'v1.0.0', 'HEAD')).resolves.toEqual({
+      ok: true,
+      message: 'created',
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:32100/api/repo/create-local-tag',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
+        body: JSON.stringify({ cwd: '/tmp/repo', name: 'v1.0.0', ref: 'HEAD' }),
+      }),
+    )
+  })
+
+  test('deletes local tags through the embedded server', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, message: 'deleted' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { deleteRepositoryLocalTag } = await import('#/web/repo-client.ts')
+    await expect(deleteRepositoryLocalTag('/tmp/repo', 'v1.0.0')).resolves.toEqual({
+      ok: true,
+      message: 'deleted',
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:32100/api/repo/delete-local-tag',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
+        body: JSON.stringify({ cwd: '/tmp/repo', name: 'v1.0.0' }),
+      }),
+    )
+  })
+
+  test('deletes remote server tag through the embedded server', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, message: 'deleted' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { deleteRepositoryRemoteTag } = await import('#/web/repo-client.ts')
+    await expect(deleteRepositoryRemoteTag('/tmp/repo', 'origin', 'release/v1.0.0')).resolves.toEqual({
+      ok: true,
+      message: 'deleted',
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:32100/api/repo/delete-remote-tag',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
+        body: JSON.stringify({ cwd: '/tmp/repo', remote: 'origin', tag: 'release/v1.0.0' }),
+      }),
+    )
+  })
 })

@@ -1,6 +1,7 @@
 import { useStoreWithEqualityFn } from 'zustand/traditional'
-import { EmptyState, ScrollPane } from '#/web/components/Layout.tsx'
-import { BranchStatus } from '#/web/components/branch-detail/BranchStatus.tsx'
+import { EmptyState, ScrollPane, Toolbar } from '#/web/components/Layout.tsx'
+import { CopyButton } from '#/web/components/CopyButton.tsx'
+import { BranchStatus, branchStatusClipboardText } from '#/web/components/branch-detail/BranchStatus.tsx'
 import type { BranchDetailRepo } from '#/web/components/branch-detail/model.ts'
 import { getSelectedBranchDetailPresentation } from '#/web/components/branch-detail/model.ts'
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
@@ -12,12 +13,17 @@ interface ProjectStatusPanelProps {
   layout: RepoWorkspaceLayout
 }
 
-function projectStatusRepoEqual(a: BranchDetailRepo | undefined, b: BranchDetailRepo | undefined): boolean {
+type ProjectStatusRepo = BranchDetailRepo & {
+  name: string
+}
+
+function projectStatusRepoEqual(a: ProjectStatusRepo | undefined, b: ProjectStatusRepo | undefined): boolean {
   return (
     a === b ||
     (!!a &&
       !!b &&
       a.id === b.id &&
+      a.name === b.name &&
       a.instanceToken === b.instanceToken &&
       a.data.branches === b.data.branches &&
       a.data.currentBranch === b.data.currentBranch &&
@@ -49,6 +55,7 @@ export function ProjectStatusPanel({ repoId, layout }: ProjectStatusPanelProps) 
       return repo
         ? {
             id: repo.id,
+            name: repo.name,
             instanceToken: repo.instanceToken,
             data: {
               branches: repo.data.branches,
@@ -91,9 +98,32 @@ export function ProjectStatusPanel({ repoId, layout }: ProjectStatusPanelProps) 
     return <EmptyState title={t(repo.data.branches.length === 0 ? 'branches.empty' : 'branches.filter-empty')} />
   }
 
+  const copyAllValue = branchStatusClipboardText(detail, repo.name, repo.id, t)
+
   return (
-    <ScrollPane>
-      <BranchStatus detail={detail} layout={layout} />
-    </ScrollPane>
+    <section className="flex min-h-0 flex-1 flex-col bg-pane">
+      <ProjectStatusToolbar copyAllValue={copyAllValue} />
+      <ScrollPane>
+        <BranchStatus detail={detail} repoName={repo.name} repoId={repo.id} layout={layout} />
+      </ScrollPane>
+    </section>
+  )
+}
+
+function ProjectStatusToolbar({ copyAllValue }: { copyAllValue: string }) {
+  const t = useT()
+
+  return (
+    <Toolbar data-testid="project-status-toolbar" className="gap-2 px-2">
+      <div data-testid="project-status-left-actions" className="flex min-w-0 items-center gap-1">
+        <CopyButton
+          value={copyAllValue}
+          copyLabel={t('branch-status.copy-all')}
+          copiedLabel={t('branch-status.copied')}
+          disabled={!copyAllValue}
+          className="shrink-0"
+        />
+      </div>
+    </Toolbar>
   )
 }

@@ -43,12 +43,11 @@ export function buildRuntimeSettingsSnapshot(input: {
     terminalCustomButtonSize: input.prefs.terminalCustomButtonSize,
     terminalCustomButtons: input.prefs.terminalCustomButtons,
     lanEnabled: input.prefs.lanEnabled,
+    serverPort: input.prefs.serverPort,
   }
 }
 
-export function buildRuntimeRecentReposState(input: {
-  recentRepos: RepoSessionEntry[]
-}): RuntimeRecentReposState {
+export function buildRuntimeRecentReposState(input: { recentRepos: RepoSessionEntry[] }): RuntimeRecentReposState {
   return {
     recentRepos: input.recentRepos,
   }
@@ -105,6 +104,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     | 'terminalCustomButtonSize'
     | 'terminalCustomButtons'
     | 'lanEnabled'
+    | 'serverPort'
   >,
 ): RuntimeSettingsSnapshot {
   return {
@@ -138,6 +138,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     terminalCustomButtonSize: snapshot.terminalCustomButtonSize,
     terminalCustomButtons: snapshot.terminalCustomButtons,
     lanEnabled: snapshot.lanEnabled,
+    serverPort: snapshot.serverPort,
   }
 }
 
@@ -149,8 +150,6 @@ export function runtimeRecentReposStateFromSettingsSnapshot(
   }
 }
 
-export function restorableSessionStateFromSettingsSnapshot(
-  snapshot: Pick<SettingsSnapshot, 'session'>,
-): SessionState {
+export function restorableSessionStateFromSettingsSnapshot(snapshot: Pick<SettingsSnapshot, 'session'>): SessionState {
   return snapshot.session
 }

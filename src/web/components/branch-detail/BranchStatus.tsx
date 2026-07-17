@@ -3,6 +3,8 @@ import {
   ArrowUp,
   Check,
   Clock,
+  FolderGit2,
+  FolderOpen,
   FolderTree,
   GitBranch,
   GitMerge,
@@ -15,7 +17,11 @@ import {
 import { useT } from '#/web/stores/i18n.ts'
 import { EmptyState } from '#/web/components/Layout.tsx'
 import { CopyButton } from '#/web/components/CopyButton.tsx'
-import { PullRequestStatusRow } from '#/web/components/branch-detail/PullRequestStatusRow.tsx'
+import {
+  PullRequestStatusRow,
+  pullRequestClipboardValue,
+  type TFn,
+} from '#/web/components/branch-detail/PullRequestStatusRow.tsx'
 import {
   CopyableValue,
   MonoValue,
@@ -31,8 +37,17 @@ import type { SelectedBranchDetail } from '#/web/components/branch-detail/model.
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { repoWorkspaceBehavior } from '#/web/lib/workspace-layout.ts'
 import { cn } from '#/web/lib/cn.ts'
+import { lastPathSegment } from '#/web/lib/paths.ts'
+
+function worktreeFolderName(worktreePath: string | undefined, repoId: string): string {
+  const fromWorktree = worktreePath ? lastPathSegment(worktreePath) : ''
+  if (fromWorktree) return fromWorktree
+  return lastPathSegment(repoId) || repoId
+}
 interface Props {
   detail: SelectedBranchDetail
+  repoName: string
+  repoId: string
   layout: RepoWorkspaceLayout
 }
 
@@ -92,6 +107,52 @@ function formatCommitTime(value: string): string {
   })
 }
 
+function syncClipboardValue(branch: NonNullable<SelectedBranchDetail['branch']>, t: TFn): string {
+  if (!branch.tracking) return t('branches.no-upstream')
+  const parts = [
+    branch.ahead > 0 ? t('branch-status.sync.ahead', { n: branch.ahead }) : null,
+    branch.behind > 0 ? t('branch-status.sync.behind', { n: branch.behind }) : null,
+  ].filter((part): part is string => part !== null)
+  return parts.length > 0 ? parts.join(', ') : t('branch-status.sync.up-to-date')
+}
+
+function mergeClipboardValue(branch: NonNullable<SelectedBranchDetail['branch']>, t: TFn): string {
+  if (branch.isDefault) return ''
+  if (branch.mergedToDefault === undefined) return t('branch-status.merge-unknown')
+  return branch.mergedToDefault ? t('branch-status.merged') : t('branch-status.not-merged')
+}
+
+function emptyClipboardValue(value: string): string {
+  return value.trim().length > 0 ? value : '—'
+}
+
+export function branchStatusClipboardText(detail: SelectedBranchDetail, repoName: string, repoId: string, t: TFn): string {
+  const { branch } = detail
+  if (!branch) return ''
+
+  const folderName = worktreeFolderName(branch.worktree?.path, repoId)
+
+  const pullRequest =
+    branch.pullRequest && branchPullRequestBelongsToBranch(branch, branch.pullRequest) ? branch.pullRequest : undefined
+  const rows: Array<[string, string]> = [
+    [t('branch-status.signal.folder'), folderName],
+    [t('branch-status.signal.project'), repoName],
+    [t('branch-status.signal.branch'), branch.name],
+    [t('branch-status.signal.worktree'), branch.worktree?.path ?? t('branch-status.worktree.none')],
+    [t('branch-status.signal.upstream'), branch.tracking ?? t('branches.no-upstream')],
+    [t('branch-status.signal.sync'), syncClipboardValue(branch, t)],
+    [t('branch-status.signal.commit-hash'), branch.lastCommitHash],
+    [t('branch-status.signal.commit-message'), branch.lastCommitMessage],
+    [t('branch-status.signal.commit-author'), branch.lastCommitAuthor],
+    [t('branch-status.signal.commit-time'), branch.lastCommitDate],
+  ]
+
+  if (!branch.isDefault) rows.push([t('branch-status.signal.merge'), mergeClipboardValue(branch, t)])
+  if (pullRequest) rows.push([t('branch-status.signal.pr'), pullRequestClipboardValue(pullRequest, t)])
+
+  return rows.map(([label, value]) => `${label}: ${emptyClipboardValue(value)}`).join('\n')
+}
+
 function CommitMetadataValue({
   value,
   displayValue = value,
@@ -125,12 +186,14 @@ function CommitMetadataValue({
   )
 }
 
-export function BranchStatus({ detail, layout }: Props) {
+export function BranchStatus({ detail, repoName, repoId, layout }: Props) {
   const t = useT()
   const compact = useIsCompactUi()
   const { branch, statusCount } = detail
   const behavior = repoWorkspaceBehavior(layout, false)
   if (!branch) return <EmptyState title={t('branches.empty')} />
+
+  const folderName = worktreeFolderName(branch.worktree?.path, repoId)
 
   const protectedBranch = PROTECTED_BRANCHES.has(branch.name)
   const worktreePath = branch.worktree?.path ?? ''
@@ -193,6 +256,32 @@ export function BranchStatus({ detail, layout }: Props) {
   ) : undefined
   return (
     <StatusRows>
+      <StatusRow
+        icon={<FolderOpen size={14} />}
+        label={t('branch-status.signal.folder')}
+        value={
+          <CommitMetadataValue
+            value={folderName}
+            copyLabel={t('branch-status.copy-folder-name')}
+            copiedLabel={t('branch-status.copied')}
+          />
+        }
+        valueLayout="fill"
+        tone="neutral"
+      />
+      <StatusRow
+        icon={<FolderGit2 size={14} />}
+        label={t('branch-status.signal.project')}
+        value={
+          <CommitMetadataValue
+            value={repoName}
+            copyLabel={t('branch-status.copy-project-name')}
+            copiedLabel={t('branch-status.copied')}
+          />
+        }
+        valueLayout="fill"
+        tone="brand"
+      />
       <StatusRow
         icon={<GitBranch size={15} />}
         label={t('branch-status.signal.branch')}

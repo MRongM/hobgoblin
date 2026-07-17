@@ -2,19 +2,19 @@ import { Terminal } from 'lucide-react'
 import { cn } from '#/web/lib/cn.ts'
 
 const activeGlowStyle = {
-  boxShadow: '0 0 10px rgb(var(--color-success-rgb) / 0.82)',
+  boxShadow: '0 0 10px rgb(var(--color-terminal-activity-rgb) / 0.82)',
 }
 
 const activeIconStyle = {
-  filter: 'drop-shadow(0 0 4px rgb(var(--color-success-rgb) / 0.9))',
+  filter: 'drop-shadow(0 0 4px rgb(var(--color-terminal-activity-rgb) / 0.9))',
 }
 
 const compactGlowStyle = {
-  boxShadow: '0 0 5px rgb(var(--color-success-rgb) / 0.72)',
+  boxShadow: '0 0 5px rgb(var(--color-terminal-activity-rgb) / 0.72)',
 }
 
 const compactIconStyle = {
-  filter: 'drop-shadow(0 0 2px rgb(var(--color-success-rgb) / 0.82))',
+  filter: 'drop-shadow(0 0 2px rgb(var(--color-terminal-activity-rgb) / 0.82))',
 }
 
 const effectStyles = {
@@ -73,7 +73,7 @@ export function TerminalOutputActivityIndicator({
           <span
             data-terminal-output-activity-glow
             className={cn(
-              'absolute inline-flex animate-pulse rounded-full bg-success-surface opacity-100',
+              'absolute inline-flex animate-pulse rounded-full bg-terminal-activity-surface opacity-100',
               effectStyle.glowClassName,
             )}
             style={effectStyle.glowStyle}
@@ -82,7 +82,7 @@ export function TerminalOutputActivityIndicator({
           <span
             data-terminal-output-activity-ping
             className={cn(
-              'absolute inline-flex animate-ping rounded-full border border-success bg-success opacity-60',
+              'absolute inline-flex animate-ping rounded-full border border-terminal-activity-border bg-terminal-activity opacity-60',
               effectStyle.pingClassName,
             )}
             aria-hidden="true"
@@ -91,7 +91,11 @@ export function TerminalOutputActivityIndicator({
       )}
       <Terminal
         size={iconSize}
-        className={cn('relative shrink-0', active ? 'animate-pulse text-success' : 'text-current', iconClassName)}
+        className={cn(
+          'relative shrink-0',
+          active ? 'animate-pulse text-terminal-activity' : 'text-current',
+          iconClassName,
+        )}
         style={active ? effectStyle.iconStyle : undefined}
         aria-hidden="true"
       />

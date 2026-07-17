@@ -21,10 +21,12 @@ import {
   checkoutBranchInWorktree,
   commitRepositoryChanges,
   mergeRepositoryBranch,
+  pullRepositoryBranch,
   resetRepositoryHard,
 } from '#/web/repo-client.ts'
 import { useT } from '#/web/stores/i18n.ts'
-import type { BranchActionItem } from '#/web/hooks/useBranchActionItems.ts'
+import { toast } from 'sonner'
+import type { BranchActionItem } from '#/web/hooks/useBranchActionItems.tsx'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 
@@ -72,7 +74,9 @@ export function useBranchWriteActions(
   async function handleCheckoutTo(targetBranch: string) {
     if (!worktreePath) return
     const result = await checkoutBranchInWorktree(repo.id, worktreePath, targetBranch)
-    setLastResult(repo.id, result, repo.instanceToken)
+    setLastResult(repo.id, result, repo.instanceToken, {
+      action: { kind: 'checkout', branch: targetBranch, worktreePath },
+    })
     if (!result.ok) throw new Error(result.message)
     checkoutToDialog.close()
   }
@@ -80,14 +84,27 @@ export function useBranchWriteActions(
   async function handleMerge(sourceBranch: string): Promise<ExecResult> {
     if (!worktreePath) return { ok: false, message: 'error.invalid-arguments' }
     const result = await mergeRepositoryBranch(repo.id, worktreePath, sourceBranch)
-    setLastResult(repo.id, result, repo.instanceToken)
+    setLastResult(repo.id, result, repo.instanceToken, {
+      action: { kind: 'merge', branch: branch.name, sourceBranch, worktreePath },
+    })
+    return result
+  }
+
+  async function handlePull(): Promise<ExecResult> {
+    if (!worktreePath) return { ok: false, message: 'error.invalid-arguments' }
+    const result = await pullRepositoryBranch(repo.id, branch.name, worktreePath)
+    setLastResult(repo.id, result, repo.instanceToken, {
+      action: { kind: 'pull', branch: branch.name, worktreePath },
+    })
     return result
   }
 
   async function handleCommit(message: string) {
     if (!worktreePath) return
     const result = await commitRepositoryChanges(repo.id, worktreePath, message)
-    setLastResult(repo.id, result, repo.instanceToken)
+    setLastResult(repo.id, result, repo.instanceToken, {
+      action: { kind: 'commit', branch: branch.name, message, worktreePath },
+    })
     if (!result.ok) throw new Error(result.message)
   }
 
@@ -163,7 +180,13 @@ export function useBranchWriteActions(
       visible: true,
       icon: createElement(SendHorizontal),
       onSelect: () => {
-        if (worktreePath) inlineCommitDraftActions.openDraft(repo.id, worktreePath)
+        if (!worktreePath) return
+        const worktreeStatus = repo.data.status.find((s) => s.path === worktreePath)
+        if (!worktreeStatus || worktreeStatus.entries.length === 0) {
+          toast.info(t('action.commit-no-changes'))
+          return
+        }
+        inlineCommitDraftActions.openDraft(repo.id, worktreePath)
       },
     },
   ]
@@ -212,6 +235,7 @@ export function useBranchWriteActions(
         branch={branch}
         allBranches={allBranches}
         onClose={mergeDialog.close}
+        onPull={options.canPush ? handlePull : undefined}
         onMerge={handleMerge}
         onPush={options.canPush ? options.onPush : undefined}
       />

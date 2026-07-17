@@ -1,23 +1,17 @@
-// Top app bar with embedded tab strip. Holds the ambient settings entry.
-// The .topbar CSS rule turns this into the OS drag region; child buttons
-// opt out via -webkit-app-region: no-drag (set globally on `button` and
-// any element with `data-interactive`).
+// Top app bar with embedded tab strip. The .topbar CSS rule turns this into
+// the OS drag region; child buttons opt out via -webkit-app-region: no-drag
+// (set globally on `button` and any element with `data-interactive`).
+// The ambient settings entry lives in the bottom status bar.
 
 import type { ReactNode } from 'react'
-import { Settings } from 'lucide-react'
-import { useT } from '#/web/stores/i18n.ts'
-import { Tip } from '#/web/components/Tip.tsx'
-import { Button } from '#/web/components/ui/button.tsx'
 import { useRuntimeChromeSettings } from '#/web/runtime-settings-chrome.ts'
 
 interface Props {
-  onOpenSettings: () => void
   children: ReactNode
   actions?: ReactNode
 }
 
-export function Topbar({ onOpenSettings, children, actions }: Props) {
-  const t = useT()
+export function Topbar({ children, actions }: Props) {
   const { topbarHeightPx } = useRuntimeChromeSettings()
 
   return (
@@ -27,18 +21,10 @@ export function Topbar({ onOpenSettings, children, actions }: Props) {
     >
       {children}
       {actions && (
-        <>
-          <div data-testid="topbar-actions" className="flex h-full shrink-0 items-center gap-1">
-            {actions}
-          </div>
-          <div aria-hidden="true" className="h-4 w-px shrink-0 bg-separator/70" />
-        </>
+        <div data-testid="topbar-actions" className="flex h-full shrink-0 items-center gap-1">
+          {actions}
+        </div>
       )}
-      <Tip label={t('topbar.settings')}>
-        <Button variant="ghost" size="icon" onClick={() => onOpenSettings()} aria-label={t('topbar.settings')}>
-          <Settings />
-        </Button>
-      </Tip>
     </div>
   )
 }

@@ -9,6 +9,7 @@ import {
   getServerTerminalSessionSnapshot,
   handleRealtimeServerMessage,
   listServerTerminalSessions,
+  pruneServerTerminals,
   reorderServerTerminals,
   attachServerTerminal,
   registerTerminalSocket,
@@ -370,6 +371,47 @@ describe('server terminal sessions', () => {
     expect(reopened.ok).toBe(true)
     if (!reopened.ok) return
     expect(reopened.key).toBe('/repo\u0000/repo-linked\u0000terminal-1')
+  })
+
+  test('prune keeps sessions when authoritative worktree read is empty', async () => {
+    const sessionId = await createTerminalSession('client_1')
+    vi.mocked(getWorktrees).mockResolvedValueOnce([])
+
+    await expect(pruneServerTerminals('client_1', '/repo')).resolves.toEqual({
+      pruned: 0,
+      remaining: 1,
+    })
+    await expect(listServerTerminalSessions('client_1', '/repo')).resolves.toEqual([
+      expect.objectContaining({ sessionId, key: '/repo\u0000/repo-linked\u0000terminal-1' }),
+    ])
+    expect(getWorktrees).toHaveBeenLastCalledWith('/repo', { includeStatus: false })
+  })
+
+  test('prune closes only sessions missing from authoritative worktree paths', async () => {
+    vi.mocked(getWorktrees).mockResolvedValue([
+      { path: '/repo-linked', branch: 'feature', isBare: false, isPrimary: false },
+      { path: '/repo-other', branch: 'other', isBare: false, isPrimary: false },
+    ])
+    const keptSessionId = await createTerminalSession('client_1', {
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+    })
+    const prunedSessionId = await createTerminalSession('client_1', {
+      branch: 'other',
+      worktreePath: '/repo-other',
+    })
+    vi.mocked(getWorktrees).mockResolvedValueOnce([
+      { path: '/repo-linked', branch: 'feature', isBare: false, isPrimary: false },
+    ])
+
+    await expect(pruneServerTerminals('client_1', '/repo')).resolves.toEqual({ pruned: 1, remaining: 1 })
+    await expect(listServerTerminalSessions('client_1', '/repo')).resolves.toEqual([
+      expect.objectContaining({ sessionId: keptSessionId, key: '/repo\u0000/repo-linked\u0000terminal-1' }),
+    ])
+    expect(mockPtys[1]?.kill).toHaveBeenCalledTimes(1)
+    await expect(listServerTerminalSessions('client_1', '/repo')).resolves.not.toContainEqual(
+      expect.objectContaining({ sessionId: prunedSessionId }),
+    )
   })
 
   test('clears stale canonical title when the foreground process returns to the shell without a new title', async () => {

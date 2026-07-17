@@ -164,7 +164,10 @@ class TerminalCatalog {
     if (isRemoteRepoId(repoRoot)) return { pruned: 0, remaining: allSessions.length }
 
     const worktrees = await getWorktrees(repoRoot, { includeStatus: false })
+    if (worktrees.length === 0) return { pruned: 0, remaining: allSessions.length }
+
     const liveWorktreePaths = new Set(worktrees.map((worktree) => terminalSessionScope(worktree.path)))
+
     let pruned = 0
     for (const session of allSessions) {
       const parsed = parseSessionKey(session.key)

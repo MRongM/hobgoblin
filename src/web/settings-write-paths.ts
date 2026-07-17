@@ -26,8 +26,10 @@ import {
   setGitNetworkProxyUrl,
   setGitNetworkTimeoutSec,
   setLanEnabled,
+  setServerPort,
   setPreferredEditorApp,
   setPreferredTerminalApp,
+  setProjectColorTheme,
   setRemoteTerminalTmuxEnabled,
   setSettingsFetchInterval,
   setShortcutsDisabled,
@@ -52,6 +54,7 @@ import {
   updateRestorableSessionStateCache,
   updateRuntimeRecentReposStateCache,
   updateRuntimeSettingsSnapshotCache,
+  updateSettingsSnapshotCache,
 } from '#/web/settings-query-cache.ts'
 
 export async function recordRecentRepo(repo: RepoSessionEntry): Promise<void> {
@@ -77,7 +80,10 @@ export async function setFetchIntervalPreference(sec: number): Promise<number> {
 
 export async function setTerminalNotificationsEnabledPreference(enabled: boolean): Promise<void> {
   await setTerminalNotificationsEnabled(enabled)
-  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, terminalNotificationsEnabled: enabled }))
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
+    ...current,
+    terminalNotificationsEnabled: enabled,
+  }))
 }
 
 export async function setShortcutsDisabledPreference(disabled: boolean): Promise<void> {
@@ -87,7 +93,10 @@ export async function setShortcutsDisabledPreference(disabled: boolean): Promise
 
 export async function setGlobalShortcutDisabledPreference(disabled: boolean): Promise<void> {
   await setGlobalShortcutDisabled(disabled)
-  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, globalShortcutDisabled: disabled }))
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
+    ...current,
+    globalShortcutDisabled: disabled,
+  }))
 }
 
 export async function setSwapCloseShortcutsPreference(swapped: boolean): Promise<void> {
@@ -185,6 +194,17 @@ export async function setFontFamilyPreference(fontFamily: FontFamilyPref): Promi
   return nextFontFamily
 }
 
+export async function setProjectColorThemePreference(
+  repoId: string,
+  colorTheme: Parameters<typeof setProjectColorTheme>[1],
+): Promise<void> {
+  const repoSettings = await setProjectColorTheme(repoId, colorTheme)
+  updateSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
+    ...current,
+    repoSettings,
+  }))
+}
+
 export async function setRemoteTerminalTmuxEnabledPreference(enabled: boolean): Promise<void> {
   await setRemoteTerminalTmuxEnabled(enabled)
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
@@ -231,6 +251,11 @@ export async function setLanEnabledPreference(enabled: boolean): Promise<void> {
   await setLanEnabled(enabled)
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, lanEnabled: enabled }))
   void mainWindowQueryClient.invalidateQueries({ queryKey: lanInfoQueryKey() })
+}
+
+export async function setServerPortPreference(port: number): Promise<void> {
+  await setServerPort(port)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, serverPort: port }))
 }
 
 export async function setGitNetworkProxyEnabledPreference(enabled: boolean): Promise<void> {

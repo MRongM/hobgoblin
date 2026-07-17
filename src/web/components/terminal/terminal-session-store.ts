@@ -135,6 +135,29 @@ export function useRepoTerminalHasBell(repoRoot: string | null, worktreePaths: r
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
 
+export function useRepoTerminalCount(repoRoot: string | null, worktreePaths: readonly string[]): number {
+  const readContext = useContext(TerminalSessionReadContext)
+  const worktreeKeys = useMemo(
+    () => (repoRoot ? worktreePaths.map((path) => makeWorktreeTerminalKey(repoRoot, path)) : []),
+    [repoRoot, worktreePaths],
+  )
+  const subscribe = useCallback(
+    (listener: () => void) => {
+      if (!readContext || worktreeKeys.length === 0) return () => {}
+      const unsubscribers = worktreeKeys.map((key) => readContext.subscribeWorktree(key, listener))
+      return () => {
+        for (const unsubscribe of unsubscribers) unsubscribe()
+      }
+    },
+    [readContext, worktreeKeys],
+  )
+  const getSnapshot = useCallback(
+    () => (readContext ? worktreeKeys.reduce((sum, key) => sum + readContext.worktreeSnapshot(key).count, 0) : 0),
+    [readContext, worktreeKeys],
+  )
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+}
+
 export function useRepoTerminalHasOutputActivity(repoRoot: string | null, worktreePaths: readonly string[]): boolean {
   const readContext = useContext(TerminalSessionReadContext)
   const worktreeKeys = useMemo(

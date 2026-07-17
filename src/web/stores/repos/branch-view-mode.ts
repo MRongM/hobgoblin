@@ -1,4 +1,5 @@
-import type { BranchViewMode, RepoBranchState, RepoState } from '#/web/stores/repos/types.ts'
+import type { RepoBranchState, RepoState } from '#/web/stores/repos/types.ts'
+type BranchViewMode = 'all' | 'worktrees' | 'no-worktree'
 interface BranchSelectionInput {
   branches: RepoBranchState[]
   currentBranch: string
@@ -95,5 +96,5 @@ export function selectedBranchForViewMode(repo: RepoState, viewMode: BranchViewM
 }
 
 export function branchForVisibleLog(repo: RepoState): string | null {
-  return repo.ui.selectedBranch ?? (repo.ui.branchViewMode === 'all' ? repo.data.currentBranch : null)
+  return repo.ui.selectedBranch
 }

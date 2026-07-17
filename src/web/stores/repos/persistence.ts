@@ -2,10 +2,14 @@ import { LRUCache } from 'lru-cache'
 import * as v from 'valibot'
 import type { ReposSet } from '#/web/stores/repos/types.ts'
 import { selectedBranchForBranchSet } from '#/web/stores/repos/branch-view-mode.ts'
-import type { RestorableRepoSnapshot, RepoState } from '#/web/stores/repos/types.ts'
+import type { ExplorerTab, RestorableRepoSnapshot, RepoState } from '#/web/stores/repos/types.ts'
 import { finishResourceSuccess } from '#/web/stores/repos/resources.ts'
 import { stripBranchWorktreeMetadata } from '#/web/stores/repos/worktree-state.ts'
 import { DEFAULT_WORKSPACE_LAYOUT, normalizeFileTreePaneSizes } from '#/shared/workspace-layout.ts'
+import type { BranchActionItemId } from '#/web/hooks/branch-action-state.ts'
+
+export const rememberedQuickActions = new Map<string, BranchActionItemId>()
+
 const MAX_CACHE_AGE_MS = 14 * 24 * 60 * 60 * 1000
 const MAX_REPOS = 50
 const FiniteNumber = v.pipe(v.number(), v.finite())
@@ -55,6 +59,19 @@ const WorktreeStateSchema = v.object({
   isLocked: v.optional(v.boolean()),
 })
 
+const RepoEventActionSchema = v.union([
+  v.object({ kind: v.literal('checkout'), branch: v.string(), worktreePath: v.optional(v.string()) }),
+  v.object({ kind: v.literal('pull'), branch: v.string(), worktreePath: v.string() }),
+  v.object({ kind: v.literal('push'), branch: v.string(), worktreePath: v.optional(v.string()) }),
+  v.object({ kind: v.literal('commit'), branch: v.string(), message: v.string(), worktreePath: v.string() }),
+  v.object({ kind: v.literal('merge'), branch: v.string(), sourceBranch: v.string(), worktreePath: v.string() }),
+  v.object({ kind: v.literal('createWorktree'), branch: v.string(), worktreePath: v.string() }),
+  v.object({ kind: v.literal('createBranch'), branch: v.string(), baseBranch: v.string() }),
+  v.object({ kind: v.literal('trackRemoteBranch'), branch: v.string(), remoteRef: v.string() }),
+  v.object({ kind: v.literal('deleteBranch'), branch: v.string() }),
+  v.object({ kind: v.literal('removeWorktree'), branch: v.string(), worktreePath: v.string(), alsoDeleteBranch: v.boolean() }),
+])
+
 const RestorableRepoSnapshotSchema = v.object({
   savedAt: FiniteNumber,
   name: v.string(),
@@ -64,11 +81,16 @@ const RestorableRepoSnapshotSchema = v.object({
   }),
   ui: v.object({
     selectedBranch: v.nullable(v.string()),
-    branchViewMode: v.picklist(['all', 'worktrees', 'no-worktree']),
     detailTab: v.picklist(['status', 'changes', 'terminal']),
+    // Legacy per-repo explorer tab. Migrated into `explorerTabByBranch['']` on
+    // restore so old snapshots continue to hydrate a sensible tab state.
+    explorerTab: v.optional(v.unknown()),
+    explorerTabByBranch: v.optional(v.unknown()),
     workspaceLayout: v.optional(v.picklist(['top-bottom', 'left-right']), DEFAULT_WORKSPACE_LAYOUT),
     fileTreePaneSizes: v.optional(v.unknown()),
     worktreePathOrder: v.optional(v.array(v.string()), []),
+    quickActions: v.optional(v.record(v.string(), v.string())),
+    worktreeActionHistories: v.optional(v.record(v.string(), v.array(RepoEventActionSchema))),
   }),
 })
 
@@ -76,16 +98,64 @@ function normalizeCachedDetailTab(tab: string): 'status' | 'changes' | 'terminal
   return tab === 'terminal' || tab === 'changes' ? tab : 'status'
 }
 
+function normalizeCachedExplorerTab(tab: unknown): ExplorerTab {
+  switch (tab) {
+    case 'files':
+    case 'changes':
+    case 'status':
+    case 'history':
+    case 'local':
+    case 'remoteBranches':
+    case 'ports':
+      return tab
+    case 'tags':
+      return 'local'
+    default:
+      return 'files'
+  }
+}
+
+function normalizeCachedExplorerTabByBranch(
+  raw: unknown,
+  legacyTab: unknown,
+): Record<string, ExplorerTab> {
+  const result: Record<string, ExplorerTab> = {}
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+      if (typeof key !== 'string' || typeof value !== 'string') continue
+      const normalized = normalizeCachedExplorerTab(value)
+      // Only keep entries whose stored value is a real tab — dropping
+      // unknown strings prevents `'files'` fallback rows from bloating
+      // the map.
+      if (normalized !== 'files' || value === 'files') result[key] = normalized
+    }
+  }
+  // Migrate legacy per-repo `explorerTab` into the fallback slot only when the
+  // map doesn't already carry one, so that once a user starts using per-branch
+  // tabs the fallback stops overriding it.
+  if (!(('' in result)) && legacyTab !== undefined) {
+    const migrated = normalizeCachedExplorerTab(legacyTab)
+    if (migrated !== 'files' || legacyTab === 'files') result[''] = migrated
+  }
+  return result
+}
+
 function cachedBranches(branches: RepoState['data']['branches']): RestorableRepoSnapshot['data']['branches'] {
   return stripBranchWorktreeMetadata(branches).map(({ pullRequest: _pullRequest, ...branch }) => branch)
 }
 
 function restoreProjectionFromSnapshot(repo: RepoState, snapshot: RestorableRepoSnapshot): RepoState {
+  if (snapshot.ui.quickActions) {
+    for (const [branchName, actionId] of Object.entries(snapshot.ui.quickActions)) {
+      rememberedQuickActions.set(`${repo.id}\0${branchName}`, actionId as BranchActionItemId)
+    }
+  }
+
   const selectedBranch = selectedBranchForBranchSet({
     branches: snapshot.data.branches,
     currentBranch: snapshot.data.currentBranch,
     selectedBranch: snapshot.ui.selectedBranch,
-    viewMode: snapshot.ui.branchViewMode,
+    viewMode: 'worktrees',
   })
   const resources = {
     ...repo.resources,
@@ -105,8 +175,8 @@ function restoreProjectionFromSnapshot(repo: RepoState, snapshot: RestorableRepo
     ui: {
       ...repo.ui,
       selectedBranch,
-      branchViewMode: snapshot.ui.branchViewMode,
       detailTab: normalizeCachedDetailTab(snapshot.ui.detailTab),
+      explorerTabByBranch: snapshot.ui.explorerTabByBranch ?? {},
       workspaceLayout: snapshot.ui.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT,
       fileTreePaneSizes: snapshot.ui.fileTreePaneSizes,
       worktreePathOrder: snapshot.ui.worktreePathOrder,
@@ -133,7 +203,11 @@ export function persistRestorableRepoSnapshot(set: ReposSet, repo: RepoState | u
   if (!entry) return
   set((s) => {
     if (s.repos[repo.id]?.instanceToken !== token) return s
-    const restorableRepoCache = trimRepoCache({ ...s.restorableRepoCache, [repo.id]: entry })
+    const existing = s.restorableRepoCache[repo.id]
+    const merged = existing?.ui?.worktreeActionHistories
+      ? { ...entry, ui: { ...entry.ui, worktreeActionHistories: existing.ui.worktreeActionHistories } }
+      : entry
+    const restorableRepoCache = trimRepoCache({ ...s.restorableRepoCache, [repo.id]: merged })
     return { restorableRepoCache }
   })
 }
@@ -147,7 +221,16 @@ export function normalizeRestorableRepoCache(value: unknown): Record<string, Res
 }
 
 function restorableRepoSnapshotFromRepo(repo: RepoState): RestorableRepoSnapshot | null {
-  if (repo.data.branches.length === 0) return null
+  if (repo.data.branches.length === 0 && repo.resources.snapshot.loadedAt === null) return null
+
+  const quickActions: Record<string, string> = {}
+  for (const branch of repo.data.branches) {
+    const key = `${repo.id}\0${branch.name}`
+    const actionId = rememberedQuickActions.get(key)
+    if (actionId) quickActions[branch.name] = actionId
+  }
+
+  const explorerTabByBranch = repo.ui.explorerTabByBranch ?? {}
   return {
     savedAt: Date.now(),
     name: repo.name,
@@ -157,11 +240,12 @@ function restorableRepoSnapshotFromRepo(repo: RepoState): RestorableRepoSnapshot
     },
     ui: {
       selectedBranch: repo.ui.selectedBranch,
-      branchViewMode: repo.ui.branchViewMode,
       detailTab: normalizeCachedDetailTab(repo.ui.detailTab),
+      ...(Object.keys(explorerTabByBranch).length > 0 ? { explorerTabByBranch } : {}),
       workspaceLayout: repo.ui.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT,
       ...(repo.ui.fileTreePaneSizes ? { fileTreePaneSizes: repo.ui.fileTreePaneSizes } : {}),
       worktreePathOrder: repo.ui.worktreePathOrder,
+      ...(Object.keys(quickActions).length > 0 ? { quickActions } : {}),
     },
   }
 }
@@ -184,7 +268,13 @@ function normalizeRestorableRepoSnapshotEntry(value: unknown): RestorableRepoSna
   const snapshot = parsed.output
   const fileTreePaneSizes =
     snapshot.ui.fileTreePaneSizes === undefined ? undefined : normalizeFileTreePaneSizes(snapshot.ui.fileTreePaneSizes)
-  const { fileTreePaneSizes: _rawFileTreePaneSizes, ...ui } = snapshot.ui
+  const {
+    fileTreePaneSizes: _rawFileTreePaneSizes,
+    explorerTab: rawExplorerTab,
+    explorerTabByBranch: rawExplorerTabByBranch,
+    ...ui
+  } = snapshot.ui
+  const explorerTabByBranch = normalizeCachedExplorerTabByBranch(rawExplorerTabByBranch, rawExplorerTab)
   return {
     ...snapshot,
     data: {
@@ -194,6 +284,7 @@ function normalizeRestorableRepoSnapshotEntry(value: unknown): RestorableRepoSna
     ui: {
       ...ui,
       detailTab: normalizeCachedDetailTab(snapshot.ui.detailTab),
+      ...(Object.keys(explorerTabByBranch).length > 0 ? { explorerTabByBranch } : {}),
       workspaceLayout: snapshot.ui.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT,
       ...(fileTreePaneSizes ? { fileTreePaneSizes } : {}),
     },

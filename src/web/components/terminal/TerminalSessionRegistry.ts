@@ -36,6 +36,11 @@ const EMPTY_TERMINAL_SNAPSHOT: TerminalSnapshot = {
   canonicalTitle: null,
 }
 const TERMINAL_OUTPUT_ACTIVE_IDLE_MS = 1_200
+// Output within this window after a keystroke is echo, not program activity.
+const TERMINAL_OUTPUT_ACTIVE_ECHO_MS = 500
+// Output must flow this long before the activity indicator lights, so brief
+// bursts (TUI redraw on attach/resize, one-shot writes) stay dark.
+const TERMINAL_OUTPUT_ACTIVE_SUSTAIN_MS = 1_000
 
 function parseServerSessionKey(key: string): { repoRoot: string; worktreePath: string; terminalId: string } | null {
   const parts = key.split('\0')
@@ -76,6 +81,9 @@ export class TerminalSessionRegistry {
   private readonly worktreeSnapshotCache = new Map<string, WorktreeTerminalSnapshot>()
   private readonly outputActiveKeys = new Set<string>()
   private readonly outputActiveIdleTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private readonly lastTerminalInputAt = new Map<string, number>()
+  private readonly outputBurstStartAt = new Map<string, number>()
+  private readonly outputBurstLastAt = new Map<string, number>()
   private readonly worktreeListeners = new Map<string, Set<() => void>>()
   private readonly snapshotListeners = new Map<string, Set<() => void>>()
   private readonly displayOrderByKey = new Map<string, number>()
@@ -143,6 +151,9 @@ export class TerminalSessionRegistry {
     this.outputActiveKeys.clear()
     for (const timer of this.outputActiveIdleTimers.values()) clearTimeout(timer)
     this.outputActiveIdleTimers.clear()
+    this.lastTerminalInputAt.clear()
+    this.outputBurstStartAt.clear()
+    this.outputBurstLastAt.clear()
     this.worktreeListeners.clear()
     this.snapshotListeners.clear()
     this.hostByWorktree.clear()
@@ -252,6 +263,14 @@ export class TerminalSessionRegistry {
         snapshotSeq: serverSnapshot?.snapshotSeq ?? (isReattachMatch ? reattachCache?.snapshotSeq : undefined),
       })
       this.syncSessionIdIndex(descriptor.key, serverSession.sessionId)
+      // The server releases the controller when the previous app instance
+      // disconnects; reclaim live unowned sessions instead of waiting for a
+      // manual takeover. Races between windows are resolved server-side via
+      // authoritative ownership events (last claim wins, losers become viewers).
+      if (ownership.role === 'unowned' && serverSession.phase === 'open') {
+        const session = this.sessions.get(descriptor.key)
+        if (session && !session.snapshot().takeoverPending) session.takeover()
+      }
       if (serverSession.controller?.attachmentId === attachmentId) {
         controllerKeyByWorktree.set(terminalWorktreeKey, descriptor.key)
       }
@@ -565,9 +584,32 @@ export class TerminalSessionRegistry {
       this.notifyWorktree(worktreeTerminalKey)
   }
 
+  private noteTerminalInput(key: string): void {
+    this.lastTerminalInputAt.set(key, Date.now())
+  }
+
+  private isSustainedOutput(key: string): boolean {
+    const now = Date.now()
+    const lastInputAt = this.lastTerminalInputAt.get(key)
+    if (lastInputAt !== undefined && now - lastInputAt < TERMINAL_OUTPUT_ACTIVE_ECHO_MS) return false
+    const lastOutputAt = this.outputBurstLastAt.get(key)
+    let burstStartAt = this.outputBurstStartAt.get(key)
+    if (
+      burstStartAt === undefined ||
+      lastOutputAt === undefined ||
+      now - lastOutputAt >= TERMINAL_OUTPUT_ACTIVE_IDLE_MS
+    ) {
+      burstStartAt = now
+      this.outputBurstStartAt.set(key, now)
+    }
+    this.outputBurstLastAt.set(key, now)
+    return now - burstStartAt >= TERMINAL_OUTPUT_ACTIVE_SUSTAIN_MS
+  }
+
   private markOutputActive(key: string): void {
     const session = this.sessions.get(key)
     if (!session) return
+    if (!this.isSustainedOutput(key)) return
     const wasActive = this.outputActiveKeys.has(key)
     this.outputActiveKeys.add(key)
     const currentTimer = this.outputActiveIdleTimers.get(key)
@@ -587,6 +629,9 @@ export class TerminalSessionRegistry {
     if (timer) clearTimeout(timer)
     this.outputActiveIdleTimers.delete(key)
     this.outputActiveKeys.delete(key)
+    this.lastTerminalInputAt.delete(key)
+    this.outputBurstStartAt.delete(key)
+    this.outputBurstLastAt.delete(key)
   }
 
   private subscribeToKeyedListeners(
@@ -723,6 +768,7 @@ export class TerminalSessionRegistry {
       this.terminalFontSize,
       this.terminalFontFamily,
       this.getTerminalThemeMode,
+      (inputDescriptor) => this.noteTerminalInput(inputDescriptor.key),
     )
     this.sessions.set(descriptor.key, session)
     this.syncSessionIdIndex(descriptor.key, session.currentSessionId())

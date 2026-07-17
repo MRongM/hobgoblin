@@ -42,6 +42,69 @@ describe('remote command scripts', () => {
     )
   })
 
+  test('renders remote tag listing command for a concrete remote', () => {
+    expect(
+      buildRemoteCommandInvocation(TARGET, { type: 'gitRemoteTags', path: '/srv/repo', remote: 'origin' }).script,
+    ).toContain("ls-remote --tags --refs 'origin'")
+  })
+
+  test('renders local tag list, create, and delete commands', () => {
+    expect(buildRemoteCommandInvocation(TARGET, { type: 'gitTags', path: '/srv/repo' }).script).toContain(
+      "git -C '/srv/repo' tag --sort=-creatordate",
+    )
+    expect(
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'gitTagCreate',
+        path: '/srv/repo',
+        name: 'v1.0.0',
+        ref: 'HEAD',
+      }).script,
+    ).toContain("git -C '/srv/repo' tag 'v1.0.0' 'HEAD'")
+    expect(
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'gitTagDelete',
+        path: '/srv/repo',
+        name: 'v1.0.0',
+      }).script,
+    ).toContain("git -C '/srv/repo' tag -d 'v1.0.0'")
+  })
+
+  test('renders remote server branch delete command', () => {
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'gitRemoteBranchDelete',
+      path: '/srv/repo',
+      remote: 'origin',
+      branch: 'feature/remove-me',
+    })
+
+    expect(invocation.script).toContain("git -C '/srv/repo' push --delete -- 'origin' 'feature/remove-me'")
+    expect(invocation.args).toContain(TARGET.alias)
+  })
+
+  test('renders remote server tag delete command', () => {
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'gitRemoteTagDelete',
+      path: '/srv/repo',
+      remote: 'origin',
+      tag: 'release/v1.0.0',
+    })
+
+    expect(invocation.script).toContain("git -C '/srv/repo' push -- 'origin' ':refs/tags/release/v1.0.0'")
+    expect(invocation.args).toContain(TARGET.alias)
+  })
+
+  test('renders remote server tag push command', () => {
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'gitTagPush',
+      path: '/srv/repo',
+      remote: 'origin',
+      tag: 'v1.0.0',
+    })
+
+    expect(invocation.script).toContain("git -C '/srv/repo' push -- 'origin' 'refs/tags/v1.0.0'")
+    expect(invocation.args).toContain(TARGET.alias)
+  })
+
   test('builds a quoted one-level remote directory listing command', () => {
     const invocation = buildRemoteCommandInvocation(TARGET, {
       type: 'listDirectoryEntries',

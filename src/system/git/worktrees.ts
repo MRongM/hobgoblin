@@ -9,6 +9,7 @@ const WORKTREE_STATUS_CONCURRENCY = 16
 interface GetWorktreesOptions {
   includeStatus?: boolean
   signal?: AbortSignal
+  throwOnError?: boolean
 }
 
 export async function getWorktrees(cwd: string, options?: GetWorktreesOptions): Promise<WorktreeInfo[]> {
@@ -40,8 +41,9 @@ export async function getWorktrees(cwd: string, options?: GetWorktreesOptions): 
     )
 
     return worktrees
-  } catch {
+  } catch (err) {
     if (options?.signal?.aborted) throw new Error('cancelled')
+    if (options?.throwOnError === true) throw err
     return []
   }
 }

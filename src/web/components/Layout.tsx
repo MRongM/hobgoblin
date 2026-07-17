@@ -28,6 +28,7 @@ interface ToolbarProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode
   className?: string
   variant?: 'plain' | 'repo' | 'detail'
+  chrome?: 'toolbar' | 'topbar'
 }
 
 interface PaneProps {
@@ -47,18 +48,22 @@ interface EmptyStateProps {
   tone?: 'neutral' | 'success'
 }
 
-export function Toolbar({ children, className, variant = 'plain', style, ...props }: ToolbarProps) {
-  const { toolbarHeightPx } = useRuntimeChromeSettings()
+export function Toolbar({ children, className, variant = 'plain', chrome = 'toolbar', style, ...props }: ToolbarProps) {
+  const { topbarHeightPx, toolbarHeightPx } = useRuntimeChromeSettings()
+  const topbar = chrome === 'topbar'
 
   return (
     <div
       className={cn(
-        'flex shrink-0 items-center border-b border-toolbar-border bg-toolbar text-toolbar-foreground',
+        'flex shrink-0 items-center border-b',
+        topbar
+          ? 'topbar-tone border-topbar-border bg-topbar text-topbar-foreground'
+          : 'border-toolbar-border bg-toolbar text-toolbar-foreground',
         variant === 'repo' && 'gap-3 px-4',
         variant === 'detail' && 'min-w-0 justify-between gap-2 px-2',
         className,
       )}
-      style={{ ...style, height: toolbarHeightPx }}
+      style={{ ...style, height: topbar ? topbarHeightPx : toolbarHeightPx }}
       {...props}
     >
       {children}
@@ -120,10 +125,7 @@ export function RepoWorkspace({
 
   // Collapsed top/bottom layout keeps only the detail toolbar visible.
   return (
-    <div
-      className="grid min-h-0 flex-1"
-      style={{ gridTemplateRows: `minmax(0, 1fr) 1px ${toolbarHeightPx}px` }}
-    >
+    <div className="grid min-h-0 flex-1" style={{ gridTemplateRows: `minmax(0, 1fr) 1px ${toolbarHeightPx}px` }}>
       {branchPane}
       <WorkspaceSeparator />
       {detailPane}
@@ -140,11 +142,7 @@ export function RepoWorkspacePane({ children }: PaneProps) {
 }
 
 export function ScrollPane({ children }: ShellProps) {
-  return (
-    <ScrollArea className="min-h-0 flex-1">
-      {children}
-    </ScrollArea>
-  )
+  return <ScrollArea className="min-h-0 flex-1">{children}</ScrollArea>
 }
 
 export function EmptyState({ icon, title, body, tone = 'neutral' }: EmptyStateProps) {

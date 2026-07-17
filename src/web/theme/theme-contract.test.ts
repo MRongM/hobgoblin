@@ -14,6 +14,19 @@ const CONTRACT_TOKENS = [
   '--color-input-hover:',
   '--color-input-border:',
   '--color-input-placeholder:',
+  '--color-terminal-activity:',
+  '--color-terminal-activity-rgb:',
+  '--color-terminal-activity-surface:',
+  '--color-terminal-activity-border:',
+  '--color-terminal-bell:',
+  '--color-terminal-bell-rgb:',
+  '--color-terminal-bell-surface:',
+  '--color-terminal-bell-border:',
+  '--color-topbar-muted-foreground:',
+  '--color-topbar-control:',
+  '--color-topbar-control-hover:',
+  '--color-topbar-control-border:',
+  '--color-topbar-control-foreground:',
 ]
 
 const CLASSIC_TERMINAL_TOKENS = [
@@ -46,6 +59,16 @@ function readText(url: URL): string {
   return readFileSync(url, 'utf8')
 }
 
+function cssRule(css: string, selector: string): string {
+  const start = css.indexOf(selector)
+  expect(start, `${selector} exists`).toBeGreaterThanOrEqual(0)
+  const open = css.indexOf('{', start)
+  const close = css.indexOf('}', open)
+  expect(open, `${selector} opening brace`).toBeGreaterThanOrEqual(0)
+  expect(close, `${selector} closing brace`).toBeGreaterThan(open)
+  return css.slice(open + 1, close)
+}
+
 describe('web theme contract', () => {
   test('exposes semantic tokens for region bars, toolbars, and inputs', () => {
     const contract = readText(new URL('contract.css', THEME_ROOT))
@@ -55,8 +78,25 @@ describe('web theme contract', () => {
     }
   })
 
+  test('scopes topbar control semantics without replacing muted foreground', () => {
+    const contract = readText(new URL('contract.css', THEME_ROOT))
+
+    for (const selector of ['.topbar', '.topbar-tone']) {
+      const topbar = cssRule(contract, selector)
+
+      expect(topbar).toContain('--color-control: var(--color-topbar-control);')
+      expect(topbar).toContain('--color-control-hover: var(--color-topbar-control-hover);')
+      expect(topbar).toContain('--color-input: var(--color-topbar-control-border);')
+      expect(topbar).toContain('--color-accent: var(--color-topbar-control-hover);')
+      expect(topbar).toContain('--color-accent-foreground: var(--color-topbar-control-foreground);')
+      expect(topbar).not.toContain('--color-muted-foreground:')
+    }
+  })
+
   test('defines classic terminal tokens for every color theme preset', () => {
-    const themeFiles = readdirSync(THEMES_ROOT).filter((file) => file.endsWith('.css')).sort()
+    const themeFiles = readdirSync(THEMES_ROOT)
+      .filter((file) => file.endsWith('.css'))
+      .sort()
     expect(themeFiles).not.toEqual([])
 
     for (const file of themeFiles) {

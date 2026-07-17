@@ -78,6 +78,27 @@ describe('RepoActivityControl component', () => {
     expect(button().disabled).toBe(false)
     expect(button().getAttribute('aria-label')).toBe('action.refresh')
   })
+
+  test('allows topbar hosts to override cached projection muted color', () => {
+    const repo = seedRepoState({ id: REPO_ID, remote: { hasRemotes: false } })
+    useReposStore.setState({
+      repos: {
+        [REPO_ID]: {
+          ...repo,
+          projection: { source: 'cache', savedAt: 1 },
+        },
+      },
+    })
+
+    render(
+      <RepoActivityControl repoId={REPO_ID} mutedForegroundClassName="text-topbar-muted-foreground" />,
+    )
+
+    const indicator = document.body.querySelector<HTMLElement>('[aria-label^="tab.projectiond"]')
+    expect(indicator?.className).toContain('text-topbar-muted-foreground')
+    expect(indicator?.querySelector('span')?.className).toContain('bg-current')
+    expect(indicator?.querySelector('span')?.className).toContain('opacity-70')
+  })
 })
 
 function render(element: ReactNode) {

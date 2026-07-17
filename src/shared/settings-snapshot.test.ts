@@ -42,6 +42,7 @@ describe('settings snapshot partitions', () => {
         terminalCustomButtonSize: 'large',
         terminalCustomButtons: [{ label: 'status', value: 'git status --short', action: 'input' }],
         lanEnabled: true,
+        serverPort: 33001,
       },
       globalShortcutRegistered: true,
     })
@@ -77,6 +78,7 @@ describe('settings snapshot partitions', () => {
       terminalCustomButtonSize: 'large',
       terminalCustomButtons: [{ label: 'status', value: 'git status --short', action: 'input' }],
       lanEnabled: true,
+      serverPort: 33001,
     })
   })
 
@@ -122,6 +124,7 @@ describe('settings snapshot partitions', () => {
         terminalCustomButtonSize: 'medium',
         terminalCustomButtons: [{ label: 'status', value: 'git status --short', action: 'execute' }],
         lanEnabled: false,
+        serverPort: 32200,
       },
       globalShortcutRegistered: false,
       recentRepos: [{ kind: 'local', id: '/tmp/repo-b' }],

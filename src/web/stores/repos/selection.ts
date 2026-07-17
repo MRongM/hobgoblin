@@ -1,6 +1,6 @@
 import { arrayMove } from '@dnd-kit/sortable'
-import { normalizeWorktreePathOrder, selectedBranchForViewMode } from '#/web/stores/repos/branch-view-mode.ts'
-import { replaceRepo, replaceRepoState } from '#/web/stores/repos/helpers.ts'
+import { normalizeWorktreePathOrder } from '#/web/stores/repos/branch-view-mode.ts'
+import { explorerTabForRepo as explorerTabForRepoSelection, replaceRepo, replaceRepoState } from '#/web/stores/repos/helpers.ts'
 import { persistRestorableRepoSnapshot } from '#/web/stores/repos/persistence.ts'
 import {
   DEFAULT_DETAIL_COLLAPSED,
@@ -15,7 +15,6 @@ import {
   workspaceLayoutAllowsDetailCollapse,
 } from '#/shared/workspace-layout.ts'
 import type {
-  BranchViewMode,
   DetailTab,
   RepoWorkspaceLayout,
   ReposGet,
@@ -49,6 +48,7 @@ type RestorableWorkspaceSelectionActions = Pick<
   | 'applySessionSelectedTerminalState'
   | 'setDetailPaneSize'
   | 'setDetailPaneSizes'
+  | 'setExplorerTab'
   | 'setRepoFileTreePaneSize'
   | 'setDefaultFileTreePaneSize'
   | 'resetLayout'
@@ -60,7 +60,7 @@ type LocalWorkspaceSelectionActions = Pick<ReposStore, 'setBranchSearchQuery'>
 
 type RuntimeCoherentSelectionActions = Pick<
   ReposStore,
-  'setBranchViewMode' | 'setDetailTab' | 'dismissExitedTerminalDetail' | 'selectBranch'
+  'setDetailTab' | 'dismissExitedTerminalDetail' | 'selectBranch'
 >
 
 type RepoMutationSelectionActions = Pick<ReposStore, 'checkoutSelectedInRepo' | 'checkoutSelected'>
@@ -243,6 +243,28 @@ function createRestorableWorkspaceSelectionActions(
       })
     },
 
+    setExplorerTab(id, tab) {
+      let changed = false
+      let token: number | undefined
+      set((state) => {
+        const repo = state.repos[id]
+        if (!repo) return state
+        // Compare against the effective tab (with fallback) so setting
+        // the default `'files'` on an untouched branch stays a no-op —
+        // matches the pre-migration behavior where an implicit 'files'
+        // was already the value.
+        if (explorerTabForRepoSelection(repo) === tab) return state
+        const key = repo.ui.selectedBranch ?? ''
+        changed = true
+        token = repo.instanceToken
+        return replaceRepoState(state, repo, (draft) => {
+          draft.ui.explorerTabByBranch[key] = tab
+        })
+      })
+      const repo = get().repos[id]
+      if (changed && token !== undefined && repo) persistRestorableRepoSnapshot(set, repo, token)
+    },
+
     setRepoFileTreePaneSize(id: string, layout: RepoWorkspaceLayout, size: number) {
       let changed = false
       let token: number | undefined
@@ -366,36 +388,6 @@ function createRuntimeCoherentSelectionActions(
   get: ReposGet,
 ): RuntimeCoherentSelectionActions {
   return {
-    setBranchViewMode(id: string, viewMode: BranchViewMode) {
-      let changed = false
-      let selectedForPullRequest: string | null = null
-      let token: number | undefined
-      set((s) => {
-        const repo = s.repos[id]
-        if (!repo || repo.ui.branchViewMode === viewMode) return s
-        changed = true
-        token = repo.instanceToken
-        const selectedBranch = selectedBranchForViewMode(repo, viewMode)
-        const selectionChanged = selectedBranch !== repo.ui.selectedBranch
-        selectedForPullRequest = selectionChanged ? selectedBranch : null
-        return replaceRepoState(s, repo, (r) => {
-          r.ui.branchViewMode = viewMode
-          r.ui.selectedBranch = selectedBranch
-          r.ui.detailTab = detailTabForSelection(repo, r.ui.detailTab, selectedBranch)
-        })
-      })
-      const repo = get().repos[id]
-      if (changed && token !== undefined && repo) persistRestorableRepoSnapshot(set, repo, token)
-      if (changed && token !== undefined && repo) {
-        void runRepoRefreshIntent(get, {
-          kind: 'visible-pull-request-changed',
-          id,
-          token,
-          branch: selectedForPullRequest,
-        })
-      }
-    },
-
     setDetailTab(id: string, tab: DetailTab) {
       let changed = false
       let token: number | undefined

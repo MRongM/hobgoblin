@@ -4,6 +4,7 @@ export interface BranchWorktreeState {
   path: string
   dirty: boolean
   changeCount: number
+  changeCountKnown: boolean
   known: boolean
   isMain: boolean
   isLocked: boolean
@@ -79,12 +80,14 @@ export function getBranchWorktreeState(repo: BranchWorktreeRepo, branch: RepoBra
   const worktree = repo.data.worktreesByPath[branch.worktree.path]
   const status = repo.data.status.find((wt) => wt.path === branch.worktree?.path)
   const statusChangeCount = status?.entries.length
+  const exactChangeCount = statusChangeCount ?? worktree?.changeCount
   const dirty = statusChangeCount === undefined ? (worktree?.isDirty ?? false) : statusChangeCount > 0
-  const changeCount = statusChangeCount ?? worktree?.changeCount ?? (dirty ? 1 : 0)
+  const changeCount = exactChangeCount ?? (dirty ? 1 : 0)
   return {
     path: branch.worktree.path,
     dirty,
     changeCount,
+    changeCountKnown: exactChangeCount !== undefined,
     known: status !== undefined || worktree?.isDirty !== undefined || changeCount > 0,
     isMain: worktree?.isMain ?? false,
     isLocked: worktree?.isLocked ?? false,

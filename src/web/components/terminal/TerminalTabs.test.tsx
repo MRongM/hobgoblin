@@ -42,6 +42,31 @@ afterEach(() => {
 })
 
 describe('TerminalTabs', () => {
+  test('marks tab containers interactive so the Electron window drag region does not swallow tab drags', () => {
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[
+          session({ key: 't1', terminalId: 'terminal-1', index: 1, selected: true }),
+          session({ key: 't2', terminalId: 'terminal-2', index: 2, title: 'term-2', selected: false }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    for (const key of ['t1', 't2']) {
+      const tab = document.body.querySelector(`[data-terminal-tab-tooltip-id="${key}"]`)
+      if (!(tab instanceof HTMLElement)) throw new Error(`missing terminal tab ${key}`)
+      expect(tab.hasAttribute('data-interactive')).toBe(true)
+    }
+  })
+
   test('shows terminal tooltip content with only the original title', async () => {
     render(
       <TerminalTabs
@@ -305,10 +330,22 @@ describe('TerminalTabs', () => {
     expect(tablist?.getAttribute('aria-orientation')).toBe('horizontal')
     expect(document.body.querySelector('button[aria-label="terminal.sessions"]')).toBeNull()
     expect(tablist?.className).toContain('h-full')
-    expect(tablist?.parentElement?.className).toContain('w-max')
-    expect(
-      [...document.body.querySelectorAll('[data-terminal-tab-tooltip-id]')].every((tab) => tab.className.includes('w-28')),
-    ).toBe(true)
+    expect(tablist?.className).toContain('min-w-min')
+    expect(tablist?.className).not.toContain('flex-1')
+    expect(tablist?.parentElement?.className).toContain('w-fit')
+    expect(tablist?.parentElement?.className).not.toContain('w-max')
+    expect(tablist?.parentElement?.className).toContain('gap-0')
+    const terminalTabs = [...document.body.querySelectorAll<HTMLElement>('[data-terminal-tab-tooltip-id]')]
+    expect(terminalTabs).toHaveLength(3)
+    for (const tab of terminalTabs) {
+      expect(tab.className).toContain('w-full')
+      expect(tab.className).not.toContain('w-36')
+
+      const sortableItem = tab.parentElement
+      expect(sortableItem?.className).toContain('min-w-28')
+      expect(sortableItem?.className).toContain('max-w-56')
+      expect(sortableItem?.className).toContain('flex-[1_1_14rem]')
+    }
     expect(document.body.querySelectorAll('[role="tab"]').length).toBe(3)
     const firstTab = document.body.querySelector('#detail-terminal-tab')
     expect(firstTab?.getAttribute('aria-posinset')).toBe('1')
@@ -340,6 +377,9 @@ describe('TerminalTabs', () => {
     const tab = document.body.querySelector('#detail-terminal-tab')
     expect(tab?.getAttribute('aria-label')).toContain('~/repo/worktree — npm run dev')
     expect(tab?.getAttribute('aria-label')).toContain('terminal.bell-unread')
+    const ping = tab?.querySelector('[data-terminal-bell-ping]')
+    expect(ping?.classList.contains('opacity-100')).toBe(true)
+    expect(ping?.classList.contains('opacity-75')).toBe(false)
   })
 
   test('moves focus across the full terminal tab strip and only navigates out at arrow-key edges', () => {
@@ -755,7 +795,9 @@ describe('TerminalTabs', () => {
     )
 
     expect(document.body.querySelectorAll('[role="tab"]').length).toBe(1)
-    expect(document.body.querySelector('[data-terminal-tab-tooltip-id]')?.className).toContain('w-28')
+    const compactTab = document.body.querySelector<HTMLElement>('[data-terminal-tab-tooltip-id]')
+    expect(compactTab?.className).toContain('w-36')
+    expect(compactTab?.className).not.toContain('w-full')
 
     rerender(
       <TerminalTabs
@@ -775,6 +817,12 @@ describe('TerminalTabs', () => {
 
     expect(document.body.querySelectorAll('[role="tab"]').length).toBe(2)
     expect(document.body.querySelector('button[aria-label="terminal.sessions"]')).toBeNull()
+    const expandedTab = document.body.querySelector<HTMLElement>('[data-terminal-tab-tooltip-id]')
+    expect(expandedTab?.className).toContain('w-full')
+    expect(expandedTab?.className).not.toContain('w-36')
+    expect(expandedTab?.parentElement?.className).toContain('min-w-28')
+    expect(expandedTab?.parentElement?.className).toContain('max-w-56')
+    expect(expandedTab?.parentElement?.className).toContain('flex-[1_1_14rem]')
   })
 })
 

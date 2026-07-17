@@ -118,6 +118,10 @@
   scrollbar-width: thin;
 }
 
+.goblin-managed-terminal-host .xterm-scrollable-element > .scrollbar.vertical {
+  background: transparent;
+}
+
 .goblin-managed-terminal-host .xterm-viewport::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -141,7 +145,7 @@
 }
 
 .goblin-terminal-slot:has(.goblin-terminal-bottom-dock) .goblin-managed-terminal-frame {
-  padding-bottom: calc(var(--goblin-terminal-bottom-dock-height) + var(--goblin-terminal-overlay-offset));
+  padding-bottom: var(--goblin-terminal-bottom-dock-height);
 }
 
 .goblin-terminal-slot__search {
@@ -232,7 +236,7 @@
 .goblin-terminal-bottom-dock {
   position: absolute;
   right: var(--goblin-terminal-overlay-offset);
-  bottom: var(--goblin-terminal-overlay-offset);
+  bottom: 0;
   left: var(--goblin-terminal-overlay-offset);
   z-index: 2;
   display: flex;

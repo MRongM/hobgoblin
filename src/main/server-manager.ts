@@ -112,14 +112,18 @@ function pipeProcessLogs(proc: ServerChildProcess, log: StartupDiagnostics): voi
   })
 }
 
-function readLanEnabledFromSettings(): boolean {
+function readServerSettings(): { lanEnabled: boolean; serverPort: number | null } {
   try {
     const file = path.join(app.getPath('userData'), 'server-settings.json')
     const raw = readFileSync(file, 'utf-8')
     const parsed = JSON.parse(raw)
-    return parsed.lanEnabled === true
+    const port = Number(parsed.serverPort)
+    return {
+      lanEnabled: parsed.lanEnabled === true,
+      serverPort: Number.isInteger(port) && port >= 1024 && port <= 65535 ? port : null,
+    }
   } catch {
-    return false
+    return { lanEnabled: false, serverPort: null }
   }
 }
 
@@ -128,11 +132,16 @@ export async function startEmbeddedServer(): Promise<EmbeddedServerRuntime | nul
   if (startPromise) return await startPromise
   if (!embeddedServerEnabled()) return null
   startPromise = (async () => {
+    const settings = readServerSettings()
     let host = process.env.GOBLIN_SERVER_HOST?.trim()
     if (!host) {
-      host = readLanEnabledFromSettings() ? '0.0.0.0' : DEFAULT_HOST
+      host = settings.lanEnabled ? '0.0.0.0' : DEFAULT_HOST
     }
-    const preferredPort = parseServerPort(process.env.GOBLIN_SERVER_PORT)
+    // The env var wins for dev overrides; otherwise the configured port from
+    // settings applies (restart-effective), falling back to the default.
+    const preferredPort = process.env.GOBLIN_SERVER_PORT
+      ? parseServerPort(process.env.GOBLIN_SERVER_PORT)
+      : (settings.serverPort ?? DEFAULT_PORT)
     const port = await reserveEmbeddedServerPort(host, preferredPort)
     const secret = randomBytes(32).toString('hex')
     const clientId = deriveServerClientId(secret)

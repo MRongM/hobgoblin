@@ -3,6 +3,7 @@ import { buildServerExternalAppsSnapshot } from '#/server/modules/external-apps.
 import {
   addServerRecentRepo,
   clearServerRecentRepos,
+  setServerRepoColorTheme,
   setServerFetchIntervalSec,
   setServerSessionState,
   updateServerSettingsPrefs,
@@ -70,4 +71,16 @@ export async function applyServerRecentRepoClearWrite(): Promise<{ ok: true }> {
   await clearServerRecentRepos()
   publishSettingsInvalidation(['settings-snapshot'])
   return { ok: true }
+}
+
+export async function applyServerRepoThemeWrite(
+  body: unknown,
+): Promise<{ ok: true; repoSettings: Awaited<ReturnType<typeof setServerRepoColorTheme>> }> {
+  const input = body as { repoId?: unknown; colorTheme?: unknown } | null
+  const repoSettings = await setServerRepoColorTheme({
+    repoId: typeof input?.repoId === 'string' ? input.repoId : '',
+    colorTheme: input?.colorTheme === null ? null : (input?.colorTheme as never),
+  })
+  publishSettingsInvalidation(['settings-snapshot'])
+  return { ok: true, repoSettings }
 }

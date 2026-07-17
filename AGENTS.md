@@ -1,5 +1,9 @@
 # Project Notes
 
+## Codebase context
+
+Read [`CONTEXT.md`](CONTEXT.md) for a project overview, stack, source layout, architecture boundaries, state model, feature layering, and key commands. Start there before exploring the codebase.
+
 ## TypeScript constraints
 
 The project runs in Node.js strip-only mode (no `tsc` emit). Do not use these unsupported TypeScript features:
@@ -21,6 +25,10 @@ The project runs in Node.js strip-only mode (no `tsc` emit). Do not use these un
 - Read-only git commands may run concurrently.
 - Keep network git commands (`fetch`, `pull`, `push`) cancellable and coalesced per repo.
 - Avoid destructive git features in the app. If one is introduced, design safety, cancellation, and recovery explicitly first.
+
+## Grilling plans
+
+Before implementing a feature, use `/grill-with-docs` to stress-test the plan against the project's architecture docs. The skill lives at `.claude/skills/grill-with-docs/SKILL.md`.
 
 ## App-level design docs
 

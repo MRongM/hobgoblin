@@ -72,6 +72,11 @@ html[data-color-theme='macos'][data-theme='light'] {
   --goblin-status-danger-surface: rgb(var(--goblin-status-danger-rgb) / 0.08);
   --goblin-status-danger-border: rgb(var(--goblin-status-danger-rgb) / 0.34);
 
+  --goblin-terminal-bell: #af52de;
+  --goblin-terminal-bell-rgb: 175 82 222;
+  --goblin-terminal-bell-surface: rgb(var(--goblin-terminal-bell-rgb) / 0.13);
+  --goblin-terminal-bell-border: rgb(var(--goblin-terminal-bell-rgb) / 0.38);
+
   --color-overlay-scrim: rgb(0 0 0 / 0.38);
   --goblin-shadow-xs: 0 1px 1px rgb(0 0 0 / 0.03);
   --goblin-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.05);
@@ -179,6 +184,11 @@ html[data-color-theme='macos'][data-theme='dark'] {
   --goblin-status-danger-rgb: 255 69 58;
   --goblin-status-danger-surface: rgb(var(--goblin-status-danger-rgb) / 0.12);
   --goblin-status-danger-border: rgb(var(--goblin-status-danger-rgb) / 0.36);
+
+  --goblin-terminal-bell: #da8fff;
+  --goblin-terminal-bell-rgb: 218 143 255;
+  --goblin-terminal-bell-surface: rgb(var(--goblin-terminal-bell-rgb) / 0.14);
+  --goblin-terminal-bell-border: rgb(var(--goblin-terminal-bell-rgb) / 0.38);
 
   --color-overlay-scrim: rgb(0 0 0 / 0.58);
   --goblin-shadow-xs: 0 1px 1px rgb(0 0 0 / 0.24);

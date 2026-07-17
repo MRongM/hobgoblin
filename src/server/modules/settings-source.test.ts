@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { defaultSessionState } from '#/shared/settings-defaults.ts'
+import { COLOR_THEMES } from '#/shared/color-theme.ts'
 
 let tmp: string | null = null
 let previousDataDir = process.env.GOBLIN_SERVER_DATA_DIR
@@ -178,6 +179,29 @@ test('persists updates and notifies subscribers from the server settings store',
   expect(await reloaded.getServerRecentRepos()).toEqual([{ kind: 'local', id: '/repo-b' }])
 })
 
+test('persists a custom server port and normalizes invalid values to the default', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  expect((await mod.getServerSettingsPrefs()).serverPort).toBe(32200)
+
+  await mod.updateServerSettingsPrefs({ serverPort: 33001 })
+  expect((await mod.getServerSettingsPrefs()).serverPort).toBe(33001)
+
+  await mod.updateServerSettingsPrefs({ serverPort: 80 })
+  expect((await mod.getServerSettingsPrefs()).serverPort).toBe(32200)
+
+  await mod.updateServerSettingsPrefs({ serverPort: Number.NaN })
+  expect((await mod.getServerSettingsPrefs()).serverPort).toBe(32200)
+})
+
+test('normalizes persisted out-of-range server ports to the default on load', async () => {
+  useTempServerSettingsDir()
+  writeSettingsFile({ serverPort: 70000 })
+  const mod = await import('#/server/modules/settings-source.ts')
+  expect((await mod.getServerSettingsPrefs()).serverPort).toBe(32200)
+})
+
 test('normalizes configurable chrome heights', async () => {
   tmp = mkdtempSync(path.join(os.tmpdir(), 'gbl-server-settings-'))
   previousDataDir = process.env.GOBLIN_SERVER_DATA_DIR
@@ -346,7 +370,7 @@ test('accepts current design color themes and normalizes legacy apple plus unkno
   process.env.GOBLIN_SERVER_DATA_DIR = tmp
 
   const mod = await import('#/server/modules/settings-source.ts')
-  for (const colorTheme of ['claude', 'cursor', 'airbnb', 'bmw'] as const) {
+  for (const colorTheme of COLOR_THEMES) {
     await mod.updateServerSettingsPrefs({ colorTheme })
     expect(await mod.getServerSettingsPrefs()).toMatchObject({ colorTheme })
   }
@@ -413,4 +437,111 @@ test('drops invalid persisted worktree bootstrap trust entries', async () => {
       },
     },
   ])
+})
+
+test('normalizes persisted project color themes and drops invalid project color themes', async () => {
+  useTempServerSettingsDir()
+  await writeSettingsFile({
+    repoSettings: [
+      { repoId: '/repo-a', colorTheme: 'tokyo-night' },
+      { repoId: '/repo-b', colorTheme: 'apple' },
+      { repoId: '/repo-c', colorTheme: 'not-a-theme' },
+      {
+        repoId: '/repo-d',
+        colorTheme: 'github',
+        worktreeBootstrapTrust: {
+          configHash: 'sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+          trustedAt: '2026-07-08T00:00:00.000Z',
+        },
+      },
+    ],
+  })
+
+  const mod = await import('#/server/modules/settings-source.ts')
+  await expect(mod.getServerRepoSettings()).resolves.toEqual([
+    { repoId: '/repo-a', colorTheme: 'tokyo-night' },
+    {
+      repoId: '/repo-d',
+      colorTheme: 'github',
+      worktreeBootstrapTrust: {
+        configHash: 'sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+        trustedAt: '2026-07-08T00:00:00.000Z',
+      },
+    },
+  ])
+})
+
+test('sets and clears project color themes while preserving bootstrap trust', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+  const configHash = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+  await mod.trustServerRepoWorktreeBootstrapConfig({ repoId: '/repo-a', configHash })
+  await mod.setServerRepoColorTheme({ repoId: '/repo-a', colorTheme: 'cursor' })
+  await expect(mod.getServerRepoSettings()).resolves.toEqual([
+    {
+      repoId: '/repo-a',
+      colorTheme: 'cursor',
+      worktreeBootstrapTrust: { configHash, trustedAt: expect.any(String) },
+    },
+  ])
+
+  await mod.setServerRepoColorTheme({ repoId: '/repo-a', colorTheme: null })
+  await expect(mod.getServerRepoSettings()).resolves.toEqual([
+    {
+      repoId: '/repo-a',
+      worktreeBootstrapTrust: { configHash, trustedAt: expect.any(String) },
+    },
+  ])
+
+  await expect(mod.untrustServerRepoWorktreeBootstrapConfig({ repoId: '/repo-a', configHash })).resolves.toBe(true)
+  await expect(mod.getServerRepoSettings()).resolves.toEqual([])
+})
+
+test('ignores invalid project color theme writes', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await mod.setServerRepoColorTheme({ repoId: '/repo-a', colorTheme: 'cursor' })
+  await mod.setServerRepoColorTheme({ repoId: '/repo-a', colorTheme: 'not-a-theme' as never })
+  await mod.setServerRepoColorTheme({ repoId: '', colorTheme: 'github' })
+
+  await expect(mod.getServerRepoSettings()).resolves.toEqual([{ repoId: '/repo-a', colorTheme: 'cursor' }])
+})
+
+test('untrusting bootstrap config preserves project color theme', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+  const configHash = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+  await mod.trustServerRepoWorktreeBootstrapConfig({ repoId: '/repo-a', configHash })
+  await mod.setServerRepoColorTheme({ repoId: '/repo-a', colorTheme: 'cursor' })
+
+  await expect(mod.untrustServerRepoWorktreeBootstrapConfig({ repoId: '/repo-a', configHash })).resolves.toBe(true)
+  await expect(mod.getServerRepoSettings()).resolves.toEqual([{ repoId: '/repo-a', colorTheme: 'cursor' }])
+})
+
+test('persists file tree pane sizes through session save and reload', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  const saved = await mod.setServerSessionState({
+    ...defaultSessionState(),
+    fileTreePaneSizes: { 'top-bottom': 40, 'left-right': 32.5 },
+  })
+  expect(saved.fileTreePaneSizes).toEqual({ 'top-bottom': 40, 'left-right': 32.5 })
+
+  await expect(mod.getServerSessionState()).resolves.toMatchObject({
+    fileTreePaneSizes: { 'top-bottom': 40, 'left-right': 32.5 },
+  })
+})
+
+test('normalizes missing or invalid file tree pane sizes to defaults', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  const session = defaultSessionState()
+  delete session.fileTreePaneSizes
+  const saved = await mod.setServerSessionState(session)
+  expect(saved.fileTreePaneSizes).toEqual({ 'top-bottom': 66.7, 'left-right': 66.7 })
 })

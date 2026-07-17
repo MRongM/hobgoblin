@@ -121,7 +121,32 @@ describe('RepoTabStrip', () => {
     expect(tab?.querySelector('[data-terminal-output-activity-indicator="active"]')).not.toBeNull()
   })
 
-  test('uses a smaller terminal output activity effect on repo tabs', () => {
+  test('shows a persistent terminal count badge when a repo worktree has open terminals', () => {
+    render(
+      <RepoTabStrip
+        repos={[repo('repo-a', '/tmp/repo-a', { worktreePaths: ['/tmp/repo-a', '/tmp/repo-a-feature'] })]}
+        activeId="/tmp/repo-a"
+        labels={labels}
+        onActivate={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+        onOpenLocal={() => {}}
+        onOpenRemote={() => {}}
+        onClone={() => {}}
+      />,
+      { openWorktreeKeys: ['/tmp/repo-a\0/tmp/repo-a', '/tmp/repo-a\0/tmp/repo-a-feature'] },
+    )
+
+    const tab = document.body.querySelector('[data-repo-tab-id="/tmp/repo-a"]')
+    expect(tab?.getAttribute('aria-label')).toContain('terminal.open-count')
+    const badge = tab?.querySelector('[data-testid="repo-tab-terminal-count-badge"]')
+    expect(badge).not.toBeNull()
+    expect(badge?.textContent).toContain('2')
+    expect(badge?.querySelector('svg')).not.toBeNull()
+    expect(badge?.querySelector('[data-terminal-output-activity-indicator]')).toBeNull()
+  })
+
+  test('renders the terminal output activity effect inside the terminal count badge', () => {
     render(
       <RepoTabStrip
         repos={[repo('repo-a', '/tmp/repo-a', { worktreePaths: ['/tmp/repo-a'] })]}
@@ -137,10 +162,12 @@ describe('RepoTabStrip', () => {
       { outputActiveWorktreeKeys: ['/tmp/repo-a\0/tmp/repo-a'] },
     )
 
-    const indicator = document.body.querySelector('[data-terminal-output-activity-indicator="active"]')
-    expect(indicator?.className).toContain('size-3')
-    expect(indicator?.querySelector('[data-terminal-output-activity-glow]')?.className).toContain('h-[120%]')
-    expect(indicator?.querySelector('[data-terminal-output-activity-ping]')?.className).toContain('h-[135%]')
+    const badge = document.body.querySelector('[data-testid="repo-tab-terminal-count-badge"]')
+    expect(badge).not.toBeNull()
+    expect(badge?.textContent).toContain('1')
+    const indicator = badge?.querySelector('[data-terminal-output-activity-indicator="active"]')
+    expect(indicator).not.toBeNull()
+    expect(indicator?.className).toContain('size-2.5')
   })
 
   test('shows active terminal output and unread bell independently on a repo tab', () => {
@@ -274,6 +301,142 @@ describe('RepoTabStrip', () => {
     expect(onActivate).toHaveBeenNthCalledWith(3, '/tmp/repo-a')
     expect(document.activeElement).toBe(repoA)
   })
+
+  test('keeps project tabs content-sized within the 144px to 256px bounds', () => {
+    vi.stubGlobal('matchMedia', createMatchMedia(false))
+
+    render(
+      <RepoTabStrip
+        repos={[repo('a-project-with-a-long-display-name', '/tmp/project')]}
+        activeId="/tmp/project"
+        labels={labels}
+        onActivate={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+        onOpenLocal={() => {}}
+        onOpenRemote={() => {}}
+        onClone={() => {}}
+      />,
+    )
+
+    const projectTab = container!.querySelector<HTMLElement>('[data-repo-tab-tooltip-id="/tmp/project"]')!
+    const classes = projectTab.className.split(/\s+/)
+
+    expect(classes).toContain('min-w-36')
+    expect(classes).toContain('max-w-64')
+    expect(classes).not.toContain('max-w-56')
+    expect(classes.some((className) => /^w-\d+$/.test(className))).toBe(false)
+  })
+
+  test('uses tighter spacing between project tabs on large screens', () => {
+    vi.stubGlobal('matchMedia', createMatchMedia(false))
+
+    render(
+      <RepoTabStrip
+        repos={[
+          repo('repo-a', '/tmp/repo-a'),
+          repo('repo-b', '/tmp/repo-b'),
+          repo('repo-c', '/tmp/repo-c'),
+        ]}
+        activeId="/tmp/repo-a"
+        labels={labels}
+        onActivate={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+        onOpenLocal={() => {}}
+        onOpenRemote={() => {}}
+        onClone={() => {}}
+      />,
+    )
+
+    const tablist = document.body.querySelector('[role="tablist"]')
+    expect(tablist?.className).toContain('gap-0.5')
+
+    const activeTab = container!.querySelector<HTMLElement>('[data-repo-tab-tooltip-id="/tmp/repo-a"]')!
+    const inactiveTab = container!.querySelector<HTMLElement>('[data-repo-tab-tooltip-id="/tmp/repo-b"]')!
+    expect(activeTab.className).toContain('text-foreground')
+    expect(inactiveTab.className).toContain('text-topbar-muted-foreground')
+    expect(inactiveTab.querySelector('svg')?.getAttribute('class')).toContain('text-topbar-muted-foreground')
+
+    const activeClose = activeTab.querySelector<HTMLButtonElement>('button[aria-label="Close repo-a"]')!
+    const inactiveClose = inactiveTab.querySelector<HTMLButtonElement>('button[aria-label="Close repo-b"]')!
+    expect(activeClose.className).toContain('text-muted-foreground')
+    expect(activeClose.className).not.toContain('text-topbar-muted-foreground')
+    expect(inactiveClose.className).toContain('text-topbar-muted-foreground')
+    expect(inactiveTab.querySelector('span.border-topbar-border')).not.toBeNull()
+
+    const openTrigger = container!.querySelector<HTMLButtonElement>('button[aria-label="Open"]')!
+    expect(openTrigger.parentElement?.querySelector('span.border-topbar-border')).not.toBeNull()
+  })
+
+  test('asks for confirmation before clearing cache', async () => {
+    localStorage.setItem('probe', 'kept')
+    const location = stubLocationReload()
+    try {
+      renderEmptyStrip()
+      await selectClearCacheMenuItem()
+
+      expect(document.body.querySelector('[role="alertdialog"]')).not.toBeNull()
+      expect(document.body.textContent).toContain('Clear cache?')
+      expect(localStorage.getItem('probe')).toBe('kept')
+      expect(location.reload).not.toHaveBeenCalled()
+    } finally {
+      location.restore()
+      localStorage.clear()
+    }
+  })
+
+  test('clears storage and reloads after confirming', async () => {
+    localStorage.setItem('probe', 'kept')
+    sessionStorage.setItem('probe-session', 'kept')
+    const location = stubLocationReload()
+    try {
+      renderEmptyStrip()
+      await selectClearCacheMenuItem()
+
+      expect(document.body.querySelector('[role="alertdialog"]')).not.toBeNull()
+      expect(localStorage.getItem('probe')).toBe('kept')
+
+      await act(async () => {
+        Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'))
+          .find((button) => button.textContent?.includes('Clear and reload'))
+          ?.click()
+        await Promise.resolve()
+      })
+
+      expect(localStorage.getItem('probe')).toBeNull()
+      expect(sessionStorage.getItem('probe-session')).toBeNull()
+      expect(location.reload).toHaveBeenCalledTimes(1)
+      expect(document.body.querySelector('[role="alertdialog"]')).toBeNull()
+    } finally {
+      location.restore()
+      localStorage.clear()
+      sessionStorage.clear()
+    }
+  })
+
+  test('cancelling the clear-cache dialog has no side effects', async () => {
+    localStorage.setItem('probe', 'kept')
+    const location = stubLocationReload()
+    try {
+      renderEmptyStrip()
+      await selectClearCacheMenuItem()
+
+      await act(async () => {
+        Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'))
+          .find((button) => button.textContent?.includes('dialog.cancel'))
+          ?.click()
+        await Promise.resolve()
+      })
+
+      expect(document.body.querySelector('[role="alertdialog"]')).toBeNull()
+      expect(localStorage.getItem('probe')).toBe('kept')
+      expect(location.reload).not.toHaveBeenCalled()
+    } finally {
+      location.restore()
+      localStorage.clear()
+    }
+  })
 })
 
 function render(
@@ -281,6 +444,7 @@ function render(
   fixture: {
     bellWorktreeKeys?: string[]
     outputActiveWorktreeKeys?: string[]
+    openWorktreeKeys?: string[]
   } = {},
 ) {
   container = document.createElement('div')
@@ -289,6 +453,7 @@ function render(
   const readContext = terminalReadContextWithState(
     new Set(fixture.bellWorktreeKeys ?? []),
     new Set(fixture.outputActiveWorktreeKeys ?? []),
+    new Set(fixture.openWorktreeKeys ?? []),
   )
   act(() => {
     root!.render(
@@ -310,15 +475,15 @@ function repo(name: string, id: string, options: { worktreePaths?: string[]; isG
 function terminalReadContextWithState(
   bellKeys: ReadonlySet<string>,
   outputActiveKeys: ReadonlySet<string>,
+  openKeys: ReadonlySet<string> = new Set(),
 ): TerminalSessionReadContextValue {
   return {
     worktreeSnapshot: (worktreeTerminalKey) => {
       const hasBell = bellKeys.has(worktreeTerminalKey)
       const isOutputActive = outputActiveKeys.has(worktreeTerminalKey)
-      return {
-        worktreeTerminalKey,
-        selectedDescriptor: null,
-        sessions: hasBell || isOutputActive
+      const isOpen = openKeys.has(worktreeTerminalKey)
+      const sessions =
+        hasBell || isOutputActive || isOpen
           ? [
               {
                 key: `${worktreeTerminalKey}\0terminal-1`,
@@ -326,14 +491,18 @@ function terminalReadContextWithState(
                 terminalId: 'terminal-1',
                 index: 1,
                 title: 'terminal',
-                phase: 'open',
+                phase: 'open' as const,
                 selected: true,
                 hasBell,
                 isOutputActive,
               },
             ]
-          : [],
-        count: hasBell || isOutputActive ? 1 : 0,
+          : []
+      return {
+        worktreeTerminalKey,
+        selectedDescriptor: null,
+        sessions,
+        count: sessions.length,
       }
     },
     subscribeWorktree: () => () => {},
@@ -357,6 +526,52 @@ const labels = {
   clone: 'Clone repository…',
   cloneShortcut: '⌘⇧O',
   unavailable: 'Unavailable',
+  clearCache: 'Clear cache',
+  clearCacheConfirmTitle: 'Clear cache?',
+  clearCacheConfirmMessage: 'Clears cached data for all repositories on this server and reloads the page.',
+  clearCacheConfirmLabel: 'Clear and reload',
+}
+
+function renderEmptyStrip() {
+  render(
+    <RepoTabStrip
+      repos={[]}
+      activeId={null}
+      labels={labels}
+      onActivate={() => {}}
+      onClose={() => {}}
+      onReorder={() => {}}
+      onOpenLocal={() => {}}
+      onOpenRemote={() => {}}
+      onClone={() => {}}
+    />,
+  )
+}
+
+async function selectClearCacheMenuItem() {
+  const trigger = document.body.querySelector('button[aria-label="Open"]')
+  if (!(trigger instanceof HTMLButtonElement)) throw new Error('missing open trigger')
+  await act(async () => {
+    trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+    trigger.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }))
+    await Promise.resolve()
+  })
+  await act(async () => {
+    Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+      .find((item) => item.textContent?.includes('Clear cache'))
+      ?.click()
+    await Promise.resolve()
+  })
+}
+
+function stubLocationReload(): { reload: ReturnType<typeof vi.fn>; restore: () => void } {
+  const originalLocation = window.location
+  const reload = vi.fn()
+  Object.defineProperty(window, 'location', { configurable: true, value: { reload } })
+  return {
+    reload,
+    restore: () => Object.defineProperty(window, 'location', { configurable: true, value: originalLocation }),
+  }
 }
 
 function createMatchMedia(matches: boolean) {

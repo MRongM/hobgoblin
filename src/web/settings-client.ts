@@ -24,7 +24,11 @@ import type {
   ThemeState,
 } from '#/shared/rpc.ts'
 import type { ColorTheme } from '#/shared/color-theme.ts'
-import { nativeSettingsProjectionStateFromSettings, pickNativeSettingsProjectionPatch } from '#/shared/native-shell-projection.ts'
+import type { RepoSettingsEntry } from '#/shared/repo-settings.ts'
+import {
+  nativeSettingsProjectionStateFromSettings,
+  pickNativeSettingsProjectionPatch,
+} from '#/shared/native-shell-projection.ts'
 import { runtimeSettingsSnapshotFromSettingsSnapshot } from '#/shared/settings-snapshot.ts'
 
 type RecentReposUpdateResponse = { ok: boolean; addedRepo?: RepoSessionEntry | null } & RuntimeRecentReposState
@@ -79,6 +83,17 @@ export async function setThemeColorTheme(colorTheme: ColorTheme): Promise<ThemeS
   return resolveThemeStateFromPrefs((await updateSettingsPrefsPatch({ colorTheme })).settings)
 }
 
+export async function setProjectColorTheme(
+  repoId: string,
+  colorTheme: ColorTheme | null,
+): Promise<RepoSettingsEntry[]> {
+  const result = await postServerJson<
+    { repoId: string; colorTheme: ColorTheme | null },
+    { ok: true; repoSettings: RepoSettingsEntry[] }
+  >('/api/settings/repo-theme', { repoId, colorTheme })
+  return result.repoSettings
+}
+
 export async function getI18nSnapshot(): Promise<I18nSnapshot> {
   return await fetchServerJson<I18nSnapshot>('/api/settings/i18n')
 }
@@ -107,6 +122,10 @@ export async function getLanInfo(): Promise<LanInfo> {
 
 export async function setLanEnabled(enabled: boolean): Promise<void> {
   await updateSettingsPrefsPatch({ lanEnabled: enabled })
+}
+
+export async function setServerPort(port: number): Promise<void> {
+  await updateSettingsPrefsPatch({ serverPort: port })
 }
 
 export async function setGitNetworkProxyEnabled(enabled: boolean): Promise<void> {

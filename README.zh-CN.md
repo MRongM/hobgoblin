@@ -117,6 +117,39 @@ http://127.0.0.1:32200
 ./serve.sh --host 127.0.0.1 --port 32200
 ```
 
+### Linux systemd 部署
+
+在使用 systemd 的 Linux 主机上安装 Node.js 24+ 和 Bun，克隆仓库后，在仓库根目录执行部署脚本：
+
+```sh
+./scripts/serve-systemd.sh
+```
+
+首次运行会安装服务，后续运行会更新现有部署。首次安装时如需明确配置监听地址、端口和持久化数据目录，可执行：
+
+```sh
+./scripts/serve-systemd.sh install \
+  --host 0.0.0.0 \
+  --port 32200 \
+  --data-dir ./data/server
+```
+
+`0.0.0.0` 会监听所有网络接口；如果服务只应允许本机访问，请改用 `127.0.0.1`。
+
+安装操作会执行 `bun install`、构建 Web UI、写入 `/etc/systemd/system/hobgoblin.service` 和 `/etc/hobgoblin/server.env`，然后启用并启动服务。非 root 用户运行时，脚本会使用 `sudo`。
+
+常用维护命令：
+
+```sh
+./scripts/serve-systemd.sh update
+./scripts/serve-systemd.sh update --no-pull
+./scripts/serve-systemd.sh status
+./scripts/serve-systemd.sh logs
+./scripts/serve-systemd.sh uninstall
+```
+
+`update` 默认尝试执行 `git pull --ff-only`，随后安装依赖、重新构建 Web UI 并重启服务。使用 `--no-pull` 可以直接部署当前 checkout。`uninstall` 会停止并移除服务，但保留 `/etc/hobgoblin/server.env`；如果不再需要，请手动删除该文件。
+
 ## 链接
 
 - [GitHub Pages](https://mrongm.github.io/hobgoblin/)

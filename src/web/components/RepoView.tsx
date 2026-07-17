@@ -2,41 +2,37 @@
 // while focus mode renders detail directly under the global topbar.
 
 import { useCallback, useState } from 'react'
-import { Smartphone } from 'lucide-react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { BranchDetail } from '#/web/components/BranchDetail.tsx'
 import { RepoWorkspaceSkeleton } from '#/web/components/Skeleton.tsx'
 import { RepoWorkspace, RepoWorkspacePane } from '#/web/components/Layout.tsx'
 import { useRepoToasts } from '#/web/hooks/useRepoToasts.tsx'
-import { useT } from '#/web/stores/i18n.ts'
 import { repoWorkspaceBehavior } from '#/web/lib/workspace-layout.ts'
 import { getRepoWorkspacePresentation } from '#/web/components/repo-workspace/model.ts'
 import { RepoExplorerPane, type FileTreeRevealRequest } from '#/web/components/repo-workspace/RepoExplorerPane.tsx'
 import { UnavailableRepoView } from '#/web/components/UnavailableRepoView.tsx'
 import { useResponsiveUiMode } from '#/web/hooks/useResponsiveUiMode.tsx'
-import { Button } from '#/web/components/ui/button.tsx'
 import { repoIsPlainWorkspace } from '#/web/stores/repos/capabilities.ts'
+import { useEffectiveWorkspaceLayout } from '#/web/lib/effective-workspace-layout.ts'
 
 interface Props {
   repoId: string
 }
 
 export function RepoView({ repoId }: Props) {
-  const t = useT()
+  const layout = useEffectiveWorkspaceLayout()
   const uiMode = useResponsiveUiMode()
   const view = useStoreWithEqualityFn(
     useReposStore,
     (s) => {
       const repo = s.repos[repoId]
       const presentation = getRepoWorkspacePresentation(repo)
-      const workspaceLayout = repo?.ui.workspaceLayout ?? s.workspaceLayout
       return {
         exists: presentation.exists,
         initialLoading: presentation.initialLoading,
         detailCollapsed: s.detailCollapsed,
         detailFocusMode: s.detailFocusMode,
-        workspaceLayout,
         detailPaneSizes: s.detailPaneSizes,
       }
     },
@@ -45,28 +41,30 @@ export function RepoView({ repoId }: Props) {
       a.initialLoading === b.initialLoading &&
       a.detailCollapsed === b.detailCollapsed &&
       a.detailFocusMode === b.detailFocusMode &&
-      a.workspaceLayout === b.workspaceLayout &&
       a.detailPaneSizes['top-bottom'] === b.detailPaneSizes['top-bottom'] &&
       a.detailPaneSizes['left-right'] === b.detailPaneSizes['left-right'],
   )
   const setDetailPaneSize = useReposStore((s) => s.setDetailPaneSize)
-  const setWorkspaceLayout = useReposStore((s) => s.setWorkspaceLayout)
   const repo = useReposStore((s) => s.repos[repoId])
   useRepoToasts(repoId)
+  const [fileAreaCollapsed, setFileAreaCollapsed] = useState(false)
   const [terminalRevealRequest, setTerminalRevealRequest] = useState<FileTreeRevealRequest | null>(null)
-  const handleTerminalRevealPath = useCallback((relativePath: string) => {
-    setTerminalRevealRequest((current) => ({ id: (current?.id ?? 0) + 1, relativePath }))
-  }, [])
+  const toggleFileArea = useCallback(() => setFileAreaCollapsed((collapsed) => !collapsed), [])
+  const handleTerminalRevealPath = useCallback(
+    (relativePath: string) => {
+      setFileAreaCollapsed(false)
+      setTerminalRevealRequest((current) => ({ id: (current?.id ?? 0) + 1, repoId, relativePath }))
+    },
+    [repoId],
+  )
 
-  const layout = view.workspaceLayout
   const behavior = repoWorkspaceBehavior(layout, view.detailCollapsed, view.detailFocusMode)
   const detailPaneSize = view.detailPaneSizes[layout]
-  const compactLeftRight = uiMode === 'compact' && view.workspaceLayout === 'left-right'
   const isPlainWorkspace = repoIsPlainWorkspace(repo)
 
   if (!view.exists || !repo) return <div />
-  if (repo.availability.phase === 'unavailable') return <UnavailableRepoView repo={repo} />
-  if (view.initialLoading) {
+  const repoUnavailable = repo.availability.phase === 'unavailable'
+  if (view.initialLoading && !repoUnavailable) {
     return (
       <RepoWorkspaceSkeleton
         layout={layout}
@@ -85,6 +83,7 @@ export function RepoView({ repoId }: Props) {
             layout={layout}
             showActions={false}
             revealRequest={terminalRevealRequest}
+            plainWorkspaceTerminalPanel={repoUnavailable ? <UnavailableRepoView repo={repo} /> : undefined}
           />
         </RepoWorkspacePane>
       </section>
@@ -93,19 +92,23 @@ export function RepoView({ repoId }: Props) {
 
   const detailPane = (
     <RepoWorkspacePane>
-      <BranchDetail
-        repoId={repoId}
-        layout={layout}
-        collapsed={behavior.detailCollapsed}
-        detailFocusMode={behavior.detailFocusMode}
-        onRevealPath={handleTerminalRevealPath}
-      />
+      {repoUnavailable ? (
+        <UnavailableRepoView repo={repo} />
+      ) : (
+        <BranchDetail
+          repoId={repoId}
+          layout={layout}
+          collapsed={behavior.detailCollapsed}
+          detailFocusMode={behavior.detailFocusMode}
+          onRevealPath={handleTerminalRevealPath}
+        />
+      )}
     </RepoWorkspacePane>
   )
-  const workspaceMode = behavior.mode === 'collapsed' ? 'collapsed' : 'split'
+  const workspaceMode = repoUnavailable ? 'split' : behavior.mode === 'collapsed' ? 'collapsed' : 'split'
 
   const workspaceBody =
-    behavior.mode === 'focus' ? (
+    behavior.mode === 'focus' && !repoUnavailable ? (
       detailPane
     ) : (
       <RepoWorkspace
@@ -118,8 +121,10 @@ export function RepoView({ repoId }: Props) {
             <RepoExplorerPane
               repoId={repoId}
               layout={layout}
-              showActions={behavior.branchListActionsVisible}
+              showActions={repoUnavailable || behavior.branchListActionsVisible}
               revealRequest={terminalRevealRequest}
+              fileAreaCollapsed={fileAreaCollapsed}
+              onToggleFileArea={toggleFileArea}
             />
           </RepoWorkspacePane>
         }
@@ -127,19 +132,5 @@ export function RepoView({ repoId }: Props) {
       />
     )
 
-  return (
-    <section className="relative flex min-w-0 flex-1 flex-col">
-      {compactLeftRight && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/95 p-6 text-center">
-          <Smartphone className="mb-4 h-10 w-10 text-muted-foreground" />
-          <div className="text-sm font-medium text-foreground">{t('workspace.compact-mask.title')}</div>
-          <div className="mt-1 text-xs text-muted-foreground">{t('workspace.compact-mask.description')}</div>
-          <Button className="mt-4" onClick={() => setWorkspaceLayout(repoId, 'top-bottom')}>
-            {t('workspace.compact-mask.button')}
-          </Button>
-        </div>
-      )}
-      {workspaceBody}
-    </section>
-  )
+  return <section className="relative flex min-w-0 flex-1 flex-col">{workspaceBody}</section>
 }

@@ -3,7 +3,7 @@ import { useReposStore } from '#/web/stores/repos/store.ts'
 import { markRepoOperationTargets, nextRepoOperationId, repoOperation } from '#/web/stores/repos/runtime.ts'
 import { replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { getBranchActionCapabilities } from '#/web/hooks/useBranchActions.tsx'
-import { branchBrowserRemoteProvider } from '#/web/hooks/useBranchActionItems.ts'
+import { branchBrowserRemoteProvider } from '#/web/hooks/useBranchActionItems.tsx'
 import {
   createBranchSnapshot,
   createRepoBranch,
@@ -12,7 +12,6 @@ import {
   seedRepoState,
 } from '#/web/stores/repos/test-utils.ts'
 import type { RepoBranchAction } from '#/web/stores/repos/branch-action-types.ts'
-import type { BranchViewMode } from '#/web/stores/repos/types.ts'
 import { normalizeRemoteTarget } from '#/shared/remote-repo.ts'
 const REPO_ID = '/tmp/gbl-branch-actions-test-repo'
 
@@ -39,10 +38,9 @@ function updateRepoForTest(
   })
 }
 
-function setSelectionForTest(selectedBranch: string, branchViewMode: BranchViewMode) {
+function setSelectionForTest(selectedBranch: string) {
   updateRepoForTest((repo) => {
     repo.ui.selectedBranch = selectedBranch
-    repo.ui.branchViewMode = branchViewMode
   })
 }
 
@@ -734,8 +732,8 @@ describe('runBranchAction', () => {
     })
   })
 
-  test('keeps the current branch selection after creating a worktree', async () => {
-    setSelectionForTest('feature/a', 'all')
+  test('selects the new worktree branch after creating a worktree', async () => {
+    setSelectionForTest('feature/a')
     installSuccessfulCreateWorktreeBridge()
 
     await useReposStore.getState().runBranchAction(
@@ -747,12 +745,11 @@ describe('runBranchAction', () => {
     )
 
     const repo = useReposStore.getState().repos[REPO_ID]
-    expect(repo?.ui.branchViewMode).toBe('all')
-    expect(repo?.ui.selectedBranch).toBe('feature/a')
+    expect(repo?.ui.selectedBranch).toBe('feature/new')
   })
 
-  test('keeps no-worktree filtering after creating a worktree', async () => {
-    setSelectionForTest('feature/a', 'no-worktree')
+  test('updates selection to visible worktree branch after refresh', async () => {
+    setSelectionForTest('feature/a')
     installSuccessfulCreateWorktreeBridge()
 
     await useReposStore.getState().runBranchAction(
@@ -764,15 +761,14 @@ describe('runBranchAction', () => {
     )
 
     const repo = useReposStore.getState().repos[REPO_ID]
-    expect(repo?.ui.branchViewMode).toBe('no-worktree')
-    expect(repo?.ui.selectedBranch).toBe('feature/a')
+    expect(repo?.ui.selectedBranch).toBe('feature/new')
   })
 
   test.each([
     ['failed', { ok: false, message: 'error.invalid-path' }],
     ['cancelled', { ok: false, message: 'cancelled' }],
   ])('keeps the current branch selection when create worktree is %s', async (_label, result) => {
-    setSelectionForTest('feature/a', 'no-worktree')
+    setSelectionForTest('feature/a')
     installGoblinTestBridge({
       'repo.createWorktree': async () => result,
     })
@@ -786,12 +782,11 @@ describe('runBranchAction', () => {
     )
 
     const repo = useReposStore.getState().repos[REPO_ID]
-    expect(repo?.ui.branchViewMode).toBe('no-worktree')
     expect(repo?.ui.selectedBranch).toBe('feature/a')
   })
 
   test('does not let stale create worktree refresh results change selection', async () => {
-    setSelectionForTest('feature/a', 'no-worktree')
+    setSelectionForTest('feature/a')
     installSuccessfulCreateWorktreeBridge({
       onSnapshot: () => {
         seedRepoState({
@@ -800,7 +795,7 @@ describe('runBranchAction', () => {
           branches: [createRepoBranch('feature/a'), createRepoBranch('feature/new')],
           selectedBranch: 'feature/a',
         })
-        setSelectionForTest('feature/a', 'no-worktree')
+        setSelectionForTest('feature/a')
       },
     })
 
@@ -814,7 +809,6 @@ describe('runBranchAction', () => {
 
     const repo = useReposStore.getState().repos[REPO_ID]
     expect(repo?.instanceToken).toBe(2)
-    expect(repo?.ui.branchViewMode).toBe('no-worktree')
     expect(repo?.ui.selectedBranch).toBe('feature/a')
   })
 
@@ -850,12 +844,12 @@ describe('runBranchAction', () => {
   })
 
   test('keeps selection after non-create branch actions refresh', async () => {
-    setSelectionForTest('feature/a', 'no-worktree')
+    setSelectionForTest('feature/a')
     installGoblinTestBridge({
       'repo.deleteBranch': async () => ({ ok: true, message: 'ok' }),
       'repo.snapshot': async () => ({
         branches: [
-          createBranchSnapshot('feature/a'),
+          createBranchSnapshot('feature/a', { worktree: { path: '/tmp/gbl-worktree-a' } }),
           createBranchSnapshot('feature/new', { worktree: { path: '/tmp/gbl-branch-actions-test-worktree' } }),
         ],
         current: 'feature/a',
@@ -869,7 +863,6 @@ describe('runBranchAction', () => {
       .runBranchAction(REPO_ID, { kind: 'deleteBranch', branch: 'feature/b', force: false }, { token: 1 })
 
     const repo = useReposStore.getState().repos[REPO_ID]
-    expect(repo?.ui.branchViewMode).toBe('no-worktree')
     expect(repo?.ui.selectedBranch).toBe('feature/a')
   })
 

@@ -12,6 +12,8 @@ import {
 } from '#/shared/file-tree.ts'
 import { parseBranches, parseCommitFileChanges, parseCommitHistory, parseLog, parseStatus, parseWorktrees } from '#/system/git/parsers.ts'
 import { markDefaultBranch, prioritizeDefaultBranch } from '#/system/git/branches.ts'
+import { isProtectedRemoteBranchRef, parseRemoteBranchInput } from '#/shared/remote-branches.ts'
+import { parseRemoteTagInput, remoteTagRefsFromLsRemote, remoteTagSortKey } from '#/shared/remote-tags.ts'
 import {
   parseBootstrapConfig,
   validateBootstrapConfigPaths,
@@ -879,6 +881,68 @@ export async function getRemoteTrackingBranches(
   return result.ok ? parseRemoteTrackingRefs(result.stdout) : []
 }
 
+export async function getLocalTags(
+  target: RemoteRepoTarget,
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<string[]> {
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const result = await run({ type: 'gitTags', path: target.remotePath }, target, { signal: options.signal })
+  return result.ok
+    ? result.stdout
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+    : []
+}
+
+export async function createLocalTag(
+  target: RemoteRepoTarget,
+  input: { name: string; ref: string; signal?: AbortSignal; run?: RemoteGitRunner },
+): Promise<ExecResult> {
+  if (!isSafeBranchName(input.name)) return { ok: false, message: 'error.invalid-arguments' }
+  const run: RemoteGitRunner = input.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const result = await run(
+    { type: 'gitTagCreate', path: target.remotePath, name: input.name, ref: input.ref },
+    target,
+    { signal: input.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
+  )
+  return remoteExecResult(result)
+}
+
+export async function deleteLocalTag(
+  target: RemoteRepoTarget,
+  input: { name: string; signal?: AbortSignal; run?: RemoteGitRunner },
+): Promise<ExecResult> {
+  if (!isSafeBranchName(input.name)) return { ok: false, message: 'error.invalid-arguments' }
+  const run: RemoteGitRunner = input.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const result = await run(
+    { type: 'gitTagDelete', path: target.remotePath, name: input.name },
+    target,
+    { signal: input.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
+  )
+  return remoteExecResult(result)
+}
+
+export async function getRemoteTags(
+  target: RemoteRepoTarget,
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<string[]> {
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const remotes = await getRemoteRemotes(target, { signal: options.signal, run })
+  if (options.signal?.aborted) return []
+  const refs = await Promise.all(
+    remotes.map(async (remote) => {
+      const result = await run(
+        { type: 'gitRemoteTags', path: target.remotePath, remote: remote.name },
+        target,
+        { signal: options.signal },
+      )
+      return result.ok ? remoteTagRefsFromLsRemote(remote.name, result.stdout) : []
+    }),
+  )
+  return Array.from(new Set(refs.flat())).sort((a, b) => remoteTagSortKey(a).localeCompare(remoteTagSortKey(b)))
+}
+
 export async function removeRemoteWorktree(
   target: RemoteRepoTarget,
   input: {
@@ -979,6 +1043,53 @@ export async function deleteRemoteBranch(
   if (validation) return validation
   const result = await run(
     { type: 'gitBranchDelete', path: target.remotePath, branch: input.branch, force: shouldForce },
+    target,
+    { signal: input.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
+  )
+  return remoteExecResult(result)
+}
+
+export async function deleteRemoteServerBranch(
+  target: RemoteRepoTarget,
+  input: { remote: string; branch: string; signal?: AbortSignal; run?: RemoteGitRunner },
+): Promise<ExecResult> {
+  const parsed = parseRemoteBranchInput(input.remote, input.branch)
+  if (!parsed || isProtectedRemoteBranchRef(parsed.fullRef)) return { ok: false, message: 'error.invalid-arguments' }
+  const run: RemoteGitRunner = input.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const result = await run(
+    { type: 'gitRemoteBranchDelete', path: target.remotePath, remote: parsed.remote, branch: parsed.branch },
+    target,
+    { signal: input.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
+  )
+  return remoteExecResult(result)
+}
+
+export async function deleteRemoteServerTag(
+  target: RemoteRepoTarget,
+  input: { remote: string; tag: string; signal?: AbortSignal; run?: RemoteGitRunner },
+): Promise<ExecResult> {
+  const parsed = parseRemoteTagInput(input.remote, input.tag)
+  if (!parsed) return { ok: false, message: 'error.invalid-arguments' }
+  const run: RemoteGitRunner = input.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const result = await run(
+    { type: 'gitRemoteTagDelete', path: target.remotePath, remote: parsed.remote, tag: parsed.tag },
+    target,
+    { signal: input.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
+  )
+  return remoteExecResult(result)
+}
+
+export async function pushLocalTag(
+  target: RemoteRepoTarget,
+  input: { name: string; signal?: AbortSignal; run?: RemoteGitRunner },
+): Promise<ExecResult> {
+  if (!isSafeBranchName(input.name)) return { ok: false, message: 'error.invalid-arguments' }
+  const run: RemoteGitRunner = input.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const pushTarget = await resolveRemotePushTarget(target, input.name, { signal: input.signal, run })
+  if (input.signal?.aborted) return { ok: false, message: 'cancelled' }
+  if ('ok' in pushTarget) return pushTarget
+  const result = await run(
+    { type: 'gitTagPush', path: target.remotePath, remote: pushTarget.remote, tag: input.name },
     target,
     { signal: input.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
   )
