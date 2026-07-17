@@ -169,12 +169,13 @@ export function RepoExplorerPane({
   )
 }
 
-// Slim eyebrow above the branch rows — mirrors the detached-worktrees
-// list label so the sidebar sections read as one system.
+// Slim eyebrow above the branch rows — the same 10px tracked-caps label
+// the project switcher and detached-worktrees lists use, so the sidebar
+// sections read as one system.
 function BranchSectionLabel() {
   const t = useT()
   return (
-    <div className="flex h-7 shrink-0 items-center px-4 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+    <div className="flex h-7 shrink-0 items-center px-4 pt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
       {t('branches.filter.worktrees')}
     </div>
   )
