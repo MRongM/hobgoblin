@@ -497,3 +497,28 @@ test('untrusting bootstrap config preserves project color theme', async () => {
   await expect(mod.untrustServerRepoWorktreeBootstrapConfig({ repoId: '/repo-a', configHash })).resolves.toBe(true)
   await expect(mod.getServerRepoSettings()).resolves.toEqual([{ repoId: '/repo-a', colorTheme: 'cursor' }])
 })
+
+test('persists file tree pane sizes through session save and reload', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  const saved = await mod.setServerSessionState({
+    ...defaultSessionState(),
+    fileTreePaneSizes: { 'top-bottom': 40, 'left-right': 32.5 },
+  })
+  expect(saved.fileTreePaneSizes).toEqual({ 'top-bottom': 40, 'left-right': 32.5 })
+
+  await expect(mod.getServerSessionState()).resolves.toMatchObject({
+    fileTreePaneSizes: { 'top-bottom': 40, 'left-right': 32.5 },
+  })
+})
+
+test('normalizes missing or invalid file tree pane sizes to defaults', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  const session = defaultSessionState()
+  delete session.fileTreePaneSizes
+  const saved = await mod.setServerSessionState(session)
+  expect(saved.fileTreePaneSizes).toEqual({ 'top-bottom': 66.7, 'left-right': 66.7 })
+})

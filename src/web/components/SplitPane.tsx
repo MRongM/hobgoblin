@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import type { ReactNode } from 'react'
-import { useGroupRef, usePanelRef } from 'react-resizable-panels'
+import { useGroupRef } from 'react-resizable-panels'
 import type { Layout } from 'react-resizable-panels'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '#/web/components/ui/resizable.tsx'
 import { cn } from '#/web/lib/cn.ts'
@@ -42,14 +42,9 @@ export function SplitPane({
   disabled = false,
 }: SplitPaneProps) {
   const groupRef = useGroupRef()
-  const afterPanelRef = usePanelRef()
-  const wasAfterCollapsedRef = useRef(afterCollapsed)
   const layout = useMemo<Layout>(
-    () => ({
-      [BEFORE_PANEL_ID]: afterCollapsed ? 100 : 100 - afterSize,
-      [AFTER_PANEL_ID]: afterCollapsed ? 0 : afterSize,
-    }),
-    [afterCollapsed, afterSize],
+    () => ({ [BEFORE_PANEL_ID]: 100 - afterSize, [AFTER_PANEL_ID]: afterSize }),
+    [afterSize],
   )
   const handleLayoutChanged = useCallback(
     (layout: Layout) => {
@@ -60,17 +55,19 @@ export function SplitPane({
     [afterCollapsed, onAfterSizeChange],
   )
 
+  // Collapse is CSS-driven (display:none on the trailing panel) rather than
+  // panel.collapse()/dynamic minSize: imperative collapse validates against
+  // the registered min-size constraints and never reaches zero, and
+  // panel.resize(number) treats the value as pixels, so both directions end
+  // up clamped at the minimum size. Hiding the panel lets the leading pane
+  // absorb the full flex share while the group keeps its layout state.
+  // The rule lives on the group because Panel does not forward className
+  // to its DOM element. Re-applying the controlled layout on expand clears
+  // any re-measuring the library did while the panel was display:none.
   useEffect(() => {
+    if (afterCollapsed) return
     groupRef.current?.setLayout(layout)
-  }, [groupRef, layout])
-
-  useEffect(() => {
-    const panel = afterPanelRef.current
-    if (!panel) return
-    if (afterCollapsed) panel.collapse()
-    else if (wasAfterCollapsedRef.current) panel.resize(afterSize)
-    wasAfterCollapsedRef.current = afterCollapsed
-  }, [afterCollapsed, afterPanelRef, afterSize])
+  }, [afterCollapsed, groupRef, layout])
 
   return (
     <ResizablePanelGroup
@@ -80,7 +77,7 @@ export function SplitPane({
       resizeTargetMinimumSize={RESIZE_TARGET_MINIMUM_SIZE}
       defaultLayout={layout}
       onLayoutChanged={handleLayoutChanged}
-      className={cn('min-h-0 min-w-0', className)}
+      className={cn('min-h-0 min-w-0', afterCollapsed && '[&>[data-panel]:last-child]:!hidden', className)}
     >
       <ResizablePanel
         id={BEFORE_PANEL_ID}
@@ -92,23 +89,15 @@ export function SplitPane({
       <ResizableHandle
         orientation={orientation}
         disabled={disabled || afterCollapsed}
-        className={afterCollapsed ? 'hidden' : undefined}
+        className={afterCollapsed ? '!hidden' : undefined}
       />
       <ResizablePanel
         id={AFTER_PANEL_ID}
-        panelRef={afterPanelRef}
-        collapsible={afterCollapsed}
-        collapsedSize={0}
-        minSize={afterCollapsed ? 0 : afterMinSize}
+        minSize={afterMinSize}
         maxSize={afterMaxSize}
         className={cn('flex min-h-0 min-w-0 overflow-hidden', afterClassName)}
       >
-        <div
-          aria-hidden={afterCollapsed || undefined}
-          className={cn('flex min-h-0 min-w-0 flex-1', afterCollapsed && 'hidden')}
-        >
-          {after}
-        </div>
+        {after}
       </ResizablePanel>
     </ResizablePanelGroup>
   )

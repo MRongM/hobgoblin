@@ -24,6 +24,7 @@ import {
   DEFAULT_DETAIL_COLLAPSED,
   effectiveDetailCollapsed,
   normalizeDetailPaneSizes,
+  normalizeFileTreePaneSizes,
   normalizeWorkspaceLayout,
 } from '#/shared/workspace-layout.ts'
 import { repoSessionEntryId, type RepoSessionEntry } from '#/shared/remote-repo.ts'
@@ -348,6 +349,7 @@ function normalizeSession(value: unknown): SessionState {
     detailFocusMode,
     workspaceLayout,
     detailPaneSizes: normalizeDetailPaneSizes(partial.detailPaneSizes),
+    fileTreePaneSizes: normalizeFileTreePaneSizes(partial.fileTreePaneSizes),
     selectedTerminalByWorktree: normalizeSelectedTerminalByWorktree(
       partial.selectedTerminalByWorktree ?? partial.activeTerminalByGroup,
     ),

@@ -17,6 +17,7 @@ import {
   SettingsRow,
 } from '#/web/components/settings/SettingsPrimitives.tsx'
 import { useFileAreaSettingsController, useRuntimeFileAreaSettings } from '#/web/runtime-settings-file-area.ts'
+import { useEffectiveWorkspaceLayout } from '#/web/lib/effective-workspace-layout.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useT } from '#/web/stores/i18n.ts'
 
@@ -25,9 +26,11 @@ export function FileAreaSettings() {
   const { fileTreeFontSize, fileTreeTopbarFontSize, fileTreeClipboardMaxBytesMb } = useRuntimeFileAreaSettings()
   const { setFileTreeFontSize, setFileTreeTopbarFontSize, setFileTreeClipboardMaxBytesMb } =
     useFileAreaSettingsController()
-  const workspaceLayout = useReposStore((state) =>
-    state.activeId ? state.repos[state.activeId]?.ui.workspaceLayout ?? state.workspaceLayout : state.workspaceLayout,
-  )
+  // The workspace always renders with the responsive effective layout (see
+  // useEffectiveWorkspaceLayout), so the setting must edit the same key —
+  // the session's stored workspaceLayout may differ and would silently edit
+  // an unused entry.
+  const workspaceLayout = useEffectiveWorkspaceLayout()
   const fileTreePaneSize = useReposStore((state) => state.fileTreePaneSizes[workspaceLayout])
   const setDefaultFileTreePaneSize = useReposStore((state) => state.setDefaultFileTreePaneSize)
 
