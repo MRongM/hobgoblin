@@ -1,4 +1,4 @@
-import { ArrowUp, Maximize2, Minus, PanelLeftOpen, QrCode } from 'lucide-react'
+import { ArrowUp, Globe, Minus, PanelLeftOpen, QrCode } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useReposStore } from '#/web/stores/repos/store.ts'
@@ -23,6 +23,7 @@ import { useRuntimeShortcutSettings } from '#/web/runtime-settings-shortcuts.ts'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { useFocusRegistry } from '#/web/components/tab-strip/useFocusRegistry.ts'
 import { useLanInfoQuery } from '#/web/settings-queries.ts'
+import { openExternalUrl } from '#/web/app-shell-client.ts'
 import { TopbarRepoControls } from '#/web/components/topbar/TopbarRepoControls.tsx'
 import { FocusProjectSwitcher } from '#/web/components/repo-workspace/FocusProjectSwitcher.tsx'
 import {
@@ -136,6 +137,16 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
       }),
     )
   }, [detail.branch, focusedTerminalSession?.terminalId, lanInfo?.lanUrls, repo.id])
+  const terminalBrowserUrl = useMemo(() => {
+    if (!detail.branch?.worktree?.path || !lanInfo) return null
+    const accessHost = lanInfo.host === '0.0.0.0' ? '127.0.0.1' : lanInfo.host
+    return buildTerminalDeepLinkUrl(`http://${accessHost}:${lanInfo.port}`, {
+      repoId: repo.id,
+      worktreePath: detail.branch.worktree.path,
+      branch: detail.branch.name,
+      terminalId: focusedTerminalSession?.terminalId,
+    })
+  }, [detail.branch, focusedTerminalSession?.terminalId, lanInfo, repo.id])
 
   // No selected branch means there is no tab/action target; BranchDetailContent renders the empty state.
   if (!detail.branch) return null
@@ -153,7 +164,6 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
         ? 'branch-detail.expand-title'
         : 'branch-detail.collapse-title',
   )
-  const focusTogglePressed = behavior.detailFocusMode
   const showCollapseControl = behavior.detailCollapseAllowed && layout !== 'left-right'
   // In the desktop left-right layout this toolbar is the right half of the
   // window's top edge, so its unused surface is a drag region without the
@@ -227,6 +237,18 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
             <Button
               variant="ghost"
               size="icon"
+              onClick={() => {
+                if (terminalBrowserUrl) void openExternalUrl(terminalBrowserUrl)
+              }}
+              disabled={!terminalBrowserUrl}
+              aria-label={t('terminal.open-in-browser')}
+              title={t('terminal.open-in-browser-title')}
+            >
+              <Globe />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => setLanQrOpen(true)}
               aria-label={t('terminal.lan-qr')}
               title={t('terminal.lan-qr-title')}
@@ -235,20 +257,6 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
             </Button>
             <TerminalLanQrDialog open={lanQrOpen} onOpenChange={setLanQrOpen} urls={terminalLanUrls} />
           </>
-        )}
-        {/* In focus mode the exit control sits at the toolbar's left edge
-         * (PanelLeftOpen), so the maximize toggle only shows outside it. */}
-        {behavior.detailFocusAllowed && !focusTogglePressed && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleDetailFocusMode}
-            aria-label={t('branch-detail.focus')}
-            title={t('branch-detail.focus-title')}
-            aria-pressed={focusTogglePressed}
-          >
-            <Maximize2 />
-          </Button>
         )}
         {showCollapseControl && (
           <Button

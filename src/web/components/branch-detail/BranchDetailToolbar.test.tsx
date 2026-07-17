@@ -31,6 +31,15 @@ import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 
 let compactUi = false
 
+const { openExternalUrlMock } = vi.hoisted(() => ({
+  openExternalUrlMock: vi.fn(async (_url: string) => ({ ok: true, message: '' })),
+}))
+
+vi.mock('#/web/app-shell-client.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('#/web/app-shell-client.ts')>()),
+  openExternalUrl: (url: string) => openExternalUrlMock(url),
+}))
+
 vi.mock('#/web/hooks/useResponsiveUiMode.tsx', () => ({
   useIsCompactUi: () => compactUi,
 }))
@@ -200,7 +209,7 @@ describe('BranchDetailToolbar', () => {
     expect(c.querySelector('[data-testid="branch-detail-toolbar-divider"]')).toBeNull()
   })
 
-  test('shows terminal focus control without collapse control in left-right layout', () => {
+  test('renders neither the focus entry nor the collapse control in left-right layout', () => {
     const { container: c } = renderToolbar({
       terminalCount: 1,
       detailTab: 'terminal',
@@ -208,17 +217,13 @@ describe('BranchDetailToolbar', () => {
       navigation: navigationWith({}),
     })
 
+    // The sidebar collapse control owns focus-mode entry, so the toolbar
+    // no longer renders its own maximize toggle.
     const focusButton = c.querySelector<HTMLButtonElement>('button[aria-label="branch-detail.focus"]')
     const collapseButton = c.querySelector<HTMLButtonElement>('button[aria-label="branch-detail.collapse"]')
 
-    expect(focusButton).not.toBeNull()
+    expect(focusButton).toBeNull()
     expect(collapseButton).toBeNull()
-
-    act(() => {
-      focusButton?.click()
-    })
-    expect(useReposStore.getState().detailFocusMode).toBe(true)
-    expect(useReposStore.getState().detailCollapsed).toBe(false)
   })
 
   test('marks the desktop left-right detail toolbar as a window drag region', () => {
@@ -264,7 +269,7 @@ describe('BranchDetailToolbar', () => {
     const focusButton = c.querySelector<HTMLButtonElement>('button[aria-label="branch-detail.focus"]')
 
     expect(redrawButton).toBeNull()
-    expect(focusButton).not.toBeNull()
+    expect(focusButton).toBeNull()
   })
 
   test('opens LAN QR dialog with one current terminal target per LAN URL', async () => {
@@ -299,6 +304,33 @@ describe('BranchDetailToolbar', () => {
     )
     await flushUntil(() => document.body.querySelectorAll('[data-testid="terminal-lan-qr-image"]').length === 2)
     expect(document.body.querySelectorAll('[data-testid="terminal-lan-qr-image"]')).toHaveLength(2)
+  })
+
+  test('opens the current terminal target in the browser via the loopback server URL', async () => {
+    openExternalUrlMock.mockClear()
+    const { container: c } = renderToolbar({
+      terminalCount: 2,
+      detailTab: 'terminal',
+      navigation: navigationWith({}),
+      lanInfo: { host: '0.0.0.0', port: 32215, lanUrls: [], qrCodes: {} },
+    })
+
+    const browserButton = c.querySelector<HTMLButtonElement>('button[aria-label="terminal.open-in-browser"]')
+    expect(browserButton).not.toBeNull()
+
+    act(() => {
+      browserButton?.click()
+    })
+    await flush()
+
+    expect(openExternalUrlMock).toHaveBeenCalledWith(
+      buildTerminalDeepLinkUrl('http://127.0.0.1:32215', {
+        repoId: REPO_ID,
+        worktreePath: WORKTREE_PATH,
+        branch: 'feature/worktree',
+        terminalId: 't1',
+      }),
+    )
   })
 
   test('keeps terminal focus when pressing End on the compact terminal tab', async () => {

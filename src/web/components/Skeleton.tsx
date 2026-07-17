@@ -30,10 +30,7 @@ interface WorkspaceSkeletonProps {
 
 export function BranchListSkeleton({ rows = 6, showBranchActions = false }: BranchListSkeletonProps) {
   return (
-    <SkeletonList
-      rows={rows}
-      renderRow={(i) => <BranchListSkeletonRow key={i} showActions={showBranchActions} />}
-    />
+    <SkeletonList rows={rows} renderRow={(i) => <BranchListSkeletonRow key={i} showActions={showBranchActions} />} />
   )
 }
 
@@ -99,7 +96,6 @@ export function BranchDetailSkeleton({
         </div>
         <div aria-hidden="true" className="min-w-2 flex-1 self-stretch" />
         <div className="flex shrink-0 items-center gap-1">
-          {behavior.detailFocusAllowed && <Skeleton className="h-7 w-7" />}
           {behavior.detailCollapseAllowed && <Skeleton className="h-7 w-7" />}
         </div>
       </Toolbar>
@@ -113,24 +109,15 @@ export function BranchDetailSkeleton({
   )
 }
 
-function SkeletonList({
-  rows,
-  renderRow,
-}: {
-  rows: number
-  renderRow: (index: number) => ReactNode
-}) {
-  return <ul className="flex-1 divide-y divide-separator">{Array.from({ length: rows }).map((_, i) => renderRow(i))}</ul>
+function SkeletonList({ rows, renderRow }: { rows: number; renderRow: (index: number) => ReactNode }) {
+  return (
+    <ul className="flex-1 divide-y divide-separator">{Array.from({ length: rows }).map((_, i) => renderRow(i))}</ul>
+  )
 }
 
 function BranchListSkeletonRow({ showActions }: { showActions: boolean }) {
   return (
-    <li
-      className={cn(
-        'grid min-h-9 items-stretch',
-        showActions ? 'grid-cols-[minmax(0,1fr)_auto]' : 'grid-cols-1',
-      )}
-    >
+    <li className={cn('grid min-h-9 items-stretch', showActions ? 'grid-cols-[minmax(0,1fr)_auto]' : 'grid-cols-1')}>
       <div className="flex min-w-0 items-center gap-3 px-4">
         <Skeleton className="h-4 w-4 rounded-full" />
         <Skeleton className="h-4 w-3/5" />
