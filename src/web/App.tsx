@@ -251,6 +251,9 @@ function MainWindowViewportContent({
   overlays,
 }: MainWindowViewportContentProps) {
   const uiMode = useResponsiveUiMode()
+  const visibleRepoUnavailable = useReposStore((state) =>
+    visibleRepoId ? state.repos[visibleRepoId]?.availability.phase === 'unavailable' : false,
+  )
   if (routeSettingsPage) {
     return (
       <SettingsPageScreen
@@ -267,7 +270,7 @@ function MainWindowViewportContent({
   // nothing is open. Compact UI keeps the classic repo tab strip except
   // in focus mode, where the detail pane takes the whole viewport. Same
   // rules for web and Electron so both shells look identical.
-  const showGlobalTopbar = compact ? workspaceMode !== 'focus' : !visibleRepoId
+  const showGlobalTopbar = compact ? workspaceMode !== 'focus' || visibleRepoUnavailable : !visibleRepoId
   return (
     <>
       {showGlobalTopbar && (

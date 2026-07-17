@@ -47,9 +47,12 @@ export function RepoView({ repoId }: Props) {
   const setDetailPaneSize = useReposStore((s) => s.setDetailPaneSize)
   const repo = useReposStore((s) => s.repos[repoId])
   useRepoToasts(repoId)
+  const [fileAreaCollapsed, setFileAreaCollapsed] = useState(false)
   const [terminalRevealRequest, setTerminalRevealRequest] = useState<FileTreeRevealRequest | null>(null)
+  const toggleFileArea = useCallback(() => setFileAreaCollapsed((collapsed) => !collapsed), [])
   const handleTerminalRevealPath = useCallback(
     (relativePath: string) => {
+      setFileAreaCollapsed(false)
       setTerminalRevealRequest((current) => ({ id: (current?.id ?? 0) + 1, repoId, relativePath }))
     },
     [repoId],
@@ -60,8 +63,8 @@ export function RepoView({ repoId }: Props) {
   const isPlainWorkspace = repoIsPlainWorkspace(repo)
 
   if (!view.exists || !repo) return <div />
-  if (repo.availability.phase === 'unavailable') return <UnavailableRepoView repo={repo} />
-  if (view.initialLoading) {
+  const repoUnavailable = repo.availability.phase === 'unavailable'
+  if (view.initialLoading && !repoUnavailable) {
     return (
       <RepoWorkspaceSkeleton
         layout={layout}
@@ -80,6 +83,7 @@ export function RepoView({ repoId }: Props) {
             layout={layout}
             showActions={false}
             revealRequest={terminalRevealRequest}
+            plainWorkspaceTerminalPanel={repoUnavailable ? <UnavailableRepoView repo={repo} /> : undefined}
           />
         </RepoWorkspacePane>
       </section>
@@ -88,19 +92,23 @@ export function RepoView({ repoId }: Props) {
 
   const detailPane = (
     <RepoWorkspacePane>
-      <BranchDetail
-        repoId={repoId}
-        layout={layout}
-        collapsed={behavior.detailCollapsed}
-        detailFocusMode={behavior.detailFocusMode}
-        onRevealPath={handleTerminalRevealPath}
-      />
+      {repoUnavailable ? (
+        <UnavailableRepoView repo={repo} />
+      ) : (
+        <BranchDetail
+          repoId={repoId}
+          layout={layout}
+          collapsed={behavior.detailCollapsed}
+          detailFocusMode={behavior.detailFocusMode}
+          onRevealPath={handleTerminalRevealPath}
+        />
+      )}
     </RepoWorkspacePane>
   )
-  const workspaceMode = behavior.mode === 'collapsed' ? 'collapsed' : 'split'
+  const workspaceMode = repoUnavailable ? 'split' : behavior.mode === 'collapsed' ? 'collapsed' : 'split'
 
   const workspaceBody =
-    behavior.mode === 'focus' ? (
+    behavior.mode === 'focus' && !repoUnavailable ? (
       detailPane
     ) : (
       <RepoWorkspace
@@ -113,8 +121,10 @@ export function RepoView({ repoId }: Props) {
             <RepoExplorerPane
               repoId={repoId}
               layout={layout}
-              showActions={behavior.branchListActionsVisible}
+              showActions={repoUnavailable || behavior.branchListActionsVisible}
               revealRequest={terminalRevealRequest}
+              fileAreaCollapsed={fileAreaCollapsed}
+              onToggleFileArea={toggleFileArea}
             />
           </RepoWorkspacePane>
         }
@@ -122,9 +132,5 @@ export function RepoView({ repoId }: Props) {
       />
     )
 
-  return (
-    <section className="relative flex min-w-0 flex-1 flex-col">
-      {workspaceBody}
-    </section>
-  )
+  return <section className="relative flex min-w-0 flex-1 flex-col">{workspaceBody}</section>
 }

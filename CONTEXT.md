@@ -6,6 +6,12 @@ Hobgoblin is a high-productivity workspace for Git worktree-based development wi
 
 Core model: **multi-project × multi-worktree/branch × multi-terminal**. Users open several repositories, isolate parallel branches in separate worktrees, and attach server-backed terminals to the right branch context — keeping Git state and AI CLI sessions (Claude Code, Codex, etc.) together.
 
+## Language
+
+**Terminal topbar**:
+The top row of the terminal area, containing terminal tabs and terminal-level actions.
+_Avoid_: Terminal toolbar, detail toolbar
+
 ## Stack
 
 | Layer | Technology |

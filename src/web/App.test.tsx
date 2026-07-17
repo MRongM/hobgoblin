@@ -6,6 +6,8 @@ import { afterEach, describe, expect, test, vi } from 'vitest'
 import { App } from '#/web/App.tsx'
 import type { RepoWorkspaceMode } from '#/web/lib/workspace-layout.ts'
 import type { useMainWindowShellState } from '#/web/hooks/useMainWindowShellState.ts'
+import { emptyRepo } from '#/web/stores/repos/helpers.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
 
 type MainWindowShellState = ReturnType<typeof useMainWindowShellState>
 
@@ -191,6 +193,7 @@ afterEach(() => {
   shellMock.state = null
   bootstrapMock.runtimeKind = 'web'
   uiModeMock.mode = 'default'
+  useReposStore.setState({ repos: {} })
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
 })
 
@@ -316,6 +319,18 @@ describe('App shell topbar visibility', () => {
     await renderApp({ runtime: 'electron', workspaceMode: 'focus' })
 
     expect(container?.querySelector('[data-testid="global-topbar"]')).toBeNull()
+  })
+
+  test('keeps compact repo tabs visible for an unavailable focused project', async () => {
+    const repo = emptyRepo('/repo', 'repo')
+    repo.availability = { phase: 'unavailable', reason: 'path-missing', checkedAt: 1 }
+    useReposStore.setState({ repos: { '/repo': repo } })
+    uiModeMock.mode = 'compact'
+
+    await renderApp({ runtime: 'web', workspaceMode: 'focus' })
+
+    expect(container?.querySelector('[data-testid="global-topbar"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="repo-tabs"]')).not.toBeNull()
   })
 
   test('renders the close project confirmation overlay', async () => {

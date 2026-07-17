@@ -5,7 +5,7 @@
 // App also renders it full-width on the desktop empty state (repoId null) so
 // the settings entry never disappears.
 
-import { GitBranch, Settings } from 'lucide-react'
+import { GitBranch, PanelBottomClose, PanelBottomOpen, Settings } from 'lucide-react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useT } from '#/web/stores/i18n.ts'
@@ -17,6 +17,8 @@ import { RepoActivityControl } from '#/web/components/repo-activity/RepoActivity
 
 interface Props {
   repoId: string | null
+  fileAreaCollapsed?: boolean
+  onToggleFileArea?: () => void
 }
 
 interface StatusBarRepoSummary {
@@ -24,7 +26,7 @@ interface StatusBarRepoSummary {
   isGitRepo: boolean
 }
 
-export function StatusBar({ repoId }: Props) {
+export function StatusBar({ repoId, fileAreaCollapsed, onToggleFileArea }: Props) {
   const t = useT()
   const shellActions = useShellOverlayActions()
   const summary = useStoreWithEqualityFn(
@@ -53,6 +55,20 @@ export function StatusBar({ repoId }: Props) {
         </Tip>
       )}
       {repoId && <ProjectThemeMenuConnected repoId={repoId} />}
+      {repoId && onToggleFileArea && fileAreaCollapsed !== undefined && (
+        <Tip label={t(fileAreaCollapsed ? 'file-area.expand' : 'file-area.collapse')}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onToggleFileArea}
+            aria-label={t(fileAreaCollapsed ? 'file-area.expand' : 'file-area.collapse')}
+            aria-expanded={!fileAreaCollapsed}
+          >
+            {fileAreaCollapsed ? <PanelBottomOpen /> : <PanelBottomClose />}
+          </Button>
+        </Tip>
+      )}
       <div className="min-w-0 flex-1" aria-hidden="true" />
       {summary && (
         <div className="flex min-w-0 items-center gap-1.5 pr-1">

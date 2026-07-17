@@ -34,6 +34,10 @@ vi.mock('#/web/hooks/useResponsiveUiMode.tsx', () => ({
   useIsCompactUi: () => compactUi,
 }))
 
+vi.mock('#/web/runtime-settings-chrome.ts', () => ({
+  useRuntimeChromeSettings: () => ({ topbarHeightPx: 39, toolbarHeightPx: 41 }),
+}))
+
 // Focus-mode branch controls live in their own component with their own
 // providers (commit drafts etc.); this suite only exercises the toolbar.
 vi.mock('#/web/components/topbar/TopbarRepoControls.tsx', () => ({
@@ -223,6 +227,7 @@ describe('BranchDetailToolbar', () => {
     })
 
     const toolbar = c.firstElementChild
+    expect((toolbar as HTMLElement | null)?.style.height).toBe('39px')
     expect(toolbar?.className).toContain('[-webkit-app-region:drag]')
     expect(toolbar?.className).toContain('topbar-tone')
     expect(toolbar?.className).toContain('border-topbar-border')
@@ -239,8 +244,10 @@ describe('BranchDetailToolbar', () => {
       navigation: navigationWith({}),
     })
 
-    expect(c.firstElementChild?.className).toContain('bg-toolbar')
-    expect(c.firstElementChild?.className).not.toContain('topbar-tone')
+    const toolbar = c.firstElementChild as HTMLElement | null
+    expect(toolbar?.style.height).toBe('41px')
+    expect(toolbar?.className).toContain('bg-toolbar')
+    expect(toolbar?.className).not.toContain('topbar-tone')
   })
 
   test('does not render the removed terminal redraw control', () => {

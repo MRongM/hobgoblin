@@ -13,6 +13,7 @@ const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENV
 const REPO_ID = '/repo'
 const REPO_B_ID = '/repo-b'
 const REMOTE_REPO_ID = 'ssh-config://prod/srv/plain'
+let compactUi = false
 const runtimeFontSettings = vi.hoisted(() => ({
   fileTreeFontSize: 12,
   fileTreeTopbarFontSize: 13,
@@ -25,6 +26,10 @@ vi.mock('#/web/runtime-settings-fonts.ts', () => ({
 
 vi.mock('#/web/runtime-settings-chrome.ts', () => ({
   useRuntimeChromeSettings: () => ({ topbarHeightPx: 39, toolbarHeightPx: 41 }),
+}))
+
+vi.mock('#/web/hooks/useResponsiveUiMode.tsx', () => ({
+  useIsCompactUi: () => compactUi,
 }))
 
 vi.mock('#/web/runtime-settings-external-apps.ts', () => ({
@@ -140,7 +145,27 @@ vi.mock('#/web/components/repo-workspace/SidebarProjectHeader.tsx', () => ({
 }))
 
 vi.mock('#/web/components/StatusBar.tsx', () => ({
-  StatusBar: ({ repoId }: { repoId: string | null }) => <footer data-testid="statusbar" data-repo-id={repoId} />,
+  StatusBar: ({
+    repoId,
+    fileAreaCollapsed,
+    onToggleFileArea,
+  }: {
+    repoId: string | null
+    fileAreaCollapsed?: boolean
+    onToggleFileArea?: () => void
+  }) => (
+    <footer
+      data-testid="statusbar"
+      data-repo-id={repoId}
+      data-file-area-collapsed={fileAreaCollapsed === undefined ? 'unset' : String(fileAreaCollapsed)}
+    >
+      {onToggleFileArea && (
+        <button type="button" data-testid="statusbar-file-area-toggle" onClick={onToggleFileArea}>
+          toggle files
+        </button>
+      )}
+    </footer>
+  ),
 }))
 
 vi.mock('#/web/components/SplitPane.tsx', () => ({
@@ -149,15 +174,22 @@ vi.mock('#/web/components/SplitPane.tsx', () => ({
     after,
     orientation,
     afterSize,
+    afterCollapsed,
     onAfterSizeChange,
   }: {
     before: React.ReactNode
     after: React.ReactNode
     orientation: string
     afterSize: number
+    afterCollapsed?: boolean
     onAfterSizeChange?: (size: number) => void
   }) => (
-    <div data-testid="split-pane" data-orientation={orientation} data-after-size={String(afterSize)}>
+    <div
+      data-testid="split-pane"
+      data-orientation={orientation}
+      data-after-size={String(afterSize)}
+      data-after-collapsed={String(!!afterCollapsed)}
+    >
       <button type="button" data-testid="resize-file-tree-pane" onClick={() => onAfterSizeChange?.(44.44)}>
         resize
       </button>
@@ -169,6 +201,7 @@ vi.mock('#/web/components/SplitPane.tsx', () => ({
 
 beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
+  compactUi = false
   resetReposStore()
   seedRepoState({
     id: REPO_ID,
@@ -215,6 +248,35 @@ describe('RepoExplorerPane', () => {
     expect(container.querySelector('[data-testid="project-tags-panel"]')).toBeNull()
     expect(container.querySelector('[data-testid="project-ports-panel"]')).toBeNull()
     expect(container.textContent).not.toContain('branches.empty')
+    await act(async () => root.unmount())
+  })
+
+  test('replaces only the plain workspace terminal panel when an override is provided', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(
+        <RepoExplorerPane
+          repoId={REPO_ID}
+          layout="top-bottom"
+          showActions
+          plainWorkspaceTerminalPanel={<div data-testid="unavailable-panel" />}
+        />,
+      )
+    })
+
+    expect(container.querySelector('[data-testid="sidebar-project-header"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="project-file-tree"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="unavailable-panel"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="plain-workspace-terminal"]')).toBeNull()
     await act(async () => root.unmount())
   })
 
@@ -485,6 +547,59 @@ describe('RepoExplorerPane', () => {
     })
     expect(container.querySelector('[data-file-tree-layout="left-right"]')).toBeTruthy()
     expect(container.querySelector('[data-testid="split-pane"]')?.getAttribute('data-orientation')).toBe('vertical')
+    await act(async () => root.unmount())
+  })
+
+  test('forwards controlled file area collapse to the split pane and status bar', async () => {
+    const onToggleFileArea = vi.fn()
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(
+        <RepoExplorerPane
+          repoId={REPO_ID}
+          layout="left-right"
+          showActions
+          fileAreaCollapsed
+          onToggleFileArea={onToggleFileArea}
+        />,
+      )
+    })
+
+    expect(container.querySelector('[data-testid="split-pane"]')?.getAttribute('data-after-collapsed')).toBe('true')
+    const branchList = container.querySelector('[data-testid="branch-list"]')
+    expect(branchList).not.toBeNull()
+    expect(branchList?.parentElement?.parentElement?.className).toContain('bg-sidebar')
+    expect(container.querySelector('[data-testid="statusbar"]')?.getAttribute('data-file-area-collapsed')).toBe('true')
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="statusbar-file-area-toggle"]')?.click()
+    })
+    expect(onToggleFileArea).toHaveBeenCalledTimes(1)
+    await act(async () => root.unmount())
+  })
+
+  test('keeps the file area expanded in compact UI when the desktop preference is collapsed', async () => {
+    compactUi = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(
+        <RepoExplorerPane
+          repoId={REPO_ID}
+          layout="top-bottom"
+          showActions
+          fileAreaCollapsed
+          onToggleFileArea={() => {}}
+        />,
+      )
+    })
+
+    expect(container.querySelector('[data-testid="split-pane"]')?.getAttribute('data-after-collapsed')).toBe('false')
+    expect(container.querySelector('[data-testid="project-file-tree"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="statusbar"]')).toBeNull()
     await act(async () => root.unmount())
   })
 

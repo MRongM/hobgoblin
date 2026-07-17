@@ -22,6 +22,10 @@ vi.mock('#/web/hooks/useResponsiveUiMode.tsx', () => ({
   useIsCompactUi: () => compactUi,
 }))
 
+vi.mock('#/web/runtime-settings-chrome.ts', () => ({
+  useRuntimeChromeSettings: () => ({ topbarHeightPx: 39, toolbarHeightPx: 41 }),
+}))
+
 vi.mock('#/web/components/terminal/terminal-session-context.ts', () => ({
   useTerminalSessionContext: () => ({
     createTerminal,
@@ -122,6 +126,7 @@ describe('PlainWorkspaceTerminalPanel', () => {
     render(<PlainWorkspaceTerminalPanel repoId="/repo" />)
 
     const toolbar = container!.querySelector<HTMLElement>('[data-testid="plain-workspace-terminal-toolbar"]')
+    expect(toolbar?.style.height).toBe('39px')
     expect(toolbar?.className).toContain('topbar-tone')
     expect(toolbar?.className).toContain('border-topbar-border')
     expect(toolbar?.className).toContain('bg-topbar')
@@ -133,6 +138,7 @@ describe('PlainWorkspaceTerminalPanel', () => {
     render(<PlainWorkspaceTerminalPanel repoId="/repo" />)
 
     const toolbar = container!.querySelector<HTMLElement>('[data-testid="plain-workspace-terminal-toolbar"]')
+    expect(toolbar?.style.height).toBe('41px')
     expect(toolbar?.className).toContain('bg-toolbar')
     expect(toolbar?.className).not.toContain('topbar-tone')
   })

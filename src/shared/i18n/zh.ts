@@ -343,6 +343,8 @@ export const zh: Record<DictKey, string> = {
   'file-tree.upload-file': '上传文件',
   'file-tree.paste': '粘贴',
   'file-tree.collapse-all': '收起树',
+  'file-area.collapse': '折叠文件区',
+  'file-area.expand': '展开文件区',
   'file-tree.new-file': '新建文件',
   'file-tree.new-folder': '新建文件夹',
   'file-tree.refresh': '刷新',

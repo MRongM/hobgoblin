@@ -350,6 +350,8 @@ export const ko: Record<DictKey, string> = {
   'file-tree.upload-file': '파일 업로드',
   'file-tree.paste': '붙여넣기',
   'file-tree.collapse-all': '트리 접기',
+  'file-area.collapse': '파일 영역 접기',
+  'file-area.expand': '파일 영역 펼치기',
   'file-tree.new-file': '새 파일',
   'file-tree.new-folder': '새 폴더',
   'file-tree.refresh': '새로 고침',

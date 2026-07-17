@@ -111,6 +111,16 @@ describe('i18n dictionaries', () => {
     }
   })
 
+  test('includes file area collapse copy in every dictionary', () => {
+    const keys = ['file-area.collapse', 'file-area.expand'] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) {
+        expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+      }
+    }
+  })
+
   test('includes bundled font license copy in every dictionary', () => {
     const keys = [
       'about.third-party-licenses',

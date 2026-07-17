@@ -84,11 +84,7 @@ export function PlainWorkspaceTerminalPanel({ repoId }: PlainWorkspaceTerminalPa
 
   return (
     <section className="flex min-h-0 flex-1 flex-col bg-pane">
-      <Toolbar
-        data-testid="plain-workspace-terminal-toolbar"
-        variant="detail"
-        tone={compact ? 'toolbar' : 'topbar'}
-      >
+      <Toolbar data-testid="plain-workspace-terminal-toolbar" variant="detail" chrome={compact ? 'toolbar' : 'topbar'}>
         <div className="flex h-full min-w-0 items-center gap-1 overflow-hidden">
           <TerminalTabs
             worktreeTerminalKey={terminalWorktreeKey}

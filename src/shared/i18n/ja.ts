@@ -358,6 +358,8 @@ export const ja: Record<DictKey, string> = {
   'file-tree.upload-file': 'ファイルをアップロード',
   'file-tree.paste': '貼り付け',
   'file-tree.collapse-all': 'ツリーを折りたたむ',
+  'file-area.collapse': 'ファイル領域を折りたたむ',
+  'file-area.expand': 'ファイル領域を展開',
   'file-tree.new-file': '新しいファイル',
   'file-tree.new-folder': '新しいフォルダ',
   'file-tree.refresh': '更新',

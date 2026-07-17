@@ -1,6 +1,6 @@
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useCallback, useEffect, useState } from 'react'
-import type { CSSProperties } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import {
   FolderTree,
   FolderGit,
@@ -56,9 +56,20 @@ interface RepoExplorerPaneProps {
   layout: RepoWorkspaceLayout
   showActions: boolean
   revealRequest?: FileTreeRevealRequest | null
+  plainWorkspaceTerminalPanel?: ReactNode
+  fileAreaCollapsed?: boolean
+  onToggleFileArea?: () => void
 }
 
-export function RepoExplorerPane({ repoId, layout, showActions, revealRequest }: RepoExplorerPaneProps) {
+export function RepoExplorerPane({
+  repoId,
+  layout,
+  showActions,
+  revealRequest,
+  plainWorkspaceTerminalPanel,
+  fileAreaCollapsed = false,
+  onToggleFileArea,
+}: RepoExplorerPaneProps) {
   const {
     activeTab,
     repoFileTreePaneSizes,
@@ -105,12 +116,18 @@ export function RepoExplorerPane({ repoId, layout, showActions, revealRequest }:
   // project header (window chrome + project switcher) only renders on
   // desktop layouts.
   const compact = useIsCompactUi()
+  const desktopFileAreaCollapsed = !compact && fileAreaCollapsed
 
   if (isPlainWorkspace) {
     return (
       <div data-file-tree-layout={layout} className="flex min-h-0 min-w-0 flex-1 flex-col">
         {!compact && <SidebarProjectHeader repoId={repoId} />}
-        <PlainWorkspacePane repoId={repoId} layout={layout} revealRequest={activeRevealRequest} />
+        <PlainWorkspacePane
+          repoId={repoId}
+          layout={layout}
+          revealRequest={activeRevealRequest}
+          terminalPanel={plainWorkspaceTerminalPanel}
+        />
         {!compact && <StatusBar repoId={repoId} />}
       </div>
     )
@@ -122,7 +139,7 @@ export function RepoExplorerPane({ repoId, layout, showActions, revealRequest }:
       <SplitPane
         orientation={splitOrientation}
         before={
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
             {!compact && <BranchSectionLabel />}
             <BranchArea repoId={repoId} showActions={showActions} />
           </div>
@@ -138,13 +155,16 @@ export function RepoExplorerPane({ repoId, layout, showActions, revealRequest }:
           />
         }
         afterSize={fileTreeSize}
+        afterCollapsed={desktopFileAreaCollapsed}
         onAfterSizeChange={(size) => setRepoFileTreePaneSize(repoId, layout, size)}
         beforeMinSize={sideBySide ? '12rem' : '8rem'}
         afterMinSize={sideBySide ? '12rem' : '8rem'}
         afterMaxSize="80%"
         className="min-h-0 flex-1"
       />
-      {!compact && <StatusBar repoId={repoId} />}
+      {!compact && (
+        <StatusBar repoId={repoId} fileAreaCollapsed={desktopFileAreaCollapsed} onToggleFileArea={onToggleFileArea} />
+      )}
     </div>
   )
 }

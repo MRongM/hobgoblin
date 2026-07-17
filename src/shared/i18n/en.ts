@@ -359,6 +359,8 @@ export const en = {
   'file-tree.upload-file': 'Upload file',
   'file-tree.paste': 'Paste',
   'file-tree.collapse-all': 'Collapse tree',
+  'file-area.collapse': 'Collapse file area',
+  'file-area.expand': 'Expand file area',
   'file-tree.new-file': 'New file',
   'file-tree.new-folder': 'New folder',
   'file-tree.refresh': 'Refresh',

@@ -162,7 +162,7 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
   return (
     <Toolbar
       variant="detail"
-      tone={compact ? 'toolbar' : 'topbar'}
+      chrome={compact ? 'toolbar' : 'topbar'}
       className={cn(layout === 'left-right' && '[-webkit-app-region:drag]', isWindowChrome && 'topbar')}
     >
       <div className="flex h-full min-w-0 items-center gap-1 overflow-hidden">

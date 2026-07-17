@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
-import { useGroupRef } from 'react-resizable-panels'
+import { useGroupRef, usePanelRef } from 'react-resizable-panels'
 import type { Layout } from 'react-resizable-panels'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '#/web/components/ui/resizable.tsx'
 import { cn } from '#/web/lib/cn.ts'
@@ -18,6 +18,7 @@ interface SplitPaneProps {
   beforeMinSize?: number | string
   afterMinSize?: number | string
   afterMaxSize?: number | string
+  afterCollapsed?: boolean
   disabled?: boolean
 }
 
@@ -37,24 +38,39 @@ export function SplitPane({
   beforeMinSize = '12rem',
   afterMinSize = '12rem',
   afterMaxSize,
+  afterCollapsed = false,
   disabled = false,
 }: SplitPaneProps) {
   const groupRef = useGroupRef()
+  const afterPanelRef = usePanelRef()
+  const wasAfterCollapsedRef = useRef(afterCollapsed)
   const layout = useMemo<Layout>(
-    () => ({ [BEFORE_PANEL_ID]: 100 - afterSize, [AFTER_PANEL_ID]: afterSize }),
-    [afterSize],
+    () => ({
+      [BEFORE_PANEL_ID]: afterCollapsed ? 100 : 100 - afterSize,
+      [AFTER_PANEL_ID]: afterCollapsed ? 0 : afterSize,
+    }),
+    [afterCollapsed, afterSize],
   )
   const handleLayoutChanged = useCallback(
     (layout: Layout) => {
+      if (afterCollapsed) return
       const next = layout[AFTER_PANEL_ID]
-      if (typeof next === 'number') onAfterSizeChange?.(next)
+      if (typeof next === 'number' && next > 0) onAfterSizeChange?.(next)
     },
-    [onAfterSizeChange],
+    [afterCollapsed, onAfterSizeChange],
   )
 
   useEffect(() => {
     groupRef.current?.setLayout(layout)
   }, [groupRef, layout])
+
+  useEffect(() => {
+    const panel = afterPanelRef.current
+    if (!panel) return
+    if (afterCollapsed) panel.collapse()
+    else if (wasAfterCollapsedRef.current) panel.resize(afterSize)
+    wasAfterCollapsedRef.current = afterCollapsed
+  }, [afterCollapsed, afterPanelRef, afterSize])
 
   return (
     <ResizablePanelGroup
@@ -73,14 +89,26 @@ export function SplitPane({
       >
         {before}
       </ResizablePanel>
-      <ResizableHandle orientation={orientation} disabled={disabled} />
+      <ResizableHandle
+        orientation={orientation}
+        disabled={disabled || afterCollapsed}
+        className={afterCollapsed ? 'hidden' : undefined}
+      />
       <ResizablePanel
         id={AFTER_PANEL_ID}
-        minSize={afterMinSize}
+        panelRef={afterPanelRef}
+        collapsible={afterCollapsed}
+        collapsedSize={0}
+        minSize={afterCollapsed ? 0 : afterMinSize}
         maxSize={afterMaxSize}
         className={cn('flex min-h-0 min-w-0 overflow-hidden', afterClassName)}
       >
-        {after}
+        <div
+          aria-hidden={afterCollapsed || undefined}
+          className={cn('flex min-h-0 min-w-0 flex-1', afterCollapsed && 'hidden')}
+        >
+          {after}
+        </div>
       </ResizablePanel>
     </ResizablePanelGroup>
   )
