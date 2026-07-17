@@ -51,11 +51,15 @@ export function BranchActionsDropdown({
   destructiveItems,
   open,
   onOpenChange,
+  hideQuickAction = false,
 }: Pick<BranchActionItemGroups, 'patchItems' | 'mainItems' | 'externalItems' | 'destructiveItems'> & {
   repoId?: string
   branchName?: string
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  /** Render only the menu trigger, without the remembered quick-action
+   *  split button (used by the focus-mode toolbar chrome). */
+  hideQuickAction?: boolean
 }) {
   const t = useT()
   const [, setQuickActionRevision] = useState(0)
@@ -105,25 +109,23 @@ export function BranchActionsDropdown({
         onClick={(e) => e.stopPropagation()}
         onDoubleClick={(e) => e.stopPropagation()}
       >
-        <AsyncButton
-          variant="ghost"
-          size="icon-sm"
-          loading={quickAction?.busy}
-          disabled={quickActionDisabled}
-          onClick={runQuickAction}
-          title={quickAction?.title ?? quickAction?.label ?? t('action.menu')}
-          aria-label={quickAction?.ariaLabel ?? quickAction?.title ?? quickAction?.label ?? t('action.menu')}
-          className={cn(
-            'rounded-r-none px-1.5',
-            quickAction?.destructive && 'text-danger hover:bg-danger-surface hover:text-danger',
-          )}
-        >
-          {({ busy }) => (
-            <>
-              {busy ? <Loader2 className="size-4 animate-spin" /> : quickAction?.icon}
-            </>
-          )}
-        </AsyncButton>
+        {!hideQuickAction && (
+          <AsyncButton
+            variant="ghost"
+            size="icon-sm"
+            loading={quickAction?.busy}
+            disabled={quickActionDisabled}
+            onClick={runQuickAction}
+            title={quickAction?.title ?? quickAction?.label ?? t('action.menu')}
+            aria-label={quickAction?.ariaLabel ?? quickAction?.title ?? quickAction?.label ?? t('action.menu')}
+            className={cn(
+              'rounded-r-none px-1.5',
+              quickAction?.destructive && 'text-danger hover:bg-danger-surface hover:text-danger',
+            )}
+          >
+            {({ busy }) => <>{busy ? <Loader2 className="size-4 animate-spin" /> : quickAction?.icon}</>}
+          </AsyncButton>
+        )}
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
@@ -131,7 +133,10 @@ export function BranchActionsDropdown({
             title={t('action.menu')}
             aria-label={t('action.menu')}
             aria-busy={busyAction ? true : undefined}
-            className="h-6 w-7 rounded-l-none px-1.5 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground"
+            className={cn(
+              hideQuickAction ? 'px-1.5' : 'h-6 w-7 rounded-l-none px-1.5',
+              'data-[state=open]:bg-accent data-[state=open]:text-accent-foreground',
+            )}
           >
             {busyAction ? <Loader2 className="size-4 animate-spin" /> : <ChevronDown className="size-3.5" />}
           </Button>

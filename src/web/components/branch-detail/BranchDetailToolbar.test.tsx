@@ -40,9 +40,10 @@ vi.mock('#/web/runtime-settings-chrome.ts', () => ({
 }))
 
 // Focus-mode branch controls live in their own component with their own
-// providers (commit drafts etc.); this suite only exercises the toolbar.
+// providers (commit drafts etc.); this suite only exercises the toolbar,
+// so the mock is just a placement marker.
 vi.mock('#/web/components/topbar/TopbarRepoControls.tsx', () => ({
-  TopbarRepoControls: () => null,
+  TopbarRepoControls: () => <div data-testid="topbar-repo-controls" />,
 }))
 
 vi.stubGlobal('requestAnimationFrame', ((cb: FrameRequestCallback) => {
@@ -337,6 +338,26 @@ describe('BranchDetailToolbar', () => {
     const trigger = c.querySelector<HTMLButtonElement>('[data-testid="focus-project-switcher"]')
     expect(trigger).not.toBeNull()
     expect(trigger?.textContent).toContain('repo')
+  })
+
+  test('focus mode places the branch controls right after the project switcher', () => {
+    const { container: c } = renderToolbar({
+      terminalCount: 0,
+      detailFocusMode: true,
+      navigation: navigationWith({}),
+    })
+
+    const switcher = c.querySelector('[data-testid="focus-project-switcher"]')
+    const controls = c.querySelector('[data-testid="topbar-repo-controls"]')
+    expect(switcher).not.toBeNull()
+    expect(controls).not.toBeNull()
+    expect(switcher?.nextElementSibling).toBe(controls)
+  })
+
+  test('does not render the branch controls outside focus mode', () => {
+    const { container: c } = renderToolbar({ terminalCount: 0, navigation: navigationWith({}) })
+
+    expect(c.querySelector('[data-testid="topbar-repo-controls"]')).toBeNull()
   })
 
   test('focus switcher lists open projects and activates the selected one', async () => {

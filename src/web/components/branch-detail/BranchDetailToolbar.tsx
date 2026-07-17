@@ -182,6 +182,9 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
               <PanelLeftOpen />
             </Button>
             <FocusProjectSwitcher repoId={repo.id} />
+            {/* Focus-mode branch switcher / actions — previously topbar
+             * content; the component renders nothing outside focus mode. */}
+            <TopbarRepoControls repoId={repo.id} menuAlign="start" />
           </>
         )}
         {terminalWorktreeKey && (
@@ -218,9 +221,6 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
         }
       />
       <div className="flex shrink-0 items-center gap-1">
-        {/* Focus-mode branch switcher / actions — previously topbar content;
-         * the component renders nothing outside focus mode. */}
-        <TopbarRepoControls repoId={repo.id} />
         {layout === 'top-bottom' && <div className="mx-1 h-4 w-px bg-separator/70" aria-hidden="true" />}
         {terminalWorktreeKey && (
           <>

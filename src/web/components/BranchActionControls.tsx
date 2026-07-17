@@ -15,6 +15,7 @@ interface BranchActionControlsProps {
   actions: BranchActionItemGroups
   variant?: BranchActionControlsVariant
   iconOnly?: boolean
+  hideQuickAction?: boolean
   repoId?: string
   branchName?: string
 }
@@ -23,6 +24,7 @@ export function BranchActionControls({
   actions,
   variant = 'bar',
   iconOnly = false,
+  hideQuickAction = false,
   repoId,
   branchName,
 }: BranchActionControlsProps) {
@@ -34,6 +36,7 @@ export function BranchActionControls({
       <BranchActionsDropdown
         repoId={repoId}
         branchName={branchName}
+        hideQuickAction={hideQuickAction}
         patchItems={patchItems}
         mainItems={mainItems}
         externalItems={externalItems}
