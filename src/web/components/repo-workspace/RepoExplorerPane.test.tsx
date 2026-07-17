@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { RepoExplorerPane } from '#/web/components/repo-workspace/RepoExplorerPane.tsx'
+import { RepoExplorerPane, resetExplorerOverflowExpanded } from '#/web/components/repo-workspace/RepoExplorerPane.tsx'
 import { emptyRepo } from '#/web/stores/repos/helpers.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { explorerTabForRepo } from '#/web/stores/repos/helpers.ts'
@@ -13,6 +13,7 @@ const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENV
 const REPO_ID = '/repo'
 const REPO_B_ID = '/repo-b'
 const REMOTE_REPO_ID = 'ssh-config://prod/srv/plain'
+let compactUi = false
 const runtimeFontSettings = vi.hoisted(() => ({
   fileTreeFontSize: 12,
   fileTreeTopbarFontSize: 13,
@@ -25,6 +26,10 @@ vi.mock('#/web/runtime-settings-fonts.ts', () => ({
 
 vi.mock('#/web/runtime-settings-chrome.ts', () => ({
   useRuntimeChromeSettings: () => ({ topbarHeightPx: 39, toolbarHeightPx: 41 }),
+}))
+
+vi.mock('#/web/hooks/useResponsiveUiMode.tsx', () => ({
+  useIsCompactUi: () => compactUi,
 }))
 
 vi.mock('#/web/runtime-settings-external-apps.ts', () => ({
@@ -109,8 +114,10 @@ vi.mock('#/web/components/repo-workspace/ProjectHistoryPanel.tsx', () => ({
   ),
 }))
 
-vi.mock('#/web/components/repo-workspace/ProjectTagsPanel.tsx', () => ({
-  ProjectTagsPanel: ({ repoId }: { repoId: string }) => <div data-testid="project-tags-panel" data-repo-id={repoId} />,
+vi.mock('#/web/components/repo-workspace/ProjectLocalPanel.tsx', () => ({
+  ProjectLocalPanel: ({ repoId }: { repoId: string }) => (
+    <div data-testid="project-local-panel" data-repo-id={repoId} />
+  ),
 }))
 
 vi.mock('#/web/components/repo-workspace/ProjectRemoteBranchesPanel.tsx', () => ({
@@ -131,21 +138,60 @@ vi.mock('#/web/components/repo-workspace/PlainWorkspaceTerminalPanel.tsx', () =>
   ),
 }))
 
+// Sidebar chrome — exercised by their own suites; the status bar pulls in
+// react-query (project theme menu) which this harness doesn't provide.
+vi.mock('#/web/components/repo-workspace/SidebarProjectHeader.tsx', () => ({
+  SidebarProjectHeader: ({ repoId }: { repoId: string }) => (
+    <div data-testid="sidebar-project-header" data-repo-id={repoId} />
+  ),
+}))
+
+vi.mock('#/web/components/StatusBar.tsx', () => ({
+  StatusBar: ({
+    repoId,
+    fileAreaCollapsed,
+    onToggleFileArea,
+  }: {
+    repoId: string | null
+    fileAreaCollapsed?: boolean
+    onToggleFileArea?: () => void
+  }) => (
+    <footer
+      data-testid="statusbar"
+      data-repo-id={repoId}
+      data-file-area-collapsed={fileAreaCollapsed === undefined ? 'unset' : String(fileAreaCollapsed)}
+    >
+      {onToggleFileArea && (
+        <button type="button" data-testid="statusbar-file-area-toggle" onClick={onToggleFileArea}>
+          toggle files
+        </button>
+      )}
+    </footer>
+  ),
+}))
+
 vi.mock('#/web/components/SplitPane.tsx', () => ({
   SplitPane: ({
     before,
     after,
     orientation,
     afterSize,
+    afterCollapsed,
     onAfterSizeChange,
   }: {
     before: React.ReactNode
     after: React.ReactNode
     orientation: string
     afterSize: number
+    afterCollapsed?: boolean
     onAfterSizeChange?: (size: number) => void
   }) => (
-    <div data-testid="split-pane" data-orientation={orientation} data-after-size={String(afterSize)}>
+    <div
+      data-testid="split-pane"
+      data-orientation={orientation}
+      data-after-size={String(afterSize)}
+      data-after-collapsed={String(!!afterCollapsed)}
+    >
       <button type="button" data-testid="resize-file-tree-pane" onClick={() => onAfterSizeChange?.(44.44)}>
         resize
       </button>
@@ -157,7 +203,9 @@ vi.mock('#/web/components/SplitPane.tsx', () => ({
 
 beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
+  compactUi = false
   resetReposStore()
+  resetExplorerOverflowExpanded()
   seedRepoState({
     id: REPO_ID,
     branches: [createRepoBranch('main')],
@@ -203,6 +251,35 @@ describe('RepoExplorerPane', () => {
     expect(container.querySelector('[data-testid="project-tags-panel"]')).toBeNull()
     expect(container.querySelector('[data-testid="project-ports-panel"]')).toBeNull()
     expect(container.textContent).not.toContain('branches.empty')
+    await act(async () => root.unmount())
+  })
+
+  test('replaces only the plain workspace terminal panel when an override is provided', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(
+        <RepoExplorerPane
+          repoId={REPO_ID}
+          layout="top-bottom"
+          showActions
+          plainWorkspaceTerminalPanel={<div data-testid="unavailable-panel" />}
+        />,
+      )
+    })
+
+    expect(container.querySelector('[data-testid="sidebar-project-header"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="project-file-tree"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="unavailable-panel"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="plain-workspace-terminal"]')).toBeNull()
     await act(async () => root.unmount())
   })
 
@@ -376,7 +453,7 @@ describe('RepoExplorerPane', () => {
     expect(fileTree?.getAttribute('data-toolbar-height')).toBe('detail')
     expect(explorerToolbar?.style.getPropertyValue('--goblin-file-tree-topbar-font-size')).toBe('13px')
     expect(firstTab?.className).toContain('text-[length:var(--goblin-file-tree-topbar-font-size)]')
-    expect(tabIcons).toHaveLength(5)
+    expect(tabIcons).toHaveLength(4)
     expect(tabIcons.every((icon) => icon.classList.contains('size-3.5'))).toBe(true)
     await act(async () => root.unmount())
   })
@@ -476,6 +553,59 @@ describe('RepoExplorerPane', () => {
     await act(async () => root.unmount())
   })
 
+  test('forwards controlled file area collapse to the split pane and status bar', async () => {
+    const onToggleFileArea = vi.fn()
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(
+        <RepoExplorerPane
+          repoId={REPO_ID}
+          layout="left-right"
+          showActions
+          fileAreaCollapsed
+          onToggleFileArea={onToggleFileArea}
+        />,
+      )
+    })
+
+    expect(container.querySelector('[data-testid="split-pane"]')?.getAttribute('data-after-collapsed')).toBe('true')
+    const branchList = container.querySelector('[data-testid="branch-list"]')
+    expect(branchList).not.toBeNull()
+    expect(branchList?.parentElement?.parentElement?.className).toContain('bg-sidebar')
+    expect(container.querySelector('[data-testid="statusbar"]')?.getAttribute('data-file-area-collapsed')).toBe('true')
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="statusbar-file-area-toggle"]')?.click()
+    })
+    expect(onToggleFileArea).toHaveBeenCalledTimes(1)
+    await act(async () => root.unmount())
+  })
+
+  test('keeps the file area expanded in compact UI when the desktop preference is collapsed', async () => {
+    compactUi = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(
+        <RepoExplorerPane
+          repoId={REPO_ID}
+          layout="top-bottom"
+          showActions
+          fileAreaCollapsed
+          onToggleFileArea={() => {}}
+        />,
+      )
+    })
+
+    expect(container.querySelector('[data-testid="split-pane"]')?.getAttribute('data-after-collapsed')).toBe('false')
+    expect(container.querySelector('[data-testid="project-file-tree"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="statusbar"]')).toBeNull()
+    await act(async () => root.unmount())
+  })
+
   test('switches the local explorer area between file, changes, and status tabs', async () => {
     const container = document.createElement('div')
     document.body.appendChild(container)
@@ -490,7 +620,6 @@ describe('RepoExplorerPane', () => {
       'tab.changes',
       'tab.status',
       'tab.history',
-      '',
     ])
     expect(container.querySelector('[data-testid="project-file-tree"]')).toBeTruthy()
 
@@ -590,10 +719,9 @@ describe('RepoExplorerPane', () => {
       'tab.changes',
       'tab.status',
       'tab.history',
-      '',
     ])
 
-    // ports is in the overflow dropdown — activate it via the store action
+    // ports is in the collapsed overflow area — activate it via the store action
     await act(async () => {
       useReposStore.getState().setExplorerTab('ssh-config://prod/srv/repo', 'ports')
     })
@@ -624,14 +752,16 @@ describe('RepoExplorerPane', () => {
       root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
     })
 
-    const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-    // remote-branches is in the overflow dropdown
-    const overflowTrigger = tabs[4]
-    expect(overflowTrigger).toBeTruthy()
-
-    // activate remote-branches via the store action since Radix dropdown portals don't open in jsdom
+    // remote-branches is in the collapsed overflow area — expand it and click the real tab
     await act(async () => {
-      useReposStore.getState().setExplorerTab(REPO_ID, 'remoteBranches')
+      container.querySelector<HTMLButtonElement>('[data-testid="explorer-tabs-overflow-toggle"]')?.click()
+    })
+    const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+    const remoteBranchesTab = tabs.find((tab) => tab.textContent === 'tab.remote-branches')
+    expect(remoteBranchesTab).toBeTruthy()
+
+    await act(async () => {
+      remoteBranchesTab?.click()
     })
 
     expect(container.querySelector('[data-testid="project-remote-branches-panel"]')?.getAttribute('data-repo-id')).toBe(
@@ -653,7 +783,7 @@ describe('RepoExplorerPane', () => {
     expect(tablist?.className).toContain('min-w-full')
     expect(tablist?.className).toContain('gap-0.5')
     expect(tablist?.getAttribute('aria-orientation')).toBe('horizontal')
-    expect(container.querySelectorAll('[role="tab"]').length).toBe(5)
+    expect(container.querySelectorAll('[role="tab"]').length).toBe(4)
     await act(async () => root.unmount())
   })
 
@@ -736,6 +866,124 @@ describe('RepoExplorerPane', () => {
     const repo3 = useReposStore.getState().repos[REPO_ID]
     expect(repo3 && explorerTabForRepo(repo3)).toBe('files')
     await act(async () => root.unmount())
+  })
+
+  test('collapses overflow tabs by default behind an expand-right toggle', async () => {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
+    })
+
+    const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'file-tree.title',
+      'tab.changes',
+      'tab.status',
+      'tab.history',
+    ])
+    const toggle = container.querySelector<HTMLButtonElement>('[data-testid="explorer-tabs-overflow-toggle"]')
+    expect(toggle).toBeTruthy()
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false')
+    expect(toggle?.getAttribute('aria-label')).toBe('file-tree.tabs.expand')
+    await act(async () => root.unmount())
+  })
+
+  test('expands overflow tabs inline to the right and collapses them again', async () => {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
+    })
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="explorer-tabs-overflow-toggle"]')?.click()
+    })
+
+    let tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'file-tree.title',
+      'tab.changes',
+      'tab.status',
+      'tab.history',
+      'tab.local',
+      'tab.remote-branches',
+    ])
+    const toggle = container.querySelector<HTMLButtonElement>('[data-testid="explorer-tabs-overflow-toggle"]')
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true')
+    expect(toggle?.getAttribute('aria-label')).toBe('file-tree.tabs.collapse')
+
+    // expanded overflow tabs are real tabs — clicking one switches the panel
+    await act(async () => {
+      tabs[4]?.click()
+    })
+    expect(container.querySelector('[data-testid="project-local-panel"]')).toBeTruthy()
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="explorer-tabs-overflow-toggle"]')?.click()
+    })
+    tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+    // collapsed again, but the active overflow tab stays visible beside the toggle
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'file-tree.title',
+      'tab.changes',
+      'tab.status',
+      'tab.history',
+      'tab.local',
+    ])
+    await act(async () => root.unmount())
+  })
+
+  test('shows the active overflow tab inline while collapsed', async () => {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
+    })
+
+    await act(async () => {
+      useReposStore.getState().setExplorerTab(REPO_ID, 'remoteBranches')
+    })
+
+    const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'file-tree.title',
+      'tab.changes',
+      'tab.status',
+      'tab.history',
+      'tab.remote-branches',
+    ])
+    expect(tabs[4]?.getAttribute('aria-selected')).toBe('true')
+    expect(container.querySelector('[data-testid="project-remote-branches-panel"]')).toBeTruthy()
+    await act(async () => root.unmount())
+  })
+
+  test('remembers the expanded state across remounts within the session', async () => {
+    seedRepoState({ id: REPO_B_ID, selectedBranch: 'main' })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
+    })
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="explorer-tabs-overflow-toggle"]')?.click()
+    })
+    await act(async () => root.unmount())
+
+    const root2 = createRoot(container)
+    await act(async () => {
+      root2.render(<RepoExplorerPane repoId={REPO_B_ID} layout="top-bottom" showActions />)
+    })
+    expect(
+      container.querySelector('[data-testid="explorer-tabs-overflow-toggle"]')?.getAttribute('aria-expanded'),
+    ).toBe('true')
+    expect(Array.from(container.querySelectorAll('[role="tab"]')).length).toBe(6)
+    await act(async () => root2.unmount())
   })
 
   test('branch area no longer renders a toolbar for external app buttons (moved to inline rows)', async () => {

@@ -198,10 +198,7 @@ export const en = {
 
   // ---- Empty state --------------------------------------------------------
   'empty.title': 'No repository open',
-  // Body uses <Trans> so React renders the highlighted label as a real
-  // element (no dangerouslySetInnerHTML).
-  'empty.body':
-    'Click <open>Open</open> in the tab strip to add a Git repository, or drop a repository folder into this window.',
+  'empty.body': 'Open a Git repository to get started, or drop a repository folder into this window.',
 
   // ---- Drag and drop ------------------------------------------------------
   'drop.title': 'Drop to open local repository',
@@ -362,6 +359,10 @@ export const en = {
   'file-tree.upload-file': 'Upload file',
   'file-tree.paste': 'Paste',
   'file-tree.collapse-all': 'Collapse tree',
+  'file-tree.tabs.expand': 'Show more tabs',
+  'file-tree.tabs.collapse': 'Show fewer tabs',
+  'file-area.collapse': 'Collapse file area',
+  'file-area.expand': 'Expand file area',
   'file-tree.new-file': 'New file',
   'file-tree.new-folder': 'New folder',
   'file-tree.refresh': 'Refresh',
@@ -447,6 +448,8 @@ export const en = {
   'terminal.open-count': '{count} terminals',
   'terminal.bell-unread': 'Unread terminal bell',
   'terminal.bell-unread-count': '{count} unread bell',
+  'terminal.open-in-browser': 'Open in browser',
+  'terminal.open-in-browser-title': 'Open this workspace in the browser',
   'terminal.lan-qr': 'LAN terminal QR code',
   'terminal.lan-qr-title': 'LAN terminal QR code',
   'terminal.lan-qr-description': 'Scan from another device on the same network to open this workspace terminal.',
@@ -741,6 +744,9 @@ export const en = {
   'settings.action-bar-blank-toggle': 'Toggle details from action bar',
   'settings.action-bar-blank-toggle-hint':
     'Top/bottom layout only. Click empty action bar space to show or hide details.',
+  'settings.server-port': 'Project port',
+  'settings.server-port-hint':
+    'Port for the local project server (default 32200). Takes effect after restarting Hobgoblin.',
   'settings.temporary-files-directory': 'Temporary files directory',
   'settings.temporary-files-directory-hint':
     'Used when terminal binary paste creates files. Supports absolute paths or paths relative to the current project, such as tmp/cache. Leave empty to use the current project tmp folder.',

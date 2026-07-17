@@ -209,7 +209,7 @@ export function BranchList({ repoId, showActions = true }: Props) {
   })
 
   const list = (
-    <ul>
+    <ul className="pb-1.5">
       {dragEnabled ? (
         <DndContext
           sensors={sensors}
@@ -226,7 +226,7 @@ export function BranchList({ repoId, showActions = true }: Props) {
       )}
       {detachedWorktrees.length > 0 && (
         <>
-          <li className="px-4 pb-1 pt-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <li className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
             {t('branches.detached-worktrees')}
           </li>
           {detachedWorktrees.map((worktree) => (
@@ -297,9 +297,9 @@ function DetachedWorktreeRow({
   return (
     <li
       title={title}
-      className="relative grid min-h-9 grid-cols-1 items-stretch text-muted-foreground transition-colors duration-100 hover:bg-list-row-hover"
+      className="relative mx-1.5 grid min-h-9 grid-cols-1 items-stretch rounded-[var(--goblin-brand-radius-md,var(--radius-md))] text-muted-foreground transition-colors duration-100 hover:bg-list-row-hover"
     >
-      <div className="pointer-events-none relative z-10 flex min-w-0 items-center gap-2 px-4 py-1.5">
+      <div className="pointer-events-none relative z-10 flex min-w-0 items-center gap-2 px-2.5 py-1.5">
         <span className="flex w-4 shrink-0 items-center justify-center">
           <GitCommitHorizontal size={14} className={dirty ? 'text-attention' : 'text-muted-foreground'} />
         </span>

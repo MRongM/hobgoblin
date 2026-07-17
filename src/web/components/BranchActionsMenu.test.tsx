@@ -58,6 +58,7 @@ function renderDropdown({
   repoId = '/repo',
   branchName = 'feature/a',
   open = true,
+  hideQuickAction = false,
   editor = item('editor', 'Edit'),
   terminal = item('terminal', 'Terminal'),
   destructive = item('deleteBranch', 'Delete branch', vi.fn(), { destructive: true }),
@@ -65,6 +66,7 @@ function renderDropdown({
   repoId?: string
   branchName?: string
   open?: boolean
+  hideQuickAction?: boolean
   editor?: BranchActionItem
   terminal?: BranchActionItem
   destructive?: BranchActionItem
@@ -79,6 +81,7 @@ function renderDropdown({
         mainItems={[]}
         destructiveItems={[destructive]}
         open={open}
+        hideQuickAction={hideQuickAction}
       />,
     )
   })
@@ -105,6 +108,17 @@ describe('BranchActionsDropdown split button', () => {
     expect(button('Edit').className).toContain('px-1.5')
     expect(button('Actions').className).toContain('w-7')
     expect(button('Actions').className).toContain('px-1.5')
+  })
+
+  test('hideQuickAction renders only the menu trigger with the full items list', () => {
+    renderDropdown({ hideQuickAction: true })
+
+    expect(document.body.querySelector('button[aria-label="Edit"]')).toBeNull()
+    const trigger = button('Actions')
+    expect(trigger.className).not.toContain('rounded-l-none')
+    menuItem('Edit')
+    menuItem('Terminal')
+    menuItem('Delete branch')
   })
 
   test('renders edit as the default quick action and runs it from the left button', () => {

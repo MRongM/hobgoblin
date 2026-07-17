@@ -48,7 +48,7 @@ vi.mock('#/web/components/ui/scroll-area.tsx', () => ({
 }))
 
 vi.mock('#/web/components/BranchActionsMenu.tsx', () => ({
-  BranchActionsMenu: () => null,
+  BranchActionsDropdown: () => null,
 }))
 
 vi.mock('@dnd-kit/core', async () => {
@@ -194,7 +194,7 @@ describe('BranchList worktree drag ordering', () => {
       countsByWorktreeKey: new Map([['/tmp/repo\0/tmp/worktree-a', 2]]),
     })
 
-    expect(Array.from(container?.querySelectorAll('.text-sm.font-medium') ?? []).map((node) => node.textContent)).toEqual([
+    expect(Array.from(container?.querySelectorAll('.text-\\[13px\\].font-medium') ?? []).map((node) => node.textContent)).toEqual([
       'main',
       'feature/a',
     ])

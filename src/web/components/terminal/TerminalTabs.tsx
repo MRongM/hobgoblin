@@ -452,7 +452,14 @@ function TerminalTabChrome({
       : {}
   return (
     <ToolbarClosableTab
-      containerProps={{ 'data-terminal-tab-tooltip-id': session.key }}
+      containerProps={{
+        'data-terminal-tab-tooltip-id': session.key,
+        // Opt the whole tab (padding + close button) out of the Electron
+        // window drag region: in detail focus mode this toolbar becomes the
+        // OS drag area (`.topbar`), which would otherwise swallow the pointer
+        // events dnd-kit needs for tab reordering.
+        'data-interactive': true,
+      }}
       containerClassName={cn(
         toolbarTabChromeClassName({ variant: 'terminal', active: isActive, dragging: isDragging }),
         fillWidth && 'w-full',

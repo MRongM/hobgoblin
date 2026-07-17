@@ -16,6 +16,15 @@ const closeTerminalAndDismissDetailIfLast = vi.fn()
 const reorderSessions = vi.fn()
 const terminalTabsProps: Array<Record<string, unknown>> = []
 const REMOTE_REPO_ID = 'ssh-config://prod/srv/plain'
+let compactUi = false
+
+vi.mock('#/web/hooks/useResponsiveUiMode.tsx', () => ({
+  useIsCompactUi: () => compactUi,
+}))
+
+vi.mock('#/web/runtime-settings-chrome.ts', () => ({
+  useRuntimeChromeSettings: () => ({ topbarHeightPx: 39, toolbarHeightPx: 41 }),
+}))
 
 vi.mock('#/web/components/terminal/terminal-session-context.ts', () => ({
   useTerminalSessionContext: () => ({
@@ -64,6 +73,7 @@ beforeEach(() => {
   closeTerminalAndDismissDetailIfLast.mockClear()
   reorderSessions.mockClear()
   terminalTabsProps.length = 0
+  compactUi = false
   resetReposStore()
 })
 
@@ -110,6 +120,27 @@ describe('PlainWorkspaceTerminalPanel', () => {
 
     const terminalTabs = container!.querySelector('[data-testid="terminal-tabs"]')
     expect(terminalTabs?.parentElement?.className).not.toContain('flex-1')
+  })
+
+  test('uses the project topbar tone for the desktop terminal toolbar', () => {
+    render(<PlainWorkspaceTerminalPanel repoId="/repo" />)
+
+    const toolbar = container!.querySelector<HTMLElement>('[data-testid="plain-workspace-terminal-toolbar"]')
+    expect(toolbar?.style.height).toBe('39px')
+    expect(toolbar?.className).toContain('topbar-tone')
+    expect(toolbar?.className).toContain('border-topbar-border')
+    expect(toolbar?.className).toContain('bg-topbar')
+    expect(toolbar?.className).toContain('text-topbar-foreground')
+  })
+
+  test('keeps the compact terminal toolbar on the generic toolbar tone', () => {
+    compactUi = true
+    render(<PlainWorkspaceTerminalPanel repoId="/repo" />)
+
+    const toolbar = container!.querySelector<HTMLElement>('[data-testid="plain-workspace-terminal-toolbar"]')
+    expect(toolbar?.style.height).toBe('41px')
+    expect(toolbar?.className).toContain('bg-toolbar')
+    expect(toolbar?.className).not.toContain('topbar-tone')
   })
 
   test('auto-creates remote plain workspace sessions at the remote path', () => {

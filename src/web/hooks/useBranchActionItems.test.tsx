@@ -45,9 +45,6 @@ let closeTerminalAndDismissDetailIfLast: ReturnType<
   typeof vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>
 >
 
-vi.mock('#/web/runtime-settings-hooks.ts', () => ({
-  useRuntimeExternalAppSettings: mocks.useRuntimeExternalAppSettings,
-}))
 vi.mock('#/web/runtime-settings-external-apps.ts', () => ({
   useRuntimeExternalAppSettings: mocks.useRuntimeExternalAppSettings,
 }))

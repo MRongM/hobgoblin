@@ -9,7 +9,6 @@ import {
 } from '#/web/components/ui/dropdown-menu.tsx'
 import { BranchActionControls } from '#/web/components/BranchActionControls.tsx'
 import { RepoActivityControl } from '#/web/components/repo-activity/RepoActivityControl.tsx'
-import { ProjectThemeMenuConnected } from '#/web/components/repo-toolbar/ProjectThemeMenu.tsx'
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.tsx'
 import { useBranchActionShortcutRegistry } from '#/web/hooks/useBranchActionShortcutRegistry.ts'
@@ -22,9 +21,12 @@ import { repoWorkspaceBehavior } from '#/web/lib/workspace-layout.ts'
 
 interface Props {
   repoId: string
+  /** Which trigger edge the focus-mode dropdowns align to; 'start' when the
+   *  controls sit at the window's left edge (detail toolbar chrome). */
+  menuAlign?: 'start' | 'end'
 }
 
-export function TopbarRepoControls({ repoId }: Props) {
+export function TopbarRepoControls({ repoId, menuAlign = 'end' }: Props) {
   const exists = useReposStore((s) => !!s.repos[repoId])
   const isGitRepo = useReposStore((s) => s.repos[repoId]?.isGitRepo ?? true)
   const workspaceLayout = useReposStore((s) => s.repos[repoId]?.ui.workspaceLayout ?? s.workspaceLayout)
@@ -34,19 +36,22 @@ export function TopbarRepoControls({ repoId }: Props) {
   })
 
   if (!exists) return null
+  // The project theme menu moved to the bottom status bar; without it this
+  // control only has content for focus mode (branch switcher) and non-git
+  // workspaces (activity), so render nothing otherwise.
+  if (!(isGitRepo && focusMode) && isGitRepo) return null
 
   return (
     <div className="flex h-full shrink-0 items-center gap-1">
-      {isGitRepo && focusMode && <FocusBranchControls repoId={repoId} />}
+      {isGitRepo && focusMode && <FocusBranchControls repoId={repoId} menuAlign={menuAlign} />}
       {!isGitRepo && (
         <RepoActivityControl repoId={repoId} compact mutedForegroundClassName="text-topbar-muted-foreground" />
       )}
-      <ProjectThemeMenuConnected repoId={repoId} />
     </div>
   )
 }
 
-function FocusBranchControls({ repoId }: Props) {
+function FocusBranchControls({ repoId, menuAlign }: { repoId: string; menuAlign: 'start' | 'end' }) {
   const navigation = useMainWindowNavigation()
   const { branches, selectedBranch, selectedBranchData } = useStoreWithEqualityFn(
     useReposStore,
@@ -73,7 +78,13 @@ function FocusBranchControls({ repoId }: Props) {
 
   return (
     <div className="flex h-full shrink-0 items-center gap-1">
-      <BranchSelector repoId={repoId} branches={branches} selectedBranch={selectedBranch} navigation={navigation} />
+      <BranchSelector
+        repoId={repoId}
+        branches={branches}
+        selectedBranch={selectedBranch}
+        navigation={navigation}
+        menuAlign={menuAlign}
+      />
       {selectedBranchData && <FocusBranchActions repoId={repoId} branch={selectedBranchData} />}
     </div>
   )
@@ -138,7 +149,7 @@ function FocusBranchActions({ repoId, branch }: { repoId: string; branch: RepoBr
   return (
     <>
       {actions.dialogs}
-      <BranchActionControls actions={actions} variant="menu" repoId={repoId} branchName={branch.name} />
+      <BranchActionControls actions={actions} variant="menu" hideQuickAction repoId={repoId} branchName={branch.name} />
     </>
   )
 }
@@ -148,11 +159,13 @@ function BranchSelector({
   branches,
   selectedBranch,
   navigation,
+  menuAlign,
 }: {
   repoId: string
   branches: { name: string }[]
   selectedBranch: string | null
   navigation: ReturnType<typeof useMainWindowNavigation>
+  menuAlign: 'start' | 'end'
 }) {
   const t = useT()
   if (branches.length === 0) return null
@@ -177,7 +190,7 @@ function BranchSelector({
           <ChevronDown className="size-3" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="bottom" align="end" className="w-max">
+      <DropdownMenuContent side="bottom" align={menuAlign} className="w-max">
         {branches.map((branch) => (
           <DropdownMenuItem
             key={branch.name}

@@ -7,7 +7,9 @@ export type WorkspaceDetailPaneSizes = Record<WorkspaceLayout, number>
 export const DEFAULT_WORKSPACE_LAYOUT: WorkspaceLayout = 'left-right'
 export const DEFAULT_DETAIL_COLLAPSED = false
 export const DEFAULT_DETAIL_FOCUS_MODE = false
-export const DEFAULT_DETAIL_PANE_SIZES: WorkspaceDetailPaneSizes = { 'top-bottom': 61.8, 'left-right': 61.8 }
+// left-right: the detail pane owns the width — the sidebar (branch list +
+// file area) stays narrow, roughly a quarter of the window.
+export const DEFAULT_DETAIL_PANE_SIZES: WorkspaceDetailPaneSizes = { 'top-bottom': 61.8, 'left-right': 74.2 }
 export const DEFAULT_FILE_TREE_PANE_SIZES: WorkspaceDetailPaneSizes = { 'top-bottom': 66.7, 'left-right': 66.7 }
 
 export const MIN_WORKSPACE_PANE_SIZE = 10

@@ -1,6 +1,6 @@
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useCallback, useEffect, useState } from 'react'
-import type { CSSProperties } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import {
   FolderTree,
   FolderGit,
@@ -10,7 +10,8 @@ import {
   History,
   RadioTower,
   Tag,
-  ChevronDown,
+  ChevronsLeft,
+  ChevronsRight,
   type LucideIcon,
 } from 'lucide-react'
 import { BranchList } from '#/web/components/BranchList.tsx'
@@ -23,6 +24,9 @@ import { ProjectRemoteBranchesPanel } from '#/web/components/repo-workspace/Proj
 import { ProjectLocalPanel } from '#/web/components/repo-workspace/ProjectLocalPanel.tsx'
 import { ProjectStatusPanel } from '#/web/components/repo-workspace/ProjectStatusPanel.tsx'
 import { PlainWorkspacePane } from '#/web/components/repo-workspace/PlainWorkspacePane.tsx'
+import { SidebarProjectHeader } from '#/web/components/repo-workspace/SidebarProjectHeader.tsx'
+import { StatusBar } from '#/web/components/StatusBar.tsx'
+import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { explorerTabForRepo } from '#/web/stores/repos/helpers.ts'
 import type { ExplorerTab, RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
@@ -35,12 +39,6 @@ import { cn } from '#/web/lib/cn.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 import { repoIsPlainWorkspace } from '#/web/stores/repos/capabilities.ts'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '#/web/components/ui/dropdown-menu.tsx'
 
 export interface FileTreeRevealRequest {
   id: number
@@ -53,9 +51,20 @@ interface RepoExplorerPaneProps {
   layout: RepoWorkspaceLayout
   showActions: boolean
   revealRequest?: FileTreeRevealRequest | null
+  plainWorkspaceTerminalPanel?: ReactNode
+  fileAreaCollapsed?: boolean
+  onToggleFileArea?: () => void
 }
 
-export function RepoExplorerPane({ repoId, layout, showActions, revealRequest }: RepoExplorerPaneProps) {
+export function RepoExplorerPane({
+  repoId,
+  layout,
+  showActions,
+  revealRequest,
+  plainWorkspaceTerminalPanel,
+  fileAreaCollapsed = false,
+  onToggleFileArea,
+}: RepoExplorerPaneProps) {
   const {
     activeTab,
     repoFileTreePaneSizes,
@@ -98,19 +107,38 @@ export function RepoExplorerPane({ repoId, layout, showActions, revealRequest }:
     return repoIsPlainWorkspace(repo)
   })
 
+  // Compact UI keeps the repo tab strip in the topbar, so the sidebar
+  // project header (window chrome + project switcher) only renders on
+  // desktop layouts.
+  const compact = useIsCompactUi()
+  const desktopFileAreaCollapsed = !compact && fileAreaCollapsed
+
   if (isPlainWorkspace) {
     return (
-      <div data-file-tree-layout={layout} className="flex min-h-0 min-w-0 flex-1">
-        <PlainWorkspacePane repoId={repoId} layout={layout} revealRequest={activeRevealRequest} />
+      <div data-file-tree-layout={layout} className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {!compact && <SidebarProjectHeader repoId={repoId} />}
+        <PlainWorkspacePane
+          repoId={repoId}
+          layout={layout}
+          revealRequest={activeRevealRequest}
+          terminalPanel={plainWorkspaceTerminalPanel}
+        />
+        {!compact && <StatusBar repoId={repoId} />}
       </div>
     )
   }
 
   return (
-    <div data-file-tree-layout={layout} className="flex min-h-0 min-w-0 flex-1">
+    <div data-file-tree-layout={layout} className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {!compact && <SidebarProjectHeader repoId={repoId} />}
       <SplitPane
         orientation={splitOrientation}
-        before={<BranchArea repoId={repoId} showActions={showActions} />}
+        before={
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
+            {!compact && <BranchSectionLabel />}
+            <BranchArea repoId={repoId} showActions={showActions} />
+          </div>
+        }
         after={
           <ExplorerTabs
             repoId={repoId}
@@ -122,12 +150,28 @@ export function RepoExplorerPane({ repoId, layout, showActions, revealRequest }:
           />
         }
         afterSize={fileTreeSize}
+        afterCollapsed={desktopFileAreaCollapsed}
         onAfterSizeChange={(size) => setRepoFileTreePaneSize(repoId, layout, size)}
         beforeMinSize={sideBySide ? '12rem' : '8rem'}
         afterMinSize={sideBySide ? '12rem' : '8rem'}
         afterMaxSize="80%"
-        className="flex-1"
+        className="min-h-0 flex-1"
       />
+      {!compact && (
+        <StatusBar repoId={repoId} fileAreaCollapsed={desktopFileAreaCollapsed} onToggleFileArea={onToggleFileArea} />
+      )}
+    </div>
+  )
+}
+
+// Slim eyebrow above the branch rows — the same 10px tracked-caps label
+// the project switcher and detached-worktrees lists use, so the sidebar
+// sections read as one system.
+function BranchSectionLabel() {
+  const t = useT()
+  return (
+    <div className="flex h-7 shrink-0 items-center px-4 pt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
+      {t('branches.filter.worktrees')}
     </div>
   )
 }
@@ -138,6 +182,14 @@ function BranchArea({ repoId, showActions }: { repoId: string; showActions: bool
       <BranchList repoId={repoId} showActions={showActions} />
     </section>
   )
+}
+
+// Session-only memory for the file-area overflow tab strip: survives
+// remounts (project switches) but intentionally resets on page reload.
+let lastOverflowExpanded = false
+
+export function resetExplorerOverflowExpanded() {
+  lastOverflowExpanded = false
 }
 
 function ExplorerTabs({
@@ -165,7 +217,7 @@ function ExplorerTabs({
   // 检查是否有工作树
   const hasWorktree = useReposStore((s) => {
     const repo = s.repos[repoId]
-    const selected = repo?.data.branches.find(branch => branch.name === repo.ui.selectedBranch)
+    const selected = repo?.data.branches.find((branch) => branch.name === repo.ui.selectedBranch)
     return !!selected?.worktree?.path
   })
 
@@ -184,9 +236,7 @@ function ExplorerTabs({
   ]
 
   // 有工作树时，status 移到第一位
-  const orderedTabs = hasWorktree
-    ? [baseTabs[2], baseTabs[0], baseTabs[1], ...baseTabs.slice(3)]
-    : baseTabs
+  const orderedTabs = hasWorktree ? [baseTabs[2], baseTabs[0], baseTabs[1], ...baseTabs.slice(3)] : baseTabs
 
   const tabs = [
     ...orderedTabs,
@@ -195,7 +245,43 @@ function ExplorerTabs({
 
   const primaryTabs = tabs.slice(0, 4)
   const overflowTabs = tabs.slice(4)
-  const overflowActive = overflowTabs.some((tab) => tab.id === activeVisibleTab)
+  const [overflowExpanded, setOverflowExpanded] = useState(() => lastOverflowExpanded)
+  const toggleOverflow = () =>
+    setOverflowExpanded((current) => {
+      lastOverflowExpanded = !current
+      return !current
+    })
+
+  const renderTab = (tab: (typeof tabs)[number]) => {
+    const selected = activeVisibleTab === tab.id
+    const Icon = tab.icon
+    return (
+      <Button
+        key={tab.id}
+        type="button"
+        variant="ghost"
+        role="tab"
+        aria-selected={selected}
+        aria-controls={`repo-explorer-${tab.id}-panel`}
+        tabIndex={selected ? 0 : -1}
+        onClick={() => onTabChange(tab.id)}
+        className={cn(
+          'h-7 gap-1.5 border px-2.5 text-[length:var(--goblin-file-tree-topbar-font-size)] font-normal',
+          selected
+            ? 'border-transparent bg-tab-active text-foreground'
+            : 'border-separator text-muted-foreground hover:bg-tab-hover hover:text-foreground',
+        )}
+      >
+        <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+        {tab.label}
+        {tab.id === 'changes' && changeCount > 0 && (
+          <Badge variant="attention" className="font-normal font-mono tabular-nums">
+            {changeCount}
+          </Badge>
+        )}
+      </Button>
+    )
+  }
 
   function handleRevealPath(relativePath: string) {
     onTabChange('files')
@@ -222,83 +308,29 @@ function ExplorerTabs({
               aria-orientation="horizontal"
               className="gap-0.5"
             >
-              {primaryTabs.map((tab) => {
-                const selected = activeVisibleTab === tab.id
-                const Icon = tab.icon
-                return (
+              {primaryTabs.map(renderTab)}
+              {overflowTabs.length > 0 && (
+                <>
+                  {(overflowExpanded
+                    ? overflowTabs
+                    : overflowTabs.filter((tab) => tab.id === activeVisibleTab)
+                  ).map(renderTab)}
                   <Button
-                    key={tab.id}
                     type="button"
                     variant="ghost"
-                    role="tab"
-                    aria-selected={selected}
-                    aria-controls={`repo-explorer-${tab.id}-panel`}
-                    tabIndex={selected ? 0 : -1}
-                    onClick={() => onTabChange(tab.id)}
-                    className={cn(
-                      'h-7 gap-1.5 border px-2.5 text-[length:var(--goblin-file-tree-topbar-font-size)] font-normal',
-                      selected
-                        ? 'border-transparent bg-tab-active text-foreground'
-                        : 'border-separator text-muted-foreground hover:bg-tab-hover hover:text-foreground',
-                    )}
+                    data-testid="explorer-tabs-overflow-toggle"
+                    aria-expanded={overflowExpanded}
+                    aria-label={t(overflowExpanded ? 'file-tree.tabs.collapse' : 'file-tree.tabs.expand')}
+                    onClick={toggleOverflow}
+                    className="h-7 border border-separator px-2 text-muted-foreground hover:bg-tab-hover hover:text-foreground"
                   >
-                    <Icon className="size-3.5 shrink-0" aria-hidden="true" />
-                    {tab.label}
-                    {tab.id === 'changes' && changeCount > 0 && (
-                      <Badge variant="attention" className="font-normal font-mono tabular-nums">
-                        {changeCount}
-                      </Badge>
+                    {overflowExpanded ? (
+                      <ChevronsLeft className="size-3.5 shrink-0" aria-hidden="true" />
+                    ) : (
+                      <ChevronsRight className="size-3.5 shrink-0" aria-hidden="true" />
                     )}
                   </Button>
-                )
-              })}
-              {overflowTabs.length > 0 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      role="tab"
-                      aria-selected={overflowActive}
-                      tabIndex={overflowActive ? 0 : -1}
-                      className={cn(
-                        'h-7 gap-1 border px-2 text-[length:var(--goblin-file-tree-topbar-font-size)] font-normal',
-                        overflowActive
-                          ? 'border-transparent bg-tab-active text-foreground'
-                          : 'border-separator text-muted-foreground hover:bg-tab-hover hover:text-foreground',
-                      )}
-                    >
-                      {overflowActive &&
-                        (() => {
-                          const active = overflowTabs.find((t) => t.id === activeVisibleTab)
-                          if (!active) return null
-                          const Icon = active.icon
-                          return (
-                            <>
-                              <Icon className="size-3.5 shrink-0" aria-hidden="true" />
-                              {active.label}
-                            </>
-                          )
-                        })()}
-                      <ChevronDown className="size-3.5 shrink-0" aria-hidden="true" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {overflowTabs.map((tab) => {
-                      const Icon = tab.icon
-                      return (
-                        <DropdownMenuItem
-                          key={tab.id}
-                          onSelect={() => onTabChange(tab.id)}
-                          className={cn(activeVisibleTab === tab.id && 'bg-tab-active text-foreground')}
-                        >
-                          <Icon className="size-3.5 shrink-0" aria-hidden="true" />
-                          {tab.label}
-                        </DropdownMenuItem>
-                      )
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                </>
               )}
             </ToolbarTabStripBody>
           }

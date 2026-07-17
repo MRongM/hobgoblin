@@ -24,6 +24,7 @@ import {
   DEFAULT_DETAIL_COLLAPSED,
   effectiveDetailCollapsed,
   normalizeDetailPaneSizes,
+  normalizeFileTreePaneSizes,
   normalizeWorkspaceLayout,
 } from '#/shared/workspace-layout.ts'
 import { repoSessionEntryId, type RepoSessionEntry } from '#/shared/remote-repo.ts'
@@ -68,7 +69,10 @@ import {
   MIN_FILE_TREE_FONT_SIZE,
   MIN_FILE_TREE_TOPBAR_FONT_SIZE,
   MIN_GIT_NETWORK_TIMEOUT_SEC,
+  MIN_SERVER_PORT,
   MIN_TERMINAL_FONT_SIZE,
+  MAX_SERVER_PORT,
+  DEFAULT_SERVER_PORT,
   defaultSessionState,
   defaultSettingsPrefs,
 } from '#/shared/settings-defaults.ts'
@@ -105,6 +109,7 @@ interface ServerSettingsData {
   terminalCustomButtonSize: TerminalCustomButtonSize
   terminalCustomButtons: TerminalCustomButton[]
   lanEnabled: boolean
+  serverPort: number
   session: SessionState
   recentRepos: RepoSessionEntry[]
   repoSettings: RepoSettingsEntry[]
@@ -243,6 +248,12 @@ function normalizeLanEnabled(value: unknown): boolean {
   return value === true
 }
 
+function normalizeServerPort(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_SERVER_PORT
+  const port = Math.round(value)
+  return port >= MIN_SERVER_PORT && port <= MAX_SERVER_PORT ? port : DEFAULT_SERVER_PORT
+}
+
 function normalizeGitNetworkProxyEnabled(value: unknown): boolean {
   return value === true
 }
@@ -295,6 +306,7 @@ function settingsPrefsFromData(data: ServerSettingsData): SettingsPrefs {
     terminalCustomButtonSize: data.terminalCustomButtonSize,
     terminalCustomButtons: data.terminalCustomButtons,
     lanEnabled: data.lanEnabled,
+    serverPort: data.serverPort,
   }
 }
 
@@ -348,6 +360,7 @@ function normalizeSession(value: unknown): SessionState {
     detailFocusMode,
     workspaceLayout,
     detailPaneSizes: normalizeDetailPaneSizes(partial.detailPaneSizes),
+    fileTreePaneSizes: normalizeFileTreePaneSizes(partial.fileTreePaneSizes),
     selectedTerminalByWorktree: normalizeSelectedTerminalByWorktree(
       partial.selectedTerminalByWorktree ?? partial.activeTerminalByGroup,
     ),
@@ -419,6 +432,7 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       terminalCustomButtonSize: normalizeTerminalCustomButtonSize(parsed.terminalCustomButtonSize),
       terminalCustomButtons: normalizeTerminalCustomButtons(parsed.terminalCustomButtons),
       lanEnabled: normalizeLanEnabled(parsed.lanEnabled),
+      serverPort: normalizeServerPort(parsed.serverPort),
       session: normalizeSession(parsed.session),
       recentRepos: normalizeRecentRepos(parsed.recentRepos),
       repoSettings: normalizeRepoSettings(parsed.repoSettings),
@@ -437,7 +451,12 @@ async function writeServerSettingsFile(data: ServerSettingsData): Promise<void> 
 async function loadServerSettings(): Promise<ServerSettingsData> {
   settingsPromise ??= (async () => {
     const persisted = await readServerSettingsFile()
-    const data = persisted ?? { ...defaultSettingsPrefs(), session: defaultSession(), recentRepos: [], repoSettings: [] }
+    const data = persisted ?? {
+      ...defaultSettingsPrefs(),
+      session: defaultSession(),
+      recentRepos: [],
+      repoSettings: [],
+    }
     await writeServerSettingsFile(data)
     cachedFetchIntervalSec = data.fetchIntervalSec
     return data
@@ -552,6 +571,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
       ? data.terminalCustomButtons
       : normalizeTerminalCustomButtons(patch.terminalCustomButtons)
   const nextLanEnabled = patch.lanEnabled === undefined ? data.lanEnabled : normalizeLanEnabled(patch.lanEnabled)
+  const nextServerPort = patch.serverPort === undefined ? data.serverPort : normalizeServerPort(patch.serverPort)
   const changed =
     data.lang !== nextLang ||
     data.theme !== nextTheme ||
@@ -581,7 +601,8 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     data.terminalCustomButtonsVisible !== nextTerminalCustomButtonsVisible ||
     data.terminalCustomButtonSize !== nextTerminalCustomButtonSize ||
     JSON.stringify(data.terminalCustomButtons) !== JSON.stringify(nextTerminalCustomButtons) ||
-    data.lanEnabled !== nextLanEnabled
+    data.lanEnabled !== nextLanEnabled ||
+    data.serverPort !== nextServerPort
   data.lang = nextLang
   data.theme = nextTheme
   data.colorTheme = nextColorTheme
@@ -611,6 +632,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   data.terminalCustomButtonSize = nextTerminalCustomButtonSize
   data.terminalCustomButtons = nextTerminalCustomButtons
   data.lanEnabled = nextLanEnabled
+  data.serverPort = nextServerPort
   if (changed) await writeServerSettingsFile(data)
   if (cachedFetchIntervalSec !== nextFetchIntervalSec) {
     cachedFetchIntervalSec = nextFetchIntervalSec
@@ -710,10 +732,7 @@ function cloneRepoSettings(repoSettings: readonly RepoSettingsEntry[]): RepoSett
   }))
 }
 
-function upsertRepoSettingsEntry(
-  entries: readonly RepoSettingsEntry[],
-  next: RepoSettingsEntry,
-): RepoSettingsEntry[] {
+function upsertRepoSettingsEntry(entries: readonly RepoSettingsEntry[], next: RepoSettingsEntry): RepoSettingsEntry[] {
   return [next, ...entries.filter((entry) => entry.repoId !== next.repoId)]
 }
 

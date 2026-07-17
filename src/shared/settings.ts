@@ -23,6 +23,8 @@ export const MIN_TERMINAL_FONT_SIZE = 10
 export const MAX_TERMINAL_FONT_SIZE = 24
 export const MIN_GIT_NETWORK_TIMEOUT_SEC = 15
 export const MAX_GIT_NETWORK_TIMEOUT_SEC = 900
+export const MIN_SERVER_PORT = 1024
+export const MAX_SERVER_PORT = 65535
 
 export {
   DEFAULT_TOPBAR_HEIGHT_PX,
@@ -70,4 +72,5 @@ export interface SettingsPrefs {
   terminalCustomButtonSize: TerminalCustomButtonSize
   terminalCustomButtons: TerminalCustomButton[]
   lanEnabled: boolean
+  serverPort: number
 }

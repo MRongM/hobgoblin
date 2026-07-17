@@ -106,7 +106,8 @@ export const ko: Record<DictKey, string> = {
   'repo-tabs.clone-cloning': '클론 중…',
   'repo-tabs.clone-opened': '리포지토리를 클론했습니다',
   'repo-tabs.clear-cache-confirm-title': '캐시를 지울까요?',
-  'repo-tabs.clear-cache-confirm-message': '이 서버의 모든 리포지토리 로컬 캐시를 지우고 페이지를 새로 고칩니다. 서버 데이터는 영향을 받지 않으며 리포지토리는 다시 로드됩니다.',
+  'repo-tabs.clear-cache-confirm-message':
+    '이 서버의 모든 리포지토리 로컬 캐시를 지우고 페이지를 새로 고칩니다. 서버 데이터는 영향을 받지 않으며 리포지토리는 다시 로드됩니다.',
   'repo-tabs.clear-cache-confirm': '지우고 새로 고침',
   'repo-tabs.open-remote-title': '원격 리포지토리 열기',
   'repo-tabs.open-remote-description': 'SSH 별칭을 고르고 리포지토리 경로를 입력하세요.',
@@ -190,8 +191,7 @@ export const ko: Record<DictKey, string> = {
 
   // ---- Empty state -------------------------------------------------------
   'empty.title': '열린 리포지토리가 없습니다',
-  'empty.body':
-    '상단 탭 막대의 <open>열기</open> 를 눌러 Git 리포지토리를 추가하거나, 리포지토리 폴더를 이 창으로 드롭하세요.',
+  'empty.body': 'Git 리포지토리를 열어 시작하거나, 리포지토리 폴더를 이 창으로 드롭하세요.',
 
   // ---- Drag and drop -----------------------------------------------------
   'drop.title': '놓아서 로컬 리포지토리 열기',
@@ -350,6 +350,10 @@ export const ko: Record<DictKey, string> = {
   'file-tree.upload-file': '파일 업로드',
   'file-tree.paste': '붙여넣기',
   'file-tree.collapse-all': '트리 접기',
+  'file-tree.tabs.expand': '탭 더 보기',
+  'file-tree.tabs.collapse': '탭 접기',
+  'file-area.collapse': '파일 영역 접기',
+  'file-area.expand': '파일 영역 펼치기',
   'file-tree.new-file': '새 파일',
   'file-tree.new-folder': '새 폴더',
   'file-tree.refresh': '새로 고침',
@@ -435,6 +439,8 @@ export const ko: Record<DictKey, string> = {
   'terminal.open-count': '터미널 {count}개',
   'terminal.bell-unread': '읽지 않은 터미널 벨',
   'terminal.bell-unread-count': '읽지 않은 벨 {count}개',
+  'terminal.open-in-browser': '브라우저에서 열기',
+  'terminal.open-in-browser-title': '이 작업 공간을 브라우저에서 엽니다',
   'terminal.lan-qr': 'LAN 터미널 QR 코드',
   'terminal.lan-qr-title': 'LAN 터미널 QR 코드',
   'terminal.lan-qr-description': '같은 네트워크의 다른 기기에서 스캔해 이 작업 공간 터미널을 엽니다.',
@@ -730,6 +736,8 @@ export const ko: Record<DictKey, string> = {
   'settings.action-bar-blank-toggle': '작업 막대 빈 영역으로 세부 패널 접기/펼치기',
   'settings.action-bar-blank-toggle-hint':
     '상하 레이아웃에서만 작동합니다. 작업 막대 빈 공간을 클릭해 세부 정보를 표시하거나 숨깁니다.',
+  'settings.server-port': '프로젝트 포트',
+  'settings.server-port-hint': '로컬 프로젝트 서버 포트(기본 32200). Hobgoblin을 다시 시작하면 적용됩니다.',
   'settings.temporary-files-directory': '임시 파일 디렉터리',
   'settings.temporary-files-directory-hint':
     '터미널에서 바이너리를 붙여넣을 때 생성되는 파일에 사용합니다. 절대 경로 또는 현재 프로젝트 기준 상대 경로(예: tmp/cache)를 지원합니다. 비워 두면 현재 프로젝트의 tmp 폴더를 사용합니다.',

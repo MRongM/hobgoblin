@@ -1,6 +1,5 @@
 import type { BrowserWindow } from 'electron'
 import type { RpcEvent } from '#/shared/rpc.ts'
-import type { RepoQueryInvalidationEvent } from '#/shared/repo-query-invalidation.ts'
 import type { RendererEffectIntent } from '#/shared/renderer-effect-intents.ts'
 import { broadcastToSurfaceCapability, sendToRegisteredWindow } from '#/main/window-registry.ts'
 import { RENDERER_EFFECT_INTENT_CHANNEL, RPC_EVENT_CHANNEL } from '#/shared/ipc-channels.ts'
@@ -21,8 +20,4 @@ export function broadcastRendererEffectIntent(intent: RendererEffectIntent): voi
 
 export function sendRendererEffectIntent(win: BrowserWindow | null | undefined, intent: RendererEffectIntent): void {
   sendToRegisteredWindow(win, RENDERER_EFFECT_INTENT_CHANNEL, [intent])
-}
-
-export function broadcastRepoQueryInvalidation(event: Omit<RepoQueryInvalidationEvent, 'type'>): void {
-  broadcastRpcEvent({ type: 'repo-query-invalidated', ...event })
 }

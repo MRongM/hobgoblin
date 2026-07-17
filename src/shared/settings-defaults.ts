@@ -29,7 +29,9 @@ import {
   MIN_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   MIN_FILE_TREE_TOPBAR_FONT_SIZE,
   MIN_GIT_NETWORK_TIMEOUT_SEC,
+  MIN_SERVER_PORT,
   MIN_TERMINAL_FONT_SIZE,
+  MAX_SERVER_PORT,
   DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
 } from '#/shared/settings.ts'
 import {
@@ -66,6 +68,7 @@ export const DEFAULT_TERMINAL_CUSTOM_BUTTONS_VISIBLE = true
 export const DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE: TerminalCustomButtonSize = 'medium'
 export const DEFAULT_TERMINAL_CUSTOM_BUTTONS: TerminalCustomButton[] = []
 export const DEFAULT_LAN_ENABLED = false
+export const DEFAULT_SERVER_PORT = 32200
 
 export function defaultSessionState(): SessionState {
   return {
@@ -87,12 +90,9 @@ export function defaultSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): Se
     colorTheme: overrides.colorTheme ?? DEFAULT_COLOR_THEME,
     fontFamily: overrides.fontFamily ?? DEFAULT_FONT_FAMILY,
     fetchIntervalSec: overrides.fetchIntervalSec ?? DEFAULT_FETCH_INTERVAL_SEC,
-    gitNetworkProxyEnabled:
-      overrides.gitNetworkProxyEnabled ?? DEFAULT_GIT_NETWORK_PROXY_ENABLED,
-    gitNetworkProxyUrl:
-      overrides.gitNetworkProxyUrl ?? DEFAULT_GIT_NETWORK_PROXY_URL,
-    gitNetworkTimeoutSec:
-      overrides.gitNetworkTimeoutSec ?? DEFAULT_GIT_NETWORK_TIMEOUT_SEC,
+    gitNetworkProxyEnabled: overrides.gitNetworkProxyEnabled ?? DEFAULT_GIT_NETWORK_PROXY_ENABLED,
+    gitNetworkProxyUrl: overrides.gitNetworkProxyUrl ?? DEFAULT_GIT_NETWORK_PROXY_URL,
+    gitNetworkTimeoutSec: overrides.gitNetworkTimeoutSec ?? DEFAULT_GIT_NETWORK_TIMEOUT_SEC,
     terminalNotificationsEnabled: overrides.terminalNotificationsEnabled ?? DEFAULT_TERMINAL_NOTIFICATIONS_ENABLED,
     shortcutsDisabled: overrides.shortcutsDisabled ?? DEFAULT_SHORTCUTS_DISABLED,
     globalShortcutDisabled: overrides.globalShortcutDisabled ?? DEFAULT_GLOBAL_SHORTCUT_DISABLED,
@@ -100,8 +100,7 @@ export function defaultSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): Se
     toggleDetailOnActionBarBlankClick:
       overrides.toggleDetailOnActionBarBlankClick ?? DEFAULT_TOGGLE_DETAIL_ON_ACTION_BAR_BLANK_CLICK,
     terminalThemeSyncEnabled: overrides.terminalThemeSyncEnabled ?? DEFAULT_TERMINAL_THEME_SYNC_ENABLED,
-    temporaryFilesDirectory:
-      overrides.temporaryFilesDirectory ?? DEFAULT_TEMPORARY_FILES_DIRECTORY,
+    temporaryFilesDirectory: overrides.temporaryFilesDirectory ?? DEFAULT_TEMPORARY_FILES_DIRECTORY,
     globalShortcut: overrides.globalShortcut ?? DEFAULT_GLOBAL_SHORTCUT,
     terminalApp: overrides.terminalApp ?? DEFAULT_TERMINAL_APP,
     editorApp: overrides.editorApp ?? DEFAULT_EDITOR_APP,
@@ -109,17 +108,14 @@ export function defaultSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): Se
     toolbarHeightPx: overrides.toolbarHeightPx ?? DEFAULT_TOOLBAR_HEIGHT_PX,
     fileTreeFontSize: overrides.fileTreeFontSize ?? DEFAULT_FILE_TREE_FONT_SIZE,
     fileTreeTopbarFontSize: overrides.fileTreeTopbarFontSize ?? DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
-    fileTreeClipboardMaxBytesMb:
-      overrides.fileTreeClipboardMaxBytesMb ?? DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
+    fileTreeClipboardMaxBytesMb: overrides.fileTreeClipboardMaxBytesMb ?? DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
     terminalFontSize: overrides.terminalFontSize ?? DEFAULT_TERMINAL_FONT_SIZE,
-    remoteTerminalTmuxEnabled:
-      overrides.remoteTerminalTmuxEnabled ?? DEFAULT_REMOTE_TERMINAL_TMUX_ENABLED,
-    terminalCustomButtonsVisible:
-      overrides.terminalCustomButtonsVisible ?? DEFAULT_TERMINAL_CUSTOM_BUTTONS_VISIBLE,
-    terminalCustomButtonSize:
-      overrides.terminalCustomButtonSize ?? DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
+    remoteTerminalTmuxEnabled: overrides.remoteTerminalTmuxEnabled ?? DEFAULT_REMOTE_TERMINAL_TMUX_ENABLED,
+    terminalCustomButtonsVisible: overrides.terminalCustomButtonsVisible ?? DEFAULT_TERMINAL_CUSTOM_BUTTONS_VISIBLE,
+    terminalCustomButtonSize: overrides.terminalCustomButtonSize ?? DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
     terminalCustomButtons: overrides.terminalCustomButtons ?? DEFAULT_TERMINAL_CUSTOM_BUTTONS,
     lanEnabled: overrides.lanEnabled ?? DEFAULT_LAN_ENABLED,
+    serverPort: overrides.serverPort ?? DEFAULT_SERVER_PORT,
   }
 }
 
@@ -134,36 +130,39 @@ export function defaultSettingsSnapshot(overrides: Partial<SettingsSnapshot> = {
   }
 }
 
-export function initialSettingsFromSnapshot(snapshot: Pick<
-  SettingsSnapshot,
-  | 'fetchIntervalSec'
-  | 'fontFamily'
-  | 'gitNetworkProxyEnabled'
-  | 'gitNetworkProxyUrl'
-  | 'gitNetworkTimeoutSec'
-  | 'terminalNotificationsEnabled'
-  | 'shortcutsDisabled'
-  | 'globalShortcutDisabled'
-  | 'swapCloseShortcuts'
-  | 'toggleDetailOnActionBarBlankClick'
-  | 'terminalThemeSyncEnabled'
-  | 'temporaryFilesDirectory'
-  | 'globalShortcut'
-  | 'globalShortcutRegistered'
-  | 'terminalApp'
-  | 'editorApp'
-  | 'topbarHeightPx'
-  | 'toolbarHeightPx'
-  | 'fileTreeFontSize'
-  | 'fileTreeTopbarFontSize'
-  | 'fileTreeClipboardMaxBytesMb'
-  | 'terminalFontSize'
-  | 'remoteTerminalTmuxEnabled'
-  | 'terminalCustomButtonsVisible'
-  | 'terminalCustomButtonSize'
-  | 'terminalCustomButtons'
-  | 'lanEnabled'
->): InitialSettingsSnapshot {
+export function initialSettingsFromSnapshot(
+  snapshot: Pick<
+    SettingsSnapshot,
+    | 'fetchIntervalSec'
+    | 'fontFamily'
+    | 'gitNetworkProxyEnabled'
+    | 'gitNetworkProxyUrl'
+    | 'gitNetworkTimeoutSec'
+    | 'terminalNotificationsEnabled'
+    | 'shortcutsDisabled'
+    | 'globalShortcutDisabled'
+    | 'swapCloseShortcuts'
+    | 'toggleDetailOnActionBarBlankClick'
+    | 'terminalThemeSyncEnabled'
+    | 'temporaryFilesDirectory'
+    | 'globalShortcut'
+    | 'globalShortcutRegistered'
+    | 'terminalApp'
+    | 'editorApp'
+    | 'topbarHeightPx'
+    | 'toolbarHeightPx'
+    | 'fileTreeFontSize'
+    | 'fileTreeTopbarFontSize'
+    | 'fileTreeClipboardMaxBytesMb'
+    | 'terminalFontSize'
+    | 'remoteTerminalTmuxEnabled'
+    | 'terminalCustomButtonsVisible'
+    | 'terminalCustomButtonSize'
+    | 'terminalCustomButtons'
+    | 'lanEnabled'
+    | 'serverPort'
+  >,
+): InitialSettingsSnapshot {
   return {
     fetchIntervalSec: snapshot.fetchIntervalSec,
     fontFamily: snapshot.fontFamily,
@@ -192,10 +191,13 @@ export function initialSettingsFromSnapshot(snapshot: Pick<
     terminalCustomButtonSize: snapshot.terminalCustomButtonSize,
     terminalCustomButtons: snapshot.terminalCustomButtons,
     lanEnabled: snapshot.lanEnabled,
+    serverPort: snapshot.serverPort,
   }
 }
 
-export function defaultInitialSettingsSnapshot(overrides: Partial<InitialSettingsSnapshot> = {}): InitialSettingsSnapshot {
+export function defaultInitialSettingsSnapshot(
+  overrides: Partial<InitialSettingsSnapshot> = {},
+): InitialSettingsSnapshot {
   return initialSettingsFromSnapshot(defaultSettingsSnapshot(overrides))
 }
 
@@ -215,6 +217,8 @@ export {
   MIN_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   MIN_FILE_TREE_TOPBAR_FONT_SIZE,
   MIN_GIT_NETWORK_TIMEOUT_SEC,
+  MIN_SERVER_PORT,
   MIN_TERMINAL_FONT_SIZE,
+  MAX_SERVER_PORT,
 }
 export type { ColorTheme }

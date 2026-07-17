@@ -179,6 +179,29 @@ test('persists updates and notifies subscribers from the server settings store',
   expect(await reloaded.getServerRecentRepos()).toEqual([{ kind: 'local', id: '/repo-b' }])
 })
 
+test('persists a custom server port and normalizes invalid values to the default', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  expect((await mod.getServerSettingsPrefs()).serverPort).toBe(32200)
+
+  await mod.updateServerSettingsPrefs({ serverPort: 33001 })
+  expect((await mod.getServerSettingsPrefs()).serverPort).toBe(33001)
+
+  await mod.updateServerSettingsPrefs({ serverPort: 80 })
+  expect((await mod.getServerSettingsPrefs()).serverPort).toBe(32200)
+
+  await mod.updateServerSettingsPrefs({ serverPort: Number.NaN })
+  expect((await mod.getServerSettingsPrefs()).serverPort).toBe(32200)
+})
+
+test('normalizes persisted out-of-range server ports to the default on load', async () => {
+  useTempServerSettingsDir()
+  writeSettingsFile({ serverPort: 70000 })
+  const mod = await import('#/server/modules/settings-source.ts')
+  expect((await mod.getServerSettingsPrefs()).serverPort).toBe(32200)
+})
+
 test('normalizes configurable chrome heights', async () => {
   tmp = mkdtempSync(path.join(os.tmpdir(), 'gbl-server-settings-'))
   previousDataDir = process.env.GOBLIN_SERVER_DATA_DIR
@@ -496,4 +519,29 @@ test('untrusting bootstrap config preserves project color theme', async () => {
 
   await expect(mod.untrustServerRepoWorktreeBootstrapConfig({ repoId: '/repo-a', configHash })).resolves.toBe(true)
   await expect(mod.getServerRepoSettings()).resolves.toEqual([{ repoId: '/repo-a', colorTheme: 'cursor' }])
+})
+
+test('persists file tree pane sizes through session save and reload', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  const saved = await mod.setServerSessionState({
+    ...defaultSessionState(),
+    fileTreePaneSizes: { 'top-bottom': 40, 'left-right': 32.5 },
+  })
+  expect(saved.fileTreePaneSizes).toEqual({ 'top-bottom': 40, 'left-right': 32.5 })
+
+  await expect(mod.getServerSessionState()).resolves.toMatchObject({
+    fileTreePaneSizes: { 'top-bottom': 40, 'left-right': 32.5 },
+  })
+})
+
+test('normalizes missing or invalid file tree pane sizes to defaults', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  const session = defaultSessionState()
+  delete session.fileTreePaneSizes
+  const saved = await mod.setServerSessionState(session)
+  expect(saved.fileTreePaneSizes).toEqual({ 'top-bottom': 66.7, 'left-right': 66.7 })
 })

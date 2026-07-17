@@ -61,7 +61,7 @@ export function BranchRow({
       onClick={() => onSelectBranch(branch.name)}
       onDoubleClick={() => onOpenBranchStatus(branch.name)}
       className={cn(
-        'relative grid min-h-8 items-stretch cursor-pointer',
+        'relative mx-1.5 grid min-h-8 items-stretch cursor-pointer rounded-[var(--goblin-brand-radius-md,var(--radius-md))]',
         showActions ? 'grid-cols-[minmax(0,1fr)_auto]' : 'grid-cols-1',
         'transition-colors duration-100',
         isSelected
@@ -70,7 +70,7 @@ export function BranchRow({
         sortable?.isDragging && 'z-10 bg-[var(--goblin-card-bg,var(--color-card))] text-foreground shadow-sm',
       )}
     >
-      <div className="pointer-events-none relative z-10 flex min-w-0 items-center px-4 py-1">
+      <div className="pointer-events-none relative z-10 flex min-w-0 items-center py-1 pl-2.5">
         <BranchSummaryInline repo={repo} branch={branch} selected={isSelected} />
       </div>
       {showActions && (
@@ -106,7 +106,7 @@ function BranchRowActions({
           row action must first move the selection (and thus the file tree)
           to this branch, keeping the opened directory and the tree in sync. */}
       <div
-        className="pointer-events-none relative z-20 flex shrink-0 items-center py-1 pr-4"
+        className="pointer-events-none relative z-20 flex shrink-0 items-center py-1 pr-2.5"
         onClickCapture={() => onSelectBranch(branch.name)}
       >
         <div className="pointer-events-auto flex items-center gap-0.5">

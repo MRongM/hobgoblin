@@ -42,6 +42,31 @@ afterEach(() => {
 })
 
 describe('TerminalTabs', () => {
+  test('marks tab containers interactive so the Electron window drag region does not swallow tab drags', () => {
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[
+          session({ key: 't1', terminalId: 'terminal-1', index: 1, selected: true }),
+          session({ key: 't2', terminalId: 'terminal-2', index: 2, title: 'term-2', selected: false }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    for (const key of ['t1', 't2']) {
+      const tab = document.body.querySelector(`[data-terminal-tab-tooltip-id="${key}"]`)
+      if (!(tab instanceof HTMLElement)) throw new Error(`missing terminal tab ${key}`)
+      expect(tab.hasAttribute('data-interactive')).toBe(true)
+    }
+  })
+
   test('shows terminal tooltip content with only the original title', async () => {
     render(
       <TerminalTabs

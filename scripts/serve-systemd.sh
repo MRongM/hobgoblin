@@ -119,7 +119,10 @@ start_and_verify() {
   local action="$1"
   ${SUDO} systemctl daemon-reload
   if [[ "${action}" == "install" ]]; then
-    ${SUDO} systemctl enable --now "${SERVICE_NAME}"
+    # enable --now alone won't replace an already-running instance (it is a
+    # no-op start), so restart explicitly to pick up the rewritten unit.
+    ${SUDO} systemctl enable "${SERVICE_NAME}"
+    ${SUDO} systemctl restart "${SERVICE_NAME}"
   else
     ${SUDO} systemctl restart "${SERVICE_NAME}"
   fi

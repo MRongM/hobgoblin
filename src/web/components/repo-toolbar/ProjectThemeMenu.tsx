@@ -37,7 +37,7 @@ export function ProjectThemeMenu({ repoId, projectColorTheme }: ProjectThemeMenu
     <DropdownMenu>
       <Tip label={label}>
         <DropdownMenuTrigger asChild>
-          <Button type="button" variant="outline" size="icon-sm" className="shrink-0" aria-label={label}>
+          <Button type="button" variant="ghost" size="icon-sm" className="shrink-0" aria-label={label}>
             <Palette />
           </Button>
         </DropdownMenuTrigger>

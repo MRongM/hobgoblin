@@ -25,7 +25,10 @@ import type {
 } from '#/shared/rpc.ts'
 import type { ColorTheme } from '#/shared/color-theme.ts'
 import type { RepoSettingsEntry } from '#/shared/repo-settings.ts'
-import { nativeSettingsProjectionStateFromSettings, pickNativeSettingsProjectionPatch } from '#/shared/native-shell-projection.ts'
+import {
+  nativeSettingsProjectionStateFromSettings,
+  pickNativeSettingsProjectionPatch,
+} from '#/shared/native-shell-projection.ts'
 import { runtimeSettingsSnapshotFromSettingsSnapshot } from '#/shared/settings-snapshot.ts'
 
 type RecentReposUpdateResponse = { ok: boolean; addedRepo?: RepoSessionEntry | null } & RuntimeRecentReposState
@@ -119,6 +122,10 @@ export async function getLanInfo(): Promise<LanInfo> {
 
 export async function setLanEnabled(enabled: boolean): Promise<void> {
   await updateSettingsPrefsPatch({ lanEnabled: enabled })
+}
+
+export async function setServerPort(port: number): Promise<void> {
+  await updateSettingsPrefsPatch({ serverPort: port })
 }
 
 export async function setGitNetworkProxyEnabled(enabled: boolean): Promise<void> {

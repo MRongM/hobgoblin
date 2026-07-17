@@ -80,14 +80,17 @@ describe('web theme contract', () => {
 
   test('scopes topbar control semantics without replacing muted foreground', () => {
     const contract = readText(new URL('contract.css', THEME_ROOT))
-    const topbar = cssRule(contract, '.topbar')
 
-    expect(topbar).toContain('--color-control: var(--color-topbar-control);')
-    expect(topbar).toContain('--color-control-hover: var(--color-topbar-control-hover);')
-    expect(topbar).toContain('--color-input: var(--color-topbar-control-border);')
-    expect(topbar).toContain('--color-accent: var(--color-topbar-control-hover);')
-    expect(topbar).toContain('--color-accent-foreground: var(--color-topbar-control-foreground);')
-    expect(topbar).not.toContain('--color-muted-foreground:')
+    for (const selector of ['.topbar', '.topbar-tone']) {
+      const topbar = cssRule(contract, selector)
+
+      expect(topbar).toContain('--color-control: var(--color-topbar-control);')
+      expect(topbar).toContain('--color-control-hover: var(--color-topbar-control-hover);')
+      expect(topbar).toContain('--color-input: var(--color-topbar-control-border);')
+      expect(topbar).toContain('--color-accent: var(--color-topbar-control-hover);')
+      expect(topbar).toContain('--color-accent-foreground: var(--color-topbar-control-foreground);')
+      expect(topbar).not.toContain('--color-muted-foreground:')
+    }
   })
 
   test('defines classic terminal tokens for every color theme preset', () => {

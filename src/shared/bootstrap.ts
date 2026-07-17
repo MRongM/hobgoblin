@@ -67,6 +67,7 @@ export interface InitialSettingsSnapshot {
   terminalCustomButtonSize: TerminalCustomButtonSize
   terminalCustomButtons: TerminalCustomButton[]
   lanEnabled: boolean
+  serverPort: number
 }
 
 export interface InitialServerSnapshot {

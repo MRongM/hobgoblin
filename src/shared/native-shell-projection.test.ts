@@ -66,6 +66,7 @@ describe('native shell projection helpers', () => {
         terminalCustomButtons: [],
         fontFamily: 'mono',
         lanEnabled: false,
+        serverPort: 32200,
       }),
     ).toEqual({
       lang: 'ko',

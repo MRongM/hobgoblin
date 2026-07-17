@@ -113,7 +113,8 @@ export const ja: Record<DictKey, string> = {
   'repo-tabs.clone-cloning': 'クローン中…',
   'repo-tabs.clone-opened': 'リポジトリをクローンしました',
   'repo-tabs.clear-cache-confirm-title': 'キャッシュをクリアしますか？',
-  'repo-tabs.clear-cache-confirm-message': 'このサーバー上のすべてのリポジトリのローカルキャッシュをクリアし、ページを再読み込みします。サーバーのデータには影響せず、リポジトリは再読み込みされます。',
+  'repo-tabs.clear-cache-confirm-message':
+    'このサーバー上のすべてのリポジトリのローカルキャッシュをクリアし、ページを再読み込みします。サーバーのデータには影響せず、リポジトリは再読み込みされます。',
   'repo-tabs.clear-cache-confirm': 'クリアして再読み込み',
   'repo-tabs.open-remote-title': 'リモートリポジトリを開く',
   'repo-tabs.open-remote-description': 'SSH エイリアスを選び、リポジトリのパスを入力します。',
@@ -198,8 +199,7 @@ export const ja: Record<DictKey, string> = {
 
   // ---- Empty state -------------------------------------------------------
   'empty.title': 'リポジトリが開かれていません',
-  'empty.body':
-    '上部タブバーの <open>開く</open> から Git リポジトリを追加するか、リポジトリフォルダをこのウィンドウにドロップします。',
+  'empty.body': 'Git リポジトリを開いて始めるか、リポジトリフォルダをこのウィンドウにドロップします。',
 
   // ---- Drag and drop -----------------------------------------------------
   'drop.title': 'ドロップしてローカルリポジトリを開く',
@@ -358,6 +358,10 @@ export const ja: Record<DictKey, string> = {
   'file-tree.upload-file': 'ファイルをアップロード',
   'file-tree.paste': '貼り付け',
   'file-tree.collapse-all': 'ツリーを折りたたむ',
+  'file-tree.tabs.expand': 'タブをさらに表示',
+  'file-tree.tabs.collapse': 'タブを折りたたむ',
+  'file-area.collapse': 'ファイル領域を折りたたむ',
+  'file-area.expand': 'ファイル領域を展開',
   'file-tree.new-file': '新しいファイル',
   'file-tree.new-folder': '新しいフォルダ',
   'file-tree.refresh': '更新',
@@ -444,6 +448,8 @@ export const ja: Record<DictKey, string> = {
   'terminal.open-count': 'ターミナル {count} 件',
   'terminal.bell-unread': '未読のターミナルベル',
   'terminal.bell-unread-count': '未読ベル {count} 件',
+  'terminal.open-in-browser': 'ブラウザで開く',
+  'terminal.open-in-browser-title': 'このワークスペースをブラウザで開きます',
   'terminal.lan-qr': 'LAN ターミナル QR コード',
   'terminal.lan-qr-title': 'LAN ターミナル QR コード',
   'terminal.lan-qr-description':
@@ -742,6 +748,9 @@ export const ja: Record<DictKey, string> = {
   'settings.action-bar-blank-toggle': 'アクションバーの空白で詳細を折りたたむ/展開',
   'settings.action-bar-blank-toggle-hint':
     '上下レイアウトでのみ有効です。アクションバーの空白をクリックして詳細を表示/非表示にします。',
+  'settings.server-port': 'プロジェクトポート',
+  'settings.server-port-hint':
+    'ローカルプロジェクトサーバーのポート(デフォルト 32200)。Hobgoblin の再起動後に有効になります。',
   'settings.temporary-files-directory': '一時ファイルディレクトリ',
   'settings.temporary-files-directory-hint':
     'ターミナルでバイナリを貼り付けたときに作成するファイルに使用します。絶対パス、または現在のプロジェクトからの相対パス（例: tmp/cache）をサポートします。空の場合は現在のプロジェクトの tmp フォルダを使用します。',

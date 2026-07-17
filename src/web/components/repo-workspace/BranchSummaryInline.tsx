@@ -92,7 +92,7 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
     .join(', ')
 
   return (
-    <div title={title} className={cn('grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-1.5', className)}>
+    <div title={title} className={cn('grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2', className)}>
       <span className="flex w-4 shrink-0 items-center justify-center">
         {hasWorktree ? (
           <FolderTree size={13} className={worktreeDirty ? 'text-attention' : 'text-brand-text'} />
@@ -104,7 +104,7 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
         <div className="flex min-w-0 items-center gap-1.5">
           <span
             className={cn(
-              'min-w-0 truncate text-sm leading-4 font-medium',
+              'min-w-0 truncate text-[13px] leading-4 font-medium',
               selected ? 'text-selected-foreground' : 'text-foreground',
             )}
           >
@@ -114,7 +114,7 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
             <span
               data-testid="branch-hash-tag"
               className={cn(
-                'font-mono text-[10px] font-medium tabular-nums',
+                'font-mono text-[11px] font-medium tabular-nums',
                 selected ? 'text-selected-muted-foreground' : 'text-muted-foreground',
               )}
             >

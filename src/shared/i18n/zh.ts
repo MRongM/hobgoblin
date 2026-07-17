@@ -72,7 +72,7 @@ export const zh: Record<DictKey, string> = {
   // ---- Dependencies ------------------------------------------------------
 
   // ---- Repository tabs ---------------------------------------------------
-  'repo-tabs.repos': '仓库',
+  'repo-tabs.repos': '项目',
   'repo-tabs.close': '关闭',
   'repo-tabs.close-named': '关闭 {name}',
   'repo-tabs.close-confirm-title': '关闭项目？',
@@ -105,7 +105,8 @@ export const zh: Record<DictKey, string> = {
   'repo-tabs.clone-cloning': '正在克隆…',
   'repo-tabs.clone-opened': '仓库已克隆',
   'repo-tabs.clear-cache-confirm-title': '清除缓存？',
-  'repo-tabs.clear-cache-confirm-message': '将清除此服务器下所有仓库的本地缓存并刷新页面。服务器数据不受影响，仓库将重新加载。',
+  'repo-tabs.clear-cache-confirm-message':
+    '将清除此服务器下所有仓库的本地缓存并刷新页面。服务器数据不受影响，仓库将重新加载。',
   'repo-tabs.clear-cache-confirm': '清除并刷新',
   'repo-tabs.open-remote-title': '打开远程仓库',
   'repo-tabs.open-remote-description': '选择一个 SSH 别名并填写仓库路径。',
@@ -183,7 +184,7 @@ export const zh: Record<DictKey, string> = {
 
   // ---- Empty state -------------------------------------------------------
   'empty.title': '没有打开的仓库',
-  'empty.body': '点击顶部标签栏的 <open>打开</open> 添加一个 Git 仓库，或把仓库文件夹拖到窗口中。',
+  'empty.body': '打开一个 Git 仓库开始使用，或把仓库文件夹拖到窗口中。',
 
   // ---- Drag and drop -----------------------------------------------------
   'drop.title': '松手打开本地仓库',
@@ -342,6 +343,10 @@ export const zh: Record<DictKey, string> = {
   'file-tree.upload-file': '上传文件',
   'file-tree.paste': '粘贴',
   'file-tree.collapse-all': '收起树',
+  'file-tree.tabs.expand': '展开更多标签页',
+  'file-tree.tabs.collapse': '收起标签页',
+  'file-area.collapse': '折叠文件区',
+  'file-area.expand': '展开文件区',
   'file-tree.new-file': '新建文件',
   'file-tree.new-folder': '新建文件夹',
   'file-tree.refresh': '刷新',
@@ -427,6 +432,8 @@ export const zh: Record<DictKey, string> = {
   'terminal.open-count': '{count} 个终端',
   'terminal.bell-unread': '终端有未读提醒',
   'terminal.bell-unread-count': '{count} 个未读终端提醒',
+  'terminal.open-in-browser': '在浏览器中打开',
+  'terminal.open-in-browser-title': '在浏览器中打开此工作区',
   'terminal.lan-qr': '局域网终端二维码',
   'terminal.lan-qr-title': '局域网终端二维码',
   'terminal.lan-qr-description': '用同一局域网内的其他设备扫码，直接打开当前工作区终端。',
@@ -714,6 +721,8 @@ export const zh: Record<DictKey, string> = {
   'settings.back': '返回',
   'settings.action-bar-blank-toggle': '点击操作栏空白处展开/收起详情',
   'settings.action-bar-blank-toggle-hint': '仅上下布局生效。点击操作栏空白处展开或收起详情。',
+  'settings.server-port': '项目端口',
+  'settings.server-port-hint': '本地项目服务端口(默认 32200),重启 Hobgoblin 后生效。',
   'settings.temporary-files-directory': '临时文件目录',
   'settings.temporary-files-directory-hint':
     '用于终端二进制粘贴生成文件。支持绝对路径，或相对当前项目的路径（如 tmp/cache）；留空时使用当前项目的 tmp 目录。',

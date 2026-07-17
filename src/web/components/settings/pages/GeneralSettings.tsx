@@ -19,6 +19,7 @@ import { useThemeStore } from '#/web/stores/theme.ts'
 import { useI18nStore } from '#/web/stores/i18n.ts'
 import { COLOR_THEMES } from '#/shared/color-theme.ts'
 import { MAX_CHROME_HEIGHT_PX, MIN_CHROME_HEIGHT_PX } from '#/shared/window-chrome.ts'
+import { MAX_SERVER_PORT, MIN_SERVER_PORT } from '#/shared/settings.ts'
 import type { ColorTheme } from '#/shared/color-theme.ts'
 import type { FontFamilyPref, LangPref, ThemePref } from '#/shared/rpc.ts'
 
@@ -32,12 +33,13 @@ export function GeneralSettings() {
   const setLangPref = useI18nStore((s) => s.setPref)
   const { fontFamily } = useRuntimeFontSettings()
   const { topbarHeightPx, toolbarHeightPx } = useRuntimeChromeSettings()
-  const { toggleDetailOnActionBarBlankClick, terminalThemeSyncEnabled, temporaryFilesDirectory } =
+  const { toggleDetailOnActionBarBlankClick, terminalThemeSyncEnabled, temporaryFilesDirectory, serverPort } =
     useRuntimeGeneralSettings()
   const {
     setToggleDetailOnActionBarBlankClick,
     setTerminalThemeSyncEnabled,
     setTemporaryFilesDirectory,
+    setServerPort,
   } = useGeneralSettingsController()
   const { setFontFamily } = useFontSettingsController()
   const { setTopbarHeightPx, setToolbarHeightPx } = useChromeSettingsController()
@@ -138,6 +140,20 @@ export function GeneralSettings() {
                 checked={toggleDetailOnActionBarBlankClick}
                 onCheckedChange={(enabled) => void setToggleDetailOnActionBarBlankClick(enabled)}
                 aria-label={t('settings.action-bar-blank-toggle')}
+              />
+            }
+          />
+          <SettingsRow
+            controlId="settings-server-port"
+            label={t('settings.server-port')}
+            hint={t('settings.server-port-hint')}
+            control={
+              <SettingsNumberInput
+                id="settings-server-port"
+                value={serverPort}
+                min={MIN_SERVER_PORT}
+                max={MAX_SERVER_PORT}
+                onChange={(value) => void setServerPort(value)}
               />
             }
           />
