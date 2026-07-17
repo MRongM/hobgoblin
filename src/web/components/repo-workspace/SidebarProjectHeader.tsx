@@ -168,7 +168,11 @@ export function SidebarProjectHeader({ repoId }: Props) {
       data-testid="sidebar-project-header"
       className="flex shrink-0 flex-col border-b border-topbar-border bg-topbar text-topbar-foreground"
     >
-      <div className="topbar flex shrink-0 items-center gap-0.5" style={{ height: topbarHeightPx }}>
+      {/* The bottom border lives on the outer wrapper (it must also wrap the
+          expanded project list), so subtract it here to keep the collapsed
+          header at exactly topbarHeightPx — the same border-box height every
+          other topbar row (Toolbar chrome="topbar", Topbar) renders with. */}
+      <div className="topbar flex shrink-0 items-center gap-0.5" style={{ height: topbarHeightPx - 1 }}>
         <Button
           type="button"
           variant="ghost"
