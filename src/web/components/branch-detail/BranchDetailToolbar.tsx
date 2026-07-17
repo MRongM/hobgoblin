@@ -24,6 +24,7 @@ import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { useFocusRegistry } from '#/web/components/tab-strip/useFocusRegistry.ts'
 import { useLanInfoQuery } from '#/web/settings-queries.ts'
 import { TopbarRepoControls } from '#/web/components/topbar/TopbarRepoControls.tsx'
+import { FocusProjectSwitcher } from '#/web/components/repo-workspace/FocusProjectSwitcher.tsx'
 import {
   branchDetailToolbarStoreActionsEqual,
   branchDetailToolbarStoreActionsFromStore,
@@ -167,17 +168,21 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
     >
       <div className="flex h-full min-w-0 items-center gap-1 overflow-hidden">
         {/* Focus mode hides the sidebar, so its collapse control mirrors
-         * here at the window's top-left to bring the sidebar back. */}
+         * here at the window's top-left to bring the sidebar back, and the
+         * project switcher stays reachable as a dropdown next to it. */}
         {isWindowChrome && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleDetailFocusMode}
-            aria-label={t('branch-detail.exit-focus')}
-            title={t('branch-detail.exit-focus-title')}
-          >
-            <PanelLeftOpen />
-          </Button>
+          <>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleDetailFocusMode}
+              aria-label={t('branch-detail.exit-focus')}
+              title={t('branch-detail.exit-focus-title')}
+            >
+              <PanelLeftOpen />
+            </Button>
+            <FocusProjectSwitcher repoId={repo.id} />
+          </>
         )}
         {terminalWorktreeKey && (
           <TerminalTabs

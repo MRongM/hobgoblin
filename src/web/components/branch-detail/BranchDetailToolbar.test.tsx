@@ -23,6 +23,7 @@ import { emptyRendererBridgeBootstrap, setRendererBridgeForTests } from '#/web/r
 import { lanInfoQueryKey } from '#/web/settings-query-cache.ts'
 import type { LanInfoWithQrCodes } from '#/web/settings-queries.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
+import { emptyRepo } from '#/web/stores/repos/helpers.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { DEFAULT_WORKSPACE_LAYOUT } from '#/shared/workspace-layout.ts'
 import type { RendererBridge } from '#/web/renderer-bridge-types.ts'
@@ -50,6 +51,7 @@ vi.stubGlobal('requestAnimationFrame', ((cb: FrameRequestCallback) => {
 }) as typeof requestAnimationFrame)
 
 const REPO_ID = '/tmp/gbl-branch-detail-toolbar-repo'
+const SECOND_REPO_ID = '/tmp/gbl-branch-detail-toolbar-repo-b'
 const WORKTREE_PATH = '/tmp/gbl-branch-detail-toolbar-worktree'
 
 let container: HTMLDivElement | null = null
@@ -317,6 +319,74 @@ describe('BranchDetailToolbar', () => {
 
     expect(showRepoDetailTab).not.toHaveBeenCalled()
     expect(document.activeElement?.id).toBe('detail-terminal-tab')
+  })
+
+  test('does not render the project switcher outside focus mode', () => {
+    const { container: c } = renderToolbar({ terminalCount: 0, navigation: navigationWith({}) })
+
+    expect(c.querySelector('[data-testid="focus-project-switcher"]')).toBeNull()
+  })
+
+  test('focus mode shows the project switcher with the active project name', () => {
+    const { container: c } = renderToolbar({
+      terminalCount: 0,
+      detailFocusMode: true,
+      navigation: navigationWith({}),
+    })
+
+    const trigger = c.querySelector<HTMLButtonElement>('[data-testid="focus-project-switcher"]')
+    expect(trigger).not.toBeNull()
+    expect(trigger?.textContent).toContain('repo')
+  })
+
+  test('focus switcher lists open projects and activates the selected one', async () => {
+    const activateRepo = vi.fn()
+    const { container: c } = renderToolbar({
+      terminalCount: 0,
+      detailFocusMode: true,
+      navigation: navigationWith({ activateRepo }),
+    })
+
+    act(() => {
+      useReposStore.setState((s) => ({
+        repos: { ...s.repos, [SECOND_REPO_ID]: emptyRepo(SECOND_REPO_ID, 'other-repo') },
+        order: [...s.order, SECOND_REPO_ID],
+      }))
+    })
+
+    await act(async () => {
+      c.querySelector<HTMLButtonElement>('[data-testid="focus-project-switcher"]')?.dispatchEvent(
+        new MouseEvent('pointerdown', { bubbles: true, button: 0 }),
+      )
+      await Promise.resolve()
+    })
+
+    const items = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+    expect(items).toHaveLength(2)
+    expect(items[0]?.getAttribute('aria-current')).toBe('true')
+    expect(items[1]?.textContent).toContain('other-repo')
+
+    // Selecting the already-active project is a no-op.
+    await act(async () => {
+      items[0]?.click()
+      await Promise.resolve()
+    })
+    expect(activateRepo).not.toHaveBeenCalled()
+
+    await act(async () => {
+      c.querySelector<HTMLButtonElement>('[data-testid="focus-project-switcher"]')?.dispatchEvent(
+        new MouseEvent('pointerdown', { bubbles: true, button: 0 }),
+      )
+      await Promise.resolve()
+    })
+    await act(async () => {
+      Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+        .find((item) => item.textContent?.includes('other-repo'))
+        ?.click()
+      await Promise.resolve()
+    })
+
+    expect(activateRepo).toHaveBeenCalledWith(SECOND_REPO_ID)
   })
 
   test('keeps terminal focus when keyboard navigation leaves terminal tabs', async () => {
