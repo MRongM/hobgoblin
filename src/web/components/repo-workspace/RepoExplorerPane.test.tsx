@@ -114,10 +114,6 @@ vi.mock('#/web/components/repo-workspace/ProjectHistoryPanel.tsx', () => ({
   ),
 }))
 
-vi.mock('#/web/components/repo-workspace/ProjectTagsPanel.tsx', () => ({
-  ProjectTagsPanel: ({ repoId }: { repoId: string }) => <div data-testid="project-tags-panel" data-repo-id={repoId} />,
-}))
-
 vi.mock('#/web/components/repo-workspace/ProjectRemoteBranchesPanel.tsx', () => ({
   ProjectRemoteBranchesPanel: ({ repoId }: { repoId: string }) => (
     <div data-testid="project-remote-branches-panel" data-repo-id={repoId} />
