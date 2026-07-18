@@ -1,26 +1,11 @@
 import { useEffect } from 'react'
 import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query'
-import type {
-  ExternalAppsSnapshot,
-  GitHubCliState,
-  LanInfo,
-  SettingsSnapshot,
-} from '#/shared/rpc.ts'
-import {
-  getExternalAppsSnapshot,
-  getGitHubCliState,
-  getLanInfo,
-  getSettingsSnapshot,
-} from '#/web/settings-client.ts'
+import type { ExternalAppsSnapshot, LanInfo, SettingsSnapshot } from '#/shared/rpc.ts'
+import { getExternalAppsSnapshot, getLanInfo, getSettingsSnapshot } from '#/web/settings-client.ts'
 import { getInitialBootstrap } from '#/web/bootstrap.ts'
 import { subscribeSettingsInvalidation } from '#/web/settings-invalidation-ingress.ts'
 import { DEFAULT_COLOR_THEME } from '#/shared/color-theme.ts'
-import {
-  externalAppsQueryKey,
-  githubCliQueryKey,
-  lanInfoQueryKey,
-  settingsSnapshotQueryKey,
-} from '#/web/settings-query-cache.ts'
+import { externalAppsQueryKey, lanInfoQueryKey, settingsSnapshotQueryKey } from '#/web/settings-query-cache.ts'
 import {
   DEFAULT_DETAIL_COLLAPSED,
   DEFAULT_DETAIL_PANE_SIZES,
@@ -48,6 +33,7 @@ function initialSettingsSnapshot(): SettingsSnapshot | undefined {
     },
     recentRepos: [],
     repoSettings: [],
+    webAccess: { enabled: false, username: '', passwordConfigured: false },
   }
 }
 
@@ -72,16 +58,7 @@ function initialExternalAppsSnapshot(): ExternalAppsSnapshot | undefined {
   }
 }
 
-function initialGitHubCliState(): GitHubCliState {
-  return {
-    available: false,
-    version: null,
-    detectedAt: 0,
-    hosts: {},
-  }
-}
-
-export { externalAppsQueryKey, githubCliQueryKey, lanInfoQueryKey, settingsSnapshotQueryKey } from '#/web/settings-query-cache.ts'
+export { externalAppsQueryKey, lanInfoQueryKey, settingsSnapshotQueryKey } from '#/web/settings-query-cache.ts'
 
 export function settingsSnapshotQueryOptions() {
   return queryOptions<SettingsSnapshot>({
@@ -98,16 +75,6 @@ export function externalAppsQueryOptions() {
     queryKey: externalAppsQueryKey(),
     queryFn: getExternalAppsSnapshot,
     initialData: initialExternalAppsSnapshot,
-    staleTime: 0,
-    gcTime: 5 * 60_000,
-  })
-}
-
-export function githubCliQueryOptions(hosts?: string[]) {
-  return queryOptions<GitHubCliState>({
-    queryKey: githubCliQueryKey(hosts),
-    queryFn: () => getGitHubCliState(hosts),
-    initialData: initialGitHubCliState,
     staleTime: 0,
     gcTime: 5 * 60_000,
   })
@@ -135,10 +102,6 @@ export function useSettingsSnapshotQuery() {
 
 export function useExternalAppsQuery() {
   return useQuery(externalAppsQueryOptions())
-}
-
-export function useGitHubCliQuery(hosts?: string[]) {
-  return useQuery(githubCliQueryOptions(hosts))
 }
 
 export function useLanInfoQuery() {

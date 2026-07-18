@@ -3,12 +3,12 @@ import { AboutSettings } from '#/web/components/settings/pages/AboutSettings.tsx
 import { ExternalAppSettings } from '#/web/components/settings/pages/ExternalAppSettings.tsx'
 import { FileAreaSettings } from '#/web/components/settings/pages/FileAreaSettings.tsx'
 import { GeneralSettings } from '#/web/components/settings/pages/GeneralSettings.tsx'
-import { GitHubSettings } from '#/web/components/settings/pages/GitHubSettings.tsx'
 import { KeyboardShortcutSettings } from '#/web/components/settings/pages/KeyboardShortcutSettings.tsx'
 import { LanSettings } from '#/web/components/settings/pages/LanSettings.tsx'
 import { NotificationSettings } from '#/web/components/settings/pages/NotificationSettings.tsx'
 import { ProxySettings } from '#/web/components/settings/pages/ProxySettings.tsx'
 import { SshRemoteSettings } from '#/web/components/settings/pages/SshRemoteSettings.tsx'
+import { SecuritySettings } from '#/web/components/settings/pages/SecuritySettings.tsx'
 import { SyncSettings } from '#/web/components/settings/pages/SyncSettings.tsx'
 import { TerminalSettings } from '#/web/components/settings/pages/TerminalSettings.tsx'
 import { useT } from '#/web/stores/i18n.ts'
@@ -28,13 +28,13 @@ export function SettingsSurface({ page, onPageChange, topInset = 0, autoFocusSel
         {page === 'general' && <GeneralSettings />}
         {page === 'files' && <FileAreaSettings />}
         {page === 'terminal' && <TerminalSettings />}
-        {page === 'github' && <GitHubSettings />}
         {page === 'apps' && <ExternalAppSettings />}
         {page === 'sync' && <SyncSettings />}
         {page === 'proxy' && <ProxySettings />}
         {page === 'ssh' && <SshRemoteSettings />}
         {page === 'shortcuts' && <KeyboardShortcutSettings />}
         {page === 'notifications' && <NotificationSettings />}
+        {page === 'security' && <SecuritySettings />}
         {page === 'lan' && <LanSettings />}
         {page === 'about' && <AboutSettings />}
       </>

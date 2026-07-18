@@ -4,7 +4,6 @@ import { SettingsSidebar } from '#/web/components/settings/SettingsSidebar.tsx'
 import { useT } from '#/web/stores/i18n.ts'
 import { SETTINGS_PAGE_CONFIG, SETTINGS_PAGES } from '#/shared/settings-pages.ts'
 import type { SettingsPage } from '#/shared/settings-pages.ts'
-import { GitHubMark } from '#/web/components/GitHubMark.tsx'
 import {
   AppWindow,
   Bell,
@@ -12,6 +11,7 @@ import {
   Globe,
   Info,
   Keyboard,
+  LockKeyhole,
   Settings2,
   Shield,
   SlidersHorizontal,
@@ -29,10 +29,10 @@ const SETTINGS_PAGE_ICONS = {
   sync: SlidersHorizontal,
   proxy: Globe,
   apps: AppWindow,
-  github: GitHubMark,
+  security: LockKeyhole,
   lan: Globe,
   about: Info,
-} as const satisfies Record<SettingsPage, LucideIcon | typeof GitHubMark>
+} as const satisfies Record<SettingsPage, LucideIcon>
 
 interface SettingsLayoutProps {
   page: SettingsPage

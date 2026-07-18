@@ -8,6 +8,7 @@ import {
 } from '#/shared/input-validation.ts'
 import { safeRelativePath } from '#/shared/path-semantics.ts'
 import { serverDataFile } from '#/server/common/data-dir.ts'
+import { hashWebAccessPassword, isWebAccessPasswordHash } from '#/server/modules/web-access-auth.ts'
 import type {
   EditorPref,
   FontFamilyPref,
@@ -19,6 +20,7 @@ import type {
   TerminalCustomButtonSize,
   TerminalPref,
   ThemePref,
+  WebAccessSettingsSnapshot,
 } from '#/shared/rpc.ts'
 import {
   DEFAULT_DETAIL_COLLAPSED,
@@ -110,6 +112,9 @@ interface ServerSettingsData {
   terminalCustomButtons: TerminalCustomButton[]
   lanEnabled: boolean
   serverPort: number
+  webAccessEnabled: boolean
+  webAccessUsername: string
+  webAccessPasswordHash: string
   session: SessionState
   recentRepos: RepoSessionEntry[]
   repoSettings: RepoSettingsEntry[]
@@ -121,6 +126,26 @@ let cachedFetchIntervalSec = DEFAULT_FETCH_INTERVAL_SEC
 let settingsPromise: Promise<ServerSettingsData> | null = null
 const listeners = new Set<FetchIntervalListener>()
 const MAX_TERMINAL_CUSTOM_BUTTONS = 20
+const MAX_WEB_ACCESS_USERNAME_LENGTH = 128
+const MIN_WEB_ACCESS_PASSWORD_LENGTH = 8
+const MAX_WEB_ACCESS_PASSWORD_LENGTH = 1024
+
+export type WebAccessSettingsErrorCode =
+  | 'username-required'
+  | 'username-invalid'
+  | 'password-required'
+  | 'password-too-short'
+  | 'password-too-long'
+
+export class WebAccessSettingsError extends Error {
+  readonly code: WebAccessSettingsErrorCode
+
+  constructor(code: WebAccessSettingsErrorCode) {
+    super(code)
+    this.name = 'WebAccessSettingsError'
+    this.code = code
+  }
+}
 
 function normalizeFetchInterval(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value)
@@ -252,6 +277,24 @@ function normalizeServerPort(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_SERVER_PORT
   const port = Math.round(value)
   return port >= MIN_SERVER_PORT && port <= MAX_SERVER_PORT ? port : DEFAULT_SERVER_PORT
+}
+
+function normalizeWebAccessUsername(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  const username = value.trim()
+  if (!username || username.length > MAX_WEB_ACCESS_USERNAME_LENGTH || /[\u0000-\u001f\u007f]/u.test(username)) {
+    return ''
+  }
+  return username
+}
+
+function webAccessSettingsFromData(data: ServerSettingsData): WebAccessSettingsSnapshot {
+  const passwordConfigured = Boolean(data.webAccessUsername && isWebAccessPasswordHash(data.webAccessPasswordHash))
+  return {
+    enabled: data.webAccessEnabled && passwordConfigured,
+    username: passwordConfigured ? data.webAccessUsername : '',
+    passwordConfigured,
+  }
 }
 
 function normalizeGitNetworkProxyEnabled(value: unknown): boolean {
@@ -433,6 +476,17 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       terminalCustomButtons: normalizeTerminalCustomButtons(parsed.terminalCustomButtons),
       lanEnabled: normalizeLanEnabled(parsed.lanEnabled),
       serverPort: normalizeServerPort(parsed.serverPort),
+      webAccessEnabled:
+        parsed.webAccessEnabled === true &&
+        Boolean(normalizeWebAccessUsername(parsed.webAccessUsername)) &&
+        isWebAccessPasswordHash(parsed.webAccessPasswordHash),
+      webAccessUsername: isWebAccessPasswordHash(parsed.webAccessPasswordHash)
+        ? normalizeWebAccessUsername(parsed.webAccessUsername)
+        : '',
+      webAccessPasswordHash:
+        normalizeWebAccessUsername(parsed.webAccessUsername) && isWebAccessPasswordHash(parsed.webAccessPasswordHash)
+          ? parsed.webAccessPasswordHash
+          : '',
       session: normalizeSession(parsed.session),
       recentRepos: normalizeRecentRepos(parsed.recentRepos),
       repoSettings: normalizeRepoSettings(parsed.repoSettings),
@@ -453,6 +507,9 @@ async function loadServerSettings(): Promise<ServerSettingsData> {
     const persisted = await readServerSettingsFile()
     const data = persisted ?? {
       ...defaultSettingsPrefs(),
+      webAccessEnabled: false,
+      webAccessUsername: '',
+      webAccessPasswordHash: '',
       session: defaultSession(),
       recentRepos: [],
       repoSettings: [],
@@ -471,6 +528,61 @@ export async function getServerFetchIntervalSec(): Promise<number> {
 
 export async function getServerSettingsPrefs(): Promise<SettingsPrefs> {
   return settingsPrefsFromData(await loadServerSettings())
+}
+
+export async function getServerWebAccessSettings(): Promise<WebAccessSettingsSnapshot> {
+  return webAccessSettingsFromData(await loadServerSettings())
+}
+
+export async function getServerWebAccessCredentials(): Promise<{
+  enabled: boolean
+  username: string
+  passwordHash: string
+}> {
+  const data = await loadServerSettings()
+  const snapshot = webAccessSettingsFromData(data)
+  return {
+    enabled: snapshot.enabled,
+    username: snapshot.username,
+    passwordHash: snapshot.passwordConfigured ? data.webAccessPasswordHash : '',
+  }
+}
+
+export async function updateServerWebAccessSettings(input: {
+  enabled: boolean
+  username: string
+  password?: string
+}): Promise<WebAccessSettingsSnapshot> {
+  const data = await loadServerSettings()
+  const current = webAccessSettingsFromData(data)
+  const rawUsername = typeof input.username === 'string' ? input.username.trim() : ''
+  const normalizedUsername = normalizeWebAccessUsername(rawUsername)
+  if (rawUsername && !normalizedUsername) throw new WebAccessSettingsError('username-invalid')
+
+  const username = normalizedUsername || (!input.enabled && current.passwordConfigured ? current.username : '')
+  if (input.enabled && !username) throw new WebAccessSettingsError('username-required')
+
+  const password = typeof input.password === 'string' ? input.password : ''
+  if (password.length > MAX_WEB_ACCESS_PASSWORD_LENGTH) throw new WebAccessSettingsError('password-too-long')
+  if (password && password.length < MIN_WEB_ACCESS_PASSWORD_LENGTH) {
+    throw new WebAccessSettingsError('password-too-short')
+  }
+  const mayKeepPassword = current.passwordConfigured && username === current.username
+  if (!password && input.enabled && !mayKeepPassword) throw new WebAccessSettingsError('password-required')
+  if (!password && normalizedUsername && normalizedUsername !== current.username) {
+    throw new WebAccessSettingsError('password-required')
+  }
+
+  const passwordHash = password
+    ? await hashWebAccessPassword(password)
+    : mayKeepPassword
+      ? data.webAccessPasswordHash
+      : ''
+  data.webAccessEnabled = input.enabled === true
+  data.webAccessUsername = username
+  data.webAccessPasswordHash = passwordHash
+  await writeServerSettingsFile(data)
+  return webAccessSettingsFromData(data)
 }
 
 export function subscribeServerFetchInterval(listener: FetchIntervalListener): () => void {

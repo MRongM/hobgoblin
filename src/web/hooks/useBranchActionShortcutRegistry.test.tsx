@@ -53,6 +53,33 @@ describe('useBranchActionShortcutRegistry', () => {
     expect(onPull).toHaveBeenCalledTimes(1)
   })
 
+  test('runs the external terminal action from its shortcut id', async () => {
+    const onExternalTerminal = vi.fn()
+
+    await renderHookHost({
+      patchItems: [],
+      mainItems: [],
+      externalItems: [
+        {
+          id: 'externalTerminal',
+          label: 'External terminal',
+          disabled: false,
+          visible: true,
+          icon: null,
+          onSelect: onExternalTerminal,
+        },
+      ],
+      destructiveItems: [],
+      dialogs: null,
+    })
+
+    act(() => {
+      runBranchActionShortcut('externalTerminal')
+    })
+
+    expect(onExternalTerminal).toHaveBeenCalledTimes(1)
+  })
+
   test('does not run hidden or disabled actions', async () => {
     const hiddenPull = vi.fn()
     const disabledPush = vi.fn()

@@ -78,7 +78,7 @@ describe('normalizeRestorableRepoCache', () => {
     expect(normalized.repo?.ui.detailTab).toBe('changes')
   })
 
-  test('normalizes cached branch worktree references while dropping dynamic metadata', () => {
+  test('normalizes cached branch worktree references', () => {
     const now = Date.now()
     const raw = cachedRepo(now)
     raw.data.branches = [createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })]
@@ -86,7 +86,6 @@ describe('normalizeRestorableRepoCache', () => {
     const normalized = normalizeRestorableRepoCache({ repo: raw })
 
     expect(normalized.repo?.data.branches[0]?.worktree).toEqual({ path: '/tmp/worktree-a' })
-    expect(normalized.repo?.data.branches[0]?.pullRequest).toBeUndefined()
   })
 
   test('normalizes missing and invalid worktree path order to an empty array', () => {
@@ -226,7 +225,7 @@ describe('persistRestorableRepoSnapshot', () => {
     expect(useReposStore.getState().restorableRepoCache['/repo']).toBeUndefined()
   })
 
-  test('persists branch references without dynamic worktree or pull request state', () => {
+  test('persists branch references without dynamic worktree state', () => {
     const repo = seedRepoState({
       id: '/repo',
       instanceToken: 1,
@@ -241,13 +240,6 @@ describe('persistRestorableRepoSnapshot', () => {
               changeCount: 2,
             },
           },
-          pullRequest: {
-            number: 1,
-            title: 'PR 1',
-            url: 'https://github.com/acme/repo/pull/1',
-            state: 'open',
-            mergeable: 'MERGEABLE',
-          },
         }),
       ],
       currentBranch: 'feature/a',
@@ -258,7 +250,6 @@ describe('persistRestorableRepoSnapshot', () => {
 
     const cached = useReposStore.getState().restorableRepoCache['/repo']
     expect(cached?.data.branches[0]?.worktree).toEqual({ path: '/tmp/worktree-a' })
-    expect(cached?.data.branches[0]?.pullRequest).toBeUndefined()
   })
 
   test('persists worktree path order in repo cache', () => {
@@ -386,26 +377,18 @@ describe('persistRestorableRepoSnapshot', () => {
 })
 
 describe('restoreRepoProjectionFromSnapshot', () => {
-  test('hydrates branch references without restoring dynamic worktree or pull request state', () => {
+  test('hydrates branch references without restoring dynamic worktree state', () => {
     const now = Date.now()
     const cached = cachedRepo(now)
     cached.data.branches = [
       createBranchSnapshot('feature/a', {
         worktree: { path: '/tmp/worktree-a' },
-        pullRequest: {
-          number: 2,
-          title: 'PR 2',
-          url: 'https://github.com/acme/repo/pull/2',
-          state: 'open',
-          mergeable: 'UNKNOWN',
-        },
       }),
     ]
 
     const repo = restoreRepoProjectionFromSnapshot(emptyRepo('/repo', 'repo'), cached)
 
     expect(repo.data.branches[0]?.worktree).toEqual({ path: '/tmp/worktree-a' })
-    expect(repo.data.branches[0]?.pullRequest).toBeUndefined()
     expect(repo.data.statusLoaded).toBe(false)
     expect(repo.data.status).toEqual([])
   })

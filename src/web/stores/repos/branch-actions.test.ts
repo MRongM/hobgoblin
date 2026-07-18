@@ -59,7 +59,6 @@ function installSuccessfulCreateWorktreeBridge(options?: { onSnapshot?: () => vo
       }
     },
     'repo.status': async () => [],
-    'repo.pullRequests': async () => [],
   })
 }
 
@@ -287,7 +286,6 @@ describe('runBranchAction', () => {
       },
       'repo.snapshot': async () => ({ branches: [createBranchSnapshot('feature/a')], current: 'feature/a' }),
       'repo.status': async () => [],
-      'repo.pullRequests': async () => [],
     })
 
     const syncWork = useReposStore.getState().syncAndRefresh(REPO_ID)
@@ -346,7 +344,6 @@ describe('runBranchAction', () => {
         return { ok: true, message: 'ok' }
       },
       'repo.snapshot': async () => ({ branches: [createBranchSnapshot('feature/a')], current: 'feature/a' }),
-      'repo.pullRequests': async () => [],
     })
 
     const statusWork = useReposStore.getState().refreshStatus(REPO_ID)
@@ -392,7 +389,6 @@ describe('runBranchAction', () => {
         return { ok: true, message: 'ok' }
       },
       'repo.snapshot': async () => ({ branches: [createBranchSnapshot('feature/a')], current: 'feature/a' }),
-      'repo.pullRequests': async () => [],
     })
 
     void useReposStore.getState().refreshStatus(REPO_ID)
@@ -435,7 +431,6 @@ describe('runBranchAction', () => {
         statusCalls += 1
         return []
       },
-      'repo.pullRequests': async () => [],
     })
 
     const result = await useReposStore.getState().runBranchAction(REPO_ID, { kind: 'pull', branch: 'feature/a' })
@@ -458,7 +453,6 @@ describe('runBranchAction', () => {
       'repo.pull': async () => ({ ok: false, message: 'boom' }),
       'repo.snapshot': async () => ({ branches: [createBranchSnapshot('feature/a')], current: 'feature/a' }),
       'repo.status': async () => [],
-      'repo.pullRequests': async () => [],
     })
 
     const result = await useReposStore
@@ -492,7 +486,6 @@ describe('runBranchAction', () => {
         })
       },
       'repo.snapshot': async () => ({ branches: [createBranchSnapshot('feature/a')], current: 'feature/a' }),
-      'repo.pullRequests': async () => [],
     })
 
     const statusWork = useReposStore.getState().refreshStatus(REPO_ID)
@@ -559,7 +552,6 @@ describe('runBranchAction', () => {
           })
         },
         'repo.snapshot': async () => ({ branches: [createBranchSnapshot('feature/a')], current: 'feature/a' }),
-        'repo.pullRequests': async () => [],
       })
 
       const statusWork = useReposStore.getState().refreshStatus(REPO_ID)
@@ -626,7 +618,6 @@ describe('runBranchAction', () => {
         current: 'feature/a',
       }),
       'repo.status': async () => [],
-      'repo.pullRequests': async () => [],
     })
 
     const work = useReposStore
@@ -663,7 +654,6 @@ describe('runBranchAction', () => {
         }),
       'repo.snapshot': async () => ({ branches: [createBranchSnapshot('feature/a')], current: 'feature/a' }),
       'repo.status': async () => [],
-      'repo.pullRequests': async () => [],
     })
 
     useReposStore.getState().submitBranchAction(REPO_ID, {
@@ -712,7 +702,6 @@ describe('runBranchAction', () => {
         current: 'feature/a',
       }),
       'repo.status': async () => [],
-      'repo.pullRequests': async () => [],
     })
 
     await useReposStore.getState().runBranchAction(
@@ -822,7 +811,6 @@ describe('runBranchAction', () => {
             resolve({ branches: [createBranchSnapshot('feature/stale')], current: 'feature/stale' })
         }),
       'repo.status': async () => [],
-      'repo.pullRequests': async () => [],
     })
 
     const work = useReposStore.getState().runBranchAction(REPO_ID, { kind: 'pull', branch: 'feature/a' })
@@ -855,7 +843,6 @@ describe('runBranchAction', () => {
         current: 'feature/a',
       }),
       'repo.status': async () => [],
-      'repo.pullRequests': async () => [],
     })
 
     await useReposStore
@@ -894,7 +881,6 @@ describe('runBranchAction', () => {
       let actionCount = 0
       let snapshotCount = 0
       let statusCount = 0
-      let pullRequestCount = 0
       let fetchCount = 0
       const handlers: Record<string, (input: any) => unknown> = {
         [rpcPath]: async () => {
@@ -913,10 +899,6 @@ describe('runBranchAction', () => {
           statusCount += 1
           return []
         },
-        'repo.pullRequests': async () => {
-          pullRequestCount += 1
-          return []
-        },
       }
       installGoblinTestBridge(handlers)
       updateRepoForTest((repo) => {
@@ -930,7 +912,6 @@ describe('runBranchAction', () => {
       expect(fetchCount).toBe(0)
       expect(snapshotCount).toBe(0)
       expect(statusCount).toBe(0)
-      expect(pullRequestCount).toBe(0)
       expect(useReposStore.getState().repos[REPO_ID]?.operations.branchAction.phase).toBe('idle')
       expect(useReposStore.getState().repos[REPO_ID]?.resources.fetch.phase).toBe('idle')
       expect(useReposStore.getState().repos[REPO_ID]?.events.at(-1)).toMatchObject({

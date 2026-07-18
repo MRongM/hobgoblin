@@ -90,10 +90,10 @@ const settingsAppsRoute = createRoute({
   component: SettingsAppsRoute,
 })
 
-const settingsGitHubRoute = createRoute({
+const settingsSecurityRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/settings/github',
-  component: SettingsGitHubRoute,
+  path: '/settings/security',
+  component: SettingsSecurityRoute,
 })
 
 const settingsLanRoute = createRoute({
@@ -126,7 +126,7 @@ const mainRouteTree = rootRoute.addChildren([
   settingsSyncRoute,
   settingsProxyRoute,
   settingsAppsRoute,
-  settingsGitHubRoute,
+  settingsSecurityRoute,
   settingsLanRoute,
   settingsAboutRoute,
 ])
@@ -190,8 +190,8 @@ function SettingsAppsRoute() {
   return <SettingsRoutePage settingsPage="apps" />
 }
 
-function SettingsGitHubRoute() {
-  return <SettingsRoutePage settingsPage="github" />
+function SettingsSecurityRoute() {
+  return <SettingsRoutePage settingsPage="security" />
 }
 
 function SettingsLanRoute() {

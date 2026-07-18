@@ -127,6 +127,7 @@ export function defaultSettingsSnapshot(overrides: Partial<SettingsSnapshot> = {
     session: overrides.session ?? defaultSessionState(),
     recentRepos: overrides.recentRepos ?? [],
     repoSettings: overrides.repoSettings ?? [],
+    webAccess: overrides.webAccess ?? { enabled: false, username: '', passwordConfigured: false },
   }
 }
 

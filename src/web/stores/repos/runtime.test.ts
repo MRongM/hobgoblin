@@ -4,7 +4,6 @@ import {
   disposeRepoRuntime,
   markRepoOperationTargets,
   pruneRepoBranchLogOperations,
-  pruneRepoBranchPullRequestOperations,
   repoOperation,
   repoOperationBusy,
   scheduleRepoTask,
@@ -141,32 +140,4 @@ describe('repo runtime task scheduling', () => {
     expect(repoOperation(REPO_ID, 'fetch').phase).toBe('idle')
   })
 
-  test('prunes pull request operation state for removed branches', () => {
-    markRepoOperationTargets(
-      REPO_ID,
-      1,
-      [
-        { key: 'pullRequests', reason: 'summary' },
-        { key: 'pullRequest:feature/a', reason: 'summary' },
-        { key: 'pullRequest:feature/stale', reason: 'summary' },
-      ],
-      'running',
-    )
-    settleRepoOperationTargets(
-      REPO_ID,
-      1,
-      [
-        { key: 'pullRequests', reason: 'summary' },
-        { key: 'pullRequest:feature/a', reason: 'summary' },
-        { key: 'pullRequest:feature/stale', reason: 'summary' },
-      ],
-      null,
-    )
-
-    pruneRepoBranchPullRequestOperations(REPO_ID, new Set(['feature/a']))
-
-    expect(repoOperation(REPO_ID, 'pullRequests').operationId).toBe(1)
-    expect(repoOperation(REPO_ID, 'pullRequest:feature/a').operationId).toBe(1)
-    expect(repoOperation(REPO_ID, 'pullRequest:feature/stale').operationId).toBe(0)
-  })
 })

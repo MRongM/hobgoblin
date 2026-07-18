@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { defaultSessionState } from '#/shared/settings-defaults.ts'
@@ -77,6 +77,86 @@ test('initializes server-settings.json with defaults when no persisted settings 
   vi.resetModules()
   const reloaded = await import('#/server/modules/settings-source.ts')
   expect(await reloaded.getServerFetchIntervalSec()).toBe(120)
+})
+
+test('persists web access credentials without exposing password material in public settings', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(
+    mod.updateServerWebAccessSettings({
+      enabled: true,
+      username: 'operator',
+      password: 'test-password',
+    }),
+  ).resolves.toEqual({ enabled: true, username: 'operator', passwordConfigured: true })
+
+  const persisted = readFileSync(path.join(tmp!, 'server-settings.json'), 'utf-8')
+  expect(persisted).not.toContain('test-password')
+  expect(JSON.parse(persisted)).toMatchObject({
+    webAccessEnabled: true,
+    webAccessUsername: 'operator',
+    webAccessPasswordHash: expect.stringMatching(/^scrypt\$/u),
+  })
+  await expect(mod.getServerWebAccessSettings()).resolves.toEqual({
+    enabled: true,
+    username: 'operator',
+    passwordConfigured: true,
+  })
+  expect(JSON.stringify(await mod.getServerSettingsPrefs())).not.toContain('webAccessPasswordHash')
+})
+
+test('retains configured credentials safely and requires a password when the username changes', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await mod.updateServerWebAccessSettings({
+    enabled: true,
+    username: 'operator',
+    password: 'test-password',
+  })
+  const originalHash = JSON.parse(readFileSync(path.join(tmp!, 'server-settings.json'), 'utf-8')).webAccessPasswordHash
+
+  await expect(mod.updateServerWebAccessSettings({ enabled: true, username: 'operator' })).resolves.toEqual({
+    enabled: true,
+    username: 'operator',
+    passwordConfigured: true,
+  })
+  expect(JSON.parse(readFileSync(path.join(tmp!, 'server-settings.json'), 'utf-8')).webAccessPasswordHash).toBe(
+    originalHash,
+  )
+
+  await expect(
+    mod.updateServerWebAccessSettings({ enabled: true, username: 'another-operator' }),
+  ).rejects.toMatchObject({ code: 'password-required' })
+  await expect(
+    mod.updateServerWebAccessSettings({ enabled: true, username: 'operator', password: 'short' }),
+  ).rejects.toMatchObject({ code: 'password-too-short' })
+
+  await expect(mod.updateServerWebAccessSettings({ enabled: false, username: 'operator' })).resolves.toEqual({
+    enabled: false,
+    username: 'operator',
+    passwordConfigured: true,
+  })
+  expect(JSON.parse(readFileSync(path.join(tmp!, 'server-settings.json'), 'utf-8')).webAccessPasswordHash).toBe(
+    originalHash,
+  )
+})
+
+test('normalizes incomplete persisted web access credentials to disabled and unconfigured', async () => {
+  useTempServerSettingsDir()
+  writeSettingsFile({
+    webAccessEnabled: true,
+    webAccessUsername: 'operator',
+    webAccessPasswordHash: 'not-a-valid-hash',
+  })
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(mod.getServerWebAccessSettings()).resolves.toEqual({
+    enabled: false,
+    username: '',
+    passwordConfigured: false,
+  })
 })
 
 test('persists updates and notifies subscribers from the server settings store', async () => {

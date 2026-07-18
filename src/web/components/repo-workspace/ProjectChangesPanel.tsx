@@ -38,7 +38,6 @@ function projectChangesRepoEqual(a: BranchDetailRepo | undefined, b: BranchDetai
       a.ui.selectedBranch === b.ui.selectedBranch &&
       a.ui.detailTab === b.ui.detailTab &&
       a.resources.status === b.resources.status &&
-      a.resources.pullRequests === b.resources.pullRequests &&
       a.operations.branchAction === b.operations.branchAction &&
       a.operations.fetch === b.operations.fetch &&
       a.operations.manualRefresh === b.operations.manualRefresh &&
@@ -151,7 +150,6 @@ export function ProjectChangesPanel({
             },
             resources: {
               status: repo.resources.status,
-              pullRequests: repo.resources.pullRequests,
             },
             operations: {
               branchAction: repo.operations.branchAction,

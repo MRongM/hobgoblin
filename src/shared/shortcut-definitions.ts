@@ -2,7 +2,7 @@ import type { RendererEffectIntent } from '#/shared/renderer-effect-intents.ts'
 import type { DictKey } from '#/shared/i18n/dictionaries.ts'
 import type { WorkspaceLayout } from '#/shared/workspace-layout.ts'
 
-export type BranchActionShortcutAction = 'pull' | 'push' | 'terminal' | 'editor' | 'remote'
+export type BranchActionShortcutAction = 'pull' | 'push' | 'externalTerminal' | 'editor' | 'remote'
 export type RendererNavigationShortcutAction = 'next-branch' | 'prev-branch' | 'next-detail-tab' | 'prev-detail-tab'
 export type RendererAppShortcutAction = 'checkout-selected' | 'show-help' | 'dismiss'
 export type RendererKeyboardShortcutAction =
@@ -87,7 +87,7 @@ export const RENDERER_NAVIGATION_SHORTCUTS: RendererKeyboardShortcutDefinition<R
 export const BRANCH_ACTION_SHORTCUTS: BranchActionShortcutDefinition[] = [
   branchActionShortcut([{ code: 'KeyP', shiftKey: false }], 'pull', [['p']], 'action.pull'),
   branchActionShortcut([{ code: 'KeyP', shiftKey: true }], 'push', [['⇧', 'P']], 'action.push'),
-  branchActionShortcut([{ code: 'KeyG', shiftKey: false }], 'terminal', [['g']], 'worktrees.open-in-terminal-label'),
+  branchActionShortcut([{ code: 'KeyG', shiftKey: false }], 'externalTerminal', [['g']], 'terminal.external'),
   branchActionShortcut([{ code: 'KeyV', shiftKey: false }], 'editor', [['v']], 'worktrees.open-in-editor-label'),
   branchActionShortcut([{ code: 'KeyG', shiftKey: true }], 'remote', [['⇧', 'G']], 'action.remote'),
 ]

@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import type { PullRequestInfo } from '#/shared/git-types.ts'
-import type { PullRequestEntry, RepoSnapshot } from '#/shared/rpc.ts'
+import type { RepoSnapshot } from '#/shared/rpc.ts'
 
 const mocks = vi.hoisted(() => ({
   checkGitAvailable: vi.fn(),
@@ -35,7 +34,6 @@ const mocks = vi.hoisted(() => ({
   fsStat: vi.fn(),
   isGitRepo: vi.fn(),
   getBranches: vi.fn(),
-  getBranchPullRequests: vi.fn(),
   getCommitDetail: vi.fn(),
   getCommitHistory: vi.fn(),
   getCurrentBranch: vi.fn(),
@@ -260,10 +258,6 @@ vi.mock('#/system/ssh/git.ts', () => ({
   replaceRemoteFileTreeTextFile: mocks.replaceRemoteFileTreeTextFile,
   removeRemoteWorktree: mocks.removeRemoteWorktree,
   resetRemoteHard: mocks.resetRemoteHard,
-}))
-
-vi.mock('#/system/git/pull-requests.ts', () => ({
-  getBranchPullRequests: mocks.getBranchPullRequests,
 }))
 
 vi.mock('#/server/common/network-ops.ts', () => ({
@@ -511,15 +505,6 @@ function repoSnapshot(branch = 'main'): RepoSnapshot {
   }
 }
 
-function pullRequest(number: number): PullRequestInfo {
-  return {
-    number,
-    title: `PR ${number}`,
-    url: `https://example.com/pr/${number}`,
-    state: 'open',
-  }
-}
-
 describe('getRepositorySnapshot', () => {
   test('reads git state directly without publishing invalidation', async () => {
     mocks.getWorktrees.mockResolvedValueOnce([
@@ -545,46 +530,6 @@ describe('getRepositorySnapshot', () => {
 
     await expect(getRepositorySnapshot('/tmp/repo')).rejects.toThrow('error.failed-read-repo')
     expect(mocks.getBranches).not.toHaveBeenCalled()
-    expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
-  })
-})
-
-describe('getRepositoryPullRequests', () => {
-  test('reads pull requests directly from the backend', async () => {
-    const fresh: PullRequestEntry[] = [{ branch: 'feature/a', pullRequest: pullRequest(1) }]
-    mocks.getBranchPullRequests.mockResolvedValueOnce(new Map([['feature/a', pullRequest(1)]]))
-    const { getRepositoryPullRequests } = await import('#/server/modules/repo-read-paths.ts')
-    const result = await getRepositoryPullRequests('/tmp/repo', ['feature/a'], { mode: 'full' })
-
-    expect(result).toEqual(fresh)
-    expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
-  })
-
-  test('returns single-branch pull requests without publishing invalidation', async () => {
-    mocks.getBranchPullRequests.mockResolvedValueOnce(new Map([['feature/a', pullRequest(2)]]))
-
-    const { getRepositoryPullRequests } = await import('#/server/modules/repo-read-paths.ts')
-    const result = await getRepositoryPullRequests('/tmp/repo', ['feature/a'], { mode: 'summary' })
-
-    expect(result).toEqual([{ branch: 'feature/a', pullRequest: pullRequest(2) }])
-    expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
-  })
-
-  test('returns multi-branch pull requests without publishing invalidation', async () => {
-    mocks.getBranchPullRequests.mockResolvedValueOnce(
-      new Map([
-        ['feature/a', pullRequest(3)],
-        ['feature/b', pullRequest(4)],
-      ]),
-    )
-
-    const { getRepositoryPullRequests } = await import('#/server/modules/repo-read-paths.ts')
-    const result = await getRepositoryPullRequests('/tmp/repo', ['feature/a', 'feature/b'], { mode: 'full' })
-
-    expect(result).toEqual([
-      { branch: 'feature/a', pullRequest: pullRequest(3) },
-      { branch: 'feature/b', pullRequest: pullRequest(4) },
-    ])
     expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
   })
 })

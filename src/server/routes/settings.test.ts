@@ -3,7 +3,6 @@ import { createServerSettingsState } from '#/server/modules/settings-state.ts'
 
 const mocks = vi.hoisted(() => ({
   getServerExternalAppsSnapshot: vi.fn(),
-  getServerGitHubCliState: vi.fn(),
   getSettingsSnapshot: vi.fn(),
   getServerSettingsPrefs: vi.fn(),
   applyServerFetchIntervalWrite: vi.fn(),
@@ -13,14 +12,11 @@ const mocks = vi.hoisted(() => ({
   applyServerRepoThemeWrite: vi.fn(),
   applyServerSessionWrite: vi.fn(),
   applyServerSettingsPrefsWrite: vi.fn(),
+  applyServerWebAccessSettingsWrite: vi.fn(),
 }))
 
 vi.mock('#/server/modules/external-apps.ts', () => ({
   getServerExternalAppsSnapshot: mocks.getServerExternalAppsSnapshot,
-}))
-
-vi.mock('#/server/modules/github-cli.ts', () => ({
-  getServerGitHubCliState: mocks.getServerGitHubCliState,
 }))
 
 vi.mock('#/server/modules/settings-snapshot.ts', () => ({
@@ -39,6 +35,7 @@ vi.mock('#/server/modules/settings-write-paths.ts', () => ({
   applyServerRepoThemeWrite: mocks.applyServerRepoThemeWrite,
   applyServerSessionWrite: mocks.applyServerSessionWrite,
   applyServerSettingsPrefsWrite: mocks.applyServerSettingsPrefsWrite,
+  applyServerWebAccessSettingsWrite: mocks.applyServerWebAccessSettingsWrite,
 }))
 
 describe('settings routes', () => {
@@ -197,6 +194,46 @@ describe('settings routes', () => {
     expect(mocks.applyServerRepoThemeWrite).toHaveBeenNthCalledWith(2, {
       repoId: '/tmp/repo-a',
       colorTheme: null,
+    })
+  })
+
+  test('delegates Web access writes with session revocation', async () => {
+    const webAccess = { enabled: true, username: 'operator', passwordConfigured: true }
+    const revokeAllWebSessions = vi.fn()
+    mocks.applyServerWebAccessSettingsWrite.mockResolvedValue({ ok: true, webAccess })
+    const { createSettingsRoutes } = await import('#/server/routes/settings.ts')
+    const app = createSettingsRoutes(createServerSettingsState(), { revokeAllWebSessions })
+
+    const response = await app.request('/web-access', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: true, username: 'operator', password: 'test-password' }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true, webAccess })
+    expect(mocks.applyServerWebAccessSettingsWrite).toHaveBeenCalledWith(
+      { enabled: true, username: 'operator', password: 'test-password' },
+      { revokeAllWebSessions },
+    )
+  })
+
+  test('returns stable Web access validation errors as HTTP 400', async () => {
+    const error = Object.assign(new Error('password-too-short'), { code: 'password-too-short' })
+    mocks.applyServerWebAccessSettingsWrite.mockRejectedValue(error)
+    const { createSettingsRoutes } = await import('#/server/routes/settings.ts')
+    const app = createSettingsRoutes(createServerSettingsState(), { revokeAllWebSessions: vi.fn() })
+
+    const response = await app.request('/web-access', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: true, username: 'operator', password: 'short' }),
+    })
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: { code: 'password-too-short' },
     })
   })
 })

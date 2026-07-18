@@ -129,6 +129,7 @@ describe('settings snapshot partitions', () => {
       globalShortcutRegistered: false,
       recentRepos: [{ kind: 'local', id: '/tmp/repo-b' }],
       repoSettings: [],
+      webAccess: { enabled: false, username: '', passwordConfigured: false },
       session: {
         openRepos: [{ kind: 'local', id: '/tmp/repo-b' }],
         activeRepo: '/tmp/repo-b',
@@ -190,9 +191,24 @@ describe('settings snapshot partitions', () => {
       session: defaultSessionState(),
       recentRepos: [],
       repoSettings,
+      webAccess: { enabled: false, username: '', passwordConfigured: false },
     })
 
     expect(snapshot.repoSettings).toEqual(repoSettings)
     expect(defaultSettingsSnapshot().repoSettings).toEqual([])
+  })
+
+  test('settings snapshots expose only the public web access projection', () => {
+    const snapshot = buildSettingsSnapshot({
+      prefs: defaultSettingsPrefs(),
+      globalShortcutRegistered: false,
+      session: defaultSessionState(),
+      recentRepos: [],
+      repoSettings: [],
+      webAccess: { enabled: true, username: 'operator', passwordConfigured: true },
+    })
+
+    expect(snapshot.webAccess).toEqual({ enabled: true, username: 'operator', passwordConfigured: true })
+    expect(JSON.stringify(snapshot)).not.toContain('passwordHash')
   })
 })

@@ -6,7 +6,6 @@ import type {
   EditorPref,
   ExternalAppsSnapshot,
   FontFamilyPref,
-  GitHubCliState,
   GlobalShortcutState,
   I18nSnapshot,
   LangPref,
@@ -22,6 +21,8 @@ import type {
   TerminalPref,
   ThemePref,
   ThemeState,
+  WebAccessSettingsSnapshot,
+  WebAccessSettingsUpdateInput,
 } from '#/shared/rpc.ts'
 import type { ColorTheme } from '#/shared/color-theme.ts'
 import type { RepoSettingsEntry } from '#/shared/repo-settings.ts'
@@ -36,6 +37,14 @@ import type { RepoSessionEntry } from '#/shared/remote-repo.ts'
 
 export async function getSettingsSnapshot(): Promise<SettingsSnapshot> {
   return await fetchServerJson<SettingsSnapshot>('/api/settings')
+}
+
+export async function setWebAccessSettings(input: WebAccessSettingsUpdateInput): Promise<WebAccessSettingsSnapshot> {
+  const result = await postServerJson<WebAccessSettingsUpdateInput, { ok: true; webAccess: WebAccessSettingsSnapshot }>(
+    '/api/settings/web-access',
+    input,
+  )
+  return result.webAccess
 }
 
 function resolveThemeStateFromPrefs(settings: Pick<SettingsPrefs, 'theme' | 'colorTheme'>): ThemeState {
@@ -101,19 +110,6 @@ export async function getI18nSnapshot(): Promise<I18nSnapshot> {
 export async function setI18nPref(pref: LangPref): Promise<I18nSnapshot> {
   const result = await updateSettingsPrefsPatch({ lang: pref })
   return result.i18n ?? (await getI18nSnapshot())
-}
-
-export async function getGitHubCliState(hosts?: string[]): Promise<GitHubCliState> {
-  const params = new URLSearchParams()
-  for (const host of hosts ?? []) {
-    if (host.trim()) params.append('host', host.trim())
-  }
-  const suffix = params.size > 0 ? `?${params.toString()}` : ''
-  return await fetchServerJson<GitHubCliState>(`/api/settings/github-cli${suffix}`)
-}
-
-export async function refreshGitHubCliState(hosts?: string[]): Promise<GitHubCliState> {
-  return await postServerJson('/api/settings/github-cli/refresh', hosts && hosts.length > 0 ? { hosts } : {})
 }
 
 export async function getLanInfo(): Promise<LanInfo> {

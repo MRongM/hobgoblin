@@ -5,20 +5,26 @@ import type { ServerTerminalHost, ServerTerminalSocket } from '#/server/terminal
 
 interface RealtimeRouteOptions {
   internalSecret: string
+  validateWebSession?: (token: string) => Promise<boolean>
   terminalHost: ServerTerminalHost
 }
 
 // Server-authoritative realtime only. Native-host renderer effect intents stay
 // on Electron IPC so the server does not become a broker for local shell APIs.
-export function createRealtimeRoutes({ internalSecret, terminalHost }: RealtimeRouteOptions) {
+export function createRealtimeRoutes({ internalSecret, validateWebSession, terminalHost }: RealtimeRouteOptions) {
   const app = new Hono()
   app.use('/invalidation', async (c, next) => {
-    if (c.req.query('token') !== internalSecret) return c.json({ ok: false, message: 'Unauthorized' }, 401)
+    if (!(await capabilityValid(c.req.query('token'), internalSecret, validateWebSession))) {
+      return c.json({ ok: false, message: 'Unauthorized' }, 401)
+    }
     await next()
   })
   app.use('/terminal', async (c, next) => {
-    if (c.req.query('token') !== internalSecret) return c.json({ ok: false, message: 'Unauthorized' }, 401)
-    if (!terminalHost.isValidClientId(c.req.query('clientId'))) return c.json({ ok: false, message: 'Invalid client id' }, 400)
+    if (!(await capabilityValid(c.req.query('token'), internalSecret, validateWebSession))) {
+      return c.json({ ok: false, message: 'Unauthorized' }, 401)
+    }
+    if (!terminalHost.isValidClientId(c.req.query('clientId')))
+      return c.json({ ok: false, message: 'Invalid client id' }, 400)
     if (!c.req.query('attachmentId')) return c.json({ ok: false, message: 'Missing attachment id' }, 400)
     await next()
   })
@@ -62,4 +68,14 @@ export function createRealtimeRoutes({ internalSecret, terminalHost }: RealtimeR
     }),
   )
   return app
+}
+
+async function capabilityValid(
+  token: string | undefined,
+  internalSecret: string,
+  validateWebSession: ((token: string) => Promise<boolean>) | undefined,
+): Promise<boolean> {
+  if (!token) return false
+  if (internalSecret && token === internalSecret) return true
+  return Boolean(await validateWebSession?.(token))
 }

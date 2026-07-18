@@ -77,7 +77,7 @@ describe('ProjectStatusPanel', () => {
     })
 
     await act(async () => {
-      root!.render(<ProjectStatusPanel repoId={REPO_ID} layout="top-bottom" />)
+      root!.render(<ProjectStatusPanel repoId={REPO_ID} />)
     })
 
     expect(container?.textContent).toContain('feature/worktree')

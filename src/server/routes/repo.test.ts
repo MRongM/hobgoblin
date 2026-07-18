@@ -29,7 +29,6 @@ vi.mock('#/server/modules/repo-read-paths.ts', () => ({
   getRepositoryHistory: mocks.getRepositoryHistory,
   getRepositoryLocalTags: mocks.getRepositoryLocalTags,
   getRepositoryPatch: vi.fn(),
-  getRepositoryPullRequests: vi.fn(),
   getRepositorySnapshot: vi.fn(),
   getRepositoryStatus: vi.fn(),
   probeRepository: vi.fn(),

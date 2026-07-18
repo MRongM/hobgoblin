@@ -4,7 +4,6 @@ import type {
   BrowserRemoteProvider,
   ExecResult,
   GitRemoteInfo,
-  PullRequestFetchMode,
   WorktreeStatus,
 } from '#/web/types.ts'
 import type { RemoteRepoTarget, RepoSessionEntry } from '#/shared/remote-repo.ts'
@@ -227,16 +226,7 @@ export interface RuntimeCoherentRepoProjectionActions {
     options?: { affectVisibleWorkspace?: boolean },
   ) => void
   selectBranch: (id: string, branch: string) => void
-  refreshSnapshot: (id: string, options?: { skipLogBackfill?: boolean; token?: number }) => Promise<void>
-  refreshPullRequests: (
-    id: string,
-    branches?: string[],
-    options?: {
-      token?: number
-      mode?: PullRequestFetchMode
-      clearMissing?: boolean
-    },
-  ) => Promise<void>
+  refreshSnapshot: (id: string, options?: { token?: number }) => Promise<void>
   refreshStatus: (id: string, options?: { token?: number }) => Promise<void>
   refreshCoreData: (id: string, options?: { token?: number }) => Promise<void>
   syncAndRefresh: (id: string, options?: { token?: number }) => Promise<void>

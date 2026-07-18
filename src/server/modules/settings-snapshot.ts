@@ -3,6 +3,7 @@ import {
   getServerRepoSettings,
   getServerSessionState,
   getServerSettingsPrefs,
+  getServerWebAccessSettings,
 } from '#/server/modules/settings-source.ts'
 import type { ServerSettingsState } from '#/server/modules/settings-state.ts'
 import { buildSettingsSnapshot } from '#/shared/settings-snapshot.ts'
@@ -16,5 +17,6 @@ export async function getSettingsSnapshot(state: ServerSettingsState): Promise<S
     session: await getServerSessionState(),
     recentRepos: await getServerRecentRepos(),
     repoSettings: await getServerRepoSettings(),
+    webAccess: await getServerWebAccessSettings(),
   })
 }

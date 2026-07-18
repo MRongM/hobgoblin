@@ -14,7 +14,7 @@ import type {
   TerminalSessionSummary,
   TerminalTakeoverResult,
 } from '#/shared/terminal.ts'
-import type { BranchSnapshotInfo, PullRequestInfo, WorktreeStatus } from '#/web/types.ts'
+import type { BranchSnapshotInfo, WorktreeStatus } from '#/web/types.ts'
 import type { DetailTab, ExplorerTab, RepoBranchState, RepoState } from '#/web/stores/repos/types.ts'
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import {
@@ -86,16 +86,6 @@ export function createBranchSnapshot(name: string, options: Partial<BranchSnapsh
 
 export function createRepoBranch(name: string, options: Partial<RepoBranchState> = {}): RepoBranchState {
   return stripBranchWorktreeMetadata([createBranchSnapshot(name, options)])[0]!
-}
-
-export function createPullRequest(number: number, options: Partial<PullRequestInfo> = {}): PullRequestInfo {
-  return {
-    number,
-    title: `PR ${number}`,
-    url: `https://github.com/acme/repo/pull/${number}`,
-    state: 'open',
-    ...options,
-  }
 }
 
 export function resetReposStore(): void {
@@ -416,11 +406,6 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
       const result = (() => {
         if (url.pathname === '/api/settings') return call('settings.get', undefined)
         if (url.pathname === '/api/settings/i18n') return call('i18n.get', undefined)
-        if (url.pathname === '/api/settings/github-cli') {
-          const hosts = url.searchParams.getAll('host')
-          return call('githubCli.get', hosts.length > 0 ? { hosts } : undefined)
-        }
-        if (url.pathname === '/api/settings/github-cli/refresh') return call('githubCli.refresh', body)
         if (url.pathname === '/api/settings/external-apps') {
           return init?.method === 'POST' ? call('externalApps.refresh', body) : call('externalApps.get', undefined)
         }
@@ -436,7 +421,6 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
         if (url.pathname === '/api/repo/snapshot') return call('repo.snapshot', body)
         if (url.pathname === '/api/repo/status') return call('repo.status', body)
         if (url.pathname === '/api/repo/remote-branches') return call('repo.remoteBranches', body)
-        if (url.pathname === '/api/repo/pull-requests') return call('repo.pullRequests', body)
         if (url.pathname === '/api/repo/local-tags') return call('repo.localTags', body)
         if (url.pathname === '/api/repo/create-local-tag') return call('repo.createLocalTag', body)
         if (url.pathname === '/api/repo/delete-local-tag') return call('repo.deleteLocalTag', body)

@@ -9,6 +9,7 @@ export type BranchActionItemId =
   | 'sync'
   | 'remote'
   | 'terminal'
+  | 'externalTerminal'
   | 'closeAllTerminals'
   | 'editor'
   | 'createWorktree'

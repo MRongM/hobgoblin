@@ -13,7 +13,7 @@ describe('shortcut definitions', () => {
   test('matches branch action shortcuts from keyboard input', () => {
     expect(matchBranchActionShortcut({ code: 'KeyP', shiftKey: false })).toBe('pull')
     expect(matchBranchActionShortcut({ code: 'KeyP', shiftKey: true })).toBe('push')
-    expect(matchBranchActionShortcut({ code: 'KeyG', shiftKey: false })).toBe('terminal')
+    expect(matchBranchActionShortcut({ code: 'KeyG', shiftKey: false })).toBe('externalTerminal')
     expect(matchBranchActionShortcut({ code: 'KeyG', shiftKey: true })).toBe('remote')
     expect(matchBranchActionShortcut({ code: 'KeyV', shiftKey: false })).toBe('editor')
     expect(matchBranchActionShortcut({ code: 'KeyV', shiftKey: true })).toBeNull()

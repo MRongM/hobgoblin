@@ -1,13 +1,5 @@
 import * as v from 'valibot'
-import type {
-  BranchSnapshotInfo,
-  ExecResult,
-  LogEntry,
-  PullRequestFetchMode,
-  PullRequestInfo,
-  RepoRemoteInfo,
-  WorktreeStatus,
-} from '#/shared/git-types.ts'
+import type { BranchSnapshotInfo, ExecResult, LogEntry, RepoRemoteInfo, WorktreeStatus } from '#/shared/git-types.ts'
 import type { WorkspaceDetailPaneSizes, WorkspaceLayout } from '#/shared/workspace-layout.ts'
 import type { ColorTheme } from '#/shared/color-theme.ts'
 import type { SettingsPage } from '#/shared/settings-pages.ts'
@@ -107,29 +99,27 @@ export interface RuntimeRecentReposState {
   recentRepos: RepoSessionEntry[]
 }
 
+export interface WebAccessSettingsSnapshot {
+  enabled: boolean
+  username: string
+  passwordConfigured: boolean
+}
+
+export interface WebAccessSettingsUpdateInput {
+  enabled: boolean
+  username: string
+  password?: string
+}
+
 export interface SettingsSnapshot extends RuntimeSettingsSnapshot, RuntimeRecentReposState {
   session: SessionState
   repoSettings: RepoSettingsEntry[]
+  webAccess: WebAccessSettingsSnapshot
 }
 
 export interface GlobalShortcutState {
   accelerator: string
   registered: boolean
-}
-
-export interface GitHubCliState {
-  available: boolean
-  version: string | null
-  detectedAt: number
-  hosts: Record<string, GitHubCliHostState>
-}
-
-export interface GitHubCliHostState {
-  host: string
-  authenticated: boolean
-  activeLogin: string | null
-  logins: string[]
-  tokenSource: string | null
 }
 
 export interface TerminalAppState {
@@ -185,16 +175,6 @@ export interface CloneRepoResult extends ExecResult {
   path?: string
 }
 
-export interface PullRequestEntry {
-  branch: string
-  pullRequest: PullRequestInfo
-}
-
-export interface PullRequestFetchOptions {
-  mode?: PullRequestFetchMode
-  clearMissing?: boolean
-}
-
 export type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
 export { isRemoteRepoId, parseRemoteRepoId } from '#/shared/remote-repo.ts'
 
@@ -222,7 +202,6 @@ export type RpcEvent =
   | { type: 'toggle-detail-on-action-bar-blank-click-changed'; enabled: boolean }
   | ({ type: 'terminal-app-changed' } & TerminalAppState)
   | ({ type: 'editor-app-changed' } & EditorAppState)
-  | { type: 'github-cli-changed'; state: GitHubCliState }
   | { type: 'settings-write-error'; message: string }
   | I18nChangedEvent
   | RepoQueryInvalidationEvent
@@ -238,11 +217,6 @@ export interface AppRpcHandlers {
     }) => Promise<CloneRepoResult>
     abortClone: (input: { operationId: string }) => Promise<boolean>
     snapshot: (input: { cwd: string }) => Promise<RepoSnapshot | null>
-    pullRequests: (input: {
-      cwd: string
-      branches?: string[]
-      options?: PullRequestFetchOptions
-    }) => Promise<PullRequestEntry[] | null>
     status: (input: { cwd: string }) => Promise<WorktreeStatus[]>
     patch: (input: { cwd: string; worktreePath: string }) => Promise<ExecResult>
     checkout: (input: { cwd: string; branch: string }) => Promise<ExecResult>
@@ -252,16 +226,8 @@ export interface AppRpcHandlers {
       force?: boolean
       alsoDeleteUpstream?: boolean
     }) => Promise<ExecResult>
-    deleteRemoteBranch: (input: {
-      cwd: string
-      remote: string
-      branch: string
-    }) => Promise<ExecResult>
-    deleteRemoteTag: (input: {
-      cwd: string
-      remote: string
-      tag: string
-    }) => Promise<ExecResult>
+    deleteRemoteBranch: (input: { cwd: string; remote: string; branch: string }) => Promise<ExecResult>
+    deleteRemoteTag: (input: { cwd: string; remote: string; tag: string }) => Promise<ExecResult>
     removeWorktree: (input: {
       cwd: string
       branch: string
@@ -315,10 +281,6 @@ export interface AppRpcHandlers {
   externalApps: {
     get: () => Promise<ExternalAppsSnapshot>
     refresh: () => Promise<ExternalAppsSnapshot>
-  }
-  githubCli: {
-    get: (input: { hosts?: string[] } | undefined) => Promise<GitHubCliState>
-    refresh: (input: { hosts?: string[] } | undefined) => Promise<GitHubCliState>
   }
   i18n: {
     get: () => Promise<I18nSnapshot>

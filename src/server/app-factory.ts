@@ -6,14 +6,16 @@ import { Hono, type Context } from 'hono'
 import { cors } from 'hono/cors'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { createInternalAuthMiddleware } from '#/server/common/auth.ts'
+import { createWebAccessAuth } from '#/server/modules/web-access-auth.ts'
 import { createHealthRoutes } from '#/server/routes/health.ts'
 import { createPortForwardingRoutes } from '#/server/routes/port-forwarding.ts'
 import { createRemoteRoutes } from '#/server/routes/remote.ts'
 import { createRealtimeRoutes } from '#/server/routes/realtime.ts'
 import { createRepoRoutes } from '#/server/routes/repo.ts'
 import { createSettingsRoutes } from '#/server/routes/settings.ts'
+import { createWebAccessAuthRoutes, readWebAccessSessionCookie } from '#/server/routes/web-access-auth.ts'
 import type { ServerTerminalHost } from '#/server/terminal/terminal-host.ts'
-import { getServerSettingsPrefs } from '#/server/modules/settings-source.ts'
+import { getServerSettingsPrefs, getServerWebAccessCredentials } from '#/server/modules/settings-source.ts'
 import { createServerSettingsState } from '#/server/modules/settings-state.ts'
 import { createRendererBootstrapSnapshot, toInitialServerSnapshot } from '#/shared/bootstrap-builders.ts'
 import { createRendererRuntimeSnapshot } from '#/shared/bootstrap-builders.ts'
@@ -32,13 +34,14 @@ export interface ServerAppOptions {
 
 const WEB_DIST_DIR = path.resolve(import.meta.dirname, '../../dist/web')
 const WEB_INDEX_HTML = path.join(WEB_DIST_DIR, 'index.html')
+const INTERNAL_CAPABILITY_HEADER = 'x-goblin-internal-secret'
 function deriveServerClientId(secret: string): string {
   return `client_${createHash('sha256').update(secret).digest('hex').slice(0, 32)}`
 }
 
 function buildWebBootstrap(
   requestUrl: string,
-  internalSecret: string,
+  webCapability: string,
   acceptLanguageHeader: string | null,
   langPref: LangPref,
   settings: Awaited<ReturnType<typeof getServerSettingsPrefs>>,
@@ -54,8 +57,8 @@ function buildWebBootstrap(
     }),
     server: toInitialServerSnapshot({
       url: `${origin}/`,
-      secret: internalSecret,
-      clientId: deriveServerClientId(internalSecret),
+      secret: webCapability,
+      clientId: deriveServerClientId(webCapability),
     }),
   })
 }
@@ -83,12 +86,12 @@ function injectBootstrapIntoHtml(indexHtml: string, bootstrap: RendererBootstrap
 
 async function renderRendererIndexHtml(
   requestUrl: string,
-  internalSecret: string,
+  webCapability: string,
   acceptLanguageHeader: string | null,
 ): Promise<string> {
   await access(WEB_INDEX_HTML)
   const settings = await getServerSettingsPrefs()
-  const bootstrap = buildWebBootstrap(requestUrl, internalSecret, acceptLanguageHeader, settings.lang, settings)
+  const bootstrap = buildWebBootstrap(requestUrl, webCapability, acceptLanguageHeader, settings.lang, settings)
   return injectBootstrapIntoHtml(await readFile(WEB_INDEX_HTML, 'utf8'), bootstrap)
 }
 
@@ -99,6 +102,10 @@ function noStoreHtml(c: Context, html: string): Response {
 
 export function createApp(options: ServerAppOptions): Hono {
   const settingsState = createServerSettingsState()
+  const webAccessAuth = createWebAccessAuth({ readCredentials: getServerWebAccessCredentials })
+  const capabilityMiddleware = createInternalAuthMiddleware(options.internalSecret, {
+    validateWebSession: webAccessAuth.validateToken,
+  })
   const app = new Hono()
   app.use('/api/*', async (c, next) => {
     c.header('Cache-Control', 'no-store')
@@ -112,51 +119,55 @@ export function createApp(options: ServerAppOptions): Hono {
       allowMethods: ['GET', 'POST', 'OPTIONS'],
     }),
   )
-  app.route('/api', createHealthRoutes({ version: options.version, startedAt: options.startedAt, terminalHost: options.terminalHost }))
-  app.use('/api/settings/*', createInternalAuthMiddleware(options.internalSecret))
-  app.use('/api/remote/*', createInternalAuthMiddleware(options.internalSecret))
-  app.use('/api/repo/*', createInternalAuthMiddleware(options.internalSecret))
-  app.use('/api/port-forwarding/*', createInternalAuthMiddleware(options.internalSecret))
-  app.route('/api/settings', createSettingsRoutes(settingsState))
+  app.route(
+    '/api',
+    createHealthRoutes({ version: options.version, startedAt: options.startedAt, terminalHost: options.terminalHost }),
+  )
+  app.use('/api/settings/*', capabilityMiddleware)
+  app.use('/api/remote/*', capabilityMiddleware)
+  app.use('/api/repo/*', capabilityMiddleware)
+  app.use('/api/port-forwarding/*', capabilityMiddleware)
+  app.route('/api/settings', createSettingsRoutes(settingsState, { revokeAllWebSessions: webAccessAuth.revokeAll }))
   app.route('/api/remote', createRemoteRoutes())
   app.route('/api/repo', createRepoRoutes())
   app.route('/api/port-forwarding', createPortForwardingRoutes())
-  app.route('/ws', createRealtimeRoutes({ internalSecret: options.internalSecret, terminalHost: options.terminalHost }))
-  app.get('/', async (c) => {
+  app.route(
+    '/ws',
+    createRealtimeRoutes({
+      internalSecret: options.internalSecret,
+      validateWebSession: webAccessAuth.validateToken,
+      terminalHost: options.terminalHost,
+    }),
+  )
+  app.route('/auth', createWebAccessAuthRoutes({ auth: webAccessAuth }))
+  const renderProtectedHtml = async (c: Context): Promise<Response> => {
+    const requestCapability = c.req.header(INTERNAL_CAPABILITY_HEADER) ?? ''
+    const internalCapabilityValid = Boolean(options.internalSecret) && requestCapability === options.internalSecret
+    const pageCapability = internalCapabilityValid
+      ? options.internalSecret
+      : await webAccessAuth.createPageCapability(readWebAccessSessionCookie(c))
+    if (!pageCapability) return redirectToLogin(c)
     try {
-      return noStoreHtml(c, await renderRendererIndexHtml(c.req.url, options.internalSecret, c.req.header('accept-language') ?? null))
+      return noStoreHtml(
+        c,
+        await renderRendererIndexHtml(c.req.url, pageCapability, c.req.header('accept-language') ?? null),
+      )
     } catch {
       return c.text('Not Found', 404)
     }
-  })
-  app.get('/index.html', async (c) => {
-    try {
-      return noStoreHtml(c, await renderRendererIndexHtml(c.req.url, options.internalSecret, c.req.header('accept-language') ?? null))
-    } catch {
-      return c.text('Not Found', 404)
-    }
-  })
-  app.get('/settings', async (c) => {
-    try {
-      return noStoreHtml(c, await renderRendererIndexHtml(c.req.url, options.internalSecret, c.req.header('accept-language') ?? null))
-    } catch {
-      return c.text('Not Found', 404)
-    }
-  })
-  app.get('/settings/*', async (c) => {
-    try {
-      return noStoreHtml(c, await renderRendererIndexHtml(c.req.url, options.internalSecret, c.req.header('accept-language') ?? null))
-    } catch {
-      return c.text('Not Found', 404)
-    }
-  })
+  }
+  app.get('/', renderProtectedHtml)
+  app.get('/index.html', renderProtectedHtml)
+  app.get('/settings', renderProtectedHtml)
+  app.get('/settings/*', renderProtectedHtml)
   app.use('/*', serveStatic({ root: WEB_DIST_DIR }))
-  app.get('*', async (c) => {
-    try {
-      return noStoreHtml(c, await renderRendererIndexHtml(c.req.url, options.internalSecret, c.req.header('accept-language') ?? null))
-    } catch {
-      return c.text('Not Found', 404)
-    }
-  })
+  app.get('*', renderProtectedHtml)
   return app
+}
+
+function redirectToLogin(c: Context): Response {
+  const url = new URL(c.req.url)
+  const next = `${url.pathname}${url.search}`
+  c.header('Cache-Control', 'no-store')
+  return c.redirect(`/auth/login?next=${encodeURIComponent(next)}`, 303)
 }

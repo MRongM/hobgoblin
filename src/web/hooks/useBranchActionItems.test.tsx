@@ -45,6 +45,7 @@ let closeTerminalAndDismissDetailIfLast: ReturnType<
   typeof vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>
 >
 let createTerminal: ReturnType<typeof vi.fn<TerminalSessionContextValue['createTerminal']>>
+let openExternalTerminal: ReturnType<typeof vi.fn>
 
 vi.mock('#/web/runtime-settings-external-apps.ts', () => ({
   useRuntimeExternalAppSettings: mocks.useRuntimeExternalAppSettings,
@@ -83,6 +84,7 @@ describe('useBranchActionItems', () => {
       resolvedEditorApp: 'vscode',
       editorAvailable: true,
     })
+    openExternalTerminal = vi.fn()
     mocks.useBranchActions.mockReturnValue({
       blocked: false,
       busyAction: null,
@@ -103,7 +105,7 @@ describe('useBranchActionItems', () => {
         checkout: vi.fn(),
         pull: vi.fn(),
         push: vi.fn(),
-        openTerminal: vi.fn(),
+        openExternalTerminal,
         openEditor: vi.fn(),
         openRemote: vi.fn(),
         requestDeleteBranch: vi.fn(),
@@ -165,10 +167,13 @@ describe('useBranchActionItems', () => {
     })
 
     const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
-    const itemIds = await renderItems(useItems, repo, branch)
+    const groups = await renderItemGroups(useItems, repo, branch)
+    const itemIds = groups.externalItems.filter((item) => item.visible).map((item) => item.id)
 
     expect(itemIds).toContain('terminal')
+    expect(itemIds).toContain('externalTerminal')
     expect(itemIds).toContain('editor')
+    expect(groups.externalItems.find((item) => item.id === 'externalTerminal')?.disabled).toBe(false)
   })
 
   test('creates an internal terminal for the worktree without requiring an external terminal app', async () => {
@@ -187,6 +192,8 @@ describe('useBranchActionItems', () => {
     if (!terminal) throw new Error('missing terminal action')
 
     expect(terminal.disabled).toBe(false)
+    expect(terminal.label).toBe('terminal.internal')
+    expect(groups.externalItems.find((item) => item.id === 'externalTerminal')?.disabled).toBe(true)
 
     await act(async () => {
       await terminal.onSelect()
@@ -199,6 +206,38 @@ describe('useBranchActionItems', () => {
     })
     expect(useReposStore.getState().repos['/tmp/repo']?.ui.detailTab).toBe('terminal')
     expect(useReposStore.getState().detailCollapsed).toBe(false)
+    expect(openExternalTerminal).not.toHaveBeenCalled()
+  })
+
+  test('opens the external terminal without creating an internal session', async () => {
+    mocks.useRuntimeExternalAppSettings.mockReturnValue({
+      terminalApp: 'auto',
+      resolvedTerminalApp: 'iterm',
+      terminalAvailable: true,
+      editorApp: 'vscode',
+      resolvedEditorApp: 'vscode',
+      editorAvailable: true,
+    })
+    const branch = createRepoBranch('feature/external', { worktree: { path: '/tmp/repo-feature' } })
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      branches: [branch],
+    })
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
+    const groups = await renderItemGroups(useItems, repo, branch)
+    const externalTerminal = groups.externalItems.find((item) => item.id === 'externalTerminal')
+    if (!externalTerminal) throw new Error('missing external terminal action')
+
+    expect(externalTerminal.label).toBe('terminal.external')
+    expect(externalTerminal.disabled).toBe(false)
+
+    await act(async () => {
+      await externalTerminal.onSelect()
+    })
+
+    expect(openExternalTerminal).toHaveBeenCalledTimes(1)
+    expect(createTerminal).not.toHaveBeenCalled()
   })
 
   test('orders external actions first and keeps patch at the bottom of branch actions', async () => {
@@ -230,7 +269,7 @@ describe('useBranchActionItems', () => {
         checkout: vi.fn(),
         pull: vi.fn(),
         push: vi.fn(),
-        openTerminal: vi.fn(),
+        openExternalTerminal,
         openEditor: vi.fn(),
         openRemote: vi.fn(),
         requestDeleteBranch: vi.fn(),
@@ -255,8 +294,11 @@ describe('useBranchActionItems', () => {
     expect(groups.externalItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
       'editor',
       'terminal',
+      'externalTerminal',
       'remote',
     ])
+    expect(groups.externalItems.find((item) => item.id === 'terminal')?.label).toBe('terminal.internal')
+    expect(groups.externalItems.find((item) => item.id === 'externalTerminal')?.label).toBe('terminal.external')
     expect(groups.patchItems.filter((item) => item.visible).map((item) => item.id)).toEqual(['createTag'])
     expect(groups.mainItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
       'pull',
@@ -302,7 +344,7 @@ describe('useBranchActionItems', () => {
         checkout: vi.fn(),
         pull: vi.fn(),
         push: vi.fn(),
-        openTerminal: vi.fn(),
+        openExternalTerminal,
         openEditor: vi.fn(),
         openRemote: vi.fn(),
         requestDeleteBranch: vi.fn(),
@@ -338,6 +380,7 @@ describe('useBranchActionItems', () => {
     expect(groups.externalItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
       'editor',
       'terminal',
+      'externalTerminal',
       'remote',
     ])
     expect(groups.destructiveItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
@@ -358,6 +401,7 @@ describe('useBranchActionItems', () => {
     expect(disabledById.get('merge')).toBe(true)
     expect(disabledById.get('commit')).toBe(true)
     expect(disabledById.get('terminal')).toBe(true)
+    expect(disabledById.get('externalTerminal')).toBe(true)
     expect(disabledById.get('editor')).toBe(true)
     expect(disabledById.get('remote')).toBe(true)
     expect(disabledById.get('removeWorktree')).toBe(true)
@@ -386,7 +430,7 @@ describe('useBranchActionItems', () => {
         checkout: vi.fn(),
         pull: vi.fn(),
         push: vi.fn(),
-        openTerminal: vi.fn(),
+        openExternalTerminal,
         openEditor: vi.fn(),
         openRemote: vi.fn(),
         requestDeleteBranch: vi.fn(),
@@ -433,7 +477,7 @@ describe('useBranchActionItems', () => {
         checkout: vi.fn(),
         pull: vi.fn(),
         push: vi.fn(),
-        openTerminal: vi.fn(),
+        openExternalTerminal,
         openEditor: vi.fn(),
         openRemote: vi.fn(),
         requestDeleteBranch: vi.fn(),
@@ -482,7 +526,7 @@ describe('useBranchActionItems', () => {
         checkout: vi.fn(),
         pull: vi.fn(),
         push: vi.fn(),
-        openTerminal: vi.fn(),
+        openExternalTerminal,
         openEditor: vi.fn(),
         openRemote: vi.fn(),
         requestDeleteBranch: vi.fn(),
@@ -561,7 +605,7 @@ describe('useBranchActionItems', () => {
         checkout: vi.fn(),
         pull: vi.fn(),
         push: vi.fn(),
-        openTerminal: vi.fn(),
+        openExternalTerminal,
         openEditor: vi.fn(),
         openRemote: vi.fn(),
         requestDeleteBranch: vi.fn(),
@@ -620,7 +664,7 @@ describe('useBranchActionItems', () => {
         checkout: vi.fn(),
         pull: vi.fn(),
         push: vi.fn(),
-        openTerminal: vi.fn(),
+        openExternalTerminal,
         openEditor: vi.fn(),
         openRemote: vi.fn(),
         requestDeleteBranch: vi.fn(),
@@ -695,7 +739,7 @@ describe('useBranchActionItems', () => {
         checkout: vi.fn(),
         pull: vi.fn(),
         push,
-        openTerminal: vi.fn(),
+        openExternalTerminal,
         openEditor: vi.fn(),
         openRemote: vi.fn(),
         requestDeleteBranch: vi.fn(),

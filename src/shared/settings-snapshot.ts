@@ -6,6 +6,7 @@ import type {
   SessionState,
   SettingsPrefs,
   SettingsSnapshot,
+  WebAccessSettingsSnapshot,
 } from '#/shared/rpc.ts'
 
 export function buildRuntimeSettingsSnapshot(input: {
@@ -59,6 +60,7 @@ export function buildSettingsSnapshot(input: {
   session: SessionState
   recentRepos: RepoSessionEntry[]
   repoSettings: RepoSettingsEntry[]
+  webAccess: WebAccessSettingsSnapshot
 }): SettingsSnapshot {
   return {
     ...buildRuntimeSettingsSnapshot({
@@ -68,6 +70,7 @@ export function buildSettingsSnapshot(input: {
     ...buildRuntimeRecentReposState({ recentRepos: input.recentRepos }),
     session: input.session,
     repoSettings: input.repoSettings,
+    webAccess: input.webAccess,
   }
 }
 

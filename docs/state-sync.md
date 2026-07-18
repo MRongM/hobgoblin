@@ -37,7 +37,7 @@ Representative examples:
 - `useThemeStore`
 - `useI18nStore`
 - recent repos
-- repo snapshot, status, and pull request state
+- repo snapshot and status
 - terminal sessions and ownership
 
 Notes:

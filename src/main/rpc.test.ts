@@ -6,8 +6,7 @@ import { createWorktree, getWorktrees } from '#/system/git/worktrees.ts'
 import { getWorkingStatus } from '#/system/git/status.ts'
 import { getWorktreePatch } from '#/system/git/patch.ts'
 import { resolveKnownWorktree, resolveRemovableWorktree } from '#/shared/worktree-guards.ts'
-import { getBrowserRemoteUrl, getNewPullRequestUrl, pullBranch } from '#/system/git/remote.ts'
-import { getBranchPullRequest, getBranchPullRequests } from '#/system/git/pull-requests.ts'
+import { getBrowserRemoteUrl, pullBranch } from '#/system/git/remote.ts'
 import { openHttpsExternal } from '#/main/external-url.ts'
 import { registerTrustedAppUrl, registerTrustedWebContents } from '#/main/ipc/trusted-webcontents.ts'
 import { wireRpcIpc } from '#/main/rpc.ts'
@@ -116,7 +115,6 @@ vi.mock('#/system/git/helper.ts', () => ({
 vi.mock('#/system/git/remote.ts', () => ({
   fetchAll: vi.fn(),
   getBrowserRemoteUrl: vi.fn(),
-  getNewPullRequestUrl: vi.fn(),
   getRemoteInfo: vi.fn(),
   pullBranch: vi.fn(),
   pushBranch: vi.fn(),
@@ -132,11 +130,6 @@ vi.mock('#/system/git/patch.ts', () => ({
 
 vi.mock('#/system/git/clone.ts', () => ({
   cloneRepository: vi.fn(),
-}))
-
-vi.mock('#/system/git/pull-requests.ts', () => ({
-  getBranchPullRequest: vi.fn(),
-  getBranchPullRequests: vi.fn(),
 }))
 
 vi.mock('#/main/window.ts', () => ({
@@ -216,20 +209,6 @@ vi.mock('#/main/settings-server-client.ts', () => ({
   getSettingsPrefs: vi.fn(async () => settingsPrefs()),
   getSettingsSnapshot: vi.fn(),
   updateSettingsPrefs: vi.fn(async (patch: Record<string, unknown>) => ({ ...settingsPrefs(), ...patch })),
-}))
-
-vi.mock('#/system/github-cli.ts', () => ({
-  probeGitHubCli: vi.fn(async (_signal?: AbortSignal, hosts?: string[]) => ({
-    available: true,
-    version: 'gh version 2.93.0',
-    detectedAt: 0,
-    hosts: Object.fromEntries(
-      (hosts ?? ['github.com']).map((host) => [
-        host,
-        { host, authenticated: true, activeLogin: 'tester', logins: ['tester'], tokenSource: 'keyring' },
-      ]),
-    ),
-  })),
 }))
 
 vi.mock('#/main/terminal.ts', () => ({

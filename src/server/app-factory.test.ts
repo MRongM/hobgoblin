@@ -36,6 +36,7 @@ const mocks = vi.hoisted(() => ({
     terminalCustomButtons: [],
     lanEnabled: false,
   })),
+  getServerWebAccessCredentials: vi.fn(async () => ({ enabled: false, username: '', passwordHash: '' })),
 }))
 
 const terminalHostStub = {
@@ -81,12 +82,14 @@ vi.mock('node:fs/promises', () => ({
 
 vi.mock('#/server/modules/settings-source.ts', () => ({
   getServerSettingsPrefs: mocks.getServerSettingsPrefs,
+  getServerWebAccessCredentials: mocks.getServerWebAccessCredentials,
 }))
 
 describe('server app html bootstrap', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()
+    mocks.getServerWebAccessCredentials.mockResolvedValue({ enabled: false, username: '', passwordHash: '' })
   })
 
   test('injects bootstrap into the web index html for web requests', async () => {
@@ -110,7 +113,8 @@ describe('server app html bootstrap', () => {
     expect(response.status).toBe(200)
     expect(response.headers.get('cache-control')).toBe('no-store')
     expect(html).toContain('<script id="goblin-bootstrap" type="application/json">')
-    expect(html).toContain('"secret"')
+    expect(webCapabilityFromHtml(html)).not.toBe('secret')
+    expect(webCapabilityFromHtml(html)).toMatch(/^[0-9a-f]{64}$/u)
     expect(html).toContain('"lang":"zh"')
     expect(html).toContain('打开本地仓库')
   }, 10_000)
@@ -153,9 +157,89 @@ describe('server app html bootstrap', () => {
       expect(response.status).toBe(200)
       expect(response.headers.get('cache-control')).toBe('no-store')
       expect(html).toContain('<script id="goblin-bootstrap" type="application/json">')
-      expect(html).toContain('"secret"')
+      expect(webCapabilityFromHtml(html)).not.toBe('secret')
+      expect(webCapabilityFromHtml(html)).toMatch(/^[0-9a-f]{64}$/u)
       expect(html).toContain('<base href="http://127.0.0.1:32100/">')
     }
+  })
+
+  test('redirects protected browser routes to login when Web access protection is enabled', async () => {
+    mocks.getServerWebAccessCredentials.mockResolvedValue({
+      enabled: true,
+      username: 'operator',
+      passwordHash:
+        'scrypt$16384$8$1$00000000000000000000000000000000$0000000000000000000000000000000000000000000000000000000000000000',
+    })
+    const { createApp } = await import('#/server/app-factory.ts')
+    const app = createApp({
+      version: '0.1.0',
+      startedAt: Date.now(),
+      internalSecret: 'secret',
+      terminalHost: terminalHostStub,
+    })
+
+    const response = await app.request('http://127.0.0.1:32100/settings/security', {
+      headers: { 'x-goblin-internal-secret': 'wrong-secret' },
+    })
+
+    expect(response.status).toBe(303)
+    expect(response.headers.get('location')).toBe('/auth/login?next=%2Fsettings%2Fsecurity')
+    expect(response.headers.get('cache-control')).toBe('no-store')
+  })
+
+  test('serves protected renderer html to Electron with the exact internal capability', async () => {
+    mocks.getServerWebAccessCredentials.mockResolvedValue({
+      enabled: true,
+      username: 'operator',
+      passwordHash:
+        'scrypt$16384$8$1$00000000000000000000000000000000$0000000000000000000000000000000000000000000000000000000000000000',
+    })
+    const { createApp } = await import('#/server/app-factory.ts')
+    const app = createApp({
+      version: '0.1.0',
+      startedAt: Date.now(),
+      internalSecret: 'secret',
+      terminalHost: terminalHostStub,
+    })
+
+    const response = await app.request('http://127.0.0.1:32100/', {
+      headers: { 'x-goblin-internal-secret': 'secret' },
+    })
+    const html = await response.text()
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(webCapabilityFromHtml(html)).toBe('secret')
+  })
+
+  test('uses the authenticated Cookie capability in protected Web bootstrap', async () => {
+    const { hashWebAccessPassword } = await import('#/server/modules/web-access-auth.ts')
+    mocks.getServerWebAccessCredentials.mockResolvedValue({
+      enabled: true,
+      username: 'operator',
+      passwordHash: await hashWebAccessPassword('test-password'),
+    })
+    const { createApp } = await import('#/server/app-factory.ts')
+    const app = createApp({
+      version: '0.1.0',
+      startedAt: Date.now(),
+      internalSecret: 'secret',
+      terminalHost: terminalHostStub,
+    })
+    const login = await app.request('http://127.0.0.1:32100/auth/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ username: 'operator', password: 'test-password', next: '/' }),
+    })
+    const cookie = login.headers.get('set-cookie')?.split(';')[0]
+
+    expect(login.status).toBe(303)
+    expect(cookie).toMatch(/^goblin_web_session=/u)
+    const response = await app.request('http://127.0.0.1:32100/', { headers: { cookie: cookie! } })
+    const html = await response.text()
+    expect(response.status).toBe(200)
+    expect(webCapabilityFromHtml(html)).toBe(cookie!.split('=')[1])
+    expect(webCapabilityFromHtml(html)).not.toBe('secret')
   })
 
   test('marks api responses as non-cacheable', async () => {
@@ -173,3 +257,11 @@ describe('server app html bootstrap', () => {
     expect(response.headers.get('cache-control')).toBe('no-store')
   })
 })
+
+function webCapabilityFromHtml(html: string): string {
+  const match = html.match(/<script id="goblin-bootstrap" type="application\/json">([^<]+)<\/script>/u)
+  if (!match?.[1]) throw new Error('Missing renderer bootstrap')
+  const bootstrap = JSON.parse(match[1]) as { initialServer?: { secret?: string } }
+  if (!bootstrap.initialServer?.secret) throw new Error('Missing Web capability')
+  return bootstrap.initialServer.secret
+}

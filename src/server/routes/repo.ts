@@ -10,7 +10,6 @@ import {
   getRepositoryHistory,
   getRepositoryLocalTags,
   getRepositoryPatch,
-  getRepositoryPullRequests,
   searchRepositoryFileTree,
   getRepositorySnapshot,
   getRepositoryStatus,
@@ -398,15 +397,6 @@ export function createRepoRoutes() {
         'file-export',
       ),
     )
-  })
-  app.post('/pull-requests', async (c) => {
-    const body = await c.req.json().catch(() => null)
-    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
-    const branches = Array.isArray(body?.branches)
-      ? body.branches.filter((branch: unknown): branch is string => typeof branch === 'string')
-      : undefined
-    const mode = body?.options?.mode === 'summary' ? 'summary' : 'full'
-    return c.json(await jsonOr(() => getRepositoryPullRequests(cwd, branches, { mode, signal: c.req.raw.signal }), null, 'pull-requests'))
   })
   app.post('/fetch', async (c) => {
     const body = await c.req.json().catch(() => null)

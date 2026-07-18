@@ -17,7 +17,7 @@ import {
   isGitRepo,
 } from '#/system/git/branches.ts'
 import { getCommitDetail as getLocalCommitDetail, getCommitHistory as getLocalCommitHistory } from '#/system/git/history.ts'
-import { fetchAll, getBrowserRemoteUrl, getRemoteInfo, pickPreferredRemote, pullBranch, pushBranch } from '#/system/git/remote.ts'
+import { fetchAll, getBrowserRemoteUrl, getRemoteInfo, pullBranch, pushBranch } from '#/system/git/remote.ts'
 import { createLocalTag as createLocalGitTag, deleteLocalTag as deleteLocalGitTag, getLocalTags as getLocalGitTags, pushLocalTag as pushLocalGitTag } from '#/system/git/tags.ts'
 import {
   deleteRemoteServerTag as deleteLocalRemoteServerTag,
@@ -42,8 +42,6 @@ import {
   type CommitDetail,
   type CommitHistoryEntry,
   type ExecResult,
-  type PullRequestFetchMode,
-  type PullRequestInfo,
   type WorktreeStatus,
 } from '#/shared/git-types.ts'
 import { resolveKnownWorktree, resolveRemovableWorktree } from '#/shared/worktree-guards.ts'
@@ -82,13 +80,10 @@ import {
   resetRemoteHard,
   removeRemoteWorktree,
 } from '#/system/ssh/git.ts'
-import { getBranchPullRequests, getBranchPullRequestsForRepoRef } from '#/system/git/pull-requests.ts'
-import { parseGitHubRemoteUrl, type GitHubRepoRef } from '#/system/github/graphql.ts'
 import {
   isRemoteRepoId,
   parseRemoteRepoId,
   type ProbeResult,
-  type PullRequestEntry,
   type RemoteRepoTarget,
   type RepoSnapshot,
 } from '#/shared/rpc.ts'
@@ -107,10 +102,6 @@ export interface RepoBackend {
   probe(): Promise<ProbeResult>
   getSnapshot(signal?: AbortSignal): Promise<RepoSnapshot | null>
   getStatus(signal?: AbortSignal): Promise<WorktreeStatus[]>
-  getPullRequests(
-    branches?: string[],
-    options?: { mode?: PullRequestFetchMode; signal?: AbortSignal },
-  ): Promise<PullRequestEntry[] | null>
   getHistory(branch: string, input: { limit: number; skip: number }, signal?: AbortSignal): Promise<CommitHistoryEntry[]>
   getCommitDetail(commit: string, signal?: AbortSignal): Promise<CommitDetail | null>
   getRemoteBranches(signal?: AbortSignal): Promise<string[]>
@@ -168,10 +159,6 @@ export interface RepoBackend {
   getBrowserRemoteUrl(branch?: string, signal?: AbortSignal): Promise<string | null>
 }
 
-interface RepoBackendCapabilities {
-  pullRequests: 'cwd-github' | 'derived-github-repo'
-}
-
 export async function resolveRemoteRepoTarget(repoId: string): Promise<RemoteRepoTarget> {
   const parsed = parseRemoteRepoId(repoId)
   if (!parsed) throw new Error('error.ssh-config-changed')
@@ -223,8 +210,6 @@ async function probeGitRepository(cwd: string): Promise<ProbeAvailability> {
 }
 
 function createLocalRepoBackend(repoId: string): RepoBackend {
-  const capabilities: RepoBackendCapabilities = { pullRequests: 'cwd-github' }
-
   async function validateBranchDeletion(
     branch: string,
     options?: { force?: boolean; notMergedMessage?: 'error.branch-not-fully-merged' | 'error.cannot-remove-unpushed-worktree' },
@@ -314,14 +299,6 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       if (!available.ok) throw new Error(available.message)
       const status = await getWorkingStatus(repoId, { signal })
       return signal?.aborted ? [] : status
-    },
-    async getPullRequests(branches, options) {
-      if (!isValidCwd(repoId)) return null
-      const branchSet = normalizeRequestedBranches(branches)
-      if (branchSet?.size === 0) return []
-      if (capabilities.pullRequests !== 'cwd-github') return null
-      const prs = await getBranchPullRequests(repoId, branchSet, { mode: options?.mode, signal: options?.signal })
-      return pullRequestEntries(prs)
     },
     async getHistory(branch, input, signal) {
       if (!isValidCwd(repoId)) return []
@@ -501,7 +478,6 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
 
 async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
   const target = await resolveRemoteRepoTarget(repoId)
-  const capabilities: RepoBackendCapabilities = { pullRequests: 'derived-github-repo' }
   return {
     id: repoId,
     kind: 'remote',
@@ -519,18 +495,6 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
     async getStatus(signal) {
       const status = await getRemoteStatus(target, { signal })
       return signal?.aborted ? [] : status
-    },
-    async getPullRequests(branches, options) {
-      const branchSet = normalizeRequestedBranches(branches)
-      if (branchSet?.size === 0) return []
-      if (capabilities.pullRequests !== 'derived-github-repo') return null
-      const repo = await remotePullRequestRepoRef(target, options?.signal)
-      if (!repo) return null
-      const prs = await getBranchPullRequestsForRepoRef(repoId, repo, branchSet, {
-        mode: options?.mode,
-        signal: options?.signal,
-      })
-      return pullRequestEntries(prs)
     },
     async getHistory(branch, input, signal) {
       return await getRemoteHistory(target, branch, input, { signal })
@@ -628,33 +592,4 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
       return await getRemoteBrowserUrl(target, branch, { signal })
     },
   }
-}
-
-function preferredGitHubRepoRef(remotes: Array<{ name: string; fetchUrl: string; pushUrl: string }>): GitHubRepoRef | null {
-  const githubRemotes = remotes
-    .map((remote) => ({ name: remote.name, repo: parseGitHubRemoteUrl(remote.fetchUrl) }))
-    .filter((remote): remote is { name: string; repo: GitHubRepoRef } => remote.repo !== null)
-  return pickPreferredRemote(githubRemotes)?.repo ?? null
-}
-
-function normalizeRequestedBranches(branches?: string[]): ReadonlySet<string> | undefined {
-  if (branches === undefined) return undefined
-  if (!Array.isArray(branches)) return undefined
-  return new Set(
-    branches.filter((branch): branch is string => {
-      return typeof branch === 'string' && branch.length > 0
-    }),
-  )
-}
-
-function pullRequestEntries(
-  prs: Map<string, PullRequestInfo> | null,
-): PullRequestEntry[] | null {
-  return prs ? Array.from(prs, ([branch, pullRequest]) => ({ branch, pullRequest })) : null
-}
-
-async function remotePullRequestRepoRef(target: RemoteRepoTarget, signal?: AbortSignal): Promise<GitHubRepoRef | null> {
-  const snapshot = await getRemoteSnapshot(target, { signal })
-  if (!snapshot?.remote?.hasGitHubRemote) return null
-  return preferredGitHubRepoRef(snapshot.remote.remotes)
 }

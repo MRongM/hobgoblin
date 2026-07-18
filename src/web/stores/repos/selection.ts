@@ -24,7 +24,6 @@ import type {
 import type { WorkspaceDetailPaneSizes } from '#/shared/workspace-layout.ts'
 import type { RepoState } from '#/web/stores/repos/types.ts'
 import { detailTabForWorktree } from '#/web/lib/detail-tabs.ts'
-import { runRepoRefreshIntent } from '#/web/stores/repos/refresh-coordinator.ts'
 function branchHasWorktree(repo: RepoState, branchName: string | null): boolean {
   return !!branchName && repo.data.branches.some((branch) => branch.name === branchName && !!branch.worktree?.path)
 }
@@ -404,14 +403,6 @@ function createRuntimeCoherentSelectionActions(
       })
       const repo = get().repos[id]
       if (changed && token !== undefined && repo) persistRestorableRepoSnapshot(set, repo, token)
-      if (changed && token !== undefined && repo) {
-        void runRepoRefreshIntent(get, {
-          kind: 'visible-pull-request-changed',
-          id,
-          token,
-          branch: repo.ui.detailTab === 'status' ? repo.ui.selectedBranch : null,
-        })
-      }
     },
 
     dismissExitedTerminalDetail(id: string, worktreePath: string, options?: { affectVisibleWorkspace?: boolean }) {
@@ -441,14 +432,6 @@ function createRuntimeCoherentSelectionActions(
       })
       const repo = get().repos[id]
       if (changed && token !== undefined && repo) persistRestorableRepoSnapshot(set, repo, token)
-      if (changed && token !== undefined && repo) {
-        void runRepoRefreshIntent(get, {
-          kind: 'visible-pull-request-changed',
-          id,
-          token,
-          branch: repo.ui.selectedBranch,
-        })
-      }
     },
 
     selectBranch(id: string, branch: string) {
@@ -468,14 +451,6 @@ function createRuntimeCoherentSelectionActions(
       })
       const repo = get().repos[id]
       if (changed && token !== undefined && repo) persistRestorableRepoSnapshot(set, repo, token)
-      if (changed && token !== undefined && repo) {
-        void runRepoRefreshIntent(get, {
-          kind: 'visible-pull-request-changed',
-          id,
-          token,
-          branch,
-        })
-      }
     },
   }
 }

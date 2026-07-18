@@ -80,6 +80,17 @@ describe('i18n dictionaries', () => {
     expect(zh['action.delete-branch']).toBe('删除分支')
   })
 
+  test('distinguishes internal and external terminal actions in every dictionary', () => {
+    expect(en['terminal.internal']).toBe('Internal terminal')
+    expect(en['terminal.external']).toBe('External terminal')
+    expect(zh['terminal.internal']).toBe('内部终端')
+    expect(zh['terminal.external']).toBe('外部终端')
+    expect(ja['terminal.internal']).toBe('内部ターミナル')
+    expect(ja['terminal.external']).toBe('外部ターミナル')
+    expect(ko['terminal.internal']).toBe('내부 터미널')
+    expect(ko['terminal.external']).toBe('외부 터미널')
+  })
+
   test('includes discard selected changes copy', () => {
     expect(en['changes.selection-toggle']).toBe('Select')
     expect(en['changes.selection-toggle-title']).toBe('Show selection checkboxes')

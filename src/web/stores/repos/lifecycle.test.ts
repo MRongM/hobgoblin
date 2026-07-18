@@ -136,9 +136,6 @@ describe('repo lifecycle', () => {
             draft.data.worktreesByPath = {
               [REPO_A]: { path: REPO_A, branch: 'stale', isMain: true, isDirty: true, changeCount: 1 },
             }
-            draft.resources.pullRequestsByBranch = {
-              stale: { phase: 'loading', loadedAt: null, error: null, stale: false, mode: 'full' },
-            }
             draft.ui.selectedBranch = 'stale'
             draft.ui.worktreePathOrder = [REPO_A]
             draft.remote.remotes = ['origin']
@@ -167,7 +164,6 @@ describe('repo lifecycle', () => {
       statusLoaded: false,
       worktreesByPath: {},
     })
-    expect(repo?.resources.pullRequestsByBranch).toEqual({})
     expect(repo?.ui.selectedBranch).toBeNull()
     expect(repo?.ui.worktreePathOrder).toEqual([])
     expect(repo?.remote).toMatchObject({

@@ -6,12 +6,13 @@ import {
   setServerRepoColorTheme,
   setServerFetchIntervalSec,
   setServerSessionState,
+  updateServerWebAccessSettings,
   updateServerSettingsPrefs,
 } from '#/server/modules/settings-source.ts'
 import type { ServerSettingsState } from '#/server/modules/settings-state.ts'
 import { resolveI18nSnapshot } from '#/shared/i18n/snapshot.ts'
 import { toSafeSessionRepoEntry } from '#/shared/input-validation.ts'
-import type { SessionState, SettingsPrefsUpdateResponse } from '#/shared/rpc.ts'
+import type { SessionState, SettingsPrefsUpdateResponse, WebAccessSettingsSnapshot } from '#/shared/rpc.ts'
 import type { RepoSessionEntry } from '#/shared/remote-repo.ts'
 import { repoSessionEntryId } from '#/shared/remote-repo.ts'
 import { settingsInvalidationScopesForPrefsPatch } from '#/shared/server-invalidation.ts'
@@ -27,7 +28,7 @@ export async function applyServerSettingsPrefsWrite(
   body: unknown,
   options: { acceptLanguage?: string; signal: AbortSignal },
 ): Promise<SettingsPrefsUpdateResponse> {
-  const patch = (((body as { settings?: unknown } | null)?.settings ?? {}) as Record<string, unknown>)
+  const patch = ((body as { settings?: unknown } | null)?.settings ?? {}) as Record<string, unknown>
   const settings = await updateServerSettingsPrefs(patch)
   publishSettingsInvalidation(settingsInvalidationScopesForPrefsPatch(patch))
   return {
@@ -38,6 +39,21 @@ export async function applyServerSettingsPrefsWrite(
       ? { externalApps: await buildServerExternalAppsSnapshot(settings, options.signal) }
       : {}),
   }
+}
+
+export async function applyServerWebAccessSettingsWrite(
+  body: unknown,
+  options: { revokeAllWebSessions: () => void },
+): Promise<{ ok: true; webAccess: WebAccessSettingsSnapshot }> {
+  const input = body as { enabled?: unknown; username?: unknown; password?: unknown } | null
+  const webAccess = await updateServerWebAccessSettings({
+    enabled: input?.enabled === true,
+    username: typeof input?.username === 'string' ? input.username : '',
+    ...(typeof input?.password === 'string' ? { password: input.password } : {}),
+  })
+  publishSettingsInvalidation(['settings-snapshot'])
+  options.revokeAllWebSessions()
+  return { ok: true, webAccess }
 }
 
 export function applyServerGlobalShortcutRegistrationWrite(

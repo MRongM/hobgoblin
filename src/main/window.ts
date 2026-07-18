@@ -17,6 +17,7 @@ import { createStartupDiagnostics, type StartupDiagnostics } from '#/main/startu
 import { getMainWindow as getRegisteredMainWindow } from '#/main/window-registry.ts'
 import {
   allowRendererWindowEntryUrl,
+  configureEmbeddedServerNavigationCapability,
   createRendererEntryUrl,
   createRendererWindowWebPreferences,
   disposeRendererBootstrapForWebPreferences,
@@ -172,6 +173,7 @@ async function createMainWindow(): Promise<BrowserWindow> {
   attachStartupDiagnostics(win, diagnostics, startupErrorPageState)
   attachRendererSurfaceWindow(win, { logLabel: 'window', surface: MAIN_WINDOW_SURFACE })
   const { url } = createRendererEntryUrl({ routePath: '/' })
+  const disposeNavigationCapability = configureEmbeddedServerNavigationCapability(win)
   allowRendererWindowEntryUrl(win, url.toString())
   // Persist bounds. We listen on both `resize` and `move` because the
   // user can do either independently. `getNormalBounds` returns the
@@ -187,6 +189,7 @@ async function createMainWindow(): Promise<BrowserWindow> {
   win.on('move', persistBounds)
 
   win.on('closed', () => {
+    disposeNavigationCapability()
     disposeRendererBootstrapForWebPreferences(webPreferences)
     detachRendererSurfaceWindow(win, MAIN_WINDOW_SURFACE)
   })

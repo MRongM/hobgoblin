@@ -13,8 +13,8 @@ import type {
 } from '#/shared/file-tree.ts'
 import type { RepoFileExportRequest, RepoFileExportResult } from '#/shared/file-tree-export.ts'
 import type { EditorOpenTarget } from '#/shared/file-path-target.ts'
-import type { CloneRepoResult, PullRequestEntry, RepoSnapshot } from '#/shared/rpc.ts'
-import type { CommitDetail, CommitHistoryEntry, ExecResult, PullRequestFetchMode, WorktreeStatus } from '#/shared/git-types.ts'
+import type { CloneRepoResult, RepoSnapshot } from '#/shared/rpc.ts'
+import type { CommitDetail, CommitHistoryEntry, ExecResult, WorktreeStatus } from '#/shared/git-types.ts'
 import type { ProbeResult } from '#/shared/rpc.ts'
 import type { CreateWorktreeInput } from '#/shared/worktree-create.ts'
 import type { WorktreeBootstrapDecision, WorktreeBootstrapPreviewResult } from '#/shared/worktree-bootstrap-summary.ts'
@@ -63,15 +63,6 @@ export async function getRepositoryCommitDetail(
   signal?: AbortSignal,
 ): Promise<CommitDetail | null> {
   return await postServerJson('/api/repo/commit-detail', { repoId, commit }, { signal })
-}
-
-export async function getRepositoryPullRequests(
-  cwd: string,
-  branches?: string[],
-  options?: { mode?: PullRequestFetchMode },
-  signal?: AbortSignal,
-): Promise<PullRequestEntry[] | null> {
-  return await postServerJson('/api/repo/pull-requests', { cwd, branches, options }, { signal })
 }
 
 export async function abortRepositoryOperation(cwd: string): Promise<boolean> {

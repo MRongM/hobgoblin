@@ -195,8 +195,8 @@ vi.mock('#/web/components/SplitPane.tsx', () => ({
       <button type="button" data-testid="resize-file-tree-pane" onClick={() => onAfterSizeChange?.(44.44)}>
         resize
       </button>
-      {before}
-      {after}
+      <div data-testid="split-pane-before">{before}</div>
+      <div data-testid="split-pane-after">{after}</div>
     </div>
   ),
 }))
@@ -251,6 +251,38 @@ describe('RepoExplorerPane', () => {
     expect(container.querySelector('[data-testid="project-tags-panel"]')).toBeNull()
     expect(container.querySelector('[data-testid="project-ports-panel"]')).toBeNull()
     expect(container.textContent).not.toContain('branches.empty')
+    await act(async () => root.unmount())
+  })
+
+  test('keeps desktop plain workspace chrome in the left pane beside the full-height terminal', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="left-right" showActions />)
+    })
+
+    const split = container.querySelector('[data-testid="split-pane"]')
+    const before = container.querySelector('[data-testid="split-pane-before"]')
+    const after = container.querySelector('[data-testid="split-pane-after"]')
+
+    expect(split?.getAttribute('data-orientation')).toBe('horizontal')
+    expect(before?.querySelector('[data-testid="sidebar-project-header"]')).toBeTruthy()
+    expect(before?.querySelector('[data-testid="project-file-tree"]')).toBeTruthy()
+    expect(before?.querySelector('[data-testid="statusbar"]')).toBeTruthy()
+    expect(before?.querySelector('[data-testid="plain-workspace-terminal"]')).toBeNull()
+    expect(after?.querySelector('[data-testid="plain-workspace-terminal"]')).toBeTruthy()
+    expect(after?.querySelector('[data-testid="sidebar-project-header"]')).toBeNull()
+    expect(after?.querySelector('[data-testid="statusbar"]')).toBeNull()
+
     await act(async () => root.unmount())
   })
 

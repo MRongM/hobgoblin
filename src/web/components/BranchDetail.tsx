@@ -36,7 +36,6 @@ function branchDetailRepoEqual(a: BranchDetailRepo | undefined, b: BranchDetailR
       a.ui.selectedBranch === b.ui.selectedBranch &&
       a.ui.detailTab === b.ui.detailTab &&
       a.resources.status === b.resources.status &&
-      a.resources.pullRequests === b.resources.pullRequests &&
       a.operations.branchAction === b.operations.branchAction &&
       a.operations.fetch === b.operations.fetch &&
       a.operations.manualRefresh === b.operations.manualRefresh &&
@@ -78,7 +77,6 @@ export function BranchDetail({
             },
             resources: {
               status: repo.resources.status,
-              pullRequests: repo.resources.pullRequests,
             },
             operations: {
               branchAction: repo.operations.branchAction,

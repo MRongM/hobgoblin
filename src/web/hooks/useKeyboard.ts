@@ -157,7 +157,7 @@ export function useKeyboard({
         }
         case 'pull':
         case 'push':
-        case 'terminal':
+        case 'externalTerminal':
         case 'editor':
         case 'remote': {
           if (overlayOpen || !repo || !repo.ui.selectedBranch) break

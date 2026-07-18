@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
     }),
     requestSingleInstanceLock: vi.fn(() => true),
     appSetPath: vi.fn(),
+    appendSwitch: vi.fn(),
     getAppPath: vi.fn(() => '/app'),
     getPath: vi.fn(() => '/tmp/goblin'),
     exit: vi.fn(),
@@ -51,6 +52,9 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('electron', () => ({
   app: {
+    commandLine: {
+      appendSwitch: mocks.appendSwitch,
+    },
     focus: vi.fn(),
     getAppPath: mocks.getAppPath,
     getPath: mocks.getPath,
@@ -158,6 +162,18 @@ describe('main process startup lifecycle', () => {
       'main-start',
       expect.objectContaining({ hasUserDataOverride: true }),
     )
+  })
+
+  test('configures the Chromium keychain policy before app readiness', async () => {
+    await import('#/main/main.ts')
+
+    if (process.platform !== 'darwin') {
+      expect(mocks.appendSwitch).not.toHaveBeenCalled()
+      return
+    }
+    expect(mocks.appendSwitch).toHaveBeenCalledTimes(1)
+    expect(mocks.appendSwitch).toHaveBeenCalledWith('use-mock-keychain')
+    expect(mocks.appendSwitch.mock.invocationCallOrder[0]).toBeLessThan(mocks.whenReady.mock.invocationCallOrder[0]!)
   })
 
   test('flushes settings and shortcut cleanup before exiting', async () => {

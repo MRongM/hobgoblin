@@ -3,7 +3,6 @@ export const EMBEDDED_SERVER_RPC_ROUTES = {
   'repo.clone': { route: '/api/repo/clone', method: 'POST' },
   'repo.abortClone': { route: '/api/repo/abort-clone', method: 'POST' },
   'repo.snapshot': { route: '/api/repo/snapshot', method: 'POST' },
-  'repo.pullRequests': { route: '/api/repo/pull-requests', method: 'POST' },
   'repo.status': { route: '/api/repo/status', method: 'POST' },
   'repo.remoteBranches': { route: '/api/repo/remote-branches', method: 'POST' },
   'repo.remoteTags': { route: '/api/repo/remote-tags', method: 'POST' },

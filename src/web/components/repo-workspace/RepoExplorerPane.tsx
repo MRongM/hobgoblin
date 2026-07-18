@@ -116,14 +116,12 @@ export function RepoExplorerPane({
   if (isPlainWorkspace) {
     return (
       <div data-file-tree-layout={layout} className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {!compact && <SidebarProjectHeader repoId={repoId} />}
         <PlainWorkspacePane
           repoId={repoId}
           layout={layout}
           revealRequest={activeRevealRequest}
           terminalPanel={plainWorkspaceTerminalPanel}
         />
-        {!compact && <StatusBar repoId={repoId} />}
       </div>
     )
   }
@@ -342,7 +340,7 @@ function ExplorerTabs({
         ) : activeVisibleTab === 'changes' ? (
           <ProjectChangesPanel repoId={repoId} onRevealPath={handleRevealPath} />
         ) : activeVisibleTab === 'status' ? (
-          <ProjectStatusPanel repoId={repoId} layout={layout} />
+          <ProjectStatusPanel repoId={repoId} />
         ) : activeVisibleTab === 'history' ? (
           <ProjectHistoryPanel repoId={repoId} onRevealPath={handleRevealPath} />
         ) : activeVisibleTab === 'local' ? (

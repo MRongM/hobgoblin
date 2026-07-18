@@ -1,7 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query'
 import type {
   ExternalAppsSnapshot,
-  GitHubCliState,
   RuntimeRecentReposState,
   RuntimeSettingsSnapshot,
   SessionState,
@@ -15,10 +14,6 @@ export function settingsSnapshotQueryKey() {
 
 export function externalAppsQueryKey() {
   return ['settings', 'external-apps'] as const
-}
-
-export function githubCliQueryKey(hosts?: string[]) {
-  return ['settings', 'github-cli', ...(hosts?.filter((host) => host.trim()).sort() ?? [])] as const
 }
 
 export function lanInfoQueryKey() {
@@ -71,13 +66,4 @@ export function updateExternalAppsCache(
   queryClient.setQueryData(externalAppsQueryKey(), (current: ExternalAppsSnapshot | undefined) =>
     current ? update(current) : current,
   )
-}
-
-export function updateGitHubCliCache(
-  queryClient: QueryClient,
-  hosts: string[] | undefined,
-  state: GitHubCliState,
-): void {
-  queryClient.setQueryData(githubCliQueryKey(hosts), state)
-  if (!hosts || hosts.length === 0) queryClient.setQueryData(githubCliQueryKey(), state)
 }

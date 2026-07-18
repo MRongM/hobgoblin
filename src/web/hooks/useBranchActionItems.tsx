@@ -5,7 +5,6 @@ import {
   ExternalLink,
   FolderPlus,
   GitBranch,
-  GitPullRequest,
   RefreshCw,
   Tag,
   Terminal,
@@ -18,12 +17,11 @@ import { GitLabLogoIcon } from '#/web/components/GitLabLogoIcon.tsx'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useT } from '#/web/stores/i18n.ts'
-import { EditorAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
+import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import { CreateTagDialog } from '#/web/components/CreateTagDialog.tsx'
 import { useBranchActions, type BranchActionItemId } from '#/web/hooks/useBranchActions.tsx'
 import { branchActionDisplayPhase, type BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
-import { branchPullRequestBelongsToBranch } from '#/shared/git-types.ts'
 import type { BrowserRemoteProvider } from '#/web/types.ts'
 import { useRuntimeExternalAppSettings } from '#/web/runtime-settings-external-apps.ts'
 import { useBranchWriteActions } from '#/web/hooks/useBranchWriteActions.tsx'
@@ -101,7 +99,14 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
   const syncAndRefresh = useReposStore((s) => s.syncAndRefresh)
   const submitBranchAction = useReposStore((s) => s.submitBranchAction)
   const setDetailCollapsed = useReposStore((s) => s.setDetailCollapsed)
-  const { editorApp, resolvedEditorApp, editorAvailable } = useRuntimeExternalAppSettings()
+  const {
+    terminalApp,
+    resolvedTerminalApp,
+    terminalAvailable,
+    editorApp,
+    resolvedEditorApp,
+    editorAvailable,
+  } = useRuntimeExternalAppSettings()
   const navigation = useMainWindowNavigation()
   const { blocked, busyAction, capabilities, actions, dialogs } = useBranchActions(repo, branch)
   const writeActions = useBranchWriteActions(repo, branch, {
@@ -131,9 +136,10 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
     if (itemPhase === 'queued' && queuedKey) return t(queuedKey)
     return t(loadingKey)
   }
-  const pullRequest =
-    branch.pullRequest && branchPullRequestBelongsToBranch(branch, branch.pullRequest) ? branch.pullRequest : undefined
-  const remoteIcon = pullRequest ? GitPullRequest : browserRemoteIcon(branchBrowserRemoteProvider(repo, branch))
+  const remoteIcon = browserRemoteIcon(branchBrowserRemoteProvider(repo, branch))
+  const isRemoteRepo = !!repo.remote.target
+  const showExternalTerminalAction = capabilities.canOpenTerminal && (isRemoteRepo || terminalAvailable)
+  const terminalIconPref = isRemoteRepo ? 'auto' : (resolvedTerminalApp ?? terminalApp)
   const terminalBase: TerminalSessionBase | null = branch.worktree?.path
     ? { repoRoot: repo.id, branch: branch.name, worktreePath: branch.worktree.path }
     : null
@@ -271,17 +277,29 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
     },
     {
       id: 'terminal',
-      label: t('terminal.new'),
-      title: t('terminal.new'),
-      ariaLabel: t('terminal.new'),
+      label: t('terminal.internal'),
+      title: t('terminal.internal'),
+      ariaLabel: t('terminal.internal'),
       disabled: disabled || !terminalBase,
       visible: true,
       icon: createElement(Terminal),
       onSelect: handleNewTerminal,
     },
     {
+      id: 'externalTerminal',
+      label: t('terminal.external'),
+      title: t('terminal.external'),
+      ariaLabel: t('terminal.external'),
+      disabled: disabled || !showExternalTerminalAction,
+      busy: busy('externalTerminal'),
+      visible: true,
+      shortcut: 'G',
+      icon: createElement(TerminalAppIcon, { pref: terminalIconPref }),
+      onSelect: actions.openExternalTerminal,
+    },
+    {
       id: 'remote',
-      label: pullRequest ? t('action.remote-pr', { n: pullRequest.number }) : t('action.remote'),
+      label: t('action.remote'),
       disabled: disabled || !capabilities.canOpenRemote,
       busy: busy('remote'),
       visible: true,
