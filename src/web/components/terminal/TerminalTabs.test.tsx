@@ -200,6 +200,101 @@ describe('TerminalTabs', () => {
     expect(document.body.textContent).not.toContain('terminal.close-all-confirm-title')
   })
 
+  test('confirms terminal tab context-menu close scopes before closing sessions', async () => {
+    const onClose = vi.fn()
+
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[
+          session({ key: 't1', selected: true, title: 'term-1' }),
+          session({ key: 't2', selected: false, title: 'term-2' }),
+          session({ key: 't3', selected: false, title: 'term-3' }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+
+    await clickTabContextMenuItem('t2', 'terminal.close-current')
+    expect(onClose).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('terminal.close-confirm-title')
+    clickElementByText('terminal.close-confirm-confirm')
+    expect(onClose.mock.calls).toEqual([['t2']])
+
+    onClose.mockClear()
+    await clickTabContextMenuItem('t2', 'terminal.close-others')
+    expect(onClose).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('terminal.close-others-confirm-title')
+    clickElementByText('terminal.close-others-confirm-confirm')
+    expect(onClose.mock.calls).toEqual([['t1'], ['t3']])
+
+    onClose.mockClear()
+    await clickTabContextMenuItem('t2', 'terminal.close-all')
+    expect(onClose).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('terminal.close-all-confirm-title')
+    clickElementByText('terminal.close-all-confirm-confirm')
+    expect(onClose.mock.calls).toEqual([['t1'], ['t2'], ['t3']])
+  })
+
+  test('cancels terminal tab context-menu close without closing sessions', async () => {
+    const onClose = vi.fn()
+
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[
+          session({ key: 't1', selected: true, title: 'term-1' }),
+          session({ key: 't2', selected: false, title: 'term-2' }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+
+    await clickTabContextMenuItem('t1', 'terminal.close-others')
+    clickElementByText('dialog.cancel')
+
+    expect(onClose).not.toHaveBeenCalled()
+    expect(document.body.textContent).not.toContain('terminal.close-others-confirm-title')
+  })
+
+  test('keeps close-other-terminals enabled on the compact selected tab when other sessions exist', async () => {
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        responsiveCompact
+        sessions={[
+          session({ key: 't1', selected: false, title: 'term-1' }),
+          session({ key: 't2', selected: true, title: 'term-2' }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    await openTabContextMenu('t2')
+
+    const closeOthers = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) =>
+      candidate.textContent?.includes('terminal.close-others'),
+    )
+    expect(closeOthers?.hasAttribute('data-disabled')).toBe(false)
+  })
+
   test('focuses the selected terminal after scrolling it to bottom', () => {
     const onScrollToBottom = vi.fn()
     const onSelect = vi.fn()
@@ -868,6 +963,28 @@ async function openCompactTerminalDropdown() {
   await act(async () => {
     trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
     trigger.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }))
+    await Promise.resolve()
+  })
+}
+
+async function clickTabContextMenuItem(sessionKey: string, label: string) {
+  await openTabContextMenu(sessionKey)
+  const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) =>
+    candidate.textContent?.includes(label),
+  )
+  if (!item) throw new Error(`missing terminal context menu item: ${label}`)
+  await act(async () => {
+    item.click()
+    await Promise.resolve()
+  })
+}
+
+async function openTabContextMenu(sessionKey: string) {
+  const tab = document.body.querySelector(`[data-terminal-tab-tooltip-id="${sessionKey}"]`)
+  if (!(tab instanceof HTMLElement)) throw new Error(`missing terminal tab: ${sessionKey}`)
+
+  await act(async () => {
+    tab.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
     await Promise.resolve()
   })
 }

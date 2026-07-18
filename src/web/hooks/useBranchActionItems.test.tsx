@@ -44,6 +44,7 @@ let terminalSnapshotsByWorktree: Map<string, WorktreeTerminalSnapshot>
 let closeTerminalAndDismissDetailIfLast: ReturnType<
   typeof vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>
 >
+let createTerminal: ReturnType<typeof vi.fn<TerminalSessionContextValue['createTerminal']>>
 
 vi.mock('#/web/runtime-settings-external-apps.ts', () => ({
   useRuntimeExternalAppSettings: mocks.useRuntimeExternalAppSettings,
@@ -133,6 +134,7 @@ describe('useBranchActionItems', () => {
       message: '[feature/commit abc1234] feat: inline commit',
     })
     terminalSnapshotsByWorktree = new Map()
+    createTerminal = vi.fn<TerminalSessionContextValue['createTerminal']>(async () => 't1')
     closeTerminalAndDismissDetailIfLast =
       vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>()
   })
@@ -167,6 +169,36 @@ describe('useBranchActionItems', () => {
 
     expect(itemIds).toContain('terminal')
     expect(itemIds).toContain('editor')
+  })
+
+  test('creates an internal terminal for the worktree without requiring an external terminal app', async () => {
+    const branch = createRepoBranch('feature/internal', { worktree: { path: '/tmp/repo-feature' } })
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      branches: [branch],
+      selectedBranch: branch.name,
+      detailTab: 'status',
+    })
+    useReposStore.setState({ detailCollapsed: true })
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
+    const groups = await renderItemGroups(useItems, repo, branch)
+    const terminal = groups.externalItems.find((item) => item.id === 'terminal')
+    if (!terminal) throw new Error('missing terminal action')
+
+    expect(terminal.disabled).toBe(false)
+
+    await act(async () => {
+      await terminal.onSelect()
+    })
+
+    expect(createTerminal).toHaveBeenCalledWith({
+      repoRoot: '/tmp/repo',
+      branch: 'feature/internal',
+      worktreePath: '/tmp/repo-feature',
+    })
+    expect(useReposStore.getState().repos['/tmp/repo']?.ui.detailTab).toBe('terminal')
+    expect(useReposStore.getState().detailCollapsed).toBe(false)
   })
 
   test('orders external actions first and keeps patch at the bottom of branch actions', async () => {
@@ -902,7 +934,7 @@ function terminalReadContextValue(): TerminalSessionReadContextValue {
 
 function terminalContextValue(): TerminalSessionContextValue {
   return {
-    createTerminal: async () => 't1',
+    createTerminal,
     selectTerminal: vi.fn(),
     scrollToBottom: vi.fn(),
     focusTerminal: vi.fn(),

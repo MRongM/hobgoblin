@@ -31,6 +31,11 @@ import { ToolbarClosableTab } from '#/web/components/tab-strip/ToolbarClosableTa
 import { toolbarTabButtonClassName, toolbarTabChromeClassName } from '#/web/components/tab-strip/tab-variants.ts'
 import { useFocusRegistry, type FocusRegistry } from '#/web/components/tab-strip/useFocusRegistry.ts'
 import { useSortableTab } from '#/web/components/tab-strip/useSortableTab.ts'
+import {
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+} from '#/web/components/ui/context-menu.tsx'
 
 interface TerminalTabsProps {
   worktreeTerminalKey: string
@@ -53,6 +58,9 @@ interface TerminalTabsProps {
 export const EMPTY_TERMINAL_TAB_FOCUS_KEY = '__terminal-empty__'
 
 const TERMINAL_TAB_TOOLTIP_SELECTOR = '[data-terminal-tab-tooltip-id]'
+
+type TerminalCloseScope = 'current' | 'others' | 'all'
+type PendingBulkClose = { kind: 'all' } | { kind: 'others'; targetKey: string }
 
 export function TerminalTabs({
   worktreeTerminalKey,
@@ -80,8 +88,12 @@ export function TerminalTabs({
   const prevSessionCountRef = useRef(sessions.length)
   const newButtonRef = useRef<HTMLButtonElement>(null)
   const [pendingCloseKey, setPendingCloseKey] = useState<string | null>(null)
-  const [bulkCloseConfirmOpen, setBulkCloseConfirmOpen] = useState(false)
+  const [pendingBulkClose, setPendingBulkClose] = useState<PendingBulkClose | null>(null)
   const pendingCloseSession = sessions.find((session) => session.key === pendingCloseKey) ?? null
+  const pendingBulkCloseKeys =
+    pendingBulkClose?.kind === 'others'
+      ? sessions.filter((session) => session.key !== pendingBulkClose.targetKey).map((session) => session.key)
+      : sessions.map((session) => session.key)
 
   useLayoutEffect(() => {
     if (sessions.length <= prevSessionCountRef.current) {
@@ -153,11 +165,19 @@ export function TerminalTabs({
   }, [focusRegistry, onClose, pendingCloseKey, sessions])
 
   const confirmBulkClose = useCallback(() => {
-    setBulkCloseConfirmOpen(false)
-    for (const key of sessions.map((session) => session.key)) {
+    setPendingBulkClose(null)
+    for (const key of pendingBulkCloseKeys) {
       onClose(key)
     }
-  }, [onClose, sessions])
+  }, [onClose, pendingBulkCloseKeys])
+
+  const requestContextClose = useCallback((scope: TerminalCloseScope, targetKey: string) => {
+    if (scope === 'current') {
+      setPendingCloseKey(targetKey)
+      return
+    }
+    setPendingBulkClose(scope === 'others' ? { kind: 'others', targetKey } : { kind: 'all' })
+  }, [])
 
   const handleTabKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLButtonElement>, sessionKey: string) => {
@@ -251,10 +271,12 @@ export function TerminalTabs({
             session={selectedSession}
             isActive={!!panelActive && selectedSession.selected}
             isSelected={selectedSession.selected}
+            contextSessionCount={sessions.length}
             tabId={`${detailId}-terminal-tab`}
             focusRegistry={focusRegistry}
             onSelect={handleSelect}
             onClose={handleClose}
+            onRequestClose={requestContextClose}
             onKeyDown={handleTabKeyDown}
             t={t}
           />
@@ -302,7 +324,11 @@ export function TerminalTabs({
               {t('terminal.new')}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="gap-2" variant="destructive" onSelect={() => setBulkCloseConfirmOpen(true)}>
+            <DropdownMenuItem
+              className="gap-2"
+              variant="destructive"
+              onSelect={() => setPendingBulkClose({ kind: 'all' })}
+            >
               <X size={14} />
               {t('terminal.close-all')}
             </DropdownMenuItem>
@@ -341,6 +367,7 @@ export function TerminalTabs({
                   focusRegistry={focusRegistry}
                   onSelect={handleSelect}
                   onClose={handleClose}
+                  onRequestClose={requestContextClose}
                   onKeyDown={handleTabKeyDown}
                   t={t}
                 />
@@ -382,12 +409,21 @@ export function TerminalTabs({
         onConfirm={confirmClose}
       />
       <ConfirmDialog
-        open={bulkCloseConfirmOpen}
+        open={pendingBulkClose?.kind === 'all'}
         title={t('terminal.close-all-confirm-title')}
         message={t('terminal.close-all-confirm-body', { count: sessions.length })}
         confirmLabel={t('terminal.close-all-confirm-confirm')}
         destructive
-        onCancel={() => setBulkCloseConfirmOpen(false)}
+        onCancel={() => setPendingBulkClose(null)}
+        onConfirm={confirmBulkClose}
+      />
+      <ConfirmDialog
+        open={pendingBulkClose?.kind === 'others'}
+        title={t('terminal.close-others-confirm-title')}
+        message={t('terminal.close-others-confirm-body', { count: pendingBulkCloseKeys.length })}
+        confirmLabel={t('terminal.close-others-confirm-confirm')}
+        destructive
+        onCancel={() => setPendingBulkClose(null)}
         onConfirm={confirmBulkClose}
       />
     </>
@@ -400,10 +436,12 @@ interface TerminalTabProps {
   isSelected: boolean
   index?: number
   total?: number
+  contextSessionCount?: number
   tabId: string
   focusRegistry: FocusRegistry<string, HTMLButtonElement>
   onSelect: (key: string) => void
   onClose: (event: React.MouseEvent, key: string) => void
+  onRequestClose: (scope: TerminalCloseScope, key: string) => void
   onKeyDown: (e: React.KeyboardEvent<HTMLButtonElement>, sessionKey: string) => void
   t: (key: string, params?: Record<string, string | number>) => string
 }
@@ -414,6 +452,7 @@ interface TerminalTabChromeProps {
   isSelected: boolean
   index?: number
   total?: number
+  contextSessionCount?: number
   isDragging?: boolean
   fillWidth?: boolean
   tabId: string
@@ -421,6 +460,7 @@ interface TerminalTabChromeProps {
   buttonProps?: ComponentPropsWithoutRef<'button'>
   onSelect: (key: string) => void
   onClose: (event: React.MouseEvent, key: string) => void
+  onRequestClose: (scope: TerminalCloseScope, key: string) => void
   onKeyDown: (e: React.KeyboardEvent<HTMLButtonElement>, sessionKey: string) => void
   t: (key: string, params?: Record<string, string | number>) => string
 }
@@ -431,6 +471,7 @@ function TerminalTabChrome({
   isSelected,
   index,
   total,
+  contextSessionCount,
   isDragging = false,
   fillWidth = false,
   tabId,
@@ -438,6 +479,7 @@ function TerminalTabChrome({
   buttonProps,
   onSelect,
   onClose,
+  onRequestClose,
   onKeyDown,
   t,
 }: TerminalTabChromeProps) {
@@ -464,6 +506,14 @@ function TerminalTabChrome({
         toolbarTabChromeClassName({ variant: 'terminal', active: isActive, dragging: isDragging }),
         fillWidth && 'w-full',
       )}
+      contextMenu={
+        <TerminalTabContextMenu
+          sessionKey={session.key}
+          sessionCount={contextSessionCount ?? total ?? 1}
+          onRequestClose={onRequestClose}
+          t={t}
+        />
+      }
       buttonRef={buttonRef}
       buttonProps={{
         ...buttonProps,
@@ -495,10 +545,12 @@ function TerminalTab({
   isSelected,
   index,
   total,
+  contextSessionCount,
   tabId,
   focusRegistry,
   onSelect,
   onClose,
+  onRequestClose,
   onKeyDown,
   t,
 }: TerminalTabProps) {
@@ -509,10 +561,12 @@ function TerminalTab({
       isSelected={isSelected}
       index={index}
       total={total}
+      contextSessionCount={contextSessionCount}
       tabId={tabId}
       buttonRef={focusRegistry.setRef(session.key)}
       onSelect={onSelect}
       onClose={onClose}
+      onRequestClose={onRequestClose}
       onKeyDown={onKeyDown}
       t={t}
     />
@@ -525,10 +579,12 @@ function SortableTerminalTab({
   isSelected,
   index,
   total,
+  contextSessionCount,
   tabId,
   focusRegistry,
   onSelect,
   onClose,
+  onRequestClose,
   onKeyDown,
   t,
 }: TerminalTabProps) {
@@ -546,6 +602,7 @@ function SortableTerminalTab({
         isSelected={isSelected}
         index={index}
         total={total}
+        contextSessionCount={contextSessionCount}
         isDragging={sortable.isDragging}
         fillWidth
         tabId={tabId}
@@ -553,6 +610,7 @@ function SortableTerminalTab({
         buttonProps={{ ...sortable.attributes, ...sortable.sortableListeners }}
         onSelect={onSelect}
         onClose={onClose}
+        onRequestClose={onRequestClose}
         onKeyDown={(e) => {
           sortable.sortableOnKeyDown?.(e)
           if (e.defaultPrevented || sortable.isDragging) return
@@ -561,6 +619,40 @@ function SortableTerminalTab({
         t={t}
       />
     </div>
+  )
+}
+
+function TerminalTabContextMenu({
+  sessionKey,
+  sessionCount,
+  onRequestClose,
+  t,
+}: {
+  sessionKey: string
+  sessionCount: number
+  onRequestClose: (scope: TerminalCloseScope, key: string) => void
+  t: (key: string, params?: Record<string, string | number>) => string
+}) {
+  return (
+    <ContextMenuContent>
+      <ContextMenuItem variant="destructive" onSelect={() => onRequestClose('current', sessionKey)}>
+        <X />
+        {t('terminal.close-current')}
+      </ContextMenuItem>
+      <ContextMenuItem
+        variant="destructive"
+        disabled={sessionCount <= 1}
+        onSelect={() => onRequestClose('others', sessionKey)}
+      >
+        <X />
+        {t('terminal.close-others')}
+      </ContextMenuItem>
+      <ContextMenuSeparator />
+      <ContextMenuItem variant="destructive" onSelect={() => onRequestClose('all', sessionKey)}>
+        <X />
+        {t('terminal.close-all')}
+      </ContextMenuItem>
+    </ContextMenuContent>
   )
 }
 

@@ -1,6 +1,7 @@
 import { X } from 'lucide-react'
 import type { ComponentPropsWithoutRef, ReactNode, Ref } from 'react'
 import { cn } from '#/web/lib/cn.ts'
+import { ContextMenu, ContextMenuTrigger } from '#/web/components/ui/context-menu.tsx'
 
 type DataAttributes = {
   [K in `data-${string}`]?: string | boolean | undefined
@@ -15,6 +16,7 @@ interface ToolbarClosableTabProps {
   containerProps?: ToolbarClosableTabContainerProps
   containerClassName: string
   overlay?: ReactNode
+  contextMenu?: ReactNode
   buttonRef?: Ref<HTMLButtonElement>
   buttonProps?: ToolbarClosableTabButtonProps
   buttonClassName?: string
@@ -30,6 +32,7 @@ export function ToolbarClosableTab({
   containerProps,
   containerClassName,
   overlay,
+  contextMenu,
   buttonRef,
   buttonProps,
   buttonClassName,
@@ -39,7 +42,7 @@ export function ToolbarClosableTab({
   onClose,
   children,
 }: ToolbarClosableTabProps) {
-  return (
+  const tab = (
     <div ref={containerRef} {...containerProps} className={containerClassName}>
       {overlay}
       <button
@@ -69,5 +72,14 @@ export function ToolbarClosableTab({
         <X size={14} />
       </button>
     </div>
+  )
+
+  if (!contextMenu) return tab
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{tab}</ContextMenuTrigger>
+      {contextMenu}
+    </ContextMenu>
   )
 }

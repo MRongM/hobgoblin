@@ -17,11 +17,8 @@ import type {
   TerminalDescriptor,
   WorktreeTerminalSnapshot,
 } from '#/web/components/terminal/types.ts'
-import { buildTerminalDeepLinkUrl } from '#/web/lib/terminal-deep-link.ts'
 import { MainWindowNavigationProvider, type MainWindowNavigationActions } from '#/web/main-window-navigation.tsx'
 import { emptyRendererBridgeBootstrap, setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
-import { lanInfoQueryKey } from '#/web/settings-query-cache.ts'
-import type { LanInfoWithQrCodes } from '#/web/settings-queries.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { emptyRepo } from '#/web/stores/repos/helpers.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
@@ -30,15 +27,6 @@ import type { RendererBridge } from '#/web/renderer-bridge-types.ts'
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 
 let compactUi = false
-
-const { openExternalUrlMock } = vi.hoisted(() => ({
-  openExternalUrlMock: vi.fn(async (_url: string) => ({ ok: true, message: '' })),
-}))
-
-vi.mock('#/web/app-shell-client.ts', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('#/web/app-shell-client.ts')>()),
-  openExternalUrl: (url: string) => openExternalUrlMock(url),
-}))
 
 vi.mock('#/web/hooks/useResponsiveUiMode.tsx', () => ({
   useIsCompactUi: () => compactUi,
@@ -272,65 +260,18 @@ describe('BranchDetailToolbar', () => {
     expect(focusButton).toBeNull()
   })
 
-  test('opens LAN QR dialog with one current terminal target per LAN URL', async () => {
-    const lanUrls = ['http://192.168.1.23:32200', 'http://10.0.0.8:32200']
+  test('does not render browser or LAN QR actions after they move to the status bar', () => {
     const { container: c } = renderToolbar({
       terminalCount: 2,
       detailTab: 'terminal',
       navigation: navigationWith({}),
-      lanInfo: { host: '0.0.0.0', port: 32200, lanUrls, qrCodes: {} },
     })
 
     const qrButton = c.querySelector<HTMLButtonElement>('button[aria-label="terminal.lan-qr"]')
-    expect(qrButton).not.toBeNull()
-
-    act(() => {
-      qrButton?.click()
-    })
-    await flush()
-
-    const urls = Array.from(document.body.querySelectorAll<HTMLElement>('[data-testid="terminal-lan-qr-url"]')).map(
-      (item) => item.textContent,
-    )
-    expect(urls).toEqual(
-      lanUrls.map((url) =>
-        buildTerminalDeepLinkUrl(url, {
-          repoId: REPO_ID,
-          worktreePath: WORKTREE_PATH,
-          branch: 'feature/worktree',
-          terminalId: 't1',
-        }),
-      ),
-    )
-    await flushUntil(() => document.body.querySelectorAll('[data-testid="terminal-lan-qr-image"]').length === 2)
-    expect(document.body.querySelectorAll('[data-testid="terminal-lan-qr-image"]')).toHaveLength(2)
-  })
-
-  test('opens the current terminal target in the browser via the loopback server URL', async () => {
-    openExternalUrlMock.mockClear()
-    const { container: c } = renderToolbar({
-      terminalCount: 2,
-      detailTab: 'terminal',
-      navigation: navigationWith({}),
-      lanInfo: { host: '0.0.0.0', port: 32215, lanUrls: [], qrCodes: {} },
-    })
-
     const browserButton = c.querySelector<HTMLButtonElement>('button[aria-label="terminal.open-in-browser"]')
-    expect(browserButton).not.toBeNull()
 
-    act(() => {
-      browserButton?.click()
-    })
-    await flush()
-
-    expect(openExternalUrlMock).toHaveBeenCalledWith(
-      buildTerminalDeepLinkUrl('http://127.0.0.1:32215', {
-        repoId: REPO_ID,
-        worktreePath: WORKTREE_PATH,
-        branch: 'feature/worktree',
-        terminalId: 't1',
-      }),
-    )
+    expect(qrButton).toBeNull()
+    expect(browserButton).toBeNull()
   })
 
   test('keeps terminal focus when pressing End on the compact terminal tab', async () => {
@@ -471,7 +412,6 @@ function renderToolbar(options: {
   detailFocusMode?: boolean
   collapsed?: boolean
   layout?: RepoWorkspaceLayout
-  lanInfo?: LanInfoWithQrCodes
 }): {
   container: HTMLDivElement
   terminalTab: HTMLButtonElement
@@ -574,10 +514,6 @@ function renderToolbar(options: {
   document.body.appendChild(container)
   root = createRoot(container)
   queryClient = new QueryClient()
-  queryClient.setQueryData(
-    lanInfoQueryKey(),
-    options.lanInfo ?? { host: '127.0.0.1', port: 32200, lanUrls: [], qrCodes: {} },
-  )
   act(() => {
     root!.render(
       <QueryClientProvider client={queryClient!}>

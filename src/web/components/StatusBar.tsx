@@ -14,6 +14,7 @@ import { Tip } from '#/web/components/Tip.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { ProjectThemeMenuConnected } from '#/web/components/repo-toolbar/ProjectThemeMenu.tsx'
 import { RepoActivityControl } from '#/web/components/repo-activity/RepoActivityControl.tsx'
+import { TerminalStatusActions } from '#/web/components/terminal/TerminalStatusActions.tsx'
 
 interface Props {
   repoId: string | null
@@ -55,6 +56,7 @@ export function StatusBar({ repoId, fileAreaCollapsed, onToggleFileArea }: Props
         </Tip>
       )}
       {repoId && <ProjectThemeMenuConnected repoId={repoId} />}
+      {repoId && <TerminalStatusActions repoId={repoId} />}
       {repoId && onToggleFileArea && fileAreaCollapsed !== undefined && (
         <Tip label={t(fileAreaCollapsed ? 'file-area.expand' : 'file-area.collapse')}>
           <Button
