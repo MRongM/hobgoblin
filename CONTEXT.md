@@ -20,6 +20,14 @@ _Avoid_: New terminal, embedded terminal
 An operating-system terminal application opened outside Hobgoblin at the selected worktree path.
 _Avoid_: Native terminal, system terminal
 
+**Project list**:
+The inline list of open projects shown beneath the sidebar project switcher.
+_Avoid_: Repo dropdown, project expanded list
+
+**Plain workspace**:
+A readable directory opened as a workspace without requiring Git metadata.
+_Avoid_: Non-Git repository
+
 **Web access protection**:
 The optional server-owned authentication gate for browser clients. When enabled, browser access requires configured web credentials while the Electron client continues to use its private internal capability.
 _Avoid_: Security mode, LAN password

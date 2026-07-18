@@ -36,6 +36,8 @@ function detailTabForSelection(repo: RepoState, tab: DetailTab, selectedBranch =
 type RestorableWorkspaceSelectionActions = Pick<
   ReposStore,
   | 'setActive'
+  | 'setProjectListExpanded'
+  | 'toggleProjectListExpanded'
   | 'reorderRepos'
   | 'cycleActive'
   | 'setDetailCollapsed'
@@ -79,6 +81,16 @@ function createRestorableWorkspaceSelectionActions(
           workspaceLayout: repo.ui.workspaceLayout,
         }
       })
+    },
+
+    setProjectListExpanded(expanded: boolean) {
+      set((state) =>
+        state.projectListExpanded === expanded ? state : { projectListExpanded: expanded },
+      )
+    },
+
+    toggleProjectListExpanded() {
+      set((state) => ({ projectListExpanded: !state.projectListExpanded }))
     },
 
     reorderRepos(fromId: string, toId: string) {

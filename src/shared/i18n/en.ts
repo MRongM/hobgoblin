@@ -77,6 +77,10 @@ export const en = {
   'topbar.open': 'Open',
   'topbar.settings': 'Settings (⌘,)',
 
+  // ---- Mobile ------------------------------------------------------------
+  'mobile.open-workspace': 'Open workspace',
+  'mobile.show-terminal': 'Show terminal',
+
   // ---- Dependencies -------------------------------------------------------
 
   // ---- Repository tabs ----------------------------------------------------

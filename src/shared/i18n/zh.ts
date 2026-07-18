@@ -69,6 +69,10 @@ export const zh: Record<DictKey, string> = {
   'topbar.open': '打开',
   'topbar.settings': '设置 (⌘,)',
 
+  // ---- Mobile -----------------------------------------------------------
+  'mobile.open-workspace': '打开工作区',
+  'mobile.show-terminal': '显示终端',
+
   // ---- Dependencies ------------------------------------------------------
 
   // ---- Repository tabs ---------------------------------------------------

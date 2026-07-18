@@ -12,6 +12,7 @@ import {
   DEFAULT_WORKSPACE_LAYOUT,
 } from '#/shared/workspace-layout.ts'
 import { qrCodeDataUrls } from '#/web/lib/qr-code-images.ts'
+import { DEFAULT_PROJECT_LIST_EXPANDED } from '#/shared/settings-defaults.ts'
 
 function initialSettingsSnapshot(): SettingsSnapshot | undefined {
   const initialSettings = getInitialBootstrap().initialSettings
@@ -25,6 +26,7 @@ function initialSettingsSnapshot(): SettingsSnapshot | undefined {
     session: {
       openRepos: [],
       activeRepo: null,
+      projectListExpanded: DEFAULT_PROJECT_LIST_EXPANDED,
       detailCollapsed: DEFAULT_DETAIL_COLLAPSED,
       detailFocusMode: false,
       workspaceLayout: DEFAULT_WORKSPACE_LAYOUT,

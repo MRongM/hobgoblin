@@ -62,7 +62,6 @@ import { useRepoStoreInvalidationRefresh } from '#/web/hooks/useRepoStoreInvalid
 import { useSettingsQueryInvalidationSync } from '#/web/settings-queries.ts'
 import { MainWindowNavigationProvider, useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import { useResponsiveUiMode } from '#/web/hooks/useResponsiveUiMode.tsx'
-import type { RepoWorkspaceMode } from '#/web/lib/workspace-layout.ts'
 import type { SettingsPage } from '#/shared/settings-pages.ts'
 
 interface AppProps {
@@ -145,7 +144,6 @@ export function App({ routeSettingsPage = null, onRouteSettingsPageChange }: App
                 visibleRepoId={visibleRepoId}
                 sessionReady={sessionReady}
                 workspaceLayout={workspaceLayout}
-                workspaceMode={workspaceBehavior.mode}
                 detailCollapsed={workspaceBehavior.detailCollapsed}
                 detailFocusMode={workspaceBehavior.detailFocusMode}
                 overlays={overlays}
@@ -167,7 +165,6 @@ interface MainWindowViewportProps {
   visibleRepoId: string | null
   sessionReady: boolean
   workspaceLayout: 'top-bottom' | 'left-right'
-  workspaceMode: RepoWorkspaceMode
   detailCollapsed: boolean
   detailFocusMode: boolean
   overlays: ReturnType<typeof useMainWindowShellState>['overlays']
@@ -182,7 +179,6 @@ interface MainWindowViewportContentProps {
   visibleRepoId: string | null
   sessionReady: boolean
   workspaceLayout: 'top-bottom' | 'left-right'
-  workspaceMode: RepoWorkspaceMode
   detailCollapsed: boolean
   detailFocusMode: boolean
   overlays: ReturnType<typeof useMainWindowShellState>['overlays']
@@ -201,7 +197,6 @@ function MainWindowViewport({
   visibleRepoId,
   sessionReady,
   workspaceLayout,
-  workspaceMode,
   detailCollapsed,
   detailFocusMode,
   overlays,
@@ -228,7 +223,6 @@ function MainWindowViewport({
         visibleRepoId={visibleRepoId}
         sessionReady={sessionReady}
         workspaceLayout={workspaceLayout}
-        workspaceMode={workspaceMode}
         detailCollapsed={detailCollapsed}
         detailFocusMode={detailFocusMode}
         overlays={overlays}
@@ -245,15 +239,15 @@ function MainWindowViewportContent({
   visibleRepoId,
   sessionReady,
   workspaceLayout,
-  workspaceMode,
   detailCollapsed,
   detailFocusMode,
   overlays,
 }: MainWindowViewportContentProps) {
   const uiMode = useResponsiveUiMode()
-  const visibleRepoUnavailable = useReposStore((state) =>
-    visibleRepoId ? state.repos[visibleRepoId]?.availability.phase === 'unavailable' : false,
-  )
+  const compactFocusEligible = useReposStore((state) => {
+    const repo = visibleRepoId ? state.repos[visibleRepoId] : undefined
+    return !!repo && repo.isGitRepo !== false && repo.availability.phase !== 'unavailable'
+  })
   if (routeSettingsPage) {
     return (
       <SettingsPageScreen
@@ -267,10 +261,10 @@ function MainWindowViewportContent({
   // Desktop has no global topbar while a repo is open — the sidebar's
   // project header and the detail toolbar form the window's top edge.
   // It comes back as a plain chrome strip (drag region + wordmark) when
-  // nothing is open. Compact UI keeps the classic repo tab strip except
-  // in focus mode, where the detail pane takes the whole viewport. Same
-  // rules for web and Electron so both shells look identical.
-  const showGlobalTopbar = compact ? workspaceMode !== 'focus' || visibleRepoUnavailable : !visibleRepoId
+  // nothing is open. Compact UI gives an available Git workspace the
+  // whole viewport; other workspace states keep the classic repo tab
+  // strip. Same rules for web and Electron so both shells look identical.
+  const showGlobalTopbar = compact ? !compactFocusEligible : !visibleRepoId
   return (
     <>
       {showGlobalTopbar && (

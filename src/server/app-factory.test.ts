@@ -119,6 +119,28 @@ describe('server app html bootstrap', () => {
     expect(html).toContain('打开本地仓库')
   }, 10_000)
 
+  test('keeps browser terminal ownership aligned with Electron while capabilities differ', async () => {
+    const { createApp } = await import('#/server/app-factory.ts')
+    const app = createApp({
+      version: '0.1.0',
+      startedAt: Date.now(),
+      internalSecret: 'secret',
+      terminalHost: terminalHostStub,
+    })
+
+    const electronResponse = await app.request('http://127.0.0.1:32100/', {
+      headers: { 'x-goblin-internal-secret': 'secret' },
+    })
+    const browserResponse = await app.request('http://127.0.0.1:32100/')
+    const electronHtml = await electronResponse.text()
+    const browserHtml = await browserResponse.text()
+    const electronServer = serverBootstrapFromHtml(electronHtml)
+    const browserServer = serverBootstrapFromHtml(browserHtml)
+
+    expect(browserServer.secret).not.toBe(electronServer.secret)
+    expect(browserServer.clientId).toBe(electronServer.clientId)
+  })
+
   test('resolves auto language from the first supported accept-language candidate', async () => {
     const { createApp } = await import('#/server/app-factory.ts')
     const app = createApp({
@@ -258,10 +280,15 @@ describe('server app html bootstrap', () => {
   })
 })
 
-function webCapabilityFromHtml(html: string): string {
+function serverBootstrapFromHtml(html: string): { secret: string; clientId: string } {
   const match = html.match(/<script id="goblin-bootstrap" type="application\/json">([^<]+)<\/script>/u)
   if (!match?.[1]) throw new Error('Missing renderer bootstrap')
-  const bootstrap = JSON.parse(match[1]) as { initialServer?: { secret?: string } }
+  const bootstrap = JSON.parse(match[1]) as { initialServer?: { secret?: string; clientId?: string } }
   if (!bootstrap.initialServer?.secret) throw new Error('Missing Web capability')
-  return bootstrap.initialServer.secret
+  if (!bootstrap.initialServer.clientId) throw new Error('Missing terminal client id')
+  return { secret: bootstrap.initialServer.secret, clientId: bootstrap.initialServer.clientId }
+}
+
+function webCapabilityFromHtml(html: string): string {
+  return serverBootstrapFromHtml(html).secret
 }

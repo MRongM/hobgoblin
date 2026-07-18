@@ -83,6 +83,7 @@ export interface SessionState {
   openRepos: RepoSessionEntry[]
   /** The active tab id — null when no repos were open. */
   activeRepo: string | null
+  projectListExpanded: boolean
   detailCollapsed: boolean
   detailFocusMode: boolean
   workspaceLayout: WorkspaceLayout

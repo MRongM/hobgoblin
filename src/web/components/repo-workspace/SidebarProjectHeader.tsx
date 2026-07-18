@@ -8,7 +8,17 @@
 //     the existing detail focus mode
 
 import { useId, useState } from 'react'
-import { ChevronDown, Download, FolderGit2, FolderOpen, PanelLeftClose, Plus, Server, Trash2 } from 'lucide-react'
+import {
+  ChevronDown,
+  Download,
+  FolderGit2,
+  FolderOpen,
+  PanelLeftClose,
+  PanelRightOpen,
+  Plus,
+  Server,
+  Trash2,
+} from 'lucide-react'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
@@ -30,12 +40,14 @@ import { cn } from '#/web/lib/cn.ts'
 
 interface Props {
   repoId: string
+  onShowCompactDetail?: () => void
 }
 
-export function SidebarProjectHeader({ repoId }: Props) {
+export function SidebarProjectHeader({ repoId, onShowCompactDetail }: Props) {
   const t = useT()
   const listId = useId()
-  const [listExpanded, setListExpanded] = useState(false)
+  const listExpanded = useReposStore((state) => state.projectListExpanded)
+  const toggleProjectListExpanded = useReposStore((state) => state.toggleProjectListExpanded)
   const [confirmClearCacheOpen, setConfirmClearCacheOpen] = useState(false)
   const navigation = useMainWindowNavigation()
   const shellActions = useShellOverlayActions()
@@ -88,7 +100,7 @@ export function SidebarProjectHeader({ repoId }: Props) {
           variant="ghost"
           size="sm"
           className="min-w-0 gap-1.5 px-1.5"
-          onClick={() => setListExpanded((expanded) => !expanded)}
+          onClick={toggleProjectListExpanded}
           aria-expanded={listExpanded}
           aria-controls={listExpanded ? listId : undefined}
           aria-label={t('repo-tabs.repos')}
@@ -146,11 +158,11 @@ export function SidebarProjectHeader({ repoId }: Props) {
           type="button"
           variant="ghost"
           size="icon-sm"
-          onClick={toggleDetailFocusMode}
-          aria-label={t('branch-detail.focus')}
-          title={t('branch-detail.focus-title')}
+          onClick={onShowCompactDetail ?? toggleDetailFocusMode}
+          aria-label={t(onShowCompactDetail ? 'mobile.show-terminal' : 'branch-detail.focus')}
+          title={t(onShowCompactDetail ? 'mobile.show-terminal' : 'branch-detail.focus-title')}
         >
-          <PanelLeftClose />
+          {onShowCompactDetail ? <PanelRightOpen /> : <PanelLeftClose />}
         </Button>
       </div>
       {listExpanded && (

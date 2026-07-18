@@ -19,6 +19,10 @@ const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENV
 const dndState = vi.hoisted(() => ({
   lastDragEnd: null as ((event: TestDragEndEvent) => void) | null,
 }))
+const navigationState = vi.hoisted(() => ({
+  selectRepoBranch: vi.fn(),
+  showRepoDetailTab: vi.fn(),
+}))
 
 vi.mock('#/web/stores/i18n.ts', () => ({
   useI18nStore: (selector: (state: { lang: string }) => string) => selector({ lang: 'zh' }),
@@ -38,8 +42,8 @@ vi.mock('#/web/stores/i18n.ts', () => ({
 
 vi.mock('#/web/main-window-navigation.tsx', () => ({
   useMainWindowNavigation: () => ({
-    selectRepoBranch: vi.fn(),
-    showRepoDetailTab: vi.fn(),
+    selectRepoBranch: navigationState.selectRepoBranch,
+    showRepoDetailTab: navigationState.showRepoDetailTab,
   }),
 }))
 
@@ -91,6 +95,8 @@ beforeEach(() => {
   originalScrollIntoView = Element.prototype.scrollIntoView
   Element.prototype.scrollIntoView = vi.fn()
   dndState.lastDragEnd = null
+  navigationState.selectRepoBranch.mockReset()
+  navigationState.showRepoDetailTab.mockReset()
   resetReposStore()
 })
 
@@ -162,6 +168,7 @@ function renderList(
     bellWorktreeKeys?: string[]
     countsByWorktreeKey?: Map<string, number>
     outputActiveWorktreeKeys?: string[]
+    onBranchSelected?: () => void
   } = {},
 ) {
   const readContext = terminalReadContextWithState(
@@ -172,13 +179,30 @@ function renderList(
   act(() => {
     root!.render(
       <TerminalSessionReadContext.Provider value={readContext}>
-        <BranchList repoId={REPO_ID} showActions={false} />
+        <BranchList repoId={REPO_ID} showActions={false} onBranchSelected={fixture.onBranchSelected} />
       </TerminalSessionReadContext.Provider>,
     )
   })
 }
 
 describe('BranchList worktree drag ordering', () => {
+  test('notifies compact presentation after branch navigation', () => {
+    seedWorktreeRepo()
+    const onBranchSelected = vi.fn()
+
+    renderList({ onBranchSelected })
+    const featureRow = Array.from(container?.querySelectorAll('li') ?? []).find((row) =>
+      row.textContent?.includes('feature/a'),
+    )
+    act(() => featureRow?.click())
+
+    expect(navigationState.selectRepoBranch).toHaveBeenCalledWith(REPO_ID, 'feature/a')
+    expect(onBranchSelected).toHaveBeenCalledTimes(1)
+    expect(navigationState.selectRepoBranch.mock.invocationCallOrder[0]).toBeLessThan(
+      onBranchSelected.mock.invocationCallOrder[0]!,
+    )
+  })
+
   test('renders branch names first and worktree paths as project directory names', () => {
     seedRepoState({
       id: REPO_ID,

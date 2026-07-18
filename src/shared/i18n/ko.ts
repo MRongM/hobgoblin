@@ -70,6 +70,10 @@ export const ko: Record<DictKey, string> = {
   'topbar.open': '열기',
   'topbar.settings': '설정 (⌘,)',
 
+  // ---- Mobile -----------------------------------------------------------
+  'mobile.open-workspace': '작업 영역 열기',
+  'mobile.show-terminal': '터미널 표시',
+
   // ---- Dependencies ------------------------------------------------------
 
   // ---- Repository tabs ---------------------------------------------------

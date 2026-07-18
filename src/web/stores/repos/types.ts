@@ -155,6 +155,8 @@ export interface RestorableWorkspaceState {
   order: string[]
   /** Active workspace tab restored from SessionState.activeRepo. */
   activeId: string | null
+  /** Global sidebar project-list expansion preference restored from SessionState. */
+  projectListExpanded: boolean
   detailCollapsed: boolean
   /** Persisted focus-toggle preference for the detail pane. This
    *  is not itself proof that the workspace is currently rendering in focus
@@ -184,6 +186,8 @@ export interface LocalWorkspaceActions {
 
 export interface RestorableWorkspaceActions {
   setActive: (id: string) => void
+  setProjectListExpanded: (expanded: boolean) => void
+  toggleProjectListExpanded: () => void
   /** Reorder the tab strip so `fromId` lands at `toId`'s position, using
    *  the same shift semantics as dnd-kit's `arrayMove` (the rest of the
    *  list closes the gap; later items shift up if `from < to`, down if

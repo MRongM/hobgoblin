@@ -77,6 +77,10 @@ export const ja: Record<DictKey, string> = {
   'topbar.open': '開く',
   'topbar.settings': '設定 (⌘,)',
 
+  // ---- Mobile -----------------------------------------------------------
+  'mobile.open-workspace': 'ワークスペースを開く',
+  'mobile.show-terminal': 'ターミナルを表示',
+
   // ---- Dependencies ------------------------------------------------------
 
   // ---- Repository tabs ---------------------------------------------------

@@ -40,7 +40,13 @@ vi.mock('#/web/runtime-settings-chrome.ts', () => ({
 // providers (commit drafts etc.); this suite only exercises the toolbar,
 // so the mock is just a placement marker.
 vi.mock('#/web/components/topbar/TopbarRepoControls.tsx', () => ({
-  TopbarRepoControls: () => <div data-testid="topbar-repo-controls" />,
+  TopbarRepoControls: ({
+    focusPresentation,
+    tone = 'topbar',
+  }: {
+    focusPresentation?: boolean
+    tone?: 'topbar' | 'toolbar'
+  }) => (focusPresentation ? <div data-testid="topbar-repo-controls" data-tone={tone} /> : null),
 }))
 
 vi.stubGlobal('requestAnimationFrame', ((cb: FrameRequestCallback) => {
@@ -333,6 +339,50 @@ describe('BranchDetailToolbar', () => {
     expect(c.querySelector('[data-testid="topbar-repo-controls"]')).toBeNull()
   })
 
+  test('compact focus presentation shows context controls without persisting focus mode', async () => {
+    compactUi = true
+    const onShowCompactExplorer = vi.fn()
+    const { container: c } = renderToolbar({
+      terminalCount: 0,
+      detailFocusMode: false,
+      compactFocusPresentation: true,
+      layout: 'top-bottom',
+      onShowCompactExplorer,
+      navigation: navigationWith({}),
+    })
+
+    const workspaceButton = c.querySelector<HTMLButtonElement>('button[aria-label="mobile.open-workspace"]')
+    expect(workspaceButton).not.toBeNull()
+    expect(c.querySelector('[data-testid="focus-project-switcher"]')).not.toBeNull()
+    expect(c.querySelector('[data-testid="topbar-repo-controls"]')).not.toBeNull()
+    expect(c.querySelector('button[aria-label="branch-detail.collapse"]')).toBeNull()
+
+    act(() => {
+      workspaceButton?.click()
+    })
+    await flush()
+
+    expect(onShowCompactExplorer).toHaveBeenCalledTimes(1)
+    expect(useReposStore.getState().detailFocusMode).toBe(false)
+    expect(useReposStore.getState().detailCollapsed).toBe(false)
+  })
+
+  test('compact context rail uses generic toolbar tone', () => {
+    compactUi = true
+    const { container: c } = renderToolbar({
+      terminalCount: 0,
+      compactFocusPresentation: true,
+      navigation: navigationWith({}),
+    })
+
+    const projectSwitcher = c.querySelector<HTMLButtonElement>('[data-testid="focus-project-switcher"]')
+    const projectChevron = projectSwitcher?.querySelectorAll('svg').item(1)
+    const repoControls = c.querySelector<HTMLElement>('[data-testid="topbar-repo-controls"]')
+    expect(projectChevron?.classList.contains('text-muted-foreground')).toBe(true)
+    expect(projectChevron?.classList.contains('text-topbar-muted-foreground')).toBe(false)
+    expect(repoControls?.dataset.tone).toBe('toolbar')
+  })
+
   test('focus switcher lists open projects and activates the selected one', async () => {
     const activateRepo = vi.fn()
     const { container: c } = renderToolbar({
@@ -410,6 +460,8 @@ function renderToolbar(options: {
   navigation: MainWindowNavigationActions
   detailTab?: 'status' | 'changes' | 'terminal'
   detailFocusMode?: boolean
+  compactFocusPresentation?: boolean
+  onShowCompactExplorer?: () => void
   collapsed?: boolean
   layout?: RepoWorkspaceLayout
 }): {
@@ -527,7 +579,9 @@ function renderToolbar(options: {
                 contentId="content"
                 collapsed={options.collapsed ?? false}
                 detailFocusMode={options.detailFocusMode ?? false}
+                compactFocusPresentation={options.compactFocusPresentation}
                 layout={options.layout ?? DEFAULT_WORKSPACE_LAYOUT}
+                onShowCompactExplorer={options.onShowCompactExplorer}
               />
             </TerminalSessionReadContext.Provider>
           </TerminalSessionContext.Provider>

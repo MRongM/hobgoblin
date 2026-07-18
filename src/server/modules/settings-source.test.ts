@@ -616,6 +616,25 @@ test('persists file tree pane sizes through session save and reload', async () =
   })
 })
 
+test('persists and normalizes the global project list expansion preference', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(
+    mod.setServerSessionState({
+      ...defaultSessionState(),
+      projectListExpanded: true,
+    }),
+  ).resolves.toMatchObject({ projectListExpanded: true })
+
+  await expect(
+    mod.setServerSessionState({
+      ...defaultSessionState(),
+      projectListExpanded: 'invalid' as never,
+    }),
+  ).resolves.toMatchObject({ projectListExpanded: false })
+})
+
 test('normalizes missing or invalid file tree pane sizes to defaults', async () => {
   useTempServerSettingsDir()
   const mod = await import('#/server/modules/settings-source.ts')

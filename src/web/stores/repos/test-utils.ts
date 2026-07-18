@@ -24,6 +24,7 @@ import {
   DEFAULT_WORKSPACE_LAYOUT,
   type WorkspaceDetailPaneSizes,
 } from '#/shared/workspace-layout.ts'
+import { DEFAULT_PROJECT_LIST_EXPANDED } from '#/shared/settings-defaults.ts'
 export type RpcTestHandler = (input: any) => unknown
 
 interface TerminalBridgeTestOutputs {
@@ -96,6 +97,7 @@ export function resetReposStore(): void {
     restorableRepoCache: {},
     order: [],
     activeId: null,
+    projectListExpanded: DEFAULT_PROJECT_LIST_EXPANDED,
     sessionReady: false,
     branchSearchQueries: {},
     detailCollapsed: DEFAULT_DETAIL_COLLAPSED,
@@ -540,6 +542,7 @@ export function seedRepoState(options: {
     restorableRepoCache: {},
     order: [options.id],
     activeId: options.id,
+    projectListExpanded: DEFAULT_PROJECT_LIST_EXPANDED,
     sessionReady: true,
     branchSearchQueries: {},
     detailCollapsed: DEFAULT_DETAIL_COLLAPSED,

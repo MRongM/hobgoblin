@@ -83,6 +83,7 @@ describe('repo selectors', () => {
       restorableWorkspaceStateFromStore({
         order: ['/tmp/repo'],
         activeId: '/tmp/repo',
+        projectListExpanded: true,
         detailCollapsed: false,
         detailFocusMode: true,
         workspaceLayout: 'top-bottom',
@@ -101,6 +102,7 @@ describe('repo selectors', () => {
     ).toEqual({
       order: ['/tmp/repo'],
       activeId: '/tmp/repo',
+      projectListExpanded: true,
       detailCollapsed: false,
       detailFocusMode: true,
       workspaceLayout: 'top-bottom',

@@ -51,6 +51,7 @@ import {
   DEFAULT_GLOBAL_SHORTCUT,
   DEFAULT_GLOBAL_SHORTCUT_DISABLED,
   DEFAULT_LANG_PREF,
+  DEFAULT_PROJECT_LIST_EXPANDED,
   DEFAULT_SESSION_DETAIL_FOCUS_MODE,
   DEFAULT_SHORTCUTS_DISABLED,
   DEFAULT_SWAP_CLOSE_SHORTCUTS,
@@ -399,6 +400,8 @@ function normalizeSession(value: unknown): SessionState {
   return {
     openRepos,
     activeRepo: activeRepo && openRepos.some((entry) => repoSessionEntryId(entry) === activeRepo) ? activeRepo : null,
+    projectListExpanded:
+      typeof partial.projectListExpanded === 'boolean' ? partial.projectListExpanded : DEFAULT_PROJECT_LIST_EXPANDED,
     detailCollapsed: effectiveDetailCollapsed(workspaceLayout, detailCollapsed),
     detailFocusMode,
     workspaceLayout,

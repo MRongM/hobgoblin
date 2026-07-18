@@ -86,7 +86,7 @@ describe('RepoWorkspaceSkeleton', () => {
     expect(container?.querySelector('[data-testid="mock-split-pane"]')).toBeNull()
   })
 
-  test('does not render a compact repository toolbar on small screens', () => {
+  test('renders only the detail pane on small screens when persisted focus is disabled', () => {
     render(
       <RepoWorkspaceSkeleton
         layout="top-bottom"
@@ -96,6 +96,9 @@ describe('RepoWorkspaceSkeleton', () => {
       />,
     )
 
+    expect(container?.querySelectorAll('li')).toHaveLength(8)
+    expect(container?.querySelectorAll('[data-testid="branch-list-skeleton-action"]')).toHaveLength(0)
+    expect(container?.querySelector('[data-testid="mock-split-pane"]')).toBeNull()
     expect(container?.querySelector('[data-testid="repo-toolbar-skeleton-pager"]')).toBeNull()
     expect(container?.querySelector('[data-testid="repo-toolbar-skeleton-branch-view"]')).toBeNull()
     expect(container?.querySelector('[data-testid="repo-toolbar-skeleton-branch-search"]')).toBeNull()

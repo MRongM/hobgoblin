@@ -569,6 +569,18 @@ describe('resetLayout', () => {
   })
 })
 
+describe('project list expansion', () => {
+  test('toggles one global expansion preference', () => {
+    expect(useReposStore.getState().projectListExpanded).toBe(false)
+
+    useReposStore.getState().toggleProjectListExpanded()
+    expect(useReposStore.getState().projectListExpanded).toBe(true)
+
+    useReposStore.getState().toggleProjectListExpanded()
+    expect(useReposStore.getState().projectListExpanded).toBe(false)
+  })
+})
+
 describe('setBranchSearchQuery', () => {
   test('updates runtime search without rewriting durable cache or changing selection', () => {
     seedRepo({ selectedBranch: 'feature/plain' })

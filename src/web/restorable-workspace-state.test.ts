@@ -18,6 +18,7 @@ describe('restorable-workspace-state', () => {
         restorableWorkspaceState: {
           order: [repo.id],
           activeId: repo.id,
+          projectListExpanded: true,
           detailCollapsed: false,
           detailFocusMode: true,
           workspaceLayout: 'left-right',
@@ -31,6 +32,7 @@ describe('restorable-workspace-state', () => {
     ).toEqual({
       openRepos: [localRepoSessionEntry('/tmp/repo')],
       activeRepo: '/tmp/repo',
+      projectListExpanded: true,
       detailCollapsed: false,
       detailFocusMode: true,
       workspaceLayout: 'left-right',
@@ -47,6 +49,7 @@ describe('restorable-workspace-state', () => {
       restoreRestorableWorkspaceStateFromSession({
         openRepos: [localRepoSessionEntry('/tmp/repo')],
         activeRepo: '/tmp/repo',
+        projectListExpanded: true,
         detailCollapsed: true,
         detailFocusMode: false,
         workspaceLayout: 'top-bottom',
@@ -58,6 +61,7 @@ describe('restorable-workspace-state', () => {
       }),
     ).toEqual({
       activeId: '/tmp/repo',
+      projectListExpanded: true,
       detailCollapsed: true,
       detailFocusMode: false,
       workspaceLayout: 'top-bottom',

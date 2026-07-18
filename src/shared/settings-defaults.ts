@@ -69,11 +69,13 @@ export const DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE: TerminalCustomButtonSize = 'me
 export const DEFAULT_TERMINAL_CUSTOM_BUTTONS: TerminalCustomButton[] = []
 export const DEFAULT_LAN_ENABLED = false
 export const DEFAULT_SERVER_PORT = 32200
+export const DEFAULT_PROJECT_LIST_EXPANDED = false
 
 export function defaultSessionState(): SessionState {
   return {
     openRepos: [],
     activeRepo: null,
+    projectListExpanded: DEFAULT_PROJECT_LIST_EXPANDED,
     detailCollapsed: DEFAULT_DETAIL_COLLAPSED,
     detailFocusMode: DEFAULT_DETAIL_FOCUS_MODE,
     workspaceLayout: DEFAULT_WORKSPACE_LAYOUT,

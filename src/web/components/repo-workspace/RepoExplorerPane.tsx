@@ -54,6 +54,8 @@ interface RepoExplorerPaneProps {
   plainWorkspaceTerminalPanel?: ReactNode
   fileAreaCollapsed?: boolean
   onToggleFileArea?: () => void
+  onShowCompactDetail?: () => void
+  onBranchSelected?: () => void
 }
 
 export function RepoExplorerPane({
@@ -64,6 +66,8 @@ export function RepoExplorerPane({
   plainWorkspaceTerminalPanel,
   fileAreaCollapsed = false,
   onToggleFileArea,
+  onShowCompactDetail,
+  onBranchSelected,
 }: RepoExplorerPaneProps) {
   const {
     activeTab,
@@ -99,18 +103,18 @@ export function RepoExplorerPane({
   )
   const handleTabChange = useCallback((tab: ExplorerTab) => setExplorerTab(repoId, tab), [repoId, setExplorerTab])
   const fileTreeSize = repoFileTreePaneSizes?.[layout] ?? defaultFileTreePaneSizes[layout]
-  const splitOrientation = layout === 'top-bottom' ? 'horizontal' : 'vertical'
-  const sideBySide = splitOrientation === 'horizontal'
   const activeRevealRequest = revealRequest?.repoId === repoId ? revealRequest : null
   const isPlainWorkspace = useReposStore((s) => {
     const repo = s.repos[repoId]
     return repoIsPlainWorkspace(repo)
   })
 
-  // Compact UI keeps the repo tab strip in the topbar, so the sidebar
-  // project header (window chrome + project switcher) only renders on
-  // desktop layouts.
+  // Compact focus presentation supplies its own explorer navigation, while
+  // legacy compact shells keep relying on the global topbar.
   const compact = useIsCompactUi()
+  const compactExplorerChrome = compact && !!onShowCompactDetail
+  const splitOrientation = compact ? 'vertical' : layout === 'top-bottom' ? 'horizontal' : 'vertical'
+  const sideBySide = splitOrientation === 'horizontal'
   const desktopFileAreaCollapsed = !compact && fileAreaCollapsed
 
   if (isPlainWorkspace) {
@@ -128,13 +132,15 @@ export function RepoExplorerPane({
 
   return (
     <div data-file-tree-layout={layout} className="flex min-h-0 min-w-0 flex-1 flex-col">
-      {!compact && <SidebarProjectHeader repoId={repoId} />}
+      {(!compact || compactExplorerChrome) && (
+        <SidebarProjectHeader repoId={repoId} onShowCompactDetail={compact ? onShowCompactDetail : undefined} />
+      )}
       <SplitPane
         orientation={splitOrientation}
         before={
           <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
             {!compact && <BranchSectionLabel />}
-            <BranchArea repoId={repoId} showActions={showActions} />
+            <BranchArea repoId={repoId} showActions={showActions} onBranchSelected={onBranchSelected} />
           </div>
         }
         after={
@@ -155,8 +161,12 @@ export function RepoExplorerPane({
         afterMaxSize="80%"
         className="min-h-0 flex-1"
       />
-      {!compact && (
-        <StatusBar repoId={repoId} fileAreaCollapsed={desktopFileAreaCollapsed} onToggleFileArea={onToggleFileArea} />
+      {(!compact || compactExplorerChrome) && (
+        <StatusBar
+          repoId={repoId}
+          fileAreaCollapsed={compact ? undefined : desktopFileAreaCollapsed}
+          onToggleFileArea={compact ? undefined : onToggleFileArea}
+        />
       )}
     </div>
   )
@@ -174,10 +184,18 @@ function BranchSectionLabel() {
   )
 }
 
-function BranchArea({ repoId, showActions }: { repoId: string; showActions: boolean }) {
+function BranchArea({
+  repoId,
+  showActions,
+  onBranchSelected,
+}: {
+  repoId: string
+  showActions: boolean
+  onBranchSelected?: () => void
+}) {
   return (
     <section className="flex min-h-0 flex-1 flex-col">
-      <BranchList repoId={repoId} showActions={showActions} />
+      <BranchList repoId={repoId} showActions={showActions} onBranchSelected={onBranchSelected} />
     </section>
   )
 }

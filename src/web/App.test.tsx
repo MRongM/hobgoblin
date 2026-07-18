@@ -219,13 +219,26 @@ describe('App shell topbar visibility', () => {
     expect(container?.querySelector('[data-testid="repo-tabs"]')).toBeNull()
   })
 
-  test('keeps the repo tab strip topbar in compact UI', async () => {
+  test('hides the compact topbar for an available Git project', async () => {
+    const repo = emptyRepo('/repo', 'repo')
+    useReposStore.setState({ repos: { '/repo': repo } })
     uiModeMock.mode = 'compact'
+    await renderApp({ runtime: 'web', workspaceMode: 'split' })
+
+    expect(container?.querySelector('[data-testid="global-topbar"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-tabs"]')).toBeNull()
+  })
+
+  test('keeps compact repo tabs visible for a plain workspace', async () => {
+    const repo = emptyRepo('/repo', 'repo')
+    repo.isGitRepo = false
+    useReposStore.setState({ repos: { '/repo': repo } })
+    uiModeMock.mode = 'compact'
+
     await renderApp({ runtime: 'web', workspaceMode: 'split' })
 
     expect(container?.querySelector('[data-testid="global-topbar"]')).not.toBeNull()
     expect(container?.querySelector('[data-testid="repo-tabs"]')).not.toBeNull()
-    expect(container?.querySelector('[data-testid="topbar-repo-controls"]')).not.toBeNull()
   })
 
   test('keeps settings and project theme entries in the compact topbar', async () => {
@@ -306,6 +319,8 @@ describe('App shell topbar visibility', () => {
   })
 
   test('hides the compact topbar in focus mode on both runtimes', async () => {
+    const repo = emptyRepo('/repo', 'repo')
+    useReposStore.setState({ repos: { '/repo': repo } })
     uiModeMock.mode = 'compact'
     await renderApp({ runtime: 'web', workspaceMode: 'focus' })
 

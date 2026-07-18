@@ -42,6 +42,7 @@ export function restorableWorkspaceStateFromStore(
     ReposStore,
     | 'order'
     | 'activeId'
+    | 'projectListExpanded'
     | 'detailCollapsed'
     | 'detailFocusMode'
     | 'workspaceLayout'
@@ -56,6 +57,7 @@ export function restorableWorkspaceStateFromStore(
   return {
     order: state.order,
     activeId: state.activeId,
+    projectListExpanded: state.projectListExpanded,
     detailCollapsed: state.detailCollapsed,
     detailFocusMode: state.detailFocusMode,
     workspaceLayout,

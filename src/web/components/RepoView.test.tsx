@@ -9,33 +9,73 @@ import { resetReposStore, seedRepoState, createRepoBranch } from '#/web/stores/r
 import { useReposStore } from '#/web/stores/repos/store.ts'
 
 vi.mock('#/web/components/BranchDetail.tsx', () => ({
-  BranchDetail: ({ onRevealPath }: { onRevealPath?: (relativePath: string) => void }) => (
-    <button type="button" data-testid="branch-detail" onClick={() => onRevealPath?.('src/from-terminal.ts')}>
-      branch detail
-    </button>
+  BranchDetail: ({
+    collapsed,
+    compactFocusPresentation,
+    onRevealPath,
+    onShowCompactExplorer,
+  }: {
+    collapsed?: boolean
+    compactFocusPresentation?: boolean
+    onRevealPath?: (relativePath: string) => void
+    onShowCompactExplorer?: () => void
+  }) => (
+    <>
+      <button
+        type="button"
+        data-testid="branch-detail"
+        data-collapsed={String(collapsed)}
+        data-compact-focus-presentation={String(compactFocusPresentation)}
+        onClick={() => onRevealPath?.('src/from-terminal.ts')}
+      >
+        branch detail
+      </button>
+      {onShowCompactExplorer && (
+        <button type="button" data-testid="show-compact-explorer" onClick={onShowCompactExplorer}>
+          show explorer
+        </button>
+      )}
+    </>
   ),
 }))
 
 vi.mock('#/web/components/repo-workspace/RepoExplorerPane.tsx', () => ({
   RepoExplorerPane: ({
+    showActions,
     revealRequest,
     plainWorkspaceTerminalPanel,
     fileAreaCollapsed,
     onToggleFileArea,
+    onShowCompactDetail,
+    onBranchSelected,
   }: {
+    showActions?: boolean
     revealRequest?: { relativePath: string } | null
     plainWorkspaceTerminalPanel?: ReactNode
     fileAreaCollapsed?: boolean
     onToggleFileArea?: () => void
+    onShowCompactDetail?: () => void
+    onBranchSelected?: () => void
   }) => (
     <div
       data-testid="repo-explorer-pane"
+      data-show-actions={String(showActions)}
       data-reveal-path={revealRequest?.relativePath ?? ''}
       data-file-area-collapsed={fileAreaCollapsed === undefined ? 'unset' : String(fileAreaCollapsed)}
     >
       {onToggleFileArea && (
         <button type="button" data-testid="toggle-file-area" onClick={onToggleFileArea}>
           toggle files
+        </button>
+      )}
+      {onShowCompactDetail && (
+        <button type="button" data-testid="show-compact-detail" onClick={onShowCompactDetail}>
+          show detail
+        </button>
+      )}
+      {onBranchSelected && (
+        <button type="button" data-testid="select-branch" onClick={onBranchSelected}>
+          select branch
         </button>
       )}
       {plainWorkspaceTerminalPanel}
@@ -62,8 +102,12 @@ const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENV
 beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   resetReposStore()
+  setCompactUi(true)
+})
+
+function setCompactUi(compact: boolean) {
   window.matchMedia = vi.fn((query: string) => ({
-    matches: query === '(max-width: 639px)',
+    matches: compact && query === '(max-width: 639px)',
     media: query,
     onchange: null,
     addListener: vi.fn(),
@@ -72,7 +116,7 @@ beforeEach(() => {
     removeEventListener: vi.fn(),
     dispatchEvent: vi.fn(),
   })) as typeof window.matchMedia
-})
+}
 
 afterEach(() => {
   act(() => {
@@ -85,6 +129,90 @@ afterEach(() => {
 })
 
 describe('RepoView', () => {
+  test('renders only detail for a compact Git repository with a selected worktree', () => {
+    seedRepoWithSelectedWorktree()
+
+    renderRepoView()
+
+    const detail = container?.querySelector('[data-testid="branch-detail"]')
+    expect(detail).not.toBeNull()
+    expect(detail?.getAttribute('data-collapsed')).toBe('false')
+    expect(detail?.getAttribute('data-compact-focus-presentation')).toBe('true')
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="split-pane"]')).toBeNull()
+  })
+
+  test('renders only explorer after the compact detail requests the workspace', async () => {
+    seedRepoWithSelectedWorktree()
+    renderRepoView()
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="show-compact-explorer"]')?.click()
+    })
+
+    expect(container?.querySelector('[data-testid="branch-detail"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="split-pane"]')).toBeNull()
+  })
+
+  test('keeps compact explorer actions visible when desktop focus preference is restored', async () => {
+    seedRepoWithSelectedWorktree()
+    useReposStore.setState({ detailFocusMode: true })
+    renderRepoView()
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="show-compact-explorer"]')?.click()
+    })
+
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-show-actions')).toBe(
+      'true',
+    )
+  })
+
+  test.each(['show-compact-detail', 'select-branch'])(
+    'returns to compact detail through the %s callback',
+    async (callbackTestId) => {
+      seedRepoWithSelectedWorktree()
+      renderRepoView()
+      await act(async () => {
+        container?.querySelector<HTMLButtonElement>('[data-testid="show-compact-explorer"]')?.click()
+      })
+
+      await act(async () => {
+        container?.querySelector<HTMLButtonElement>(`[data-testid="${callbackTestId}"]`)?.click()
+      })
+
+      expect(container?.querySelector('[data-testid="branch-detail"]')).not.toBeNull()
+      expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).toBeNull()
+    },
+  )
+
+  test('renders only explorer in compact mode when the selected branch has no worktree', () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main')],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+    })
+
+    renderRepoView()
+
+    expect(container?.querySelector('[data-testid="branch-detail"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="split-pane"]')).toBeNull()
+  })
+
+  test('keeps the existing split workspace in default UI mode', () => {
+    seedRepoWithSelectedWorktree()
+    setCompactUi(false)
+
+    renderRepoView()
+
+    expect(container?.querySelector('[data-testid="split-pane"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="branch-detail"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).not.toBeNull()
+  })
+
   test('does not mount branch detail for non-git local workspaces', () => {
     seedRepoState({
       id: REPO_ID,
@@ -187,7 +315,90 @@ describe('RepoView', () => {
     expect(container?.textContent).toContain('repo-unavailable.title')
   })
 
-  test('routes terminal reveal requests to the repository explorer', async () => {
+  test('routes compact terminal reveal requests to the repository explorer', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [
+        createRepoBranch('main'),
+        createRepoBranch('feature/a', { worktree: { path: `${REPO_ID}/feature-a` } }),
+      ],
+      currentBranch: 'main',
+      selectedBranch: 'feature/a',
+    })
+    useReposStore.setState({ workspaceLayout: 'top-bottom', detailCollapsed: true })
+
+    renderRepoView()
+
+    expect(container?.querySelector('[data-testid="branch-detail"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).toBeNull()
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="branch-detail"]')?.click()
+    })
+
+    expect(container?.querySelector('[data-testid="branch-detail"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-reveal-path')).toBe(
+      'src/from-terminal.ts',
+    )
+  })
+
+  test('does not replay a compact terminal reveal after returning through ordinary navigation', async () => {
+    seedRepoWithSelectedWorktree()
+    renderRepoView()
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="branch-detail"]')?.click()
+    })
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-reveal-path')).toBe(
+      'src/from-terminal.ts',
+    )
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="show-compact-detail"]')?.click()
+    })
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="show-compact-explorer"]')?.click()
+    })
+
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-reveal-path')).toBe('')
+  })
+
+  test('does not replay a compact terminal reveal after switching repositories and back', async () => {
+    const otherRepoId = `${REPO_ID}-other`
+    const firstRepo = seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main', { worktree: { path: REPO_ID } })],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+    })
+    const otherRepo = seedRepoState({
+      id: otherRepoId,
+      branches: [createRepoBranch('main', { worktree: { path: otherRepoId } })],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+    })
+    useReposStore.setState({
+      repos: { [REPO_ID]: firstRepo, [otherRepoId]: otherRepo },
+      order: [REPO_ID, otherRepoId],
+      activeId: REPO_ID,
+    })
+    renderRepoView()
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="branch-detail"]')?.click()
+    })
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-reveal-path')).toBe(
+      'src/from-terminal.ts',
+    )
+
+    rerenderRepoView(otherRepoId)
+    rerenderRepoView(REPO_ID)
+
+    expect(container?.querySelector('[data-testid="branch-detail"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).toBeNull()
+  })
+
+  test('routes desktop terminal reveal requests and expands the file area', async () => {
     seedRepoState({
       id: REPO_ID,
       branches: [createRepoBranch('main'), createRepoBranch('feature/a')],
@@ -195,7 +406,7 @@ describe('RepoView', () => {
       selectedBranch: 'feature/a',
     })
     useReposStore.setState({ workspaceLayout: 'top-bottom', detailCollapsed: true })
-
+    setCompactUi(false)
     renderRepoView()
 
     await act(async () => {
@@ -224,6 +435,7 @@ describe('RepoView', () => {
       currentBranch: 'main',
       selectedBranch: 'main',
     })
+    setCompactUi(false)
 
     renderRepoView()
 
@@ -300,12 +512,25 @@ function renderRepoView(repoId = REPO_ID) {
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
+  rerenderRepoView(repoId)
+}
+
+function rerenderRepoView(repoId: string) {
   act(() => {
     root!.render(
       <MainWindowNavigationProvider value={navigationWith({})}>
         <RepoView repoId={repoId} />
       </MainWindowNavigationProvider>,
     )
+  })
+}
+
+function seedRepoWithSelectedWorktree() {
+  seedRepoState({
+    id: REPO_ID,
+    branches: [createRepoBranch('main', { worktree: { path: REPO_ID } })],
+    currentBranch: 'main',
+    selectedBranch: 'main',
   })
 }
 

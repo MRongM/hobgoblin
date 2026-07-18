@@ -42,6 +42,7 @@ export function RepoWorkspaceSkeleton({
   layout = DEFAULT_WORKSPACE_LAYOUT,
   detailCollapsed = false,
   detailFocusMode = false,
+  compact = false,
 }: WorkspaceSkeletonProps) {
   const behavior = repoWorkspaceBehavior(layout, detailCollapsed, detailFocusMode)
   const detailPane = (
@@ -55,7 +56,7 @@ export function RepoWorkspaceSkeleton({
   )
   const workspaceMode = behavior.mode === 'collapsed' ? 'collapsed' : 'split'
   const workspaceBody =
-    behavior.mode === 'focus' ? (
+    compact || behavior.mode === 'focus' ? (
       detailPane
     ) : (
       <RepoWorkspace

@@ -1,7 +1,7 @@
 // Active-repo body. Split layouts render the branch area plus detail,
 // while focus mode renders detail directly under the global topbar.
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { BranchDetail } from '#/web/components/BranchDetail.tsx'
@@ -48,15 +48,29 @@ export function RepoView({ repoId }: Props) {
   const repo = useReposStore((s) => s.repos[repoId])
   useRepoToasts(repoId)
   const [fileAreaCollapsed, setFileAreaCollapsed] = useState(false)
+  const [compactExplorerRepoId, setCompactExplorerRepoId] = useState<string | null>(null)
   const [terminalRevealRequest, setTerminalRevealRequest] = useState<FileTreeRevealRequest | null>(null)
   const toggleFileArea = useCallback(() => setFileAreaCollapsed((collapsed) => !collapsed), [])
+  const showCompactExplorer = useCallback(() => {
+    setTerminalRevealRequest(null)
+    setCompactExplorerRepoId(repoId)
+  }, [repoId])
+  const showCompactDetail = useCallback(() => {
+    setTerminalRevealRequest(null)
+    setCompactExplorerRepoId(null)
+  }, [])
   const handleTerminalRevealPath = useCallback(
     (relativePath: string) => {
       setFileAreaCollapsed(false)
+      setCompactExplorerRepoId(repoId)
       setTerminalRevealRequest((current) => ({ id: (current?.id ?? 0) + 1, repoId, relativePath }))
     },
     [repoId],
   )
+  useEffect(() => {
+    setCompactExplorerRepoId(null)
+    setTerminalRevealRequest(null)
+  }, [repoId])
 
   const behavior = repoWorkspaceBehavior(layout, view.detailCollapsed, view.detailFocusMode)
   const detailPaneSize = view.detailPaneSizes[layout]
@@ -85,6 +99,42 @@ export function RepoView({ repoId }: Props) {
             revealRequest={terminalRevealRequest}
             plainWorkspaceTerminalPanel={repoUnavailable ? <UnavailableRepoView repo={repo} /> : undefined}
           />
+        </RepoWorkspacePane>
+      </section>
+    )
+  }
+
+  const selectedBranch = repo.data.branches.find((branch) => branch.name === repo.ui.selectedBranch)
+  const compactDetailAvailable = !!selectedBranch?.worktree?.path
+  const compactExplorerOpen = compactExplorerRepoId === repoId
+  const showCompactExplorerPane = compactExplorerOpen || !compactDetailAvailable
+
+  if (uiMode === 'compact' && !repoUnavailable) {
+    return (
+      <section className="relative flex min-w-0 flex-1 flex-col">
+        <RepoWorkspacePane>
+          {showCompactExplorerPane ? (
+            <RepoExplorerPane
+              repoId={repoId}
+              layout={layout}
+              showActions
+              revealRequest={terminalRevealRequest}
+              fileAreaCollapsed={fileAreaCollapsed}
+              onToggleFileArea={toggleFileArea}
+              onShowCompactDetail={showCompactDetail}
+              onBranchSelected={showCompactDetail}
+            />
+          ) : (
+            <BranchDetail
+              repoId={repoId}
+              layout={layout}
+              collapsed={false}
+              detailFocusMode={behavior.detailFocusMode}
+              compactFocusPresentation
+              onRevealPath={handleTerminalRevealPath}
+              onShowCompactExplorer={showCompactExplorer}
+            />
+          )}
         </RepoWorkspacePane>
       </section>
     )

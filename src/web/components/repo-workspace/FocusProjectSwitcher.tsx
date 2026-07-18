@@ -23,9 +23,10 @@ import { cn } from '#/web/lib/cn.ts'
 
 interface Props {
   repoId: string
+  compact?: boolean
 }
 
-export function FocusProjectSwitcher({ repoId }: Props) {
+export function FocusProjectSwitcher({ repoId, compact = false }: Props) {
   const t = useT()
   const navigation = useMainWindowNavigation()
   const activeName = useReposStore((s) => s.repos[repoId]?.name ?? '')
@@ -45,8 +46,21 @@ export function FocusProjectSwitcher({ repoId }: Props) {
           title={activeName}
         >
           <FolderGit2 className="size-4 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 max-w-40 truncate text-xs font-semibold uppercase tracking-wide">{activeName}</span>
-          <ChevronDown className="size-3.5 shrink-0 text-topbar-muted-foreground" aria-hidden="true" />
+          <span
+            className={cn(
+              'min-w-0 truncate text-xs font-semibold uppercase tracking-wide',
+              compact ? 'max-w-20' : 'max-w-40',
+            )}
+          >
+            {activeName}
+          </span>
+          <ChevronDown
+            className={cn(
+              'size-3.5 shrink-0',
+              compact ? 'text-muted-foreground' : 'text-topbar-muted-foreground',
+            )}
+            aria-hidden="true"
+          />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="max-h-72 w-max max-w-80 overflow-y-auto">

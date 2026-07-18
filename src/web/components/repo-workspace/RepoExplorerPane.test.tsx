@@ -75,7 +75,15 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
 }))
 
 vi.mock('#/web/components/BranchList.tsx', () => ({
-  BranchList: () => <div data-testid="branch-list" />,
+  BranchList: ({ onBranchSelected }: { onBranchSelected?: () => void }) => (
+    <div data-testid="branch-list">
+      {onBranchSelected && (
+        <button type="button" data-testid="mock-select-branch" onClick={onBranchSelected}>
+          select branch
+        </button>
+      )}
+    </div>
+  ),
 }))
 
 vi.mock('#/web/components/file-tree/ProjectFileTree.tsx', () => ({
@@ -141,8 +149,14 @@ vi.mock('#/web/components/repo-workspace/PlainWorkspaceTerminalPanel.tsx', () =>
 // Sidebar chrome — exercised by their own suites; the status bar pulls in
 // react-query (project theme menu) which this harness doesn't provide.
 vi.mock('#/web/components/repo-workspace/SidebarProjectHeader.tsx', () => ({
-  SidebarProjectHeader: ({ repoId }: { repoId: string }) => (
-    <div data-testid="sidebar-project-header" data-repo-id={repoId} />
+  SidebarProjectHeader: ({ repoId, onShowCompactDetail }: { repoId: string; onShowCompactDetail?: () => void }) => (
+    <div data-testid="sidebar-project-header" data-repo-id={repoId}>
+      {onShowCompactDetail && (
+        <button type="button" data-testid="mock-show-compact-detail" onClick={onShowCompactDetail}>
+          show detail
+        </button>
+      )}
+    </div>
   ),
 }))
 
@@ -635,6 +649,44 @@ describe('RepoExplorerPane', () => {
     expect(container.querySelector('[data-testid="split-pane"]')?.getAttribute('data-after-collapsed')).toBe('false')
     expect(container.querySelector('[data-testid="project-file-tree"]')).not.toBeNull()
     expect(container.querySelector('[data-testid="statusbar"]')).toBeNull()
+    await act(async () => root.unmount())
+  })
+
+  test('renders compact explorer chrome vertically and forwards branch selection to detail navigation', async () => {
+    compactUi = true
+    const onShowCompactDetail = vi.fn()
+    const onBranchSelected = vi.fn()
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <RepoExplorerPane
+          repoId={REPO_ID}
+          layout="top-bottom"
+          showActions
+          onShowCompactDetail={onShowCompactDetail}
+          onBranchSelected={onBranchSelected}
+        />,
+      )
+    })
+
+    expect(container.querySelector('[data-testid="sidebar-project-header"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="statusbar"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="statusbar"]')?.getAttribute('data-file-area-collapsed')).toBe(
+      'unset',
+    )
+    expect(container.querySelector('[data-testid="statusbar-file-area-toggle"]')).toBeNull()
+    expect(container.querySelector('[data-testid="split-pane"]')?.getAttribute('data-orientation')).toBe('vertical')
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="mock-select-branch"]')?.click()
+      container.querySelector<HTMLButtonElement>('[data-testid="mock-show-compact-detail"]')?.click()
+    })
+
+    expect(onBranchSelected).toHaveBeenCalledTimes(1)
+    expect(onShowCompactDetail).toHaveBeenCalledTimes(1)
     await act(async () => root.unmount())
   })
 

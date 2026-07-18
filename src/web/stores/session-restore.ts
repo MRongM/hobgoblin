@@ -13,10 +13,12 @@ import {
   DEFAULT_FILE_TREE_PANE_SIZES,
   DEFAULT_WORKSPACE_LAYOUT,
 } from '#/shared/workspace-layout.ts'
+import { DEFAULT_PROJECT_LIST_EXPANDED } from '#/shared/settings-defaults.ts'
 
 export const DEFAULT_RESTORABLE_SESSION_STATE: SessionState = {
   openRepos: [],
   activeRepo: null,
+  projectListExpanded: DEFAULT_PROJECT_LIST_EXPANDED,
   detailCollapsed: DEFAULT_DETAIL_COLLAPSED,
   detailFocusMode: false,
   workspaceLayout: DEFAULT_WORKSPACE_LAYOUT,

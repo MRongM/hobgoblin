@@ -133,6 +133,7 @@ describe('settings snapshot partitions', () => {
       session: {
         openRepos: [{ kind: 'local', id: '/tmp/repo-b' }],
         activeRepo: '/tmp/repo-b',
+        projectListExpanded: true,
         detailCollapsed: false,
         detailFocusMode: true,
         workspaceLayout: 'top-bottom',
@@ -166,6 +167,7 @@ describe('settings snapshot partitions', () => {
     expect(restorableSessionStateFromSettingsSnapshot(snapshot)).toEqual({
       openRepos: [{ kind: 'local', id: '/tmp/repo-b' }],
       activeRepo: '/tmp/repo-b',
+      projectListExpanded: true,
       detailCollapsed: false,
       detailFocusMode: true,
       workspaceLayout: 'top-bottom',

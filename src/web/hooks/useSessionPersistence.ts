@@ -8,6 +8,7 @@ const SESSION_SAVE_DEBOUNCE_MS = 200
 export function useSessionPersistence() {
   const activeId = useReposStore((s) => s.activeId)
   const order = useReposStore((s) => s.order)
+  const projectListExpanded = useReposStore((s) => s.projectListExpanded)
   const detailCollapsed = useReposStore((s) => s.detailCollapsed)
   const detailFocusMode = useReposStore((s) => s.detailFocusMode)
   const workspaceLayout = useReposStore((s) => (s.activeId ? s.repos[s.activeId]?.ui.workspaceLayout ?? s.workspaceLayout : s.workspaceLayout))
@@ -28,6 +29,7 @@ export function useSessionPersistence() {
       repos,
       order,
       activeId,
+      projectListExpanded,
       detailCollapsed,
       detailFocusMode,
       workspaceLayout,
@@ -43,6 +45,7 @@ export function useSessionPersistence() {
     const immediateKey = JSON.stringify({
       openRepos: session.openRepos,
       activeRepo: session.activeRepo,
+      projectListExpanded,
       detailCollapsed,
       detailFocusMode,
       workspaceLayout: restorableWorkspaceState.workspaceLayout,
@@ -68,6 +71,7 @@ export function useSessionPersistence() {
     sessionReady,
     order,
     activeId,
+    projectListExpanded,
     detailCollapsed,
     detailFocusMode,
     detailPaneSizes,

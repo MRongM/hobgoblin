@@ -42,6 +42,7 @@ function deriveServerClientId(secret: string): string {
 function buildWebBootstrap(
   requestUrl: string,
   webCapability: string,
+  terminalClientId: string,
   acceptLanguageHeader: string | null,
   langPref: LangPref,
   settings: Awaited<ReturnType<typeof getServerSettingsPrefs>>,
@@ -58,7 +59,7 @@ function buildWebBootstrap(
     server: toInitialServerSnapshot({
       url: `${origin}/`,
       secret: webCapability,
-      clientId: deriveServerClientId(webCapability),
+      clientId: terminalClientId,
     }),
   })
 }
@@ -87,11 +88,19 @@ function injectBootstrapIntoHtml(indexHtml: string, bootstrap: RendererBootstrap
 async function renderRendererIndexHtml(
   requestUrl: string,
   webCapability: string,
+  terminalClientId: string,
   acceptLanguageHeader: string | null,
 ): Promise<string> {
   await access(WEB_INDEX_HTML)
   const settings = await getServerSettingsPrefs()
-  const bootstrap = buildWebBootstrap(requestUrl, webCapability, acceptLanguageHeader, settings.lang, settings)
+  const bootstrap = buildWebBootstrap(
+    requestUrl,
+    webCapability,
+    terminalClientId,
+    acceptLanguageHeader,
+    settings.lang,
+    settings,
+  )
   return injectBootstrapIntoHtml(await readFile(WEB_INDEX_HTML, 'utf8'), bootstrap)
 }
 
@@ -103,6 +112,7 @@ function noStoreHtml(c: Context, html: string): Response {
 export function createApp(options: ServerAppOptions): Hono {
   const settingsState = createServerSettingsState()
   const webAccessAuth = createWebAccessAuth({ readCredentials: getServerWebAccessCredentials })
+  const terminalClientId = deriveServerClientId(options.internalSecret)
   const capabilityMiddleware = createInternalAuthMiddleware(options.internalSecret, {
     validateWebSession: webAccessAuth.validateToken,
   })
@@ -150,7 +160,12 @@ export function createApp(options: ServerAppOptions): Hono {
     try {
       return noStoreHtml(
         c,
-        await renderRendererIndexHtml(c.req.url, pageCapability, c.req.header('accept-language') ?? null),
+        await renderRendererIndexHtml(
+          c.req.url,
+          pageCapability,
+          terminalClientId,
+          c.req.header('accept-language') ?? null,
+        ),
       )
     } catch {
       return c.text('Not Found', 404)

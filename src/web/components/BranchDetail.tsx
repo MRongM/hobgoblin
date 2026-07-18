@@ -17,7 +17,9 @@ interface Props {
   layout?: RepoWorkspaceLayout
   collapsed?: boolean
   detailFocusMode?: boolean
+  compactFocusPresentation?: boolean
   onRevealPath?: (relativePath: string) => void
+  onShowCompactExplorer?: () => void
 }
 
 // Keep this equality in sync with fields read by BranchDetail children.
@@ -53,7 +55,9 @@ export function BranchDetail({
   layout = DEFAULT_WORKSPACE_LAYOUT,
   collapsed = false,
   detailFocusMode = false,
+  compactFocusPresentation = false,
   onRevealPath,
+  onShowCompactExplorer,
 }: Props) {
   const detailId = useId()
   const repo = useStoreWithEqualityFn(
@@ -115,8 +119,10 @@ export function BranchDetail({
           contentId={contentId}
           collapsed={collapsed}
           detailFocusMode={detailFocusMode}
+          compactFocusPresentation={compactFocusPresentation}
           layout={layout}
           onRevealPath={onRevealPath}
+          onShowCompactExplorer={onShowCompactExplorer}
         />
       ) : (
         <>
@@ -127,7 +133,9 @@ export function BranchDetail({
             contentId={contentId}
             collapsed={collapsed}
             detailFocusMode={detailFocusMode}
+            compactFocusPresentation={compactFocusPresentation}
             layout={layout}
+            onShowCompactExplorer={onShowCompactExplorer}
           />
           {!collapsed && (
             <BranchDetailContent
@@ -153,8 +161,10 @@ interface BranchShortcutHandlerProps {
   contentId: string
   collapsed: boolean
   detailFocusMode: boolean
+  compactFocusPresentation: boolean
   layout: RepoWorkspaceLayout
   onRevealPath?: (relativePath: string) => void
+  onShowCompactExplorer?: () => void
 }
 
 function BranchShortcutHandler({
@@ -165,8 +175,10 @@ function BranchShortcutHandler({
   contentId,
   collapsed,
   detailFocusMode,
+  compactFocusPresentation,
   layout,
   onRevealPath,
+  onShowCompactExplorer,
 }: BranchShortcutHandlerProps) {
   const actions = useBranchActionItems(repo, branch)
   useBranchActionShortcutRegistry(actions)
@@ -180,7 +192,9 @@ function BranchShortcutHandler({
         contentId={contentId}
         collapsed={collapsed}
         detailFocusMode={detailFocusMode}
+        compactFocusPresentation={compactFocusPresentation}
         layout={layout}
+        onShowCompactExplorer={onShowCompactExplorer}
       />
       {actions.dialogs}
       {!collapsed && (

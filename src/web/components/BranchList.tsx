@@ -39,6 +39,7 @@ import { detailPanelStoreActionsEqual, detailPanelStoreActionsFromStore } from '
 interface Props {
   repoId: string
   showActions?: boolean
+  onBranchSelected?: () => void
 }
 
 type OpenActionMenu = { repoId: string; branch: string }
@@ -80,7 +81,7 @@ function branchListRepoEqual(a: BranchListRepo | undefined, b: BranchListRepo | 
   )
 }
 
-export function BranchList({ repoId, showActions = true }: Props) {
+export function BranchList({ repoId, showActions = true, onBranchSelected }: Props) {
   const t = useT()
   const { setDetailCollapsed } = useStoreWithEqualityFn(
     useReposStore,
@@ -95,8 +96,9 @@ export function BranchList({ repoId, showActions = true }: Props) {
   const handleSelectBranch = useCallback(
     (branch: string) => {
       navigation.selectRepoBranch(repoId, branch)
+      onBranchSelected?.()
     },
-    [navigation, repoId],
+    [navigation, onBranchSelected, repoId],
   )
   const handleOpenBranchStatus = useCallback(
     (branch: string) => {

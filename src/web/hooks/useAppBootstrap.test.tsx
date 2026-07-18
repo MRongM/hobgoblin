@@ -37,6 +37,7 @@ describe('useAppBootstrap', () => {
     vi.spyOn(useSessionRestoreStore.getState(), 'hydrate').mockResolvedValue({
       openRepos: [{ kind: 'local', id: '/tmp/repo' }],
       activeRepo: '/tmp/repo',
+      projectListExpanded: true,
       detailCollapsed: true,
       detailFocusMode: true,
       workspaceLayout: 'left-right',
@@ -46,6 +47,7 @@ describe('useAppBootstrap', () => {
     vi.spyOn(useSessionRestoreStore.getState(), 'consumeBootSessionSnapshot').mockReturnValue({
       openRepos: [{ kind: 'local', id: '/tmp/repo' }],
       activeRepo: '/tmp/repo',
+      projectListExpanded: true,
       detailCollapsed: true,
       detailFocusMode: true,
       workspaceLayout: 'left-right',
@@ -57,6 +59,7 @@ describe('useAppBootstrap', () => {
     await render(<Harness />)
 
     const state = useReposStore.getState()
+    expect(state.projectListExpanded).toBe(true)
     expect(state.workspaceLayout).toBe('left-right')
     expect(state.detailCollapsed).toBe(true)
     expect(state.detailFocusMode).toBe(true)

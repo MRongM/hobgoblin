@@ -12,6 +12,7 @@ export function sessionStateFromRestorableWorkspaceState(input: {
   return {
     openRepos: persistedOpenWorkspaceEntries(restorableWorkspaceState.order, repos),
     activeRepo: persistedActiveRepoIdForSession(restorableWorkspaceState.activeId),
+    projectListExpanded: restorableWorkspaceState.projectListExpanded,
     detailCollapsed: restorableWorkspaceState.detailCollapsed,
     detailFocusMode: restorableWorkspaceState.detailFocusMode,
     workspaceLayout: restorableWorkspaceState.workspaceLayout,
@@ -33,6 +34,7 @@ export function restoreRestorableWorkspaceStateFromSession(
 ): Pick<
   RestorableWorkspaceState,
   | 'activeId'
+  | 'projectListExpanded'
   | 'detailCollapsed'
   | 'detailFocusMode'
   | 'workspaceLayout'
@@ -42,6 +44,7 @@ export function restoreRestorableWorkspaceStateFromSession(
 > {
   return {
     activeId,
+    projectListExpanded: session.projectListExpanded,
     detailCollapsed: session.detailCollapsed,
     detailFocusMode: session.detailFocusMode,
     workspaceLayout: session.workspaceLayout,

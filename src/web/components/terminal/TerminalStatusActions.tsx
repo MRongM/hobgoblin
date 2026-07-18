@@ -12,6 +12,8 @@ import { qrCodeDataUrls } from '#/web/lib/qr-code-images.ts'
 import { useLanInfoQuery } from '#/web/settings-queries.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
+import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
+import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
 
 interface Props {
   repoId: string
@@ -29,6 +31,13 @@ export function TerminalStatusActions({ repoId }: Props) {
     useReposStore,
     (state): TerminalStatusTarget | null => {
       const repo = state.repos[repoId]
+      const plainWorkspacePath = repoPlainWorkspacePath(repo)
+      if (plainWorkspacePath) {
+        return {
+          branch: NON_GIT_WORKSPACE_TERMINAL_BRANCH,
+          worktreePath: plainWorkspacePath,
+        }
+      }
       const branchName = repo?.ui.selectedBranch ?? repo?.data.currentBranch
       const branch = branchName ? repo?.data.branches.find((candidate) => candidate.name === branchName) : null
       const worktreePath = branch?.worktree?.path

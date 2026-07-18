@@ -32,10 +32,22 @@ interface Props {
   contentId: string
   collapsed: boolean
   detailFocusMode: boolean
+  compactFocusPresentation?: boolean
   layout: RepoWorkspaceLayout
+  onShowCompactExplorer?: () => void
 }
 
-export function BranchDetailToolbar({ repo, detail, detailId, contentId, collapsed, detailFocusMode, layout }: Props) {
+export function BranchDetailToolbar({
+  repo,
+  detail,
+  detailId,
+  contentId,
+  collapsed,
+  detailFocusMode,
+  compactFocusPresentation = false,
+  layout,
+  onShowCompactExplorer,
+}: Props) {
   const t = useT()
   const { setDetailCollapsed, toggleDetailCollapsed, toggleDetailFocusMode } = useStoreWithEqualityFn(
     useReposStore,
@@ -135,7 +147,9 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
         ? 'branch-detail.expand-title'
         : 'branch-detail.collapse-title',
   )
-  const showCollapseControl = behavior.detailCollapseAllowed && layout !== 'left-right'
+  const showCollapseControl =
+    !compactFocusPresentation && behavior.detailCollapseAllowed && layout !== 'left-right'
+  const contextRail = behavior.mode === 'focus' || compactFocusPresentation
   // In the desktop left-right layout this toolbar is the right half of the
   // window's top edge, so its unused surface is a drag region without the
   // traffic-light padding owned by `.topbar`. Focus mode hides the sidebar,
@@ -148,24 +162,27 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
       className={cn(layout === 'left-right' && '[-webkit-app-region:drag]', isWindowChrome && 'topbar')}
     >
       <div className="flex h-full min-w-0 items-center gap-1 overflow-hidden">
-        {/* Focus mode hides the sidebar, so its collapse control mirrors
-         * here at the window's top-left to bring the sidebar back, and the
-         * project switcher stays reachable as a dropdown next to it. */}
-        {isWindowChrome && (
+        {/* Keep workspace and branch context reachable whenever the detail
+         * toolbar is presented as the compact or desktop context rail. */}
+        {contextRail && (
           <>
             <Button
               variant="ghost"
               size="icon"
-              onClick={toggleDetailFocusMode}
-              aria-label={t('branch-detail.exit-focus')}
-              title={t('branch-detail.exit-focus-title')}
+              onClick={compactFocusPresentation ? onShowCompactExplorer : toggleDetailFocusMode}
+              aria-label={t(compactFocusPresentation ? 'mobile.open-workspace' : 'branch-detail.exit-focus')}
+              title={t(compactFocusPresentation ? 'mobile.open-workspace' : 'branch-detail.exit-focus-title')}
             >
               <PanelLeftOpen />
             </Button>
-            <FocusProjectSwitcher repoId={repo.id} />
-            {/* Focus-mode branch switcher / actions — previously topbar
-             * content; the component renders nothing outside focus mode. */}
-            <TopbarRepoControls repoId={repo.id} menuAlign="start" />
+            <FocusProjectSwitcher repoId={repo.id} compact={compactFocusPresentation} />
+            {/* Branch switcher / actions — previously topbar content. */}
+            <TopbarRepoControls
+              repoId={repo.id}
+              menuAlign="start"
+              focusPresentation={contextRail}
+              tone={compactFocusPresentation ? 'toolbar' : 'topbar'}
+            />
           </>
         )}
         {terminalWorktreeKey && (
@@ -175,7 +192,7 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
             detailId={detailId}
             responsiveCompact={compact}
             panelActive={activeDetailTab === 'terminal'}
-            focusMode={detailFocusMode}
+            focusMode={contextRail}
             focusRegistry={terminalTabFocusRegistry}
             emptyFocusKey={EMPTY_TERMINAL_TAB_FOCUS_KEY}
             onNew={handleNewTerminal}
@@ -202,7 +219,9 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
         }
       />
       <div className="flex shrink-0 items-center gap-1">
-        {layout === 'top-bottom' && <div className="mx-1 h-4 w-px bg-separator/70" aria-hidden="true" />}
+        {!compactFocusPresentation && layout === 'top-bottom' && (
+          <div className="mx-1 h-4 w-px bg-separator/70" aria-hidden="true" />
+        )}
         {showCollapseControl && (
           <Button
             variant="ghost"
