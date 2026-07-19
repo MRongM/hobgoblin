@@ -69,16 +69,13 @@ describe('TerminalSessionRuntime', () => {
     expect(runtime.handleOutput({ sessionId: 'session-1', data: 'old', seq: 1, processName: 'zsh' })).toEqual({
       changed: false,
       output: null,
-      summaryChanged: false,
     })
     expect(runtime.handleOutput({ sessionId: 'session-1', data: 'new', seq: 3, processName: 'bash' })).toEqual({
       changed: true,
       output: null,
-      summaryChanged: false,
     })
     expect(runtime.processName()).toBe('bash')
     expect(runtime.finishReplay()).toEqual([{ sessionId: 'session-1', data: 'new', seq: 3, processName: 'bash' }])
-    expect(runtime.snapshot().outputSummary).toBe('new')
 
     expect(
       runtime.handleOwnership({
@@ -145,7 +142,6 @@ describe('TerminalSessionRuntime', () => {
     expect(runtime.handleOutput({ sessionId: 'session-1', data: 'live', seq: 3, processName: 'zsh' })).toEqual({
       changed: false,
       output: null,
-      summaryChanged: false,
     })
     expect(runtime.finishReplay(firstGeneration)).toEqual([])
     expect(runtime.isReplaying()).toBe(true)
@@ -154,7 +150,6 @@ describe('TerminalSessionRuntime', () => {
       { sessionId: 'session-1', data: 'live', seq: 3, processName: 'zsh' },
     ])
     expect(runtime.isReplaying()).toBe(false)
-    expect(runtime.snapshot().outputSummary).toBe('live')
   })
 
   test('preserves server-provided title when attaching an existing session', () => {
@@ -217,7 +212,6 @@ describe('TerminalSessionRuntime', () => {
     expect(runtime.handleOutput({ sessionId: 'session-remote', data: 'tick', seq: 1, processName: 'node' })).toEqual({
       changed: false,
       output: 'tick',
-      summaryChanged: true,
     })
   })
 

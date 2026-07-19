@@ -14,10 +14,7 @@ import type {
 } from '#/shared/terminal.ts'
 import { branchForTerminalWorktree } from '#/web/components/terminal/terminal-repo-index.ts'
 import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
-import {
-  DEFAULT_TERMINAL_FONT_FAMILY,
-  measureTerminalGeometry,
-} from '#/web/components/terminal/terminal-geometry.ts'
+import { DEFAULT_TERMINAL_FONT_FAMILY, measureTerminalGeometry } from '#/web/components/terminal/terminal-geometry.ts'
 import type { TerminalThemeMode } from '#/web/components/terminal/terminal-theme.ts'
 import type {
   TerminalDescriptor,
@@ -670,7 +667,7 @@ export class TerminalSessionRegistry {
     this.sessionKeyBySessionId.set(sessionId, key)
   }
 
-  private notifySession(key: string, reason: 'metadata' | 'outputSummary' = 'metadata'): void {
+  private notifySession(key: string): void {
     const session = this.sessions.get(key)
     this.syncSessionIdIndex(key, session?.currentSessionId() ?? null)
     if (session) {
@@ -679,10 +676,8 @@ export class TerminalSessionRegistry {
       this.snapshotCache.delete(key)
     }
     this.notifySnapshot(key)
-    if (reason !== 'outputSummary') {
-      const worktreeTerminalKey = session?.descriptor.worktreeTerminalKey
-      if (worktreeTerminalKey) this.notifyWorktree(worktreeTerminalKey)
-    }
+    const worktreeTerminalKey = session?.descriptor.worktreeTerminalKey
+    if (worktreeTerminalKey) this.notifyWorktree(worktreeTerminalKey)
   }
 
   private removeSession(key: string, options: { dispose: boolean; closeSession?: boolean }): boolean {
@@ -763,7 +758,7 @@ export class TerminalSessionRegistry {
     }
     const session = new ManagedTerminalSession(
       descriptor,
-      (reason) => this.notifySession(descriptor.key, reason),
+      () => this.notifySession(descriptor.key),
       this.bellController.handleBell,
       this.terminalFontSize,
       this.terminalFontFamily,

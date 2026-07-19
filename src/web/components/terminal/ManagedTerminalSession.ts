@@ -33,8 +33,6 @@ import type {
 const RESIZE_DEBOUNCE_MS = 80
 const EMPTY_SEARCH_RESULT: TerminalSearchResult = { resultIndex: -1, resultCount: 0, found: false }
 
-export type TerminalNotifyReason = 'metadata' | 'outputSummary'
-
 type TerminalAttachResultWithOwnership = Extract<TerminalAttachResult, { ok: true }> & {
   role: TerminalOwnershipViewModel['role']
   controllerStatus: TerminalOwnershipViewModel['controllerStatus']
@@ -42,7 +40,7 @@ type TerminalAttachResultWithOwnership = Extract<TerminalAttachResult, { ok: tru
 
 export class ManagedTerminalSession {
   descriptor: TerminalDescriptor
-  private readonly notify: (reason: TerminalNotifyReason) => void
+  private readonly notify: () => void
   private readonly onBell: ((descriptor: TerminalDescriptor, event: TerminalBellEvent) => void) | null
   private readonly onInput: ((descriptor: TerminalDescriptor) => void) | null
   private readonly runtime = new TerminalSessionRuntime()
@@ -63,7 +61,7 @@ export class ManagedTerminalSession {
 
   constructor(
     descriptor: TerminalDescriptor,
-    notify: (reason: TerminalNotifyReason) => void,
+    notify: () => void,
     onBell: ((descriptor: TerminalDescriptor, event: TerminalBellEvent) => void) | null = null,
     fontSize = DEFAULT_TERMINAL_FONT_SIZE,
     fontFamily = DEFAULT_TERMINAL_FONT_FAMILY,
@@ -74,15 +72,18 @@ export class ManagedTerminalSession {
     this.notify = notify
     this.onBell = onBell
     this.onInput = onInput
-    this.view = new TerminalSessionView({
-      onInput: (data) => this.writeInput(data),
-      onBell: () => this.handleBell(),
-      onResize: ({ cols, rows }) => this.queueResize(cols, rows),
-      onSearchResult: (event) => this.updateSearchResult(event),
-      onProgress: (state, value) => this.updateProgress(state, value),
-      onOpenExternalLink: (uri) => this.openExternalLink(uri),
-      onRenderRecoveryRequest: () => this.recoverActiveView(),
-    }, { fontSize, fontFamily, terminalThemeMode })
+    this.view = new TerminalSessionView(
+      {
+        onInput: (data) => this.writeInput(data),
+        onBell: () => this.handleBell(),
+        onResize: ({ cols, rows }) => this.queueResize(cols, rows),
+        onSearchResult: (event) => this.updateSearchResult(event),
+        onProgress: (state, value) => this.updateProgress(state, value),
+        onOpenExternalLink: (uri) => this.openExternalLink(uri),
+        onRenderRecoveryRequest: () => this.recoverActiveView(),
+      },
+      { fontSize, fontFamily, terminalThemeMode },
+    )
     this.view.setWorktreePath(descriptor.worktreePath)
   }
 
@@ -108,13 +109,8 @@ export class ManagedTerminalSession {
     this.view.setRevealPathHandler(handlers?.onRevealPath ?? null)
     this.view.setOpenPathInEditorHandler(handlers?.onOpenPathInEditor ?? null)
     this.view.attach(host)
-    if (this.runtime.canResize()) {
-      if (this.view.currentTerminal()) {
-        this.view.fitSoon()
-      } else {
-        this.start()
-      }
-    }
+    if (!this.view.currentTerminal()) this.start()
+    else this.view.fitSoon()
     this.flushPendingFocus()
   }
 
@@ -139,7 +135,7 @@ export class ManagedTerminalSession {
     if (this.disposed) return
     const { changed } = this.runtime.prepareRestart()
     this.destroyActiveView()
-    if (changed) this.notify('metadata')
+    if (changed) this.notify()
     this.start()
   }
 
@@ -168,7 +164,7 @@ export class ManagedTerminalSession {
     if (typeof input !== 'string' && isTerminalEmulatorInput(input) && this.runtime.isReplaying()) return
     const data = typeof input === 'string' ? input : input.data
     const sessionId = this.runtime.currentSessionId()
-    if (!sessionId) return
+    if (!sessionId || !this.runtime.canWrite()) return
     this.onInput?.(this.descriptor)
     this.pendingWriteBuffer += data
     this.scheduleInputFlush()
@@ -185,22 +181,14 @@ export class ManagedTerminalSession {
 
   private flushInput(): void {
     if (this.disposed) return
-    const sessionId = this.runtime.currentSessionId()
-    if (!sessionId) return
     const data = this.pendingWriteBuffer
     this.pendingWriteBuffer = ''
-    if (!data) return
+    if (!data || !this.runtime.currentSessionId() || !this.runtime.canWrite()) return
     void writeWithTerminalAuthority({
       data,
       getSessionId: () => this.runtime.currentSessionId(),
       getAttachment: () => this.runtime.snapshot().attachment,
-      currentSize: () => this.currentViewSize(),
       bridge: terminalBridge,
-      applyTakeover: (result) => {
-        const changed = this.runtime.applyTakeoverResult(result)
-        const pendingCleared = this.runtime.clearTakeoverPending()
-        if (changed || pendingCleared) this.notify('metadata')
-      },
     }).catch(() => {})
   }
 
@@ -247,6 +235,7 @@ export class ManagedTerminalSession {
     snapshotSeq?: number
     windowsPty?: TerminalWindowsPty
   }): void {
+    const wasController = this.runtime.canResize()
     this.windowsPty = input.windowsPty
     this.view.setWindowsPty(this.windowsPty)
     this.hydratedSnapshot =
@@ -265,22 +254,23 @@ export class ManagedTerminalSession {
       phase: input.phase,
       message: input.message,
     })
+    const isController = this.runtime.canResize()
+    if (wasController !== isController) this.syncViewAfterOwnershipChange(wasController)
     if (previousSessionId !== input.sessionId) this.backgroundBellScanner.reset()
     if (previousSessionId && previousSessionId !== input.sessionId) this.applyHydratedSnapshotToActiveView()
-    if (changed) this.notify('metadata')
+    if (changed) this.notify()
   }
 
   handleOutput(event: TerminalOutputEvent): void {
     const result = this.runtime.handleOutput(event)
-    if (result.changed) this.notify('metadata')
-    if (result.summaryChanged) this.scheduleSummaryNotify()
+    if (result.changed) this.notify()
     if (!result.output) return
-    if (this.runtime.canResize() && this.view.currentTerminal()) {
+    if (this.view.currentTerminal()) {
       this.queueOutput(result.output)
       return
     }
-    // No live xterm parses this output (background project, viewer role, or
-    // never-attached session) — detect BEL here so the bell still goes unread.
+    // No live xterm parses this output (background project or never-attached
+    // session) — detect BEL here so the bell still goes unread.
     if (this.backgroundBellScanner.scan(result.output)) this.handleBell()
   }
 
@@ -289,24 +279,15 @@ export class ManagedTerminalSession {
     const changed = this.runtime.handleOwnership(event)
     const pendingCleared = this.runtime.clearTakeoverPending()
     if (changed) {
-      const isController = this.runtime.canResize()
-      if (!isController) {
-        if (this.view.currentTerminal()) {
-          this.destroyActiveView({ preserveTransientState: true })
-        }
-      } else if (!wasController && isController) {
-        if (this.view.isConnected() && !this.view.currentTerminal()) {
-          this.start()
-        }
-      }
+      this.syncViewAfterOwnershipChange(wasController)
     }
     if (changed || pendingCleared) {
-      this.notify('metadata')
+      this.notify()
     }
   }
 
   handleServerTitle(canonicalTitle: string | null): void {
-    if (this.runtime.setCanonicalTitle(canonicalTitle)) this.notify('metadata')
+    if (this.runtime.setCanonicalTitle(canonicalTitle)) this.notify()
   }
 
   handleExit(event: TerminalExitEvent): boolean {
@@ -322,26 +303,26 @@ export class ManagedTerminalSession {
     const sessionId = this.runtime.currentSessionId()
     if (!sessionId) return
     const term = this.view.currentTerminal()
-    const size = term
-      ? { cols: term.cols, rows: term.rows }
-      : this.runtime.currentCanonicalSize()
-    // Ownership changes are applied exclusively via authoritative onOwnership realtime messages.
-    // The bridge response is only used to trigger the server-side handoff.
-    if (this.runtime.setTakeoverPending(true)) this.notify('metadata')
+    const size = term ? { cols: term.cols, rows: term.rows } : this.runtime.currentCanonicalSize()
+    // Apply the authoritative takeover response immediately. A matching realtime
+    // ownership event remains idempotent.
+    if (this.runtime.setTakeoverPending(true)) this.notify()
     void terminalBridge
       .takeover({ sessionId, cols: size.cols, rows: size.rows })
       .then((result) => {
         if (!result.ok) return
+        const wasController = this.runtime.canResize()
         const changed = this.runtime.applyTakeoverResult(result)
         const pendingCleared = this.runtime.clearTakeoverPending()
-        if (changed || pendingCleared) this.notify('metadata')
+        if (changed) this.syncViewAfterOwnershipChange(wasController)
+        if (changed || pendingCleared) this.notify()
       })
       .catch(() => {})
       .finally(() => {
         // If the server response settles but we never received an ownership event,
         // clear the pending state so the user can retry.
         if (this.runtime.isTakeoverPending()) {
-          if (this.runtime.setTakeoverPending(false)) this.notify('metadata')
+          if (this.runtime.setTakeoverPending(false)) this.notify()
         }
       })
   }
@@ -349,7 +330,7 @@ export class ManagedTerminalSession {
   private start(): void {
     if (this.disposed || this.view.currentTerminal() || !this.view.isConnected()) return
     const token = (this.startToken += 1)
-    if (!this.runtime.currentSessionId() && this.runtime.startAttaching()) this.notify('metadata')
+    if (!this.runtime.currentSessionId() && this.runtime.startAttaching()) this.notify()
     void this.startAsync(token)
   }
 
@@ -371,7 +352,7 @@ export class ManagedTerminalSession {
       this.closeReplacingPtySession()
       if (!this.currentToken(token)) return
       this.destroyActiveView()
-      if (this.runtime.failRuntime(err instanceof Error ? err.message : String(err))) this.notify('metadata')
+      if (this.runtime.failRuntime(err instanceof Error ? err.message : String(err))) this.notify()
     }
   }
 
@@ -394,7 +375,7 @@ export class ManagedTerminalSession {
     const sessionId = restart ? this.runtime.restartingSessionId() : this.runtime.currentSessionId()
     if (!sessionId) {
       this.destroyActiveView()
-      if (this.runtime.failAttachAttempt('error.invalid-arguments')) this.notify('metadata')
+      if (this.runtime.failAttachAttempt('error.invalid-arguments')) this.notify()
       throw new StartCancelledError()
     }
     const result = restart
@@ -409,7 +390,7 @@ export class ManagedTerminalSession {
     if (!result.ok) {
       this.closeReplacingPtySession()
       this.destroyActiveView()
-      if (this.runtime.failAttachAttempt(result.message)) this.notify('metadata')
+      if (this.runtime.failAttachAttempt(result.message)) this.notify()
       throw new StartCancelledError()
     }
     return this.withLocalOwnership(result)
@@ -421,12 +402,13 @@ export class ManagedTerminalSession {
     result: TerminalAttachResultWithOwnership,
     preloaded: boolean,
   ): Promise<void> {
-    let changed = this.runtime.applyAttachResult(result, { cols: term.cols, rows: term.rows })
+    const wasController = this.runtime.canResize()
+    this.runtime.applyAttachResult(result, { cols: term.cols, rows: term.rows })
     this.windowsPty = result.windowsPty
     this.view.setWindowsPty(this.windowsPty)
-    if (!this.runtime.canResize()) {
-      this.applyCanonicalSizeToView()
-    } else {
+    const isController = this.runtime.canResize()
+    if (wasController !== isController) this.syncViewAfterOwnershipChange(wasController)
+    if (isController) {
       const canonicalSize = this.runtime.currentCanonicalSize()
       if (term.cols !== canonicalSize.cols || term.rows !== canonicalSize.rows) {
         this.queueResize(term.cols, term.rows)
@@ -456,10 +438,9 @@ export class ManagedTerminalSession {
   private finalizePhase(token: number, term: XTermTerminal): void {
     this.guardStart(token, term)
     const changed = this.runtime.markAttached()
-    if (changed) this.notify('metadata')
+    if (changed) this.notify()
     this.flushPendingFocus()
   }
-
 
   private guardStart(token: number, term: XTermTerminal): void {
     if (this.disposed || this.startToken !== token || this.view.currentTerminal() !== term) {
@@ -589,14 +570,16 @@ export class ManagedTerminalSession {
       .catch(() => {})
   }
 
-  private applyCanonicalSizeToView(): void {
-    const { cols, rows } = this.runtime.currentCanonicalSize()
-    if (cols > 0 && rows > 0) this.view.resizeTo(cols, rows)
-  }
-
-  private currentViewSize(): { cols: number; rows: number } {
-    const term = this.view.currentTerminal()
-    return term ? { cols: term.cols, rows: term.rows } : this.runtime.currentCanonicalSize()
+  private syncViewAfterOwnershipChange(wasController: boolean): void {
+    const isController = this.runtime.canResize()
+    if (!isController) {
+      this.cancelResizeFlush()
+      this.pendingResize = null
+      this.pendingWriteBuffer = ''
+    }
+    if (wasController === isController) return
+    if (this.view.currentTerminal()) this.view.fitSoon()
+    else if (this.view.isConnected()) this.start()
   }
 
   private cancelResizeFlush(): void {
@@ -653,10 +636,6 @@ export class ManagedTerminalSession {
     this.view.destroyTerminal()
   }
 
-  private scheduleSummaryNotify(): void {
-    this.notify('outputSummary')
-  }
-
   private currentStart(token: number, term: XTermTerminal): boolean {
     return !this.disposed && this.startToken === token && this.view.currentTerminal() === term
   }
@@ -666,7 +645,7 @@ export class ManagedTerminalSession {
   }
 
   private updateProgress(state: number, value: number): void {
-    if (this.runtime.setProgress(state, value)) this.notify('metadata')
+    if (this.runtime.setProgress(state, value)) this.notify()
   }
 
   private handleBell(): void {
@@ -696,7 +675,7 @@ export class ManagedTerminalSession {
   }
 
   private setSearchResult(result: TerminalSearchResult | null): void {
-    if (this.runtime.setSearchResult(result)) this.notify('metadata')
+    if (this.runtime.setSearchResult(result)) this.notify()
   }
 
   private openExternalLink(uri: string): void {
