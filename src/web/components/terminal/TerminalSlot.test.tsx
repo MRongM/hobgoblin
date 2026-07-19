@@ -371,7 +371,13 @@ describe('TerminalSlot', () => {
       expect(container.textContent).toContain('terminal.mirror-controlled')
       const host = container.querySelector('.goblin-terminal-slot__host')
       expect(host?.getAttribute('aria-readonly')).toBe('true')
-      expect(container.querySelector('.goblin-terminal-slot__viewer-overlay')).toBeTruthy()
+      expect(host?.classList.contains('goblin-terminal-slot__host--hidden')).toBe(false)
+      const viewerStatus = container.querySelector('.goblin-terminal-slot__viewer-status')
+      expect(viewerStatus).toBeTruthy()
+      expect(viewerStatus?.getAttribute('role')).toBeNull()
+      expect(viewerStatus?.querySelector('.goblin-terminal-slot__viewer-message')?.getAttribute('role')).toBe('status')
+      expect(container.querySelector('.goblin-terminal-slot__viewer-overlay')).toBeNull()
+      expect(container.querySelector('.goblin-terminal-slot__viewer-output')).toBeNull()
       const button = Array.from(container.querySelectorAll('button')).find(
         (node) => node.textContent === 'terminal.takeover',
       )
@@ -480,7 +486,11 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot={descriptor.repoRoot} branch={descriptor.branch} worktreePath={descriptor.worktreePath} />
+            <TerminalSlot
+              repoRoot={descriptor.repoRoot}
+              branch={descriptor.branch}
+              worktreePath={descriptor.worktreePath}
+            />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -587,6 +597,50 @@ describe('TerminalSlot', () => {
       })
 
       expect(writeInput).toHaveBeenCalledWith('terminal-1', "'a file.ts' b.ts")
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('does not advertise or write path drops for a viewer terminal', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const writeInput = vi.fn()
+    const { worktreeSnapshot, snapshot } = controllerFixture('viewer')
+    const context = terminalContext({ writeInput })
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+
+    await act(async () => {
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    })
+
+    try {
+      const slot = container.querySelector('.goblin-terminal-slot')
+      const dragEnter = terminalPathDragEvent('dragenter')
+      await act(async () => slot?.dispatchEvent(dragEnter))
+
+      expect(container.querySelector('.goblin-terminal-slot__drop-overlay')).toBeNull()
+
+      const drop = terminalPathDragEvent('drop')
+      await act(async () => slot?.dispatchEvent(drop))
+
+      expect(writeInput).not.toHaveBeenCalled()
     } finally {
       await act(async () => root.unmount())
       container.remove()
@@ -971,7 +1025,6 @@ describe('TerminalSlot', () => {
       container.remove()
     }
   })
-
 })
 
 function controllerFixture(
@@ -1035,4 +1088,17 @@ function terminalContext(overrides: Partial<TerminalSessionContextValue> = {}): 
     serialize: vi.fn(() => ''),
     ...overrides,
   }
+}
+
+function terminalPathDragEvent(type: 'dragenter' | 'drop'): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'dataTransfer', {
+    value: {
+      types: [GOBLIN_FILE_PATHS_MIME],
+      files: [],
+      getData: (dataType: string) =>
+        dataType === GOBLIN_FILE_PATHS_MIME ? serializeGoblinFilePathDragPayload(['/worktree/a file.ts']) : '',
+    },
+  })
+  return event
 }

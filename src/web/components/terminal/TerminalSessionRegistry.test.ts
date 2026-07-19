@@ -271,7 +271,11 @@ describe('TerminalSessionRegistry', () => {
         registry.setRepoIndex(makeRepoIndex())
         registry.reconcileServerSessions(
           REPO_ROOT,
-          [makeServerSession('session-a', 'terminal-1')],
+          [
+            makeServerSession('session-a', 'terminal-1', {
+              controller: { attachmentId: 'attachment_local', status: 'connected' },
+            }),
+          ],
           'attachment_local',
           new Map(),
         )
@@ -378,33 +382,9 @@ describe('TerminalSessionRegistry', () => {
 
       // Simulate metadata change via internal notifySession
       const key = registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]!.key
-      ;(registry as any).notifySession(key, 'metadata')
+      ;(registry as any).notifySession(key)
 
       expect(listener).toHaveBeenCalledTimes(1)
-      unsubscribe()
-    })
-
-    test('outputSummary notify does NOT invalidate worktree cache', () => {
-      registry.setRepoIndex(makeRepoIndex())
-      registry.reconcileServerSessions(
-        REPO_ROOT,
-        [makeServerSession('session-a', 'terminal-1')],
-        'attachment_local',
-        new Map(),
-      )
-
-      const listener = vi.fn()
-      const unsubscribe = registry.subscribeWorktree(WORKTREE_KEY, listener)
-
-      // Prime the cache
-      registry.worktreeSnapshot(WORKTREE_KEY)
-      listener.mockClear()
-
-      // Simulate outputSummary change
-      const key = registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]!.key
-      ;(registry as any).notifySession(key, 'outputSummary')
-
-      expect(listener).not.toHaveBeenCalled()
       unsubscribe()
     })
   })
@@ -650,7 +630,7 @@ describe('TerminalSessionRegistry', () => {
       const s1 = registry.snapshot(key)
 
       // metadata notify forces cache refresh
-      ;(registry as any).notifySession(key, 'metadata')
+      ;(registry as any).notifySession(key)
       const s2 = registry.snapshot(key)
       expect(s1).not.toBe(s2)
     })
