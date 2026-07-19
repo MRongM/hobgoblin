@@ -23,6 +23,10 @@
   overflow: hidden;
 }
 
+.goblin-terminal-slot__host--touch-scroll {
+  touch-action: pan-x pinch-zoom;
+}
+
 .goblin-terminal-slot__empty {
   display: flex;
   flex: 1;

@@ -9,6 +9,7 @@ import {
   type DragEvent,
   type FocusEvent,
   type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { toast } from 'sonner'
 import { Button } from '#/web/components/ui/button.tsx'
@@ -53,6 +54,7 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
   const hostRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const bottomDockRef = useRef<HTMLDivElement | null>(null)
+  const touchScrollRef = useRef<{ pointerId: number; lastY: number; remainder: number } | null>(null)
   const onRevealPathRef = useRef(onRevealPath)
   onRevealPathRef.current = onRevealPath
   const [searchOpen, setSearchOpen] = useState(false)
@@ -79,13 +81,60 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
   const key = descriptor?.key ?? null
   const snapshot = useTerminalSnapshot(key)
   const hasSessions = useWorktreeTerminalCount(terminalWorktreeKey) > 0
-  const { temporaryFilesDirectory, terminalCustomButtonsVisible, terminalCustomButtonSize, terminalCustomButtons } =
-    useRuntimeTerminalSettings()
+  const {
+    temporaryFilesDirectory,
+    terminalFontSize,
+    terminalCustomButtonsVisible,
+    terminalCustomButtonSize,
+    terminalCustomButtons,
+  } = useRuntimeTerminalSettings()
   const progress = snapshot.progress
   const attachment = snapshot.attachment
   const isController = hasSessions && snapshot.phase === 'open' && attachment?.role === 'controller'
   const isReadonly =
     hasSessions && snapshot.phase === 'open' && (attachment?.role === 'viewer' || attachment?.role === 'unowned')
+  const isMobile = isMobileDevice()
+  const isMobileReadonly = isMobile && isReadonly && !!key
+
+  useEffect(() => {
+    if (!isMobileReadonly) touchScrollRef.current = null
+  }, [isMobileReadonly, key])
+
+  const handleTouchScrollStart = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!isMobileReadonly || event.pointerType !== 'touch' || event.isPrimary === false) return
+      touchScrollRef.current = { pointerId: event.pointerId, lastY: event.clientY, remainder: 0 }
+      event.currentTarget.setPointerCapture?.(event.pointerId)
+    },
+    [isMobileReadonly],
+  )
+  const handleTouchScrollMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const gesture = touchScrollRef.current
+      if (!isMobileReadonly || !key || !gesture || event.pointerId !== gesture.pointerId) return
+
+      const pixelsPerLine = Math.max(1, terminalFontSize)
+      const accumulatedPixels = gesture.remainder + gesture.lastY - event.clientY
+      const lineDelta =
+        accumulatedPixels < 0
+          ? Math.ceil(accumulatedPixels / pixelsPerLine)
+          : Math.floor(accumulatedPixels / pixelsPerLine)
+      gesture.lastY = event.clientY
+      gesture.remainder = accumulatedPixels - lineDelta * pixelsPerLine
+      if (lineDelta === 0) return
+
+      event.preventDefault()
+      scrollLines(key, lineDelta)
+    },
+    [isMobileReadonly, key, scrollLines, terminalFontSize],
+  )
+  const handleTouchScrollEnd = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (touchScrollRef.current?.pointerId !== event.pointerId) return
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    touchScrollRef.current = null
+  }, [])
 
   useLayoutEffect(() => {
     registerWorktreeHost(terminalWorktreeKey, hostRef.current)
@@ -348,8 +397,15 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
       )}
       <div
         ref={hostRef}
-        className="goblin-terminal-slot__host"
+        className={cn(
+          'goblin-terminal-slot__host',
+          isMobileReadonly && 'goblin-terminal-slot__host--touch-scroll',
+        )}
         aria-readonly={(!isController && hasSessions) || undefined}
+        onPointerDown={isMobileReadonly ? handleTouchScrollStart : undefined}
+        onPointerMove={isMobileReadonly ? handleTouchScrollMove : undefined}
+        onPointerUp={isMobileReadonly ? handleTouchScrollEnd : undefined}
+        onPointerCancel={isMobileReadonly ? handleTouchScrollEnd : undefined}
       />
       <div className="goblin-terminal-float-group">
         {searchOpen && (
@@ -377,7 +433,7 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
             </Button>
           </div>
         )}
-        {isMobileDevice() && isController && key && (
+        {isMobile && isController && key && (
           <MobileTerminalToolbar
             onInput={(data) => writeInput(key, data)}
             onScrollLines={(amount) => scrollLines(key, amount)}

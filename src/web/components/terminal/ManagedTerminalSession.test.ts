@@ -1433,8 +1433,13 @@ describe('ManagedTerminalSession', () => {
     await flushTerminalStart()
 
     expect(xtermMocks.terminals).toHaveLength(1)
+    expect(xtermMocks.terminals[0]).toMatchObject({ cols: 100, rows: 30 })
     expect(terminalCalls.attach).toHaveBeenCalled()
-    expect(session.snapshot().attachment?.role).toBe('viewer')
+    expect(session.snapshot().attachment).toMatchObject({
+      role: 'viewer',
+      canonicalCols: 120,
+      canonicalRows: 40,
+    })
     expect(terminalCalls.resize).not.toHaveBeenCalled()
   })
 
@@ -1982,7 +1987,7 @@ describe('ManagedTerminalSession', () => {
     })
   })
 
-  test('preserves the xterm when a controller becomes a viewer', async () => {
+  test('preserves the xterm and local geometry when a controller becomes a viewer', async () => {
     const host = document.createElement('div')
     document.body.appendChild(host)
     const session = new ManagedTerminalSession(descriptor, vi.fn())
@@ -2002,12 +2007,12 @@ describe('ManagedTerminalSession', () => {
 
     expect(xtermMocks.terminals).toHaveLength(1)
     expect(term.dispose).not.toHaveBeenCalled()
-    expect(term.cols).toBe(120)
-    expect(term.rows).toBe(40)
+    expect(term.cols).toBe(100)
+    expect(term.rows).toBe(30)
     expect(session.snapshot().attachment?.role).toBe('viewer')
   })
 
-  test('keeps viewer geometry at the canonical size when local layout changes', async () => {
+  test('fits viewer geometry to the local host without publishing a PTY resize', async () => {
     const host = document.createElement('div')
     document.body.appendChild(host)
     const session = new ManagedTerminalSession(descriptor, vi.fn())
@@ -2027,16 +2032,68 @@ describe('ManagedTerminalSession', () => {
     })
     fitAddon.fit.mockClear()
     fitAddon.proposeDimensions.mockReturnValue({ cols: 90, rows: 20 })
+    fitAddon.fit.mockImplementation(() => term.resize(90, 20))
+    terminalCalls.resize.mockClear()
 
-    term.emitBufferChange('alternate')
     const observer = MockResizeObserver.instances.at(-1)!
     observer.cb([], observer as unknown as ResizeObserver)
+    await flushResizeDebounce()
+
+    expect(fitAddon.fit).toHaveBeenCalled()
+    expect(term).toMatchObject({ cols: 90, rows: 20 })
+    expect(session.snapshot().attachment).toMatchObject({ canonicalCols: 120, canonicalRows: 40 })
+    expect(terminalCalls.resize).not.toHaveBeenCalled()
+  })
+
+  test('keeps buffer, font, and canonical viewer geometry updates local', async () => {
+    terminalCalls.attach.mockResolvedValueOnce(
+      attachResult('session-1', {
+        controller: { attachmentId: 'attachment_remote', status: 'connected' },
+        canonicalCols: 120,
+        canonicalRows: 40,
+      }),
+    )
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session, {
+      role: 'viewer',
+      controllerStatus: 'connected',
+      canonicalCols: 120,
+      canonicalRows: 40,
+    })
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+    const term = xtermMocks.terminals[0]!
+    const fitAddon = xtermMocks.fitAddons[0]!
+    fitAddon.fit.mockClear()
+    terminalCalls.resize.mockClear()
+
+    fitAddon.proposeDimensions.mockReturnValue({ cols: 90, rows: 20 })
+    fitAddon.fit.mockImplementation(() => term.resize(90, 20))
+    term.emitBufferChange('alternate')
+
+    session.handleOwnership({
+      sessionId: 'session-1',
+      role: 'viewer',
+      controllerStatus: 'connected',
+      canonicalCols: 70,
+      canonicalRows: 15,
+    })
+
+    expect(term).toMatchObject({ cols: 90, rows: 20 })
+    expect(session.snapshot().attachment).toMatchObject({ canonicalCols: 70, canonicalRows: 15 })
+
+    fitAddon.proposeDimensions.mockReturnValue({ cols: 80, rows: 18 })
+    fitAddon.fit.mockImplementation(() => term.resize(80, 18))
     mockFonts.emitLoadingDone()
     await flushResizeDebounce()
 
-    expect(fitAddon.fit).not.toHaveBeenCalled()
-    expect(term.cols).toBe(120)
-    expect(term.rows).toBe(40)
+    expect(fitAddon.fit).toHaveBeenCalledTimes(2)
+    expect(term).toMatchObject({ cols: 80, rows: 18 })
+    expect(session.snapshot().attachment).toMatchObject({ canonicalCols: 70, canonicalRows: 15 })
+    expect(terminalCalls.resize).not.toHaveBeenCalled()
   })
 
   test('applies ownership updates from realtime messages', async () => {

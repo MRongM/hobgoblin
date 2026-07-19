@@ -43,8 +43,17 @@ vi.mock('#/web/lib/editor-open-targets.ts', () => ({
   openWorktreeEditorTarget: editorOpenMocks.openWorktreeEditorTarget,
 }))
 
+const mobileDetectionMocks = vi.hoisted(() => ({
+  isMobileDevice: false,
+}))
+
+vi.mock('#/web/components/terminal/mobile-detection.ts', () => ({
+  isMobileDevice: () => mobileDetectionMocks.isMobileDevice,
+}))
+
 const runtimeSettingsMocks = vi.hoisted(() => ({
   temporaryFilesDirectory: '',
+  terminalFontSize: 14,
   terminalCustomButtonsVisible: true,
   terminalCustomButtonSize: 'medium' as 'small' | 'medium' | 'large',
   terminalCustomButtons: [] as { label: string; value: string; action?: 'execute' | 'input' }[],
@@ -54,6 +63,7 @@ vi.mock('#/web/runtime-settings-terminal-buttons.ts', () => ({
   useRuntimeTerminalCustomButtons: () => runtimeSettingsMocks.terminalCustomButtons,
   useRuntimeTerminalSettings: () => ({
     temporaryFilesDirectory: runtimeSettingsMocks.temporaryFilesDirectory,
+    terminalFontSize: runtimeSettingsMocks.terminalFontSize,
     terminalCustomButtonsVisible: runtimeSettingsMocks.terminalCustomButtonsVisible,
     terminalCustomButtonSize: runtimeSettingsMocks.terminalCustomButtonSize,
     terminalCustomButtons: runtimeSettingsMocks.terminalCustomButtons,
@@ -62,6 +72,7 @@ vi.mock('#/web/runtime-settings-terminal-buttons.ts', () => ({
 
 afterEach(() => {
   runtimeSettingsMocks.temporaryFilesDirectory = ''
+  runtimeSettingsMocks.terminalFontSize = 14
   runtimeSettingsMocks.terminalCustomButtonsVisible = true
   runtimeSettingsMocks.terminalCustomButtonSize = 'medium'
   runtimeSettingsMocks.terminalCustomButtons = []
@@ -71,6 +82,7 @@ afterEach(() => {
   repoClientMocks.transferRepositoryFiles.mockReset()
   editorOpenMocks.openWorktreeEditorTarget.mockReset()
   editorOpenMocks.openWorktreeEditorTarget.mockResolvedValue({ ok: true })
+  mobileDetectionMocks.isMobileDevice = false
   document.body.innerHTML = ''
 })
 
@@ -388,6 +400,72 @@ describe('TerminalSlot', () => {
       })
 
       expect(takeover).toHaveBeenCalledWith('terminal-1')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test.each(['viewer', 'unowned'] as const)(
+    'scrolls terminal history with primary touch drags for a mobile %s attachment',
+    async (role) => {
+      mobileDetectionMocks.isMobileDevice = true
+      const scrollLines = vi.fn()
+      const writeInput = vi.fn()
+      const takeover = vi.fn()
+      const { container, root } = await renderTerminalSlotFixture(role, { scrollLines, writeInput, takeover })
+
+      try {
+        const host = container.querySelector('.goblin-terminal-slot__host')
+        expect(host).toBeInstanceOf(HTMLElement)
+
+        await act(async () => {
+          host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientY: 200, pointerType: 'mouse' }))
+          host?.dispatchEvent(terminalPointerEvent('pointermove', { clientY: 170, pointerType: 'mouse' }))
+        })
+        expect(scrollLines).not.toHaveBeenCalled()
+
+        await act(async () => {
+          host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientY: 200 }))
+          host?.dispatchEvent(terminalPointerEvent('pointermove', { clientY: 190 }))
+        })
+        expect(scrollLines).not.toHaveBeenCalled()
+
+        await act(async () => {
+          host?.dispatchEvent(terminalPointerEvent('pointermove', { clientY: 170 }))
+        })
+        expect(scrollLines).toHaveBeenLastCalledWith('terminal-1', 2)
+
+        await act(async () => {
+          host?.dispatchEvent(terminalPointerEvent('pointerup', { clientY: 170 }))
+          host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientY: 100, pointerId: 2 }))
+          host?.dispatchEvent(terminalPointerEvent('pointermove', { clientY: 128, pointerId: 2 }))
+        })
+        expect(scrollLines).toHaveBeenLastCalledWith('terminal-1', -2)
+        expect(writeInput).not.toHaveBeenCalled()
+        expect(takeover).not.toHaveBeenCalled()
+      } finally {
+        await act(async () => root.unmount())
+        container.remove()
+      }
+    },
+  )
+
+  test('does not install the read-only touch scroll gesture for a mobile controller', async () => {
+    mobileDetectionMocks.isMobileDevice = true
+    const scrollLines = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('controller', { scrollLines })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      expect(host).toBeInstanceOf(HTMLElement)
+
+      await act(async () => {
+        host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientY: 200 }))
+        host?.dispatchEvent(terminalPointerEvent('pointermove', { clientY: 160 }))
+      })
+
+      expect(scrollLines).not.toHaveBeenCalled()
     } finally {
       await act(async () => root.unmount())
       container.remove()
@@ -1028,7 +1106,7 @@ describe('TerminalSlot', () => {
 })
 
 function controllerFixture(
-  role: 'controller' | 'viewer' = 'controller',
+  role: 'controller' | 'viewer' | 'unowned' = 'controller',
   options: { repoRoot?: string; worktreePath?: string; branch?: string } = {},
 ) {
   const repoRoot = options.repoRoot ?? '/repo'
@@ -1055,7 +1133,7 @@ function controllerFixture(
     processName: 'zsh',
     attachment: {
       role,
-      controllerStatus: 'connected' as const,
+      controllerStatus: role === 'unowned' ? ('none' as const) : ('connected' as const),
       active: role === 'controller',
       canTakeover: role !== 'controller',
       canonicalCols: 120,
@@ -1063,6 +1141,51 @@ function controllerFixture(
     },
   }
   return { descriptor, worktreeSnapshot, snapshot }
+}
+
+async function renderTerminalSlotFixture(
+  role: 'controller' | 'viewer' | 'unowned',
+  contextOverrides: Partial<TerminalSessionContextValue> = {},
+): Promise<{ container: HTMLDivElement; root: Root }> {
+  ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  const container = document.createElement('div')
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  const { worktreeSnapshot, snapshot } = controllerFixture(role)
+  const context = terminalContext(contextOverrides)
+  const readContext: TerminalSessionReadContextValue = {
+    worktreeSnapshot: () => worktreeSnapshot,
+    subscribeWorktree: () => () => {},
+    repoSyncReady: () => true,
+    subscribeRepoSync: () => () => {},
+    snapshot: () => snapshot,
+    subscribeSnapshot: () => () => {},
+  }
+
+  await act(async () => {
+    root.render(
+      <TerminalSessionContext.Provider value={context}>
+        <TerminalSessionReadContext.Provider value={readContext}>
+          <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+        </TerminalSessionReadContext.Provider>
+      </TerminalSessionContext.Provider>,
+    )
+  })
+
+  return { container, root }
+}
+
+function terminalPointerEvent(
+  type: 'pointerdown' | 'pointermove' | 'pointerup',
+  options: { clientY: number; pointerId?: number; pointerType?: 'touch' | 'mouse'; isPrimary?: boolean },
+): Event {
+  const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientY: options.clientY })
+  Object.defineProperties(event, {
+    pointerId: { value: options.pointerId ?? 1 },
+    pointerType: { value: options.pointerType ?? 'touch' },
+    isPrimary: { value: options.isPrimary ?? true },
+  })
+  return event
 }
 
 function terminalContext(overrides: Partial<TerminalSessionContextValue> = {}): TerminalSessionContextValue {

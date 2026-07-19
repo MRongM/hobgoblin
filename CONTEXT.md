@@ -16,6 +16,14 @@ _Avoid_: Terminal toolbar, detail toolbar
 A Hobgoblin-managed terminal session rendered inside the selected worktree's terminal area.
 _Avoid_: New terminal, embedded terminal
 
+**Canonical terminal geometry**:
+The server-owned PTY column and row count published by the current controller attachment.
+_Avoid_: Viewer size, shared viewport size
+
+**Local terminal geometry**:
+The renderer-local xterm column and row count fitted to one client's visible host. It is never synchronized or persisted; only a controller may publish it as new canonical terminal geometry.
+_Avoid_: Canonical size, remote size
+
 **External terminal**:
 An operating-system terminal application opened outside Hobgoblin at the selected worktree path.
 _Avoid_: Native terminal, system terminal

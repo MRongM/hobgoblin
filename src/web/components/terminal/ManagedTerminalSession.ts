@@ -108,11 +108,9 @@ export class ManagedTerminalSession {
     if (this.disposed) return
     this.view.setRevealPathHandler(handlers?.onRevealPath ?? null)
     this.view.setOpenPathInEditorHandler(handlers?.onOpenPathInEditor ?? null)
-    this.view.setAutoFitEnabled(this.runtime.canResize())
     this.view.attach(host)
     if (!this.view.currentTerminal()) this.start()
-    else if (this.runtime.canResize()) this.view.fitSoon()
-    else this.applyCanonicalSizeToView()
+    else this.view.fitSoon()
     this.flushPendingFocus()
   }
 
@@ -257,9 +255,7 @@ export class ManagedTerminalSession {
       message: input.message,
     })
     const isController = this.runtime.canResize()
-    this.view.setAutoFitEnabled(isController)
     if (wasController !== isController) this.syncViewAfterOwnershipChange(wasController)
-    else if (!isController && this.view.currentTerminal()) this.applyCanonicalSizeToView()
     if (previousSessionId !== input.sessionId) this.backgroundBellScanner.reset()
     if (previousSessionId && previousSessionId !== input.sessionId) this.applyHydratedSnapshotToActiveView()
     if (changed) this.notify()
@@ -368,7 +364,7 @@ export class ManagedTerminalSession {
     const preloaded = await this.preloadHydratedSnapshot(token, term)
     await waitForTerminalLayout()
     this.guardStart(token, term)
-    this.view.fitNow(true)
+    this.view.fitNow()
     await waitForTerminalLayout()
     this.guardStart(token, term)
     return { term, preloaded }
@@ -412,10 +408,6 @@ export class ManagedTerminalSession {
     this.view.setWindowsPty(this.windowsPty)
     const isController = this.runtime.canResize()
     if (wasController !== isController) this.syncViewAfterOwnershipChange(wasController)
-    else {
-      this.view.setAutoFitEnabled(isController)
-      if (!isController) this.applyCanonicalSizeToView()
-    }
     if (isController) {
       const canonicalSize = this.runtime.currentCanonicalSize()
       if (term.cols !== canonicalSize.cols || term.rows !== canonicalSize.rows) {
@@ -578,22 +570,14 @@ export class ManagedTerminalSession {
       .catch(() => {})
   }
 
-  private applyCanonicalSizeToView(): void {
-    const { cols, rows } = this.runtime.currentCanonicalSize()
-    if (cols > 0 && rows > 0) this.view.resizeTo(cols, rows)
-  }
-
   private syncViewAfterOwnershipChange(wasController: boolean): void {
     const isController = this.runtime.canResize()
-    this.view.setAutoFitEnabled(isController)
     if (!isController) {
       this.cancelResizeFlush()
       this.pendingResize = null
       this.pendingWriteBuffer = ''
-      this.applyCanonicalSizeToView()
-      return
     }
-    if (wasController) return
+    if (wasController === isController) return
     if (this.view.currentTerminal()) this.view.fitSoon()
     else if (this.view.isConnected()) this.start()
   }
