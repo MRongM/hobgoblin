@@ -41,6 +41,7 @@ describe('WorkspaceConfigurationDialog', () => {
         <WorkspaceConfigurationDialog
           open
           onOpenChange={() => {}}
+          configuredRepositoryNames={['api']}
           candidates={[candidates[0]!]}
           onSave={async () => ({ ok: true })}
         />,
@@ -53,11 +54,17 @@ describe('WorkspaceConfigurationDialog', () => {
     expect(document.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true)
   })
 
-  test('selects members and saves child names without a primary repository', async () => {
+  test('preserves configured order and appends newly selected repositories', async () => {
     const onSave = vi.fn(async () => ({ ok: true as const }))
     act(() =>
       root!.render(
-        <WorkspaceConfigurationDialog open onOpenChange={() => {}} candidates={candidates} onSave={onSave} />,
+        <WorkspaceConfigurationDialog
+          open
+          onOpenChange={() => {}}
+          configuredRepositoryNames={['web', 'api']}
+          candidates={candidates}
+          onSave={onSave}
+        />,
       ),
     )
 
@@ -66,7 +73,7 @@ describe('WorkspaceConfigurationDialog', () => {
     )
     await act(async () => document.querySelector<HTMLButtonElement>('button[type="submit"]')?.click())
 
-    expect(onSave).toHaveBeenCalledWith({ repo: ['api', 'web', 'docs'] })
+    expect(onSave).toHaveBeenCalledWith({ repo: ['web', 'api', 'docs'] })
     expect(document.querySelector('input[type="radio"]')).toBeNull()
   })
 })

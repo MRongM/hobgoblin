@@ -16,16 +16,30 @@ import type { WorkspaceConfig, WorkspaceRepositoryCandidate } from '#/shared/wor
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
+  configuredRepositoryNames: string[]
   candidates: WorkspaceRepositoryCandidate[]
   onSave: (config: WorkspaceConfig) => Promise<{ ok: boolean; message?: string }>
 }
 
-export function WorkspaceConfigurationDialog({ open, onOpenChange, candidates, onSave }: Props) {
+export function WorkspaceConfigurationDialog({
+  open,
+  onOpenChange,
+  configuredRepositoryNames,
+  candidates,
+  onSave,
+}: Props) {
   const t = useT()
-  const initialSelection = useMemo(
-    () => candidates.filter((candidate) => candidate.selected).map((candidate) => candidate.name),
-    [candidates],
-  )
+  const initialSelection = useMemo(() => {
+    const selectedNames = new Set(
+      candidates.filter((candidate) => candidate.selected).map((candidate) => candidate.name),
+    )
+    const configured = configuredRepositoryNames.filter((name) => selectedNames.has(name))
+    const configuredSet = new Set(configured)
+    const newlyDiscovered = candidates
+      .filter((candidate) => candidate.selected && !configuredSet.has(candidate.name))
+      .map((candidate) => candidate.name)
+    return [...configured, ...newlyDiscovered]
+  }, [candidates, configuredRepositoryNames])
   const [selected, setSelected] = useState<string[]>(initialSelection)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -50,9 +64,7 @@ export function WorkspaceConfigurationDialog({ open, onOpenChange, candidates, o
     if (selected.length === 0 || pending) return
     setPending(true)
     setError(null)
-    const result = await onSave({
-      repo: candidates.filter((candidate) => selected.includes(candidate.name)).map((candidate) => candidate.name),
-    })
+    const result = await onSave({ repo: selected })
     setPending(false)
     if (result.ok) onOpenChange(false)
     else setError(result.message ?? 'workspace.config.write-failed')

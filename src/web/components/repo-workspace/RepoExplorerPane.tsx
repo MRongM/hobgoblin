@@ -2,6 +2,7 @@ import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useCallback, useEffect, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import {
+  FolderPlus,
   FolderTree,
   FolderGit,
   GitBranch,
@@ -9,6 +10,7 @@ import {
   GitFork,
   History,
   RadioTower,
+  RefreshCw,
   Tag,
   ChevronsLeft,
   ChevronsRight,
@@ -29,9 +31,11 @@ import { StatusBar } from '#/web/components/StatusBar.tsx'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { explorerTabForRepo } from '#/web/stores/repos/helpers.ts'
-import type { ExplorerTab, RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
+import type { ExplorerTab, RepoBranchState, RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { Toolbar } from '#/web/components/Layout.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
+import { AsyncButton } from '#/web/components/AsyncButton.tsx'
+import { Tip } from '#/web/components/Tip.tsx'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { ToolbarTabStrip, ToolbarTabStripBody } from '#/web/components/tab-strip/ToolbarTabStrip.tsx'
 import { useT } from '#/web/stores/i18n.ts'
@@ -40,6 +44,9 @@ import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 import { repoIsPlainWorkspace } from '#/web/stores/repos/capabilities.ts'
 import { WorkspaceRepositoryRail } from '#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx'
+import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.tsx'
+import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
+import { runRepoRefreshIntent } from '#/web/stores/repos/refresh-coordinator.ts'
 
 export interface FileTreeRevealRequest {
   id: number
@@ -146,7 +153,7 @@ export function RepoExplorerPane({
             {!compact && workspaceRootId && (
               <WorkspaceRepositoryRail workspaceRootId={workspaceRootId} currentRepoId={repoId} />
             )}
-            {!compact && <BranchSectionLabel />}
+            {!compact && <BranchSectionLabel repoId={repoId} />}
             <BranchArea repoId={repoId} showActions={showActions} onBranchSelected={onBranchSelected} />
           </div>
         }
@@ -182,12 +189,89 @@ export function RepoExplorerPane({
 // Slim eyebrow above the branch rows — the same 10px tracked-caps label
 // the project switcher and detached-worktrees lists use, so the sidebar
 // sections read as one system.
-function BranchSectionLabel() {
+function BranchSectionLabel({ repoId }: { repoId: string }) {
   const t = useT()
+  const repo = useReposStore((state) => state.repos[repoId])
+  const branch = repo?.ui.selectedBranch
+    ? (repo.data.branches.find((candidate) => candidate.name === repo.ui.selectedBranch) ?? null)
+    : null
+  const syncBusy = !!repo && (repo.operations.manualRefresh.phase !== 'idle' || repo.operations.fetch.phase !== 'idle')
+  const syncDisabled = !repo || repo.availability.phase === 'unavailable' || syncBusy
+  const syncTitle = t(repo?.remote.hasRemotes === false ? 'action.fetch-local-title' : 'action.fetch-title')
+
+  function handleSync() {
+    if (!repo || syncDisabled) return
+    void runRepoRefreshIntent(useReposStore.getState, {
+      kind: 'manual-refresh-requested',
+      id: repo.id,
+      token: repo.instanceToken,
+    })
+  }
+
   return (
     <div className="flex h-7 shrink-0 items-center gap-2 px-4 pt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
       <span className="min-w-0 flex-1">{t('branches.filter.worktrees')}</span>
+      {repo && branch ? (
+        <BranchCreateWorktreeButton repo={repo} branch={branch} />
+      ) : (
+        <Tip label={t('action.create-worktree-title')}>
+          <span className="inline-flex">
+            <AsyncButton
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              disabled
+              aria-label={t('action.create-worktree-title')}
+            >
+              <FolderPlus aria-hidden="true" />
+            </AsyncButton>
+          </span>
+        </Tip>
+      )}
+      <Tip label={syncTitle}>
+        <span className="inline-flex">
+          <AsyncButton
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            loading={syncBusy}
+            disabled={syncDisabled}
+            aria-label={t('action.refresh')}
+            onClick={handleSync}
+          >
+            {({ busy }) => <RefreshCw className={busy ? 'animate-spin' : ''} aria-hidden="true" />}
+          </AsyncButton>
+        </span>
+      </Tip>
     </div>
+  )
+}
+
+function BranchCreateWorktreeButton({ repo, branch }: { repo: BranchActionRepo; branch: RepoBranchState }) {
+  const actions = useBranchActionItems(repo, branch)
+  const action = actions.mainItems.find((item) => item.id === 'createWorktree')
+  const t = useT()
+  if (!action) return null
+
+  return (
+    <>
+      <Tip label={action.title ?? action.label}>
+        <span className="inline-flex">
+          <AsyncButton
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            loading={action.busy}
+            disabled={action.disabled}
+            aria-label={action.ariaLabel ?? action.title ?? t('action.create-worktree-title')}
+            onClick={() => action.onSelect()}
+          >
+            <FolderPlus aria-hidden="true" />
+          </AsyncButton>
+        </span>
+      </Tip>
+      {actions.dialogs}
+    </>
   )
 }
 

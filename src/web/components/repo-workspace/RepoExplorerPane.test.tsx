@@ -19,6 +19,10 @@ const runtimeFontSettings = vi.hoisted(() => ({
   fileTreeTopbarFontSize: 13,
   terminalFontSize: 14,
 }))
+const sectionActionMocks = vi.hoisted(() => ({
+  createWorktree: vi.fn(),
+  refreshIntent: vi.fn(),
+}))
 
 vi.mock('#/web/runtime-settings-fonts.ts', () => ({
   useRuntimeFontSettings: () => runtimeFontSettings,
@@ -30,6 +34,10 @@ vi.mock('#/web/runtime-settings-chrome.ts', () => ({
 
 vi.mock('#/web/hooks/useResponsiveUiMode.tsx', () => ({
   useIsCompactUi: () => compactUi,
+}))
+
+vi.mock('#/web/stores/repos/refresh-coordinator.ts', () => ({
+  runRepoRefreshIntent: sectionActionMocks.refreshIntent,
 }))
 
 vi.mock('#/web/runtime-settings-external-apps.ts', () => ({
@@ -46,7 +54,18 @@ vi.mock('#/web/runtime-settings-external-apps.ts', () => ({
 vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
   useBranchActionItems: (_repo: unknown, branch: unknown) => ({
     patchItems: [],
-    mainItems: [],
+    mainItems: [
+      {
+        id: 'createWorktree',
+        label: 'action.create-worktree',
+        title: 'action.create-worktree-title',
+        disabled: false,
+        busy: false,
+        visible: true,
+        icon: null,
+        onSelect: sectionActionMocks.createWorktree,
+      },
+    ],
     externalItems: [
       {
         id: 'editor',
@@ -240,6 +259,8 @@ vi.mock('#/web/components/SplitPane.tsx', () => ({
 beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   compactUi = false
+  sectionActionMocks.createWorktree.mockReset()
+  sectionActionMocks.refreshIntent.mockReset()
   resetReposStore()
   resetExplorerOverflowExpanded()
   seedRepoState({
@@ -656,6 +677,60 @@ describe('RepoExplorerPane', () => {
     const branchList = container.querySelector('[data-testid="branch-list"]')
     expect(branchToolbar).toBeNull()
     expect(branchList).toBeTruthy()
+    await act(async () => root.unmount())
+  })
+
+  test('places new worktree and sync actions at the right of the worktree section label', async () => {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
+    })
+
+    const createWorktree = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="action.create-worktree-title"]',
+    )
+    const sync = container.querySelector<HTMLButtonElement>('button[aria-label="action.refresh"]')
+
+    expect(createWorktree?.querySelector('.lucide-folder-plus')).not.toBeNull()
+    expect(sync?.querySelector('.lucide-refresh-cw')).not.toBeNull()
+    expect(createWorktree!.compareDocumentPosition(sync!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    await act(async () => {
+      createWorktree?.click()
+      sync?.click()
+    })
+
+    expect(sectionActionMocks.createWorktree).toHaveBeenCalledTimes(1)
+    expect(sectionActionMocks.refreshIntent).toHaveBeenCalledWith(useReposStore.getState, {
+      kind: 'manual-refresh-requested',
+      id: REPO_ID,
+      token: useReposStore.getState().repos[REPO_ID]?.instanceToken,
+    })
+    await act(async () => root.unmount())
+  })
+
+  test('keeps new worktree visible but disabled without a selected branch', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="top-bottom" showActions />)
+    })
+
+    expect(
+      container.querySelector<HTMLButtonElement>('button[aria-label="action.create-worktree-title"]')?.disabled,
+    ).toBe(true)
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="action.refresh"]')?.disabled).toBe(false)
     await act(async () => root.unmount())
   })
 

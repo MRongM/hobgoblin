@@ -103,6 +103,7 @@ describe('workspace worktree write service', () => {
       branch: 'feature/a',
       worktreePath: '/workspace/api-feature-a',
       alsoDeleteBranch: true,
+      forceDeleteBranch: true,
       alsoDeleteUpstream: true,
     })
   })

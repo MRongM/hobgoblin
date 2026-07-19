@@ -37,7 +37,7 @@ A local project rooted at a readable non-Git directory whose immediate child dir
 _Avoid_: Monorepo, repository group, nested repository
 
 **Configured workspace**:
-A multi-repository workspace whose durable repository membership has been explicitly selected. Filesystem discovery supplies candidates but does not silently change a configured workspace.
+A multi-repository workspace whose durable, ordered repository membership has been explicitly selected. Filesystem discovery supplies candidates but does not silently change a configured workspace. Repository order controls workspace navigation order and sequential workspace batch-operation order.
 _Avoid_: Saved scan, repository registry, primary repository
 
 **Workspace worktree**:
@@ -50,6 +50,7 @@ _Avoid_: Orphan worktree, detached worktree
 
 **Workspace batch operation**:
 A server-coordinated Git operation applied sequentially to the configured repositories with per-repository results and no automatic rollback.
+When batch worktree removal includes local branch cleanup, that cleanup is explicitly forceful and may discard unpushed commits; dirty, locked, and primary worktrees remain removal safety boundaries.
 _Avoid_: Workspace transaction, multi-repository Git command
 
 **Plain workspace**:

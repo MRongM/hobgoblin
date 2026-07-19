@@ -7,10 +7,48 @@ import { WorkspaceRepositoryRail } from '#/web/components/repo-workspace/Workspa
 import { emptyRepo, replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { createRepoBranch, resetReposStore } from '#/web/stores/repos/test-utils.ts'
+import type { WorkspaceConfig } from '#/shared/workspace.ts'
 
 vi.mock('#/web/stores/i18n.ts', () => ({
   useT: () => (key: string, params?: Record<string, unknown>) =>
     params?.count === undefined ? key : `${key}:${params.count}`,
+}))
+
+const repositoryListState = vi.hoisted(() => ({
+  props: null as null | {
+    repositories: Array<{
+      id: string
+      name: string
+      branch?: string
+      changeCount: number
+      unavailable: boolean
+    }>
+    currentRepoId: string
+    disabled: boolean
+    onActivate: (id: string) => void
+    onReorder: (fromId: string, toId: string) => void
+  },
+}))
+
+vi.mock('#/web/components/repo-workspace/WorkspaceRepositoryList.tsx', () => ({
+  WorkspaceRepositoryList: (props: NonNullable<typeof repositoryListState.props>) => {
+    repositoryListState.props = props
+    return (
+      <div data-testid="workspace-repository-list" data-disabled={props.disabled ? 'true' : 'false'}>
+        {props.repositories.map((repository) => (
+          <button
+            key={repository.id}
+            type="button"
+            aria-current={repository.id === props.currentRepoId ? 'page' : undefined}
+            onClick={() => props.onActivate(repository.id)}
+          >
+            {repository.name} {repository.branch} {repository.changeCount || ''}{' '}
+            {repository.unavailable ? 'workspace.repository-unavailable' : ''}
+          </button>
+        ))}
+      </div>
+    )
+  },
 }))
 
 const ROOT = '/workspace'
@@ -26,7 +64,11 @@ let container: HTMLDivElement | null = null
 let root: Root | null = null
 const activateWorkspaceRepository = vi.fn()
 const rescanWorkspace = vi.fn(async () => {})
-const configureWorkspace = vi.fn(async () => ({ ok: true as const }))
+const configureWorkspace = vi.fn(
+  async (_rootId: string, _config: WorkspaceConfig): Promise<{ ok: true } | { ok: false; message: string }> => ({
+    ok: true,
+  }),
+)
 
 beforeEach(() => {
   ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -37,6 +79,7 @@ beforeEach(() => {
   rescanWorkspace.mockResolvedValue(undefined)
   configureWorkspace.mockReset()
   configureWorkspace.mockResolvedValue({ ok: true })
+  repositoryListState.props = null
   const overview = replaceRepo(emptyRepo(ROOT, 'workspace'), (repo) => {
     repo.isGitRepo = false
   })
@@ -113,7 +156,10 @@ describe('WorkspaceRepositoryRail', () => {
     expect(container?.textContent).toContain('workspace.scan-skipped:1')
     expect(container?.querySelector('button[aria-current="page"]')?.textContent).toContain('api')
     expect(container?.querySelector('button[aria-label="workspace.rescan"]')).not.toBeNull()
-    expect(container?.querySelector('button[aria-label="workspace.batch.create-action"]')).not.toBeNull()
+    const batchCreate = container?.querySelector('button[aria-label="workspace.batch.create-action"]')
+    expect(batchCreate).not.toBeNull()
+    expect(batchCreate?.querySelector('.lucide-folder-plus')).not.toBeNull()
+    expect(batchCreate?.querySelector('.lucide-git-branch-plus')).toBeNull()
     expect(container?.querySelector('button[aria-label="workspace.batch.remove-action"]')).not.toBeNull()
     expect(container?.querySelector('button[aria-label="workspace.batch.pull-action"]')).not.toBeNull()
     expect(container?.querySelector('button[aria-label="workspace.configure"]')).not.toBeNull()
@@ -148,5 +194,60 @@ describe('WorkspaceRepositoryRail', () => {
     await act(async () => document.querySelector<HTMLButtonElement>('button[type="submit"]')?.click())
 
     expect(configureWorkspace).toHaveBeenCalledWith(ROOT, { repo: ['api', 'web'] })
+  })
+
+  test('optimistically reorders configured repositories and persists their names', async () => {
+    const web = useReposStore.getState().repos[WEB]!
+    useReposStore.setState({
+      repos: { ...useReposStore.getState().repos, [WEB]: { ...web, availability: { phase: 'available' } } },
+    })
+    let resolveSave: ((value: { ok: true }) => void) | undefined
+    configureWorkspace.mockImplementation(() => new Promise<{ ok: true }>((resolve) => (resolveSave = resolve)))
+    act(() => root!.render(<WorkspaceRepositoryRail workspaceRootId={ROOT} currentRepoId={API} />))
+
+    act(() => repositoryListState.props?.onReorder(WEB, API))
+
+    expect(repositoryListState.props?.repositories.map((repository) => repository.id)).toEqual([WEB, API])
+    expect(repositoryListState.props?.disabled).toBe(true)
+    expect(container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.configure"]')?.disabled).toBe(true)
+    expect(configureWorkspace).toHaveBeenCalledWith(ROOT, { repo: ['web', 'api'] })
+    act(() => repositoryListState.props?.onReorder(API, WEB))
+    expect(configureWorkspace).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      useReposStore.setState((state) => ({
+        workspaceProjects: {
+          ...state.workspaceProjects,
+          [ROOT]: { ...state.workspaceProjects[ROOT]!, repositoryIds: [WEB, API] },
+        },
+      }))
+      resolveSave?.({ ok: true })
+      await Promise.resolve()
+    })
+
+    expect(repositoryListState.props?.repositories.map((repository) => repository.id)).toEqual([WEB, API])
+    expect(repositoryListState.props?.disabled).toBe(false)
+  })
+
+  test('rolls back an unsuccessful reorder and reports the configuration error', async () => {
+    const web = useReposStore.getState().repos[WEB]!
+    useReposStore.setState({
+      repos: { ...useReposStore.getState().repos, [WEB]: { ...web, availability: { phase: 'available' } } },
+    })
+    configureWorkspace.mockResolvedValue({ ok: false, message: 'workspace.config.write-failed' })
+    act(() => root!.render(<WorkspaceRepositoryRail workspaceRootId={ROOT} currentRepoId={API} />))
+
+    await act(async () => repositoryListState.props?.onReorder(WEB, API))
+
+    expect(repositoryListState.props?.repositories.map((repository) => repository.id)).toEqual([API, WEB])
+    expect(container?.querySelector('[role="alert"]')?.textContent).toContain('workspace.config.write-failed')
+  })
+
+  test('keeps Overview outside the sortable repository membership', () => {
+    act(() => root!.render(<WorkspaceRepositoryRail workspaceRootId={ROOT} currentRepoId={API} />))
+
+    expect(repositoryListState.props?.repositories.map((repository) => repository.id)).toEqual([API, WEB])
+    expect(repositoryListState.props?.repositories.some((repository) => repository.id === ROOT)).toBe(false)
+    expect(container?.textContent).toContain('workspace.overview')
   })
 })

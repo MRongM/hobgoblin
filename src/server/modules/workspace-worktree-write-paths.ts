@@ -122,6 +122,7 @@ export function createWorkspaceWorktreeService(
                 branch: member.branch,
                 worktreePath: member.worktreePath,
                 alsoDeleteBranch: removalOptions.alsoDeleteBranch,
+                forceDeleteBranch: removalOptions.alsoDeleteBranch,
                 alsoDeleteUpstream: removalOptions.alsoDeleteUpstream,
               },
               controller.signal,

@@ -1,18 +1,13 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
-import {
-  Download,
-  FolderGit2,
-  FolderTree,
-  GitBranchPlus,
-  LoaderCircle,
-  RefreshCw,
-  Settings2,
-  Trash2,
-} from 'lucide-react'
-import { Badge } from '#/web/components/ui/badge.tsx'
+import { arrayMove } from '@dnd-kit/sortable'
+import { Download, FolderPlus, FolderTree, LoaderCircle, RefreshCw, Settings2, Trash2 } from 'lucide-react'
 import { Button } from '#/web/components/ui/button.tsx'
 import { WorkspaceConfigurationDialog } from '#/web/components/repo-workspace/WorkspaceConfigurationDialog.tsx'
+import {
+  WorkspaceRepositoryList,
+  type WorkspaceRepositoryListItem,
+} from '#/web/components/repo-workspace/WorkspaceRepositoryList.tsx'
 import { WorkspaceWorktreeDialog } from '#/web/components/repo-workspace/WorkspaceWorktreeDialog.tsx'
 import { useWorkspaceWorktreeActions } from '#/web/hooks/useWorkspaceWorktreeActions.ts'
 import { cn } from '#/web/lib/cn.ts'
@@ -44,6 +39,21 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
   const [configurationOpen, setConfigurationOpen] = useState(false)
   const [batchOpen, setBatchOpen] = useState(false)
   const [batchOperation, setBatchOperation] = useState<'create' | 'remove' | 'pull'>('create')
+  const [optimisticRepositoryIds, setOptimisticRepositoryIds] = useState<string[] | null>(null)
+  const [reorderPending, setReorderPending] = useState(false)
+  const [reorderError, setReorderError] = useState<string | null>(null)
+  const candidateNameById = useMemo(
+    () => new Map((workspace?.candidates ?? []).map((candidate) => [candidate.id, candidate.name])),
+    [workspace?.candidates],
+  )
+  const configuredRepositoryNames = useMemo(
+    () =>
+      (workspace?.repositoryIds ?? []).flatMap((repositoryId) => {
+        const name = candidateNameById.get(repositoryId)
+        return name ? [name] : []
+      }),
+    [candidateNameById, workspace?.repositoryIds],
+  )
   const refreshWorkspaceAfterBatch = useCallback(async () => {
     const state = useReposStore.getState()
     const memberIds = state.workspaceProjects[workspaceRootId]?.repositoryIds ?? []
@@ -54,10 +64,25 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
   if (!workspace) return null
 
   const scanning = workspace.phase === 'scanning'
+  const displayRepositoryIds = optimisticRepositoryIds ?? workspace.repositoryIds
   const batchReady =
     workspace.configured &&
     workspace.repositoryIds.length > 0 &&
     workspace.repositoryIds.every((repositoryId) => repos[repositoryId]?.availability.phase === 'available')
+  const repositoryItems: WorkspaceRepositoryListItem[] = displayRepositoryIds.flatMap((repositoryId) => {
+    const repo = repos[repositoryId]
+    if (!repo) return []
+    return [
+      {
+        id: repositoryId,
+        name: repo.name,
+        branch: repo.data.currentBranch,
+        changeCount: repo.data.status.reduce((total, status) => total + status.entries.length, 0),
+        unavailable: repo.availability.phase === 'unavailable',
+      },
+    ]
+  })
+  const reorderReady = batchReady && !reorderPending
   const openBatch = (operation: 'create' | 'remove' | 'pull') => {
     batchActions.reset()
     setBatchOperation(operation)
@@ -65,6 +90,29 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
     if (operation === 'pull') void batchActions.requestPull()
   }
   const previewBatch = (request: WorkspaceWorktreePlanRequest) => batchActions.requestPlan(request)
+  const reorderRepositories = async (fromId: string, toId: string) => {
+    if (!reorderReady) return
+    const fromIndex = displayRepositoryIds.indexOf(fromId)
+    const toIndex = displayRepositoryIds.indexOf(toId)
+    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return
+    const nextIds = arrayMove(displayRepositoryIds, fromIndex, toIndex)
+    const nextNames = nextIds.map((repositoryId) => candidateNameById.get(repositoryId))
+    if (nextNames.some((name) => !name)) {
+      setReorderError('workspace.repository-reorder-failed')
+      return
+    }
+
+    setOptimisticRepositoryIds(nextIds)
+    setReorderPending(true)
+    setReorderError(null)
+    const result = await configureWorkspace(workspaceRootId, { repo: nextNames as string[] }).catch(() => ({
+      ok: false as const,
+      message: 'workspace.config.write-failed',
+    }))
+    setOptimisticRepositoryIds(null)
+    setReorderPending(false)
+    if (!result.ok) setReorderError(result.message)
+  }
 
   return (
     <>
@@ -84,10 +132,10 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
             title={t(
               batchChoices.baseBranches.length > 0 ? 'workspace.batch.create-action' : 'workspace.batch.no-shared-base',
             )}
-            disabled={!batchReady || batchChoices.baseBranches.length === 0}
+            disabled={!batchReady || reorderPending || batchChoices.baseBranches.length === 0}
             onClick={() => openBatch('create')}
           >
-            <GitBranchPlus aria-hidden="true" />
+            <FolderPlus aria-hidden="true" />
           </Button>
           <Button
             type="button"
@@ -99,7 +147,7 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
                 ? 'workspace.batch.remove-action'
                 : 'workspace.batch.no-shared-worktree',
             )}
-            disabled={!batchReady || batchChoices.removableBranches.length === 0}
+            disabled={!batchReady || reorderPending || batchChoices.removableBranches.length === 0}
             onClick={() => openBatch('remove')}
           >
             <Trash2 aria-hidden="true" />
@@ -110,7 +158,7 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
             size="icon-xs"
             aria-label={t('workspace.batch.pull-action')}
             title={t('workspace.batch.pull-action')}
-            disabled={!batchReady}
+            disabled={!batchReady || reorderPending}
             onClick={() => openBatch('pull')}
           >
             <Download aria-hidden="true" />
@@ -121,6 +169,7 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
             size="icon-xs"
             aria-label={t('workspace.configure')}
             title={t('workspace.configure')}
+            disabled={reorderPending}
             onClick={() => setConfigurationOpen(true)}
           >
             <Settings2 aria-hidden="true" />
@@ -149,26 +198,19 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
             prefix="./"
             onActivate={() => activateWorkspaceRepository(workspaceRootId, null)}
           />
-          {workspace.repositoryIds.map((repositoryId, index) => {
-            const repo = repos[repositoryId]
-            if (!repo) return null
-            const unavailable = repo.availability.phase === 'unavailable'
-            const changeCount = repo.data.status.reduce((total, status) => total + status.entries.length, 0)
-            return (
-              <ManifestRow
-                key={repositoryId}
-                active={currentRepoId === repositoryId}
-                icon={FolderGit2}
-                name={repo.name}
-                branch={repo.data.currentBranch}
-                changeCount={changeCount}
-                unavailable={unavailable}
-                terminal={index === workspace.repositoryIds.length - 1}
-                onActivate={() => activateWorkspaceRepository(workspaceRootId, repositoryId)}
-              />
-            )
-          })}
+          <WorkspaceRepositoryList
+            repositories={repositoryItems}
+            currentRepoId={currentRepoId}
+            disabled={!reorderReady}
+            onActivate={(repositoryId) => activateWorkspaceRepository(workspaceRootId, repositoryId)}
+            onReorder={(fromId, toId) => void reorderRepositories(fromId, toId)}
+          />
         </div>
+        {reorderError ? (
+          <div className="border-t border-separator/60 px-3 py-1.5 text-[10px] leading-4 text-danger" role="alert">
+            {t(reorderError)}
+          </div>
+        ) : null}
         {(workspace.error || workspace.configurationError || !workspace.configured || workspace.skipped.length > 0) && (
           <div className="border-t border-separator/60 px-3 py-1.5 text-[10px] leading-4 text-warning" role="status">
             {workspace.error
@@ -184,12 +226,14 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
       <WorkspaceConfigurationDialog
         open={configurationOpen}
         onOpenChange={setConfigurationOpen}
+        configuredRepositoryNames={configuredRepositoryNames}
         candidates={workspace.candidates}
         onSave={(config) => configureWorkspace(workspaceRootId, config)}
       />
       <WorkspaceWorktreeDialog
         open={batchOpen}
         operation={batchOperation}
+        repositoryCount={workspace.repositoryIds.length}
         baseBranches={batchChoices.baseBranches}
         removableBranches={batchChoices.removableBranches}
         plan={batchActions.plan}
@@ -218,32 +262,22 @@ function ManifestRow({
   icon: Icon,
   name,
   prefix,
-  branch,
-  changeCount = 0,
-  unavailable = false,
-  terminal = false,
   onActivate,
 }: {
   active: boolean
-  icon: typeof FolderGit2
+  icon: typeof FolderTree
   name: string
   prefix?: string
-  branch?: string
-  changeCount?: number
-  unavailable?: boolean
-  terminal?: boolean
   onActivate: () => void
 }) {
-  const t = useT()
   return (
     <button
       type="button"
       aria-current={active ? 'page' : undefined}
-      title={unavailable ? t('workspace.repository-unavailable') : name}
+      title={name}
       className={cn(
         'group relative flex h-7 w-full min-w-0 items-center gap-2 rounded-[var(--goblin-brand-radius-sm,var(--radius-sm))] px-2 text-left text-xs transition-colors duration-100',
         active ? 'bg-selected text-selected-foreground' : 'text-foreground hover:bg-list-row-hover',
-        unavailable && 'opacity-60',
       )}
       onClick={onActivate}
     >
@@ -253,20 +287,7 @@ function ManifestRow({
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         {prefix && <span className="shrink-0 font-mono text-muted-foreground">{prefix}</span>}
         <span className="min-w-0 truncate font-medium">{name}</span>
-        {branch && <span className="min-w-0 truncate font-mono text-[10px] text-muted-foreground">{branch}</span>}
       </span>
-      {changeCount > 0 && (
-        <Badge variant="attention" className="h-4 min-w-4 justify-center rounded-full px-1 text-[9px] tabular-nums">
-          {changeCount}
-        </Badge>
-      )}
-      {unavailable && <span className="shrink-0 text-[9px] text-danger">{t('workspace.repository-unavailable')}</span>}
-      {terminal && (
-        <span
-          className="absolute bottom-0 left-[0.68rem] h-1.5 w-1.5 border-b border-l border-separator"
-          aria-hidden="true"
-        />
-      )}
     </button>
   )
 }

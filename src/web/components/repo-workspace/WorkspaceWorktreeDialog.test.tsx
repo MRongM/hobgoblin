@@ -81,6 +81,7 @@ describe('WorkspaceWorktreeDialog', () => {
         <WorkspaceWorktreeDialog
           open
           operation="create"
+          repositoryCount={2}
           baseBranches={['main', 'develop']}
           removableBranches={[]}
           plan={null}
@@ -105,6 +106,13 @@ describe('WorkspaceWorktreeDialog', () => {
       Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(base, 'develop')
       base.dispatchEvent(new Event('change', { bubbles: true }))
     })
+    const summary = document.querySelector('[data-testid="workspace-worktree-intent-summary"]')
+    expect(summary?.textContent).toContain('develop')
+    expect(summary?.textContent).toContain('feature/b')
+    expect(summary?.textContent).toContain('workspace.worktree.repositories-count:2')
+    expect(document.querySelector('button[data-action="preview"]')?.textContent).toContain(
+      'workspace.worktree.check-repositories',
+    )
     await act(async () => document.querySelector<HTMLButtonElement>('button[data-action="preview"]')?.click())
 
     expect(onPreview).toHaveBeenCalledWith({ operation: 'create', branch: 'feature/b', baseBranch: 'develop' })
@@ -156,6 +164,7 @@ describe('WorkspaceWorktreeDialog', () => {
         <WorkspaceWorktreeDialog
           open
           operation="remove"
+          repositoryCount={2}
           baseBranches={[]}
           removableBranches={['feature/a']}
           plan={null}
@@ -171,10 +180,22 @@ describe('WorkspaceWorktreeDialog', () => {
       ),
     )
 
-    expect(findLabel('action.confirm-delete-branch-also-delete-upstream')).toBeUndefined()
+    const removeWorktree = document.querySelector('[data-workspace-removal-step="worktree"]')
+    const deleteBranchLabel = findLabel('action.confirm-remove-worktree-also-delete-branch')
+    expect(removeWorktree?.textContent).toContain('workspace.worktree.remove-linked-worktree')
+    expect(removeWorktree?.textContent).toContain('workspace.worktree.always')
+    expect(
+      removeWorktree && deleteBranchLabel
+        ? removeWorktree.compareDocumentPosition(deleteBranchLabel) & Node.DOCUMENT_POSITION_FOLLOWING
+        : 0,
+    ).not.toBe(0)
+    const cleanupOptions = document.querySelector('[data-workspace-removal-cleanup]')
+    expect(cleanupOptions?.className).toContain('grid-cols-2')
     const deleteBranch = checkboxForLabel('action.confirm-remove-worktree-also-delete-branch')
-    await act(async () => deleteBranch.click())
     const deleteUpstream = checkboxForLabel('action.confirm-delete-branch-also-delete-upstream')
+    expect(deleteUpstream.hasAttribute('disabled')).toBe(true)
+    await act(async () => deleteBranch.click())
+    expect(deleteUpstream.hasAttribute('disabled')).toBe(false)
     await act(async () => deleteUpstream.click())
     await act(async () => document.querySelector<HTMLButtonElement>('button[data-action="preview"]')?.click())
 
@@ -208,7 +229,7 @@ describe('WorkspaceWorktreeDialog', () => {
     )
 
     expect(checkboxForLabel('action.confirm-remove-worktree-also-delete-branch').hasAttribute('disabled')).toBe(true)
-    expect(findLabel('action.confirm-delete-branch-also-delete-upstream')).toBeUndefined()
+    expect(checkboxForLabel('action.confirm-delete-branch-also-delete-upstream').hasAttribute('disabled')).toBe(true)
   })
 
   test('closes after a completely successful confirmation', async () => {
@@ -218,6 +239,7 @@ describe('WorkspaceWorktreeDialog', () => {
         <WorkspaceWorktreeDialog
           open
           operation="create"
+          repositoryCount={2}
           plan={plan}
           result={null}
           pending={false}
@@ -243,6 +265,7 @@ describe('WorkspaceWorktreeDialog', () => {
         <WorkspaceWorktreeDialog
           open
           operation="create"
+          repositoryCount={2}
           plan={plan}
           result={null}
           pending={false}
@@ -293,6 +316,7 @@ describe('WorkspaceWorktreeDialog', () => {
         <WorkspaceWorktreeDialog
           open
           operation="create"
+          repositoryCount={2}
           plan={plan}
           result={null}
           pending={false}
@@ -309,8 +333,13 @@ describe('WorkspaceWorktreeDialog', () => {
       ),
     )
 
-    expect(document.body.textContent).toContain('/workspace/api')
-    expect(document.body.textContent).toContain('main')
+    const summary = document.querySelector('[data-testid="workspace-worktree-intent-summary"]')
+    expect(summary?.textContent).toContain('main')
+    expect(summary?.textContent).toContain('feature/a')
+    expect(summary?.textContent).toContain('workspace.worktree.repositories-count:2')
+    const repositoryLabel = document.querySelector('[data-workspace-repository-id]')
+    expect(repositoryLabel?.textContent).toBe('api')
+    expect(repositoryLabel?.getAttribute('title')).toBe('/workspace/api')
     expect(document.body.textContent).toContain('/workspace/api-feature-a')
     expect(document.body.textContent).toContain('workspace.worktree.bootstrap-copy:2')
     await act(async () => document.querySelector<HTMLButtonElement>('button[data-action="confirm"]')?.click())
