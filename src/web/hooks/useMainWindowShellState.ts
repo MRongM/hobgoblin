@@ -31,7 +31,7 @@ export function useMainWindowShellState({
   const closeRepoCandidateName = useReposStore((s) =>
     closeRepoCandidateId ? (s.repos[closeRepoCandidateId]?.name ?? closeRepoCandidateId) : '',
   )
-  const { setActive, closeRepo, cycleActive, selectBranch, setDetailTab } = useStoreWithEqualityFn(
+  const { setActive, activateProject, closeRepo, cycleActive, selectBranch, setDetailTab } = useStoreWithEqualityFn(
     useReposStore,
     mainWindowNavigationStoreActionsFromStore,
     mainWindowNavigationStoreActionsEqual,
@@ -72,6 +72,7 @@ export function useMainWindowShellState({
         activeId,
         order,
         setActive,
+        activateProject,
         closeRepo: requestCloseRepo,
         cycleActive,
         selectBranch,
@@ -80,6 +81,7 @@ export function useMainWindowShellState({
       }),
     [
       activeId,
+      activateProject,
       cycleActive,
       openSettings,
       order,

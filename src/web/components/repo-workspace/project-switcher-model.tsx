@@ -29,6 +29,7 @@ export interface ProjectSummary {
   id: string
   name: string
   unavailable: boolean
+  isGitRepo: boolean
   worktreePaths: string[]
 }
 
@@ -44,6 +45,7 @@ function projectSummariesEqual(a: ProjectSummary[], b: ProjectSummary[]): boolea
       item.id === b[index]!.id &&
       item.name === b[index]!.name &&
       item.unavailable === b[index]!.unavailable &&
+      item.isGitRepo === b[index]!.isGitRepo &&
       stringArraysEqual(item.worktreePaths, b[index]!.worktreePaths),
   )
 }
@@ -61,6 +63,7 @@ export function useProjectSummaries(): ProjectSummary[] {
                 id: repo.id,
                 name: repo.name,
                 unavailable: repo.availability.phase === 'unavailable',
+                isGitRepo: repo.isGitRepo !== false,
                 worktreePaths: repoTerminalWorktreePaths(repo),
               }
             : null

@@ -146,6 +146,25 @@ vi.mock('#/web/components/repo-workspace/PlainWorkspaceTerminalPanel.tsx', () =>
   ),
 }))
 
+vi.mock('#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx', () => ({
+  WorkspaceRepositoryRail: ({
+    workspaceRootId,
+    currentRepoId,
+    fill,
+  }: {
+    workspaceRootId: string
+    currentRepoId: string
+    fill?: boolean
+  }) => (
+    <div
+      data-testid="workspace-repository-rail"
+      data-workspace-root-id={workspaceRootId}
+      data-current-repo-id={currentRepoId}
+      data-fill={String(!!fill)}
+    />
+  ),
+}))
+
 // Sidebar chrome — exercised by their own suites; the status bar pulls in
 // react-query (project theme menu) which this harness doesn't provide.
 vi.mock('#/web/components/repo-workspace/SidebarProjectHeader.tsx', () => ({
@@ -190,6 +209,7 @@ vi.mock('#/web/components/SplitPane.tsx', () => ({
     after,
     orientation,
     afterSize,
+    beforeCollapsed,
     afterCollapsed,
     onAfterSizeChange,
   }: {
@@ -197,6 +217,7 @@ vi.mock('#/web/components/SplitPane.tsx', () => ({
     after: React.ReactNode
     orientation: string
     afterSize: number
+    beforeCollapsed?: boolean
     afterCollapsed?: boolean
     onAfterSizeChange?: (size: number) => void
   }) => (
@@ -204,6 +225,7 @@ vi.mock('#/web/components/SplitPane.tsx', () => ({
       data-testid="split-pane"
       data-orientation={orientation}
       data-after-size={String(afterSize)}
+      data-before-collapsed={String(!!beforeCollapsed)}
       data-after-collapsed={String(!!afterCollapsed)}
     >
       <button type="button" data-testid="resize-file-tree-pane" onClick={() => onAfterSizeChange?.(44.44)}>
@@ -234,6 +256,81 @@ afterEach(() => {
 })
 
 describe('RepoExplorerPane', () => {
+  test('renders the repository manifest above the root file tree on workspace Overview', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    useReposStore.setState({
+      workspaceProjects: {
+        [REPO_ID]: {
+          rootId: REPO_ID,
+          repositoryIds: [`${REPO_ID}/api`],
+          candidates: [],
+          configured: false,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="left-right" showActions />)
+    })
+
+    const before = container.querySelector('[data-testid="split-pane-before"]')
+    const rail = before?.querySelector('[data-testid="workspace-repository-rail"]')
+    expect(rail?.getAttribute('data-workspace-root-id')).toBe(REPO_ID)
+    expect(rail?.getAttribute('data-current-repo-id')).toBe(REPO_ID)
+    expect(before?.querySelector('[data-testid="project-file-tree"]')).toBeTruthy()
+    await act(async () => root.unmount())
+  })
+
+  test('renders the repository manifest above worktrees for a workspace child', async () => {
+    useReposStore.setState((state) => {
+      const repo = state.repos[REPO_ID]
+      if (!repo) return state
+      repo.workspaceRootId = '/workspace'
+      return {
+        repos: { ...state.repos, [REPO_ID]: repo },
+        workspaceProjects: {
+          '/workspace': {
+            rootId: '/workspace',
+            repositoryIds: [REPO_ID],
+            candidates: [{ id: REPO_ID, name: 'repo', selected: true, available: true }],
+            configured: true,
+            configurationError: null,
+            phase: 'ready',
+            skipped: [],
+            error: null,
+          },
+        },
+      }
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="left-right" showActions />)
+    })
+
+    const sidebar = container.querySelector('[data-testid="split-pane-before"]')
+    const rail = sidebar?.querySelector('[data-testid="workspace-repository-rail"]')
+    expect(rail?.getAttribute('data-workspace-root-id')).toBe('/workspace')
+    expect(rail?.getAttribute('data-current-repo-id')).toBe(REPO_ID)
+    expect(sidebar?.querySelector('[data-testid="branch-list"]')).not.toBeNull()
+    await act(async () => root.unmount())
+  })
+
   test('renders non-git local workspaces as files and terminal only without a branch pane', async () => {
     seedRepoState({
       id: REPO_ID,
@@ -453,6 +550,94 @@ describe('RepoExplorerPane', () => {
     await act(async () => root.unmount())
   })
 
+  test('collapses the desktop workspace Overview bottom file area and keeps its chrome reachable', async () => {
+    const onToggleFileArea = vi.fn()
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    useReposStore.setState({
+      workspaceProjects: {
+        [REPO_ID]: {
+          rootId: REPO_ID,
+          repositoryIds: [],
+          candidates: [],
+          configured: false,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <RepoExplorerPane
+          repoId={REPO_ID}
+          layout="left-right"
+          showActions={false}
+          fileAreaCollapsed
+          onToggleFileArea={onToggleFileArea}
+        />,
+      )
+    })
+
+    const splitPanes = container.querySelectorAll('[data-testid="split-pane"]')
+    expect(splitPanes).toHaveLength(2)
+    expect(splitPanes[0]?.getAttribute('data-before-collapsed')).toBe('false')
+    expect(splitPanes[1]?.getAttribute('data-after-collapsed')).toBe('true')
+    expect(container.querySelector('[data-testid="project-file-tree"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="workspace-repository-rail"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="workspace-repository-rail"]')?.getAttribute('data-fill')).toBe('true')
+    expect(container.querySelector('[data-testid="plain-workspace-terminal"]')).not.toBeNull()
+    expect(container.querySelectorAll('[data-testid="statusbar"]')).toHaveLength(1)
+    expect(container.querySelector('[data-testid="statusbar"]')?.getAttribute('data-file-area-collapsed')).toBe('true')
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="statusbar-file-area-toggle"]')?.click()
+    })
+    expect(onToggleFileArea).toHaveBeenCalledTimes(1)
+    await act(async () => root.unmount())
+  })
+
+  test('keeps a compact plain workspace file area expanded', async () => {
+    compactUi = true
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <RepoExplorerPane
+          repoId={REPO_ID}
+          layout="top-bottom"
+          showActions={false}
+          fileAreaCollapsed
+          onToggleFileArea={() => {}}
+        />,
+      )
+    })
+
+    expect(container.querySelector('[data-testid="split-pane"]')?.getAttribute('data-before-collapsed')).toBe('false')
+    expect(container.querySelector('[data-testid="project-file-tree"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="statusbar"]')).toBeNull()
+    await act(async () => root.unmount())
+  })
+
   test('renders branch list without a branch-area toolbar above it', async () => {
     seedRepoState({
       id: REPO_ID,
@@ -599,8 +784,27 @@ describe('RepoExplorerPane', () => {
     await act(async () => root.unmount())
   })
 
-  test('forwards controlled file area collapse to the split pane and status bar', async () => {
+  test('collapses the selected repository file area while retaining branches and status controls', async () => {
     const onToggleFileArea = vi.fn()
+    useReposStore.setState((state) => {
+      const repo = state.repos[REPO_ID]!
+      repo.workspaceRootId = '/workspace'
+      return {
+        repos: { ...state.repos, [REPO_ID]: repo },
+        workspaceProjects: {
+          '/workspace': {
+            rootId: '/workspace',
+            repositoryIds: [REPO_ID],
+            candidates: [{ id: REPO_ID, name: 'repo', selected: true, available: true }],
+            configured: true,
+            configurationError: null,
+            phase: 'ready',
+            skipped: [],
+            error: null,
+          },
+        },
+      }
+    })
     const container = document.createElement('div')
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -617,6 +821,8 @@ describe('RepoExplorerPane', () => {
     })
 
     expect(container.querySelector('[data-testid="split-pane"]')?.getAttribute('data-after-collapsed')).toBe('true')
+    expect(container.querySelector('[data-testid="repo-explorer-toolbar"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="project-file-tree"]')).not.toBeNull()
     const branchList = container.querySelector('[data-testid="branch-list"]')
     expect(branchList).not.toBeNull()
     expect(branchList?.parentElement?.parentElement?.className).toContain('bg-sidebar')
@@ -674,9 +880,7 @@ describe('RepoExplorerPane', () => {
 
     expect(container.querySelector('[data-testid="sidebar-project-header"]')).not.toBeNull()
     expect(container.querySelector('[data-testid="statusbar"]')).not.toBeNull()
-    expect(container.querySelector('[data-testid="statusbar"]')?.getAttribute('data-file-area-collapsed')).toBe(
-      'unset',
-    )
+    expect(container.querySelector('[data-testid="statusbar"]')?.getAttribute('data-file-area-collapsed')).toBe('unset')
     expect(container.querySelector('[data-testid="statusbar-file-area-toggle"]')).toBeNull()
     expect(container.querySelector('[data-testid="split-pane"]')?.getAttribute('data-orientation')).toBe('vertical')
 
@@ -699,12 +903,7 @@ describe('RepoExplorerPane', () => {
     })
 
     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-    expect(tabs.map((tab) => tab.textContent)).toEqual([
-      'file-tree.title',
-      'tab.changes',
-      'tab.status',
-      'tab.history',
-    ])
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['file-tree.title', 'tab.changes', 'tab.status', 'tab.history'])
     expect(container.querySelector('[data-testid="project-file-tree"]')).toBeTruthy()
 
     await act(async () => {
@@ -798,12 +997,7 @@ describe('RepoExplorerPane', () => {
     })
 
     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-    expect(tabs.map((tab) => tab.textContent)).toEqual([
-      'file-tree.title',
-      'tab.changes',
-      'tab.status',
-      'tab.history',
-    ])
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['file-tree.title', 'tab.changes', 'tab.status', 'tab.history'])
 
     // ports is in the collapsed overflow area — activate it via the store action
     await act(async () => {
@@ -961,12 +1155,7 @@ describe('RepoExplorerPane', () => {
     })
 
     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-    expect(tabs.map((tab) => tab.textContent)).toEqual([
-      'file-tree.title',
-      'tab.changes',
-      'tab.status',
-      'tab.history',
-    ])
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['file-tree.title', 'tab.changes', 'tab.status', 'tab.history'])
     const toggle = container.querySelector<HTMLButtonElement>('[data-testid="explorer-tabs-overflow-toggle"]')
     expect(toggle).toBeTruthy()
     expect(toggle?.getAttribute('aria-expanded')).toBe('false')

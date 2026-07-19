@@ -13,6 +13,7 @@ import { createRemoteRoutes } from '#/server/routes/remote.ts'
 import { createRealtimeRoutes } from '#/server/routes/realtime.ts'
 import { createRepoRoutes } from '#/server/routes/repo.ts'
 import { createSettingsRoutes } from '#/server/routes/settings.ts'
+import { createWorkspaceRoutes } from '#/server/routes/workspace.ts'
 import { createWebAccessAuthRoutes, readWebAccessSessionCookie } from '#/server/routes/web-access-auth.ts'
 import type { ServerTerminalHost } from '#/server/terminal/terminal-host.ts'
 import { getServerSettingsPrefs, getServerWebAccessCredentials } from '#/server/modules/settings-source.ts'
@@ -136,10 +137,12 @@ export function createApp(options: ServerAppOptions): Hono {
   app.use('/api/settings/*', capabilityMiddleware)
   app.use('/api/remote/*', capabilityMiddleware)
   app.use('/api/repo/*', capabilityMiddleware)
+  app.use('/api/workspace/*', capabilityMiddleware)
   app.use('/api/port-forwarding/*', capabilityMiddleware)
   app.route('/api/settings', createSettingsRoutes(settingsState, { revokeAllWebSessions: webAccessAuth.revokeAll }))
   app.route('/api/remote', createRemoteRoutes())
   app.route('/api/repo', createRepoRoutes())
+  app.route('/api/workspace', createWorkspaceRoutes())
   app.route('/api/port-forwarding', createPortForwardingRoutes())
   app.route(
     '/ws',

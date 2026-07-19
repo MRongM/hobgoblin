@@ -99,6 +99,8 @@ export const useReposStore = create<ReposStore>()(
     (set, get) => ({
       // Runtime-coherent renderer projection.
       repos: {},
+      workspaceProjects: {},
+      workspaceActiveRepoByRoot: {},
 
       // Restorable warm-start cache.
       restorableRepoCache: {},

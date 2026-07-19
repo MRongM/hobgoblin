@@ -22,6 +22,7 @@ interface RepoWorkspaceProps {
   mode?: Exclude<RepoWorkspaceMode, 'focus'>
   detailSize?: number
   onDetailSizeChange?: (size: number) => void
+  branchCollapsed?: boolean
 }
 
 interface ToolbarProps extends HTMLAttributes<HTMLDivElement> {
@@ -90,6 +91,7 @@ export function RepoWorkspace({
   mode = 'split',
   detailSize = DEFAULT_DETAIL_PANE_SIZES[layout],
   onDetailSizeChange,
+  branchCollapsed = false,
 }: RepoWorkspaceProps) {
   const axis = workspaceLayoutAxis(layout)
   const { toolbarHeightPx } = useRuntimeChromeSettings()
@@ -101,6 +103,7 @@ export function RepoWorkspace({
         after={detailPane}
         afterSize={detailSize}
         onAfterSizeChange={onDetailSizeChange}
+        beforeCollapsed={branchCollapsed}
         beforeMinSize={axis === 'columns' ? LEFT_RIGHT_BRANCH_MIN_SIZE : TOP_BOTTOM_BRANCH_MIN_SIZE}
         afterMinSize={axis === 'columns' ? LEFT_RIGHT_DETAIL_MIN_SIZE : TOP_BOTTOM_DETAIL_MIN_SIZE}
         afterMaxSize="90%"

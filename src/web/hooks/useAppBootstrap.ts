@@ -42,7 +42,11 @@ export function useAppBootstrap() {
         setProjectListExpanded(restoredWorkspaceState.projectListExpanded)
         applySessionLayoutState(normalizedLayout)
         applySessionSelectedTerminalState(restoredWorkspaceState.selectedTerminalByWorktree)
-        await hydrateSession(session.openRepos, session.activeRepo)
+        await hydrateSession(
+          session.openRepos,
+          session.activeRepo,
+          restoredWorkspaceState.workspaceActiveRepoByRoot,
+        )
       } catch (err) {
         console.warn('[bootstrap] failed', err)
         useReposStore.setState({ sessionReady: true })

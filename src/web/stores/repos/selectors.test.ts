@@ -83,6 +83,9 @@ describe('repo selectors', () => {
       restorableWorkspaceStateFromStore({
         order: ['/tmp/repo'],
         activeId: '/tmp/repo',
+        workspaceActiveRepoByRoot: {
+          '/tmp/repo': '/tmp/repo/api',
+        },
         projectListExpanded: true,
         detailCollapsed: false,
         detailFocusMode: true,
@@ -102,6 +105,9 @@ describe('repo selectors', () => {
     ).toEqual({
       order: ['/tmp/repo'],
       activeId: '/tmp/repo',
+      workspaceActiveRepoByRoot: {
+        '/tmp/repo': '/tmp/repo/api',
+      },
       projectListExpanded: true,
       detailCollapsed: false,
       detailFocusMode: true,
@@ -325,6 +331,7 @@ describe('repo selectors', () => {
       mainWindowNavigationStoreActionsEqual(
         mainWindowNavigationStoreActionsFromStore({
           setActive: fnA,
+          activateProject: fnA,
           closeRepo: fnA,
           cycleActive: fnA,
           selectBranch: fnA,
@@ -332,6 +339,7 @@ describe('repo selectors', () => {
         }),
         mainWindowNavigationStoreActionsFromStore({
           setActive: fnA,
+          activateProject: fnA,
           closeRepo: fnA,
           cycleActive: fnA,
           selectBranch: fnA,

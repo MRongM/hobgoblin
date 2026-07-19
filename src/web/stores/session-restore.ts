@@ -18,6 +18,7 @@ import { DEFAULT_PROJECT_LIST_EXPANDED } from '#/shared/settings-defaults.ts'
 export const DEFAULT_RESTORABLE_SESSION_STATE: SessionState = {
   openRepos: [],
   activeRepo: null,
+  workspaceActiveRepoByRoot: {},
   projectListExpanded: DEFAULT_PROJECT_LIST_EXPANDED,
   detailCollapsed: DEFAULT_DETAIL_COLLAPSED,
   detailFocusMode: false,

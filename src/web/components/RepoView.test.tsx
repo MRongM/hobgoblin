@@ -213,7 +213,7 @@ describe('RepoView', () => {
     expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).not.toBeNull()
   })
 
-  test('does not mount branch detail for non-git local workspaces', () => {
+  test('keeps file-area collapse available without mounting branch detail for non-git local workspaces', () => {
     seedRepoState({
       id: REPO_ID,
       isGitRepo: false,
@@ -229,8 +229,15 @@ describe('RepoView', () => {
     expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).not.toBeNull()
     expect(
       container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-file-area-collapsed'),
-    ).toBe('unset')
-    expect(container?.querySelector('[data-testid="toggle-file-area"]')).toBeNull()
+    ).toBe('false')
+    const toggle = container?.querySelector<HTMLButtonElement>('[data-testid="toggle-file-area"]')
+    expect(toggle).not.toBeNull()
+
+    act(() => toggle?.click())
+
+    expect(
+      container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-file-area-collapsed'),
+    ).toBe('true')
     expect(container?.textContent).not.toContain('branches.empty')
   })
 

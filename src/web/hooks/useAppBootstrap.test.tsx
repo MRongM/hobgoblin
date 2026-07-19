@@ -65,7 +65,7 @@ describe('useAppBootstrap', () => {
     expect(state.detailFocusMode).toBe(true)
     expect(state.detailPaneSizes).toEqual({ 'top-bottom': 55, 'left-right': 45 })
     expect(state.selectedTerminalByWorktree).toEqual({ '/tmp/repo\0/tmp/worktree': '/tmp/repo\0/tmp/worktree\0terminal-2' })
-    expect(hydrateSession).toHaveBeenCalledWith([{ kind: 'local', id: '/tmp/repo' }], '/tmp/repo')
+    expect(hydrateSession).toHaveBeenCalledWith([{ kind: 'local', id: '/tmp/repo' }], '/tmp/repo', {})
   })
 })
 

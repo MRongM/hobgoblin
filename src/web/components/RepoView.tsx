@@ -98,6 +98,8 @@ export function RepoView({ repoId }: Props) {
             showActions={false}
             revealRequest={terminalRevealRequest}
             plainWorkspaceTerminalPanel={repoUnavailable ? <UnavailableRepoView repo={repo} /> : undefined}
+            fileAreaCollapsed={fileAreaCollapsed}
+            onToggleFileArea={toggleFileArea}
           />
         </RepoWorkspacePane>
       </section>

@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, test } from 'vitest'
 import { emptyRepo, replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { DetailTab, RepoState } from '#/web/stores/repos/types.ts'
-import { createRepoBranch as branch, installGoblinTestBridge, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
+import {
+  createRepoBranch as branch,
+  installGoblinTestBridge,
+  resetReposStore,
+  seedRepoState,
+} from '#/web/stores/repos/test-utils.ts'
 import type { BranchSnapshotInfo } from '#/web/types.ts'
 import { DEFAULT_DETAIL_PANE_SIZES, DEFAULT_FILE_TREE_PANE_SIZES } from '#/shared/workspace-layout.ts'
 const REPO_ID = '/tmp/gbl-selection-test-repo'
@@ -466,7 +471,6 @@ describe('setDetailFocusMode', () => {
 
     expect(useReposStore.getState().detailFocusMode).toBe(true)
   })
-
 })
 
 describe('setDetailPaneSize', () => {
@@ -578,6 +582,72 @@ describe('project list expansion', () => {
 
     useReposStore.getState().toggleProjectListExpanded()
     expect(useReposStore.getState().projectListExpanded).toBe(false)
+  })
+})
+
+describe('multi-repository workspace selection', () => {
+  const rootId = '/tmp/gbl-workspace'
+  const childId = `${rootId}/api`
+  const soloId = '/tmp/gbl-solo'
+
+  function seedWorkspaceSelection() {
+    const root = replaceRepo(emptyRepo(rootId, 'workspace'), (repo) => {
+      repo.isGitRepo = false
+    })
+    const child = replaceRepo(emptyRepo(childId, 'api'), (repo) => {
+      repo.workspaceRootId = rootId
+    })
+    const solo = emptyRepo(soloId, 'solo')
+    useReposStore.setState({
+      repos: { [rootId]: root, [childId]: child, [soloId]: solo },
+      order: [rootId, soloId],
+      activeId: rootId,
+      workspaceProjects: {
+        [rootId]: {
+          rootId,
+          repositoryIds: [childId],
+          candidates: [],
+          configured: false,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+      workspaceActiveRepoByRoot: { [rootId]: null },
+    })
+  }
+
+  test('selects a child repository and remembers it for top-level project activation', () => {
+    seedWorkspaceSelection()
+
+    useReposStore.getState().activateWorkspaceRepository(rootId, childId)
+    useReposStore.getState().setActive(soloId)
+    useReposStore.getState().activateProject(rootId)
+
+    expect(useReposStore.getState().activeId).toBe(childId)
+    expect(useReposStore.getState().workspaceActiveRepoByRoot[rootId]).toBe(childId)
+  })
+
+  test('selects Overview explicitly', () => {
+    seedWorkspaceSelection()
+    useReposStore.setState({ workspaceActiveRepoByRoot: { [rootId]: childId } })
+
+    useReposStore.getState().activateWorkspaceRepository(rootId, null)
+
+    expect(useReposStore.getState().activeId).toBe(rootId)
+    expect(useReposStore.getState().workspaceActiveRepoByRoot[rootId]).toBeNull()
+  })
+
+  test('cycles across top-level projects instead of child repositories', () => {
+    seedWorkspaceSelection()
+    useReposStore.getState().activateWorkspaceRepository(rootId, childId)
+
+    useReposStore.getState().cycleActive(1)
+    expect(useReposStore.getState().activeId).toBe(soloId)
+
+    useReposStore.getState().cycleActive(-1)
+    expect(useReposStore.getState().activeId).toBe(childId)
   })
 })
 

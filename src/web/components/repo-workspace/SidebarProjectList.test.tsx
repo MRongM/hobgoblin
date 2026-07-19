@@ -81,8 +81,8 @@ vi.mock('#/web/components/repo-workspace/project-switcher-model.tsx', async () =
 })
 
 const projects: ProjectSummary[] = [
-  { id: '/repo-a', name: 'Repo A', unavailable: false, worktreePaths: [] },
-  { id: '/repo-b', name: 'Repo B', unavailable: false, worktreePaths: [] },
+  { id: '/repo-a', name: 'Repo A', unavailable: false, isGitRepo: true, worktreePaths: [] },
+  { id: '/repo-b', name: 'Repo B', unavailable: false, isGitRepo: false, worktreePaths: [] },
 ]
 
 let container: HTMLDivElement | null = null
@@ -193,6 +193,18 @@ describe('SidebarProjectList', () => {
 
     expect(projectName?.className).toContain('leading-4')
     expect(projectName?.className).not.toContain('leading-none')
+  })
+
+  test('uses a folder icon for plain projects and a Git folder icon for repositories', () => {
+    renderList()
+    const gitProject = container!.querySelector('[data-sortable-activator-id="/repo-a"]')
+    const plainProject = container!.querySelector('[data-sortable-activator-id="/repo-b"]')
+
+    expect(gitProject?.getAttribute('data-project-kind')).toBe('git')
+    expect(gitProject?.querySelector('svg.lucide-folder-git-2')).not.toBeNull()
+    expect(plainProject?.getAttribute('data-project-kind')).toBe('plain')
+    expect(plainProject?.querySelector('svg.lucide-folder')).not.toBeNull()
+    expect(plainProject?.querySelector('svg.lucide-folder-git-2')).toBeNull()
   })
 
   test('activates a project from its row', () => {

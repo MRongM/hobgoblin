@@ -83,6 +83,8 @@ export interface SessionState {
   openRepos: RepoSessionEntry[]
   /** The active tab id — null when no repos were open. */
   activeRepo: string | null
+  /** Last Overview/child selection for each open multi-repository workspace root. */
+  workspaceActiveRepoByRoot?: Record<string, string | null>
   projectListExpanded: boolean
   detailCollapsed: boolean
   detailFocusMode: boolean

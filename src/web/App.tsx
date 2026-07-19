@@ -27,6 +27,7 @@ import { Toaster } from '#/web/components/ui/sonner.tsx'
 import { Tip } from '#/web/components/Tip.tsx'
 import { Topbar } from '#/web/components/Topbar.tsx'
 import { TopbarRepoControls } from '#/web/components/topbar/TopbarRepoControls.tsx'
+import { WorkspaceRepositorySwitcher } from '#/web/components/repo-workspace/WorkspaceRepositorySwitcher.tsx'
 import { ProjectThemeMenuConnected } from '#/web/components/repo-toolbar/ProjectThemeMenu.tsx'
 import { StatusBar } from '#/web/components/StatusBar.tsx'
 import { Logo } from '#/web/components/Logo.tsx'
@@ -275,6 +276,7 @@ function MainWindowViewportContent({
             // here instead.
             compact ? (
               <>
+                {visibleRepoId && <WorkspaceRepositorySwitcher repoId={visibleRepoId} compact />}
                 {visibleRepoId && <TopbarRepoControls repoId={visibleRepoId} />}
                 {visibleRepoId && <ProjectThemeMenuConnected repoId={visibleRepoId} />}
                 <CompactSettingsButton onOpenSettings={() => openSettings()} />

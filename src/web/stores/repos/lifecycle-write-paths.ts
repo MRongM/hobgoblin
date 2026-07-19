@@ -1,21 +1,31 @@
 import { lastPathSegment } from '#/web/lib/paths.ts'
-import { clearGitProjection, emptyRepo, replaceRepo, replaceRepoState, resetRepoOperations, rotateRepoInstanceToken } from '#/web/stores/repos/helpers.ts'
+import {
+  clearGitProjection,
+  emptyRepo,
+  replaceRepo,
+  replaceRepoState,
+  resetRepoOperations,
+  rotateRepoInstanceToken,
+} from '#/web/stores/repos/helpers.ts'
 import { restoreRepoProjectionFromSnapshot } from '#/web/stores/repos/persistence.ts'
 import { disposeRepoRuntime } from '#/web/stores/repos/runtime.ts'
 import { runRepoRefreshIntent } from '#/web/stores/repos/refresh-coordinator.ts'
 import { repoSupportsGitData } from '#/web/stores/repos/capabilities.ts'
 import { markRepoAvailable, markRepoUnavailable } from '#/web/stores/repos/availability.ts'
-import {
-  abortRepositoryOperation,
-  initRepository as initRepositoryRpc,
-  probeRepository,
-} from '#/web/repo-client.ts'
+import { abortRepositoryOperation, initRepository as initRepositoryRpc, probeRepository } from '#/web/repo-client.ts'
 import { resolveRemoteRepositoryTarget } from '#/web/remote-client.ts'
 import { stopPortForwardSessionsForRepo } from '#/web/port-forwarding-client.ts'
 import { recordRecentRepo } from '#/web/settings-write-paths.ts'
+import { configureWorkspace as configureWorkspaceClient, discoverWorkspace } from '#/web/workspace-client.ts'
 import type { OpenRepoResult, ReposGet, ReposSet, ReposStore } from '#/web/stores/repos/types.ts'
 import type { ExecResult } from '#/web/types.ts'
+import type { WorkspaceConfig, WorkspaceDiscoveryResult } from '#/shared/workspace.ts'
 import { nextActiveRepoIdAfterWorkspaceClose } from '#/web/open-workspace-state.ts'
+import {
+  activeProjectId,
+  projectActivationTarget,
+  workspaceRootIdForRepo,
+} from '#/web/stores/repos/workspace-projects.ts'
 import {
   isRemoteRepoId,
   localRepoSessionEntry,
@@ -31,6 +41,7 @@ interface ResolvedRepo {
   name: string
   isGitRepo?: boolean
   target?: RemoteRepoTarget
+  workspaceRootId?: string
 }
 
 interface ProbeResult {
@@ -133,7 +144,9 @@ export function addResolvedRepo(
         existing.remote.target.remotePath !== resolvedRepo.target.remotePath)
     const capabilityChanged = existing.isGitRepo !== nextIsGitRepo
     const availabilityChanged = existing.availability.phase !== 'available'
-    if (!targetChanged && !capabilityChanged && !availabilityChanged) {
+    const workspaceAssociationChanged =
+      resolvedRepo.workspaceRootId !== undefined && existing.workspaceRootId !== resolvedRepo.workspaceRootId
+    if (!targetChanged && !capabilityChanged && !availabilityChanged && !workspaceAssociationChanged) {
       return { repos: s.repos, order: s.order, changed: false }
     }
     const nextRepo = replaceRepo(existing, (draft) => {
@@ -145,25 +158,27 @@ export function addResolvedRepo(
       markRepoAvailable(draft)
       if (!nextIsGitRepo) clearGitProjection(draft)
       if (targetChanged && resolvedRepo.target) draft.remote.target = resolvedRepo.target
+      if (resolvedRepo.workspaceRootId !== undefined) draft.workspaceRootId = resolvedRepo.workspaceRootId
     })
     return {
       repos: {
         ...s.repos,
         [id]: nextRepo,
       },
-      order: s.order,
+      order: resolvedRepo.workspaceRootId ? s.order.filter((entry) => entry !== id) : s.order,
       changed: true,
     }
   }
   const repo = restoreRepoProjectionFromSnapshot(emptyRepo(id, name), s.restorableRepoCache[id])
   if (resolvedRepo.target) repo.remote.target = resolvedRepo.target
+  if (resolvedRepo.workspaceRootId) repo.workspaceRootId = resolvedRepo.workspaceRootId
   if (resolvedRepo.isGitRepo === false) {
     repo.isGitRepo = false
     clearGitProjection(repo)
   }
   return {
     repos: { ...s.repos, [id]: repo },
-    order: orderedInsert(s.order, id, rankById),
+    order: resolvedRepo.workspaceRootId ? s.order : orderedInsert(s.order, id, rankById),
     changed: true,
   }
 }
@@ -177,7 +192,10 @@ export function addUnavailableRepo(
 ): Pick<ReposStore, 'repos' | 'order'> & { changed: boolean } {
   if (s.repos[id]) return { repos: s.repos, order: s.order, changed: false }
   const cached = s.restorableRepoCache[id]
-  const repo = restoreRepoProjectionFromSnapshot(emptyRepo(id, cached?.name || target?.displayName || lastPathSegment(id)), cached)
+  const repo = restoreRepoProjectionFromSnapshot(
+    emptyRepo(id, cached?.name || target?.displayName || lastPathSegment(id)),
+    cached,
+  )
   if (target) repo.remote.target = target
   repo.availability = { phase: 'unavailable', reason, checkedAt: Date.now() }
   return {
@@ -264,7 +282,13 @@ function applyWorkspaceOpen(
   return { repos, order, changed, id: repo.id }
 }
 
-export function createRuntimeRepoLifecycleActions(set: ReposSet, get: ReposGet): Pick<ReposStore, 'ensureWorkspaceOpen' | 'closeRepo' | 'initGitRepository'> {
+export function createRuntimeRepoLifecycleActions(
+  set: ReposSet,
+  get: ReposGet,
+): Pick<
+  ReposStore,
+  'ensureWorkspaceOpen' | 'closeRepo' | 'initGitRepository' | 'rescanWorkspace' | 'configureWorkspace'
+> {
   return {
     async ensureWorkspaceOpen(pathOrEntry: string | RepoSessionEntry): Promise<OpenRepoResult> {
       const entry = sessionEntryFromInput(pathOrEntry)
@@ -282,39 +306,85 @@ export function createRuntimeRepoLifecycleActions(set: ReposSet, get: ReposGet):
         const existingRepo = s.repos[id]
         const { repos, order, changed } = applyWorkspaceOpen(s, repo)
         const repoToRefresh = changed ? repos[id] : existingRepo
-        if (repoToRefresh && repoSupportsGitData(repoToRefresh)) initialRefresh = { id, token: repoToRefresh.instanceToken }
+        if (repoToRefresh && repoSupportsGitData(repoToRefresh))
+          initialRefresh = { id, token: repoToRefresh.instanceToken }
         return changed ? { repos, order } : s
       })
 
       if (initialRefresh) refreshInitialRepoState(get, initialRefresh)
+      if (!repo.target && repo.isGitRepo === false) await reconcileWorkspaceProject(set, get, id)
       return { ok: true, id }
     },
 
+    async rescanWorkspace(rootId: string): Promise<void> {
+      await reconcileWorkspaceProject(set, get, rootId)
+    },
+
+    async configureWorkspace(
+      rootId: string,
+      config: WorkspaceConfig,
+    ): Promise<{ ok: true } | { ok: false; message: string }> {
+      const result = await configureWorkspaceClient(rootId, config).catch(() => ({
+        ok: false as const,
+        message: 'workspace.config.write-failed',
+      }))
+      if (!result.ok) return result
+      applyWorkspaceDiscoveryResult(set, get, rootId, result)
+      return { ok: true }
+    },
+
     closeRepo(id: string) {
-      disposeRepoRuntime(id)
-      void stopPortForwardSessionsForRepo(id).catch(() => {
-        /* port-forward cleanup is best-effort; server shutdown also stops active forwards */
-      })
-      // Tell main to abort any cancellable network op for this repo —
-      // otherwise a `git push` started right before the user closed the
-      // tab keeps running for up to the network timeout, charged to a
-      // tab that no longer exists. Fire-and-forget; failure is fine.
-      void abortRepositoryOperation(id).catch(() => {
-        /* main may have nothing to abort — ignore */
-      })
+      const state = get()
+      const projectId = workspaceRootIdForRepo(state, id) ?? id
+      const workspace = state.workspaceProjects[projectId]
+      const workspaceChildIds = workspace
+        ? Object.values(state.repos)
+            .filter((repo) => repo.workspaceRootId === projectId)
+            .map((repo) => repo.id)
+        : []
+      const closingIds = workspace ? [projectId, ...workspaceChildIds] : [projectId]
+      for (const closingId of closingIds) {
+        disposeRepoRuntime(closingId)
+        void stopPortForwardSessionsForRepo(closingId).catch(() => {
+          /* port-forward cleanup is best-effort; server shutdown also stops active forwards */
+        })
+        // Tell main to abort any cancellable network op for this repo —
+        // otherwise a `git push` started right before the user closed the
+        // tab keeps running for up to the network timeout, charged to a
+        // tab that no longer exists. Fire-and-forget; failure is fine.
+        void abortRepositoryOperation(closingId).catch(() => {
+          /* main may have nothing to abort — ignore */
+        })
+      }
       set((s) => {
-        if (!s.repos[id]) return s
+        if (!s.repos[projectId]) return s
         const repos = { ...s.repos }
         const branchSearchQueries = { ...s.branchSearchQueries }
         const selectedTerminalByWorktree = { ...s.selectedTerminalByWorktree }
-        delete repos[id]
-        delete branchSearchQueries[id]
-        for (const worktreeKey of Object.keys(selectedTerminalByWorktree)) {
-          if (worktreeKey.startsWith(`${id}\0`)) delete selectedTerminalByWorktree[worktreeKey]
+        for (const closingId of closingIds) {
+          delete repos[closingId]
+          delete branchSearchQueries[closingId]
+          for (const worktreeKey of Object.keys(selectedTerminalByWorktree)) {
+            if (worktreeKey.startsWith(`${closingId}\0`)) delete selectedTerminalByWorktree[worktreeKey]
+          }
         }
-        const order = s.order.filter((x) => x !== id)
-        const activeId = nextActiveRepoIdAfterWorkspaceClose(s.order, s.activeId, id)
-        return { repos, branchSearchQueries, selectedTerminalByWorktree, order, activeId }
+        const order = s.order.filter((entry) => entry !== projectId)
+        const currentProjectId = activeProjectId(s)
+        const nextProjectId = nextActiveRepoIdAfterWorkspaceClose(s.order, currentProjectId, projectId)
+        const activeId = nextProjectId ? projectActivationTarget(s, nextProjectId) : null
+        const workspaceProjects = { ...s.workspaceProjects }
+        const workspaceActiveRepoByRoot = { ...s.workspaceActiveRepoByRoot }
+        delete workspaceProjects[projectId]
+        delete workspaceActiveRepoByRoot[projectId]
+        return {
+          repos,
+          branchSearchQueries,
+          selectedTerminalByWorktree,
+          order,
+          activeId,
+          workspaceProjects,
+          workspaceActiveRepoByRoot,
+        }
       })
     },
 
@@ -340,4 +410,173 @@ export function createRuntimeRepoLifecycleActions(set: ReposSet, get: ReposGet):
       return result
     },
   }
+}
+
+export async function reconcileWorkspaceProject(set: ReposSet, get: ReposGet, rootId: string): Promise<void> {
+  const root = get().repos[rootId]
+  if (!root || root.isGitRepo !== false || root.remote.target) return
+
+  set((state) => {
+    const current = state.workspaceProjects[rootId]
+    if (!current || current.phase === 'scanning') return state
+    return {
+      workspaceProjects: {
+        ...state.workspaceProjects,
+        [rootId]: { ...current, phase: 'scanning', error: null },
+      },
+    }
+  })
+
+  const result = await discoverWorkspace(rootId).catch(() => ({
+    ok: false as const,
+    message: 'error.failed-read-repo',
+  }))
+  const freshRoot = get().repos[rootId]
+  if (!freshRoot || freshRoot.isGitRepo !== false) return
+
+  if (!result.ok) {
+    set((state) => ({
+      workspaceProjects: {
+        ...state.workspaceProjects,
+        [rootId]: {
+          rootId,
+          repositoryIds: state.workspaceProjects[rootId]?.repositoryIds ?? [],
+          candidates: state.workspaceProjects[rootId]?.candidates ?? [],
+          configured: state.workspaceProjects[rootId]?.configured ?? false,
+          configurationError: state.workspaceProjects[rootId]?.configurationError ?? null,
+          phase: 'error',
+          skipped: state.workspaceProjects[rootId]?.skipped ?? [],
+          error: result.message,
+        },
+      },
+    }))
+    return
+  }
+
+  applyWorkspaceDiscoveryResult(set, get, rootId, result)
+}
+
+function applyWorkspaceDiscoveryResult(
+  set: ReposSet,
+  get: ReposGet,
+  rootId: string,
+  result: Extract<WorkspaceDiscoveryResult, { ok: true }>,
+): void {
+  const refreshes: InitialRepoRefresh[] = []
+  set((state) => {
+    if (!state.repos[rootId] || state.repos[rootId]?.isGitRepo !== false) return state
+    let repos = state.repos
+    let order = state.order
+    const previousIds = state.workspaceProjects[rootId]?.repositoryIds ?? []
+    const effectiveCandidates =
+      result.configuration.kind === 'ready'
+        ? result.configuration.config.repo.flatMap((name) => {
+            const candidate = result.candidates.find((entry) => entry.name === name)
+            return candidate ? [candidate] : []
+          })
+        : []
+    const projectedRepositories = [
+      ...result.repositories,
+      ...effectiveCandidates
+        .filter((candidate) => !candidate.available)
+        .map((candidate) => ({ id: candidate.id, name: candidate.name })),
+    ]
+    const discoveredIds = new Set(projectedRepositories.map((repository) => repository.id))
+
+    for (const repository of projectedRepositories) {
+      const opened = addResolvedRepo(
+        { repos, order, restorableRepoCache: state.restorableRepoCache },
+        {
+          id: repository.id,
+          name: repository.name,
+          isGitRepo: true,
+          workspaceRootId: rootId,
+        },
+      )
+      repos = opened.repos
+      order = opened.order
+      const openedRepo = repos[repository.id]
+      const available = result.repositories.some((entry) => entry.id === repository.id)
+      if (openedRepo && !available) {
+        repos = {
+          ...repos,
+          [repository.id]: replaceRepo(openedRepo, (draft) => {
+            markRepoUnavailable(draft, 'workspace.repository-unavailable')
+          }),
+        }
+      } else if (openedRepo && opened.changed) {
+        refreshes.push({ id: repository.id, token: openedRepo.instanceToken })
+      }
+    }
+
+    if (result.configuration.kind === 'missing') {
+      for (const previousId of previousIds) {
+        if (discoveredIds.has(previousId)) continue
+        const previousRepo = repos[previousId]
+        if (!previousRepo || previousRepo.availability.phase === 'unavailable') continue
+        repos = {
+          ...repos,
+          [previousId]: replaceRepo(previousRepo, (draft) => {
+            markRepoUnavailable(draft, 'workspace.repository-unavailable')
+          }),
+        }
+      }
+    }
+
+    const repositoryIds =
+      result.configuration.kind === 'missing'
+        ? Array.from(new Set([...previousIds, ...result.repositories.map((repository) => repository.id)]))
+            .filter((id) => !!repos[id])
+            .sort((left, right) =>
+              (repos[left]?.name ?? left).localeCompare(repos[right]?.name ?? right, 'en', {
+                numeric: true,
+                sensitivity: 'base',
+              }),
+            )
+        : result.configuration.kind === 'ready'
+          ? effectiveCandidates.map((candidate) => candidate.id)
+          : []
+    const workspaceProjects = { ...state.workspaceProjects }
+    if (
+      repositoryIds.length === 0 &&
+      result.candidates.length === 0 &&
+      result.configuration.kind === 'missing' &&
+      result.skipped.length === 0
+    ) {
+      delete workspaceProjects[rootId]
+      const workspaceActiveRepoByRoot = { ...state.workspaceActiveRepoByRoot }
+      delete workspaceActiveRepoByRoot[rootId]
+      return { repos, order, workspaceProjects, workspaceActiveRepoByRoot }
+    }
+    workspaceProjects[rootId] = {
+      rootId,
+      repositoryIds,
+      candidates: result.candidates,
+      configured: result.configuration.kind === 'ready',
+      configurationError: result.configuration.kind === 'invalid' ? result.configuration.message : null,
+      phase: 'ready',
+      skipped: result.skipped,
+      error: null,
+    }
+    const activeBelongsToWorkspace = !!state.activeId && state.repos[state.activeId]?.workspaceRootId === rootId
+    if (activeBelongsToWorkspace && !repositoryIds.includes(state.activeId!)) {
+      const nextRepositoryId = repositoryIds.find((repositoryId) => {
+        return repos[repositoryId]?.availability.phase === 'available'
+      })
+      const activeId = nextRepositoryId ?? rootId
+      return {
+        repos,
+        order,
+        activeId,
+        workspaceProjects,
+        workspaceActiveRepoByRoot: {
+          ...state.workspaceActiveRepoByRoot,
+          [rootId]: activeId === rootId ? null : activeId,
+        },
+      }
+    }
+    return { repos, order, workspaceProjects }
+  })
+
+  for (const refresh of refreshes) refreshInitialRepoState(get, refresh)
 }

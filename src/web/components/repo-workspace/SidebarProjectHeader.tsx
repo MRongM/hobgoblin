@@ -11,6 +11,7 @@ import { useId, useState } from 'react'
 import {
   ChevronDown,
   Download,
+  Folder,
   FolderGit2,
   FolderOpen,
   PanelLeftClose,
@@ -37,6 +38,8 @@ import {
   DropdownMenuTrigger,
 } from '#/web/components/ui/dropdown-menu.tsx'
 import { cn } from '#/web/lib/cn.ts'
+import { workspaceRootIdForRepo } from '#/web/stores/repos/workspace-projects.ts'
+import { WorkspaceRepositorySwitcher } from '#/web/components/repo-workspace/WorkspaceRepositorySwitcher.tsx'
 
 interface Props {
   repoId: string
@@ -55,10 +58,13 @@ export function SidebarProjectHeader({ repoId, onShowCompactDetail }: Props) {
   const reorderRepos = useReposStore((s) => s.reorderRepos)
   const toggleDetailFocusMode = useReposStore((s) => s.toggleDetailFocusMode)
   const { topbarHeightPx } = useRuntimeChromeSettings()
-  const activeName = useReposStore((s) => s.repos[repoId]?.name ?? '')
+  const activeProjectId = useReposStore((s) => workspaceRootIdForRepo(s, repoId) ?? repoId)
+  const activeName = useReposStore((s) => s.repos[activeProjectId]?.name ?? '')
   const projects = useProjectSummaries()
 
-  const activeProject = projects.find((project) => project.id === repoId) ?? null
+  const activeProject = projects.find((project) => project.id === activeProjectId) ?? null
+  const activeProjectKind = activeProject?.isGitRepo === false ? 'plain' : 'git'
+  const ActiveProjectIcon = activeProjectKind === 'plain' ? Folder : FolderGit2
 
   async function handleOpenLocal() {
     if (!shellActions) return
@@ -101,12 +107,13 @@ export function SidebarProjectHeader({ repoId, onShowCompactDetail }: Props) {
           size="sm"
           className="min-w-0 gap-1.5 px-1.5"
           onClick={toggleProjectListExpanded}
+          data-project-kind={activeProjectKind}
           aria-expanded={listExpanded}
           aria-controls={listExpanded ? listId : undefined}
           aria-label={t('repo-tabs.repos')}
           title={activeName}
         >
-          <FolderGit2 className="size-4 shrink-0" aria-hidden="true" />
+          <ActiveProjectIcon className="size-4 shrink-0" aria-hidden="true" />
           <span className="min-w-0 truncate text-xs font-semibold uppercase tracking-wide">{activeName}</span>
           {activeProject && (
             <ProjectTerminalStatus repoId={activeProject.id} worktreePaths={activeProject.worktreePaths} />
@@ -119,6 +126,7 @@ export function SidebarProjectHeader({ repoId, onShowCompactDetail }: Props) {
             aria-hidden="true"
           />
         </Button>
+        {onShowCompactDetail && <WorkspaceRepositorySwitcher repoId={repoId} compact />}
         <div className="min-w-0 flex-1" aria-hidden="true" />
         {shellActions && (
           <DropdownMenu>
@@ -173,7 +181,7 @@ export function SidebarProjectHeader({ repoId, onShowCompactDetail }: Props) {
           <SidebarProjectList
             id={listId}
             projects={projects}
-            activeRepoId={repoId}
+            activeRepoId={activeProjectId}
             onActivate={navigation.activateRepo}
             onClose={navigation.closeRepo}
             onReorder={reorderRepos}

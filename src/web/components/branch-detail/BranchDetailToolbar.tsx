@@ -21,6 +21,7 @@ import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { useFocusRegistry } from '#/web/components/tab-strip/useFocusRegistry.ts'
 import { TopbarRepoControls } from '#/web/components/topbar/TopbarRepoControls.tsx'
 import { FocusProjectSwitcher } from '#/web/components/repo-workspace/FocusProjectSwitcher.tsx'
+import { WorkspaceRepositorySwitcher } from '#/web/components/repo-workspace/WorkspaceRepositorySwitcher.tsx'
 import {
   branchDetailToolbarStoreActionsEqual,
   branchDetailToolbarStoreActionsFromStore,
@@ -176,6 +177,7 @@ export function BranchDetailToolbar({
               <PanelLeftOpen />
             </Button>
             <FocusProjectSwitcher repoId={repo.id} compact={compactFocusPresentation} />
+            <WorkspaceRepositorySwitcher repoId={repo.id} compact={compactFocusPresentation} />
             {/* Branch switcher / actions — previously topbar content. */}
             <TopbarRepoControls
               repoId={repo.id}

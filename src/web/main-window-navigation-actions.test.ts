@@ -2,6 +2,24 @@ import { describe, expect, test, vi } from 'vitest'
 import { createMainWindowNavigationActions } from '#/web/main-window-navigation-actions.ts'
 
 describe('createMainWindowNavigationActions', () => {
+  test('activates top-level projects through the workspace-aware action', () => {
+    const activateProject = vi.fn()
+    const actions = createMainWindowNavigationActions({
+      activeId: '/workspace/api',
+      order: ['/workspace'],
+      setActive: vi.fn(),
+      activateProject,
+      closeRepo: vi.fn(),
+      cycleActive: vi.fn(),
+      selectBranch: vi.fn(),
+      setDetailTab: vi.fn(),
+    })
+
+    actions.activateRepo('/workspace')
+
+    expect(activateProject).toHaveBeenCalledWith('/workspace')
+  })
+
   test('mutates store directly for repo branch detail navigation', () => {
     const setActive = vi.fn()
     const selectBranch = vi.fn()

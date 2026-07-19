@@ -94,6 +94,8 @@ export function resetReposStore(): void {
   mainWindowQueryClient.clear()
   useReposStore.setState({
     repos: {},
+    workspaceProjects: {},
+    workspaceActiveRepoByRoot: {},
     restorableRepoCache: {},
     order: [],
     activeId: null,
@@ -188,10 +190,16 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
     },
   })
   function callTerminalHandler(name: 'terminal.attach', payload: unknown): TerminalBridgeTestOutputs['terminal.attach']
-  function callTerminalHandler(name: 'terminal.restart', payload: unknown): TerminalBridgeTestOutputs['terminal.restart']
+  function callTerminalHandler(
+    name: 'terminal.restart',
+    payload: unknown,
+  ): TerminalBridgeTestOutputs['terminal.restart']
   function callTerminalHandler(name: 'terminal.write', payload: unknown): TerminalBridgeTestOutputs['terminal.write']
   function callTerminalHandler(name: 'terminal.resize', payload: unknown): TerminalBridgeTestOutputs['terminal.resize']
-  function callTerminalHandler(name: 'terminal.takeover', payload: unknown): TerminalBridgeTestOutputs['terminal.takeover']
+  function callTerminalHandler(
+    name: 'terminal.takeover',
+    payload: unknown,
+  ): TerminalBridgeTestOutputs['terminal.takeover']
   function callTerminalHandler(name: 'terminal.close', payload: unknown): TerminalBridgeTestOutputs['terminal.close']
   function callTerminalHandler(name: 'terminal.create', payload: unknown): TerminalBridgeTestOutputs['terminal.create']
   function callTerminalHandler(name: 'terminal.prune', payload: unknown): TerminalBridgeTestOutputs['terminal.prune']
@@ -354,7 +362,11 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
     kind: () => 'electron',
     hasCapability: () => false,
     getBootstrap: () => ({
-      runtime: { kind: 'electron', bridgeVersion: RENDERER_BRIDGE_VERSION, capabilities: [...ELECTRON_RENDERER_CAPABILITIES] },
+      runtime: {
+        kind: 'electron',
+        bridgeVersion: RENDERER_BRIDGE_VERSION,
+        capabilities: [...ELECTRON_RENDERER_CAPABILITIES],
+      },
       homeDir: '/Users/test',
       initialI18n: null,
       initialSettings: null,
@@ -444,6 +456,8 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
         if (url.pathname === '/api/repo/open-editor') return call('repo.openEditor', body)
         if (url.pathname === '/api/repo/background-sync-repos') return call('repo.backgroundSyncRepos', body)
         if (url.pathname === '/api/repo/abort') return call('repo.abort', body)
+        if (url.pathname === '/api/workspace/discover') return call('workspace.discover', body)
+        if (url.pathname === '/api/workspace/configure') return call('workspace.configure', body)
         throw new Error(`Unhandled fetch URL: ${url.pathname}`)
       })()
       const abortError = () => {

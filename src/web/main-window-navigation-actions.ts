@@ -15,6 +15,7 @@ interface CreateMainWindowNavigationActionsOptions {
   activeId: string | null
   order: string[]
   setActive: (repoId: string) => void
+  activateProject?: (projectId: string) => void
   closeRepo: (repoId: string) => void
   cycleActive: (direction: 1 | -1) => void
   selectBranch: (repoId: string, branch: string) => void
@@ -26,6 +27,7 @@ export function createMainWindowNavigationActions({
   activeId,
   order,
   setActive,
+  activateProject,
   closeRepo,
   cycleActive,
   selectBranch,
@@ -34,7 +36,7 @@ export function createMainWindowNavigationActions({
 }: CreateMainWindowNavigationActionsOptions): MainWindowNavigationActions {
   return {
     activateRepo(repoId) {
-      setActive(repoId)
+      ;(activateProject ?? setActive)(repoId)
     },
     closeRepo(repoId) {
       closeRepo(repoId)

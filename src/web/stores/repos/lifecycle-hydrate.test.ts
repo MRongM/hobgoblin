@@ -14,6 +14,57 @@ import {
 beforeEach(resetLifecycleTest)
 
 describe('repo session hydration', () => {
+  test('rediscovers workspace children before restoring an active child repository', async () => {
+    const root = '/tmp/gbl-workspace'
+    const child = `${root}/api`
+    const calls = installGoblin({
+      probe: (cwd: string) => ({
+        ok: true,
+        root: cwd,
+        name: cwd.split('/').at(-1) ?? cwd,
+        isGitRepo: cwd !== root,
+      }),
+      'workspace.discover': () => ({
+        ok: true,
+        rootId: root,
+        repositories: [{ id: child, name: 'api' }],
+        candidates: [{ id: child, name: 'api', selected: false, available: true }],
+        configuration: { kind: 'missing' },
+        skipped: [],
+      }),
+    })
+
+    await useReposStore.getState().hydrateSession([localRepoSessionEntry(root)], child, { [root]: child })
+
+    expect(useReposStore.getState().order).toEqual([root])
+    expect(useReposStore.getState().activeId).toBe(child)
+    expect(useReposStore.getState().workspaceActiveRepoByRoot).toEqual({ [root]: child })
+    expect(useReposStore.getState().workspaceProjects[root]?.repositoryIds).toEqual([child])
+    expect(calls.recent).toEqual([])
+  })
+
+  test('drops a stale child selection when the root is no longer a multi-repository workspace', async () => {
+    const root = '/tmp/gbl-workspace'
+    const child = `${root}/removed`
+    installGoblin({
+      probe: (cwd: string) => ({ ok: true, root: cwd, name: 'workspace', isGitRepo: false }),
+      'workspace.discover': () => ({
+        ok: true,
+        rootId: root,
+        repositories: [],
+        candidates: [],
+        configuration: { kind: 'missing' },
+        skipped: [],
+      }),
+    })
+
+    await useReposStore.getState().hydrateSession([localRepoSessionEntry(root)], child, { [root]: child })
+
+    expect(useReposStore.getState().activeId).toBe(root)
+    expect(useReposStore.getState().workspaceProjects).toEqual({})
+    expect(useReposStore.getState().workspaceActiveRepoByRoot).toEqual({})
+  })
+
   test('hydrateSession restores tabs through the same initial local refresh path without recent-repo side effects', async () => {
     const calls = installGoblin()
 

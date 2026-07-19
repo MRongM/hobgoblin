@@ -114,6 +114,12 @@ vi.mock('#/web/components/topbar/TopbarRepoControls.tsx', () => ({
   TopbarRepoControls: () => <div data-testid="topbar-repo-controls" />,
 }))
 
+vi.mock('#/web/components/repo-workspace/WorkspaceRepositorySwitcher.tsx', () => ({
+  WorkspaceRepositorySwitcher: ({ repoId }: { repoId: string }) => (
+    <div data-testid="workspace-repository-switcher">{repoId}</div>
+  ),
+}))
+
 vi.mock('#/web/components/repo-toolbar/ProjectThemeMenu.tsx', () => ({
   ProjectThemeMenuConnected: () => <div data-testid="project-theme-menu" />,
 }))
@@ -239,6 +245,17 @@ describe('App shell topbar visibility', () => {
 
     expect(container?.querySelector('[data-testid="global-topbar"]')).not.toBeNull()
     expect(container?.querySelector('[data-testid="repo-tabs"]')).not.toBeNull()
+  })
+
+  test('keeps repository navigation in the compact workspace topbar', async () => {
+    const repo = emptyRepo('/repo', 'repo')
+    repo.isGitRepo = false
+    useReposStore.setState({ repos: { '/repo': repo } })
+    uiModeMock.mode = 'compact'
+
+    await renderApp({ runtime: 'web', workspaceMode: 'split' })
+
+    expect(container?.querySelector('[data-testid="workspace-repository-switcher"]')?.textContent).toBe('/repo')
   })
 
   test('keeps settings and project theme entries in the compact topbar', async () => {

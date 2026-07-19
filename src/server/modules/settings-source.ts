@@ -383,6 +383,29 @@ function normalizeSelectedTerminalByWorktree(value: unknown): Record<string, str
   return normalized
 }
 
+function normalizeWorkspaceActiveRepoByRoot(
+  value: unknown,
+  openRepos: RepoSessionEntry[],
+): Record<string, string | null> {
+  if (!value || typeof value !== 'object') return {}
+  const openLocalRoots = new Set(
+    openRepos.filter((entry) => entry.kind === 'local').map((entry) => path.resolve(entry.id)),
+  )
+  const normalized: Record<string, string | null> = {}
+  for (const [rawRoot, rawSelection] of Object.entries(value)) {
+    const root = toSafeRepoLocator(rawRoot)
+    if (!root || !openLocalRoots.has(path.resolve(root))) continue
+    if (rawSelection === null) {
+      normalized[root] = null
+      continue
+    }
+    const selection = toSafeRepoLocator(rawSelection)
+    if (!selection || path.dirname(path.resolve(selection)) !== path.resolve(root)) continue
+    normalized[root] = selection
+  }
+  return normalized
+}
+
 function normalizeSession(value: unknown): SessionState {
   if (!value || typeof value !== 'object') return defaultSession()
   const partial = value as Partial<SessionState> & { activeTerminalByGroup?: unknown }
@@ -392,6 +415,10 @@ function normalizeSession(value: unknown): SessionState {
       )
     : []
   const activeRepo = toSafeRepoLocator(partial.activeRepo)
+  const workspaceActiveRepoByRoot = normalizeWorkspaceActiveRepoByRoot(
+    partial.workspaceActiveRepoByRoot,
+    openRepos,
+  )
   const workspaceLayout = normalizeWorkspaceLayout(partial.workspaceLayout)
   const detailCollapsed =
     typeof partial.detailCollapsed === 'boolean' ? partial.detailCollapsed : DEFAULT_DETAIL_COLLAPSED
@@ -399,7 +426,13 @@ function normalizeSession(value: unknown): SessionState {
     workspaceLayout === 'top-bottom' && partial.detailFocusMode === true ? true : DEFAULT_SESSION_DETAIL_FOCUS_MODE
   return {
     openRepos,
-    activeRepo: activeRepo && openRepos.some((entry) => repoSessionEntryId(entry) === activeRepo) ? activeRepo : null,
+    activeRepo:
+      activeRepo &&
+      (openRepos.some((entry) => repoSessionEntryId(entry) === activeRepo) ||
+        Object.values(workspaceActiveRepoByRoot).includes(activeRepo))
+        ? activeRepo
+        : null,
+    workspaceActiveRepoByRoot,
     projectListExpanded:
       typeof partial.projectListExpanded === 'boolean' ? partial.projectListExpanded : DEFAULT_PROJECT_LIST_EXPANDED,
     detailCollapsed: effectiveDetailCollapsed(workspaceLayout, detailCollapsed),

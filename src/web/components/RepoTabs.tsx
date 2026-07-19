@@ -17,6 +17,7 @@ import type { RepoTabSummary } from '#/web/components/repo-tabs/types.ts'
 import { openRepoFromDialog } from '#/web/lib/open-repo-dialog.ts'
 import { useRuntimeShortcutSettings } from '#/web/runtime-settings-shortcuts.ts'
 import { repoTabStoreActionsEqual, repoTabStoreActionsFromStore } from '#/web/stores/repos/selector-actions.ts'
+import { activeProjectId } from '#/web/stores/repos/workspace-projects.ts'
 
 interface RepoTabsProps {
   currentRepoId: string | null
@@ -57,6 +58,9 @@ export function RepoTabs({ currentRepoId, onOpenRepoPathDialog, onOpenRemote, on
     repoTabSummariesEqual,
   )
   const navigation = useMainWindowNavigation()
+  const currentProjectId = useReposStore((state) =>
+    activeProjectId({ activeId: currentRepoId, repos: state.repos }),
+  )
   const { ensureWorkspaceOpen, reorderRepos } = useStoreWithEqualityFn(
     useReposStore,
     repoTabStoreActionsFromStore,
@@ -75,7 +79,7 @@ export function RepoTabs({ currentRepoId, onOpenRepoPathDialog, onOpenRemote, on
   return (
     <RepoTabStrip
       repos={summaries}
-      activeId={currentRepoId}
+      activeId={currentProjectId}
       labels={{
         repositories: t('repo-tabs.repos'),
         closeWithName: (name) => t('repo-tabs.close-named', { name }),

@@ -13,6 +13,8 @@ export function installGoblin(overrides: Record<string, (input: any) => unknown>
     recent: [] as RepoSessionEntry[],
     snapshot: [] as string[],
     status: [] as string[],
+    workspace: [] as string[],
+    workspaceConfigure: [] as Array<{ rootPath: string; config: unknown }>,
     resolveTarget: [] as Array<{ alias: string; remotePath: string }>,
   }
   const handlers: Record<string, (input: any) => unknown> = {
@@ -29,6 +31,21 @@ export function installGoblin(overrides: Record<string, (input: any) => unknown>
       return []
     },
     'repo.abort': async () => undefined,
+    'workspace.discover': ({ rootPath }: { rootPath: string }) => {
+      calls.workspace.push(rootPath)
+      return {
+        ok: true,
+        rootId: rootPath,
+        repositories: [],
+        candidates: [],
+        configuration: { kind: 'missing' },
+        skipped: [],
+      }
+    },
+    'workspace.configure': ({ rootPath, config }: { rootPath: string; config: unknown }) => {
+      calls.workspaceConfigure.push({ rootPath, config })
+      return { ok: false, message: 'workspace.config.write-failed' }
+    },
     'remote.resolveTarget': ({ alias, remotePath }: { alias: string; remotePath: string }) => {
       calls.resolveTarget.push({ alias, remotePath })
       return {

@@ -15,7 +15,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { FolderGit2, X } from 'lucide-react'
+import { Folder, FolderGit2, X } from 'lucide-react'
 import {
   ProjectTerminalStatus,
   projectLocation,
@@ -94,6 +94,8 @@ function SortableProjectRow({
     id: project.id,
   })
   const location = projectLocation(project.id)
+  const projectKind = project.isGitRepo ? 'git' : 'plain'
+  const ProjectIcon = project.isGitRepo ? FolderGit2 : Folder
 
   return (
     <li
@@ -110,6 +112,7 @@ function SortableProjectRow({
         {...attributes}
         {...listeners}
         onClick={() => onActivate(project.id)}
+        data-project-kind={projectKind}
         aria-current={active ? 'true' : undefined}
         title={project.unavailable ? t('repo-unavailable.title') : location}
         className={cn(
@@ -119,7 +122,7 @@ function SortableProjectRow({
           isDragging && 'cursor-grabbing',
         )}
       >
-        <FolderGit2
+        <ProjectIcon
           className={cn('size-4 shrink-0', active ? 'text-selected-muted-foreground' : 'text-muted-foreground')}
           aria-hidden="true"
         />

@@ -39,6 +39,7 @@ import { cn } from '#/web/lib/cn.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 import { repoIsPlainWorkspace } from '#/web/stores/repos/capabilities.ts'
+import { WorkspaceRepositoryRail } from '#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx'
 
 export interface FileTreeRevealRequest {
   id: number
@@ -108,6 +109,7 @@ export function RepoExplorerPane({
     const repo = s.repos[repoId]
     return repoIsPlainWorkspace(repo)
   })
+  const workspaceRootId = useReposStore((s) => s.repos[repoId]?.workspaceRootId)
 
   // Compact focus presentation supplies its own explorer navigation, while
   // legacy compact shells keep relying on the global topbar.
@@ -125,6 +127,8 @@ export function RepoExplorerPane({
           layout={layout}
           revealRequest={activeRevealRequest}
           terminalPanel={plainWorkspaceTerminalPanel}
+          fileAreaCollapsed={desktopFileAreaCollapsed}
+          onToggleFileArea={compact ? undefined : onToggleFileArea}
         />
       </div>
     )
@@ -139,6 +143,9 @@ export function RepoExplorerPane({
         orientation={splitOrientation}
         before={
           <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
+            {!compact && workspaceRootId && (
+              <WorkspaceRepositoryRail workspaceRootId={workspaceRootId} currentRepoId={repoId} />
+            )}
             {!compact && <BranchSectionLabel />}
             <BranchArea repoId={repoId} showActions={showActions} onBranchSelected={onBranchSelected} />
           </div>
@@ -178,8 +185,8 @@ export function RepoExplorerPane({
 function BranchSectionLabel() {
   const t = useT()
   return (
-    <div className="flex h-7 shrink-0 items-center px-4 pt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
-      {t('branches.filter.worktrees')}
+    <div className="flex h-7 shrink-0 items-center gap-2 px-4 pt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
+      <span className="min-w-0 flex-1">{t('branches.filter.worktrees')}</span>
     </div>
   )
 }
@@ -327,10 +334,9 @@ function ExplorerTabs({
               {primaryTabs.map(renderTab)}
               {overflowTabs.length > 0 && (
                 <>
-                  {(overflowExpanded
-                    ? overflowTabs
-                    : overflowTabs.filter((tab) => tab.id === activeVisibleTab)
-                  ).map(renderTab)}
+                  {(overflowExpanded ? overflowTabs : overflowTabs.filter((tab) => tab.id === activeVisibleTab)).map(
+                    renderTab,
+                  )}
                   <Button
                     type="button"
                     variant="ghost"

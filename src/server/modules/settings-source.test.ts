@@ -635,6 +635,46 @@ test('persists and normalizes the global project list expansion preference', asy
   ).resolves.toMatchObject({ projectListExpanded: false })
 })
 
+test('persists an active child repository for an open multi-repository workspace root', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+  const root = '/tmp/workspace'
+  const child = '/tmp/workspace/api'
+
+  await expect(
+    mod.setServerSessionState({
+      ...defaultSessionState(),
+      openRepos: [{ kind: 'local', id: root }],
+      activeRepo: child,
+      workspaceActiveRepoByRoot: { [root]: child },
+    }),
+  ).resolves.toMatchObject({
+    activeRepo: child,
+    workspaceActiveRepoByRoot: { [root]: child },
+  })
+})
+
+test('drops workspace selections that are not immediate children of an open local root', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+  const root = '/tmp/workspace'
+
+  await expect(
+    mod.setServerSessionState({
+      ...defaultSessionState(),
+      openRepos: [{ kind: 'local', id: root }],
+      activeRepo: '/tmp/workspace/nested/api',
+      workspaceActiveRepoByRoot: {
+        [root]: '/tmp/workspace/nested/api',
+        '/tmp/closed': '/tmp/closed/api',
+      },
+    }),
+  ).resolves.toMatchObject({
+    activeRepo: null,
+    workspaceActiveRepoByRoot: {},
+  })
+})
+
 test('normalizes missing or invalid file tree pane sizes to defaults', async () => {
   useTempServerSettingsDir()
   const mod = await import('#/server/modules/settings-source.ts')

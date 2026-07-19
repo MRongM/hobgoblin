@@ -18,6 +18,7 @@ interface SplitPaneProps {
   beforeMinSize?: number | string
   afterMinSize?: number | string
   afterMaxSize?: number | string
+  beforeCollapsed?: boolean
   afterCollapsed?: boolean
   disabled?: boolean
 }
@@ -38,6 +39,7 @@ export function SplitPane({
   beforeMinSize = '12rem',
   afterMinSize = '12rem',
   afterMaxSize,
+  beforeCollapsed = false,
   afterCollapsed = false,
   disabled = false,
 }: SplitPaneProps) {
@@ -48,11 +50,11 @@ export function SplitPane({
   )
   const handleLayoutChanged = useCallback(
     (layout: Layout) => {
-      if (afterCollapsed) return
+      if (beforeCollapsed || afterCollapsed) return
       const next = layout[AFTER_PANEL_ID]
       if (typeof next === 'number' && next > 0) onAfterSizeChange?.(next)
     },
-    [afterCollapsed, onAfterSizeChange],
+    [afterCollapsed, beforeCollapsed, onAfterSizeChange],
   )
 
   // Collapse is CSS-driven (display:none on the trailing panel) rather than
@@ -65,9 +67,11 @@ export function SplitPane({
   // to its DOM element. Re-applying the controlled layout on expand clears
   // any re-measuring the library did while the panel was display:none.
   useEffect(() => {
-    if (afterCollapsed) return
+    if (beforeCollapsed || afterCollapsed) return
     groupRef.current?.setLayout(layout)
-  }, [afterCollapsed, groupRef, layout])
+  }, [afterCollapsed, beforeCollapsed, groupRef, layout])
+
+  const paneCollapsed = beforeCollapsed || afterCollapsed
 
   return (
     <ResizablePanelGroup
@@ -77,7 +81,12 @@ export function SplitPane({
       resizeTargetMinimumSize={RESIZE_TARGET_MINIMUM_SIZE}
       defaultLayout={layout}
       onLayoutChanged={handleLayoutChanged}
-      className={cn('min-h-0 min-w-0', afterCollapsed && '[&>[data-panel]:last-child]:!hidden', className)}
+      className={cn(
+        'min-h-0 min-w-0',
+        beforeCollapsed && '[&>[data-panel]:first-child]:!hidden',
+        afterCollapsed && '[&>[data-panel]:last-child]:!hidden',
+        className,
+      )}
     >
       <ResizablePanel
         id={BEFORE_PANEL_ID}
@@ -88,8 +97,8 @@ export function SplitPane({
       </ResizablePanel>
       <ResizableHandle
         orientation={orientation}
-        disabled={disabled || afterCollapsed}
-        className={afterCollapsed ? '!hidden' : undefined}
+        disabled={disabled || paneCollapsed}
+        className={paneCollapsed ? '!hidden' : undefined}
       />
       <ResizablePanel
         id={AFTER_PANEL_ID}

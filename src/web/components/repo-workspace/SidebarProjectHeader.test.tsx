@@ -11,7 +11,11 @@ const repoState = {
   toggleDetailFocusMode: vi.fn(),
   toggleProjectListExpanded: vi.fn(),
   projectListExpanded: false,
-  repos: { '/repo-a': { name: 'Repo A' }, '/repo-b': { name: 'Repo B' } },
+  repos: {
+    '/repo-a': { name: 'Repo A', isGitRepo: true },
+    '/repo-a/api': { name: 'api', isGitRepo: true, workspaceRootId: '/repo-a' },
+    '/repo-b': { name: 'Repo B', isGitRepo: false },
+  } as Record<string, { name: string; isGitRepo: boolean; workspaceRootId?: string }>,
 }
 
 vi.mock('#/web/stores/repos/store.ts', () => ({
@@ -37,8 +41,8 @@ vi.mock('#/web/runtime-settings-chrome.ts', () => ({
 vi.mock('#/web/components/repo-workspace/project-switcher-model.tsx', () => ({
   ProjectTerminalStatus: () => null,
   useProjectSummaries: () => [
-    { id: '/repo-a', name: 'Repo A', unavailable: false, worktreePaths: [] },
-    { id: '/repo-b', name: 'Repo B', unavailable: false, worktreePaths: [] },
+    { id: '/repo-a', name: 'Repo A', unavailable: false, isGitRepo: true, worktreePaths: [] },
+    { id: '/repo-b', name: 'Repo B', unavailable: false, isGitRepo: false, worktreePaths: [] },
   ],
 }))
 
@@ -48,6 +52,12 @@ vi.mock('#/web/components/repo-workspace/SidebarProjectList.tsx', () => ({
 
 vi.mock('#/web/components/ConfirmDialog.tsx', () => ({
   ConfirmDialog: () => null,
+}))
+
+vi.mock('#/web/components/repo-workspace/WorkspaceRepositorySwitcher.tsx', () => ({
+  WorkspaceRepositorySwitcher: ({ repoId, compact }: { repoId: string; compact?: boolean }) => (
+    <div data-testid="workspace-repository-switcher" data-repo-id={repoId} data-compact={String(!!compact)} />
+  ),
 }))
 
 let container: HTMLDivElement | null = null
@@ -76,6 +86,17 @@ afterEach(() => {
 })
 
 describe('SidebarProjectHeader', () => {
+  test('keeps the top-level workspace identity while a child repository is visible', () => {
+    act(() => {
+      root!.render(<SidebarProjectHeader repoId="/repo-a/api" />)
+    })
+
+    const trigger = container!.querySelector<HTMLButtonElement>('button[aria-label="repo-tabs.repos"]')
+    expect(trigger?.title).toBe('Repo A')
+    expect(trigger?.textContent).toContain('Repo A')
+    expect(trigger?.textContent).not.toContain('api')
+  })
+
   test('points the project switcher at one list element', () => {
     act(() => {
       root!.render(<SidebarProjectHeader repoId="/repo-a" />)
@@ -107,6 +128,17 @@ describe('SidebarProjectHeader', () => {
     expect(container!.querySelector('ul')).not.toBeNull()
   })
 
+  test('uses a folder icon when the active project is a plain workspace', () => {
+    act(() => {
+      root!.render(<SidebarProjectHeader repoId="/repo-b" />)
+    })
+
+    const trigger = container!.querySelector<HTMLButtonElement>('button[aria-label="repo-tabs.repos"]')
+    expect(trigger?.getAttribute('data-project-kind')).toBe('plain')
+    expect(trigger?.querySelector('svg.lucide-folder')).not.toBeNull()
+    expect(trigger?.querySelector('svg.lucide-folder-git-2')).toBeNull()
+  })
+
   test('returns to the compact terminal without changing the persisted focus preference', () => {
     const onShowCompactDetail = vi.fn()
     act(() => {
@@ -120,5 +152,15 @@ describe('SidebarProjectHeader', () => {
 
     expect(onShowCompactDetail).toHaveBeenCalledTimes(1)
     expect(repoState.toggleDetailFocusMode).not.toHaveBeenCalled()
+  })
+
+  test('keeps repository navigation available in the compact explorer', () => {
+    act(() => {
+      root!.render(<SidebarProjectHeader repoId="/repo-a/api" onShowCompactDetail={() => {}} />)
+    })
+
+    const switcher = container!.querySelector('[data-testid="workspace-repository-switcher"]')
+    expect(switcher?.getAttribute('data-repo-id')).toBe('/repo-a/api')
+    expect(switcher?.getAttribute('data-compact')).toBe('true')
   })
 })

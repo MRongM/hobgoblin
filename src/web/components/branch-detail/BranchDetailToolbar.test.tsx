@@ -49,6 +49,12 @@ vi.mock('#/web/components/topbar/TopbarRepoControls.tsx', () => ({
   }) => (focusPresentation ? <div data-testid="topbar-repo-controls" data-tone={tone} /> : null),
 }))
 
+vi.mock('#/web/components/repo-workspace/WorkspaceRepositorySwitcher.tsx', () => ({
+  WorkspaceRepositorySwitcher: ({ compact }: { compact?: boolean }) => (
+    <div data-testid="workspace-repository-switcher" data-compact={String(!!compact)} />
+  ),
+}))
+
 vi.stubGlobal('requestAnimationFrame', ((cb: FrameRequestCallback) => {
   cb(0)
   return 1
@@ -319,7 +325,7 @@ describe('BranchDetailToolbar', () => {
     expect(trigger?.textContent).toContain('repo')
   })
 
-  test('focus mode places the branch controls right after the project switcher', () => {
+  test('focus mode places repository and branch controls after the project switcher', () => {
     const { container: c } = renderToolbar({
       terminalCount: 0,
       detailFocusMode: true,
@@ -327,10 +333,13 @@ describe('BranchDetailToolbar', () => {
     })
 
     const switcher = c.querySelector('[data-testid="focus-project-switcher"]')
+    const repositorySwitcher = c.querySelector('[data-testid="workspace-repository-switcher"]')
     const controls = c.querySelector('[data-testid="topbar-repo-controls"]')
     expect(switcher).not.toBeNull()
+    expect(repositorySwitcher).not.toBeNull()
     expect(controls).not.toBeNull()
-    expect(switcher?.nextElementSibling).toBe(controls)
+    expect(switcher?.nextElementSibling).toBe(repositorySwitcher)
+    expect(repositorySwitcher?.nextElementSibling).toBe(controls)
   })
 
   test('does not render the branch controls outside focus mode', () => {
@@ -354,6 +363,9 @@ describe('BranchDetailToolbar', () => {
     const workspaceButton = c.querySelector<HTMLButtonElement>('button[aria-label="mobile.open-workspace"]')
     expect(workspaceButton).not.toBeNull()
     expect(c.querySelector('[data-testid="focus-project-switcher"]')).not.toBeNull()
+    expect(c.querySelector('[data-testid="workspace-repository-switcher"]')?.getAttribute('data-compact')).toBe(
+      'true',
+    )
     expect(c.querySelector('[data-testid="topbar-repo-controls"]')).not.toBeNull()
     expect(c.querySelector('button[aria-label="branch-detail.collapse"]')).toBeNull()
 

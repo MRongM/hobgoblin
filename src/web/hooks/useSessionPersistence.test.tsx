@@ -44,6 +44,7 @@ describe('useSessionPersistence', () => {
       repos: { [repo.id]: repo },
       order: [repo.id],
       activeId: repo.id,
+      workspaceActiveRepoByRoot: { '/tmp/workspace': '/tmp/workspace/api' },
       sessionReady: true,
       projectListExpanded: true,
       selectedTerminalByWorktree: {
@@ -57,6 +58,7 @@ describe('useSessionPersistence', () => {
       expect.objectContaining({
         openRepos: [{ kind: 'local', id: '/tmp/repo' }],
         activeRepo: '/tmp/repo',
+        workspaceActiveRepoByRoot: { '/tmp/workspace': '/tmp/workspace/api' },
         projectListExpanded: true,
         selectedTerminalByWorktree: {
           '/tmp/repo\0/tmp/worktree': '/tmp/repo\0/tmp/worktree\0terminal-2',

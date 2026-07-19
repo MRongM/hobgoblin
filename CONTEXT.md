@@ -24,6 +24,34 @@ _Avoid_: Native terminal, system terminal
 The inline list of open projects shown beneath the sidebar project switcher.
 _Avoid_: Repo dropdown, project expanded list
 
+**Project**:
+A top-level working context in the project list. A project is either one Git repository, one plain workspace, or one multi-repository workspace.
+_Avoid_: Using project as a synonym for every repository inside a multi-repository workspace
+
+**Repository**:
+One Git operation boundary. Branches, worktrees, status, history, and Git writes always belong to exactly one repository, even when several repositories share a project.
+_Avoid_: Workspace repository, subproject
+
+**Multi-repository workspace**:
+A local project rooted at a readable non-Git directory whose immediate child directories contain Git repositories. The root provides project-level files and terminals; its repositories remain independent Git operation boundaries.
+_Avoid_: Monorepo, repository group, nested repository
+
+**Configured workspace**:
+A multi-repository workspace whose durable repository membership has been explicitly selected. Filesystem discovery supplies candidates but does not silently change a configured workspace.
+_Avoid_: Saved scan, repository registry, primary repository
+
+**Workspace worktree**:
+A set of same-named linked worktrees created across every configured repository. Each repository remains independently navigable and no repository anchors another repository's worktree list.
+_Avoid_: Shared worktree, combined worktree
+
+**Repository-only worktree**:
+A linked branch worktree that does not exist with the same branch name in every configured repository. It is changed only through that repository's ordinary worktree actions.
+_Avoid_: Orphan worktree, detached worktree
+
+**Workspace batch operation**:
+A server-coordinated Git operation applied sequentially to the configured repositories with per-repository results and no automatic rollback.
+_Avoid_: Workspace transaction, multi-repository Git command
+
 **Plain workspace**:
 A readable directory opened as a workspace without requiring Git metadata.
 _Avoid_: Non-Git repository
