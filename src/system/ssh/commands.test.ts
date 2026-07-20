@@ -28,26 +28,6 @@ function testPosix(name: string, fn: () => Promise<void> | void): void {
 }
 
 describe('remote command scripts', () => {
-  test('builds workspace config read and atomic write commands', () => {
-    const read = buildRemoteCommandInvocation(TARGET, {
-      type: 'readWorkspaceConfig',
-      rootPath: "/srv/work space/user's",
-    })
-    expect(read.script).toContain('goblin.toml')
-    expect(read.script).toContain('__HOBGOBLIN_WORKSPACE_CONFIG_MISSING__')
-    expect(read.script).toContain("/srv/work space/user'\\''s")
-
-    const write = buildRemoteCommandInvocation(TARGET, {
-      type: 'writeWorkspaceConfig',
-      rootPath: "/srv/work space/user's",
-      temporaryName: '.goblin.toml.safe.tmp',
-    })
-    expect(write.script).toContain('umask 077')
-    expect(write.script).toContain('trap')
-    expect(write.script).toContain('set -C')
-    expect(write.script).toContain('mv --')
-  })
-
   test('builds depth-one workspace marker discovery and path existence commands', () => {
     const discovery = buildRemoteCommandInvocation(TARGET, {
       type: 'listWorkspaceGitDirectories',
@@ -124,51 +104,6 @@ describe('remote command scripts', () => {
       await expect(execa('sh', ['-c', nestedValidation.script])).rejects.toBeDefined()
     },
   )
-
-  testPosix('workspace config commands atomically write and read roots with shell-sensitive paths', async () => {
-    const dir = path.join(os.tmpdir(), `hobgoblin-workspace-config-${Date.now()}-${process.pid}`)
-    tempDirs.push(dir)
-    const root = path.join(dir, "work space's")
-    mkdirSync(root, { recursive: true })
-    const contents = '[workspace]\nrepo = ["api"]\n'
-    const write = buildRemoteCommandInvocation(TARGET, {
-      type: 'writeWorkspaceConfig',
-      rootPath: root,
-      temporaryName: ".goblin.toml.safe space's.tmp",
-    })
-
-    await execa('sh', ['-c', write.script], { input: contents })
-
-    expect(readFileSync(path.join(root, 'goblin.toml'), 'utf8')).toBe(contents)
-    expect(existsSync(path.join(root, ".goblin.toml.safe space's.tmp"))).toBe(false)
-    const read = buildRemoteCommandInvocation(TARGET, { type: 'readWorkspaceConfig', rootPath: root })
-    const result = await execa('sh', ['-c', read.script])
-    expect(result.stdout).toBe(`__HOBGOBLIN_WORKSPACE_CONFIG_CONTENT__\n${contents.trimEnd()}`)
-  })
-
-  testPosix('workspace config write fails safely when the temporary file already exists', async () => {
-    const dir = path.join(os.tmpdir(), `hobgoblin-workspace-config-collision-${Date.now()}-${process.pid}`)
-    tempDirs.push(dir)
-    const root = path.join(dir, 'workspace')
-    const temporaryName = '.goblin.toml.collision.tmp'
-    const configPath = path.join(root, 'goblin.toml')
-    const temporaryPath = path.join(root, temporaryName)
-    mkdirSync(root, { recursive: true })
-    writeFileSync(configPath, '[workspace]\nrepo = ["original"]\n')
-    writeFileSync(temporaryPath, 'pre-existing temporary file\n')
-    const write = buildRemoteCommandInvocation(TARGET, {
-      type: 'writeWorkspaceConfig',
-      rootPath: root,
-      temporaryName,
-    })
-
-    await expect(
-      execa('sh', ['-c', write.script], { input: '[workspace]\nrepo = ["replacement"]\n' }),
-    ).rejects.toBeDefined()
-
-    expect(readFileSync(configPath, 'utf8')).toBe('[workspace]\nrepo = ["original"]\n')
-    expect(readFileSync(temporaryPath, 'utf8')).toBe('pre-existing temporary file\n')
-  })
 
   test('renders remote branch listing command', () => {
     expect(buildRemoteCommandInvocation(TARGET, { type: 'gitRemoteBranches', path: '/srv/repo' }).script).toContain(

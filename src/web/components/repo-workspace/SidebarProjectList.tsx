@@ -24,6 +24,10 @@ import {
 import { Button } from '#/web/components/ui/button.tsx'
 import { useT } from '#/web/stores/i18n.ts'
 import { cn } from '#/web/lib/cn.ts'
+import { AsyncButton } from '#/web/components/AsyncButton.tsx'
+import { Tip } from '#/web/components/Tip.tsx'
+import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
+import { useProjectExternalOpenActions } from '#/web/hooks/useProjectExternalOpenActions.ts'
 
 const restrictToVerticalProjectList: Modifier = ({ transform }) => ({ ...transform, x: 0 })
 
@@ -96,6 +100,7 @@ function SortableProjectRow({
   const location = projectLocation(project.id)
   const projectKind = project.isGitRepo ? 'git' : 'plain'
   const ProjectIcon = project.isGitRepo ? FolderGit2 : Folder
+  const projectExternalActions = useProjectExternalOpenActions(project.id)
 
   return (
     <li
@@ -116,7 +121,7 @@ function SortableProjectRow({
         aria-current={active ? 'true' : undefined}
         title={project.unavailable ? t('repo-unavailable.title') : location}
         className={cn(
-          'flex w-full min-w-0 cursor-grab items-center gap-2.5 rounded-[var(--goblin-brand-radius-md,var(--radius-md))] py-2 pl-2.5 pr-9 text-left transition-colors duration-100 active:cursor-grabbing',
+          'flex w-full min-w-0 cursor-grab items-center gap-2.5 rounded-[var(--goblin-brand-radius-md,var(--radius-md))] py-2 pl-2.5 pr-20 text-left transition-colors duration-100 active:cursor-grabbing',
           active ? 'bg-selected text-selected-foreground' : 'text-foreground hover:bg-tab-hover',
           project.unavailable && 'opacity-60',
           isDragging && 'cursor-grabbing',
@@ -131,6 +136,51 @@ function SortableProjectRow({
           <ProjectTerminalStatus terminalWorktreeKeys={project.terminalWorktreeKeys} />
         </span>
       </button>
+      {projectExternalActions.visible && (
+        <div
+          data-testid="project-row-external-actions"
+          className="absolute right-8 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 opacity-0 focus-within:opacity-100 group-hover:opacity-100"
+        >
+          <Tip label={t('worktrees.open-in-editor-label')}>
+            <span className="inline-flex">
+              <AsyncButton
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                data-testid="project-editor-btn"
+                loading={projectExternalActions.editor.busy}
+                disabled={projectExternalActions.editor.disabled}
+                aria-label={`${t('worktrees.open-in-editor-label')} ${project.name}`}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  return projectExternalActions.editor.onSelect()
+                }}
+              >
+                {() => <EditorAppIcon pref={projectExternalActions.editor.iconPref} />}
+              </AsyncButton>
+            </span>
+          </Tip>
+          <Tip label={t('terminal.external')}>
+            <span className="inline-flex">
+              <AsyncButton
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                data-testid="project-external-terminal-btn"
+                loading={projectExternalActions.externalTerminal.busy}
+                disabled={projectExternalActions.externalTerminal.disabled}
+                aria-label={`${t('terminal.external')} ${project.name}`}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  return projectExternalActions.externalTerminal.onSelect()
+                }}
+              >
+                {() => <TerminalAppIcon pref={projectExternalActions.externalTerminal.iconPref} />}
+              </AsyncButton>
+            </span>
+          </Tip>
+        </div>
+      )}
       <Button
         type="button"
         variant="ghost"

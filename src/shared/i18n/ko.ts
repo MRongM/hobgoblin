@@ -97,6 +97,7 @@ export const ko: Record<DictKey, string> = {
   'workspace.configuration-required': '워크스페이스 작업 트리를 사용하기 전에 저장소를 구성하세요.',
   'workspace.configuration-invalid': '워크스페이스 구성이 잘못되었습니다. 업데이트한 후 계속하세요.',
   'workspace.config.write-failed': '워크스페이스 구성을 저장할 수 없습니다.',
+  'workspace.agents.write-failed': 'AGENTS.md를 업데이트할 수 없습니다.',
   'workspace.config.repository-unavailable': '선택한 모든 저장소를 사용할 수 있어야 합니다.',
   'workspace.batch.create-action': '모든 저장소에 작업 트리 만들기',
   'workspace.batch.remove-action': '모든 저장소에서 작업 트리 제거',
@@ -425,6 +426,8 @@ export const ko: Record<DictKey, string> = {
   'file-tree.init-worktree-bootstrap-config': 'goblin.toml 초기화',
   'file-tree.init-worktree-bootstrap-config-created': 'goblin.toml이 생성되었습니다',
   'file-tree.init-worktree-bootstrap-config-failed': 'goblin.toml을 초기화할 수 없습니다',
+  'file-tree.init-worktree-bootstrap-config-ai-command-failed':
+    'goblin.toml을 만들었지만 AI 명령을 터미널에 입력하지 못했습니다.',
   'file-tree.search-label': '파일 검색',
   'file-tree.search-placeholder': '파일 검색',
   'file-tree.search-clear': '검색 지우기',

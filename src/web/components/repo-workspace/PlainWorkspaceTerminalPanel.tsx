@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useMemo } from 'react'
 import { PanelLeftOpen } from 'lucide-react'
 import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
 import { EmptyState, Toolbar } from '#/web/components/Layout.tsx'
@@ -14,12 +14,14 @@ import { useFocusRegistry } from '#/web/components/tab-strip/useFocusRegistry.ts
 import { useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
+import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import type { TerminalSessionBase } from '#/web/components/terminal/types.ts'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { cn } from '#/web/lib/cn.ts'
 
 interface PlainWorkspaceTerminalPanelProps {
   repoId: string
+  layout: RepoWorkspaceLayout
   focusMode?: boolean
   compactFocusPresentation?: boolean
   onShowCompactOverview?: () => void
@@ -29,6 +31,7 @@ const DETAIL_ID = 'plain-workspace-terminal'
 
 export function PlainWorkspaceTerminalPanel({
   repoId,
+  layout,
   focusMode = false,
   compactFocusPresentation = false,
   onShowCompactOverview,
@@ -41,7 +44,6 @@ export function PlainWorkspaceTerminalPanel({
   const terminalWorktreeKey = worktreeTerminalKey(repoId, workspacePath)
   const snapshot = useWorktreeTerminalSnapshot(terminalWorktreeKey)
   const terminalTabFocusRegistry = useFocusRegistry<string, HTMLButtonElement>()
-  const bootstrappedRef = useRef(false)
   const contextRail = focusMode || compactFocusPresentation
   const {
     createTerminal,
@@ -60,17 +62,6 @@ export function PlainWorkspaceTerminalPanel({
     }),
     [repoId, workspacePath],
   )
-
-  useEffect(() => {
-    bootstrappedRef.current = false
-  }, [terminalWorktreeKey])
-
-  useEffect(() => {
-    if (bootstrappedRef.current) return
-    if (snapshot.sessions.length > 0) return
-    bootstrappedRef.current = true
-    void createTerminal(terminalBase)
-  }, [createTerminal, snapshot.sessions.length, terminalBase])
 
   const handleNewTerminal = useCallback(() => {
     void createTerminal(terminalBase)
@@ -103,7 +94,11 @@ export function PlainWorkspaceTerminalPanel({
         data-testid="plain-workspace-terminal-toolbar"
         variant="detail"
         chrome={compact ? 'toolbar' : 'topbar'}
-        className={cn('mobile-topbar-scroll', focusMode && 'topbar')}
+        className={cn(
+          'mobile-topbar-scroll',
+          layout === 'left-right' && '[-webkit-app-region:drag]',
+          focusMode && 'topbar',
+        )}
       >
         <div className="mobile-topbar-scroll-content flex h-full min-w-0 items-center gap-1 overflow-hidden">
           {contextRail && (

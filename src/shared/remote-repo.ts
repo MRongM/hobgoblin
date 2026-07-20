@@ -1,7 +1,5 @@
 import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
 
-export type RepoKind = 'local' | 'remote'
-
 export interface RemoteRepoRef {
   id: string
   alias: string
@@ -144,12 +142,6 @@ export function remoteDisplayName(target: Pick<RemoteRepoTargetInput, 'alias' | 
   const remotePath =
     typeof target.remotePath === 'string' && safeText(target.remotePath) ? normalizeRemotePath(target.remotePath) : null
   return `${alias ?? host}:${basename(remotePath ?? '/')}`
-}
-
-export function isRemoteRepoTarget(value: unknown): value is RemoteRepoTarget {
-  if (!value || typeof value !== 'object') return false
-  const target = value as RemoteRepoTarget
-  return normalizeRemoteTarget(target)?.id === target.id
 }
 
 export function repoSessionEntryId(entry: RepoSessionEntry): string {

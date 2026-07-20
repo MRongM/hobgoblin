@@ -1,3 +1,4 @@
+import { syncWorkspaceAgents } from '#/server/modules/workspace-agents-source.ts'
 import {
   buildWorkspaceWorktreePlan,
   validateWorkspaceWorktreeRetryPlan,
@@ -33,6 +34,7 @@ interface WorkspaceWorktreeServiceDependencies {
   removeWorktree?: typeof removeRepositoryWorktree
   pullBranch?: typeof pullRepositoryBranch
   validateRetry?: typeof validateWorkspaceWorktreeRetryPlan
+  syncAgents?: typeof syncWorkspaceAgents
 }
 
 export interface WorkspaceWorktreeService {
@@ -51,6 +53,7 @@ export function createWorkspaceWorktreeService(
   const removeWorktree = dependencies.removeWorktree ?? removeRepositoryWorktree
   const pullBranch = dependencies.pullBranch ?? pullRepositoryBranch
   const validateRetry = dependencies.validateRetry ?? validateWorkspaceWorktreeRetryPlan
+  const syncAgents = dependencies.syncAgents ?? syncWorkspaceAgents
 
   return {
     async plan(rootId, request) {
@@ -100,12 +103,14 @@ export function createWorkspaceWorktreeService(
           repoId: member.repoId,
           phase: pending.completed.has(member.repoId) ? 'satisfied' : 'not-started',
         }))
+        let failureMessage: string | undefined
         for (let index = 0; index < pending.plan.members.length; index += 1) {
           const member = pending.plan.members[index]!
           if (pending.completed.has(member.repoId)) continue
           if (controller.signal.aborted) {
             members[index] = { repoId: member.repoId, phase: 'failed', message: 'cancelled' }
-            return batchResult(pending.plan, members, false, 'cancelled')
+            failureMessage = 'cancelled'
+            break
           }
           let result: ExecResult
           if (pending.plan.operation === 'create') {
@@ -139,12 +144,25 @@ export function createWorkspaceWorktreeService(
           }
           if (!result.ok) {
             members[index] = { repoId: member.repoId, phase: 'failed', message: result.message }
-            return batchResult(pending.plan, members, false, result.message)
+            failureMessage = result.message
+            break
           }
           pending.completed.add(member.repoId)
           members[index] = { repoId: member.repoId, phase: 'succeeded', message: result.message }
         }
 
+        let agentsSyncFailed = false
+        if (pending.plan.operation !== 'pull' && pending.completed.size > 0) {
+          try {
+            await syncAgents(rootId)
+          } catch {
+            agentsSyncFailed = true
+          }
+        }
+        if (failureMessage) return batchResult(pending.plan, members, false, failureMessage)
+        if (agentsSyncFailed) {
+          return batchResult(pending.plan, members, false, 'workspace.agents.write-failed')
+        }
         pendingByRoot.delete(rootId)
         return batchResult(pending.plan, members, true)
       } finally {

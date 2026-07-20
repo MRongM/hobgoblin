@@ -5,7 +5,7 @@ import { markRepoOperationTargets, repoOperation } from '#/web/stores/repos/runt
 import { branch, REPO_ID, resetRefreshTest, rpcHandlers, seedRepo } from '#/web/stores/repos/refresh-test-utils.ts'
 import { seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { canStartRemoteFetch } from '#/web/stores/repos/sync-state.ts'
-import type { LogEntry, WorktreeStatus } from '#/web/types.ts'
+import type { WorktreeStatus } from '#/web/types.ts'
 beforeEach(resetRefreshTest)
 
 type TestRepo = NonNullable<ReturnType<typeof useReposStore.getState>['repos'][string]>
@@ -16,17 +16,6 @@ function updateRepoForTest(mutator: (repo: TestRepo) => void) {
     if (!repo) return s
     return { repos: { ...s.repos, [REPO_ID]: replaceRepo(repo, mutator) } }
   })
-}
-
-function logEntry(index: number): LogEntry {
-  const hash = `hash-${index}`
-  return {
-    hash,
-    shortHash: hash,
-    message: `commit ${index}`,
-    author: 'Alice',
-    date: '2026-01-01T00:00:00+08:00',
-  }
 }
 
 describe('remote fetch timestamps', () => {
@@ -151,10 +140,7 @@ describe('remote fetch timestamps', () => {
     rpcHandlers['repo.snapshot'] = async () => {
       snapshotCount += 1
       return {
-        branches: [
-          branch('feature/a', undefined, { worktree: { path: '/tmp/worktree-a' } }),
-          branch('feature/b'),
-        ],
+        branches: [branch('feature/a', undefined, { worktree: { path: '/tmp/worktree-a' } }), branch('feature/b')],
         current: 'feature/a',
       }
     }
@@ -950,7 +936,9 @@ describe('core refresh request ordering', () => {
   test('manual refresh switches a git local workspace to plain and clears git projection', async () => {
     const token = seedRepo([branch('main')])
     updateRepoForTest((repo) => {
-      repo.data.status = [{ path: REPO_ID, branch: 'main', isMain: true, entries: [{ x: 'M', y: ' ', path: 'README.md' }] }]
+      repo.data.status = [
+        { path: REPO_ID, branch: 'main', isMain: true, entries: [{ x: 'M', y: ' ', path: 'README.md' }] },
+      ]
       repo.data.statusLoaded = true
       repo.ui.selectedBranch = 'main'
       repo.remote.remotes = ['origin']
@@ -961,7 +949,12 @@ describe('core refresh request ordering', () => {
     let statusCount = 0
     let terminalPruneCount = 0
     let terminalCloseCount = 0
-    rpcHandlers['repo.probe'] = async ({ cwd }: { cwd: string }) => ({ ok: true, root: cwd, name: 'plain', isGitRepo: false })
+    rpcHandlers['repo.probe'] = async ({ cwd }: { cwd: string }) => ({
+      ok: true,
+      root: cwd,
+      name: 'plain',
+      isGitRepo: false,
+    })
     rpcHandlers['repo.snapshot'] = async () => {
       snapshotCount += 1
       return { branches: [branch('stale')], current: 'stale' }
@@ -1010,7 +1003,12 @@ describe('core refresh request ordering', () => {
     expect(unavailable?.operations.manualRefresh.phase).toBe('idle')
 
     const retryToken = unavailable!.instanceToken
-    rpcHandlers['repo.probe'] = async ({ cwd }: { cwd: string }) => ({ ok: true, root: cwd, name: 'plain', isGitRepo: false })
+    rpcHandlers['repo.probe'] = async ({ cwd }: { cwd: string }) => ({
+      ok: true,
+      root: cwd,
+      name: 'plain',
+      isGitRepo: false,
+    })
 
     await useReposStore.getState().syncAndRefresh(REPO_ID, { token: retryToken })
 

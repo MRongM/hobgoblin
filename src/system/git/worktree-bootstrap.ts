@@ -66,20 +66,9 @@ const SETUP_TIMEOUT_MS = 10 * 60_000
 const WINDOWS_ROOTED_PATH_RE = /^(?:[A-Za-z]:|[\\/])/
 
 export const DEFAULT_WORKTREE_BOOTSTRAP_CONFIG = `# Configure worktree bootstrap for this repo.
-# Add [worktree] with copy, symlink, hardlink, exclude, and setup when needed.
 # Paths are repo-relative.
-#
-# Example:
-#   [worktree]
-#   copy = [".env.local"]
-#   symlink = ["config/*.json"]
-#   hardlink = ["build/cache.db"]
-#   exclude = ["*.log", "*.tmp"]
-#   setup = "bun install"
 
 [worktree]
-copy = [".env"]
-setup = "bun install"
 `
 
 export async function initializeWorktreeBootstrapConfig(

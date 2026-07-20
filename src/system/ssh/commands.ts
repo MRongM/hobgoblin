@@ -17,8 +17,6 @@ const SSH_CONNECT_TIMEOUT_SEC = 10
 export const REMOTE_SNAPSHOT_CURRENT_MARKER = '__GOBLIN_REMOTE_CURRENT__'
 export const REMOTE_SNAPSHOT_DEFAULT_MARKER = '__GOBLIN_REMOTE_DEFAULT__'
 export const REMOTE_SNAPSHOT_BRANCHES_MARKER = '__GOBLIN_REMOTE_BRANCHES__'
-export const REMOTE_WORKSPACE_CONFIG_MISSING_MARKER = '__HOBGOBLIN_WORKSPACE_CONFIG_MISSING__'
-export const REMOTE_WORKSPACE_CONFIG_CONTENT_MARKER = '__HOBGOBLIN_WORKSPACE_CONFIG_CONTENT__'
 export const REMOTE_PATH_EXISTS_MARKER = '__HOBGOBLIN_PATH_EXISTS__'
 export const REMOTE_PATH_MISSING_MARKER = '__HOBGOBLIN_PATH_MISSING__'
 
@@ -28,8 +26,6 @@ export type RemoteCommandKind =
   | { type: 'checkGit' }
   | { type: 'testDirectory'; path: string }
   | { type: 'listDirectories'; path: string; limit?: number }
-  | { type: 'readWorkspaceConfig'; rootPath: string }
-  | { type: 'writeWorkspaceConfig'; rootPath: string; temporaryName: string }
   | { type: 'listWorkspaceGitDirectories'; rootPath: string }
   | { type: 'testWorkspaceGitDirectory'; path: string }
   | { type: 'testPathExists'; path: string }
@@ -55,7 +51,6 @@ export type RemoteCommandKind =
   | { type: 'gitPatch'; path: string }
   | { type: 'gitWorktreeList'; path: string }
   | { type: 'gitStatus'; path: string }
-  | { type: 'gitLog'; path: string; branch: string; count?: number; skip?: number }
   | { type: 'gitHistory'; path: string; branch: string; limit?: number; skip?: number }
   | { type: 'gitCommitMetadata'; path: string; commit: string }
   | { type: 'gitCommitNameStatus'; path: string; commit: string }
@@ -115,12 +110,6 @@ export interface RemoteCommandOptions {
   stdin?: string
   maxBuffer?: number
 }
-
-export type RemoteCommandRunner = (
-  command: RemoteCommandKind,
-  target: RemoteRepoTarget,
-  options?: RemoteCommandOptions,
-) => Promise<RemoteCommandResult>
 
 export function buildRemoteCommandInvocation(
   target: RemoteRepoTarget,
@@ -216,34 +205,6 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return `find ${shellQuote(
         command.path,
       )} -mindepth 1 -maxdepth 1 -type d -print 2>/dev/null | LC_ALL=C sort | head -n ${limit}`
-    }
-    case 'readWorkspaceConfig': {
-      const configPath = shellQuote(path.posix.join(command.rootPath, 'goblin.toml'))
-      return [
-        `if [ ! -e ${configPath} ] && [ ! -L ${configPath} ]; then`,
-        `  printf '%s\\n' ${shellQuote(REMOTE_WORKSPACE_CONFIG_MISSING_MARKER)}`,
-        '  exit 0',
-        'fi',
-        `test -f ${configPath} && test -r ${configPath}`,
-        `printf '%s\\n' ${shellQuote(REMOTE_WORKSPACE_CONFIG_CONTENT_MARKER)}`,
-        `cat -- ${configPath}`,
-      ].join('\n')
-    }
-    case 'writeWorkspaceConfig': {
-      const rootPath = shellQuote(command.rootPath)
-      const configPath = shellQuote(path.posix.join(command.rootPath, 'goblin.toml'))
-      const temporaryPath = shellQuote(path.posix.join(command.rootPath, command.temporaryName))
-      return [
-        `test -d ${rootPath} || exit 1`,
-        'umask 077',
-        `config_path=${configPath}`,
-        `temporary_path=${temporaryPath}`,
-        '(set -C; : > "$temporary_path") || exit 1',
-        `trap 'rm -f -- "$temporary_path"' 0 HUP INT TERM`,
-        'cat > "$temporary_path" || exit 1',
-        'mv -- "$temporary_path" "$config_path" || exit 1',
-        'trap - 0 HUP INT TERM',
-      ].join('\n')
     }
     case 'listWorkspaceGitDirectories': {
       const rootPath = shellQuote(command.rootPath)
@@ -396,19 +357,6 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return `git -C ${shellQuote(command.path)} worktree list --porcelain`
     case 'gitStatus':
       return `git -C ${shellQuote(command.path)} status --porcelain -z`
-    case 'gitLog': {
-      const count = Math.max(1, Math.min(1000, Math.floor(command.count ?? 100)))
-      const skip = Math.max(0, Math.floor(command.skip ?? 0))
-      const format = ['%H', '%h', '%s', '%an', '%aI'].join(FIELD_SEP)
-      return [
-        `git -C ${shellQuote(command.path)} log`,
-        `--format=${shellQuote(format)}`,
-        `--max-count=${count}`,
-        `--skip=${skip}`,
-        shellQuote(command.branch),
-        '--',
-      ].join(' ')
-    }
     case 'gitHistory': {
       const limit = Math.max(1, Math.min(200, Math.floor(command.limit ?? 100)))
       const skip = Math.max(0, Math.floor(command.skip ?? 0))

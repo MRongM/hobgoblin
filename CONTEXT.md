@@ -28,6 +28,18 @@ _Avoid_: Canonical size, remote size
 An operating-system terminal application opened outside Hobgoblin at the selected worktree path.
 _Avoid_: Native terminal, system terminal
 
+**Settings dialog**:
+The modal surface for changing application preferences while keeping the current workspace visible underneath.
+_Avoid_: Settings screen, full-page settings
+
+**AI handoff command**:
+A provider-specific CLI command placed into an internal terminal for review, without being executed, so the user can start an AI task in the selected worktree context.
+_Avoid_: AI command, automatic AI action
+
+**Worktree bootstrap**:
+A repository-configured process that prepares a newly created worktree from its source worktree before normal development begins.
+_Avoid_: Worktree setup script, post-create hook
+
 **Project list**:
 The inline list of open projects shown beneath the sidebar project switcher.
 _Avoid_: Repo dropdown, project expanded list
@@ -45,8 +57,12 @@ A project rooted at a readable non-Git directory, either local or reached throug
 _Avoid_: Monorepo, repository group, nested repository
 
 **Configured workspace**:
-A multi-repository workspace whose durable, ordered repository membership has been explicitly selected. Filesystem discovery supplies candidates but does not silently change a configured workspace. Repository order controls workspace navigation order and sequential workspace batch-operation order.
+A multi-repository workspace whose durable, ordered repository membership has been explicitly selected. Membership is stored in Hobgoblin application data; `goblin.toml` remains repository-owned worktree bootstrap configuration. Filesystem discovery supplies candidates but does not silently change a configured workspace. Repository order controls workspace navigation order and sequential workspace batch-operation order.
 _Avoid_: Saved scan, repository registry, primary repository
+
+**Workspace inventory**:
+A derived current-state list of configured repositories and their checked-out worktree branches for agent context. It never determines workspace membership and is not an operation history.
+_Avoid_: Workspace configuration, branch log, changelog
 
 **Workspace worktree**:
 A set of same-named linked worktrees created across every configured repository. Each repository remains independently navigable and no repository anchors another repository's worktree list.

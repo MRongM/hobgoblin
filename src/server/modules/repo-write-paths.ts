@@ -39,13 +39,17 @@ import type { RepoFileTreeBinaryFileReplaceResult, RepoFileTreeTextFileReplaceRe
 import { isRemoteRepoId, type NetworkOpKind } from '#/shared/rpc.ts'
 import { checkGitAvailable } from '#/system/git/helper.ts'
 import { isValidCwd, isValidRepoLocator, MAX_IPC_PATH_LENGTH } from '#/shared/input-validation.ts'
-import { type CloneRepoResult, type ProbeResult } from '#/shared/rpc.ts'
+import { type CloneRepoResult } from '#/shared/rpc.ts'
 import { isProtectedRemoteBranchRef, parseRemoteBranchInput } from '#/shared/remote-branches.ts'
 import { parseRemoteTagInput } from '#/shared/remote-tags.ts'
 import { constants as fsConstants, promises as fs } from 'node:fs'
 import path from 'node:path'
 import PQueue from 'p-queue'
-import { isAbsoluteWorktreePath, normalizeCreateWorktreeInput, type CreateWorktreeInput } from '#/shared/worktree-create.ts'
+import {
+  isAbsoluteWorktreePath,
+  normalizeCreateWorktreeInput,
+  type CreateWorktreeInput,
+} from '#/shared/worktree-create.ts'
 import { isRepoWorktreeBootstrapConfigTrusted } from '#/shared/repo-settings.ts'
 import type { WorktreeBootstrapDecision, WorktreeBootstrapPreviewResult } from '#/shared/worktree-bootstrap-summary.ts'
 import {
@@ -68,17 +72,6 @@ const createWorktreeOperationQueuesByRepo = new Map<string, PQueue>()
 
 async function getGitNetworkOptions() {
   return gitNetworkOptionsFromPrefs(await getServerSettingsPrefs())
-}
-
-async function probeReadableDirectory(cwd: string): Promise<ProbeAvailability> {
-  try {
-    const stat = await fs.stat(cwd)
-    if (!stat.isDirectory()) return { ok: false, message: 'error.path-not-directory' }
-    await fs.access(cwd, fsConstants.R_OK)
-    return { ok: true }
-  } catch (err) {
-    return { ok: false, message: classifyPathProbeError(err) }
-  }
 }
 
 async function probeWritableDirectory(cwd: string): Promise<ProbeAvailability> {
@@ -173,11 +166,7 @@ async function publishSnapshotInvalidationAfterMutation(
   return result
 }
 
-function publishSnapshotInvalidationAfterGitAttempt(
-  cwd: string,
-  result: ExecResult,
-  sourceToken?: string,
-): ExecResult {
+function publishSnapshotInvalidationAfterGitAttempt(cwd: string, result: ExecResult, sourceToken?: string): ExecResult {
   publishRepoSnapshotInvalidation(cwd, sourceToken)
   return result
 }
@@ -531,7 +520,11 @@ export async function deleteRepositoryBranch(
   sourceToken?: string,
 ): Promise<ExecResult> {
   return await runWithRepoBackend(cwd, async (backend) => {
-    return await publishSnapshotInvalidationAfterMutation(cwd, await backend.deleteBranch(branch, options, signal), sourceToken)
+    return await publishSnapshotInvalidationAfterMutation(
+      cwd,
+      await backend.deleteBranch(branch, options, signal),
+      sourceToken,
+    )
   })
 }
 
@@ -681,7 +674,9 @@ export async function createRepositoryFileTreeDirectory(
   sourceToken?: string,
 ): Promise<ExecResult> {
   const result = isRemoteRepoId(repoId)
-    ? await createRemoteFileTreeDirectory(await resolveRemoteRepoTarget(repoId), worktreePath, parentDirPath, name, { signal })
+    ? await createRemoteFileTreeDirectory(await resolveRemoteRepoTarget(repoId), worktreePath, parentDirPath, name, {
+        signal,
+      })
     : await createLocalFileTreeDirectory(worktreePath, parentDirPath, name)
   if (result.ok) publishRepoSnapshotInvalidation(repoId, sourceToken)
   return result
@@ -696,7 +691,9 @@ export async function createRepositoryFileTreeFile(
   sourceToken?: string,
 ): Promise<ExecResult> {
   const result = isRemoteRepoId(repoId)
-    ? await createRemoteFileTreeFile(await resolveRemoteRepoTarget(repoId), worktreePath, parentDirPath, name, { signal })
+    ? await createRemoteFileTreeFile(await resolveRemoteRepoTarget(repoId), worktreePath, parentDirPath, name, {
+        signal,
+      })
     : await createLocalFileTreeFile(worktreePath, parentDirPath, name)
   if (result.ok) publishRepoSnapshotInvalidation(repoId, sourceToken)
   return result
@@ -711,7 +708,9 @@ export async function replaceRepositoryFileTreeTextFile(
   sourceToken?: string,
 ): Promise<RepoFileTreeTextFileReplaceResult> {
   const result = isRemoteRepoId(repoId)
-    ? await replaceRemoteFileTreeTextFile(await resolveRemoteRepoTarget(repoId), worktreePath, filePath, content, { signal })
+    ? await replaceRemoteFileTreeTextFile(await resolveRemoteRepoTarget(repoId), worktreePath, filePath, content, {
+        signal,
+      })
     : await replaceLocalFileTreeTextFile(worktreePath, filePath, content)
   if (result.ok) publishRepoSnapshotInvalidation(repoId, sourceToken)
   return result
@@ -763,7 +762,9 @@ export async function moveRepositoryFileTreeEntries(
   sourceToken?: string,
 ): Promise<ExecResult> {
   const result = isRemoteRepoId(repoId)
-    ? await moveRemoteFileTreeEntries(await resolveRemoteRepoTarget(repoId), worktreePath, paths, targetDirPath, { signal })
+    ? await moveRemoteFileTreeEntries(await resolveRemoteRepoTarget(repoId), worktreePath, paths, targetDirPath, {
+        signal,
+      })
     : await moveLocalFileTreeEntries(worktreePath, paths, targetDirPath)
   if (result.ok) publishRepoSnapshotInvalidation(repoId, sourceToken)
   return result

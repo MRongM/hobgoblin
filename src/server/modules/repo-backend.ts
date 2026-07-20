@@ -9,16 +9,23 @@ import {
   deleteUpstreamBranch,
   getBranches,
   getCurrentBranch,
-  getDefaultBranch,
   getRepoName,
   getRepoRoot,
   getUpstream,
   isAncestor,
   isGitRepo,
 } from '#/system/git/branches.ts'
-import { getCommitDetail as getLocalCommitDetail, getCommitHistory as getLocalCommitHistory } from '#/system/git/history.ts'
+import {
+  getCommitDetail as getLocalCommitDetail,
+  getCommitHistory as getLocalCommitHistory,
+} from '#/system/git/history.ts'
 import { fetchAll, getBrowserRemoteUrl, getRemoteInfo, pullBranch, pushBranch } from '#/system/git/remote.ts'
-import { createLocalTag as createLocalGitTag, deleteLocalTag as deleteLocalGitTag, getLocalTags as getLocalGitTags, pushLocalTag as pushLocalGitTag } from '#/system/git/tags.ts'
+import {
+  createLocalTag as createLocalGitTag,
+  deleteLocalTag as deleteLocalGitTag,
+  getLocalTags as getLocalGitTags,
+  pushLocalTag as pushLocalGitTag,
+} from '#/system/git/tags.ts'
 import {
   deleteRemoteServerTag as deleteLocalRemoteServerTag,
   getRemoteTags as getLocalRemoteTags,
@@ -31,22 +38,14 @@ import {
   bootstrapWorktreeAfterCreate,
   getWorktreeBootstrapPreview as getLocalWorktreeBootstrapPreview,
 } from '#/system/git/worktree-bootstrap.ts'
-import {
-  getWorktreeCommitMessageContext,
-  type CommitMessageContext,
-} from '#/system/git/commit-message-context.ts'
+import { getWorktreeCommitMessageContext, type CommitMessageContext } from '#/system/git/commit-message-context.ts'
 import { commitAllChanges } from '#/system/git/commit.ts'
 import { mergeBranch } from '#/system/git/merge.ts'
 import { discardChangesForPaths, resetHardToCurrentHead } from '#/system/git/reset.ts'
-import {
-  type CommitDetail,
-  type CommitHistoryEntry,
-  type ExecResult,
-  type WorktreeStatus,
-} from '#/shared/git-types.ts'
+import { type CommitDetail, type CommitHistoryEntry, type ExecResult, type WorktreeStatus } from '#/shared/git-types.ts'
 import { resolveKnownWorktree, resolveRemovableWorktree } from '#/shared/worktree-guards.ts'
 import { isValidCwd } from '#/shared/input-validation.ts'
-import { validateBranchDeletionPolicy, validateCreateWorktreeInput, validateRemovableWorktreeState } from '#/shared/repo-action-policy.ts'
+import { validateBranchDeletionPolicy, validateRemovableWorktreeState } from '#/shared/repo-action-policy.ts'
 import { resolveRemoteTarget as resolveSshRemoteTarget } from '#/system/ssh/config.ts'
 import { testRemoteRepository } from '#/system/ssh/diagnostics.ts'
 import {
@@ -102,7 +101,11 @@ export interface RepoBackend {
   probe(): Promise<ProbeResult>
   getSnapshot(signal?: AbortSignal): Promise<RepoSnapshot | null>
   getStatus(signal?: AbortSignal): Promise<WorktreeStatus[]>
-  getHistory(branch: string, input: { limit: number; skip: number }, signal?: AbortSignal): Promise<CommitHistoryEntry[]>
+  getHistory(
+    branch: string,
+    input: { limit: number; skip: number },
+    signal?: AbortSignal,
+  ): Promise<CommitHistoryEntry[]>
   getCommitDetail(commit: string, signal?: AbortSignal): Promise<CommitDetail | null>
   getRemoteBranches(signal?: AbortSignal): Promise<string[]>
   getRemoteTags(signal?: AbortSignal, networkOptions?: GitNetworkOptions): Promise<string[]>
@@ -110,7 +113,12 @@ export interface RepoBackend {
   fetch(signal: AbortSignal, networkOptions?: GitNetworkOptions): Promise<{ ok: boolean; message: string }>
   checkout(branch: string, signal?: AbortSignal): Promise<ExecResult>
   checkoutWorktree(worktreePath: string, branch: string, signal?: AbortSignal): Promise<ExecResult>
-  pull(branch: string, worktreePath?: string, signal?: AbortSignal, networkOptions?: GitNetworkOptions): Promise<ExecResult>
+  pull(
+    branch: string,
+    worktreePath?: string,
+    signal?: AbortSignal,
+    networkOptions?: GitNetworkOptions,
+  ): Promise<ExecResult>
   push(branch: string, signal?: AbortSignal, networkOptions?: GitNetworkOptions): Promise<ExecResult>
   commitAll(worktreePath: string, message: string, signal?: AbortSignal): Promise<ExecResult>
   merge(worktreePath: string, branch: string, signal?: AbortSignal): Promise<ExecResult>
@@ -212,7 +220,10 @@ async function probeGitRepository(cwd: string): Promise<ProbeAvailability> {
 function createLocalRepoBackend(repoId: string): RepoBackend {
   async function validateBranchDeletion(
     branch: string,
-    options?: { force?: boolean; notMergedMessage?: 'error.branch-not-fully-merged' | 'error.cannot-remove-unpushed-worktree' },
+    options?: {
+      force?: boolean
+      notMergedMessage?: 'error.branch-not-fully-merged' | 'error.cannot-remove-unpushed-worktree'
+    },
     signal?: AbortSignal,
     ignoredWorktreePath?: string,
   ): Promise<ExecResult | null> {

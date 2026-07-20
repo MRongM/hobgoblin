@@ -13,6 +13,16 @@ const { openExternalUrlMock } = vi.hoisted(() => ({
   openExternalUrlMock: vi.fn(async (_url: string) => ({ ok: true, message: '' })),
 }))
 
+const shellOverlayMock = vi.hoisted(() => ({
+  state: null as {
+    openRepoPathDialog: () => void
+    openRemoteRepo: () => void
+    openCloneRepo: () => void
+    openSettings: () => void
+    settingsOpen: boolean
+  } | null,
+}))
+
 vi.mock('#/web/app-shell-client.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('#/web/app-shell-client.ts')>()),
   openExternalUrl: (url: string) => openExternalUrlMock(url),
@@ -45,7 +55,7 @@ vi.mock('#/web/stores/i18n.ts', () => ({
 }))
 
 vi.mock('#/web/shell-overlay-actions.tsx', () => ({
-  useShellOverlayActions: () => null,
+  useShellOverlayActions: () => shellOverlayMock.state,
 }))
 
 vi.mock('#/web/components/Tip.tsx', () => ({
@@ -90,6 +100,7 @@ beforeEach(() => {
   ]
   terminalSnapshotKeys.length = 0
   openExternalUrlMock.mockClear()
+  shellOverlayMock.state = null
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
@@ -104,6 +115,27 @@ afterEach(() => {
 })
 
 describe('StatusBar file area control', () => {
+  test('keeps the active settings trigger above the dialog scrim and toggles it closed', () => {
+    const toggleSettings = vi.fn()
+    shellOverlayMock.state = {
+      openRepoPathDialog: vi.fn(),
+      openRemoteRepo: vi.fn(),
+      openCloneRepo: vi.fn(),
+      openSettings: toggleSettings,
+      settingsOpen: true,
+    }
+
+    act(() => root!.render(<StatusBar repoId={REPO_ID} />))
+
+    const settings = container?.querySelector<HTMLButtonElement>('button[aria-label="topbar.settings"]')
+    expect(settings?.getAttribute('aria-pressed')).toBe('true')
+    expect(settings?.className).toContain('z-[60]')
+
+    act(() => settings?.click())
+
+    expect(toggleSettings).toHaveBeenCalledTimes(1)
+  })
+
   test('switches between collapse and expand actions', () => {
     const onToggleFileArea = vi.fn()
     renderStatusBar(false, onToggleFileArea)

@@ -190,7 +190,7 @@ vi.mock('#/system/git/worktrees.ts', () => ({
 }))
 
 vi.mock('#/system/git/worktree-bootstrap.ts', () => ({
-  DEFAULT_WORKTREE_BOOTSTRAP_CONFIG: '[worktree]\ncopy = [".env"]\nsetup = "bun install"\n',
+  DEFAULT_WORKTREE_BOOTSTRAP_CONFIG: '[worktree]\n',
   getWorktreeBootstrapPreview: mocks.getWorktreeBootstrapPreview,
   initializeWorktreeBootstrapConfig: mocks.initializeWorktreeBootstrapConfig,
   bootstrapWorktreeAfterCreate: mocks.bootstrapWorktreeAfterCreate,
@@ -244,7 +244,6 @@ vi.mock('#/system/ssh/git.ts', () => ({
   getRemotePatch: vi.fn(),
   getRemoteTags: mocks.getRemoteTags,
   getRemoteTrackingBranches: mocks.getRemoteTrackingBranches,
-  getRemoteLog: vi.fn(),
   getRemoteSnapshot: mocks.getRemoteSnapshot,
   getRemoteStatus: vi.fn(),
   pullRemoteBranch: mocks.pullRemoteBranch,

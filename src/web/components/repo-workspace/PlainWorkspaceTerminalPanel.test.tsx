@@ -92,8 +92,22 @@ afterEach(() => {
 })
 
 describe('PlainWorkspaceTerminalPanel', () => {
-  test('auto-creates the first session for a plain workspace', () => {
-    render(<PlainWorkspaceTerminalPanel repoId="/repo" />)
+  test('does not create a terminal when a plain workspace opens or rerenders', () => {
+    render(<PlainWorkspaceTerminalPanel repoId="/repo" layout="top-bottom" />)
+
+    act(() => {
+      root!.render(<PlainWorkspaceTerminalPanel repoId="/repo" layout="top-bottom" />)
+    })
+
+    expect(createTerminal).not.toHaveBeenCalled()
+  })
+
+  test('creates a local plain-workspace terminal from the explicit new action', () => {
+    render(<PlainWorkspaceTerminalPanel repoId="/repo" layout="top-bottom" />)
+
+    act(() => {
+      ;(terminalTabsProps.at(-1)?.onNew as (() => void) | undefined)?.()
+    })
 
     expect(createTerminal).toHaveBeenCalledTimes(1)
     expect(createTerminal).toHaveBeenCalledWith({
@@ -103,31 +117,21 @@ describe('PlainWorkspaceTerminalPanel', () => {
     })
   })
 
-  test('does not create another first session on rerender', () => {
-    render(<PlainWorkspaceTerminalPanel repoId="/repo" />)
-
-    act(() => {
-      root!.render(<PlainWorkspaceTerminalPanel repoId="/repo" />)
-    })
-
-    expect(createTerminal).toHaveBeenCalledTimes(1)
-  })
-
   test('passes terminal focus command to terminal tabs', () => {
-    render(<PlainWorkspaceTerminalPanel repoId="/repo" />)
+    render(<PlainWorkspaceTerminalPanel repoId="/repo" layout="top-bottom" />)
 
     expect(terminalTabsProps[0]?.onFocusTerminal).toBe(focusTerminal)
   })
 
   test('keeps terminal tabs content-sized in the plain-workspace toolbar', () => {
-    render(<PlainWorkspaceTerminalPanel repoId="/repo" />)
+    render(<PlainWorkspaceTerminalPanel repoId="/repo" layout="top-bottom" />)
 
     const terminalTabs = container!.querySelector('[data-testid="terminal-tabs"]')
     expect(terminalTabs?.parentElement?.className).not.toContain('flex-1')
   })
 
   test('uses the project topbar tone for the desktop terminal toolbar', () => {
-    render(<PlainWorkspaceTerminalPanel repoId="/repo" />)
+    render(<PlainWorkspaceTerminalPanel repoId="/repo" layout="top-bottom" />)
 
     const toolbar = container!.querySelector<HTMLElement>('[data-testid="plain-workspace-terminal-toolbar"]')
     expect(toolbar?.style.height).toBe('39px')
@@ -137,9 +141,23 @@ describe('PlainWorkspaceTerminalPanel', () => {
     expect(toolbar?.className).toContain('text-topbar-foreground')
   })
 
+  test('marks the desktop left-right terminal topbar as a window drag region', () => {
+    render(<PlainWorkspaceTerminalPanel repoId="/repo" layout="left-right" />)
+
+    const toolbar = container!.querySelector<HTMLElement>('[data-testid="plain-workspace-terminal-toolbar"]')
+    expect(toolbar?.className).toContain('[-webkit-app-region:drag]')
+  })
+
+  test('keeps the top-bottom terminal toolbar as an internal non-drag row', () => {
+    render(<PlainWorkspaceTerminalPanel repoId="/repo" layout="top-bottom" />)
+
+    const toolbar = container!.querySelector<HTMLElement>('[data-testid="plain-workspace-terminal-toolbar"]')
+    expect(toolbar?.className).not.toContain('[-webkit-app-region:drag]')
+  })
+
   test('keeps the compact terminal toolbar on the generic toolbar tone', () => {
     compactUi = true
-    render(<PlainWorkspaceTerminalPanel repoId="/repo" />)
+    render(<PlainWorkspaceTerminalPanel repoId="/repo" layout="top-bottom" />)
 
     const toolbar = container!.querySelector<HTMLElement>('[data-testid="plain-workspace-terminal-toolbar"]')
     expect(toolbar?.style.height).toBe('41px')
@@ -149,14 +167,14 @@ describe('PlainWorkspaceTerminalPanel', () => {
 
   test('collapses the plain-workspace terminal list in compact UI like a Git workspace', () => {
     compactUi = true
-    render(<PlainWorkspaceTerminalPanel repoId="/repo" />)
+    render(<PlainWorkspaceTerminalPanel repoId="/repo" layout="top-bottom" />)
 
     expect(terminalTabsProps.at(-1)?.responsiveCompact).toBe(true)
   })
 
   test('keeps the complete compact terminal topbar in the shared horizontal scroll flow', () => {
     compactUi = true
-    render(<PlainWorkspaceTerminalPanel repoId="/repo" compactFocusPresentation />)
+    render(<PlainWorkspaceTerminalPanel repoId="/repo" layout="top-bottom" compactFocusPresentation />)
 
     const toolbar = container!.querySelector<HTMLElement>('[data-testid="plain-workspace-terminal-toolbar"]')
     const content = toolbar?.firstElementChild
@@ -193,6 +211,7 @@ describe('PlainWorkspaceTerminalPanel', () => {
     render(
       <PlainWorkspaceTerminalPanel
         repoId="/repo"
+        layout="top-bottom"
         compactFocusPresentation
         onShowCompactOverview={onShowCompactOverview}
       />,
@@ -225,7 +244,7 @@ describe('PlainWorkspaceTerminalPanel', () => {
     })
     useReposStore.setState({ detailFocusMode: true })
 
-    render(<PlainWorkspaceTerminalPanel repoId="/repo" focusMode />)
+    render(<PlainWorkspaceTerminalPanel repoId="/repo" layout="top-bottom" focusMode />)
 
     const toolbar = container!.querySelector<HTMLElement>('[data-testid="plain-workspace-terminal-toolbar"]')
     const projectSwitcher = container!.querySelector('[data-testid="focus-project-switcher"]')
@@ -261,7 +280,7 @@ describe('PlainWorkspaceTerminalPanel', () => {
       },
     })
 
-    render(<PlainWorkspaceTerminalPanel repoId="/repo" focusMode />)
+    render(<PlainWorkspaceTerminalPanel repoId="/repo" layout="top-bottom" focusMode />)
 
     expect(container!.querySelector('button[aria-label="workspace.repositories"]')).not.toBeNull()
   })
@@ -275,7 +294,7 @@ describe('PlainWorkspaceTerminalPanel', () => {
       selectedBranch: null,
     })
     useReposStore.setState({ detailFocusMode: true })
-    render(<PlainWorkspaceTerminalPanel repoId="/repo" focusMode />)
+    render(<PlainWorkspaceTerminalPanel repoId="/repo" layout="top-bottom" focusMode />)
 
     act(() => {
       container!.querySelector<HTMLButtonElement>('button[aria-label="branch-detail.exit-focus"]')?.click()
@@ -284,7 +303,7 @@ describe('PlainWorkspaceTerminalPanel', () => {
     expect(useReposStore.getState().detailFocusMode).toBe(false)
   })
 
-  test('auto-creates remote plain workspace sessions at the remote path', () => {
+  test('creates a remote plain-workspace terminal from the explicit new action', () => {
     seedRepoState({
       id: REMOTE_REPO_ID,
       isGitRepo: false,
@@ -303,7 +322,11 @@ describe('PlainWorkspaceTerminalPanel', () => {
       },
     })
 
-    render(<PlainWorkspaceTerminalPanel repoId={REMOTE_REPO_ID} />)
+    render(<PlainWorkspaceTerminalPanel repoId={REMOTE_REPO_ID} layout="top-bottom" />)
+
+    act(() => {
+      ;(terminalTabsProps.at(-1)?.onNew as (() => void) | undefined)?.()
+    })
 
     expect(createTerminal).toHaveBeenCalledTimes(1)
     expect(createTerminal).toHaveBeenCalledWith({

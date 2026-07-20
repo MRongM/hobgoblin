@@ -36,6 +36,7 @@ const repositoryListState = vi.hoisted(() => ({
       name: string
       branch?: string
       changeCount: number
+      terminalWorktreePaths: string[]
       unavailable: boolean
     }>
     currentRepoId: string
@@ -134,6 +135,10 @@ beforeEach(() => {
     repo.workspaceRootId = ROOT
     repo.data.currentBranch = 'main'
     repo.data.branches = [createRepoBranch('main', { worktree: { path: API } })]
+    repo.data.worktreesByPath = {
+      [API]: { path: API, branch: 'main', isMain: true },
+      '/worktrees/api-feature': { path: '/worktrees/api-feature', branch: 'feature/api', isMain: false },
+    }
     repo.data.status = [
       {
         path: API,
@@ -408,6 +413,13 @@ describe('WorkspaceRepositoryRail', () => {
     expect(repositoryListState.props?.repositories.map((repository) => repository.id)).toEqual([API, WEB])
     expect(repositoryListState.props?.repositories.some((repository) => repository.id === ROOT)).toBe(false)
     expect(container?.textContent).toContain('workspace.overview')
+  })
+
+  test('projects every repository worktree path into repository items for terminal aggregation', () => {
+    renderRail()
+
+    const api = repositoryListState.props?.repositories.find((repository) => repository.id === API)
+    expect(api?.terminalWorktreePaths).toEqual([API, '/worktrees/api-feature'])
   })
 })
 

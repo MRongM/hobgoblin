@@ -54,10 +54,12 @@ describe('workspace worktree write service', () => {
   test('executes creation sequentially in plan order', async () => {
     const planned = plan('create')
     const createWorktree = vi.fn(async (_repoId: string) => ({ ok: true, message: 'created' }))
+    const syncAgents = vi.fn(async () => undefined)
     const service = createWorkspaceWorktreeService({
       buildPlan: vi.fn(async () => ({ ok: true as const, plan: planned })),
       createWorktree,
       removeWorktree: vi.fn(),
+      syncAgents,
     })
     await service.plan(ROOT, { operation: 'create', branch: 'feature/a', baseBranch: 'main' })
 
@@ -66,6 +68,7 @@ describe('workspace worktree write service', () => {
     expect(result.ok).toBe(true)
     expect(createWorktree.mock.calls.map(([repoId]) => repoId)).toEqual(['/workspace/api', '/workspace/web'])
     expect(result.members.map((member) => member.phase)).toEqual(['succeeded', 'succeeded'])
+    expect(syncAgents).toHaveBeenCalledWith(ROOT)
   })
 
   test("forwards each child repository's own bootstrap decision during creation", async () => {
@@ -84,6 +87,7 @@ describe('workspace worktree write service', () => {
       buildPlan: vi.fn(async () => ({ ok: true as const, plan: planned })),
       createWorktree,
       removeWorktree: vi.fn(),
+      syncAgents: vi.fn(async () => undefined),
     })
     await service.plan(ROOT, { operation: 'create', branch: 'feature/a', baseBranch: 'main' })
 
@@ -100,6 +104,7 @@ describe('workspace worktree write service', () => {
     const planned = plan('remove')
     planned.removalOptions = { alsoDeleteBranch: true, alsoDeleteUpstream: true }
     let webAttempts = 0
+    const syncAgents = vi.fn(async () => undefined)
     const removeWorktree = vi.fn(async (repoId: string, _input: unknown) => {
       if (repoId === '/workspace/web' && webAttempts++ === 0) return { ok: false, message: 'busy' }
       return { ok: true, message: 'removed' }
@@ -109,6 +114,7 @@ describe('workspace worktree write service', () => {
       createWorktree: vi.fn(),
       removeWorktree,
       validateRetry: vi.fn(async () => ({ ok: true as const })),
+      syncAgents,
     })
     await service.plan(ROOT, {
       operation: 'remove',
@@ -134,10 +140,12 @@ describe('workspace worktree write service', () => {
       forceDeleteBranch: true,
       alsoDeleteUpstream: true,
     })
+    expect(syncAgents).toHaveBeenCalledTimes(2)
   })
 
   test('pulls each repository root branch sequentially in configured order', async () => {
     const planned = plan('pull')
+    const syncAgents = vi.fn(async () => undefined)
     const pullBranch = vi.fn(async (_repoId: string, _branch: string, _worktreePath?: string) => ({
       ok: true,
       message: 'pulled',
@@ -147,6 +155,7 @@ describe('workspace worktree write service', () => {
       createWorktree: vi.fn(),
       removeWorktree: vi.fn(),
       pullBranch,
+      syncAgents,
     })
     await service.plan(ROOT, { operation: 'pull' })
 
@@ -157,6 +166,72 @@ describe('workspace worktree write service', () => {
       ['/workspace/api', 'main', '/workspace/api'],
       ['/workspace/web', 'trunk', '/workspace/web'],
     ])
+    expect(syncAgents).not.toHaveBeenCalled()
+  })
+
+  test('preserves a primary Git failure when AGENTS.md synchronization also fails', async () => {
+    const planned = plan('remove')
+    const removeWorktree = vi.fn(async (repoId: string) =>
+      repoId === '/workspace/api' ? { ok: true, message: 'removed' } : { ok: false, message: 'busy' },
+    )
+    const syncAgents = vi.fn(async () => {
+      throw new Error('workspace.agents.write-failed')
+    })
+    const service = createWorkspaceWorktreeService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan: planned })),
+      createWorktree: vi.fn(),
+      removeWorktree,
+      syncAgents,
+    })
+    await service.plan(ROOT, {
+      operation: 'remove',
+      branch: 'feature/a',
+      alsoDeleteBranch: false,
+      alsoDeleteUpstream: false,
+    })
+
+    const result = await service.execute(ROOT, { planToken: planned.token, approveBootstrap: false })
+
+    expect(result).toMatchObject({
+      ok: false,
+      message: 'busy',
+      members: [{ phase: 'succeeded' }, { phase: 'failed' }],
+    })
+    expect(syncAgents).toHaveBeenCalledWith(ROOT)
+  })
+
+  test('retries AGENTS.md synchronization without repeating completed repository writes', async () => {
+    const planned = plan('create')
+    const createWorktree = vi.fn(async () => ({ ok: true, message: 'created' }))
+    const syncAgents = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('workspace.agents.write-failed'))
+      .mockResolvedValueOnce(undefined)
+    const validateRetry = vi.fn(async () => ({ ok: true as const }))
+    const service = createWorkspaceWorktreeService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan: planned })),
+      createWorktree,
+      removeWorktree: vi.fn(),
+      validateRetry,
+      syncAgents,
+    })
+    await service.plan(ROOT, { operation: 'create', branch: 'feature/a', baseBranch: 'main' })
+
+    const first = await service.execute(ROOT, { planToken: planned.token, approveBootstrap: false })
+    const retry = await service.execute(ROOT, { planToken: planned.token, approveBootstrap: false })
+
+    expect(first).toMatchObject({
+      ok: false,
+      message: 'workspace.agents.write-failed',
+      members: [{ phase: 'succeeded' }, { phase: 'succeeded' }],
+    })
+    expect(retry).toMatchObject({
+      ok: true,
+      members: [{ phase: 'satisfied' }, { phase: 'satisfied' }],
+    })
+    expect(createWorktree).toHaveBeenCalledTimes(planned.members.length)
+    expect(validateRetry).toHaveBeenCalledTimes(1)
+    expect(syncAgents).toHaveBeenCalledTimes(2)
   })
 
   test('rejects stale plans and unapproved bootstrap operations before writes', async () => {
@@ -204,6 +279,7 @@ describe('workspace worktree write service', () => {
       buildPlan: vi.fn(async () => ({ ok: true as const, plan: planned })),
       createWorktree,
       removeWorktree: vi.fn(),
+      syncAgents: vi.fn(async () => undefined),
     })
     await service.plan(ROOT, { operation: 'create', branch: 'feature/a', baseBranch: 'main' })
     const running = service.execute(ROOT, { planToken: planned.token, approveBootstrap: false })

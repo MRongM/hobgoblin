@@ -267,7 +267,6 @@ describe('discoverWorkspaceRepositories', () => {
     const api = await createGitDirectory(root, 'api')
     const web = await createGitDirectory(root, 'web')
     const docs = await createGitDirectory(root, 'docs')
-    await writeFile(path.join(root, 'goblin.toml'), '[workspace]\nrepo = ["api", "web"]\n')
     const probeRepository = vi.fn(
       async (cwd: string): Promise<ProbeResult> => ({
         ok: true,
@@ -277,7 +276,12 @@ describe('discoverWorkspaceRepositories', () => {
       }),
     )
 
-    await expect(discoverWorkspaceRepositories(root, { probeRepository })).resolves.toEqual({
+    await expect(
+      discoverWorkspaceRepositories(root, {
+        probeRepository,
+        readConfig: async () => ({ kind: 'ready', config: { repo: ['api', 'web'] } }),
+      }),
+    ).resolves.toEqual({
       ok: true,
       rootId: root,
       repositories: [
@@ -297,7 +301,6 @@ describe('discoverWorkspaceRepositories', () => {
   test('reports missing configured repositories as unavailable candidates', async () => {
     const root = await createTemporaryRoot()
     const api = await createGitDirectory(root, 'api')
-    await writeFile(path.join(root, 'goblin.toml'), '[workspace]\nrepo = ["api", "web"]\n')
     const probeRepository = vi.fn(
       async (cwd: string): Promise<ProbeResult> => ({
         ok: true,
@@ -307,7 +310,10 @@ describe('discoverWorkspaceRepositories', () => {
       }),
     )
 
-    const result = await discoverWorkspaceRepositories(root, { probeRepository })
+    const result = await discoverWorkspaceRepositories(root, {
+      probeRepository,
+      readConfig: async () => ({ kind: 'ready', config: { repo: ['api', 'web'] } }),
+    })
 
     expect(result).toEqual({
       ok: true,
@@ -325,7 +331,6 @@ describe('discoverWorkspaceRepositories', () => {
   test('keeps candidates visible but disables effective membership for invalid config', async () => {
     const root = await createTemporaryRoot()
     const api = await createGitDirectory(root, 'api')
-    await writeFile(path.join(root, 'goblin.toml'), '[workspace]\nrepo = ["api", "api"]\n')
     const probeRepository = vi.fn(
       async (cwd: string): Promise<ProbeResult> => ({
         ok: true,
@@ -335,14 +340,17 @@ describe('discoverWorkspaceRepositories', () => {
       }),
     )
 
-    const result = await discoverWorkspaceRepositories(root, { probeRepository })
+    const result = await discoverWorkspaceRepositories(root, {
+      probeRepository,
+      readConfig: async () => ({ kind: 'invalid', message: 'workspace.config.read-failed' }),
+    })
 
     expect(result).toEqual({
       ok: true,
       rootId: root,
       repositories: [],
       candidates: [{ id: api, name: 'api', selected: false, available: true }],
-      configuration: { kind: 'invalid', message: 'workspace.config.duplicate-repository' },
+      configuration: { kind: 'invalid', message: 'workspace.config.read-failed' },
       skipped: [],
     })
   })

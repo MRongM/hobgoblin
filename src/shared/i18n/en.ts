@@ -104,6 +104,7 @@ export const en = {
   'workspace.configuration-required': 'Configure repositories before using workspace worktrees.',
   'workspace.configuration-invalid': 'The workspace configuration is invalid. Update it to continue.',
   'workspace.config.write-failed': 'Workspace configuration could not be saved.',
+  'workspace.agents.write-failed': 'Failed to update AGENTS.md.',
   'workspace.config.repository-unavailable': 'Every selected repository must be available.',
   'workspace.batch.create-action': 'Create worktrees in all repositories',
   'workspace.batch.remove-action': 'Remove worktrees from all repositories',
@@ -436,6 +437,8 @@ export const en = {
   'file-tree.init-worktree-bootstrap-config': 'Initialize goblin.toml',
   'file-tree.init-worktree-bootstrap-config-created': 'goblin.toml created',
   'file-tree.init-worktree-bootstrap-config-failed': 'Unable to initialize goblin.toml',
+  'file-tree.init-worktree-bootstrap-config-ai-command-failed':
+    'goblin.toml was created, but the AI command could not be placed in the terminal.',
   'file-tree.search-label': 'Search files',
   'file-tree.search-placeholder': 'Search files',
   'file-tree.search-clear': 'Clear search',

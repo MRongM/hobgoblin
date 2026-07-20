@@ -64,14 +64,6 @@ export interface WorktreeStatus {
   entries: StatusEntry[]
 }
 
-export interface LogEntry {
-  hash: string
-  shortHash: string
-  message: string
-  author: string
-  date: string
-}
-
 export interface CommitHistoryEntry {
   hash: string
   shortHash: string

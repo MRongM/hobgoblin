@@ -64,6 +64,7 @@ import { useRepoStoreInvalidationRefresh } from '#/web/hooks/useRepoStoreInvalid
 import { useSettingsQueryInvalidationSync } from '#/web/settings-queries.ts'
 import { MainWindowNavigationProvider, useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import { useResponsiveUiMode } from '#/web/hooks/useResponsiveUiMode.tsx'
+import { cn } from '#/web/lib/cn.ts'
 import type { SettingsPage } from '#/shared/settings-pages.ts'
 
 interface AppProps {
@@ -82,7 +83,7 @@ export function App({ routeSettingsPage = null, onRouteSettingsPageChange }: App
     settingsOpen,
     modalOpen,
     workspaceShortcutsSuppressed,
-    openSettings,
+    toggleSettings,
     showHelp,
     exitSettings,
     navigation,
@@ -126,9 +127,10 @@ export function App({ routeSettingsPage = null, onRouteSettingsPageChange }: App
       openRepoPathDialog: overlays.openRepoPathDialog,
       openRemoteRepo: overlays.openRemoteRepo,
       openCloneRepo: overlays.openCloneRepo,
-      openSettings: () => openSettings(),
+      openSettings: toggleSettings,
+      settingsOpen,
     }),
-    [overlays.openRepoPathDialog, overlays.openRemoteRepo, overlays.openCloneRepo, openSettings],
+    [overlays.openRepoPathDialog, overlays.openRemoteRepo, overlays.openCloneRepo, settingsOpen, toggleSettings],
   )
 
   return (
@@ -142,7 +144,8 @@ export function App({ routeSettingsPage = null, onRouteSettingsPageChange }: App
               <MainWindowViewport
                 routeSettingsPage={routeSettingsPage}
                 onRouteSettingsPageChange={onRouteSettingsPageChange}
-                openSettings={openSettings}
+                toggleSettings={toggleSettings}
+                settingsOpen={settingsOpen}
                 visibleRepoId={visibleRepoId}
                 sessionReady={sessionReady}
                 workspaceLayout={workspaceLayout}
@@ -163,7 +166,8 @@ export function App({ routeSettingsPage = null, onRouteSettingsPageChange }: App
 interface MainWindowViewportProps {
   routeSettingsPage: SettingsPage | null
   onRouteSettingsPageChange?: (page: SettingsPage | null) => void
-  openSettings: (page?: SettingsPage) => void
+  toggleSettings: () => void
+  settingsOpen: boolean
   visibleRepoId: string | null
   sessionReady: boolean
   workspaceLayout: 'top-bottom' | 'left-right'
@@ -175,9 +179,8 @@ interface MainWindowViewportProps {
 }
 
 interface MainWindowViewportContentProps {
-  routeSettingsPage: SettingsPage | null
-  onRouteSettingsPageChange?: (page: SettingsPage | null) => void
-  openSettings: (page?: SettingsPage) => void
+  toggleSettings: () => void
+  settingsOpen: boolean
   visibleRepoId: string | null
   sessionReady: boolean
   workspaceLayout: 'top-bottom' | 'left-right'
@@ -195,7 +198,8 @@ interface MainWindowOverlaysProps {
 function MainWindowViewport({
   routeSettingsPage,
   onRouteSettingsPageChange,
-  openSettings,
+  toggleSettings,
+  settingsOpen,
   visibleRepoId,
   sessionReady,
   workspaceLayout,
@@ -219,9 +223,8 @@ function MainWindowViewport({
       onDrop={repoDrop.onDrop}
     >
       <MainWindowViewportContent
-        routeSettingsPage={routeSettingsPage}
-        onRouteSettingsPageChange={onRouteSettingsPageChange}
-        openSettings={openSettings}
+        toggleSettings={toggleSettings}
+        settingsOpen={settingsOpen}
         visibleRepoId={visibleRepoId}
         sessionReady={sessionReady}
         workspaceLayout={workspaceLayout}
@@ -229,15 +232,20 @@ function MainWindowViewport({
         detailFocusMode={detailFocusMode}
         overlays={overlays}
       />
-      <MainWindowOverlays overlays={overlays} closeRepoConfirmation={closeRepoConfirmation} repoDrop={repoDrop} />
+      <MainWindowOverlays
+        routeSettingsPage={routeSettingsPage}
+        onRouteSettingsPageChange={onRouteSettingsPageChange}
+        overlays={overlays}
+        closeRepoConfirmation={closeRepoConfirmation}
+        repoDrop={repoDrop}
+      />
     </div>
   )
 }
 
 function MainWindowViewportContent({
-  routeSettingsPage,
-  onRouteSettingsPageChange,
-  openSettings,
+  toggleSettings,
+  settingsOpen,
   visibleRepoId,
   sessionReady,
   workspaceLayout,
@@ -250,15 +258,6 @@ function MainWindowViewportContent({
     const repo = visibleRepoId ? state.repos[visibleRepoId] : undefined
     return !!repo && repo.availability.phase !== 'unavailable'
   })
-  if (routeSettingsPage) {
-    return (
-      <SettingsPageScreen
-        page={routeSettingsPage}
-        onBack={() => onRouteSettingsPageChange?.(null)}
-        onPageChange={(page) => onRouteSettingsPageChange?.(page)}
-      />
-    )
-  }
   const compact = uiMode === 'compact'
   // Desktop has no global topbar while a repo is open — the sidebar's
   // project header and the detail toolbar form the window's top edge.
@@ -280,7 +279,7 @@ function MainWindowViewportContent({
                 {visibleRepoId && <WorkspaceRepositorySwitcher repoId={visibleRepoId} compact />}
                 {visibleRepoId && <TopbarRepoControls repoId={visibleRepoId} />}
                 {visibleRepoId && <ProjectThemeMenuConnected repoId={visibleRepoId} />}
-                <CompactSettingsButton onOpenSettings={() => openSettings()} />
+                <CompactSettingsButton settingsOpen={settingsOpen} onToggleSettings={toggleSettings} />
               </>
             ) : null
           }
@@ -322,10 +321,24 @@ function MainWindowViewportContent({
   )
 }
 
-function MainWindowOverlays({ overlays, closeRepoConfirmation, repoDrop }: MainWindowOverlaysProps) {
+function MainWindowOverlays({
+  routeSettingsPage,
+  onRouteSettingsPageChange,
+  overlays,
+  closeRepoConfirmation,
+  repoDrop,
+}: MainWindowOverlaysProps & {
+  routeSettingsPage: SettingsPage | null
+  onRouteSettingsPageChange?: (page: SettingsPage | null) => void
+}) {
   const t = useT()
   return (
     <>
+      <SettingsPageScreen
+        page={routeSettingsPage}
+        onClose={() => onRouteSettingsPageChange?.(null)}
+        onPageChange={(page) => onRouteSettingsPageChange?.(page)}
+      />
       <RepoOpenDialog open={overlays.state.openRepo.open} onOpenChange={overlays.setOpenRepoOpen} />
       <RepoCloneDialog open={overlays.state.clone.open} onOpenChange={overlays.setCloneOpen} />
       <OpenRemoteRepositoryDialog
@@ -350,11 +363,25 @@ function MainWindowOverlays({ overlays, closeRepoConfirmation, repoDrop }: MainW
   )
 }
 
-function CompactSettingsButton({ onOpenSettings }: { onOpenSettings: () => void }) {
+function CompactSettingsButton({
+  settingsOpen,
+  onToggleSettings,
+}: {
+  settingsOpen: boolean
+  onToggleSettings: () => void
+}) {
   const t = useT()
   return (
     <Tip label={t('topbar.settings')}>
-      <Button variant="ghost" size="icon" onClick={onOpenSettings} aria-label={t('topbar.settings')}>
+      <Button
+        data-settings-trigger
+        variant="ghost"
+        size="icon"
+        className={cn(settingsOpen && 'pointer-events-auto relative z-[60] bg-accent text-accent-foreground')}
+        onClick={onToggleSettings}
+        aria-label={t('topbar.settings')}
+        aria-pressed={settingsOpen}
+      >
         <Settings />
       </Button>
     </Tip>

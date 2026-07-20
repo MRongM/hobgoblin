@@ -105,6 +105,7 @@ export function RepoView({ repoId }: Props) {
           ) : (
             <PlainWorkspaceTerminalPanel
               repoId={repoId}
+              layout={layout}
               compactFocusPresentation
               onShowCompactOverview={multiRepositoryWorkspace ? showCompactExplorer : undefined}
             />

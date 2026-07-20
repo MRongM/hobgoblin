@@ -7,6 +7,12 @@ import {
   WorkspaceRepositoryList,
   type WorkspaceRepositoryListItem,
 } from '#/web/components/repo-workspace/WorkspaceRepositoryList.tsx'
+import { TerminalSessionReadContext } from '#/web/components/terminal/terminal-session-context.ts'
+import type {
+  TerminalSessionReadContextValue,
+  TerminalSessionSummary,
+  WorktreeTerminalSnapshot,
+} from '#/web/components/terminal/types.ts'
 
 type TestDragEndEvent = { active: { id: string }; over: { id: string } | null }
 
@@ -79,8 +85,21 @@ vi.mock('#/web/stores/i18n.ts', () => ({
 }))
 
 const repositories: WorkspaceRepositoryListItem[] = [
-  { id: '/workspace/api', name: 'api', branch: 'main', changeCount: 2, unavailable: false },
-  { id: '/workspace/web', name: 'web', changeCount: 0, unavailable: true },
+  {
+    id: '/workspace/api',
+    name: 'api',
+    branch: 'main',
+    changeCount: 2,
+    terminalWorktreePaths: ['/workspace/api', '/worktrees/api-feature'],
+    unavailable: false,
+  },
+  {
+    id: '/workspace/web',
+    name: 'web',
+    changeCount: 0,
+    terminalWorktreePaths: ['/workspace/web'],
+    unavailable: true,
+  },
 ]
 
 let container: HTMLDivElement | null = null
@@ -109,18 +128,20 @@ afterEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
 })
 
-function renderList(disabled = false) {
+function renderList(disabled = false, readContext: TerminalSessionReadContextValue = terminalReadContext(new Map())) {
   const onActivate = vi.fn()
   const onReorder = vi.fn()
   act(() => {
     root!.render(
-      <WorkspaceRepositoryList
-        repositories={repositories}
-        currentRepoId="/workspace/api"
-        disabled={disabled}
-        onActivate={onActivate}
-        onReorder={onReorder}
-      />,
+      <TerminalSessionReadContext.Provider value={readContext}>
+        <WorkspaceRepositoryList
+          repositories={repositories}
+          currentRepoId="/workspace/api"
+          disabled={disabled}
+          onActivate={onActivate}
+          onReorder={onReorder}
+        />
+      </TerminalSessionReadContext.Provider>,
     )
   })
   return { onActivate, onReorder }
@@ -174,6 +195,55 @@ describe('WorkspaceRepositoryList', () => {
     expect(onActivate).toHaveBeenCalledWith('/workspace/api')
   })
 
+  test('shows aggregate terminal count, output activity, changes, and unread bell on a repository row', () => {
+    const mainKey = '/workspace/api\0/workspace/api'
+    const featureKey = '/workspace/api\0/worktrees/api-feature'
+    renderList(
+      false,
+      terminalReadContext(
+        new Map([
+          [mainKey, worktreeSnapshot(mainKey, terminalSession(mainKey, { hasBell: true }))],
+          [featureKey, worktreeSnapshot(featureKey, terminalSession(featureKey, { isOutputActive: true }))],
+        ]),
+      ),
+    )
+    const row = container!.querySelector('[data-sortable-activator-id="/workspace/api"]')
+    const terminalBadge = row?.querySelector('[data-testid="workspace-repository-terminal-count-badge"]')
+    const changeBadge = row?.querySelector('[data-testid="workspace-repository-change-count-badge"]')
+
+    expect(terminalBadge?.textContent).toBe('2')
+    expect(terminalBadge?.querySelector('[data-terminal-output-activity-indicator="active"]')).not.toBeNull()
+    expect(changeBadge?.textContent).toBe('2')
+    expect(changeBadge?.querySelector('.lucide-git-compare-arrows')).not.toBeNull()
+    expect(row?.querySelector('[data-terminal-bell-dot]')).not.toBeNull()
+  })
+
+  test('keeps terminal, change, and unread bell badges in the left-aligned primary content group', () => {
+    const mainKey = '/workspace/api\0/workspace/api'
+    renderList(
+      false,
+      terminalReadContext(new Map([[mainKey, worktreeSnapshot(mainKey, terminalSession(mainKey, { hasBell: true }))]])),
+    )
+    const row = container!.querySelector('[data-sortable-activator-id="/workspace/api"]')
+    const primaryContent = row?.querySelector('[data-testid="workspace-repository-primary-content"]')
+    const statusBadges = row?.querySelector('[data-testid="workspace-repository-status-badges"]')
+    const terminalBadge = row?.querySelector('[data-testid="workspace-repository-terminal-count-badge"]')
+    const changeBadge = row?.querySelector('[data-testid="workspace-repository-change-count-badge"]')
+    const bell = row?.querySelector('[data-terminal-bell-dot]')
+
+    expect(primaryContent?.contains(statusBadges ?? null)).toBe(true)
+    expect(statusBadges?.contains(terminalBadge ?? null)).toBe(true)
+    expect(statusBadges?.contains(changeBadge ?? null)).toBe(true)
+    expect(statusBadges?.contains(bell ?? null)).toBe(true)
+  })
+
+  test('omits repository status badges when terminal, change, and bell state are all empty', () => {
+    renderList()
+    const row = container!.querySelector('[data-sortable-activator-id="/workspace/web"]')
+
+    expect(row?.querySelector('[data-testid="workspace-repository-status-badges"]')).toBeNull()
+  })
+
   test('shows unavailable repository state', () => {
     renderList()
     const row = container!.querySelector('[data-sortable-activator-id="/workspace/web"]')
@@ -203,3 +273,43 @@ describe('WorkspaceRepositoryList', () => {
     )
   })
 })
+
+function terminalReadContext(
+  snapshots: ReadonlyMap<string, WorktreeTerminalSnapshot>,
+): TerminalSessionReadContextValue {
+  return {
+    worktreeSnapshot: (key) =>
+      snapshots.get(key) ?? { worktreeTerminalKey: key, selectedDescriptor: null, sessions: [], count: 0 },
+    subscribeWorktree: () => () => {},
+    repoSyncReady: () => true,
+    subscribeRepoSync: () => () => {},
+    snapshot: () => ({ phase: 'opening', message: null, processName: 'terminal' }),
+    subscribeSnapshot: () => () => {},
+  }
+}
+
+function worktreeSnapshot(key: string, session: TerminalSessionSummary): WorktreeTerminalSnapshot {
+  return {
+    worktreeTerminalKey: key,
+    selectedDescriptor: null,
+    sessions: [session],
+    count: 1,
+  }
+}
+
+function terminalSession(
+  worktreeTerminalKey: string,
+  overrides: Partial<Pick<TerminalSessionSummary, 'hasBell' | 'isOutputActive'>> = {},
+): TerminalSessionSummary {
+  return {
+    key: `${worktreeTerminalKey}\0terminal-1`,
+    worktreeTerminalKey,
+    terminalId: 'terminal-1',
+    index: 1,
+    title: 'terminal',
+    phase: 'open',
+    selected: true,
+    hasBell: false,
+    ...overrides,
+  }
+}

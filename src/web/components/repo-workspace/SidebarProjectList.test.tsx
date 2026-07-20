@@ -20,6 +20,16 @@ const dndState = vi.hoisted(() => ({
   verticalStrategy: {},
 }))
 
+const projectExternalActionState = vi.hoisted(() => ({
+  requestedProjectIds: [] as string[],
+  editorOnSelect: vi.fn(),
+  terminalOnSelect: vi.fn(),
+  editorDisabled: false,
+  editorBusy: false,
+  terminalDisabled: false,
+  terminalBusy: false,
+}))
+
 vi.mock('@dnd-kit/core', async () => {
   const actual = await vi.importActual<typeof import('@dnd-kit/core')>('@dnd-kit/core')
   return {
@@ -73,6 +83,32 @@ vi.mock('#/web/stores/i18n.ts', () => ({
     key === 'repo-tabs.close-named' ? `Close ${params?.name}` : key,
 }))
 
+vi.mock('#/web/hooks/useProjectExternalOpenActions.ts', () => ({
+  useProjectExternalOpenActions: (projectId: string) => {
+    projectExternalActionState.requestedProjectIds.push(projectId)
+    return {
+      visible: true,
+      editor: {
+        disabled: projectExternalActionState.editorDisabled,
+        busy: projectExternalActionState.editorBusy,
+        iconPref: 'cursor',
+        onSelect: () => projectExternalActionState.editorOnSelect(projectId),
+      },
+      externalTerminal: {
+        disabled: projectExternalActionState.terminalDisabled,
+        busy: projectExternalActionState.terminalBusy,
+        iconPref: 'ghostty',
+        onSelect: () => projectExternalActionState.terminalOnSelect(projectId),
+      },
+    }
+  },
+}))
+
+vi.mock('#/web/components/ExternalAppIcon/index.tsx', () => ({
+  EditorAppIcon: ({ pref }: { pref: string }) => <span data-testid="mock-editor-app-icon" data-pref={pref} />,
+  TerminalAppIcon: ({ pref }: { pref: string }) => <span data-testid="mock-terminal-app-icon" data-pref={pref} />,
+}))
+
 vi.mock('#/web/components/repo-workspace/project-switcher-model.tsx', async () => {
   const actual = await vi.importActual<typeof import('#/web/components/repo-workspace/project-switcher-model.tsx')>(
     '#/web/components/repo-workspace/project-switcher-model.tsx',
@@ -97,6 +133,13 @@ beforeEach(() => {
   dndState.sortableStrategy = null
   dndState.sortableOnKeyDown.mockClear()
   dndState.useSensor.mockClear()
+  projectExternalActionState.requestedProjectIds = []
+  projectExternalActionState.editorOnSelect.mockReset()
+  projectExternalActionState.terminalOnSelect.mockReset()
+  projectExternalActionState.editorDisabled = false
+  projectExternalActionState.editorBusy = false
+  projectExternalActionState.terminalDisabled = false
+  projectExternalActionState.terminalBusy = false
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -226,6 +269,65 @@ describe('SidebarProjectList', () => {
     expect(onActivate).not.toHaveBeenCalled()
   })
 
+  test('renders project actions at the right side immediately before Close', () => {
+    renderList()
+
+    expect(projectExternalActionState.requestedProjectIds).toEqual(['/repo-a', '/repo-b'])
+    for (const project of projects) {
+      const row = projectRow(project.id)
+      const actions = row.querySelector<HTMLElement>('[data-testid="project-row-external-actions"]')
+      const close = row.querySelector<HTMLButtonElement>(`[aria-label="Close ${project.name}"]`)
+      const projectButton = row.querySelector<HTMLElement>('[data-sortable-activator-id]')
+      const editor = actions?.querySelector('[data-testid="project-editor-btn"]')
+      const terminal = actions?.querySelector('[data-testid="project-external-terminal-btn"]')
+
+      expect(actions?.nextElementSibling).toBe(close)
+      expect(actions?.className).toContain('right-8')
+      expect(actions?.className).toContain('group-hover:opacity-100')
+      expect(actions?.className).toContain('focus-within:opacity-100')
+      expect(projectButton?.className).toContain('pr-20')
+      expect(close?.className).toContain('right-2')
+      expect(close?.className).toContain('focus-visible:opacity-100')
+      expect(editor?.getAttribute('aria-label')).toBe(`worktrees.open-in-editor-label ${project.name}`)
+      expect(terminal?.getAttribute('aria-label')).toBe(`terminal.external ${project.name}`)
+      expect(editor?.querySelector('[data-testid="mock-editor-app-icon"]')?.getAttribute('data-pref')).toBe('cursor')
+      expect(terminal?.querySelector('[data-testid="mock-terminal-app-icon"]')?.getAttribute('data-pref')).toBe(
+        'ghostty',
+      )
+    }
+  })
+
+  test('opens item external apps without activating or closing the project', () => {
+    const { onActivate, onClose } = renderList()
+    const row = projectRow('/repo-a')
+    const editor = row.querySelector<HTMLButtonElement>('[data-testid="project-editor-btn"]')
+    const terminal = row.querySelector<HTMLButtonElement>('[data-testid="project-external-terminal-btn"]')
+
+    act(() => {
+      editor?.click()
+      terminal?.click()
+    })
+
+    expect(projectExternalActionState.editorOnSelect).toHaveBeenCalledWith('/repo-a')
+    expect(projectExternalActionState.terminalOnSelect).toHaveBeenCalledWith('/repo-a')
+    expect(onActivate).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  test('forwards disabled and busy state to item external actions', () => {
+    projectExternalActionState.editorDisabled = true
+    projectExternalActionState.terminalDisabled = true
+    projectExternalActionState.terminalBusy = true
+    renderList()
+
+    const row = projectRow('/repo-a')
+    const editor = row.querySelector<HTMLButtonElement>('[data-testid="project-editor-btn"]')
+    const terminal = row.querySelector<HTMLButtonElement>('[data-testid="project-external-terminal-btn"]')
+    expect(editor?.disabled).toBe(true)
+    expect(terminal?.disabled).toBe(true)
+    expect(terminal?.getAttribute('aria-busy')).toBe('true')
+  })
+
   test('reorders when dropped over a different project', () => {
     const { onReorder } = renderList()
 
@@ -243,3 +345,9 @@ describe('SidebarProjectList', () => {
     expect(onReorder).not.toHaveBeenCalled()
   })
 })
+
+function projectRow(projectId: string): HTMLLIElement {
+  const row = container!.querySelector(`[data-sortable-node-id="${projectId}"]`)
+  if (!(row instanceof HTMLLIElement)) throw new Error(`missing project row: ${projectId}`)
+  return row
+}

@@ -60,13 +60,6 @@ export function finishResourceError(resource: RepoResourceState, error: string):
   resource.stale = stale
 }
 
-export function finishResourceUnavailable(resource: RepoResourceState): void {
-  const stale = resource.loadedAt !== null || resource.phase === 'refreshing'
-  resource.phase = 'idle'
-  resource.error = null
-  resource.stale = stale
-}
-
 export function cancelResource(resource: RepoResourceState): void {
   resource.phase = 'idle'
 }

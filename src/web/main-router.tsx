@@ -5,14 +5,15 @@ import {
   createRoute,
   createRouter,
   redirect,
+  useLocation,
   useNavigate,
 } from '@tanstack/react-router'
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 import { App } from '#/web/App.tsx'
 import { getInitialBootstrap } from '#/web/bootstrap.ts'
-import type { SettingsPage } from '#/shared/settings-pages.ts'
+import { isSettingsPage, type SettingsPage } from '#/shared/settings-pages.ts'
 
-const rootRoute = createRootRoute()
+const rootRoute = createRootRoute({ component: MainWindowRoute })
 
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -25,7 +26,6 @@ const indexRoute = createRoute({
 const workspaceRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/workspace',
-  component: WorkspaceRoute,
 })
 
 const settingsIndexRoute = createRoute({
@@ -39,61 +39,51 @@ const settingsIndexRoute = createRoute({
 const settingsGeneralRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/general',
-  component: SettingsGeneralRoute,
 })
 
 const settingsFilesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/files',
-  component: SettingsFilesRoute,
 })
 
 const settingsTerminalRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/terminal',
-  component: SettingsTerminalRoute,
 })
 
 const settingsShortcutsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/shortcuts',
-  component: SettingsShortcutsRoute,
 })
 
 const settingsNotificationsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/notifications',
-  component: SettingsNotificationsRoute,
 })
 
 const settingsSshRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/ssh',
-  component: SettingsSshRoute,
 })
 
 const settingsSyncRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/sync',
-  component: SettingsSyncRoute,
 })
 
 const settingsProxyRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/proxy',
-  component: SettingsProxyRoute,
 })
 
 const settingsAppsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/apps',
-  component: SettingsAppsRoute,
 })
 
 const settingsSecurityRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/security',
-  component: SettingsSecurityRoute,
 })
 
 const settingsLanRoute = createRoute({
@@ -104,13 +94,11 @@ const settingsLanRoute = createRoute({
       throw redirect({ to: '/settings/general' })
     }
   },
-  component: SettingsLanRoute,
 })
 
 const settingsAboutRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/about',
-  component: SettingsAboutRoute,
 })
 
 const mainRouteTree = rootRoute.addChildren([
@@ -142,80 +130,29 @@ export const mainRouter = createRouter({
   ),
 })
 
-function WorkspaceRoute() {
+function MainWindowRoute() {
+  const pathname = useLocation({ select: (location) => location.pathname })
   const navigate = useNavigate()
+  const routeSettingsPage = settingsPageFromPathname(pathname)
   return (
     <App
-      routeSettingsPage={null}
+      routeSettingsPage={routeSettingsPage}
       onRouteSettingsPageChange={(nextPage) => {
-        if (nextPage) void navigate({ to: settingsRoutePath(nextPage), replace: false })
+        void navigate({ to: nextPage ? settingsRoutePath(nextPage) : '/workspace', replace: false })
       }}
     />
   )
-}
-
-function SettingsGeneralRoute() {
-  return <SettingsRoutePage settingsPage="general" />
-}
-
-function SettingsFilesRoute() {
-  return <SettingsRoutePage settingsPage="files" />
-}
-
-function SettingsTerminalRoute() {
-  return <SettingsRoutePage settingsPage="terminal" />
-}
-
-function SettingsShortcutsRoute() {
-  return <SettingsRoutePage settingsPage="shortcuts" />
-}
-
-function SettingsNotificationsRoute() {
-  return <SettingsRoutePage settingsPage="notifications" />
-}
-
-function SettingsSshRoute() {
-  return <SettingsRoutePage settingsPage="ssh" />
-}
-
-function SettingsSyncRoute() {
-  return <SettingsRoutePage settingsPage="sync" />
-}
-
-function SettingsProxyRoute() {
-  return <SettingsRoutePage settingsPage="proxy" />
-}
-
-function SettingsAppsRoute() {
-  return <SettingsRoutePage settingsPage="apps" />
-}
-
-function SettingsSecurityRoute() {
-  return <SettingsRoutePage settingsPage="security" />
-}
-
-function SettingsLanRoute() {
-  return <SettingsRoutePage settingsPage="lan" />
-}
-
-function SettingsAboutRoute() {
-  return <SettingsRoutePage settingsPage="about" />
 }
 
 function settingsRoutePath(page: SettingsPage) {
   return `/settings/${page}` as const
 }
 
-function SettingsRoutePage({ settingsPage }: { settingsPage: SettingsPage }) {
-  const navigate = useNavigate()
-  return (
-    <App
-      routeSettingsPage={settingsPage}
-      onRouteSettingsPageChange={(nextPage) => {
-        void navigate({ to: nextPage ? settingsRoutePath(nextPage) : '/workspace', replace: false })
-      }}
-    />
-  )
+function settingsPageFromPathname(pathname: string): SettingsPage | null {
+  const prefix = '/settings/'
+  if (!pathname.startsWith(prefix)) return null
+  const page = pathname.slice(prefix.length)
+  return isSettingsPage(page) ? page : null
 }
 
 export function MainWindowRouterProvider() {

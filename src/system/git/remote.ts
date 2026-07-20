@@ -34,20 +34,6 @@ export async function getBrowserRemoteUrl(
   return options?.branch ? newPullRequestUrlForBrowserRemote(remote, options.branch) : (remote?.url ?? null)
 }
 
-export async function getNewPullRequestUrl(
-  cwd: string,
-  branch: string,
-  options?: { signal?: AbortSignal },
-): Promise<string | null> {
-  const remote = await getBrowserRemote(cwd, { branch, signal: options?.signal })
-  // `/pull/new/{branch}` redirects to the existing open PR if one is
-  // associated with the branch; otherwise it lands on GitHub's "create
-  // pull request" page pre-populated with that branch as the head. This
-  // single URL covers both intents the user has when opening the branch's
-  // remote page — see an existing PR, or start one.
-  return newPullRequestUrlForBrowserRemote(remote, branch)
-}
-
 async function hasRemote(cwd: string, remote: string, signal?: AbortSignal): Promise<boolean> {
   try {
     const url = await git(cwd, ['remote', 'get-url', '--', remote], { signal })
@@ -163,7 +149,10 @@ export function repoRemoteInfoForRemotes(remotes: GitRemoteInfo[]): RepoRemoteIn
   }
 }
 
-export function getBrowserRemoteUrlForRemotes(remotes: GitRemoteInfo[], upstream?: UpstreamParts | null): string | null {
+export function getBrowserRemoteUrlForRemotes(
+  remotes: GitRemoteInfo[],
+  upstream?: UpstreamParts | null,
+): string | null {
   return pickBrowserRemote(remotes, upstream)?.url ?? null
 }
 
@@ -232,11 +221,7 @@ export function resolvePushTargetForRemotes(
   return { remote, branch, setUpstream: true }
 }
 
-async function resolvePushTarget(
-  cwd: string,
-  branch: string,
-  signal?: AbortSignal,
-): Promise<PushTarget | ExecResult> {
+async function resolvePushTarget(cwd: string, branch: string, signal?: AbortSignal): Promise<PushTarget | ExecResult> {
   const [remotes, upstream] = await Promise.all([getRemotes(cwd, signal), getUpstreamParts(cwd, branch, signal)])
   return resolvePushTargetForRemotes(remotes, upstream, branch)
 }

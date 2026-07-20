@@ -360,10 +360,7 @@ async function readWorkspaceConfiguration(
 ): Promise<WorkspaceConfigSnapshot> {
   return dependencies.readConfig
     ? await dependencies.readConfig(rootId)
-    : await readWorkspaceConfig(rootId, {
-        runRemote: dependencies.runRemote,
-        resolveRemoteTarget: dependencies.resolveRemoteTarget,
-      })
+    : await readWorkspaceConfig(rootId)
 }
 
 function remoteWorkspaceRefForMember(rootId: string, member: string) {

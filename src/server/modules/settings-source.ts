@@ -48,20 +48,14 @@ import {
   DEFAULT_FETCH_INTERVAL_SEC,
   DEFAULT_FONT_FAMILY,
   DEFAULT_GIT_NETWORK_TIMEOUT_SEC,
-  DEFAULT_GLOBAL_SHORTCUT,
-  DEFAULT_GLOBAL_SHORTCUT_DISABLED,
   DEFAULT_LANG_PREF,
   DEFAULT_PROJECT_LIST_EXPANDED,
   DEFAULT_SESSION_DETAIL_FOCUS_MODE,
-  DEFAULT_SHORTCUTS_DISABLED,
-  DEFAULT_SWAP_CLOSE_SHORTCUTS,
   DEFAULT_TERMINAL_APP,
   DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
   DEFAULT_TERMINAL_FONT_SIZE,
-  DEFAULT_TERMINAL_NOTIFICATIONS_ENABLED,
   DEFAULT_TERMINAL_THEME_SYNC_ENABLED,
   DEFAULT_THEME_PREF,
-  DEFAULT_TOGGLE_DETAIL_ON_ACTION_BAR_BLANK_CLICK,
   MAX_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   MAX_FILE_TREE_FONT_SIZE,
   MAX_FILE_TREE_TOPBAR_FONT_SIZE,
@@ -415,10 +409,7 @@ function normalizeSession(value: unknown): SessionState {
       )
     : []
   const activeRepo = toSafeRepoLocator(partial.activeRepo)
-  const workspaceActiveRepoByRoot = normalizeWorkspaceActiveRepoByRoot(
-    partial.workspaceActiveRepoByRoot,
-    openRepos,
-  )
+  const workspaceActiveRepoByRoot = normalizeWorkspaceActiveRepoByRoot(partial.workspaceActiveRepoByRoot, openRepos)
   const workspaceLayout = normalizeWorkspaceLayout(partial.workspaceLayout)
   const detailCollapsed =
     typeof partial.detailCollapsed === 'boolean' ? partial.detailCollapsed : DEFAULT_DETAIL_COLLAPSED

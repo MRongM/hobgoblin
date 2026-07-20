@@ -63,7 +63,7 @@ export function PlainWorkspacePane({
   const fileBrowser = <ProjectFileTree repoId={repoId} revealRequest={revealRequest ?? null} toolbarHeight="detail" />
   const detailPane = (
     <RepoWorkspacePane>
-      {terminalPanel ?? <PlainWorkspaceTerminalPanel repoId={repoId} focusMode={focusMode} />}
+      {terminalPanel ?? <PlainWorkspaceTerminalPanel repoId={repoId} layout={layout} focusMode={focusMode} />}
     </RepoWorkspacePane>
   )
 

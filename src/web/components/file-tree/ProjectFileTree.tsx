@@ -36,6 +36,7 @@ import {
   createRepositoryFileTreeFile,
   createRepositoryFileTreeDirectory,
   deleteRepositoryFileTreeEntries,
+  getCommitMessageProviders,
   getRepositoryFileTree,
   getRepositoryWorktreeBootstrapPreview,
   initializeRepositoryWorktreeBootstrapConfig,
@@ -48,6 +49,11 @@ import {
   transferRepositoryFiles,
   exportRepositoryFilesToLocalDirectory,
 } from '#/web/repo-client.ts'
+import {
+  buildAiHandoffCommand,
+  preferredAiHandoffProvider,
+  prefillAiTerminalCommand,
+} from '#/web/ai-terminal-handoff.ts'
 import { Button } from '#/web/components/ui/button.tsx'
 import {
   AlertDialog,
@@ -105,8 +111,11 @@ import {
 import { useRuntimeFileAreaSettings } from '#/web/runtime-settings-file-area.ts'
 import { useRuntimeChromeSettings } from '#/web/runtime-settings-chrome.ts'
 import { fileTreeClipboardMaxBytes as fileTreeClipboardMaxBytesFromMb } from '#/shared/file-tree-clipboard.ts'
+import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 
 const ROOT_DIR = ''
+const WORKTREE_DEPENDENCY_SYMLINK_PROMPT =
+  "Inspect this project's .gitignore files and dependency manifests. Identify dependency directories that are ignored by Git and suitable for reuse across Git worktrees, then configure them under [worktree].symlink in goblin.toml. Preserve all existing goblin.toml settings. Modify no other files, install no dependencies, and run no Git commands."
 
 interface DirectoryState {
   entries?: RepoFileTreeEntry[]
@@ -124,6 +133,7 @@ interface CreateEntryTarget {
 interface ProjectFileTreeView {
   exists: boolean
   isGitRepo: boolean
+  branch: string | null
   worktreePath: string | null
   status: WorktreeStatus[]
 }
@@ -177,9 +187,12 @@ export function ProjectFileTree({
   toolbarHeight?: FileTreeToolbarHeight
 }) {
   const t = useT()
+  const navigation = useMainWindowNavigation()
+  const setDetailCollapsed = useReposStore((state) => state.setDetailCollapsed)
   const { fileTreeFontSize, fileTreeClipboardMaxBytesMb } = useRuntimeFileAreaSettings()
   const fileTreeClipboardMaxBytes = fileTreeClipboardMaxBytesFromMb(fileTreeClipboardMaxBytesMb)
   const view = useProjectFileTreeView(repoId)
+  const branch = view.branch
   const worktreePath = view.worktreePath
   const activeWorktreeRef = useRef<string | null>(worktreePath)
   const directoriesRef = useRef<Record<string, DirectoryState>>({})
@@ -647,7 +660,7 @@ export function ProjectFileTree({
   )
 
   const initializeBootstrapConfig = useCallback(async () => {
-    if (!worktreePath || initializingBootstrapConfig || bootstrapConfigStatus !== 'missing') return
+    if (!branch || !worktreePath || initializingBootstrapConfig || bootstrapConfigStatus !== 'missing') return
     setInitializingBootstrapConfig(true)
     try {
       const result = await initializeRepositoryWorktreeBootstrapConfig(repoId, worktreePath)
@@ -655,6 +668,22 @@ export function ProjectFileTree({
         setBootstrapConfigStatus('present')
         toast.success(t('file-tree.init-worktree-bootstrap-config-created'))
         refreshTreeDirectory(rootCreateEntryTarget())
+        try {
+          const availability = await getCommitMessageProviders().catch(() => ({ codex: false, claude: false }))
+          const provider = preferredAiHandoffProvider(availability)
+          const handedOff = await prefillAiTerminalCommand({
+            repoId,
+            branch,
+            worktreePath,
+            command: buildAiHandoffCommand(provider, WORKTREE_DEPENDENCY_SYMLINK_PROMPT),
+            navigation,
+            setDetailCollapsed,
+          })
+          if (!handedOff) toast.error(t('file-tree.init-worktree-bootstrap-config-ai-command-failed'))
+        } catch (err) {
+          console.warn('[file-tree] worktree bootstrap AI command handoff failed', err)
+          toast.error(t('file-tree.init-worktree-bootstrap-config-ai-command-failed'))
+        }
         return
       }
       if (result.message === 'error.file-exists') setBootstrapConfigStatus('present')
@@ -667,7 +696,18 @@ export function ProjectFileTree({
     } finally {
       setInitializingBootstrapConfig(false)
     }
-  }, [bootstrapConfigStatus, initializingBootstrapConfig, refreshTreeDirectory, repoId, rootCreateEntryTarget, t, worktreePath])
+  }, [
+    bootstrapConfigStatus,
+    branch,
+    initializingBootstrapConfig,
+    navigation,
+    refreshTreeDirectory,
+    repoId,
+    rootCreateEntryTarget,
+    setDetailCollapsed,
+    t,
+    worktreePath,
+  ])
 
   const refreshDirectoryForContextNode = useCallback(
     (node: FileTreeNode | null) => {
@@ -1319,13 +1359,16 @@ function useProjectFileTreeView(repoId: string): ProjectFileTreeView {
     useReposStore,
     (state) => {
       const repo = state.repos[repoId]
-      if (!repo) return { exists: false, isGitRepo: false, worktreePath: null, status: [] }
+      if (!repo) return { exists: false, isGitRepo: false, branch: null, worktreePath: null, status: [] }
       const plainWorkspacePath = repoPlainWorkspacePath(repo)
-      if (plainWorkspacePath) return { exists: true, isGitRepo: false, worktreePath: plainWorkspacePath, status: [] }
+      if (plainWorkspacePath) {
+        return { exists: true, isGitRepo: false, branch: null, worktreePath: plainWorkspacePath, status: [] }
+      }
       const selected = repo.data.branches.find((branch) => branch.name === repo.ui.selectedBranch) ?? null
       return {
         exists: true,
         isGitRepo: repo.isGitRepo,
+        branch: selected?.name ?? null,
         worktreePath: selected?.worktree?.path ?? null,
         status: repo.data.status,
       }
@@ -1333,6 +1376,7 @@ function useProjectFileTreeView(repoId: string): ProjectFileTreeView {
     (a, b) =>
       a.exists === b.exists &&
       a.isGitRepo === b.isGitRepo &&
+      a.branch === b.branch &&
       a.worktreePath === b.worktreePath &&
       a.status === b.status,
   )

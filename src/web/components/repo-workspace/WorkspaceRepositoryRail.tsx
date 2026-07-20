@@ -5,6 +5,7 @@ import { arrayMove } from '@dnd-kit/sortable'
 import { Download, FolderPlus, FolderTree, LoaderCircle, RefreshCw, Settings2, Terminal, Trash2 } from 'lucide-react'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
+import { repoTerminalWorktreePaths } from '#/web/components/RepoTabs.tsx'
 import { WorkspaceConfigurationDialog } from '#/web/components/repo-workspace/WorkspaceConfigurationDialog.tsx'
 import {
   WorkspaceRepositoryList,
@@ -116,6 +117,7 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
         name: repo.name,
         branch: repo.data.currentBranch,
         changeCount: repo.data.status.reduce((total, status) => total + status.entries.length, 0),
+        terminalWorktreePaths: repoTerminalWorktreePaths(repo),
         unavailable: repo.availability.phase === 'unavailable',
       },
     ]

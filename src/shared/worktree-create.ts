@@ -1,5 +1,4 @@
 import { isSafeBranchName } from '#/shared/refnames.ts'
-import type { WorktreeBootstrapDecision } from '#/shared/worktree-bootstrap-summary.ts'
 
 export type CreateWorktreeMode =
   | { kind: 'newBranch'; newBranch: string; baseRef: string }
@@ -10,12 +9,6 @@ export type CreateWorktreeMode =
 export interface CreateWorktreeInput {
   worktreePath: string
   mode: CreateWorktreeMode
-}
-
-export interface CreateWorktreeRpcInput extends CreateWorktreeInput {
-  cwd: string
-  sourceToken?: string
-  worktreeBootstrap: WorktreeBootstrapDecision
 }
 
 export function parseRemoteTrackingRefs(output: string): string[] {

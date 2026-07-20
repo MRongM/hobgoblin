@@ -36,12 +36,6 @@ interface PaneProps {
   children: ReactNode
 }
 
-interface ToolbarTitleProps {
-  title: ReactNode
-  description?: ReactNode
-  after?: ReactNode
-}
-
 interface EmptyStateProps {
   icon?: ReactNode
   title: ReactNode
@@ -68,18 +62,6 @@ export function Toolbar({ children, className, variant = 'plain', chrome = 'tool
       {...props}
     >
       {children}
-    </div>
-  )
-}
-
-export function ToolbarTitle({ title, description, after }: ToolbarTitleProps) {
-  return (
-    <div className="min-w-0 flex-1 flex items-center gap-2">
-      <div className="flex min-w-0 flex-1 items-baseline gap-2">
-        <div className="shrink-0 truncate text-sm font-semibold text-foreground">{title}</div>
-        {description && <div className="min-w-0 truncate text-xs text-muted-foreground">{description}</div>}
-      </div>
-      {after}
     </div>
   )
 }

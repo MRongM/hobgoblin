@@ -40,6 +40,10 @@ import {
 import { cn } from '#/web/lib/cn.ts'
 import { workspaceRootIdForRepo } from '#/web/stores/repos/workspace-projects.ts'
 import { WorkspaceRepositorySwitcher } from '#/web/components/repo-workspace/WorkspaceRepositorySwitcher.tsx'
+import { AsyncButton } from '#/web/components/AsyncButton.tsx'
+import { Tip } from '#/web/components/Tip.tsx'
+import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
+import { useProjectExternalOpenActions } from '#/web/hooks/useProjectExternalOpenActions.ts'
 
 interface Props {
   repoId: string
@@ -61,6 +65,7 @@ export function SidebarProjectHeader({ repoId, onShowCompactDetail }: Props) {
   const activeProjectId = useReposStore((s) => workspaceRootIdForRepo(s, repoId) ?? repoId)
   const activeName = useReposStore((s) => s.repos[activeProjectId]?.name ?? '')
   const projects = useProjectSummaries()
+  const projectExternalActions = useProjectExternalOpenActions(activeProjectId)
 
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? null
   const activeProjectKind = activeProject?.isGitRepo === false ? 'plain' : 'git'
@@ -126,6 +131,42 @@ export function SidebarProjectHeader({ repoId, onShowCompactDetail }: Props) {
         </Button>
         {onShowCompactDetail && <WorkspaceRepositorySwitcher repoId={repoId} compact />}
         <div className="min-w-0 flex-1" aria-hidden="true" />
+        {!listExpanded && projectExternalActions.visible && (
+          <div data-testid="project-header-external-actions" className="flex shrink-0 items-center gap-0.5">
+            <Tip label={t('worktrees.open-in-editor-label')}>
+              <span className="inline-flex">
+                <AsyncButton
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  data-testid="project-editor-btn"
+                  loading={projectExternalActions.editor.busy}
+                  disabled={projectExternalActions.editor.disabled}
+                  aria-label={`${t('worktrees.open-in-editor-label')} ${activeName}`}
+                  onClick={() => projectExternalActions.editor.onSelect()}
+                >
+                  {() => <EditorAppIcon pref={projectExternalActions.editor.iconPref} />}
+                </AsyncButton>
+              </span>
+            </Tip>
+            <Tip label={t('terminal.external')}>
+              <span className="inline-flex">
+                <AsyncButton
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  data-testid="project-external-terminal-btn"
+                  loading={projectExternalActions.externalTerminal.busy}
+                  disabled={projectExternalActions.externalTerminal.disabled}
+                  aria-label={`${t('terminal.external')} ${activeName}`}
+                  onClick={() => projectExternalActions.externalTerminal.onSelect()}
+                >
+                  {() => <TerminalAppIcon pref={projectExternalActions.externalTerminal.iconPref} />}
+                </AsyncButton>
+              </span>
+            </Tip>
+          </div>
+        )}
         {shellActions && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

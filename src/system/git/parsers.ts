@@ -11,7 +11,6 @@ import type {
   CommitFileChange,
   CommitFileChangeStatus,
   CommitHistoryEntry,
-  LogEntry,
   StatusEntry,
   WorktreeInfo,
 } from '#/shared/git-types.ts'
@@ -20,9 +19,13 @@ import type {
  *  containing it. Used by both the branch and log format strings. */
 export const FIELD_SEP = '\x1f'
 
-function branchWorktreeSnapshot(
-  wtInfo: { path: string; isDirty?: boolean; isPrimary: boolean; changeCount?: number; isLocked?: boolean },
-): NonNullable<BranchSnapshotInfo['worktree']> {
+function branchWorktreeSnapshot(wtInfo: {
+  path: string
+  isDirty?: boolean
+  isPrimary: boolean
+  changeCount?: number
+  isLocked?: boolean
+}): NonNullable<BranchSnapshotInfo['worktree']> {
   const hasSummary = wtInfo.isDirty !== undefined || wtInfo.changeCount !== undefined
   return {
     path: wtInfo.path,
@@ -44,7 +47,11 @@ function branchWorktreeSnapshot(
  * Fields, in order: refname:short, objectname:short, subject,
  * authordate:iso-strict, authorname, upstream:short, upstream:track.
  */
-export function parseBranches(output: string, currentBranch: string, worktrees: WorktreeInfo[] = []): BranchSnapshotInfo[] {
+export function parseBranches(
+  output: string,
+  currentBranch: string,
+  worktrees: WorktreeInfo[] = [],
+): BranchSnapshotInfo[] {
   const worktreeMap = new Map<
     string,
     { path: string; isDirty?: boolean; isPrimary: boolean; changeCount?: number; isLocked?: boolean }
@@ -124,26 +131,6 @@ export function parseBranches(output: string, currentBranch: string, worktrees: 
   }
 
   return branches
-}
-
-/**
- * Parse `git log --format=<%H, %h, %s, %an, %aI joined by FIELD_SEP>`.
- */
-export function parseLog(output: string): LogEntry[] {
-  if (!output) return []
-  return output
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => {
-      const parts = line.split(FIELD_SEP)
-      return {
-        hash: parts[0] ?? '',
-        shortHash: parts[1] ?? '',
-        message: parts[2] ?? '',
-        author: parts[3] ?? '',
-        date: parts[4] ?? '',
-      }
-    })
 }
 
 /**

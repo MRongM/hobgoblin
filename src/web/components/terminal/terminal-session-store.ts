@@ -176,16 +176,6 @@ export function useRepoTerminalHasOutputActivity(repoRoot: string | null, worktr
   return useTerminalAggregateHasOutputActivity(useRepoTerminalWorktreeKeys(repoRoot, worktreePaths))
 }
 
-export function useTerminalRepoSyncReady(repoRoot: string | null): boolean {
-  const { repoSyncReady, subscribeRepoSync } = useTerminalSessionReadContext()
-  const subscribe = useCallback(
-    (listener: () => void) => (repoRoot ? subscribeRepoSync(repoRoot, listener) : () => {}),
-    [repoRoot, subscribeRepoSync],
-  )
-  const getSnapshot = useCallback(() => (repoRoot ? repoSyncReady(repoRoot) : false), [repoRoot, repoSyncReady])
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
-}
-
 export function useTerminalSnapshot(key: string | null): TerminalSnapshot {
   const { snapshot, subscribeSnapshot } = useTerminalSessionReadContext()
   const subscribe = useCallback(

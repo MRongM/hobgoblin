@@ -1,30 +1,33 @@
 import { randomUUID } from 'node:crypto'
-import { readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { parse } from 'smol-toml'
-import {
-  REMOTE_WORKSPACE_CONFIG_CONTENT_MARKER,
-  REMOTE_WORKSPACE_CONFIG_MISSING_MARKER,
-  runRemoteCommand,
-} from '#/system/ssh/commands.ts'
-import { resolveRemoteTarget as resolveSshRemoteTarget } from '#/system/ssh/config.ts'
-import { isRemoteRepoId, parseRemoteRepoId } from '#/shared/remote-repo.ts'
+import { serverDataFile } from '#/server/common/data-dir.ts'
+import { workspaceRootId } from '#/server/modules/workspace-paths.ts'
 import { isWorkspaceRepositoryName, type WorkspaceConfig, type WorkspaceConfigSnapshot } from '#/shared/workspace.ts'
 
-const configFileName = 'goblin.toml'
-const workspaceHeader = /^\s*\[workspace\]\s*(?:#.*)?$/
-const tableHeader = /^\s*\[\[?[^\]]+\]?\]\s*(?:#.*)?$/
+const registryFileName = 'workspace-configs.json'
 
 interface WorkspaceConfigSourceDependencies {
-  runRemote?: typeof runRemoteCommand
-  resolveRemoteTarget?: typeof resolveSshRemoteTarget
+  dataFile?: string
   randomId?: () => string
 }
 
-type WorkspaceConfigContents =
+interface PersistedWorkspaceConfig {
+  rootId: string
+  repo: string[]
+}
+
+interface WorkspaceConfigRegistry {
+  version: 1
+  workspaces: PersistedWorkspaceConfig[]
+}
+
+type WorkspaceConfigRegistrySnapshot =
   | { kind: 'missing' }
-  | { kind: 'ready'; raw: string }
-  | { kind: 'invalid'; message: string }
+  | { kind: 'ready'; registry: WorkspaceConfigRegistry }
+  | { kind: 'invalid' }
+
+const writeQueues = new Map<string, Promise<void>>()
 
 export function normalizeWorkspaceConfig(value: unknown): WorkspaceConfig {
   const record = asRecord(value)
@@ -48,38 +51,15 @@ export async function readWorkspaceConfig(
   rootId: string,
   dependencies: WorkspaceConfigSourceDependencies = {},
 ): Promise<WorkspaceConfigSnapshot> {
-  const contents = await readWorkspaceConfigContents(rootId, dependencies)
-  if (contents.kind !== 'ready') return contents
-  return parseWorkspaceConfig(contents.raw)
-}
+  const dataFile = dependencies.dataFile ?? serverDataFile(registryFileName)
+  await writeQueues.get(dataFile)?.catch(() => undefined)
+  const snapshot = await readRegistry(dataFile)
+  if (snapshot.kind === 'missing') return snapshot
+  if (snapshot.kind === 'invalid') return { kind: 'invalid', message: 'workspace.config.read-failed' }
 
-async function readWorkspaceConfigContents(
-  rootId: string,
-  dependencies: WorkspaceConfigSourceDependencies,
-): Promise<WorkspaceConfigContents> {
-  if (isRemoteRepoId(rootId)) return await readRemoteWorkspaceConfigContents(rootId, dependencies)
-  try {
-    return { kind: 'ready', raw: await readFile(path.join(rootId, configFileName), 'utf8') }
-  } catch (error) {
-    if (isErrno(error, 'ENOENT')) return { kind: 'missing' }
-    return { kind: 'invalid', message: 'workspace.config.read-failed' }
-  }
-}
-
-function parseWorkspaceConfig(raw: string): WorkspaceConfigSnapshot {
-  let parsed: unknown
-  try {
-    parsed = parse(raw)
-  } catch {
-    return { kind: 'invalid', message: 'workspace.config.invalid-toml' }
-  }
-  const root = asRecord(parsed)
-  if (!root || root.workspace === undefined) return { kind: 'missing' }
-  try {
-    return { kind: 'ready', config: normalizeWorkspaceConfig(root.workspace) }
-  } catch (error) {
-    return { kind: 'invalid', message: errorMessage(error) }
-  }
+  const normalizedRootId = workspaceRootId(rootId)
+  const persisted = snapshot.registry.workspaces.find((workspace) => workspace.rootId === normalizedRootId)
+  return persisted ? { kind: 'ready', config: { repo: [...persisted.repo] } } : { kind: 'missing' }
 }
 
 export async function writeWorkspaceConfig(
@@ -87,59 +67,91 @@ export async function writeWorkspaceConfig(
   config: WorkspaceConfig,
   dependencies: WorkspaceConfigSourceDependencies = {},
 ): Promise<void> {
-  const normalized = normalizeWorkspaceConfig(config)
-  const contents = await readWorkspaceConfigContents(rootId, dependencies)
-  if (contents.kind === 'invalid') throw new Error(contents.message)
-  const raw = contents.kind === 'ready' ? contents.raw : ''
+  const normalizedRootId = workspaceRootId(rootId)
+  const normalizedConfig = normalizeWorkspaceConfig(config)
+  const dataFile = dependencies.dataFile ?? serverDataFile(registryFileName)
 
-  if (raw) {
-    try {
-      parse(raw)
-    } catch {
-      throw new Error('workspace.config.invalid-toml')
-    }
-  }
+  await enqueueWrite(dataFile, async () => {
+    const snapshot = await readRegistry(dataFile)
+    if (snapshot.kind === 'invalid') throw new Error('workspace.config.read-failed')
+    const registry: WorkspaceConfigRegistry =
+      snapshot.kind === 'ready' ? snapshot.registry : { version: 1, workspaces: [] }
+    const workspaces = registry.workspaces.map((workspace) => ({
+      rootId: workspace.rootId,
+      repo: [...workspace.repo],
+    }))
+    const existingIndex = workspaces.findIndex((workspace) => workspace.rootId === normalizedRootId)
+    const persisted = { rootId: normalizedRootId, repo: [...normalizedConfig.repo] }
+    if (existingIndex >= 0) workspaces[existingIndex] = persisted
+    else workspaces.push(persisted)
 
-  const updated = upsertWorkspaceTable(raw, normalized)
-  if (isRemoteRepoId(rootId)) {
-    await writeRemoteWorkspaceConfig(rootId, updated, dependencies)
-    return
-  }
+    await writeRegistry(dataFile, { version: 1, workspaces }, dependencies.randomId?.() ?? randomUUID())
+  })
+}
 
-  const configPath = path.join(rootId, configFileName)
-  const temporaryPath = path.join(rootId, `.${configFileName}.${dependencies.randomId?.() ?? randomUUID()}.tmp`)
+async function readRegistry(dataFile: string): Promise<WorkspaceConfigRegistrySnapshot> {
+  let raw: string
   try {
-    await writeFile(temporaryPath, updated, { encoding: 'utf8', flag: 'wx' })
-    await rename(temporaryPath, configPath)
+    raw = await readFile(dataFile, 'utf8')
   } catch (error) {
-    await unlink(temporaryPath).catch(() => undefined)
+    return isErrno(error, 'ENOENT') ? { kind: 'missing' } : { kind: 'invalid' }
+  }
+
+  try {
+    return { kind: 'ready', registry: normalizeRegistry(JSON.parse(raw)) }
+  } catch {
+    return { kind: 'invalid' }
+  }
+}
+
+function normalizeRegistry(value: unknown): WorkspaceConfigRegistry {
+  const record = asRecord(value)
+  if (!record || record.version !== 1 || !Array.isArray(record.workspaces)) {
+    throw new Error('workspace.config.read-failed')
+  }
+
+  const workspaces: PersistedWorkspaceConfig[] = []
+  const seen = new Set<string>()
+  for (const value of record.workspaces) {
+    const workspace = asRecord(value)
+    if (!workspace || typeof workspace.rootId !== 'string' || workspace.rootId.trim() !== workspace.rootId) {
+      throw new Error('workspace.config.read-failed')
+    }
+    const normalizedRootId = workspaceRootId(workspace.rootId)
+    if (workspace.rootId.length === 0 || normalizedRootId !== workspace.rootId || seen.has(normalizedRootId)) {
+      throw new Error('workspace.config.read-failed')
+    }
+    const config = normalizeWorkspaceConfig({ repo: workspace.repo })
+    seen.add(normalizedRootId)
+    workspaces.push({ rootId: normalizedRootId, repo: config.repo })
+  }
+  return { version: 1, workspaces }
+}
+
+async function writeRegistry(dataFile: string, registry: WorkspaceConfigRegistry, randomId: string): Promise<void> {
+  await mkdir(path.dirname(dataFile), { recursive: true })
+  const temporaryFile = path.join(path.dirname(dataFile), `.${path.basename(dataFile)}.${randomId}.tmp`)
+  let temporaryFileCreated = false
+  try {
+    await writeFile(temporaryFile, `${JSON.stringify(registry, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' })
+    temporaryFileCreated = true
+    await rename(temporaryFile, dataFile)
+    temporaryFileCreated = false
+  } catch (error) {
+    if (temporaryFileCreated) await unlink(temporaryFile).catch(() => undefined)
     throw error
   }
 }
 
-export function upsertWorkspaceTable(raw: string, config: WorkspaceConfig): string {
-  const table = serializeWorkspaceTable(normalizeWorkspaceConfig(config))
-  const lines = raw.split('\n')
-  const start = lines.findIndex((line) => workspaceHeader.test(line))
-  if (start < 0) {
-    const prefix = raw.length === 0 ? '' : raw.endsWith('\n') ? `${raw}\n` : `${raw}\n\n`
-    return `${prefix}${table}\n`
+async function enqueueWrite(dataFile: string, write: () => Promise<void>): Promise<void> {
+  const previous = writeQueues.get(dataFile) ?? Promise.resolve()
+  const operation = previous.catch(() => undefined).then(write)
+  writeQueues.set(dataFile, operation)
+  try {
+    await operation
+  } finally {
+    if (writeQueues.get(dataFile) === operation) writeQueues.delete(dataFile)
   }
-
-  let end = lines.length
-  for (let index = start + 1; index < lines.length; index += 1) {
-    if (tableHeader.test(lines[index] ?? '')) {
-      end = index
-      break
-    }
-  }
-  const before = lines.slice(0, start)
-  const after = lines.slice(end)
-  return [...before, table, ...after].join('\n')
-}
-
-function serializeWorkspaceTable(config: WorkspaceConfig): string {
-  return `[workspace]\nrepo = [${config.repo.map((member) => JSON.stringify(member)).join(', ')}]`
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -150,56 +162,4 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function isErrno(error: unknown, code: string): boolean {
   return error instanceof Error && 'code' in error && error.code === code
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'workspace.config.invalid'
-}
-
-async function readRemoteWorkspaceConfigContents(
-  rootId: string,
-  dependencies: WorkspaceConfigSourceDependencies,
-): Promise<WorkspaceConfigContents> {
-  const parsed = parseRemoteRepoId(rootId)
-  if (!parsed) return { kind: 'invalid', message: 'workspace.config.read-failed' }
-  try {
-    const resolved = await (dependencies.resolveRemoteTarget ?? resolveSshRemoteTarget)(parsed)
-    const result = await (dependencies.runRemote ?? runRemoteCommand)(resolved.target, {
-      type: 'readWorkspaceConfig',
-      rootPath: parsed.remotePath,
-    })
-    if (!result.ok) return { kind: 'invalid', message: 'workspace.config.read-failed' }
-    if (result.stdout === REMOTE_WORKSPACE_CONFIG_MISSING_MARKER) return { kind: 'missing' }
-    if (result.stdout === REMOTE_WORKSPACE_CONFIG_CONTENT_MARKER) return { kind: 'ready', raw: '' }
-    const prefix = `${REMOTE_WORKSPACE_CONFIG_CONTENT_MARKER}\n`
-    if (!result.stdout.startsWith(prefix)) return { kind: 'invalid', message: 'workspace.config.read-failed' }
-    return { kind: 'ready', raw: result.stdout.slice(prefix.length) }
-  } catch (error) {
-    return { kind: 'invalid', message: remoteWorkspaceErrorMessage(error, 'workspace.config.read-failed') }
-  }
-}
-
-async function writeRemoteWorkspaceConfig(
-  rootId: string,
-  contents: string,
-  dependencies: WorkspaceConfigSourceDependencies,
-): Promise<void> {
-  const parsed = parseRemoteRepoId(rootId)
-  if (!parsed) throw new Error('workspace.config.write-failed')
-  try {
-    const resolved = await (dependencies.resolveRemoteTarget ?? resolveSshRemoteTarget)(parsed)
-    const temporaryName = `.${configFileName}.${dependencies.randomId?.() ?? randomUUID()}.tmp`
-    const result = await (dependencies.runRemote ?? runRemoteCommand)(
-      resolved.target,
-      { type: 'writeWorkspaceConfig', rootPath: parsed.remotePath, temporaryName },
-      { stdin: contents },
-    )
-    if (!result.ok) throw new Error('workspace.config.write-failed')
-  } catch (error) {
-    throw new Error(remoteWorkspaceErrorMessage(error, 'workspace.config.write-failed'))
-  }
-}
-
-function remoteWorkspaceErrorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message === 'error.ssh-config-changed' ? error.message : fallback
 }

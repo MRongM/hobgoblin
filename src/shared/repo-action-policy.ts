@@ -1,16 +1,6 @@
-import path from 'node:path'
 import { PROTECTED_BRANCHES, type ExecResult, type WorktreeInfo } from '#/shared/git-types.ts'
-import { isSafeBranchName } from '#/shared/refnames.ts'
 
 export type BranchDeletionNotMergedMessage = 'error.branch-not-fully-merged' | 'error.cannot-remove-unpushed-worktree'
-
-export function validateCreateWorktreeInput(worktreePath: string, newBranch: string, baseBranch: string): ExecResult | null {
-  if (!path.isAbsolute(worktreePath) || worktreePath.includes('\0')) return { ok: false, message: 'error.invalid-path' }
-  if (!isSafeBranchName(newBranch) || !isSafeBranchName(baseBranch)) {
-    return { ok: false, message: 'error.invalid-arguments' }
-  }
-  return null
-}
 
 export function validateRemovableWorktreeState(worktree: WorktreeInfo): ExecResult | null {
   if (worktree.isLocked === true) return { ok: false, message: 'error.cannot-remove-locked-worktree' }

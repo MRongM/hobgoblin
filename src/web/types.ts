@@ -11,7 +11,6 @@ export type {
   GitRemoteInfo,
   StatusEntry,
   WorktreeStatus,
-  LogEntry,
   ExecResult,
   BrowserRemoteProvider,
 } from '#/shared/git-types.ts'

@@ -1,3 +1,4 @@
+import { syncWorkspaceAgents } from '#/server/modules/workspace-agents-source.ts'
 import { normalizeWorkspaceConfig, writeWorkspaceConfig } from '#/server/modules/workspace-config-source.ts'
 import { discoverWorkspaceRepositories } from '#/server/modules/workspace-read.ts'
 import type { WorkspaceConfig, WorkspaceDiscoveryResult, WorkspaceRepositoryEntry } from '#/shared/workspace.ts'
@@ -5,6 +6,7 @@ import type { WorkspaceConfig, WorkspaceDiscoveryResult, WorkspaceRepositoryEntr
 interface WorkspaceWriteDependencies {
   discover?: typeof discoverWorkspaceRepositories
   writeConfig?: typeof writeWorkspaceConfig
+  syncAgents?: typeof syncWorkspaceAgents
 }
 
 export async function saveWorkspaceConfig(
@@ -31,6 +33,7 @@ export async function saveWorkspaceConfig(
 
   try {
     await (dependencies.writeConfig ?? writeWorkspaceConfig)(discovery.rootId, config)
+    await (dependencies.syncAgents ?? syncWorkspaceAgents)(discovery.rootId)
   } catch (error) {
     return { ok: false, message: safeMessage(error) }
   }
@@ -71,7 +74,9 @@ function projectSavedWorkspaceConfiguration(
 
 function safeMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : ''
-  return message.startsWith('workspace.config.') || message === 'error.ssh-config-changed'
+  return message.startsWith('workspace.config.') ||
+    message === 'workspace.agents.write-failed' ||
+    message === 'error.ssh-config-changed'
     ? message
     : 'workspace.config.write-failed'
 }

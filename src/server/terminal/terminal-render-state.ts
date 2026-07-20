@@ -157,7 +157,6 @@ export function disposeTerminalRenderState(state: TerminalRenderState): void {
 }
 
 export function maybeClearCanonicalTitleOnShellReturn(
-  sessionId: string,
   state: TerminalRenderState,
   previousProcessName: string,
   nextProcessName: string,

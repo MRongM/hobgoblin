@@ -1,188 +1,186 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test } from 'vitest'
 import { readWorkspaceConfig, writeWorkspaceConfig } from '#/server/modules/workspace-config-source.ts'
-import { normalizeRemoteRepoId, normalizeRemoteTarget } from '#/shared/remote-repo.ts'
-import type { RemoteCommandResult } from '#/system/ssh/commands.ts'
+import { normalizeRemoteRepoId } from '#/shared/remote-repo.ts'
 
-const temporaryRoots: string[] = []
+const temporaryDirectories: string[] = []
 
-async function createTemporaryRoot(): Promise<string> {
-  const root = await mkdtemp(path.join(tmpdir(), 'hobgoblin-workspace-config-'))
-  temporaryRoots.push(root)
-  return root
+async function createFixture(): Promise<{ directory: string; dataFile: string; root: string }> {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hobgoblin-workspace-config-'))
+  temporaryDirectories.push(directory)
+  const root = path.join(directory, 'workspace')
+  await mkdir(root)
+  return {
+    directory,
+    dataFile: path.join(directory, 'app-data', 'workspace-configs.json'),
+    root,
+  }
 }
 
 afterEach(async () => {
-  await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
+  await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })))
 })
 
 describe('workspace config source', () => {
-  test('reports a missing goblin.toml as unconfigured', async () => {
-    const root = await createTemporaryRoot()
+  test('reports an unregistered workspace as missing', async () => {
+    const { dataFile, root } = await createFixture()
 
-    await expect(readWorkspaceConfig(root)).resolves.toEqual({ kind: 'missing' })
+    await expect(readWorkspaceConfig(root, { dataFile })).resolves.toEqual({ kind: 'missing' })
   })
 
-  test('reads a valid workspace table', async () => {
-    const root = await createTemporaryRoot()
-    await writeFile(path.join(root, 'goblin.toml'), '[workspace]\nrepo = ["api", "web"]\n')
+  test('persists ordered membership in the application-data registry without creating goblin.toml', async () => {
+    const { dataFile, root } = await createFixture()
 
-    await expect(readWorkspaceConfig(root)).resolves.toEqual({
+    await writeWorkspaceConfig(root, { repo: ['web', 'api'] }, { dataFile, randomId: () => 'safe' })
+
+    await expect(readWorkspaceConfig(root, { dataFile })).resolves.toEqual({
       kind: 'ready',
-      config: { repo: ['api', 'web'] },
+      config: { repo: ['web', 'api'] },
+    })
+    const registry = JSON.parse(await readFile(dataFile, 'utf8')) as {
+      version: number
+      workspaces: Array<{ rootId: string; repo: string[] }>
+    }
+    expect(registry).toEqual({
+      version: 1,
+      workspaces: [{ rootId: path.resolve(root), repo: ['web', 'api'] }],
+    })
+    await expect(readFile(path.join(root, 'goblin.toml'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  test('ignores an existing goblin.toml workspace table', async () => {
+    const { dataFile, root } = await createFixture()
+    await writeFile(path.join(root, 'goblin.toml'), '[workspace]\nrepo = ["legacy"]\n')
+
+    await expect(readWorkspaceConfig(root, { dataFile })).resolves.toEqual({ kind: 'missing' })
+  })
+
+  test('preserves other roots and replaces one root without changing registry order', async () => {
+    const { directory, dataFile, root } = await createFixture()
+    const secondRoot = path.join(directory, 'second-workspace')
+    await mkdir(secondRoot)
+
+    await writeWorkspaceConfig(root, { repo: ['api'] }, { dataFile })
+    await writeWorkspaceConfig(secondRoot, { repo: ['docs'] }, { dataFile })
+    await writeWorkspaceConfig(root, { repo: ['web', 'api'] }, { dataFile })
+
+    const registry = JSON.parse(await readFile(dataFile, 'utf8')) as {
+      workspaces: Array<{ rootId: string; repo: string[] }>
+    }
+    expect(registry.workspaces).toEqual([
+      { rootId: path.resolve(root), repo: ['web', 'api'] },
+      { rootId: path.resolve(secondRoot), repo: ['docs'] },
+    ])
+  })
+
+  test('serializes concurrent writes so no workspace is lost', async () => {
+    const { directory, dataFile, root } = await createFixture()
+    const secondRoot = path.join(directory, 'second-workspace')
+    const thirdRoot = path.join(directory, 'third-workspace')
+
+    await Promise.all([
+      writeWorkspaceConfig(root, { repo: ['api'] }, { dataFile }),
+      writeWorkspaceConfig(secondRoot, { repo: ['web'] }, { dataFile }),
+      writeWorkspaceConfig(thirdRoot, { repo: ['docs'] }, { dataFile }),
+    ])
+
+    const registry = JSON.parse(await readFile(dataFile, 'utf8')) as {
+      workspaces: Array<{ rootId: string; repo: string[] }>
+    }
+    expect(registry.workspaces).toHaveLength(3)
+    expect(new Set(registry.workspaces.map((workspace) => workspace.rootId))).toEqual(
+      new Set([path.resolve(root), path.resolve(secondRoot), path.resolve(thirdRoot)]),
+    )
+  })
+
+  test('normalizes local root identifiers before storing and looking them up', async () => {
+    const { dataFile, root } = await createFixture()
+    const unnormalizedRoot = path.join(root, 'nested', '..')
+
+    await writeWorkspaceConfig(unnormalizedRoot, { repo: ['api'] }, { dataFile })
+
+    await expect(readWorkspaceConfig(root, { dataFile })).resolves.toEqual({
+      kind: 'ready',
+      config: { repo: ['api'] },
     })
   })
 
-  test('ignores a legacy main key', async () => {
-    const root = await createTemporaryRoot()
-    await writeFile(path.join(root, 'goblin.toml'), '[workspace]\nmain = "api"\nrepo = ["api", "web"]\n')
+  test('persists an SSH workspace identifier locally without contacting the remote host', async () => {
+    const { dataFile } = await createFixture()
+    const rootId = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/workspace' })
 
-    await expect(readWorkspaceConfig(root)).resolves.toEqual({
+    await writeWorkspaceConfig(rootId, { repo: ['api', 'web'] }, { dataFile })
+
+    await expect(readWorkspaceConfig(rootId, { dataFile })).resolves.toEqual({
       kind: 'ready',
       config: { repo: ['api', 'web'] },
     })
   })
 
   test.each([
-    ['duplicate repositories', '[workspace]\nrepo = ["api", "api"]\n'],
-    ['empty repositories', '[workspace]\nrepo = []\n'],
-    ['path separators', '[workspace]\nrepo = ["api", "nested/web"]\n'],
-    ['parent directory', '[workspace]\nrepo = [".."]\n'],
-    ['nul bytes', '[workspace]\nrepo = ["api", "web\\u0000"]\n'],
-  ])('rejects %s', async (_label, contents) => {
-    const root = await createTemporaryRoot()
-    await writeFile(path.join(root, 'goblin.toml'), contents)
+    ['invalid JSON', '{'],
+    ['unsupported version', JSON.stringify({ version: 2, workspaces: [] })],
+    [
+      'duplicate roots',
+      JSON.stringify({
+        version: 1,
+        workspaces: [
+          { rootId: '/workspace', repo: ['api'] },
+          { rootId: '/workspace', repo: ['web'] },
+        ],
+      }),
+    ],
+    [
+      'invalid repositories',
+      JSON.stringify({ version: 1, workspaces: [{ rootId: '/workspace', repo: ['nested/web'] }] }),
+    ],
+  ])('reports %s in the internal registry as a safe read failure', async (_label, contents) => {
+    const { dataFile, root } = await createFixture()
+    await mkdir(path.dirname(dataFile), { recursive: true })
+    await writeFile(dataFile, contents)
 
-    const result = await readWorkspaceConfig(root)
-
-    expect(result.kind).toBe('invalid')
-  })
-
-  test('reports invalid TOML without exposing its filesystem path', async () => {
-    const root = await createTemporaryRoot()
-    await writeFile(path.join(root, 'goblin.toml'), '[workspace\nmain = "api"\n')
-
-    const result = await readWorkspaceConfig(root)
-
-    expect(result).toEqual({ kind: 'invalid', message: 'workspace.config.invalid-toml' })
-    expect(JSON.stringify(result)).not.toContain(root)
-  })
-
-  test('writes workspace config while preserving unrelated tables', async () => {
-    const root = await createTemporaryRoot()
-    await writeFile(
-      path.join(root, 'goblin.toml'),
-      '# existing config\n[worktree]\ncopy = [".env.example"]\n\n[workspace]\nmain = "old"\nrepo = ["old"]\n\n[tooling]\nenabled = true\n',
-    )
-
-    await writeWorkspaceConfig(root, { repo: ['api', 'web'] })
-
-    const persisted = await readFile(path.join(root, 'goblin.toml'), 'utf8')
-    expect(persisted).toContain('# existing config\n[worktree]\ncopy = [".env.example"]')
-    expect(persisted).toContain('[workspace]\nrepo = ["api", "web"]')
-    expect(persisted).not.toContain('main =')
-    expect(persisted).toContain('[tooling]\nenabled = true')
-  })
-
-  test('does not overwrite invalid existing TOML', async () => {
-    const root = await createTemporaryRoot()
-    const invalid = '[workspace\nmain = "api"\n'
-    await writeFile(path.join(root, 'goblin.toml'), invalid)
-
-    await expect(writeWorkspaceConfig(root, { repo: ['api'] })).rejects.toThrow('workspace.config.invalid-toml')
-    await expect(readFile(path.join(root, 'goblin.toml'), 'utf8')).resolves.toBe(invalid)
-  })
-
-  test('reads missing, valid, and invalid workspace config over SSH', async () => {
-    const target = normalizeRemoteTarget({
-      alias: 'prod',
-      host: 'example.com',
-      user: 'alice',
-      port: 22,
-      remotePath: '/srv/workspace',
-    })!
-    const rootId = normalizeRemoteRepoId(target)
-    const resolveRemoteTarget = vi.fn(async () => ({ target }))
-    const runRemote = vi.fn()
-    const dependencies = { resolveRemoteTarget, runRemote }
-
-    runRemote.mockResolvedValueOnce(ok('__HOBGOBLIN_WORKSPACE_CONFIG_MISSING__'))
-    await expect(readWorkspaceConfig(rootId, dependencies)).resolves.toEqual({ kind: 'missing' })
-
-    runRemote.mockResolvedValueOnce(ok('__HOBGOBLIN_WORKSPACE_CONFIG_CONTENT__\n[workspace]\nrepo=["api"]\n'))
-    await expect(readWorkspaceConfig(rootId, dependencies)).resolves.toEqual({
-      kind: 'ready',
-      config: { repo: ['api'] },
-    })
-
-    runRemote.mockResolvedValueOnce(ok('__HOBGOBLIN_WORKSPACE_CONFIG_CONTENT__\ninvalid = ['))
-    await expect(readWorkspaceConfig(rootId, dependencies)).resolves.toEqual({
+    await expect(readWorkspaceConfig(root, { dataFile })).resolves.toEqual({
       kind: 'invalid',
-      message: 'workspace.config.invalid-toml',
+      message: 'workspace.config.read-failed',
     })
-    expect(resolveRemoteTarget).toHaveBeenCalledWith({ alias: 'prod', remotePath: '/srv/workspace' })
   })
 
-  test('writes workspace config through SSH stdin without overwriting invalid TOML', async () => {
-    const target = normalizeRemoteTarget({
-      alias: 'prod',
-      host: 'example.com',
-      user: 'alice',
-      port: 22,
-      remotePath: '/srv/workspace',
-    })!
-    const rootId = normalizeRemoteRepoId(target)
-    const resolveRemoteTarget = vi.fn(async () => ({ target }))
-    const runRemote = vi
-      .fn()
-      .mockResolvedValueOnce(ok('__HOBGOBLIN_WORKSPACE_CONFIG_CONTENT__\n[worktree]\ncopy=[".env"]\n'))
-      .mockResolvedValueOnce(ok())
+  test('does not overwrite a corrupt internal registry', async () => {
+    const { dataFile, root } = await createFixture()
+    const corrupt = '{"version":1,"workspaces":['
+    await mkdir(path.dirname(dataFile), { recursive: true })
+    await writeFile(dataFile, corrupt)
 
-    await writeWorkspaceConfig(
-      rootId,
-      { repo: ['api', 'web'] },
-      { resolveRemoteTarget, runRemote, randomId: () => 'safe' },
+    await expect(writeWorkspaceConfig(root, { repo: ['api'] }, { dataFile })).rejects.toThrow(
+      'workspace.config.read-failed',
     )
+    await expect(readFile(dataFile, 'utf8')).resolves.toBe(corrupt)
+  })
 
-    expect(runRemote).toHaveBeenNthCalledWith(
-      2,
-      target,
-      {
-        type: 'writeWorkspaceConfig',
-        rootPath: '/srv/workspace',
-        temporaryName: '.goblin.toml.safe.tmp',
-      },
-      expect.objectContaining({ stdin: expect.stringContaining('[workspace]\nrepo = ["api", "web"]') }),
-    )
+  test('preserves a pre-existing temporary file when atomic creation collides', async () => {
+    const { dataFile, root } = await createFixture()
+    await mkdir(path.dirname(dataFile), { recursive: true })
+    const temporaryFile = path.join(path.dirname(dataFile), '.workspace-configs.json.safe.tmp')
+    await writeFile(temporaryFile, 'pre-existing')
 
-    runRemote.mockReset()
-    runRemote.mockResolvedValueOnce(ok('__HOBGOBLIN_WORKSPACE_CONFIG_CONTENT__\ninvalid = ['))
     await expect(
-      writeWorkspaceConfig(rootId, { repo: ['api'] }, { resolveRemoteTarget, runRemote, randomId: () => 'unused' }),
-    ).rejects.toThrow('workspace.config.invalid-toml')
-    expect(runRemote).toHaveBeenCalledTimes(1)
+      writeWorkspaceConfig(root, { repo: ['api'] }, { dataFile, randomId: () => 'safe' }),
+    ).rejects.toThrow()
+
+    await expect(readdir(path.dirname(dataFile))).resolves.toContain('.workspace-configs.json.safe.tmp')
+    await expect(readFile(temporaryFile, 'utf8')).resolves.toBe('pre-existing')
   })
 
-  test('preserves the SSH config changed error for remote config reads and writes', async () => {
-    const rootId = normalizeRemoteRepoId({ alias: 'removed', remotePath: '/srv/workspace' })
-    const dependencies = {
-      resolveRemoteTarget: async () => {
-        throw new Error('error.ssh-config-changed')
-      },
-    }
+  test.each([
+    ['duplicate repositories', { repo: ['api', 'api'] }, 'workspace.config.duplicate-repository'],
+    ['empty repositories', { repo: [] }, 'workspace.config.empty-repositories'],
+    ['path separators', { repo: ['api', 'nested/web'] }, 'workspace.config.invalid-repository'],
+    ['parent directory', { repo: ['..'] }, 'workspace.config.invalid-repository'],
+  ])('rejects %s before persistence', async (_label, config, message) => {
+    const { dataFile, root } = await createFixture()
 
-    await expect(readWorkspaceConfig(rootId, dependencies)).resolves.toEqual({
-      kind: 'invalid',
-      message: 'error.ssh-config-changed',
-    })
-    await expect(writeWorkspaceConfig(rootId, { repo: ['api'] }, dependencies)).rejects.toThrow(
-      'error.ssh-config-changed',
-    )
+    await expect(writeWorkspaceConfig(root, config, { dataFile })).rejects.toThrow(message)
   })
 })
-
-function ok(stdout = ''): RemoteCommandResult {
-  return { ok: true, stdout, stderr: '' }
-}

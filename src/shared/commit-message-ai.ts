@@ -7,12 +7,6 @@ export interface CommitMessageProviderAvailability {
   claude: boolean
 }
 
-export interface CommitMessageGenerationRequest {
-  repoId: string
-  worktreePath: string
-  provider: CommitMessageProvider
-}
-
 export interface CommitMessageGenerationResult {
   ok: boolean
   message: string

@@ -104,6 +104,7 @@ export const ja: Record<DictKey, string> = {
   'workspace.configuration-required': 'ワークスペースの worktree を使う前にリポジトリを設定してください。',
   'workspace.configuration-invalid': 'ワークスペース設定が無効です。更新して続行してください。',
   'workspace.config.write-failed': 'ワークスペース設定を保存できませんでした。',
+  'workspace.agents.write-failed': 'AGENTS.md を更新できませんでした。',
   'workspace.config.repository-unavailable': '選択したすべてのリポジトリが利用可能である必要があります。',
   'workspace.batch.create-action': 'すべてのリポジトリに worktree を作成',
   'workspace.batch.remove-action': 'すべてのリポジトリから worktree を削除',
@@ -434,6 +435,8 @@ export const ja: Record<DictKey, string> = {
   'file-tree.init-worktree-bootstrap-config': 'goblin.toml を初期化',
   'file-tree.init-worktree-bootstrap-config-created': 'goblin.toml を作成しました',
   'file-tree.init-worktree-bootstrap-config-failed': 'goblin.toml を初期化できません',
+  'file-tree.init-worktree-bootstrap-config-ai-command-failed':
+    'goblin.toml は作成されましたが、AI コマンドをターミナルに入力できませんでした。',
   'file-tree.search-label': 'ファイルを検索',
   'file-tree.search-placeholder': 'ファイルを検索',
   'file-tree.search-clear': '検索をクリア',
