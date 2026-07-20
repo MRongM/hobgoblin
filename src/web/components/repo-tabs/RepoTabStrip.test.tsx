@@ -370,7 +370,7 @@ describe('RepoTabStrip', () => {
   })
 
   test('asks for confirmation before clearing cache', async () => {
-    localStorage.setItem('probe', 'kept')
+    window.localStorage.setItem('probe', 'kept')
     const location = stubLocationReload()
     try {
       renderEmptyStrip()
@@ -378,24 +378,24 @@ describe('RepoTabStrip', () => {
 
       expect(document.body.querySelector('[role="alertdialog"]')).not.toBeNull()
       expect(document.body.textContent).toContain('Clear cache?')
-      expect(localStorage.getItem('probe')).toBe('kept')
+      expect(window.localStorage.getItem('probe')).toBe('kept')
       expect(location.reload).not.toHaveBeenCalled()
     } finally {
       location.restore()
-      localStorage.clear()
+      window.localStorage.clear()
     }
   })
 
   test('clears storage and reloads after confirming', async () => {
-    localStorage.setItem('probe', 'kept')
-    sessionStorage.setItem('probe-session', 'kept')
+    window.localStorage.setItem('probe', 'kept')
+    window.sessionStorage.setItem('probe-session', 'kept')
     const location = stubLocationReload()
     try {
       renderEmptyStrip()
       await selectClearCacheMenuItem()
 
       expect(document.body.querySelector('[role="alertdialog"]')).not.toBeNull()
-      expect(localStorage.getItem('probe')).toBe('kept')
+      expect(window.localStorage.getItem('probe')).toBe('kept')
 
       await act(async () => {
         Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'))
@@ -404,19 +404,19 @@ describe('RepoTabStrip', () => {
         await Promise.resolve()
       })
 
-      expect(localStorage.getItem('probe')).toBeNull()
-      expect(sessionStorage.getItem('probe-session')).toBeNull()
+      expect(window.localStorage.getItem('probe')).toBeNull()
+      expect(window.sessionStorage.getItem('probe-session')).toBeNull()
       expect(location.reload).toHaveBeenCalledTimes(1)
       expect(document.body.querySelector('[role="alertdialog"]')).toBeNull()
     } finally {
       location.restore()
-      localStorage.clear()
-      sessionStorage.clear()
+      window.localStorage.clear()
+      window.sessionStorage.clear()
     }
   })
 
   test('cancelling the clear-cache dialog has no side effects', async () => {
-    localStorage.setItem('probe', 'kept')
+    window.localStorage.setItem('probe', 'kept')
     const location = stubLocationReload()
     try {
       renderEmptyStrip()
@@ -430,11 +430,11 @@ describe('RepoTabStrip', () => {
       })
 
       expect(document.body.querySelector('[role="alertdialog"]')).toBeNull()
-      expect(localStorage.getItem('probe')).toBe('kept')
+      expect(window.localStorage.getItem('probe')).toBe('kept')
       expect(location.reload).not.toHaveBeenCalled()
     } finally {
       location.restore()
-      localStorage.clear()
+      window.localStorage.clear()
     }
   })
 })
