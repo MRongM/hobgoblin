@@ -12,19 +12,8 @@ type CoreRepoRefreshReason = 'initial-load' | 'branch-action'
 export type RepoRefreshIntent =
   | (RepoRefreshIntentBase & { kind: 'core-data-changed'; reason: CoreRepoRefreshReason })
   | (RepoRefreshIntentBase & { kind: 'manual-refresh-requested' })
-  | (RepoRefreshIntentBase & { kind: 'visible-pull-request-changed'; branch: string | null })
 
 type RepoInvalidationRefreshDisposition = 'refresh' | 'suppress'
-
-async function runVisiblePullRequestRefresh(
-  get: ReposGet,
-  id: string,
-  branch: string | null | undefined,
-  token: number,
-): Promise<void> {
-  if (!branch) return
-  await get().refreshPullRequests(id, [branch], { token, mode: 'full' })
-}
 
 export function repoInvalidationRefreshDisposition(
   event: Pick<RepoQueryInvalidationEvent, 'sourceToken'>,
@@ -57,9 +46,6 @@ export async function runRepoRefreshIntent(get: ReposGet, intent: RepoRefreshInt
       return
     case 'core-data-changed':
       await get().refreshCoreData(intent.id, { token: intent.token })
-      return
-    case 'visible-pull-request-changed':
-      await runVisiblePullRequestRefresh(get, intent.id, intent.branch, intent.token)
       return
   }
   const exhaustive: never = intent

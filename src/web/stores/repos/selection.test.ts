@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, test } from 'vitest'
 import { emptyRepo, replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { DetailTab, RepoState } from '#/web/stores/repos/types.ts'
-import { createRepoBranch as branch, installGoblinTestBridge, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
+import {
+  createRepoBranch as branch,
+  installGoblinTestBridge,
+  resetReposStore,
+  seedRepoState,
+} from '#/web/stores/repos/test-utils.ts'
 import type { BranchSnapshotInfo } from '#/web/types.ts'
 import { DEFAULT_DETAIL_PANE_SIZES, DEFAULT_FILE_TREE_PANE_SIZES } from '#/shared/workspace-layout.ts'
 const REPO_ID = '/tmp/gbl-selection-test-repo'
@@ -48,24 +53,10 @@ async function flushAsyncWork() {
   await new Promise((resolve) => setTimeout(resolve, 0))
 }
 
-function stubRefreshActions(
-  stubs: Partial<Pick<ReturnType<typeof useReposStore.getState>, 'refreshPullRequests' | 'refreshStatus'>>,
-): () => void {
-  const original = useReposStore.getState()
-  useReposStore.setState(stubs)
-  return () => {
-    useReposStore.setState({
-      refreshPullRequests: original.refreshPullRequests,
-      refreshStatus: original.refreshStatus,
-    })
-  }
-}
-
 beforeEach(() => {
   for (const key of Object.keys(rpcHandlers)) delete rpcHandlers[key]
   resetReposStore()
   installGoblinTestBridge(rpcHandlers)
-  rpcHandlers['repo.pullRequests'] = async () => []
   rpcHandlers['repo.status'] = async () => []
 })
 
@@ -155,71 +146,22 @@ describe('reorderWorktrees', () => {
 })
 
 describe('selectBranch', () => {
-  test('refreshes pull request details locally', async () => {
-    let resolve!: () => void
-    const calls: Array<{ branches?: string[]; mode?: string }> = []
-    rpcHandlers['repo.pullRequests'] = ({ branches, options }: { branches?: string[]; options?: { mode?: string } }) =>
-      new Promise<[]>((r) => {
-        calls.push({ branches, mode: options?.mode })
-        resolve = () => r([])
-      })
-    seedRepo({ selectedBranch: 'feature/plain' })
-
-    useReposStore.getState().selectBranch(REPO_ID, 'main')
-
-    expect(useReposStore.getState().repos[REPO_ID]?.resources.pullRequests.phase).toBe('loading')
-    resolve()
-    await Promise.resolve()
-    expect(calls).toEqual([{ branches: ['main'], mode: 'full' }])
-    expect(useReposStore.getState().restorableRepoCache[REPO_ID]?.ui.selectedBranch).toBe('main')
-  })
-
-  test('passes the current repo token to selected branch refreshes', () => {
-    seedRepo({ selectedBranch: 'feature/plain', detailTab: 'status' })
-    const token = useReposStore.getState().repos[REPO_ID]!.instanceToken
-    const pullRequestCalls: Parameters<ReturnType<typeof useReposStore.getState>['refreshPullRequests']>[] = []
-    const restore = stubRefreshActions({
-      refreshPullRequests: async (...args) => {
-        pullRequestCalls.push(args)
-      },
-    })
-
-    try {
-      useReposStore.getState().selectBranch(REPO_ID, 'main')
-
-      expect(pullRequestCalls[0]).toEqual([REPO_ID, ['main'], { token, mode: 'full' }])
-    } finally {
-      restore()
-    }
-  })
-
   test('ignores a branch that is not in the current snapshot', () => {
-    let calls = 0
-    rpcHandlers['repo.pullRequests'] = async () => {
-      calls += 1
-      return []
-    }
     seedRepo({ selectedBranch: 'feature/plain' })
 
     useReposStore.getState().selectBranch(REPO_ID, 'missing')
 
     const repo = useReposStore.getState().repos[REPO_ID]
     expect(repo?.ui.selectedBranch).toBe('feature/plain')
-    expect(calls).toBe(0)
   })
 
-  test('does not refresh when selecting the already-selected branch', () => {
-    let calls = 0
-    rpcHandlers['repo.pullRequests'] = async () => {
-      calls += 1
-      return []
-    }
+  test('does not rewrite state when selecting the already-selected branch', () => {
     seedRepo({ selectedBranch: 'feature/plain' })
+    const before = useReposStore.getState().repos[REPO_ID]
 
     useReposStore.getState().selectBranch(REPO_ID, 'feature/plain')
 
-    expect(useReposStore.getState().repos[REPO_ID]?.ui.selectedBranch).toBe('feature/plain')
-    expect(calls).toBe(0)
+    expect(useReposStore.getState().repos[REPO_ID]).toBe(before)
   })
 
   test('falls back from terminal when selecting a branch without a worktree', () => {
@@ -314,39 +256,6 @@ describe('setDetailTab', () => {
     expect(useReposStore.getState().restorableRepoCache[REPO_ID]?.ui.detailTab).toBeUndefined()
   })
 
-  test('passes the current repo token to detail tab refreshes', () => {
-    seedRepo({ selectedBranch: 'main', detailTab: 'terminal' })
-    const token = useReposStore.getState().repos[REPO_ID]!.instanceToken
-    const pullRequestCalls: Parameters<ReturnType<typeof useReposStore.getState>['refreshPullRequests']>[] = []
-    const restore = stubRefreshActions({
-      refreshPullRequests: async (...args) => {
-        pullRequestCalls.push(args)
-      },
-    })
-
-    try {
-      useReposStore.getState().setDetailTab(REPO_ID, 'status')
-
-      expect(pullRequestCalls[0]).toEqual([REPO_ID, ['main'], { token, mode: 'full' }])
-    } finally {
-      restore()
-    }
-  })
-
-  test('refreshes pull request details when switching to status', async () => {
-    const calls: string[][] = []
-    rpcHandlers['repo.pullRequests'] = async ({ branches }: { branches?: string[] }) => {
-      calls.push(branches ?? [])
-      return []
-    }
-    seedRepo({ selectedBranch: 'main', detailTab: 'terminal' })
-
-    useReposStore.getState().setDetailTab(REPO_ID, 'status')
-    await flushAsyncWork()
-
-    expect(calls).toEqual([['main']])
-  })
-
   test('opens terminal only for branches with a worktree', () => {
     seedRepo({ selectedBranch: 'feature/worktree', detailTab: 'status' })
 
@@ -371,12 +280,7 @@ describe('setDetailTab', () => {
     expect(useReposStore.getState().restorableRepoCache[REPO_ID]?.ui.detailTab).toBe('terminal')
   })
 
-  test('dismissing the active exited terminal detail falls back to status and collapses the pane', async () => {
-    let refreshedBranches: string[] | undefined
-    rpcHandlers['repo.pullRequests'] = async ({ branches }: { branches: string[] }) => {
-      refreshedBranches = branches
-      return []
-    }
+  test('dismissing the active exited terminal detail falls back to status and collapses the pane', () => {
     seedRepo({ selectedBranch: 'feature/worktree', detailTab: 'terminal' })
     useReposStore.setState({ workspaceLayout: 'top-bottom', detailCollapsed: false })
 
@@ -387,8 +291,6 @@ describe('setDetailTab', () => {
     expect(useReposStore.getState().repos[REPO_ID]?.ui.detailTab).toBe('status')
     expect(useReposStore.getState().detailCollapsed).toBe(true)
     expect(useReposStore.getState().restorableRepoCache[REPO_ID]?.ui.detailTab).toBe('status')
-    await flushAsyncWork()
-    expect(refreshedBranches).toEqual(['feature/worktree'])
   })
 
   test('dismissing a stale exited terminal session leaves the current detail selection alone', () => {
@@ -569,7 +471,6 @@ describe('setDetailFocusMode', () => {
 
     expect(useReposStore.getState().detailFocusMode).toBe(true)
   })
-
 })
 
 describe('setDetailPaneSize', () => {
@@ -669,6 +570,84 @@ describe('resetLayout', () => {
     useReposStore.getState().resetLayout()
 
     expect(useReposStore.getState()).toBe(before)
+  })
+})
+
+describe('project list expansion', () => {
+  test('toggles one global expansion preference', () => {
+    expect(useReposStore.getState().projectListExpanded).toBe(false)
+
+    useReposStore.getState().toggleProjectListExpanded()
+    expect(useReposStore.getState().projectListExpanded).toBe(true)
+
+    useReposStore.getState().toggleProjectListExpanded()
+    expect(useReposStore.getState().projectListExpanded).toBe(false)
+  })
+})
+
+describe('multi-repository workspace selection', () => {
+  const rootId = '/tmp/gbl-workspace'
+  const childId = `${rootId}/api`
+  const soloId = '/tmp/gbl-solo'
+
+  function seedWorkspaceSelection() {
+    const root = replaceRepo(emptyRepo(rootId, 'workspace'), (repo) => {
+      repo.isGitRepo = false
+    })
+    const child = replaceRepo(emptyRepo(childId, 'api'), (repo) => {
+      repo.workspaceRootId = rootId
+    })
+    const solo = emptyRepo(soloId, 'solo')
+    useReposStore.setState({
+      repos: { [rootId]: root, [childId]: child, [soloId]: solo },
+      order: [rootId, soloId],
+      activeId: rootId,
+      workspaceProjects: {
+        [rootId]: {
+          rootId,
+          repositoryIds: [childId],
+          candidates: [],
+          configured: false,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+      workspaceActiveRepoByRoot: { [rootId]: null },
+    })
+  }
+
+  test('selects a child repository and remembers it for top-level project activation', () => {
+    seedWorkspaceSelection()
+
+    useReposStore.getState().activateWorkspaceRepository(rootId, childId)
+    useReposStore.getState().setActive(soloId)
+    useReposStore.getState().activateProject(rootId)
+
+    expect(useReposStore.getState().activeId).toBe(childId)
+    expect(useReposStore.getState().workspaceActiveRepoByRoot[rootId]).toBe(childId)
+  })
+
+  test('selects Overview explicitly', () => {
+    seedWorkspaceSelection()
+    useReposStore.setState({ workspaceActiveRepoByRoot: { [rootId]: childId } })
+
+    useReposStore.getState().activateWorkspaceRepository(rootId, null)
+
+    expect(useReposStore.getState().activeId).toBe(rootId)
+    expect(useReposStore.getState().workspaceActiveRepoByRoot[rootId]).toBeNull()
+  })
+
+  test('cycles across top-level projects instead of child repositories', () => {
+    seedWorkspaceSelection()
+    useReposStore.getState().activateWorkspaceRepository(rootId, childId)
+
+    useReposStore.getState().cycleActive(1)
+    expect(useReposStore.getState().activeId).toBe(soloId)
+
+    useReposStore.getState().cycleActive(-1)
+    expect(useReposStore.getState().activeId).toBe(childId)
   })
 })
 

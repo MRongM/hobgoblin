@@ -65,8 +65,6 @@ function createRepo(input: {
       fetch: { phase: 'idle', loadedAt: null, stale: false, error: null },
       snapshot: { phase: 'idle', loadedAt: null, stale: false, error: null },
       status: { phase: 'idle', loadedAt: null, stale: false, error: null },
-      pullRequests: { phase: 'idle', loadedAt: null, stale: false, error: null, mode: null },
-      pullRequestsByBranch: {},
     },
     operations: {
       fetch: { operationId: 0, phase: 'idle', reason: null, target: null, startedAt: null, settledAt: null, error: null },
@@ -89,15 +87,6 @@ function createRepo(input: {
         error: null,
       },
       status: { operationId: 0, phase: 'idle', reason: null, target: null, startedAt: null, settledAt: null, error: null },
-      pullRequests: {
-        operationId: 0,
-        phase: 'idle',
-        reason: null,
-        target: null,
-        startedAt: null,
-        settledAt: null,
-        error: null,
-      },
       branchAction: {
         operationId: 0,
         phase: 'idle',
@@ -107,7 +96,6 @@ function createRepo(input: {
         settledAt: null,
         error: null,
       },
-      pullRequestsByBranch: {},
     },
     ui: {
       selectedBranch: null,

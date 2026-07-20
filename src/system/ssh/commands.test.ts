@@ -1,12 +1,4 @@
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { execa } from 'execa'
@@ -36,6 +28,83 @@ function testPosix(name: string, fn: () => Promise<void> | void): void {
 }
 
 describe('remote command scripts', () => {
+  test('builds depth-one workspace marker discovery and path existence commands', () => {
+    const discovery = buildRemoteCommandInvocation(TARGET, {
+      type: 'listWorkspaceGitDirectories',
+      rootPath: '/srv/workspace',
+    })
+    expect(discovery.script).toContain('-mindepth 1')
+    expect(discovery.script).toContain('-maxdepth 1')
+    expect(discovery.script).toContain('-type l')
+    expect(discovery.script).toContain('.git')
+    expect(discovery.script).toContain('printf "%s\\0"')
+
+    const validation = buildRemoteCommandInvocation(TARGET, {
+      type: 'testWorkspaceGitDirectory',
+      path: '/srv/workspace/linked',
+    })
+    expect(validation.script).toContain('pwd -P')
+    expect(validation.script).toContain('rev-parse --show-toplevel')
+
+    const exists = buildRemoteCommandInvocation(TARGET, { type: 'testPathExists', path: '/srv/worktree' })
+    expect(exists.script).toContain("test -e '/srv/worktree'")
+    expect(exists.script).toContain("test -L '/srv/worktree'")
+    expect(exists.script).toContain('__HOBGOBLIN_PATH_EXISTS__')
+    expect(exists.script).toContain('__HOBGOBLIN_PATH_MISSING__')
+  })
+
+  testPosix('workspace marker discovery emits NUL-delimited immediate git directories', async () => {
+    const dir = path.join(os.tmpdir(), `hobgoblin-workspace-discovery-${Date.now()}-${process.pid}`)
+    tempDirs.push(dir)
+    const root = path.join(dir, "work space's")
+    const api = path.join(root, 'api')
+    const web = path.join(root, 'web')
+    const linked = path.join(root, 'linked')
+    const linkedTarget = path.join(dir, 'linked-target')
+    mkdirSync(path.join(api, '.git'), { recursive: true })
+    mkdirSync(web, { recursive: true })
+    writeFileSync(path.join(web, '.git'), 'gitdir: ../metadata\n')
+    mkdirSync(path.join(linkedTarget, '.git'), { recursive: true })
+    symlinkSync(linkedTarget, linked)
+    mkdirSync(path.join(root, 'docs'), { recursive: true })
+
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'listWorkspaceGitDirectories',
+      rootPath: root,
+    })
+    const result = await execa('sh', ['-c', invocation.script])
+
+    expect(result.stdout.split('\0').filter(Boolean).sort()).toEqual([api, linked, web].sort())
+  })
+
+  testPosix(
+    'workspace git directory validation accepts a repository symlink but rejects a nested directory',
+    async () => {
+      const dir = path.join(os.tmpdir(), `hobgoblin-workspace-validation-${Date.now()}-${process.pid}`)
+      tempDirs.push(dir)
+      const root = path.join(dir, 'workspace')
+      const target = path.join(dir, 'repository')
+      const linked = path.join(root, 'linked')
+      const nested = path.join(target, 'nested')
+      mkdirSync(root, { recursive: true })
+      mkdirSync(nested, { recursive: true })
+      await execa('git', ['init', target])
+      symlinkSync(target, linked)
+
+      const linkedValidation = buildRemoteCommandInvocation(TARGET, {
+        type: 'testWorkspaceGitDirectory',
+        path: linked,
+      })
+      await expect(execa('sh', ['-c', linkedValidation.script])).resolves.toMatchObject({ exitCode: 0 })
+
+      const nestedValidation = buildRemoteCommandInvocation(TARGET, {
+        type: 'testWorkspaceGitDirectory',
+        path: nested,
+      })
+      await expect(execa('sh', ['-c', nestedValidation.script])).rejects.toBeDefined()
+    },
+  )
+
   test('renders remote branch listing command', () => {
     expect(buildRemoteCommandInvocation(TARGET, { type: 'gitRemoteBranches', path: '/srv/repo' }).script).toContain(
       "for-each-ref '--format=%(refname:short)' refs/remotes/",

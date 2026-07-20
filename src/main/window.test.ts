@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => {
     setWindowOpenHandler: vi.fn(),
     windowOn: vi.fn(),
     loadURL: vi.fn(),
+    onBeforeSendHeaders: vi.fn(),
     ipcMainOn: vi.fn(),
     openHttpExternal: vi.fn(() => Promise.resolve(true)),
     getSettingsPrefs: vi.fn(),
@@ -33,6 +34,11 @@ const mocks = vi.hoisted(() => {
           setWindowOpenHandler: state.setWindowOpenHandler,
           isDestroyed: () => false,
           once: vi.fn(),
+          session: {
+            webRequest: {
+              onBeforeSendHeaders: state.onBeforeSendHeaders,
+            },
+          },
         },
         isDestroyed: () => false,
         isVisible: () => true,
@@ -146,6 +152,55 @@ describe('main window navigation boundaries', () => {
     willNavigate(event, 'https://example.com/')
 
     expect(event.preventDefault).toHaveBeenCalled()
+  })
+
+  test('attaches the internal capability only to this window main-frame embedded-server navigation', async () => {
+    const { getOrCreateMainWindow } = await import('#/main/window.ts')
+    await getOrCreateMainWindow()
+
+    expect(mocks.onBeforeSendHeaders).toHaveBeenCalledTimes(1)
+    const [filter, listener] = mocks.onBeforeSendHeaders.mock.calls[0] ?? []
+    expect(filter).toEqual({ urls: ['http://127.0.0.1:32100/*'] })
+    expect(listener).toBeTypeOf('function')
+
+    const matchingCallback = vi.fn()
+    listener(
+      {
+        webContentsId: 1,
+        resourceType: 'mainFrame',
+        requestHeaders: { Accept: 'text/html' },
+      },
+      matchingCallback,
+    )
+    expect(matchingCallback).toHaveBeenCalledWith({
+      requestHeaders: {
+        Accept: 'text/html',
+        'x-goblin-internal-secret': 'secret',
+      },
+    })
+
+    for (const details of [
+      { webContentsId: 2, resourceType: 'mainFrame' },
+      { webContentsId: 1, resourceType: 'script' },
+    ]) {
+      const callback = vi.fn()
+      listener({ ...details, requestHeaders: { Accept: '*/*' } }, callback)
+      expect(callback).toHaveBeenCalledWith({ requestHeaders: { Accept: '*/*' } })
+    }
+
+    const closed = mocks.windowOn.mock.calls.find(([eventName]) => eventName === 'closed')?.[1]
+    expect(closed).toBeTypeOf('function')
+    closed()
+    expect(mocks.onBeforeSendHeaders).toHaveBeenLastCalledWith(null)
+  })
+
+  test('does not attach the internal capability to renderer development-server navigation', async () => {
+    process.env.GOBLIN_WEB_DEV_URL = 'http://127.0.0.1:5173/'
+    const { getOrCreateMainWindow } = await import('#/main/window.ts')
+
+    await getOrCreateMainWindow()
+
+    expect(mocks.onBeforeSendHeaders).not.toHaveBeenCalled()
   })
 
   test('denies new windows and opens web links externally', async () => {

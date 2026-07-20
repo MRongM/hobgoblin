@@ -4,13 +4,11 @@ import { CopyButton } from '#/web/components/CopyButton.tsx'
 import { BranchStatus, branchStatusClipboardText } from '#/web/components/branch-detail/BranchStatus.tsx'
 import type { BranchDetailRepo } from '#/web/components/branch-detail/model.ts'
 import { getSelectedBranchDetailPresentation } from '#/web/components/branch-detail/model.ts'
-import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useT } from '#/web/stores/i18n.ts'
 
 interface ProjectStatusPanelProps {
   repoId: string
-  layout: RepoWorkspaceLayout
 }
 
 type ProjectStatusRepo = BranchDetailRepo & {
@@ -33,7 +31,6 @@ function projectStatusRepoEqual(a: ProjectStatusRepo | undefined, b: ProjectStat
       a.ui.selectedBranch === b.ui.selectedBranch &&
       a.ui.detailTab === b.ui.detailTab &&
       a.resources.status === b.resources.status &&
-      a.resources.pullRequests === b.resources.pullRequests &&
       a.operations.branchAction === b.operations.branchAction &&
       a.operations.fetch === b.operations.fetch &&
       a.operations.manualRefresh === b.operations.manualRefresh &&
@@ -46,7 +43,7 @@ function projectStatusRepoEqual(a: ProjectStatusRepo | undefined, b: ProjectStat
   )
 }
 
-export function ProjectStatusPanel({ repoId, layout }: ProjectStatusPanelProps) {
+export function ProjectStatusPanel({ repoId }: ProjectStatusPanelProps) {
   const t = useT()
   const repo = useStoreWithEqualityFn(
     useReposStore,
@@ -70,7 +67,6 @@ export function ProjectStatusPanel({ repoId, layout }: ProjectStatusPanelProps) 
             },
             resources: {
               status: repo.resources.status,
-              pullRequests: repo.resources.pullRequests,
             },
             operations: {
               branchAction: repo.operations.branchAction,
@@ -104,7 +100,7 @@ export function ProjectStatusPanel({ repoId, layout }: ProjectStatusPanelProps) 
     <section className="flex min-h-0 flex-1 flex-col bg-pane">
       <ProjectStatusToolbar copyAllValue={copyAllValue} />
       <ScrollPane>
-        <BranchStatus detail={detail} repoName={repo.name} repoId={repo.id} layout={layout} />
+        <BranchStatus detail={detail} repoName={repo.name} repoId={repo.id} />
       </ScrollPane>
     </section>
   )

@@ -22,22 +22,6 @@ const dndState = vi.hoisted(() => ({
 }))
 
 function defaultRpcResult(path: string, input?: unknown) {
-  if (path === 'githubCli.get' || path === 'githubCli.refresh') {
-    const requestedHosts = (input as { hosts?: string[] } | undefined)?.hosts
-    const hosts = (requestedHosts && requestedHosts.length > 0 ? requestedHosts : ['github.example.com']).reduce<
-      Record<string, unknown>
-    >((acc, host) => {
-      acc[host] = {
-        host,
-        authenticated: true,
-        activeLogin: 'tester',
-        logins: ['tester'],
-        tokenSource: 'keyring',
-      }
-      return acc
-    }, {})
-    return { available: true, version: 'gh version 2.93.0', detectedAt: 0, hosts }
-  }
   if (path === 'settings.get') {
     return {
       fetchIntervalSec: 60,
@@ -75,6 +59,7 @@ function defaultRpcResult(path: string, input?: unknown) {
         detailPaneSizes: [50, 50],
       },
       recentRepos: [],
+      webAccess: { enabled: false, username: '', passwordConfigured: false },
     }
   }
   if (path === 'externalApps.get' || path === 'externalApps.refresh') {
@@ -150,10 +135,7 @@ const invokeRpc = vi.fn(async ({ path, input }: { path: string; input?: unknown 
 const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
   const url = new URL(typeof input === 'string' ? input : input.toString())
   let result: unknown = null
-  if (url.pathname === '/api/settings/github-cli/refresh') result = defaultRpcResult('githubCli.refresh')
-  else if (url.pathname === '/api/settings/github-cli') {
-    result = defaultRpcResult('githubCli.get', { hosts: url.searchParams.getAll('host') })
-  } else if (url.pathname === '/api/settings') result = defaultRpcResult('settings.get')
+  if (url.pathname === '/api/settings') result = defaultRpcResult('settings.get')
   else if (url.pathname === '/api/settings/prefs') {
     const body = JSON.parse(String(init?.body ?? '{}')) as { settings?: Record<string, unknown> }
     result = {
@@ -164,6 +146,17 @@ const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
       },
     }
   } else if (url.pathname === '/api/settings/external-apps') result = defaultRpcResult('externalApps.get')
+  else if (url.pathname === '/api/settings/web-access') {
+    const body = JSON.parse(String(init?.body ?? '{}')) as { enabled?: boolean; username?: string }
+    result = {
+      ok: true,
+      webAccess: {
+        enabled: body.enabled === true,
+        username: body.username?.trim() ?? '',
+        passwordConfigured: true,
+      },
+    }
+  }
   return {
     ok: true,
     json: async () => result,
@@ -319,8 +312,6 @@ describe('SettingsSurface', () => {
           ...defaultRpcResult('settings.get'),
           terminalNotificationsEnabled: true,
         }
-      } else if (url.pathname === '/api/settings/github-cli') {
-        result = defaultRpcResult('githubCli.get', { hosts: url.searchParams.getAll('host') })
       } else if (url.pathname === '/api/settings/external-apps') {
         result = defaultRpcResult('externalApps.get')
       }
@@ -332,69 +323,6 @@ describe('SettingsSurface', () => {
     await render(<SettingsSurface page="notifications" onPageChange={() => {}} />)
 
     await waitForSwitchState('settings-terminal-notifications', 'true')
-  })
-
-  test('shows GitHub CLI availability and version', async () => {
-    await render(<SettingsSurface page="github" onPageChange={() => {}} />)
-
-    await waitForText('settings.github.status-available')
-    expect(document.body.textContent).toContain('settings.github.status-available')
-    expect(document.body.textContent).toContain('gh version 2.93.0')
-    expect(document.body.textContent).toContain('github.example.com')
-    expect(document.body.textContent).toContain('settings.github.auth-signed-in')
-  })
-
-  test('refreshes GitHub CLI detection from settings', async () => {
-    await render(<SettingsSurface page="github" onPageChange={() => {}} />)
-
-    await act(async () => {
-      buttonByText('settings.github.refresh').click()
-      await Promise.resolve()
-    })
-
-    expect(
-      fetchMock.mock.calls.some((call) => {
-        const [url, options] = call as unknown as [unknown, RequestInit | undefined]
-        if (new URL(String(url)).pathname !== '/api/settings/github-cli/refresh') return false
-        return (
-          options &&
-          typeof options === 'object' &&
-          'method' in options &&
-          'headers' in options &&
-          (options as RequestInit).method === 'POST' &&
-          expect
-            .objectContaining({
-              'content-type': 'application/json',
-              'x-goblin-internal-secret': 'secret',
-            })
-            .asymmetricMatch((options as RequestInit).headers)
-        )
-      }),
-    ).toBe(true)
-  })
-
-  test('shows unavailable GitHub CLI status when gh is missing', async () => {
-    fetchMock.mockImplementation(async (input: string | URL, init?: RequestInit) => {
-      const url = new URL(typeof input === 'string' ? input : input.toString())
-      let result: unknown = null
-      if (url.pathname === '/api/settings/github-cli/refresh') {
-        result = { available: false, version: null, detectedAt: 0, hosts: {} }
-      } else if (url.pathname === '/api/settings/github-cli') {
-        result = { available: false, version: null, detectedAt: 0, hosts: {} }
-      } else if (url.pathname === '/api/settings') {
-        result = defaultRpcResult('settings.get')
-      } else if (url.pathname === '/api/settings/external-apps') {
-        result = defaultRpcResult(init?.method === 'POST' ? 'externalApps.refresh' : 'externalApps.get')
-      }
-      return {
-        ok: true,
-        json: async () => result,
-      }
-    })
-    await render(<SettingsSurface page="github" onPageChange={() => {}} />)
-
-    expect(document.body.textContent).toContain('settings.github.status-unavailable')
-    expect(document.body.textContent).toContain('settings.github.hint-missing')
   })
 
   test('renders the SSH remotes settings page', async () => {
@@ -412,6 +340,46 @@ describe('SettingsSurface', () => {
     expect(document.body.textContent).toContain('settings.proxy.git-proxy')
     expect(document.body.textContent).toContain('settings.proxy.git-timeout')
     expect(document.body.textContent).toContain('settings.proxy.ssh-note')
+  })
+
+  test('configures protected Web access without echoing password fields', async () => {
+    await render(<SettingsSurface page="security" onPageChange={() => {}} />)
+
+    const usernameInput = document.getElementById('settings-web-access-username')
+    const passwordInput = document.getElementById('settings-web-access-password')
+    const confirmInput = document.getElementById('settings-web-access-confirm-password')
+    if (!(usernameInput instanceof HTMLInputElement)) throw new Error('Missing Web access username input')
+    if (!(passwordInput instanceof HTMLInputElement)) throw new Error('Missing Web access password input')
+    if (!(confirmInput instanceof HTMLInputElement)) throw new Error('Missing Web access password confirmation input')
+
+    expect(passwordInput.type).toBe('password')
+    expect(passwordInput.value).toBe('')
+    expect(confirmInput.value).toBe('')
+
+    await act(async () => {
+      switchById('settings-web-access-enabled').click()
+      setInputValue(usernameInput, ' operator ')
+      setInputValue(passwordInput, 'test-password')
+      setInputValue(confirmInput, 'test-password')
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText('settings.security.save').click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const write = fetchMock.mock.calls.find((call) => {
+      const [url] = call as unknown as [unknown, RequestInit | undefined]
+      return new URL(String(url)).pathname === '/api/settings/web-access'
+    })
+    expect(write).toBeDefined()
+    const [, options] = write as unknown as [unknown, RequestInit]
+    expect(JSON.parse(String(options.body))).toEqual({
+      enabled: true,
+      username: 'operator',
+      password: 'test-password',
+    })
   })
 
   test('edits git network proxy settings from proxy settings', async () => {
@@ -622,7 +590,9 @@ describe('SettingsSurface', () => {
     await waitForText('settings.general.open-from-terminal-title')
 
     expect(
-      fetchMock.mock.calls.some((call) => new URL(String((call as unknown as [unknown])[0])).pathname.startsWith('/api/repo/worktree-bootstrap')),
+      fetchMock.mock.calls.some((call) =>
+        new URL(String((call as unknown as [unknown])[0])).pathname.startsWith('/api/repo/worktree-bootstrap'),
+      ),
     ).toBe(false)
     expect(document.body.textContent).not.toContain('settings.worktree-bootstrap-config.label')
   })

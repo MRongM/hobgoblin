@@ -8,7 +8,7 @@ export type SelectedBranchDetailPresentation = ReturnType<typeof getSelectedBran
 export interface BranchDetailRepo extends BranchActionRepo {
   data: BranchActionRepo['data'] & Pick<RepoState['data'], 'branches' | 'statusLoaded'>
   ui: Pick<RepoState['ui'], 'selectedBranch' | 'detailTab'>
-  resources: Pick<RepoState['resources'], 'status' | 'pullRequests'>
+  resources: Pick<RepoState['resources'], 'status'>
   remote: BranchActionRepo['remote'] & Pick<RepoState['remote'], 'target'>
 }
 
@@ -29,7 +29,6 @@ export function getSelectedBranchDetailPresentation(repo: BranchDetailRepo) {
     ...detail,
     loading: {
       status: statusLoading,
-      pullRequests: resourceBusy(repo.resources.pullRequests),
     },
     errors: {
       status: repo.resources.status.error,

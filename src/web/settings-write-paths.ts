@@ -9,12 +9,13 @@ import type {
   TerminalCustomButtonSize,
   TerminalAppState,
   TerminalPref,
+  WebAccessSettingsSnapshot,
+  WebAccessSettingsUpdateInput,
 } from '#/shared/rpc.ts'
 import {
   addRecentRepo,
   clearRecentRepos,
   refreshExternalAppsSnapshot,
-  refreshGitHubCliState,
   saveSession,
   setFileTreeClipboardMaxBytesMb,
   setFontFamily,
@@ -44,13 +45,13 @@ import {
   setToolbarHeightPx,
   setTopbarHeightPx,
   setToggleDetailOnActionBarBlankClick,
+  setWebAccessSettings,
 } from '#/web/settings-client.ts'
 import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
 import {
   externalAppsQueryKey,
   lanInfoQueryKey,
   updateExternalAppsCache,
-  updateGitHubCliCache,
   updateRestorableSessionStateCache,
   updateRuntimeRecentReposStateCache,
   updateRuntimeSettingsSnapshotCache,
@@ -76,6 +77,14 @@ export async function setFetchIntervalPreference(sec: number): Promise<number> {
   const fetchIntervalSec = await setSettingsFetchInterval(sec)
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, fetchIntervalSec }))
   return fetchIntervalSec
+}
+
+export async function setWebAccessSettingsPreference(
+  input: WebAccessSettingsUpdateInput,
+): Promise<WebAccessSettingsSnapshot> {
+  const webAccess = await setWebAccessSettings(input)
+  updateSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, webAccess }))
+  return webAccess
 }
 
 export async function setTerminalNotificationsEnabledPreference(enabled: boolean): Promise<void> {
@@ -240,11 +249,6 @@ export async function setTerminalCustomButtonsPreference(
 export async function refreshExternalAppsDetection(): Promise<void> {
   const state = await refreshExternalAppsSnapshot()
   mainWindowQueryClient.setQueryData(externalAppsQueryKey(), state)
-}
-
-export async function refreshGitHubCliDetection(hosts?: string[]): Promise<void> {
-  const state = await refreshGitHubCliState(hosts)
-  updateGitHubCliCache(mainWindowQueryClient, hosts, state)
 }
 
 export async function setLanEnabledPreference(enabled: boolean): Promise<void> {

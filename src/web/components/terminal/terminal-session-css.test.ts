@@ -43,4 +43,10 @@ describe('terminal session CSS layout contract', () => {
       /\.goblin-managed-terminal-host \.xterm-scrollable-element > \.scrollbar\.vertical\s*\{[^}]*margin-left:\s*14px;/,
     )
   })
+
+  test('reserves vertical touch gestures for mobile read-only terminal scrolling', () => {
+    expect(css).toMatch(
+      /\.goblin-terminal-slot__host--touch-scroll\s*\{[^}]*touch-action:\s*pan-x pinch-zoom;/,
+    )
+  })
 })

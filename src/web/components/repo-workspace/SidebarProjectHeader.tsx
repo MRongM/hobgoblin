@@ -8,18 +8,26 @@
 //     the existing detail focus mode
 
 import { useId, useState } from 'react'
-import { ChevronDown, Download, FolderGit2, FolderOpen, PanelLeftClose, Plus, Server, Trash2, X } from 'lucide-react'
+import {
+  ChevronDown,
+  Download,
+  Folder,
+  FolderGit2,
+  FolderOpen,
+  PanelLeftClose,
+  PanelRightOpen,
+  Plus,
+  Server,
+  Trash2,
+} from 'lucide-react'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import { useShellOverlayActions } from '#/web/shell-overlay-actions.tsx'
 import { openRepoFromDialog } from '#/web/lib/open-repo-dialog.ts'
 import { useRuntimeChromeSettings } from '#/web/runtime-settings-chrome.ts'
-import {
-  ProjectTerminalStatus,
-  projectLocation,
-  useProjectSummaries,
-} from '#/web/components/repo-workspace/project-switcher-model.tsx'
+import { ProjectTerminalStatus, useProjectSummaries } from '#/web/components/repo-workspace/project-switcher-model.tsx'
+import { SidebarProjectList } from '#/web/components/repo-workspace/SidebarProjectList.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import {
@@ -30,25 +38,38 @@ import {
   DropdownMenuTrigger,
 } from '#/web/components/ui/dropdown-menu.tsx'
 import { cn } from '#/web/lib/cn.ts'
+import { workspaceRootIdForRepo } from '#/web/stores/repos/workspace-projects.ts'
+import { WorkspaceRepositorySwitcher } from '#/web/components/repo-workspace/WorkspaceRepositorySwitcher.tsx'
+import { AsyncButton } from '#/web/components/AsyncButton.tsx'
+import { Tip } from '#/web/components/Tip.tsx'
+import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
+import { useProjectExternalOpenActions } from '#/web/hooks/useProjectExternalOpenActions.ts'
 
 interface Props {
   repoId: string
+  onShowCompactDetail?: () => void
 }
 
-export function SidebarProjectHeader({ repoId }: Props) {
+export function SidebarProjectHeader({ repoId, onShowCompactDetail }: Props) {
   const t = useT()
   const listId = useId()
-  const [listExpanded, setListExpanded] = useState(false)
+  const listExpanded = useReposStore((state) => state.projectListExpanded)
+  const toggleProjectListExpanded = useReposStore((state) => state.toggleProjectListExpanded)
   const [confirmClearCacheOpen, setConfirmClearCacheOpen] = useState(false)
   const navigation = useMainWindowNavigation()
   const shellActions = useShellOverlayActions()
   const ensureWorkspaceOpen = useReposStore((s) => s.ensureWorkspaceOpen)
+  const reorderRepos = useReposStore((s) => s.reorderRepos)
   const toggleDetailFocusMode = useReposStore((s) => s.toggleDetailFocusMode)
   const { topbarHeightPx } = useRuntimeChromeSettings()
-  const activeName = useReposStore((s) => s.repos[repoId]?.name ?? '')
+  const activeProjectId = useReposStore((s) => workspaceRootIdForRepo(s, repoId) ?? repoId)
+  const activeName = useReposStore((s) => s.repos[activeProjectId]?.name ?? '')
   const projects = useProjectSummaries()
+  const projectExternalActions = useProjectExternalOpenActions(activeProjectId)
 
-  const activeProject = projects.find((project) => project.id === repoId) ?? null
+  const activeProject = projects.find((project) => project.id === activeProjectId) ?? null
+  const activeProjectKind = activeProject?.isGitRepo === false ? 'plain' : 'git'
+  const ActiveProjectIcon = activeProjectKind === 'plain' ? Folder : FolderGit2
 
   async function handleOpenLocal() {
     if (!shellActions) return
@@ -90,17 +111,16 @@ export function SidebarProjectHeader({ repoId }: Props) {
           variant="ghost"
           size="sm"
           className="min-w-0 gap-1.5 px-1.5"
-          onClick={() => setListExpanded((expanded) => !expanded)}
+          onClick={toggleProjectListExpanded}
+          data-project-kind={activeProjectKind}
           aria-expanded={listExpanded}
           aria-controls={listExpanded ? listId : undefined}
           aria-label={t('repo-tabs.repos')}
           title={activeName}
         >
-          <FolderGit2 className="size-4 shrink-0" aria-hidden="true" />
+          <ActiveProjectIcon className="size-4 shrink-0" aria-hidden="true" />
           <span className="min-w-0 truncate text-xs font-semibold uppercase tracking-wide">{activeName}</span>
-          {activeProject && (
-            <ProjectTerminalStatus repoId={activeProject.id} worktreePaths={activeProject.worktreePaths} />
-          )}
+          {activeProject && <ProjectTerminalStatus terminalWorktreeKeys={activeProject.terminalWorktreeKeys} />}
           <ChevronDown
             className={cn(
               'size-3.5 shrink-0 text-topbar-muted-foreground transition-transform',
@@ -109,7 +129,44 @@ export function SidebarProjectHeader({ repoId }: Props) {
             aria-hidden="true"
           />
         </Button>
+        {onShowCompactDetail && <WorkspaceRepositorySwitcher repoId={repoId} compact />}
         <div className="min-w-0 flex-1" aria-hidden="true" />
+        {!listExpanded && projectExternalActions.visible && (
+          <div data-testid="project-header-external-actions" className="flex shrink-0 items-center gap-0.5">
+            <Tip label={t('worktrees.open-in-editor-label')}>
+              <span className="inline-flex">
+                <AsyncButton
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  data-testid="project-editor-btn"
+                  loading={projectExternalActions.editor.busy}
+                  disabled={projectExternalActions.editor.disabled}
+                  aria-label={`${t('worktrees.open-in-editor-label')} ${activeName}`}
+                  onClick={() => projectExternalActions.editor.onSelect()}
+                >
+                  {() => <EditorAppIcon pref={projectExternalActions.editor.iconPref} />}
+                </AsyncButton>
+              </span>
+            </Tip>
+            <Tip label={t('terminal.external')}>
+              <span className="inline-flex">
+                <AsyncButton
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  data-testid="project-external-terminal-btn"
+                  loading={projectExternalActions.externalTerminal.busy}
+                  disabled={projectExternalActions.externalTerminal.disabled}
+                  aria-label={`${t('terminal.external')} ${activeName}`}
+                  onClick={() => projectExternalActions.externalTerminal.onSelect()}
+                >
+                  {() => <TerminalAppIcon pref={projectExternalActions.externalTerminal.iconPref} />}
+                </AsyncButton>
+              </span>
+            </Tip>
+          </div>
+        )}
         {shellActions && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -148,62 +205,26 @@ export function SidebarProjectHeader({ repoId }: Props) {
           type="button"
           variant="ghost"
           size="icon-sm"
-          onClick={toggleDetailFocusMode}
-          aria-label={t('branch-detail.focus')}
-          title={t('branch-detail.focus-title')}
+          onClick={onShowCompactDetail ?? toggleDetailFocusMode}
+          aria-label={t(onShowCompactDetail ? 'mobile.show-terminal' : 'branch-detail.focus')}
+          title={t(onShowCompactDetail ? 'mobile.show-terminal' : 'branch-detail.focus-title')}
         >
-          <PanelLeftClose />
+          {onShowCompactDetail ? <PanelRightOpen /> : <PanelLeftClose />}
         </Button>
       </div>
       {listExpanded && (
-        <div id={listId} className="border-t border-separator/70">
+        <div className="border-t border-separator/70">
           <div className="flex h-7 shrink-0 items-center px-4 pt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-topbar-muted-foreground">
             {t('repo-tabs.repos')}
           </div>
-          <ul className="max-h-72 overflow-y-auto px-1.5 pb-2">
-            {projects.map((project) => {
-              const active = project.id === repoId
-              const location = projectLocation(project.id)
-              return (
-                <li key={project.id} className="group relative">
-                  <button
-                    type="button"
-                    onClick={() => navigation.activateRepo(project.id)}
-                    aria-current={active ? 'true' : undefined}
-                    title={project.unavailable ? t('repo-unavailable.title') : location}
-                    className={cn(
-                      'flex w-full min-w-0 items-center gap-2.5 rounded-[var(--goblin-brand-radius-md,var(--radius-md))] py-2 pl-2.5 pr-9 text-left transition-colors duration-100',
-                      active ? 'bg-selected text-selected-foreground' : 'text-foreground hover:bg-tab-hover',
-                      project.unavailable && 'opacity-60',
-                    )}
-                  >
-                    <FolderGit2
-                      className={cn(
-                        'size-4 shrink-0',
-                        active ? 'text-selected-muted-foreground' : 'text-muted-foreground',
-                      )}
-                      aria-hidden="true"
-                    />
-                    <span className="flex min-w-0 flex-1 items-center gap-2">
-                      <span className="min-w-0 truncate text-[13px] font-medium leading-none">{project.name}</span>
-                      <ProjectTerminalStatus repoId={project.id} worktreePaths={project.worktreePaths} />
-                    </span>
-                  </button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
-                    aria-label={t('repo-tabs.close-named', { name: project.name })}
-                    title={t('repo-tabs.close-named', { name: project.name })}
-                    onClick={() => navigation.closeRepo(project.id)}
-                  >
-                    <X />
-                  </Button>
-                </li>
-              )
-            })}
-          </ul>
+          <SidebarProjectList
+            id={listId}
+            projects={projects}
+            activeRepoId={activeProjectId}
+            onActivate={navigation.activateRepo}
+            onClose={navigation.closeRepo}
+            onReorder={reorderRepos}
+          />
         </div>
       )}
       <ConfirmDialog

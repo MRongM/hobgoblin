@@ -24,7 +24,7 @@ import type {
 import type { WorkspaceDetailPaneSizes } from '#/shared/workspace-layout.ts'
 import type { RepoState } from '#/web/stores/repos/types.ts'
 import { detailTabForWorktree } from '#/web/lib/detail-tabs.ts'
-import { runRepoRefreshIntent } from '#/web/stores/repos/refresh-coordinator.ts'
+import { activeProjectId, projectActivationTarget } from '#/web/stores/repos/workspace-projects.ts'
 function branchHasWorktree(repo: RepoState, branchName: string | null): boolean {
   return !!branchName && repo.data.branches.some((branch) => branch.name === branchName && !!branch.worktree?.path)
 }
@@ -37,6 +37,10 @@ function detailTabForSelection(repo: RepoState, tab: DetailTab, selectedBranch =
 type RestorableWorkspaceSelectionActions = Pick<
   ReposStore,
   | 'setActive'
+  | 'activateProject'
+  | 'activateWorkspaceRepository'
+  | 'setProjectListExpanded'
+  | 'toggleProjectListExpanded'
   | 'reorderRepos'
   | 'cycleActive'
   | 'setDetailCollapsed'
@@ -74,12 +78,51 @@ function createRestorableWorkspaceSelectionActions(
       set((s) => {
         const repo = s.repos[id]
         if (!repo) return s
-        if (s.activeId === id && s.workspaceLayout === repo.ui.workspaceLayout) return s
+        const workspaceRootId = repo.workspaceRootId ?? (s.workspaceProjects[id] ? id : null)
+        const workspaceSelection = repo.workspaceRootId ? id : null
+        if (
+          s.activeId === id &&
+          s.workspaceLayout === repo.ui.workspaceLayout &&
+          (!workspaceRootId || s.workspaceActiveRepoByRoot[workspaceRootId] === workspaceSelection)
+        ) {
+          return s
+        }
         return {
           activeId: id,
           workspaceLayout: repo.ui.workspaceLayout,
+          ...(workspaceRootId
+            ? {
+                workspaceActiveRepoByRoot: {
+                  ...s.workspaceActiveRepoByRoot,
+                  [workspaceRootId]: workspaceSelection,
+                },
+              }
+            : {}),
         }
       })
+    },
+
+    activateProject(id: string) {
+      const state = get()
+      get().setActive(projectActivationTarget(state, id))
+    },
+
+    activateWorkspaceRepository(rootId: string, repoId: string | null) {
+      const state = get()
+      const workspace = state.workspaceProjects[rootId]
+      if (!workspace) return
+      if (repoId !== null && (!workspace.repositoryIds.includes(repoId) || !state.repos[repoId])) return
+      get().setActive(repoId ?? rootId)
+    },
+
+    setProjectListExpanded(expanded: boolean) {
+      set((state) =>
+        state.projectListExpanded === expanded ? state : { projectListExpanded: expanded },
+      )
+    },
+
+    toggleProjectListExpanded() {
+      set((state) => ({ projectListExpanded: !state.projectListExpanded }))
     },
 
     reorderRepos(fromId: string, toId: string) {
@@ -93,12 +136,14 @@ function createRestorableWorkspaceSelectionActions(
     },
 
     cycleActive(direction: 1 | -1) {
-      const { order, activeId } = get()
-      if (order.length === 0) return
-      const idx = activeId ? order.indexOf(activeId) : -1
-      const nextIdx = idx === -1 ? 0 : (idx + direction + order.length) % order.length
-      const next = order[nextIdx]
-      if (next && next !== activeId) set({ activeId: next })
+      const state = get()
+      if (state.order.length === 0) return
+      const projectId = activeProjectId(state)
+      const idx = projectId ? state.order.indexOf(projectId) : -1
+      const nextIdx = idx === -1 ? 0 : (idx + direction + state.order.length) % state.order.length
+      const nextProjectId = state.order[nextIdx]
+      if (!nextProjectId || nextProjectId === projectId) return
+      get().setActive(projectActivationTarget(state, nextProjectId))
     },
 
     setDetailCollapsed(collapsed: boolean) {
@@ -404,14 +449,6 @@ function createRuntimeCoherentSelectionActions(
       })
       const repo = get().repos[id]
       if (changed && token !== undefined && repo) persistRestorableRepoSnapshot(set, repo, token)
-      if (changed && token !== undefined && repo) {
-        void runRepoRefreshIntent(get, {
-          kind: 'visible-pull-request-changed',
-          id,
-          token,
-          branch: repo.ui.detailTab === 'status' ? repo.ui.selectedBranch : null,
-        })
-      }
     },
 
     dismissExitedTerminalDetail(id: string, worktreePath: string, options?: { affectVisibleWorkspace?: boolean }) {
@@ -441,14 +478,6 @@ function createRuntimeCoherentSelectionActions(
       })
       const repo = get().repos[id]
       if (changed && token !== undefined && repo) persistRestorableRepoSnapshot(set, repo, token)
-      if (changed && token !== undefined && repo) {
-        void runRepoRefreshIntent(get, {
-          kind: 'visible-pull-request-changed',
-          id,
-          token,
-          branch: repo.ui.selectedBranch,
-        })
-      }
     },
 
     selectBranch(id: string, branch: string) {
@@ -468,14 +497,6 @@ function createRuntimeCoherentSelectionActions(
       })
       const repo = get().repos[id]
       if (changed && token !== undefined && repo) persistRestorableRepoSnapshot(set, repo, token)
-      if (changed && token !== undefined && repo) {
-        void runRepoRefreshIntent(get, {
-          kind: 'visible-pull-request-changed',
-          id,
-          token,
-          branch,
-        })
-      }
     },
   }
 }

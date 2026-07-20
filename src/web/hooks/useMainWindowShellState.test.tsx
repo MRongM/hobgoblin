@@ -32,6 +32,9 @@ function Harness() {
       <button id="show-help" type="button" onClick={() => shell.showHelp()}>
         help
       </button>
+      <button id="toggle-settings" type="button" onClick={() => shell.toggleSettings()}>
+        settings
+      </button>
       <button
         id="show-terminal"
         type="button"
@@ -94,6 +97,20 @@ describe('useMainWindowShellState', () => {
     expect(text('#route-settings')).toBe('shortcuts')
     expect(text('#settings-open')).toBe('yes')
     expect(text('#shortcut-gate')).toBe('yes')
+  })
+
+  test('toggles the settings route from the ambient settings action', async () => {
+    await render(<Harness />)
+
+    await click('#toggle-settings')
+
+    expect(text('#route-settings')).toBe('general')
+    expect(text('#settings-open')).toBe('yes')
+
+    await click('#toggle-settings')
+
+    expect(text('#route-settings')).toBe('none')
+    expect(text('#settings-open')).toBe('no')
   })
 
   test('applies branch-detail navigation directly to the store', async () => {

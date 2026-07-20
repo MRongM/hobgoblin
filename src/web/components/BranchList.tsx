@@ -39,6 +39,7 @@ import { detailPanelStoreActionsEqual, detailPanelStoreActionsFromStore } from '
 interface Props {
   repoId: string
   showActions?: boolean
+  onBranchSelected?: () => void
 }
 
 type OpenActionMenu = { repoId: string; branch: string }
@@ -80,7 +81,7 @@ function branchListRepoEqual(a: BranchListRepo | undefined, b: BranchListRepo | 
   )
 }
 
-export function BranchList({ repoId, showActions = true }: Props) {
+export function BranchList({ repoId, showActions = true, onBranchSelected }: Props) {
   const t = useT()
   const { setDetailCollapsed } = useStoreWithEqualityFn(
     useReposStore,
@@ -95,8 +96,9 @@ export function BranchList({ repoId, showActions = true }: Props) {
   const handleSelectBranch = useCallback(
     (branch: string) => {
       navigation.selectRepoBranch(repoId, branch)
+      onBranchSelected?.()
     },
-    [navigation, repoId],
+    [navigation, onBranchSelected, repoId],
   )
   const handleOpenBranchStatus = useCallback(
     (branch: string) => {
@@ -108,41 +110,9 @@ export function BranchList({ repoId, showActions = true }: Props) {
   )
   const repo = useStoreWithEqualityFn(
     useReposStore,
-    (s) => {
-      const repo = s.repos[repoId]
-      return repo
-        ? {
-            id: repo.id,
-            instanceToken: repo.instanceToken,
-            data: {
-              branches: repo.data.branches,
-              currentBranch: repo.data.currentBranch,
-              status: repo.data.status,
-              worktreesByPath: repo.data.worktreesByPath,
-            },
-            ui: {
-              selectedBranch: repo.ui.selectedBranch,
-              worktreePathOrder: repo.ui.worktreePathOrder,
-            },
-            operations: {
-              branchAction: repo.operations.branchAction,
-              fetch: repo.operations.fetch,
-              manualRefresh: repo.operations.manualRefresh,
-            },
-            remote: {
-              target: repo.remote.target,
-              hasRemotes: repo.remote.hasRemotes,
-              hasBrowserRemote: repo.remote.hasBrowserRemote,
-              hasGitHubRemote: repo.remote.hasGitHubRemote,
-              browserRemoteProvider: repo.remote.browserRemoteProvider,
-              remoteProviders: repo.remote.remoteProviders,
-            },
-          }
-        : undefined
-    },
+    (s) => branchListRepoFromState(s.repos[repoId]),
     branchListRepoEqual,
   )
-
   // Keep the selected row in view as the user navigates with j/k.
   useEffect(() => {
     const selectedEl = selectedRef.current
@@ -157,10 +127,7 @@ export function BranchList({ repoId, showActions = true }: Props) {
     viewMode: 'worktrees',
     worktreePathOrder: repo.ui.worktreePathOrder,
   })
-  const dragEnabled = true
-  const sortableWorktreePaths = dragEnabled
-    ? branches.map((branch) => branch.worktree?.path).filter((path): path is string => !!path)
-    : []
+  const sortableWorktreePaths = branches.map((branch) => branch.worktree?.path).filter((path): path is string => !!path)
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
     if (!over || active.id === over.id) return
@@ -201,7 +168,7 @@ export function BranchList({ repoId, showActions = true }: Props) {
               : current,
         ),
     }
-    return dragEnabled && branch.worktree?.path ? (
+    return branch.worktree?.path ? (
       <SortableBranchRow {...rowProps} key={branch.name} id={branch.worktree.path} />
     ) : (
       <BranchRow {...rowProps} key={branch.name} />
@@ -210,20 +177,16 @@ export function BranchList({ repoId, showActions = true }: Props) {
 
   const list = (
     <ul className="pb-1.5">
-      {dragEnabled ? (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          modifiers={[restrictToVerticalBranchList]}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext items={sortableWorktreePaths} strategy={verticalListSortingStrategy}>
-            {rows}
-          </SortableContext>
-        </DndContext>
-      ) : (
-        rows
-      )}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        modifiers={[restrictToVerticalBranchList]}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext items={sortableWorktreePaths} strategy={verticalListSortingStrategy}>
+          {rows}
+        </SortableContext>
+      </DndContext>
       {detachedWorktrees.length > 0 && (
         <>
           <li className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
@@ -243,6 +206,39 @@ export function BranchList({ repoId, showActions = true }: Props) {
   )
 
   return <ScrollArea className="min-h-0 flex-1 bg-sidebar">{list}</ScrollArea>
+}
+
+function branchListRepoFromState(
+  repo: ReturnType<typeof useReposStore.getState>['repos'][string] | undefined,
+): BranchListRepo | undefined {
+  if (!repo) return undefined
+  return {
+    id: repo.id,
+    instanceToken: repo.instanceToken,
+    data: {
+      branches: repo.data.branches,
+      currentBranch: repo.data.currentBranch,
+      status: repo.data.status,
+      worktreesByPath: repo.data.worktreesByPath,
+    },
+    ui: {
+      selectedBranch: repo.ui.selectedBranch,
+      worktreePathOrder: repo.ui.worktreePathOrder,
+    },
+    operations: {
+      branchAction: repo.operations.branchAction,
+      fetch: repo.operations.fetch,
+      manualRefresh: repo.operations.manualRefresh,
+    },
+    remote: {
+      target: repo.remote.target,
+      hasRemotes: repo.remote.hasRemotes,
+      hasBrowserRemote: repo.remote.hasBrowserRemote,
+      hasGitHubRemote: repo.remote.hasGitHubRemote,
+      browserRemoteProvider: repo.remote.browserRemoteProvider,
+      remoteProviders: repo.remote.remoteProviders,
+    },
+  }
 }
 
 function SortableBranchRow(props: ComponentProps<typeof BranchRow> & { id: string }) {
@@ -282,15 +278,8 @@ function DetachedWorktreeRow({
   const dirty = worktree.isDirty || (worktree.changeCount ?? 0) > 0
   const dirtyChangeCount = dirty && (worktree.changeCount ?? 0) > 0 ? (worktree.changeCount ?? null) : null
   const dirtyLabel =
-    dirtyChangeCount === null
-      ? t('branches.dirty')
-      : t('branch-status.worktree-dirty', { n: dirtyChangeCount })
-  const title = [
-    t('branches.detached-worktree'),
-    worktree.head ?? null,
-    displayPath,
-    dirty ? dirtyLabel : null,
-  ]
+    dirtyChangeCount === null ? t('branches.dirty') : t('branch-status.worktree-dirty', { n: dirtyChangeCount })
+  const title = [t('branches.detached-worktree'), worktree.head ?? null, displayPath, dirty ? dirtyLabel : null]
     .filter(Boolean)
     .join(', ')
 
@@ -313,8 +302,7 @@ function DetachedWorktreeRow({
               title={dirtyLabel}
               className={cn(
                 'h-4 px-1',
-                dirtyChangeCount !== null &&
-                  'gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums',
+                dirtyChangeCount !== null && 'gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums',
               )}
             >
               <GitCompareArrows size={10} aria-hidden="true" />

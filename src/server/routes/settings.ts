@@ -1,6 +1,5 @@
 import { Hono } from 'hono'
 import { getServerExternalAppsSnapshot } from '#/server/modules/external-apps.ts'
-import { getServerGitHubCliState } from '#/server/modules/github-cli.ts'
 import { getServerI18nSnapshot } from '#/server/modules/i18n.ts'
 import { getSettingsSnapshot } from '#/server/modules/settings-snapshot.ts'
 import { getServerSettingsPrefs } from '#/server/modules/settings-source.ts'
@@ -13,25 +12,31 @@ import {
   applyServerRepoThemeWrite,
   applyServerSessionWrite,
   applyServerSettingsPrefsWrite,
+  applyServerWebAccessSettingsWrite,
 } from '#/server/modules/settings-write-paths.ts'
 import { getLanUrls, isLanAddress } from '#/shared/lan-addresses.ts'
 import type { LanInfo } from '#/shared/rpc.ts'
 
-export function createSettingsRoutes(settingsState: ServerSettingsState) {
+const WEB_ACCESS_ERROR_CODES = new Set([
+  'username-required',
+  'username-invalid',
+  'password-required',
+  'password-too-short',
+  'password-too-long',
+])
+
+function readWebAccessErrorCode(error: unknown): string | null {
+  const code = (error as { code?: unknown } | null)?.code
+  return typeof code === 'string' && WEB_ACCESS_ERROR_CODES.has(code) ? code : null
+}
+
+export function createSettingsRoutes(
+  settingsState: ServerSettingsState,
+  options: { revokeAllWebSessions?: () => void } = {},
+) {
   const app = new Hono()
   app.get('/', async (c) => c.json(await getSettingsSnapshot(settingsState)))
   app.get('/i18n', async (c) => c.json(await getServerI18nSnapshot(c.req.header('accept-language'))))
-  app.get('/github-cli', async (c) => {
-    const hosts = (c.req.queries('host') ?? []).filter((host): host is string => typeof host === 'string' && host.length > 0)
-    return c.json(await getServerGitHubCliState(c.req.raw.signal, hosts))
-  })
-  app.post('/github-cli/refresh', async (c) => {
-    const body = await c.req.json().catch(() => null)
-    const hosts = Array.isArray(body?.hosts)
-      ? body.hosts.filter((host: unknown): host is string => typeof host === 'string' && host.length > 0)
-      : undefined
-    return c.json(await getServerGitHubCliState(c.req.raw.signal, hosts, { force: true }))
-  })
   app.get('/external-apps', async (c) => c.json(await getServerExternalAppsSnapshot(c.req.raw.signal)))
   app.post('/external-apps/refresh', async (c) => c.json(await getServerExternalAppsSnapshot(c.req.raw.signal)))
   app.get('/prefs', async (c) => c.json(await getServerSettingsPrefs()))
@@ -53,6 +58,20 @@ export function createSettingsRoutes(settingsState: ServerSettingsState) {
         signal: c.req.raw.signal,
       }),
     )
+  })
+  app.post('/web-access', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    try {
+      return c.json(
+        await applyServerWebAccessSettingsWrite(body, {
+          revokeAllWebSessions: options.revokeAllWebSessions ?? (() => undefined),
+        }),
+      )
+    } catch (error) {
+      const code = readWebAccessErrorCode(error)
+      if (!code) throw error
+      return c.json({ ok: false as const, error: { code } }, 400)
+    }
   })
   app.post('/global-shortcut-state', async (c) => {
     const body = await c.req.json().catch(() => null)

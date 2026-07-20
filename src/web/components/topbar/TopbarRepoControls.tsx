@@ -21,19 +21,24 @@ import { repoWorkspaceBehavior } from '#/web/lib/workspace-layout.ts'
 
 interface Props {
   repoId: string
+  focusPresentation?: boolean
+  tone?: 'topbar' | 'toolbar'
   /** Which trigger edge the focus-mode dropdowns align to; 'start' when the
    *  controls sit at the window's left edge (detail toolbar chrome). */
   menuAlign?: 'start' | 'end'
 }
 
-export function TopbarRepoControls({ repoId, menuAlign = 'end' }: Props) {
+export function TopbarRepoControls({ repoId, focusPresentation, tone = 'topbar', menuAlign = 'end' }: Props) {
   const exists = useReposStore((s) => !!s.repos[repoId])
   const isGitRepo = useReposStore((s) => s.repos[repoId]?.isGitRepo ?? true)
   const workspaceLayout = useReposStore((s) => s.repos[repoId]?.ui.workspaceLayout ?? s.workspaceLayout)
-  const focusMode = useReposStore((s) => {
+  const storeFocusMode = useReposStore((s) => {
     const behavior = repoWorkspaceBehavior(workspaceLayout, s.detailCollapsed, s.detailFocusMode)
     return behavior.mode === 'focus'
   })
+  const focusMode = focusPresentation ?? storeFocusMode
+  const mutedForegroundClassName =
+    tone === 'toolbar' ? 'text-muted-foreground' : 'text-topbar-muted-foreground'
 
   if (!exists) return null
   // The project theme menu moved to the bottom status bar; without it this
@@ -43,15 +48,23 @@ export function TopbarRepoControls({ repoId, menuAlign = 'end' }: Props) {
 
   return (
     <div className="flex h-full shrink-0 items-center gap-1">
-      {isGitRepo && focusMode && <FocusBranchControls repoId={repoId} menuAlign={menuAlign} />}
+      {isGitRepo && focusMode && <FocusBranchControls repoId={repoId} menuAlign={menuAlign} tone={tone} />}
       {!isGitRepo && (
-        <RepoActivityControl repoId={repoId} compact mutedForegroundClassName="text-topbar-muted-foreground" />
+        <RepoActivityControl repoId={repoId} compact mutedForegroundClassName={mutedForegroundClassName} />
       )}
     </div>
   )
 }
 
-function FocusBranchControls({ repoId, menuAlign }: { repoId: string; menuAlign: 'start' | 'end' }) {
+function FocusBranchControls({
+  repoId,
+  menuAlign,
+  tone,
+}: {
+  repoId: string
+  menuAlign: 'start' | 'end'
+  tone: 'topbar' | 'toolbar'
+}) {
   const navigation = useMainWindowNavigation()
   const { branches, selectedBranch, selectedBranchData } = useStoreWithEqualityFn(
     useReposStore,
@@ -84,6 +97,7 @@ function FocusBranchControls({ repoId, menuAlign }: { repoId: string; menuAlign:
         selectedBranch={selectedBranch}
         navigation={navigation}
         menuAlign={menuAlign}
+        tone={tone}
       />
       {selectedBranchData && <FocusBranchActions repoId={repoId} branch={selectedBranchData} />}
     </div>
@@ -160,12 +174,14 @@ function BranchSelector({
   selectedBranch,
   navigation,
   menuAlign,
+  tone,
 }: {
   repoId: string
   branches: { name: string }[]
   selectedBranch: string | null
   navigation: ReturnType<typeof useMainWindowNavigation>
   menuAlign: 'start' | 'end'
+  tone: 'topbar' | 'toolbar'
 }) {
   const t = useT()
   if (branches.length === 0) return null
@@ -182,7 +198,9 @@ function BranchSelector({
         <Button
           variant="ghost"
           size="sm"
-          className="gap-0.5 px-1.5 text-topbar-muted-foreground"
+          className={`gap-0.5 px-1.5 ${
+            tone === 'toolbar' ? 'text-muted-foreground' : 'text-topbar-muted-foreground'
+          }`}
           aria-label={t('branches.switch')}
           title={title}
         >

@@ -37,11 +37,3 @@ export function FileListViewModeControl({ value, onChange }: FileListViewModeCon
     </Tip>
   )
 }
-
-export function FileListViewToolbar(props: FileListViewModeControlProps) {
-  return (
-    <div className="flex min-h-8 shrink-0 items-center justify-end border-b border-toolbar-border bg-toolbar px-2">
-      <FileListViewModeControl {...props} />
-    </div>
-  )
-}

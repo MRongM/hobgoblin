@@ -17,11 +17,8 @@ import type {
   TerminalDescriptor,
   WorktreeTerminalSnapshot,
 } from '#/web/components/terminal/types.ts'
-import { buildTerminalDeepLinkUrl } from '#/web/lib/terminal-deep-link.ts'
 import { MainWindowNavigationProvider, type MainWindowNavigationActions } from '#/web/main-window-navigation.tsx'
 import { emptyRendererBridgeBootstrap, setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
-import { lanInfoQueryKey } from '#/web/settings-query-cache.ts'
-import type { LanInfoWithQrCodes } from '#/web/settings-queries.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { emptyRepo } from '#/web/stores/repos/helpers.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
@@ -30,15 +27,6 @@ import type { RendererBridge } from '#/web/renderer-bridge-types.ts'
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 
 let compactUi = false
-
-const { openExternalUrlMock } = vi.hoisted(() => ({
-  openExternalUrlMock: vi.fn(async (_url: string) => ({ ok: true, message: '' })),
-}))
-
-vi.mock('#/web/app-shell-client.ts', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('#/web/app-shell-client.ts')>()),
-  openExternalUrl: (url: string) => openExternalUrlMock(url),
-}))
 
 vi.mock('#/web/hooks/useResponsiveUiMode.tsx', () => ({
   useIsCompactUi: () => compactUi,
@@ -52,7 +40,19 @@ vi.mock('#/web/runtime-settings-chrome.ts', () => ({
 // providers (commit drafts etc.); this suite only exercises the toolbar,
 // so the mock is just a placement marker.
 vi.mock('#/web/components/topbar/TopbarRepoControls.tsx', () => ({
-  TopbarRepoControls: () => <div data-testid="topbar-repo-controls" />,
+  TopbarRepoControls: ({
+    focusPresentation,
+    tone = 'topbar',
+  }: {
+    focusPresentation?: boolean
+    tone?: 'topbar' | 'toolbar'
+  }) => (focusPresentation ? <div data-testid="topbar-repo-controls" data-tone={tone} /> : null),
+}))
+
+vi.mock('#/web/components/repo-workspace/WorkspaceRepositorySwitcher.tsx', () => ({
+  WorkspaceRepositorySwitcher: ({ compact }: { compact?: boolean }) => (
+    <div data-testid="workspace-repository-switcher" data-compact={String(!!compact)} />
+  ),
 }))
 
 vi.stubGlobal('requestAnimationFrame', ((cb: FrameRequestCallback) => {
@@ -258,6 +258,23 @@ describe('BranchDetailToolbar', () => {
     expect(toolbar?.className).not.toContain('topbar-tone')
   })
 
+  test('keeps the complete compact terminal topbar in the shared horizontal scroll flow', () => {
+    compactUi = true
+    const { container: c } = renderToolbar({
+      terminalCount: 1,
+      detailTab: 'terminal',
+      compactFocusPresentation: true,
+      layout: 'top-bottom',
+      navigation: navigationWith({}),
+    })
+
+    const toolbar = c.firstElementChild
+    const content = toolbar?.firstElementChild
+
+    expect(toolbar?.classList.contains('mobile-topbar-scroll')).toBe(true)
+    expect(content?.classList.contains('mobile-topbar-scroll-content')).toBe(true)
+  })
+
   test('does not render the removed terminal redraw control', () => {
     const { container: c } = renderToolbar({
       terminalCount: 1,
@@ -272,68 +289,21 @@ describe('BranchDetailToolbar', () => {
     expect(focusButton).toBeNull()
   })
 
-  test('opens LAN QR dialog with one current terminal target per LAN URL', async () => {
-    const lanUrls = ['http://192.168.1.23:32200', 'http://10.0.0.8:32200']
+  test('does not render browser or LAN QR actions after they move to the status bar', () => {
     const { container: c } = renderToolbar({
       terminalCount: 2,
       detailTab: 'terminal',
       navigation: navigationWith({}),
-      lanInfo: { host: '0.0.0.0', port: 32200, lanUrls, qrCodes: {} },
     })
 
     const qrButton = c.querySelector<HTMLButtonElement>('button[aria-label="terminal.lan-qr"]')
-    expect(qrButton).not.toBeNull()
-
-    act(() => {
-      qrButton?.click()
-    })
-    await flush()
-
-    const urls = Array.from(document.body.querySelectorAll<HTMLElement>('[data-testid="terminal-lan-qr-url"]')).map(
-      (item) => item.textContent,
-    )
-    expect(urls).toEqual(
-      lanUrls.map((url) =>
-        buildTerminalDeepLinkUrl(url, {
-          repoId: REPO_ID,
-          worktreePath: WORKTREE_PATH,
-          branch: 'feature/worktree',
-          terminalId: 't1',
-        }),
-      ),
-    )
-    await flushUntil(() => document.body.querySelectorAll('[data-testid="terminal-lan-qr-image"]').length === 2)
-    expect(document.body.querySelectorAll('[data-testid="terminal-lan-qr-image"]')).toHaveLength(2)
-  })
-
-  test('opens the current terminal target in the browser via the loopback server URL', async () => {
-    openExternalUrlMock.mockClear()
-    const { container: c } = renderToolbar({
-      terminalCount: 2,
-      detailTab: 'terminal',
-      navigation: navigationWith({}),
-      lanInfo: { host: '0.0.0.0', port: 32215, lanUrls: [], qrCodes: {} },
-    })
-
     const browserButton = c.querySelector<HTMLButtonElement>('button[aria-label="terminal.open-in-browser"]')
-    expect(browserButton).not.toBeNull()
 
-    act(() => {
-      browserButton?.click()
-    })
-    await flush()
-
-    expect(openExternalUrlMock).toHaveBeenCalledWith(
-      buildTerminalDeepLinkUrl('http://127.0.0.1:32215', {
-        repoId: REPO_ID,
-        worktreePath: WORKTREE_PATH,
-        branch: 'feature/worktree',
-        terminalId: 't1',
-      }),
-    )
+    expect(qrButton).toBeNull()
+    expect(browserButton).toBeNull()
   })
 
-  test('keeps terminal focus when pressing End on the compact terminal tab', async () => {
+  test('keeps the compact terminal switcher focused when pressing End', async () => {
     compactUi = true
     const showRepoDetailTab = vi.fn()
     const { container: c } = renderToolbar({
@@ -346,12 +316,14 @@ describe('BranchDetailToolbar', () => {
     expect(terminalTab).not.toBeNull()
 
     act(() => {
+      terminalTab?.focus()
       terminalTab?.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }))
     })
     await flush()
 
     expect(showRepoDetailTab).not.toHaveBeenCalled()
     expect(document.activeElement?.id).toBe('detail-terminal-tab')
+    expect(terminalTab?.getAttribute('aria-haspopup')).toBe('menu')
   })
 
   test('does not render the project switcher outside focus mode', () => {
@@ -372,7 +344,7 @@ describe('BranchDetailToolbar', () => {
     expect(trigger?.textContent).toContain('repo')
   })
 
-  test('focus mode places the branch controls right after the project switcher', () => {
+  test('focus mode places repository and branch controls after the project switcher', () => {
     const { container: c } = renderToolbar({
       terminalCount: 0,
       detailFocusMode: true,
@@ -380,16 +352,64 @@ describe('BranchDetailToolbar', () => {
     })
 
     const switcher = c.querySelector('[data-testid="focus-project-switcher"]')
+    const repositorySwitcher = c.querySelector('[data-testid="workspace-repository-switcher"]')
     const controls = c.querySelector('[data-testid="topbar-repo-controls"]')
     expect(switcher).not.toBeNull()
+    expect(repositorySwitcher).not.toBeNull()
     expect(controls).not.toBeNull()
-    expect(switcher?.nextElementSibling).toBe(controls)
+    expect(switcher?.nextElementSibling).toBe(repositorySwitcher)
+    expect(repositorySwitcher?.nextElementSibling).toBe(controls)
   })
 
   test('does not render the branch controls outside focus mode', () => {
     const { container: c } = renderToolbar({ terminalCount: 0, navigation: navigationWith({}) })
 
     expect(c.querySelector('[data-testid="topbar-repo-controls"]')).toBeNull()
+  })
+
+  test('compact focus presentation shows context controls without persisting focus mode', async () => {
+    compactUi = true
+    const onShowCompactExplorer = vi.fn()
+    const { container: c } = renderToolbar({
+      terminalCount: 0,
+      detailFocusMode: false,
+      compactFocusPresentation: true,
+      layout: 'top-bottom',
+      onShowCompactExplorer,
+      navigation: navigationWith({}),
+    })
+
+    const workspaceButton = c.querySelector<HTMLButtonElement>('button[aria-label="mobile.open-workspace"]')
+    expect(workspaceButton).not.toBeNull()
+    expect(c.querySelector('[data-testid="focus-project-switcher"]')).not.toBeNull()
+    expect(c.querySelector('[data-testid="workspace-repository-switcher"]')?.getAttribute('data-compact')).toBe('true')
+    expect(c.querySelector('[data-testid="topbar-repo-controls"]')).not.toBeNull()
+    expect(c.querySelector('button[aria-label="branch-detail.collapse"]')).toBeNull()
+
+    act(() => {
+      workspaceButton?.click()
+    })
+    await flush()
+
+    expect(onShowCompactExplorer).toHaveBeenCalledTimes(1)
+    expect(useReposStore.getState().detailFocusMode).toBe(false)
+    expect(useReposStore.getState().detailCollapsed).toBe(false)
+  })
+
+  test('compact context rail uses generic toolbar tone', () => {
+    compactUi = true
+    const { container: c } = renderToolbar({
+      terminalCount: 0,
+      compactFocusPresentation: true,
+      navigation: navigationWith({}),
+    })
+
+    const projectSwitcher = c.querySelector<HTMLButtonElement>('[data-testid="focus-project-switcher"]')
+    const projectChevron = projectSwitcher?.querySelectorAll('svg').item(1)
+    const repoControls = c.querySelector<HTMLElement>('[data-testid="topbar-repo-controls"]')
+    expect(projectChevron?.classList.contains('text-muted-foreground')).toBe(true)
+    expect(projectChevron?.classList.contains('text-topbar-muted-foreground')).toBe(false)
+    expect(repoControls?.dataset.tone).toBe('toolbar')
   })
 
   test('focus switcher lists open projects and activates the selected one', async () => {
@@ -469,9 +489,10 @@ function renderToolbar(options: {
   navigation: MainWindowNavigationActions
   detailTab?: 'status' | 'changes' | 'terminal'
   detailFocusMode?: boolean
+  compactFocusPresentation?: boolean
+  onShowCompactExplorer?: () => void
   collapsed?: boolean
   layout?: RepoWorkspaceLayout
-  lanInfo?: LanInfoWithQrCodes
 }): {
   container: HTMLDivElement
   terminalTab: HTMLButtonElement
@@ -574,10 +595,6 @@ function renderToolbar(options: {
   document.body.appendChild(container)
   root = createRoot(container)
   queryClient = new QueryClient()
-  queryClient.setQueryData(
-    lanInfoQueryKey(),
-    options.lanInfo ?? { host: '127.0.0.1', port: 32200, lanUrls: [], qrCodes: {} },
-  )
   act(() => {
     root!.render(
       <QueryClientProvider client={queryClient!}>
@@ -591,7 +608,9 @@ function renderToolbar(options: {
                 contentId="content"
                 collapsed={options.collapsed ?? false}
                 detailFocusMode={options.detailFocusMode ?? false}
+                compactFocusPresentation={options.compactFocusPresentation}
                 layout={options.layout ?? DEFAULT_WORKSPACE_LAYOUT}
+                onShowCompactExplorer={options.onShowCompactExplorer}
               />
             </TerminalSessionReadContext.Provider>
           </TerminalSessionContext.Provider>

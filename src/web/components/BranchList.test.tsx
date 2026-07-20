@@ -19,6 +19,10 @@ const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENV
 const dndState = vi.hoisted(() => ({
   lastDragEnd: null as ((event: TestDragEndEvent) => void) | null,
 }))
+const navigationState = vi.hoisted(() => ({
+  selectRepoBranch: vi.fn(),
+  showRepoDetailTab: vi.fn(),
+}))
 
 vi.mock('#/web/stores/i18n.ts', () => ({
   useI18nStore: (selector: (state: { lang: string }) => string) => selector({ lang: 'zh' }),
@@ -38,8 +42,8 @@ vi.mock('#/web/stores/i18n.ts', () => ({
 
 vi.mock('#/web/main-window-navigation.tsx', () => ({
   useMainWindowNavigation: () => ({
-    selectRepoBranch: vi.fn(),
-    showRepoDetailTab: vi.fn(),
+    selectRepoBranch: navigationState.selectRepoBranch,
+    showRepoDetailTab: navigationState.showRepoDetailTab,
   }),
 }))
 
@@ -47,8 +51,35 @@ vi.mock('#/web/components/ui/scroll-area.tsx', () => ({
   ScrollArea: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }))
 
+vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
+  useBranchActionItems: () => ({
+    patchItems: [],
+    mainItems: [],
+    externalItems: [],
+    destructiveItems: [
+      {
+        id: 'removeWorktree',
+        label: 'action.remove-worktree',
+        disabled: false,
+        visible: true,
+        destructive: true,
+        icon: null,
+        onSelect: () => {},
+      },
+    ],
+    dialogs: null,
+  }),
+}))
+
 vi.mock('#/web/components/BranchActionsMenu.tsx', () => ({
-  BranchActionsDropdown: () => null,
+  BranchActionsDropdown: ({
+    destructiveItems,
+  }: {
+    destructiveItems: Array<{ id: string; disabled: boolean; visible: boolean }>
+  }) =>
+    destructiveItems.some((item) => item.id === 'removeWorktree' && item.visible && !item.disabled) ? (
+      <button type="button" data-testid="ordinary-remove-worktree" />
+    ) : null,
 }))
 
 vi.mock('@dnd-kit/core', async () => {
@@ -91,6 +122,8 @@ beforeEach(() => {
   originalScrollIntoView = Element.prototype.scrollIntoView
   Element.prototype.scrollIntoView = vi.fn()
   dndState.lastDragEnd = null
+  navigationState.selectRepoBranch.mockReset()
+  navigationState.showRepoDetailTab.mockReset()
   resetReposStore()
 })
 
@@ -118,21 +151,22 @@ function terminalReadContextWithState(
       return {
         worktreeTerminalKey,
         selectedDescriptor: null,
-        sessions: count > 0
-          ? [
-              {
-                key: `${worktreeTerminalKey}\0terminal-1`,
-                worktreeTerminalKey,
-                terminalId: 'terminal-1',
-                index: 1,
-                title: 'terminal',
-                phase: 'open',
-                selected: true,
-                hasBell,
-                isOutputActive,
-              },
-            ]
-          : [],
+        sessions:
+          count > 0
+            ? [
+                {
+                  key: `${worktreeTerminalKey}\0terminal-1`,
+                  worktreeTerminalKey,
+                  terminalId: 'terminal-1',
+                  index: 1,
+                  title: 'terminal',
+                  phase: 'open',
+                  selected: true,
+                  hasBell,
+                  isOutputActive,
+                },
+              ]
+            : [],
         count,
       }
     },
@@ -162,6 +196,8 @@ function renderList(
     bellWorktreeKeys?: string[]
     countsByWorktreeKey?: Map<string, number>
     outputActiveWorktreeKeys?: string[]
+    onBranchSelected?: () => void
+    showActions?: boolean
   } = {},
 ) {
   const readContext = terminalReadContextWithState(
@@ -172,14 +208,59 @@ function renderList(
   act(() => {
     root!.render(
       <TerminalSessionReadContext.Provider value={readContext}>
-        <BranchList repoId={REPO_ID} showActions={false} />
+        <BranchList
+          repoId={REPO_ID}
+          showActions={fixture.showActions ?? false}
+          onBranchSelected={fixture.onBranchSelected}
+        />
       </TerminalSessionReadContext.Provider>,
     )
   })
 }
 
 describe('BranchList worktree drag ordering', () => {
-  test('renders branch names first and worktree paths as project directory names', () => {
+  test('renders only the visible repository worktrees with ordinary repository actions', () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [
+        createRepoBranch('trunk', { worktree: { path: REPO_ID } }),
+        createRepoBranch('feature/solo', { worktree: { path: '/tmp/web-feature-solo' } }),
+      ],
+      currentBranch: 'trunk',
+      selectedBranch: 'trunk',
+      worktreesByPath: {
+        [REPO_ID]: { path: REPO_ID, branch: 'trunk', isMain: true },
+        '/tmp/web-feature-solo': { path: '/tmp/web-feature-solo', branch: 'feature/solo', isMain: false },
+      },
+    })
+    renderList({ showActions: true })
+
+    const soloRow = Array.from(container?.querySelectorAll('li') ?? []).find((row) =>
+      row.textContent?.includes('feature/solo'),
+    )
+    expect(soloRow).not.toBeUndefined()
+    expect(soloRow?.querySelector<HTMLButtonElement>('[data-testid="ordinary-remove-worktree"]')).not.toBeNull()
+    expect(document.querySelector('button[aria-label="workspace.batch.remove-action"]')).toBeNull()
+  })
+
+  test('notifies compact presentation after branch navigation', () => {
+    seedWorktreeRepo()
+    const onBranchSelected = vi.fn()
+
+    renderList({ onBranchSelected })
+    const featureRow = Array.from(container?.querySelectorAll('li') ?? []).find((row) =>
+      row.textContent?.includes('feature/a'),
+    )
+    act(() => featureRow?.click())
+
+    expect(navigationState.selectRepoBranch).toHaveBeenCalledWith(REPO_ID, 'feature/a')
+    expect(onBranchSelected).toHaveBeenCalledTimes(1)
+    expect(navigationState.selectRepoBranch.mock.invocationCallOrder[0]).toBeLessThan(
+      onBranchSelected.mock.invocationCallOrder[0]!,
+    )
+  })
+
+  test('renders branch names and exposes worktree directory names in row tooltips', () => {
     seedRepoState({
       id: REPO_ID,
       branches: [
@@ -194,13 +275,13 @@ describe('BranchList worktree drag ordering', () => {
       countsByWorktreeKey: new Map([['/tmp/repo\0/tmp/worktree-a', 2]]),
     })
 
-    expect(Array.from(container?.querySelectorAll('.text-\\[13px\\].font-medium') ?? []).map((node) => node.textContent)).toEqual([
-      'main',
-      'feature/a',
-    ])
+    expect(
+      Array.from(container?.querySelectorAll('.text-\\[13px\\].font-medium') ?? []).map((node) => node.textContent),
+    ).toEqual(['main', 'feature/a'])
     expect(container?.querySelector('[data-testid="terminal-count-badge"]')?.textContent).toBe('2')
-    expect(container?.textContent).toContain('worktree-a')
-    expect(container?.querySelector('[aria-label="worktree-a"]')).not.toBeNull()
+    expect(container?.querySelector('[title*="worktree-a"]')).not.toBeNull()
+    expect(container?.querySelector('[aria-label="worktree-a"]')).toBeNull()
+    expect(container?.textContent).not.toContain('worktree-a')
     expect(container?.textContent).not.toContain('../worktree-a')
     expect(container?.textContent).not.toContain('/tmp/worktree-a')
   })

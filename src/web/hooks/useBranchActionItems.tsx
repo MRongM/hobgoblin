@@ -5,9 +5,9 @@ import {
   ExternalLink,
   FolderPlus,
   GitBranch,
-  GitPullRequest,
   RefreshCw,
   Tag,
+  Terminal,
   Trash2,
   X,
 } from 'lucide-react'
@@ -22,7 +22,6 @@ import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import { CreateTagDialog } from '#/web/components/CreateTagDialog.tsx'
 import { useBranchActions, type BranchActionItemId } from '#/web/hooks/useBranchActions.tsx'
 import { branchActionDisplayPhase, type BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
-import { branchPullRequestBelongsToBranch } from '#/shared/git-types.ts'
 import type { BrowserRemoteProvider } from '#/web/types.ts'
 import { useRuntimeExternalAppSettings } from '#/web/runtime-settings-external-apps.ts'
 import { useBranchWriteActions } from '#/web/hooks/useBranchWriteActions.tsx'
@@ -36,6 +35,7 @@ import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-
 import { useWorktreeTerminalSnapshot } from '#/web/components/terminal/terminal-session-store.ts'
 import { useTerminalSessionContext } from '#/web/components/terminal/terminal-session-context.ts'
 import type { TerminalSessionBase } from '#/web/components/terminal/types.ts'
+import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 export interface BranchActionItem {
   id: BranchActionItemId
   label: string
@@ -98,8 +98,16 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
   const t = useT()
   const syncAndRefresh = useReposStore((s) => s.syncAndRefresh)
   const submitBranchAction = useReposStore((s) => s.submitBranchAction)
-  const { terminalApp, resolvedTerminalApp, terminalAvailable, editorApp, resolvedEditorApp, editorAvailable } =
-    useRuntimeExternalAppSettings()
+  const setDetailCollapsed = useReposStore((s) => s.setDetailCollapsed)
+  const {
+    terminalApp,
+    resolvedTerminalApp,
+    terminalAvailable,
+    editorApp,
+    resolvedEditorApp,
+    editorAvailable,
+  } = useRuntimeExternalAppSettings()
+  const navigation = useMainWindowNavigation()
   const { blocked, busyAction, capabilities, actions, dialogs } = useBranchActions(repo, branch)
   const writeActions = useBranchWriteActions(repo, branch, {
     canPush: capabilities.canPush,
@@ -108,7 +116,7 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
   const createWorktreeDialog = useRetainedDialogState<string>()
   const createTagDialog = useRetainedDialogState<string>()
   const closeAllTerminalsConfirm = useRetainedDialogState<string>()
-  const { closeTerminalAndDismissDetailIfLast } = useTerminalSessionContext()
+  const { createTerminal, closeTerminalAndDismissDetailIfLast } = useTerminalSessionContext()
   const disabled = blocked
   const busy = (id: BranchActionItemId) => busyAction === id
   const phase = branchActionDisplayPhase(repo, branch.name)
@@ -128,11 +136,9 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
     if (itemPhase === 'queued' && queuedKey) return t(queuedKey)
     return t(loadingKey)
   }
-  const pullRequest =
-    branch.pullRequest && branchPullRequestBelongsToBranch(branch, branch.pullRequest) ? branch.pullRequest : undefined
-  const remoteIcon = pullRequest ? GitPullRequest : browserRemoteIcon(branchBrowserRemoteProvider(repo, branch))
+  const remoteIcon = browserRemoteIcon(branchBrowserRemoteProvider(repo, branch))
   const isRemoteRepo = !!repo.remote.target
-  const showTerminalAction = capabilities.canOpenTerminal && (isRemoteRepo || terminalAvailable)
+  const showExternalTerminalAction = capabilities.canOpenTerminal && (isRemoteRepo || terminalAvailable)
   const terminalIconPref = isRemoteRepo ? 'auto' : (resolvedTerminalApp ?? terminalApp)
   const terminalBase: TerminalSessionBase | null = branch.worktree?.path
     ? { repoRoot: repo.id, branch: branch.name, worktreePath: branch.worktree.path }
@@ -164,6 +170,13 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
     for (const session of terminalSessions) {
       closeTerminalAndDismissDetailIfLast(session.key, terminalBase)
     }
+  }
+
+  async function handleNewTerminal(): Promise<void> {
+    if (!terminalBase) return
+    navigation.showRepoDetailTab(repo.id, 'terminal')
+    setDetailCollapsed(false)
+    await createTerminal(terminalBase)
   }
 
   async function handleSync(): Promise<void> {
@@ -264,17 +277,29 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
     },
     {
       id: 'terminal',
-      label: t('worktrees.open-in-terminal-label'),
-      disabled: disabled || !showTerminalAction,
-      busy: busy('terminal'),
+      label: t('terminal.internal'),
+      title: t('terminal.internal'),
+      ariaLabel: t('terminal.internal'),
+      disabled: disabled || !terminalBase,
+      visible: true,
+      icon: createElement(Terminal),
+      onSelect: handleNewTerminal,
+    },
+    {
+      id: 'externalTerminal',
+      label: t('terminal.external'),
+      title: t('terminal.external'),
+      ariaLabel: t('terminal.external'),
+      disabled: disabled || !showExternalTerminalAction,
+      busy: busy('externalTerminal'),
       visible: true,
       shortcut: 'G',
       icon: createElement(TerminalAppIcon, { pref: terminalIconPref }),
-      onSelect: actions.openTerminal,
+      onSelect: actions.openExternalTerminal,
     },
     {
       id: 'remote',
-      label: pullRequest ? t('action.remote-pr', { n: pullRequest.number }) : t('action.remote'),
+      label: t('action.remote'),
       disabled: disabled || !capabilities.canOpenRemote,
       busy: busy('remote'),
       visible: true,

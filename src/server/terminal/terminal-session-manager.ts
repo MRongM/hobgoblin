@@ -514,7 +514,6 @@ export class TerminalSessionManager<TOwner extends string | number> {
         const titleEventVersionBeforeWrite = session.render.titleEventVersion
         queueTerminalRenderWrite(session.render, data, () => {
           maybeClearCanonicalTitleOnShellReturn(
-            session.id,
             session.render,
             previousProcessName,
             processName,
@@ -574,7 +573,10 @@ export class TerminalSessionManager<TOwner extends string | number> {
   }
 
   private isValidOwnerId(ownerId: TOwner): boolean {
-    return (typeof ownerId === 'number' && Number.isSafeInteger(ownerId) && ownerId > 0) || (typeof ownerId === 'string' && ownerId.length > 0)
+    return (
+      (typeof ownerId === 'number' && Number.isSafeInteger(ownerId) && ownerId > 0) ||
+      (typeof ownerId === 'string' && ownerId.length > 0)
+    )
   }
 }
 

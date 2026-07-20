@@ -1,18 +1,10 @@
-import {
-  currentRuntimeSettingsSnapshot,
-  readRuntimeGitNetworkSettings,
-  useRuntimeSettingsSnapshot,
-} from '#/web/settings-read-projection.ts'
+import { readRuntimeGitNetworkSettings, useRuntimeSettingsSnapshot } from '#/web/settings-read-projection.ts'
 import {
   runSettingsControllerAction,
   setGitNetworkProxyEnabledPreference,
   setGitNetworkProxyUrlPreference,
   setGitNetworkTimeoutSecPreference,
 } from '#/web/settings-write-paths.ts'
-
-export function getRuntimeGitNetworkSettings() {
-  return readRuntimeGitNetworkSettings(currentRuntimeSettingsSnapshot())
-}
 
 export function useRuntimeGitNetworkSettings() {
   return readRuntimeGitNetworkSettings(useRuntimeSettingsSnapshot())

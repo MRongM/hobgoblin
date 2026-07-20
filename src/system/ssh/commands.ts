@@ -17,6 +17,8 @@ const SSH_CONNECT_TIMEOUT_SEC = 10
 export const REMOTE_SNAPSHOT_CURRENT_MARKER = '__GOBLIN_REMOTE_CURRENT__'
 export const REMOTE_SNAPSHOT_DEFAULT_MARKER = '__GOBLIN_REMOTE_DEFAULT__'
 export const REMOTE_SNAPSHOT_BRANCHES_MARKER = '__GOBLIN_REMOTE_BRANCHES__'
+export const REMOTE_PATH_EXISTS_MARKER = '__HOBGOBLIN_PATH_EXISTS__'
+export const REMOTE_PATH_MISSING_MARKER = '__HOBGOBLIN_PATH_MISSING__'
 
 export type RemoteCommandKind =
   | { type: 'printHome' }
@@ -24,6 +26,9 @@ export type RemoteCommandKind =
   | { type: 'checkGit' }
   | { type: 'testDirectory'; path: string }
   | { type: 'listDirectories'; path: string; limit?: number }
+  | { type: 'listWorkspaceGitDirectories'; rootPath: string }
+  | { type: 'testWorkspaceGitDirectory'; path: string }
+  | { type: 'testPathExists'; path: string }
   | { type: 'listDirectoryEntries'; worktreePath: string; dirPath: string }
   | { type: 'searchFileTree'; worktreePath: string; query: string; limit: number }
   | { type: 'createFileTreeDirectory'; worktreePath: string; parentDirPath: string; name: string }
@@ -46,7 +51,6 @@ export type RemoteCommandKind =
   | { type: 'gitPatch'; path: string }
   | { type: 'gitWorktreeList'; path: string }
   | { type: 'gitStatus'; path: string }
-  | { type: 'gitLog'; path: string; branch: string; count?: number; skip?: number }
   | { type: 'gitHistory'; path: string; branch: string; limit?: number; skip?: number }
   | { type: 'gitCommitMetadata'; path: string; commit: string }
   | { type: 'gitCommitNameStatus'; path: string; commit: string }
@@ -106,12 +110,6 @@ export interface RemoteCommandOptions {
   stdin?: string
   maxBuffer?: number
 }
-
-export type RemoteCommandRunner = (
-  command: RemoteCommandKind,
-  target: RemoteRepoTarget,
-  options?: RemoteCommandOptions,
-) => Promise<RemoteCommandResult>
 
 export function buildRemoteCommandInvocation(
   target: RemoteRepoTarget,
@@ -207,6 +205,38 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return `find ${shellQuote(
         command.path,
       )} -mindepth 1 -maxdepth 1 -type d -print 2>/dev/null | LC_ALL=C sort | head -n ${limit}`
+    }
+    case 'listWorkspaceGitDirectories': {
+      const rootPath = shellQuote(command.rootPath)
+      return [
+        `find ${rootPath} -mindepth 1 -maxdepth 1 \\( -type d -o -type l \\) -exec sh -c '`,
+        'for candidate do',
+        '  if [ -d "$candidate" ] && { [ -d "$candidate/.git" ] || [ -f "$candidate/.git" ]; }; then',
+        '    printf "%s\\0" "$candidate"',
+        '  fi',
+        'done',
+        "' sh {} +",
+      ].join('\n')
+    }
+    case 'testWorkspaceGitDirectory': {
+      const candidatePath = shellQuote(command.path)
+      return [
+        `candidate_path=${candidatePath}`,
+        'candidate_root=$(cd "$candidate_path" 2>/dev/null && pwd -P) || exit 1',
+        'git_root=$(git -C "$candidate_path" rev-parse --show-toplevel 2>/dev/null) || exit 1',
+        'git_root=$(cd "$git_root" 2>/dev/null && pwd -P) || exit 1',
+        '[ "$candidate_root" = "$git_root" ]',
+      ].join('\n')
+    }
+    case 'testPathExists': {
+      const candidatePath = shellQuote(command.path)
+      return [
+        `if test -e ${candidatePath} || test -L ${candidatePath}; then`,
+        `  printf '%s\\n' ${shellQuote(REMOTE_PATH_EXISTS_MARKER)}`,
+        'else',
+        `  printf '%s\\n' ${shellQuote(REMOTE_PATH_MISSING_MARKER)}`,
+        'fi',
+      ].join('\n')
     }
     case 'listDirectoryEntries':
       return [
@@ -327,19 +357,6 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return `git -C ${shellQuote(command.path)} worktree list --porcelain`
     case 'gitStatus':
       return `git -C ${shellQuote(command.path)} status --porcelain -z`
-    case 'gitLog': {
-      const count = Math.max(1, Math.min(1000, Math.floor(command.count ?? 100)))
-      const skip = Math.max(0, Math.floor(command.skip ?? 0))
-      const format = ['%H', '%h', '%s', '%an', '%aI'].join(FIELD_SEP)
-      return [
-        `git -C ${shellQuote(command.path)} log`,
-        `--format=${shellQuote(format)}`,
-        `--max-count=${count}`,
-        `--skip=${skip}`,
-        shellQuote(command.branch),
-        '--',
-      ].join(' ')
-    }
     case 'gitHistory': {
       const limit = Math.max(1, Math.min(200, Math.floor(command.limit ?? 100)))
       const skip = Math.max(0, Math.floor(command.skip ?? 0))
@@ -570,7 +587,9 @@ function remoteRenameFileTreeScript(command: Extract<RemoteCommandKind, { type: 
   ].join('\n')
 }
 
-function remoteCreateFileTreeDirectoryScript(command: Extract<RemoteCommandKind, { type: 'createFileTreeDirectory' }>): string {
+function remoteCreateFileTreeDirectoryScript(
+  command: Extract<RemoteCommandKind, { type: 'createFileTreeDirectory' }>,
+): string {
   return [
     "python3 - <<'PY'",
     ...remoteFileTreePreamble(command.worktreePath),
@@ -743,7 +762,9 @@ function remoteTextFilePreamble(worktreePath: string): string[] {
   ]
 }
 
-function remoteReadFileTreeTextFileScript(command: Extract<RemoteCommandKind, { type: 'readFileTreeTextFile' }>): string {
+function remoteReadFileTreeTextFileScript(
+  command: Extract<RemoteCommandKind, { type: 'readFileTreeTextFile' }>,
+): string {
   return [
     "python3 - <<'PY'",
     ...remoteTextFilePreamble(command.worktreePath),
@@ -754,7 +775,9 @@ function remoteReadFileTreeTextFileScript(command: Extract<RemoteCommandKind, { 
   ].join('\n')
 }
 
-function remoteReplaceFileTreeTextFileScript(command: Extract<RemoteCommandKind, { type: 'replaceFileTreeTextFile' }>): string {
+function remoteReplaceFileTreeTextFileScript(
+  command: Extract<RemoteCommandKind, { type: 'replaceFileTreeTextFile' }>,
+): string {
   const script = [
     ...remoteTextFilePreamble(command.worktreePath),
     `file_path = checked_file_path(${pythonString(command.filePath)})`,
@@ -828,7 +851,9 @@ function remoteBinaryFilePreamble(worktreePath: string, maxBytes: number): strin
   ]
 }
 
-function remoteReadFileTreeBinaryFileScript(command: Extract<RemoteCommandKind, { type: 'readFileTreeBinaryFile' }>): string {
+function remoteReadFileTreeBinaryFileScript(
+  command: Extract<RemoteCommandKind, { type: 'readFileTreeBinaryFile' }>,
+): string {
   return [
     "python3 - <<'PY'",
     ...remoteBinaryFilePreamble(command.worktreePath, command.maxBytes),
@@ -846,7 +871,9 @@ function remoteReadFileTreeBinaryFileScript(command: Extract<RemoteCommandKind, 
   ].join('\n')
 }
 
-function remoteReplaceFileTreeBinaryFileScript(command: Extract<RemoteCommandKind, { type: 'replaceFileTreeBinaryFile' }>): string {
+function remoteReplaceFileTreeBinaryFileScript(
+  command: Extract<RemoteCommandKind, { type: 'replaceFileTreeBinaryFile' }>,
+): string {
   const script = [
     ...remoteBinaryFilePreamble(command.worktreePath, command.maxBytes),
     `file_path = checked_file_path(${pythonString(command.filePath)})`,

@@ -69,6 +69,34 @@ html[data-host='electron']:not([data-chrome='overlay']) .topbar {
 html[data-host='electron'][data-chrome='overlay'] .topbar {
   padding: 0 150px 0 16px;
 }
+
+/* Compact chrome keeps every topbar function in one horizontal scroll flow.
+ * Desktop keeps each component's existing clipping and flex behavior. */
+@media (max-width: 639px) {
+  .mobile-topbar-scroll {
+    justify-content: flex-start;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mobile-topbar-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-topbar-scroll > * {
+    flex: none;
+    flex-shrink: 0;
+  }
+
+  .mobile-topbar-scroll-content {
+    min-width: max-content;
+    overflow: visible;
+  }
+}
+
 button,
 [data-interactive] {
   -webkit-app-region: no-drag;

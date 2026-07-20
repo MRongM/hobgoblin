@@ -26,7 +26,9 @@ export interface RepoFileTreeSortableEntry {
   targetKind?: RepoFileTreeTargetKind
 }
 
-export function isRepoFileTreeDirectoryLikeEntry(entry: Pick<RepoFileTreeSortableEntry, 'kind' | 'targetKind'>): boolean {
+export function isRepoFileTreeDirectoryLikeEntry(
+  entry: Pick<RepoFileTreeSortableEntry, 'kind' | 'targetKind'>,
+): boolean {
   return entry.kind === 'directory' || (entry.kind === 'symlink' && entry.targetKind === 'directory')
 }
 
@@ -143,13 +145,6 @@ export interface RepoFileMoveRequest {
   targetDirPath: string
 }
 
-export interface RepoFileTreeCreateFileRequest {
-  repoId: string
-  worktreePath: string
-  parentDirPath: string
-  name: string
-}
-
 export type RepoFileTreeTextFileReadResult =
   | {
       ok: true
@@ -161,12 +156,6 @@ export type RepoFileTreeTextFileReadResult =
       message: string
     }
 
-export interface RepoFileTreeTextFileReadRequest {
-  repoId: string
-  worktreePath: string
-  filePath: string
-}
-
 export type RepoFileTreeTextFileReplaceResult =
   | {
       ok: true
@@ -177,13 +166,6 @@ export type RepoFileTreeTextFileReplaceResult =
       ok: false
       message: string
     }
-
-export interface RepoFileTreeTextFileReplaceRequest {
-  repoId: string
-  worktreePath: string
-  filePath: string
-  content: string
-}
 
 export interface RepoFileTreeBinaryFileReadRequest {
   repoId: string
@@ -267,13 +249,10 @@ export function isRepoFileTransferRequest(value: unknown): value is RepoFileTran
   }
   const source = value.source
   if (source.kind === 'fileTreePaths') {
-    return (
-      typeof source.repoId === 'string' &&
-      typeof source.worktreePath === 'string' &&
-      isStringArray(source.paths)
-    )
+    return typeof source.repoId === 'string' && typeof source.worktreePath === 'string' && isStringArray(source.paths)
   }
-  if (source.kind === 'localPaths') return Array.isArray(source.items) && source.items.every(isRepoFileTransferLocalPathItem)
+  if (source.kind === 'localPaths')
+    return Array.isArray(source.items) && source.items.every(isRepoFileTransferLocalPathItem)
   if (source.kind === 'uploadedItems') {
     return Array.isArray(source.items) && source.items.every(isRepoFileTransferUploadedItem)
   }
@@ -288,35 +267,6 @@ export function isRepoFileMoveRequest(value: unknown): value is RepoFileMoveRequ
     isStringArray(value.paths) &&
     value.paths.length > 0 &&
     typeof value.targetDirPath === 'string'
-  )
-}
-
-export function isRepoFileTreeCreateFileRequest(value: unknown): value is RepoFileTreeCreateFileRequest {
-  return (
-    isRecord(value) &&
-    typeof value.repoId === 'string' &&
-    typeof value.worktreePath === 'string' &&
-    typeof value.parentDirPath === 'string' &&
-    typeof value.name === 'string'
-  )
-}
-
-export function isRepoFileTreeTextFileReadRequest(value: unknown): value is RepoFileTreeTextFileReadRequest {
-  return (
-    isRecord(value) &&
-    typeof value.repoId === 'string' &&
-    typeof value.worktreePath === 'string' &&
-    typeof value.filePath === 'string'
-  )
-}
-
-export function isRepoFileTreeTextFileReplaceRequest(value: unknown): value is RepoFileTreeTextFileReplaceRequest {
-  return (
-    isRecord(value) &&
-    typeof value.repoId === 'string' &&
-    typeof value.worktreePath === 'string' &&
-    typeof value.filePath === 'string' &&
-    typeof value.content === 'string'
   )
 }
 

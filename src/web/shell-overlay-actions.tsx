@@ -10,6 +10,7 @@ export interface ShellOverlayActions {
   openRemoteRepo: () => void
   openCloneRepo: () => void
   openSettings: () => void
+  settingsOpen: boolean
 }
 
 const ShellOverlayActionsContext = createContext<ShellOverlayActions | null>(null)

@@ -14,6 +14,8 @@ import { Tip } from '#/web/components/Tip.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { ProjectThemeMenuConnected } from '#/web/components/repo-toolbar/ProjectThemeMenu.tsx'
 import { RepoActivityControl } from '#/web/components/repo-activity/RepoActivityControl.tsx'
+import { TerminalStatusActions } from '#/web/components/terminal/TerminalStatusActions.tsx'
+import { cn } from '#/web/lib/cn.ts'
 
 interface Props {
   repoId: string | null
@@ -49,12 +51,23 @@ export function StatusBar({ repoId, fileAreaCollapsed, onToggleFileArea }: Props
     >
       {shellActions && (
         <Tip label={t('topbar.settings')}>
-          <Button variant="ghost" size="icon-sm" onClick={shellActions.openSettings} aria-label={t('topbar.settings')}>
+          <Button
+            data-settings-trigger
+            variant="ghost"
+            size="icon-sm"
+            className={cn(
+              shellActions.settingsOpen && 'pointer-events-auto relative z-[60] bg-accent text-accent-foreground',
+            )}
+            onClick={shellActions.openSettings}
+            aria-label={t('topbar.settings')}
+            aria-pressed={shellActions.settingsOpen}
+          >
             <Settings />
           </Button>
         </Tip>
       )}
       {repoId && <ProjectThemeMenuConnected repoId={repoId} />}
+      {repoId && <TerminalStatusActions repoId={repoId} />}
       {repoId && onToggleFileArea && fileAreaCollapsed !== undefined && (
         <Tip label={t(fileAreaCollapsed ? 'file-area.expand' : 'file-area.collapse')}>
           <Button

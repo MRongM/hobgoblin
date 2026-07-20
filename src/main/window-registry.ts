@@ -39,7 +39,9 @@ function defaultCapabilities(): RegisteredRendererSurfaceCapabilities {
   }
 }
 
-function resolveCapabilities(capabilities?: Partial<RegisteredRendererSurfaceCapabilities>): RegisteredRendererSurfaceCapabilities {
+function resolveCapabilities(
+  capabilities?: Partial<RegisteredRendererSurfaceCapabilities>,
+): RegisteredRendererSurfaceCapabilities {
   return { ...defaultCapabilities(), ...capabilities }
 }
 
@@ -135,17 +137,6 @@ export function sendToRegisteredWindow(
     if (!win.isDestroyed() && !win.webContents.isDestroyed()) win.webContents.send(channel, ...args)
   } catch (err) {
     console.warn('[window-registry] failed to send event to window', err)
-  }
-}
-
-function broadcastToRegisteredWindows(
-  channel: string,
-  args: unknown[] = [],
-  options?: { excludeWindow?: BrowserWindowType | null | undefined },
-): void {
-  for (const win of allRegisteredWindows()) {
-    if (options?.excludeWindow && options.excludeWindow === win) continue
-    sendToRegisteredWindow(win, channel, args)
   }
 }
 

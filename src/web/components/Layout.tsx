@@ -22,6 +22,7 @@ interface RepoWorkspaceProps {
   mode?: Exclude<RepoWorkspaceMode, 'focus'>
   detailSize?: number
   onDetailSizeChange?: (size: number) => void
+  branchCollapsed?: boolean
 }
 
 interface ToolbarProps extends HTMLAttributes<HTMLDivElement> {
@@ -33,12 +34,6 @@ interface ToolbarProps extends HTMLAttributes<HTMLDivElement> {
 
 interface PaneProps {
   children: ReactNode
-}
-
-interface ToolbarTitleProps {
-  title: ReactNode
-  description?: ReactNode
-  after?: ReactNode
 }
 
 interface EmptyStateProps {
@@ -71,18 +66,6 @@ export function Toolbar({ children, className, variant = 'plain', chrome = 'tool
   )
 }
 
-export function ToolbarTitle({ title, description, after }: ToolbarTitleProps) {
-  return (
-    <div className="min-w-0 flex-1 flex items-center gap-2">
-      <div className="flex min-w-0 flex-1 items-baseline gap-2">
-        <div className="shrink-0 truncate text-sm font-semibold text-foreground">{title}</div>
-        {description && <div className="min-w-0 truncate text-xs text-muted-foreground">{description}</div>}
-      </div>
-      {after}
-    </div>
-  )
-}
-
 export function RepoWorkspace({
   branchPane,
   detailPane,
@@ -90,6 +73,7 @@ export function RepoWorkspace({
   mode = 'split',
   detailSize = DEFAULT_DETAIL_PANE_SIZES[layout],
   onDetailSizeChange,
+  branchCollapsed = false,
 }: RepoWorkspaceProps) {
   const axis = workspaceLayoutAxis(layout)
   const { toolbarHeightPx } = useRuntimeChromeSettings()
@@ -101,6 +85,7 @@ export function RepoWorkspace({
         after={detailPane}
         afterSize={detailSize}
         onAfterSizeChange={onDetailSizeChange}
+        beforeCollapsed={branchCollapsed}
         beforeMinSize={axis === 'columns' ? LEFT_RIGHT_BRANCH_MIN_SIZE : TOP_BOTTOM_BRANCH_MIN_SIZE}
         afterMinSize={axis === 'columns' ? LEFT_RIGHT_DETAIL_MIN_SIZE : TOP_BOTTOM_DETAIL_MIN_SIZE}
         afterMaxSize="90%"

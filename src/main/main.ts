@@ -17,6 +17,9 @@ import { broadcastRendererEffectIntent } from '#/main/renderer-surface-events.ts
 import { getSettingsSnapshot, setSettingsGlobalShortcutState } from '#/main/settings-server-client.ts'
 import { startEmbeddedServer, stopEmbeddedServer } from '#/main/server-manager.ts'
 import { createStartupDiagnostics } from '#/main/startup-diagnostics.ts'
+import { configureChromiumKeychainPolicy } from '#/main/chromium-keychain-policy.ts'
+
+configureChromiumKeychainPolicy(app.commandLine, process.platform)
 
 function activateMainWindowFromEvent(): void {
   void activationBarrier

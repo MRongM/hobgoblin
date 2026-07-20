@@ -141,7 +141,7 @@ function normalizeCachedExplorerTabByBranch(
 }
 
 function cachedBranches(branches: RepoState['data']['branches']): RestorableRepoSnapshot['data']['branches'] {
-  return stripBranchWorktreeMetadata(branches).map(({ pullRequest: _pullRequest, ...branch }) => branch)
+  return stripBranchWorktreeMetadata(branches)
 }
 
 function restoreProjectionFromSnapshot(repo: RepoState, snapshot: RestorableRepoSnapshot): RepoState {

@@ -16,7 +16,7 @@ export function Topbar({ children, actions }: Props) {
 
   return (
     <div
-      className="topbar relative flex items-center gap-2 overflow-hidden border-b border-topbar-border bg-topbar text-sm text-topbar-foreground"
+      className="topbar mobile-topbar-scroll relative flex items-center gap-2 overflow-hidden border-b border-topbar-border bg-topbar text-sm text-topbar-foreground"
       style={{ height: topbarHeightPx }}
     >
       {children}

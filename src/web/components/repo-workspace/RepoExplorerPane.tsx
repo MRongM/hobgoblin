@@ -2,6 +2,7 @@ import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useCallback, useEffect, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import {
+  FolderPlus,
   FolderTree,
   FolderGit,
   GitBranch,
@@ -9,6 +10,7 @@ import {
   GitFork,
   History,
   RadioTower,
+  RefreshCw,
   Tag,
   ChevronsLeft,
   ChevronsRight,
@@ -29,9 +31,11 @@ import { StatusBar } from '#/web/components/StatusBar.tsx'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { explorerTabForRepo } from '#/web/stores/repos/helpers.ts'
-import type { ExplorerTab, RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
+import type { ExplorerTab, RepoBranchState, RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { Toolbar } from '#/web/components/Layout.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
+import { AsyncButton } from '#/web/components/AsyncButton.tsx'
+import { Tip } from '#/web/components/Tip.tsx'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { ToolbarTabStrip, ToolbarTabStripBody } from '#/web/components/tab-strip/ToolbarTabStrip.tsx'
 import { useT } from '#/web/stores/i18n.ts'
@@ -39,6 +43,10 @@ import { cn } from '#/web/lib/cn.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 import { repoIsPlainWorkspace } from '#/web/stores/repos/capabilities.ts'
+import { WorkspaceRepositoryRail } from '#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx'
+import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.tsx'
+import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
+import { runRepoRefreshIntent } from '#/web/stores/repos/refresh-coordinator.ts'
 
 export interface FileTreeRevealRequest {
   id: number
@@ -54,6 +62,8 @@ interface RepoExplorerPaneProps {
   plainWorkspaceTerminalPanel?: ReactNode
   fileAreaCollapsed?: boolean
   onToggleFileArea?: () => void
+  onShowCompactDetail?: () => void
+  onBranchSelected?: () => void
 }
 
 export function RepoExplorerPane({
@@ -64,6 +74,8 @@ export function RepoExplorerPane({
   plainWorkspaceTerminalPanel,
   fileAreaCollapsed = false,
   onToggleFileArea,
+  onShowCompactDetail,
+  onBranchSelected,
 }: RepoExplorerPaneProps) {
   const {
     activeTab,
@@ -99,44 +111,51 @@ export function RepoExplorerPane({
   )
   const handleTabChange = useCallback((tab: ExplorerTab) => setExplorerTab(repoId, tab), [repoId, setExplorerTab])
   const fileTreeSize = repoFileTreePaneSizes?.[layout] ?? defaultFileTreePaneSizes[layout]
-  const splitOrientation = layout === 'top-bottom' ? 'horizontal' : 'vertical'
-  const sideBySide = splitOrientation === 'horizontal'
   const activeRevealRequest = revealRequest?.repoId === repoId ? revealRequest : null
   const isPlainWorkspace = useReposStore((s) => {
     const repo = s.repos[repoId]
     return repoIsPlainWorkspace(repo)
   })
+  const workspaceRootId = useReposStore((s) => s.repos[repoId]?.workspaceRootId)
 
-  // Compact UI keeps the repo tab strip in the topbar, so the sidebar
-  // project header (window chrome + project switcher) only renders on
-  // desktop layouts.
+  // Compact focus presentation supplies its own explorer navigation, while
+  // legacy compact shells keep relying on the global topbar.
   const compact = useIsCompactUi()
+  const compactExplorerChrome = compact && !!onShowCompactDetail
+  const splitOrientation = compact ? 'vertical' : layout === 'top-bottom' ? 'horizontal' : 'vertical'
+  const sideBySide = splitOrientation === 'horizontal'
   const desktopFileAreaCollapsed = !compact && fileAreaCollapsed
 
   if (isPlainWorkspace) {
     return (
       <div data-file-tree-layout={layout} className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {!compact && <SidebarProjectHeader repoId={repoId} />}
         <PlainWorkspacePane
           repoId={repoId}
           layout={layout}
           revealRequest={activeRevealRequest}
           terminalPanel={plainWorkspaceTerminalPanel}
+          fileAreaCollapsed={desktopFileAreaCollapsed}
+          onToggleFileArea={compact ? undefined : onToggleFileArea}
+          onShowCompactDetail={compact ? onShowCompactDetail : undefined}
         />
-        {!compact && <StatusBar repoId={repoId} />}
       </div>
     )
   }
 
   return (
     <div data-file-tree-layout={layout} className="flex min-h-0 min-w-0 flex-1 flex-col">
-      {!compact && <SidebarProjectHeader repoId={repoId} />}
+      {(!compact || compactExplorerChrome) && (
+        <SidebarProjectHeader repoId={repoId} onShowCompactDetail={compact ? onShowCompactDetail : undefined} />
+      )}
       <SplitPane
         orientation={splitOrientation}
         before={
           <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
-            {!compact && <BranchSectionLabel />}
-            <BranchArea repoId={repoId} showActions={showActions} />
+            {!compact && workspaceRootId && (
+              <WorkspaceRepositoryRail workspaceRootId={workspaceRootId} currentRepoId={repoId} />
+            )}
+            {!compact && <BranchSectionLabel repoId={repoId} />}
+            <BranchArea repoId={repoId} showActions={showActions} onBranchSelected={onBranchSelected} />
           </div>
         }
         after={
@@ -157,8 +176,12 @@ export function RepoExplorerPane({
         afterMaxSize="80%"
         className="min-h-0 flex-1"
       />
-      {!compact && (
-        <StatusBar repoId={repoId} fileAreaCollapsed={desktopFileAreaCollapsed} onToggleFileArea={onToggleFileArea} />
+      {(!compact || compactExplorerChrome) && (
+        <StatusBar
+          repoId={repoId}
+          fileAreaCollapsed={compact ? undefined : desktopFileAreaCollapsed}
+          onToggleFileArea={compact ? undefined : onToggleFileArea}
+        />
       )}
     </div>
   )
@@ -167,19 +190,104 @@ export function RepoExplorerPane({
 // Slim eyebrow above the branch rows — the same 10px tracked-caps label
 // the project switcher and detached-worktrees lists use, so the sidebar
 // sections read as one system.
-function BranchSectionLabel() {
+function BranchSectionLabel({ repoId }: { repoId: string }) {
   const t = useT()
+  const repo = useReposStore((state) => state.repos[repoId])
+  const branch = repo?.ui.selectedBranch
+    ? (repo.data.branches.find((candidate) => candidate.name === repo.ui.selectedBranch) ?? null)
+    : null
+  const syncBusy = !!repo && (repo.operations.manualRefresh.phase !== 'idle' || repo.operations.fetch.phase !== 'idle')
+  const syncDisabled = !repo || repo.availability.phase === 'unavailable' || syncBusy
+  const syncTitle = t(repo?.remote.hasRemotes === false ? 'action.fetch-local-title' : 'action.fetch-title')
+
+  function handleSync() {
+    if (!repo || syncDisabled) return
+    void runRepoRefreshIntent(useReposStore.getState, {
+      kind: 'manual-refresh-requested',
+      id: repo.id,
+      token: repo.instanceToken,
+    })
+  }
+
   return (
-    <div className="flex h-7 shrink-0 items-center px-4 pt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
-      {t('branches.filter.worktrees')}
+    <div className="flex h-7 shrink-0 items-center gap-2 px-4 pt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
+      <span className="min-w-0 flex-1">{t('branches.filter.worktrees')}</span>
+      {repo && branch ? (
+        <BranchCreateWorktreeButton repo={repo} branch={branch} />
+      ) : (
+        <Tip label={t('action.create-worktree-title')}>
+          <span className="inline-flex">
+            <AsyncButton
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              disabled
+              aria-label={t('action.create-worktree-title')}
+            >
+              <FolderPlus aria-hidden="true" />
+            </AsyncButton>
+          </span>
+        </Tip>
+      )}
+      <Tip label={syncTitle}>
+        <span className="inline-flex">
+          <AsyncButton
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            loading={syncBusy}
+            disabled={syncDisabled}
+            aria-label={t('action.refresh')}
+            onClick={handleSync}
+          >
+            {({ busy }) => <RefreshCw className={busy ? 'animate-spin' : ''} aria-hidden="true" />}
+          </AsyncButton>
+        </span>
+      </Tip>
     </div>
   )
 }
 
-function BranchArea({ repoId, showActions }: { repoId: string; showActions: boolean }) {
+function BranchCreateWorktreeButton({ repo, branch }: { repo: BranchActionRepo; branch: RepoBranchState }) {
+  const actions = useBranchActionItems(repo, branch)
+  const action = actions.mainItems.find((item) => item.id === 'createWorktree')
+  const t = useT()
+  if (!action) return null
+
+  return (
+    <>
+      <Tip label={action.title ?? action.label}>
+        <span className="inline-flex">
+          <AsyncButton
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            loading={action.busy}
+            disabled={action.disabled}
+            aria-label={action.ariaLabel ?? action.title ?? t('action.create-worktree-title')}
+            onClick={() => action.onSelect()}
+          >
+            <FolderPlus aria-hidden="true" />
+          </AsyncButton>
+        </span>
+      </Tip>
+      {actions.dialogs}
+    </>
+  )
+}
+
+function BranchArea({
+  repoId,
+  showActions,
+  onBranchSelected,
+}: {
+  repoId: string
+  showActions: boolean
+  onBranchSelected?: () => void
+}) {
   return (
     <section className="flex min-h-0 flex-1 flex-col">
-      <BranchList repoId={repoId} showActions={showActions} />
+      <BranchList repoId={repoId} showActions={showActions} onBranchSelected={onBranchSelected} />
     </section>
   )
 }
@@ -311,10 +419,9 @@ function ExplorerTabs({
               {primaryTabs.map(renderTab)}
               {overflowTabs.length > 0 && (
                 <>
-                  {(overflowExpanded
-                    ? overflowTabs
-                    : overflowTabs.filter((tab) => tab.id === activeVisibleTab)
-                  ).map(renderTab)}
+                  {(overflowExpanded ? overflowTabs : overflowTabs.filter((tab) => tab.id === activeVisibleTab)).map(
+                    renderTab,
+                  )}
                   <Button
                     type="button"
                     variant="ghost"
@@ -342,7 +449,7 @@ function ExplorerTabs({
         ) : activeVisibleTab === 'changes' ? (
           <ProjectChangesPanel repoId={repoId} onRevealPath={handleRevealPath} />
         ) : activeVisibleTab === 'status' ? (
-          <ProjectStatusPanel repoId={repoId} layout={layout} />
+          <ProjectStatusPanel repoId={repoId} />
         ) : activeVisibleTab === 'history' ? (
           <ProjectHistoryPanel repoId={repoId} onRevealPath={handleRevealPath} />
         ) : activeVisibleTab === 'local' ? (

@@ -6,11 +6,10 @@ import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
 import { useBranchActions } from '#/web/hooks/useBranchActions.tsx'
 import { openBranchExternalTarget } from '#/web/hooks/openBranchExternalTarget.ts'
-import { createPullRequest, createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
+import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { normalizeRemoteTarget } from '#/shared/remote-repo.ts'
 
 const mocks = vi.hoisted(() => ({
-  openExternalUrl: vi.fn(),
   openRepositoryEditor: vi.fn(),
   openRepositoryRemote: vi.fn(),
   openRepositoryTerminal: vi.fn(),
@@ -18,10 +17,6 @@ const mocks = vi.hoisted(() => ({
   openRemoteRepositoryTerminal: vi.fn(),
   showRepoDetailTab: vi.fn(),
   showRepoBranchDetailTab: vi.fn(),
-}))
-
-vi.mock('#/web/app-shell-client.ts', () => ({
-  openExternalUrl: mocks.openExternalUrl,
 }))
 
 vi.mock('#/web/repo-client.ts', () => ({
@@ -52,7 +47,6 @@ describe('useBranchActions', () => {
 
   beforeEach(() => {
     resetReposStore()
-    mocks.openExternalUrl.mockReset()
     mocks.openRepositoryEditor.mockReset()
     mocks.openRepositoryRemote.mockReset()
     mocks.openRepositoryTerminal.mockReset()
@@ -74,39 +68,7 @@ describe('useBranchActions', () => {
     root = null
   })
 
-  test('opens the existing pull request URL when present', async () => {
-    const branch = createRepoBranch('feature/pr', {
-      pullRequest: createPullRequest(28689, { url: 'https://github.com/acme/repo/pull/28689' }),
-    })
-    const repo = seedRepoState({
-      id: REPO_ID,
-      branches: [branch],
-      remote: {
-        remotes: ['origin'],
-        hasRemotes: true,
-        hasBrowserRemote: true,
-        browserRemoteProvider: 'github',
-        remoteProviders: { origin: 'github' },
-        hasGitHubRemote: true,
-      },
-    })
-    mocks.openExternalUrl.mockResolvedValue({ ok: true, message: '' })
-
-    let actions: ReturnType<typeof useBranchActions>['actions'] | null = null
-    root = createRoot(container)
-    await act(async () => {
-      root!.render(<BranchActionsHarness repo={repo} onReady={(value) => (actions = value)} />)
-    })
-
-    await act(async () => {
-      await actions?.openRemote?.()
-    })
-
-    expect(mocks.openExternalUrl).toHaveBeenCalledWith('https://github.com/acme/repo/pull/28689')
-    expect(mocks.openRepositoryRemote).not.toHaveBeenCalled()
-  })
-
-  test('falls back to the branch remote URL when no pull request exists', async () => {
+  test('opens the branch remote URL', async () => {
     const branch = createRepoBranch('feature/no-pr')
     const repo = seedRepoState({
       id: REPO_ID,
@@ -133,7 +95,6 @@ describe('useBranchActions', () => {
     })
 
     expect(mocks.openRepositoryRemote).toHaveBeenCalledWith(REPO_ID, 'feature/no-pr')
-    expect(mocks.openExternalUrl).not.toHaveBeenCalled()
   })
 
   test('opens remote terminals through the remote terminal client without selecting the in-app terminal tab', async () => {
@@ -160,7 +121,7 @@ describe('useBranchActions', () => {
     })
 
     await act(async () => {
-      await actions?.openTerminal?.()
+      await actions?.openExternalTerminal?.()
     })
 
     expect(mocks.openRemoteRepositoryTerminal).toHaveBeenCalledWith(target!.id, '/srv/repo-feature')
@@ -184,12 +145,58 @@ describe('useBranchActions', () => {
     })
 
     await act(async () => {
-      await actions?.openTerminal?.()
+      await actions?.openExternalTerminal?.()
     })
 
     expect(mocks.openRepositoryTerminal).toHaveBeenCalledWith('/tmp/repo-feature')
     expect(mocks.openRemoteRepositoryTerminal).not.toHaveBeenCalled()
     expect(mocks.showRepoBranchDetailTab).not.toHaveBeenCalled()
+  })
+
+  test('tracks external terminal launches with a distinct pending action id', async () => {
+    let resolveOpenTerminal: ((result: { ok: boolean; message: string }) => void) | null = null
+    mocks.openRepositoryTerminal.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveOpenTerminal = resolve
+        }),
+    )
+    const branch = createRepoBranch('feature/pending-external-terminal', {
+      worktree: { path: '/tmp/repo-feature' },
+    })
+    const repo = seedRepoState({
+      id: REPO_ID,
+      branches: [branch],
+    })
+
+    let actions: ReturnType<typeof useBranchActions>['actions'] | null = null
+    let busyAction: ReturnType<typeof useBranchActions>['busyAction'] = null
+    root = createRoot(container)
+    await act(async () => {
+      root!.render(
+        <BranchActionsStateHarness
+          repo={repo}
+          onReady={(value) => {
+            actions = value.actions
+            busyAction = value.busyAction
+          }}
+        />,
+      )
+    })
+
+    let pending: Promise<void> | void
+    await act(async () => {
+      pending = actions?.openExternalTerminal()
+      await Promise.resolve()
+    })
+
+    expect(busyAction).toBe('externalTerminal')
+
+    await act(async () => {
+      resolveOpenTerminal?.({ ok: true, message: '' })
+      await pending
+    })
+    expect(busyAction).toBeNull()
   })
 
   test('opens remote editors through the remote editor client', async () => {
@@ -226,32 +233,17 @@ describe('useBranchActions', () => {
 
 describe('openBranchExternalTarget', () => {
   beforeEach(() => {
-    mocks.openExternalUrl.mockReset()
     mocks.openRepositoryRemote.mockReset()
   })
 
-  test('prefers the existing pull request URL', async () => {
-    mocks.openExternalUrl.mockResolvedValue({ ok: true, message: '' })
-
-    await openBranchExternalTarget(REPO_ID, {
-      name: 'feature/pr',
-      pullRequest: createPullRequest(28689, { url: 'https://github.com/acme/repo/pull/28689' }),
-    })
-
-    expect(mocks.openExternalUrl).toHaveBeenCalledWith('https://github.com/acme/repo/pull/28689')
-    expect(mocks.openRepositoryRemote).not.toHaveBeenCalled()
-  })
-
-  test('falls back to the branch remote target when no pull request exists', async () => {
+  test('opens the branch remote target', async () => {
     mocks.openRepositoryRemote.mockResolvedValue({ ok: true, message: '' })
 
     await openBranchExternalTarget(REPO_ID, {
       name: 'feature/no-pr',
-      pullRequest: undefined,
     })
 
     expect(mocks.openRepositoryRemote).toHaveBeenCalledWith(REPO_ID, 'feature/no-pr')
-    expect(mocks.openExternalUrl).not.toHaveBeenCalled()
   })
 })
 
@@ -267,5 +259,20 @@ function BranchActionsHarness({
   React.useEffect(() => {
     onReady(actions)
   }, [actions, onReady])
+  return null
+}
+
+function BranchActionsStateHarness({
+  repo,
+  onReady,
+}: {
+  repo: ReturnType<typeof seedRepoState>
+  onReady: (state: ReturnType<typeof useBranchActions>) => void
+}) {
+  const branch = repo.data.branches[0]!
+  const state = useBranchActions(repo, branch)
+  React.useEffect(() => {
+    onReady(state)
+  }, [state, onReady])
   return null
 }

@@ -6,14 +6,6 @@ export function defaultTitleBarStyle(): 'hiddenInset' | 'hidden' {
   return process.platform === 'darwin' ? 'hiddenInset' : 'hidden'
 }
 
-export function standaloneTitleBarStyle(): 'hiddenInset' | 'hidden' {
-  // Kept separate from defaultTitleBarStyle() even though they currently
-  // match. Main and auxiliary windows have already diverged in other chrome
-  // concerns (menu bar policy, page routing, close lifecycle), and keeping
-  // distinct entry points makes future platform-specific tweaks local.
-  return process.platform === 'darwin' ? 'hiddenInset' : 'hidden'
-}
-
 export function supportsTitleBarOverlay(): boolean {
   return process.platform !== 'darwin'
 }
@@ -27,9 +19,7 @@ export function titleBarOverlayForTheme(
   // Match the overlay strip to the renderer topbar. Otherwise Win/Linux
   // caption buttons render over a visibly different band.
   const color = TOPBAR_BACKGROUND_BY_COLOR_THEME[colorTheme][theme]
-  return theme === 'dark'
-    ? { color, symbolColor: '#ffffff', height }
-    : { color, symbolColor: '#000000', height }
+  return theme === 'dark' ? { color, symbolColor: '#ffffff', height } : { color, symbolColor: '#000000', height }
 }
 
 export function macTrafficLightPosition(topInset: number): { x: number; y: number } | undefined {

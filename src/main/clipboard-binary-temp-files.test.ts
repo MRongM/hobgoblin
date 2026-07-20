@@ -2,10 +2,7 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'vitest'
-import {
-  MAX_CLIPBOARD_BINARY_FILE_BYTES,
-  MAX_CLIPBOARD_BINARY_TOTAL_BYTES,
-} from '#/shared/clipboard-binary-temp-files.ts'
+import { MAX_CLIPBOARD_BINARY_FILE_BYTES } from '#/shared/clipboard-binary-temp-files.ts'
 import { saveClipboardBinaryFilesToTemp } from '#/main/clipboard-binary-temp-files.ts'
 
 const roots: string[] = []

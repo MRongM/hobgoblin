@@ -175,9 +175,10 @@ export function createServerTerminalBridge(options: {
   }
 
   function closeSocketIfIdle() {
-    if (shouldKeepSocketOpen() || !socket) return
-    manualSocketClose = true
+    if (shouldKeepSocketOpen()) return
     clearReconnectTimer()
+    if (!socket) return
+    manualSocketClose = true
     if (socket.readyState === WebSocket.CONNECTING) return
     try {
       socket.close()
@@ -207,10 +208,7 @@ export function createServerTerminalBridge(options: {
       return requestOverSocket('restart', input)
     },
     write(input) {
-      // Fire-and-forget: don't wait for server ack to avoid blocking mobile input pipeline.
-      // PTY exit is signaled independently via the 'exit' event.
-      void requestOverSocket('write', input).catch(() => {})
-      return Promise.resolve(true)
+      return requestOverSocket('write', input)
     },
     resize(input) {
       return requestOverSocket('resize', input).then((result) => result)

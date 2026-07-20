@@ -48,10 +48,6 @@ export function parseSshConfig(content: string): SshConfigHostsResult {
   return { hosts, hasInclude }
 }
 
-export function parseSshConfigHosts(content: string): SshConfigHost[] {
-  return parseSshConfig(content).hosts
-}
-
 export async function resolveRemoteTarget(
   input: RemoteConnectionInput,
   signal?: AbortSignal,

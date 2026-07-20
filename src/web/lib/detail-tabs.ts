@@ -1,9 +1,10 @@
 import type { DetailTab } from '#/web/stores/repos/types.ts'
 export type DetailTabNavigationKey = 'ArrowRight' | 'ArrowLeft' | 'Home' | 'End'
 
-export const DETAIL_TABS = [
-  { id: 'terminal', labelKey: 'tab.terminal' },
-] as const satisfies readonly { id: DetailTab; labelKey: string }[]
+export const DETAIL_TABS = [{ id: 'terminal', labelKey: 'tab.terminal' }] as const satisfies readonly {
+  id: DetailTab
+  labelKey: string
+}[]
 
 export function visibleDetailTabs(hasWorktree: boolean) {
   return hasWorktree ? DETAIL_TABS : []
@@ -12,10 +13,6 @@ export function visibleDetailTabs(hasWorktree: boolean) {
 export function detailTabForWorktree(tab: DetailTab, hasWorktree: boolean): DetailTab {
   if (tab === 'terminal') return hasWorktree ? tab : 'status'
   return 'status'
-}
-
-export function detailTabNavigationKey(key: string): DetailTabNavigationKey | null {
-  return key === 'ArrowRight' || key === 'ArrowLeft' || key === 'Home' || key === 'End' ? key : null
 }
 
 // Shared by the ARIA tablist handler and global shortcuts; callers own focus and collapse side effects.

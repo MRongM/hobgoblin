@@ -44,6 +44,10 @@ export class TerminalSessionRuntime {
     return this.state.getCanResize()
   }
 
+  canWrite(): boolean {
+    return this.state.getCanResize()
+  }
+
   startAttaching(): boolean {
     return this.state.setOpening()
   }
@@ -153,12 +157,11 @@ export class TerminalSessionRuntime {
     return this.state.resetTransientState()
   }
 
-  handleOutput(event: TerminalOutputEvent): { changed: boolean; output: string | null; summaryChanged: boolean } {
-    if (event.sessionId !== this.ptySessionId) return { changed: false, output: null, summaryChanged: false }
+  handleOutput(event: TerminalOutputEvent): { changed: boolean; output: string | null } {
+    if (event.sessionId !== this.ptySessionId) return { changed: false, output: null }
     const changed = this.state.setProcessName(event.processName)
-    if (this.state.captureReplayOutput(event)) return { changed, output: null, summaryChanged: false }
-    const summaryChanged = this.state.getCanResize() ? false : this.state.appendOutputSummary(event.data)
-    return { changed, output: event.data, summaryChanged }
+    if (this.state.captureReplayOutput(event)) return { changed, output: null }
+    return { changed, output: event.data }
   }
 
   handleOwnership(event: TerminalOwnershipViewModel): boolean {
@@ -192,9 +195,7 @@ export class TerminalSessionRuntime {
   }
 
   finishReplay(replayGeneration?: number): TerminalOutputEvent[] {
-    const events = this.state.finishReplay(replayGeneration)
-    for (const event of events) this.state.appendOutputSummary(event.data)
-    return events
+    return this.state.finishReplay(replayGeneration)
   }
 
   discardReplay(replayGeneration?: number): void {
@@ -222,5 +223,4 @@ export class TerminalSessionRuntime {
     this.replacingPtySessionId = null
     return sessionId
   }
-
 }

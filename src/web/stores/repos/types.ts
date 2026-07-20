@@ -4,12 +4,12 @@ import type {
   BrowserRemoteProvider,
   ExecResult,
   GitRemoteInfo,
-  PullRequestFetchMode,
   WorktreeStatus,
 } from '#/web/types.ts'
 import type { RemoteRepoTarget, RepoSessionEntry } from '#/shared/remote-repo.ts'
 import type { WorkspaceDetailPaneSizes, WorkspaceLayout } from '#/shared/workspace-layout.ts'
 import type { SessionState } from '#/shared/rpc.ts'
+import type { WorkspaceConfig, WorkspaceDiscoveryIssue, WorkspaceRepositoryCandidate } from '#/shared/workspace.ts'
 import type { RepoBranchAction, RunBranchActionOptions } from '#/web/stores/repos/branch-action-types.ts'
 import type { RepoOperationsState } from '#/web/stores/repos/operations.ts'
 import type { RepoResourcesState } from '#/web/stores/repos/resources.ts'
@@ -123,6 +123,8 @@ export interface RepoState {
   /** Absolute repo root — also the unique id. */
   id: string
   name: string
+  /** Multi-repository workspace root that owns this child repository. */
+  workspaceRootId?: string
   /** false when the directory is readable but not yet a git repository. */
   isGitRepo: boolean
   /** Bumped on every fresh open so async writers can detect close-and-reopen. */
@@ -136,6 +138,24 @@ export interface RepoState {
   remote: RepoRemoteState
   availability: RepoAvailabilityState
   events: RepoEvent[]
+}
+
+export interface WorkspaceProjectState {
+  rootId: string
+  repositoryIds: string[]
+  candidates: WorkspaceRepositoryCandidate[]
+  configured: boolean
+  configurationError: string | null
+  phase: 'scanning' | 'ready' | 'error'
+  skipped: WorkspaceDiscoveryIssue[]
+  error: string | null
+}
+
+export interface WorkspaceProjectsState {
+  /** Renderer projection of depth-one repository discovery by workspace root. */
+  workspaceProjects: Record<string, WorkspaceProjectState>
+  /** Restorable Overview/child selection for each multi-repository workspace. */
+  workspaceActiveRepoByRoot: Record<string, string | null>
 }
 
 export interface RuntimeCoherentRepoProjectionState {
@@ -156,6 +176,9 @@ export interface RestorableWorkspaceState {
   order: string[]
   /** Active workspace tab restored from SessionState.activeRepo. */
   activeId: string | null
+  workspaceActiveRepoByRoot: Record<string, string | null>
+  /** Global sidebar project-list expansion preference restored from SessionState. */
+  projectListExpanded: boolean
   detailCollapsed: boolean
   /** Persisted focus-toggle preference for the detail pane. This
    *  is not itself proof that the workspace is currently rendering in focus
@@ -185,6 +208,12 @@ export interface LocalWorkspaceActions {
 
 export interface RestorableWorkspaceActions {
   setActive: (id: string) => void
+  /** Activate a top-level project, restoring its last workspace child when present. */
+  activateProject: (id: string) => void
+  /** Select Overview (`null`) or one repository within a workspace project. */
+  activateWorkspaceRepository: (rootId: string, repoId: string | null) => void
+  setProjectListExpanded: (expanded: boolean) => void
+  toggleProjectListExpanded: () => void
   /** Reorder the tab strip so `fromId` lands at `toId`'s position, using
    *  the same shift semantics as dnd-kit's `arrayMove` (the rest of the
    *  list closes the gap; later items shift up if `from < to`, down if
@@ -227,33 +256,30 @@ export interface RuntimeCoherentRepoProjectionActions {
     options?: { affectVisibleWorkspace?: boolean },
   ) => void
   selectBranch: (id: string, branch: string) => void
-  refreshSnapshot: (id: string, options?: { skipLogBackfill?: boolean; token?: number }) => Promise<void>
-  refreshPullRequests: (
-    id: string,
-    branches?: string[],
-    options?: {
-      token?: number
-      mode?: PullRequestFetchMode
-      clearMissing?: boolean
-    },
-  ) => Promise<void>
+  refreshSnapshot: (id: string, options?: { token?: number }) => Promise<void>
   refreshStatus: (id: string, options?: { token?: number }) => Promise<void>
   refreshCoreData: (id: string, options?: { token?: number }) => Promise<void>
   syncAndRefresh: (id: string, options?: { token?: number }) => Promise<void>
-  setLastResult: (
-    id: string,
-    result: ExecResult,
-    token: number,
-    options?: RepoResultEventOptions,
-  ) => void
+  setLastResult: (id: string, result: ExecResult, token: number, options?: RepoResultEventOptions) => void
   clearEvents: (id: string, eventIds: number[]) => void
-  hydrateSession: (openRepos: RepoSessionEntry[], activeRepo: string | null) => Promise<void>
+  hydrateSession: (
+    openRepos: RepoSessionEntry[],
+    activeRepo: string | null,
+    workspaceActiveRepoByRoot?: Record<string, string | null>,
+  ) => Promise<void>
   /** Clear the fetchFailed flag — called by manual fetch success and
    *  by an explicit refresh, so a stale badge doesn't follow the user
    *  around forever. */
   clearFetchFailed: (id: string, token: number) => void
   /** Initialize the directory at `id` as a git repo, then refresh. */
   initGitRepository: (id: string) => Promise<ExecResult>
+  /** Re-run depth-one repository discovery for a multi-repository workspace root. */
+  rescanWorkspace: (rootId: string) => Promise<void>
+  /** Persist selected repository members for a plain workspace. */
+  configureWorkspace: (
+    rootId: string,
+    config: WorkspaceConfig,
+  ) => Promise<{ ok: true } | { ok: false; message: string }>
 }
 
 export interface RepoMutationActions {
@@ -273,7 +299,9 @@ export interface RepoMutationActions {
 }
 
 export interface ReposStore
-  extends RuntimeCoherentRepoProjectionState,
+  extends
+    RuntimeCoherentRepoProjectionState,
+    WorkspaceProjectsState,
     RestorableRepoCacheState,
     RestorableWorkspaceState,
     LocalWorkspaceState,

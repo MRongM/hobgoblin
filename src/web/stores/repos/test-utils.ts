@@ -14,7 +14,7 @@ import type {
   TerminalSessionSummary,
   TerminalTakeoverResult,
 } from '#/shared/terminal.ts'
-import type { BranchSnapshotInfo, PullRequestInfo, WorktreeStatus } from '#/web/types.ts'
+import type { BranchSnapshotInfo, WorktreeStatus } from '#/web/types.ts'
 import type { DetailTab, ExplorerTab, RepoBranchState, RepoState } from '#/web/stores/repos/types.ts'
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import {
@@ -24,6 +24,7 @@ import {
   DEFAULT_WORKSPACE_LAYOUT,
   type WorkspaceDetailPaneSizes,
 } from '#/shared/workspace-layout.ts'
+import { DEFAULT_PROJECT_LIST_EXPANDED } from '#/shared/settings-defaults.ts'
 export type RpcTestHandler = (input: any) => unknown
 
 interface TerminalBridgeTestOutputs {
@@ -88,24 +89,17 @@ export function createRepoBranch(name: string, options: Partial<RepoBranchState>
   return stripBranchWorktreeMetadata([createBranchSnapshot(name, options)])[0]!
 }
 
-export function createPullRequest(number: number, options: Partial<PullRequestInfo> = {}): PullRequestInfo {
-  return {
-    number,
-    title: `PR ${number}`,
-    url: `https://github.com/acme/repo/pull/${number}`,
-    state: 'open',
-    ...options,
-  }
-}
-
 export function resetReposStore(): void {
   disposeAllRepoRuntimes()
   mainWindowQueryClient.clear()
   useReposStore.setState({
     repos: {},
+    workspaceProjects: {},
+    workspaceActiveRepoByRoot: {},
     restorableRepoCache: {},
     order: [],
     activeId: null,
+    projectListExpanded: DEFAULT_PROJECT_LIST_EXPANDED,
     sessionReady: false,
     branchSearchQueries: {},
     detailCollapsed: DEFAULT_DETAIL_COLLAPSED,
@@ -196,10 +190,16 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
     },
   })
   function callTerminalHandler(name: 'terminal.attach', payload: unknown): TerminalBridgeTestOutputs['terminal.attach']
-  function callTerminalHandler(name: 'terminal.restart', payload: unknown): TerminalBridgeTestOutputs['terminal.restart']
+  function callTerminalHandler(
+    name: 'terminal.restart',
+    payload: unknown,
+  ): TerminalBridgeTestOutputs['terminal.restart']
   function callTerminalHandler(name: 'terminal.write', payload: unknown): TerminalBridgeTestOutputs['terminal.write']
   function callTerminalHandler(name: 'terminal.resize', payload: unknown): TerminalBridgeTestOutputs['terminal.resize']
-  function callTerminalHandler(name: 'terminal.takeover', payload: unknown): TerminalBridgeTestOutputs['terminal.takeover']
+  function callTerminalHandler(
+    name: 'terminal.takeover',
+    payload: unknown,
+  ): TerminalBridgeTestOutputs['terminal.takeover']
   function callTerminalHandler(name: 'terminal.close', payload: unknown): TerminalBridgeTestOutputs['terminal.close']
   function callTerminalHandler(name: 'terminal.create', payload: unknown): TerminalBridgeTestOutputs['terminal.create']
   function callTerminalHandler(name: 'terminal.prune', payload: unknown): TerminalBridgeTestOutputs['terminal.prune']
@@ -362,7 +362,11 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
     kind: () => 'electron',
     hasCapability: () => false,
     getBootstrap: () => ({
-      runtime: { kind: 'electron', bridgeVersion: RENDERER_BRIDGE_VERSION, capabilities: [...ELECTRON_RENDERER_CAPABILITIES] },
+      runtime: {
+        kind: 'electron',
+        bridgeVersion: RENDERER_BRIDGE_VERSION,
+        capabilities: [...ELECTRON_RENDERER_CAPABILITIES],
+      },
       homeDir: '/Users/test',
       initialI18n: null,
       initialSettings: null,
@@ -416,11 +420,6 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
       const result = (() => {
         if (url.pathname === '/api/settings') return call('settings.get', undefined)
         if (url.pathname === '/api/settings/i18n') return call('i18n.get', undefined)
-        if (url.pathname === '/api/settings/github-cli') {
-          const hosts = url.searchParams.getAll('host')
-          return call('githubCli.get', hosts.length > 0 ? { hosts } : undefined)
-        }
-        if (url.pathname === '/api/settings/github-cli/refresh') return call('githubCli.refresh', body)
         if (url.pathname === '/api/settings/external-apps') {
           return init?.method === 'POST' ? call('externalApps.refresh', body) : call('externalApps.get', undefined)
         }
@@ -436,7 +435,6 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
         if (url.pathname === '/api/repo/snapshot') return call('repo.snapshot', body)
         if (url.pathname === '/api/repo/status') return call('repo.status', body)
         if (url.pathname === '/api/repo/remote-branches') return call('repo.remoteBranches', body)
-        if (url.pathname === '/api/repo/pull-requests') return call('repo.pullRequests', body)
         if (url.pathname === '/api/repo/local-tags') return call('repo.localTags', body)
         if (url.pathname === '/api/repo/create-local-tag') return call('repo.createLocalTag', body)
         if (url.pathname === '/api/repo/delete-local-tag') return call('repo.deleteLocalTag', body)
@@ -458,6 +456,9 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
         if (url.pathname === '/api/repo/open-editor') return call('repo.openEditor', body)
         if (url.pathname === '/api/repo/background-sync-repos') return call('repo.backgroundSyncRepos', body)
         if (url.pathname === '/api/repo/abort') return call('repo.abort', body)
+        if (url.pathname === '/api/workspace/restore') return call('workspace.restore', body)
+        if (url.pathname === '/api/workspace/discover') return call('workspace.discover', body)
+        if (url.pathname === '/api/workspace/configure') return call('workspace.configure', body)
         throw new Error(`Unhandled fetch URL: ${url.pathname}`)
       })()
       const abortError = () => {
@@ -556,6 +557,7 @@ export function seedRepoState(options: {
     restorableRepoCache: {},
     order: [options.id],
     activeId: options.id,
+    projectListExpanded: DEFAULT_PROJECT_LIST_EXPANDED,
     sessionReady: true,
     branchSearchQueries: {},
     detailCollapsed: DEFAULT_DETAIL_COLLAPSED,

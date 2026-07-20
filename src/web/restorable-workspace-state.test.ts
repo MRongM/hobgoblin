@@ -18,6 +18,8 @@ describe('restorable-workspace-state', () => {
         restorableWorkspaceState: {
           order: [repo.id],
           activeId: repo.id,
+          workspaceActiveRepoByRoot: { '/tmp/workspace': '/tmp/workspace/api' },
+          projectListExpanded: true,
           detailCollapsed: false,
           detailFocusMode: true,
           workspaceLayout: 'left-right',
@@ -31,6 +33,8 @@ describe('restorable-workspace-state', () => {
     ).toEqual({
       openRepos: [localRepoSessionEntry('/tmp/repo')],
       activeRepo: '/tmp/repo',
+      workspaceActiveRepoByRoot: { '/tmp/workspace': '/tmp/workspace/api' },
+      projectListExpanded: true,
       detailCollapsed: false,
       detailFocusMode: true,
       workspaceLayout: 'left-right',
@@ -47,6 +51,8 @@ describe('restorable-workspace-state', () => {
       restoreRestorableWorkspaceStateFromSession({
         openRepos: [localRepoSessionEntry('/tmp/repo')],
         activeRepo: '/tmp/repo',
+        workspaceActiveRepoByRoot: { '/tmp/workspace': '/tmp/workspace/api' },
+        projectListExpanded: true,
         detailCollapsed: true,
         detailFocusMode: false,
         workspaceLayout: 'top-bottom',
@@ -58,6 +64,8 @@ describe('restorable-workspace-state', () => {
       }),
     ).toEqual({
       activeId: '/tmp/repo',
+      workspaceActiveRepoByRoot: { '/tmp/workspace': '/tmp/workspace/api' },
+      projectListExpanded: true,
       detailCollapsed: true,
       detailFocusMode: false,
       workspaceLayout: 'top-bottom',
@@ -67,5 +75,19 @@ describe('restorable-workspace-state', () => {
         '/tmp/repo\0/tmp/worktree': '/tmp/repo\0/tmp/worktree\0terminal-1',
       },
     })
+  })
+
+  test('restores an empty workspace selection map from legacy sessions', () => {
+    expect(
+      restoreRestorableWorkspaceStateFromSession({
+        openRepos: [],
+        activeRepo: null,
+        projectListExpanded: false,
+        detailCollapsed: false,
+        detailFocusMode: false,
+        workspaceLayout: 'left-right',
+        detailPaneSizes: { 'top-bottom': 50, 'left-right': 50 },
+      }).workspaceActiveRepoByRoot,
+    ).toEqual({})
   })
 })

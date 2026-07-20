@@ -1,6 +1,6 @@
 import { getInitialBootstrap } from '#/web/bootstrap.ts'
 import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
-import { externalAppsQueryKey, settingsSnapshotQueryKey, useSettingsSnapshotQuery } from '#/web/settings-queries.ts'
+import { settingsSnapshotQueryKey, useSettingsSnapshotQuery } from '#/web/settings-queries.ts'
 import type {
   ExternalAppsSnapshot,
   RuntimeRecentReposState,
@@ -49,10 +49,6 @@ export function runtimeRecentReposStateOrUndefined(
   return snapshot ? runtimeRecentReposStateFromSettingsSnapshot(snapshot) : undefined
 }
 
-export function currentRuntimeRecentReposState(): RuntimeRecentReposState | undefined {
-  return runtimeRecentReposStateOrUndefined(currentSettingsSnapshot())
-}
-
 export function useRuntimeSettingsSnapshot(): RuntimeSettingsSnapshot | undefined {
   const { data } = useSettingsSnapshotQuery()
   return runtimeSettingsSnapshotOrUndefined(data)
@@ -61,10 +57,6 @@ export function useRuntimeSettingsSnapshot(): RuntimeSettingsSnapshot | undefine
 export function useRuntimeRecentReposState(): RuntimeRecentReposState | undefined {
   const { data } = useSettingsSnapshotQuery()
   return runtimeRecentReposStateOrUndefined(data)
-}
-
-export function currentExternalAppsSnapshot(): ExternalAppsSnapshot | undefined {
-  return mainWindowQueryClient.getQueryData<ExternalAppsSnapshot>(externalAppsQueryKey())
 }
 
 export function readRuntimeShortcutSettings(data: RuntimeSettingsSnapshot | undefined) {

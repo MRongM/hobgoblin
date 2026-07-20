@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { localRepoSessionEntry, normalizeRemoteTarget, remoteRepoSessionEntry } from '#/shared/remote-repo.ts'
+import {
+  localRepoSessionEntry,
+  normalizeRemoteRepoRef,
+  normalizeRemoteTarget,
+  remoteRepoSessionEntry,
+} from '#/shared/remote-repo.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { BranchSnapshotInfo } from '#/web/types.ts'
 import {
@@ -14,6 +19,94 @@ import {
 beforeEach(resetLifecycleTest)
 
 describe('repo session hydration', () => {
+  test('restores configured remote workspace children before restoring an active child repository', async () => {
+    const rootTarget = normalizeRemoteTarget({
+      alias: 'example',
+      host: 'example.com',
+      user: 'alice',
+      port: 22,
+      remotePath: '/srv/workspace',
+    })!
+    const child = normalizeRemoteRepoRef({ alias: 'example', remotePath: '/srv/workspace/api' })!
+    const calls = installGoblin({
+      probe: (cwd: string) => ({
+        ok: true,
+        root: cwd,
+        name: cwd === rootTarget.id ? 'example:workspace' : cwd,
+        isGitRepo: cwd !== rootTarget.id,
+      }),
+      'workspace.restore': () => ({
+        ok: true,
+        rootId: rootTarget.id,
+        repositories: [{ id: child.id, name: 'api', remoteRef: child }],
+        candidates: [{ id: child.id, name: 'api', remoteRef: child, selected: false, available: true }],
+        configuration: { kind: 'missing' },
+        skipped: [],
+      }),
+    })
+
+    await useReposStore
+      .getState()
+      .hydrateSession([remoteRepoSessionEntry(rootTarget)], child.id, { [rootTarget.id]: child.id })
+
+    expect(useReposStore.getState().order).toEqual([rootTarget.id])
+    expect(useReposStore.getState().activeId).toBe(child.id)
+    expect(useReposStore.getState().repos[child.id]?.remote.target).toEqual({ ...rootTarget, ...child })
+    expect(useReposStore.getState().workspaceActiveRepoByRoot).toEqual({ [rootTarget.id]: child.id })
+    expect(calls.recent).toEqual([])
+  })
+
+  test('rediscovers workspace children before restoring an active child repository', async () => {
+    const root = '/tmp/gbl-workspace'
+    const child = `${root}/api`
+    const calls = installGoblin({
+      probe: (cwd: string) => ({
+        ok: true,
+        root: cwd,
+        name: cwd.split('/').at(-1) ?? cwd,
+        isGitRepo: cwd !== root,
+      }),
+      'workspace.discover': () => ({
+        ok: true,
+        rootId: root,
+        repositories: [{ id: child, name: 'api' }],
+        candidates: [{ id: child, name: 'api', selected: false, available: true }],
+        configuration: { kind: 'missing' },
+        skipped: [],
+      }),
+    })
+
+    await useReposStore.getState().hydrateSession([localRepoSessionEntry(root)], child, { [root]: child })
+
+    expect(useReposStore.getState().order).toEqual([root])
+    expect(useReposStore.getState().activeId).toBe(child)
+    expect(useReposStore.getState().workspaceActiveRepoByRoot).toEqual({ [root]: child })
+    expect(useReposStore.getState().workspaceProjects[root]?.repositoryIds).toEqual([child])
+    expect(calls.recent).toEqual([])
+  })
+
+  test('drops a stale child selection when the root is no longer a multi-repository workspace', async () => {
+    const root = '/tmp/gbl-workspace'
+    const child = `${root}/removed`
+    installGoblin({
+      probe: (cwd: string) => ({ ok: true, root: cwd, name: 'workspace', isGitRepo: false }),
+      'workspace.discover': () => ({
+        ok: true,
+        rootId: root,
+        repositories: [],
+        candidates: [],
+        configuration: { kind: 'missing' },
+        skipped: [],
+      }),
+    })
+
+    await useReposStore.getState().hydrateSession([localRepoSessionEntry(root)], child, { [root]: child })
+
+    expect(useReposStore.getState().activeId).toBe(root)
+    expect(useReposStore.getState().workspaceProjects).toEqual({})
+    expect(useReposStore.getState().workspaceActiveRepoByRoot).toEqual({})
+  })
+
   test('hydrateSession restores tabs through the same initial local refresh path without recent-repo side effects', async () => {
     const calls = installGoblin()
 

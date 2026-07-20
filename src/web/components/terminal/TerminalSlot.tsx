@@ -9,10 +9,15 @@ import {
   type DragEvent,
   type FocusEvent,
   type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { toast } from 'sonner'
 import { Button } from '#/web/components/ui/button.tsx'
-import { GOBLIN_FILE_PATHS_MIME, parseGoblinFilePathDragPayload, type RepoFileTransferUploadedItem } from '#/shared/file-tree.ts'
+import {
+  GOBLIN_FILE_PATHS_MIME,
+  parseGoblinFilePathDragPayload,
+  type RepoFileTransferUploadedItem,
+} from '#/shared/file-tree.ts'
 import type { ClipboardBinaryFilePayload } from '#/shared/clipboard-binary-temp-files.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
@@ -49,6 +54,7 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
   const hostRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const bottomDockRef = useRef<HTMLDivElement | null>(null)
+  const touchScrollRef = useRef<{ pointerId: number; lastY: number; remainder: number } | null>(null)
   const onRevealPathRef = useRef(onRevealPath)
   onRevealPathRef.current = onRevealPath
   const [searchOpen, setSearchOpen] = useState(false)
@@ -75,13 +81,60 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
   const key = descriptor?.key ?? null
   const snapshot = useTerminalSnapshot(key)
   const hasSessions = useWorktreeTerminalCount(terminalWorktreeKey) > 0
-  const { temporaryFilesDirectory, terminalCustomButtonsVisible, terminalCustomButtonSize, terminalCustomButtons } =
-    useRuntimeTerminalSettings()
+  const {
+    temporaryFilesDirectory,
+    terminalFontSize,
+    terminalCustomButtonsVisible,
+    terminalCustomButtonSize,
+    terminalCustomButtons,
+  } = useRuntimeTerminalSettings()
   const progress = snapshot.progress
   const attachment = snapshot.attachment
   const isController = hasSessions && snapshot.phase === 'open' && attachment?.role === 'controller'
   const isReadonly =
     hasSessions && snapshot.phase === 'open' && (attachment?.role === 'viewer' || attachment?.role === 'unowned')
+  const isMobile = isMobileDevice()
+  const isMobileReadonly = isMobile && isReadonly && !!key
+
+  useEffect(() => {
+    if (!isMobileReadonly) touchScrollRef.current = null
+  }, [isMobileReadonly, key])
+
+  const handleTouchScrollStart = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!isMobileReadonly || event.pointerType !== 'touch' || event.isPrimary === false) return
+      touchScrollRef.current = { pointerId: event.pointerId, lastY: event.clientY, remainder: 0 }
+      event.currentTarget.setPointerCapture?.(event.pointerId)
+    },
+    [isMobileReadonly],
+  )
+  const handleTouchScrollMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const gesture = touchScrollRef.current
+      if (!isMobileReadonly || !key || !gesture || event.pointerId !== gesture.pointerId) return
+
+      const pixelsPerLine = Math.max(1, terminalFontSize)
+      const accumulatedPixels = gesture.remainder + gesture.lastY - event.clientY
+      const lineDelta =
+        accumulatedPixels < 0
+          ? Math.ceil(accumulatedPixels / pixelsPerLine)
+          : Math.floor(accumulatedPixels / pixelsPerLine)
+      gesture.lastY = event.clientY
+      gesture.remainder = accumulatedPixels - lineDelta * pixelsPerLine
+      if (lineDelta === 0) return
+
+      event.preventDefault()
+      scrollLines(key, lineDelta)
+    },
+    [isMobileReadonly, key, scrollLines, terminalFontSize],
+  )
+  const handleTouchScrollEnd = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (touchScrollRef.current?.pointerId !== event.pointerId) return
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    touchScrollRef.current = null
+  }, [])
 
   useLayoutEffect(() => {
     registerWorktreeHost(terminalWorktreeKey, hostRef.current)
@@ -235,34 +288,48 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
       : ''
 
   const [dragOver, setDragOver] = useState(false)
-  const handleDragEnter = useCallback((event: DragEvent<HTMLDivElement>) => {
-    if (!hasPathDrop(event)) return
-    event.preventDefault()
-    setDragOver(true)
-  }, [])
-  const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
-    if (!hasPathDrop(event)) return
-    event.preventDefault()
-    event.dataTransfer.dropEffect = 'copy'
-  }, [])
-  const handleDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
-    if (!hasPathDrop(event)) return
-    const relatedTarget = event.relatedTarget
-    if (!(relatedTarget instanceof Node) || !event.currentTarget.contains(relatedTarget)) setDragOver(false)
-  }, [])
+  const handleDragEnter = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      if (!hasPathDrop(event)) return
+      event.preventDefault()
+      setDragOver(isController)
+    },
+    [isController],
+  )
+  const handleDragOver = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      if (!hasPathDrop(event)) return
+      event.preventDefault()
+      event.dataTransfer.dropEffect = isController ? 'copy' : 'none'
+    },
+    [isController],
+  )
+  const handleDragLeave = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      if (!hasPathDrop(event)) return
+      const relatedTarget = event.relatedTarget
+      if (!isController || !(relatedTarget instanceof Node) || !event.currentTarget.contains(relatedTarget)) {
+        setDragOver(false)
+      }
+    },
+    [isController],
+  )
   const handleDrop = useCallback(
     (event: DragEvent<HTMLDivElement>) => {
       if (!hasPathDrop(event)) return
       event.preventDefault()
       setDragOver(false)
-      if (!key) return
+      if (!isController || !key) return
       const paths = pathsForDrop(event, worktreePath)
       if (paths.length === 0) return
       const escaped = paths.map(shellEscapePath).join(' ')
       writeInput(key, escaped)
     },
-    [key, worktreePath, writeInput],
+    [isController, key, worktreePath, writeInput],
   )
+  useEffect(() => {
+    if (!isController) setDragOver(false)
+  }, [isController])
   const visibleCustomButtons =
     isController && terminalCustomButtonsVisible
       ? terminalCustomButtons.filter((button) => button.label.trim() && button.value.trim())
@@ -291,7 +358,7 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
     return () => observer.disconnect()
   }, [hasBottomDock, visibleCustomButtons.length])
 
-  const readonlyBadge = attachment?.role === 'viewer' ? t('terminal.mirror-controlled') : t('terminal.unowned')
+  const readonlyMessage = attachment?.role === 'viewer' ? t('terminal.mirror-controlled') : t('terminal.unowned')
   const progressVariant =
     progress?.state === 2 ? 'error' : progress?.state === 4 ? 'warning' : progress?.state === 3 ? 'indeterminate' : ''
   const slotStyle =
@@ -330,8 +397,15 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
       )}
       <div
         ref={hostRef}
-        className={cn('goblin-terminal-slot__host', isReadonly && 'goblin-terminal-slot__host--hidden')}
+        className={cn(
+          'goblin-terminal-slot__host',
+          isMobileReadonly && 'goblin-terminal-slot__host--touch-scroll',
+        )}
         aria-readonly={(!isController && hasSessions) || undefined}
+        onPointerDown={isMobileReadonly ? handleTouchScrollStart : undefined}
+        onPointerMove={isMobileReadonly ? handleTouchScrollMove : undefined}
+        onPointerUp={isMobileReadonly ? handleTouchScrollEnd : undefined}
+        onPointerCancel={isMobileReadonly ? handleTouchScrollEnd : undefined}
       />
       <div className="goblin-terminal-float-group">
         {searchOpen && (
@@ -359,7 +433,7 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
             </Button>
           </div>
         )}
-        {isMobileDevice() && isController && key && (
+        {isMobile && isController && key && (
           <MobileTerminalToolbar
             onInput={(data) => writeInput(key, data)}
             onScrollLines={(amount) => scrollLines(key, amount)}
@@ -396,10 +470,9 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
         </div>
       )}
       {isReadonly && (
-        <ViewerOverlay
-          badge={readonlyBadge}
+        <ViewerStatus
+          message={readonlyMessage}
           takeoverLabel={t('terminal.takeover')}
-          snapshot={snapshot}
           takeoverKey={key}
           onTakeover={takeover}
           takeoverPending={snapshot.takeoverPending}
@@ -429,39 +502,29 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
   )
 }
 
-interface ViewerOverlayProps {
-  badge: string
+interface ViewerStatusProps {
+  message: string
   takeoverLabel: string
-  snapshot: ReturnType<typeof useTerminalSnapshot>
   takeoverKey: string | null
   onTakeover: (key: string) => void
   takeoverPending?: boolean
 }
 
-function ViewerOverlay({ badge, takeoverLabel, snapshot, takeoverKey, onTakeover, takeoverPending }: ViewerOverlayProps) {
+function ViewerStatus({ message, takeoverLabel, takeoverKey, onTakeover, takeoverPending }: ViewerStatusProps) {
   return (
-    <div className="goblin-terminal-slot__viewer-overlay">
-      <div className="goblin-terminal-slot__viewer-content">
-        <div className="goblin-terminal-slot__viewer-badge">{badge}</div>
-        <div className="goblin-terminal-slot__viewer-meta">
-          <span className="goblin-terminal-slot__viewer-process">{snapshot.processName}</span>
-          {snapshot.canonicalTitle && (
-            <span className="goblin-terminal-slot__viewer-title">{snapshot.canonicalTitle}</span>
-          )}
-        </div>
-        {snapshot.outputSummary && (
-          <pre className="goblin-terminal-slot__viewer-output">{snapshot.outputSummary}</pre>
-        )}
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          onClick={() => takeoverKey && onTakeover(takeoverKey)}
-          disabled={!takeoverKey || takeoverPending}
-        >
-          {takeoverPending ? `${takeoverLabel}…` : takeoverLabel}
-        </Button>
-      </div>
+    <div className="goblin-terminal-slot__viewer-status">
+      <span className="goblin-terminal-slot__viewer-message" role="status" aria-live="polite" aria-atomic="true">
+        {message}
+      </span>
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        onClick={() => takeoverKey && onTakeover(takeoverKey)}
+        disabled={!takeoverKey || takeoverPending}
+      >
+        {takeoverPending ? `${takeoverLabel}…` : takeoverLabel}
+      </Button>
     </div>
   )
 }

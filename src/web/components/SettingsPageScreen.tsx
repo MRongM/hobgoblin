@@ -1,38 +1,35 @@
-import { ArrowLeft } from 'lucide-react'
-import { Button } from '#/web/components/ui/button.tsx'
 import { SettingsSurface } from '#/web/components/SettingsSurface.tsx'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '#/web/components/ui/dialog.tsx'
 import { useT } from '#/web/stores/i18n.ts'
-import { useRuntimeChromeSettings } from '#/web/runtime-settings-chrome.ts'
-import { SETTINGS_PAGE_CONFIG } from '#/shared/settings-pages.ts'
 import type { SettingsPage } from '#/shared/settings-pages.ts'
 interface SettingsPageScreenProps {
-  page: SettingsPage
-  onBack: () => void
+  page: SettingsPage | null
+  onClose: () => void
   onPageChange: (page: SettingsPage) => void
 }
 
-export function SettingsPageScreen({ page, onBack, onPageChange }: SettingsPageScreenProps) {
+export function SettingsPageScreen({ page, onClose, onPageChange }: SettingsPageScreenProps) {
   const t = useT()
-  const { topbarHeightPx } = useRuntimeChromeSettings()
-  const pageTitle = t(SETTINGS_PAGE_CONFIG[page].titleKey)
 
   return (
-    <div className="flex h-full flex-col bg-background">
-      <div
-        className="topbar flex shrink-0 items-center gap-2 border-b border-topbar-border bg-topbar text-sm text-topbar-foreground"
-        style={{ height: topbarHeightPx }}
+    <Dialog open={page !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        aria-describedby={undefined}
+        overlayClassName="backdrop-blur-[2px]"
+        className="flex h-[min(50rem,calc(100dvh-2rem))] w-[calc(100dvw-2rem)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-[68rem]"
+        onPointerDownOutside={(event) => {
+          if (event.target instanceof Element && event.target.closest('[data-settings-trigger]')) {
+            event.preventDefault()
+          }
+        }}
       >
-        <Button type="button" variant="ghost" size="sm" className="gap-1.5 px-2" onClick={onBack}>
-          <ArrowLeft className="size-4" />
-          {t('settings.back')}
-        </Button>
-        <div className="min-w-0 flex-1 truncate text-center text-sm font-semibold text-topbar-foreground">
-          {pageTitle}
+        <DialogHeader className="flex h-10 shrink-0 justify-center border-b border-topbar-border bg-topbar px-4 pr-11">
+          <DialogTitle className="truncate text-topbar-foreground">{t('settings.title')}</DialogTitle>
+        </DialogHeader>
+        <div className="min-h-0 flex-1">
+          <SettingsSurface page={page ?? 'general'} onPageChange={onPageChange} />
         </div>
-      </div>
-      <div className="min-h-0 flex-1">
-        <SettingsSurface page={page} onPageChange={onPageChange} />
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -31,7 +31,7 @@ Hobgoblin started from [Goblin](https://nano-props.github.io/goblin/), a small, 
 - **Multi-project workspace:** Open repositories in tabs, reorder them, and restore your previous session.
 - **Desktop or web browser:** Use Hobgoblin as a packaged desktop app, or run server mode and open the same workspace from a browser.
 - **Multi-worktree branch development:** Create and inspect worktrees so multiple branches can move independently without dirtying one checkout.
-- **Branch and worktree overview:** See branch status, worktree state, latest commits, and linked pull requests in one window.
+- **Branch and worktree overview:** See branch status, worktree state, latest commits, diffs, and working tree changes in one window.
 - **Git actions in context:** Checkout, pull, push, create worktrees, open branches in external tools, and jump to GitHub.
 - **Multi-terminal execution surface:** Keep multiple server-backed terminals attached to the workspace and the branch/worktree they belong to.
 - **Local and SSH remote repositories:** Work with local paths, SSH clone URLs, and remote repositories opened through SSH-config aliases and remote paths.

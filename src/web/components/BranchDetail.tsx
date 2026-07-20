@@ -17,7 +17,9 @@ interface Props {
   layout?: RepoWorkspaceLayout
   collapsed?: boolean
   detailFocusMode?: boolean
+  compactFocusPresentation?: boolean
   onRevealPath?: (relativePath: string) => void
+  onShowCompactExplorer?: () => void
 }
 
 // Keep this equality in sync with fields read by BranchDetail children.
@@ -36,7 +38,6 @@ function branchDetailRepoEqual(a: BranchDetailRepo | undefined, b: BranchDetailR
       a.ui.selectedBranch === b.ui.selectedBranch &&
       a.ui.detailTab === b.ui.detailTab &&
       a.resources.status === b.resources.status &&
-      a.resources.pullRequests === b.resources.pullRequests &&
       a.operations.branchAction === b.operations.branchAction &&
       a.operations.fetch === b.operations.fetch &&
       a.operations.manualRefresh === b.operations.manualRefresh &&
@@ -54,7 +55,9 @@ export function BranchDetail({
   layout = DEFAULT_WORKSPACE_LAYOUT,
   collapsed = false,
   detailFocusMode = false,
+  compactFocusPresentation = false,
   onRevealPath,
+  onShowCompactExplorer,
 }: Props) {
   const detailId = useId()
   const repo = useStoreWithEqualityFn(
@@ -78,7 +81,6 @@ export function BranchDetail({
             },
             resources: {
               status: repo.resources.status,
-              pullRequests: repo.resources.pullRequests,
             },
             operations: {
               branchAction: repo.operations.branchAction,
@@ -117,8 +119,10 @@ export function BranchDetail({
           contentId={contentId}
           collapsed={collapsed}
           detailFocusMode={detailFocusMode}
+          compactFocusPresentation={compactFocusPresentation}
           layout={layout}
           onRevealPath={onRevealPath}
+          onShowCompactExplorer={onShowCompactExplorer}
         />
       ) : (
         <>
@@ -129,7 +133,9 @@ export function BranchDetail({
             contentId={contentId}
             collapsed={collapsed}
             detailFocusMode={detailFocusMode}
+            compactFocusPresentation={compactFocusPresentation}
             layout={layout}
+            onShowCompactExplorer={onShowCompactExplorer}
           />
           {!collapsed && (
             <BranchDetailContent
@@ -155,8 +161,10 @@ interface BranchShortcutHandlerProps {
   contentId: string
   collapsed: boolean
   detailFocusMode: boolean
+  compactFocusPresentation: boolean
   layout: RepoWorkspaceLayout
   onRevealPath?: (relativePath: string) => void
+  onShowCompactExplorer?: () => void
 }
 
 function BranchShortcutHandler({
@@ -167,8 +175,10 @@ function BranchShortcutHandler({
   contentId,
   collapsed,
   detailFocusMode,
+  compactFocusPresentation,
   layout,
   onRevealPath,
+  onShowCompactExplorer,
 }: BranchShortcutHandlerProps) {
   const actions = useBranchActionItems(repo, branch)
   useBranchActionShortcutRegistry(actions)
@@ -182,7 +192,9 @@ function BranchShortcutHandler({
         contentId={contentId}
         collapsed={collapsed}
         detailFocusMode={detailFocusMode}
+        compactFocusPresentation={compactFocusPresentation}
         layout={layout}
+        onShowCompactExplorer={onShowCompactExplorer}
       />
       {actions.dialogs}
       {!collapsed && (

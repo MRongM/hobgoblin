@@ -4,8 +4,7 @@ import {
   type CommitMessageProvider,
   type CommitMessageProviderAvailability,
 } from '#/shared/commit-message-ai.ts'
-import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
-import { readTerminalSessionCommandBridge } from '#/web/components/terminal/terminal-session-command-bridge.ts'
+import { buildAiHandoffCommand, prefillAiTerminalCommand } from '#/web/ai-terminal-handoff.ts'
 import { getCommitMessageProviders } from '#/web/repo-client.ts'
 import { useT } from '#/web/stores/i18n.ts'
 
@@ -84,33 +83,14 @@ async function prefillMergeConflictCommand(
   input: MergeConflictAiActionsInput,
   provider: CommitMessageProvider,
 ): Promise<boolean> {
-  const bridge = readTerminalSessionCommandBridge()
-  if (!bridge) return false
-  const scope = worktreeTerminalKey(input.repoId, input.worktreePath)
-  input.navigation.showRepoBranchDetailTab(input.repoId, input.branch, 'terminal')
-  input.setDetailCollapsed(false)
-
-  const snapshot = bridge.worktreeSnapshot(scope)
-  let key = snapshot.selectedDescriptor?.key ?? snapshot.sessions[0]?.key ?? null
-  if (key) {
-    bridge.selectTerminal(scope, key)
-  } else {
-    key = await bridge.createTerminal({
-      repoRoot: input.repoId,
-      branch: input.branch,
-      worktreePath: input.worktreePath,
-    })
-  }
-
-  await Promise.resolve()
-  if (!key) return false
-  bridge.writeInput(key, buildMergeConflictAiCommand(provider))
-  return true
+  return await prefillAiTerminalCommand({
+    ...input,
+    command: buildMergeConflictAiCommand(provider),
+  })
 }
 
 export function buildMergeConflictAiCommand(provider: CommitMessageProvider): string {
   const prompt =
     'Resolve the current Git merge conflicts in this working tree. Inspect conflicted files, make minimal edits, and do not run git add, git commit, or git merge --continue.'
-  if (provider === 'codex') return `codex exec --skip-git-repo-check ${JSON.stringify(prompt)}`
-  return `claude --print ${JSON.stringify(prompt)}`
+  return buildAiHandoffCommand(provider, prompt)
 }

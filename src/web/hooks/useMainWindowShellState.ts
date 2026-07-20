@@ -31,7 +31,7 @@ export function useMainWindowShellState({
   const closeRepoCandidateName = useReposStore((s) =>
     closeRepoCandidateId ? (s.repos[closeRepoCandidateId]?.name ?? closeRepoCandidateId) : '',
   )
-  const { setActive, closeRepo, cycleActive, selectBranch, setDetailTab } = useStoreWithEqualityFn(
+  const { setActive, activateProject, closeRepo, cycleActive, selectBranch, setDetailTab } = useStoreWithEqualityFn(
     useReposStore,
     mainWindowNavigationStoreActionsFromStore,
     mainWindowNavigationStoreActionsEqual,
@@ -41,8 +41,8 @@ export function useMainWindowShellState({
   const visibleRepoId = activeId
   const settingsOpen = routeSettingsPage !== null
   const closeRepoConfirmationOpen = closeRepoCandidateId !== null
-  const modalOpen = overlays.anyOpen || closeRepoConfirmationOpen
-  const workspaceShortcutsSuppressed = modalOpen || settingsOpen
+  const modalOpen = overlays.anyOpen || closeRepoConfirmationOpen || settingsOpen
+  const workspaceShortcutsSuppressed = modalOpen
   const requestCloseRepo = useCallback((repoId: string) => {
     setCloseRepoCandidateId(repoId)
   }, [])
@@ -60,6 +60,9 @@ export function useMainWindowShellState({
     },
     [onRouteSettingsPageChange],
   )
+  const toggleSettings = useCallback(() => {
+    onRouteSettingsPageChange?.(settingsOpen ? null : 'general')
+  }, [onRouteSettingsPageChange, settingsOpen])
   const showHelp = useCallback(() => {
     openSettings('shortcuts')
   }, [openSettings])
@@ -72,6 +75,7 @@ export function useMainWindowShellState({
         activeId,
         order,
         setActive,
+        activateProject,
         closeRepo: requestCloseRepo,
         cycleActive,
         selectBranch,
@@ -80,6 +84,7 @@ export function useMainWindowShellState({
       }),
     [
       activeId,
+      activateProject,
       cycleActive,
       openSettings,
       order,
@@ -97,13 +102,7 @@ export function useMainWindowShellState({
       cancel: cancelCloseRepo,
       confirm: confirmCloseRepo,
     }),
-    [
-      cancelCloseRepo,
-      closeRepoCandidateId,
-      closeRepoCandidateName,
-      closeRepoConfirmationOpen,
-      confirmCloseRepo,
-    ],
+    [cancelCloseRepo, closeRepoCandidateId, closeRepoCandidateName, closeRepoConfirmationOpen, confirmCloseRepo],
   )
 
   return {
@@ -117,6 +116,7 @@ export function useMainWindowShellState({
     modalOpen,
     workspaceShortcutsSuppressed,
     openSettings,
+    toggleSettings,
     showHelp,
     exitSettings,
     navigation,

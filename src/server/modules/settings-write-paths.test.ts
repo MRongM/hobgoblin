@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   setServerFetchIntervalSec: vi.fn(),
   setServerSessionState: vi.fn(),
   updateServerSettingsPrefs: vi.fn(),
+  updateServerWebAccessSettings: vi.fn(),
   settingsInvalidationScopesForPrefsPatch: vi.fn(),
 }))
 
@@ -28,10 +29,13 @@ vi.mock('#/server/modules/settings-source.ts', () => ({
   setServerFetchIntervalSec: mocks.setServerFetchIntervalSec,
   setServerSessionState: mocks.setServerSessionState,
   updateServerSettingsPrefs: mocks.updateServerSettingsPrefs,
+  updateServerWebAccessSettings: mocks.updateServerWebAccessSettings,
 }))
 
 vi.mock('#/shared/server-invalidation.ts', async () => {
-  const actual = await vi.importActual<typeof import('#/shared/server-invalidation.ts')>('#/shared/server-invalidation.ts')
+  const actual = await vi.importActual<typeof import('#/shared/server-invalidation.ts')>(
+    '#/shared/server-invalidation.ts',
+  )
   return {
     ...actual,
     settingsInvalidationScopesForPrefsPatch: mocks.settingsInvalidationScopesForPrefsPatch,
@@ -186,5 +190,43 @@ describe('settings write paths', () => {
     })
     expect(mocks.setServerRepoColorTheme).toHaveBeenCalledWith({ repoId: '/repo-a', colorTheme: 'cursor' })
     expect(mocks.publishSettingsInvalidation).toHaveBeenCalledWith(['settings-snapshot'])
+  })
+
+  test('updates Web access settings atomically, publishes invalidation, and revokes sessions', async () => {
+    const webAccess = { enabled: true, username: 'operator', passwordConfigured: true }
+    const revokeAllWebSessions = vi.fn()
+    mocks.updateServerWebAccessSettings.mockResolvedValue(webAccess)
+    const { applyServerWebAccessSettingsWrite } = await import('#/server/modules/settings-write-paths.ts')
+
+    await expect(
+      applyServerWebAccessSettingsWrite(
+        { enabled: true, username: ' operator ', password: 'test-password' },
+        { revokeAllWebSessions },
+      ),
+    ).resolves.toEqual({ ok: true, webAccess })
+
+    expect(mocks.updateServerWebAccessSettings).toHaveBeenCalledWith({
+      enabled: true,
+      username: ' operator ',
+      password: 'test-password',
+    })
+    expect(mocks.publishSettingsInvalidation).toHaveBeenCalledWith(['settings-snapshot'])
+    expect(revokeAllWebSessions).toHaveBeenCalledOnce()
+  })
+
+  test('does not publish or revoke sessions when the Web access write fails', async () => {
+    const error = Object.assign(new Error('password-too-short'), { code: 'password-too-short' })
+    const revokeAllWebSessions = vi.fn()
+    mocks.updateServerWebAccessSettings.mockRejectedValue(error)
+    const { applyServerWebAccessSettingsWrite } = await import('#/server/modules/settings-write-paths.ts')
+
+    await expect(
+      applyServerWebAccessSettingsWrite(
+        { enabled: true, username: 'operator', password: 'short' },
+        { revokeAllWebSessions },
+      ),
+    ).rejects.toBe(error)
+    expect(mocks.publishSettingsInvalidation).not.toHaveBeenCalled()
+    expect(revokeAllWebSessions).not.toHaveBeenCalled()
   })
 })

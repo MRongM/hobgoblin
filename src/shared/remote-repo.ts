@@ -1,4 +1,4 @@
-export type RepoKind = 'local' | 'remote'
+import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
 
 export interface RemoteRepoRef {
   id: string
@@ -144,12 +144,6 @@ export function remoteDisplayName(target: Pick<RemoteRepoTargetInput, 'alias' | 
   return `${alias ?? host}:${basename(remotePath ?? '/')}`
 }
 
-export function isRemoteRepoTarget(value: unknown): value is RemoteRepoTarget {
-  if (!value || typeof value !== 'object') return false
-  const target = value as RemoteRepoTarget
-  return normalizeRemoteTarget(target)?.id === target.id
-}
-
 export function repoSessionEntryId(entry: RepoSessionEntry): string {
   return entry.id
 }
@@ -197,6 +191,13 @@ export function remoteRepoRefFromTarget(target: RemoteRepoTarget): RemoteRepoRef
     remotePath: target.remotePath,
     displayName: target.displayName,
   }
+}
+
+export function remoteWorkspaceChildRef(root: RemoteRepoRef, member: string): RemoteRepoRef | null {
+  const normalizedRoot = normalizeRemoteRepoRef(root)
+  if (!normalizedRoot || !isWorkspaceRepositoryName(member)) return null
+  const rootPath = normalizedRoot.remotePath === '/' ? '' : normalizedRoot.remotePath
+  return normalizeRemoteRepoRef({ alias: normalizedRoot.alias, remotePath: `${rootPath}/${member}` })
 }
 
 function remoteTargetFields(input: RemoteRepoTargetInput): Pick<RemoteRepoTarget, 'host' | 'user' | 'port'> | null {

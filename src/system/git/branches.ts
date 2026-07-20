@@ -5,11 +5,11 @@ import {
   NETWORK_TIMEOUT_MS,
   type GitNetworkOptions,
 } from '#/system/git/helper.ts'
-import { FIELD_SEP, parseBranches, parseLog } from '#/system/git/parsers.ts'
+import { FIELD_SEP, parseBranches } from '#/system/git/parsers.ts'
 import { isProtectedRemoteBranchRef, parseRemoteBranchInput } from '#/shared/remote-branches.ts'
 import { isSafeBranchName } from '#/shared/refnames.ts'
 import { isRemoteTrackingRef } from '#/shared/worktree-create.ts'
-import type { BranchSnapshotInfo, ExecResult, LogEntry, WorktreeInfo } from '#/shared/git-types.ts'
+import type { BranchSnapshotInfo, ExecResult, WorktreeInfo } from '#/shared/git-types.ts'
 
 export async function isGitRepo(cwd: string): Promise<boolean> {
   try {
@@ -139,24 +139,6 @@ export async function getBranches(
   }
 }
 
-export async function getLog(
-  cwd: string,
-  branch: string,
-  count = 100,
-  skip = 0,
-  options?: { signal?: AbortSignal },
-): Promise<LogEntry[]> {
-  if (!isSafeBranchName(branch)) return []
-  try {
-    const format = ['%H', '%h', '%s', '%an', '%aI'].join(FIELD_SEP)
-    const args = ['log', `--format=${format}`, '-n', String(count), '--skip', String(skip), branch]
-    const output = await git(cwd, args, { signal: options?.signal })
-    return parseLog(output)
-  } catch {
-    return []
-  }
-}
-
 export async function checkoutBranch(cwd: string, name: string, signal?: AbortSignal): Promise<ExecResult> {
   if (!isSafeBranchName(name)) return { ok: false, message: 'error.invalid-arguments' }
   return gitResultWithOptions(cwd, { signal }, 'switch', '--', name)
@@ -168,7 +150,8 @@ export async function createBranch(
   baseBranch: string,
   signal?: AbortSignal,
 ): Promise<ExecResult> {
-  if (!isSafeBranchName(branch) || !isSafeBranchName(baseBranch)) return { ok: false, message: 'error.invalid-arguments' }
+  if (!isSafeBranchName(branch) || !isSafeBranchName(baseBranch))
+    return { ok: false, message: 'error.invalid-arguments' }
   return gitResultWithOptions(cwd, { signal }, 'branch', '--', branch, baseBranch)
 }
 

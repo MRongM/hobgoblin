@@ -28,6 +28,7 @@ import {
   DEFAULT_WORKSPACE_LAYOUT,
 } from '#/shared/workspace-layout.ts'
 import type { RestorableRepoSnapshot, ReposStore } from '#/web/stores/repos/types.ts'
+import { DEFAULT_PROJECT_LIST_EXPANDED } from '#/shared/settings-defaults.ts'
 
 interface PersistedReposStore {
   restorableRepoCache: Record<string, RestorableRepoSnapshot>
@@ -98,6 +99,8 @@ export const useReposStore = create<ReposStore>()(
     (set, get) => ({
       // Runtime-coherent renderer projection.
       repos: {},
+      workspaceProjects: {},
+      workspaceActiveRepoByRoot: {},
 
       // Restorable warm-start cache.
       restorableRepoCache: {},
@@ -105,6 +108,7 @@ export const useReposStore = create<ReposStore>()(
       // Restorable workspace state.
       order: [],
       activeId: null,
+      projectListExpanded: DEFAULT_PROJECT_LIST_EXPANDED,
       detailCollapsed: DEFAULT_DETAIL_COLLAPSED,
       detailFocusMode: false,
       workspaceLayout: DEFAULT_WORKSPACE_LAYOUT,

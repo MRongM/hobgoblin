@@ -114,6 +114,12 @@ vi.mock('#/web/components/topbar/TopbarRepoControls.tsx', () => ({
   TopbarRepoControls: () => <div data-testid="topbar-repo-controls" />,
 }))
 
+vi.mock('#/web/components/repo-workspace/WorkspaceRepositorySwitcher.tsx', () => ({
+  WorkspaceRepositorySwitcher: ({ repoId }: { repoId: string }) => (
+    <div data-testid="workspace-repository-switcher">{repoId}</div>
+  ),
+}))
+
 vi.mock('#/web/components/repo-toolbar/ProjectThemeMenu.tsx', () => ({
   ProjectThemeMenuConnected: () => <div data-testid="project-theme-menu" />,
 }))
@@ -219,13 +225,40 @@ describe('App shell topbar visibility', () => {
     expect(container?.querySelector('[data-testid="repo-tabs"]')).toBeNull()
   })
 
-  test('keeps the repo tab strip topbar in compact UI', async () => {
+  test('hides the compact topbar for an available Git project', async () => {
+    const repo = emptyRepo('/repo', 'repo')
+    useReposStore.setState({ repos: { '/repo': repo } })
     uiModeMock.mode = 'compact'
+    await renderApp({ runtime: 'web', workspaceMode: 'split' })
+
+    expect(container?.querySelector('[data-testid="global-topbar"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-tabs"]')).toBeNull()
+  })
+
+  test('hides the compact topbar for an available plain workspace', async () => {
+    const repo = emptyRepo('/repo', 'repo')
+    repo.isGitRepo = false
+    useReposStore.setState({ repos: { '/repo': repo } })
+    uiModeMock.mode = 'compact'
+
+    await renderApp({ runtime: 'web', workspaceMode: 'split' })
+
+    expect(container?.querySelector('[data-testid="global-topbar"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-tabs"]')).toBeNull()
+  })
+
+  test('keeps compact navigation for an unavailable plain workspace', async () => {
+    const repo = emptyRepo('/repo', 'repo')
+    repo.isGitRepo = false
+    repo.availability = { phase: 'unavailable', reason: 'path-missing', checkedAt: 1 }
+    useReposStore.setState({ repos: { '/repo': repo } })
+    uiModeMock.mode = 'compact'
+
     await renderApp({ runtime: 'web', workspaceMode: 'split' })
 
     expect(container?.querySelector('[data-testid="global-topbar"]')).not.toBeNull()
     expect(container?.querySelector('[data-testid="repo-tabs"]')).not.toBeNull()
-    expect(container?.querySelector('[data-testid="topbar-repo-controls"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="workspace-repository-switcher"]')?.textContent).toBe('/repo')
   })
 
   test('keeps settings and project theme entries in the compact topbar', async () => {
@@ -233,18 +266,20 @@ describe('App shell topbar visibility', () => {
     // hosts on desktop (settings entry, project theme menu) live in the
     // compact topbar instead.
     uiModeMock.mode = 'compact'
-    await renderApp({ runtime: 'web', workspaceMode: 'split' })
+    await renderApp({ runtime: 'web', workspaceMode: 'split', routeSettingsPage: 'general' })
 
     const actions = container?.querySelector('[data-testid="topbar-actions"]')
     expect(actions?.querySelector('[data-testid="project-theme-menu"]')).not.toBeNull()
 
     const settingsButton = actions?.querySelector<HTMLButtonElement>('button[aria-label="topbar.settings"]')
     expect(settingsButton).not.toBeNull()
+    expect(settingsButton?.getAttribute('aria-pressed')).toBe('true')
+    expect(settingsButton?.className).toContain('z-[60]')
     await act(async () => {
       settingsButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
       await Promise.resolve()
     })
-    expect(shellMock.state?.openSettings).toHaveBeenCalledTimes(1)
+    expect(shellMock.state?.toggleSettings).toHaveBeenCalledTimes(1)
   })
 
   test('keeps the settings entry in the compact empty-state topbar but not on desktop', async () => {
@@ -306,6 +341,8 @@ describe('App shell topbar visibility', () => {
   })
 
   test('hides the compact topbar in focus mode on both runtimes', async () => {
+    const repo = emptyRepo('/repo', 'repo')
+    useReposStore.setState({ repos: { '/repo': repo } })
     uiModeMock.mode = 'compact'
     await renderApp({ runtime: 'web', workspaceMode: 'focus' })
 
@@ -345,6 +382,13 @@ describe('App shell topbar visibility', () => {
 
     expect(confirmCloseRepo).toHaveBeenCalledTimes(1)
   })
+
+  test('keeps the workspace mounted behind route-backed settings', async () => {
+    await renderApp({ runtime: 'web', workspaceMode: 'split', routeSettingsPage: 'general' })
+
+    expect(container?.querySelector('[data-testid="repo-view"]')?.textContent).toBe('/repo')
+    expect(container?.querySelector('[data-testid="settings-screen"]')).not.toBeNull()
+  })
 })
 
 async function renderApp({
@@ -353,22 +397,29 @@ async function renderApp({
   closeConfirmOpen = false,
   confirmCloseRepo = vi.fn(),
   visibleRepoId = '/repo',
+  routeSettingsPage = null,
 }: {
   runtime: 'web' | 'electron'
   workspaceMode: RepoWorkspaceMode
   closeConfirmOpen?: boolean
   confirmCloseRepo?: () => void
   visibleRepoId?: string | null
+  routeSettingsPage?: 'general' | null
 }) {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   bootstrapMock.runtimeKind = runtime
-  shellMock.state = shellStateWith(workspaceMode, { closeConfirmOpen, confirmCloseRepo, visibleRepoId })
+  shellMock.state = shellStateWith(workspaceMode, {
+    closeConfirmOpen,
+    confirmCloseRepo,
+    visibleRepoId,
+    settingsOpen: routeSettingsPage !== null,
+  })
 
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
   await act(async () => {
-    root!.render(<App />)
+    root!.render(<App routeSettingsPage={routeSettingsPage} />)
     await Promise.resolve()
   })
 }
@@ -385,7 +436,12 @@ async function clickButton(text: string) {
 
 function shellStateWith(
   workspaceMode: RepoWorkspaceMode,
-  options: { closeConfirmOpen?: boolean; confirmCloseRepo?: () => void; visibleRepoId?: string | null } = {},
+  options: {
+    closeConfirmOpen?: boolean
+    confirmCloseRepo?: () => void
+    visibleRepoId?: string | null
+    settingsOpen?: boolean
+  } = {},
 ): MainWindowShellState {
   const overlays = {
     anyOpen: false,
@@ -424,10 +480,11 @@ function shellStateWith(
       branchListActionsVisible: workspaceMode !== 'focus',
       prTooltipSide: 'bottom' as const,
     },
-    settingsOpen: false,
-    modalOpen: false,
-    workspaceShortcutsSuppressed: false,
+    settingsOpen: options.settingsOpen ?? false,
+    modalOpen: options.settingsOpen ?? false,
+    workspaceShortcutsSuppressed: options.settingsOpen ?? false,
     openSettings: vi.fn(),
+    toggleSettings: vi.fn(),
     showHelp: vi.fn(),
     exitSettings: vi.fn(),
     navigation: {

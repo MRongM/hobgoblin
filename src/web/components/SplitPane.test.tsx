@@ -93,6 +93,24 @@ describe('SplitPane controlled trailing panel', () => {
     expect(handle()?.getAttribute('data-disabled')).toBe('false')
   })
 
+  test('hides the leading panel without persisting the temporary expanded trailing size', () => {
+    const onAfterSizeChange = vi.fn()
+    renderSplitPane(false, onAfterSizeChange, true)
+
+    expect(group()?.className).toContain('[&>[data-panel]:first-child]:!hidden')
+    expect(handle()?.className).toContain('!hidden')
+    expect(handle()?.getAttribute('data-disabled')).toBe('true')
+
+    act(() => resizable.onLayoutChanged?.({ before: 0, after: 100 }))
+    expect(onAfterSizeChange).not.toHaveBeenCalled()
+
+    resizable.setLayout.mockClear()
+    renderSplitPane(false, onAfterSizeChange, false)
+
+    expect(group()?.className).not.toContain('[&>[data-panel]:first-child]:!hidden')
+    expect(resizable.setLayout).toHaveBeenLastCalledWith({ before: 65, after: 35 })
+  })
+
   test('ignores zero-size layout notifications while expanded', () => {
     const onAfterSizeChange = vi.fn()
     renderSplitPane(false, onAfterSizeChange)
@@ -113,13 +131,14 @@ function handle() {
   return container?.querySelector('[data-testid="resizable-handle"]')
 }
 
-function renderSplitPane(afterCollapsed: boolean, onAfterSizeChange: (size: number) => void) {
+function renderSplitPane(afterCollapsed: boolean, onAfterSizeChange: (size: number) => void, beforeCollapsed = false) {
   act(() => {
     root!.render(
       <SplitPane
         before={<div data-testid="before-content" />}
         after={<div data-testid="after-content" />}
         afterSize={35}
+        beforeCollapsed={beforeCollapsed}
         afterCollapsed={afterCollapsed}
         onAfterSizeChange={onAfterSizeChange}
       />,

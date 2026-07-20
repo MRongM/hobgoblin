@@ -59,6 +59,7 @@ function renderDropdown({
   branchName = 'feature/a',
   open = true,
   hideQuickAction = false,
+  commit = item('commit', 'Commit'),
   editor = item('editor', 'Edit'),
   terminal = item('terminal', 'Terminal'),
   destructive = item('deleteBranch', 'Delete branch', vi.fn(), { destructive: true }),
@@ -67,6 +68,7 @@ function renderDropdown({
   branchName?: string
   open?: boolean
   hideQuickAction?: boolean
+  commit?: BranchActionItem
   editor?: BranchActionItem
   terminal?: BranchActionItem
   destructive?: BranchActionItem
@@ -78,7 +80,7 @@ function renderDropdown({
         branchName={branchName}
         patchItems={[]}
         externalItems={[editor, terminal]}
-        mainItems={[]}
+        mainItems={[commit]}
         destructiveItems={[destructive]}
         open={open}
         hideQuickAction={hideQuickAction}
@@ -105,7 +107,7 @@ describe('BranchActionsDropdown split button', () => {
   test('weights the split button hit targets toward the dropdown trigger', () => {
     renderDropdown()
 
-    expect(button('Edit').className).toContain('px-1.5')
+    expect(button('Commit').className).toContain('px-1.5')
     expect(button('Actions').className).toContain('w-7')
     expect(button('Actions').className).toContain('px-1.5')
   })
@@ -121,46 +123,49 @@ describe('BranchActionsDropdown split button', () => {
     menuItem('Delete branch')
   })
 
-  test('renders edit as the default quick action and runs it from the left button', () => {
-    const onEdit = vi.fn()
+  test('renders commit as the default quick action and runs it from the left button', () => {
+    const onCommit = vi.fn()
 
-    renderDropdown({ repoId: '/repo/default', branchName: 'feature/default', editor: item('editor', 'Edit', onEdit) })
-
-    act(() => {
-      button('Edit').click()
+    renderDropdown({
+      repoId: '/repo/default',
+      branchName: 'feature/default',
+      commit: item('commit', 'Commit', onCommit),
     })
 
-    expect(onEdit).toHaveBeenCalledTimes(1)
+    act(() => {
+      button('Commit').click()
+    })
+
+    expect(onCommit).toHaveBeenCalledTimes(1)
   })
 
   test('remembers a non-destructive menu action per repo and branch', () => {
-    const terminalA = item('terminal', 'Terminal A')
+    const editorA = item('editor', 'Edit A')
 
     renderDropdown({
       repoId: '/repo/memory',
       branchName: 'feature/a',
-      terminal: terminalA,
+      editor: editorA,
     })
 
     act(() => {
-      menuItem('Terminal A').click()
+      menuItem('Edit A').click()
     })
 
     renderDropdown({
       repoId: '/repo/memory',
       branchName: 'feature/b',
-      terminal: item('terminal', 'Terminal B'),
     })
 
-    expect(button('Edit')).toBeTruthy()
+    expect(button('Commit')).toBeTruthy()
 
     renderDropdown({
       repoId: '/repo/memory',
       branchName: 'feature/a',
-      terminal: terminalA,
+      editor: editorA,
     })
 
-    expect(button('Terminal A')).toBeTruthy()
+    expect(button('Edit A')).toBeTruthy()
   })
 
   test('does not remember destructive menu actions', () => {
@@ -177,10 +182,10 @@ describe('BranchActionsDropdown split button', () => {
     })
 
     expect(onDelete).toHaveBeenCalledTimes(1)
-    expect(button('Edit')).toBeTruthy()
+    expect(button('Commit')).toBeTruthy()
   })
 
-  test('falls back to edit when the remembered action becomes disabled', () => {
+  test('falls back to commit when the remembered action becomes disabled', () => {
     renderDropdown({
       repoId: '/repo/fallback',
       branchName: 'feature/fallback',
@@ -197,16 +202,16 @@ describe('BranchActionsDropdown split button', () => {
       terminal: item('terminal', 'Terminal', vi.fn(), { disabled: true }),
     })
 
-    expect(button('Edit')).toBeTruthy()
+    expect(button('Commit')).toBeTruthy()
   })
 
-  test('disables the edit quick action when edit is unavailable', () => {
+  test('disables the commit quick action when commit is unavailable', () => {
     renderDropdown({
-      repoId: '/repo/disabled-edit',
-      branchName: 'feature/disabled-edit',
-      editor: item('editor', 'Edit', vi.fn(), { disabled: true }),
+      repoId: '/repo/disabled-commit',
+      branchName: 'feature/disabled-commit',
+      commit: item('commit', 'Commit', vi.fn(), { disabled: true }),
     })
 
-    expect(button('Edit').disabled).toBe(true)
+    expect(button('Commit').disabled).toBe(true)
   })
 })

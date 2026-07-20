@@ -19,7 +19,7 @@ import { useReposStore } from '#/web/stores/repos/store.ts'
 
 export type { BranchActionItem } from '#/web/hooks/useBranchActionItems.tsx'
 
-const DEFAULT_QUICK_ACTION_ID: BranchActionItem['id'] = 'editor'
+const DEFAULT_QUICK_ACTION_ID: BranchActionItem['id'] = 'commit'
 
 function branchQuickActionKey(repoId: string, branchName: string): string {
   return `${repoId}\0${branchName}`

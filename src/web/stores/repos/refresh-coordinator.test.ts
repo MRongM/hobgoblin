@@ -27,14 +27,6 @@ function callsGet() {
         calls.push(`core:${id}:${options?.token ?? ''}`)
         return Promise.resolve()
       },
-      refreshPullRequests: (
-        id: string,
-        branches?: string[],
-        options?: { token?: number; mode?: string; clearMissing?: boolean },
-      ) => {
-        calls.push(`prs:${id}:${branches?.join(',') ?? ''}:${options?.mode ?? ''}:${options?.token ?? ''}`)
-        return Promise.resolve()
-      },
     }) as unknown as ReturnType<ReposGet>
   return { calls, get }
 }
@@ -71,25 +63,6 @@ describe('repo refresh coordinator', () => {
     await handleRepoInvalidationRefresh(get, { repoId: '/repo', query: 'repo-snapshot' }, 9)
 
     expect(calls).toEqual(['core:/repo:9'])
-  })
-
-  test('runs visible pull request refreshes only when a branch is visible', async () => {
-    const { calls, get } = callsGet()
-
-    await runRepoRefreshIntent(get, {
-      kind: 'visible-pull-request-changed',
-      id: '/repo',
-      token: 3,
-      branch: 'feature/a',
-    })
-    await runRepoRefreshIntent(get, {
-      kind: 'visible-pull-request-changed',
-      id: '/repo',
-      token: 3,
-      branch: null,
-    })
-
-    expect(calls).toEqual(['prs:/repo:feature/a:full:3'])
   })
 
   test('suppresses repo invalidations from an active local source token', () => {

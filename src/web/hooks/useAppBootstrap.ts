@@ -28,15 +28,25 @@ export function useAppBootstrap() {
         ])
         const session = useSessionRestoreStore.getState().consumeBootSessionSnapshot()
         const normalizedLayout = normalizeWorkspaceSessionLayoutState(session)
-        const { hydrateSession, applySessionLayoutState, applySessionSelectedTerminalState } = useReposStore.getState()
+        const {
+          hydrateSession,
+          applySessionLayoutState,
+          applySessionSelectedTerminalState,
+          setProjectListExpanded,
+        } = useReposStore.getState()
         // Apply layout prefs before repo probing finishes so the first
         // restored paint uses the saved geometry. useSessionPersistence
         // still waits for sessionReady, so this cannot overwrite the
         // persisted session with a partially hydrated one.
         const restoredWorkspaceState = restoreRestorableWorkspaceStateFromSession(session)
+        setProjectListExpanded(restoredWorkspaceState.projectListExpanded)
         applySessionLayoutState(normalizedLayout)
         applySessionSelectedTerminalState(restoredWorkspaceState.selectedTerminalByWorktree)
-        await hydrateSession(session.openRepos, session.activeRepo)
+        await hydrateSession(
+          session.openRepos,
+          session.activeRepo,
+          restoredWorkspaceState.workspaceActiveRepoByRoot,
+        )
       } catch (err) {
         console.warn('[bootstrap] failed', err)
         useReposStore.setState({ sessionReady: true })

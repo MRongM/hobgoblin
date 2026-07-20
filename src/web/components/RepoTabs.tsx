@@ -17,6 +17,9 @@ import type { RepoTabSummary } from '#/web/components/repo-tabs/types.ts'
 import { openRepoFromDialog } from '#/web/lib/open-repo-dialog.ts'
 import { useRuntimeShortcutSettings } from '#/web/runtime-settings-shortcuts.ts'
 import { repoTabStoreActionsEqual, repoTabStoreActionsFromStore } from '#/web/stores/repos/selector-actions.ts'
+import { activeProjectId } from '#/web/stores/repos/workspace-projects.ts'
+import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
+import type { RepoState } from '#/web/stores/repos/types.ts'
 
 interface RepoTabsProps {
   currentRepoId: string | null
@@ -57,6 +60,9 @@ export function RepoTabs({ currentRepoId, onOpenRepoPathDialog, onOpenRemote, on
     repoTabSummariesEqual,
   )
   const navigation = useMainWindowNavigation()
+  const currentProjectId = useReposStore((state) =>
+    activeProjectId({ activeId: currentRepoId, repos: state.repos }),
+  )
   const { ensureWorkspaceOpen, reorderRepos } = useStoreWithEqualityFn(
     useReposStore,
     repoTabStoreActionsFromStore,
@@ -75,7 +81,7 @@ export function RepoTabs({ currentRepoId, onOpenRepoPathDialog, onOpenRemote, on
   return (
     <RepoTabStrip
       repos={summaries}
-      activeId={currentRepoId}
+      activeId={currentProjectId}
       labels={{
         repositories: t('repo-tabs.repos'),
         closeWithName: (name) => t('repo-tabs.close-named', { name }),
@@ -110,12 +116,13 @@ export function RepoTabs({ currentRepoId, onOpenRepoPathDialog, onOpenRemote, on
 export function repoTerminalWorktreePaths(repo: {
   id: string
   isGitRepo?: boolean
+  remote?: Pick<RepoState['remote'], 'target'>
   data: {
     branches: Array<{ worktree?: { path?: string } }>
     worktreesByPath: Record<string, unknown>
   }
 }): string[] {
-  if (repo.isGitRepo === false) return [repo.id]
+  if (repo.isGitRepo === false) return [repoPlainWorkspacePath(repo) ?? repo.id]
 
   return Array.from(
     new Set([

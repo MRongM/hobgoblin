@@ -15,20 +15,9 @@ const mocks = vi.hoisted(() => ({
 }))
 
 const GOBLIN_REFERENCE_BOOTSTRAP_CONFIG = `# Configure worktree bootstrap for this repo.
-# Add [worktree] with copy, symlink, hardlink, exclude, and setup when needed.
 # Paths are repo-relative.
-#
-# Example:
-#   [worktree]
-#   copy = [".env.local"]
-#   symlink = ["config/*.json"]
-#   hardlink = ["build/cache.db"]
-#   exclude = ["*.log", "*.tmp"]
-#   setup = "bun install"
 
 [worktree]
-copy = [".env"]
-setup = "bun install"
 `
 
 vi.mock('#/system/git/branches.ts', () => ({
@@ -109,22 +98,26 @@ exclude = ["config/*.log"]
     expect(mocks.getRepoRoot).toHaveBeenCalledWith(sourceRoot, { signal: undefined })
   })
 
-  test('initializes a missing goblin.toml from the reference template', async () => {
+  test('initializes a missing goblin.toml without default copy or setup operations', async () => {
     const result = await initializeWorktreeBootstrapConfig(sourceRoot)
 
     expect(result).toEqual({ ok: true, message: 'goblin.toml created' })
     expect(DEFAULT_WORKTREE_BOOTSTRAP_CONFIG).toBe(GOBLIN_REFERENCE_BOOTSTRAP_CONFIG)
-    await expect(readFile(path.join(sourceRoot, 'goblin.toml'), 'utf8')).resolves.toBe(GOBLIN_REFERENCE_BOOTSTRAP_CONFIG)
-    await expect(getWorktreeBootstrapPreview(sourceRoot)).resolves.toMatchObject({
+    await expect(readFile(path.join(sourceRoot, 'goblin.toml'), 'utf8')).resolves.toBe(
+      GOBLIN_REFERENCE_BOOTSTRAP_CONFIG,
+    )
+    expect(GOBLIN_REFERENCE_BOOTSTRAP_CONFIG).not.toContain('copy =')
+    expect(GOBLIN_REFERENCE_BOOTSTRAP_CONFIG).not.toContain('setup =')
+    await expect(getWorktreeBootstrapPreview(sourceRoot)).resolves.toEqual({
       ok: true,
       preview: {
         hasConfig: true,
-        hasOperations: true,
-        copyCount: 1,
+        hasOperations: false,
+        configHash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+        copyCount: 0,
         symlinkCount: 0,
         hardlinkCount: 0,
         excludeCount: 0,
-        setup: { command: 'bun install' },
       },
     })
   })

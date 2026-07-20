@@ -252,13 +252,6 @@ export class TerminalSessionView {
     this.term?.focus()
   }
 
-  resizeTo(cols: number, rows: number): void {
-    if (!this.term) return
-    if (this.term.cols === cols && this.term.rows === rows) return
-    this.term.resize(cols, rows)
-    this.pinToBottomSoon()
-  }
-
   serialize(): string {
     return this.serializeAddon?.serialize({ excludeAltBuffer: true }) ?? ''
   }
@@ -442,10 +435,12 @@ export class TerminalSessionView {
 
   private installWebLinksAddon(term: XTermTerminal): void {
     try {
-      term.loadAddon(new WebLinksAddon((event, uri) => {
-        if (!event.metaKey && !event.ctrlKey) return
-        this.handlers.onOpenExternalLink(uri)
-      }))
+      term.loadAddon(
+        new WebLinksAddon((event, uri) => {
+          if (!event.metaKey && !event.ctrlKey) return
+          this.handlers.onOpenExternalLink(uri)
+        }),
+      )
     } catch (err) {
       console.warn('[terminal] failed to load web links addon', err)
     }

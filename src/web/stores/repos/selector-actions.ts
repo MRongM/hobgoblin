@@ -44,7 +44,7 @@ export interface RuntimeCoherentRepoProjectionStoreActions
   extends Pick<ReposStore, 'ensureWorkspaceOpen' | 'closeRepo' | 'selectBranch' | 'setDetailTab'> {}
 
 export interface MainWindowNavigationStoreActions
-  extends Pick<ReposStore, 'setActive' | 'closeRepo' | 'cycleActive' | 'selectBranch' | 'setDetailTab'> {}
+  extends Pick<ReposStore, 'setActive' | 'activateProject' | 'closeRepo' | 'cycleActive' | 'selectBranch' | 'setDetailTab'> {}
 
 export interface RepoTabStoreActions extends Pick<ReposStore, 'ensureWorkspaceOpen' | 'reorderRepos'> {}
 
@@ -200,7 +200,7 @@ export function runtimeCoherentRepoProjectionStoreActionsFromStore(
 }
 
 export function mainWindowNavigationStoreActionsFromStore(
-  state: Pick<ReposStore, 'setActive' | 'cycleActive' | 'closeRepo' | 'selectBranch' | 'setDetailTab'>,
+  state: Pick<ReposStore, 'setActive' | 'activateProject' | 'cycleActive' | 'closeRepo' | 'selectBranch' | 'setDetailTab'>,
 ): MainWindowNavigationStoreActions {
   const restorable = restorableWorkspaceViewportStoreActionsFromStore({
     setActive: state.setActive,
@@ -213,6 +213,7 @@ export function mainWindowNavigationStoreActionsFromStore(
   })
   return {
     setActive: restorable.setActive,
+    activateProject: state.activateProject,
     closeRepo: runtimeCoherent.closeRepo,
     cycleActive: restorable.cycleActive,
     selectBranch: runtimeCoherent.selectBranch,
@@ -290,6 +291,7 @@ export function mainWindowNavigationStoreActionsEqual(
 ): boolean {
   return (
     a.setActive === b.setActive &&
+    a.activateProject === b.activateProject &&
     a.closeRepo === b.closeRepo &&
     a.cycleActive === b.cycleActive &&
     a.selectBranch === b.selectBranch &&

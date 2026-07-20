@@ -10,7 +10,13 @@ import {
   type RepoFileTreeTextFileReadResult,
   type RepoFileTreeTextFileReplaceResult,
 } from '#/shared/file-tree.ts'
-import { parseBranches, parseCommitFileChanges, parseCommitHistory, parseLog, parseStatus, parseWorktrees } from '#/system/git/parsers.ts'
+import {
+  parseBranches,
+  parseCommitFileChanges,
+  parseCommitHistory,
+  parseStatus,
+  parseWorktrees,
+} from '#/system/git/parsers.ts'
 import { markDefaultBranch, prioritizeDefaultBranch } from '#/system/git/branches.ts'
 import { isProtectedRemoteBranchRef, parseRemoteBranchInput } from '#/shared/remote-branches.ts'
 import { parseRemoteTagInput, remoteTagRefsFromLsRemote, remoteTagSortKey } from '#/shared/remote-tags.ts'
@@ -45,7 +51,6 @@ import {
   type CommitHistoryEntry,
   type ExecResult,
   type GitRemoteInfo,
-  type LogEntry,
   type RepoRemoteInfo,
   type WorktreeInfo,
   type WorktreeStatus,
@@ -96,9 +101,7 @@ export type RemoteTransferInventoryResult =
   | { ok: true; entries: RemoteTransferInventoryEntry[]; totalBytes: number }
   | { ok: false; message: string }
 
-export type RemoteFileReadResult =
-  | { ok: true; bytesBase64: string }
-  | { ok: false; message: string }
+export type RemoteFileReadResult = { ok: true; bytesBase64: string } | { ok: false; message: string }
 
 interface SnapshotSections {
   current: string[]
@@ -174,21 +177,6 @@ export async function getRemoteStatus(
     options.signal,
   )
   return statuses.filter((status): status is WorktreeStatus => status !== null)
-}
-
-export async function getRemoteLog(
-  target: RemoteRepoTarget,
-  branch: string,
-  count?: number,
-  skip?: number,
-  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
-): Promise<LogEntry[]> {
-  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  const result = await run({ type: 'gitLog', path: target.remotePath, branch, count, skip }, target, {
-    signal: options.signal,
-  })
-  if (!result.ok || options.signal?.aborted) return []
-  return parseLog(result.stdout)
 }
 
 export async function getRemoteHistory(
@@ -292,17 +280,21 @@ export async function listRemoteFileTreeDirectory(
   const normalizedDir = path.posix.normalize(dirPath)
   const normalizedWorktree = path.posix.normalize(worktreePath)
   const entries: RepoFileTreeEntry[] = (parsed.entries ?? [])
-    .filter((entry): entry is { name: string; kind: RepoFileTreeEntry['kind']; targetKind?: RepoFileTreeEntry['targetKind'] } => {
-      return (
-        typeof entry.name === 'string' &&
-        (entry.kind === 'file' || entry.kind === 'directory' || entry.kind === 'symlink') &&
-        (entry.targetKind === undefined ||
-          entry.targetKind === 'file' ||
-          entry.targetKind === 'directory' ||
-          entry.targetKind === 'other' ||
-          entry.targetKind === 'missing')
-      )
-    })
+    .filter(
+      (
+        entry,
+      ): entry is { name: string; kind: RepoFileTreeEntry['kind']; targetKind?: RepoFileTreeEntry['targetKind'] } => {
+        return (
+          typeof entry.name === 'string' &&
+          (entry.kind === 'file' || entry.kind === 'directory' || entry.kind === 'symlink') &&
+          (entry.targetKind === undefined ||
+            entry.targetKind === 'file' ||
+            entry.targetKind === 'directory' ||
+            entry.targetKind === 'other' ||
+            entry.targetKind === 'missing')
+        )
+      },
+    )
     .map((entry) => {
       const absolutePath = path.posix.join(normalizedDir, entry.name)
       return {
@@ -313,7 +305,12 @@ export async function listRemoteFileTreeDirectory(
         ...(entry.targetKind ? { targetKind: entry.targetKind } : {}),
       }
     })
-  return { ok: true, worktreePath: normalizedWorktree, dirPath: normalizedDir, entries: sortRepoFileTreeEntries(entries) }
+  return {
+    ok: true,
+    worktreePath: normalizedWorktree,
+    dirPath: normalizedDir,
+    entries: sortRepoFileTreeEntries(entries),
+  }
 }
 
 export async function searchRemoteFileTree(
@@ -366,11 +363,10 @@ export async function inventoryRemoteFileTransfer(
   options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
 ): Promise<RemoteTransferInventoryResult> {
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  const result = await run(
-    { type: 'fileTransferInventory', rootPath, paths },
-    target,
-    { signal: options.signal, timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS },
-  )
+  const result = await run({ type: 'fileTransferInventory', rootPath, paths }, target, {
+    signal: options.signal,
+    timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS,
+  })
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
   if (!result.ok && !result.stdout) return { ok: false, message: result.message || 'error.failed-read-repo' }
   return parseRemoteTransferInventory(result.stdout)
@@ -382,15 +378,11 @@ export async function readRemoteFileBase64(
   options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
 ): Promise<RemoteFileReadResult> {
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  const result = await run(
-    { type: 'fileTransferReadBase64', path },
-    target,
-    {
-      signal: options.signal,
-      timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS,
-      maxBuffer: REMOTE_FILE_TRANSFER_MAX_BUFFER,
-    },
-  )
+  const result = await run({ type: 'fileTransferReadBase64', path }, target, {
+    signal: options.signal,
+    timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS,
+    maxBuffer: REMOTE_FILE_TRANSFER_MAX_BUFFER,
+  })
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
   if (!result.ok) {
     const failure = remoteExecResult(result)
@@ -406,11 +398,11 @@ export async function writeRemoteFileBase64(
   options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
 ): Promise<ExecResult> {
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  const result = await run(
-    { type: 'fileTransferWriteBase64', targetPath },
-    target,
-    { signal: options.signal, timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS, stdin: bytesBase64 },
-  )
+  const result = await run({ type: 'fileTransferWriteBase64', targetPath }, target, {
+    signal: options.signal,
+    timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS,
+    stdin: bytesBase64,
+  })
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
   return remoteExecResult(result)
 }
@@ -421,11 +413,10 @@ export async function createRemoteDirectory(
   options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
 ): Promise<ExecResult> {
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  const result = await run(
-    { type: 'fileTransferMkdir', targetPath },
-    target,
-    { signal: options.signal, timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS },
-  )
+  const result = await run({ type: 'fileTransferMkdir', targetPath }, target, {
+    signal: options.signal,
+    timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS,
+  })
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
   return remoteExecResult(result)
 }
@@ -437,11 +428,10 @@ export async function createRemoteSymlink(
   options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
 ): Promise<ExecResult> {
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  const result = await run(
-    { type: 'fileTransferSymlink', linkPath, target: linkTarget },
-    target,
-    { signal: options.signal, timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS },
-  )
+  const result = await run({ type: 'fileTransferSymlink', linkPath, target: linkTarget }, target, {
+    signal: options.signal,
+    timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS,
+  })
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
   return remoteExecResult(result)
 }
@@ -454,11 +444,9 @@ export async function renameRemoteFileTreeEntry(
   options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
 ): Promise<ExecResult> {
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  const result = await run(
-    { type: 'renameFileTreeEntry', worktreePath, oldPath, newName },
-    target,
-    { signal: options.signal },
-  )
+  const result = await run({ type: 'renameFileTreeEntry', worktreePath, oldPath, newName }, target, {
+    signal: options.signal,
+  })
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
   return remoteFileTreeMutationResult(result)
 }
@@ -471,11 +459,9 @@ export async function createRemoteFileTreeDirectory(
   options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
 ): Promise<ExecResult> {
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  const result = await run(
-    { type: 'createFileTreeDirectory', worktreePath, parentDirPath, name },
-    target,
-    { signal: options.signal },
-  )
+  const result = await run({ type: 'createFileTreeDirectory', worktreePath, parentDirPath, name }, target, {
+    signal: options.signal,
+  })
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
   return remoteFileTreeMutationResult(result)
 }
@@ -488,11 +474,9 @@ export async function createRemoteFileTreeFile(
   options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
 ): Promise<ExecResult> {
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  const result = await run(
-    { type: 'createFileTreeFile', worktreePath, parentDirPath, name },
-    target,
-    { signal: options.signal },
-  )
+  const result = await run({ type: 'createFileTreeFile', worktreePath, parentDirPath, name }, target, {
+    signal: options.signal,
+  })
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
   return remoteFileTreeMutationResult(result)
 }
@@ -506,16 +490,12 @@ export async function createRemoteFileTreeTextFile(
   options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
 ): Promise<ExecResult> {
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  const result = await run(
-    { type: 'createFileTreeTextFile', worktreePath, parentDirPath, name },
-    target,
-    {
-      signal: options.signal,
-      timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS,
-      stdin: Buffer.from(content, 'utf8').toString('base64'),
-      maxBuffer: REMOTE_FILE_TRANSFER_MAX_BUFFER,
-    },
-  )
+  const result = await run({ type: 'createFileTreeTextFile', worktreePath, parentDirPath, name }, target, {
+    signal: options.signal,
+    timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS,
+    stdin: Buffer.from(content, 'utf8').toString('base64'),
+    maxBuffer: REMOTE_FILE_TRANSFER_MAX_BUFFER,
+  })
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
   return remoteFileTreeMutationResult(result)
 }
@@ -527,11 +507,11 @@ export async function readRemoteFileTreeTextFile(
   options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
 ): Promise<RepoFileTreeTextFileReadResult> {
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  const result = await run(
-    { type: 'readFileTreeTextFile', worktreePath, filePath },
-    target,
-    { signal: options.signal, timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS, maxBuffer: REMOTE_FILE_TRANSFER_MAX_BUFFER },
-  )
+  const result = await run({ type: 'readFileTreeTextFile', worktreePath, filePath }, target, {
+    signal: options.signal,
+    timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS,
+    maxBuffer: REMOTE_FILE_TRANSFER_MAX_BUFFER,
+  })
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
   if (!result.ok && !result.stdout) return { ok: false, message: remoteExecResult(result).message }
   return parseRemoteTextFileReadResult(result.stdout)
@@ -545,16 +525,12 @@ export async function replaceRemoteFileTreeTextFile(
   options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
 ): Promise<RepoFileTreeTextFileReplaceResult> {
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  const result = await run(
-    { type: 'replaceFileTreeTextFile', worktreePath, filePath },
-    target,
-    {
-      signal: options.signal,
-      timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS,
-      stdin: Buffer.from(content, 'utf8').toString('base64'),
-      maxBuffer: REMOTE_FILE_TRANSFER_MAX_BUFFER,
-    },
-  )
+  const result = await run({ type: 'replaceFileTreeTextFile', worktreePath, filePath }, target, {
+    signal: options.signal,
+    timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS,
+    stdin: Buffer.from(content, 'utf8').toString('base64'),
+    maxBuffer: REMOTE_FILE_TRANSFER_MAX_BUFFER,
+  })
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
   if (!result.ok && !result.stdout) return { ok: false, message: remoteExecResult(result).message }
   return parseRemoteTextFileReplaceResult(result.stdout)
@@ -568,11 +544,11 @@ export async function readRemoteFileTreeBinaryFile(
   options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
 ): Promise<RepoFileTreeBinaryFileReadResult> {
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  const result = await run(
-    { type: 'readFileTreeBinaryFile', worktreePath, filePath, maxBytes },
-    target,
-    { signal: options.signal, timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS, maxBuffer: REMOTE_FILE_TRANSFER_MAX_BUFFER },
-  )
+  const result = await run({ type: 'readFileTreeBinaryFile', worktreePath, filePath, maxBytes }, target, {
+    signal: options.signal,
+    timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS,
+    maxBuffer: REMOTE_FILE_TRANSFER_MAX_BUFFER,
+  })
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
   if (!result.ok && !result.stdout) return { ok: false, message: remoteExecResult(result).message }
   return parseRemoteBinaryFileReadResult(result.stdout)
@@ -587,16 +563,12 @@ export async function replaceRemoteFileTreeBinaryFile(
   options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
 ): Promise<RepoFileTreeBinaryFileReplaceResult> {
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  const result = await run(
-    { type: 'replaceFileTreeBinaryFile', worktreePath, filePath, maxBytes },
-    target,
-    {
-      signal: options.signal,
-      timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS,
-      stdin: bytesBase64,
-      maxBuffer: REMOTE_FILE_TRANSFER_MAX_BUFFER,
-    },
-  )
+  const result = await run({ type: 'replaceFileTreeBinaryFile', worktreePath, filePath, maxBytes }, target, {
+    signal: options.signal,
+    timeoutMs: REMOTE_FILE_TRANSFER_TIMEOUT_MS,
+    stdin: bytesBase64,
+    maxBuffer: REMOTE_FILE_TRANSFER_MAX_BUFFER,
+  })
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
   if (!result.ok && !result.stdout) return { ok: false, message: remoteExecResult(result).message }
   return parseRemoteBinaryFileReplaceResult(result.stdout)
@@ -609,11 +581,7 @@ export async function deleteRemoteFileTreeEntries(
   options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
 ): Promise<ExecResult> {
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  const result = await run(
-    { type: 'deleteFileTreeEntries', worktreePath, paths },
-    target,
-    { signal: options.signal },
-  )
+  const result = await run({ type: 'deleteFileTreeEntries', worktreePath, paths }, target, { signal: options.signal })
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
   return remoteFileTreeMutationResult(result)
 }
@@ -626,11 +594,9 @@ export async function moveRemoteFileTreeEntries(
   options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
 ): Promise<ExecResult> {
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  const result = await run(
-    { type: 'moveFileTreeEntries', worktreePath, paths, targetDirPath },
-    target,
-    { signal: options.signal },
-  )
+  const result = await run({ type: 'moveFileTreeEntries', worktreePath, paths, targetDirPath }, target, {
+    signal: options.signal,
+  })
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
   return remoteFileTreeMutationResult(result)
 }
@@ -644,7 +610,9 @@ export async function fetchRemoteRepository(
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
   const [remotes, upstream] = await Promise.all([
     getRemoteRemotes(target, { signal: options.signal, run }),
-    currentBranch ? getRemoteUpstreamParts(target, currentBranch, { signal: options.signal, run }) : Promise.resolve(null),
+    currentBranch
+      ? getRemoteUpstreamParts(target, currentBranch, { signal: options.signal, run })
+      : Promise.resolve(null),
   ])
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
   if (remotes.length === 0) return { ok: true, message: '' }
@@ -666,11 +634,10 @@ export async function checkoutRemoteBranch(
   if (!isSafeBranchName(branch)) return { ok: false, message: 'error.invalid-arguments' }
   if (worktreePath && !isValidRemotePath(worktreePath)) return { ok: false, message: 'error.invalid-path' }
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  const result = await run(
-    { type: 'gitCheckout', path: worktreePath ?? target.remotePath, branch },
-    target,
-    { signal: options.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
-  )
+  const result = await run({ type: 'gitCheckout', path: worktreePath ?? target.remotePath, branch }, target, {
+    signal: options.signal,
+    timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS,
+  })
   return remoteExecResult(result)
 }
 
@@ -712,7 +679,13 @@ export async function pullRemoteBranch(
     return { ok: false, message: 'error.pull-no-remote' }
   }
   const result = await run(
-    { type: 'gitFetchBranch', path: target.remotePath, remote: targetParts.remote, remoteBranch: targetParts.branch, branch },
+    {
+      type: 'gitFetchBranch',
+      path: target.remotePath,
+      remote: targetParts.remote,
+      remoteBranch: targetParts.branch,
+      branch,
+    },
     target,
     { signal: options.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
   )
@@ -754,11 +727,10 @@ export async function commitRemoteChanges(
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
   const known = await resolveKnownRemoteWorktree(target, worktreePath, { signal: options.signal, run })
   if ('ok' in known) return known
-  const result = await run(
-    { type: 'gitCommitAll', path: known.path, message },
-    target,
-    { signal: options.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
-  )
+  const result = await run({ type: 'gitCommitAll', path: known.path, message }, target, {
+    signal: options.signal,
+    timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS,
+  })
   return remoteExecResult(result)
 }
 
@@ -773,18 +745,15 @@ export async function mergeRemoteBranch(
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
   const known = await resolveKnownRemoteWorktree(target, worktreePath, { signal: options.signal, run })
   if ('ok' in known) return known
-  const result = await run(
-    { type: 'gitMerge', path: known.path, branch },
-    target,
-    { signal: options.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
-  )
+  const result = await run({ type: 'gitMerge', path: known.path, branch }, target, {
+    signal: options.signal,
+    timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS,
+  })
   const execResult = remoteExecResult(result)
   if (execResult.ok || options.signal?.aborted) return execResult
   const status = await run({ type: 'gitStatus', path: known.path }, target, { signal: options.signal })
   if (options.signal?.aborted || !status.ok) return execResult
-  return hasUnmergedStatusEntries(parseStatus(status.stdout))
-    ? { ...execResult, reason: 'merge-conflict' }
-    : execResult
+  return hasUnmergedStatusEntries(parseStatus(status.stdout)) ? { ...execResult, reason: 'merge-conflict' } : execResult
 }
 
 export async function resetRemoteHard(
@@ -796,11 +765,10 @@ export async function resetRemoteHard(
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
   const known = await resolveKnownRemoteWorktree(target, worktreePath, { signal: options.signal, run })
   if ('ok' in known) return known
-  const result = await run(
-    { type: 'gitResetHard', path: known.path },
-    target,
-    { signal: options.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
-  )
+  const result = await run({ type: 'gitResetHard', path: known.path }, target, {
+    signal: options.signal,
+    timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS,
+  })
   return remoteExecResult(result)
 }
 
@@ -814,11 +782,10 @@ export async function discardRemoteChangesForPaths(
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
   const known = await resolveKnownRemoteWorktree(target, worktreePath, { signal: options.signal, run })
   if ('ok' in known) return known
-  const result = await run(
-    { type: 'gitDiscardChanges', path: known.path, paths },
-    target,
-    { signal: options.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
-  )
+  const result = await run({ type: 'gitDiscardChanges', path: known.path, paths }, target, {
+    signal: options.signal,
+    timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS,
+  })
   return remoteExecResult(result)
 }
 
@@ -865,7 +832,12 @@ export async function createRemoteTrackingBranch(
   }
   const run: RemoteGitRunner = input.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
   const result = await run(
-    { type: 'gitBranchTrackRemote', path: target.remotePath, localBranch: input.localBranch, remoteRef: input.remoteRef },
+    {
+      type: 'gitBranchTrackRemote',
+      path: target.remotePath,
+      localBranch: input.localBranch,
+      remoteRef: input.remoteRef,
+    },
     target,
     { signal: input.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
   )
@@ -915,11 +887,10 @@ export async function deleteLocalTag(
 ): Promise<ExecResult> {
   if (!isSafeBranchName(input.name)) return { ok: false, message: 'error.invalid-arguments' }
   const run: RemoteGitRunner = input.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  const result = await run(
-    { type: 'gitTagDelete', path: target.remotePath, name: input.name },
-    target,
-    { signal: input.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
-  )
+  const result = await run({ type: 'gitTagDelete', path: target.remotePath, name: input.name }, target, {
+    signal: input.signal,
+    timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS,
+  })
   return remoteExecResult(result)
 }
 
@@ -932,11 +903,9 @@ export async function getRemoteTags(
   if (options.signal?.aborted) return []
   const refs = await Promise.all(
     remotes.map(async (remote) => {
-      const result = await run(
-        { type: 'gitRemoteTags', path: target.remotePath, remote: remote.name },
-        target,
-        { signal: options.signal },
-      )
+      const result = await run({ type: 'gitRemoteTags', path: target.remotePath, remote: remote.name }, target, {
+        signal: options.signal,
+      })
       return result.ok ? remoteTagRefsFromLsRemote(remote.name, result.stdout) : []
     }),
   )
@@ -960,12 +929,7 @@ export async function removeRemoteWorktree(
   if (!listResult.ok) return remoteExecResult(listResult)
   const worktrees = parseWorktrees(listResult.stdout)
 
-  const resolved = resolveRemoteRemovableWorktree(
-    worktrees,
-    input.branch,
-    input.worktreePath,
-    target.remotePath,
-  )
+  const resolved = resolveRemoteRemovableWorktree(worktrees, input.branch, input.worktreePath, target.remotePath)
   if ('ok' in resolved) return resolved
 
   const status = await run({ type: 'gitStatus', path: resolved.path }, target, { signal: input.signal })
@@ -990,7 +954,9 @@ export async function removeRemoteWorktree(
     const validation = validateBranchDeletionPolicy({
       branch: input.branch,
       currentBranch,
-      isCheckedOutElsewhere: worktrees.some((worktree) => worktree.branch === input.branch && worktree.path !== resolved.path),
+      isCheckedOutElsewhere: worktrees.some(
+        (worktree) => worktree.branch === input.branch && worktree.path !== resolved.path,
+      ),
       force: shouldForceDeleteBranch,
       mergedToCurrent: mergeFacts.mergedToCurrent,
       mergedToUpstream: mergeFacts.mergedToUpstream,
@@ -1035,7 +1001,9 @@ export async function deleteRemoteBranch(
   const validation = validateBranchDeletionPolicy({
     branch: input.branch,
     currentBranch: snapshot?.current,
-    isCheckedOutElsewhere: !!snapshot?.branches.some((branchInfo) => branchInfo.name === input.branch && branchInfo.worktree),
+    isCheckedOutElsewhere: !!snapshot?.branches.some(
+      (branchInfo) => branchInfo.name === input.branch && branchInfo.worktree,
+    ),
     force: shouldForce,
     mergedToCurrent: mergeFacts.mergedToCurrent,
     mergedToUpstream: mergeFacts.mergedToUpstream,
@@ -1121,12 +1089,10 @@ async function loadRemoteWorktreeBootstrapConfig(
   options: { signal?: AbortSignal; run: RemoteGitRunner },
 ): Promise<RemoteWorktreeBootstrapConfigLoadResult> {
   const sourceRoot = path.posix.normalize(target.remotePath)
-  const readResult = await readRemoteFileTreeTextFile(
-    target,
-    sourceRoot,
-    path.posix.join(sourceRoot, 'goblin.toml'),
-    { signal: options.signal, run: options.run },
-  )
+  const readResult = await readRemoteFileTreeTextFile(target, sourceRoot, path.posix.join(sourceRoot, 'goblin.toml'), {
+    signal: options.signal,
+    run: options.run,
+  })
   if (!readResult.ok) {
     if (readResult.message === 'cancelled') return { ok: false, message: 'cancelled' }
     if (readResult.message === 'error.path-not-found') return { ok: true, value: { sourceRoot } }

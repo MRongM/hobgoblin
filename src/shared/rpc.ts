@@ -1,49 +1,24 @@
 import * as v from 'valibot'
-import type {
-  BranchSnapshotInfo,
-  ExecResult,
-  LogEntry,
-  PullRequestFetchMode,
-  PullRequestInfo,
-  RepoRemoteInfo,
-  WorktreeStatus,
-} from '#/shared/git-types.ts'
+import type { BranchSnapshotInfo, ExecResult, RepoRemoteInfo } from '#/shared/git-types.ts'
 import type { WorkspaceDetailPaneSizes, WorkspaceLayout } from '#/shared/workspace-layout.ts'
 import type { ColorTheme } from '#/shared/color-theme.ts'
-import type { SettingsPage } from '#/shared/settings-pages.ts'
 import type {
   EditorAppAvailability,
   EditorPref,
-  FontFamilyPref,
   Lang,
   LangPref,
   ResolvedEditorApp,
   ResolvedTerminalApp,
   ResolvedTheme,
   SettingsPrefs,
-  TerminalCustomButton,
-  TerminalCustomButtonAction,
-  TerminalCustomButtonSize,
   TerminalAppAvailability,
   TerminalPref,
   ThemePref,
 } from '#/shared/settings.ts'
-import type {
-  RemoteConnectionInput,
-  RemoteDiagnosticsResult,
-  RemotePathSuggestionsInput,
-  RepoSessionEntry,
-  RemoteRepoTarget,
-  ResolvedRemoteTarget,
-  SshConfigHost,
-  SshConfigHostsResult,
-} from '#/shared/remote-repo.ts'
+import type { RepoSessionEntry } from '#/shared/remote-repo.ts'
 import type { RepoQueryInvalidationEvent } from '#/shared/repo-query-invalidation.ts'
-import type { CreateWorktreeRpcInput } from '#/shared/worktree-create.ts'
 import type { RepoSettingsEntry } from '#/shared/repo-settings.ts'
-import type { WorktreeBootstrapPreviewResult } from '#/shared/worktree-bootstrap-summary.ts'
 import { NativeShellProjectionSchema, type NativeShellProjection } from '#/shared/native-shell-projection.ts'
-import { RemoteAbsolutePathSchema } from '#/shared/remote-repo-schema.ts'
 
 export type { WorkspaceLayout } from '#/shared/workspace-layout.ts'
 export type { SettingsPage } from '#/shared/settings-pages.ts'
@@ -91,6 +66,9 @@ export interface SessionState {
   openRepos: RepoSessionEntry[]
   /** The active tab id — null when no repos were open. */
   activeRepo: string | null
+  /** Last Overview/child selection for each open multi-repository workspace root. */
+  workspaceActiveRepoByRoot?: Record<string, string | null>
+  projectListExpanded: boolean
   detailCollapsed: boolean
   detailFocusMode: boolean
   workspaceLayout: WorkspaceLayout
@@ -107,29 +85,27 @@ export interface RuntimeRecentReposState {
   recentRepos: RepoSessionEntry[]
 }
 
+export interface WebAccessSettingsSnapshot {
+  enabled: boolean
+  username: string
+  passwordConfigured: boolean
+}
+
+export interface WebAccessSettingsUpdateInput {
+  enabled: boolean
+  username: string
+  password?: string
+}
+
 export interface SettingsSnapshot extends RuntimeSettingsSnapshot, RuntimeRecentReposState {
   session: SessionState
   repoSettings: RepoSettingsEntry[]
+  webAccess: WebAccessSettingsSnapshot
 }
 
 export interface GlobalShortcutState {
   accelerator: string
   registered: boolean
-}
-
-export interface GitHubCliState {
-  available: boolean
-  version: string | null
-  detectedAt: number
-  hosts: Record<string, GitHubCliHostState>
-}
-
-export interface GitHubCliHostState {
-  host: string
-  authenticated: boolean
-  activeLogin: string | null
-  logins: string[]
-  tokenSource: string | null
 }
 
 export interface TerminalAppState {
@@ -185,16 +161,6 @@ export interface CloneRepoResult extends ExecResult {
   path?: string
 }
 
-export interface PullRequestEntry {
-  branch: string
-  pullRequest: PullRequestInfo
-}
-
-export interface PullRequestFetchOptions {
-  mode?: PullRequestFetchMode
-  clearMissing?: boolean
-}
-
 export type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
 export { isRemoteRepoId, parseRemoteRepoId } from '#/shared/remote-repo.ts'
 
@@ -222,109 +188,9 @@ export type RpcEvent =
   | { type: 'toggle-detail-on-action-bar-blank-click-changed'; enabled: boolean }
   | ({ type: 'terminal-app-changed' } & TerminalAppState)
   | ({ type: 'editor-app-changed' } & EditorAppState)
-  | { type: 'github-cli-changed'; state: GitHubCliState }
   | { type: 'settings-write-error'; message: string }
   | I18nChangedEvent
   | RepoQueryInvalidationEvent
-
-export interface AppRpcHandlers {
-  repo: {
-    probe: (input: { cwd: string }) => Promise<ProbeResult>
-    clone: (input: {
-      operationId: string
-      url: string
-      parentPath: string
-      directoryName: string
-    }) => Promise<CloneRepoResult>
-    abortClone: (input: { operationId: string }) => Promise<boolean>
-    snapshot: (input: { cwd: string }) => Promise<RepoSnapshot | null>
-    pullRequests: (input: {
-      cwd: string
-      branches?: string[]
-      options?: PullRequestFetchOptions
-    }) => Promise<PullRequestEntry[] | null>
-    status: (input: { cwd: string }) => Promise<WorktreeStatus[]>
-    patch: (input: { cwd: string; worktreePath: string }) => Promise<ExecResult>
-    checkout: (input: { cwd: string; branch: string }) => Promise<ExecResult>
-    deleteBranch: (input: {
-      cwd: string
-      branch: string
-      force?: boolean
-      alsoDeleteUpstream?: boolean
-    }) => Promise<ExecResult>
-    deleteRemoteBranch: (input: {
-      cwd: string
-      remote: string
-      branch: string
-    }) => Promise<ExecResult>
-    deleteRemoteTag: (input: {
-      cwd: string
-      remote: string
-      tag: string
-    }) => Promise<ExecResult>
-    removeWorktree: (input: {
-      cwd: string
-      branch: string
-      worktreePath: string
-      alsoDeleteBranch: boolean
-      forceDeleteBranch?: boolean
-      alsoDeleteUpstream?: boolean
-    }) => Promise<ExecResult>
-    createWorktree: (input: CreateWorktreeRpcInput) => Promise<ExecResult>
-    worktreeBootstrapPreview: (input: { cwd: string; worktreePath?: string }) => Promise<WorktreeBootstrapPreviewResult>
-    initializeWorktreeBootstrapConfig: (input: { repoId: string; worktreePath: string }) => Promise<ExecResult>
-    remoteBranches: (input: { cwd: string }) => Promise<string[]>
-    remoteTags: (input: { cwd: string }) => Promise<string[]>
-    localTags: (input: { cwd: string }) => Promise<string[]>
-    createLocalTag: (input: { cwd: string; name: string; ref: string }) => Promise<ExecResult>
-    deleteLocalTag: (input: { cwd: string; name: string }) => Promise<ExecResult>
-    pushLocalTag: (input: { cwd: string; name: string }) => Promise<ExecResult>
-    pull: (input: { cwd: string; branch: string; worktreePath?: string }) => Promise<ExecResult>
-    push: (input: { cwd: string; branch: string }) => Promise<ExecResult>
-    fetch: (input: { cwd: string; kind?: NetworkOpKind }) => Promise<ExecResult>
-    abort: (input: { cwd: string }) => Promise<boolean>
-    openRemote: (input: { cwd: string; branch?: string }) => Promise<ExecResult>
-  }
-  remote: {
-    listSshHosts: () => Promise<SshConfigHostsResult>
-    resolveTarget: (input: RemoteConnectionInput) => Promise<ResolvedRemoteTarget>
-    listPathSuggestions: (input: RemotePathSuggestionsInput) => Promise<string[]>
-    testRepository: (input: { target: RemoteRepoTarget }) => Promise<RemoteDiagnosticsResult>
-  }
-  theme: {
-    get: () => ThemeState
-    setPref: (input: { pref: ThemePref }) => Promise<ThemeState>
-    setColorTheme: (input: { colorTheme: ColorTheme }) => Promise<ThemeState>
-  }
-  settings: {
-    get: () => Promise<SettingsSnapshot>
-    setFetchInterval: (input: { sec: number }) => Promise<void>
-    setTerminalNotificationsEnabled: (input: { enabled: boolean }) => Promise<void>
-    setShortcutsDisabled: (input: { disabled: boolean }) => Promise<void>
-    setGlobalShortcutDisabled: (input: { disabled: boolean }) => Promise<void>
-    setSwapCloseShortcuts: (input: { swapped: boolean }) => Promise<void>
-    setToggleDetailOnActionBarBlankClick: (input: { enabled: boolean }) => Promise<void>
-    setGlobalShortcut: (input: { accelerator: string }) => Promise<GlobalShortcutState>
-    setTerminalApp: (input: { pref: TerminalPref }) => Promise<TerminalAppState>
-    setEditorApp: (input: { pref: EditorPref }) => Promise<EditorAppState>
-    saveSession: (input: { session: SessionState }) => Promise<void>
-    applyShellProjection: (input: NativeShellProjection) => Promise<void>
-    addRecentRepo: (input: { repo: RepoSessionEntry }) => Promise<RepoSessionEntry[]>
-    clearRecentRepos: () => Promise<void>
-  }
-  externalApps: {
-    get: () => Promise<ExternalAppsSnapshot>
-    refresh: () => Promise<ExternalAppsSnapshot>
-  }
-  githubCli: {
-    get: (input: { hosts?: string[] } | undefined) => Promise<GitHubCliState>
-    refresh: (input: { hosts?: string[] } | undefined) => Promise<GitHubCliState>
-  }
-  i18n: {
-    get: () => Promise<I18nSnapshot>
-    setPref: (input: { pref: LangPref }) => Promise<I18nSnapshot | null>
-  }
-}
 
 export interface NativeRpcHandlers {
   settings: {
@@ -338,33 +204,6 @@ export type NativeBridgeHandlers = NativeRpcHandlers
 export type NativeRpcPath = {
   [NS in keyof NativeBridgeHandlers]: `${Extract<NS, string>}.${Extract<keyof NativeBridgeHandlers[NS], string>}`
 }[keyof NativeBridgeHandlers]
-
-const EmptyInput = v.optional(v.void())
-const FiniteNumber = v.pipe(v.number(), v.finite())
-const PortNumber = v.pipe(FiniteNumber, v.integer(), v.minValue(1), v.maxValue(65535))
-const CwdInput = v.object({ cwd: v.string() })
-const BranchInput = v.object({ cwd: v.string(), branch: v.string() })
-
-const RemoteTargetSchema = v.object({
-  id: v.string(),
-  alias: v.string(),
-  host: v.string(),
-  user: v.string(),
-  port: PortNumber,
-  remotePath: RemoteAbsolutePathSchema,
-  displayName: v.string(),
-})
-
-const RemoteConnectionInputSchema = v.object({
-  alias: v.string(),
-  remotePath: v.string(),
-})
-
-const RemotePathSuggestionsInputSchema = v.object({
-  alias: v.string(),
-  remotePath: v.string(),
-  prefix: v.string(),
-})
 
 export type RpcErrorCode = 'FORBIDDEN' | 'BAD_REQUEST' | 'NOT_FOUND' | 'INTERNAL_SERVER_ERROR'
 

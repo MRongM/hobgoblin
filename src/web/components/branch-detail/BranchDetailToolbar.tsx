@@ -1,17 +1,14 @@
-import { ArrowUp, Globe, Minus, PanelLeftOpen, QrCode } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ArrowUp, Minus, PanelLeftOpen } from 'lucide-react'
+import { useCallback, useMemo } from 'react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { Button } from '#/web/components/ui/button.tsx'
 import { Toolbar } from '#/web/components/Layout.tsx'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '#/web/components/ui/dialog.tsx'
 import { detailTabForWorktree } from '#/web/lib/detail-tabs.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { repoWorkspaceBehavior } from '#/web/lib/workspace-layout.ts'
-import { buildTerminalDeepLinkUrl } from '#/web/lib/terminal-deep-link.ts'
-import { qrCodeDataUrls } from '#/web/lib/qr-code-images.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { useWorktreeTerminalSnapshot } from '#/web/components/terminal/terminal-session-store.ts'
 import { useTerminalSessionContext } from '#/web/components/terminal/terminal-session-context.ts'
@@ -22,10 +19,9 @@ import type { BranchDetailRepo, SelectedBranchDetailPresentation } from '#/web/c
 import { useRuntimeShortcutSettings } from '#/web/runtime-settings-shortcuts.ts'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { useFocusRegistry } from '#/web/components/tab-strip/useFocusRegistry.ts'
-import { useLanInfoQuery } from '#/web/settings-queries.ts'
-import { openExternalUrl } from '#/web/app-shell-client.ts'
 import { TopbarRepoControls } from '#/web/components/topbar/TopbarRepoControls.tsx'
 import { FocusProjectSwitcher } from '#/web/components/repo-workspace/FocusProjectSwitcher.tsx'
+import { WorkspaceRepositorySwitcher } from '#/web/components/repo-workspace/WorkspaceRepositorySwitcher.tsx'
 import {
   branchDetailToolbarStoreActionsEqual,
   branchDetailToolbarStoreActionsFromStore,
@@ -37,12 +33,23 @@ interface Props {
   contentId: string
   collapsed: boolean
   detailFocusMode: boolean
+  compactFocusPresentation?: boolean
   layout: RepoWorkspaceLayout
+  onShowCompactExplorer?: () => void
 }
 
-export function BranchDetailToolbar({ repo, detail, detailId, contentId, collapsed, detailFocusMode, layout }: Props) {
+export function BranchDetailToolbar({
+  repo,
+  detail,
+  detailId,
+  contentId,
+  collapsed,
+  detailFocusMode,
+  compactFocusPresentation = false,
+  layout,
+  onShowCompactExplorer,
+}: Props) {
   const t = useT()
-  const [lanQrOpen, setLanQrOpen] = useState(false)
   const { setDetailCollapsed, toggleDetailCollapsed, toggleDetailFocusMode } = useStoreWithEqualityFn(
     useReposStore,
     branchDetailToolbarStoreActionsFromStore,
@@ -51,7 +58,6 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
   const navigation = useMainWindowNavigation()
   const { shortcutsDisabled, toggleDetailOnActionBarBlankClick } = useRuntimeShortcutSettings()
   const compact = useIsCompactUi()
-  const { data: lanInfo } = useLanInfoQuery()
   const behavior = repoWorkspaceBehavior(layout, collapsed, detailFocusMode)
   const activeDetailTab = detailTabForWorktree(repo.ui.detailTab, !!detail.branch?.worktree?.path)
   const terminalWorktreeKey = detail.branch?.worktree?.path
@@ -69,6 +75,7 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
 
   const worktreeSnapshot = useWorktreeTerminalSnapshot(terminalWorktreeKey)
   const terminalSessions = worktreeSnapshot.sessions
+  const focusedTerminalSession = terminalSessions.find((session) => session.selected) ?? terminalSessions[0] ?? null
   const terminalTabFocusRegistry = useFocusRegistry<string, HTMLButtonElement>()
 
   const terminalBase = useMemo<TerminalSessionBase | null>(
@@ -125,29 +132,6 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
     [reorderSessions],
   )
 
-  const focusedTerminalSession = terminalSessions.find((session) => session.selected) ?? terminalSessions[0] ?? null
-  const terminalLanUrls = useMemo(() => {
-    if (!detail.branch?.worktree?.path) return []
-    return (lanInfo?.lanUrls ?? []).map((url) =>
-      buildTerminalDeepLinkUrl(url, {
-        repoId: repo.id,
-        worktreePath: detail.branch!.worktree!.path,
-        branch: detail.branch!.name,
-        terminalId: focusedTerminalSession?.terminalId,
-      }),
-    )
-  }, [detail.branch, focusedTerminalSession?.terminalId, lanInfo?.lanUrls, repo.id])
-  const terminalBrowserUrl = useMemo(() => {
-    if (!detail.branch?.worktree?.path || !lanInfo) return null
-    const accessHost = lanInfo.host === '0.0.0.0' ? '127.0.0.1' : lanInfo.host
-    return buildTerminalDeepLinkUrl(`http://${accessHost}:${lanInfo.port}`, {
-      repoId: repo.id,
-      worktreePath: detail.branch.worktree.path,
-      branch: detail.branch.name,
-      terminalId: focusedTerminalSession?.terminalId,
-    })
-  }, [detail.branch, focusedTerminalSession?.terminalId, lanInfo, repo.id])
-
   // No selected branch means there is no tab/action target; BranchDetailContent renders the empty state.
   if (!detail.branch) return null
 
@@ -164,7 +148,8 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
         ? 'branch-detail.expand-title'
         : 'branch-detail.collapse-title',
   )
-  const showCollapseControl = behavior.detailCollapseAllowed && layout !== 'left-right'
+  const showCollapseControl = !compactFocusPresentation && behavior.detailCollapseAllowed && layout !== 'left-right'
+  const contextRail = behavior.mode === 'focus' || compactFocusPresentation
   // In the desktop left-right layout this toolbar is the right half of the
   // window's top edge, so its unused surface is a drag region without the
   // traffic-light padding owned by `.topbar`. Focus mode hides the sidebar,
@@ -174,27 +159,35 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
     <Toolbar
       variant="detail"
       chrome={compact ? 'toolbar' : 'topbar'}
-      className={cn(layout === 'left-right' && '[-webkit-app-region:drag]', isWindowChrome && 'topbar')}
+      className={cn(
+        'mobile-topbar-scroll',
+        layout === 'left-right' && '[-webkit-app-region:drag]',
+        isWindowChrome && 'topbar',
+      )}
     >
-      <div className="flex h-full min-w-0 items-center gap-1 overflow-hidden">
-        {/* Focus mode hides the sidebar, so its collapse control mirrors
-         * here at the window's top-left to bring the sidebar back, and the
-         * project switcher stays reachable as a dropdown next to it. */}
-        {isWindowChrome && (
+      <div className="mobile-topbar-scroll-content flex h-full min-w-0 items-center gap-1 overflow-hidden">
+        {/* Keep workspace and branch context reachable whenever the detail
+         * toolbar is presented as the compact or desktop context rail. */}
+        {contextRail && (
           <>
             <Button
               variant="ghost"
               size="icon"
-              onClick={toggleDetailFocusMode}
-              aria-label={t('branch-detail.exit-focus')}
-              title={t('branch-detail.exit-focus-title')}
+              onClick={compactFocusPresentation ? onShowCompactExplorer : toggleDetailFocusMode}
+              aria-label={t(compactFocusPresentation ? 'mobile.open-workspace' : 'branch-detail.exit-focus')}
+              title={t(compactFocusPresentation ? 'mobile.open-workspace' : 'branch-detail.exit-focus-title')}
             >
               <PanelLeftOpen />
             </Button>
-            <FocusProjectSwitcher repoId={repo.id} />
-            {/* Focus-mode branch switcher / actions — previously topbar
-             * content; the component renders nothing outside focus mode. */}
-            <TopbarRepoControls repoId={repo.id} menuAlign="start" />
+            <FocusProjectSwitcher repoId={repo.id} compact={compactFocusPresentation} />
+            <WorkspaceRepositorySwitcher repoId={repo.id} compact={compactFocusPresentation} />
+            {/* Branch switcher / actions — previously topbar content. */}
+            <TopbarRepoControls
+              repoId={repo.id}
+              menuAlign="start"
+              focusPresentation={contextRail}
+              tone={compactFocusPresentation ? 'toolbar' : 'topbar'}
+            />
           </>
         )}
         {terminalWorktreeKey && (
@@ -204,7 +197,7 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
             detailId={detailId}
             responsiveCompact={compact}
             panelActive={activeDetailTab === 'terminal'}
-            focusMode={detailFocusMode}
+            focusMode={contextRail}
             focusRegistry={terminalTabFocusRegistry}
             emptyFocusKey={EMPTY_TERMINAL_TAB_FOCUS_KEY}
             onNew={handleNewTerminal}
@@ -231,32 +224,8 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
         }
       />
       <div className="flex shrink-0 items-center gap-1">
-        {layout === 'top-bottom' && <div className="mx-1 h-4 w-px bg-separator/70" aria-hidden="true" />}
-        {terminalWorktreeKey && (
-          <>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => {
-                if (terminalBrowserUrl) void openExternalUrl(terminalBrowserUrl)
-              }}
-              disabled={!terminalBrowserUrl}
-              aria-label={t('terminal.open-in-browser')}
-              title={t('terminal.open-in-browser-title')}
-            >
-              <Globe />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setLanQrOpen(true)}
-              aria-label={t('terminal.lan-qr')}
-              title={t('terminal.lan-qr-title')}
-            >
-              <QrCode />
-            </Button>
-            <TerminalLanQrDialog open={lanQrOpen} onOpenChange={setLanQrOpen} urls={terminalLanUrls} />
-          </>
+        {!compactFocusPresentation && layout === 'top-bottom' && (
+          <div className="mx-1 h-4 w-px bg-separator/70" aria-hidden="true" />
         )}
         {showCollapseControl && (
           <Button
@@ -273,75 +242,5 @@ export function BranchDetailToolbar({ repo, detail, detailId, contentId, collaps
         )}
       </div>
     </Toolbar>
-  )
-}
-
-interface TerminalLanQrDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  urls: string[]
-}
-
-function TerminalLanQrDialog({ open, onOpenChange, urls }: TerminalLanQrDialogProps) {
-  const t = useT()
-  const [qrCodes, setQrCodes] = useState<Record<string, string>>({})
-  const urlKey = urls.join('\n')
-
-  useEffect(() => {
-    let cancelled = false
-    if (!open || urls.length === 0) {
-      setQrCodes({})
-      return
-    }
-    void qrCodeDataUrls(urls).then((next) => {
-      if (!cancelled) setQrCodes(next)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [open, urlKey, urls])
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{t('terminal.lan-qr-title')}</DialogTitle>
-          <DialogDescription>
-            {urls.length === 0 ? t('terminal.lan-qr-empty') : t('terminal.lan-qr-description')}
-          </DialogDescription>
-        </DialogHeader>
-        {urls.length > 0 && (
-          <div className="grid max-h-[70vh] grid-cols-1 gap-3 overflow-y-auto sm:grid-cols-2">
-            {urls.map((url) => (
-              <div key={url} className="flex min-w-0 flex-col items-center gap-2 rounded-md border bg-muted/20 p-3">
-                {qrCodes[url] ? (
-                  <img
-                    data-testid="terminal-lan-qr-image"
-                    src={qrCodes[url]}
-                    alt={t('terminal.lan-qr-image-alt', { url })}
-                    width={180}
-                    height={180}
-                    className="rounded border bg-white"
-                  />
-                ) : (
-                  <div
-                    data-testid="terminal-lan-qr-loading"
-                    className="grid h-[180px] w-[180px] place-items-center rounded border bg-background text-xs text-muted-foreground"
-                  >
-                    {t('terminal.lan-qr-loading')}
-                  </div>
-                )}
-                <code
-                  data-testid="terminal-lan-qr-url"
-                  className="w-full break-all rounded bg-background px-2 py-1 text-xs text-muted-foreground"
-                >
-                  {url}
-                </code>
-              </div>
-            ))}
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
   )
 }

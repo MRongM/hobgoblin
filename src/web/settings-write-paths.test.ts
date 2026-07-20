@@ -3,15 +3,10 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { defaultSettingsSnapshot, defaultSessionState } from '#/shared/settings-defaults.ts'
 import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
-import {
-  externalAppsQueryKey,
-  githubCliQueryKey,
-  lanInfoQueryKey,
-  settingsSnapshotQueryKey,
-} from '#/web/settings-query-cache.ts'
+import { externalAppsQueryKey, lanInfoQueryKey, settingsSnapshotQueryKey } from '#/web/settings-query-cache.ts'
 import type { RepoSessionEntry } from '#/shared/remote-repo.ts'
 import type { RepoSettingsEntry } from '#/shared/repo-settings.ts'
-import type { GitHubCliState, TerminalCustomButton } from '#/shared/rpc.ts'
+import type { TerminalCustomButton } from '#/shared/rpc.ts'
 
 type AddRecentRepoResult = {
   recentRepos: RepoSessionEntry[]
@@ -36,12 +31,6 @@ const appDataClientMocks = vi.hoisted(() => ({
       appAvailability: { vscode: false, cursor: false, windsurf: false },
       detectedAt: 0,
     },
-  })),
-  refreshGitHubCliState: vi.fn<() => Promise<GitHubCliState>>(async () => ({
-    available: false,
-    version: null,
-    detectedAt: 0,
-    hosts: {},
   })),
   saveSession: vi.fn(async (session) => session),
   setFontFamily: vi.fn(async (fontFamily: 'mono' | 'maple' | 'system') => fontFamily),
@@ -79,13 +68,17 @@ const appDataClientMocks = vi.hoisted(() => ({
   setTerminalFontSize: vi.fn(async (fontSize: number) => fontSize),
   setTerminalNotificationsEnabled: vi.fn(async () => {}),
   setToggleDetailOnActionBarBlankClick: vi.fn(async () => {}),
+  setWebAccessSettings: vi.fn(async (input) => ({
+    enabled: input.enabled === true,
+    username: input.username,
+    passwordConfigured: true,
+  })),
 }))
 
 vi.mock('#/web/settings-client.ts', () => ({
   addRecentRepo: appDataClientMocks.addRecentRepo,
   clearRecentRepos: appDataClientMocks.clearRecentRepos,
   refreshExternalAppsSnapshot: appDataClientMocks.refreshExternalAppsSnapshot,
-  refreshGitHubCliState: appDataClientMocks.refreshGitHubCliState,
   saveSession: appDataClientMocks.saveSession,
   setFontFamily: appDataClientMocks.setFontFamily,
   setFileTreeFontSize: appDataClientMocks.setFileTreeFontSize,
@@ -110,6 +103,7 @@ vi.mock('#/web/settings-client.ts', () => ({
   setTerminalFontSize: appDataClientMocks.setTerminalFontSize,
   setTerminalNotificationsEnabled: appDataClientMocks.setTerminalNotificationsEnabled,
   setToggleDetailOnActionBarBlankClick: appDataClientMocks.setToggleDetailOnActionBarBlankClick,
+  setWebAccessSettings: appDataClientMocks.setWebAccessSettings,
 }))
 
 describe('settings write paths', () => {
@@ -135,13 +129,6 @@ describe('settings write paths', () => {
         appAvailability: { vscode: false, cursor: false, windsurf: false },
         detectedAt: 0,
       },
-    })
-    appDataClientMocks.refreshGitHubCliState.mockReset()
-    appDataClientMocks.refreshGitHubCliState.mockResolvedValue({
-      available: false,
-      version: null,
-      detectedAt: 0,
-      hosts: {},
     })
     appDataClientMocks.saveSession.mockReset()
     appDataClientMocks.saveSession.mockImplementation(async (session) => session)
@@ -203,6 +190,12 @@ describe('settings write paths', () => {
     appDataClientMocks.setTerminalNotificationsEnabled.mockResolvedValue(undefined)
     appDataClientMocks.setToggleDetailOnActionBarBlankClick.mockReset()
     appDataClientMocks.setToggleDetailOnActionBarBlankClick.mockResolvedValue(undefined)
+    appDataClientMocks.setWebAccessSettings.mockReset()
+    appDataClientMocks.setWebAccessSettings.mockImplementation(async (input) => ({
+      enabled: input.enabled === true,
+      username: input.username,
+      passwordConfigured: true,
+    }))
   })
 
   test('recordRecentRepo syncs recent repos into the settings snapshot cache', async () => {
@@ -279,31 +272,6 @@ describe('settings write paths', () => {
     })
   })
 
-  test('refreshGitHubCliDetection writes refreshed state into the GitHub CLI cache', async () => {
-    appDataClientMocks.refreshGitHubCliState.mockResolvedValue({
-      available: true,
-      version: '2.70.0',
-      detectedAt: 1,
-      hosts: {
-        'github.com': {
-          host: 'github.com',
-          authenticated: true,
-          activeLogin: 'octocat',
-          logins: ['octocat'],
-          tokenSource: 'keychain',
-        },
-      },
-    })
-    const { refreshGitHubCliDetection } = await import('#/web/settings-write-paths.ts')
-
-    await refreshGitHubCliDetection()
-
-    expect(mainWindowQueryClient.getQueryData(githubCliQueryKey())).toMatchObject({
-      available: true,
-      version: '2.70.0',
-    })
-  })
-
   test('setLanEnabledPreference updates runtime settings cache and invalidates LAN info', async () => {
     const invalidateSpy = vi.spyOn(mainWindowQueryClient, 'invalidateQueries')
     mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
@@ -347,6 +315,23 @@ describe('settings write paths', () => {
     expect(appDataClientMocks.setGitNetworkProxyEnabled).toHaveBeenCalledWith(true)
     expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
       gitNetworkProxyEnabled: true,
+    })
+  })
+
+  test('setWebAccessSettingsPreference updates the public security snapshot cache', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    const input = { enabled: true, username: 'operator', password: 'test-password' }
+    const { setWebAccessSettingsPreference } = await import('#/web/settings-write-paths.ts')
+
+    await expect(setWebAccessSettingsPreference(input)).resolves.toEqual({
+      enabled: true,
+      username: 'operator',
+      passwordConfigured: true,
+    })
+
+    expect(appDataClientMocks.setWebAccessSettings).toHaveBeenCalledWith(input)
+    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
+      webAccess: { enabled: true, username: 'operator', passwordConfigured: true },
     })
   })
 

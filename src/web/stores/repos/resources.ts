@@ -1,7 +1,6 @@
 // Resources state tracks UI-facing load phases (idle/loading/refreshing).
 // Executability decisions use the operations system (operations.ts) instead;
 // keeping the two separate eliminates the risk of drift.
-import type { PullRequestFetchMode } from '#/web/types.ts'
 export type RepoResourcePhase = 'idle' | 'loading' | 'refreshing'
 
 export interface RepoResourceState {
@@ -11,16 +10,10 @@ export interface RepoResourceState {
   stale: boolean
 }
 
-export interface RepoPullRequestResourceState extends RepoResourceState {
-  mode: PullRequestFetchMode | null
-}
-
 export interface RepoResourcesState {
   snapshot: RepoResourceState
   status: RepoResourceState
   fetch: RepoResourceState
-  pullRequests: RepoPullRequestResourceState
-  pullRequestsByBranch: Record<string, RepoPullRequestResourceState>
 }
 
 export function idleResource(loadedAt: number | null = null): RepoResourceState {
@@ -32,23 +25,11 @@ export function idleResource(loadedAt: number | null = null): RepoResourceState 
   }
 }
 
-export function idlePullRequestResource(
-  loadedAt: number | null = null,
-  mode: PullRequestFetchMode | null = null,
-): RepoPullRequestResourceState {
-  return {
-    ...idleResource(loadedAt),
-    mode,
-  }
-}
-
 export function emptyRepoResources(): RepoResourcesState {
   return {
     snapshot: idleResource(),
     status: idleResource(),
     fetch: idleResource(),
-    pullRequests: idlePullRequestResource(),
-    pullRequestsByBranch: {},
   }
 }
 
@@ -79,44 +60,6 @@ export function finishResourceError(resource: RepoResourceState, error: string):
   resource.stale = stale
 }
 
-export function finishResourceUnavailable(resource: RepoResourceState): void {
-  const stale = resource.loadedAt !== null || resource.phase === 'refreshing'
-  resource.phase = 'idle'
-  resource.error = null
-  resource.stale = stale
-}
-
 export function cancelResource(resource: RepoResourceState): void {
   resource.phase = 'idle'
-}
-
-export function startPullRequestResource(
-  resource: RepoPullRequestResourceState,
-  mode: PullRequestFetchMode,
-  options?: { hasData?: boolean },
-): void {
-  startResource(resource, options)
-  resource.mode = mode
-}
-
-export function finishPullRequestResourceSuccess(
-  resource: RepoPullRequestResourceState,
-  mode: PullRequestFetchMode,
-  loadedAt: number = Date.now(),
-): void {
-  finishResourceSuccess(resource, loadedAt)
-  resource.mode = mode
-}
-
-export function finishPullRequestResourceUnavailable(
-  resource: RepoPullRequestResourceState,
-  mode: PullRequestFetchMode,
-): void {
-  finishResourceUnavailable(resource)
-  resource.mode = mode
-}
-
-export function finishPullRequestResourceError(resource: RepoPullRequestResourceState, error: string): void {
-  finishResourceError(resource, error)
-  resource.mode = null
 }

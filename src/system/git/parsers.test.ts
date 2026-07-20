@@ -11,7 +11,6 @@ import {
   parseBranches,
   parseCommitFileChanges,
   parseCommitHistory,
-  parseLog,
   parseStatus,
   parseWorktrees,
 } from '#/system/git/parsers.ts'
@@ -138,34 +137,6 @@ describe('parseBranches', () => {
   })
 })
 
-describe('parseLog', () => {
-  test('returns empty for empty input', () => {
-    expect(parseLog('')).toEqual([])
-  })
-
-  test('parses multiple entries', () => {
-    const out = [
-      ['fullsha1', 'sha1', 'first', 'Alice', '2026-05-20T10:00:00+08:00'].join(SEP),
-      ['fullsha2', 'sha2', 'second', 'Bob', '2026-05-19T10:00:00+08:00'].join(SEP),
-    ].join('\n')
-    const result = parseLog(out)
-    expect(result).toHaveLength(2)
-    expect(result[0]).toEqual({
-      hash: 'fullsha1',
-      shortHash: 'sha1',
-      message: 'first',
-      author: 'Alice',
-      date: '2026-05-20T10:00:00+08:00',
-    })
-    expect(result[1]?.author).toBe('Bob')
-  })
-
-  test('subjects with embedded spaces survive', () => {
-    const out = ['h', 'sh', 'feat(scope): hello world', 'a', 'd'].join(SEP)
-    expect(parseLog(out)[0]?.message).toBe('feat(scope): hello world')
-  })
-})
-
 describe('parseCommitHistory', () => {
   test('parses parents for regular and merge commits', () => {
     const out = [
@@ -196,34 +167,36 @@ describe('parseCommitHistory', () => {
 
 describe('parseCommitFileChanges', () => {
   test('merges name-status and numstat records including rename, copy, and binary stats', () => {
-    const nameStatus = [
-      'A',
-      'src/new.ts',
-      'M',
-      'src/edit.ts',
-      'D',
-      'src/deleted.ts',
-      'R050',
-      'src/old name.ts',
-      'src/new name.ts',
-      'C100',
-      'src/source.ts',
-      'src/copied.ts',
-      'X',
-      'assets/logo.png',
-    ].join('\0') + '\0'
-    const numstat = [
-      '10\t0\tsrc/new.ts',
-      '2\t3\tsrc/edit.ts',
-      '0\t8\tsrc/deleted.ts',
-      '1\t1\t',
-      'src/old name.ts',
-      'src/new name.ts',
-      '5\t0\t',
-      'src/source.ts',
-      'src/copied.ts',
-      '-\t-\tassets/logo.png',
-    ].join('\0') + '\0'
+    const nameStatus =
+      [
+        'A',
+        'src/new.ts',
+        'M',
+        'src/edit.ts',
+        'D',
+        'src/deleted.ts',
+        'R050',
+        'src/old name.ts',
+        'src/new name.ts',
+        'C100',
+        'src/source.ts',
+        'src/copied.ts',
+        'X',
+        'assets/logo.png',
+      ].join('\0') + '\0'
+    const numstat =
+      [
+        '10\t0\tsrc/new.ts',
+        '2\t3\tsrc/edit.ts',
+        '0\t8\tsrc/deleted.ts',
+        '1\t1\t',
+        'src/old name.ts',
+        'src/new name.ts',
+        '5\t0\t',
+        'src/source.ts',
+        'src/copied.ts',
+        '-\t-\tassets/logo.png',
+      ].join('\0') + '\0'
 
     expect(parseCommitFileChanges(nameStatus, numstat)).toEqual([
       { path: 'src/new.ts', status: 'added', additions: 10, deletions: 0 },

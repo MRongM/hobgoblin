@@ -13,7 +13,20 @@ export function installGoblin(overrides: Record<string, (input: any) => unknown>
     recent: [] as RepoSessionEntry[],
     snapshot: [] as string[],
     status: [] as string[],
+    workspace: [] as string[],
+    workspaceConfigure: [] as Array<{ rootPath: string; config: unknown }>,
     resolveTarget: [] as Array<{ alias: string; remotePath: string }>,
+  }
+  const defaultWorkspaceRead = ({ rootPath }: { rootPath: string }) => {
+    calls.workspace.push(rootPath)
+    return {
+      ok: true,
+      rootId: rootPath,
+      repositories: [],
+      candidates: [],
+      configuration: { kind: 'missing' },
+      skipped: [],
+    }
   }
   const handlers: Record<string, (input: any) => unknown> = {
     'repo.probe': ({ cwd }: { cwd: string }) => {
@@ -24,12 +37,17 @@ export function installGoblin(overrides: Record<string, (input: any) => unknown>
       calls.snapshot.push(cwd)
       return { branches: [], current: '' }
     },
-    'repo.pullRequests': async () => [],
     'repo.status': ({ cwd }: { cwd: string }) => {
       calls.status.push(cwd)
       return []
     },
     'repo.abort': async () => undefined,
+    'workspace.restore': defaultWorkspaceRead,
+    'workspace.discover': defaultWorkspaceRead,
+    'workspace.configure': ({ rootPath, config }: { rootPath: string; config: unknown }) => {
+      calls.workspaceConfigure.push({ rootPath, config })
+      return { ok: false, message: 'workspace.config.write-failed' }
+    },
     'remote.resolveTarget': ({ alias, remotePath }: { alias: string; remotePath: string }) => {
       calls.resolveTarget.push({ alias, remotePath })
       return {
@@ -54,6 +72,9 @@ export function installGoblin(overrides: Record<string, (input: any) => unknown>
     if (key === 'probe') handlers['repo.probe'] = ({ cwd }: { cwd: string }) => handler(cwd)
     else if (key === 'snapshot') handlers['repo.snapshot'] = ({ cwd }: { cwd: string }) => handler(cwd)
     else handlers[key] = handler
+  }
+  if (overrides['workspace.discover'] && !overrides['workspace.restore']) {
+    handlers['workspace.restore'] = overrides['workspace.discover']
   }
   installGoblinTestBridge(handlers)
   return calls

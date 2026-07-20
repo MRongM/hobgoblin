@@ -37,6 +37,7 @@ describe('useAppBootstrap', () => {
     vi.spyOn(useSessionRestoreStore.getState(), 'hydrate').mockResolvedValue({
       openRepos: [{ kind: 'local', id: '/tmp/repo' }],
       activeRepo: '/tmp/repo',
+      projectListExpanded: true,
       detailCollapsed: true,
       detailFocusMode: true,
       workspaceLayout: 'left-right',
@@ -46,6 +47,7 @@ describe('useAppBootstrap', () => {
     vi.spyOn(useSessionRestoreStore.getState(), 'consumeBootSessionSnapshot').mockReturnValue({
       openRepos: [{ kind: 'local', id: '/tmp/repo' }],
       activeRepo: '/tmp/repo',
+      projectListExpanded: true,
       detailCollapsed: true,
       detailFocusMode: true,
       workspaceLayout: 'left-right',
@@ -57,12 +59,13 @@ describe('useAppBootstrap', () => {
     await render(<Harness />)
 
     const state = useReposStore.getState()
+    expect(state.projectListExpanded).toBe(true)
     expect(state.workspaceLayout).toBe('left-right')
     expect(state.detailCollapsed).toBe(true)
     expect(state.detailFocusMode).toBe(true)
     expect(state.detailPaneSizes).toEqual({ 'top-bottom': 55, 'left-right': 45 })
     expect(state.selectedTerminalByWorktree).toEqual({ '/tmp/repo\0/tmp/worktree': '/tmp/repo\0/tmp/worktree\0terminal-2' })
-    expect(hydrateSession).toHaveBeenCalledWith([{ kind: 'local', id: '/tmp/repo' }], '/tmp/repo')
+    expect(hydrateSession).toHaveBeenCalledWith([{ kind: 'local', id: '/tmp/repo' }], '/tmp/repo', {})
   })
 })
 

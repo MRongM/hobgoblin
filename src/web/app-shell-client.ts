@@ -45,14 +45,6 @@ export function hasNativeFilePicker(): boolean {
   }
 }
 
-export function canOpenAppSettings(): boolean {
-  try {
-    return getRendererBridge().hasCapability('open-settings-window')
-  } catch {
-    return false
-  }
-}
-
 export function canUseGlobalShortcutSettings(): boolean {
   return canUseNativeRpcBridge()
 }

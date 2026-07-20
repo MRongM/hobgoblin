@@ -8,6 +8,7 @@ import {
 } from '#/shared/input-validation.ts'
 import { safeRelativePath } from '#/shared/path-semantics.ts'
 import { serverDataFile } from '#/server/common/data-dir.ts'
+import { hashWebAccessPassword, isWebAccessPasswordHash } from '#/server/modules/web-access-auth.ts'
 import type {
   EditorPref,
   FontFamilyPref,
@@ -19,6 +20,7 @@ import type {
   TerminalCustomButtonSize,
   TerminalPref,
   ThemePref,
+  WebAccessSettingsSnapshot,
 } from '#/shared/rpc.ts'
 import {
   DEFAULT_DETAIL_COLLAPSED,
@@ -46,19 +48,14 @@ import {
   DEFAULT_FETCH_INTERVAL_SEC,
   DEFAULT_FONT_FAMILY,
   DEFAULT_GIT_NETWORK_TIMEOUT_SEC,
-  DEFAULT_GLOBAL_SHORTCUT,
-  DEFAULT_GLOBAL_SHORTCUT_DISABLED,
   DEFAULT_LANG_PREF,
+  DEFAULT_PROJECT_LIST_EXPANDED,
   DEFAULT_SESSION_DETAIL_FOCUS_MODE,
-  DEFAULT_SHORTCUTS_DISABLED,
-  DEFAULT_SWAP_CLOSE_SHORTCUTS,
   DEFAULT_TERMINAL_APP,
   DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
   DEFAULT_TERMINAL_FONT_SIZE,
-  DEFAULT_TERMINAL_NOTIFICATIONS_ENABLED,
   DEFAULT_TERMINAL_THEME_SYNC_ENABLED,
   DEFAULT_THEME_PREF,
-  DEFAULT_TOGGLE_DETAIL_ON_ACTION_BAR_BLANK_CLICK,
   MAX_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   MAX_FILE_TREE_FONT_SIZE,
   MAX_FILE_TREE_TOPBAR_FONT_SIZE,
@@ -110,6 +107,9 @@ interface ServerSettingsData {
   terminalCustomButtons: TerminalCustomButton[]
   lanEnabled: boolean
   serverPort: number
+  webAccessEnabled: boolean
+  webAccessUsername: string
+  webAccessPasswordHash: string
   session: SessionState
   recentRepos: RepoSessionEntry[]
   repoSettings: RepoSettingsEntry[]
@@ -121,6 +121,26 @@ let cachedFetchIntervalSec = DEFAULT_FETCH_INTERVAL_SEC
 let settingsPromise: Promise<ServerSettingsData> | null = null
 const listeners = new Set<FetchIntervalListener>()
 const MAX_TERMINAL_CUSTOM_BUTTONS = 20
+const MAX_WEB_ACCESS_USERNAME_LENGTH = 128
+const MIN_WEB_ACCESS_PASSWORD_LENGTH = 8
+const MAX_WEB_ACCESS_PASSWORD_LENGTH = 1024
+
+export type WebAccessSettingsErrorCode =
+  | 'username-required'
+  | 'username-invalid'
+  | 'password-required'
+  | 'password-too-short'
+  | 'password-too-long'
+
+export class WebAccessSettingsError extends Error {
+  readonly code: WebAccessSettingsErrorCode
+
+  constructor(code: WebAccessSettingsErrorCode) {
+    super(code)
+    this.name = 'WebAccessSettingsError'
+    this.code = code
+  }
+}
 
 function normalizeFetchInterval(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value)
@@ -254,6 +274,24 @@ function normalizeServerPort(value: unknown): number {
   return port >= MIN_SERVER_PORT && port <= MAX_SERVER_PORT ? port : DEFAULT_SERVER_PORT
 }
 
+function normalizeWebAccessUsername(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  const username = value.trim()
+  if (!username || username.length > MAX_WEB_ACCESS_USERNAME_LENGTH || /[\u0000-\u001f\u007f]/u.test(username)) {
+    return ''
+  }
+  return username
+}
+
+function webAccessSettingsFromData(data: ServerSettingsData): WebAccessSettingsSnapshot {
+  const passwordConfigured = Boolean(data.webAccessUsername && isWebAccessPasswordHash(data.webAccessPasswordHash))
+  return {
+    enabled: data.webAccessEnabled && passwordConfigured,
+    username: passwordConfigured ? data.webAccessUsername : '',
+    passwordConfigured,
+  }
+}
+
 function normalizeGitNetworkProxyEnabled(value: unknown): boolean {
   return value === true
 }
@@ -339,6 +377,29 @@ function normalizeSelectedTerminalByWorktree(value: unknown): Record<string, str
   return normalized
 }
 
+function normalizeWorkspaceActiveRepoByRoot(
+  value: unknown,
+  openRepos: RepoSessionEntry[],
+): Record<string, string | null> {
+  if (!value || typeof value !== 'object') return {}
+  const openLocalRoots = new Set(
+    openRepos.filter((entry) => entry.kind === 'local').map((entry) => path.resolve(entry.id)),
+  )
+  const normalized: Record<string, string | null> = {}
+  for (const [rawRoot, rawSelection] of Object.entries(value)) {
+    const root = toSafeRepoLocator(rawRoot)
+    if (!root || !openLocalRoots.has(path.resolve(root))) continue
+    if (rawSelection === null) {
+      normalized[root] = null
+      continue
+    }
+    const selection = toSafeRepoLocator(rawSelection)
+    if (!selection || path.dirname(path.resolve(selection)) !== path.resolve(root)) continue
+    normalized[root] = selection
+  }
+  return normalized
+}
+
 function normalizeSession(value: unknown): SessionState {
   if (!value || typeof value !== 'object') return defaultSession()
   const partial = value as Partial<SessionState> & { activeTerminalByGroup?: unknown }
@@ -348,6 +409,7 @@ function normalizeSession(value: unknown): SessionState {
       )
     : []
   const activeRepo = toSafeRepoLocator(partial.activeRepo)
+  const workspaceActiveRepoByRoot = normalizeWorkspaceActiveRepoByRoot(partial.workspaceActiveRepoByRoot, openRepos)
   const workspaceLayout = normalizeWorkspaceLayout(partial.workspaceLayout)
   const detailCollapsed =
     typeof partial.detailCollapsed === 'boolean' ? partial.detailCollapsed : DEFAULT_DETAIL_COLLAPSED
@@ -355,7 +417,15 @@ function normalizeSession(value: unknown): SessionState {
     workspaceLayout === 'top-bottom' && partial.detailFocusMode === true ? true : DEFAULT_SESSION_DETAIL_FOCUS_MODE
   return {
     openRepos,
-    activeRepo: activeRepo && openRepos.some((entry) => repoSessionEntryId(entry) === activeRepo) ? activeRepo : null,
+    activeRepo:
+      activeRepo &&
+      (openRepos.some((entry) => repoSessionEntryId(entry) === activeRepo) ||
+        Object.values(workspaceActiveRepoByRoot).includes(activeRepo))
+        ? activeRepo
+        : null,
+    workspaceActiveRepoByRoot,
+    projectListExpanded:
+      typeof partial.projectListExpanded === 'boolean' ? partial.projectListExpanded : DEFAULT_PROJECT_LIST_EXPANDED,
     detailCollapsed: effectiveDetailCollapsed(workspaceLayout, detailCollapsed),
     detailFocusMode,
     workspaceLayout,
@@ -433,6 +503,17 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       terminalCustomButtons: normalizeTerminalCustomButtons(parsed.terminalCustomButtons),
       lanEnabled: normalizeLanEnabled(parsed.lanEnabled),
       serverPort: normalizeServerPort(parsed.serverPort),
+      webAccessEnabled:
+        parsed.webAccessEnabled === true &&
+        Boolean(normalizeWebAccessUsername(parsed.webAccessUsername)) &&
+        isWebAccessPasswordHash(parsed.webAccessPasswordHash),
+      webAccessUsername: isWebAccessPasswordHash(parsed.webAccessPasswordHash)
+        ? normalizeWebAccessUsername(parsed.webAccessUsername)
+        : '',
+      webAccessPasswordHash:
+        normalizeWebAccessUsername(parsed.webAccessUsername) && isWebAccessPasswordHash(parsed.webAccessPasswordHash)
+          ? parsed.webAccessPasswordHash
+          : '',
       session: normalizeSession(parsed.session),
       recentRepos: normalizeRecentRepos(parsed.recentRepos),
       repoSettings: normalizeRepoSettings(parsed.repoSettings),
@@ -453,6 +534,9 @@ async function loadServerSettings(): Promise<ServerSettingsData> {
     const persisted = await readServerSettingsFile()
     const data = persisted ?? {
       ...defaultSettingsPrefs(),
+      webAccessEnabled: false,
+      webAccessUsername: '',
+      webAccessPasswordHash: '',
       session: defaultSession(),
       recentRepos: [],
       repoSettings: [],
@@ -471,6 +555,61 @@ export async function getServerFetchIntervalSec(): Promise<number> {
 
 export async function getServerSettingsPrefs(): Promise<SettingsPrefs> {
   return settingsPrefsFromData(await loadServerSettings())
+}
+
+export async function getServerWebAccessSettings(): Promise<WebAccessSettingsSnapshot> {
+  return webAccessSettingsFromData(await loadServerSettings())
+}
+
+export async function getServerWebAccessCredentials(): Promise<{
+  enabled: boolean
+  username: string
+  passwordHash: string
+}> {
+  const data = await loadServerSettings()
+  const snapshot = webAccessSettingsFromData(data)
+  return {
+    enabled: snapshot.enabled,
+    username: snapshot.username,
+    passwordHash: snapshot.passwordConfigured ? data.webAccessPasswordHash : '',
+  }
+}
+
+export async function updateServerWebAccessSettings(input: {
+  enabled: boolean
+  username: string
+  password?: string
+}): Promise<WebAccessSettingsSnapshot> {
+  const data = await loadServerSettings()
+  const current = webAccessSettingsFromData(data)
+  const rawUsername = typeof input.username === 'string' ? input.username.trim() : ''
+  const normalizedUsername = normalizeWebAccessUsername(rawUsername)
+  if (rawUsername && !normalizedUsername) throw new WebAccessSettingsError('username-invalid')
+
+  const username = normalizedUsername || (!input.enabled && current.passwordConfigured ? current.username : '')
+  if (input.enabled && !username) throw new WebAccessSettingsError('username-required')
+
+  const password = typeof input.password === 'string' ? input.password : ''
+  if (password.length > MAX_WEB_ACCESS_PASSWORD_LENGTH) throw new WebAccessSettingsError('password-too-long')
+  if (password && password.length < MIN_WEB_ACCESS_PASSWORD_LENGTH) {
+    throw new WebAccessSettingsError('password-too-short')
+  }
+  const mayKeepPassword = current.passwordConfigured && username === current.username
+  if (!password && input.enabled && !mayKeepPassword) throw new WebAccessSettingsError('password-required')
+  if (!password && normalizedUsername && normalizedUsername !== current.username) {
+    throw new WebAccessSettingsError('password-required')
+  }
+
+  const passwordHash = password
+    ? await hashWebAccessPassword(password)
+    : mayKeepPassword
+      ? data.webAccessPasswordHash
+      : ''
+  data.webAccessEnabled = input.enabled === true
+  data.webAccessUsername = username
+  data.webAccessPasswordHash = passwordHash
+  await writeServerSettingsFile(data)
+  return webAccessSettingsFromData(data)
 }
 
 export function subscribeServerFetchInterval(listener: FetchIntervalListener): () => void {

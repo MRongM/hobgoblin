@@ -5,6 +5,7 @@ import {
   addUnavailableRepo,
   createRuntimeRepoLifecycleActions,
   refreshInitialRepoState,
+  reconcileWorkspaceProject,
   resolveRepoPath,
 } from '#/web/stores/repos/lifecycle-write-paths.ts'
 import { activeRepoIdAfterWorkspaceHydration } from '#/web/open-workspace-state.ts'
@@ -19,12 +20,13 @@ type RestorableWorkspaceLifecycleActions = Pick<ReposStore, 'hydrateSession'>
 
 const SESSION_PROBE_CONCURRENCY = 4
 
-function createRestorableWorkspaceLifecycleActions(
-  set: ReposSet,
-  get: ReposGet,
-): RestorableWorkspaceLifecycleActions {
+function createRestorableWorkspaceLifecycleActions(set: ReposSet, get: ReposGet): RestorableWorkspaceLifecycleActions {
   return {
-    async hydrateSession(openRepos: RepoSessionEntry[], activeRepo: string | null) {
+    async hydrateSession(
+      openRepos: RepoSessionEntry[],
+      activeRepo: string | null,
+      workspaceActiveRepoByRoot: Record<string, string | null> = {},
+    ) {
       // Boot/session restore of workspace membership and active tab. This
       // reopens what SessionState described, but does not subscribe the repos
       // store to future session writes from persistence.
@@ -33,6 +35,7 @@ function createRestorableWorkspaceLifecycleActions(
       // tabs so the user's workspace shape stays intact.
       const rankById = new Map<string, number>()
       let managedActiveId: string | null = null
+      set({ workspaceActiveRepoByRoot: { ...workspaceActiveRepoByRoot } })
       const limitProbe = pLimit(SESSION_PROBE_CONCURRENCY)
       await Promise.all(
         openRepos.map((entry, index) =>
@@ -86,6 +89,9 @@ function createRestorableWorkspaceLifecycleActions(
             // so we hydrate it for every restored repo, not just the active
             // one — switching after boot shouldn't reveal a stale 0.
             if (initialRefresh) refreshInitialRepoState(get, initialRefresh)
+            if (resolvedRepo.isGitRepo === false) {
+              await reconcileWorkspaceProject(set, get, resolvedRepo.id)
+            }
           }),
         ),
       )

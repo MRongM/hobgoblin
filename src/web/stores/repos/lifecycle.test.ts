@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { normalizeRemoteTarget, remoteRepoSessionEntry } from '#/shared/remote-repo.ts'
+import { normalizeRemoteRepoRef, normalizeRemoteTarget, remoteRepoSessionEntry } from '#/shared/remote-repo.ts'
 import { emptyRepo, replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { BranchSnapshotInfo } from '#/web/types.ts'
@@ -23,6 +23,326 @@ vi.mock('#/web/port-forwarding-client.ts', () => ({
 beforeEach(resetLifecycleTest)
 
 describe('repo lifecycle', () => {
+  test('uses configured restoration for automatic open and complete discovery for manual rescan', async () => {
+    const root = '/tmp/gbl-workspace'
+    const restoreCalls: string[] = []
+    const discoverCalls: string[] = []
+    const workspaceResult = {
+      ok: true as const,
+      rootId: root,
+      repositories: [],
+      candidates: [],
+      configuration: { kind: 'missing' as const },
+      skipped: [],
+    }
+    installGoblin({
+      probe: (cwd: string) => ({ ok: true, root: cwd, name: 'workspace', isGitRepo: false }),
+      'workspace.restore': ({ rootPath }: { rootPath: string }) => {
+        restoreCalls.push(rootPath)
+        return workspaceResult
+      },
+      'workspace.discover': ({ rootPath }: { rootPath: string }) => {
+        discoverCalls.push(rootPath)
+        return workspaceResult
+      },
+    })
+
+    await useReposStore.getState().ensureWorkspaceOpen(root)
+    expect(restoreCalls).toEqual([root])
+    expect(discoverCalls).toEqual([])
+
+    await useReposStore.getState().rescanWorkspace(root)
+    expect(discoverCalls).toEqual([root])
+  })
+
+  test('opens a remote plain directory as one workspace with remote child repository targets', async () => {
+    const rootTarget = normalizeRemoteTarget({
+      alias: 'example',
+      host: 'example.com',
+      user: 'alice',
+      port: 22,
+      remotePath: '/srv/workspace',
+    })!
+    const api = normalizeRemoteRepoRef({ alias: 'example', remotePath: '/srv/workspace/api' })!
+    const missing = normalizeRemoteRepoRef({ alias: 'example', remotePath: '/srv/workspace/missing' })!
+    const calls = installGoblin({
+      probe: (cwd: string) => ({
+        ok: true,
+        root: cwd,
+        name: cwd === rootTarget.id ? 'example:workspace' : cwd,
+        isGitRepo: cwd !== rootTarget.id,
+      }),
+      'workspace.discover': ({ rootPath }: { rootPath: string }) => {
+        calls.workspace.push(rootPath)
+        return {
+          ok: true,
+          rootId: rootTarget.id,
+          repositories: [{ id: api.id, name: 'api', remoteRef: api }],
+          candidates: [
+            { id: api.id, name: 'api', remoteRef: api, selected: true, available: true },
+            { id: missing.id, name: 'missing', remoteRef: missing, selected: true, available: false },
+          ],
+          configuration: { kind: 'ready', config: { repo: ['api', 'missing'] } },
+          skipped: [],
+        }
+      },
+    })
+
+    const result = await useReposStore.getState().ensureWorkspaceOpen(remoteRepoSessionEntry(rootTarget))
+
+    expect(result).toEqual({ ok: true, id: rootTarget.id })
+    expect(useReposStore.getState().order).toEqual([rootTarget.id])
+    expect(useReposStore.getState().workspaceProjects[rootTarget.id]?.repositoryIds).toEqual([api.id, missing.id])
+    expect(useReposStore.getState().repos[api.id]).toMatchObject({
+      workspaceRootId: rootTarget.id,
+      remote: { target: { ...rootTarget, ...api } },
+      availability: { phase: 'available' },
+    })
+    expect(useReposStore.getState().repos[missing.id]).toMatchObject({
+      workspaceRootId: rootTarget.id,
+      remote: { target: { ...rootTarget, ...missing } },
+      availability: { phase: 'unavailable', reason: 'workspace.repository-unavailable' },
+    })
+    expect(calls.workspace).toEqual([rootTarget.id])
+    expect(calls.snapshot).toEqual([api.id])
+  })
+
+  test('opens immediate child repositories as members of one top-level workspace project', async () => {
+    const root = '/tmp/gbl-workspace'
+    const api = `${root}/api`
+    const web = `${root}/web`
+    const calls = installGoblin({
+      probe: (cwd: string) => ({
+        ok: true,
+        root: cwd,
+        name: cwd.split('/').at(-1) ?? cwd,
+        isGitRepo: cwd !== root,
+      }),
+      'workspace.discover': ({ rootPath }: { rootPath: string }) => {
+        calls.workspace.push(rootPath)
+        return {
+          ok: true,
+          rootId: root,
+          repositories: [
+            { id: api, name: 'api' },
+            { id: web, name: 'web' },
+          ],
+          candidates: [
+            { id: api, name: 'api', selected: false, available: true },
+            { id: web, name: 'web', selected: false, available: true },
+          ],
+          configuration: { kind: 'missing' },
+          skipped: [],
+        }
+      },
+    })
+
+    const result = await useReposStore.getState().ensureWorkspaceOpen(root)
+
+    expect(result).toEqual({ ok: true, id: root })
+    expect(useReposStore.getState().order).toEqual([root])
+    expect(Object.keys(useReposStore.getState().repos).sort()).toEqual([api, root, web].sort())
+    expect(useReposStore.getState().repos[api]?.workspaceRootId).toBe(root)
+    expect(useReposStore.getState().repos[web]?.workspaceRootId).toBe(root)
+    expect(useReposStore.getState().workspaceProjects[root]).toMatchObject({
+      rootId: root,
+      repositoryIds: [api, web],
+      candidates: [
+        { id: api, name: 'api', selected: false, available: true },
+        { id: web, name: 'web', selected: false, available: true },
+      ],
+      configured: false,
+      configurationError: null,
+      phase: 'ready',
+      skipped: [],
+      error: null,
+    })
+    expect(calls.recent).toEqual([{ kind: 'local', id: root }])
+    expect(calls.workspace).toEqual([root])
+    expect(calls.snapshot).toEqual([api, web])
+  })
+
+  test('does not discover children when the selected root is itself a git repository', async () => {
+    const calls = installGoblin()
+
+    await useReposStore.getState().ensureWorkspaceOpen(REPO_A)
+
+    expect(calls.workspace).toEqual([])
+    expect(useReposStore.getState().workspaceProjects).toEqual({})
+  })
+
+  test('rescan adds new members and retains missing members as unavailable', async () => {
+    const root = '/tmp/gbl-workspace'
+    const api = `${root}/api`
+    const web = `${root}/web`
+    let scan = 0
+    installGoblin({
+      probe: (cwd: string) => ({
+        ok: true,
+        root: cwd,
+        name: cwd.split('/').at(-1) ?? cwd,
+        isGitRepo: cwd !== root,
+      }),
+      'workspace.discover': () => {
+        scan += 1
+        return {
+          ok: true,
+          rootId: root,
+          repositories: scan === 1 ? [{ id: api, name: 'api' }] : [{ id: web, name: 'web' }],
+          candidates:
+            scan === 1
+              ? [{ id: api, name: 'api', selected: false, available: true }]
+              : [{ id: web, name: 'web', selected: false, available: true }],
+          configuration: { kind: 'missing' },
+          skipped: [],
+        }
+      },
+    })
+    await useReposStore.getState().ensureWorkspaceOpen(root)
+
+    await useReposStore.getState().rescanWorkspace(root)
+
+    expect(useReposStore.getState().order).toEqual([root])
+    expect(useReposStore.getState().workspaceProjects[root]?.repositoryIds).toEqual([api, web])
+    expect(useReposStore.getState().repos[api]?.availability.phase).toBe('unavailable')
+    expect(useReposStore.getState().repos[web]?.workspaceRootId).toBe(root)
+  })
+
+  test('rescan refreshes an unchanged logical member after a repository symlink is retargeted', async () => {
+    const root = '/tmp/gbl-workspace'
+    const linked = `${root}/linked`
+    let scan = 0
+    const snapshotCalls: string[] = []
+    installGoblin({
+      probe: (cwd: string) => ({
+        ok: true,
+        root: cwd,
+        name: cwd.split('/').at(-1) ?? cwd,
+        isGitRepo: cwd !== root,
+      }),
+      'workspace.discover': () => {
+        scan += 1
+        return {
+          ok: true,
+          rootId: root,
+          repositories: [{ id: linked, name: 'linked' }],
+          candidates: [{ id: linked, name: 'linked', selected: false, available: true }],
+          configuration: { kind: 'missing' },
+          skipped: [],
+        }
+      },
+      snapshot: (cwd: string) => {
+        snapshotCalls.push(cwd)
+        return { branches: [branchSnapshot(`target-${scan}`)], current: `target-${scan}` }
+      },
+    })
+
+    await useReposStore.getState().ensureWorkspaceOpen(root)
+    await vi.waitFor(() => {
+      expect(useReposStore.getState().repos[linked]?.data.currentBranch).toBe('target-1')
+    })
+
+    await useReposStore.getState().rescanWorkspace(root)
+    await vi.waitFor(() => {
+      expect(useReposStore.getState().repos[linked]?.data.currentBranch).toBe('target-2')
+    })
+    expect(snapshotCalls).toEqual([linked, linked])
+  })
+
+  test('projects configured membership and reconciles the authoritative save result', async () => {
+    const root = '/tmp/gbl-workspace'
+    const api = `${root}/api`
+    const web = `${root}/web`
+    const docs = `${root}/docs`
+    const configuredApi = {
+      ok: true as const,
+      rootId: root,
+      repositories: [{ id: api, name: 'api' }],
+      candidates: [
+        { id: api, name: 'api', selected: true, available: true },
+        { id: docs, name: 'docs', selected: false, available: true },
+        { id: web, name: 'web', selected: false, available: true },
+      ],
+      configuration: { kind: 'ready' as const, config: { repo: ['api'] } },
+      skipped: [],
+    }
+    const configuredWeb = {
+      ...configuredApi,
+      repositories: [{ id: web, name: 'web' }],
+      candidates: configuredApi.candidates.map((candidate) => ({
+        ...candidate,
+        selected: candidate.id === web,
+      })),
+      configuration: { kind: 'ready' as const, config: { repo: ['web'] } },
+    }
+    const calls = installGoblin({
+      probe: (cwd: string) => ({
+        ok: true,
+        root: cwd,
+        name: cwd.split('/').at(-1) ?? cwd,
+        isGitRepo: cwd !== root,
+      }),
+      'workspace.discover': () => configuredApi,
+      'workspace.configure': ({ rootPath, config }: { rootPath: string; config: unknown }) => {
+        calls.workspaceConfigure.push({ rootPath, config })
+        return configuredWeb
+      },
+    })
+
+    await useReposStore.getState().ensureWorkspaceOpen(root)
+    expect(useReposStore.getState().workspaceProjects[root]).toMatchObject({
+      repositoryIds: [api],
+      configured: true,
+      configurationError: null,
+    })
+    useReposStore.setState({ activeId: api, workspaceActiveRepoByRoot: { [root]: api } })
+
+    await expect(useReposStore.getState().configureWorkspace(root, { repo: ['web'] })).resolves.toEqual({
+      ok: true,
+    })
+    expect(calls.workspaceConfigure).toEqual([{ rootPath: root, config: { repo: ['web'] } }])
+    expect(useReposStore.getState().workspaceProjects[root]).toMatchObject({
+      repositoryIds: [web],
+      configured: true,
+    })
+    expect(useReposStore.getState().repos[api]).toBeDefined()
+    expect(useReposStore.getState().workspaceProjects[root]?.repositoryIds).not.toContain(api)
+    expect(useReposStore.getState().activeId).toBe(web)
+  })
+
+  test('keeps Overview usable when workspace discovery fails', async () => {
+    const root = '/tmp/gbl-workspace'
+    installGoblin({
+      probe: (cwd: string) => ({ ok: true, root: cwd, name: 'workspace', isGitRepo: false }),
+      'workspace.discover': () => ({ ok: false, message: 'error.path-permission-denied' }),
+    })
+
+    await useReposStore.getState().ensureWorkspaceOpen(root)
+
+    expect(useReposStore.getState().order).toEqual([root])
+    expect(useReposStore.getState().repos[root]?.isGitRepo).toBe(false)
+    expect(useReposStore.getState().workspaceProjects[root]).toMatchObject({
+      phase: 'error',
+      error: 'error.path-permission-denied',
+    })
+  })
+
+  test('keeps Overview usable when workspace discovery cannot reach the server', async () => {
+    const root = '/tmp/gbl-workspace'
+    installGoblin({
+      probe: (cwd: string) => ({ ok: true, root: cwd, name: 'workspace', isGitRepo: false }),
+      'workspace.discover': () => {
+        throw new Error('network unavailable')
+      },
+    })
+
+    await expect(useReposStore.getState().ensureWorkspaceOpen(root)).resolves.toEqual({ ok: true, id: root })
+    expect(useReposStore.getState().workspaceProjects[root]).toMatchObject({
+      phase: 'error',
+      error: 'error.failed-read-repo',
+    })
+  })
+
   test('ensureWorkspaceOpen plus setActive opens the resolved repo, records it as recent, and starts initial local refresh', async () => {
     const calls = installGoblin()
 
@@ -131,18 +451,19 @@ describe('repo lifecycle', () => {
           [REPO_A]: replaceRepo(repo, (draft) => {
             draft.data.branches = [branchSnapshot('stale')]
             draft.data.currentBranch = 'stale'
-            draft.data.status = [{ path: REPO_A, branch: 'stale', isMain: true, entries: [{ x: 'M', y: ' ', path: 'README.md' }] }]
+            draft.data.status = [
+              { path: REPO_A, branch: 'stale', isMain: true, entries: [{ x: 'M', y: ' ', path: 'README.md' }] },
+            ]
             draft.data.statusLoaded = true
             draft.data.worktreesByPath = {
               [REPO_A]: { path: REPO_A, branch: 'stale', isMain: true, isDirty: true, changeCount: 1 },
             }
-            draft.resources.pullRequestsByBranch = {
-              stale: { phase: 'loading', loadedAt: null, error: null, stale: false, mode: 'full' },
-            }
             draft.ui.selectedBranch = 'stale'
             draft.ui.worktreePathOrder = [REPO_A]
             draft.remote.remotes = ['origin']
-            draft.remote.remoteDetails = [{ name: 'origin', fetchUrl: 'git@example.com:acme/repo.git', pushUrl: 'git@example.com:acme/repo.git' }]
+            draft.remote.remoteDetails = [
+              { name: 'origin', fetchUrl: 'git@example.com:acme/repo.git', pushUrl: 'git@example.com:acme/repo.git' },
+            ]
             draft.remote.hasRemotes = true
             draft.remote.hasBrowserRemote = true
             draft.remote.browserRemoteProvider = 'github'
@@ -167,7 +488,6 @@ describe('repo lifecycle', () => {
       statusLoaded: false,
       worktreesByPath: {},
     })
-    expect(repo?.resources.pullRequestsByBranch).toEqual({})
     expect(repo?.ui.selectedBranch).toBeNull()
     expect(repo?.ui.worktreePathOrder).toEqual([])
     expect(repo?.remote).toMatchObject({
@@ -329,5 +649,43 @@ describe('repo lifecycle', () => {
     useReposStore.getState().closeRepo(repoId)
 
     expect(mocks.stopPortForwardSessionsForRepo).toHaveBeenCalledWith(repoId)
+  })
+
+  test('closing a workspace project closes its root and every child repository projection', () => {
+    const root = '/tmp/gbl-workspace'
+    const child = `${root}/api`
+    useReposStore.setState({
+      repos: {
+        [root]: emptyRepo(root, 'workspace'),
+        [child]: replaceRepo(emptyRepo(child, 'api'), (repo) => {
+          repo.workspaceRootId = root
+        }),
+      },
+      order: [root],
+      activeId: child,
+      workspaceProjects: {
+        [root]: {
+          rootId: root,
+          repositoryIds: [child],
+          candidates: [],
+          configured: false,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+      workspaceActiveRepoByRoot: { [root]: child },
+    })
+
+    useReposStore.getState().closeRepo(root)
+
+    expect(useReposStore.getState().repos).toEqual({})
+    expect(useReposStore.getState().order).toEqual([])
+    expect(useReposStore.getState().activeId).toBeNull()
+    expect(useReposStore.getState().workspaceProjects).toEqual({})
+    expect(useReposStore.getState().workspaceActiveRepoByRoot).toEqual({})
+    expect(mocks.stopPortForwardSessionsForRepo).toHaveBeenCalledWith(root)
+    expect(mocks.stopPortForwardSessionsForRepo).toHaveBeenCalledWith(child)
   })
 })

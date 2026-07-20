@@ -1,4 +1,5 @@
 import { type CSSProperties, type HTMLAttributes, type RefObject, useCallback, useMemo } from 'react'
+import { Trash2 } from 'lucide-react'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import { BranchActionsDropdown } from '#/web/components/BranchActionsMenu.tsx'
 import { BranchSummaryInline } from '#/web/components/repo-workspace/BranchSummaryInline.tsx'
@@ -20,6 +21,8 @@ interface BranchRowSortable {
 interface BranchRowProps {
   repo: BranchActionRepo
   branch: RepoBranchState
+  displayName?: string
+  workspaceRemoveAction?: { label: string; onSelect: () => void }
   selected: string | null
   onSelectBranch: (branch: string) => void
   onOpenBranchStatus: (branch: string) => void
@@ -33,6 +36,8 @@ interface BranchRowProps {
 export function BranchRow({
   repo,
   branch,
+  displayName,
+  workspaceRemoveAction,
   selected,
   onSelectBranch,
   onOpenBranchStatus,
@@ -62,7 +67,7 @@ export function BranchRow({
       onDoubleClick={() => onOpenBranchStatus(branch.name)}
       className={cn(
         'relative mx-1.5 grid min-h-8 items-stretch cursor-pointer rounded-[var(--goblin-brand-radius-md,var(--radius-md))]',
-        showActions ? 'grid-cols-[minmax(0,1fr)_auto]' : 'grid-cols-1',
+        showActions || workspaceRemoveAction ? 'grid-cols-[minmax(0,1fr)_auto]' : 'grid-cols-1',
         'transition-colors duration-100',
         isSelected
           ? 'bg-list-row-selected text-list-row-selected-foreground hover:bg-list-row-selected'
@@ -71,17 +76,23 @@ export function BranchRow({
       )}
     >
       <div className="pointer-events-none relative z-10 flex min-w-0 items-center py-1 pl-2.5">
-        <BranchSummaryInline repo={repo} branch={branch} selected={isSelected} />
+        <BranchSummaryInline repo={repo} branch={branch} displayName={displayName} selected={isSelected} />
       </div>
       {showActions && (
         <BranchRowActions
           repo={repo}
           branch={branch}
+          workspaceRemoveAction={workspaceRemoveAction}
           onSelectBranch={onSelectBranch}
           actionMenuOpen={actionMenuOpen}
           onActionMenuOpenChange={onActionMenuOpenChange}
         />
       )}
+      {!showActions && workspaceRemoveAction ? (
+        <div className="relative z-20 flex items-center pr-2.5">
+          <WorkspaceRemoveButton action={workspaceRemoveAction} />
+        </div>
+      ) : null}
     </li>
   )
 }
@@ -89,12 +100,14 @@ export function BranchRow({
 function BranchRowActions({
   repo,
   branch,
+  workspaceRemoveAction,
   onSelectBranch,
   actionMenuOpen,
   onActionMenuOpenChange,
 }: {
   repo: BranchActionRepo
   branch: RepoBranchState
+  workspaceRemoveAction?: { label: string; onSelect: () => void }
   onSelectBranch: (branch: string) => void
   actionMenuOpen?: boolean
   onActionMenuOpenChange?: (open: boolean) => void
@@ -110,6 +123,7 @@ function BranchRowActions({
         onClickCapture={() => onSelectBranch(branch.name)}
       >
         <div className="pointer-events-auto flex items-center gap-0.5">
+          {workspaceRemoveAction ? <WorkspaceRemoveButton action={workspaceRemoveAction} /> : null}
           {branch.worktree?.path && (
             <div className="hidden md:flex items-center gap-0.5">
               <BranchRowExternalActions actions={actions} />
@@ -139,6 +153,27 @@ function BranchRowActions({
       ) : null}
       {actions.dialogs}
     </>
+  )
+}
+
+function WorkspaceRemoveButton({ action }: { action: { label: string; onSelect: () => void } }) {
+  return (
+    <Tip label={action.label}>
+      <span className="inline-flex">
+        <AsyncButton
+          variant="ghost"
+          size="icon-sm"
+          aria-label={action.label}
+          className="text-danger hover:bg-danger-surface hover:text-danger"
+          onClick={(event) => {
+            event.stopPropagation()
+            action.onSelect()
+          }}
+        >
+          {() => <Trash2 aria-hidden="true" />}
+        </AsyncButton>
+      </span>
+    </Tip>
   )
 }
 

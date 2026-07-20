@@ -18,11 +18,6 @@ import { useT } from '#/web/stores/i18n.ts'
 import { EmptyState } from '#/web/components/Layout.tsx'
 import { CopyButton } from '#/web/components/CopyButton.tsx'
 import {
-  PullRequestStatusRow,
-  pullRequestClipboardValue,
-  type TFn,
-} from '#/web/components/branch-detail/PullRequestStatusRow.tsx'
-import {
   CopyableValue,
   MonoValue,
   StatusChip,
@@ -31,13 +26,12 @@ import {
   STATUS_INLINE_GROUP_CLASS,
   type Tone,
 } from '#/web/components/branch-detail/status-ui.tsx'
-import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
-import { PROTECTED_BRANCHES, branchPullRequestBelongsToBranch } from '#/shared/git-types.ts'
+import { PROTECTED_BRANCHES } from '#/shared/git-types.ts'
 import type { SelectedBranchDetail } from '#/web/components/branch-detail/model.ts'
-import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
-import { repoWorkspaceBehavior } from '#/web/lib/workspace-layout.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { lastPathSegment } from '#/web/lib/paths.ts'
+
+type TFn = (key: string, params?: Record<string, string | number>) => string
 
 function worktreeFolderName(worktreePath: string | undefined, repoId: string): string {
   const fromWorktree = worktreePath ? lastPathSegment(worktreePath) : ''
@@ -48,7 +42,6 @@ interface Props {
   detail: SelectedBranchDetail
   repoName: string
   repoId: string
-  layout: RepoWorkspaceLayout
 }
 
 function SyncValue({
@@ -132,8 +125,6 @@ export function branchStatusClipboardText(detail: SelectedBranchDetail, repoName
 
   const folderName = worktreeFolderName(branch.worktree?.path, repoId)
 
-  const pullRequest =
-    branch.pullRequest && branchPullRequestBelongsToBranch(branch, branch.pullRequest) ? branch.pullRequest : undefined
   const rows: Array<[string, string]> = [
     [t('branch-status.signal.folder'), folderName],
     [t('branch-status.signal.project'), repoName],
@@ -148,8 +139,6 @@ export function branchStatusClipboardText(detail: SelectedBranchDetail, repoName
   ]
 
   if (!branch.isDefault) rows.push([t('branch-status.signal.merge'), mergeClipboardValue(branch, t)])
-  if (pullRequest) rows.push([t('branch-status.signal.pr'), pullRequestClipboardValue(pullRequest, t)])
-
   return rows.map(([label, value]) => `${label}: ${emptyClipboardValue(value)}`).join('\n')
 }
 
@@ -186,11 +175,9 @@ function CommitMetadataValue({
   )
 }
 
-export function BranchStatus({ detail, repoName, repoId, layout }: Props) {
+export function BranchStatus({ detail, repoName, repoId }: Props) {
   const t = useT()
-  const compact = useIsCompactUi()
   const { branch, statusCount } = detail
-  const behavior = repoWorkspaceBehavior(layout, false)
   if (!branch) return <EmptyState title={t('branches.empty')} />
 
   const folderName = worktreeFolderName(branch.worktree?.path, repoId)
@@ -198,8 +185,6 @@ export function BranchStatus({ detail, repoName, repoId, layout }: Props) {
   const protectedBranch = PROTECTED_BRANCHES.has(branch.name)
   const worktreePath = branch.worktree?.path ?? ''
   const worktreeChangeCount = detail.worktreeState?.changeCount ?? statusCount
-  const pullRequest =
-    branch.pullRequest && branchPullRequestBelongsToBranch(branch, branch.pullRequest) ? branch.pullRequest : undefined
   const hasRole = branch.isCurrent || branch.isDefault || protectedBranch
   const hasWorktreeChanges = !!branch.worktree?.path && (detail.worktreeState?.dirty || worktreeChangeCount > 0)
   const mergeKnown = branch.isDefault || branch.mergedToDefault !== undefined
@@ -241,11 +226,7 @@ export function BranchStatus({ detail, repoName, repoId, layout }: Props) {
   ) : (
     <StatusChip tone="attention">{t('branches.no-upstream')}</StatusChip>
   )
-  const upstreamAfter = branch.trackingGone ? (
-    <StatusChip tone="attention">{t('branches.gone')}</StatusChip>
-  ) : !branch.tracking && pullRequest ? (
-    <StatusChip>{t('branch-status.upstream.pr-only')}</StatusChip>
-  ) : undefined
+  const upstreamAfter = branch.trackingGone ? <StatusChip tone="attention">{t('branches.gone')}</StatusChip> : undefined
 
   const roleChips = hasRole ? (
     <>
@@ -392,7 +373,6 @@ export function BranchStatus({ detail, repoName, repoId, layout }: Props) {
           tone={mergeTone}
         />
       )}
-      <PullRequestStatusRow pullRequest={pullRequest} tooltipSide={compact ? 'top' : behavior.prTooltipSide} />
     </StatusRows>
   )
 }

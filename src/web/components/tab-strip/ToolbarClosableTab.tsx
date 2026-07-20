@@ -1,6 +1,7 @@
 import { X } from 'lucide-react'
-import type { ComponentPropsWithoutRef, ReactNode, Ref } from 'react'
+import type { ComponentPropsWithoutRef, ReactElement, ReactNode, Ref } from 'react'
 import { cn } from '#/web/lib/cn.ts'
+import { ContextMenu, ContextMenuTrigger } from '#/web/components/ui/context-menu.tsx'
 
 type DataAttributes = {
   [K in `data-${string}`]?: string | boolean | undefined
@@ -15,8 +16,10 @@ interface ToolbarClosableTabProps {
   containerProps?: ToolbarClosableTabContainerProps
   containerClassName: string
   overlay?: ReactNode
+  contextMenu?: ReactNode
   buttonRef?: Ref<HTMLButtonElement>
   buttonProps?: ToolbarClosableTabButtonProps
+  buttonWrapper?: (button: ReactElement) => ReactNode
   buttonClassName?: string
   closeButtonClassName?: string
   closeLabel: string
@@ -30,8 +33,10 @@ export function ToolbarClosableTab({
   containerProps,
   containerClassName,
   overlay,
+  contextMenu,
   buttonRef,
   buttonProps,
+  buttonWrapper,
   buttonClassName,
   closeButtonClassName,
   closeLabel,
@@ -39,20 +44,23 @@ export function ToolbarClosableTab({
   onClose,
   children,
 }: ToolbarClosableTabProps) {
-  return (
+  const button = (
+    <button
+      ref={buttonRef}
+      type="button"
+      {...buttonProps}
+      className={cn(
+        'flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 border-0 bg-transparent p-0 text-left text-inherit outline-none',
+        buttonClassName,
+      )}
+    >
+      {children}
+    </button>
+  )
+  const tab = (
     <div ref={containerRef} {...containerProps} className={containerClassName}>
       {overlay}
-      <button
-        ref={buttonRef}
-        type="button"
-        {...buttonProps}
-        className={cn(
-          'flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 border-0 bg-transparent p-0 text-left text-inherit outline-none',
-          buttonClassName,
-        )}
-      >
-        {children}
-      </button>
+      {buttonWrapper ? buttonWrapper(button) : button}
       <button
         type="button"
         tabIndex={-1}
@@ -69,5 +77,14 @@ export function ToolbarClosableTab({
         <X size={14} />
       </button>
     </div>
+  )
+
+  if (!contextMenu) return tab
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{tab}</ContextMenuTrigger>
+      {contextMenu}
+    </ContextMenu>
   )
 }

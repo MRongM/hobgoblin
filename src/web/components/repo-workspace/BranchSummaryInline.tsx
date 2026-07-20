@@ -24,6 +24,7 @@ export type BranchSummaryInlineRepo = BranchWorktreeRepo & {
 interface BranchSummaryInlineProps {
   repo: BranchSummaryInlineRepo
   branch: RepoBranchState
+  displayName?: string
   selected?: boolean
   className?: string
 }
@@ -51,7 +52,13 @@ function shortHashTag(hash: string): string | null {
   return trimmed ? `#${trimmed.slice(0, 7)}` : null
 }
 
-export function BranchSummaryInline({ repo, branch, selected = false, className }: BranchSummaryInlineProps) {
+export function BranchSummaryInline({
+  repo,
+  branch,
+  displayName,
+  selected = false,
+  className,
+}: BranchSummaryInlineProps) {
   const t = useT()
   const isCurrent = branch.name === repo.data.currentBranch
   const hasWorktree = !!branch.worktree?.path
@@ -75,7 +82,7 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
   const terminalOutputActiveLabel = t('terminal.output-active')
   const commitHashTag = shortHashTag(branch.lastCommitHash)
   const title = [
-    branch.name,
+    displayName ?? branch.name,
     commitHashTag,
     isCurrent ? t('branch-status.current') : null,
     branch.isDefault ? t('branches.default') : null,
@@ -108,7 +115,7 @@ export function BranchSummaryInline({ repo, branch, selected = false, className 
               selected ? 'text-selected-foreground' : 'text-foreground',
             )}
           >
-            {branch.name}
+            {displayName ?? branch.name}
           </span>
           {commitHashTag && (
             <span

@@ -10,10 +10,11 @@ import { repoTerminalWorktreePaths } from '#/web/components/RepoTabs.tsx'
 import { TerminalBellDot } from '#/web/components/terminal/TerminalBellDot.tsx'
 import { TerminalOutputActivityIndicator } from '#/web/components/terminal/TerminalOutputActivityIndicator.tsx'
 import {
-  useRepoTerminalCount,
-  useRepoTerminalHasBell,
-  useRepoTerminalHasOutputActivity,
+  useTerminalAggregateCount,
+  useTerminalAggregateHasBell,
+  useTerminalAggregateHasOutputActivity,
 } from '#/web/components/terminal/terminal-session-store.ts'
+import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { parseRemoteRepoId } from '#/shared/remote-repo.ts'
 
@@ -29,7 +30,31 @@ export interface ProjectSummary {
   id: string
   name: string
   unavailable: boolean
-  worktreePaths: string[]
+  isGitRepo: boolean
+  terminalWorktreeKeys: string[]
+}
+
+interface ProjectTerminalRepo {
+  id: string
+  isGitRepo?: boolean
+  remote?: Parameters<typeof repoTerminalWorktreePaths>[0]['remote']
+  data: {
+    branches: Array<{ worktree?: { path?: string } }>
+    worktreesByPath: Record<string, unknown>
+  }
+}
+
+export function projectTerminalWorktreeKeys(
+  rootRepo: ProjectTerminalRepo,
+  memberRepos: readonly ProjectTerminalRepo[],
+): string[] {
+  return Array.from(
+    new Set(
+      [rootRepo, ...memberRepos].flatMap((repo) =>
+        repoTerminalWorktreePaths(repo).map((path) => worktreeTerminalKey(repo.id, path)),
+      ),
+    ),
+  ).sort()
 }
 
 function stringArraysEqual(a: string[], b: string[]): boolean {
@@ -44,7 +69,8 @@ function projectSummariesEqual(a: ProjectSummary[], b: ProjectSummary[]): boolea
       item.id === b[index]!.id &&
       item.name === b[index]!.name &&
       item.unavailable === b[index]!.unavailable &&
-      stringArraysEqual(item.worktreePaths, b[index]!.worktreePaths),
+      item.isGitRepo === b[index]!.isGitRepo &&
+      stringArraysEqual(item.terminalWorktreeKeys, b[index]!.terminalWorktreeKeys),
   )
 }
 
@@ -56,12 +82,17 @@ export function useProjectSummaries(): ProjectSummary[] {
       s.order
         .map<ProjectSummary | null>((id) => {
           const repo = s.repos[id]
+          const memberRepos = (s.workspaceProjects[id]?.repositoryIds ?? []).flatMap((memberId) => {
+            const member = s.repos[memberId]
+            return member ? [member] : []
+          })
           return repo
             ? {
                 id: repo.id,
                 name: repo.name,
                 unavailable: repo.availability.phase === 'unavailable',
-                worktreePaths: repoTerminalWorktreePaths(repo),
+                isGitRepo: repo.isGitRepo !== false,
+                terminalWorktreeKeys: projectTerminalWorktreeKeys(repo, memberRepos),
               }
             : null
         })
@@ -73,11 +104,11 @@ export function useProjectSummaries(): ProjectSummary[] {
 // Terminal state carried over from the old repo tab strip: open-session
 // count with the output-activity pulse inside the badge, plus the unread
 // bell dot.
-export function ProjectTerminalStatus({ repoId, worktreePaths }: { repoId: string; worktreePaths: string[] }) {
+export function ProjectTerminalStatus({ terminalWorktreeKeys }: { terminalWorktreeKeys: readonly string[] }) {
   const t = useT()
-  const terminalCount = useRepoTerminalCount(repoId, worktreePaths)
-  const hasBell = useRepoTerminalHasBell(repoId, worktreePaths)
-  const hasOutputActivity = useRepoTerminalHasOutputActivity(repoId, worktreePaths)
+  const terminalCount = useTerminalAggregateCount(terminalWorktreeKeys)
+  const hasBell = useTerminalAggregateHasBell(terminalWorktreeKeys)
+  const hasOutputActivity = useTerminalAggregateHasOutputActivity(terminalWorktreeKeys)
   if (terminalCount === 0 && !hasBell) return null
   const countLabel = terminalCount > 0 ? t('terminal.open-count', { count: terminalCount }) : undefined
   return (

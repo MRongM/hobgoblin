@@ -31,8 +31,8 @@ import {
 
 export type { BranchActionItemId } from '#/web/hooks/branch-action-state.ts'
 
-const SILENT_SUCCESS_OPS = new Set<BranchActionItemId>(['remote', 'terminal', 'editor'])
-type LocalBranchActionItemId = 'copyPatch' | 'remote' | 'terminal' | 'editor'
+const SILENT_SUCCESS_OPS = new Set<BranchActionItemId>(['remote', 'externalTerminal', 'editor'])
+type LocalBranchActionItemId = 'copyPatch' | 'remote' | 'externalTerminal' | 'editor'
 
 export interface BranchActionCapabilities {
   isCurrent: boolean
@@ -152,13 +152,13 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
     void runRepoAction({ kind: 'push', branch: branch.name })
   }
 
-  function openTerminal() {
+  function openExternalTerminal() {
     if (!branch.worktree?.path) return
     const worktreePath = branch.worktree.path
     if (repo.remote.target) {
-      return runUiAction('terminal', () => openRemoteRepositoryTerminal(repo.id, worktreePath))
+      return runUiAction('externalTerminal', () => openRemoteRepositoryTerminal(repo.id, worktreePath))
     }
-    return runUiAction('terminal', () => openRepositoryTerminal(worktreePath))
+    return runUiAction('externalTerminal', () => openRepositoryTerminal(worktreePath))
   }
 
   function openEditor() {
@@ -270,7 +270,7 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
       checkout,
       pull,
       push,
-      openTerminal,
+      openExternalTerminal,
       openEditor,
       openRemote,
       requestDeleteBranch,

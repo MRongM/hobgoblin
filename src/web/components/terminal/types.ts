@@ -1,10 +1,4 @@
-import type {
-  TerminalAttachmentRole,
-  TerminalControllerStatus,
-  TerminalExitEvent,
-  TerminalOutputEvent,
-  TerminalSessionPhase,
-} from '#/shared/terminal.ts'
+import type { TerminalAttachmentRole, TerminalControllerStatus, TerminalSessionPhase } from '#/shared/terminal.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
 export type TerminalPhase = TerminalSessionPhase
 
@@ -59,8 +53,6 @@ export interface TerminalSnapshot {
   attachment?: TerminalAttachmentSnapshot | null
   search?: TerminalSearchResult | null
   progress?: TerminalProgressState | null
-  /** Viewer-mode output summary: stripped recent terminal output. */
-  outputSummary?: string | null
   /** True while a takeover request has been sent but ownership has not yet been confirmed. */
   takeoverPending?: boolean
 }
@@ -141,32 +133,6 @@ export interface TerminalSessionReadContextValue {
   subscribeRepoSync: (repoRoot: string, listener: () => void) => () => void
   snapshot: (key: string) => TerminalSnapshot
   subscribeSnapshot: (key: string, listener: () => void) => () => void
-}
-
-export interface ManagedTerminalSessionLike {
-  descriptor: TerminalDescriptor
-  updateDescriptor: (descriptor: TerminalDescriptor) => void
-  setFontSize: (fontSize: number) => void
-  attach: (host: HTMLElement, handlers?: TerminalSessionAttachHandlers) => void
-  detach: (host: HTMLElement, parkingRoot: HTMLElement) => void
-  focus: () => void
-  restart: () => void
-  dispose: (options?: { closeSession?: boolean }) => void
-  snapshot: () => TerminalSnapshot
-  isTerminalFocusTarget: (target: EventTarget | null) => boolean
-  findNext: (term: string, incremental?: boolean) => TerminalSearchResult
-  findPrevious: (term: string) => TerminalSearchResult
-  clearSearch: () => void
-  scrollToBottom: () => void
-  scrollLines: (amount: number) => void
-  writeInput: (data: string) => void
-  takeover: () => void
-  handleOwnership: (event: TerminalOwnershipViewModel) => void
-  /** Serializes xterm framebuffer state as VT sequences; not plain-text output for copy UI. */
-  serialize: () => string
-  handleOutput: (event: TerminalOutputEvent) => void
-  handleServerTitle: (canonicalTitle: string | null) => void
-  handleExit: (event: TerminalExitEvent) => boolean
 }
 
 export function createTerminalAttachmentSnapshot(input: {

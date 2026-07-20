@@ -34,6 +34,7 @@ const webDevUrl = process.env.GOBLIN_WEB_DEV_URL?.trim()
 const WEB_DIST_DIR = path.join(app.getAppPath(), 'dist/web')
 const PRELOAD_PATH = path.join(app.getAppPath(), 'src/preload/preload.cjs')
 const BOOTSTRAP_ID_PREFIX = '--goblin-bootstrap-id='
+const INTERNAL_CAPABILITY_HEADER = 'x-goblin-internal-secret'
 const rendererBootstrapPayloads = new Map<string, RendererBootstrapPayload>()
 let rendererBootstrapIpcWired = false
 
@@ -146,6 +147,36 @@ export function configureTrustedRendererWindow(win: BrowserWindow, logLabel: str
     })
     return { action: 'deny' }
   })
+}
+
+export function configureEmbeddedServerNavigationCapability(win: BrowserWindow): () => void {
+  const runtime = getEmbeddedServerRuntime()
+  const rendererBaseUrl = getRendererBaseUrl()
+  if (!runtime || !rendererBaseUrl) return () => {}
+
+  const embeddedOrigin = new URL(runtime.url).origin
+  if (new URL(rendererBaseUrl).origin !== embeddedOrigin) return () => {}
+
+  const webRequest = win.webContents.session.webRequest
+  webRequest.onBeforeSendHeaders({ urls: [`${embeddedOrigin}/*`] }, (details, callback) => {
+    if (details.webContentsId !== win.webContents.id || details.resourceType !== 'mainFrame') {
+      callback({ requestHeaders: details.requestHeaders })
+      return
+    }
+    callback({
+      requestHeaders: {
+        ...details.requestHeaders,
+        [INTERNAL_CAPABILITY_HEADER]: runtime.secret,
+      },
+    })
+  })
+
+  let disposed = false
+  return () => {
+    if (disposed) return
+    disposed = true
+    webRequest.onBeforeSendHeaders(null)
+  }
 }
 
 export function allowRendererWindowEntryUrl(win: BrowserWindow, value: string): void {

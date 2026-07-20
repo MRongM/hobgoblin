@@ -12,18 +12,91 @@ Core model: **multi-project × multi-worktree/branch × multi-terminal**. Users 
 The top row of the terminal area, containing terminal tabs and terminal-level actions.
 _Avoid_: Terminal toolbar, detail toolbar
 
+**Internal terminal**:
+A Hobgoblin-managed terminal session rendered inside the selected worktree's terminal area.
+_Avoid_: New terminal, embedded terminal
+
+**Canonical terminal geometry**:
+The server-owned PTY column and row count published by the current controller attachment.
+_Avoid_: Viewer size, shared viewport size
+
+**Local terminal geometry**:
+The renderer-local xterm column and row count fitted to one client's visible host. It is never synchronized or persisted; only a controller may publish it as new canonical terminal geometry.
+_Avoid_: Canonical size, remote size
+
+**External terminal**:
+An operating-system terminal application opened outside Hobgoblin at the selected worktree path.
+_Avoid_: Native terminal, system terminal
+
+**Settings dialog**:
+The modal surface for changing application preferences while keeping the current workspace visible underneath.
+_Avoid_: Settings screen, full-page settings
+
+**AI handoff command**:
+A provider-specific CLI command placed into an internal terminal for review, without being executed, so the user can start an AI task in the selected worktree context.
+_Avoid_: AI command, automatic AI action
+
+**Worktree bootstrap**:
+A repository-configured process that prepares a newly created worktree from its source worktree before normal development begins.
+_Avoid_: Worktree setup script, post-create hook
+
+**Project list**:
+The inline list of open projects shown beneath the sidebar project switcher.
+_Avoid_: Repo dropdown, project expanded list
+
+**Project**:
+A top-level working context in the project list. A project is either one Git repository, one plain workspace, or one multi-repository workspace.
+_Avoid_: Using project as a synonym for every repository inside a multi-repository workspace
+
+**Repository**:
+One Git operation boundary. Branches, worktrees, status, history, and Git writes always belong to exactly one repository, even when several repositories share a project.
+_Avoid_: Workspace repository, subproject
+
+**Multi-repository workspace**:
+A project rooted at a readable non-Git directory, either local or reached through one SSH target, whose immediate child entries are directories or directory symlinks resolving to Git repository top levels. A symlink keeps its immediate-child name and logical path as the workspace member identity. The root provides project-level files and terminals; its repositories remain independent Git operation boundaries. Every repository in an SSH multi-repository workspace uses the same SSH target as the workspace root.
+_Avoid_: Monorepo, repository group, nested repository
+
+**Configured workspace**:
+A multi-repository workspace whose durable, ordered repository membership has been explicitly selected. Membership is stored in Hobgoblin application data; `goblin.toml` remains repository-owned worktree bootstrap configuration. Filesystem discovery supplies candidates but does not silently change a configured workspace. Repository order controls workspace navigation order and sequential workspace batch-operation order.
+_Avoid_: Saved scan, repository registry, primary repository
+
+**Workspace inventory**:
+A derived current-state list of configured repositories and their checked-out worktree branches for agent context. It never determines workspace membership and is not an operation history.
+_Avoid_: Workspace configuration, branch log, changelog
+
+**Workspace worktree**:
+A set of same-named linked worktrees created across every configured repository. Each repository remains independently navigable and no repository anchors another repository's worktree list.
+_Avoid_: Shared worktree, combined worktree
+
+**Repository-only worktree**:
+A linked branch worktree that does not exist with the same branch name in every configured repository. It is changed only through that repository's ordinary worktree actions.
+_Avoid_: Orphan worktree, detached worktree
+
+**Workspace batch operation**:
+A server-coordinated Git operation applied sequentially to the configured repositories with per-repository results and no automatic rollback.
+When batch worktree removal includes local branch cleanup, that cleanup is explicitly forceful and may discard unpushed commits; dirty, locked, and primary worktrees remain removal safety boundaries.
+_Avoid_: Workspace transaction, multi-repository Git command
+
+**Plain workspace**:
+A readable directory opened as a workspace without requiring Git metadata.
+_Avoid_: Non-Git repository
+
+**Web access protection**:
+The optional server-owned authentication gate for browser clients. When enabled, browser access requires configured web credentials while the Electron client continues to use its private internal capability.
+_Avoid_: Security mode, LAN password
+
 ## Stack
 
-| Layer | Technology |
-|---|---|
-| Desktop shell | Electron 42 |
-| Server | Hono on `@hono/node-server` |
-| Frontend | React 19, TanStack Router, TanStack Query, Zustand, Tailwind CSS 4 |
-| Terminal | xterm.js + node-pty (worker process) |
-| Runtime | Bun 1.3 / Node.js 24 |
-| Language | TypeScript 6 (Node.js strip-only — no `tsc` emit) |
-| Build | Vite (web), Bun build (server), electron-builder (packaging) |
-| Test | Vitest |
+| Layer         | Technology                                                         |
+| ------------- | ------------------------------------------------------------------ |
+| Desktop shell | Electron 42                                                        |
+| Server        | Hono on `@hono/node-server`                                        |
+| Frontend      | React 19, TanStack Router, TanStack Query, Zustand, Tailwind CSS 4 |
+| Terminal      | xterm.js + node-pty (worker process)                               |
+| Runtime       | Bun 1.3 / Node.js 24                                               |
+| Language      | TypeScript 6 (Node.js strip-only — no `tsc` emit)                  |
+| Build         | Vite (web), Bun build (server), electron-builder (packaging)       |
+| Test          | Vitest                                                             |
 
 ## Source layout
 
@@ -81,23 +154,23 @@ The renderer is a browser client, not a privileged process. Business logic lives
 
 Three classes — pick the right one before deciding ownership:
 
-| Class | Description | Examples |
-|---|---|---|
-| **Local** | Short-lived interaction state, never synced | dialog inputs, hover state, `branchSearchQueries` |
+| Class                | Description                                                                 | Examples                                                       |
+| -------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| **Local**            | Short-lived interaction state, never synced                                 | dialog inputs, hover state, `branchSearchQueries`              |
 | **Runtime-coherent** | Must converge across windows during this run; server is the source of truth | settings snapshots, repo/branch/status data, terminal sessions |
-| **Restorable** | Survives relaunch but needs no live sync | workspace layout, active repo set, `restorableRepoCache` |
+| **Restorable**       | Survives relaunch but needs no live sync                                    | workspace layout, active repo set, `restorableRepoCache`       |
 
 ## Feature layering
 
 Each feature is a vertical slice that may span `src/server/`, `src/web/`, and `src/shared/`. Within a feature, use only the layers you need:
 
-| Layer | Role | Typical file |
-|---|---|---|
-| Boundary | Parse transport input, delegate | `routes/*.ts`, `*-client.ts` |
-| Read | Query snapshots, hooks, query keys | `*-queries.ts`, `*-read.ts` |
-| Write | Mutation orchestration, invalidation, cache updates | `*-write-paths.ts` |
-| Source | Persistence, authoritative system calls | `*-source.ts` |
-| Runtime facade | Stable combined read+write API for the UI — **only when both are present** | `runtime-*.ts` |
+| Layer          | Role                                                                       | Typical file                 |
+| -------------- | -------------------------------------------------------------------------- | ---------------------------- |
+| Boundary       | Parse transport input, delegate                                            | `routes/*.ts`, `*-client.ts` |
+| Read           | Query snapshots, hooks, query keys                                         | `*-queries.ts`, `*-read.ts`  |
+| Write          | Mutation orchestration, invalidation, cache updates                        | `*-write-paths.ts`           |
+| Source         | Persistence, authoritative system calls                                    | `*-source.ts`                |
+| Runtime facade | Stable combined read+write API for the UI — **only when both are present** | `runtime-*.ts`               |
 
 Name files `<feature>-<layer>.ts`. Avoid generic `service`, `controller`, or `manager` names.
 

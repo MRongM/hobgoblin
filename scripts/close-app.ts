@@ -3,7 +3,10 @@
 // macOS-only (uses AppleScript + pgrep); on other platforms this is a no-op,
 // since the install flow it serves only runs on macOS.
 import { $ } from 'bun'
+import { execFile } from 'node:child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
+
+import { closeRunningAppWithRuntime } from './close-app-core.ts'
 
 const APP_NAME = 'Hobgoblin'
 
@@ -20,28 +23,28 @@ async function isRunning(): Promise<boolean> {
   return r.exitCode === 0
 }
 
-export async function closeRunningApp(): Promise<void> {
-  if (process.platform !== 'darwin') return
-  if (!(await isRunning())) return
-
-  console.log(`${APP_NAME} is running, attempting graceful quit...`)
-
-  // osascript may fail if the app just exited; fall through to the wait loop.
-  await $`osascript -e ${`quit app "${APP_NAME}"`}`.quiet().nothrow()
-
-  for (let i = 0; i < 10; i++) {
-    if (!(await isRunning())) {
-      console.log(`${APP_NAME} quit.`)
-      return
+async function requestGracefulQuit(signal: AbortSignal): Promise<void> {
+  await new Promise<void>((resolve) => {
+    try {
+      execFile('osascript', ['-e', `quit app "${APP_NAME}"`], { signal }, () => resolve())
+    } catch {
+      // The app may exit between detection and the quit request.
+      resolve()
     }
-    await sleep(500)
-  }
+  })
+}
 
-  if (await isRunning()) {
-    console.log(`Forcing ${APP_NAME} to quit...`)
-    await $`pkill -9 -f ${BINARY_PATH_FRAGMENT}`.quiet().nothrow()
-    await sleep(1000)
-  }
+export async function closeRunningApp(): Promise<void> {
+  await closeRunningAppWithRuntime({
+    platform: process.platform,
+    isRunning,
+    requestGracefulQuit,
+    forceQuit: async () => {
+      await $`pkill -9 -f ${BINARY_PATH_FRAGMENT}`.quiet().nothrow()
+    },
+    sleep,
+    log: console.log,
+  })
 }
 
 if (import.meta.main) await closeRunningApp()

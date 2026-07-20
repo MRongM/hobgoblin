@@ -37,14 +37,16 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  overlayClassName,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
+  overlayClassName?: string
 }) {
   const compact = useIsCompactUi()
   return (
     <DialogPortal data-slot="dialog-portal">
-      <DialogOverlay />
+      <DialogOverlay className={overlayClassName} />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         // Tighter padding (p-4 / gap-3) than upstream shadcn's p-6 / gap-4
@@ -73,13 +75,7 @@ function DialogContent({
 }
 
 function DialogHeader({ className, ...props }: React.ComponentProps<'div'>) {
-  return (
-    <div
-      data-slot="dialog-header"
-      className={cn('flex flex-col gap-2 text-left', className)}
-      {...props}
-    />
-  )
+  return <div data-slot="dialog-header" className={cn('flex flex-col gap-2 text-left', className)} {...props} />
 }
 
 function DialogFooter({

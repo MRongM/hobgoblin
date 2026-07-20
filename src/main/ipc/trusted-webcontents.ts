@@ -58,7 +58,7 @@ function normalizeTrustedAppUrl(value: string): string | null {
   try {
     const url = new URL(value)
     if (url.protocol === 'http:' || url.protocol === 'https:') {
-      url.pathname = normalizeTrustedHttpPath(url.pathname)
+      url.pathname = normalizeTrustedHttpPath()
       url.search = ''
       url.hash = ''
       return url.toString()
@@ -69,6 +69,6 @@ function normalizeTrustedAppUrl(value: string): string | null {
   }
 }
 
-function normalizeTrustedHttpPath(pathname: string): string {
+function normalizeTrustedHttpPath(): string {
   return '/'
 }
