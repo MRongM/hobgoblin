@@ -14,6 +14,8 @@ const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENV
 
 beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
+  Object.defineProperty(window, 'localStorage', { configurable: true, value: createStorage() })
+  Object.defineProperty(window, 'sessionStorage', { configurable: true, value: createStorage() })
   vi.stubGlobal(
     'matchMedia',
     vi.fn((query: string) => ({
@@ -39,6 +41,18 @@ afterEach(() => {
   vi.unstubAllGlobals()
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
 })
+
+function createStorage(): Storage {
+  const store = new Map<string, string>()
+  return {
+    get length() { return store.size },
+    clear: () => store.clear(),
+    getItem: (key) => store.get(key) ?? null,
+    key: (index) => Array.from(store.keys())[index] ?? null,
+    removeItem: (key) => { store.delete(key) },
+    setItem: (key, value) => { store.set(key, value) },
+  }
+}
 
 describe('RepoTabStrip', () => {
   test('marks non-git local workspace tabs as plain repositories', () => {
