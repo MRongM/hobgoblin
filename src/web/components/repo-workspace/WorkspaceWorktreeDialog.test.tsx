@@ -340,7 +340,9 @@ describe('WorkspaceWorktreeDialog', () => {
     const repositoryLabel = document.querySelector('[data-workspace-repository-id]')
     expect(repositoryLabel?.textContent).toBe('api')
     expect(repositoryLabel?.getAttribute('title')).toBe('/workspace/api')
-    expect(document.body.textContent).toContain('/workspace/api-feature-a')
+    const worktreePath = document.querySelector('span[title="/workspace/api-feature-a"]')
+    expect(worktreePath?.textContent).toBe('api-feature-a')
+    expect(worktreePath?.getAttribute('title')).toBe('/workspace/api-feature-a')
     expect(document.body.textContent).toContain('workspace.worktree.bootstrap-copy:2')
     await act(async () => document.querySelector<HTMLButtonElement>('button[data-action="confirm"]')?.click())
     expect(onConfirm).toHaveBeenCalledTimes(1)
@@ -375,9 +377,74 @@ describe('WorkspaceWorktreeDialog', () => {
     )
 
     expect(document.body.textContent).toContain('workspace.worktree.remove-warning')
+    expect(document.querySelector('span[title="/workspace/api-feature-a"]')?.textContent).toBe('api-feature-a')
     expect(document.body.textContent).toContain('workspace.worktree.phase.failed')
     expect(document.querySelector('button[data-action="retry"]')).not.toBeNull()
     expect(document.querySelector('button[data-action="confirm"]')?.getAttribute('data-variant')).toBe('destructive')
+  })
+
+  test('shows relative worktree paths while retaining absolute titles before pull', () => {
+    const pullPlan = { ...plan, operation: 'pull' as const, members: [{ ...plan.members[0]!, baseRef: undefined }] }
+    act(() =>
+      root!.render(
+        <WorkspaceWorktreeDialog
+          open
+          operation="pull"
+          initialBranch="feature/a"
+          plan={pullPlan}
+          result={null}
+          pending={false}
+          error={null}
+          onOpenChange={() => {}}
+          onPreview={async () => {}}
+          onConfirm={async () => null}
+          onRetry={async () => null}
+          onCancel={async () => {}}
+        />,
+      ),
+    )
+
+    const worktreePath = document.querySelector('span[title="/workspace/api-feature-a"]')
+    expect(worktreePath?.textContent).toBe('api-feature-a')
+    expect(worktreePath?.getAttribute('title')).toBe('/workspace/api-feature-a')
+  })
+
+  test('uses the physical workspace root for remote plan paths', () => {
+    const remotePlan = {
+      ...plan,
+      rootId: 'ssh-config://prod/srv/workspace',
+      operation: 'pull' as const,
+      members: [
+        {
+          ...plan.members[0]!,
+          repoId: 'ssh-config://prod/srv/workspace/api',
+          baseRef: undefined,
+          worktreePath: '/srv/workspace/api-feature-a',
+        },
+      ],
+    }
+    act(() =>
+      root!.render(
+        <WorkspaceWorktreeDialog
+          open
+          operation="pull"
+          initialBranch="feature/a"
+          plan={remotePlan}
+          result={null}
+          pending={false}
+          error={null}
+          onOpenChange={() => {}}
+          onPreview={async () => {}}
+          onConfirm={async () => null}
+          onRetry={async () => null}
+          onCancel={async () => {}}
+        />,
+      ),
+    )
+
+    const worktreePath = document.querySelector('span[title="/srv/workspace/api-feature-a"]')
+    expect(worktreePath?.textContent).toBe('api-feature-a')
+    expect(worktreePath?.getAttribute('title')).toBe('/srv/workspace/api-feature-a')
   })
 })
 

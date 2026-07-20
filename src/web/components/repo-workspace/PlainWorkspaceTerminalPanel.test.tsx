@@ -6,6 +6,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
 import { PlainWorkspaceTerminalPanel } from '#/web/components/repo-workspace/PlainWorkspaceTerminalPanel.tsx'
+import { useReposStore } from '#/web/stores/repos/store.ts'
 import { resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 
 const createTerminal = vi.fn()
@@ -39,6 +40,9 @@ vi.mock('#/web/components/terminal/terminal-session-context.ts', () => ({
 
 vi.mock('#/web/components/terminal/terminal-session-store.ts', () => ({
   useWorktreeTerminalSnapshot: () => ({ sessions: [], selectedDescriptor: null }),
+  useRepoTerminalCount: () => 0,
+  useRepoTerminalHasBell: () => false,
+  useRepoTerminalHasOutputActivity: () => false,
 }))
 
 vi.mock('#/web/components/terminal/TerminalTabs.tsx', () => ({
@@ -141,6 +145,75 @@ describe('PlainWorkspaceTerminalPanel', () => {
     expect(toolbar?.style.height).toBe('41px')
     expect(toolbar?.className).toContain('bg-toolbar')
     expect(toolbar?.className).not.toContain('topbar-tone')
+  })
+
+  test('focus mode shows project context and uses full-width window chrome', () => {
+    seedRepoState({
+      id: '/repo',
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    useReposStore.setState({ detailFocusMode: true })
+
+    render(<PlainWorkspaceTerminalPanel repoId="/repo" focusMode />)
+
+    const toolbar = container!.querySelector<HTMLElement>('[data-testid="plain-workspace-terminal-toolbar"]')
+    const projectSwitcher = container!.querySelector('[data-testid="focus-project-switcher"]')
+    expect(toolbar?.classList.contains('topbar')).toBe(true)
+    expect(projectSwitcher).not.toBeNull()
+    expect(projectSwitcher?.querySelector('svg.lucide-folder')).not.toBeNull()
+    expect(projectSwitcher?.querySelector('svg.lucide-folder-git-2')).toBeNull()
+    expect(container!.querySelector('button[aria-label="branch-detail.exit-focus"]')).not.toBeNull()
+    expect(terminalTabsProps.at(-1)?.focusMode).toBe(true)
+  })
+
+  test('focus mode keeps configured workspace repository navigation reachable', () => {
+    seedRepoState({
+      id: '/repo',
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    useReposStore.setState({
+      detailFocusMode: true,
+      workspaceProjects: {
+        '/repo': {
+          rootId: '/repo',
+          repositoryIds: [],
+          candidates: [],
+          configured: false,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+    })
+
+    render(<PlainWorkspaceTerminalPanel repoId="/repo" focusMode />)
+
+    expect(container!.querySelector('button[aria-label="workspace.repositories"]')).not.toBeNull()
+  })
+
+  test('focus exit control clears the existing focus preference', () => {
+    seedRepoState({
+      id: '/repo',
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    useReposStore.setState({ detailFocusMode: true })
+    render(<PlainWorkspaceTerminalPanel repoId="/repo" focusMode />)
+
+    act(() => {
+      container!.querySelector<HTMLButtonElement>('button[aria-label="branch-detail.exit-focus"]')?.click()
+    })
+
+    expect(useReposStore.getState().detailFocusMode).toBe(false)
   })
 
   test('auto-creates remote plain workspace sessions at the remote path', () => {

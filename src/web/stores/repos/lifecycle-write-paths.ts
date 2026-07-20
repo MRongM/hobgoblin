@@ -19,7 +19,7 @@ import { recordRecentRepo } from '#/web/settings-write-paths.ts'
 import { configureWorkspace as configureWorkspaceClient, discoverWorkspace } from '#/web/workspace-client.ts'
 import type { OpenRepoResult, ReposGet, ReposSet, ReposStore } from '#/web/stores/repos/types.ts'
 import type { ExecResult } from '#/web/types.ts'
-import type { WorkspaceConfig, WorkspaceDiscoveryResult } from '#/shared/workspace.ts'
+import type { WorkspaceConfig, WorkspaceDiscoveryResult, WorkspaceRepositoryEntry } from '#/shared/workspace.ts'
 import { nextActiveRepoIdAfterWorkspaceClose } from '#/web/open-workspace-state.ts'
 import {
   activeProjectId,
@@ -32,6 +32,7 @@ import {
   normalizeRemoteRepoRef,
   parseRemoteRepoId,
   remoteRepoSessionEntry,
+  type RemoteRepoRef,
   type RemoteRepoTarget,
   type RepoSessionEntry,
 } from '#/shared/remote-repo.ts'
@@ -312,7 +313,7 @@ export function createRuntimeRepoLifecycleActions(
       })
 
       if (initialRefresh) refreshInitialRepoState(get, initialRefresh)
-      if (!repo.target && repo.isGitRepo === false) await reconcileWorkspaceProject(set, get, id)
+      if (repo.isGitRepo === false) await reconcileWorkspaceProject(set, get, id)
       return { ok: true, id }
     },
 
@@ -414,7 +415,7 @@ export function createRuntimeRepoLifecycleActions(
 
 export async function reconcileWorkspaceProject(set: ReposSet, get: ReposGet, rootId: string): Promise<void> {
   const root = get().repos[rootId]
-  if (!root || root.isGitRepo !== false || root.remote.target) return
+  if (!root || root.isGitRepo !== false) return
 
   set((state) => {
     const current = state.workspaceProjects[rootId]
@@ -479,11 +480,16 @@ function applyWorkspaceDiscoveryResult(
       ...result.repositories,
       ...effectiveCandidates
         .filter((candidate) => !candidate.available)
-        .map((candidate) => ({ id: candidate.id, name: candidate.name })),
+        .map((candidate) => ({
+          id: candidate.id,
+          name: candidate.name,
+          ...(candidate.remoteRef ? { remoteRef: candidate.remoteRef } : {}),
+        })),
     ]
     const discoveredIds = new Set(projectedRepositories.map((repository) => repository.id))
 
     for (const repository of projectedRepositories) {
+      const target = workspaceChildRemoteTarget(state.repos[rootId]?.remote.target, repository)
       const opened = addResolvedRepo(
         { repos, order, restorableRepoCache: state.restorableRepoCache },
         {
@@ -491,6 +497,7 @@ function applyWorkspaceDiscoveryResult(
           name: repository.name,
           isGitRepo: true,
           workspaceRootId: rootId,
+          ...(target ? { target } : {}),
         },
       )
       repos = opened.repos
@@ -504,7 +511,7 @@ function applyWorkspaceDiscoveryResult(
             markRepoUnavailable(draft, 'workspace.repository-unavailable')
           }),
         }
-      } else if (openedRepo && opened.changed) {
+      } else if (openedRepo) {
         refreshes.push({ id: repository.id, token: openedRepo.instanceToken })
       }
     }
@@ -579,4 +586,12 @@ function applyWorkspaceDiscoveryResult(
   })
 
   for (const refresh of refreshes) refreshInitialRepoState(get, refresh)
+}
+
+function workspaceChildRemoteTarget(
+  rootTarget: RemoteRepoTarget | undefined,
+  repository: Pick<WorkspaceRepositoryEntry, 'remoteRef'>,
+): RemoteRepoTarget | undefined {
+  const ref: RemoteRepoRef | undefined = repository.remoteRef
+  return rootTarget && ref ? { ...rootTarget, ...ref } : undefined
 }

@@ -20,10 +20,7 @@ type RestorableWorkspaceLifecycleActions = Pick<ReposStore, 'hydrateSession'>
 
 const SESSION_PROBE_CONCURRENCY = 4
 
-function createRestorableWorkspaceLifecycleActions(
-  set: ReposSet,
-  get: ReposGet,
-): RestorableWorkspaceLifecycleActions {
+function createRestorableWorkspaceLifecycleActions(set: ReposSet, get: ReposGet): RestorableWorkspaceLifecycleActions {
   return {
     async hydrateSession(
       openRepos: RepoSessionEntry[],
@@ -92,7 +89,7 @@ function createRestorableWorkspaceLifecycleActions(
             // so we hydrate it for every restored repo, not just the active
             // one — switching after boot shouldn't reveal a stale 0.
             if (initialRefresh) refreshInitialRepoState(get, initialRefresh)
-            if (!resolvedRepo.target && resolvedRepo.isGitRepo === false) {
+            if (resolvedRepo.isGitRepo === false) {
               await reconcileWorkspaceProject(set, get, resolvedRepo.id)
             }
           }),

@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { localRepoSessionEntry, normalizeRemoteTarget, remoteRepoSessionEntry } from '#/shared/remote-repo.ts'
+import {
+  localRepoSessionEntry,
+  normalizeRemoteRepoRef,
+  normalizeRemoteTarget,
+  remoteRepoSessionEntry,
+} from '#/shared/remote-repo.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { BranchSnapshotInfo } from '#/web/types.ts'
 import {
@@ -14,6 +19,43 @@ import {
 beforeEach(resetLifecycleTest)
 
 describe('repo session hydration', () => {
+  test('rediscovers remote workspace children before restoring an active child repository', async () => {
+    const rootTarget = normalizeRemoteTarget({
+      alias: 'example',
+      host: 'example.com',
+      user: 'alice',
+      port: 22,
+      remotePath: '/srv/workspace',
+    })!
+    const child = normalizeRemoteRepoRef({ alias: 'example', remotePath: '/srv/workspace/api' })!
+    const calls = installGoblin({
+      probe: (cwd: string) => ({
+        ok: true,
+        root: cwd,
+        name: cwd === rootTarget.id ? 'example:workspace' : cwd,
+        isGitRepo: cwd !== rootTarget.id,
+      }),
+      'workspace.discover': () => ({
+        ok: true,
+        rootId: rootTarget.id,
+        repositories: [{ id: child.id, name: 'api', remoteRef: child }],
+        candidates: [{ id: child.id, name: 'api', remoteRef: child, selected: false, available: true }],
+        configuration: { kind: 'missing' },
+        skipped: [],
+      }),
+    })
+
+    await useReposStore
+      .getState()
+      .hydrateSession([remoteRepoSessionEntry(rootTarget)], child.id, { [rootTarget.id]: child.id })
+
+    expect(useReposStore.getState().order).toEqual([rootTarget.id])
+    expect(useReposStore.getState().activeId).toBe(child.id)
+    expect(useReposStore.getState().repos[child.id]?.remote.target).toEqual({ ...rootTarget, ...child })
+    expect(useReposStore.getState().workspaceActiveRepoByRoot).toEqual({ [rootTarget.id]: child.id })
+    expect(calls.recent).toEqual([])
+  })
+
   test('rediscovers workspace children before restoring an active child repository', async () => {
     const root = '/tmp/gbl-workspace'
     const child = `${root}/api`

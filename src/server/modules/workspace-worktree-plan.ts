@@ -1,7 +1,13 @@
 import { createHash } from 'node:crypto'
-import { access } from 'node:fs/promises'
 import path from 'node:path'
 import { readWorkspaceConfig } from '#/server/modules/workspace-config-source.ts'
+import {
+  workspacePathExists,
+  workspaceRepositoryId,
+  workspaceRepositoryPath,
+  workspaceRootId,
+  workspaceWorktreePath,
+} from '#/server/modules/workspace-paths.ts'
 import { getRepositorySnapshot, getRepositoryStatus } from '#/server/modules/repo-read-paths.ts'
 import { getRepositoryWorktreeBootstrapPreview } from '#/server/modules/repo-write-paths.ts'
 import { isSafeBranchName } from '#/shared/refnames.ts'
@@ -22,7 +28,7 @@ export interface WorkspaceWorktreePlanDependencies {
   getSnapshot?: (repoId: string, signal?: AbortSignal) => Promise<RepoSnapshot | null>
   getStatus?: (repoId: string, signal?: AbortSignal) => Promise<WorktreeStatus[]>
   getBootstrapPreview?: (repoId: string, signal?: AbortSignal) => Promise<WorktreeBootstrapPreviewResult>
-  pathExists?: (candidatePath: string) => Promise<boolean>
+  pathExists?: (repoId: string, candidatePath: string) => Promise<boolean>
 }
 
 export async function buildWorkspaceWorktreePlan(
@@ -38,10 +44,24 @@ export async function buildWorkspaceWorktreePlan(
     return { ok: false, message: 'workspace.worktree.base-unavailable' }
   }
   const readConfig = dependencies.readConfig ?? readWorkspaceConfig
-  const configSnapshot = await readConfig(rootId)
-  if (configSnapshot.kind !== 'ready') return { ok: false, message: 'workspace.configuration-required' }
+  const configResult = await readPlanResource(
+    async () => await readConfig(rootId),
+    'workspace.worktree.repository-unavailable',
+  )
+  if (!configResult.ok) return configResult
+  const configSnapshot = configResult.value
+  if (configSnapshot.kind !== 'ready') {
+    return {
+      ok: false,
+      message:
+        configSnapshot.kind === 'invalid' && configSnapshot.message === 'error.ssh-config-changed'
+          ? configSnapshot.message
+          : 'workspace.configuration-required',
+    }
+  }
 
-  const configuredIds = configSnapshot.config.repo.map((name) => path.join(rootId, name))
+  const configuredIds = configuredRepositoryIds(rootId, configSnapshot.config.repo)
+  if (!configuredIds) return { ok: false, message: 'workspace.config.invalid-repository' }
   const removalOptions = request.operation === 'remove' ? normalizeRemovalOptions(request) : undefined
   const members: WorkspaceWorktreeMemberPlan[] = []
   for (const repoId of configuredIds) {
@@ -57,7 +77,7 @@ export async function buildWorkspaceWorktreePlan(
   }
 
   const planWithoutToken = {
-    rootId: path.resolve(rootId),
+    rootId: workspaceRootId(rootId),
     operation: request.operation,
     branch: request.operation === 'pull' ? '' : request.branch,
     ...(removalOptions ? { removalOptions } : {}),
@@ -73,9 +93,23 @@ export async function validateWorkspaceWorktreeRetryPlan(
   dependencies: WorkspaceWorktreePlanDependencies = {},
   signal?: AbortSignal,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
-  const configSnapshot = await (dependencies.readConfig ?? readWorkspaceConfig)(plan.rootId)
-  if (configSnapshot.kind !== 'ready') return { ok: false, message: 'workspace.worktree.plan-stale' }
-  const configuredIds = configSnapshot.config.repo.map((name) => path.join(plan.rootId, name))
+  const configResult = await readPlanResource(
+    async () => await (dependencies.readConfig ?? readWorkspaceConfig)(plan.rootId),
+    'workspace.worktree.plan-stale',
+  )
+  if (!configResult.ok) return configResult
+  const configSnapshot = configResult.value
+  if (configSnapshot.kind !== 'ready') {
+    return {
+      ok: false,
+      message:
+        configSnapshot.kind === 'invalid' && configSnapshot.message === 'error.ssh-config-changed'
+          ? configSnapshot.message
+          : 'workspace.worktree.plan-stale',
+    }
+  }
+  const configuredIds = configuredRepositoryIds(plan.rootId, configSnapshot.config.repo)
+  if (!configuredIds) return { ok: false, message: 'workspace.worktree.plan-stale' }
   const plannedIds = plan.members.map((member) => member.repoId)
   if (
     configuredIds.length !== plannedIds.length ||
@@ -85,7 +119,12 @@ export async function validateWorkspaceWorktreeRetryPlan(
   }
 
   for (const member of plan.members) {
-    const snapshot = await (dependencies.getSnapshot ?? getRepositorySnapshot)(member.repoId, signal)
+    const snapshotResult = await readPlanResource(
+      async () => await (dependencies.getSnapshot ?? getRepositorySnapshot)(member.repoId, signal),
+      'workspace.worktree.plan-stale',
+    )
+    if (!snapshotResult.ok) return snapshotResult
+    const snapshot = snapshotResult.value
     if (!snapshot) return { ok: false, message: 'workspace.worktree.plan-stale' }
     const branch = snapshot.branches.find((candidate) => candidate.name === member.branch)
     if (plan.operation === 'pull') {
@@ -103,8 +142,12 @@ export async function validateWorkspaceWorktreeRetryPlan(
         if (branch || !member.baseRef || !snapshot.branches.some((candidate) => candidate.name === member.baseRef)) {
           return { ok: false, message: 'workspace.worktree.plan-stale' }
         }
-        if (await (dependencies.pathExists ?? fileExists)(member.worktreePath)) {
-          return { ok: false, message: 'workspace.worktree.plan-stale' }
+        try {
+          if (await (dependencies.pathExists ?? workspacePathExists)(member.repoId, member.worktreePath)) {
+            return { ok: false, message: 'workspace.worktree.plan-stale' }
+          }
+        } catch (error) {
+          return { ok: false, message: planResourceErrorMessage(error, 'workspace.worktree.plan-stale') }
         }
       }
       continue
@@ -119,10 +162,19 @@ export async function validateWorkspaceWorktreeRetryPlan(
     if (plan.removalOptions?.alsoDeleteUpstream && branch?.tracking !== member.upstream) {
       return { ok: false, message: 'workspace.worktree.plan-stale' }
     }
-    if (branch?.worktree?.path !== member.worktreePath || branch.worktree.isPrimary || branch.worktree.isLocked) {
+    if (
+      branch?.worktree?.path !== member.worktreePath ||
+      isRootWorktree(member.repoId, branch.worktree) ||
+      branch.worktree.isLocked
+    ) {
       return { ok: false, message: 'workspace.worktree.plan-stale' }
     }
-    const statuses = await (dependencies.getStatus ?? getRepositoryStatus)(member.repoId, signal)
+    const statusResult = await readPlanResource(
+      async () => await (dependencies.getStatus ?? getRepositoryStatus)(member.repoId, signal),
+      'workspace.worktree.plan-stale',
+    )
+    if (!statusResult.ok) return statusResult
+    const statuses = statusResult.value
     const status = statuses.find((entry) => entry.path === member.worktreePath)
     if ((status?.entries.length ?? branch.worktree.summary?.changeCount ?? 0) > 0 || branch.worktree.summary?.dirty) {
       return { ok: false, message: 'workspace.worktree.plan-stale' }
@@ -142,7 +194,12 @@ async function planCreateMember(
   dependencies: WorkspaceWorktreePlanDependencies,
   signal?: AbortSignal,
 ): Promise<{ ok: true; member: WorkspaceWorktreeMemberPlan } | { ok: false; message: string }> {
-  const snapshot = await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal)
+  const snapshotResult = await readPlanResource(
+    async () => await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal),
+    'workspace.worktree.repository-unavailable',
+  )
+  if (!snapshotResult.ok) return snapshotResult
+  const snapshot = snapshotResult.value
   if (!snapshot) return { ok: false, message: 'workspace.worktree.repository-unavailable' }
   if (snapshot.branches.some((candidate) => candidate.name === branch)) {
     return { ok: false, message: 'workspace.worktree.branch-exists' }
@@ -150,9 +207,22 @@ async function planCreateMember(
   const base = snapshot.branches.find((candidate) => candidate.name === baseBranch)
   if (!base) return { ok: false, message: 'workspace.worktree.base-unavailable' }
   const worktreePath = defaultWorkspaceWorktreePath(repoId, branch)
-  const pathExists = dependencies.pathExists ?? fileExists
-  if (await pathExists(worktreePath)) return { ok: false, message: 'workspace.worktree.path-exists' }
-  const bootstrap = await (dependencies.getBootstrapPreview ?? getRepositoryWorktreeBootstrapPreview)(repoId, signal)
+  if (!worktreePath) return { ok: false, message: 'workspace.worktree.repository-unavailable' }
+  const pathExists = dependencies.pathExists ?? workspacePathExists
+  try {
+    if (await pathExists(repoId, worktreePath)) return { ok: false, message: 'workspace.worktree.path-exists' }
+  } catch (error) {
+    return {
+      ok: false,
+      message: planResourceErrorMessage(error, 'workspace.worktree.repository-unavailable'),
+    }
+  }
+  const bootstrapResult = await readPlanResource(
+    async () => await (dependencies.getBootstrapPreview ?? getRepositoryWorktreeBootstrapPreview)(repoId, signal),
+    'workspace.worktree.repository-unavailable',
+  )
+  if (!bootstrapResult.ok) return bootstrapResult
+  const bootstrap = bootstrapResult.value
   if (!bootstrap.ok) return { ok: false, message: bootstrap.message }
   const runBootstrap = bootstrap.preview.hasOperations && !!bootstrap.preview.configHash
   return {
@@ -176,7 +246,12 @@ async function planPullMember(
   dependencies: WorkspaceWorktreePlanDependencies,
   signal?: AbortSignal,
 ): Promise<{ ok: true; member: WorkspaceWorktreeMemberPlan } | { ok: false; message: string }> {
-  const snapshot = await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal)
+  const snapshotResult = await readPlanResource(
+    async () => await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal),
+    'workspace.worktree.repository-unavailable',
+  )
+  if (!snapshotResult.ok) return snapshotResult
+  const snapshot = snapshotResult.value
   if (!snapshot) return { ok: false, message: 'workspace.worktree.repository-unavailable' }
   const rootBranch = snapshot.branches.find(
     (candidate) => !!candidate.worktree && isRootWorktree(repoId, candidate.worktree),
@@ -195,16 +270,28 @@ async function planRemoveMember(
   dependencies: WorkspaceWorktreePlanDependencies,
   signal?: AbortSignal,
 ): Promise<{ ok: true; member: WorkspaceWorktreeMemberPlan } | { ok: false; message: string }> {
-  const snapshot = await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal)
+  const snapshotResult = await readPlanResource(
+    async () => await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal),
+    'workspace.worktree.repository-unavailable',
+  )
+  if (!snapshotResult.ok) return snapshotResult
+  const snapshot = snapshotResult.value
   if (!snapshot) return { ok: false, message: 'workspace.worktree.repository-unavailable' }
   const candidate = snapshot.branches.find((entry) => entry.name === branch)
   const worktree = candidate?.worktree
   if (!worktree) return { ok: false, message: 'workspace.worktree.target-missing' }
-  const statuses = await (dependencies.getStatus ?? getRepositoryStatus)(repoId, signal)
+  const statusResult = await readPlanResource(
+    async () => await (dependencies.getStatus ?? getRepositoryStatus)(repoId, signal),
+    'workspace.worktree.repository-unavailable',
+  )
+  if (!statusResult.ok) return statusResult
+  const statuses = statusResult.value
   const status = statuses.find((entry) => entry.path === worktree.path)
   const dirty = (status?.entries.length ?? worktree.summary?.changeCount ?? 0) > 0 || worktree.summary?.dirty === true
   const locked = worktree.isLocked === true
-  if (worktree.isPrimary || dirty || locked) return { ok: false, message: 'workspace.worktree.remove-unsafe' }
+  if (isRootWorktree(repoId, worktree) || dirty || locked) {
+    return { ok: false, message: 'workspace.worktree.remove-unsafe' }
+  }
   return {
     ok: true,
     member: {
@@ -228,19 +315,37 @@ function normalizeRemovalOptions(
   }
 }
 
-export function defaultWorkspaceWorktreePath(repoId: string, branch: string): string {
-  return path.join(path.dirname(repoId), `${path.basename(repoId)}-${branch.replaceAll('/', '-')}`)
+export function defaultWorkspaceWorktreePath(repoId: string, branch: string): string | null {
+  return workspaceWorktreePath(repoId, branch)
 }
 
 function isRootWorktree(repoId: string, worktree: { path: string; isPrimary?: boolean }): boolean {
-  return worktree.isPrimary === true || path.resolve(worktree.path) === path.resolve(repoId)
+  if (worktree.isPrimary === true) return true
+  const repositoryPath = workspaceRepositoryPath(repoId)
+  if (!repositoryPath) return false
+  if (repoId.startsWith('ssh-config://')) {
+    return path.posix.normalize(worktree.path) === path.posix.normalize(repositoryPath)
+  }
+  return path.resolve(worktree.path) === path.resolve(repositoryPath)
 }
 
-async function fileExists(candidatePath: string): Promise<boolean> {
+function configuredRepositoryIds(rootId: string, members: string[]): string[] | null {
+  const ids = members.map((member) => workspaceRepositoryId(rootId, member))
+  return ids.every((id): id is string => id !== null) ? ids : null
+}
+
+async function readPlanResource<T>(
+  read: () => Promise<T>,
+  fallbackMessage: string,
+): Promise<{ ok: true; value: T } | { ok: false; message: string }> {
   try {
-    await access(candidatePath)
-    return true
-  } catch {
-    return false
+    return { ok: true, value: await read() }
+  } catch (error) {
+    return { ok: false, message: planResourceErrorMessage(error, fallbackMessage) }
   }
+}
+
+function planResourceErrorMessage(error: unknown, fallbackMessage: string): string {
+  const message = error instanceof Error ? error.message : ''
+  return message === 'error.ssh-config-changed' || message === 'cancelled' ? message : fallbackMessage
 }

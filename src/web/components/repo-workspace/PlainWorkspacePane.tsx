@@ -10,6 +10,7 @@ import type { FileTreeRevealRequest } from '#/web/components/repo-workspace/Repo
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { WorkspaceRepositoryRail } from '#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx'
+import { repoWorkspaceBehavior } from '#/web/lib/workspace-layout.ts'
 
 interface PlainWorkspacePaneProps {
   repoId: string
@@ -29,6 +30,8 @@ export function PlainWorkspacePane({
   onToggleFileArea,
 }: PlainWorkspacePaneProps) {
   const compact = useIsCompactUi()
+  const detailFocusMode = useReposStore((state) => state.detailFocusMode)
+  const repoUnavailable = useReposStore((state) => state.repos[repoId]?.availability.phase === 'unavailable')
   const multiRepositoryWorkspace = useReposStore((state) => !!state.workspaceProjects[repoId])
   const terminalPaneSize = useReposStore((s) => s.detailPaneSizes[layout])
   const setDetailPaneSize = useReposStore((s) => s.setDetailPaneSize)
@@ -40,33 +43,46 @@ export function PlainWorkspacePane({
   const desktopWorkspaceOverview = !compact && multiRepositoryWorkspace
   const splitOrientation = layout === 'top-bottom' ? 'horizontal' : 'vertical'
   const sideBySide = splitOrientation === 'horizontal'
+  const behavior = repoWorkspaceBehavior(layout, false, detailFocusMode)
+  const focusMode = !compact && !repoUnavailable && behavior.mode === 'focus'
 
   const fileBrowser = <ProjectFileTree repoId={repoId} revealRequest={revealRequest ?? null} toolbarHeight="detail" />
+  const detailPane = (
+    <RepoWorkspacePane>
+      {terminalPanel ?? <PlainWorkspaceTerminalPanel repoId={repoId} focusMode={focusMode} />}
+    </RepoWorkspacePane>
+  )
+
+  if (focusMode) {
+    return <div className="flex min-h-0 min-w-0 flex-1 flex-col">{detailPane}</div>
+  }
 
   const branchPane = (
     <RepoWorkspacePane>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {!compact && <SidebarProjectHeader repoId={repoId} />}
-        {desktopWorkspaceOverview ? (
-          <SplitPane
-            orientation={splitOrientation}
-            before={
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
-                <WorkspaceRepositoryRail workspaceRootId={repoId} currentRepoId={repoId} fill />
-              </div>
-            }
-            after={fileBrowser}
-            afterSize={fileAreaSize}
-            afterCollapsed={desktopFileAreaCollapsed}
-            onAfterSizeChange={(size) => setRepoFileTreePaneSize(repoId, layout, size)}
-            beforeMinSize={sideBySide ? '12rem' : '8rem'}
-            afterMinSize={sideBySide ? '12rem' : '8rem'}
-            afterMaxSize="80%"
-            className="min-h-0 flex-1"
-          />
-        ) : !desktopFileAreaCollapsed ? (
-          fileBrowser
-        ) : null}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {desktopWorkspaceOverview ? (
+            <SplitPane
+              orientation={splitOrientation}
+              before={
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
+                  <WorkspaceRepositoryRail workspaceRootId={repoId} currentRepoId={repoId} fill />
+                </div>
+              }
+              after={fileBrowser}
+              afterSize={fileAreaSize}
+              afterCollapsed={desktopFileAreaCollapsed}
+              onAfterSizeChange={(size) => setRepoFileTreePaneSize(repoId, layout, size)}
+              beforeMinSize={sideBySide ? '12rem' : '8rem'}
+              afterMinSize={sideBySide ? '12rem' : '8rem'}
+              afterMaxSize="80%"
+              className="min-h-0 flex-1"
+            />
+          ) : !desktopFileAreaCollapsed ? (
+            fileBrowser
+          ) : null}
+        </div>
         {!compact && (
           <StatusBar repoId={repoId} fileAreaCollapsed={desktopFileAreaCollapsed} onToggleFileArea={onToggleFileArea} />
         )}
@@ -82,9 +98,7 @@ export function PlainWorkspacePane({
         detailSize={terminalPaneSize}
         onDetailSizeChange={(size) => setDetailPaneSize(layout, size)}
         branchPane={branchPane}
-        detailPane={
-          <RepoWorkspacePane>{terminalPanel ?? <PlainWorkspaceTerminalPanel repoId={repoId} />}</RepoWorkspacePane>
-        }
+        detailPane={detailPane}
       />
     </div>
   )

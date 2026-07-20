@@ -5,6 +5,9 @@ import {
   validateWorkspaceWorktreeRetryPlan,
 } from '#/server/modules/workspace-worktree-plan.ts'
 import type { RepoSnapshot } from '#/shared/rpc.ts'
+import { normalizeRemoteRepoId } from '#/shared/remote-repo.ts'
+import type { WorkspaceConfigSnapshot } from '#/shared/workspace.ts'
+import type { WorkspaceWorktreePlan } from '#/shared/workspace-worktrees.ts'
 
 const ROOT = '/workspace'
 const API = '/workspace/api'
@@ -64,7 +67,7 @@ function snapshot(
 
 function dependencies(snapshots: Record<string, RepoSnapshot | null>) {
   return {
-    readConfig: vi.fn(async () => ({
+    readConfig: vi.fn(async (): Promise<WorkspaceConfigSnapshot> => ({
       kind: 'ready' as const,
       config: { repo: ['api', 'web'] },
     })),
@@ -87,6 +90,87 @@ function dependencies(snapshots: Record<string, RepoSnapshot | null>) {
 }
 
 describe('workspace worktree plan', () => {
+  test('plans remote members without treating remote ids as filesystem paths', async () => {
+    const remoteRoot = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/workspace' })
+    const remoteApi = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/workspace/api' })
+    const apiSnapshot = snapshot('/srv/workspace/api', 'main', ['develop'])
+    apiSnapshot.branches[0]!.worktree!.isPrimary = undefined
+    const deps = dependencies({ [remoteApi]: apiSnapshot })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
+
+    const result = await buildWorkspaceWorktreePlan(
+      remoteRoot,
+      { operation: 'create', branch: 'feature/remote', baseBranch: 'develop' },
+      deps,
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        rootId: remoteRoot,
+        members: [{ repoId: remoteApi, worktreePath: '/srv/workspace/api-feature-remote' }],
+      },
+    })
+    expect(deps.pathExists).toHaveBeenCalledWith(remoteApi, '/srv/workspace/api-feature-remote')
+    if (!result.ok) return
+
+    deps.pathExists.mockClear()
+    await expect(validateWorkspaceWorktreeRetryPlan(result.plan, new Set(), deps)).resolves.toEqual({ ok: true })
+    expect(deps.pathExists).toHaveBeenCalledWith(remoteApi, '/srv/workspace/api-feature-remote')
+  })
+
+  test('validates remote retry membership and recognizes the physical repository root worktree', async () => {
+    const remoteRoot = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/workspace' })
+    const remoteApi = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/workspace/api' })
+    const apiSnapshot = snapshot('/srv/workspace/api', 'main')
+    apiSnapshot.branches[0]!.worktree!.isPrimary = undefined
+    const deps = dependencies({ [remoteApi]: apiSnapshot })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
+
+    const planned = await buildWorkspaceWorktreePlan(remoteRoot, { operation: 'pull' }, deps)
+    expect(planned).toMatchObject({
+      ok: true,
+      plan: { rootId: remoteRoot, members: [{ repoId: remoteApi, worktreePath: '/srv/workspace/api' }] },
+    })
+    if (!planned.ok) return
+    await expect(validateWorkspaceWorktreeRetryPlan(planned.plan, new Set(), deps)).resolves.toEqual({ ok: true })
+  })
+
+  test('rejects remote repository roots as removal targets even when the primary flag is absent', async () => {
+    const remoteRoot = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/workspace' })
+    const remoteApi = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/workspace/api' })
+    const apiSnapshot = snapshot(
+      '/srv/workspace/api',
+      'main',
+      [],
+      [{ branch: 'feature/a', path: '/srv/workspace/api' }],
+    )
+    apiSnapshot.branches.at(-1)!.worktree!.isPrimary = undefined
+    const deps = dependencies({ [remoteApi]: apiSnapshot })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
+
+    await expect(
+      buildWorkspaceWorktreePlan(
+        remoteRoot,
+        { operation: 'remove', branch: 'feature/a', alsoDeleteBranch: false, alsoDeleteUpstream: false },
+        deps,
+      ),
+    ).resolves.toEqual({ ok: false, message: 'workspace.worktree.remove-unsafe' })
+
+    const retryPlan: WorkspaceWorktreePlan = {
+      token: 'sha256:test',
+      rootId: remoteRoot,
+      operation: 'remove',
+      branch: 'feature/a',
+      removalOptions: { alsoDeleteBranch: false, alsoDeleteUpstream: false },
+      members: [{ repoId: remoteApi, branch: 'feature/a', worktreePath: '/srv/workspace/api' }],
+    }
+    await expect(validateWorkspaceWorktreeRetryPlan(retryPlan, new Set(), deps)).resolves.toEqual({
+      ok: false,
+      message: 'workspace.worktree.plan-stale',
+    })
+  })
+
   test('plans same-name branches in configured order from the selected shared base', async () => {
     const deps = dependencies({
       [API]: snapshot(API, 'main', ['develop']),
@@ -210,6 +294,79 @@ describe('workspace worktree plan', () => {
     ).resolves.toEqual({
       ok: false,
       message: 'workspace.worktree.remove-unsafe',
+    })
+  })
+
+  test('treats path existence transport failures as unavailable or stale instead of absent', async () => {
+    const deps = dependencies({ [API]: snapshot(API, 'main'), [WEB]: snapshot(WEB, 'main') })
+    deps.pathExists.mockRejectedValue(new Error('timeout'))
+
+    await expect(
+      buildWorkspaceWorktreePlan(ROOT, { operation: 'create', branch: 'feature/a', baseBranch: 'main' }, deps),
+    ).resolves.toEqual({ ok: false, message: 'workspace.worktree.repository-unavailable' })
+
+    const retryPlan: WorkspaceWorktreePlan = {
+      token: 'sha256:test',
+      rootId: ROOT,
+      operation: 'create',
+      branch: 'feature/a',
+      members: [
+        {
+          repoId: API,
+          branch: 'feature/a',
+          baseRef: 'main',
+          worktreePath: path.join(ROOT, 'api-feature-a'),
+        },
+        {
+          repoId: WEB,
+          branch: 'feature/a',
+          baseRef: 'main',
+          worktreePath: path.join(ROOT, 'web-feature-a'),
+        },
+      ],
+    }
+    await expect(validateWorkspaceWorktreeRetryPlan(retryPlan, new Set(), deps)).resolves.toEqual({
+      ok: false,
+      message: 'workspace.worktree.plan-stale',
+    })
+  })
+
+  test('returns structured SSH config errors from remote worktree planning resources', async () => {
+    const configChanged = new Error('error.ssh-config-changed')
+    const configDependencies = dependencies({ [API]: snapshot(API, 'main'), [WEB]: snapshot(WEB, 'main') })
+    configDependencies.readConfig.mockResolvedValue({ kind: 'invalid', message: configChanged.message })
+
+    await expect(
+      buildWorkspaceWorktreePlan(
+        ROOT,
+        { operation: 'create', branch: 'feature/a', baseBranch: 'main' },
+        configDependencies,
+      ),
+    ).resolves.toEqual({ ok: false, message: 'error.ssh-config-changed' })
+
+    const snapshotDependencies = dependencies({ [API]: snapshot(API, 'main'), [WEB]: snapshot(WEB, 'main') })
+    snapshotDependencies.getSnapshot.mockRejectedValue(configChanged)
+    await expect(
+      buildWorkspaceWorktreePlan(
+        ROOT,
+        { operation: 'create', branch: 'feature/a', baseBranch: 'main' },
+        snapshotDependencies,
+      ),
+    ).resolves.toEqual({ ok: false, message: 'error.ssh-config-changed' })
+
+    const retryPlan: WorkspaceWorktreePlan = {
+      token: 'sha256:test',
+      rootId: ROOT,
+      operation: 'pull',
+      branch: '',
+      members: [
+        { repoId: API, branch: 'main', worktreePath: API },
+        { repoId: WEB, branch: 'main', worktreePath: WEB },
+      ],
+    }
+    await expect(validateWorkspaceWorktreeRetryPlan(retryPlan, new Set(), snapshotDependencies)).resolves.toEqual({
+      ok: false,
+      message: 'error.ssh-config-changed',
     })
   })
 

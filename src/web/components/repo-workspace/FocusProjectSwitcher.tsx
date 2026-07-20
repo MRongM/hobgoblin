@@ -3,7 +3,7 @@
 // the focus-mode window chrome. Pure single-select switcher: open/clone and
 // close live in the sidebar.
 
-import { ChevronDown, FolderGit2 } from 'lucide-react'
+import { ChevronDown, Folder, FolderGit2 } from 'lucide-react'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
@@ -34,6 +34,8 @@ export function FocusProjectSwitcher({ repoId, compact = false }: Props) {
   const activeName = useReposStore((s) => s.repos[activeProjectId]?.name ?? '')
   const projects = useProjectSummaries()
   if (projects.length === 0) return null
+  const activeProject = projects.find((project) => project.id === activeProjectId) ?? null
+  const ActiveProjectIcon = activeProject?.isGitRepo === false ? Folder : FolderGit2
 
   return (
     <DropdownMenu>
@@ -47,7 +49,7 @@ export function FocusProjectSwitcher({ repoId, compact = false }: Props) {
           aria-label={t('repo-tabs.repos')}
           title={activeName}
         >
-          <FolderGit2 className="size-4 shrink-0" aria-hidden="true" />
+          <ActiveProjectIcon className="size-4 shrink-0" aria-hidden="true" />
           <span
             className={cn(
               'min-w-0 truncate text-xs font-semibold uppercase tracking-wide',
@@ -57,10 +59,7 @@ export function FocusProjectSwitcher({ repoId, compact = false }: Props) {
             {activeName}
           </span>
           <ChevronDown
-            className={cn(
-              'size-3.5 shrink-0',
-              compact ? 'text-muted-foreground' : 'text-topbar-muted-foreground',
-            )}
+            className={cn('size-3.5 shrink-0', compact ? 'text-muted-foreground' : 'text-topbar-muted-foreground')}
             aria-hidden="true"
           />
         </Button>
@@ -69,20 +68,18 @@ export function FocusProjectSwitcher({ repoId, compact = false }: Props) {
         {projects.map((project) => {
           const active = project.id === activeProjectId
           const location = projectLocation(project.id)
+          const ProjectIcon = project.isGitRepo ? FolderGit2 : Folder
           return (
             <DropdownMenuItem
               key={project.id}
               aria-current={active ? 'true' : undefined}
               title={project.unavailable ? t('repo-unavailable.title') : location}
-              className={cn(
-                active && 'bg-selected text-selected-foreground',
-                project.unavailable && 'opacity-60',
-              )}
+              className={cn(active && 'bg-selected text-selected-foreground', project.unavailable && 'opacity-60')}
               onSelect={() => {
                 if (!active) navigation.activateRepo(project.id)
               }}
             >
-              <FolderGit2
+              <ProjectIcon
                 className={cn('size-4 shrink-0', active ? 'text-selected-muted-foreground' : 'text-muted-foreground')}
                 aria-hidden="true"
               />

@@ -313,6 +313,7 @@ describe('RepoView', () => {
       currentBranch: '',
       selectedBranch: null,
     })
+    useReposStore.setState({ detailFocusMode: true })
     markTestRepoUnavailable()
 
     renderRepoView()

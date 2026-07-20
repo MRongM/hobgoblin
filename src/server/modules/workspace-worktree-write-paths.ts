@@ -81,7 +81,14 @@ export function createWorkspaceWorktreeService(
       try {
         if (pending.completed.size === 0) {
           const current = await buildPlan(rootId, pending.request, {}, controller.signal)
-          if (!current.ok || current.plan.token !== pending.plan.token) {
+          if (!current.ok) {
+            return failedBatch(
+              pending.plan,
+              input.planToken,
+              current.message === 'error.ssh-config-changed' ? current.message : 'workspace.worktree.plan-stale',
+            )
+          }
+          if (current.plan.token !== pending.plan.token) {
             return failedBatch(pending.plan, input.planToken, 'workspace.worktree.plan-stale')
           }
         } else {

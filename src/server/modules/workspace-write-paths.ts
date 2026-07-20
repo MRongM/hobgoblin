@@ -39,5 +39,7 @@ export async function saveWorkspaceConfig(
 
 function safeMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : ''
-  return message.startsWith('workspace.config.') ? message : 'workspace.config.write-failed'
+  return message.startsWith('workspace.config.') || message === 'error.ssh-config-changed'
+    ? message
+    : 'workspace.config.write-failed'
 }

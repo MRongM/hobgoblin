@@ -1,6 +1,9 @@
+import type { RemoteRepoRef } from '#/shared/remote-repo.ts'
+
 export interface WorkspaceRepositoryEntry {
   id: string
   name: string
+  remoteRef?: RemoteRepoRef
 }
 
 export interface WorkspaceConfig {
@@ -32,3 +35,16 @@ export type WorkspaceDiscoveryResult =
       skipped: WorkspaceDiscoveryIssue[]
     }
   | { ok: false; message: string }
+
+export function isWorkspaceRepositoryName(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.trim() === value &&
+    value !== '.' &&
+    value !== '..' &&
+    !value.includes('/') &&
+    !value.includes('\\') &&
+    !value.includes('\0')
+  )
+}

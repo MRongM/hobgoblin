@@ -41,7 +41,7 @@ One Git operation boundary. Branches, worktrees, status, history, and Git writes
 _Avoid_: Workspace repository, subproject
 
 **Multi-repository workspace**:
-A local project rooted at a readable non-Git directory whose immediate child directories contain Git repositories. The root provides project-level files and terminals; its repositories remain independent Git operation boundaries.
+A project rooted at a readable non-Git directory, either local or reached through one SSH target, whose immediate child entries are directories or directory symlinks resolving to Git repository top levels. A symlink keeps its immediate-child name and logical path as the workspace member identity. The root provides project-level files and terminals; its repositories remain independent Git operation boundaries. Every repository in an SSH multi-repository workspace uses the same SSH target as the workspace root.
 _Avoid_: Monorepo, repository group, nested repository
 
 **Configured workspace**:

@@ -1,12 +1,4 @@
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { execa } from 'execa'
@@ -36,6 +28,148 @@ function testPosix(name: string, fn: () => Promise<void> | void): void {
 }
 
 describe('remote command scripts', () => {
+  test('builds workspace config read and atomic write commands', () => {
+    const read = buildRemoteCommandInvocation(TARGET, {
+      type: 'readWorkspaceConfig',
+      rootPath: "/srv/work space/user's",
+    })
+    expect(read.script).toContain('goblin.toml')
+    expect(read.script).toContain('__HOBGOBLIN_WORKSPACE_CONFIG_MISSING__')
+    expect(read.script).toContain("/srv/work space/user'\\''s")
+
+    const write = buildRemoteCommandInvocation(TARGET, {
+      type: 'writeWorkspaceConfig',
+      rootPath: "/srv/work space/user's",
+      temporaryName: '.goblin.toml.safe.tmp',
+    })
+    expect(write.script).toContain('umask 077')
+    expect(write.script).toContain('trap')
+    expect(write.script).toContain('set -C')
+    expect(write.script).toContain('mv --')
+  })
+
+  test('builds depth-one workspace marker discovery and path existence commands', () => {
+    const discovery = buildRemoteCommandInvocation(TARGET, {
+      type: 'listWorkspaceGitDirectories',
+      rootPath: '/srv/workspace',
+    })
+    expect(discovery.script).toContain('-mindepth 1')
+    expect(discovery.script).toContain('-maxdepth 1')
+    expect(discovery.script).toContain('-type l')
+    expect(discovery.script).toContain('.git')
+    expect(discovery.script).toContain('printf "%s\\0"')
+
+    const validation = buildRemoteCommandInvocation(TARGET, {
+      type: 'testWorkspaceGitDirectory',
+      path: '/srv/workspace/linked',
+    })
+    expect(validation.script).toContain('pwd -P')
+    expect(validation.script).toContain('rev-parse --show-toplevel')
+
+    const exists = buildRemoteCommandInvocation(TARGET, { type: 'testPathExists', path: '/srv/worktree' })
+    expect(exists.script).toContain("test -e '/srv/worktree'")
+    expect(exists.script).toContain("test -L '/srv/worktree'")
+    expect(exists.script).toContain('__HOBGOBLIN_PATH_EXISTS__')
+    expect(exists.script).toContain('__HOBGOBLIN_PATH_MISSING__')
+  })
+
+  testPosix('workspace marker discovery emits NUL-delimited immediate git directories', async () => {
+    const dir = path.join(os.tmpdir(), `hobgoblin-workspace-discovery-${Date.now()}-${process.pid}`)
+    tempDirs.push(dir)
+    const root = path.join(dir, "work space's")
+    const api = path.join(root, 'api')
+    const web = path.join(root, 'web')
+    const linked = path.join(root, 'linked')
+    const linkedTarget = path.join(dir, 'linked-target')
+    mkdirSync(path.join(api, '.git'), { recursive: true })
+    mkdirSync(web, { recursive: true })
+    writeFileSync(path.join(web, '.git'), 'gitdir: ../metadata\n')
+    mkdirSync(path.join(linkedTarget, '.git'), { recursive: true })
+    symlinkSync(linkedTarget, linked)
+    mkdirSync(path.join(root, 'docs'), { recursive: true })
+
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'listWorkspaceGitDirectories',
+      rootPath: root,
+    })
+    const result = await execa('sh', ['-c', invocation.script])
+
+    expect(result.stdout.split('\0').filter(Boolean).sort()).toEqual([api, linked, web].sort())
+  })
+
+  testPosix(
+    'workspace git directory validation accepts a repository symlink but rejects a nested directory',
+    async () => {
+      const dir = path.join(os.tmpdir(), `hobgoblin-workspace-validation-${Date.now()}-${process.pid}`)
+      tempDirs.push(dir)
+      const root = path.join(dir, 'workspace')
+      const target = path.join(dir, 'repository')
+      const linked = path.join(root, 'linked')
+      const nested = path.join(target, 'nested')
+      mkdirSync(root, { recursive: true })
+      mkdirSync(nested, { recursive: true })
+      await execa('git', ['init', target])
+      symlinkSync(target, linked)
+
+      const linkedValidation = buildRemoteCommandInvocation(TARGET, {
+        type: 'testWorkspaceGitDirectory',
+        path: linked,
+      })
+      await expect(execa('sh', ['-c', linkedValidation.script])).resolves.toMatchObject({ exitCode: 0 })
+
+      const nestedValidation = buildRemoteCommandInvocation(TARGET, {
+        type: 'testWorkspaceGitDirectory',
+        path: nested,
+      })
+      await expect(execa('sh', ['-c', nestedValidation.script])).rejects.toBeDefined()
+    },
+  )
+
+  testPosix('workspace config commands atomically write and read roots with shell-sensitive paths', async () => {
+    const dir = path.join(os.tmpdir(), `hobgoblin-workspace-config-${Date.now()}-${process.pid}`)
+    tempDirs.push(dir)
+    const root = path.join(dir, "work space's")
+    mkdirSync(root, { recursive: true })
+    const contents = '[workspace]\nrepo = ["api"]\n'
+    const write = buildRemoteCommandInvocation(TARGET, {
+      type: 'writeWorkspaceConfig',
+      rootPath: root,
+      temporaryName: ".goblin.toml.safe space's.tmp",
+    })
+
+    await execa('sh', ['-c', write.script], { input: contents })
+
+    expect(readFileSync(path.join(root, 'goblin.toml'), 'utf8')).toBe(contents)
+    expect(existsSync(path.join(root, ".goblin.toml.safe space's.tmp"))).toBe(false)
+    const read = buildRemoteCommandInvocation(TARGET, { type: 'readWorkspaceConfig', rootPath: root })
+    const result = await execa('sh', ['-c', read.script])
+    expect(result.stdout).toBe(`__HOBGOBLIN_WORKSPACE_CONFIG_CONTENT__\n${contents.trimEnd()}`)
+  })
+
+  testPosix('workspace config write fails safely when the temporary file already exists', async () => {
+    const dir = path.join(os.tmpdir(), `hobgoblin-workspace-config-collision-${Date.now()}-${process.pid}`)
+    tempDirs.push(dir)
+    const root = path.join(dir, 'workspace')
+    const temporaryName = '.goblin.toml.collision.tmp'
+    const configPath = path.join(root, 'goblin.toml')
+    const temporaryPath = path.join(root, temporaryName)
+    mkdirSync(root, { recursive: true })
+    writeFileSync(configPath, '[workspace]\nrepo = ["original"]\n')
+    writeFileSync(temporaryPath, 'pre-existing temporary file\n')
+    const write = buildRemoteCommandInvocation(TARGET, {
+      type: 'writeWorkspaceConfig',
+      rootPath: root,
+      temporaryName,
+    })
+
+    await expect(
+      execa('sh', ['-c', write.script], { input: '[workspace]\nrepo = ["replacement"]\n' }),
+    ).rejects.toBeDefined()
+
+    expect(readFileSync(configPath, 'utf8')).toBe('[workspace]\nrepo = ["original"]\n')
+    expect(readFileSync(temporaryPath, 'utf8')).toBe('pre-existing temporary file\n')
+  })
+
   test('renders remote branch listing command', () => {
     expect(buildRemoteCommandInvocation(TARGET, { type: 'gitRemoteBranches', path: '/srv/repo' }).script).toContain(
       "for-each-ref '--format=%(refname:short)' refs/remotes/",

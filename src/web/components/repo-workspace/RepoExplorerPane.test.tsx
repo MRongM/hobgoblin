@@ -418,6 +418,100 @@ describe('RepoExplorerPane', () => {
     await act(async () => root.unmount())
   })
 
+  test('gives an available desktop plain workspace terminal the full pane in focus mode', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    useReposStore.setState({ detailCollapsed: true, detailFocusMode: true })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="left-right" showActions={false} />)
+    })
+
+    expect(container.querySelector('[data-testid="split-pane"]')).toBeNull()
+    expect(container.querySelector('[data-testid="sidebar-project-header"]')).toBeNull()
+    expect(container.querySelector('[data-testid="project-file-tree"]')).toBeNull()
+    expect(container.querySelector('[data-testid="statusbar"]')).toBeNull()
+    expect(container.querySelector('[data-testid="plain-workspace-terminal"]')).not.toBeNull()
+    await act(async () => root.unmount())
+  })
+
+  test('keeps compact plain workspaces split when desktop focus mode is restored', async () => {
+    compactUi = true
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    useReposStore.setState({ detailCollapsed: false, detailFocusMode: true })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="left-right" showActions={false} />)
+    })
+
+    expect(container.querySelector('[data-testid="split-pane"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="project-file-tree"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="plain-workspace-terminal"]')).not.toBeNull()
+    await act(async () => root.unmount())
+  })
+
+  test('keeps unavailable plain workspaces split when focus mode was restored', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    useReposStore.setState((state) => {
+      const repo = state.repos[REPO_ID]
+      if (!repo) return state
+      return {
+        detailCollapsed: false,
+        detailFocusMode: true,
+        repos: {
+          ...state.repos,
+          [REPO_ID]: {
+            ...repo,
+            availability: { phase: 'unavailable' as const, reason: 'path-missing', checkedAt: 1 },
+          },
+        },
+      }
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <RepoExplorerPane
+          repoId={REPO_ID}
+          layout="left-right"
+          showActions={false}
+          plainWorkspaceTerminalPanel={<div data-testid="unavailable-panel" />}
+        />,
+      )
+    })
+
+    expect(container.querySelector('[data-testid="split-pane"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="sidebar-project-header"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="project-file-tree"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="unavailable-panel"]')).not.toBeNull()
+    await act(async () => root.unmount())
+  })
+
   test('replaces only the plain workspace terminal panel when an override is provided', async () => {
     seedRepoState({
       id: REPO_ID,
@@ -620,6 +714,44 @@ describe('RepoExplorerPane', () => {
     expect(container.querySelector('[data-testid="plain-workspace-terminal"]')).not.toBeNull()
     expect(container.querySelectorAll('[data-testid="statusbar"]')).toHaveLength(1)
     expect(container.querySelector('[data-testid="statusbar"]')?.getAttribute('data-file-area-collapsed')).toBe('true')
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="statusbar-file-area-toggle"]')?.click()
+    })
+    expect(onToggleFileArea).toHaveBeenCalledTimes(1)
+    await act(async () => root.unmount())
+  })
+
+  test('keeps a flexible content region above the status bar when a plain workspace without child repositories is collapsed', async () => {
+    const onToggleFileArea = vi.fn()
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <RepoExplorerPane
+          repoId={REPO_ID}
+          layout="left-right"
+          showActions={false}
+          fileAreaCollapsed
+          onToggleFileArea={onToggleFileArea}
+        />,
+      )
+    })
+
+    const statusBar = container.querySelector('[data-testid="statusbar"]')
+    expect(container.querySelector('[data-testid="workspace-repository-rail"]')).toBeNull()
+    expect(container.querySelector('[data-testid="project-file-tree"]')).toBeNull()
+    expect(statusBar?.previousElementSibling?.className).toContain('flex-1')
+    expect(statusBar?.getAttribute('data-file-area-collapsed')).toBe('true')
 
     await act(async () => {
       container.querySelector<HTMLButtonElement>('[data-testid="statusbar-file-area-toggle"]')?.click()

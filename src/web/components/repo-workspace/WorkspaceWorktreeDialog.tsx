@@ -13,7 +13,7 @@ import {
 import { Field, FieldLabel } from '#/web/components/ui/field.tsx'
 import { Input } from '#/web/components/ui/input.tsx'
 import { cn } from '#/web/lib/cn.ts'
-import { lastPathSegment } from '#/web/lib/paths.ts'
+import { formatWorktreeListPath, lastPathSegment } from '#/web/lib/paths.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import type {
   WorkspaceWorktreeBatchResult,
@@ -21,6 +21,7 @@ import type {
   WorkspaceWorktreePlanRequest,
 } from '#/shared/workspace-worktrees.ts'
 import { PROTECTED_BRANCHES } from '#/shared/git-types.ts'
+import { parseRemoteRepoId } from '#/shared/remote-repo.ts'
 
 interface Props {
   open: boolean
@@ -82,6 +83,7 @@ export function WorkspaceWorktreeDialog({
   const removal = operation === 'remove'
   const pull = operation === 'pull'
   const protectedRemovalBranch = removal && PROTECTED_BRANCHES.has(branch)
+  const workspaceRootPath = plan ? (parseRemoteRepoId(plan.rootId)?.remotePath ?? plan.rootId) : undefined
   const toggleDeleteBranch = (checked: boolean) => {
     setAlsoDeleteBranch(checked)
     if (!checked) setAlsoDeleteUpstream(false)
@@ -274,6 +276,7 @@ export function WorkspaceWorktreeDialog({
             </div>
             {plan.members.map((member) => {
               const memberResult = result?.members.find((entry) => entry.repoId === member.repoId)
+              const displayWorktreePath = formatWorktreeListPath(member.worktreePath, undefined, workspaceRootPath)
               return (
                 <div
                   key={member.repoId}
@@ -299,7 +302,7 @@ export function WorkspaceWorktreeDialog({
                     ) : null}
                   </div>
                   <span className="truncate font-mono text-[10px] text-muted-foreground" title={member.worktreePath}>
-                    {member.worktreePath}
+                    {displayWorktreePath}
                   </span>
                   <span className="text-[10px] text-muted-foreground">
                     {memberResult
