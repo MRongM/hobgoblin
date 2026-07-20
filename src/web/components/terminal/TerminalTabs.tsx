@@ -40,11 +40,7 @@ import { ToolbarClosableTab } from '#/web/components/tab-strip/ToolbarClosableTa
 import { toolbarTabButtonClassName, toolbarTabChromeClassName } from '#/web/components/tab-strip/tab-variants.ts'
 import { useFocusRegistry, type FocusRegistry } from '#/web/components/tab-strip/useFocusRegistry.ts'
 import { useSortableTab } from '#/web/components/tab-strip/useSortableTab.ts'
-import {
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-} from '#/web/components/ui/context-menu.tsx'
+import { ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '#/web/components/ui/context-menu.tsx'
 
 interface TerminalTabsProps {
   worktreeTerminalKey: string
@@ -510,7 +506,7 @@ function TerminalTabChrome({
       containerClassName={cn(
         toolbarTabChromeClassName({ variant: 'terminal', active: isActive, dragging: isDragging }),
         fillWidth && 'w-full',
-        compactSwitcher && 'min-w-0 w-full',
+        compactSwitcher && 'min-w-0 w-full max-w-[100dvw] shrink',
       )}
       contextMenu={
         <TerminalTabContextMenu
@@ -548,9 +544,7 @@ function TerminalTabChrome({
       onClose={(e) => onClose(e, session.key)}
     >
       <span className="truncate">{session.title}</span>
-      {session.hasBell && (
-        <TerminalBellDot label={t('terminal.bell-unread')} pingClassName="opacity-100" />
-      )}
+      {session.hasBell && <TerminalBellDot label={t('terminal.bell-unread')} pingClassName="opacity-100" />}
       {compactSwitcher && <ChevronDown className="size-3.5 shrink-0" aria-hidden="true" />}
     </ToolbarClosableTab>
   )

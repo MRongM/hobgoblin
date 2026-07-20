@@ -148,8 +148,7 @@ export function BranchDetailToolbar({
         ? 'branch-detail.expand-title'
         : 'branch-detail.collapse-title',
   )
-  const showCollapseControl =
-    !compactFocusPresentation && behavior.detailCollapseAllowed && layout !== 'left-right'
+  const showCollapseControl = !compactFocusPresentation && behavior.detailCollapseAllowed && layout !== 'left-right'
   const contextRail = behavior.mode === 'focus' || compactFocusPresentation
   // In the desktop left-right layout this toolbar is the right half of the
   // window's top edge, so its unused surface is a drag region without the
@@ -160,9 +159,13 @@ export function BranchDetailToolbar({
     <Toolbar
       variant="detail"
       chrome={compact ? 'toolbar' : 'topbar'}
-      className={cn(layout === 'left-right' && '[-webkit-app-region:drag]', isWindowChrome && 'topbar')}
+      className={cn(
+        'mobile-topbar-scroll',
+        layout === 'left-right' && '[-webkit-app-region:drag]',
+        isWindowChrome && 'topbar',
+      )}
     >
-      <div className="flex h-full min-w-0 items-center gap-1 overflow-hidden">
+      <div className="mobile-topbar-scroll-content flex h-full min-w-0 items-center gap-1 overflow-hidden">
         {/* Keep workspace and branch context reachable whenever the detail
          * toolbar is presented as the compact or desktop context rail. */}
         {contextRail && (

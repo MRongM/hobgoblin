@@ -258,6 +258,23 @@ describe('BranchDetailToolbar', () => {
     expect(toolbar?.className).not.toContain('topbar-tone')
   })
 
+  test('keeps the complete compact terminal topbar in the shared horizontal scroll flow', () => {
+    compactUi = true
+    const { container: c } = renderToolbar({
+      terminalCount: 1,
+      detailTab: 'terminal',
+      compactFocusPresentation: true,
+      layout: 'top-bottom',
+      navigation: navigationWith({}),
+    })
+
+    const toolbar = c.firstElementChild
+    const content = toolbar?.firstElementChild
+
+    expect(toolbar?.classList.contains('mobile-topbar-scroll')).toBe(true)
+    expect(content?.classList.contains('mobile-topbar-scroll-content')).toBe(true)
+  })
+
   test('does not render the removed terminal redraw control', () => {
     const { container: c } = renderToolbar({
       terminalCount: 1,
@@ -365,9 +382,7 @@ describe('BranchDetailToolbar', () => {
     const workspaceButton = c.querySelector<HTMLButtonElement>('button[aria-label="mobile.open-workspace"]')
     expect(workspaceButton).not.toBeNull()
     expect(c.querySelector('[data-testid="focus-project-switcher"]')).not.toBeNull()
-    expect(c.querySelector('[data-testid="workspace-repository-switcher"]')?.getAttribute('data-compact')).toBe(
-      'true',
-    )
+    expect(c.querySelector('[data-testid="workspace-repository-switcher"]')?.getAttribute('data-compact')).toBe('true')
     expect(c.querySelector('[data-testid="topbar-repo-controls"]')).not.toBeNull()
     expect(c.querySelector('button[aria-label="branch-detail.collapse"]')).toBeNull()
 

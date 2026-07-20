@@ -4,10 +4,25 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { WorkspaceRepositoryRail } from '#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx'
+import { TerminalSessionReadContext } from '#/web/components/terminal/terminal-session-context.ts'
 import { emptyRepo, replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { createRepoBranch, resetReposStore } from '#/web/stores/repos/test-utils.ts'
 import type { WorkspaceConfig } from '#/shared/workspace.ts'
+import type { WorkspaceWorktreeBatchResult } from '#/shared/workspace-worktrees.ts'
+import type { TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
+
+const toastMocks = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
+}))
+
+vi.mock('sonner', () => ({
+  toast: {
+    success: toastMocks.success,
+    error: toastMocks.error,
+  },
+}))
 
 vi.mock('#/web/stores/i18n.ts', () => ({
   useT: () => (key: string, params?: Record<string, unknown>) =>
@@ -31,11 +46,14 @@ const repositoryListState = vi.hoisted(() => ({
 }))
 
 const workspaceBatchState = vi.hoisted(() => ({
-  onSettled: null as null | (() => void | Promise<void>),
+  onSettled: null as null | ((result: WorkspaceWorktreeBatchResult) => void | Promise<void>),
 }))
 
 vi.mock('#/web/hooks/useWorkspaceWorktreeActions.ts', () => ({
-  useWorkspaceWorktreeActions: (_rootId: string, onSettled: (() => void | Promise<void>) | undefined) => {
+  useWorkspaceWorktreeActions: (
+    _rootId: string,
+    onSettled: ((result: WorkspaceWorktreeBatchResult) => void | Promise<void>) | undefined,
+  ) => {
     workspaceBatchState.onSettled = onSettled ?? null
     return {
       plan: null,
@@ -105,6 +123,8 @@ beforeEach(() => {
   refreshCoreData.mockResolvedValue(undefined)
   configureWorkspace.mockReset()
   configureWorkspace.mockResolvedValue({ ok: true })
+  toastMocks.success.mockReset()
+  toastMocks.error.mockReset()
   repositoryListState.props = null
   workspaceBatchState.onSettled = null
   const overview = replaceRepo(emptyRepo(ROOT, 'workspace'), (repo) => {
@@ -171,7 +191,7 @@ afterEach(() => {
 
 describe('WorkspaceRepositoryRail', () => {
   test('renders Overview and repository state as one depth-one manifest', () => {
-    act(() => root!.render(<WorkspaceRepositoryRail workspaceRootId={ROOT} currentRepoId={API} />))
+    renderRail()
 
     expect(container?.textContent).toContain('workspace.repositories')
     expect(container?.textContent).toContain('./')
@@ -193,8 +213,49 @@ describe('WorkspaceRepositoryRail', () => {
     expect(container?.querySelector('button[aria-label="workspace.configure"]')).not.toBeNull()
   })
 
+  test('does not show terminal status in Overview without an open root terminal', () => {
+    renderRail()
+
+    expect(overviewButton()?.querySelector('[data-testid="overview-terminal-count-badge"]')).toBeNull()
+  })
+
+  test('shows an idle terminal count in Overview like a worktree row', () => {
+    renderRail({ terminalCount: 2 })
+
+    const badge = overviewButton()?.querySelector('[data-testid="overview-terminal-count-badge"]')
+    expect(badge?.textContent).toBe('2')
+    expect(badge?.getAttribute('aria-label')).toBe('terminal.open-count:2')
+    expect(badge?.querySelector('.lucide-terminal')).not.toBeNull()
+    expect(badge?.querySelector('[data-terminal-output-activity-indicator="active"]')).toBeNull()
+  })
+
+  test('keeps the terminal badge in the left-aligned Overview label group', () => {
+    renderRail({ terminalCount: 1 })
+
+    const overview = overviewButton()
+    const labelGroup = overview?.querySelector('[class~="flex-1"]')
+    const badge = overview?.querySelector('[data-testid="overview-terminal-count-badge"]')
+    expect(labelGroup?.contains(badge ?? null)).toBe(true)
+  })
+
+  test('animates the Overview terminal icon while a root terminal is producing output', () => {
+    renderRail({ terminalCount: 1, outputActive: true })
+
+    const badge = overviewButton()?.querySelector('[data-testid="overview-terminal-count-badge"]')
+    expect(badge?.textContent).toBe('1')
+    expect(badge?.querySelector('[data-terminal-output-activity-indicator="active"]')).not.toBeNull()
+  })
+
+  test('shows an unread bell in Overview when a root terminal has rung', () => {
+    renderRail({ terminalCount: 1, hasBell: true })
+
+    const bell = overviewButton()?.querySelector('[data-terminal-bell-dot]')
+    expect(bell).not.toBeNull()
+    expect(bell?.getAttribute('aria-label')).toBe('terminal.bell-unread')
+  })
+
   test('activates Overview and child repositories through one explicit action', () => {
-    act(() => root!.render(<WorkspaceRepositoryRail workspaceRootId={ROOT} currentRepoId={API} />))
+    renderRail()
     const buttons = Array.from(container!.querySelectorAll<HTMLButtonElement>('button'))
     const overview = buttons.find((button) => button.textContent?.includes('workspace.overview'))
     const web = buttons.find((button) => button.textContent?.includes('web'))
@@ -207,7 +268,7 @@ describe('WorkspaceRepositoryRail', () => {
   })
 
   test('rescans without changing the current repository selection', () => {
-    act(() => root!.render(<WorkspaceRepositoryRail workspaceRootId={ROOT} currentRepoId={API} />))
+    renderRail()
 
     act(() => container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.rescan"]')?.click())
 
@@ -216,14 +277,61 @@ describe('WorkspaceRepositoryRail', () => {
   })
 
   test('refreshes configured members after a batch operation without rediscovering workspace directories', async () => {
-    act(() => root!.render(<WorkspaceRepositoryRail workspaceRootId={ROOT} currentRepoId={API} />))
+    renderRail()
 
-    await act(async () => await workspaceBatchState.onSettled?.())
+    await act(async () =>
+      workspaceBatchState.onSettled?.({
+        ok: true,
+        planToken: 'sha256:plan',
+        operation: 'pull',
+        branch: 'main',
+        members: [],
+      }),
+    )
 
     expect(refreshCoreData).toHaveBeenCalledTimes(2)
     expect(refreshCoreData).toHaveBeenNthCalledWith(1, API)
     expect(refreshCoreData).toHaveBeenNthCalledWith(2, WEB)
     expect(rescanWorkspace).not.toHaveBeenCalled()
+  })
+
+  test.each([
+    ['create', 'workspace.worktree.create-success'],
+    ['remove', 'workspace.worktree.remove-success'],
+    ['pull', 'workspace.worktree.pull-success'],
+  ] as const)('shows a success toast when a %s batch completes', async (operation, message) => {
+    renderRail()
+    const result = {
+      ok: true,
+      planToken: 'sha256:plan',
+      operation,
+      branch: 'feature/a',
+      members: [],
+    } satisfies WorkspaceWorktreeBatchResult
+
+    await act(async () => await workspaceBatchState.onSettled?.(result))
+
+    expect(toastMocks.success).toHaveBeenCalledWith(message)
+    expect(toastMocks.error).not.toHaveBeenCalled()
+  })
+
+  test('shows an error toast when a batch does not complete every repository', async () => {
+    renderRail()
+    const result = {
+      ok: false,
+      planToken: 'sha256:plan',
+      operation: 'remove',
+      branch: 'feature/a',
+      members: [{ repoId: API, phase: 'failed', message: 'busy' }],
+      message: 'workspace.worktree.execute-failed',
+    } satisfies WorkspaceWorktreeBatchResult
+
+    await act(async () => await workspaceBatchState.onSettled?.(result))
+
+    expect(toastMocks.error).toHaveBeenCalledWith('workspace.worktree.batch-incomplete', {
+      description: 'workspace.worktree.execute-failed',
+    })
+    expect(toastMocks.success).not.toHaveBeenCalled()
   })
 
   test('rescans before opening configuration and saves through the workspace action', async () => {
@@ -232,7 +340,7 @@ describe('WorkspaceRepositoryRail', () => {
       resolveRescan = resolve
     })
     rescanWorkspace.mockImplementationOnce(() => rescanPromise)
-    act(() => root!.render(<WorkspaceRepositoryRail workspaceRootId={ROOT} currentRepoId={API} />))
+    renderRail()
 
     act(() => container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.configure"]')?.click())
     expect(rescanWorkspace).toHaveBeenCalledWith(ROOT)
@@ -254,7 +362,7 @@ describe('WorkspaceRepositoryRail', () => {
     })
     let resolveSave: ((value: { ok: true }) => void) | undefined
     configureWorkspace.mockImplementation(() => new Promise<{ ok: true }>((resolve) => (resolveSave = resolve)))
-    act(() => root!.render(<WorkspaceRepositoryRail workspaceRootId={ROOT} currentRepoId={API} />))
+    renderRail()
 
     act(() => repositoryListState.props?.onReorder(WEB, API))
 
@@ -286,7 +394,7 @@ describe('WorkspaceRepositoryRail', () => {
       repos: { ...useReposStore.getState().repos, [WEB]: { ...web, availability: { phase: 'available' } } },
     })
     configureWorkspace.mockResolvedValue({ ok: false, message: 'workspace.config.write-failed' })
-    act(() => root!.render(<WorkspaceRepositoryRail workspaceRootId={ROOT} currentRepoId={API} />))
+    renderRail()
 
     await act(async () => repositoryListState.props?.onReorder(WEB, API))
 
@@ -295,10 +403,56 @@ describe('WorkspaceRepositoryRail', () => {
   })
 
   test('keeps Overview outside the sortable repository membership', () => {
-    act(() => root!.render(<WorkspaceRepositoryRail workspaceRootId={ROOT} currentRepoId={API} />))
+    renderRail()
 
     expect(repositoryListState.props?.repositories.map((repository) => repository.id)).toEqual([API, WEB])
     expect(repositoryListState.props?.repositories.some((repository) => repository.id === ROOT)).toBe(false)
     expect(container?.textContent).toContain('workspace.overview')
   })
 })
+
+function overviewButton(): HTMLButtonElement | null | undefined {
+  return container?.querySelector<HTMLButtonElement>('button[title="workspace.overview"]')
+}
+
+function renderRail({ terminalCount = 0, outputActive = false, hasBell = false } = {}) {
+  const rootTerminalKey = `${ROOT}\0${ROOT}`
+  const readContext: TerminalSessionReadContextValue = {
+    worktreeSnapshot: (worktreeTerminalKey) => {
+      const count = worktreeTerminalKey === rootTerminalKey ? terminalCount : 0
+      return {
+        worktreeTerminalKey,
+        selectedDescriptor: null,
+        sessions:
+          count > 0
+            ? [
+                {
+                  key: `${worktreeTerminalKey}\0terminal-1`,
+                  worktreeTerminalKey,
+                  terminalId: 'terminal-1',
+                  index: 1,
+                  title: 'terminal',
+                  phase: 'open',
+                  selected: true,
+                  hasBell,
+                  isOutputActive: outputActive,
+                },
+              ]
+            : [],
+        count,
+      }
+    },
+    subscribeWorktree: () => () => {},
+    repoSyncReady: () => true,
+    subscribeRepoSync: () => () => {},
+    snapshot: () => ({ phase: 'opening', message: null, processName: 'terminal' }),
+    subscribeSnapshot: () => () => {},
+  }
+  act(() => {
+    root!.render(
+      <TerminalSessionReadContext.Provider value={readContext}>
+        <WorkspaceRepositoryRail workspaceRootId={ROOT} currentRepoId={API} />
+      </TerminalSessionReadContext.Provider>,
+    )
+  })
+}

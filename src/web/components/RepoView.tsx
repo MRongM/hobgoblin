@@ -11,6 +11,7 @@ import { useRepoToasts } from '#/web/hooks/useRepoToasts.tsx'
 import { repoWorkspaceBehavior } from '#/web/lib/workspace-layout.ts'
 import { getRepoWorkspacePresentation } from '#/web/components/repo-workspace/model.ts'
 import { RepoExplorerPane, type FileTreeRevealRequest } from '#/web/components/repo-workspace/RepoExplorerPane.tsx'
+import { PlainWorkspaceTerminalPanel } from '#/web/components/repo-workspace/PlainWorkspaceTerminalPanel.tsx'
 import { UnavailableRepoView } from '#/web/components/UnavailableRepoView.tsx'
 import { useResponsiveUiMode } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { repoIsPlainWorkspace } from '#/web/stores/repos/capabilities.ts'
@@ -46,6 +47,7 @@ export function RepoView({ repoId }: Props) {
   )
   const setDetailPaneSize = useReposStore((s) => s.setDetailPaneSize)
   const repo = useReposStore((s) => s.repos[repoId])
+  const multiRepositoryWorkspace = useReposStore((s) => !!s.workspaceProjects[repoId])
   useRepoToasts(repoId)
   const [fileAreaCollapsed, setFileAreaCollapsed] = useState(false)
   const [compactExplorerRepoId, setCompactExplorerRepoId] = useState<string | null>(null)
@@ -88,6 +90,29 @@ export function RepoView({ repoId }: Props) {
       />
     )
   }
+  if (isPlainWorkspace && uiMode === 'compact' && !repoUnavailable) {
+    const compactOverviewOpen = multiRepositoryWorkspace && compactExplorerRepoId === repoId
+    return (
+      <section className="relative flex min-w-0 flex-1 flex-col">
+        <RepoWorkspacePane>
+          {compactOverviewOpen ? (
+            <RepoExplorerPane
+              repoId={repoId}
+              layout={layout}
+              showActions={false}
+              onShowCompactDetail={showCompactDetail}
+            />
+          ) : (
+            <PlainWorkspaceTerminalPanel
+              repoId={repoId}
+              compactFocusPresentation
+              onShowCompactOverview={multiRepositoryWorkspace ? showCompactExplorer : undefined}
+            />
+          )}
+        </RepoWorkspacePane>
+      </section>
+    )
+  }
   if (isPlainWorkspace) {
     return (
       <section className="relative flex min-w-0 flex-1 flex-col">
@@ -108,8 +133,7 @@ export function RepoView({ repoId }: Props) {
 
   const selectedBranch = repo.data.branches.find((branch) => branch.name === repo.ui.selectedBranch)
   const compactDetailAvailable = !!selectedBranch?.worktree?.path
-  const compactExplorerOpen = compactExplorerRepoId === repoId
-  const showCompactExplorerPane = compactExplorerOpen || !compactDetailAvailable
+  const showCompactExplorerPane = compactExplorerRepoId === repoId || !compactDetailAvailable
 
   if (uiMode === 'compact' && !repoUnavailable) {
     return (

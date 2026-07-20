@@ -19,6 +19,7 @@ interface PlainWorkspacePaneProps {
   terminalPanel?: ReactNode
   fileAreaCollapsed?: boolean
   onToggleFileArea?: () => void
+  onShowCompactDetail?: () => void
 }
 
 export function PlainWorkspacePane({
@@ -28,6 +29,7 @@ export function PlainWorkspacePane({
   terminalPanel,
   fileAreaCollapsed = false,
   onToggleFileArea,
+  onShowCompactDetail,
 }: PlainWorkspacePaneProps) {
   const compact = useIsCompactUi()
   const detailFocusMode = useReposStore((state) => state.detailFocusMode)
@@ -45,6 +47,18 @@ export function PlainWorkspacePane({
   const sideBySide = splitOrientation === 'horizontal'
   const behavior = repoWorkspaceBehavior(layout, false, detailFocusMode)
   const focusMode = !compact && !repoUnavailable && behavior.mode === 'focus'
+
+  if (compact && multiRepositoryWorkspace && onShowCompactDetail) {
+    return (
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <SidebarProjectHeader repoId={repoId} onShowCompactDetail={onShowCompactDetail} />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
+          <WorkspaceRepositoryRail workspaceRootId={repoId} currentRepoId={repoId} fill />
+        </div>
+        <StatusBar repoId={repoId} />
+      </div>
+    )
+  }
 
   const fileBrowser = <ProjectFileTree repoId={repoId} revealRequest={revealRequest ?? null} toolbarHeight="detail" />
   const detailPane = (

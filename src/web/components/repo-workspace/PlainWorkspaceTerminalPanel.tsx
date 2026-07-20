@@ -21,11 +21,18 @@ import { cn } from '#/web/lib/cn.ts'
 interface PlainWorkspaceTerminalPanelProps {
   repoId: string
   focusMode?: boolean
+  compactFocusPresentation?: boolean
+  onShowCompactOverview?: () => void
 }
 
 const DETAIL_ID = 'plain-workspace-terminal'
 
-export function PlainWorkspaceTerminalPanel({ repoId, focusMode = false }: PlainWorkspaceTerminalPanelProps) {
+export function PlainWorkspaceTerminalPanel({
+  repoId,
+  focusMode = false,
+  compactFocusPresentation = false,
+  onShowCompactOverview,
+}: PlainWorkspaceTerminalPanelProps) {
   const t = useT()
   const compact = useIsCompactUi()
   const repo = useReposStore((state) => state.repos[repoId])
@@ -35,6 +42,7 @@ export function PlainWorkspaceTerminalPanel({ repoId, focusMode = false }: Plain
   const snapshot = useWorktreeTerminalSnapshot(terminalWorktreeKey)
   const terminalTabFocusRegistry = useFocusRegistry<string, HTMLButtonElement>()
   const bootstrappedRef = useRef(false)
+  const contextRail = focusMode || compactFocusPresentation
   const {
     createTerminal,
     selectTerminal,
@@ -95,30 +103,43 @@ export function PlainWorkspaceTerminalPanel({ repoId, focusMode = false }: Plain
         data-testid="plain-workspace-terminal-toolbar"
         variant="detail"
         chrome={compact ? 'toolbar' : 'topbar'}
-        className={cn(focusMode && 'topbar')}
+        className={cn('mobile-topbar-scroll', focusMode && 'topbar')}
       >
-        <div className="flex h-full min-w-0 items-center gap-1 overflow-hidden">
-          {focusMode && (
+        <div className="mobile-topbar-scroll-content flex h-full min-w-0 items-center gap-1 overflow-hidden">
+          {contextRail && (
             <>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={toggleDetailFocusMode}
-                aria-label={t('branch-detail.exit-focus')}
-                title={t('branch-detail.exit-focus-title')}
-              >
-                <PanelLeftOpen />
-              </Button>
-              <FocusProjectSwitcher repoId={repoId} />
-              <WorkspaceRepositorySwitcher repoId={repoId} />
+              {compactFocusPresentation && onShowCompactOverview ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onShowCompactOverview}
+                  aria-label={t('mobile.open-workspace')}
+                  title={t('mobile.open-workspace')}
+                >
+                  <PanelLeftOpen />
+                </Button>
+              ) : focusMode ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleDetailFocusMode}
+                  aria-label={t('branch-detail.exit-focus')}
+                  title={t('branch-detail.exit-focus-title')}
+                >
+                  <PanelLeftOpen />
+                </Button>
+              ) : null}
+              <FocusProjectSwitcher repoId={repoId} compact={compactFocusPresentation} />
+              <WorkspaceRepositorySwitcher repoId={repoId} compact={compactFocusPresentation} />
             </>
           )}
           <TerminalTabs
             worktreeTerminalKey={terminalWorktreeKey}
             sessions={snapshot.sessions}
             detailId={DETAIL_ID}
+            responsiveCompact={compact}
             panelActive
-            focusMode={focusMode}
+            focusMode={contextRail}
             focusRegistry={terminalTabFocusRegistry}
             emptyFocusKey={EMPTY_TERMINAL_TAB_FOCUS_KEY}
             onNew={handleNewTerminal}

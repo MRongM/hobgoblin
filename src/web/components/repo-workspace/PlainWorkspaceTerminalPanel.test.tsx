@@ -147,6 +147,74 @@ describe('PlainWorkspaceTerminalPanel', () => {
     expect(toolbar?.className).not.toContain('topbar-tone')
   })
 
+  test('collapses the plain-workspace terminal list in compact UI like a Git workspace', () => {
+    compactUi = true
+    render(<PlainWorkspaceTerminalPanel repoId="/repo" />)
+
+    expect(terminalTabsProps.at(-1)?.responsiveCompact).toBe(true)
+  })
+
+  test('keeps the complete compact terminal topbar in the shared horizontal scroll flow', () => {
+    compactUi = true
+    render(<PlainWorkspaceTerminalPanel repoId="/repo" compactFocusPresentation />)
+
+    const toolbar = container!.querySelector<HTMLElement>('[data-testid="plain-workspace-terminal-toolbar"]')
+    const content = toolbar?.firstElementChild
+
+    expect(toolbar?.classList.contains('mobile-topbar-scroll')).toBe(true)
+    expect(content?.classList.contains('mobile-topbar-scroll-content')).toBe(true)
+  })
+
+  test('compact focus presentation shows context without mutating desktop focus state', () => {
+    const onShowCompactOverview = vi.fn()
+    compactUi = true
+    seedRepoState({
+      id: '/repo',
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    useReposStore.setState({
+      workspaceProjects: {
+        '/repo': {
+          rootId: '/repo',
+          repositoryIds: [],
+          candidates: [],
+          configured: false,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+    })
+
+    render(
+      <PlainWorkspaceTerminalPanel
+        repoId="/repo"
+        compactFocusPresentation
+        onShowCompactOverview={onShowCompactOverview}
+      />,
+    )
+
+    const toolbar = container!.querySelector<HTMLElement>('[data-testid="plain-workspace-terminal-toolbar"]')
+    expect(toolbar?.className).toContain('bg-toolbar')
+    expect(toolbar?.classList.contains('topbar')).toBe(false)
+    expect(container!.querySelector('[data-testid="focus-project-switcher"]')).not.toBeNull()
+    expect(container!.querySelector('button[aria-label="workspace.repositories"]')).not.toBeNull()
+    expect(container!.querySelector('button[aria-label="branch-detail.exit-focus"]')).toBeNull()
+    expect(terminalTabsProps.at(-1)?.focusMode).toBe(true)
+    expect(useReposStore.getState().detailFocusMode).toBe(false)
+
+    act(() => {
+      container!.querySelector<HTMLButtonElement>('button[aria-label="mobile.open-workspace"]')?.click()
+    })
+
+    expect(onShowCompactOverview).toHaveBeenCalledTimes(1)
+    expect(useReposStore.getState().detailFocusMode).toBe(false)
+  })
+
   test('focus mode shows project context and uses full-width window chrome', () => {
     seedRepoState({
       id: '/repo',

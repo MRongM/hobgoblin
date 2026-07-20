@@ -35,6 +35,24 @@ afterEach(() => {
 })
 
 describe('Topbar', () => {
+  test('keeps every topbar function in the shared mobile horizontal scroll container', () => {
+    act(() => {
+      root!.render(
+        <Topbar actions={<button type="button">action</button>}>
+          <div data-testid="tabs" />
+        </Topbar>,
+      )
+    })
+
+    const topbar = container!.firstElementChild
+    const tabs = container!.querySelector('[data-testid="tabs"]')
+    const actions = container!.querySelector('[data-testid="topbar-actions"]')
+
+    expect(topbar?.classList.contains('mobile-topbar-scroll')).toBe(true)
+    expect(tabs?.parentElement).toBe(topbar)
+    expect(actions?.parentElement).toBe(topbar)
+  })
+
   test('uses runtime topbar height', () => {
     act(() => {
       root!.render(

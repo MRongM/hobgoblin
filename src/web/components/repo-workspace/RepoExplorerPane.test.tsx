@@ -791,6 +791,60 @@ describe('RepoExplorerPane', () => {
     await act(async () => root.unmount())
   })
 
+  test('renders compact plain workspace overview without mounting its file tree or terminal', async () => {
+    const onShowCompactDetail = vi.fn()
+    compactUi = true
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    useReposStore.setState({
+      workspaceProjects: {
+        [REPO_ID]: {
+          rootId: REPO_ID,
+          repositoryIds: [],
+          candidates: [],
+          configured: false,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <RepoExplorerPane
+          repoId={REPO_ID}
+          layout="top-bottom"
+          showActions={false}
+          onShowCompactDetail={onShowCompactDetail}
+        />,
+      )
+    })
+
+    expect(container.querySelector('[data-testid="sidebar-project-header"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="workspace-repository-rail"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="statusbar"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="project-file-tree"]')).toBeNull()
+    expect(container.querySelector('[data-testid="split-pane"]')).toBeNull()
+    expect(container.querySelector('[data-testid="plain-workspace-terminal"]')).toBeNull()
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="mock-show-compact-detail"]')?.click()
+    })
+    expect(onShowCompactDetail).toHaveBeenCalledTimes(1)
+
+    await act(async () => root.unmount())
+  })
+
   test('renders branch list without a branch-area toolbar above it', async () => {
     seedRepoState({
       id: REPO_ID,

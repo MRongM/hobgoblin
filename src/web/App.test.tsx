@@ -235,9 +235,22 @@ describe('App shell topbar visibility', () => {
     expect(container?.querySelector('[data-testid="repo-tabs"]')).toBeNull()
   })
 
-  test('keeps compact repo tabs visible for a plain workspace', async () => {
+  test('hides the compact topbar for an available plain workspace', async () => {
     const repo = emptyRepo('/repo', 'repo')
     repo.isGitRepo = false
+    useReposStore.setState({ repos: { '/repo': repo } })
+    uiModeMock.mode = 'compact'
+
+    await renderApp({ runtime: 'web', workspaceMode: 'split' })
+
+    expect(container?.querySelector('[data-testid="global-topbar"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-tabs"]')).toBeNull()
+  })
+
+  test('keeps compact navigation for an unavailable plain workspace', async () => {
+    const repo = emptyRepo('/repo', 'repo')
+    repo.isGitRepo = false
+    repo.availability = { phase: 'unavailable', reason: 'path-missing', checkedAt: 1 }
     useReposStore.setState({ repos: { '/repo': repo } })
     uiModeMock.mode = 'compact'
 
@@ -245,16 +258,6 @@ describe('App shell topbar visibility', () => {
 
     expect(container?.querySelector('[data-testid="global-topbar"]')).not.toBeNull()
     expect(container?.querySelector('[data-testid="repo-tabs"]')).not.toBeNull()
-  })
-
-  test('keeps repository navigation in the compact workspace topbar', async () => {
-    const repo = emptyRepo('/repo', 'repo')
-    repo.isGitRepo = false
-    useReposStore.setState({ repos: { '/repo': repo } })
-    uiModeMock.mode = 'compact'
-
-    await renderApp({ runtime: 'web', workspaceMode: 'split' })
-
     expect(container?.querySelector('[data-testid="workspace-repository-switcher"]')?.textContent).toBe('/repo')
   })
 

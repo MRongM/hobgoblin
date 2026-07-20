@@ -136,6 +136,7 @@ export function RepoExplorerPane({
           terminalPanel={plainWorkspaceTerminalPanel}
           fileAreaCollapsed={desktopFileAreaCollapsed}
           onToggleFileArea={compact ? undefined : onToggleFileArea}
+          onShowCompactDetail={compact ? onShowCompactDetail : undefined}
         />
       </div>
     )

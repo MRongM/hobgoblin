@@ -233,7 +233,7 @@ export function WorkspaceWorktreeDialog({
               </div>
               <div
                 data-workspace-removal-cleanup
-                className="relative z-10 grid grid-cols-2 gap-3 bg-danger-surface/90 pl-6"
+                className="relative z-10 grid grid-cols-2 gap-3 pl-6"
               >
                 <div className="min-w-0">
                   <ConfirmCheckbox

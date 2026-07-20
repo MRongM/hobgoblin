@@ -9,7 +9,10 @@ import type { TerminalSessionSummary } from '#/web/components/terminal/types.ts'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
-const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; goblinNative?: unknown }
+const reactActEnvironment = globalThis as typeof globalThis & {
+  IS_REACT_ACT_ENVIRONMENT?: boolean
+  goblinNative?: unknown
+}
 
 beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
@@ -137,6 +140,10 @@ describe('TerminalTabs', () => {
     const chrome = trigger?.closest<HTMLElement>('[data-terminal-tab-tooltip-id="t2"]')
     expect(chrome).not.toBeNull()
     expect(chrome?.className).toContain('w-full')
+    expect(chrome?.classList.contains('min-w-0')).toBe(true)
+    expect(chrome?.classList.contains('max-w-[100dvw]')).toBe(true)
+    expect(chrome?.classList.contains('shrink')).toBe(true)
+    expect(chrome?.classList.contains('shrink-0')).toBe(false)
     expect(trigger?.querySelector('.lucide-chevron-down')).not.toBeNull()
 
     await openCompactTerminalDropdown()
@@ -548,7 +555,11 @@ describe('TerminalTabs', () => {
     const tab1 = document.body.querySelector('#detail-terminal-tab')
     const tab2 = document.body.querySelector('#detail-terminal-tab-t2')
     const tab3 = document.body.querySelector('#detail-terminal-tab-t3')
-    if (!(tab1 instanceof HTMLButtonElement) || !(tab2 instanceof HTMLButtonElement) || !(tab3 instanceof HTMLButtonElement)) {
+    if (
+      !(tab1 instanceof HTMLButtonElement) ||
+      !(tab2 instanceof HTMLButtonElement) ||
+      !(tab3 instanceof HTMLButtonElement)
+    ) {
       throw new Error('missing terminal tabs')
     }
 
@@ -612,10 +623,7 @@ describe('TerminalTabs', () => {
       <TerminalTabs
         worktreeTerminalKey="/repo\0/repo/worktree"
         detailId="detail"
-        sessions={[
-          session({ key: 't1', title: 'term-1' }),
-          session({ key: 't2', title: 'term-2', selected: false }),
-        ]}
+        sessions={[session({ key: 't1', title: 'term-1' }), session({ key: 't2', title: 'term-2', selected: false })]}
         onNew={() => {}}
         onSelect={() => {}}
         onScrollToBottom={() => {}}
@@ -700,10 +708,7 @@ describe('TerminalTabs', () => {
       <TerminalTabs
         worktreeTerminalKey="/repo\0/repo/worktree"
         detailId="detail"
-        sessions={[
-          session({ key: 't1', title: 'term-1' }),
-          session({ key: 't2', title: 'term-2', selected: false }),
-        ]}
+        sessions={[session({ key: 't1', title: 'term-1' }), session({ key: 't2', title: 'term-2', selected: false })]}
         onNew={() => {}}
         onSelect={() => {}}
         onScrollToBottom={() => {}}
@@ -750,10 +755,7 @@ describe('TerminalTabs', () => {
       <TerminalTabs
         worktreeTerminalKey="/repo\0/repo/worktree"
         detailId="detail"
-        sessions={[
-          session({ key: 't1', title: 'term-1' }),
-          session({ key: 't2', title: 'term-2', selected: false }),
-        ]}
+        sessions={[session({ key: 't1', title: 'term-1' }), session({ key: 't2', title: 'term-2', selected: false })]}
         onNew={() => {}}
         onSelect={() => {}}
         onScrollToBottom={() => {}}
@@ -820,10 +822,7 @@ describe('TerminalTabs', () => {
       <TerminalTabs
         worktreeTerminalKey="/repo\0/repo/worktree"
         detailId="detail"
-        sessions={[
-          session({ key: 't1', title: 'term-1' }),
-          session({ key: 't2', title: 'term-2', selected: false }),
-        ]}
+        sessions={[session({ key: 't1', title: 'term-1' }), session({ key: 't2', title: 'term-2', selected: false })]}
         onNew={() => {}}
         onSelect={() => {}}
         onScrollToBottom={() => {}}
@@ -842,10 +841,7 @@ describe('TerminalTabs', () => {
         worktreeTerminalKey="/repo\0/repo/worktree"
         detailId="detail"
         panelActive
-        sessions={[
-          session({ key: 't1', title: 'term-1' }),
-          session({ key: 't2', title: 'term-2', selected: false }),
-        ]}
+        sessions={[session({ key: 't1', title: 'term-1' }), session({ key: 't2', title: 'term-2', selected: false })]}
         onNew={() => {}}
         onSelect={() => {}}
         onScrollToBottom={() => {}}
@@ -920,10 +916,7 @@ describe('TerminalTabs', () => {
         worktreeTerminalKey="/repo\0/repo/worktree"
         detailId="detail"
         responsiveCompact
-        sessions={[
-          session({ key: 't1', title: 'term-1' }),
-          session({ key: 't2', title: 'term-2', selected: false }),
-        ]}
+        sessions={[session({ key: 't1', title: 'term-1' }), session({ key: 't2', title: 'term-2', selected: false })]}
         onNew={() => {}}
         onSelect={() => {}}
         onScrollToBottom={() => {}}
@@ -943,10 +936,7 @@ describe('TerminalTabs', () => {
       <TerminalTabs
         worktreeTerminalKey="/repo\0/repo/worktree"
         detailId="detail"
-        sessions={[
-          session({ key: 't1', title: 'term-1' }),
-          session({ key: 't2', title: 'term-2', selected: false }),
-        ]}
+        sessions={[session({ key: 't1', title: 'term-1' }), session({ key: 't2', title: 'term-2', selected: false })]}
         onNew={() => {}}
         onSelect={() => {}}
         onScrollToBottom={() => {}}

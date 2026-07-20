@@ -1,7 +1,9 @@
 import { useCallback, useMemo, useState } from 'react'
+import { toast } from 'sonner'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { arrayMove } from '@dnd-kit/sortable'
-import { Download, FolderPlus, FolderTree, LoaderCircle, RefreshCw, Settings2, Trash2 } from 'lucide-react'
+import { Download, FolderPlus, FolderTree, LoaderCircle, RefreshCw, Settings2, Terminal, Trash2 } from 'lucide-react'
+import { Badge } from '#/web/components/ui/badge.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { WorkspaceConfigurationDialog } from '#/web/components/repo-workspace/WorkspaceConfigurationDialog.tsx'
 import {
@@ -9,12 +11,27 @@ import {
   type WorkspaceRepositoryListItem,
 } from '#/web/components/repo-workspace/WorkspaceRepositoryList.tsx'
 import { WorkspaceWorktreeDialog } from '#/web/components/repo-workspace/WorkspaceWorktreeDialog.tsx'
+import { TerminalBellDot } from '#/web/components/terminal/TerminalBellDot.tsx'
+import { TerminalOutputActivityIndicator } from '#/web/components/terminal/TerminalOutputActivityIndicator.tsx'
+import {
+  useWorktreeTerminalCount,
+  useWorktreeTerminalHasBell,
+  useWorktreeTerminalHasOutputActivity,
+} from '#/web/components/terminal/terminal-session-store.ts'
+import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { useWorkspaceWorktreeActions } from '#/web/hooks/useWorkspaceWorktreeActions.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { useT } from '#/web/stores/i18n.ts'
+import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { workspaceBatchBranchChoices } from '#/web/stores/repos/workspace-worktrees.ts'
-import type { WorkspaceWorktreePlanRequest } from '#/shared/workspace-worktrees.ts'
+import type { WorkspaceWorktreeBatchResult, WorkspaceWorktreePlanRequest } from '#/shared/workspace-worktrees.ts'
+
+const WORKSPACE_BATCH_SUCCESS_KEYS = {
+  create: 'workspace.worktree.create-success',
+  remove: 'workspace.worktree.remove-success',
+  pull: 'workspace.worktree.pull-success',
+} as const
 
 interface Props {
   workspaceRootId: string
@@ -26,6 +43,13 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
   const t = useT()
   const workspace = useReposStore((state) => state.workspaceProjects[workspaceRootId])
   const repos = useReposStore((state) => state.repos)
+  const overviewTerminalWorktreeKey = worktreeTerminalKey(
+    workspaceRootId,
+    repoPlainWorkspacePath(repos[workspaceRootId]) ?? workspaceRootId,
+  )
+  const overviewTerminalCount = useWorktreeTerminalCount(overviewTerminalWorktreeKey)
+  const overviewHasTerminalBell = useWorktreeTerminalHasBell(overviewTerminalWorktreeKey)
+  const overviewHasTerminalOutputActivity = useWorktreeTerminalHasOutputActivity(overviewTerminalWorktreeKey)
   const activateWorkspaceRepository = useReposStore((state) => state.activateWorkspaceRepository)
   const rescanWorkspace = useReposStore((state) => state.rescanWorkspace)
   const configureWorkspace = useReposStore((state) => state.configureWorkspace)
@@ -54,16 +78,27 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
       }),
     [candidateNameById, workspace?.repositoryIds],
   )
-  const refreshWorkspaceAfterBatch = useCallback(async () => {
-    const state = useReposStore.getState()
-    const memberIds = state.workspaceProjects[workspaceRootId]?.repositoryIds ?? []
-    await Promise.all(memberIds.map((memberId) => state.refreshCoreData(memberId)))
-  }, [workspaceRootId])
+  const settleWorkspaceBatch = useCallback(
+    async (result: WorkspaceWorktreeBatchResult) => {
+      if (result.ok) {
+        toast.success(t(WORKSPACE_BATCH_SUCCESS_KEYS[result.operation]))
+      } else {
+        toast.error(
+          t('workspace.worktree.batch-incomplete'),
+          result.message ? { description: t(result.message) } : undefined,
+        )
+      }
+      const state = useReposStore.getState()
+      const memberIds = state.workspaceProjects[workspaceRootId]?.repositoryIds ?? []
+      await Promise.all(memberIds.map((memberId) => state.refreshCoreData(memberId)))
+    },
+    [t, workspaceRootId],
+  )
   const openConfiguration = useCallback(async () => {
     await rescanWorkspace(workspaceRootId)
     setConfigurationOpen(true)
   }, [rescanWorkspace, workspaceRootId])
-  const batchActions = useWorkspaceWorktreeActions(workspaceRootId, refreshWorkspaceAfterBatch)
+  const batchActions = useWorkspaceWorktreeActions(workspaceRootId, settleWorkspaceBatch)
   if (!workspace) return null
 
   const scanning = workspace.phase === 'scanning'
@@ -199,6 +234,9 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
             icon={FolderTree}
             name={t('workspace.overview')}
             prefix="./"
+            terminalCount={overviewTerminalCount}
+            hasTerminalBell={overviewHasTerminalBell}
+            hasTerminalOutputActivity={overviewHasTerminalOutputActivity}
             onActivate={() => activateWorkspaceRepository(workspaceRootId, null)}
           />
           <WorkspaceRepositoryList
@@ -265,14 +303,24 @@ function ManifestRow({
   icon: Icon,
   name,
   prefix,
+  terminalCount,
+  hasTerminalBell,
+  hasTerminalOutputActivity,
   onActivate,
 }: {
   active: boolean
   icon: typeof FolderTree
   name: string
   prefix?: string
+  terminalCount: number
+  hasTerminalBell: boolean
+  hasTerminalOutputActivity: boolean
   onActivate: () => void
 }) {
+  const t = useT()
+  const terminalCountLabel = terminalCount > 0 ? t('terminal.open-count', { count: terminalCount }) : null
+  const terminalBellLabel = t('terminal.bell-unread')
+
   return (
     <button
       type="button"
@@ -290,6 +338,23 @@ function ManifestRow({
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         {prefix && <span className="shrink-0 font-mono text-muted-foreground">{prefix}</span>}
         <span className="min-w-0 truncate font-medium">{name}</span>
+        {terminalCount > 0 ? (
+          <Badge
+            data-testid="overview-terminal-count-badge"
+            aria-label={terminalCountLabel ?? undefined}
+            title={terminalCountLabel ?? undefined}
+            variant="brand"
+            className="h-4 gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums"
+          >
+            {hasTerminalOutputActivity ? (
+              <TerminalOutputActivityIndicator label={t('terminal.output-active')} className="size-2.5" size={10} />
+            ) : (
+              <Terminal size={10} aria-hidden="true" />
+            )}
+            {terminalCount}
+          </Badge>
+        ) : null}
+        {hasTerminalBell ? <TerminalBellDot label={terminalBellLabel} /> : null}
       </span>
     </button>
   )

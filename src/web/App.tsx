@@ -4,9 +4,10 @@
 //                 branches, files) with the StatusBar at its bottom
 //   right column: detail pane at full window height, its toolbar carrying
 //                 the terminal tabs at the window's top edge
-// Compact UI keeps the classic Topbar with the RepoTabs strip; desktop
-// shows a plain Topbar (drag region + wordmark) plus a full-width
-// StatusBar only when no repo is open.
+// Available compact workspaces own the viewport and carry navigation in
+// their local context rail. Other compact states keep the classic Topbar
+// with the RepoTabs strip. Desktop shows a plain Topbar (drag region +
+// wordmark) plus a full-width StatusBar only when no repo is open.
 //
 // Boots in this order:
 //   1. theme.hydrate()       — reads server-backed theme settings
@@ -245,9 +246,9 @@ function MainWindowViewportContent({
   overlays,
 }: MainWindowViewportContentProps) {
   const uiMode = useResponsiveUiMode()
-  const compactFocusEligible = useReposStore((state) => {
+  const compactWorkspaceEligible = useReposStore((state) => {
     const repo = visibleRepoId ? state.repos[visibleRepoId] : undefined
-    return !!repo && repo.isGitRepo !== false && repo.availability.phase !== 'unavailable'
+    return !!repo && repo.availability.phase !== 'unavailable'
   })
   if (routeSettingsPage) {
     return (
@@ -262,10 +263,10 @@ function MainWindowViewportContent({
   // Desktop has no global topbar while a repo is open — the sidebar's
   // project header and the detail toolbar form the window's top edge.
   // It comes back as a plain chrome strip (drag region + wordmark) when
-  // nothing is open. Compact UI gives an available Git workspace the
-  // whole viewport; other workspace states keep the classic repo tab
-  // strip. Same rules for web and Electron so both shells look identical.
-  const showGlobalTopbar = compact ? !compactFocusEligible : !visibleRepoId
+  // nothing is open. Compact UI gives every available workspace the whole
+  // viewport; unavailable and empty states keep the classic repo tab strip.
+  // Same rules for web and Electron so both shells look identical.
+  const showGlobalTopbar = compact ? !compactWorkspaceEligible : !visibleRepoId
   return (
     <>
       {showGlobalTopbar && (

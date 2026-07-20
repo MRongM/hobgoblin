@@ -12,6 +12,7 @@ import { TerminalSessionReadContext } from '#/web/components/terminal/terminal-s
 import { emptyRepo, replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { resetReposStore } from '#/web/stores/repos/test-utils.ts'
+import { normalizeRemoteRepoId, type RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import type {
   TerminalSessionReadContextValue,
   TerminalSessionSummary,
@@ -60,6 +61,13 @@ describe('project terminal switcher model', () => {
     expect(projectTerminalWorktreeKeys(plainWorkspace, [])).toEqual(['/plain-workspace\0/plain-workspace'])
   })
 
+  test('uses the actual terminal path for a remote plain workspace', () => {
+    const id = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/plain' })
+    const plainWorkspace = terminalRepo(id, false, [], [], remoteTarget(id, '/srv/plain'))
+
+    expect(projectTerminalWorktreeKeys(plainWorkspace, [])).toEqual([`${id}\0/srv/plain`])
+  })
+
   test('projects configured workspace member worktrees through the project summary hook', () => {
     const rootRepo = replaceRepo(emptyRepo('/workspace-root', 'workspace'), (repo) => {
       repo.isGitRepo = false
@@ -99,18 +107,18 @@ describe('project terminal switcher model', () => {
     ])
   })
 
-  test('shows aggregate count, output activity, and unread bell from member repository terminals', () => {
+  test('includes plain-workspace count and output activity in the aggregate project status', () => {
     const terminalWorktreeKeys = [
       '/workspace-root\0/workspace-root',
       '/workspace-root/repo-a\0/worktrees/feature-a',
       '/workspace-root/repo-b\0/worktrees/feature-b',
     ]
     const snapshots = new Map<string, WorktreeTerminalSnapshot>([
-      [terminalWorktreeKeys[0]!, worktreeSnapshot(terminalWorktreeKeys[0]!, terminalSession(terminalWorktreeKeys[0]!))],
       [
-        terminalWorktreeKeys[1]!,
-        worktreeSnapshot(terminalWorktreeKeys[1]!, terminalSession(terminalWorktreeKeys[1]!, { isOutputActive: true })),
+        terminalWorktreeKeys[0]!,
+        worktreeSnapshot(terminalWorktreeKeys[0]!, terminalSession(terminalWorktreeKeys[0]!, { isOutputActive: true })),
       ],
+      [terminalWorktreeKeys[1]!, worktreeSnapshot(terminalWorktreeKeys[1]!, terminalSession(terminalWorktreeKeys[1]!))],
       [
         terminalWorktreeKeys[2]!,
         worktreeSnapshot(terminalWorktreeKeys[2]!, terminalSession(terminalWorktreeKeys[2]!, { hasBell: true })),
@@ -137,14 +145,33 @@ function ProjectSummariesProbe() {
   return <output>{JSON.stringify(summaries[0]?.terminalWorktreeKeys ?? [])}</output>
 }
 
-function terminalRepo(id: string, isGitRepo: boolean, worktreePaths: string[] = [], branchPaths: string[] = []) {
+function terminalRepo(
+  id: string,
+  isGitRepo: boolean,
+  worktreePaths: string[] = [],
+  branchPaths: string[] = [],
+  target?: RemoteRepoTarget,
+) {
   return {
     id,
     isGitRepo,
+    remote: target ? { target } : undefined,
     data: {
       branches: branchPaths.map((path) => ({ worktree: { path } })),
       worktreesByPath: Object.fromEntries(worktreePaths.map((path) => [path, {}])),
     },
+  }
+}
+
+function remoteTarget(id: string, remotePath: string): RemoteRepoTarget {
+  return {
+    id,
+    alias: 'prod',
+    host: 'example.com',
+    user: 'alice',
+    port: 22,
+    remotePath,
+    displayName: 'prod:plain',
   }
 }
 

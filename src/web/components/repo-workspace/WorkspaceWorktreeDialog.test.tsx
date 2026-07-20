@@ -191,6 +191,7 @@ describe('WorkspaceWorktreeDialog', () => {
     ).not.toBe(0)
     const cleanupOptions = document.querySelector('[data-workspace-removal-cleanup]')
     expect(cleanupOptions?.className).toContain('grid-cols-2')
+    expect(cleanupOptions?.className).not.toMatch(/\bbg-/)
     const deleteBranch = checkboxForLabel('action.confirm-remove-worktree-also-delete-branch')
     const deleteUpstream = checkboxForLabel('action.confirm-delete-branch-also-delete-upstream')
     expect(deleteUpstream.hasAttribute('disabled')).toBe(true)

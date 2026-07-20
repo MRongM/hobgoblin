@@ -37,6 +37,7 @@ export interface ProjectSummary {
 interface ProjectTerminalRepo {
   id: string
   isGitRepo?: boolean
+  remote?: Parameters<typeof repoTerminalWorktreePaths>[0]['remote']
   data: {
     branches: Array<{ worktree?: { path?: string } }>
     worktreesByPath: Record<string, unknown>

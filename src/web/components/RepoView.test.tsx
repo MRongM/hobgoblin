@@ -39,6 +39,30 @@ vi.mock('#/web/components/BranchDetail.tsx', () => ({
   ),
 }))
 
+vi.mock('#/web/components/repo-workspace/PlainWorkspaceTerminalPanel.tsx', () => ({
+  PlainWorkspaceTerminalPanel: ({
+    repoId,
+    compactFocusPresentation,
+    onShowCompactOverview,
+  }: {
+    repoId: string
+    compactFocusPresentation?: boolean
+    onShowCompactOverview?: () => void
+  }) => (
+    <div
+      data-testid="plain-workspace-terminal-panel"
+      data-repo-id={repoId}
+      data-compact-focus-presentation={String(compactFocusPresentation)}
+    >
+      {onShowCompactOverview && (
+        <button type="button" data-testid="show-compact-overview" onClick={onShowCompactOverview}>
+          show overview
+        </button>
+      )}
+    </div>
+  ),
+}))
+
 vi.mock('#/web/components/repo-workspace/RepoExplorerPane.tsx', () => ({
   RepoExplorerPane: ({
     showActions,
@@ -213,7 +237,54 @@ describe('RepoView', () => {
     expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).not.toBeNull()
   })
 
-  test('keeps file-area collapse available without mounting branch detail for non-git local workspaces', () => {
+  test('switches a compact non-git workspace root between terminal focus and overview', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    useReposStore.setState({
+      workspaceProjects: {
+        [REPO_ID]: {
+          rootId: REPO_ID,
+          repositoryIds: [],
+          candidates: [],
+          configured: false,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+    })
+
+    renderRepoView()
+
+    const terminalPanel = container?.querySelector('[data-testid="plain-workspace-terminal-panel"]')
+    expect(terminalPanel).not.toBeNull()
+    expect(terminalPanel?.getAttribute('data-repo-id')).toBe(REPO_ID)
+    expect(terminalPanel?.getAttribute('data-compact-focus-presentation')).toBe('true')
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="split-pane"]')).toBeNull()
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="show-compact-overview"]')?.click()
+    })
+
+    expect(container?.querySelector('[data-testid="plain-workspace-terminal-panel"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).not.toBeNull()
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="show-compact-detail"]')?.click()
+    })
+
+    expect(container?.querySelector('[data-testid="plain-workspace-terminal-panel"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).toBeNull()
+  })
+
+  test('keeps file-area collapse available without mounting branch detail for desktop non-git workspaces', () => {
     seedRepoState({
       id: REPO_ID,
       isGitRepo: false,
@@ -222,6 +293,7 @@ describe('RepoView', () => {
       selectedBranch: null,
     })
     useReposStore.setState({ workspaceLayout: 'top-bottom', detailCollapsed: false })
+    setCompactUi(false)
 
     renderRepoView()
 
@@ -241,7 +313,7 @@ describe('RepoView', () => {
     expect(container?.textContent).not.toContain('branches.empty')
   })
 
-  test('does not mount branch detail for non-git remote workspaces', () => {
+  test('renders only the terminal focus presentation for compact non-git remote workspaces', () => {
     seedRepoState({
       id: REMOTE_REPO_ID,
       isGitRepo: false,
@@ -265,7 +337,11 @@ describe('RepoView', () => {
     renderRepoView(REMOTE_REPO_ID)
 
     expect(container?.querySelector('[data-testid="branch-detail"]')).toBeNull()
-    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).toBeNull()
+    const terminalPanel = container?.querySelector('[data-testid="plain-workspace-terminal-panel"]')
+    expect(terminalPanel?.getAttribute('data-repo-id')).toBe(REMOTE_REPO_ID)
+    expect(terminalPanel?.getAttribute('data-compact-focus-presentation')).toBe('true')
+    expect(container?.querySelector('[data-testid="show-compact-overview"]')).toBeNull()
     expect(container?.textContent).not.toContain('branches.empty')
   })
 
