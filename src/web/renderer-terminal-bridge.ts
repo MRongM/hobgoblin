@@ -175,9 +175,10 @@ export function createServerTerminalBridge(options: {
   }
 
   function closeSocketIfIdle() {
-    if (shouldKeepSocketOpen() || !socket) return
-    manualSocketClose = true
+    if (shouldKeepSocketOpen()) return
     clearReconnectTimer()
+    if (!socket) return
+    manualSocketClose = true
     if (socket.readyState === WebSocket.CONNECTING) return
     try {
       socket.close()

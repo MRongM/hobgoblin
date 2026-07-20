@@ -606,6 +606,21 @@ describe('terminal web host bridge', () => {
     disposeMessage()
   })
 
+  test('cancels a pending reconnect when the last terminal subscriber leaves', async () => {
+    vi.useFakeTimers()
+    const { terminalBridge } = await import('#/web/terminal.ts')
+    const dispose = terminalBridge.onOutput(() => {})
+    const socket = MockWebSocket.instances[0]
+    if (!socket) throw new Error('missing initial terminal socket')
+
+    socket.close()
+    dispose()
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(MockWebSocket.instances).toHaveLength(1)
+    vi.useRealTimers()
+  })
+
   test('ignores stale terminal socket events after reconnect creates a newer socket', async () => {
     vi.useFakeTimers()
     const { terminalBridge } = await import('#/web/terminal.ts')
