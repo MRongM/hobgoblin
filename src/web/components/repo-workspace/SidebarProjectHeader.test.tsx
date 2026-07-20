@@ -41,8 +41,8 @@ vi.mock('#/web/runtime-settings-chrome.ts', () => ({
 vi.mock('#/web/components/repo-workspace/project-switcher-model.tsx', () => ({
   ProjectTerminalStatus: () => null,
   useProjectSummaries: () => [
-    { id: '/repo-a', name: 'Repo A', unavailable: false, isGitRepo: true, worktreePaths: [] },
-    { id: '/repo-b', name: 'Repo B', unavailable: false, isGitRepo: false, worktreePaths: [] },
+    { id: '/repo-a', name: 'Repo A', unavailable: false, isGitRepo: true, terminalWorktreeKeys: [] },
+    { id: '/repo-b', name: 'Repo B', unavailable: false, isGitRepo: false, terminalWorktreeKeys: [] },
   ],
 }))
 

@@ -68,6 +68,34 @@ describe('workspace worktree write service', () => {
     expect(result.members.map((member) => member.phase)).toEqual(['succeeded', 'succeeded'])
   })
 
+  test("forwards each child repository's own bootstrap decision during creation", async () => {
+    const planned = plan('create')
+    planned.members[0]!.worktreeBootstrap = {
+      kind: 'run',
+      configHash: 'sha256:api',
+      configTrusted: false,
+    }
+    planned.members[0]!.confirmationRequired = true
+    const createWorktree = vi.fn(async (_repoId: string, _input: unknown, _bootstrap: unknown) => ({
+      ok: true,
+      message: 'created',
+    }))
+    const service = createWorkspaceWorktreeService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan: planned })),
+      createWorktree,
+      removeWorktree: vi.fn(),
+    })
+    await service.plan(ROOT, { operation: 'create', branch: 'feature/a', baseBranch: 'main' })
+
+    const result = await service.execute(ROOT, { planToken: planned.token, approveBootstrap: true })
+
+    expect(result.ok).toBe(true)
+    expect(createWorktree.mock.calls.map(([repoId, , bootstrap]) => [repoId, bootstrap])).toEqual([
+      ['/workspace/api', planned.members[0]!.worktreeBootstrap],
+      ['/workspace/web', planned.members[1]!.worktreeBootstrap],
+    ])
+  })
+
   test('stops on failure without rollback and retries completed members as satisfied', async () => {
     const planned = plan('remove')
     planned.removalOptions = { alsoDeleteBranch: true, alsoDeleteUpstream: true }

@@ -30,6 +30,28 @@ const repositoryListState = vi.hoisted(() => ({
   },
 }))
 
+const workspaceBatchState = vi.hoisted(() => ({
+  onSettled: null as null | (() => void | Promise<void>),
+}))
+
+vi.mock('#/web/hooks/useWorkspaceWorktreeActions.ts', () => ({
+  useWorkspaceWorktreeActions: (_rootId: string, onSettled: (() => void | Promise<void>) | undefined) => {
+    workspaceBatchState.onSettled = onSettled ?? null
+    return {
+      plan: null,
+      result: null,
+      pending: false,
+      error: null,
+      requestPlan: vi.fn(),
+      requestPull: vi.fn(),
+      confirm: vi.fn(),
+      retry: vi.fn(),
+      cancel: vi.fn(),
+      reset: vi.fn(),
+    }
+  },
+}))
+
 vi.mock('#/web/components/repo-workspace/WorkspaceRepositoryList.tsx', () => ({
   WorkspaceRepositoryList: (props: NonNullable<typeof repositoryListState.props>) => {
     repositoryListState.props = props
@@ -58,12 +80,14 @@ const originalActions = {
   activateWorkspaceRepository: useReposStore.getState().activateWorkspaceRepository,
   rescanWorkspace: useReposStore.getState().rescanWorkspace,
   configureWorkspace: useReposStore.getState().configureWorkspace,
+  refreshCoreData: useReposStore.getState().refreshCoreData,
 }
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
 const activateWorkspaceRepository = vi.fn()
 const rescanWorkspace = vi.fn(async () => {})
+const refreshCoreData = vi.fn(async () => {})
 const configureWorkspace = vi.fn(
   async (_rootId: string, _config: WorkspaceConfig): Promise<{ ok: true } | { ok: false; message: string }> => ({
     ok: true,
@@ -77,9 +101,12 @@ beforeEach(() => {
   activateWorkspaceRepository.mockReset()
   rescanWorkspace.mockReset()
   rescanWorkspace.mockResolvedValue(undefined)
+  refreshCoreData.mockReset()
+  refreshCoreData.mockResolvedValue(undefined)
   configureWorkspace.mockReset()
   configureWorkspace.mockResolvedValue({ ok: true })
   repositoryListState.props = null
+  workspaceBatchState.onSettled = null
   const overview = replaceRepo(emptyRepo(ROOT, 'workspace'), (repo) => {
     repo.isGitRepo = false
   })
@@ -126,6 +153,7 @@ beforeEach(() => {
     activateWorkspaceRepository,
     rescanWorkspace,
     configureWorkspace,
+    refreshCoreData,
   })
   container = document.createElement('div')
   document.body.append(container)
@@ -187,10 +215,33 @@ describe('WorkspaceRepositoryRail', () => {
     expect(activateWorkspaceRepository).not.toHaveBeenCalled()
   })
 
-  test('opens configuration and saves through the workspace action', async () => {
+  test('refreshes configured members after a batch operation without rediscovering workspace directories', async () => {
+    act(() => root!.render(<WorkspaceRepositoryRail workspaceRootId={ROOT} currentRepoId={API} />))
+
+    await act(async () => await workspaceBatchState.onSettled?.())
+
+    expect(refreshCoreData).toHaveBeenCalledTimes(2)
+    expect(refreshCoreData).toHaveBeenNthCalledWith(1, API)
+    expect(refreshCoreData).toHaveBeenNthCalledWith(2, WEB)
+    expect(rescanWorkspace).not.toHaveBeenCalled()
+  })
+
+  test('rescans before opening configuration and saves through the workspace action', async () => {
+    let resolveRescan: (() => void) | undefined
+    const rescanPromise = new Promise<void>((resolve) => {
+      resolveRescan = resolve
+    })
+    rescanWorkspace.mockImplementationOnce(() => rescanPromise)
     act(() => root!.render(<WorkspaceRepositoryRail workspaceRootId={ROOT} currentRepoId={API} />))
 
     act(() => container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.configure"]')?.click())
+    expect(rescanWorkspace).toHaveBeenCalledWith(ROOT)
+    expect(document.querySelector<HTMLButtonElement>('button[type="submit"]')).toBeNull()
+
+    await act(async () => {
+      resolveRescan?.()
+      await rescanPromise
+    })
     await act(async () => document.querySelector<HTMLButtonElement>('button[type="submit"]')?.click())
 
     expect(configureWorkspace).toHaveBeenCalledWith(ROOT, { repo: ['api', 'web'] })

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   discoverWorkspaceRepositories: vi.fn(),
+  restoreWorkspaceRepositories: vi.fn(),
   saveWorkspaceConfig: vi.fn(),
   planWorkspaceWorktree: vi.fn(),
   executeWorkspaceWorktree: vi.fn(),
@@ -11,6 +12,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('#/server/modules/workspace-read.ts', () => ({
   discoverWorkspaceRepositories: mocks.discoverWorkspaceRepositories,
+  restoreWorkspaceRepositories: mocks.restoreWorkspaceRepositories,
 }))
 
 vi.mock('#/server/modules/workspace-write-paths.ts', () => ({
@@ -28,6 +30,7 @@ import { createWorkspaceRoutes } from '#/server/routes/workspace.ts'
 describe('workspace routes', () => {
   beforeEach(() => {
     mocks.discoverWorkspaceRepositories.mockReset()
+    mocks.restoreWorkspaceRepositories.mockReset()
     mocks.saveWorkspaceConfig.mockReset()
     mocks.planWorkspaceWorktree.mockReset()
     mocks.executeWorkspaceWorktree.mockReset()
@@ -53,6 +56,29 @@ describe('workspace routes', () => {
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual(result)
     expect(mocks.discoverWorkspaceRepositories).toHaveBeenCalledWith('/workspace')
+  })
+
+  test('delegates configured workspace restoration and returns its result', async () => {
+    const result = {
+      ok: true,
+      rootId: '/workspace',
+      repositories: [{ id: '/workspace/api', name: 'api' }],
+      candidates: [{ id: '/workspace/api', name: 'api', selected: true, available: true }],
+      configuration: { kind: 'ready', config: { repo: ['api'] } },
+      skipped: [],
+    }
+    mocks.restoreWorkspaceRepositories.mockResolvedValue(result)
+    const app = new Hono().route('/api/workspace', createWorkspaceRoutes())
+
+    const response = await app.request('/api/workspace/restore', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ rootPath: '/workspace' }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual(result)
+    expect(mocks.restoreWorkspaceRepositories).toHaveBeenCalledWith('/workspace')
   })
 
   test('normalizes invalid input to an empty path', async () => {

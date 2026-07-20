@@ -23,6 +23,38 @@ vi.mock('#/web/port-forwarding-client.ts', () => ({
 beforeEach(resetLifecycleTest)
 
 describe('repo lifecycle', () => {
+  test('uses configured restoration for automatic open and complete discovery for manual rescan', async () => {
+    const root = '/tmp/gbl-workspace'
+    const restoreCalls: string[] = []
+    const discoverCalls: string[] = []
+    const workspaceResult = {
+      ok: true as const,
+      rootId: root,
+      repositories: [],
+      candidates: [],
+      configuration: { kind: 'missing' as const },
+      skipped: [],
+    }
+    installGoblin({
+      probe: (cwd: string) => ({ ok: true, root: cwd, name: 'workspace', isGitRepo: false }),
+      'workspace.restore': ({ rootPath }: { rootPath: string }) => {
+        restoreCalls.push(rootPath)
+        return workspaceResult
+      },
+      'workspace.discover': ({ rootPath }: { rootPath: string }) => {
+        discoverCalls.push(rootPath)
+        return workspaceResult
+      },
+    })
+
+    await useReposStore.getState().ensureWorkspaceOpen(root)
+    expect(restoreCalls).toEqual([root])
+    expect(discoverCalls).toEqual([])
+
+    await useReposStore.getState().rescanWorkspace(root)
+    expect(discoverCalls).toEqual([root])
+  })
+
   test('opens a remote plain directory as one workspace with remote child repository targets', async () => {
     const rootTarget = normalizeRemoteTarget({
       alias: 'example',

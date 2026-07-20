@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { discoverWorkspaceRepositories } from '#/server/modules/workspace-read.ts'
+import { discoverWorkspaceRepositories, restoreWorkspaceRepositories } from '#/server/modules/workspace-read.ts'
 import { saveWorkspaceConfig } from '#/server/modules/workspace-write-paths.ts'
 import {
   abortWorkspaceWorktree,
@@ -18,6 +18,17 @@ export function createWorkspaceRoutes() {
       return c.json(await discoverWorkspaceRepositories(rootPath))
     } catch (error) {
       console.warn('[server][workspace] discovery failed', error)
+      return c.json({ ok: false as const, message: 'error.failed-read-repo' })
+    }
+  })
+
+  app.post('/restore', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const rootPath = typeof body?.rootPath === 'string' ? body.rootPath : ''
+    try {
+      return c.json(await restoreWorkspaceRepositories(rootPath))
+    } catch (error) {
+      console.warn('[server][workspace] restoration failed', error)
       return c.json({ ok: false as const, message: 'error.failed-read-repo' })
     }
   })

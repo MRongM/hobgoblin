@@ -14,6 +14,7 @@ import {
   discoverWorkspace,
   executeWorkspaceWorktree,
   planWorkspaceWorktree,
+  restoreWorkspace,
 } from '#/web/workspace-client.ts'
 
 describe('workspace client', () => {
@@ -32,6 +33,21 @@ describe('workspace client', () => {
 
     await expect(discoverWorkspace('/workspace')).resolves.toEqual(result)
     expect(mocks.postServerJson).toHaveBeenCalledWith('/api/workspace/discover', {
+      rootPath: '/workspace',
+    })
+  })
+
+  test('posts the root path to the configured workspace restoration endpoint', async () => {
+    const result = {
+      ok: true,
+      rootId: '/workspace',
+      repositories: [{ id: '/workspace/api', name: 'api' }],
+      skipped: [],
+    }
+    mocks.postServerJson.mockResolvedValue(result)
+
+    await expect(restoreWorkspace('/workspace')).resolves.toEqual(result)
+    expect(mocks.postServerJson).toHaveBeenCalledWith('/api/workspace/restore', {
       rootPath: '/workspace',
     })
   })

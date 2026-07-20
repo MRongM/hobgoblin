@@ -14,6 +14,8 @@ import {
   remoteWorkspaceChildRef,
 } from '#/shared/remote-repo.ts'
 import type {
+  WorkspaceConfig,
+  WorkspaceConfigSnapshot,
   WorkspaceDiscoveryIssue,
   WorkspaceDiscoveryResult,
   WorkspaceRepositoryCandidate,
@@ -59,10 +61,43 @@ export async function discoverWorkspaceRepositories(
   return await discoverLocalWorkspaceRepositories(rootId, probeRepository, dependencies)
 }
 
+export async function restoreWorkspaceRepositories(
+  rootPath: string,
+  dependencies: WorkspaceDiscoveryDependencies = {},
+): Promise<WorkspaceDiscoveryResult> {
+  const probeRepository = dependencies.probeRepository ?? probeRepositoryDefault
+  const rootProbe = await probeRepository(rootPath)
+  if (!rootProbe.ok) return { ok: false, message: rootProbe.message ?? 'error.failed-read-repo' }
+
+  const rootId = workspaceRootId(rootProbe.root ?? rootPath)
+  if (rootProbe.isGitRepo !== false) {
+    return {
+      ok: true,
+      rootId,
+      repositories: [],
+      candidates: [],
+      configuration: { kind: 'missing' },
+      skipped: [],
+    }
+  }
+
+  const configuration = await readWorkspaceConfiguration(rootId, dependencies)
+  if (configuration.kind === 'ready') {
+    return isRemoteRepoId(rootId)
+      ? await restoreRemoteConfiguredWorkspace(rootId, configuration.config, dependencies)
+      : await restoreLocalConfiguredWorkspace(rootId, configuration.config, probeRepository)
+  }
+
+  return isRemoteRepoId(rootId)
+    ? await discoverRemoteWorkspaceRepositories(rootId, dependencies, configuration)
+    : await discoverLocalWorkspaceRepositories(rootId, probeRepository, dependencies, configuration)
+}
+
 async function discoverLocalWorkspaceRepositories(
   rootId: string,
   probeRepository: (cwd: string) => Promise<ProbeResult>,
   dependencies: WorkspaceDiscoveryDependencies,
+  configuration?: WorkspaceConfigSnapshot,
 ): Promise<WorkspaceDiscoveryResult> {
   let entries
   try {
@@ -103,12 +138,13 @@ async function discoverLocalWorkspaceRepositories(
     if ('id' in result) repositories.push(result)
     else skipped.push(result)
   }
-  return await projectWorkspaceDiscovery(rootId, repositories, skipped, dependencies)
+  return await projectWorkspaceDiscovery(rootId, repositories, skipped, dependencies, configuration)
 }
 
 async function discoverRemoteWorkspaceRepositories(
   rootId: string,
   dependencies: WorkspaceDiscoveryDependencies,
+  configuration?: WorkspaceConfigSnapshot,
 ): Promise<WorkspaceDiscoveryResult> {
   const parsed = parseRemoteRepoId(rootId)
   const rootRef = parsed ? normalizeRemoteRepoRef(parsed) : null
@@ -165,7 +201,94 @@ async function discoverRemoteWorkspaceRepositories(
     if ('id' in result) repositories.push(result)
     else skipped.push(result)
   }
-  return await projectWorkspaceDiscovery(rootId, repositories, skipped, dependencies)
+  return await projectWorkspaceDiscovery(rootId, repositories, skipped, dependencies, configuration)
+}
+
+async function restoreLocalConfiguredWorkspace(
+  rootId: string,
+  config: WorkspaceConfig,
+  probeRepository: (cwd: string) => Promise<ProbeResult>,
+): Promise<WorkspaceDiscoveryResult> {
+  const limit = pLimit(8)
+  const candidates = await Promise.all(
+    config.repo.map((name) =>
+      limit(async (): Promise<WorkspaceRepositoryCandidate> => {
+        const id = workspaceRepositoryId(rootId, name)!
+        const probe = await probeRepository(id).catch(() => null)
+        const candidateRoot = await canonicalDirectoryPath(id)
+        const probedRoot = probe?.root ? await canonicalDirectoryPath(probe.root) : null
+        const available =
+          probe?.ok === true && probe.isGitRepo !== false && !!candidateRoot && candidateRoot === probedRoot
+        return { id, name, selected: true, available }
+      }),
+    ),
+  )
+  return configuredWorkspaceResult(rootId, config, candidates)
+}
+
+async function restoreRemoteConfiguredWorkspace(
+  rootId: string,
+  config: WorkspaceConfig,
+  dependencies: WorkspaceDiscoveryDependencies,
+): Promise<WorkspaceDiscoveryResult> {
+  const parsed = parseRemoteRepoId(rootId)
+  const rootRef = parsed ? normalizeRemoteRepoRef(parsed) : null
+  if (!parsed || !rootRef) return { ok: false, message: 'error.failed-read-repo' }
+
+  let target
+  try {
+    target = (await (dependencies.resolveRemoteTarget ?? resolveSshRemoteTarget)(parsed)).target
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof Error && error.message === 'error.ssh-config-changed'
+          ? error.message
+          : 'error.failed-read-repo',
+    }
+  }
+
+  const runRemote = dependencies.runRemote ?? runRemoteCommand
+  const limit = pLimit(8)
+  const candidates = await Promise.all(
+    config.repo.map((name) =>
+      limit(async (): Promise<WorkspaceRepositoryCandidate> => {
+        const ref = remoteWorkspaceChildRef(rootRef, name)!
+        const probe = await runRemote(target, {
+          type: 'testWorkspaceGitDirectory',
+          path: ref.remotePath,
+        }).catch(() => null)
+        return { id: ref.id, name, remoteRef: ref, selected: true, available: probe?.ok === true }
+      }),
+    ),
+  )
+  return configuredWorkspaceResult(rootId, config, candidates)
+}
+
+function configuredWorkspaceResult(
+  rootId: string,
+  config: WorkspaceConfig,
+  candidates: WorkspaceRepositoryCandidate[],
+): WorkspaceDiscoveryResult {
+  const repositories = candidates.flatMap((candidate): WorkspaceRepositoryEntry[] =>
+    candidate.available
+      ? [
+          {
+            id: candidate.id,
+            name: candidate.name,
+            ...(candidate.remoteRef ? { remoteRef: candidate.remoteRef } : {}),
+          },
+        ]
+      : [],
+  )
+  return {
+    ok: true,
+    rootId,
+    repositories,
+    candidates,
+    configuration: { kind: 'ready', config },
+    skipped: [],
+  }
 }
 
 async function projectWorkspaceDiscovery(
@@ -173,13 +296,9 @@ async function projectWorkspaceDiscovery(
   repositories: WorkspaceRepositoryEntry[],
   skipped: WorkspaceDiscoveryIssue[],
   dependencies: WorkspaceDiscoveryDependencies,
+  configurationOverride?: WorkspaceConfigSnapshot,
 ): Promise<WorkspaceDiscoveryResult> {
-  const configuration = dependencies.readConfig
-    ? await dependencies.readConfig(rootId)
-    : await readWorkspaceConfig(rootId, {
-        runRemote: dependencies.runRemote,
-        resolveRemoteTarget: dependencies.resolveRemoteTarget,
-      })
+  const configuration = configurationOverride ?? (await readWorkspaceConfiguration(rootId, dependencies))
   if (configuration.kind === 'missing') {
     return {
       ok: true,
@@ -233,6 +352,18 @@ async function projectWorkspaceDiscovery(
     configuration,
     skipped,
   }
+}
+
+async function readWorkspaceConfiguration(
+  rootId: string,
+  dependencies: WorkspaceDiscoveryDependencies,
+): Promise<WorkspaceConfigSnapshot> {
+  return dependencies.readConfig
+    ? await dependencies.readConfig(rootId)
+    : await readWorkspaceConfig(rootId, {
+        runRemote: dependencies.runRemote,
+        resolveRemoteTarget: dependencies.resolveRemoteTarget,
+      })
 }
 
 function remoteWorkspaceRefForMember(rootId: string, member: string) {

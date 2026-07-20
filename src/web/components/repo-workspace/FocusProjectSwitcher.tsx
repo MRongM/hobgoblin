@@ -53,7 +53,7 @@ export function FocusProjectSwitcher({ repoId, compact = false }: Props) {
           <span
             className={cn(
               'min-w-0 truncate text-xs font-semibold uppercase tracking-wide',
-              compact ? 'max-w-20' : 'max-w-40',
+              compact ? 'max-w-16' : 'max-w-40',
             )}
           >
             {activeName}
@@ -85,7 +85,7 @@ export function FocusProjectSwitcher({ repoId, compact = false }: Props) {
               />
               <span className="flex min-w-0 flex-1 items-center gap-2">
                 <span className="min-w-0 truncate text-[13px] font-medium leading-none">{project.name}</span>
-                <ProjectTerminalStatus repoId={project.id} worktreePaths={project.worktreePaths} />
+                <ProjectTerminalStatus terminalWorktreeKeys={project.terminalWorktreeKeys} />
               </span>
             </DropdownMenuItem>
           )

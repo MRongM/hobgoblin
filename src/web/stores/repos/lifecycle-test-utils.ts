@@ -17,6 +17,17 @@ export function installGoblin(overrides: Record<string, (input: any) => unknown>
     workspaceConfigure: [] as Array<{ rootPath: string; config: unknown }>,
     resolveTarget: [] as Array<{ alias: string; remotePath: string }>,
   }
+  const defaultWorkspaceRead = ({ rootPath }: { rootPath: string }) => {
+    calls.workspace.push(rootPath)
+    return {
+      ok: true,
+      rootId: rootPath,
+      repositories: [],
+      candidates: [],
+      configuration: { kind: 'missing' },
+      skipped: [],
+    }
+  }
   const handlers: Record<string, (input: any) => unknown> = {
     'repo.probe': ({ cwd }: { cwd: string }) => {
       if (cwd === '/missing') return { ok: false, message: 'missing' }
@@ -31,17 +42,8 @@ export function installGoblin(overrides: Record<string, (input: any) => unknown>
       return []
     },
     'repo.abort': async () => undefined,
-    'workspace.discover': ({ rootPath }: { rootPath: string }) => {
-      calls.workspace.push(rootPath)
-      return {
-        ok: true,
-        rootId: rootPath,
-        repositories: [],
-        candidates: [],
-        configuration: { kind: 'missing' },
-        skipped: [],
-      }
-    },
+    'workspace.restore': defaultWorkspaceRead,
+    'workspace.discover': defaultWorkspaceRead,
     'workspace.configure': ({ rootPath, config }: { rootPath: string; config: unknown }) => {
       calls.workspaceConfigure.push({ rootPath, config })
       return { ok: false, message: 'workspace.config.write-failed' }
@@ -70,6 +72,9 @@ export function installGoblin(overrides: Record<string, (input: any) => unknown>
     if (key === 'probe') handlers['repo.probe'] = ({ cwd }: { cwd: string }) => handler(cwd)
     else if (key === 'snapshot') handlers['repo.snapshot'] = ({ cwd }: { cwd: string }) => handler(cwd)
     else handlers[key] = handler
+  }
+  if (overrides['workspace.discover'] && !overrides['workspace.restore']) {
+    handlers['workspace.restore'] = overrides['workspace.discover']
   }
   installGoblinTestBridge(handlers)
   return calls

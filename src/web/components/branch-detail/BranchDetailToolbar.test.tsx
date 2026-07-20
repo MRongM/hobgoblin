@@ -286,7 +286,7 @@ describe('BranchDetailToolbar', () => {
     expect(browserButton).toBeNull()
   })
 
-  test('keeps terminal focus when pressing End on the compact terminal tab', async () => {
+  test('keeps the compact terminal switcher focused when pressing End', async () => {
     compactUi = true
     const showRepoDetailTab = vi.fn()
     const { container: c } = renderToolbar({
@@ -299,12 +299,14 @@ describe('BranchDetailToolbar', () => {
     expect(terminalTab).not.toBeNull()
 
     act(() => {
+      terminalTab?.focus()
       terminalTab?.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }))
     })
     await flush()
 
     expect(showRepoDetailTab).not.toHaveBeenCalled()
     expect(document.activeElement?.id).toBe('detail-terminal-tab')
+    expect(terminalTab?.getAttribute('aria-haspopup')).toBe('menu')
   })
 
   test('does not render the project switcher outside focus mode', () => {

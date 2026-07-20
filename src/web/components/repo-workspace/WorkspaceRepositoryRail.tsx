@@ -58,8 +58,11 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
     const state = useReposStore.getState()
     const memberIds = state.workspaceProjects[workspaceRootId]?.repositoryIds ?? []
     await Promise.all(memberIds.map((memberId) => state.refreshCoreData(memberId)))
-    await useReposStore.getState().rescanWorkspace(workspaceRootId)
   }, [workspaceRootId])
+  const openConfiguration = useCallback(async () => {
+    await rescanWorkspace(workspaceRootId)
+    setConfigurationOpen(true)
+  }, [rescanWorkspace, workspaceRootId])
   const batchActions = useWorkspaceWorktreeActions(workspaceRootId, refreshWorkspaceAfterBatch)
   if (!workspace) return null
 
@@ -169,8 +172,8 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
             size="icon-xs"
             aria-label={t('workspace.configure')}
             title={t('workspace.configure')}
-            disabled={reorderPending}
-            onClick={() => setConfigurationOpen(true)}
+            disabled={scanning || reorderPending}
+            onClick={() => void openConfiguration()}
           >
             <Settings2 aria-hidden="true" />
           </Button>

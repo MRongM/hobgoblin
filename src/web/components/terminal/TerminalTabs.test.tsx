@@ -114,7 +114,8 @@ describe('TerminalTabs', () => {
     expect(tooltip?.textContent).not.toContain('~/Developer/goblin')
   })
 
-  test('keeps the selected terminal in the collapsed dropdown and still offers new terminal', async () => {
+  test('uses the selected compact terminal chrome as the dropdown trigger and switches sessions', async () => {
+    const onSelect = vi.fn()
     render(
       <TerminalTabs
         worktreeTerminalKey="/repo\0/repo/worktree"
@@ -125,6 +126,40 @@ describe('TerminalTabs', () => {
           session({ key: 't2', selected: true, title: 'term-2' }),
         ]}
         onNew={() => {}}
+        onSelect={onSelect}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    const trigger = document.body.querySelector<HTMLButtonElement>('button[aria-label="terminal.sessions"]')
+    const chrome = trigger?.closest<HTMLElement>('[data-terminal-tab-tooltip-id="t2"]')
+    expect(chrome).not.toBeNull()
+    expect(chrome?.className).toContain('w-full')
+    expect(trigger?.querySelector('.lucide-chevron-down')).not.toBeNull()
+
+    await openCompactTerminalDropdown()
+
+    const selectedItem = [...document.body.querySelectorAll('[role="menuitem"]')].find((item) =>
+      item.textContent?.includes('term-2'),
+    )
+    expect(selectedItem?.getAttribute('aria-current')).toBe('true')
+    expect(document.body.textContent).toContain('terminal.new')
+
+    clickElementByText('term-1')
+    expect(onSelect).toHaveBeenCalledWith(String.raw`/repo\0/repo/worktree`, 't1')
+  })
+
+  test('keeps the compact close action outside the terminal dropdown trigger', () => {
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        responsiveCompact
+        panelActive
+        sessions={[session({ key: 't1', selected: true, title: 'term-1' })]}
+        onNew={() => {}}
         onSelect={() => {}}
         onScrollToBottom={() => {}}
         onClose={() => {}}
@@ -132,11 +167,17 @@ describe('TerminalTabs', () => {
       />,
     )
 
-    await openCompactTerminalDropdown()
+    const trigger = document.body.querySelector<HTMLButtonElement>('button[aria-label="terminal.sessions"]')
+    const chrome = trigger?.closest<HTMLElement>('[data-terminal-tab-tooltip-id="t1"]')
+    const closeButton = chrome?.querySelector<HTMLButtonElement>('button[aria-label="terminal.close-named"]')
+    if (!closeButton) throw new Error('missing compact terminal close button')
 
-    const selectedItem = [...document.body.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent?.includes('term-2'))
-    expect(selectedItem?.getAttribute('aria-current')).toBe('true')
-    expect(document.body.textContent).toContain('terminal.new')
+    act(() => {
+      closeButton.click()
+    })
+
+    expect(document.body.querySelector('[role="menu"]')).toBeNull()
+    expect(document.body.textContent).toContain('terminal.close-confirm-title')
   })
 
   test('requires confirmation before closing all compact dropdown terminals', async () => {
@@ -365,7 +406,7 @@ describe('TerminalTabs', () => {
     expect(onFocusTerminal).toHaveBeenCalledWith('t2')
   })
 
-  test('collapsed terminal tab only navigates out on arrow keys', () => {
+  test('uses menu semantics instead of terminal-tab navigation in compact mode', () => {
     const onNavigateOut = vi.fn()
     render(
       <TerminalTabs
@@ -396,8 +437,10 @@ describe('TerminalTabs', () => {
       tab.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }))
     })
 
-    expect(onNavigateOut.mock.calls).toEqual([['prev'], ['next']])
+    expect(onNavigateOut).not.toHaveBeenCalled()
     expect(document.activeElement).toBe(tab)
+    expect(tab.getAttribute('role')).toBeNull()
+    expect(tab.getAttribute('aria-haspopup')).toBe('menu')
     expect(tab.getAttribute('aria-posinset')).toBeNull()
     expect(tab.getAttribute('aria-setsize')).toBeNull()
   })
@@ -889,10 +932,12 @@ describe('TerminalTabs', () => {
       />,
     )
 
-    expect(document.body.querySelectorAll('[role="tab"]').length).toBe(1)
+    expect(document.body.querySelectorAll('[role="tab"]').length).toBe(0)
     const compactTab = document.body.querySelector<HTMLElement>('[data-terminal-tab-tooltip-id]')
-    expect(compactTab?.className).toContain('w-36')
-    expect(compactTab?.className).not.toContain('w-full')
+    const compactTrigger = document.body.querySelector<HTMLButtonElement>('button[aria-label="terminal.sessions"]')
+    expect(compactTab?.className).toContain('w-full')
+    expect(compactTab?.className).not.toContain('w-36')
+    expect(compactTrigger?.closest('[data-terminal-tab-tooltip-id]')).toBe(compactTab)
 
     rerender(
       <TerminalTabs

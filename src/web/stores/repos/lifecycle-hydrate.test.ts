@@ -19,7 +19,7 @@ import {
 beforeEach(resetLifecycleTest)
 
 describe('repo session hydration', () => {
-  test('rediscovers remote workspace children before restoring an active child repository', async () => {
+  test('restores configured remote workspace children before restoring an active child repository', async () => {
     const rootTarget = normalizeRemoteTarget({
       alias: 'example',
       host: 'example.com',
@@ -35,7 +35,7 @@ describe('repo session hydration', () => {
         name: cwd === rootTarget.id ? 'example:workspace' : cwd,
         isGitRepo: cwd !== rootTarget.id,
       }),
-      'workspace.discover': () => ({
+      'workspace.restore': () => ({
         ok: true,
         rootId: rootTarget.id,
         repositories: [{ id: child.id, name: 'api', remoteRef: child }],

@@ -16,7 +16,11 @@ import { abortRepositoryOperation, initRepository as initRepositoryRpc, probeRep
 import { resolveRemoteRepositoryTarget } from '#/web/remote-client.ts'
 import { stopPortForwardSessionsForRepo } from '#/web/port-forwarding-client.ts'
 import { recordRecentRepo } from '#/web/settings-write-paths.ts'
-import { configureWorkspace as configureWorkspaceClient, discoverWorkspace } from '#/web/workspace-client.ts'
+import {
+  configureWorkspace as configureWorkspaceClient,
+  discoverWorkspace,
+  restoreWorkspace,
+} from '#/web/workspace-client.ts'
 import type { OpenRepoResult, ReposGet, ReposSet, ReposStore } from '#/web/stores/repos/types.ts'
 import type { ExecResult } from '#/web/types.ts'
 import type { WorkspaceConfig, WorkspaceDiscoveryResult, WorkspaceRepositoryEntry } from '#/shared/workspace.ts'
@@ -318,7 +322,7 @@ export function createRuntimeRepoLifecycleActions(
     },
 
     async rescanWorkspace(rootId: string): Promise<void> {
-      await reconcileWorkspaceProject(set, get, rootId)
+      await reconcileWorkspaceProject(set, get, rootId, discoverWorkspace)
     },
 
     async configureWorkspace(
@@ -413,7 +417,12 @@ export function createRuntimeRepoLifecycleActions(
   }
 }
 
-export async function reconcileWorkspaceProject(set: ReposSet, get: ReposGet, rootId: string): Promise<void> {
+export async function reconcileWorkspaceProject(
+  set: ReposSet,
+  get: ReposGet,
+  rootId: string,
+  readWorkspace: (rootPath: string) => Promise<WorkspaceDiscoveryResult> = restoreWorkspace,
+): Promise<void> {
   const root = get().repos[rootId]
   if (!root || root.isGitRepo !== false) return
 
@@ -428,7 +437,7 @@ export async function reconcileWorkspaceProject(set: ReposSet, get: ReposGet, ro
     }
   })
 
-  const result = await discoverWorkspace(rootId).catch(() => ({
+  const result = await readWorkspace(rootId).catch(() => ({
     ok: false as const,
     message: 'error.failed-read-repo',
   }))

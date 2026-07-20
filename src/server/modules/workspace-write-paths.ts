@@ -1,6 +1,6 @@
 import { normalizeWorkspaceConfig, writeWorkspaceConfig } from '#/server/modules/workspace-config-source.ts'
 import { discoverWorkspaceRepositories } from '#/server/modules/workspace-read.ts'
-import type { WorkspaceConfig, WorkspaceDiscoveryResult } from '#/shared/workspace.ts'
+import type { WorkspaceConfig, WorkspaceDiscoveryResult, WorkspaceRepositoryEntry } from '#/shared/workspace.ts'
 
 interface WorkspaceWriteDependencies {
   discover?: typeof discoverWorkspaceRepositories
@@ -34,7 +34,39 @@ export async function saveWorkspaceConfig(
   } catch (error) {
     return { ok: false, message: safeMessage(error) }
   }
-  return await discover(discovery.rootId)
+  return projectSavedWorkspaceConfiguration(discovery, config)
+}
+
+function projectSavedWorkspaceConfiguration(
+  discovery: Extract<WorkspaceDiscoveryResult, { ok: true }>,
+  config: WorkspaceConfig,
+): WorkspaceDiscoveryResult {
+  const selected = new Set(config.repo)
+  const candidates = discovery.candidates.map((candidate) => ({
+    ...candidate,
+    selected: selected.has(candidate.name),
+  }))
+  const availableByName = new Map(
+    candidates.filter((candidate) => candidate.available).map((candidate) => [candidate.name, candidate]),
+  )
+  const repositories = config.repo.flatMap((name): WorkspaceRepositoryEntry[] => {
+    const candidate = availableByName.get(name)
+    return candidate
+      ? [
+          {
+            id: candidate.id,
+            name: candidate.name,
+            ...(candidate.remoteRef ? { remoteRef: candidate.remoteRef } : {}),
+          },
+        ]
+      : []
+  })
+  return {
+    ...discovery,
+    repositories,
+    candidates,
+    configuration: { kind: 'ready', config },
+  }
 }
 
 function safeMessage(error: unknown): string {

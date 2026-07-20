@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import { discoverWorkspaceRepositories } from '#/server/modules/workspace-read.ts'
+import { discoverWorkspaceRepositories, restoreWorkspaceRepositories } from '#/server/modules/workspace-read.ts'
 import type { ProbeResult } from '#/shared/rpc.ts'
 import { normalizeRemoteRepoId, normalizeRemoteRepoRef, normalizeRemoteTarget } from '#/shared/remote-repo.ts'
 import type { RemoteCommandKind, RemoteCommandResult } from '#/system/ssh/commands.ts'
@@ -343,6 +343,110 @@ describe('discoverWorkspaceRepositories', () => {
       repositories: [],
       candidates: [{ id: api, name: 'api', selected: false, available: true }],
       configuration: { kind: 'invalid', message: 'workspace.config.duplicate-repository' },
+      skipped: [],
+    })
+  })
+})
+
+describe('restoreWorkspaceRepositories', () => {
+  test('validates only configured local members and keeps unavailable members without skipped issues', async () => {
+    const root = await createTemporaryRoot()
+    const api = await createGitDirectory(root, 'api')
+    const web = await createGitDirectory(root, 'web')
+    const unrelated = await createGitDirectory(root, 'unrelated')
+    const probeRepository = vi.fn(async (cwd: string): Promise<ProbeResult> => {
+      if (cwd === root) return { ok: true, root, name: path.basename(root), isGitRepo: false }
+      if (cwd === api) return { ok: false, message: 'error.path-not-found' }
+      if (cwd === web) return { ok: true, root: web, name: 'web', isGitRepo: true }
+      throw new Error(`unexpected probe: ${cwd}`)
+    })
+
+    await expect(
+      restoreWorkspaceRepositories(root, {
+        probeRepository,
+        readConfig: async () => ({ kind: 'ready', config: { repo: ['web', 'api'] } }),
+      }),
+    ).resolves.toEqual({
+      ok: true,
+      rootId: root,
+      repositories: [{ id: web, name: 'web' }],
+      candidates: [
+        { id: web, name: 'web', selected: true, available: true },
+        { id: api, name: 'api', selected: true, available: false },
+      ],
+      configuration: { kind: 'ready', config: { repo: ['web', 'api'] } },
+      skipped: [],
+    })
+    expect(probeRepository).toHaveBeenCalledWith(root)
+    expect(probeRepository).toHaveBeenCalledWith(web)
+    expect(probeRepository).toHaveBeenCalledWith(api)
+    expect(probeRepository).not.toHaveBeenCalledWith(unrelated)
+  })
+
+  test('validates only configured remote members without listing workspace directories', async () => {
+    const target = normalizeRemoteTarget({
+      alias: 'prod',
+      host: 'example.com',
+      user: 'alice',
+      port: 22,
+      remotePath: '/srv/workspace',
+    })!
+    const rootId = normalizeRemoteRepoId(target)
+    const api = normalizeRemoteRepoRef({ alias: 'prod', remotePath: '/srv/workspace/api' })!
+    const web = normalizeRemoteRepoRef({ alias: 'prod', remotePath: '/srv/workspace/web' })!
+    const runRemote = vi.fn(async (_target, command: RemoteCommandKind): Promise<RemoteCommandResult> => {
+      if (command.type !== 'testWorkspaceGitDirectory') throw new Error(`unexpected command: ${command.type}`)
+      return command.path.endsWith('/api') ? remoteOk() : remoteFail('missing')
+    })
+
+    await expect(
+      restoreWorkspaceRepositories(rootId, {
+        probeRepository: async () => ({ ok: true, root: rootId, name: 'prod:workspace', isGitRepo: false }),
+        resolveRemoteTarget: async () => ({ target }),
+        runRemote,
+        readConfig: async () => ({ kind: 'ready', config: { repo: ['api', 'web'] } }),
+      }),
+    ).resolves.toEqual({
+      ok: true,
+      rootId,
+      repositories: [{ id: api.id, name: 'api', remoteRef: api }],
+      candidates: [
+        { id: api.id, name: 'api', remoteRef: api, selected: true, available: true },
+        { id: web.id, name: 'web', remoteRef: web, selected: true, available: false },
+      ],
+      configuration: { kind: 'ready', config: { repo: ['api', 'web'] } },
+      skipped: [],
+    })
+    expect(runRemote).toHaveBeenCalledTimes(2)
+    expect(runRemote.mock.calls.map(([, command]) => command)).toEqual([
+      { type: 'testWorkspaceGitDirectory', path: '/srv/workspace/api' },
+      { type: 'testWorkspaceGitDirectory', path: '/srv/workspace/web' },
+    ])
+  })
+
+  test('falls back to complete discovery when workspace configuration is missing', async () => {
+    const root = await createTemporaryRoot()
+    const api = await createGitDirectory(root, 'api')
+    const probeRepository = vi.fn(
+      async (cwd: string): Promise<ProbeResult> => ({
+        ok: true,
+        root: cwd,
+        name: path.basename(cwd),
+        isGitRepo: cwd !== root,
+      }),
+    )
+
+    await expect(
+      restoreWorkspaceRepositories(root, {
+        probeRepository,
+        readConfig: async () => ({ kind: 'missing' }),
+      }),
+    ).resolves.toEqual({
+      ok: true,
+      rootId: root,
+      repositories: [{ id: api, name: 'api' }],
+      candidates: [{ id: api, name: 'api', selected: false, available: true }],
+      configuration: { kind: 'missing' },
       skipped: [],
     })
   })

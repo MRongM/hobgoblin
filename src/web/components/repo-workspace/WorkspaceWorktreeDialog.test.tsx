@@ -232,30 +232,64 @@ describe('WorkspaceWorktreeDialog', () => {
     expect(checkboxForLabel('action.confirm-delete-branch-also-delete-upstream').hasAttribute('disabled')).toBe(true)
   })
 
-  test('closes after a completely successful confirmation', async () => {
-    const onOpenChange = vi.fn()
-    act(() =>
+  test.each(['create', 'remove'] as const)(
+    'keeps %s confirmation disabled after success until the dialog closes',
+    async (operation) => {
+      const operationPlan = { ...plan, operation }
+      const operationResult = { ...successResult, operation }
+      const onOpenChange = vi.fn()
+      act(() =>
+        root!.render(
+          <WorkspaceWorktreeDialog
+            open
+            operation={operation}
+            repositoryCount={2}
+            plan={operationPlan}
+            result={null}
+            pending={false}
+            error={null}
+            onOpenChange={onOpenChange}
+            onPreview={async () => {}}
+            onConfirm={async () => operationResult}
+            onRetry={async () => operationResult}
+            onCancel={async () => {}}
+          />,
+        ),
+      )
+
+      await act(async () => document.querySelector<HTMLButtonElement>('button[data-action="confirm"]')?.click())
+
+      expect(onOpenChange).toHaveBeenCalledWith(false)
+      expect(document.querySelector<HTMLButtonElement>('button[data-action="confirm"]')?.disabled).toBe(true)
+    },
+  )
+
+  test('unlocks confirmation after the controlled dialog closes and reopens', async () => {
+    const renderDialog = (open: boolean) =>
       root!.render(
         <WorkspaceWorktreeDialog
-          open
+          open={open}
           operation="create"
           repositoryCount={2}
           plan={plan}
           result={null}
           pending={false}
           error={null}
-          onOpenChange={onOpenChange}
+          onOpenChange={() => {}}
           onPreview={async () => {}}
           onConfirm={async () => successResult}
           onRetry={async () => successResult}
           onCancel={async () => {}}
         />,
-      ),
-    )
-
+      )
+    act(() => renderDialog(true))
     await act(async () => document.querySelector<HTMLButtonElement>('button[data-action="confirm"]')?.click())
+    expect(document.querySelector<HTMLButtonElement>('button[data-action="confirm"]')?.disabled).toBe(true)
 
-    expect(onOpenChange).toHaveBeenCalledWith(false)
+    act(() => renderDialog(false))
+    act(() => renderDialog(true))
+
+    expect(document.querySelector<HTMLButtonElement>('button[data-action="confirm"]')?.disabled).toBe(false)
   })
 
   test('keeps the dialog open after an incomplete confirmation', async () => {
@@ -282,6 +316,7 @@ describe('WorkspaceWorktreeDialog', () => {
     await act(async () => document.querySelector<HTMLButtonElement>('button[data-action="confirm"]')?.click())
 
     expect(onOpenChange).not.toHaveBeenCalled()
+    expect(document.querySelector<HTMLButtonElement>('button[data-action="confirm"]')?.disabled).toBe(false)
   })
 
   test('closes when retry completes every repository', async () => {

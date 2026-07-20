@@ -63,6 +63,7 @@ export function WorkspaceWorktreeDialog({
   const [baseBranch, setBaseBranch] = useState(baseBranches[0] ?? '')
   const [alsoDeleteBranch, setAlsoDeleteBranch] = useState(false)
   const [alsoDeleteUpstream, setAlsoDeleteUpstream] = useState(false)
+  const [confirmationLocked, setConfirmationLocked] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -72,13 +73,25 @@ export function WorkspaceWorktreeDialog({
     setAlsoDeleteUpstream(false)
   }, [baseBranches, initialBranch, open, operation, removableBranches])
 
+  useEffect(() => {
+    if (!open) setConfirmationLocked(false)
+  }, [open])
+
   const close = () => {
     if (pending) void onCancel()
     onOpenChange(false)
   }
   const runBatchAction = async (action: () => Promise<WorkspaceWorktreeBatchResult | null>) => {
-    const nextResult = await action()
-    if (nextResult?.ok) onOpenChange(false)
+    const locksConfirmation = operation === 'create' || operation === 'remove'
+    if (locksConfirmation) setConfirmationLocked(true)
+    let succeeded = false
+    try {
+      const nextResult = await action()
+      succeeded = nextResult?.ok === true
+      if (succeeded) onOpenChange(false)
+    } finally {
+      if (locksConfirmation && !succeeded) setConfirmationLocked(false)
+    }
   }
   const removal = operation === 'remove'
   const pull = operation === 'pull'
@@ -345,7 +358,7 @@ export function WorkspaceWorktreeDialog({
               type="button"
               data-action="confirm"
               variant={removal ? 'destructive' : 'default'}
-              disabled={pending}
+              disabled={pending || (!pull && confirmationLocked)}
               onClick={() => void runBatchAction(onConfirm)}
             >
               {t(

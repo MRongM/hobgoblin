@@ -10,6 +10,10 @@ export async function discoverWorkspace(rootPath: string): Promise<WorkspaceDisc
   return await postServerJson('/api/workspace/discover', { rootPath })
 }
 
+export async function restoreWorkspace(rootPath: string): Promise<WorkspaceDiscoveryResult> {
+  return await postServerJson('/api/workspace/restore', { rootPath })
+}
+
 export async function configureWorkspace(rootPath: string, config: WorkspaceConfig): Promise<WorkspaceDiscoveryResult> {
   return await postServerJson('/api/workspace/configure', { rootPath, config })
 }

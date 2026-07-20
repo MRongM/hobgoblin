@@ -1,5 +1,14 @@
 import { Plus, X, ChevronDown, Terminal } from 'lucide-react'
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ComponentPropsWithoutRef } from 'react'
+import {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentPropsWithoutRef,
+  type ReactElement,
+  type ReactNode,
+} from 'react'
 import { cn } from '#/web/lib/cn.ts'
 import { Button } from '#/web/components/ui/button.tsx'
 import { ScrollArea } from '#/web/components/ui/scroll-area.tsx'
@@ -260,33 +269,25 @@ export function TerminalTabs({
 
   function renderCompactTabsBody() {
     return (
-      <ToolbarTabStripBody className="gap-0">
-        <TerminalTabTooltipLayer
-          sessions={sessions}
-          focusMode={focusMode}
-          role="tablist"
-          aria-label={t('terminal.sessions')}
-        >
-          <TerminalTab
-            session={selectedSession}
-            isActive={!!panelActive && selectedSession.selected}
-            isSelected={selectedSession.selected}
-            contextSessionCount={sessions.length}
-            tabId={`${detailId}-terminal-tab`}
-            focusRegistry={focusRegistry}
-            onSelect={handleSelect}
-            onClose={handleClose}
-            onRequestClose={requestContextClose}
-            onKeyDown={handleTabKeyDown}
-            t={t}
-          />
-        </TerminalTabTooltipLayer>
+      <ToolbarTabStripBody className="w-full gap-0">
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" aria-label={t('terminal.sessions')}>
-              <ChevronDown size={14} />
-            </Button>
-          </DropdownMenuTrigger>
+          <TerminalTabTooltipLayer sessions={sessions} focusMode={focusMode}>
+            <TerminalTabChrome
+              session={selectedSession}
+              isActive={!!panelActive && selectedSession.selected}
+              isSelected={selectedSession.selected}
+              contextSessionCount={sessions.length}
+              compactSwitcher
+              tabId={`${detailId}-terminal-tab`}
+              buttonRef={focusRegistry.setRef(selectedSession.key)}
+              buttonWrapper={(button) => <DropdownMenuTrigger asChild>{button}</DropdownMenuTrigger>}
+              onSelect={handleSelect}
+              onClose={handleClose}
+              onRequestClose={requestContextClose}
+              onKeyDown={handleTabKeyDown}
+              t={t}
+            />
+          </TerminalTabTooltipLayer>
           <DropdownMenuContent align="start" className="flex w-max flex-col !overflow-hidden">
             <ScrollArea className="max-h-[200px]" scrollbarMode="compact">
               {sessions.map((session) => (
@@ -455,9 +456,11 @@ interface TerminalTabChromeProps {
   contextSessionCount?: number
   isDragging?: boolean
   fillWidth?: boolean
+  compactSwitcher?: boolean
   tabId: string
   buttonRef: ((node: HTMLButtonElement | null) => void) | undefined
   buttonProps?: ComponentPropsWithoutRef<'button'>
+  buttonWrapper?: (button: ReactElement) => ReactNode
   onSelect: (key: string) => void
   onClose: (event: React.MouseEvent, key: string) => void
   onRequestClose: (scope: TerminalCloseScope, key: string) => void
@@ -474,9 +477,11 @@ function TerminalTabChrome({
   contextSessionCount,
   isDragging = false,
   fillWidth = false,
+  compactSwitcher = false,
   tabId,
   buttonRef,
   buttonProps,
+  buttonWrapper,
   onSelect,
   onClose,
   onRequestClose,
@@ -505,6 +510,7 @@ function TerminalTabChrome({
       containerClassName={cn(
         toolbarTabChromeClassName({ variant: 'terminal', active: isActive, dragging: isDragging }),
         fillWidth && 'w-full',
+        compactSwitcher && 'min-w-0 w-full',
       )}
       contextMenu={
         <TerminalTabContextMenu
@@ -515,26 +521,37 @@ function TerminalTabChrome({
         />
       }
       buttonRef={buttonRef}
-      buttonProps={{
-        ...buttonProps,
-        role: 'tab',
-        id: tabId,
-        'aria-selected': isSelected,
-        'aria-label': terminalLabel,
-        ...collectionAria,
-        tabIndex: isSelected ? 0 : -1,
-        onClick: () => onSelect(session.key),
-        onKeyDown: (e) => onKeyDown(e, session.key),
-      }}
+      buttonProps={
+        compactSwitcher
+          ? {
+              ...buttonProps,
+              id: tabId,
+              'aria-label': t('terminal.sessions'),
+              title: terminalLabel,
+            }
+          : {
+              ...buttonProps,
+              role: 'tab',
+              id: tabId,
+              'aria-selected': isSelected,
+              'aria-label': terminalLabel,
+              ...collectionAria,
+              tabIndex: isSelected ? 0 : -1,
+              onClick: () => onSelect(session.key),
+              onKeyDown: (e) => onKeyDown(e, session.key),
+            }
+      }
+      buttonWrapper={buttonWrapper}
       buttonClassName={toolbarTabButtonClassName('terminal')}
       closeLabel={t('terminal.close-named', { name: session.title })}
-      closeVisible={isActive}
+      closeVisible={compactSwitcher || isActive}
       onClose={(e) => onClose(e, session.key)}
     >
       <span className="truncate">{session.title}</span>
       {session.hasBell && (
         <TerminalBellDot label={t('terminal.bell-unread')} pingClassName="opacity-100" />
       )}
+      {compactSwitcher && <ChevronDown className="size-3.5 shrink-0" aria-hidden="true" />}
     </ToolbarClosableTab>
   )
 }

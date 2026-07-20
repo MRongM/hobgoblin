@@ -81,8 +81,8 @@ vi.mock('#/web/components/repo-workspace/project-switcher-model.tsx', async () =
 })
 
 const projects: ProjectSummary[] = [
-  { id: '/repo-a', name: 'Repo A', unavailable: false, isGitRepo: true, worktreePaths: [] },
-  { id: '/repo-b', name: 'Repo B', unavailable: false, isGitRepo: false, worktreePaths: [] },
+  { id: '/repo-a', name: 'Repo A', unavailable: false, isGitRepo: true, terminalWorktreeKeys: [] },
+  { id: '/repo-b', name: 'Repo B', unavailable: false, isGitRepo: false, terminalWorktreeKeys: [] },
 ]
 
 let container: HTMLDivElement | null = null
