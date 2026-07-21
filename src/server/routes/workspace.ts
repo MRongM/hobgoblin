@@ -1,6 +1,7 @@
 import { Hono, type Context } from 'hono'
 import { readBranchWorkspaceSnapshot } from '#/server/modules/branch-workspace-read.ts'
 import { createBranchWorkspaceWriteService } from '#/server/modules/branch-workspace-write-paths.ts'
+import { createBranchWorkspaceGitActionWriteService } from '#/server/modules/branch-workspace-git-action-write-paths.ts'
 import { discoverWorkspaceRepositories, restoreWorkspaceRepositories } from '#/server/modules/workspace-read.ts'
 import { saveWorkspaceConfig } from '#/server/modules/workspace-write-paths.ts'
 import type { ServerTerminalHost } from '#/server/terminal/terminal-host.ts'
@@ -10,6 +11,10 @@ import {
   executeWorkspacePull,
   planWorkspacePull,
 } from '#/server/modules/workspace-pull-write-paths.ts'
+import {
+  normalizeBranchWorkspaceGitActionExecuteInput,
+  normalizeBranchWorkspaceGitActionPlanRequest,
+} from '#/shared/branch-workspace-git-actions.ts'
 
 export interface WorkspaceRouteOptions {
   terminalHost?: ServerTerminalHost
@@ -30,6 +35,7 @@ export function createWorkspaceRoutes(options: WorkspaceRouteOptions = {}) {
       ? { closeSessions: async (sessionIds: string[]) => await options.terminalHost!.closeSessions(sessionIds) }
       : {}),
   })
+  const branchWorkspaceGitActionWriteService = createBranchWorkspaceGitActionWriteService()
 
   app.post('/discover', async (c) => {
     const body = await c.req.json().catch(() => null)
@@ -65,13 +71,23 @@ export function createWorkspaceRoutes(options: WorkspaceRouteOptions = {}) {
   })
 
   app.get('/branch-workspaces/read', async (c) => {
-    return await readBranchWorkspacesResponse(c.req.query('rootId') ?? '', c.req.raw.signal, c)
+    return await readBranchWorkspacesResponse(
+      c.req.query('rootId') ?? '',
+      c.req.raw.signal,
+      c,
+      branchWorkspaceGitActionWriteService.activeOperation,
+    )
   })
 
   app.post('/branch-workspaces/read', async (c) => {
     const body = await c.req.json().catch(() => null)
     const rootId = typeof body?.rootId === 'string' ? body.rootId : ''
-    return await readBranchWorkspacesResponse(rootId, c.req.raw.signal, c)
+    return await readBranchWorkspacesResponse(
+      rootId,
+      c.req.raw.signal,
+      c,
+      branchWorkspaceGitActionWriteService.activeOperation,
+    )
   })
 
   app.post('/branch-workspaces/plan', async (c) => {
@@ -116,6 +132,28 @@ export function createWorkspaceRoutes(options: WorkspaceRouteOptions = {}) {
     return c.json(await branchWorkspaceWriteService.reorder(rootId, body.orderedIds))
   })
 
+  app.post('/branch-workspaces/git-actions/plan', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const rootId = typeof body?.rootId === 'string' ? body.rootId : ''
+    const normalized = normalizeBranchWorkspaceGitActionPlanRequest(body?.request)
+    if (!normalized.ok) return c.json(normalized)
+    return c.json(await branchWorkspaceGitActionWriteService.plan(rootId, normalized.request, c.req.raw.signal))
+  })
+
+  app.post('/branch-workspaces/git-actions/execute', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const rootId = typeof body?.rootId === 'string' ? body.rootId : ''
+    const normalized = normalizeBranchWorkspaceGitActionExecuteInput(body?.input)
+    if (!normalized.ok) return c.json(normalized)
+    return c.json(await branchWorkspaceGitActionWriteService.execute(rootId, normalized.input))
+  })
+
+  app.post('/branch-workspaces/git-actions/abort', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const rootId = typeof body?.rootId === 'string' ? body.rootId : ''
+    return c.json({ ok: branchWorkspaceGitActionWriteService.abort(rootId) })
+  })
+
   app.post('/pull/plan', async (c) => {
     const body = await c.req.json().catch(() => null)
     const rootId = typeof body?.rootId === 'string' ? body.rootId : ''
@@ -143,9 +181,14 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.trim() === value && !value.includes('\0')
 }
 
-async function readBranchWorkspacesResponse(rootId: string, signal: AbortSignal, context: Context) {
+async function readBranchWorkspacesResponse(
+  rootId: string,
+  signal: AbortSignal,
+  context: Context,
+  readActiveOperation: ReturnType<typeof createBranchWorkspaceGitActionWriteService>['activeOperation'],
+) {
   try {
-    return context.json(await readBranchWorkspaceSnapshot(rootId, signal))
+    return context.json(await readBranchWorkspaceSnapshot(rootId, signal, { readActiveOperation }))
   } catch (error) {
     console.warn('[server][workspace] branch workspace read failed', error)
     return context.json({ ok: false as const, message: 'workspace.branch-workspace.read-failed' })

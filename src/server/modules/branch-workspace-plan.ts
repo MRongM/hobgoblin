@@ -218,7 +218,7 @@ export async function buildBranchWorkspacePlan(
     repositories,
     auxiliaryEntries,
     requiredApprovals,
-    steps: buildSteps(!existing, repositories, auxiliaryEntries),
+    steps: buildSteps(!existing, location.directoryName, repositories, auxiliaryEntries),
     terminalSessionIds: [],
   }
   return { ok: true, plan: { token: planToken(planWithoutToken), ...planWithoutToken } }
@@ -309,7 +309,9 @@ async function buildRepairPlan(
     })),
   }
   const steps: BranchWorkspacePlan['steps'] = [
-    ...(!root.exists ? [{ id: 'directory', kind: 'create-directory' as const, label: 'directory' }] : []),
+    ...(!root.exists
+      ? [{ id: 'directory', kind: 'create-directory' as const, label: manifest.directoryName }]
+      : []),
     ...repositories
       .filter((repository) => !repository.satisfied)
       .map((repository) => ({
@@ -604,7 +606,13 @@ async function buildRemovePlan(
       lastError: undefined,
     })),
   }
-  const steps = buildRemoveSteps(repositories, auxiliaryEntries, unmanagedEntries, root.exists)
+  const steps = buildRemoveSteps(
+    repositories,
+    auxiliaryEntries,
+    unmanagedEntries,
+    root.exists,
+    manifest.directoryName,
+  )
   const planWithoutToken: Omit<BranchWorkspacePlan, 'token'> = {
     rootId: manifest.rootId,
     operation: 'remove',
@@ -761,6 +769,7 @@ function buildRemoveSteps(
   auxiliaryEntries: BranchWorkspaceAuxiliaryPlan[],
   unmanagedEntries: string[],
   removeDirectory: boolean,
+  directoryName: string,
 ): BranchWorkspacePlan['steps'] {
   return [
     ...repositories.flatMap((repository) => {
@@ -812,7 +821,7 @@ function buildRemoveSteps(
       label: entryName,
       entryName,
     })),
-    ...(removeDirectory ? [{ id: 'directory', kind: 'remove-directory' as const, label: 'directory' }] : []),
+    ...(removeDirectory ? [{ id: 'directory', kind: 'remove-directory' as const, label: directoryName }] : []),
   ]
 }
 
@@ -1020,11 +1029,12 @@ async function planAuxiliaryEntry(
 
 function buildSteps(
   createDirectory: boolean,
+  directoryName: string,
   repositories: BranchWorkspaceRepositoryPlan[],
   auxiliaryEntries: BranchWorkspaceAuxiliaryPlan[],
 ): BranchWorkspacePlan['steps'] {
   return [
-    ...(createDirectory ? [{ id: 'directory', kind: 'create-directory' as const, label: 'directory' }] : []),
+    ...(createDirectory ? [{ id: 'directory', kind: 'create-directory' as const, label: directoryName }] : []),
     ...repositories
       .filter((repository) => !repository.satisfied)
       .map((repository) => ({

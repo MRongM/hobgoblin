@@ -5,8 +5,8 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
+  Folder,
   FolderPlus,
-  FolderTree,
   LoaderCircle,
   RefreshCw,
   Settings2,
@@ -18,6 +18,7 @@ import type { WorkspacePullResult } from '#/shared/workspace-pull.ts'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { BranchWorkspaceDialog } from '#/web/components/repo-workspace/BranchWorkspaceDialog.tsx'
+import { BranchWorkspaceGitActionDialog } from '#/web/components/repo-workspace/BranchWorkspaceGitActionDialog.tsx'
 import { BranchWorkspaceList } from '#/web/components/repo-workspace/BranchWorkspaceList.tsx'
 import { WorkspaceConfigurationDialog } from '#/web/components/repo-workspace/WorkspaceConfigurationDialog.tsx'
 import {
@@ -35,8 +36,10 @@ import {
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { useBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
 import { useBranchWorkspaceActions } from '#/web/hooks/useBranchWorkspaceActions.ts'
+import { useBranchWorkspaceGitActions } from '#/web/hooks/useBranchWorkspaceGitActions.ts'
 import { useWorkspacePullActions } from '#/web/hooks/useWorkspacePullActions.ts'
 import { cn } from '#/web/lib/cn.ts'
+import { lastPathSegment } from '#/web/lib/paths.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
@@ -67,19 +70,21 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
   const branchItems = branchQuery.data?.ok ? branchQuery.data.items : []
   const auxiliaryCandidates = branchQuery.data?.ok ? branchQuery.data.auxiliaryCandidates : []
   const branchActions = useBranchWorkspaceActions(workspaceRootId)
+  const branchGitActions = useBranchWorkspaceGitActions(workspaceRootId)
   const [configurationOpen, setConfigurationOpen] = useState(false)
   const [branchDialogOpen, setBranchDialogOpen] = useState(false)
   const [branchDialogMode, setBranchDialogMode] = useState<'create' | 'repair' | 'remove'>('create')
   const [dialogWorkspace, setDialogWorkspace] = useState<BranchWorkspaceSnapshot | null>(null)
   const [pullOpen, setPullOpen] = useState(false)
+  const [branchGitActionOpen, setBranchGitActionOpen] = useState(false)
+  const [branchGitActionWorkspaceId, setBranchGitActionWorkspaceId] = useState<string | null>(null)
   const [optimisticRepositoryIds, setOptimisticRepositoryIds] = useState<string[] | null>(null)
   const [reorderPending, setReorderPending] = useState(false)
   const [reorderError, setReorderError] = useState<string | null>(null)
 
-  const overviewTerminalWorktreeKey = worktreeTerminalKey(
-    workspaceRootId,
-    repoPlainWorkspacePath(repos[workspaceRootId]) ?? workspaceRootId,
-  )
+  const overviewRootPath = repoPlainWorkspacePath(repos[workspaceRootId]) ?? workspaceRootId
+  const overviewName = lastPathSegment(overviewRootPath) || repos[workspaceRootId]?.name || workspaceRootId
+  const overviewTerminalWorktreeKey = worktreeTerminalKey(workspaceRootId, overviewRootPath)
   const overviewTerminalCount = useWorktreeTerminalCount(overviewTerminalWorktreeKey)
   const overviewHasTerminalBell = useWorktreeTerminalHasBell(overviewTerminalWorktreeKey)
   const overviewHasTerminalOutputActivity = useWorktreeTerminalHasOutputActivity(overviewTerminalWorktreeKey)
@@ -117,6 +122,13 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
       }),
     [candidateNameById, repos, workspace?.repositoryIds],
   )
+  const branchGitActionWorkspace = branchItems.find((item) => item.id === branchGitActionWorkspaceId) ?? null
+  const openBranchGitAction = (kind: 'batch-commit' | 'merge-back', item: BranchWorkspaceSnapshot) => {
+    branchGitActions.reset()
+    setBranchGitActionWorkspaceId(item.id)
+    setBranchGitActionOpen(true)
+    void branchGitActions.requestPlan(kind, item.id)
+  }
   const settlePull = useCallback(
     async (result: WorkspacePullResult) => {
       if (result.ok) toast.success(t('workspace.pull-all-success'))
@@ -286,7 +298,7 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
             />
             <ManifestRow
               active={activeContext.kind === 'overview'}
-              name={t('workspace.overview')}
+              name={overviewName}
               terminalCount={overviewTerminalCount}
               hasTerminalBell={overviewHasTerminalBell}
               hasTerminalOutputActivity={overviewHasTerminalOutputActivity}
@@ -317,7 +329,7 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
                 rootId={workspaceRootId}
                 items={branchItems}
                 activeId={selectedBranchWorkspaceId}
-                disabled={branchActions.pending}
+                disabled={branchActions.pending || branchGitActions.pending}
                 onActivate={(id) => activateBranchWorkspace(workspaceRootId, id)}
                 onReorder={(orderedIds) => void branchActions.reorder(orderedIds)}
                 onInspect={(item) =>
@@ -325,7 +337,13 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
                 }
                 onRepair={(item) => openBranchDialog('repair', item, true)}
                 onRemove={(item) => openBranchDialog('remove', item, item.lifecycle === 'delete-incomplete')}
-                onCancel={() => branchActions.cancel()}
+                onBatchCommit={(item) => openBranchGitAction('batch-commit', item)}
+                onMergeBack={(item) => openBranchGitAction('merge-back', item)}
+                onCancel={(item) =>
+                  item.activeOperation?.kind === 'batch-commit' || item.activeOperation?.kind === 'merge-back'
+                    ? branchGitActions.cancel()
+                    : branchActions.cancel()
+                }
               />
             )}
           </div>
@@ -364,6 +382,7 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
         result={branchActions.result}
         pending={branchActions.pending}
         error={branchActions.error}
+        onRefreshAuxiliaryCandidates={branchQuery.refresh}
         onOpenChange={(open) => {
           setBranchDialogOpen(open)
           if (!open && !branchActions.pending) branchActions.reset()
@@ -372,6 +391,24 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
         onConfirm={branchActions.confirm}
         onRetry={branchActions.retry}
         onCancel={branchActions.cancel}
+      />
+      <BranchWorkspaceGitActionDialog
+        open={branchGitActionOpen}
+        plan={branchGitActions.plan}
+        result={branchGitActions.result}
+        activeOperation={branchGitActionWorkspace?.activeOperation ?? null}
+        pending={branchGitActions.pending}
+        error={branchGitActions.error}
+        onOpenChange={(open) => {
+          setBranchGitActionOpen(open)
+          if (!open && !branchGitActions.pending) {
+            branchGitActions.reset()
+            setBranchGitActionWorkspaceId(null)
+          }
+        }}
+        onBatchCommit={branchGitActions.executeBatchCommit}
+        onMergeBack={branchGitActions.executeMergeBack}
+        onCancel={branchGitActions.cancel}
       />
       <WorkspacePullDialog
         open={pullOpen}
@@ -418,7 +455,7 @@ function ManifestRow({
       )}
       onClick={onActivate}
     >
-      <FolderTree className="size-3.5 shrink-0" aria-hidden="true" />
+      <Folder className="size-3.5 shrink-0" aria-hidden="true" />
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         <span className="shrink-0 font-mono text-muted-foreground">./</span>
         <span className="min-w-0 truncate font-medium">{name}</span>

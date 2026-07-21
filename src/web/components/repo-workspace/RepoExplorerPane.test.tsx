@@ -1032,7 +1032,7 @@ describe('RepoExplorerPane', () => {
     await act(async () => root.unmount())
   })
 
-  test('stacks branch list above file tree in left-right workspace layout', async () => {
+  test('stacks the file tree below branch navigation in left-right workspace layout', async () => {
     const container = document.createElement('div')
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -1041,6 +1041,8 @@ describe('RepoExplorerPane', () => {
     })
     expect(container.querySelector('[data-file-tree-layout="left-right"]')).toBeTruthy()
     expect(container.querySelector('[data-testid="split-pane"]')?.getAttribute('data-orientation')).toBe('vertical')
+    expect(container.querySelector('[data-testid="split-pane-before"] [data-testid="branch-list"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="split-pane-after"] [data-testid="project-file-tree"]')).not.toBeNull()
     await act(async () => root.unmount())
   })
 

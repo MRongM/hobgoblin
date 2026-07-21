@@ -13,9 +13,20 @@ let container: HTMLDivElement | null = null
 let root: Root | null = null
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 const testWindow = window as unknown as { goblinNative?: unknown }
+const originalResizeObserver = globalThis.ResizeObserver
+
+class MockResizeObserver implements ResizeObserver {
+  observe = vi.fn()
+  unobserve = vi.fn()
+  disconnect = vi.fn()
+}
 
 beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    configurable: true,
+    value: MockResizeObserver,
+  })
   testWindow.goblinNative = {
     homeDir: '/Users/tester',
     initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' },
@@ -36,6 +47,10 @@ afterEach(() => {
   document.body.innerHTML = ''
   delete testWindow.goblinNative
   vi.unstubAllGlobals()
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    configurable: true,
+    value: originalResizeObserver,
+  })
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
 })
 
@@ -381,10 +396,10 @@ describe('CreateWorktreeDialog', () => {
       />,
     )
 
-    expect(document.querySelectorAll('[data-bootstrap-candidate-path]').length).toBe(2)
-    expect(document.querySelectorAll('[data-bootstrap-candidate-choice="skip"][data-state="on"]').length).toBe(2)
-    click('[data-bootstrap-candidate-path="node_modules"] [data-bootstrap-candidate-choice="symlink"]')
-    click('[data-bootstrap-candidate-path=".env"] [data-bootstrap-candidate-choice="copy"]')
+    expect(document.querySelectorAll('[data-materialization-item]').length).toBe(2)
+    expect(document.querySelectorAll('[data-materialization-choice="skip"][data-state="on"]').length).toBe(2)
+    click('[data-materialization-item="node_modules"] [data-materialization-choice="symlink"]')
+    click('[data-materialization-item=".env"] [data-materialization-choice="copy"]')
     setInputValue('#cwt-branch', 'feature/new')
     click('button[type="submit"]')
 
@@ -396,6 +411,47 @@ describe('CreateWorktreeDialog', () => {
       selections: [
         { path: 'node_modules', mode: 'symlink' },
         { path: '.env', mode: 'copy' },
+      ],
+    })
+  })
+
+  test('applies one materialization mode to every batch-selected candidate', () => {
+    const onCreate = vi.fn(async () => {})
+    render(
+      <CreateWorktreeDialog
+        open
+        repo={createRepo()}
+        worktreeBootstrap={{
+          loading: false,
+          preflight: {
+            kind: 'candidates',
+            candidates: [
+              { path: 'node_modules', kind: 'directory' },
+              { path: '.env', kind: 'file' },
+            ],
+          },
+          error: false,
+          configTrusted: false,
+          onConfigTrustedChange: vi.fn(),
+        }}
+        onClose={vi.fn()}
+        onCreate={onCreate}
+      />,
+    )
+
+    click('[data-materialization-select-all]')
+    click('[data-materialization-bulk-choice="symlink"]')
+    setInputValue('#cwt-branch', 'feature/new')
+    click('button[type="submit"]')
+
+    expect(onCreate).toHaveBeenCalledWith({
+      input: {
+        worktreePath: '/tmp/goblin-repo-feature-new',
+        mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'main' },
+      },
+      selections: [
+        { path: 'node_modules', mode: 'symlink' },
+        { path: '.env', mode: 'symlink' },
       ],
     })
   })
@@ -422,13 +478,13 @@ describe('CreateWorktreeDialog', () => {
     )
     render(dialog(true))
 
-    click('[data-bootstrap-candidate-path=".env"] [data-bootstrap-candidate-choice="copy"]')
-    expect(document.querySelector('[data-bootstrap-candidate-choice="copy"][data-state="on"]')).not.toBeNull()
+    click('[data-materialization-item=".env"] [data-materialization-choice="copy"]')
+    expect(document.querySelector('[data-materialization-choice="copy"][data-state="on"]')).not.toBeNull()
 
     act(() => root!.render(dialog(false)))
     act(() => root!.render(dialog(true)))
 
-    expect(document.querySelector('[data-bootstrap-candidate-choice="skip"][data-state="on"]')).not.toBeNull()
+    expect(document.querySelector('[data-materialization-choice="skip"][data-state="on"]')).not.toBeNull()
   })
 
   test('hides empty candidates and keeps preflight errors nonblocking', () => {

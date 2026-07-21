@@ -4,8 +4,8 @@ import { ProjectFileTree } from '#/web/components/file-tree/ProjectFileTree.tsx'
 import { PlainWorkspaceTerminalPanel } from '#/web/components/repo-workspace/PlainWorkspaceTerminalPanel.tsx'
 import { SidebarProjectHeader } from '#/web/components/repo-workspace/SidebarProjectHeader.tsx'
 import { StatusBar } from '#/web/components/StatusBar.tsx'
-import { SplitPane } from '#/web/components/SplitPane.tsx'
 import { RepoWorkspace, RepoWorkspacePane } from '#/web/components/Layout.tsx'
+import { FileAreaSplitPane } from '#/web/components/repo-workspace/FileAreaSplitPane.tsx'
 import type { FileTreeRevealRequest } from '#/web/components/repo-workspace/RepoExplorerPane.tsx'
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
@@ -77,20 +77,20 @@ export function PlainWorkspacePane({
         {!compact && <SidebarProjectHeader repoId={repoId} />}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {desktopWorkspaceOverview ? (
-            <SplitPane
+            <FileAreaSplitPane
               orientation={splitOrientation}
-              before={
+              navigationArea={
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
                   <WorkspaceRepositoryRail workspaceRootId={repoId} currentRepoId={repoId} fill />
                 </div>
               }
-              after={fileBrowser}
-              afterSize={fileAreaSize}
-              afterCollapsed={desktopFileAreaCollapsed}
-              onAfterSizeChange={(size) => setRepoFileTreePaneSize(repoId, layout, size)}
-              beforeMinSize={sideBySide ? '12rem' : '8rem'}
-              afterMinSize={sideBySide ? '12rem' : '8rem'}
-              afterMaxSize="80%"
+              fileArea={fileBrowser}
+              fileAreaSize={fileAreaSize}
+              fileAreaCollapsed={desktopFileAreaCollapsed}
+              onFileAreaSizeChange={(size) => setRepoFileTreePaneSize(repoId, layout, size)}
+              navigationMinSize={sideBySide ? '12rem' : '8rem'}
+              fileAreaMinSize={sideBySide ? '12rem' : '8rem'}
+              fileAreaMaxSize="80%"
               className="min-h-0 flex-1"
             />
           ) : !desktopFileAreaCollapsed ? (

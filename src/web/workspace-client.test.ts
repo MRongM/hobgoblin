@@ -20,6 +20,9 @@ import {
   planWorkspacePull,
   executeWorkspacePull,
   abortWorkspacePull,
+  planBranchWorkspaceGitAction,
+  executeBranchWorkspaceGitAction,
+  abortBranchWorkspaceGitAction,
 } from '#/web/workspace-client.ts'
 
 describe('workspace client', () => {
@@ -131,6 +134,31 @@ describe('workspace client', () => {
       planToken: 'sha256:pull',
     })
     expect(mocks.postServerJson).toHaveBeenNthCalledWith(3, '/api/workspace/pull/abort', {
+      rootId: '/workspace',
+    })
+  })
+
+  test('posts branch workspace Git-action plan, execute, and abort requests', async () => {
+    mocks.postServerJson.mockResolvedValue({ ok: true })
+    const input = {
+      kind: 'batch-commit' as const,
+      planToken: 'sha256:git-action',
+      messages: [{ repositoryName: 'api', message: 'feat: api' }],
+    }
+
+    await planBranchWorkspaceGitAction('/workspace', { kind: 'batch-commit', branchWorkspaceId: 'ws-1' })
+    await executeBranchWorkspaceGitAction('/workspace', input)
+    await abortBranchWorkspaceGitAction('/workspace')
+
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(1, '/api/workspace/branch-workspaces/git-actions/plan', {
+      rootId: '/workspace',
+      request: { kind: 'batch-commit', branchWorkspaceId: 'ws-1' },
+    })
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(2, '/api/workspace/branch-workspaces/git-actions/execute', {
+      rootId: '/workspace',
+      input,
+    })
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(3, '/api/workspace/branch-workspaces/git-actions/abort', {
       rootId: '/workspace',
     })
   })

@@ -125,6 +125,7 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.repository-dependencies-configured':
     'goblin.toml の worktree bootstrap 設定を使用します。',
   'workspace.branch-workspace.auxiliary': '追加のファイルとフォルダ',
+  'workspace.branch-workspace.auxiliary-refresh': '追加のファイルとフォルダを更新',
   'workspace.branch-workspace.auxiliary-named': '追加項目 {name} を含める',
   'workspace.branch-workspace.mode-named': '{name} の配置方法',
   'workspace.branch-workspace.auxiliary-empty': '選択できる追加項目はありません。',
@@ -144,6 +145,58 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.open-editor': 'エディタで開く',
   'workspace.branch-workspace.open-external-terminal': '外部ターミナルで開く',
   'workspace.branch-workspace.open-internal-terminal': '内部ターミナルを開く',
+  'workspace.branch-workspace.git-action.batch-commit': '一括コミット',
+  'workspace.branch-workspace.git-action.batch-commit-description':
+    '変更のある各リポジトリのメッセージを編集し、順番に1回ずつコミットします。',
+  'workspace.branch-workspace.git-action.merge-back': 'ベースブランチへマージ',
+  'workspace.branch-workspace.git-action.merge-back-description':
+    '各現在ブランチを記録済みのベースブランチへ順番にマージします。',
+  'workspace.branch-workspace.git-action.merge': 'マージ',
+  'workspace.branch-workspace.git-action.pull-merge-push': 'プル、マージ、プッシュ',
+  'workspace.branch-workspace.git-action.planning': 'すべてのリポジトリを確認中…',
+  'workspace.branch-workspace.git-action.generate-description':
+    'AI生成はリポジトリごとに実行され、失敗項目は再試行または手動編集できます。',
+  'workspace.branch-workspace.git-action.generate-all': '{provider}ですべて生成',
+  'workspace.branch-workspace.git-action.generating': '生成中…',
+  'workspace.branch-workspace.git-action.generation-failed': 'コミットメッセージの生成に失敗しました。',
+  'workspace.branch-workspace.git-action.commit-message': '{repository} のコミットメッセージ',
+  'workspace.branch-workspace.git-action.change-count': '{count} 件の変更',
+  'workspace.branch-workspace.git-action.clean-skipped': '変更なし、スキップ',
+  'workspace.branch-workspace.git-action.ready': '準備完了',
+  'workspace.branch-workspace.git-action.already-merged': 'マージ済み',
+  'workspace.branch-workspace.git-action.no-upstream': 'アップストリームなし',
+  'workspace.branch-workspace.git-action.phase.ready': '準備完了',
+  'workspace.branch-workspace.git-action.phase.satisfied': '対応済み',
+  'workspace.branch-workspace.git-action.phase.succeeded': '完了',
+  'workspace.branch-workspace.git-action.phase.failed': '失敗',
+  'workspace.branch-workspace.git-action.phase.not-started': '未開始',
+  'workspace.branch-workspace.git-action.step.commit': 'コミット中',
+  'workspace.branch-workspace.git-action.step.pull': 'プル中',
+  'workspace.branch-workspace.git-action.step.merge': 'マージ中',
+  'workspace.branch-workspace.git-action.step.push': 'プッシュ中',
+  'workspace.branch-workspace.git-action.not-ready': 'ブランチワークスペースはまだ準備できていません。',
+  'workspace.branch-workspace.git-action.no-repositories': '処理対象のリポジトリがありません。',
+  'workspace.branch-workspace.git-action.operation-active': '別のGit操作が実行中です。',
+  'workspace.branch-workspace.git-action.plan-expired': '操作計画の有効期限が切れました。再確認してください。',
+  'workspace.branch-workspace.git-action.plan-failed': 'Git操作計画を作成できませんでした。',
+  'workspace.branch-workspace.git-action.execute-failed': 'ブランチワークスペースのGit操作に失敗しました。',
+  'workspace.branch-workspace.git-action.read-failed': 'リポジトリのGit状態を読み取れませんでした。',
+  'workspace.branch-workspace.git-action.repository-changed':
+    'リポジトリ状態が変わりました。計画を再確認してください。',
+  'workspace.branch-workspace.git-action.target-worktree-required':
+    '現在のブランチが想定パスにチェックアウトされていません。',
+  'workspace.branch-workspace.git-action.target-worktree-unavailable':
+    '現在ブランチのワークツリー状態を読み取れません。',
+  'workspace.branch-workspace.git-action.target-worktree-dirty':
+    'マージ前に現在ブランチの変更をコミットまたは整理してください。',
+  'workspace.branch-workspace.git-action.base-worktree-required':
+    'ベースブランチは既存ワークツリーにチェックアウトされている必要があります。',
+  'workspace.branch-workspace.git-action.base-worktree-unavailable':
+    'ベースブランチのワークツリー状態を読み取れません。',
+  'workspace.branch-workspace.git-action.base-worktree-dirty':
+    'マージ前にベースブランチの変更をコミットまたは整理してください。',
+  'workspace.branch-workspace.git-action.base-upstream-required':
+    'プル、マージ、プッシュには各ベースブランチのアップストリームが必要です。',
   'workspace.branch-workspace.delete': 'ブランチワークスペースを削除',
   'workspace.branch-workspace.cancel': '操作をキャンセル',
   'workspace.branch-workspace.inspect': '内容を確認',
@@ -786,6 +839,11 @@ export const ja: Record<DictKey, string> = {
   'action.create-worktree-bootstrap-candidate-skip': 'スキップ',
   'action.create-worktree-bootstrap-candidate-copy': 'コピー',
   'action.create-worktree-bootstrap-candidate-symlink': 'シンボリックリンク',
+  'action.materialization-select-all': '編集可能な項目をすべて選択',
+  'action.materialization-select-candidate': '{name} を一括操作の対象に選択',
+  'action.materialization-selected-count': '{count} 件選択',
+  'action.materialization-bulk-actions': '選択項目を一括操作',
+  'action.materialization-bulk-choice': '選択項目を「{choice}」に設定',
   'action.create-worktree-bootstrap-preflight-error':
     'ワークツリーの bootstrap オプションを読み込めません。これらを使わずにワークツリーを作成できます。',
   'action.create-worktree-confirm': 'ワークツリーを作成',

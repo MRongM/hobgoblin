@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect } from 'react'
+import { queryOptions, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import type { BranchWorkspaceReadResult } from '#/shared/branch-workspaces.ts'
 import { readBranchWorkspaces } from '#/web/workspace-client.ts'
 import { subscribeBranchWorkspaceInvalidation } from '#/web/branch-workspace-invalidation.ts'
@@ -18,7 +18,19 @@ export function branchWorkspaceQueryOptions(rootId: string) {
 }
 
 export function useBranchWorkspaceQuery(rootId: string) {
-  return useQuery(branchWorkspaceQueryOptions(rootId))
+  const queryClient = useQueryClient()
+  const query = useQuery(branchWorkspaceQueryOptions(rootId))
+  const refresh = useCallback(async () => await refreshBranchWorkspaceQuery(queryClient, rootId), [queryClient, rootId])
+  return { ...query, refresh }
+}
+
+export async function refreshBranchWorkspaceQuery(
+  queryClient: QueryClient,
+  rootId: string,
+): Promise<BranchWorkspaceReadResult> {
+  const result = await readBranchWorkspaces(rootId)
+  if (result.ok) queryClient.setQueryData(branchWorkspaceQueryKey(rootId), result)
+  return result
 }
 
 export function useBranchWorkspaceInvalidationSync(): void {

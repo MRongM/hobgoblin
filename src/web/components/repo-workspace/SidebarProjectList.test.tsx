@@ -39,6 +39,9 @@ const projectExternalActionState = vi.hoisted(() => ({
   editorBusy: false,
   terminalDisabled: false,
   terminalBusy: false,
+  internalTerminalOnSelect: vi.fn(),
+  internalTerminalDisabled: false,
+  internalTerminalBusy: false,
 }))
 
 vi.mock('@dnd-kit/core', async () => {
@@ -115,6 +118,14 @@ vi.mock('#/web/hooks/useProjectExternalOpenActions.ts', () => ({
   },
 }))
 
+vi.mock('#/web/hooks/useProjectInternalTerminalAction.ts', () => ({
+  useProjectInternalTerminalAction: (projectId: string) => ({
+    disabled: projectExternalActionState.internalTerminalDisabled,
+    busy: projectExternalActionState.internalTerminalBusy,
+    onSelect: () => projectExternalActionState.internalTerminalOnSelect(projectId),
+  }),
+}))
+
 vi.mock('#/web/components/ExternalAppIcon/index.tsx', () => ({
   EditorAppIcon: ({ pref }: { pref: string }) => <span data-testid="mock-editor-app-icon" data-pref={pref} />,
   TerminalAppIcon: ({ pref }: { pref: string }) => <span data-testid="mock-terminal-app-icon" data-pref={pref} />,
@@ -151,6 +162,9 @@ beforeEach(() => {
   projectExternalActionState.editorBusy = false
   projectExternalActionState.terminalDisabled = false
   projectExternalActionState.terminalBusy = false
+  projectExternalActionState.internalTerminalOnSelect.mockReset()
+  projectExternalActionState.internalTerminalDisabled = false
+  projectExternalActionState.internalTerminalBusy = false
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -375,6 +389,26 @@ describe('SidebarProjectList', () => {
     ])
   })
 
+  test('offers the four scoped project actions from the row context menu', async () => {
+    renderList()
+    const row = projectRow('/repo-a')
+
+    expect((await openContextMenu(row)).map((item) => item.textContent?.trim())).toEqual([
+      'worktrees.open-in-editor-label',
+      'terminal.external',
+      'terminal.internal',
+      'terminal.close-all',
+    ])
+
+    await clickContextMenuItem(row, 'worktrees.open-in-editor-label')
+    await clickContextMenuItem(row, 'terminal.external')
+    await clickContextMenuItem(row, 'terminal.internal')
+
+    expect(projectExternalActionState.editorOnSelect).toHaveBeenCalledWith('/repo-a')
+    expect(projectExternalActionState.terminalOnSelect).toHaveBeenCalledWith('/repo-a')
+    expect(projectExternalActionState.internalTerminalOnSelect).toHaveBeenCalledWith('/repo-a')
+  })
+
   test('reorders when dropped over a different project', () => {
     const { onReorder } = renderList()
 
@@ -400,14 +434,25 @@ function projectRow(projectId: string): HTMLLIElement {
 }
 
 async function requestCloseAllFromContextMenu(row: HTMLElement): Promise<void> {
+  const item = (await openContextMenu(row)).find((candidate) => candidate.textContent?.includes('terminal.close-all'))
+  if (!item) throw new Error('missing close all terminals context menu item')
+  await act(async () => {
+    item.click()
+    await Promise.resolve()
+  })
+}
+
+async function openContextMenu(row: HTMLElement): Promise<HTMLElement[]> {
   await act(async () => {
     row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
     await Promise.resolve()
   })
-  const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) =>
-    candidate.textContent?.includes('terminal.close-all'),
-  )
-  if (!item) throw new Error('missing close all terminals context menu item')
+  return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+}
+
+async function clickContextMenuItem(row: HTMLElement, label: string): Promise<void> {
+  const item = (await openContextMenu(row)).find((candidate) => candidate.textContent?.includes(label))
+  if (!item) throw new Error(`missing context menu item: ${label}`)
   await act(async () => {
     item.click()
     await Promise.resolve()

@@ -17,8 +17,8 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { BranchList } from '#/web/components/BranchList.tsx'
-import { SplitPane } from '#/web/components/SplitPane.tsx'
 import { ProjectFileTree } from '#/web/components/file-tree/ProjectFileTree.tsx'
+import { FileAreaSplitPane } from '#/web/components/repo-workspace/FileAreaSplitPane.tsx'
 import { ProjectChangesPanel } from '#/web/components/repo-workspace/ProjectChangesPanel.tsx'
 import { ProjectHistoryPanel } from '#/web/components/repo-workspace/ProjectHistoryPanel.tsx'
 import { ProjectPortsPanel } from '#/web/components/repo-workspace/ProjectPortsPanel.tsx'
@@ -146,9 +146,9 @@ export function RepoExplorerPane({
       {(!compact || compactExplorerChrome) && (
         <SidebarProjectHeader repoId={repoId} onShowCompactDetail={compact ? onShowCompactDetail : undefined} />
       )}
-      <SplitPane
+      <FileAreaSplitPane
         orientation={splitOrientation}
-        before={
+        navigationArea={
           <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
             {!compact && workspaceRootId && (
               <WorkspaceRepositoryRail workspaceRootId={workspaceRootId} currentRepoId={repoId} />
@@ -157,7 +157,7 @@ export function RepoExplorerPane({
             <BranchArea repoId={repoId} showActions={showActions} onBranchSelected={onBranchSelected} />
           </div>
         }
-        after={
+        fileArea={
           <ExplorerTabs
             repoId={repoId}
             layout={layout}
@@ -167,12 +167,12 @@ export function RepoExplorerPane({
             onTabChange={handleTabChange}
           />
         }
-        afterSize={fileTreeSize}
-        afterCollapsed={desktopFileAreaCollapsed}
-        onAfterSizeChange={(size) => setRepoFileTreePaneSize(repoId, layout, size)}
-        beforeMinSize={sideBySide ? '12rem' : '8rem'}
-        afterMinSize={sideBySide ? '12rem' : '8rem'}
-        afterMaxSize="80%"
+        fileAreaSize={fileTreeSize}
+        fileAreaCollapsed={desktopFileAreaCollapsed}
+        onFileAreaSizeChange={(size) => setRepoFileTreePaneSize(repoId, layout, size)}
+        navigationMinSize={sideBySide ? '12rem' : '8rem'}
+        fileAreaMinSize={sideBySide ? '12rem' : '8rem'}
+        fileAreaMaxSize="80%"
         className="min-h-0 flex-1"
       />
       {(!compact || compactExplorerChrome) && (

@@ -67,12 +67,15 @@ const branchWorkspaceState = vi.hoisted(() => ({
   ],
   reorder: vi.fn(async () => true),
   cancel: vi.fn(async () => {}),
+  refresh: vi.fn(),
+  dialogRefresh: null as null | (() => Promise<unknown>),
 }))
 
 vi.mock('#/web/branch-workspace-queries.ts', () => ({
   useBranchWorkspaceQuery: () => ({
     data: { ok: true, rootId: ROOT, items: branchWorkspaceState.items, auxiliaryCandidates: [] },
     isPending: false,
+    refresh: branchWorkspaceState.refresh,
   }),
 }))
 
@@ -91,6 +94,20 @@ vi.mock('#/web/hooks/useBranchWorkspaceActions.ts', () => ({
   }),
 }))
 
+vi.mock('#/web/hooks/useBranchWorkspaceGitActions.ts', () => ({
+  useBranchWorkspaceGitActions: () => ({
+    plan: null,
+    result: null,
+    pending: false,
+    error: null,
+    requestPlan: vi.fn(async () => true),
+    executeBatchCommit: vi.fn(async () => null),
+    executeMergeBack: vi.fn(async () => null),
+    cancel: vi.fn(async () => {}),
+    reset: vi.fn(),
+  }),
+}))
+
 vi.mock('#/web/components/repo-workspace/BranchWorkspaceList.tsx', () => ({
   BranchWorkspaceList: ({ items, activeId }: { items: Array<{ branch: string }>; activeId: string | null }) => (
     <div data-testid="branch-workspace-list" data-active-id={activeId ?? ''}>
@@ -100,7 +117,18 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspaceList.tsx', () => ({
 }))
 
 vi.mock('#/web/components/repo-workspace/BranchWorkspaceDialog.tsx', () => ({
-  BranchWorkspaceDialog: () => null,
+  BranchWorkspaceDialog: ({
+    onRefreshAuxiliaryCandidates,
+  }: {
+    onRefreshAuxiliaryCandidates?: () => Promise<unknown>
+  }) => {
+    branchWorkspaceState.dialogRefresh = onRefreshAuxiliaryCandidates ?? null
+    return null
+  },
+}))
+
+vi.mock('#/web/components/repo-workspace/BranchWorkspaceGitActionDialog.tsx', () => ({
+  BranchWorkspaceGitActionDialog: () => null,
 }))
 
 vi.mock('#/web/hooks/useWorkspacePullActions.ts', () => ({
@@ -177,6 +205,14 @@ beforeEach(() => {
   rescanWorkspace.mockResolvedValue(undefined)
   refreshCoreData.mockReset()
   refreshCoreData.mockResolvedValue(undefined)
+  branchWorkspaceState.refresh.mockReset()
+  branchWorkspaceState.refresh.mockResolvedValue({
+    ok: true,
+    rootId: ROOT,
+    items: branchWorkspaceState.items,
+    auxiliaryCandidates: [],
+  })
+  branchWorkspaceState.dialogRefresh = null
   configureWorkspace.mockReset()
   configureWorkspace.mockResolvedValue({ ok: true })
   toastMocks.success.mockReset()
@@ -257,7 +293,7 @@ describe('WorkspaceRepositoryRail', () => {
 
     expect(container?.textContent).toContain('workspace.repositories')
     expect(container?.textContent).toContain('./')
-    expect(container?.textContent).toContain('workspace.overview')
+    expect(overviewButton()).not.toBeNull()
     expect(container?.textContent).toContain('api')
     expect(container?.textContent).toContain('main')
     expect(container?.textContent).toContain('2')
@@ -274,6 +310,17 @@ describe('WorkspaceRepositoryRail', () => {
     expect(container?.querySelector('button[aria-label="workspace.configure"]')).not.toBeNull()
   })
 
+  test('identifies Overview with the workspace root folder icon and name', () => {
+    renderRail()
+
+    const overview = overviewButton()
+    expect(overview?.title).toBe('workspace')
+    expect(overview?.textContent).toContain('./workspace')
+    expect(overview?.textContent).not.toContain('workspace.overview')
+    expect(overview?.querySelector('.lucide-folder')).not.toBeNull()
+    expect(overview?.querySelector('.lucide-folder-tree')).toBeNull()
+  })
+
   test('shows branch workspaces in the lower Overview slot while repository collapse hides only upper rows', () => {
     useReposStore.setState({
       activeId: ROOT,
@@ -285,11 +332,11 @@ describe('WorkspaceRepositoryRail', () => {
     expect(container?.querySelector('[data-testid="branch-workspace-list"]')?.getAttribute('data-active-id')).toBe(
       'branch-1',
     )
-    expect(container?.textContent).toContain('workspace.overview')
+    expect(overviewButton()).not.toBeNull()
 
     act(() => container?.querySelector<HTMLButtonElement>('[aria-label="workspace.repositories.collapse"]')?.click())
 
-    expect(container?.textContent).not.toContain('workspace.overview')
+    expect(overviewButton()).toBeUndefined()
     expect(container?.querySelector('[data-testid="branch-workspace-list"]')?.textContent).toContain('feature/auth')
   })
 
@@ -337,7 +384,7 @@ describe('WorkspaceRepositoryRail', () => {
   test('activates Overview and child repositories through one explicit action', () => {
     renderRail()
     const buttons = Array.from(container!.querySelectorAll<HTMLButtonElement>('button'))
-    const overview = buttons.find((button) => button.textContent?.includes('workspace.overview'))
+    const overview = overviewButton()
     const web = buttons.find((button) => button.textContent?.includes('web'))
 
     act(() => overview?.click())
@@ -354,6 +401,14 @@ describe('WorkspaceRepositoryRail', () => {
 
     expect(rescanWorkspace).toHaveBeenCalledWith(ROOT)
     expect(activateWorkspaceRepository).not.toHaveBeenCalled()
+  })
+
+  test('passes the query-owned auxiliary candidate refresh action to the branch workspace dialog', async () => {
+    renderRail()
+
+    await act(async () => await branchWorkspaceState.dialogRefresh?.())
+
+    expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
   })
 
   test('refreshes configured members after a batch operation without rediscovering workspace directories', async () => {
@@ -477,7 +532,7 @@ describe('WorkspaceRepositoryRail', () => {
 
     expect(repositoryListState.props?.repositories.map((repository) => repository.id)).toEqual([API, WEB])
     expect(repositoryListState.props?.repositories.some((repository) => repository.id === ROOT)).toBe(false)
-    expect(container?.textContent).toContain('workspace.overview')
+    expect(overviewButton()).not.toBeNull()
   })
 
   test('projects every repository worktree path into repository items for terminal aggregation', () => {
@@ -489,7 +544,9 @@ describe('WorkspaceRepositoryRail', () => {
 })
 
 function overviewButton(): HTMLButtonElement | null | undefined {
-  return container?.querySelector<HTMLButtonElement>('button[title="workspace.overview"]')
+  return Array.from(container?.querySelectorAll<HTMLButtonElement>('button') ?? []).find((button) =>
+    button.textContent?.includes('./'),
+  )
 }
 
 function renderRail({

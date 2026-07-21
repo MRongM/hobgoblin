@@ -23,6 +23,7 @@ import {
   getRemoteWorktreeBootstrapPreview,
   getRemoteWorktreeBootstrapPreflight,
   inventoryRemoteFileTransfer,
+  isRemoteAncestor,
   listRemoteFileTreeDirectory,
   mergeRemoteBranch,
   moveRemoteFileTreeEntries,
@@ -964,6 +965,17 @@ describe('remote git helpers', () => {
       signal: undefined,
       timeoutMs: 180_000,
     })
+  })
+
+  test('isRemoteAncestor dispatches the safe remote ancestry command', async () => {
+    const run = vi.fn(async () => okRemoteResult(''))
+
+    await expect(isRemoteAncestor(TARGET, 'feature/test', 'main', { run: run as any })).resolves.toBe(true)
+    expect(run).toHaveBeenCalledWith(
+      { type: 'gitIsAncestor', path: '/srv/repo', ancestor: 'feature/test', descendant: 'main' },
+      TARGET,
+      { signal: undefined, timeoutMs: 180_000 },
+    )
   })
 
   test('mergeRemoteBranch rejects relative worktree paths before running remote commands', async () => {

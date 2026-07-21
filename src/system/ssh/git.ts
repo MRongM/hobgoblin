@@ -763,6 +763,21 @@ export async function mergeRemoteBranch(
   return hasUnmergedStatusEntries(parseStatus(status.stdout)) ? { ...execResult, reason: 'merge-conflict' } : execResult
 }
 
+export async function isRemoteAncestor(
+  target: RemoteRepoTarget,
+  ancestor: string,
+  descendant: string,
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<boolean> {
+  if (!isSafeBranchName(ancestor) || !isSafeBranchName(descendant)) return false
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const result = await run({ type: 'gitIsAncestor', path: target.remotePath, ancestor, descendant }, target, {
+    signal: options.signal,
+    timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS,
+  })
+  return result.ok && !options.signal?.aborted
+}
+
 export async function resetRemoteHard(
   target: RemoteRepoTarget,
   worktreePath: string,

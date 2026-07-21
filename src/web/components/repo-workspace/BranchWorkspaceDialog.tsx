@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { File, Folder, FolderKanban, LoaderCircle } from 'lucide-react'
+import { FolderKanban, LoaderCircle, RefreshCw } from 'lucide-react'
 import type {
   BranchWorkspaceApproval,
   BranchWorkspaceAuxiliaryCandidate,
-  BranchWorkspaceAuxiliaryMode,
   BranchWorkspaceExecuteResult,
   BranchWorkspacePlan,
   BranchWorkspacePlanRequest,
   BranchWorkspacePlanStep,
+  BranchWorkspaceReadResult,
   BranchWorkspaceSnapshot,
 } from '#/shared/branch-workspaces.ts'
 import type { WorktreeBootstrapPreflight } from '#/shared/worktree-bootstrap-summary.ts'
@@ -15,6 +15,10 @@ import {
   WorktreeBootstrapCandidateList,
   type WorktreeBootstrapCandidateChoice,
 } from '#/web/components/WorktreeBootstrapCandidateList.tsx'
+import {
+  MaterializationCandidateList,
+  type MaterializationCandidateChoice,
+} from '#/web/components/MaterializationCandidateList.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import {
   Dialog,
@@ -53,6 +57,7 @@ interface BranchWorkspaceDialogProps {
   pending: boolean
   error: string | null
   onOpenChange: (open: boolean) => void
+  onRefreshAuxiliaryCandidates: () => Promise<BranchWorkspaceReadResult>
   onPreview: (request: BranchWorkspacePlanRequest) => Promise<unknown>
   onConfirm: (approvals: BranchWorkspaceApproval[]) => Promise<BranchWorkspaceExecuteResult | null>
   onRetry: (approvals: BranchWorkspaceApproval[]) => Promise<BranchWorkspaceExecuteResult | null>
@@ -70,6 +75,7 @@ export function BranchWorkspaceDialog({
   pending,
   error,
   onOpenChange,
+  onRefreshAuxiliaryCandidates,
   onPreview,
   onConfirm,
   onRetry,
@@ -84,8 +90,9 @@ export function BranchWorkspaceDialog({
     Record<string, Record<string, WorktreeBootstrapCandidateChoice | undefined>>
   >({})
   const bootstrapControllers = useRef<Record<string, AbortController>>({})
-  const [selectedAuxiliary, setSelectedAuxiliary] = useState<Record<string, boolean>>({})
-  const [auxiliaryModes, setAuxiliaryModes] = useState<Record<string, BranchWorkspaceAuxiliaryMode>>({})
+  const [auxiliaryChoices, setAuxiliaryChoices] = useState<Record<string, MaterializationCandidateChoice>>({})
+  const [auxiliaryRefreshPending, setAuxiliaryRefreshPending] = useState(false)
+  const [auxiliaryRefreshError, setAuxiliaryRefreshError] = useState<string | null>(null)
   const [alsoDeleteBranch, setAlsoDeleteBranch] = useState(false)
   const [alsoDeleteUpstream, setAlsoDeleteUpstream] = useState(false)
   const [forceRemoveWorktrees, setForceRemoveWorktrees] = useState(false)
@@ -99,18 +106,23 @@ export function BranchWorkspaceDialog({
     () => new Map(workspace?.auxiliaryEntries.map((entry) => [entry.name, entry]) ?? []),
     [workspace],
   )
+  const initialDialogState = useRef({ workspace, repositories, fixedRepositories })
+  initialDialogState.current = { workspace, repositories, fixedRepositories }
 
   useEffect(() => {
     if (!open) return
-    setBranch(workspace?.branch ?? '')
+    const initial = initialDialogState.current
+    setBranch(initial.workspace?.branch ?? '')
     setSelectedRepositories(
-      Object.fromEntries(repositories.map((repository) => [repository.name, fixedRepositories.has(repository.name)])),
+      Object.fromEntries(
+        initial.repositories.map((repository) => [repository.name, initial.fixedRepositories.has(repository.name)]),
+      ),
     )
     setBaseBranches(
       Object.fromEntries(
-        repositories.map((repository) => [
+        initial.repositories.map((repository) => [
           repository.name,
-          fixedRepositories.get(repository.name)?.baseBranch ||
+          initial.fixedRepositories.get(repository.name)?.baseBranch ||
             repository.defaultBranch ||
             repository.branches[0] ||
             '',
@@ -121,23 +133,50 @@ export function BranchWorkspaceDialog({
     bootstrapControllers.current = {}
     setRepositoryBootstraps({})
     setRepositoryBootstrapChoices({})
-    setSelectedAuxiliary(
-      Object.fromEntries(auxiliaryCandidates.map((candidate) => [candidate.name, fixedAuxiliary.has(candidate.name)])),
-    )
-    setAuxiliaryModes(
+    setAuxiliaryChoices({})
+    setAuxiliaryRefreshPending(false)
+    setAuxiliaryRefreshError(null)
+    setAlsoDeleteBranch(mode === 'remove')
+    setAlsoDeleteUpstream(false)
+    setForceRemoveWorktrees(mode === 'remove')
+    setApprovals([])
+  }, [mode, open, workspace?.id])
+
+  useEffect(() => {
+    if (!open) return
+    setAuxiliaryChoices((current) =>
       Object.fromEntries(
-        auxiliaryCandidates.map((candidate) => [candidate.name, fixedAuxiliary.get(candidate.name)?.mode ?? 'symlink']),
+        auxiliaryCandidates.map((candidate) => [
+          candidate.name,
+          fixedAuxiliary.get(candidate.name)?.mode ?? current[candidate.name] ?? 'skip',
+        ]),
       ),
     )
-    setAlsoDeleteBranch(false)
-    setAlsoDeleteUpstream(false)
-    setForceRemoveWorktrees(false)
-    setApprovals([])
-  }, [auxiliaryCandidates, fixedAuxiliary, fixedRepositories, open, repositories, workspace?.branch])
+  }, [auxiliaryCandidates, fixedAuxiliary, open])
 
   useEffect(() => () => Object.values(bootstrapControllers.current).forEach((controller) => controller.abort()), [])
 
-  useEffect(() => setApprovals([]), [plan?.token])
+  useEffect(() => {
+    if (plan && (mode === 'create' || mode === 'remove')) {
+      setApprovals(plan.requiredApprovals)
+      return
+    }
+    setApprovals([])
+  }, [mode, plan?.token])
+
+  const refreshAuxiliaryCandidates = async () => {
+    if (auxiliaryRefreshPending) return
+    setAuxiliaryRefreshPending(true)
+    setAuxiliaryRefreshError(null)
+    try {
+      const response = await onRefreshAuxiliaryCandidates()
+      if (!response.ok) setAuxiliaryRefreshError(response.message)
+    } catch {
+      setAuxiliaryRefreshError('workspace.branch-workspace.read-failed')
+    } finally {
+      setAuxiliaryRefreshPending(false)
+    }
+  }
 
   const loadRepositoryBootstrap = async (repository: BranchWorkspaceRepositoryOption) => {
     bootstrapControllers.current[repository.name]?.abort()
@@ -168,11 +207,10 @@ export function BranchWorkspaceDialog({
     repositories: repositories.flatMap((repository) =>
       selectedRepositories[repository.name] ? [repositorySelection(repository)] : [],
     ),
-    auxiliaryEntries: auxiliaryCandidates.flatMap((candidate) =>
-      selectedAuxiliary[candidate.name]
-        ? [{ name: candidate.name, mode: auxiliaryModes[candidate.name] ?? ('symlink' as const) }]
-        : [],
-    ),
+    auxiliaryEntries: auxiliaryCandidates.flatMap((candidate) => {
+      const choice = auxiliaryChoices[candidate.name] ?? 'skip'
+      return choice === 'skip' ? [] : [{ name: candidate.name, mode: choice }]
+    }),
   })
   const repositorySelection = (
     repository: BranchWorkspaceRepositoryOption,
@@ -331,6 +369,7 @@ export function BranchWorkspaceDialog({
                             description={t('workspace.branch-workspace.repository-dependencies-description')}
                             candidates={bootstrap.preflight.candidates}
                             choices={repositoryBootstrapChoices[repository.name] ?? {}}
+                            disabled={pending}
                             onChoiceChange={(candidatePath, choice) =>
                               setRepositoryBootstrapChoices((current) => ({
                                 ...current,
@@ -348,56 +387,55 @@ export function BranchWorkspaceDialog({
                 )
               })}
             </fieldset>
-            <fieldset className="grid gap-2 rounded-md border border-separator p-3">
-              <legend className="px-1 text-xs font-medium">{t('workspace.branch-workspace.auxiliary')}</legend>
-              {auxiliaryCandidates.length === 0 ? (
-                <p className="text-xs text-muted-foreground">{t('workspace.branch-workspace.auxiliary-empty')}</p>
-              ) : null}
-              {auxiliaryCandidates.map((candidate) => {
+            <MaterializationCandidateList
+              items={auxiliaryCandidates.map((candidate) => {
                 const fixed = fixedAuxiliary.has(candidate.name)
-                const CandidateIcon = candidate.kind === 'directory' ? Folder : File
-                return (
-                  <div key={candidate.name} className="grid grid-cols-[minmax(0,1fr)_8rem] gap-3">
-                    <label className="flex min-w-0 items-center gap-2 text-xs">
-                      <input
-                        type="checkbox"
-                        aria-label={t('workspace.branch-workspace.auxiliary-named', { name: candidate.name })}
-                        checked={selectedAuxiliary[candidate.name] === true}
-                        disabled={pending || fixed}
-                        onChange={(event) =>
-                          setSelectedAuxiliary((current) => ({ ...current, [candidate.name]: event.target.checked }))
-                        }
-                      />
-                      <CandidateIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                      <span className="truncate">{candidate.name}</span>
+                return {
+                  id: candidate.name,
+                  label: candidate.name,
+                  kind: candidate.kind === 'directory' ? 'directory' : 'file',
+                  disabled: fixed,
+                  annotation: (
+                    <>
                       {candidate.outsideRoot ? (
-                        <span className="text-[10px] text-warning">{t('workspace.branch-workspace.outside-root')}</span>
+                        <span className="shrink-0 text-[10px] text-warning">
+                          {t('workspace.branch-workspace.outside-root')}
+                        </span>
                       ) : null}
                       {fixed ? (
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="shrink-0 text-[10px] text-muted-foreground">
                           {t('workspace.branch-workspace.member-fixed')}
                         </span>
                       ) : null}
-                    </label>
-                    <select
-                      aria-label={t('workspace.branch-workspace.mode-named', { name: candidate.name })}
-                      value={auxiliaryModes[candidate.name] ?? 'symlink'}
-                      disabled={pending || fixed || !selectedAuxiliary[candidate.name]}
-                      className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-                      onChange={(event) =>
-                        setAuxiliaryModes((current) => ({
-                          ...current,
-                          [candidate.name]: event.target.value as BranchWorkspaceAuxiliaryMode,
-                        }))
-                      }
-                    >
-                      <option value="symlink">{t('workspace.branch-workspace.mode.symlink')}</option>
-                      <option value="copy">{t('workspace.branch-workspace.mode.copy')}</option>
-                    </select>
-                  </div>
-                )
+                    </>
+                  ),
+                }
               })}
-            </fieldset>
+              choices={auxiliaryChoices}
+              onChoiceChange={(name, choice) => setAuxiliaryChoices((current) => ({ ...current, [name]: choice }))}
+              headingId="branch-workspace-auxiliary-candidates"
+              label={t('workspace.branch-workspace.auxiliary')}
+              emptyMessage={t('workspace.branch-workspace.auxiliary-empty')}
+              headerAction={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={t('workspace.branch-workspace.auxiliary-refresh')}
+                  title={t('workspace.branch-workspace.auxiliary-refresh')}
+                  disabled={pending || auxiliaryRefreshPending}
+                  onClick={() => void refreshAuxiliaryCandidates()}
+                >
+                  <RefreshCw className={cn(auxiliaryRefreshPending && 'animate-spin')} aria-hidden="true" />
+                </Button>
+              }
+              disabled={pending}
+            />
+            {auxiliaryRefreshError ? (
+              <p className="text-xs text-danger" role="alert">
+                {t(auxiliaryRefreshError)}
+              </p>
+            ) : null}
           </div>
         ) : null}
 
@@ -417,6 +455,7 @@ export function BranchWorkspaceDialog({
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
+                aria-label={t('workspace.branch-workspace.delete-local-branch')}
                 checked={alsoDeleteBranch}
                 disabled={pending}
                 onChange={(event) => {
@@ -429,6 +468,7 @@ export function BranchWorkspaceDialog({
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
+                aria-label={t('workspace.branch-workspace.delete-upstream-branch')}
                 checked={alsoDeleteUpstream}
                 disabled={pending || !alsoDeleteBranch}
                 onChange={(event) => setAlsoDeleteUpstream(event.target.checked)}

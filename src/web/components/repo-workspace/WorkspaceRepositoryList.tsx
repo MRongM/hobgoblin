@@ -27,8 +27,11 @@ import {
 } from '#/web/components/terminal/terminal-session-store.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { useT } from '#/web/stores/i18n.ts'
-import { TerminalScopeContextMenu } from '#/web/components/terminal/TerminalScopeContextMenu.tsx'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
+import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
+import { WorkspaceItemContextMenu } from '#/web/components/repo-workspace/WorkspaceItemContextMenu.tsx'
+import { useProjectExternalOpenActions } from '#/web/hooks/useProjectExternalOpenActions.ts'
+import { useProjectInternalTerminalAction } from '#/web/hooks/useProjectInternalTerminalAction.ts'
 
 const restrictToVerticalRepositoryList: Modifier = ({ transform }) => ({ ...transform, x: 0 })
 
@@ -111,13 +114,23 @@ function SortableWorkspaceRepositoryRow({
     () => repository.terminalWorktreePaths.map((path) => worktreeTerminalKey(repository.id, path)),
     [repository.id, repository.terminalWorktreePaths],
   )
+  const externalActions = useProjectExternalOpenActions(repository.id)
+  const internalTerminalAction = useProjectInternalTerminalAction(repository.id)
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: repository.id,
     disabled,
   })
 
   return (
-    <TerminalScopeContextMenu worktreeTerminalKeys={terminalWorktreeKeys}>
+    <WorkspaceItemContextMenu
+      editor={{ ...externalActions.editor, icon: <EditorAppIcon pref={externalActions.editor.iconPref} /> }}
+      externalTerminal={{
+        ...externalActions.externalTerminal,
+        icon: <TerminalAppIcon pref={externalActions.externalTerminal.iconPref} />,
+      }}
+      internalTerminal={{ ...internalTerminalAction, icon: <Terminal aria-hidden="true" /> }}
+      worktreeTerminalKeys={terminalWorktreeKeys}
+    >
       <li
         ref={setNodeRef}
         style={{ transform: CSS.Transform.toString(transform), transition }}
@@ -214,6 +227,6 @@ function SortableWorkspaceRepositoryRow({
           ) : null}
         </button>
       </li>
-    </TerminalScopeContextMenu>
+    </WorkspaceItemContextMenu>
   )
 }

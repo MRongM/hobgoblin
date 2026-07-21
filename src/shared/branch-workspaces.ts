@@ -1,4 +1,8 @@
 import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
+import type {
+  BranchWorkspaceGitActionKind,
+  BranchWorkspaceGitActionStep,
+} from '#/shared/branch-workspace-git-actions.ts'
 import type { CreateWorktreeMode } from '#/shared/worktree-create.ts'
 import {
   normalizeWorktreeBootstrapSelections,
@@ -96,11 +100,13 @@ export interface BranchWorkspaceAuxiliarySnapshot extends BranchWorkspaceAuxilia
 }
 
 export interface BranchWorkspaceActiveOperation {
-  kind: BranchWorkspaceOperationKind
+  kind: BranchWorkspaceOperationKind | BranchWorkspaceGitActionKind
   currentStep: number
   completedCount: number
   totalCount: number
   cancellable: boolean
+  repositoryName?: string
+  step?: BranchWorkspaceGitActionStep
 }
 
 export type BranchWorkspaceIssueKind =

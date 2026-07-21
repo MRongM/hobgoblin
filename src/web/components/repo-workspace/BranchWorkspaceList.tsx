@@ -1,4 +1,4 @@
-import { useContext, type ReactNode } from 'react'
+import { useContext, useMemo, type ReactNode } from 'react'
 import {
   DndContext,
   KeyboardSensor,
@@ -17,7 +17,7 @@ import {
 } from '@dnd-kit/sortable'
 import { arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Eye, FolderKanban, RotateCcw, SquareTerminal, Terminal, Trash2, X } from 'lucide-react'
+import { Eye, FolderKanban, GitCommitHorizontal, GitMerge, RotateCcw, Terminal, Trash2, X } from 'lucide-react'
 import type { BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import { AsyncButton } from '#/web/components/AsyncButton.tsx'
 import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
@@ -42,6 +42,7 @@ import { useFolderExternalOpenActions } from '#/web/hooks/useFolderExternalOpenA
 import { cn } from '#/web/lib/cn.ts'
 import { lastPathSegment } from '#/web/lib/paths.ts'
 import { useT } from '#/web/stores/i18n.ts'
+import { WorkspaceItemContextMenu } from '#/web/components/repo-workspace/WorkspaceItemContextMenu.tsx'
 
 const restrictToVerticalBranchWorkspaceList: Modifier = ({ transform }) => ({ ...transform, x: 0 })
 
@@ -56,6 +57,8 @@ export interface BranchWorkspaceListProps {
   onRepair: (item: BranchWorkspaceSnapshot) => void
   onRemove: (item: BranchWorkspaceSnapshot) => void
   onCancel: (item: BranchWorkspaceSnapshot) => void | Promise<void>
+  onBatchCommit?: (item: BranchWorkspaceSnapshot) => void
+  onMergeBack?: (item: BranchWorkspaceSnapshot) => void
   onOpenEditor?: (item: BranchWorkspaceSnapshot) => void | Promise<void>
   onOpenExternalTerminal?: (item: BranchWorkspaceSnapshot) => void | Promise<void>
   onOpenInternalTerminal?: (item: BranchWorkspaceSnapshot) => void | Promise<void>
@@ -72,6 +75,8 @@ export function BranchWorkspaceList({
   onRepair,
   onRemove,
   onCancel,
+  onBatchCommit,
+  onMergeBack,
   onOpenEditor,
   onOpenExternalTerminal,
   onOpenInternalTerminal,
@@ -109,6 +114,8 @@ export function BranchWorkspaceList({
               onRepair={onRepair}
               onRemove={onRemove}
               onCancel={onCancel}
+              onBatchCommit={onBatchCommit}
+              onMergeBack={onMergeBack}
               onOpenEditor={onOpenEditor}
               onOpenExternalTerminal={onOpenExternalTerminal}
               onOpenInternalTerminal={onOpenInternalTerminal}
@@ -130,6 +137,8 @@ function BranchWorkspaceRow({
   onRepair,
   onRemove,
   onCancel,
+  onBatchCommit,
+  onMergeBack,
   onOpenEditor,
   onOpenExternalTerminal,
   onOpenInternalTerminal,
@@ -145,6 +154,7 @@ function BranchWorkspaceRow({
   const terminalContext = useContext(TerminalSessionContext)
   const terminalReadContext = useContext(TerminalSessionReadContext)
   const terminalKey = worktreeTerminalKey(rootId, item.path)
+  const terminalKeys = useMemo(() => [terminalKey], [terminalKey])
   const terminalCount = useWorktreeTerminalCount(terminalKey)
   const hasTerminalBell = useWorktreeTerminalHasBell(terminalKey)
   const hasTerminalOutputActivity = useWorktreeTerminalHasOutputActivity(terminalKey)
@@ -165,114 +175,150 @@ function BranchWorkspaceRow({
       activate,
     })
   }
+  const openActionsDisabled = disabled || !ready || !folderAvailable
 
   return (
-    <li
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      data-branch-workspace-lifecycle={item.lifecycle}
-      className={cn('group relative', isDragging && 'z-10 rounded-md bg-card shadow-sm')}
+    <WorkspaceItemContextMenu
+      editor={{
+        ...externalActions.editor,
+        disabled: openActionsDisabled || externalActions.editor.disabled,
+        icon: <EditorAppIcon pref={externalActions.editor.iconPref} />,
+        onSelect: () => (onOpenEditor ? onOpenEditor(item) : externalActions.editor.onSelect()),
+      }}
+      externalTerminal={{
+        ...externalActions.externalTerminal,
+        disabled: openActionsDisabled || externalActions.externalTerminal.disabled,
+        icon: <TerminalAppIcon pref={externalActions.externalTerminal.iconPref} />,
+        onSelect: () =>
+          onOpenExternalTerminal ? onOpenExternalTerminal(item) : externalActions.externalTerminal.onSelect(),
+      }}
+      internalTerminal={{
+        disabled: openActionsDisabled,
+        icon: <Terminal aria-hidden="true" />,
+        onSelect: openInternal,
+      }}
+      worktreeTerminalKeys={terminalKeys}
     >
-      <button
-        ref={setActivatorNodeRef}
-        type="button"
-        {...attributes}
-        {...listeners}
-        aria-current={active ? 'page' : undefined}
-        disabled={!folderAvailable || item.lifecycle === 'active'}
-        title={item.branch}
-        className={cn(
-          'flex h-8 w-full min-w-0 items-center gap-2 rounded-[var(--goblin-brand-radius-sm,var(--radius-sm))] px-2 pr-28 text-left text-xs transition-colors',
-          ready && !disabled ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
-          active ? 'bg-selected text-selected-foreground' : 'hover:bg-list-row-hover',
-          !folderAvailable && 'opacity-60',
-          isDragging && 'cursor-grabbing bg-card shadow-sm',
-        )}
-        onClick={activate}
+      <li
+        ref={setNodeRef}
+        style={{ transform: CSS.Transform.toString(transform), transition }}
+        data-branch-workspace-lifecycle={item.lifecycle}
+        className={cn('group relative', isDragging && 'z-10 rounded-md bg-card shadow-sm')}
       >
-        <FolderKanban className="size-3.5 shrink-0" aria-hidden="true" />
-        <span className="min-w-0 truncate font-medium">{item.branch}</span>
-        {terminalCount > 0 ? (
-          <Badge
-            data-testid="branch-workspace-terminal-count-badge"
-            variant="brand"
-            aria-label={t('terminal.open-count', { count: terminalCount })}
-            className="h-4 shrink-0 gap-1 rounded-full px-1.5 text-[10px] tabular-nums"
-          >
-            {hasTerminalOutputActivity ? (
-              <TerminalOutputActivityIndicator label={t('terminal.output-active')} className="size-2.5" size={10} />
-            ) : (
-              <SquareTerminal className="size-2.5" aria-hidden="true" />
-            )}
-            {terminalCount}
-          </Badge>
-        ) : null}
-        {hasTerminalBell ? <TerminalBellDot label={t('terminal.bell-unread')} /> : null}
-        <LifecycleSummary item={item} />
-      </button>
-      <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
-        {ready ? (
-          <>
-            <RowAsyncAction
-              label="workspace.branch-workspace.open-editor"
-              busy={externalActions.editor.busy}
-              disabled={externalActions.editor.disabled}
-              onClick={() => (onOpenEditor ? onOpenEditor(item) : externalActions.editor.onSelect())}
+        <button
+          ref={setActivatorNodeRef}
+          type="button"
+          {...attributes}
+          {...listeners}
+          aria-current={active ? 'page' : undefined}
+          disabled={!folderAvailable || item.lifecycle === 'active'}
+          title={item.branch}
+          className={cn(
+            'flex h-8 w-full min-w-0 items-center gap-2 rounded-[var(--goblin-brand-radius-sm,var(--radius-sm))] px-2 pr-40 text-left text-xs transition-colors',
+            ready && !disabled ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
+            active ? 'bg-selected text-selected-foreground' : 'hover:bg-list-row-hover',
+            !folderAvailable && 'opacity-60',
+            isDragging && 'cursor-grabbing bg-card shadow-sm',
+          )}
+          onClick={activate}
+        >
+          <FolderKanban className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="min-w-0 truncate font-medium">{item.branch}</span>
+          {terminalCount > 0 ? (
+            <Badge
+              data-testid="branch-workspace-terminal-count-badge"
+              variant="brand"
+              aria-label={t('terminal.open-count', { count: terminalCount })}
+              className="h-4 shrink-0 gap-1 rounded-full px-1.5 text-[10px] tabular-nums"
             >
-              <EditorAppIcon pref={externalActions.editor.iconPref} />
-            </RowAsyncAction>
-            <RowAsyncAction
-              label="workspace.branch-workspace.open-external-terminal"
-              busy={externalActions.externalTerminal.busy}
-              disabled={externalActions.externalTerminal.disabled}
-              onClick={() =>
-                onOpenExternalTerminal ? onOpenExternalTerminal(item) : externalActions.externalTerminal.onSelect()
-              }
-            >
-              <TerminalAppIcon pref={externalActions.externalTerminal.iconPref} />
-            </RowAsyncAction>
-            <RowAction label="workspace.branch-workspace.open-internal-terminal" onClick={() => void openInternal()}>
-              <Terminal />
+              {hasTerminalOutputActivity ? (
+                <TerminalOutputActivityIndicator label={t('terminal.output-active')} className="size-2.5" size={10} />
+              ) : (
+                <Terminal className="size-2.5" aria-hidden="true" />
+              )}
+              {terminalCount}
+            </Badge>
+          ) : null}
+          {hasTerminalBell ? <TerminalBellDot label={t('terminal.bell-unread')} /> : null}
+          <LifecycleSummary item={item} />
+        </button>
+        <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
+          {ready ? (
+            <>
+              {onBatchCommit ? (
+                <RowAction
+                  label="workspace.branch-workspace.git-action.batch-commit"
+                  onClick={() => onBatchCommit(item)}
+                >
+                  <GitCommitHorizontal />
+                </RowAction>
+              ) : null}
+              {onMergeBack ? (
+                <RowAction label="workspace.branch-workspace.git-action.merge-back" onClick={() => onMergeBack(item)}>
+                  <GitMerge />
+                </RowAction>
+              ) : null}
+              <RowAsyncAction
+                label="workspace.branch-workspace.open-editor"
+                busy={externalActions.editor.busy}
+                disabled={externalActions.editor.disabled}
+                onClick={() => (onOpenEditor ? onOpenEditor(item) : externalActions.editor.onSelect())}
+              >
+                <EditorAppIcon pref={externalActions.editor.iconPref} />
+              </RowAsyncAction>
+              <RowAsyncAction
+                label="workspace.branch-workspace.open-external-terminal"
+                busy={externalActions.externalTerminal.busy}
+                disabled={externalActions.externalTerminal.disabled}
+                onClick={() =>
+                  onOpenExternalTerminal ? onOpenExternalTerminal(item) : externalActions.externalTerminal.onSelect()
+                }
+              >
+                <TerminalAppIcon pref={externalActions.externalTerminal.iconPref} />
+              </RowAsyncAction>
+              <RowAction label="workspace.branch-workspace.open-internal-terminal" onClick={() => void openInternal()}>
+                <Terminal />
+              </RowAction>
+              <RowAction label="workspace.branch-workspace.delete" destructive onClick={() => onRemove(item)}>
+                <Trash2 />
+              </RowAction>
+            </>
+          ) : null}
+          {item.lifecycle === 'active' ? (
+            <RowAction label="workspace.branch-workspace.cancel" onClick={() => void onCancel(item)}>
+              <X />
             </RowAction>
-            <RowAction label="workspace.branch-workspace.delete" destructive onClick={() => onRemove(item)}>
-              <Trash2 />
-            </RowAction>
-          </>
-        ) : null}
-        {item.lifecycle === 'active' ? (
-          <RowAction label="workspace.branch-workspace.cancel" onClick={() => void onCancel(item)}>
-            <X />
-          </RowAction>
-        ) : null}
-        {item.lifecycle === 'create-incomplete' || item.lifecycle === 'needs-repair' ? (
-          <>
-            <RowAction label="workspace.branch-workspace.inspect" onClick={() => onInspect(item)}>
-              <Eye />
-            </RowAction>
-            <RowAction
-              label={
-                item.lifecycle === 'create-incomplete'
-                  ? 'workspace.branch-workspace.retry'
-                  : 'workspace.branch-workspace.repair'
-              }
-              onClick={() => onRepair(item)}
-            >
-              <RotateCcw />
-            </RowAction>
-          </>
-        ) : null}
-        {item.lifecycle === 'delete-incomplete' ? (
-          <>
-            <RowAction label="workspace.branch-workspace.inspect" onClick={() => onInspect(item)}>
-              <Eye />
-            </RowAction>
-            <RowAction label="workspace.branch-workspace.continue-delete" destructive onClick={() => onRemove(item)}>
-              <Trash2 />
-            </RowAction>
-          </>
-        ) : null}
-      </div>
-    </li>
+          ) : null}
+          {item.lifecycle === 'create-incomplete' || item.lifecycle === 'needs-repair' ? (
+            <>
+              <RowAction label="workspace.branch-workspace.inspect" onClick={() => onInspect(item)}>
+                <Eye />
+              </RowAction>
+              <RowAction
+                label={
+                  item.lifecycle === 'create-incomplete'
+                    ? 'workspace.branch-workspace.retry'
+                    : 'workspace.branch-workspace.repair'
+                }
+                onClick={() => onRepair(item)}
+              >
+                <RotateCcw />
+              </RowAction>
+            </>
+          ) : null}
+          {item.lifecycle === 'delete-incomplete' ? (
+            <>
+              <RowAction label="workspace.branch-workspace.inspect" onClick={() => onInspect(item)}>
+                <Eye />
+              </RowAction>
+              <RowAction label="workspace.branch-workspace.continue-delete" destructive onClick={() => onRemove(item)}>
+                <Trash2 />
+              </RowAction>
+            </>
+          ) : null}
+        </div>
+      </li>
+    </WorkspaceItemContextMenu>
   )
 }
 

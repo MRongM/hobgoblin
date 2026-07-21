@@ -141,6 +141,10 @@ describe('branch workspace create planner', () => {
         ],
       },
     })
+    if (!result.ok) throw new Error('Expected a create plan')
+    expect(result.plan.steps.find((step) => step.kind === 'create-directory')).toMatchObject({
+      label: 'goblin-feature-auth',
+    })
   })
 
   test('uses an existing branch and recognizes only its exact expected worktree as satisfied', async () => {
@@ -496,7 +500,7 @@ describe('branch workspace repair planner', () => {
         operation: 'repair',
         requiredApprovals: [],
         steps: [
-          { kind: 'create-directory' },
+          { kind: 'create-directory', label: 'goblin-feature-auth' },
           { kind: 'create-worktree', repositoryName: 'api' },
           { kind: 'symlink-entry', entryName: '.env' },
           { kind: 'copy-entry', entryName: 'README.md' },
@@ -774,6 +778,10 @@ describe('branch workspace remove planner', () => {
         ],
         unmanagedEntries: ['notes.txt'],
       },
+    })
+    if (!result.ok) throw new Error('Expected a removal plan')
+    expect(result.plan.steps.find((step) => step.kind === 'remove-directory')).toMatchObject({
+      label: 'goblin-feature-auth',
     })
   })
 

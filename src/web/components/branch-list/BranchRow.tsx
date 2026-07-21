@@ -10,8 +10,11 @@ import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { AsyncButton } from '#/web/components/AsyncButton.tsx'
 import { Tip } from '#/web/components/Tip.tsx'
-import { TerminalScopeContextMenu } from '#/web/components/terminal/TerminalScopeContextMenu.tsx'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
+import {
+  WorkspaceItemContextMenu,
+  type WorkspaceItemOpenAction,
+} from '#/web/components/repo-workspace/WorkspaceItemContextMenu.tsx'
 
 interface BranchRowSortable {
   setNodeRef: (node: HTMLLIElement | null) => void
@@ -55,6 +58,7 @@ export function BranchRow({
     () => (worktreePath ? [worktreeTerminalKey(repo.id, worktreePath)] : []),
     [repo.id, worktreePath],
   )
+  const actions = useBranchActionItems(repo, branch)
   const setItemRef = useCallback(
     (node: HTMLLIElement | null) => {
       if (isSelected) {
@@ -89,6 +93,7 @@ export function BranchRow({
         <BranchRowActions
           repo={repo}
           branch={branch}
+          actions={actions}
           workspaceRemoveAction={workspaceRemoveAction}
           actionMenuOpen={actionMenuOpen}
           onActionMenuOpenChange={onActionMenuOpenChange}
@@ -103,7 +108,14 @@ export function BranchRow({
   )
 
   return worktreePath ? (
-    <TerminalScopeContextMenu worktreeTerminalKeys={terminalWorktreeKeys}>{row}</TerminalScopeContextMenu>
+    <WorkspaceItemContextMenu
+      editor={branchContextMenuAction(actions.externalItems.find((item) => item.id === 'editor'))}
+      externalTerminal={branchContextMenuAction(actions.externalItems.find((item) => item.id === 'externalTerminal'))}
+      internalTerminal={branchContextMenuAction(actions.externalItems.find((item) => item.id === 'terminal'))}
+      worktreeTerminalKeys={terminalWorktreeKeys}
+    >
+      {row}
+    </WorkspaceItemContextMenu>
   ) : (
     row
   )
@@ -112,17 +124,18 @@ export function BranchRow({
 function BranchRowActions({
   repo,
   branch,
+  actions,
   workspaceRemoveAction,
   actionMenuOpen,
   onActionMenuOpenChange,
 }: {
   repo: BranchActionRepo
   branch: RepoBranchState
+  actions: ReturnType<typeof useBranchActionItems>
   workspaceRemoveAction?: { label: string; onSelect: () => void }
   actionMenuOpen?: boolean
   onActionMenuOpenChange?: (open: boolean) => void
 }) {
-  const actions = useBranchActionItems(repo, branch)
   return (
     <>
       <div className="pointer-events-none relative z-20 flex shrink-0 items-center py-1 pr-2.5">
@@ -158,6 +171,17 @@ function BranchRowActions({
       {actions.dialogs}
     </>
   )
+}
+
+function branchContextMenuAction(item: BranchActionItem | undefined): WorkspaceItemOpenAction {
+  return item
+    ? {
+        disabled: item.disabled || !item.visible,
+        busy: item.busy,
+        icon: item.icon,
+        onSelect: item.onSelect,
+      }
+    : { disabled: true, icon: null, onSelect: () => {} }
 }
 
 function WorkspaceRemoveButton({ action }: { action: { label: string; onSelect: () => void } }) {

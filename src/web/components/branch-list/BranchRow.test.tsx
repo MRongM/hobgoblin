@@ -14,6 +14,12 @@ import { createRepoBranch } from '#/web/stores/repos/test-utils.ts'
 
 type CloseTerminalMock = ReturnType<typeof vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>>
 
+const branchActionState = vi.hoisted(() => ({
+  editorOnSelect: vi.fn(),
+  externalTerminalOnSelect: vi.fn(),
+  internalTerminalOnSelect: vi.fn(),
+}))
+
 vi.mock('#/web/stores/i18n.ts', () => ({
   useI18nStore: (selector: (state: { lang: string }) => string) => selector({ lang: 'zh' }),
   useT: () => (key: string, params?: Record<string, string | number>) => {
@@ -62,7 +68,7 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
         disabled: false,
         busy: false,
         visible: true,
-        onSelect: vi.fn(),
+        onSelect: branchActionState.editorOnSelect,
       },
       {
         id: 'terminal',
@@ -73,7 +79,18 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
         disabled: false,
         busy: false,
         visible: true,
-        onSelect: vi.fn(),
+        onSelect: branchActionState.internalTerminalOnSelect,
+      },
+      {
+        id: 'externalTerminal',
+        label: 'open-external-terminal',
+        title: 'open-external-terminal',
+        ariaLabel: 'open-external-terminal',
+        icon: <span data-testid="external-terminal-icon" />,
+        disabled: false,
+        busy: false,
+        visible: true,
+        onSelect: branchActionState.externalTerminalOnSelect,
       },
     ],
     destructiveItems: [],
@@ -102,6 +119,9 @@ beforeEach(() => {
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
+  branchActionState.editorOnSelect.mockReset()
+  branchActionState.externalTerminalOnSelect.mockReset()
+  branchActionState.internalTerminalOnSelect.mockReset()
 })
 
 afterEach(() => {
@@ -603,6 +623,63 @@ describe('BranchRow', () => {
     })
   })
 
+  test('offers the four scoped worktree actions from the row context menu', async () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+    )
+    const row = document.body.querySelector('li')
+    if (!(row instanceof HTMLElement)) throw new Error('missing worktree row')
+
+    expect((await openContextMenu(row)).map((item) => item.textContent?.trim())).toEqual([
+      'worktrees.open-in-editor-label',
+      'terminal.external',
+      'terminal.internal',
+      'terminal.close-all',
+    ])
+
+    await clickContextMenuItem(row, 'worktrees.open-in-editor-label')
+    await clickContextMenuItem(row, 'terminal.external')
+    await clickContextMenuItem(row, 'terminal.internal')
+
+    expect(branchActionState.editorOnSelect).toHaveBeenCalledTimes(1)
+    expect(branchActionState.externalTerminalOnSelect).toHaveBeenCalledTimes(1)
+    expect(branchActionState.internalTerminalOnSelect).toHaveBeenCalledTimes(1)
+  })
+
+  test('does not attach the item context menu to a branch without a worktree', async () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a')
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+    )
+    const row = document.body.querySelector('li')
+    if (!(row instanceof HTMLElement)) throw new Error('missing branch row')
+
+    expect(await openContextMenu(row)).toEqual([])
+  })
+
   test('shows only the directory name for remote worktree paths', () => {
     const repo = emptyRepo('ssh-config://prod/srv/repo', 'repo')
     repo.remote.target = {
@@ -1035,14 +1112,25 @@ function terminalCommandContext(closeTerminal: CloseTerminalMock): TerminalSessi
 }
 
 async function requestCloseAllFromContextMenu(row: HTMLElement): Promise<void> {
+  const item = (await openContextMenu(row)).find((candidate) => candidate.textContent?.includes('terminal.close-all'))
+  if (!item) throw new Error('missing close all terminals context menu item')
+  await act(async () => {
+    item.click()
+    await Promise.resolve()
+  })
+}
+
+async function openContextMenu(row: HTMLElement): Promise<HTMLElement[]> {
   await act(async () => {
     row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
     await Promise.resolve()
   })
-  const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) =>
-    candidate.textContent?.includes('terminal.close-all'),
-  )
-  if (!item) throw new Error('missing close all terminals context menu item')
+  return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+}
+
+async function clickContextMenuItem(row: HTMLElement, label: string): Promise<void> {
+  const item = (await openContextMenu(row)).find((candidate) => candidate.textContent?.includes(label))
+  if (!item) throw new Error(`missing context menu item: ${label}`)
   await act(async () => {
     item.click()
     await Promise.resolve()

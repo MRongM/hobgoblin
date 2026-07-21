@@ -1,14 +1,11 @@
+import { useEffect, useState } from 'react'
 import type { BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import { RepoWorkspace, RepoWorkspacePane } from '#/web/components/Layout.tsx'
-import { SplitPane } from '#/web/components/SplitPane.tsx'
 import { StatusBar } from '#/web/components/StatusBar.tsx'
-import {
-  BranchWorkspaceFileTree,
-} from '#/web/components/repo-workspace/BranchWorkspaceFileTree.tsx'
-import {
-  branchWorkspaceFolderContext,
-} from '#/web/components/repo-workspace/BranchWorkspaceList.tsx'
+import { BranchWorkspaceFileTree } from '#/web/components/repo-workspace/BranchWorkspaceFileTree.tsx'
+import { branchWorkspaceFolderContext } from '#/web/components/repo-workspace/BranchWorkspaceList.tsx'
 import { BranchWorkspaceTerminalPanel } from '#/web/components/repo-workspace/BranchWorkspaceTerminalPanel.tsx'
+import { FileAreaSplitPane } from '#/web/components/repo-workspace/FileAreaSplitPane.tsx'
 import { SidebarProjectHeader } from '#/web/components/repo-workspace/SidebarProjectHeader.tsx'
 import { WorkspaceRepositoryRail } from '#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
@@ -23,6 +20,7 @@ interface BranchWorkspacePaneProps {
 
 export function BranchWorkspacePane({ rootId, workspace, layout }: BranchWorkspacePaneProps) {
   const compact = useIsCompactUi()
+  const [fileAreaCollapsed, setFileAreaCollapsed] = useState(true)
   const context = branchWorkspaceFolderContext(rootId, workspace)
   const detailPaneSize = useReposStore((state) => state.detailPaneSizes[layout])
   const setDetailPaneSize = useReposStore((state) => state.setDetailPaneSize)
@@ -32,26 +30,35 @@ export function BranchWorkspacePane({ rootId, workspace, layout }: BranchWorkspa
   const setRepoFileTreePaneSize = useReposStore((state) => state.setRepoFileTreePaneSize)
   const splitOrientation = compact ? 'vertical' : layout === 'top-bottom' ? 'horizontal' : 'vertical'
   const sideBySide = splitOrientation === 'horizontal'
+  const desktopFileAreaCollapsed = !compact && fileAreaCollapsed
+
+  useEffect(() => setFileAreaCollapsed(true), [workspace.id])
+
   const explorer = (
     <RepoWorkspacePane>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
         <SidebarProjectHeader repoId={rootId} />
-        <SplitPane
+        <FileAreaSplitPane
           orientation={splitOrientation}
-          before={
+          navigationArea={
             <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
               <WorkspaceRepositoryRail workspaceRootId={rootId} currentRepoId={rootId} fill />
             </div>
           }
-          after={<BranchWorkspaceFileTree context={context} />}
-          afterSize={fileTreeSize}
-          onAfterSizeChange={(size) => setRepoFileTreePaneSize(rootId, layout, size)}
-          beforeMinSize={sideBySide ? '12rem' : '8rem'}
-          afterMinSize={sideBySide ? '12rem' : '8rem'}
-          afterMaxSize="80%"
+          fileArea={<BranchWorkspaceFileTree context={context} />}
+          fileAreaSize={fileTreeSize}
+          fileAreaCollapsed={desktopFileAreaCollapsed}
+          onFileAreaSizeChange={(size) => setRepoFileTreePaneSize(rootId, layout, size)}
+          navigationMinSize={sideBySide ? '12rem' : '8rem'}
+          fileAreaMinSize={sideBySide ? '12rem' : '8rem'}
+          fileAreaMaxSize="80%"
           className="min-h-0 flex-1"
         />
-        <StatusBar repoId={rootId} />
+        <StatusBar
+          repoId={rootId}
+          fileAreaCollapsed={compact ? undefined : desktopFileAreaCollapsed}
+          onToggleFileArea={compact ? undefined : () => setFileAreaCollapsed((collapsed) => !collapsed)}
+        />
       </div>
     </RepoWorkspacePane>
   )

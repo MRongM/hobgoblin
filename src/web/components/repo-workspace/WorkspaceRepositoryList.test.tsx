@@ -34,6 +34,12 @@ const dndState = vi.hoisted(() => ({
   verticalStrategy: {},
 }))
 
+const projectActionState = vi.hoisted(() => ({
+  editorOnSelect: vi.fn(),
+  externalTerminalOnSelect: vi.fn(),
+  internalTerminalOnSelect: vi.fn(),
+}))
+
 vi.mock('@dnd-kit/core', async () => {
   const actual = await vi.importActual<typeof import('@dnd-kit/core')>('@dnd-kit/core')
   return {
@@ -89,6 +95,37 @@ vi.mock('#/web/stores/i18n.ts', () => ({
   useT: () => (key: string) => key,
 }))
 
+vi.mock('#/web/hooks/useProjectExternalOpenActions.ts', () => ({
+  useProjectExternalOpenActions: (projectId: string) => ({
+    visible: true,
+    editor: {
+      disabled: false,
+      busy: false,
+      iconPref: 'cursor',
+      onSelect: () => projectActionState.editorOnSelect(projectId),
+    },
+    externalTerminal: {
+      disabled: false,
+      busy: false,
+      iconPref: 'ghostty',
+      onSelect: () => projectActionState.externalTerminalOnSelect(projectId),
+    },
+  }),
+}))
+
+vi.mock('#/web/hooks/useProjectInternalTerminalAction.ts', () => ({
+  useProjectInternalTerminalAction: (projectId: string) => ({
+    disabled: false,
+    busy: false,
+    onSelect: () => projectActionState.internalTerminalOnSelect(projectId),
+  }),
+}))
+
+vi.mock('#/web/components/ExternalAppIcon/index.tsx', () => ({
+  EditorAppIcon: () => <span data-testid="mock-editor-app-icon" />,
+  TerminalAppIcon: () => <span data-testid="mock-terminal-app-icon" />,
+}))
+
 const repositories: WorkspaceRepositoryListItem[] = [
   {
     id: '/workspace/api',
@@ -120,6 +157,9 @@ beforeEach(() => {
   dndState.sortableOptions.clear()
   dndState.sortableOnKeyDown.mockClear()
   dndState.useSensor.mockClear()
+  projectActionState.editorOnSelect.mockReset()
+  projectActionState.externalTerminalOnSelect.mockReset()
+  projectActionState.internalTerminalOnSelect.mockReset()
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
@@ -282,6 +322,27 @@ describe('WorkspaceRepositoryList', () => {
     ])
   })
 
+  test('offers the four scoped repository actions from the row context menu', async () => {
+    renderList()
+    const row = container!.querySelector('[data-sortable-node-id="/workspace/api"]')
+    if (!(row instanceof HTMLElement)) throw new Error('missing workspace repository row')
+
+    expect((await openContextMenu(row)).map((item) => item.textContent?.trim())).toEqual([
+      'worktrees.open-in-editor-label',
+      'terminal.external',
+      'terminal.internal',
+      'terminal.close-all',
+    ])
+
+    await clickContextMenuItem(row, 'worktrees.open-in-editor-label')
+    await clickContextMenuItem(row, 'terminal.external')
+    await clickContextMenuItem(row, 'terminal.internal')
+
+    expect(projectActionState.editorOnSelect).toHaveBeenCalledWith('/workspace/api')
+    expect(projectActionState.externalTerminalOnSelect).toHaveBeenCalledWith('/workspace/api')
+    expect(projectActionState.internalTerminalOnSelect).toHaveBeenCalledWith('/workspace/api')
+  })
+
   test('shows unavailable repository state', () => {
     renderList()
     const row = container!.querySelector('[data-sortable-activator-id="/workspace/web"]')
@@ -377,14 +438,25 @@ function terminalSession(
 }
 
 async function requestCloseAllFromContextMenu(row: HTMLElement): Promise<void> {
+  const item = (await openContextMenu(row)).find((candidate) => candidate.textContent?.includes('terminal.close-all'))
+  if (!item) throw new Error('missing close all terminals context menu item')
+  await act(async () => {
+    item.click()
+    await Promise.resolve()
+  })
+}
+
+async function openContextMenu(row: HTMLElement): Promise<HTMLElement[]> {
   await act(async () => {
     row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
     await Promise.resolve()
   })
-  const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) =>
-    candidate.textContent?.includes('terminal.close-all'),
-  )
-  if (!item) throw new Error('missing close all terminals context menu item')
+  return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+}
+
+async function clickContextMenuItem(row: HTMLElement, label: string): Promise<void> {
+  const item = (await openContextMenu(row)).find((candidate) => candidate.textContent?.includes(label))
+  if (!item) throw new Error(`missing context menu item: ${label}`)
   await act(async () => {
     item.click()
     await Promise.resolve()

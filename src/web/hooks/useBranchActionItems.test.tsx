@@ -40,12 +40,19 @@ const settingsQueryMocks = vi.hoisted(() => ({
 let container: HTMLDivElement
 let root: Root | null = null
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+const originalResizeObserver = globalThis.ResizeObserver
 let terminalSnapshotsByWorktree: Map<string, WorktreeTerminalSnapshot>
 let closeTerminalAndDismissDetailIfLast: ReturnType<
   typeof vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>
 >
 let createTerminal: ReturnType<typeof vi.fn<TerminalSessionContextValue['createTerminal']>>
 let openExternalTerminal: ReturnType<typeof vi.fn>
+
+class MockResizeObserver implements ResizeObserver {
+  observe = vi.fn()
+  unobserve = vi.fn()
+  disconnect = vi.fn()
+}
 
 vi.mock('#/web/runtime-settings-external-apps.ts', () => ({
   useRuntimeExternalAppSettings: mocks.useRuntimeExternalAppSettings,
@@ -74,6 +81,10 @@ describe('useBranchActionItems', () => {
   beforeEach(() => {
     resetReposStore()
     reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
+    Object.defineProperty(globalThis, 'ResizeObserver', {
+      configurable: true,
+      value: MockResizeObserver,
+    })
     container = document.createElement('div')
     document.body.appendChild(container)
     mocks.useRuntimeExternalAppSettings.mockReturnValue({
@@ -137,6 +148,10 @@ describe('useBranchActionItems', () => {
       root?.unmount()
     })
     container.remove()
+    Object.defineProperty(globalThis, 'ResizeObserver', {
+      configurable: true,
+      value: originalResizeObserver,
+    })
     reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
     root = null
   })
@@ -840,9 +855,9 @@ describe('useBranchActionItems', () => {
       await createWorktree.onSelect()
     })
     await waitForAssertion(() => {
-      expect(document.querySelector('[data-bootstrap-candidate-path=".env"]')).not.toBeNull()
+      expect(document.querySelector('[data-materialization-item=".env"]')).not.toBeNull()
     })
-    clickButton('[data-bootstrap-candidate-path=".env"] [data-bootstrap-candidate-choice="copy"]')
+    clickButton('[data-materialization-item=".env"] [data-materialization-choice="copy"]')
     setInputValue('#cwt-branch', 'feature/new')
     clickButton('button[type="submit"]')
 

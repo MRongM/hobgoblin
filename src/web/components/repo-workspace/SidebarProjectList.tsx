@@ -15,7 +15,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Folder, FolderGit2, X } from 'lucide-react'
+import { Folder, FolderGit2, Terminal, X } from 'lucide-react'
 import {
   ProjectTerminalStatus,
   projectLocation,
@@ -28,7 +28,8 @@ import { AsyncButton } from '#/web/components/AsyncButton.tsx'
 import { Tip } from '#/web/components/Tip.tsx'
 import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
 import { useProjectExternalOpenActions } from '#/web/hooks/useProjectExternalOpenActions.ts'
-import { TerminalScopeContextMenu } from '#/web/components/terminal/TerminalScopeContextMenu.tsx'
+import { useProjectInternalTerminalAction } from '#/web/hooks/useProjectInternalTerminalAction.ts'
+import { WorkspaceItemContextMenu } from '#/web/components/repo-workspace/WorkspaceItemContextMenu.tsx'
 
 const restrictToVerticalProjectList: Modifier = ({ transform }) => ({ ...transform, x: 0 })
 
@@ -102,9 +103,21 @@ function SortableProjectRow({
   const projectKind = project.isGitRepo ? 'git' : 'plain'
   const ProjectIcon = project.isGitRepo ? FolderGit2 : Folder
   const projectExternalActions = useProjectExternalOpenActions(project.id)
+  const projectInternalTerminalAction = useProjectInternalTerminalAction(project.id)
 
   return (
-    <TerminalScopeContextMenu worktreeTerminalKeys={project.terminalWorktreeKeys}>
+    <WorkspaceItemContextMenu
+      editor={{
+        ...projectExternalActions.editor,
+        icon: <EditorAppIcon pref={projectExternalActions.editor.iconPref} />,
+      }}
+      externalTerminal={{
+        ...projectExternalActions.externalTerminal,
+        icon: <TerminalAppIcon pref={projectExternalActions.externalTerminal.iconPref} />,
+      }}
+      internalTerminal={{ ...projectInternalTerminalAction, icon: <Terminal aria-hidden="true" /> }}
+      worktreeTerminalKeys={project.terminalWorktreeKeys}
+    >
       <li
         ref={setNodeRef}
         style={{ transform: CSS.Transform.toString(transform), transition }}
@@ -198,6 +211,6 @@ function SortableProjectRow({
           <X />
         </Button>
       </li>
-    </TerminalScopeContextMenu>
+    </WorkspaceItemContextMenu>
   )
 }

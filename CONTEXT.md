@@ -84,6 +84,10 @@ _Avoid_: Project, workspace repository, generic subworkspace
 A set of same-named linked worktrees belonging to one branch workspace. The configured repository list is the candidate pool; each branch workspace chooses its own members, every member remains an independent Git operation boundary, and newly created target branches may use different base branches per repository. Member provenance distinguishes target branches created for the branch workspace from branches that already existed. A same-named worktree already checked out elsewhere remains repository-only and is never moved or claimed automatically.
 _Avoid_: Shared worktree, combined worktree
 
+**Branch workspace base branch**:
+The repository-specific destination branch that one branch workspace member is intended to merge back into. Different members may have different base branches, and the destination remains fixed rather than being inferred from the repository's current default or selected branch.
+_Avoid_: Source branch, current branch, default branch
+
 **Workspace overview**:
 The parent-level workspace view that lists its branch workspaces in the same contextual list position used for repository worktrees, while retaining the workspace root's file and terminal context. Selecting it does not select a branch workspace.
 _Avoid_: All branch workspace, workspace repository
@@ -104,6 +108,14 @@ _Avoid_: Orphan worktree, detached worktree
 A server-coordinated creation, extension, repair, or removal of one branch workspace. Member work is applied sequentially with per-member results and no automatic rollback, but this cross-repository orchestration is not exposed as a separate batch concept.
 When removal includes local branch cleanup, that cleanup applies only to branches created for the branch workspace and is explicitly forceful, so it may discard their unpushed commits; pre-existing branches are retained. Dirty worktrees may be removed only when the removal request explicitly enables force removal, which discards their uncommitted changes; locked and primary worktrees remain removal safety boundaries. Modified copied auxiliary entries, unregistered contents, and internal terminals running anywhere under the branch workspace require separate destructive approval; approved terminals are closed before file removal, while symbolic-link removal never removes its target.
 _Avoid_: Workspace batch operation, workspace transaction, multi-repository Git command
+
+**Branch workspace batch commit**:
+An application-coordinated action that presents every dirty repository member with one editable, repository-specific AI commit message bound to the inspected change set. Before any commit it verifies that every member still matches that change set; after one explicit confirmation, it creates exactly one commit per dirty member sequentially, stops at the first failure, and never rolls back completed commits.
+_Avoid_: AI commit handoff, shared commit message, automatic commit
+
+**Branch workspace merge-back**:
+An application-coordinated action that integrates each repository member's target branch into its fixed branch workspace base branch, either locally or through a pull-merge-push pipeline. Member pipelines run sequentially, stop at the first failed step, and never roll back completed Git or remote writes.
+_Avoid_: Source-branch merge, current-branch merge, atomic batch merge
 
 **Plain workspace**:
 A readable directory opened as a workspace without requiring Git metadata.
