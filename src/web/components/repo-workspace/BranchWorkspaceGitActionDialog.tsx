@@ -242,26 +242,28 @@ function BatchCommitContent({
         <span className="mr-auto text-[11px] text-muted-foreground">
           {t('workspace.branch-workspace.git-action.generate-description')}
         </span>
-        {(['codex', 'claude'] as const).map((provider) => (
-          <Button
-            key={provider}
-            type="button"
-            size="sm"
-            variant="outline"
-            data-action={`generate-all-${provider}`}
-            disabled={disabled || result !== null || !providers[provider] || generatingProvider !== null}
-            onClick={() => onGenerateAll(provider)}
-          >
-            {generatingProvider === provider ? (
-              <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
-            ) : (
-              <Sparkles className="size-3.5" aria-hidden="true" />
-            )}
-            {t('workspace.branch-workspace.git-action.generate-all', {
-              provider: provider === 'codex' ? 'Codex' : 'Claude',
-            })}
-          </Button>
-        ))}
+        <div data-testid="branch-workspace-generate-all-actions" className="ml-auto flex shrink-0 items-center gap-2">
+          {(['codex', 'claude'] as const).map((provider) => (
+            <Button
+              key={provider}
+              type="button"
+              size="sm"
+              variant="outline"
+              data-action={`generate-all-${provider}`}
+              disabled={disabled || result !== null || !providers[provider] || generatingProvider !== null}
+              onClick={() => onGenerateAll(provider)}
+            >
+              {generatingProvider === provider ? (
+                <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <Sparkles className="size-3.5" aria-hidden="true" />
+              )}
+              {t('workspace.branch-workspace.git-action.generate-all', {
+                provider: provider === 'codex' ? 'Codex' : 'Claude',
+              })}
+            </Button>
+          ))}
+        </div>
       </div>
       <div className="max-h-[52vh] overflow-y-auto rounded-md border border-separator">
         {plan.members.map((member, index) => {

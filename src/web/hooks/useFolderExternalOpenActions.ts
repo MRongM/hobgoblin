@@ -55,7 +55,7 @@ export function useFolderExternalOpenActions(input: {
     externalTerminal: {
       disabled: terminalDisabled,
       busy: pending === 'externalTerminal',
-      iconPref: remote ? 'auto' : (resolvedTerminalApp ?? terminalApp ?? 'auto'),
+      iconPref: resolvedTerminalApp ?? terminalApp ?? 'auto',
       onSelect: () => open('externalTerminal'),
     },
   }

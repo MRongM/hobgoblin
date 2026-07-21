@@ -148,7 +148,10 @@ function SortableProjectRow({
           />
           <span className="flex min-w-0 flex-1 items-center gap-2">
             <span className="min-w-0 truncate text-[13px] font-medium leading-4">{project.name}</span>
-            <ProjectTerminalStatus terminalWorktreeKeys={project.terminalWorktreeKeys} />
+            <ProjectTerminalStatus
+              terminalWorktreeKeys={project.terminalWorktreeKeys}
+              branchWorkspaceRootId={project.branchWorkspaceRootId}
+            />
           </span>
         </button>
         {projectExternalActions.visible && (

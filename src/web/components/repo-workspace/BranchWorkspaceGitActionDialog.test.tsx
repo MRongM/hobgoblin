@@ -53,6 +53,19 @@ afterEach(() => {
 })
 
 describe('BranchWorkspaceGitActionDialog', () => {
+  test('keeps both generate-all providers in one right-aligned action group', async () => {
+    render({ plan: batchPlan })
+    await flush()
+
+    const actions = document.querySelector('[data-testid="branch-workspace-generate-all-actions"]')
+    const codex = document.querySelector('[data-action="generate-all-codex"]')
+    const claude = document.querySelector('[data-action="generate-all-claude"]')
+
+    expect(actions).not.toBeNull()
+    expect(codex?.parentElement).toBe(actions)
+    expect(claude?.parentElement).toBe(actions)
+  })
+
   test('generates editable messages serially and submits all dirty repositories', async () => {
     const onBatchCommit = vi.fn(async () => null)
     render({ plan: batchPlan, onBatchCommit })

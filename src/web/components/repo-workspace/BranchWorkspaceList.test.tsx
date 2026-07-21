@@ -33,10 +33,15 @@ vi.mock('#/web/hooks/useFolderExternalOpenActions.ts', () => ({
     externalTerminal: {
       disabled: false,
       busy: false,
-      iconPref: 'auto',
+      iconPref: 'ghostty',
       onSelect: folderActionState.externalTerminalOnSelect,
     },
   }),
+}))
+
+vi.mock('#/web/components/ExternalAppIcon/index.tsx', () => ({
+  EditorAppIcon: ({ pref }: { pref: string }) => <span data-testid="mock-editor-app-icon" data-pref={pref} />,
+  TerminalAppIcon: ({ pref }: { pref: string }) => <span data-testid="mock-terminal-app-icon" data-pref={pref} />,
 }))
 
 vi.mock('#/web/components/terminal/terminal-session-store.ts', () => ({
@@ -99,7 +104,11 @@ describe('BranchWorkspaceList', () => {
     expect(container.querySelector('[data-terminal-bell-dot]')).not.toBeNull()
     expect(container.querySelector('[data-terminal-output-activity-indicator="active"]')).not.toBeNull()
     expect(container.querySelector('[aria-label="workspace.branch-workspace.open-editor"]')).not.toBeNull()
-    expect(container.querySelector('[aria-label="workspace.branch-workspace.open-external-terminal"]')).not.toBeNull()
+    const externalTerminal = container.querySelector('[aria-label="workspace.branch-workspace.open-external-terminal"]')
+    expect(externalTerminal).not.toBeNull()
+    expect(externalTerminal?.querySelector('[data-testid="mock-terminal-app-icon"]')?.getAttribute('data-pref')).toBe(
+      'ghostty',
+    )
     const internalTerminal = container.querySelector('[aria-label="workspace.branch-workspace.open-internal-terminal"]')
     expect(internalTerminal).not.toBeNull()
     expect(internalTerminal?.querySelector('.lucide-terminal')).not.toBeNull()

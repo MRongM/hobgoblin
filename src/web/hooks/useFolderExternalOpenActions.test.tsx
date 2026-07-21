@@ -81,6 +81,7 @@ describe('useFolderExternalOpenActions', () => {
       'ssh-config://dev/srv/workspace',
       '/srv/workspace/goblin-feature',
     )
+    expect(remote().externalTerminal.iconPref).toBe('ghostty')
 
     const unavailable = await renderActions({ repoId: '/workspace', path: '/workspace/missing', available: false })
     expect(unavailable().editor.disabled).toBe(true)

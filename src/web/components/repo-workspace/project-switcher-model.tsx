@@ -2,6 +2,7 @@
 // inline list and the focus-mode dropdown: the open-project summaries
 // selector and the per-project terminal status indicator.
 
+import { useMemo } from 'react'
 import { Terminal } from 'lucide-react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useReposStore } from '#/web/stores/repos/store.ts'
@@ -17,6 +18,7 @@ import {
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { parseRemoteRepoId } from '#/shared/remote-repo.ts'
+import { useBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
 
 // The list identifies projects by where they live: local repos by their
 // filesystem path, remote repos as "host:path". Same-named projects stay
@@ -32,6 +34,7 @@ export interface ProjectSummary {
   unavailable: boolean
   isGitRepo: boolean
   terminalWorktreeKeys: string[]
+  branchWorkspaceRootId: string | null
 }
 
 interface ProjectTerminalRepo {
@@ -70,6 +73,7 @@ function projectSummariesEqual(a: ProjectSummary[], b: ProjectSummary[]): boolea
       item.name === b[index]!.name &&
       item.unavailable === b[index]!.unavailable &&
       item.isGitRepo === b[index]!.isGitRepo &&
+      item.branchWorkspaceRootId === b[index]!.branchWorkspaceRootId &&
       stringArraysEqual(item.terminalWorktreeKeys, b[index]!.terminalWorktreeKeys),
   )
 }
@@ -93,6 +97,7 @@ export function useProjectSummaries(): ProjectSummary[] {
                 unavailable: repo.availability.phase === 'unavailable',
                 isGitRepo: repo.isGitRepo !== false,
                 terminalWorktreeKeys: projectTerminalWorktreeKeys(repo, memberRepos),
+                branchWorkspaceRootId: s.workspaceProjects[id]?.configured ? id : null,
               }
             : null
         })
@@ -104,7 +109,41 @@ export function useProjectSummaries(): ProjectSummary[] {
 // Terminal state carried over from the old repo tab strip: open-session
 // count with the output-activity pulse inside the badge, plus the unread
 // bell dot.
-export function ProjectTerminalStatus({ terminalWorktreeKeys }: { terminalWorktreeKeys: readonly string[] }) {
+export function ProjectTerminalStatus({
+  terminalWorktreeKeys,
+  branchWorkspaceRootId = null,
+}: {
+  terminalWorktreeKeys: readonly string[]
+  branchWorkspaceRootId?: string | null
+}) {
+  return branchWorkspaceRootId ? (
+    <BranchWorkspaceProjectTerminalStatus
+      terminalWorktreeKeys={terminalWorktreeKeys}
+      branchWorkspaceRootId={branchWorkspaceRootId}
+    />
+  ) : (
+    <ProjectTerminalStatusForKeys terminalWorktreeKeys={terminalWorktreeKeys} />
+  )
+}
+
+function BranchWorkspaceProjectTerminalStatus({
+  terminalWorktreeKeys,
+  branchWorkspaceRootId,
+}: {
+  terminalWorktreeKeys: readonly string[]
+  branchWorkspaceRootId: string
+}) {
+  const branchWorkspaceQuery = useBranchWorkspaceQuery(branchWorkspaceRootId)
+  const aggregateKeys = useMemo(() => {
+    const branchWorkspaceKeys = branchWorkspaceQuery.data?.ok
+      ? branchWorkspaceQuery.data.items.map((item) => worktreeTerminalKey(branchWorkspaceRootId, item.path))
+      : []
+    return Array.from(new Set([...terminalWorktreeKeys, ...branchWorkspaceKeys])).sort()
+  }, [branchWorkspaceQuery.data, branchWorkspaceRootId, terminalWorktreeKeys])
+  return <ProjectTerminalStatusForKeys terminalWorktreeKeys={aggregateKeys} />
+}
+
+function ProjectTerminalStatusForKeys({ terminalWorktreeKeys }: { terminalWorktreeKeys: readonly string[] }) {
   const t = useT()
   const terminalCount = useTerminalAggregateCount(terminalWorktreeKeys)
   const hasBell = useTerminalAggregateHasBell(terminalWorktreeKeys)
