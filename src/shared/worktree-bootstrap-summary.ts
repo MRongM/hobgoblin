@@ -1,3 +1,5 @@
+import { MAX_IPC_PATH_LENGTH } from '#/shared/input-validation.ts'
+
 export interface WorktreeBootstrapPathSummary {
   count: number
   paths: string[]
@@ -21,6 +23,20 @@ export type WorktreeBootstrapDecision =
       /** Desired trust state for this exact config hash after a successful bootstrap run. */
       configTrusted: boolean
     }
+  | { kind: 'materialize'; selections: WorktreeBootstrapSelection[] }
+
+export type WorktreeBootstrapCandidateKind = 'file' | 'directory'
+export type WorktreeBootstrapSelectionMode = 'copy' | 'symlink'
+
+export interface WorktreeBootstrapCandidate {
+  path: string
+  kind: WorktreeBootstrapCandidateKind
+}
+
+export interface WorktreeBootstrapSelection {
+  path: string
+  mode: WorktreeBootstrapSelectionMode
+}
 
 export interface WorktreeBootstrapPreview {
   hasConfig: boolean
@@ -39,6 +55,14 @@ export type WorktreeBootstrapPreviewResult =
   | { ok: true; preview: WorktreeBootstrapPreview }
   | { ok: false; message: string }
 
+export type WorktreeBootstrapPreflight =
+  | { kind: 'configured'; preview: WorktreeBootstrapPreview }
+  | { kind: 'candidates'; candidates: WorktreeBootstrapCandidate[] }
+
+export type WorktreeBootstrapPreflightResult =
+  | { ok: true; preflight: WorktreeBootstrapPreflight }
+  | { ok: false; message: string }
+
 interface WorktreeBootstrapConfigLike {
   copy: readonly string[]
   symlink: readonly string[]
@@ -48,6 +72,36 @@ interface WorktreeBootstrapConfigLike {
 }
 
 export const WORKTREE_BOOTSTRAP_SUMMARY_PATH_LIMIT = 8
+
+export function isWorktreeBootstrapCandidatePath(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= MAX_IPC_PATH_LENGTH &&
+    value !== '.' &&
+    value !== '..' &&
+    value !== '.git' &&
+    !value.includes('/') &&
+    !value.includes('\\') &&
+    !/[\0-\x1f\x7f]/.test(value)
+  )
+}
+
+export function normalizeWorktreeBootstrapSelections(value: unknown): WorktreeBootstrapSelection[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null
+  const result: WorktreeBootstrapSelection[] = []
+  const seen = new Set<string>()
+  for (const item of value) {
+    if (!item || typeof item !== 'object') return null
+    const raw = item as Record<string, unknown>
+    if (!isWorktreeBootstrapCandidatePath(raw.path)) return null
+    if (raw.mode !== 'copy' && raw.mode !== 'symlink') return null
+    if (seen.has(raw.path)) return null
+    seen.add(raw.path)
+    result.push({ path: raw.path, mode: raw.mode })
+  }
+  return result
+}
 
 export function compactWorktreeBootstrapPaths(paths: readonly string[]): WorktreeBootstrapPathSummary {
   return {

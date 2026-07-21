@@ -36,6 +36,8 @@ import {
   type UpstreamParts,
 } from '#/system/git/remote.ts'
 import {
+  REMOTE_PATH_EXISTS_MARKER,
+  REMOTE_PATH_MISSING_MARKER,
   REMOTE_SNAPSHOT_BRANCHES_MARKER,
   REMOTE_SNAPSHOT_CURRENT_MARKER,
   REMOTE_SNAPSHOT_DEFAULT_MARKER,
@@ -59,8 +61,12 @@ import {
   compactWorktreeBootstrapPaths,
   formatWorktreeBootstrapSummary,
   hasWorktreeBootstrapSummaryDetails,
+  isWorktreeBootstrapCandidatePath,
   worktreeBootstrapPreviewFromConfig,
+  type WorktreeBootstrapCandidate,
+  type WorktreeBootstrapPreflightResult,
   type WorktreeBootstrapPreviewResult,
+  type WorktreeBootstrapSelection,
   type WorktreeBootstrapSummary,
 } from '#/shared/worktree-bootstrap-summary.ts'
 import { validateBranchDeletionPolicy, validateRemovableWorktreeState } from '#/shared/repo-action-policy.ts'
@@ -1081,7 +1087,15 @@ export async function getRemoteBrowserUrl(
 }
 
 type RemoteWorktreeBootstrapConfigLoadResult =
-  | { ok: true; value: { sourceRoot: string; config?: WorktreeBootstrapConfig; configHash?: string } }
+  | {
+      ok: true
+      value: {
+        sourceRoot: string
+        configFileExists: boolean
+        config?: WorktreeBootstrapConfig
+        configHash?: string
+      }
+    }
   | { ok: false; message: string }
 
 async function loadRemoteWorktreeBootstrapConfig(
@@ -1095,19 +1109,29 @@ async function loadRemoteWorktreeBootstrapConfig(
   })
   if (!readResult.ok) {
     if (readResult.message === 'cancelled') return { ok: false, message: 'cancelled' }
-    if (readResult.message === 'error.path-not-found') return { ok: true, value: { sourceRoot } }
+    if (readResult.message === 'error.path-not-found') {
+      return { ok: true, value: { sourceRoot, configFileExists: false } }
+    }
     return { ok: false, message: readResult.message || 'error.failed-read-repo' }
   }
 
   const raw = readResult.content
-  if (!raw.trim()) return { ok: true, value: { sourceRoot } }
+  if (!raw.trim()) return { ok: true, value: { sourceRoot, configFileExists: true } }
 
   const loaded = parseBootstrapConfig(raw)
   if (loaded.kind === 'error') return { ok: false, message: loaded.message }
-  if (loaded.kind === 'none') return { ok: true, value: { sourceRoot } }
+  if (loaded.kind === 'none') return { ok: true, value: { sourceRoot, configFileExists: true } }
   const validPaths = validateBootstrapConfigPaths(loaded.config)
   if (!validPaths.ok) return { ok: false, message: validPaths.message }
-  return { ok: true, value: { sourceRoot, config: loaded.config, configHash: worktreeBootstrapConfigHash(raw) } }
+  return {
+    ok: true,
+    value: {
+      sourceRoot,
+      configFileExists: true,
+      config: loaded.config,
+      configHash: worktreeBootstrapConfigHash(raw),
+    },
+  }
 }
 
 export async function getRemoteWorktreeBootstrapPreview(
@@ -1118,6 +1142,176 @@ export async function getRemoteWorktreeBootstrapPreview(
   const loaded = await loadRemoteWorktreeBootstrapConfig(target, { signal: options.signal, run })
   if (!loaded.ok) return { ok: false, message: `Worktree bootstrap failed: ${loaded.message}` }
   return { ok: true, preview: worktreeBootstrapPreviewFromConfig(loaded.value.config, loaded.value.configHash) }
+}
+
+export async function getRemoteWorktreeBootstrapPreflight(
+  target: RemoteRepoTarget,
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<WorktreeBootstrapPreflightResult> {
+  if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const loaded = await loadRemoteWorktreeBootstrapConfig(target, { signal: options.signal, run })
+  if (!loaded.ok) return loaded
+  if (loaded.value.configFileExists) {
+    return {
+      ok: true,
+      preflight: {
+        kind: 'configured',
+        preview: worktreeBootstrapPreviewFromConfig(loaded.value.config, loaded.value.configHash),
+      },
+    }
+  }
+
+  const result = await run({ type: 'worktreeBootstrapCandidates', sourceRoot: loaded.value.sourceRoot }, target, {
+    signal: options.signal,
+  })
+  if (options.signal?.aborted || result.message === 'cancelled') return { ok: false, message: 'cancelled' }
+  if (!result.ok) return { ok: false, message: result.message || result.stderr || 'error.failed-read-repo' }
+  const parsed = parseRemoteWorktreeBootstrapCandidates(result.stdout)
+  return parsed.ok
+    ? { ok: true, preflight: { kind: 'candidates', candidates: parsed.candidates } }
+    : { ok: false, message: parsed.message }
+}
+
+export async function validateRemoteWorktreeBootstrapSelections(
+  target: RemoteRepoTarget,
+  selections: readonly WorktreeBootstrapSelection[],
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<ExecResult> {
+  if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
+  if (
+    selections.some(
+      (selection) =>
+        !isWorktreeBootstrapCandidatePath(selection.path) ||
+        (selection.mode !== 'copy' && selection.mode !== 'symlink'),
+    )
+  ) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const preflight = await getRemoteWorktreeBootstrapPreflight(target, { signal: options.signal, run })
+  if (!preflight.ok) return preflight
+  if (preflight.preflight.kind !== 'candidates') {
+    return { ok: false, message: 'error.worktree-bootstrap-selection-stale' }
+  }
+
+  const currentCandidates = new Set(preflight.preflight.candidates.map((candidate) => candidate.path))
+  for (const selection of selections) {
+    if (currentCandidates.has(selection.path)) continue
+    const exists = await remoteBootstrapSelectionPathExists(target, selection.path, { signal: options.signal, run })
+    if (!exists.ok) return exists
+    if (exists.exists) return { ok: false, message: 'error.worktree-bootstrap-selection-stale' }
+  }
+  return { ok: true, message: '' }
+}
+
+function parseRemoteWorktreeBootstrapCandidates(
+  stdout: string,
+): { ok: true; candidates: WorktreeBootstrapCandidate[] } | { ok: false; message: string } {
+  let value: unknown
+  try {
+    value = JSON.parse(stdout)
+  } catch {
+    return { ok: false, message: 'error.failed-read-repo' }
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { ok: false, message: 'error.failed-read-repo' }
+  }
+  const raw = value as { ok?: unknown; message?: unknown; candidates?: unknown }
+  if (raw.ok !== true) {
+    return { ok: false, message: typeof raw.message === 'string' ? raw.message : 'error.failed-read-repo' }
+  }
+  if (!Array.isArray(raw.candidates)) return { ok: false, message: 'error.failed-read-repo' }
+
+  const candidates: WorktreeBootstrapCandidate[] = []
+  const seen = new Set<string>()
+  for (const item of raw.candidates) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      return { ok: false, message: 'error.failed-read-repo' }
+    }
+    const candidate = item as { path?: unknown; kind?: unknown }
+    if (!isWorktreeBootstrapCandidatePath(candidate.path)) {
+      return { ok: false, message: 'error.failed-read-repo' }
+    }
+    if (candidate.kind !== 'file' && candidate.kind !== 'directory') {
+      return { ok: false, message: 'error.failed-read-repo' }
+    }
+    if (seen.has(candidate.path)) return { ok: false, message: 'error.failed-read-repo' }
+    seen.add(candidate.path)
+    candidates.push({ path: candidate.path, kind: candidate.kind })
+  }
+  return { ok: true, candidates }
+}
+
+async function remoteBootstrapSelectionPathExists(
+  target: RemoteRepoTarget,
+  selectionPath: string,
+  options: { signal?: AbortSignal; run: RemoteGitRunner },
+): Promise<{ ok: true; exists: boolean } | { ok: false; message: string }> {
+  const result = await options.run(
+    { type: 'testPathExists', path: path.posix.join(path.posix.normalize(target.remotePath), selectionPath) },
+    target,
+    { signal: options.signal },
+  )
+  if (options.signal?.aborted || result.message === 'cancelled') return { ok: false, message: 'cancelled' }
+  if (!result.ok) return { ok: false, message: result.message || result.stderr || 'error.failed-read-repo' }
+  if (result.stdout === REMOTE_PATH_EXISTS_MARKER) return { ok: true, exists: true }
+  if (result.stdout === REMOTE_PATH_MISSING_MARKER) return { ok: true, exists: false }
+  return { ok: false, message: 'error.failed-read-repo' }
+}
+
+export async function bootstrapRemoteWorktreeSelectionsAfterCreate(
+  target: RemoteRepoTarget,
+  worktreePath: string,
+  selections: readonly WorktreeBootstrapSelection[],
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<ExecResult> {
+  if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  for (const selection of selections) {
+    if (!isWorktreeBootstrapCandidatePath(selection.path)) {
+      return { ok: false, message: 'Worktree bootstrap failed: error.invalid-arguments' }
+    }
+    if (selection.mode !== 'copy' && selection.mode !== 'symlink') {
+      return { ok: false, message: 'Worktree bootstrap failed: error.invalid-arguments' }
+    }
+  }
+
+  const loaded = await loadRemoteWorktreeBootstrapConfig(target, { signal: options.signal, run })
+  if (!loaded.ok) return { ok: false, message: `Worktree bootstrap failed: ${loaded.message}` }
+  if (loaded.value.configFileExists) {
+    return { ok: false, message: 'Worktree bootstrap failed: goblin.toml changed after confirmation' }
+  }
+
+  const bootstrapResult = await run(
+    {
+      type: 'bootstrapRemoteWorktree',
+      sourceRoot: loaded.value.sourceRoot,
+      targetRoot: worktreePath,
+      copy: selections.filter((entry) => entry.mode === 'copy').map((entry) => entry.path),
+      symlink: selections.filter((entry) => entry.mode === 'symlink').map((entry) => entry.path),
+      hardlink: [],
+      exclude: [],
+      setup: undefined,
+      literalPaths: true,
+    },
+    target,
+    { signal: options.signal, timeoutMs: REMOTE_BOOTSTRAP_TIMEOUT_MS },
+  )
+  if (bootstrapResult.message === 'cancelled') return { ok: false, message: 'cancelled' }
+  if (!bootstrapResult.ok) {
+    return {
+      ok: false,
+      message: `Worktree bootstrap failed: ${bootstrapResult.message || bootstrapResult.stderr || 'error.failed-read-repo'}`,
+    }
+  }
+
+  const summary = remoteBootstrapSummaryFromOutput(bootstrapResult.stdout)
+  return {
+    ok: true,
+    message: formatWorktreeBootstrapSummary(summary),
+    ...(hasWorktreeBootstrapSummaryDetails(summary) ? { worktreeBootstrap: summary } : {}),
+  }
 }
 
 export async function bootstrapRemoteWorktreeAfterCreate(

@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, readlink, rm, stat, symlink, writeFile } from
 import { beforeEach, afterEach, describe, expect, test, vi } from 'vitest'
 import {
   bootstrapWorktreeAfterCreate,
+  bootstrapWorktreeSelectionsAfterCreate,
   DEFAULT_WORKTREE_BOOTSTRAP_CONFIG,
   getWorktreeBootstrapPreview,
   initializeWorktreeBootstrapConfig,
@@ -96,6 +97,87 @@ exclude = ["config/*.log"]
 
     expect(result).toEqual({ ok: true, message: '' })
     expect(mocks.getRepoRoot).toHaveBeenCalledWith(sourceRoot, { signal: undefined })
+  })
+
+  test('copies and symlinks one-time selections using literal root paths', async () => {
+    const literalName = 'local[1]*?.env'
+    await writeFile(path.join(sourceRoot, literalName), 'TOKEN=placeholder\n')
+    await mkdir(path.join(sourceRoot, 'node_modules'))
+
+    const result = await bootstrapWorktreeSelectionsAfterCreate(sourceRoot, targetRoot, [
+      { path: literalName, mode: 'copy' },
+      { path: 'node_modules', mode: 'symlink' },
+    ])
+
+    expect(result).toEqual({
+      ok: true,
+      message: `Copied 1 path: ${literalName}\nSymlinked 1 path: node_modules`,
+      worktreeBootstrap: {
+        copy: { count: 1, paths: [literalName] },
+        symlink: { count: 1, paths: ['node_modules'] },
+        hardlink: { count: 0, paths: [] },
+        skippedMissing: { count: 0, paths: [] },
+      },
+    })
+    await expect(readFile(path.join(targetRoot, literalName), 'utf8')).resolves.toBe('TOKEN=placeholder\n')
+    await expect(readlink(path.join(targetRoot, 'node_modules'))).resolves.toBe(path.join(sourceRoot, 'node_modules'))
+  })
+
+  test('rejects one-time materialization when goblin.toml appeared', async () => {
+    await writeFile(path.join(sourceRoot, '.env'), 'TOKEN=placeholder\n')
+    await writeConfig('[worktree]\n')
+
+    await expect(
+      bootstrapWorktreeSelectionsAfterCreate(sourceRoot, targetRoot, [{ path: '.env', mode: 'copy' }]),
+    ).resolves.toEqual({
+      ok: false,
+      message: 'Worktree bootstrap failed: goblin.toml changed after confirmation',
+    })
+  })
+
+  test('plans all one-time destinations before writing any selection', async () => {
+    await writeFile(path.join(sourceRoot, '.env'), 'source\n')
+    await writeFile(path.join(sourceRoot, 'later.txt'), 'later\n')
+    await writeFile(path.join(targetRoot, '.env'), 'target\n')
+
+    const result = await bootstrapWorktreeSelectionsAfterCreate(sourceRoot, targetRoot, [
+      { path: '.env', mode: 'copy' },
+      { path: 'later.txt', mode: 'copy' },
+    ])
+
+    expect(result).toEqual({
+      ok: false,
+      message: 'Worktree bootstrap failed: destination already exists: .env',
+    })
+    await expect(readFile(path.join(targetRoot, 'later.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  test('reports missing one-time selections without failing', async () => {
+    const result = await bootstrapWorktreeSelectionsAfterCreate(sourceRoot, targetRoot, [
+      { path: 'missing.env', mode: 'copy' },
+    ])
+
+    expect(result).toEqual({
+      ok: true,
+      message: 'Skipped missing 1 path: missing.env',
+      worktreeBootstrap: {
+        copy: { count: 0, paths: [] },
+        symlink: { count: 0, paths: [] },
+        hardlink: { count: 0, paths: [] },
+        skippedMissing: { count: 1, paths: ['missing.env'] },
+      },
+    })
+  })
+
+  test('cancels one-time materialization before resolving the repo root', async () => {
+    const controller = new AbortController()
+    controller.abort()
+
+    await expect(
+      bootstrapWorktreeSelectionsAfterCreate(sourceRoot, targetRoot, [{ path: '.env', mode: 'copy' }], {
+        signal: controller.signal,
+      }),
+    ).resolves.toEqual({ ok: false, message: 'cancelled' })
   })
 
   test('initializes a missing goblin.toml without default copy or setup operations', async () => {

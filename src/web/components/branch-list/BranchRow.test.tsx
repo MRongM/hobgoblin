@@ -853,7 +853,33 @@ describe('BranchRow', () => {
     expect(terminalBtn!.compareDocumentPosition(dropdown!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  test('clicking the inline editor button also selects its branch', () => {
+  test('clicking the branch row selects its branch', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+    const onSelectBranch = vi.fn()
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={onSelectBranch}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+    )
+
+    act(() => {
+      document.body.querySelector<HTMLLIElement>('li')!.click()
+    })
+
+    expect(onSelectBranch).toHaveBeenCalledWith('feature/a')
+  })
+
+  test('clicking the inline editor button does not select its branch', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
     const onSelectBranch = vi.fn()
@@ -877,10 +903,10 @@ describe('BranchRow', () => {
       editorBtn!.click()
     })
 
-    expect(onSelectBranch).toHaveBeenCalledWith('feature/a')
+    expect(onSelectBranch).not.toHaveBeenCalled()
   })
 
-  test('clicking the inline terminal button also selects its branch', () => {
+  test('leaves branch selection to the inline terminal action callback', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
     const onSelectBranch = vi.fn()
@@ -904,10 +930,10 @@ describe('BranchRow', () => {
       terminalBtn!.click()
     })
 
-    expect(onSelectBranch).toHaveBeenCalledWith('feature/a')
+    expect(onSelectBranch).not.toHaveBeenCalled()
   })
 
-  test('clicking the actions dropdown also selects its branch', () => {
+  test('clicking the actions dropdown does not select its branch', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
     const onSelectBranch = vi.fn()
@@ -931,7 +957,7 @@ describe('BranchRow', () => {
       dropdown!.click()
     })
 
-    expect(onSelectBranch).toHaveBeenCalledWith('feature/a')
+    expect(onSelectBranch).not.toHaveBeenCalled()
   })
 
   test('does not render inline editor/terminal buttons for branches without a worktree', () => {

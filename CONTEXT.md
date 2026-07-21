@@ -40,6 +40,18 @@ _Avoid_: AI command, automatic AI action
 A repository-configured process that prepares a newly created worktree from its source worktree before normal development begins.
 _Avoid_: Worktree setup script, post-create hook
 
+**Worktree bootstrap candidate**:
+An immediate child file or directory of a repository root that Git does not track, including ignored and ordinary untracked entries. A wholly untracked directory is one candidate, and `.git` is never a candidate.
+_Avoid_: Bootstrap file, untracked path
+
+**Selected branch context**:
+The branch whose explorer and detail surfaces the user is currently viewing. Changing this context is navigation; it is distinct from checking out a Git branch and from targeting a branch action.
+_Avoid_: Active branch, current branch
+
+**Branch action target**:
+The branch or worktree explicitly targeted by an action. It may differ from the selected branch context, and targeting it does not imply navigating to it unless the action opens branch-specific application content.
+_Avoid_: Active branch, implicitly selected branch
+
 **Project list**:
 The inline list of open projects shown beneath the sidebar project switcher.
 _Avoid_: Repo dropdown, project expanded list

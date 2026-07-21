@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   searchRepositoryFileTree: vi.fn(),
   exportRepositoryFilesToLocalDirectory: vi.fn(),
   getRepositoryWorktreeBootstrapPreview: vi.fn(),
+  getRepositoryWorktreeBootstrapPreflight: vi.fn(),
   initializeRepositoryWorktreeBootstrapConfig: vi.fn(),
   getRepositoryLocalTags: vi.fn(),
   createRepositoryLocalTag: vi.fn(),
@@ -35,6 +36,7 @@ vi.mock('#/server/modules/repo-read-paths.ts', () => ({
   readRepositoryFileTreeBinaryFile: mocks.readRepositoryFileTreeBinaryFile,
   readRepositoryFileTreeTextFile: mocks.readRepositoryFileTreeTextFile,
   searchRepositoryFileTree: mocks.searchRepositoryFileTree,
+  getRepositoryWorktreeBootstrapPreflight: mocks.getRepositoryWorktreeBootstrapPreflight,
 }))
 
 vi.mock('#/server/modules/repo-write-paths.ts', () => ({
@@ -251,7 +253,12 @@ describe('repo routes', () => {
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({ ok: true, message: 'deleted' })
-    expect(mocks.deleteRepositoryLocalTag).toHaveBeenCalledWith('/tmp/repo', 'v1.0.0', expect.any(AbortSignal), 'repo_test')
+    expect(mocks.deleteRepositoryLocalTag).toHaveBeenCalledWith(
+      '/tmp/repo',
+      'v1.0.0',
+      expect.any(AbortSignal),
+      'repo_test',
+    )
   })
 
   test('routes remote tag deletion', async () => {
@@ -300,6 +307,28 @@ describe('repo routes', () => {
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({ ok: true, preview: { copyCount: 1 } })
     expect(mocks.getRepositoryWorktreeBootstrapPreview).toHaveBeenCalledWith('/tmp/repo', expect.any(AbortSignal))
+  })
+
+  test('serves single-repository worktree bootstrap preflight', async () => {
+    mocks.getRepositoryWorktreeBootstrapPreflight.mockResolvedValueOnce({
+      ok: true,
+      preflight: { kind: 'candidates', candidates: [{ path: '.env', kind: 'file' }] },
+    })
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/worktree-bootstrap-preflight', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cwd: '/tmp/repo' }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      preflight: { kind: 'candidates', candidates: [{ path: '.env', kind: 'file' }] },
+    })
+    expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenCalledWith('/tmp/repo', expect.any(AbortSignal))
   })
 
   test('serves worktree bootstrap preview for an explicit worktree path', async () => {
@@ -372,6 +401,69 @@ describe('repo routes', () => {
       expect.any(AbortSignal),
       'repo_branch_test',
     )
+  })
+
+  test('routes create worktree with normalized one-time selections', async () => {
+    const { createRepositoryWorktree } = await import('#/server/modules/repo-write-paths.ts')
+    vi.mocked(createRepositoryWorktree).mockResolvedValueOnce({ ok: true, message: 'ok' })
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+    const worktreeBootstrap = {
+      kind: 'materialize',
+      selections: [
+        { path: '.env', mode: 'copy' },
+        { path: 'node_modules', mode: 'symlink' },
+      ],
+    }
+
+    const response = await app.request('http://localhost/create-worktree', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        cwd: '/tmp/repo',
+        worktreePath: '/tmp/repo-feature',
+        mode: { kind: 'existingBranch', branch: 'feature/a' },
+        worktreeBootstrap,
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true, message: 'ok' })
+    expect(createRepositoryWorktree).toHaveBeenCalledWith(
+      '/tmp/repo',
+      { worktreePath: '/tmp/repo-feature', mode: { kind: 'existingBranch', branch: 'feature/a' } },
+      worktreeBootstrap,
+      expect.any(AbortSignal),
+      undefined,
+    )
+  })
+
+  test.each<unknown>([
+    [[]],
+    [[{ path: 'config/local.json', mode: 'copy' }]],
+    [[{ path: '.env', mode: 'hardlink' }]],
+    [
+      [
+        { path: '.env', mode: 'copy' },
+        { path: '.env', mode: 'symlink' },
+      ],
+    ],
+  ])('rejects malformed one-time worktree bootstrap selections: %j', async (selections) => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/create-worktree', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        cwd: '/tmp/repo',
+        worktreePath: '/tmp/repo-feature',
+        mode: { kind: 'existingBranch', branch: 'feature/a' },
+        worktreeBootstrap: { kind: 'materialize', selections },
+      }),
+    })
+
+    await expect(response.json()).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
   })
 
   test('serves repository commit detail', async () => {
@@ -476,7 +568,13 @@ describe('repo routes', () => {
       truncated: false,
       limit: 20,
     })
-    expect(mocks.searchRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', 'button', 200, expect.any(AbortSignal))
+    expect(mocks.searchRepositoryFileTree).toHaveBeenCalledWith(
+      '/repo',
+      '/repo',
+      'button',
+      200,
+      expect.any(AbortSignal),
+    )
   })
 
   test('routes file tree create file with parsed body values', async () => {

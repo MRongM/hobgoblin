@@ -13,6 +13,7 @@ import {
   searchRepositoryFileTree,
   getRepositorySnapshot,
   getRepositoryStatus,
+  getRepositoryWorktreeBootstrapPreflight,
   probeRepository,
   readRepositoryFileTreeTextFile,
   readRepositoryFileTreeBinaryFile,
@@ -59,7 +60,10 @@ import {
 import { getServerFetchIntervalSec } from '#/server/modules/settings-source.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
 import { isWorktreeBootstrapConfigHash } from '#/shared/repo-settings.ts'
-import type { WorktreeBootstrapDecision } from '#/shared/worktree-bootstrap-summary.ts'
+import {
+  normalizeWorktreeBootstrapSelections,
+  type WorktreeBootstrapDecision,
+} from '#/shared/worktree-bootstrap-summary.ts'
 import {
   isRepoFileTreeBinaryFileReadRequest,
   isRepoFileTreeBinaryFileReplaceRequest,
@@ -98,12 +102,12 @@ export function createRepoRoutes() {
     if (!value || typeof value !== 'object') return null
     const raw = value as Record<string, unknown>
     if (raw.kind === 'skip') return { kind: 'skip' }
-    if (
-      raw.kind === 'run' &&
-      isWorktreeBootstrapConfigHash(raw.configHash) &&
-      typeof raw.configTrusted === 'boolean'
-    ) {
+    if (raw.kind === 'run' && isWorktreeBootstrapConfigHash(raw.configHash) && typeof raw.configTrusted === 'boolean') {
       return { kind: 'run', configHash: raw.configHash, configTrusted: raw.configTrusted }
+    }
+    if (raw.kind === 'materialize') {
+      const selections = normalizeWorktreeBootstrapSelections(raw.selections)
+      return selections ? { kind: 'materialize', selections } : null
     }
     return null
   }
@@ -128,13 +132,17 @@ export function createRepoRoutes() {
     const branch = typeof body?.branch === 'string' ? body.branch : ''
     const limit = boundedInt(body?.limit, 100, 1, 200)
     const skip = boundedInt(body?.skip, 0, 0, Number.MAX_SAFE_INTEGER)
-    return c.json(await jsonOr(() => getRepositoryHistory(repoId, branch, { limit, skip }, c.req.raw.signal), [], 'history'))
+    return c.json(
+      await jsonOr(() => getRepositoryHistory(repoId, branch, { limit, skip }, c.req.raw.signal), [], 'history'),
+    )
   })
   app.post('/commit-detail', async (c) => {
     const body = await c.req.json().catch(() => null)
     const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
     const commit = typeof body?.commit === 'string' ? body.commit : ''
-    return c.json(await jsonOr(() => getRepositoryCommitDetail(repoId, commit, c.req.raw.signal), null, 'commit-detail'))
+    return c.json(
+      await jsonOr(() => getRepositoryCommitDetail(repoId, commit, c.req.raw.signal), null, 'commit-detail'),
+    )
   })
   app.post('/remote-branches', async (c) => {
     const body = await c.req.json().catch(() => null)
@@ -166,6 +174,17 @@ export function createRepoRoutes() {
       ),
     )
   })
+  app.post('/worktree-bootstrap-preflight', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    return c.json(
+      await jsonOr(
+        () => getRepositoryWorktreeBootstrapPreflight(cwd, c.req.raw.signal),
+        { ok: false, message: 'error.failed-read-repo' },
+        'worktree-bootstrap-preflight',
+      ),
+    )
+  })
   app.post('/worktree-bootstrap-config/init', async (c) => {
     const body = await c.req.json().catch(() => null)
     const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
@@ -183,7 +202,13 @@ export function createRepoRoutes() {
     const body = await c.req.json().catch(() => null)
     const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
     const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
-    return c.json(await jsonOr(() => getRepositoryPatch(cwd, worktreePath, c.req.raw.signal), { ok: false, message: 'error.failed-read-repo' }, 'patch'))
+    return c.json(
+      await jsonOr(
+        () => getRepositoryPatch(cwd, worktreePath, c.req.raw.signal),
+        { ok: false, message: 'error.failed-read-repo' },
+        'patch',
+      ),
+    )
   })
   app.post('/commit-message-providers', async (c) => {
     return c.json(
@@ -257,7 +282,8 @@ export function createRepoRoutes() {
     const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
     return c.json(
       await jsonOr(
-        () => createRepositoryFileTreeDirectory(repoId, worktreePath, parentDirPath, name, c.req.raw.signal, sourceToken),
+        () =>
+          createRepositoryFileTreeDirectory(repoId, worktreePath, parentDirPath, name, c.req.raw.signal, sourceToken),
         { ok: false, message: 'error.failed-read-repo' },
         'file-tree-create-directory',
       ),
@@ -313,7 +339,14 @@ export function createRepoRoutes() {
     }
     return c.json(
       await jsonOr(
-        () => readRepositoryFileTreeBinaryFile(body.repoId, body.worktreePath, body.filePath, body.maxBytes, c.req.raw.signal),
+        () =>
+          readRepositoryFileTreeBinaryFile(
+            body.repoId,
+            body.worktreePath,
+            body.filePath,
+            body.maxBytes,
+            c.req.raw.signal,
+          ),
         { ok: false, message: 'error.failed-read-repo' },
         'file-tree-read-binary-file',
       ),
@@ -403,7 +436,13 @@ export function createRepoRoutes() {
     const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
     const kind = body?.kind === 'background' ? 'background' : 'user'
     const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
-    return c.json(await jsonOr(() => fetchRepository(cwd, kind, sourceToken), { ok: false, message: 'error.failed-read-repo' }, 'fetch'))
+    return c.json(
+      await jsonOr(
+        () => fetchRepository(cwd, kind, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'fetch',
+      ),
+    )
   })
   app.post('/clone', async (c) => {
     const body = await c.req.json().catch(() => null)
@@ -411,7 +450,13 @@ export function createRepoRoutes() {
     const url = typeof body?.url === 'string' ? body.url : ''
     const parentPath = typeof body?.parentPath === 'string' ? body.parentPath : ''
     const directoryName = typeof body?.directoryName === 'string' ? body.directoryName : ''
-    return c.json(await jsonOr(() => cloneRepository(operationId, url, parentPath, directoryName), { ok: false, message: 'error.failed-read-repo' }, 'clone'))
+    return c.json(
+      await jsonOr(
+        () => cloneRepository(operationId, url, parentPath, directoryName),
+        { ok: false, message: 'error.failed-read-repo' },
+        'clone',
+      ),
+    )
   })
   app.post('/abort-clone', async (c) => {
     const body = await c.req.json().catch(() => null)
@@ -423,7 +468,13 @@ export function createRepoRoutes() {
     const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
     const branch = typeof body?.branch === 'string' ? body.branch : ''
     const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
-    return c.json(await jsonOr(() => checkoutRepositoryBranch(cwd, branch, c.req.raw.signal, sourceToken), { ok: false, message: 'error.failed-read-repo' }, 'checkout'))
+    return c.json(
+      await jsonOr(
+        () => checkoutRepositoryBranch(cwd, branch, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'checkout',
+      ),
+    )
   })
   app.post('/pull', async (c) => {
     const body = await c.req.json().catch(() => null)
@@ -431,14 +482,26 @@ export function createRepoRoutes() {
     const branch = typeof body?.branch === 'string' ? body.branch : ''
     const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : undefined
     const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
-    return c.json(await jsonOr(() => pullRepositoryBranch(cwd, branch, worktreePath, c.req.raw.signal, sourceToken), { ok: false, message: 'error.failed-read-repo' }, 'pull'))
+    return c.json(
+      await jsonOr(
+        () => pullRepositoryBranch(cwd, branch, worktreePath, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'pull',
+      ),
+    )
   })
   app.post('/push', async (c) => {
     const body = await c.req.json().catch(() => null)
     const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
     const branch = typeof body?.branch === 'string' ? body.branch : ''
     const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
-    return c.json(await jsonOr(() => pushRepositoryBranch(cwd, branch, c.req.raw.signal, sourceToken), { ok: false, message: 'error.failed-read-repo' }, 'push'))
+    return c.json(
+      await jsonOr(
+        () => pushRepositoryBranch(cwd, branch, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'push',
+      ),
+    )
   })
   app.post('/create-worktree', async (c) => {
     const body = await c.req.json().catch(() => null)
@@ -491,7 +554,13 @@ export function createRepoRoutes() {
     const force = body?.force === true
     const alsoDeleteUpstream = body?.alsoDeleteUpstream === true
     const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
-    return c.json(await jsonOr(() => deleteRepositoryBranch(cwd, branch, { force, alsoDeleteUpstream }, c.req.raw.signal, sourceToken), { ok: false, message: 'error.failed-read-repo' }, 'delete-branch'))
+    return c.json(
+      await jsonOr(
+        () => deleteRepositoryBranch(cwd, branch, { force, alsoDeleteUpstream }, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'delete-branch',
+      ),
+    )
   })
   app.post('/delete-remote-branch', async (c) => {
     const body = await c.req.json().catch(() => null)
@@ -570,27 +639,42 @@ export function createRepoRoutes() {
     const forceDeleteBranch = body?.forceDeleteBranch === true
     const alsoDeleteUpstream = body?.alsoDeleteUpstream === true
     const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
-    return c.json(await jsonOr(
-      () => removeRepositoryWorktree(
-        cwd,
-        { branch, worktreePath, alsoDeleteBranch, forceDeleteBranch, alsoDeleteUpstream },
-        c.req.raw.signal,
-        sourceToken,
+    return c.json(
+      await jsonOr(
+        () =>
+          removeRepositoryWorktree(
+            cwd,
+            { branch, worktreePath, alsoDeleteBranch, forceDeleteBranch, alsoDeleteUpstream },
+            c.req.raw.signal,
+            sourceToken,
+          ),
+        { ok: false, message: 'error.failed-read-repo' },
+        'remove-worktree',
       ),
-      { ok: false, message: 'error.failed-read-repo' },
-      'remove-worktree',
-    ))
+    )
   })
   app.post('/open-remote', async (c) => {
     const body = await c.req.json().catch(() => null)
     const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
     const branch = typeof body?.branch === 'string' ? body.branch : undefined
-    return c.json(await jsonOr(() => openRepositoryRemote(cwd, branch, c.req.raw.signal), { ok: false, message: 'error.failed-read-repo' }, 'open-remote'))
+    return c.json(
+      await jsonOr(
+        () => openRepositoryRemote(cwd, branch, c.req.raw.signal),
+        { ok: false, message: 'error.failed-read-repo' },
+        'open-remote',
+      ),
+    )
   })
   app.post('/open-terminal', async (c) => {
     const body = await c.req.json().catch(() => null)
     const path = typeof body?.path === 'string' ? body.path : ''
-    return c.json(await jsonOr(() => openRepositoryTerminal(path), { ok: false, message: 'error.failed-read-repo' }, 'open-terminal'))
+    return c.json(
+      await jsonOr(
+        () => openRepositoryTerminal(path),
+        { ok: false, message: 'error.failed-read-repo' },
+        'open-terminal',
+      ),
+    )
   })
   app.post('/open-editor', async (c) => {
     const body = await c.req.json().catch(() => null)
@@ -609,10 +693,16 @@ export function createRepoRoutes() {
     const repoIds = Array.isArray(body?.repoIds)
       ? body.repoIds.filter((repoId: unknown): repoId is string => typeof repoId === 'string' && repoId.length > 0)
       : []
-    return c.json(await jsonOr(async () => {
-      await setBackgroundSyncRepos(repoIds)
-      return { ok: true, repoIds: getBackgroundSyncRepos(), intervalSec: await getServerFetchIntervalSec() }
-    }, { ok: true as const, repoIds: [], intervalSec: 0 }, 'background-sync-repos'))
+    return c.json(
+      await jsonOr(
+        async () => {
+          await setBackgroundSyncRepos(repoIds)
+          return { ok: true, repoIds: getBackgroundSyncRepos(), intervalSec: await getServerFetchIntervalSec() }
+        },
+        { ok: true as const, repoIds: [], intervalSec: 0 },
+        'background-sync-repos',
+      ),
+    )
   })
   app.post('/abort', async (c) => {
     const body = await c.req.json().catch(() => null)

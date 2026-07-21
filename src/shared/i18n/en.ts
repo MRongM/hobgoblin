@@ -705,6 +705,14 @@ export const en = {
   'action.create-worktree-path-disabled-hint': 'Choose a branch or ref to auto-fill the path.',
   'action.create-worktree-base-current': 'current',
   'action.create-worktree-bootstrap-config-trusted': 'Trust this config',
+  'action.create-worktree-bootstrap-candidates-label': 'Bring untracked content',
+  'action.create-worktree-bootstrap-candidates-description':
+    'Choose what to bring into this worktree. These choices apply only once.',
+  'action.create-worktree-bootstrap-candidate-skip': 'Skip',
+  'action.create-worktree-bootstrap-candidate-copy': 'Copy',
+  'action.create-worktree-bootstrap-candidate-symlink': 'Symlink',
+  'action.create-worktree-bootstrap-preflight-error':
+    'Unable to load worktree bootstrap options. The worktree can still be created without them.',
   'action.create-worktree-confirm': 'Create worktree',
   'action.menu': 'Actions',
   'action.refresh': 'Sync',
@@ -713,6 +721,7 @@ export const en = {
   // ---- Errors / banners ---------------------------------------------------
   'error.not-git-repo': 'Not a git repository',
   'error.failed-read-repo': 'Failed to read repository',
+  'error.worktree-bootstrap-selection-stale': 'Worktree bootstrap options changed. Reopen the dialog and try again.',
   'error.ssh-config-changed': 'SSH config changed',
   'error.git-not-found': 'Git not found',
   'error.path-not-found': 'Path not found',

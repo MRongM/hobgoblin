@@ -10,7 +10,9 @@ import {
   compactWorktreeBootstrapPaths,
   formatWorktreeBootstrapSummary,
   hasWorktreeBootstrapSummaryDetails,
+  isWorktreeBootstrapCandidatePath,
   worktreeBootstrapPreviewFromConfig,
+  type WorktreeBootstrapSelection,
   type WorktreeBootstrapSummary,
   type WorktreeBootstrapPreviewResult,
 } from '#/shared/worktree-bootstrap-summary.ts'
@@ -131,6 +133,63 @@ export async function bootstrapWorktreeAfterCreate(
     }
 
     const summary = bootstrapSummary(planned.operations, planned.missingSources, loaded.config.setup)
+    return {
+      ok: true,
+      message: formatWorktreeBootstrapSummary(summary),
+      ...(hasWorktreeBootstrapSummaryDetails(summary) ? { worktreeBootstrap: summary } : {}),
+    }
+  } catch (err) {
+    if (options?.signal?.aborted) return { ok: false, message: 'cancelled' }
+    return bootstrapFailure(errorMessage(err))
+  }
+}
+
+export async function bootstrapWorktreeSelectionsAfterCreate(
+  sourceCwd: string,
+  targetWorktreePath: string,
+  selections: readonly WorktreeBootstrapSelection[],
+  options?: { signal?: AbortSignal },
+): Promise<ExecResult> {
+  try {
+    if (options?.signal?.aborted) return { ok: false, message: 'cancelled' }
+    const sourceRepoRoot = await getRepoRoot(sourceCwd, { signal: options?.signal })
+    if (!sourceRepoRoot) return bootstrapFailure('failed to resolve source repo root')
+
+    const sourceRoot = path.resolve(sourceRepoRoot)
+    const targetRoot = path.resolve(targetWorktreePath)
+    if (await pathExists(path.join(sourceRoot, CONFIG_FILE), { useLstat: true })) {
+      return bootstrapFailure(`${CONFIG_FILE} changed after confirmation`)
+    }
+
+    const missingSources = new Set<string>()
+    const literalOperations: PlannedMaterialization[] = []
+    for (const selection of selections) {
+      if (!isWorktreeBootstrapCandidatePath(selection.path)) {
+        return bootstrapFailure(`invalid worktree bootstrap selection: ${selection.path}`)
+      }
+      if (selection.mode !== 'copy' && selection.mode !== 'symlink') {
+        return bootstrapFailure(`invalid worktree bootstrap mode: ${String(selection.mode)}`)
+      }
+      const source = resolveConfigPath(sourceRoot, selection.path)
+      if (!source.ok) return bootstrapFailure(source.message)
+      literalOperations.push({ ...source, mode: selection.mode })
+    }
+
+    const ready = await validateMaterializations(
+      sourceRoot,
+      targetRoot,
+      literalOperations,
+      missingSources,
+      options?.signal,
+    )
+    if (!ready.ok) return bootstrapFailure(ready.message)
+    const unsupported = ready.operations.find((operation) => !operation.stat.isFile() && !operation.stat.isDirectory())
+    if (unsupported) return bootstrapFailure(`unsupported worktree bootstrap source: ${unsupported.rel}`)
+
+    const materialized = await materializePlan(sourceRoot, targetRoot, ready.operations, new Set(), options?.signal)
+    if (!materialized.ok) return bootstrapFailure(materialized.message)
+
+    const summary = bootstrapSummary(ready.operations, Array.from(missingSources), undefined)
     return {
       ok: true,
       message: formatWorktreeBootstrapSummary(summary),

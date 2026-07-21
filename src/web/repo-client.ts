@@ -1,6 +1,10 @@
 import { openExternalUrl } from '#/web/app-shell-client.ts'
 import { postServerJson } from '#/web/lib/server-fetch.ts'
-import type { CommitMessageGenerationResult, CommitMessageProvider, CommitMessageProviderAvailability } from '#/shared/commit-message-ai.ts'
+import type {
+  CommitMessageGenerationResult,
+  CommitMessageProvider,
+  CommitMessageProviderAvailability,
+} from '#/shared/commit-message-ai.ts'
 import type {
   RepoFileSearchResult,
   RepoFileTransferRequest,
@@ -17,7 +21,11 @@ import type { CloneRepoResult, RepoSnapshot } from '#/shared/rpc.ts'
 import type { CommitDetail, CommitHistoryEntry, ExecResult, WorktreeStatus } from '#/shared/git-types.ts'
 import type { ProbeResult } from '#/shared/rpc.ts'
 import type { CreateWorktreeInput } from '#/shared/worktree-create.ts'
-import type { WorktreeBootstrapDecision, WorktreeBootstrapPreviewResult } from '#/shared/worktree-bootstrap-summary.ts'
+import type {
+  WorktreeBootstrapDecision,
+  WorktreeBootstrapPreflightResult,
+  WorktreeBootstrapPreviewResult,
+} from '#/shared/worktree-bootstrap-summary.ts'
 
 export async function probeRepository(cwd: string): Promise<ProbeResult> {
   return await postServerJson('/api/repo/probe', { cwd })
@@ -128,6 +136,13 @@ export async function getRepositoryWorktreeBootstrapPreview(
   const worktreePath = typeof worktreePathOrSignal === 'string' ? worktreePathOrSignal : undefined
   const requestSignal = typeof worktreePathOrSignal === 'string' ? signal : worktreePathOrSignal
   return await postServerJson('/api/repo/worktree-bootstrap-preview', { cwd, worktreePath }, { signal: requestSignal })
+}
+
+export async function getRepositoryWorktreeBootstrapPreflight(
+  cwd: string,
+  signal?: AbortSignal,
+): Promise<WorktreeBootstrapPreflightResult> {
+  return await postServerJson('/api/repo/worktree-bootstrap-preflight', { cwd }, { signal })
 }
 
 export async function initializeRepositoryWorktreeBootstrapConfig(
@@ -416,18 +431,11 @@ export async function commitRepositoryChanges(
   return postServerJson('/api/repo/commit', { repoId, worktreePath, message })
 }
 
-export async function mergeRepositoryBranch(
-  repoId: string,
-  worktreePath: string,
-  branch: string,
-): Promise<ExecResult> {
+export async function mergeRepositoryBranch(repoId: string, worktreePath: string, branch: string): Promise<ExecResult> {
   return postServerJson('/api/repo/merge', { repoId, worktreePath, branch })
 }
 
-export async function resetRepositoryHard(
-  repoId: string,
-  worktreePath: string,
-): Promise<ExecResult> {
+export async function resetRepositoryHard(repoId: string, worktreePath: string): Promise<ExecResult> {
   return postServerJson('/api/repo/reset-hard', { repoId, worktreePath })
 }
 

@@ -26,10 +26,10 @@ import { useRuntimeExternalAppSettings } from '#/web/runtime-settings-external-a
 import { useBranchWriteActions } from '#/web/hooks/useBranchWriteActions.tsx'
 import { useRetainedDialogState } from '#/web/hooks/useRetainedDialogState.ts'
 import { CreateWorktreeDialog, type CreateWorktreeRequest } from '#/web/components/CreateWorktreeDialog.tsx'
-import { createRepositoryLocalTag, getRepositoryWorktreeBootstrapPreview } from '#/web/repo-client.ts'
+import { createRepositoryLocalTag, getRepositoryWorktreeBootstrapPreflight } from '#/web/repo-client.ts'
 import { useSettingsSnapshotQuery } from '#/web/settings-queries.ts'
 import { isRepoWorktreeBootstrapConfigTrusted } from '#/shared/repo-settings.ts'
-import type { WorktreeBootstrapDecision, WorktreeBootstrapPreview } from '#/shared/worktree-bootstrap-summary.ts'
+import type { WorktreeBootstrapDecision, WorktreeBootstrapPreflight } from '#/shared/worktree-bootstrap-summary.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { useTerminalSessionContext } from '#/web/components/terminal/terminal-session-context.ts'
 import type { TerminalSessionBase } from '#/web/components/terminal/types.ts'
@@ -156,7 +156,7 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
 
   async function handleNewTerminal(): Promise<void> {
     if (!terminalBase) return
-    navigation.showRepoDetailTab(repo.id, 'terminal')
+    navigation.showRepoBranchDetailTab(repo.id, branch.name, 'terminal')
     setDetailCollapsed(false)
     await createTerminal(terminalBase)
   }
@@ -380,43 +380,48 @@ function CreateWorktreeDialogConnected({
   onCreate: (request: CreateWorktreeRequest, worktreeBootstrap: WorktreeBootstrapDecision) => void | Promise<void>
 }) {
   const repo = useReposStore((s) => s.repos[repoId])
-  const [bootstrapPreview, setBootstrapPreview] = useState<WorktreeBootstrapPreview | null>(null)
-  const [bootstrapPreviewError, setBootstrapPreviewError] = useState(false)
-  const [bootstrapPreviewLoading, setBootstrapPreviewLoading] = useState(false)
+  const [bootstrapPreflight, setBootstrapPreflight] = useState<WorktreeBootstrapPreflight | null>(null)
+  const [bootstrapPreflightError, setBootstrapPreflightError] = useState(false)
+  const [bootstrapPreflightLoading, setBootstrapPreflightLoading] = useState(false)
   const [configTrustChoice, setConfigTrustChoice] = useState<boolean | null>(null)
   const settingsQuery = useSettingsSnapshotQuery()
 
   useEffect(() => {
     if (!open) {
-      setBootstrapPreview(null)
-      setBootstrapPreviewError(false)
-      setBootstrapPreviewLoading(false)
+      setBootstrapPreflight(null)
+      setBootstrapPreflightError(false)
+      setBootstrapPreflightLoading(false)
       setConfigTrustChoice(null)
       return
     }
     const controller = new AbortController()
-    setBootstrapPreview(null)
-    setBootstrapPreviewError(false)
-    setBootstrapPreviewLoading(true)
+    setBootstrapPreflight(null)
+    setBootstrapPreflightError(false)
+    setBootstrapPreflightLoading(true)
     setConfigTrustChoice(null)
-    void getRepositoryWorktreeBootstrapPreview(repoId, controller.signal)
+    void getRepositoryWorktreeBootstrapPreflight(repoId, controller.signal)
       .then((result) => {
-        setBootstrapPreview(result.ok ? result.preview : null)
-        setBootstrapPreviewError(!result.ok)
+        if (controller.signal.aborted) return
+        setBootstrapPreflight(result.ok ? result.preflight : null)
+        setBootstrapPreflightError(!result.ok)
       })
       .catch(() => {
-        if (!controller.signal.aborted) setBootstrapPreviewError(true)
+        if (!controller.signal.aborted) setBootstrapPreflightError(true)
       })
       .finally(() => {
-        if (!controller.signal.aborted) setBootstrapPreviewLoading(false)
+        if (!controller.signal.aborted) setBootstrapPreflightLoading(false)
       })
     return () => controller.abort()
   }, [open, repoId])
 
   if (!repo) return null
 
-  function resolveWorktreeBootstrapDecision(): WorktreeBootstrapDecision {
-    const configHash = bootstrapPreview?.hasOperations ? bootstrapPreview.configHash : null
+  function resolveWorktreeBootstrapDecision(request: CreateWorktreeRequest): WorktreeBootstrapDecision {
+    if (bootstrapPreflight?.kind === 'candidates') {
+      return request.selections.length > 0 ? { kind: 'materialize', selections: request.selections } : { kind: 'skip' }
+    }
+    const preview = bootstrapPreflight?.kind === 'configured' ? bootstrapPreflight.preview : null
+    const configHash = preview?.hasOperations ? preview.configHash : null
     if (!configHash) return { kind: 'skip' }
     const repoSettings = settingsQuery.data?.repoSettings ?? []
     const trusted = configTrustChoice ?? isRepoWorktreeBootstrapConfigTrusted(repoSettings, repoId, configHash)
@@ -424,10 +429,11 @@ function CreateWorktreeDialogConnected({
   }
 
   function handleCreate(request: CreateWorktreeRequest) {
-    return onCreate(request, resolveWorktreeBootstrapDecision())
+    return onCreate(request, resolveWorktreeBootstrapDecision(request))
   }
 
-  const configHash = bootstrapPreview?.configHash
+  const preview = bootstrapPreflight?.kind === 'configured' ? bootstrapPreflight.preview : null
+  const configHash = preview?.configHash
   const configTrusted =
     configTrustChoice ??
     isRepoWorktreeBootstrapConfigTrusted(settingsQuery.data?.repoSettings ?? [], repoId, configHash)
@@ -438,10 +444,10 @@ function CreateWorktreeDialogConnected({
     defaultBranch,
     worktreeBootstrap: {
       loading:
-        bootstrapPreviewLoading ||
-        (bootstrapPreview?.hasOperations === true && !!bootstrapPreview.configHash && settingsQuery.isLoading),
-      preview: bootstrapPreview,
-      error: bootstrapPreviewError,
+        bootstrapPreflightLoading ||
+        (preview?.hasOperations === true && !!preview.configHash && settingsQuery.isLoading),
+      preflight: bootstrapPreflight,
+      error: bootstrapPreflightError,
       configTrusted,
       onConfigTrustedChange: setConfigTrustChoice,
     },

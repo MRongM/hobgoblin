@@ -694,6 +694,14 @@ export const ko: Record<DictKey, string> = {
   'action.create-worktree-path-disabled-hint': '브랜치나 참조를 선택하면 경로가 자동 채워집니다.',
   'action.create-worktree-base-current': '현재',
   'action.create-worktree-bootstrap-config-trusted': '현재 구성 신뢰',
+  'action.create-worktree-bootstrap-candidates-label': '추적되지 않은 콘텐츠 가져오기',
+  'action.create-worktree-bootstrap-candidates-description':
+    '이 작업 트리로 가져올 내용을 선택하세요. 이 선택은 한 번만 적용됩니다.',
+  'action.create-worktree-bootstrap-candidate-skip': '건너뛰기',
+  'action.create-worktree-bootstrap-candidate-copy': '복사',
+  'action.create-worktree-bootstrap-candidate-symlink': '심볼릭 링크',
+  'action.create-worktree-bootstrap-preflight-error':
+    '작업 트리 부트스트랩 옵션을 불러올 수 없습니다. 옵션 없이도 작업 트리를 만들 수 있습니다.',
   'action.create-worktree-confirm': '워크트리 만들기',
   'action.menu': '작업',
   'action.refresh': '동기화',
@@ -702,6 +710,8 @@ export const ko: Record<DictKey, string> = {
   // ---- Errors / banners --------------------------------------------------
   'error.not-git-repo': 'git 리포지토리가 아닙니다',
   'error.failed-read-repo': '리포지토리 읽기 실패',
+  'error.worktree-bootstrap-selection-stale':
+    '작업 트리 부트스트랩 옵션이 변경되었습니다. 대화 상자를 다시 열고 재시도하세요.',
   'error.ssh-config-changed': 'SSH 설정이 변경됨',
   'error.git-not-found': 'Git을 찾을 수 없습니다',
   'error.path-not-found': '경로를 찾을 수 없습니다',

@@ -84,10 +84,12 @@ export type RemoteCommandKind =
   | { type: 'gitIsAncestor'; path: string; ancestor: string; descendant: string }
   | { type: 'gitRemoteVerbose'; path: string }
   | { type: 'gitRemoteGetUrl'; path: string }
+  | { type: 'worktreeBootstrapCandidates'; sourceRoot: string }
   | ({
       type: 'bootstrapRemoteWorktree'
       sourceRoot: string
       targetRoot: string
+      literalPaths?: boolean
     } & WorktreeBootstrapConfig)
 
 export interface RemoteCommandResult {
@@ -435,6 +437,8 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return `git -C ${shellQuote(command.path)} push -- ${shellQuote(command.remote)} ${shellQuote(`refs/tags/${command.tag}`)}`
     case 'gitWorktreeAdd':
       return `git -C ${shellQuote(command.path)} worktree add ${remoteWorktreeAddArgs(command.input)}`
+    case 'worktreeBootstrapCandidates':
+      return remoteWorktreeBootstrapCandidatesScript(command)
     case 'bootstrapRemoteWorktree':
       return remoteBootstrapScript(command)
     case 'gitWorktreeRemove':
@@ -1077,6 +1081,45 @@ function remoteWorktreeAddArgs(input: CreateWorktreeInput): string {
   }
 }
 
+function remoteWorktreeBootstrapCandidatesScript(
+  command: Extract<RemoteCommandKind, { type: 'worktreeBootstrapCandidates' }>,
+): string {
+  return [
+    "python3 - <<'PY'",
+    'import json, os, stat, subprocess, sys',
+    `root = ${pythonString(command.sourceRoot)}`,
+    'def finish(payload):',
+    '    print(json.dumps(payload, ensure_ascii=True))',
+    '    sys.exit(0)',
+    'try:',
+    '    raw = subprocess.check_output(["git", "-C", root, "ls-files", "-z"], stderr=subprocess.PIPE)',
+    'except subprocess.CalledProcessError as exc:',
+    '    message = exc.stderr.decode("utf-8", "replace") if exc.stderr else "error.failed-read-repo"',
+    '    finish({"ok": False, "message": message})',
+    'tracked = [item.decode("utf-8", "surrogateescape") for item in raw.split(b"\\0") if item]',
+    'tracked_roots = {item.split("/", 1)[0] for item in tracked}',
+    'candidates = []',
+    'try:',
+    '    names = os.listdir(root)',
+    'except (FileNotFoundError, PermissionError, OSError):',
+    '    finish({"ok": False, "message": "error.failed-read-repo"})',
+    'for name in names:',
+    '    if name == ".git" or name in tracked_roots:',
+    '        continue',
+    '    try:',
+    '        info = os.lstat(os.path.join(root, name))',
+    '    except (FileNotFoundError, PermissionError, OSError):',
+    '        continue',
+    '    if stat.S_ISDIR(info.st_mode):',
+    '        candidates.append({"path": name, "kind": "directory"})',
+    '    elif stat.S_ISREG(info.st_mode):',
+    '        candidates.append({"path": name, "kind": "file"})',
+    'candidates.sort(key=lambda item: (0 if item["kind"] == "directory" else 1, item["path"]))',
+    'finish({"ok": True, "candidates": candidates})',
+    'PY',
+  ].join('\n')
+}
+
 function remoteBootstrapScript(command: Extract<RemoteCommandKind, { type: 'bootstrapRemoteWorktree' }>): string {
   const inner = remoteBootstrapInnerScript(command)
   const quoted = shellQuote(inner)
@@ -1093,6 +1136,7 @@ function remoteBootstrapInnerScript(command: Extract<RemoteCommandKind, { type: 
   const hardlink = command.hardlink.map(quote).join(' ')
   const exclude = command.exclude.map(quote).join(' ')
   const setup = command.setup ? quote(command.setup) : "''"
+  const literalPaths = command.literalPaths ? '1' : '0'
   const sourceRoot = quote(command.sourceRoot)
   const targetRoot = quote(command.targetRoot)
 
@@ -1108,6 +1152,7 @@ function remoteBootstrapInnerScript(command: Extract<RemoteCommandKind, { type: 
     'SYMLINK_PATTERNS=(' + symlink + ')',
     'HARDLINK_PATTERNS=(' + hardlink + ')',
     'EXCLUDE_PATTERNS=(' + exclude + ')',
+    'LITERAL_PATHS=' + literalPaths,
     'SETUP=' + setup,
     'SETUP_LOG=',
     '',
@@ -1312,9 +1357,28 @@ function remoteBootstrapInnerScript(command: Extract<RemoteCommandKind, { type: 
     '  done',
     '}',
     '',
-    'process_patterns copy "${COPY_PATTERNS[@]}"',
-    'process_patterns symlink "${SYMLINK_PATTERNS[@]}"',
-    'process_patterns hardlink "${HARDLINK_PATTERNS[@]}"',
+    'process_literal_paths() {',
+    '  local mode="$1"',
+    '  shift',
+    '  local rel',
+    '  for rel in "$@"; do',
+    '    normalize_rel "$rel"',
+    '    rel="$REL"',
+    '    source_path_for_rel "$rel"',
+    '    if ! path_exists "$SRC"; then append_missing "$rel"; continue; fi',
+    '    append_mode_path "$mode" "$rel"',
+    '  done',
+    '}',
+    '',
+    'if [ "$LITERAL_PATHS" -eq 1 ]; then',
+    '  process_literal_paths copy "${COPY_PATTERNS[@]}"',
+    '  process_literal_paths symlink "${SYMLINK_PATTERNS[@]}"',
+    '  process_literal_paths hardlink "${HARDLINK_PATTERNS[@]}"',
+    'else',
+    '  process_patterns copy "${COPY_PATTERNS[@]}"',
+    '  process_patterns symlink "${SYMLINK_PATTERNS[@]}"',
+    '  process_patterns hardlink "${HARDLINK_PATTERNS[@]}"',
+    'fi',
     '',
     'filter_excluded_paths() {',
     '  local mode="$1" rel',

@@ -3,6 +3,7 @@ import {
   compactWorktreeBootstrapPaths,
   formatWorktreeBootstrapSummary,
   hasWorktreeBootstrapSummaryDetails,
+  normalizeWorktreeBootstrapSelections,
   worktreeBootstrapPreviewFromConfig,
 } from '#/shared/worktree-bootstrap-summary.ts'
 
@@ -59,5 +60,35 @@ describe('worktree bootstrap summary', () => {
     expect(formatWorktreeBootstrapSummary(summary)).toContain('and 2 more')
     expect(formatWorktreeBootstrapSummary(summary)).toContain('Skipped missing 1 path: missing.env')
     expect(formatWorktreeBootstrapSummary(summary)).toContain('Ran setup: bun install')
+  })
+})
+
+describe('worktree bootstrap candidates', () => {
+  test('normalizes unique root-level selections', () => {
+    expect(
+      normalizeWorktreeBootstrapSelections([
+        { path: '.env', mode: 'copy' },
+        { path: 'node_modules', mode: 'symlink' },
+      ]),
+    ).toEqual([
+      { path: '.env', mode: 'copy' },
+      { path: 'node_modules', mode: 'symlink' },
+    ])
+  })
+
+  test.each([
+    null,
+    [],
+    [{ path: '.env', mode: 'hardlink' }],
+    [{ path: 'config/local.json', mode: 'copy' }],
+    [{ path: '..', mode: 'copy' }],
+    [{ path: '.git', mode: 'copy' }],
+    [{ path: 'bad\\name', mode: 'copy' }],
+    [
+      { path: '.env', mode: 'copy' },
+      { path: '.env', mode: 'symlink' },
+    ],
+  ])('rejects malformed or unsafe selections: %j', (value) => {
+    expect(normalizeWorktreeBootstrapSelections(value)).toBeNull()
   })
 })

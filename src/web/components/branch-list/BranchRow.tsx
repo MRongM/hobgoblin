@@ -90,7 +90,6 @@ export function BranchRow({
           repo={repo}
           branch={branch}
           workspaceRemoveAction={workspaceRemoveAction}
-          onSelectBranch={onSelectBranch}
           actionMenuOpen={actionMenuOpen}
           onActionMenuOpenChange={onActionMenuOpenChange}
         />
@@ -114,27 +113,19 @@ function BranchRowActions({
   repo,
   branch,
   workspaceRemoveAction,
-  onSelectBranch,
   actionMenuOpen,
   onActionMenuOpenChange,
 }: {
   repo: BranchActionRepo
   branch: RepoBranchState
   workspaceRemoveAction?: { label: string; onSelect: () => void }
-  onSelectBranch: (branch: string) => void
   actionMenuOpen?: boolean
   onActionMenuOpenChange?: (open: boolean) => void
 }) {
   const actions = useBranchActionItems(repo, branch)
   return (
     <>
-      {/* Capture-phase so the buttons' stopPropagation can't skip it: any
-          row action must first move the selection (and thus the file tree)
-          to this branch, keeping the opened directory and the tree in sync. */}
-      <div
-        className="pointer-events-none relative z-20 flex shrink-0 items-center py-1 pr-2.5"
-        onClickCapture={() => onSelectBranch(branch.name)}
-      >
+      <div className="pointer-events-none relative z-20 flex shrink-0 items-center py-1 pr-2.5">
         <div className="pointer-events-auto flex items-center gap-0.5">
           {workspaceRemoveAction ? <WorkspaceRemoveButton action={workspaceRemoveAction} /> : null}
           {branch.worktree?.path && (

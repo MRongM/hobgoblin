@@ -706,6 +706,14 @@ export const ja: Record<DictKey, string> = {
   'action.create-worktree-path-disabled-hint': 'ブランチまたは参照を選ぶとパスが自動入力されます。',
   'action.create-worktree-base-current': '現在',
   'action.create-worktree-bootstrap-config-trusted': '現在の設定を信頼',
+  'action.create-worktree-bootstrap-candidates-label': '未追跡の内容を取り込む',
+  'action.create-worktree-bootstrap-candidates-description':
+    'このワークツリーに取り込む内容を選択します。この選択は今回のみ適用されます。',
+  'action.create-worktree-bootstrap-candidate-skip': 'スキップ',
+  'action.create-worktree-bootstrap-candidate-copy': 'コピー',
+  'action.create-worktree-bootstrap-candidate-symlink': 'シンボリックリンク',
+  'action.create-worktree-bootstrap-preflight-error':
+    'ワークツリーの bootstrap オプションを読み込めません。これらを使わずにワークツリーを作成できます。',
   'action.create-worktree-confirm': 'ワークツリーを作成',
   'action.menu': '操作',
   'action.refresh': '同期',
@@ -714,6 +722,8 @@ export const ja: Record<DictKey, string> = {
   // ---- Errors / banners --------------------------------------------------
   'error.not-git-repo': 'git リポジトリではありません',
   'error.failed-read-repo': 'リポジトリの読み込みに失敗しました',
+  'error.worktree-bootstrap-selection-stale':
+    'ワークツリーの bootstrap オプションが変更されました。ダイアログを開き直して再試行してください。',
   'error.ssh-config-changed': 'SSH 設定が変更されました',
   'error.git-not-found': 'Git が見つかりません',
   'error.path-not-found': 'パスが見つかりません',

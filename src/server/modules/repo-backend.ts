@@ -36,8 +36,13 @@ import { createWorktree, getWorktrees, removeWorktree } from '#/system/git/workt
 import { getWorktreePatch } from '#/system/git/patch.ts'
 import {
   bootstrapWorktreeAfterCreate,
+  bootstrapWorktreeSelectionsAfterCreate,
   getWorktreeBootstrapPreview as getLocalWorktreeBootstrapPreview,
 } from '#/system/git/worktree-bootstrap.ts'
+import {
+  getLocalWorktreeBootstrapPreflight,
+  validateLocalWorktreeBootstrapSelections,
+} from '#/system/git/worktree-bootstrap-candidates.ts'
 import { getWorktreeCommitMessageContext, type CommitMessageContext } from '#/system/git/commit-message-context.ts'
 import { commitAllChanges } from '#/system/git/commit.ts'
 import { mergeBranch } from '#/system/git/merge.ts'
@@ -56,6 +61,7 @@ import {
   createLocalTag as createRemoteLocalTag,
   createRemoteWorktree,
   bootstrapRemoteWorktreeAfterCreate,
+  bootstrapRemoteWorktreeSelectionsAfterCreate,
   deleteRemoteBranch,
   deleteLocalTag as deleteRemoteLocalTag,
   deleteRemoteServerBranch as deleteSshRemoteServerBranch,
@@ -73,11 +79,13 @@ import {
   getRemoteTags as getSshRemoteTags,
   getRemoteTrackingBranches as getSshRemoteTrackingBranches,
   getRemoteWorktreeBootstrapPreview,
+  getRemoteWorktreeBootstrapPreflight,
   mergeRemoteBranch,
   pullRemoteBranch,
   pushRemoteBranch,
   resetRemoteHard,
   removeRemoteWorktree,
+  validateRemoteWorktreeBootstrapSelections,
 } from '#/system/ssh/git.ts'
 import {
   isRemoteRepoId,
@@ -87,7 +95,11 @@ import {
   type RepoSnapshot,
 } from '#/shared/rpc.ts'
 import type { CreateWorktreeInput } from '#/shared/worktree-create.ts'
-import type { WorktreeBootstrapDecision, WorktreeBootstrapPreviewResult } from '#/shared/worktree-bootstrap-summary.ts'
+import type {
+  WorktreeBootstrapDecision,
+  WorktreeBootstrapPreflightResult,
+  WorktreeBootstrapPreviewResult,
+} from '#/shared/worktree-bootstrap-summary.ts'
 
 type ProbeAvailability = { ok: true } | { ok: false; message: string }
 
@@ -142,6 +154,7 @@ export interface RepoBackend {
   deleteLocalTag(name: string, signal?: AbortSignal): Promise<ExecResult>
   pushLocalTag(name: string, signal?: AbortSignal, networkOptions?: GitNetworkOptions): Promise<ExecResult>
   getWorktreeBootstrapPreview(signal?: AbortSignal): Promise<WorktreeBootstrapPreviewResult>
+  getWorktreeBootstrapPreflight(signal?: AbortSignal): Promise<WorktreeBootstrapPreflightResult>
   createWorktree(
     input: CreateWorktreeInput,
     signal?: AbortSignal,
@@ -407,17 +420,34 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       return await getLocalWorktreeBootstrapPreview(repoId, { signal })
     },
+    async getWorktreeBootstrapPreflight(signal) {
+      if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
+      return await getLocalWorktreeBootstrapPreflight(repoId, { signal })
+    },
     async createWorktree(input, signal, options) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
+      const decision = options?.worktreeBootstrap
+      if (decision?.kind === 'materialize') {
+        const validation = await validateLocalWorktreeBootstrapSelections(repoId, decision.selections, { signal })
+        if (!validation.ok) return validation
+      }
       const created = await createWorktree(repoId, input, signal)
       if (!created.ok) return created
-      if (options?.worktreeBootstrap?.kind !== 'run') return created
-      const bootstrapped = await bootstrapWorktreeAfterCreate(repoId, input.worktreePath, {
-        signal,
-        expectedConfigHash: options.worktreeBootstrap.configHash,
-      })
+      if (!decision || decision.kind === 'skip') return created
+      const bootstrapped =
+        decision.kind === 'run'
+          ? await bootstrapWorktreeAfterCreate(repoId, input.worktreePath, {
+              signal,
+              expectedConfigHash: decision.configHash,
+            })
+          : await bootstrapWorktreeSelectionsAfterCreate(repoId, input.worktreePath, decision.selections, { signal })
       if (!bootstrapped.ok) {
-        return { ok: false, message: `Worktree bootstrap failed: ${bootstrapped.message}`, repoChanged: true }
+        return {
+          ok: false,
+          message:
+            decision.kind === 'run' ? `Worktree bootstrap failed: ${bootstrapped.message}` : bootstrapped.message,
+          repoChanged: true,
+        }
       }
       return {
         ok: true,
@@ -573,16 +603,34 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
     async getWorktreeBootstrapPreview(signal) {
       return await getRemoteWorktreeBootstrapPreview(target, { signal })
     },
+    async getWorktreeBootstrapPreflight(signal) {
+      return await getRemoteWorktreeBootstrapPreflight(target, { signal })
+    },
     async createWorktree(input, signal, options) {
+      const decision = options?.worktreeBootstrap
+      if (decision?.kind === 'materialize') {
+        const validation = await validateRemoteWorktreeBootstrapSelections(target, decision.selections, { signal })
+        if (!validation.ok) return validation
+      }
       const created = await createRemoteWorktree(target, { ...input, signal })
       if (!created.ok) return created
-      if (options?.worktreeBootstrap?.kind !== 'run') return created
-      const bootstrapped = await bootstrapRemoteWorktreeAfterCreate(target, input.worktreePath, {
-        signal,
-        expectedConfigHash: options.worktreeBootstrap.configHash,
-      })
+      if (!decision || decision.kind === 'skip') return created
+      const bootstrapped =
+        decision.kind === 'run'
+          ? await bootstrapRemoteWorktreeAfterCreate(target, input.worktreePath, {
+              signal,
+              expectedConfigHash: decision.configHash,
+            })
+          : await bootstrapRemoteWorktreeSelectionsAfterCreate(target, input.worktreePath, decision.selections, {
+              signal,
+            })
       if (!bootstrapped.ok) {
-        return { ok: false, message: `Worktree bootstrap failed: ${bootstrapped.message}`, repoChanged: true }
+        return {
+          ok: false,
+          message:
+            decision.kind === 'run' ? `Worktree bootstrap failed: ${bootstrapped.message}` : bootstrapped.message,
+          repoChanged: true,
+        }
       }
       return {
         ok: true,

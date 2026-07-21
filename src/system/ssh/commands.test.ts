@@ -28,6 +28,18 @@ function testPosix(name: string, fn: () => Promise<void> | void): void {
 }
 
 describe('remote command scripts', () => {
+  test('builds safely quoted worktree bootstrap candidate discovery', () => {
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'worktreeBootstrapCandidates',
+      sourceRoot: "/srv/user's repo",
+    })
+
+    expect(invocation.script).toContain('root = "/srv/user\'s repo"')
+    expect(invocation.script).toContain('git", "-C", root, "ls-files", "-z"')
+    expect(invocation.script).toContain('os.listdir(root)')
+    expect(invocation.script).toContain('os.lstat(os.path.join(root, name))')
+  })
+
   test('builds depth-one workspace marker discovery and path existence commands', () => {
     const discovery = buildRemoteCommandInvocation(TARGET, {
       type: 'listWorkspaceGitDirectories',
@@ -482,6 +494,33 @@ describe('remote command scripts', () => {
     expect(readFileSync(path.join(targetRoot, 'config dir', 'app.json'), 'utf8')).toBe('ok\n')
     expect(existsSync(path.join(targetRoot, 'config dir', 'debug.log'))).toBe(false)
     expect(existsSync(path.join(targetRoot, 'config dir', '.git', 'config'))).toBe(false)
+  })
+
+  test('remote bootstrap literal mode does not expand shell metacharacters', async () => {
+    const dir = path.join(os.tmpdir(), `goblin-remote-bootstrap-literal-test-${Date.now()}-${process.pid}`)
+    tempDirs.push(dir)
+    const sourceRoot = path.join(dir, 'repo')
+    const targetRoot = path.join(dir, 'worktree')
+    const literalName = "literal *?[x] $ user's.txt"
+    mkdirSync(sourceRoot, { recursive: true })
+    mkdirSync(targetRoot, { recursive: true })
+    writeFileSync(path.join(sourceRoot, literalName), 'literal\n')
+
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'bootstrapRemoteWorktree',
+      sourceRoot,
+      targetRoot,
+      copy: [literalName],
+      symlink: [],
+      hardlink: [],
+      exclude: [],
+      literalPaths: true,
+    })
+
+    const result = await execa('bash', ['-lc', invocation.script])
+
+    expect(result.stdout).toBe(`GOBLIN_BOOTSTRAP_COPY ${literalName}`)
+    expect(readFileSync(path.join(targetRoot, literalName), 'utf8')).toBe('literal\n')
   })
 
   testPosix('remote bootstrap script rejects sources under a symlink parent', async () => {

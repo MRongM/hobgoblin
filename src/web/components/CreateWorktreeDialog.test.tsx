@@ -61,6 +61,7 @@ describe('CreateWorktreeDialog', () => {
         worktreePath: '/tmp/goblin-repo-feature-new',
         mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'main' },
       },
+      selections: [],
     })
     expect(onClose).toHaveBeenCalledTimes(1)
     deferred.resolve()
@@ -88,6 +89,7 @@ describe('CreateWorktreeDialog', () => {
         worktreePath: '/tmp/goblin-repo-feature-new',
         mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'feature/base' },
       },
+      selections: [],
     })
     expect(onClose).toHaveBeenCalledTimes(1)
   })
@@ -130,6 +132,7 @@ describe('CreateWorktreeDialog', () => {
         worktreePath: '~/trees/repo-feature-new',
         mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'main' },
       },
+      selections: [],
     })
     expect(onClose).toHaveBeenCalledTimes(1)
   })
@@ -148,6 +151,7 @@ describe('CreateWorktreeDialog', () => {
         worktreePath: '/tmp/goblin-repo-main',
         mode: { kind: 'existingBranch', branch: 'main' },
       },
+      selections: [],
     })
     expect(onClose).toHaveBeenCalledTimes(1)
   })
@@ -164,10 +168,7 @@ describe('CreateWorktreeDialog', () => {
       ok: true,
       json: jsonMock,
     }))
-    vi.stubGlobal(
-      'fetch',
-      fetchMock,
-    )
+    vi.stubGlobal('fetch', fetchMock)
 
     render(<CreateWorktreeDialog open repo={createRepo()} onClose={onClose} onCreate={onCreate} />)
 
@@ -189,6 +190,7 @@ describe('CreateWorktreeDialog', () => {
         worktreePath: '/tmp/goblin-repo-feature-remote',
         mode: { kind: 'trackRemoteBranch', remoteRef: 'origin/feature/remote', localBranch: 'feature/remote' },
       },
+      selections: [],
     })
     expect(onClose).toHaveBeenCalledTimes(1)
   })
@@ -230,6 +232,7 @@ describe('CreateWorktreeDialog', () => {
         worktreePath: '/tmp/goblin-repo-bugfix-login-flow',
         mode: { kind: 'trackRemoteBranch', remoteRef: 'origin/bugfix/login-flow', localBranch: 'bugfix/login-flow' },
       },
+      selections: [],
     })
     expect(onClose).toHaveBeenCalledTimes(1)
   })
@@ -244,11 +247,7 @@ describe('CreateWorktreeDialog', () => {
       'fetch',
       vi.fn(async () => ({
         ok: true,
-        json: async () => [
-          'origin/feature/api-client',
-          'origin/bugfix/login-flow',
-          'origin/release/searchable-branch',
-        ],
+        json: async () => ['origin/feature/api-client', 'origin/bugfix/login-flow', 'origin/release/searchable-branch'],
       })),
     )
 
@@ -310,7 +309,7 @@ describe('CreateWorktreeDialog', () => {
         repo={createRepo()}
         worktreeBootstrap={{
           loading: true,
-          preview: null,
+          preflight: null,
           error: false,
           configTrusted: false,
           onConfigTrustedChange: vi.fn(),
@@ -332,14 +331,17 @@ describe('CreateWorktreeDialog', () => {
         repo={createRepo()}
         worktreeBootstrap={{
           loading: false,
-          preview: {
-            hasConfig: true,
-            hasOperations: true,
-            configHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-            copyCount: 1,
-            symlinkCount: 0,
-            hardlinkCount: 0,
-            excludeCount: 0,
+          preflight: {
+            kind: 'configured',
+            preview: {
+              hasConfig: true,
+              hasOperations: true,
+              configHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+              copyCount: 1,
+              symlinkCount: 0,
+              hardlinkCount: 0,
+              excludeCount: 0,
+            },
           },
           error: false,
           configTrusted: true,
@@ -353,6 +355,103 @@ describe('CreateWorktreeDialog', () => {
     const checkbox = document.querySelector('button[role="checkbox"], input[type="checkbox"]')
     expect(document.body.textContent).toContain('action.create-worktree-bootstrap-config-trusted')
     expect(checkbox).toBeTruthy()
+  })
+
+  test('defaults candidates to skip and submits only independent copy or symlink choices', () => {
+    const onCreate = vi.fn(async () => {})
+    render(
+      <CreateWorktreeDialog
+        open
+        repo={createRepo()}
+        worktreeBootstrap={{
+          loading: false,
+          preflight: {
+            kind: 'candidates',
+            candidates: [
+              { path: 'node_modules', kind: 'directory' },
+              { path: '.env', kind: 'file' },
+            ],
+          },
+          error: false,
+          configTrusted: false,
+          onConfigTrustedChange: vi.fn(),
+        }}
+        onClose={vi.fn()}
+        onCreate={onCreate}
+      />,
+    )
+
+    expect(document.querySelectorAll('[data-bootstrap-candidate-path]').length).toBe(2)
+    expect(document.querySelectorAll('[data-bootstrap-candidate-choice="skip"][data-state="on"]').length).toBe(2)
+    click('[data-bootstrap-candidate-path="node_modules"] [data-bootstrap-candidate-choice="symlink"]')
+    click('[data-bootstrap-candidate-path=".env"] [data-bootstrap-candidate-choice="copy"]')
+    setInputValue('#cwt-branch', 'feature/new')
+    click('button[type="submit"]')
+
+    expect(onCreate).toHaveBeenCalledWith({
+      input: {
+        worktreePath: '/tmp/goblin-repo-feature-new',
+        mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'main' },
+      },
+      selections: [
+        { path: 'node_modules', mode: 'symlink' },
+        { path: '.env', mode: 'copy' },
+      ],
+    })
+  })
+
+  test('resets candidate choices when the dialog is reopened', () => {
+    const worktreeBootstrap = {
+      loading: false,
+      preflight: {
+        kind: 'candidates' as const,
+        candidates: [{ path: '.env', kind: 'file' as const }],
+      },
+      error: false,
+      configTrusted: false,
+      onConfigTrustedChange: vi.fn(),
+    }
+    const dialog = (open: boolean) => (
+      <CreateWorktreeDialog
+        open={open}
+        repo={createRepo()}
+        worktreeBootstrap={worktreeBootstrap}
+        onClose={vi.fn()}
+        onCreate={vi.fn(async () => {})}
+      />
+    )
+    render(dialog(true))
+
+    click('[data-bootstrap-candidate-path=".env"] [data-bootstrap-candidate-choice="copy"]')
+    expect(document.querySelector('[data-bootstrap-candidate-choice="copy"][data-state="on"]')).not.toBeNull()
+
+    act(() => root!.render(dialog(false)))
+    act(() => root!.render(dialog(true)))
+
+    expect(document.querySelector('[data-bootstrap-candidate-choice="skip"][data-state="on"]')).not.toBeNull()
+  })
+
+  test('hides empty candidates and keeps preflight errors nonblocking', () => {
+    render(
+      <CreateWorktreeDialog
+        open
+        repo={createRepo()}
+        worktreeBootstrap={{
+          loading: false,
+          preflight: { kind: 'candidates', candidates: [] },
+          error: true,
+          configTrusted: false,
+          onConfigTrustedChange: vi.fn(),
+        }}
+        onClose={vi.fn()}
+        onCreate={vi.fn(async () => {})}
+      />,
+    )
+
+    expect(document.body.textContent).not.toContain('action.create-worktree-bootstrap-candidates-label')
+    expect(document.body.textContent).toContain('action.create-worktree-bootstrap-preflight-error')
+    setInputValue('#cwt-branch', 'feature/new')
+    expect(button('button[type="submit"]').disabled).toBe(false)
   })
 })
 
