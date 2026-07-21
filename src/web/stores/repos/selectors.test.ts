@@ -83,9 +83,10 @@ describe('repo selectors', () => {
       restorableWorkspaceStateFromStore({
         order: ['/tmp/repo'],
         activeId: '/tmp/repo',
-        workspaceActiveRepoByRoot: {
-          '/tmp/repo': '/tmp/repo/api',
+        workspaceActiveContextByRoot: {
+          '/tmp/repo': { kind: 'repository', repositoryId: '/tmp/repo/api' },
         },
+        workspaceRepositoryListExpandedByRoot: { '/tmp/repo': false },
         projectListExpanded: true,
         detailCollapsed: false,
         detailFocusMode: true,
@@ -105,9 +106,10 @@ describe('repo selectors', () => {
     ).toEqual({
       order: ['/tmp/repo'],
       activeId: '/tmp/repo',
-      workspaceActiveRepoByRoot: {
-        '/tmp/repo': '/tmp/repo/api',
+      workspaceActiveContextByRoot: {
+        '/tmp/repo': { kind: 'repository', repositoryId: '/tmp/repo/api' },
       },
+      workspaceRepositoryListExpandedByRoot: { '/tmp/repo': false },
       projectListExpanded: true,
       detailCollapsed: false,
       detailFocusMode: true,

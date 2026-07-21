@@ -28,6 +28,7 @@ export function WorkspaceRepositorySwitcher({ repoId, compact = false }: Props) 
     repoId === workspaceRootId ? t('workspace.overview') : (state.repos[repoId]?.name ?? ''),
   )
   const repos = useReposStore((state) => state.repos)
+  const activateWorkspaceOverview = useReposStore((state) => state.activateWorkspaceOverview)
   const activateWorkspaceRepository = useReposStore((state) => state.activateWorkspaceRepository)
   if (!workspaceRootId || !workspace) return null
 
@@ -61,7 +62,7 @@ export function WorkspaceRepositorySwitcher({ repoId, compact = false }: Props) 
       <DropdownMenuContent align="start" className="max-h-72 w-max max-w-72 overflow-y-auto">
         <DropdownMenuItem
           aria-current={repoId === workspaceRootId ? 'page' : undefined}
-          onSelect={() => activateWorkspaceRepository(workspaceRootId, null)}
+          onSelect={() => activateWorkspaceOverview(workspaceRootId)}
         >
           <FolderTree />
           <span className="font-mono text-muted-foreground">./</span>

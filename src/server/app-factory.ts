@@ -142,7 +142,7 @@ export function createApp(options: ServerAppOptions): Hono {
   app.route('/api/settings', createSettingsRoutes(settingsState, { revokeAllWebSessions: webAccessAuth.revokeAll }))
   app.route('/api/remote', createRemoteRoutes())
   app.route('/api/repo', createRepoRoutes())
-  app.route('/api/workspace', createWorkspaceRoutes())
+  app.route('/api/workspace', createWorkspaceRoutes({ terminalHost: options.terminalHost, terminalClientId }))
   app.route('/api/port-forwarding', createPortForwardingRoutes())
   app.route(
     '/ws',

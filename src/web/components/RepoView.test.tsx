@@ -63,6 +63,39 @@ vi.mock('#/web/components/repo-workspace/PlainWorkspaceTerminalPanel.tsx', () =>
   ),
 }))
 
+vi.mock('#/web/branch-workspace-queries.ts', () => ({
+  useBranchWorkspaceQuery: () => ({
+    data: {
+      ok: true,
+      rootId: REPO_ID,
+      auxiliaryCandidates: [],
+      items: [
+        {
+          id: 'branch-1',
+          rootId: REPO_ID,
+          branch: 'feature/auth',
+          directoryName: 'goblin-feature-auth',
+          path: `${REPO_ID}/goblin-feature-auth`,
+          lifecycle: 'ready',
+          available: true,
+          issues: [],
+          repositories: [],
+          auxiliaryEntries: [],
+        },
+      ],
+    },
+    isPending: false,
+  }),
+}))
+
+vi.mock('#/web/components/repo-workspace/BranchWorkspacePane.tsx', () => ({
+  BranchWorkspacePane: ({ workspace }: { workspace: { branch: string; path: string } }) => (
+    <div data-testid="branch-workspace-pane" data-path={workspace.path}>
+      {workspace.branch}
+    </div>
+  ),
+}))
+
 vi.mock('#/web/components/repo-workspace/RepoExplorerPane.tsx', () => ({
   RepoExplorerPane: ({
     showActions,
@@ -282,6 +315,39 @@ describe('RepoView', () => {
 
     expect(container?.querySelector('[data-testid="plain-workspace-terminal-panel"]')).not.toBeNull()
     expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).toBeNull()
+  })
+
+  test('renders the selected branch workspace as a folder context instead of a nested repository', () => {
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    useReposStore.setState({
+      workspaceProjects: {
+        [REPO_ID]: {
+          rootId: REPO_ID,
+          repositoryIds: [],
+          candidates: [],
+          configured: true,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+      workspaceActiveContextByRoot: {
+        [REPO_ID]: { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
+      },
+    })
+
+    renderRepoView()
+
+    expect(container?.querySelector('[data-testid="branch-workspace-pane"]')?.textContent).toContain('feature/auth')
+    expect(container?.querySelector('[data-testid="branch-detail"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="plain-workspace-terminal-panel"]')).toBeNull()
   })
 
   test('keeps file-area collapse available without mounting branch detail for desktop non-git workspaces', () => {

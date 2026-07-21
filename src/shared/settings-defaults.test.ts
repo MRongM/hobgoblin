@@ -12,10 +12,19 @@ import {
   MAX_CHROME_HEIGHT_PX,
   MIN_CHROME_HEIGHT_PX,
   defaultInitialSettingsSnapshot,
+  defaultSessionState,
   defaultSettingsPrefs,
 } from '#/shared/settings-defaults.ts'
 
 describe('settings defaults', () => {
+  test('defaults workspace navigation to empty tagged contexts and expanded-by-default repository lists', () => {
+    expect(defaultSessionState()).toMatchObject({
+      workspaceActiveContextByRoot: {},
+      workspaceRepositoryListExpandedByRoot: {},
+    })
+    expect(defaultSessionState()).not.toHaveProperty('workspaceActiveRepoByRoot')
+  })
+
   test('defaults file tree font size to 14', () => {
     expect(DEFAULT_FILE_TREE_FONT_SIZE).toBe(14)
     expect(defaultSettingsPrefs().fileTreeFontSize).toBe(14)

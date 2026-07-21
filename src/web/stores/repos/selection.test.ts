@@ -10,6 +10,8 @@ import {
 } from '#/web/stores/repos/test-utils.ts'
 import type { BranchSnapshotInfo } from '#/web/types.ts'
 import { DEFAULT_DETAIL_PANE_SIZES, DEFAULT_FILE_TREE_PANE_SIZES } from '#/shared/workspace-layout.ts'
+import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
+import { branchWorkspaceQueryKey } from '#/web/branch-workspace-query-cache.ts'
 const REPO_ID = '/tmp/gbl-selection-test-repo'
 const REPO_B_ID = '/tmp/gbl-selection-test-repo-b'
 const rpcHandlers: Record<string, (input: any) => unknown> = {}
@@ -614,7 +616,7 @@ describe('multi-repository workspace selection', () => {
           error: null,
         },
       },
-      workspaceActiveRepoByRoot: { [rootId]: null },
+      workspaceActiveContextByRoot: { [rootId]: { kind: 'overview' } },
     })
   }
 
@@ -626,17 +628,72 @@ describe('multi-repository workspace selection', () => {
     useReposStore.getState().activateProject(rootId)
 
     expect(useReposStore.getState().activeId).toBe(childId)
-    expect(useReposStore.getState().workspaceActiveRepoByRoot[rootId]).toBe(childId)
+    expect(useReposStore.getState().workspaceActiveContextByRoot[rootId]).toEqual({
+      kind: 'repository',
+      repositoryId: childId,
+    })
   })
 
   test('selects Overview explicitly', () => {
     seedWorkspaceSelection()
-    useReposStore.setState({ workspaceActiveRepoByRoot: { [rootId]: childId } })
+    useReposStore.setState({
+      workspaceActiveContextByRoot: { [rootId]: { kind: 'repository', repositoryId: childId } },
+    })
 
-    useReposStore.getState().activateWorkspaceRepository(rootId, null)
+    useReposStore.getState().activateWorkspaceOverview(rootId)
 
     expect(useReposStore.getState().activeId).toBe(rootId)
-    expect(useReposStore.getState().workspaceActiveRepoByRoot[rootId]).toBeNull()
+    expect(useReposStore.getState().workspaceActiveContextByRoot[rootId]).toEqual({ kind: 'overview' })
+  })
+
+  test('activates one non-repository branch workspace context under Overview', () => {
+    seedWorkspaceSelection()
+    seedBranchWorkspaceQuery('branch-1', 'ready')
+
+    useReposStore.getState().activateBranchWorkspace(rootId, 'branch-1')
+
+    expect(useReposStore.getState().activeId).toBe(rootId)
+    expect(useReposStore.getState().workspaceActiveContextByRoot[rootId]).toEqual({
+      kind: 'branch-workspace',
+      branchWorkspaceId: 'branch-1',
+    })
+  })
+
+  test.each([
+    { label: 'missing', selectedId: 'branch-missing', lifecycle: 'ready' as const },
+    { label: 'delete-incomplete', selectedId: 'branch-1', lifecycle: 'delete-incomplete' as const },
+  ])('falls back to Overview for a $label branch workspace', ({ selectedId, lifecycle }) => {
+    seedWorkspaceSelection()
+    seedBranchWorkspaceQuery('branch-1', lifecycle)
+
+    useReposStore.getState().activateBranchWorkspace(rootId, selectedId)
+
+    expect(useReposStore.getState().activeId).toBe(rootId)
+    expect(useReposStore.getState().workspaceActiveContextByRoot[rootId]).toEqual({ kind: 'overview' })
+  })
+
+  test('keeps repository list collapse independent per workspace and defaults missing roots to expanded', () => {
+    seedWorkspaceSelection()
+    const otherRoot = '/tmp/gbl-workspace-other'
+    const other = replaceRepo(emptyRepo(otherRoot, 'workspace-other'), (repo) => {
+      repo.isGitRepo = false
+    })
+    useReposStore.setState((state) => ({
+      repos: { ...state.repos, [otherRoot]: other },
+      workspaceProjects: {
+        ...state.workspaceProjects,
+        [otherRoot]: { ...state.workspaceProjects[rootId]!, rootId: otherRoot, repositoryIds: [] },
+      },
+    }))
+
+    useReposStore.getState().toggleWorkspaceRepositoryList(rootId)
+
+    expect(useReposStore.getState().workspaceRepositoryListExpandedByRoot).toEqual({ [rootId]: false })
+    useReposStore.getState().toggleWorkspaceRepositoryList(otherRoot)
+    expect(useReposStore.getState().workspaceRepositoryListExpandedByRoot).toEqual({
+      [rootId]: false,
+      [otherRoot]: false,
+    })
   })
 
   test('cycles across top-level projects instead of child repositories', () => {
@@ -650,6 +707,34 @@ describe('multi-repository workspace selection', () => {
     expect(useReposStore.getState().activeId).toBe(childId)
   })
 })
+
+function seedBranchWorkspaceQuery(
+  id: string,
+  lifecycle: 'ready' | 'delete-incomplete',
+) {
+  mainWindowQueryClient.setQueryData(branchWorkspaceQueryKey('/tmp/gbl-workspace'), {
+    ok: true,
+    rootId: '/tmp/gbl-workspace',
+    auxiliaryCandidates: [],
+    items: [
+      {
+        id,
+        rootId: '/tmp/gbl-workspace',
+        branch: 'feature/auth',
+        directoryName: 'goblin-feature',
+        path: '/tmp/gbl-workspace/goblin-feature',
+        lifecycle,
+        available: lifecycle === 'ready',
+        issues: [],
+        repositories: [],
+        auxiliaryEntries: [],
+        ...(lifecycle === 'delete-incomplete'
+          ? { operation: { kind: 'remove' as const, phase: 'failed' as const, startedAt: '2026-07-21T00:00:00.000Z' } }
+          : {}),
+      },
+    ],
+  })
+}
 
 describe('setBranchSearchQuery', () => {
   test('updates runtime search without rewriting durable cache or changing selection', () => {

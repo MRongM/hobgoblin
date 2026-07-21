@@ -289,6 +289,91 @@ describe('ProjectFileTree', () => {
     expect(container?.textContent).toContain('README.md')
   })
 
+  test('loads an explicit folder context without RepoState and protects only managed roots', async () => {
+    getRepositoryFileTree
+      .mockImplementationOnce(async (_repoId, worktreePath, dirPath) => ({
+        ok: true,
+        worktreePath,
+        dirPath,
+        entries: [
+          {
+            name: 'api',
+            absolutePath: '/workspace/goblin-feature/api',
+            relativePath: 'api',
+            kind: 'directory',
+          },
+          {
+            name: 'notes.txt',
+            absolutePath: '/workspace/goblin-feature/notes.txt',
+            relativePath: 'notes.txt',
+            kind: 'file',
+          },
+        ],
+      }))
+      .mockImplementationOnce(async (_repoId, worktreePath, dirPath) => ({
+        ok: true,
+        worktreePath,
+        dirPath,
+        entries: [
+          {
+            name: 'package.json',
+            absolutePath: '/workspace/goblin-feature/api/package.json',
+            relativePath: 'api/package.json',
+            kind: 'file',
+          },
+        ],
+      }))
+
+    await render(
+      <ProjectFileTree
+        repoId="/workspace"
+        folderContext={{
+          repoId: '/workspace',
+          worktreePath: '/workspace/goblin-feature',
+          branch: 'feature',
+          isGitRepo: false,
+          status: [],
+          protectedRootNames: ['api'],
+        }}
+      />,
+    )
+
+    expect(getRepositoryFileTree).toHaveBeenCalledWith(
+      '/workspace',
+      '/workspace/goblin-feature',
+      '/workspace/goblin-feature',
+      expect.any(AbortSignal),
+    )
+    expect(getRepositoryWorktreeBootstrapPreview).not.toHaveBeenCalled()
+
+    const api = treeItemByText('api')
+    expect(api.draggable).toBe(false)
+    await act(async () => {
+      api.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const descendant = treeItemByText('package.json')
+    expect(descendant.draggable).toBe(true)
+
+    await act(async () => {
+      api.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+      await Promise.resolve()
+    })
+    expect(contextMenuItem('file-tree.rename').getAttribute('data-disabled')).not.toBeNull()
+    expect(contextMenuItem('file-tree.delete').getAttribute('data-disabled')).not.toBeNull()
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      await Promise.resolve()
+      descendant.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+      await Promise.resolve()
+    })
+    expect(contextMenuItem('file-tree.rename').getAttribute('data-disabled')).toBeNull()
+    expect(contextMenuItem('file-tree.delete').getAttribute('data-disabled')).toBeNull()
+  })
+
   test('loads a non-git local workspace from the repo root', async () => {
     seedPlainWorkspace()
 
@@ -1716,6 +1801,14 @@ function treeItemByText(text: string): HTMLElement {
   )
   if (!row) throw new Error(`Missing tree item: ${text}`)
   return row
+}
+
+function contextMenuItem(label: string): HTMLElement {
+  const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) =>
+    candidate.textContent?.includes(label),
+  )
+  if (!item) throw new Error(`Missing context menu item: ${label}`)
+  return item
 }
 
 function fileTreeRoot(): HTMLElement {

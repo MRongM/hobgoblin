@@ -10,6 +10,7 @@ import {
 } from '#/web/stores/repos/lifecycle-write-paths.ts'
 import { activeRepoIdAfterWorkspaceHydration } from '#/web/open-workspace-state.ts'
 import { repoSessionEntryId, type RepoSessionEntry } from '#/shared/remote-repo.ts'
+import type { WorkspaceActiveContext } from '#/shared/rpc.ts'
 
 interface InitialRepoRefresh {
   id: string
@@ -25,7 +26,8 @@ function createRestorableWorkspaceLifecycleActions(set: ReposSet, get: ReposGet)
     async hydrateSession(
       openRepos: RepoSessionEntry[],
       activeRepo: string | null,
-      workspaceActiveRepoByRoot: Record<string, string | null> = {},
+      workspaceActiveContextByRoot: Record<string, WorkspaceActiveContext> = {},
+      workspaceRepositoryListExpandedByRoot: Record<string, boolean> = {},
     ) {
       // Boot/session restore of workspace membership and active tab. This
       // reopens what SessionState described, but does not subscribe the repos
@@ -35,7 +37,10 @@ function createRestorableWorkspaceLifecycleActions(set: ReposSet, get: ReposGet)
       // tabs so the user's workspace shape stays intact.
       const rankById = new Map<string, number>()
       let managedActiveId: string | null = null
-      set({ workspaceActiveRepoByRoot: { ...workspaceActiveRepoByRoot } })
+      set({
+        workspaceActiveContextByRoot: { ...workspaceActiveContextByRoot },
+        workspaceRepositoryListExpandedByRoot: { ...workspaceRepositoryListExpandedByRoot },
+      })
       const limitProbe = pLimit(SESSION_PROBE_CONCURRENCY)
       await Promise.all(
         openRepos.map((entry, index) =>

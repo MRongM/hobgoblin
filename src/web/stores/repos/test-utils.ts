@@ -95,10 +95,11 @@ export function resetReposStore(): void {
   useReposStore.setState({
     repos: {},
     workspaceProjects: {},
-    workspaceActiveRepoByRoot: {},
     restorableRepoCache: {},
     order: [],
     activeId: null,
+    workspaceActiveContextByRoot: {},
+    workspaceRepositoryListExpandedByRoot: {},
     projectListExpanded: DEFAULT_PROJECT_LIST_EXPANDED,
     sessionReady: false,
     branchSearchQueries: {},

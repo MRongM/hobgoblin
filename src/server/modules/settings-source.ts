@@ -20,6 +20,7 @@ import type {
   TerminalCustomButtonSize,
   TerminalPref,
   ThemePref,
+  WorkspaceActiveContext,
   WebAccessSettingsSnapshot,
 } from '#/shared/rpc.ts'
 import {
@@ -29,7 +30,7 @@ import {
   normalizeFileTreePaneSizes,
   normalizeWorkspaceLayout,
 } from '#/shared/workspace-layout.ts'
-import { repoSessionEntryId, type RepoSessionEntry } from '#/shared/remote-repo.ts'
+import { isRemoteRepoId, parseRemoteRepoId, repoSessionEntryId, type RepoSessionEntry } from '#/shared/remote-repo.ts'
 import {
   clearRepoSettingsEntryColorTheme,
   isWorktreeBootstrapConfigHash,
@@ -382,22 +383,83 @@ function normalizeWorkspaceActiveRepoByRoot(
   openRepos: RepoSessionEntry[],
 ): Record<string, string | null> {
   if (!value || typeof value !== 'object') return {}
-  const openLocalRoots = new Set(
-    openRepos.filter((entry) => entry.kind === 'local').map((entry) => path.resolve(entry.id)),
-  )
+  const openRootIds = new Set(openRepos.map(repoSessionEntryId))
   const normalized: Record<string, string | null> = {}
   for (const [rawRoot, rawSelection] of Object.entries(value)) {
     const root = toSafeRepoLocator(rawRoot)
-    if (!root || !openLocalRoots.has(path.resolve(root))) continue
+    if (!root || !openRootIds.has(root)) continue
     if (rawSelection === null) {
       normalized[root] = null
       continue
     }
     const selection = toSafeRepoLocator(rawSelection)
-    if (!selection || path.dirname(path.resolve(selection)) !== path.resolve(root)) continue
+    if (!selection || !isImmediateWorkspaceRepository(root, selection)) continue
     normalized[root] = selection
   }
   return normalized
+}
+
+function normalizeWorkspaceActiveContextByRoot(
+  taggedValue: unknown,
+  legacyValue: unknown,
+  openRepos: RepoSessionEntry[],
+): Record<string, WorkspaceActiveContext> {
+  const openRootIds = new Set(openRepos.map(repoSessionEntryId))
+  const normalized: Record<string, WorkspaceActiveContext> = {}
+  const legacy = normalizeWorkspaceActiveRepoByRoot(legacyValue, openRepos)
+  for (const [rootId, repositoryId] of Object.entries(legacy)) {
+    normalized[rootId] = repositoryId === null || repositoryId === rootId
+      ? { kind: 'overview' }
+      : { kind: 'repository', repositoryId }
+  }
+  if (!taggedValue || typeof taggedValue !== 'object') return normalized
+  for (const [rawRootId, rawContext] of Object.entries(taggedValue)) {
+    const rootId = toSafeRepoLocator(rawRootId)
+    if (!rootId || !openRootIds.has(rootId) || !rawContext || typeof rawContext !== 'object') continue
+    const context = rawContext as Partial<WorkspaceActiveContext>
+    if (context.kind === 'overview') {
+      normalized[rootId] = { kind: 'overview' }
+      continue
+    }
+    if (context.kind === 'repository') {
+      const repositoryId = toSafeRepoLocator(context.repositoryId)
+      if (repositoryId && isImmediateWorkspaceRepository(rootId, repositoryId)) {
+        normalized[rootId] = { kind: 'repository', repositoryId }
+      }
+      continue
+    }
+    if (context.kind === 'branch-workspace' && isValidBranchWorkspaceContextId(context.branchWorkspaceId)) {
+      normalized[rootId] = { kind: 'branch-workspace', branchWorkspaceId: context.branchWorkspaceId }
+    }
+  }
+  return normalized
+}
+
+function normalizeWorkspaceRepositoryListExpandedByRoot(
+  value: unknown,
+  openRepos: RepoSessionEntry[],
+): Record<string, boolean> {
+  if (!value || typeof value !== 'object') return {}
+  const openRootIds = new Set(openRepos.map(repoSessionEntryId))
+  const normalized: Record<string, boolean> = {}
+  for (const [rawRootId, expanded] of Object.entries(value)) {
+    const rootId = toSafeRepoLocator(rawRootId)
+    if (rootId && openRootIds.has(rootId) && typeof expanded === 'boolean') normalized[rootId] = expanded
+  }
+  return normalized
+}
+
+function isImmediateWorkspaceRepository(rootId: string, repositoryId: string): boolean {
+  if (isRemoteRepoId(rootId) || isRemoteRepoId(repositoryId)) {
+    const root = parseRemoteRepoId(rootId)
+    const repository = parseRemoteRepoId(repositoryId)
+    return !!root && !!repository && root.alias === repository.alias && path.posix.dirname(repository.remotePath) === root.remotePath
+  }
+  return path.dirname(path.resolve(repositoryId)) === path.resolve(rootId)
+}
+
+function isValidBranchWorkspaceContextId(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= 256 && !/[\x00-\x1f\x7f]/.test(value)
 }
 
 function normalizeSession(value: unknown): SessionState {
@@ -409,7 +471,11 @@ function normalizeSession(value: unknown): SessionState {
       )
     : []
   const activeRepo = toSafeRepoLocator(partial.activeRepo)
-  const workspaceActiveRepoByRoot = normalizeWorkspaceActiveRepoByRoot(partial.workspaceActiveRepoByRoot, openRepos)
+  const workspaceActiveContextByRoot = normalizeWorkspaceActiveContextByRoot(
+    partial.workspaceActiveContextByRoot,
+    partial.workspaceActiveRepoByRoot,
+    openRepos,
+  )
   const workspaceLayout = normalizeWorkspaceLayout(partial.workspaceLayout)
   const detailCollapsed =
     typeof partial.detailCollapsed === 'boolean' ? partial.detailCollapsed : DEFAULT_DETAIL_COLLAPSED
@@ -420,10 +486,16 @@ function normalizeSession(value: unknown): SessionState {
     activeRepo:
       activeRepo &&
       (openRepos.some((entry) => repoSessionEntryId(entry) === activeRepo) ||
-        Object.values(workspaceActiveRepoByRoot).includes(activeRepo))
+        Object.values(workspaceActiveContextByRoot).some(
+          (context) => context.kind === 'repository' && context.repositoryId === activeRepo,
+        ))
         ? activeRepo
         : null,
-    workspaceActiveRepoByRoot,
+    workspaceActiveContextByRoot,
+    workspaceRepositoryListExpandedByRoot: normalizeWorkspaceRepositoryListExpandedByRoot(
+      partial.workspaceRepositoryListExpandedByRoot,
+      openRepos,
+    ),
     projectListExpanded:
       typeof partial.projectListExpanded === 'boolean' ? partial.projectListExpanded : DEFAULT_PROJECT_LIST_EXPANDED,
     detailCollapsed: effectiveDetailCollapsed(workspaceLayout, detailCollapsed),

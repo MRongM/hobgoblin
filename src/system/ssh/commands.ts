@@ -29,6 +29,19 @@ export type RemoteCommandKind =
   | { type: 'listWorkspaceGitDirectories'; rootPath: string }
   | { type: 'testWorkspaceGitDirectory'; path: string }
   | { type: 'testPathExists'; path: string }
+  | { type: 'listBranchWorkspaceCandidates'; rootPath: string; excludedNames: string[] }
+  | { type: 'inspectBranchWorkspacePath'; rootPath: string; candidatePath: string }
+  | { type: 'createBranchWorkspaceDirectory'; rootPath: string; targetPath: string }
+  | {
+      type: 'materializeBranchWorkspaceSymlink'
+      rootPath: string
+      sourcePath: string
+      targetPath: string
+    }
+  | { type: 'copyBranchWorkspaceEntry'; rootPath: string; sourcePath: string; targetPath: string }
+  | { type: 'fingerprintBranchWorkspaceEntry'; rootPath: string; targetPath: string }
+  | { type: 'removeBranchWorkspaceEntry'; rootPath: string; targetPath: string }
+  | { type: 'listBranchWorkspaceChildren'; rootPath: string; targetPath: string }
   | { type: 'listDirectoryEntries'; worktreePath: string; dirPath: string }
   | { type: 'searchFileTree'; worktreePath: string; query: string; limit: number }
   | { type: 'createFileTreeDirectory'; worktreePath: string; parentDirPath: string; name: string }
@@ -238,6 +251,15 @@ function scriptForCommand(command: RemoteCommandKind): string {
         'fi',
       ].join('\n')
     }
+    case 'listBranchWorkspaceCandidates':
+    case 'inspectBranchWorkspacePath':
+    case 'createBranchWorkspaceDirectory':
+    case 'materializeBranchWorkspaceSymlink':
+    case 'copyBranchWorkspaceEntry':
+    case 'fingerprintBranchWorkspaceEntry':
+    case 'removeBranchWorkspaceEntry':
+    case 'listBranchWorkspaceChildren':
+      return remoteBranchWorkspaceScript(command)
     case 'listDirectoryEntries':
       return [
         "python3 - <<'PY'",
@@ -454,6 +476,218 @@ function scriptForCommand(command: RemoteCommandKind): string {
   }
   const exhaustive: never = command
   return exhaustive
+}
+
+type RemoteBranchWorkspaceCommand = Extract<
+  RemoteCommandKind,
+  {
+    type:
+      | 'listBranchWorkspaceCandidates'
+      | 'inspectBranchWorkspacePath'
+      | 'createBranchWorkspaceDirectory'
+      | 'materializeBranchWorkspaceSymlink'
+      | 'copyBranchWorkspaceEntry'
+      | 'fingerprintBranchWorkspaceEntry'
+      | 'removeBranchWorkspaceEntry'
+      | 'listBranchWorkspaceChildren'
+  }
+>
+
+function remoteBranchWorkspaceScript(command: RemoteBranchWorkspaceCommand): string {
+  switch (command.type) {
+    case 'listBranchWorkspaceCandidates':
+      return remoteBranchWorkspacePython(command.rootPath, [
+        `excluded_names = set(json.loads(${pythonString(JSON.stringify(command.excludedNames))}))`,
+        'root_real = os.path.realpath(root_path)',
+        'candidates = []',
+        'for name in sorted(os.listdir(root_path)):',
+        '    if name in excluded_names or name.startswith("goblin-") or name.startswith(".goblin-") or name.startswith(".hobgoblin-"):',
+        '        continue',
+        '    candidate_path = os.path.join(root_path, name)',
+        '    info = os.lstat(candidate_path)',
+        '    resolved_path = os.path.realpath(candidate_path) if os.path.exists(candidate_path) else None',
+        '    item = {',
+        '        "name": name,',
+        '        "path": candidate_path,',
+        '        "kind": path_kind(info),',
+        '        "outsideRoot": resolved_path is not None and not path_inside(root_real, resolved_path, True),',
+        '    }',
+        '    if resolved_path is not None:',
+        '        item["resolvedPath"] = resolved_path',
+        '    candidates.append(item)',
+        'print(json.dumps({"ok": True, "candidates": candidates}, ensure_ascii=False))',
+      ])
+    case 'inspectBranchWorkspacePath':
+      return remoteBranchWorkspacePython(command.rootPath, [
+        `candidate_path = checked_path(${pythonString(command.candidatePath)}, True)`,
+        'relative = os.path.relpath(candidate_path, root_path)',
+        'direct_child = relative != "." and "/" not in relative',
+        'if not os.path.lexists(candidate_path):',
+        '    print(json.dumps({"ok": True, "inspection": {"path": candidate_path, "exists": False, "kind": "missing", "directChild": direct_child, "outsideRoot": False}}, ensure_ascii=False))',
+        '    sys.exit(0)',
+        'info = os.lstat(candidate_path)',
+        'resolved_path = os.path.realpath(candidate_path) if os.path.exists(candidate_path) else None',
+        'inspection = {',
+        '    "path": candidate_path,',
+        '    "exists": True,',
+        '    "kind": path_kind(info),',
+        '    "directChild": direct_child,',
+        '    "outsideRoot": resolved_path is not None and not path_inside(os.path.realpath(root_path), resolved_path, True),',
+        '}',
+        'if stat.S_ISLNK(info.st_mode):',
+        '    inspection["linkTarget"] = os.readlink(candidate_path)',
+        'if resolved_path is not None:',
+        '    inspection["resolvedPath"] = resolved_path',
+        'print(json.dumps({"ok": True, "inspection": inspection}, ensure_ascii=False))',
+      ])
+    case 'createBranchWorkspaceDirectory':
+      return remoteBranchWorkspacePython(command.rootPath, [
+        `target_path = checked_path(${pythonString(command.targetPath)}, False)`,
+        'if os.path.dirname(target_path) != root_path or not os.path.basename(target_path).startswith("goblin-"):',
+        '    fail("workspace.branch-workspace.invalid-path")',
+        'ensure_safe_parents(target_path)',
+        'os.mkdir(target_path)',
+        'print(json.dumps({"ok": True}))',
+      ])
+    case 'materializeBranchWorkspaceSymlink':
+      return remoteBranchWorkspacePython(command.rootPath, [
+        `source_path = checked_path(${pythonString(command.sourcePath)}, False)`,
+        `target_path = checked_path(${pythonString(command.targetPath)}, False)`,
+        'if os.path.dirname(source_path) != root_path:',
+        '    fail("workspace.branch-workspace.invalid-source")',
+        'if not os.path.lexists(source_path):',
+        '    fail("workspace.branch-workspace.source-missing")',
+        'ensure_safe_parents(target_path)',
+        'os.symlink(source_path, target_path)',
+        'print(json.dumps({"ok": True}))',
+      ])
+    case 'copyBranchWorkspaceEntry':
+      return remoteBranchWorkspacePython(command.rootPath, [
+        `source_path = checked_path(${pythonString(command.sourcePath)}, False)`,
+        `target_path = checked_path(${pythonString(command.targetPath)}, False)`,
+        'if os.path.dirname(source_path) != root_path:',
+        '    fail("workspace.branch-workspace.invalid-source")',
+        'if not os.path.lexists(source_path):',
+        '    fail("workspace.branch-workspace.source-missing")',
+        'ensure_safe_parents(target_path)',
+        'if os.path.lexists(target_path):',
+        '    fail("workspace.branch-workspace.target-exists")',
+        'copy_source = os.path.realpath(source_path) if os.path.islink(source_path) else source_path',
+        'source_info = os.lstat(copy_source)',
+        'if stat.S_ISDIR(source_info.st_mode):',
+        '    shutil.copytree(copy_source, target_path, symlinks=True, copy_function=shutil.copy2)',
+        'elif stat.S_ISREG(source_info.st_mode):',
+        '    shutil.copy2(copy_source, target_path, follow_symlinks=False)',
+        'else:',
+        '    fail("workspace.branch-workspace.unsupported-entry")',
+        'print(json.dumps({"ok": True}))',
+      ])
+    case 'fingerprintBranchWorkspaceEntry':
+      return remoteBranchWorkspacePython(command.rootPath, [
+        `target_path = checked_path(${pythonString(command.targetPath)}, False)`,
+        'ensure_safe_parents(target_path)',
+        'digest = hashlib.sha256()',
+        'def hash_field(value):',
+        '    data = value.encode("utf-8", "surrogateescape")',
+        '    digest.update(str(len(data)).encode("ascii") + b":")',
+        '    digest.update(data)',
+        'def hash_entry(entry_path, relative_path):',
+        '    info = os.lstat(entry_path)',
+        '    kind = path_kind(info)',
+        '    hash_field(relative_path)',
+        '    hash_field(kind)',
+        '    hash_field(str(info.st_mode & 0o7777))',
+        '    if kind == "symlink":',
+        '        hash_field(os.readlink(entry_path))',
+        '        return',
+        '    if kind == "file":',
+        '        with open(entry_path, "rb") as handle:',
+        '            while True:',
+        '                chunk = handle.read(65536)',
+        '                if not chunk:',
+        '                    break',
+        '                digest.update(chunk)',
+        '        return',
+        '    if kind != "directory":',
+        '        return',
+        '    for name in sorted(os.listdir(entry_path)):',
+        '        child_relative = name if relative_path == "." else relative_path + "/" + name',
+        '        hash_entry(os.path.join(entry_path, name), child_relative)',
+        'hash_entry(target_path, ".")',
+        'print(digest.hexdigest())',
+      ])
+    case 'removeBranchWorkspaceEntry':
+      return remoteBranchWorkspacePython(command.rootPath, [
+        `target_path = checked_path(${pythonString(command.targetPath)}, False)`,
+        'ensure_safe_parents(target_path)',
+        'def remove_no_follow(entry_path):',
+        '    try:',
+        '        info = os.lstat(entry_path)',
+        '    except FileNotFoundError:',
+        '        return',
+        '    if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):',
+        '        os.unlink(entry_path)',
+        '        return',
+        '    for name in sorted(os.listdir(entry_path)):',
+        '        remove_no_follow(os.path.join(entry_path, name))',
+        '    os.rmdir(entry_path)',
+        'remove_no_follow(target_path)',
+        'print(json.dumps({"ok": True}))',
+      ])
+    case 'listBranchWorkspaceChildren':
+      return remoteBranchWorkspacePython(command.rootPath, [
+        `target_path = checked_path(${pythonString(command.targetPath)}, False)`,
+        'ensure_safe_parents(target_path)',
+        'info = os.lstat(target_path)',
+        'if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):',
+        '    fail("workspace.branch-workspace.not-directory")',
+        'print(json.dumps({"ok": True, "children": sorted(os.listdir(target_path))}, ensure_ascii=False))',
+      ])
+  }
+  const exhaustive: never = command
+  return exhaustive
+}
+
+function remoteBranchWorkspacePython(rootPath: string, body: string[]): string {
+  return [
+    "python3 - <<'PY'",
+    'import hashlib, json, os, shutil, stat, sys',
+    `root_path = os.path.normpath(${pythonString(rootPath)})`,
+    'def fail(message):',
+    '    print(json.dumps({"ok": False, "message": message}))',
+    '    sys.exit(0)',
+    'if not root_path or not os.path.isabs(root_path):',
+    '    fail("workspace.branch-workspace.invalid-root")',
+    'def path_inside(root, candidate, allow_root):',
+    '    try:',
+    '        common = os.path.commonpath([root, candidate])',
+    '    except ValueError:',
+    '        return False',
+    '    return common == root and (allow_root or candidate != root)',
+    'def checked_path(value, allow_root):',
+    '    candidate = os.path.normpath(value)',
+    '    if not os.path.isabs(candidate) or not path_inside(root_path, candidate, allow_root):',
+    '        fail("workspace.branch-workspace.invalid-path")',
+    '    return candidate',
+    'def ensure_safe_parents(candidate):',
+    '    relative = os.path.relpath(candidate, root_path)',
+    '    current = root_path',
+    '    for part in relative.split("/")[:-1]:',
+    '        current = os.path.join(current, part)',
+    '        try:',
+    '            info = os.lstat(current)',
+    '        except FileNotFoundError:',
+    '            fail("workspace.branch-workspace.invalid-path")',
+    '        if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):',
+    '            fail("workspace.branch-workspace.invalid-path")',
+    'def path_kind(info):',
+    '    if stat.S_ISLNK(info.st_mode): return "symlink"',
+    '    if stat.S_ISDIR(info.st_mode): return "directory"',
+    '    if stat.S_ISREG(info.st_mode): return "file"',
+    '    return "other"',
+    ...body,
+    'PY',
+  ].join('\n')
 }
 
 function remoteFileTreeSearchScript(command: Extract<RemoteCommandKind, { type: 'searchFileTree' }>): string {

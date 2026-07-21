@@ -64,6 +64,10 @@ vi.mock('#/web/settings-queries.ts', () => ({
   useSettingsSnapshotQuery: () => ({ data: { repoSettings: [] } }),
 }))
 
+vi.mock('#/web/branch-workspace-queries.ts', () => ({
+  useBranchWorkspaceInvalidationSync: vi.fn(),
+}))
+
 vi.mock('#/web/stores/i18n.ts', () => ({
   useT: () => (key: string) => key,
 }))

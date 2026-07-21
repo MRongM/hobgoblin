@@ -1,4 +1,7 @@
+import path from 'node:path'
 import { getWorktrees } from '#/system/git/worktrees.ts'
+import { readBranchWorkspaceManifests } from '#/server/modules/branch-workspace-source.ts'
+import { workspaceRootId } from '#/server/modules/workspace-paths.ts'
 import { resolveKnownWorktree } from '#/shared/worktree-guards.ts'
 import { isValidBranch, isValidCwd, isValidRepoLocator } from '#/shared/input-validation.ts'
 import { resolveRemoteTarget } from '#/system/ssh/config.ts'
@@ -24,6 +27,8 @@ interface EnsureTerminalCatalogInput {
   repoRoot: string
   branch: string
   worktreePath: string
+  targetKind?: 'branch-workspace'
+  branchWorkspaceId?: string
   terminalId?: string
   cols?: number
   rows?: number
@@ -98,6 +103,8 @@ class TerminalCatalog {
     if (!isValidRepoLocator(input.repoRoot)) return { ok: false, message: 'error.invalid-arguments' }
     if (!isValidBranch(input.branch)) return { ok: false, message: 'error.invalid-arguments' }
     if (!isValidCwd(input.worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
+    const targetAuthorization = await authorizeBranchWorkspaceTerminalTarget(input)
+    if (!targetAuthorization.ok) return targetAuthorization
 
     const terminalId = input.terminalId ?? formatTerminalId(1)
     const cols = input.cols ?? 80
@@ -167,6 +174,12 @@ class TerminalCatalog {
     if (worktrees.length === 0) return { pruned: 0, remaining: allSessions.length }
 
     const liveWorktreePaths = new Set(worktrees.map((worktree) => terminalSessionScope(worktree.path)))
+    const branchWorkspaceSnapshot = await readBranchWorkspaceManifests(repoRoot).catch(() => null)
+    if (branchWorkspaceSnapshot?.kind === 'ready') {
+      for (const manifest of branchWorkspaceSnapshot.manifests) {
+        liveWorktreePaths.add(terminalSessionScope(manifest.path))
+      }
+    }
 
     let pruned = 0
     for (const session of allSessions) {
@@ -253,6 +266,13 @@ class TerminalCatalog {
       action: TerminalCatalogAction
     },
   ): Promise<EnsureTerminalCatalogResult> {
+    if (input.targetKind === 'branch-workspace') {
+      return await this.ensureLocalSession(clientId, input, {
+        ...context,
+        repoRoot: terminalSessionScope(input.repoRoot),
+        worktreePath: terminalSessionScope(input.worktreePath),
+      })
+    }
     if (isNonGitLocalWorkspaceTerminal(input)) {
       const repoRoot = terminalSessionScope(input.repoRoot)
       return await this.ensureLocalSession(clientId, input, {
@@ -302,6 +322,46 @@ class TerminalCatalog {
     this.options.broadcastSessionsChanged(input.repoRoot)
     return toEnsureResult(context.targetSessionKey, context.action, await this.options.withSessionSnapshot(result))
   }
+}
+
+async function authorizeBranchWorkspaceTerminalTarget(
+  input: Pick<
+    EnsureTerminalCatalogInput,
+    'repoRoot' | 'branch' | 'worktreePath' | 'targetKind' | 'branchWorkspaceId'
+  >,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (input.targetKind === undefined) {
+    return input.branchWorkspaceId === undefined ? { ok: true } : { ok: false, message: 'error.invalid-arguments' }
+  }
+  if (
+    input.targetKind !== 'branch-workspace' ||
+    typeof input.branchWorkspaceId !== 'string' ||
+    !input.branchWorkspaceId.trim()
+  ) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+
+  const snapshot = await readBranchWorkspaceManifests(input.repoRoot).catch(() => null)
+  const manifest =
+    snapshot?.kind === 'ready'
+      ? snapshot.manifests.find((candidate) => candidate.id === input.branchWorkspaceId)
+      : undefined
+  if (
+    !manifest ||
+    workspaceRootId(manifest.rootId) !== workspaceRootId(input.repoRoot) ||
+    manifest.branch !== input.branch ||
+    !sameBranchWorkspaceTerminalPath(input.repoRoot, manifest.path, input.worktreePath) ||
+    manifest.operation?.kind === 'remove'
+  ) {
+    return { ok: false, message: 'workspace.branch-workspace.terminal-unavailable' }
+  }
+  return { ok: true }
+}
+
+function sameBranchWorkspaceTerminalPath(rootId: string, left: string, right: string): boolean {
+  return isRemoteRepoId(rootId)
+    ? path.posix.normalize(left) === path.posix.normalize(right)
+    : terminalSessionScope(left) === terminalSessionScope(right)
 }
 
 function isNonGitLocalWorkspaceTerminal(

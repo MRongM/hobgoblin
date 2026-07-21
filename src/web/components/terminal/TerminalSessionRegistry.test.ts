@@ -27,6 +27,7 @@ const REPO_ROOT = '/repo'
 const WORKTREE_PATH = '/repo'
 const BRANCH = 'main'
 const WORKTREE_KEY = worktreeTerminalKey(REPO_ROOT, WORKTREE_PATH)
+const BRANCH_WORKSPACE_PATH = '/repo/goblin-feature'
 
 function makeDescriptor(terminalId: string, index: number): TerminalDescriptor {
   return {
@@ -94,6 +95,39 @@ describe('TerminalSessionRegistry', () => {
       () => REPO_ROOT,
       (worktreeTerminalKey, key) => selectedChanges.push({ worktreeTerminalKey, key }),
     )
+  })
+
+  test('reconciles a branch workspace folder indexed under its parent root', () => {
+    registry.setRepoIndex({
+      [REPO_ROOT]: {
+        instanceToken: 1,
+        branchByWorktreePath: {
+          [WORKTREE_PATH]: BRANCH,
+          [BRANCH_WORKSPACE_PATH]: 'feature/auth',
+        },
+      },
+    })
+
+    registry.reconcileServerSessions(
+      REPO_ROOT,
+      [
+        {
+          ...makeServerSession('branch-session', 'terminal-1'),
+          key: `${REPO_ROOT}\0${BRANCH_WORKSPACE_PATH}\0terminal-1`,
+          cwd: BRANCH_WORKSPACE_PATH,
+        },
+      ],
+      'attachment_local',
+      new Map(),
+    )
+
+    const snapshot = registry.worktreeSnapshot(worktreeTerminalKey(REPO_ROOT, BRANCH_WORKSPACE_PATH))
+    expect(snapshot.count).toBe(1)
+    expect(snapshot.selectedDescriptor).toMatchObject({
+      repoRoot: REPO_ROOT,
+      branch: 'feature/auth',
+      worktreePath: BRANCH_WORKSPACE_PATH,
+    })
   })
 
   afterEach(() => {

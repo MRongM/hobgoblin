@@ -1,13 +1,20 @@
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import type { ServerTerminalHost } from '#/server/terminal/terminal-host.ts'
 
 const mocks = vi.hoisted(() => ({
   discoverWorkspaceRepositories: vi.fn(),
   restoreWorkspaceRepositories: vi.fn(),
   saveWorkspaceConfig: vi.fn(),
-  planWorkspaceWorktree: vi.fn(),
-  executeWorkspaceWorktree: vi.fn(),
-  abortWorkspaceWorktree: vi.fn(),
+  readBranchWorkspaceSnapshot: vi.fn(),
+  createBranchWorkspaceWriteService: vi.fn(),
+  planBranchWorkspace: vi.fn(),
+  executeBranchWorkspace: vi.fn(),
+  abortBranchWorkspace: vi.fn(),
+  reorderBranchWorkspaces: vi.fn(),
+  planWorkspacePull: vi.fn(),
+  executeWorkspacePull: vi.fn(),
+  abortWorkspacePull: vi.fn(),
 }))
 
 vi.mock('#/server/modules/workspace-read.ts', () => ({
@@ -19,22 +26,42 @@ vi.mock('#/server/modules/workspace-write-paths.ts', () => ({
   saveWorkspaceConfig: mocks.saveWorkspaceConfig,
 }))
 
-vi.mock('#/server/modules/workspace-worktree-write-paths.ts', () => ({
-  planWorkspaceWorktree: mocks.planWorkspaceWorktree,
-  executeWorkspaceWorktree: mocks.executeWorkspaceWorktree,
-  abortWorkspaceWorktree: mocks.abortWorkspaceWorktree,
+vi.mock('#/server/modules/branch-workspace-read.ts', () => ({
+  readBranchWorkspaceSnapshot: mocks.readBranchWorkspaceSnapshot,
+}))
+
+vi.mock('#/server/modules/branch-workspace-write-paths.ts', () => ({
+  createBranchWorkspaceWriteService: mocks.createBranchWorkspaceWriteService,
+}))
+
+vi.mock('#/server/modules/workspace-pull-write-paths.ts', () => ({
+  planWorkspacePull: mocks.planWorkspacePull,
+  executeWorkspacePull: mocks.executeWorkspacePull,
+  abortWorkspacePull: mocks.abortWorkspacePull,
 }))
 
 import { createWorkspaceRoutes } from '#/server/routes/workspace.ts'
 
 describe('workspace routes', () => {
   beforeEach(() => {
+    mocks.createBranchWorkspaceWriteService.mockReset()
+    mocks.createBranchWorkspaceWriteService.mockReturnValue({
+      plan: mocks.planBranchWorkspace,
+      execute: mocks.executeBranchWorkspace,
+      abort: mocks.abortBranchWorkspace,
+      reorder: mocks.reorderBranchWorkspaces,
+    })
     mocks.discoverWorkspaceRepositories.mockReset()
     mocks.restoreWorkspaceRepositories.mockReset()
     mocks.saveWorkspaceConfig.mockReset()
-    mocks.planWorkspaceWorktree.mockReset()
-    mocks.executeWorkspaceWorktree.mockReset()
-    mocks.abortWorkspaceWorktree.mockReset()
+    mocks.readBranchWorkspaceSnapshot.mockReset()
+    mocks.planBranchWorkspace.mockReset()
+    mocks.executeBranchWorkspace.mockReset()
+    mocks.abortBranchWorkspace.mockReset()
+    mocks.reorderBranchWorkspaces.mockReset()
+    mocks.planWorkspacePull.mockReset()
+    mocks.executeWorkspacePull.mockReset()
+    mocks.abortWorkspacePull.mockReset()
   })
 
   test('delegates workspace discovery and returns its result', async () => {
@@ -130,80 +157,134 @@ describe('workspace routes', () => {
     expect(mocks.saveWorkspaceConfig).toHaveBeenCalledWith('', null)
   })
 
-  test('delegates worktree plan, execute, and abort requests', async () => {
-    mocks.planWorkspaceWorktree.mockResolvedValue({ ok: false, message: 'planned' })
-    mocks.executeWorkspaceWorktree.mockResolvedValue({ ok: false, message: 'executed', members: [] })
-    mocks.abortWorkspaceWorktree.mockReturnValue(true)
+  test('reads branch workspaces through POST and GET boundaries', async () => {
+    const result = { ok: true, rootId: '/workspace', items: [], auxiliaryCandidates: [] }
+    mocks.readBranchWorkspaceSnapshot.mockResolvedValue(result)
     const app = new Hono().route('/api/workspace', createWorkspaceRoutes())
 
-    await app.request('/api/workspace/worktrees/plan', {
+    const postResponse = await app.request('/api/workspace/branch-workspaces/read', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ rootId: '/workspace' }),
+    })
+    const getResponse = await app.request('/api/workspace/branch-workspaces/read?rootId=%2Fworkspace')
+
+    expect(postResponse.status).toBe(200)
+    expect(getResponse.status).toBe(200)
+    await expect(postResponse.json()).resolves.toEqual(result)
+    await expect(getResponse.json()).resolves.toEqual(result)
+    expect(mocks.readBranchWorkspaceSnapshot).toHaveBeenNthCalledWith(1, '/workspace', expect.any(AbortSignal))
+    expect(mocks.readBranchWorkspaceSnapshot).toHaveBeenNthCalledWith(2, '/workspace', expect.any(AbortSignal))
+  })
+
+  test('injects terminal enumeration and administrative closure into the branch workspace service', async () => {
+    const terminalHost = {
+      listSessions: vi.fn(async () => [{ sessionId: 'terminal-root-1234' }]),
+      closeSessions: vi.fn(async () => ({ closed: ['terminal-root-1234'], missing: [] })),
+    } as unknown as ServerTerminalHost
+
+    createWorkspaceRoutes({ terminalHost, terminalClientId: 'client_server' })
+    const dependencies = mocks.createBranchWorkspaceWriteService.mock.calls[0]?.[0]
+
+    await expect(dependencies.planDependencies.listTerminalSessions('/workspace/api')).resolves.toEqual([
+      { sessionId: 'terminal-root-1234' },
+    ])
+    expect(terminalHost.listSessions).toHaveBeenCalledWith('client_server', '/workspace/api')
+    await expect(dependencies.closeSessions(['terminal-root-1234'])).resolves.toEqual({
+      closed: ['terminal-root-1234'],
+      missing: [],
+    })
+    expect(terminalHost.closeSessions).toHaveBeenCalledWith(['terminal-root-1234'])
+  })
+
+  test('normalizes branch workspace plan, execute, abort, and reorder boundaries', async () => {
+    mocks.planBranchWorkspace.mockResolvedValue({ ok: false, message: 'planned' })
+    mocks.executeBranchWorkspace.mockResolvedValue({ ok: false, message: 'executed' })
+    mocks.abortBranchWorkspace.mockReturnValue(true)
+    mocks.reorderBranchWorkspaces.mockResolvedValue({ ok: true })
+    const app = new Hono().route('/api/workspace', createWorkspaceRoutes())
+
+    await app.request('/api/workspace/branch-workspaces/plan', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        rootPath: '/workspace',
-        request: { operation: 'create', branch: 'feature/a', baseBranch: 'develop' },
-      }),
-    })
-    await app.request('/api/workspace/worktrees/execute', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ rootPath: '/workspace', planToken: 'sha256:plan', approveBootstrap: true }),
-    })
-    const abortResponse = await app.request('/api/workspace/worktrees/abort', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ rootPath: '/workspace' }),
-    })
-
-    expect(mocks.planWorkspaceWorktree).toHaveBeenCalledWith('/workspace', {
-      operation: 'create',
-      branch: 'feature/a',
-      baseBranch: 'develop',
-    })
-    expect(mocks.executeWorkspaceWorktree).toHaveBeenCalledWith('/workspace', {
-      planToken: 'sha256:plan',
-      approveBootstrap: true,
-    })
-    expect(mocks.abortWorkspaceWorktree).toHaveBeenCalledWith('/workspace')
-    await expect(abortResponse.json()).resolves.toEqual({ ok: true })
-  })
-
-  test('accepts a branchless batch pull plan request', async () => {
-    mocks.planWorkspaceWorktree.mockResolvedValue({ ok: false, message: 'planned' })
-    const app = new Hono().route('/api/workspace', createWorkspaceRoutes())
-
-    await app.request('/api/workspace/worktrees/plan', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ rootPath: '/workspace', request: { operation: 'pull' } }),
-    })
-
-    expect(mocks.planWorkspaceWorktree).toHaveBeenCalledWith('/workspace', { operation: 'pull' })
-  })
-
-  test('normalizes dependent branch cleanup options for batch removal', async () => {
-    mocks.planWorkspaceWorktree.mockResolvedValue({ ok: false, message: 'planned' })
-    const app = new Hono().route('/api/workspace', createWorkspaceRoutes())
-
-    await app.request('/api/workspace/worktrees/plan', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        rootPath: '/workspace',
+        rootId: '/workspace',
         request: {
-          operation: 'remove',
-          branch: 'feature/a',
-          alsoDeleteBranch: false,
-          alsoDeleteUpstream: true,
+          operation: 'create',
+          branch: ' feature/auth ',
+          repositories: [{ repositoryName: 'api', baseBranch: ' main ' }],
+          auxiliaryEntries: [{ name: 'README.md', mode: 'copy' }],
         },
       }),
     })
-
-    expect(mocks.planWorkspaceWorktree).toHaveBeenCalledWith('/workspace', {
-      operation: 'remove',
-      branch: 'feature/a',
-      alsoDeleteBranch: false,
-      alsoDeleteUpstream: false,
+    await app.request('/api/workspace/branch-workspaces/execute', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        rootId: '/workspace',
+        planToken: 'sha256:plan',
+        approvals: ['outside-root-source', 'worktree-bootstrap'],
+      }),
     })
+    const abortResponse = await app.request('/api/workspace/branch-workspaces/abort', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ rootId: '/workspace' }),
+    })
+    await app.request('/api/workspace/branch-workspaces/reorder', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ rootId: '/workspace', orderedIds: ['third', 'first'] }),
+    })
+
+    expect(mocks.planBranchWorkspace).toHaveBeenCalledWith('/workspace', {
+      operation: 'create',
+      branch: 'feature/auth',
+      repositories: [{ repositoryName: 'api', baseBranch: 'main' }],
+      auxiliaryEntries: [{ name: 'README.md', mode: 'copy' }],
+    })
+    expect(mocks.executeBranchWorkspace).toHaveBeenCalledWith('/workspace', {
+      planToken: 'sha256:plan',
+      approvals: ['outside-root-source', 'worktree-bootstrap'],
+    })
+    expect(mocks.abortBranchWorkspace).toHaveBeenCalledWith('/workspace')
+    expect(mocks.reorderBranchWorkspaces).toHaveBeenCalledWith('/workspace', ['third', 'first'])
+    await expect(abortResponse.json()).resolves.toEqual({ ok: true })
   })
+
+  test('rejects malformed branch workspace approvals before execution', async () => {
+    const app = new Hono().route('/api/workspace', createWorkspaceRoutes())
+    const response = await app.request('/api/workspace/branch-workspaces/execute', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ rootId: '/workspace', planToken: 'sha256:plan', approvals: ['unknown'] }),
+    })
+
+    await expect(response.json()).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+    expect(mocks.executeBranchWorkspace).not.toHaveBeenCalled()
+  })
+
+  test('delegates pull-only plan, execute, and abort requests', async () => {
+    mocks.planWorkspacePull.mockResolvedValue({ ok: false, message: 'planned' })
+    mocks.executeWorkspacePull.mockResolvedValue({ ok: true, planToken: 'sha256:pull', members: [] })
+    mocks.abortWorkspacePull.mockReturnValue(true)
+    const app = new Hono().route('/api/workspace', createWorkspaceRoutes())
+
+    await app.request('/api/workspace/pull/plan', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ rootId: '/workspace' }),
+    })
+    await app.request('/api/workspace/pull/execute', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ rootId: '/workspace', planToken: 'sha256:pull' }),
+    })
+    const aborted = await app.request('/api/workspace/pull/abort', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ rootId: '/workspace' }),
+    })
+
+    expect(mocks.planWorkspacePull).toHaveBeenCalledWith('/workspace')
+    expect(mocks.executeWorkspacePull).toHaveBeenCalledWith('/workspace', { planToken: 'sha256:pull' })
+    expect(mocks.abortWorkspacePull).toHaveBeenCalledWith('/workspace')
+    await expect(aborted.json()).resolves.toEqual({ ok: true })
+  })
+
 })

@@ -1,5 +1,6 @@
 import { runServerCancellable, abortServerNetworkOp } from '#/server/common/network-ops.ts'
 import { publishRepoQueryInvalidation, publishSettingsInvalidation } from '#/server/modules/invalidation-broker.ts'
+import { assertBranchWorkspaceFileMutationAllowed } from '#/server/modules/branch-workspace-protected-paths.ts'
 import { gitNetworkOptionsFromPrefs } from '#/server/modules/git-network-settings.ts'
 import { resolveRemoteRepoTarget, resolveRepoBackend, runWithRepoBackend } from '#/server/modules/repo-backend.ts'
 import {
@@ -658,6 +659,14 @@ export async function renameRepositoryFileTreeEntry(
   signal?: AbortSignal,
   sourceToken?: string,
 ): Promise<ExecResult> {
+  const allowed = await assertBranchWorkspaceFileMutationAllowed({
+    rootId: repoId,
+    kind: 'rename',
+    worktreePath,
+    paths: [oldPath],
+    newName,
+  })
+  if (!allowed.ok) return allowed
   const result = isRemoteRepoId(repoId)
     ? await renameRemoteFileTreeEntry(await resolveRemoteRepoTarget(repoId), worktreePath, oldPath, newName, { signal })
     : await renameLocalFileTreeEntry(worktreePath, oldPath, newName)
@@ -746,6 +755,13 @@ export async function deleteRepositoryFileTreeEntries(
   signal?: AbortSignal,
   sourceToken?: string,
 ): Promise<ExecResult> {
+  const allowed = await assertBranchWorkspaceFileMutationAllowed({
+    rootId: repoId,
+    kind: 'delete',
+    worktreePath,
+    paths,
+  })
+  if (!allowed.ok) return allowed
   const result = isRemoteRepoId(repoId)
     ? await deleteRemoteFileTreeEntries(await resolveRemoteRepoTarget(repoId), worktreePath, paths, { signal })
     : await deleteLocalFileTreeEntries(worktreePath, paths)
@@ -761,6 +777,14 @@ export async function moveRepositoryFileTreeEntries(
   signal?: AbortSignal,
   sourceToken?: string,
 ): Promise<ExecResult> {
+  const allowed = await assertBranchWorkspaceFileMutationAllowed({
+    rootId: repoId,
+    kind: 'move',
+    worktreePath,
+    paths,
+    targetDirPath,
+  })
+  if (!allowed.ok) return allowed
   const result = isRemoteRepoId(repoId)
     ? await moveRemoteFileTreeEntries(await resolveRemoteRepoTarget(repoId), worktreePath, paths, targetDirPath, {
         signal,

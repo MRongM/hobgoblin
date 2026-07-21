@@ -314,6 +314,8 @@ export class TerminalSessionRegistry {
       repoRoot: base.repoRoot,
       branch: base.branch,
       worktreePath: base.worktreePath,
+      ...(base.targetKind ? { targetKind: base.targetKind } : {}),
+      ...(base.branchWorkspaceId ? { branchWorkspaceId: base.branchWorkspaceId } : {}),
       kind: this.sessionSummaries(terminalWorktreeKey).length === 0 ? 'primary' : 'additional',
       attachmentId,
       cols: geometry.cols,

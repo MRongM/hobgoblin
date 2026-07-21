@@ -20,7 +20,13 @@ function createTerminalFacadeStub(): TerminalFacade {
     registerSocket: vi.fn(),
     unregisterSocket: vi.fn(),
     attach: vi.fn(async () => ({ ok: true as const, ...firstFrame, replay: '', replaySeq: 0, replayTruncated: false })),
-    restart: vi.fn(async () => ({ ok: true as const, ...firstFrame, replay: '', replaySeq: 0, replayTruncated: false })),
+    restart: vi.fn(async () => ({
+      ok: true as const,
+      ...firstFrame,
+      replay: '',
+      replaySeq: 0,
+      replayTruncated: false,
+    })),
     write: vi.fn(() => true),
     resize: vi.fn(() => true),
     takeover: vi.fn(() => ({
@@ -34,6 +40,7 @@ function createTerminalFacadeStub(): TerminalFacade {
       phase: 'open' as const,
     })),
     close: vi.fn(() => true),
+    closeSessions: vi.fn(() => ({ closed: [], missing: [] })),
     notifyBell: vi.fn(() => true),
     listSessions: vi.fn(async () => []),
     create: vi.fn(async () => ({
@@ -77,6 +84,36 @@ describe('terminal worker runtime', () => {
       attachmentId: 'attachment_a',
     })
     expect(emitted).toEqual([{ type: 'response', requestId: 'req_1', ok: true, payload: true }])
+  })
+
+  test('dispatches administrative close requests through the terminal facade', async () => {
+    const service = createTerminalFacadeStub()
+    vi.mocked(service.closeSessions).mockReturnValue({
+      closed: ['term_123456789012'],
+      missing: ['term_abcdefghijkl'],
+    })
+    const emitted: TerminalWorkerMessage[] = []
+    const runtime = new TerminalWorkerRuntime({ service, emit: (message) => emitted.push(message), exit: vi.fn() })
+
+    await runtime.handleMessage({
+      type: 'request',
+      requestId: 'req_close',
+      action: 'close-sessions',
+      clientId: 'server',
+      input: { sessionIds: ['term_123456789012', 'term_abcdefghijkl'] },
+    })
+
+    expect(service.closeSessions).toHaveBeenCalledWith({
+      sessionIds: ['term_123456789012', 'term_abcdefghijkl'],
+    })
+    expect(emitted).toEqual([
+      {
+        type: 'response',
+        requestId: 'req_close',
+        ok: true,
+        payload: { closed: ['term_123456789012'], missing: ['term_abcdefghijkl'] },
+      },
+    ])
   })
 
   test('proxies socket messages through the transport emitter', async () => {

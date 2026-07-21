@@ -4,6 +4,7 @@ import { getWorktrees } from '#/system/git/worktrees.ts'
 import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
 import {
   closeAllServerTerminalSessions,
+  closeServerTerminalSessions,
   closeServerTerminal,
   createServerTerminal,
   getServerTerminalSessionSnapshot,
@@ -24,8 +25,16 @@ const settingsSourceMocks = vi.hoisted(() => ({
   getServerSettingsPrefs: vi.fn(async () => ({ remoteTerminalTmuxEnabled: false })),
 }))
 
+const branchWorkspaceSourceMocks = vi.hoisted(() => ({
+  readBranchWorkspaceManifests: vi.fn(),
+}))
+
 vi.mock('#/server/modules/settings-source.ts', () => ({
   getServerSettingsPrefs: settingsSourceMocks.getServerSettingsPrefs,
+}))
+
+vi.mock('#/server/modules/branch-workspace-source.ts', () => ({
+  readBranchWorkspaceManifests: branchWorkspaceSourceMocks.readBranchWorkspaceManifests,
 }))
 
 vi.mock('#/system/git/worktrees.ts', () => ({
@@ -110,6 +119,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(spawn).mockClear()
   settingsSourceMocks.getServerSettingsPrefs.mockResolvedValue({ remoteTerminalTmuxEnabled: false })
+  branchWorkspaceSourceMocks.readBranchWorkspaceManifests.mockReset()
+  branchWorkspaceSourceMocks.readBranchWorkspaceManifests.mockResolvedValue({ kind: 'missing' })
 })
 
 async function createTerminalSession(
@@ -140,6 +151,133 @@ async function createTerminalSession(
 }
 
 describe('server terminal sessions', () => {
+  test('creates an authorized local branch workspace terminal without resolving Git worktrees', async () => {
+    branchWorkspaceSourceMocks.readBranchWorkspaceManifests.mockResolvedValue({
+      kind: 'ready',
+      manifests: [branchWorkspaceManifest('/workspace', '/workspace/goblin-feature')],
+    })
+    vi.mocked(getWorktrees).mockRejectedValueOnce(new Error('branch workspaces are folder targets'))
+
+    const result = await createServerTerminal('client_1', {
+      repoRoot: '/workspace',
+      branch: 'feature/auth',
+      worktreePath: '/workspace/goblin-feature',
+      targetKind: 'branch-workspace',
+      branchWorkspaceId: 'branch-1',
+      kind: 'primary',
+      attachmentId: 'attachment_1',
+    })
+
+    expect(result).toMatchObject({
+      ok: true,
+      key: '/workspace\0/workspace/goblin-feature\0terminal-1',
+    })
+    expect(getWorktrees).not.toHaveBeenCalled()
+    expect(spawn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Array),
+      expect.objectContaining({ cwd: '/workspace/goblin-feature' }),
+    )
+  })
+
+  test('creates an authorized SSH branch workspace terminal with the persisted folder cwd', async () => {
+    branchWorkspaceSourceMocks.readBranchWorkspaceManifests.mockResolvedValue({
+      kind: 'ready',
+      manifests: [
+        branchWorkspaceManifest('ssh-config://prod/srv/repo', '/srv/repo/goblin-feature'),
+      ],
+    })
+
+    const result = await createServerTerminal('client_1', {
+      repoRoot: 'ssh-config://prod/srv/repo',
+      branch: 'feature/auth',
+      worktreePath: '/srv/repo/goblin-feature',
+      targetKind: 'branch-workspace',
+      branchWorkspaceId: 'branch-1',
+      kind: 'primary',
+      attachmentId: 'attachment_1',
+    })
+
+    expect(result).toMatchObject({
+      ok: true,
+      key: 'ssh-config://prod/srv/repo\0/srv/repo/goblin-feature\0terminal-1',
+    })
+    const sshArgs = vi.mocked(spawn).mock.calls[0]?.[1] as string[]
+    expect(sshArgs[7]).toContain('/srv/repo/goblin-feature')
+  })
+
+  test.each([
+    {
+      label: 'unknown manifest id',
+      branchWorkspaceId: 'branch-missing',
+      worktreePath: '/workspace/goblin-feature',
+      operation: undefined,
+    },
+    {
+      label: 'mismatched persisted path',
+      branchWorkspaceId: 'branch-1',
+      worktreePath: '/workspace/goblin-other',
+      operation: undefined,
+    },
+    {
+      label: 'delete-incomplete workspace',
+      branchWorkspaceId: 'branch-1',
+      worktreePath: '/workspace/goblin-feature',
+      operation: { kind: 'remove' as const, phase: 'failed' as const, startedAt: '2026-07-21T00:00:00.000Z' },
+    },
+  ])('rejects an unauthorized branch workspace terminal: $label', async (fixture) => {
+    branchWorkspaceSourceMocks.readBranchWorkspaceManifests.mockResolvedValue({
+      kind: 'ready',
+      manifests: [
+        {
+          ...branchWorkspaceManifest('/workspace', '/workspace/goblin-feature'),
+          ...(fixture.operation ? { operation: fixture.operation } : {}),
+        },
+      ],
+    })
+
+    const result = await createServerTerminal('client_1', {
+      repoRoot: '/workspace',
+      branch: 'feature/auth',
+      worktreePath: fixture.worktreePath,
+      targetKind: 'branch-workspace',
+      branchWorkspaceId: fixture.branchWorkspaceId,
+      kind: 'primary',
+      attachmentId: 'attachment_1',
+    })
+
+    expect(result).toEqual({ ok: false, message: 'workspace.branch-workspace.terminal-unavailable' })
+    expect(spawn).not.toHaveBeenCalled()
+  })
+
+  test('administratively closes sessions across owners and broadcasts every affected scope', async () => {
+    const socket = { send: vi.fn(), close: vi.fn() }
+    registerTerminalSocket('observer', 'attachment_a', socket)
+    const first = await createTerminalSession('client_a', {
+      repoRoot: '/workspace',
+      worktreePath: '/repo-linked',
+    })
+    const second = await createTerminalSession('client_b', {
+      repoRoot: '/workspace/api',
+      worktreePath: '/repo-linked',
+    })
+    socket.send.mockClear()
+
+    expect(closeServerTerminalSessions([first, second, 'term_missing_1234'])).toEqual({
+      closed: [first, second],
+      missing: ['term_missing_1234'],
+    })
+    const messages = socket.send.mock.calls.map(([payload]) => JSON.parse(payload))
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        { type: 'sessions-changed', repoRoot: '/workspace' },
+        { type: 'sessions-changed', repoRoot: '/workspace/api' },
+      ]),
+    )
+    await expect(listServerTerminalSessions('client_a', '/workspace')).resolves.toEqual([])
+    await expect(listServerTerminalSessions('client_b', '/workspace/api')).resolves.toEqual([])
+  })
+
   test('create claims controller ownership for the provided attachment', async () => {
     const socket = { send: vi.fn(), close: vi.fn() }
     registerTerminalSocket('client_1', 'attachment_a', socket)
@@ -1221,9 +1359,9 @@ describe('server terminal sessions', () => {
         attachmentId: 'attachment_b',
       }),
     ).toBe(false)
-    expect(writeServerTerminal('client_1', { sessionId: created.sessionId, data: 'ls', attachmentId: 'attachment_b' })).toBe(
-      false,
-    )
+    expect(
+      writeServerTerminal('client_1', { sessionId: created.sessionId, data: 'ls', attachmentId: 'attachment_b' }),
+    ).toBe(false)
     expect(mockPtys[0]?.resize).not.toHaveBeenCalledWith(120, 40)
 
     unregisterTerminalSocket('client_1', 'attachment_a', socketA)
@@ -1399,3 +1537,15 @@ describe('server terminal sessions', () => {
     unregisterTerminalSocket('client_1', 'attachment_a', socket)
   })
 })
+
+function branchWorkspaceManifest(rootId: string, workspacePath: string) {
+  return {
+    id: 'branch-1',
+    rootId,
+    branch: 'feature/auth',
+    directoryName: 'goblin-feature',
+    path: workspacePath,
+    repositories: [],
+    auxiliaryEntries: [],
+  }
+}

@@ -9,6 +9,7 @@ import type {
 import type { RemoteRepoTarget, RepoSessionEntry } from '#/shared/remote-repo.ts'
 import type { WorkspaceDetailPaneSizes, WorkspaceLayout } from '#/shared/workspace-layout.ts'
 import type { SessionState } from '#/shared/rpc.ts'
+import type { WorkspaceActiveContext } from '#/shared/rpc.ts'
 import type { WorkspaceConfig, WorkspaceDiscoveryIssue, WorkspaceRepositoryCandidate } from '#/shared/workspace.ts'
 import type { RepoBranchAction, RunBranchActionOptions } from '#/web/stores/repos/branch-action-types.ts'
 import type { RepoOperationsState } from '#/web/stores/repos/operations.ts'
@@ -154,8 +155,6 @@ export interface WorkspaceProjectState {
 export interface WorkspaceProjectsState {
   /** Renderer projection of depth-one repository discovery by workspace root. */
   workspaceProjects: Record<string, WorkspaceProjectState>
-  /** Restorable Overview/child selection for each multi-repository workspace. */
-  workspaceActiveRepoByRoot: Record<string, string | null>
 }
 
 export interface RuntimeCoherentRepoProjectionState {
@@ -176,7 +175,9 @@ export interface RestorableWorkspaceState {
   order: string[]
   /** Active workspace tab restored from SessionState.activeRepo. */
   activeId: string | null
-  workspaceActiveRepoByRoot: Record<string, string | null>
+  workspaceActiveContextByRoot: Record<string, WorkspaceActiveContext>
+  /** Missing entries mean expanded. */
+  workspaceRepositoryListExpandedByRoot: Record<string, boolean>
   /** Global sidebar project-list expansion preference restored from SessionState. */
   projectListExpanded: boolean
   detailCollapsed: boolean
@@ -210,8 +211,11 @@ export interface RestorableWorkspaceActions {
   setActive: (id: string) => void
   /** Activate a top-level project, restoring its last workspace child when present. */
   activateProject: (id: string) => void
-  /** Select Overview (`null`) or one repository within a workspace project. */
-  activateWorkspaceRepository: (rootId: string, repoId: string | null) => void
+  activateWorkspaceOverview: (rootId: string) => void
+  activateWorkspaceRepository: (rootId: string, repoId: string) => void
+  activateBranchWorkspace: (rootId: string, branchWorkspaceId: string) => void
+  setWorkspaceRepositoryListExpanded: (rootId: string, expanded: boolean) => void
+  toggleWorkspaceRepositoryList: (rootId: string) => void
   setProjectListExpanded: (expanded: boolean) => void
   toggleProjectListExpanded: () => void
   /** Reorder the tab strip so `fromId` lands at `toId`'s position, using
@@ -265,7 +269,8 @@ export interface RuntimeCoherentRepoProjectionActions {
   hydrateSession: (
     openRepos: RepoSessionEntry[],
     activeRepo: string | null,
-    workspaceActiveRepoByRoot?: Record<string, string | null>,
+    workspaceActiveContextByRoot?: Record<string, WorkspaceActiveContext>,
+    workspaceRepositoryListExpandedByRoot?: Record<string, boolean>,
   ) => Promise<void>
   /** Clear the fetchFailed flag — called by manual fetch success and
    *  by an explicit refresh, so a stale badge doesn't follow the user

@@ -1,0 +1,188 @@
+// @vitest-environment jsdom
+
+import { act } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import {
+  BranchWorkspaceTerminalPanel,
+  openBranchWorkspaceInternalTerminal,
+} from '#/web/components/repo-workspace/BranchWorkspaceTerminalPanel.tsx'
+import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
+
+const ROOT = '/workspace'
+const PATH = '/workspace/goblin-feature'
+const WORKTREE_KEY = worktreeTerminalKey(ROOT, PATH)
+const createTerminal = vi.fn(async () => `${WORKTREE_KEY}\0terminal-1`)
+const selectTerminal = vi.fn()
+const closeTerminalAndDismissDetailIfLast = vi.fn()
+const reorderSessions = vi.fn(async () => true)
+const terminalTabsProps: Array<Record<string, unknown>> = []
+let snapshot = { worktreeTerminalKey: WORKTREE_KEY, sessions: [], selectedDescriptor: null, count: 0 } as any
+let requestedWorktreeKey: string | null = null
+
+vi.mock('#/web/components/terminal/terminal-session-context.ts', () => ({
+  useTerminalSessionContext: () => ({
+    createTerminal,
+    selectTerminal,
+    scrollToBottom: vi.fn(),
+    focusTerminal: vi.fn(),
+    closeTerminalAndDismissDetailIfLast,
+    reorderSessions,
+  }),
+}))
+
+vi.mock('#/web/components/terminal/terminal-session-store.ts', () => ({
+  useWorktreeTerminalSnapshot: (key: string) => {
+    requestedWorktreeKey = key
+    return snapshot
+  },
+}))
+
+vi.mock('#/web/components/terminal/TerminalTabs.tsx', () => ({
+  EMPTY_TERMINAL_TAB_FOCUS_KEY: 'empty',
+  TerminalTabs: (props: Record<string, unknown>) => {
+    terminalTabsProps.push(props)
+    return <div data-testid="terminal-tabs" />
+  },
+}))
+
+vi.mock('#/web/components/terminal/TerminalSlot.tsx', () => ({
+  TerminalSlot: (props: Record<string, unknown>) => <div data-testid="terminal-slot" data-props={JSON.stringify(props)} />,
+}))
+
+vi.mock('#/web/components/tab-strip/useFocusRegistry.ts', () => ({
+  useFocusRegistry: () => ({ register: vi.fn(), unregister: vi.fn() }),
+}))
+
+vi.mock('#/web/stores/i18n.ts', () => ({ useT: () => (key: string) => key }))
+vi.mock('#/web/runtime-settings-chrome.ts', () => ({
+  useRuntimeChromeSettings: () => ({ topbarHeightPx: 39, toolbarHeightPx: 41 }),
+}))
+
+let root: Root | null = null
+let container: HTMLDivElement
+
+beforeEach(() => {
+  ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  container = document.createElement('div')
+  document.body.append(container)
+  root = createRoot(container)
+  createTerminal.mockClear()
+  selectTerminal.mockClear()
+  closeTerminalAndDismissDetailIfLast.mockClear()
+  reorderSessions.mockClear()
+  terminalTabsProps.length = 0
+  requestedWorktreeKey = null
+  snapshot = { worktreeTerminalKey: WORKTREE_KEY, sessions: [], selectedDescriptor: null, count: 0 }
+})
+
+afterEach(() => {
+  act(() => root?.unmount())
+  container.remove()
+  root = null
+  ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false
+})
+
+describe('BranchWorkspaceTerminalPanel', () => {
+  test('groups the panel by the branch folder and creates an authorized target', async () => {
+    await renderPanel()
+
+    expect(requestedWorktreeKey).toBe(WORKTREE_KEY)
+    await act(async () => {
+      await (terminalTabsProps.at(-1)?.onNew as () => Promise<void>)()
+    })
+    expect(createTerminal).toHaveBeenCalledWith({
+      repoRoot: ROOT,
+      branch: 'feature/auth',
+      worktreePath: PATH,
+      targetKind: 'branch-workspace',
+      branchWorkspaceId: 'branch-1',
+    })
+  })
+
+  test('renders the selected root-scoped session in the shared terminal slot', async () => {
+    snapshot = {
+      worktreeTerminalKey: WORKTREE_KEY,
+      count: 1,
+      sessions: [],
+      selectedDescriptor: {
+        key: `${WORKTREE_KEY}\0terminal-1`,
+        worktreeTerminalKey: WORKTREE_KEY,
+        terminalId: 'terminal-1',
+        index: 1,
+        repoRoot: ROOT,
+        branch: 'feature/auth',
+        worktreePath: PATH,
+      },
+    }
+
+    await renderPanel()
+
+    const slot = container.querySelector<HTMLElement>('[data-testid="terminal-slot"]')
+    expect(JSON.parse(slot?.dataset.props ?? '{}')).toEqual({
+      repoRoot: ROOT,
+      branch: 'feature/auth',
+      worktreePath: PATH,
+    })
+  })
+})
+
+describe('openBranchWorkspaceInternalTerminal', () => {
+  test('restores the selected root session without creating another terminal', async () => {
+    const activate = vi.fn()
+    const selectedKey = `${WORKTREE_KEY}\0terminal-2`
+    await openBranchWorkspaceInternalTerminal(branchWorkspaceContext(), {
+      activate,
+      worktreeSnapshot: () => ({
+        worktreeTerminalKey: WORKTREE_KEY,
+        count: 1,
+        sessions: [{ key: selectedKey, selected: true } as any],
+        selectedDescriptor: { key: selectedKey } as any,
+      }),
+      selectTerminal,
+      createTerminal,
+    })
+
+    expect(activate).toHaveBeenCalledTimes(1)
+    expect(selectTerminal).toHaveBeenCalledWith(WORKTREE_KEY, selectedKey)
+    expect(createTerminal).not.toHaveBeenCalled()
+  })
+
+  test('creates a terminal only when the root-scoped group is empty', async () => {
+    const activate = vi.fn()
+    await openBranchWorkspaceInternalTerminal(branchWorkspaceContext(), {
+      activate,
+      worktreeSnapshot: () => ({
+        worktreeTerminalKey: WORKTREE_KEY,
+        count: 0,
+        sessions: [],
+        selectedDescriptor: null,
+      }),
+      selectTerminal,
+      createTerminal,
+    })
+
+    expect(activate).toHaveBeenCalledTimes(1)
+    expect(selectTerminal).not.toHaveBeenCalled()
+    expect(createTerminal).toHaveBeenCalledTimes(1)
+  })
+})
+
+async function renderPanel() {
+  await act(async () => {
+    root!.render(<BranchWorkspaceTerminalPanel context={branchWorkspaceContext()} />)
+    await Promise.resolve()
+  })
+}
+
+function branchWorkspaceContext() {
+  return {
+    rootId: ROOT,
+    id: 'branch-1',
+    branch: 'feature/auth',
+    path: PATH,
+    lifecycle: 'ready' as const,
+    available: true,
+    managedRootNames: ['api'],
+  }
+}

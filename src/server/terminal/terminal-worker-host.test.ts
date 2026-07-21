@@ -46,6 +46,30 @@ describe('worker-backed terminal host', () => {
     await expect(promise).resolves.toBe(true)
   })
 
+  test('routes administrative session closure without an owning client', async () => {
+    const host = new WorkerBackedTerminalHost({ spawnWorker: () => worker as any })
+    const promise = host.closeSessions(['term_123456789012', 'term_abcdefghijkl'])
+
+    const request = worker.sent[0]
+    expect(request).toMatchObject({
+      type: 'request',
+      action: 'close-sessions',
+      input: { sessionIds: ['term_123456789012', 'term_abcdefghijkl'] },
+    })
+    if (!request || request.type !== 'request') return
+    worker.emit('message', {
+      type: 'response',
+      requestId: request.requestId,
+      ok: true,
+      payload: { closed: ['term_123456789012'], missing: ['term_abcdefghijkl'] },
+    } satisfies TerminalWorkerMessage)
+
+    await expect(promise).resolves.toEqual({
+      closed: ['term_123456789012'],
+      missing: ['term_abcdefghijkl'],
+    })
+  })
+
   test('forwards worker socket output to the registered websocket', () => {
     const host = new WorkerBackedTerminalHost({ spawnWorker: () => worker as any })
     const socket: ServerTerminalSocket = { send: vi.fn(), close: vi.fn() }

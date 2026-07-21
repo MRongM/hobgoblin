@@ -45,7 +45,8 @@ export function useAppBootstrap() {
         await hydrateSession(
           session.openRepos,
           session.activeRepo,
-          restoredWorkspaceState.workspaceActiveRepoByRoot,
+          restoredWorkspaceState.workspaceActiveContextByRoot,
+          restoredWorkspaceState.workspaceRepositoryListExpandedByRoot,
         )
       } catch (err) {
         console.warn('[bootstrap] failed', err)

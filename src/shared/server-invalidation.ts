@@ -9,7 +9,15 @@ export interface SettingsInvalidationEvent {
   scopes: SettingsInvalidationScope[]
 }
 
-export type ServerInvalidationEvent = RepoQueryInvalidationEvent | SettingsInvalidationEvent
+export interface WorkspaceInvalidationEvent {
+  type: 'workspace-invalidated'
+  rootId: string
+}
+
+export type ServerInvalidationEvent =
+  | RepoQueryInvalidationEvent
+  | SettingsInvalidationEvent
+  | WorkspaceInvalidationEvent
 
 export function isSettingsInvalidationScope(value: unknown): value is SettingsInvalidationScope {
   return value === 'settings-snapshot' || value === 'external-apps' || value === 'i18n' || value === 'theme'
@@ -25,8 +33,23 @@ export function isSettingsInvalidationEvent(value: unknown): value is SettingsIn
   )
 }
 
+export function isWorkspaceInvalidationEvent(value: unknown): value is WorkspaceInvalidationEvent {
+  if (!value || typeof value !== 'object') return false
+  const event = value as Partial<WorkspaceInvalidationEvent>
+  return (
+    event.type === 'workspace-invalidated' &&
+    typeof event.rootId === 'string' &&
+    event.rootId.length > 0 &&
+    event.rootId.trim() === event.rootId &&
+    !event.rootId.includes('\0') &&
+    !/[\x00-\x1f\x7f]/.test(event.rootId)
+  )
+}
+
 export function isServerInvalidationEvent(value: unknown): value is ServerInvalidationEvent {
-  return isRepoQueryInvalidationEvent(value) || isSettingsInvalidationEvent(value)
+  return (
+    isRepoQueryInvalidationEvent(value) || isSettingsInvalidationEvent(value) || isWorkspaceInvalidationEvent(value)
+  )
 }
 
 export function settingsInvalidationScopesForPrefsPatch(patch: Record<string, unknown>): SettingsInvalidationScope[] {

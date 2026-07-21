@@ -94,6 +94,7 @@ const mocks = vi.hoisted(() => ({
   generateCommitMessageFromPatch: vi.fn(),
   resetHardToCurrentHead: vi.fn(),
   resetRemoteHard: vi.fn(),
+  assertBranchWorkspaceFileMutationAllowed: vi.fn(),
   testRemoteRepository: vi.fn(),
 }))
 
@@ -112,6 +113,10 @@ vi.mock('#/system/git/branches.ts', () => ({
   getUpstream: mocks.getUpstream,
   isAncestor: mocks.isAncestor,
   isGitRepo: mocks.isGitRepo,
+}))
+
+vi.mock('#/server/modules/branch-workspace-protected-paths.ts', () => ({
+  assertBranchWorkspaceFileMutationAllowed: mocks.assertBranchWorkspaceFileMutationAllowed,
 }))
 
 vi.mock('#/system/git/helper.ts', () => ({
@@ -284,6 +289,7 @@ vi.mock('#/server/modules/background-sync.ts', () => ({
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.runServerCancellable.mockImplementation(async (_cwd, _kind, task) => await task(new AbortController().signal))
+  mocks.assertBranchWorkspaceFileMutationAllowed.mockResolvedValue({ ok: true })
   mocks.checkGitAvailable.mockResolvedValue({ ok: true, message: '' })
   mocks.fsStat.mockResolvedValue({ isDirectory: () => true })
   mocks.fsAccess.mockResolvedValue(undefined)
@@ -1311,6 +1317,41 @@ describe('repo mutation invalidation publishing', () => {
     expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
       repoId: 'ssh-config://prod/srv/repo',
       query: 'repo-snapshot',
+    })
+  })
+
+  test('rename, delete, and move stop before filesystem dispatch when a branch workspace root is protected', async () => {
+    mocks.assertBranchWorkspaceFileMutationAllowed.mockResolvedValue({
+      ok: false,
+      message: 'branch-workspace.managed-path-protected',
+    })
+    const { deleteRepositoryFileTreeEntries, moveRepositoryFileTreeEntries, renameRepositoryFileTreeEntry } =
+      await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(
+      renameRepositoryFileTreeEntry('/workspace', '/workspace', '/workspace/goblin-feature', 'renamed'),
+    ).resolves.toEqual({ ok: false, message: 'branch-workspace.managed-path-protected' })
+    await expect(
+      deleteRepositoryFileTreeEntries('/workspace', '/workspace', ['/workspace/goblin-feature']),
+    ).resolves.toEqual({ ok: false, message: 'branch-workspace.managed-path-protected' })
+    await expect(
+      moveRepositoryFileTreeEntries(
+        '/workspace',
+        '/workspace',
+        ['/workspace/goblin-feature'],
+        '/workspace/archive',
+      ),
+    ).resolves.toEqual({ ok: false, message: 'branch-workspace.managed-path-protected' })
+
+    expect(mocks.renameLocalFileTreeEntry).not.toHaveBeenCalled()
+    expect(mocks.deleteLocalFileTreeEntries).not.toHaveBeenCalled()
+    expect(mocks.moveLocalFileTreeEntries).not.toHaveBeenCalled()
+    expect(mocks.assertBranchWorkspaceFileMutationAllowed).toHaveBeenNthCalledWith(1, {
+      rootId: '/workspace',
+      kind: 'rename',
+      worktreePath: '/workspace',
+      paths: ['/workspace/goblin-feature'],
+      newName: 'renamed',
     })
   })
 

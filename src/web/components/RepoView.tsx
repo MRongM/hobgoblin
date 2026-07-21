@@ -16,6 +16,9 @@ import { UnavailableRepoView } from '#/web/components/UnavailableRepoView.tsx'
 import { useResponsiveUiMode } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { repoIsPlainWorkspace } from '#/web/stores/repos/capabilities.ts'
 import { useEffectiveWorkspaceLayout } from '#/web/lib/effective-workspace-layout.ts'
+import { useBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
+import { BranchWorkspacePane } from '#/web/components/repo-workspace/BranchWorkspacePane.tsx'
+import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 
 interface Props {
   repoId: string
@@ -35,6 +38,10 @@ export function RepoView({ repoId }: Props) {
         detailCollapsed: s.detailCollapsed,
         detailFocusMode: s.detailFocusMode,
         detailPaneSizes: s.detailPaneSizes,
+        branchWorkspaceId:
+          s.workspaceActiveContextByRoot[repoId]?.kind === 'branch-workspace'
+            ? s.workspaceActiveContextByRoot[repoId].branchWorkspaceId
+            : null,
       }
     },
     (a, b) =>
@@ -42,6 +49,7 @@ export function RepoView({ repoId }: Props) {
       a.initialLoading === b.initialLoading &&
       a.detailCollapsed === b.detailCollapsed &&
       a.detailFocusMode === b.detailFocusMode &&
+      a.branchWorkspaceId === b.branchWorkspaceId &&
       a.detailPaneSizes['top-bottom'] === b.detailPaneSizes['top-bottom'] &&
       a.detailPaneSizes['left-right'] === b.detailPaneSizes['left-right'],
   )
@@ -89,6 +97,9 @@ export function RepoView({ repoId }: Props) {
         compact={uiMode === 'compact'}
       />
     )
+  }
+  if (multiRepositoryWorkspace && view.branchWorkspaceId) {
+    return <ActiveBranchWorkspaceView rootId={repoId} branchWorkspaceId={view.branchWorkspaceId} layout={layout} />
   }
   if (isPlainWorkspace && uiMode === 'compact' && !repoUnavailable) {
     const compactOverviewOpen = multiRepositoryWorkspace && compactExplorerRepoId === repoId
@@ -210,4 +221,33 @@ export function RepoView({ repoId }: Props) {
     )
 
   return <section className="relative flex min-w-0 flex-1 flex-col">{workspaceBody}</section>
+}
+
+function ActiveBranchWorkspaceView({
+  rootId,
+  branchWorkspaceId,
+  layout,
+}: {
+  rootId: string
+  branchWorkspaceId: string
+  layout: RepoWorkspaceLayout
+}) {
+  const query = useBranchWorkspaceQuery(rootId)
+  const activateWorkspaceOverview = useReposStore((state) => state.activateWorkspaceOverview)
+  const workspace = query.data?.ok
+    ? query.data.items.find(
+        (item) =>
+          item.id === branchWorkspaceId &&
+          item.available &&
+          item.lifecycle !== 'delete-incomplete' &&
+          item.operation?.kind !== 'remove',
+      )
+    : undefined
+
+  useEffect(() => {
+    if (query.data?.ok && !workspace) activateWorkspaceOverview(rootId)
+  }, [activateWorkspaceOverview, query.data, rootId, workspace])
+
+  if (!workspace) return <div className="min-h-0 flex-1" />
+  return <BranchWorkspacePane rootId={rootId} workspace={workspace} layout={layout} />
 }

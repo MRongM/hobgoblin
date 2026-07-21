@@ -1,4 +1,6 @@
 import type { WorkspaceProjectState } from '#/web/stores/repos/types.ts'
+import type { WorkspaceActiveContext } from '#/shared/rpc.ts'
+import type { BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 
 interface WorkspaceProjectRepoLike {
   id?: string
@@ -9,7 +11,7 @@ interface WorkspaceProjectLookupState {
   activeId: string | null
   repos: Record<string, WorkspaceProjectRepoLike | undefined>
   workspaceProjects: Record<string, WorkspaceProjectState | undefined>
-  workspaceActiveRepoByRoot: Record<string, string | null | undefined>
+  workspaceActiveContextByRoot: Record<string, WorkspaceActiveContext | undefined>
 }
 
 export function workspaceRootIdForRepo(
@@ -27,13 +29,33 @@ export function activeProjectId(
 }
 
 export function projectActivationTarget(
-  state: Pick<WorkspaceProjectLookupState, 'repos' | 'workspaceProjects' | 'workspaceActiveRepoByRoot'>,
+  state: Pick<WorkspaceProjectLookupState, 'repos' | 'workspaceProjects' | 'workspaceActiveContextByRoot'>,
   projectId: string,
+  branchWorkspaces: readonly BranchWorkspaceSnapshot[] = [],
 ): string {
   const workspace = state.workspaceProjects[projectId]
   if (!workspace) return projectId
-  const saved = state.workspaceActiveRepoByRoot[projectId]
-  return saved && workspace.repositoryIds.includes(saved) && state.repos[saved] ? saved : projectId
+  const context = workspaceActiveContext(state, projectId, branchWorkspaces)
+  return context.kind === 'repository' ? context.repositoryId : projectId
+}
+
+export function workspaceActiveContext(
+  state: Pick<WorkspaceProjectLookupState, 'repos' | 'workspaceProjects' | 'workspaceActiveContextByRoot'>,
+  rootId: string,
+  branchWorkspaces: readonly BranchWorkspaceSnapshot[] = [],
+): WorkspaceActiveContext {
+  const workspace = state.workspaceProjects[rootId]
+  const context = state.workspaceActiveContextByRoot[rootId]
+  if (!workspace || !context || context.kind === 'overview') return { kind: 'overview' }
+  if (context.kind === 'repository') {
+    return workspace.repositoryIds.includes(context.repositoryId) && state.repos[context.repositoryId]
+      ? context
+      : { kind: 'overview' }
+  }
+  const branchWorkspace = branchWorkspaces.find((item) => item.id === context.branchWorkspaceId)
+  return branchWorkspace && branchWorkspace.available && branchWorkspace.lifecycle !== 'delete-incomplete' && branchWorkspace.operation?.kind !== 'remove'
+    ? context
+    : { kind: 'overview' }
 }
 
 export function projectRepositoryIds(
@@ -43,4 +65,15 @@ export function projectRepositoryIds(
   const workspace = state.workspaceProjects[projectId]
   if (workspace) return workspace.repositoryIds
   return state.repos[projectId] ? [projectId] : []
+}
+
+export function workspaceRepositoryListExpanded(
+  state: { workspaceRepositoryListExpandedByRoot?: Record<string, boolean | undefined> },
+  rootId: string,
+): boolean {
+  return state.workspaceRepositoryListExpandedByRoot?.[rootId] ?? true
+}
+
+export function workspaceRepositoryIdFromContext(context: WorkspaceActiveContext | undefined): string | null {
+  return context?.kind === 'repository' ? context.repositoryId : null
 }

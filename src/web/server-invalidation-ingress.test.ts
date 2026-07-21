@@ -64,9 +64,8 @@ describe('server invalidation source', () => {
   })
 
   test('reuses a connecting socket when listeners unsubscribe and resubscribe before close completes', async () => {
-    const { resetServerInvalidationIngressForTests, subscribeServerInvalidationIngress } = await import(
-      '#/web/server-invalidation-ingress.ts'
-    )
+    const { resetServerInvalidationIngressForTests, subscribeServerInvalidationIngress } =
+      await import('#/web/server-invalidation-ingress.ts')
 
     const disposeFirst = subscribeServerInvalidationIngress(() => {})
     expect(MockWebSocket.instances).toHaveLength(1)
@@ -82,9 +81,8 @@ describe('server invalidation source', () => {
 
   test('ignores stale invalidation socket events after reconnect creates a newer socket', async () => {
     vi.useFakeTimers()
-    const { resetServerInvalidationIngressForTests, subscribeServerInvalidationIngress } = await import(
-      '#/web/server-invalidation-ingress.ts'
-    )
+    const { resetServerInvalidationIngressForTests, subscribeServerInvalidationIngress } =
+      await import('#/web/server-invalidation-ingress.ts')
     const listener = vi.fn()
     const dispose = subscribeServerInvalidationIngress(listener)
     const firstSocket = MockWebSocket.instances[0]
@@ -106,12 +104,29 @@ describe('server invalidation source', () => {
     vi.useRealTimers()
   })
 
+  test('forwards valid workspace invalidations and rejects malformed roots', async () => {
+    const { resetServerInvalidationIngressForTests, subscribeServerInvalidationIngress } =
+      await import('#/web/server-invalidation-ingress.ts')
+    const listener = vi.fn()
+    const dispose = subscribeServerInvalidationIngress(listener)
+    const socket = MockWebSocket.instances[0]
+    if (!socket) throw new Error('missing initial invalidation socket')
+
+    socket.emitMessage(JSON.stringify({ type: 'workspace-invalidated', rootId: '/workspace' }))
+    socket.emitMessage(JSON.stringify({ type: 'workspace-invalidated', rootId: ' ' }))
+    socket.emitMessage(JSON.stringify({ type: 'workspace-invalidated', rootId: 42 }))
+
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(listener).toHaveBeenCalledWith({ type: 'workspace-invalidated', rootId: '/workspace' })
+    dispose()
+    resetServerInvalidationIngressForTests()
+  })
+
   test('stops reconnecting invalidation sockets after app quitting starts', async () => {
     vi.useFakeTimers()
     const { markAppQuitting } = await import('#/web/app-lifecycle.ts')
-    const { resetServerInvalidationIngressForTests, subscribeServerInvalidationIngress } = await import(
-      '#/web/server-invalidation-ingress.ts'
-    )
+    const { resetServerInvalidationIngressForTests, subscribeServerInvalidationIngress } =
+      await import('#/web/server-invalidation-ingress.ts')
     const dispose = subscribeServerInvalidationIngress(() => {})
     const socket = MockWebSocket.instances[0]
     if (!socket) throw new Error('missing initial invalidation socket')

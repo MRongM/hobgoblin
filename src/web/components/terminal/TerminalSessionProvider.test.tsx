@@ -2,6 +2,7 @@
 
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { ELECTRON_RENDERER_CAPABILITIES, RENDERER_BRIDGE_VERSION } from '#/shared/bootstrap.ts'
 import { TerminalSessionProvider } from '#/web/components/terminal/TerminalSessionProvider.tsx'
@@ -58,6 +59,14 @@ const mockSessions = vi.hoisted(
 const runtimeTerminalSettingsMock = vi.hoisted(() => ({
   fontFamily: 'mono' as 'mono' | 'maple' | 'system',
   terminalThemeSyncEnabled: true,
+}))
+
+const branchWorkspaceMocks = vi.hoisted(() => ({
+  readBranchWorkspaces: vi.fn(),
+}))
+
+vi.mock('#/web/workspace-client.ts', () => ({
+  readBranchWorkspaces: branchWorkspaceMocks.readBranchWorkspaces,
 }))
 
 vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
@@ -319,6 +328,8 @@ beforeEach(() => {
   closeMock.mockReset()
   closeMock.mockResolvedValue(true)
   createTerminalMock.mockReset()
+  branchWorkspaceMocks.readBranchWorkspaces.mockReset()
+  branchWorkspaceMocks.readBranchWorkspaces.mockResolvedValue({ ok: true, rootId: REPO_ID, items: [], auxiliaryCandidates: [] })
   createTerminalMock.mockImplementation(async (input) => {
     const currentSessions = await listSessionsMock({ repoRoot: input.repoRoot })
     const terminalId =
@@ -1113,6 +1124,80 @@ describe('TerminalSessionProvider', () => {
       ])
       expect(useReposStore.getState().selectedTerminalByWorktree).toMatchObject({
         [terminalWorktreeKey]: `${REPO_ID}\u0000${WORKTREE_PATH}\u0000terminal-1`,
+      })
+    } finally {
+      await unmount()
+    }
+  })
+
+  test('reconciles server sessions for query-owned branch workspace folders', async () => {
+    const branchWorkspacePath = `${REPO_ID}/goblin-feature`
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    useReposStore.setState({
+      workspaceProjects: {
+        [REPO_ID]: {
+          rootId: REPO_ID,
+          repositoryIds: [],
+          candidates: [],
+          configured: true,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+    })
+    branchWorkspaceMocks.readBranchWorkspaces.mockResolvedValue({
+      ok: true,
+      rootId: REPO_ID,
+      auxiliaryCandidates: [],
+      items: [
+        {
+          id: 'branch-1',
+          rootId: REPO_ID,
+          branch: 'feature/auth',
+          directoryName: 'goblin-feature',
+          path: branchWorkspacePath,
+          lifecycle: 'ready',
+          available: true,
+          issues: [],
+          repositories: [],
+          auxiliaryEntries: [],
+        },
+      ],
+    })
+    managedServerSessions = [
+      {
+        sessionId: 'branch-session',
+        key: `${REPO_ID}\u0000${branchWorkspacePath}\u0000terminal-1`,
+        cwd: branchWorkspacePath,
+        controller: { attachmentId: 'attachment_local', status: 'connected' },
+        processName: 'zsh',
+        canonicalTitle: null,
+        cols: 80,
+        rows: 24,
+        displayOrder: 1,
+        phase: 'open',
+        message: null,
+      },
+    ]
+
+    const { getProbe, unmount } = await renderProviderWithProbe(
+      worktreeTerminalKey(REPO_ID, branchWorkspacePath),
+      REPO_ID,
+    )
+    try {
+      await vi.waitFor(() => expect(getProbe().count).toBe(1))
+      expect(mockSessions.at(-1)?.descriptor).toMatchObject({
+        repoRoot: REPO_ID,
+        branch: 'feature/auth',
+        worktreePath: branchWorkspacePath,
       })
     } finally {
       await unmount()
@@ -1949,9 +2034,11 @@ async function renderProvider(currentRepoId: string | null = REPO_ID): Promise<{
 
   await act(async () => {
     root.render(
-      <TerminalSessionProvider currentRepoId={currentRepoId}>
-        <CaptureContext onContext={(value) => (context = value)} />
-      </TerminalSessionProvider>,
+      <QueryClientProvider client={mainWindowQueryClient}>
+        <TerminalSessionProvider currentRepoId={currentRepoId}>
+          <CaptureContext onContext={(value) => (context = value)} />
+        </TerminalSessionProvider>
+      </QueryClientProvider>,
     )
   })
 
@@ -2009,10 +2096,12 @@ async function renderProviderWithProbe(
 
   await act(async () => {
     root.render(
-      <TerminalSessionProvider currentRepoId={currentRepoId} syncTracker={syncTracker}>
-        <CaptureContext onContext={(value) => (context = value)} />
-        <CaptureGroupProbe worktreeTerminalKey={worktreeTerminalKey} onProbe={(value) => (probe = value)} />
-      </TerminalSessionProvider>,
+      <QueryClientProvider client={mainWindowQueryClient}>
+        <TerminalSessionProvider currentRepoId={currentRepoId} syncTracker={syncTracker}>
+          <CaptureContext onContext={(value) => (context = value)} />
+          <CaptureGroupProbe worktreeTerminalKey={worktreeTerminalKey} onProbe={(value) => (probe = value)} />
+        </TerminalSessionProvider>
+      </QueryClientProvider>,
     )
   })
 
@@ -2028,10 +2117,12 @@ async function renderProviderWithProbe(
     rerender: async (nextCurrentRepoId: string | null) => {
       await act(async () => {
         root.render(
-          <TerminalSessionProvider currentRepoId={nextCurrentRepoId} syncTracker={syncTracker}>
-            <CaptureContext onContext={(value) => (context = value)} />
-            <CaptureGroupProbe worktreeTerminalKey={worktreeTerminalKey} onProbe={(value) => (probe = value)} />
-          </TerminalSessionProvider>,
+          <QueryClientProvider client={mainWindowQueryClient}>
+            <TerminalSessionProvider currentRepoId={nextCurrentRepoId} syncTracker={syncTracker}>
+              <CaptureContext onContext={(value) => (context = value)} />
+              <CaptureGroupProbe worktreeTerminalKey={worktreeTerminalKey} onProbe={(value) => (probe = value)} />
+            </TerminalSessionProvider>
+          </QueryClientProvider>,
         )
       })
     },

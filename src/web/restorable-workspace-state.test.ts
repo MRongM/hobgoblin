@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 import { localRepoSessionEntry } from '#/shared/remote-repo.ts'
 import { restoreRestorableWorkspaceStateFromSession, sessionStateFromRestorableWorkspaceState } from '#/web/restorable-workspace-state.ts'
 import { createRepoBranch, seedRepoState } from '#/web/stores/repos/test-utils.ts'
+import { workspaceRepositoryListExpanded } from '#/web/stores/repos/workspace-projects.ts'
 
 describe('restorable-workspace-state', () => {
   test('maps restorable workspace state into SessionState', () => {
@@ -18,7 +19,10 @@ describe('restorable-workspace-state', () => {
         restorableWorkspaceState: {
           order: [repo.id],
           activeId: repo.id,
-          workspaceActiveRepoByRoot: { '/tmp/workspace': '/tmp/workspace/api' },
+          workspaceActiveContextByRoot: {
+            '/tmp/workspace': { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
+          },
+          workspaceRepositoryListExpandedByRoot: { '/tmp/workspace': false },
           projectListExpanded: true,
           detailCollapsed: false,
           detailFocusMode: true,
@@ -33,7 +37,10 @@ describe('restorable-workspace-state', () => {
     ).toEqual({
       openRepos: [localRepoSessionEntry('/tmp/repo')],
       activeRepo: '/tmp/repo',
-      workspaceActiveRepoByRoot: { '/tmp/workspace': '/tmp/workspace/api' },
+      workspaceActiveContextByRoot: {
+        '/tmp/workspace': { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
+      },
+      workspaceRepositoryListExpandedByRoot: { '/tmp/workspace': false },
       projectListExpanded: true,
       detailCollapsed: false,
       detailFocusMode: true,
@@ -51,7 +58,10 @@ describe('restorable-workspace-state', () => {
       restoreRestorableWorkspaceStateFromSession({
         openRepos: [localRepoSessionEntry('/tmp/repo')],
         activeRepo: '/tmp/repo',
-        workspaceActiveRepoByRoot: { '/tmp/workspace': '/tmp/workspace/api' },
+        workspaceActiveContextByRoot: {
+          '/tmp/workspace': { kind: 'repository', repositoryId: '/tmp/workspace/api' },
+        },
+        workspaceRepositoryListExpandedByRoot: { '/tmp/workspace': true },
         projectListExpanded: true,
         detailCollapsed: true,
         detailFocusMode: false,
@@ -64,7 +74,10 @@ describe('restorable-workspace-state', () => {
       }),
     ).toEqual({
       activeId: '/tmp/repo',
-      workspaceActiveRepoByRoot: { '/tmp/workspace': '/tmp/workspace/api' },
+      workspaceActiveContextByRoot: {
+        '/tmp/workspace': { kind: 'repository', repositoryId: '/tmp/workspace/api' },
+      },
+      workspaceRepositoryListExpandedByRoot: { '/tmp/workspace': true },
       projectListExpanded: true,
       detailCollapsed: true,
       detailFocusMode: false,
@@ -77,17 +90,51 @@ describe('restorable-workspace-state', () => {
     })
   })
 
-  test('restores an empty workspace selection map from legacy sessions', () => {
-    expect(
-      restoreRestorableWorkspaceStateFromSession({
-        openRepos: [],
-        activeRepo: null,
-        projectListExpanded: false,
-        detailCollapsed: false,
-        detailFocusMode: false,
-        workspaceLayout: 'left-right',
-        detailPaneSizes: { 'top-bottom': 50, 'left-right': 50 },
-      }).workspaceActiveRepoByRoot,
-    ).toEqual({})
+  test('migrates legacy overview, root, and child selections and defaults repository lists to expanded', () => {
+    const restored = restoreRestorableWorkspaceStateFromSession({
+      openRepos: [],
+      activeRepo: null,
+      workspaceActiveRepoByRoot: {
+        '/workspace-overview': null,
+        '/workspace-root': '/workspace-root',
+        '/workspace-child': '/workspace-child/api',
+      },
+      projectListExpanded: false,
+      detailCollapsed: false,
+      detailFocusMode: false,
+      workspaceLayout: 'left-right',
+      detailPaneSizes: { 'top-bottom': 50, 'left-right': 50 },
+    })
+
+    expect(restored.workspaceActiveContextByRoot).toEqual({
+      '/workspace-overview': { kind: 'overview' },
+      '/workspace-root': { kind: 'overview' },
+      '/workspace-child': { kind: 'repository', repositoryId: '/workspace-child/api' },
+    })
+    expect(restored.workspaceRepositoryListExpandedByRoot).toEqual({})
+    expect(workspaceRepositoryListExpanded(restored, '/workspace-child')).toBe(true)
+  })
+
+  test('drops malformed tagged contexts and expansion values during renderer restore', () => {
+    const restored = restoreRestorableWorkspaceStateFromSession({
+      openRepos: [],
+      activeRepo: null,
+      workspaceActiveContextByRoot: {
+        '/workspace': { kind: 'branch-workspace', branchWorkspaceId: '' },
+        '/valid': { kind: 'overview' },
+      },
+      workspaceRepositoryListExpandedByRoot: {
+        '/workspace': 'no' as never,
+        '/valid': false,
+      },
+      projectListExpanded: false,
+      detailCollapsed: false,
+      detailFocusMode: false,
+      workspaceLayout: 'left-right',
+      detailPaneSizes: { 'top-bottom': 50, 'left-right': 50 },
+    })
+
+    expect(restored.workspaceActiveContextByRoot).toEqual({ '/valid': { kind: 'overview' } })
+    expect(restored.workspaceRepositoryListExpandedByRoot).toEqual({ '/valid': false })
   })
 })

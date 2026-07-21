@@ -24,7 +24,12 @@ import type {
 import type { WorkspaceDetailPaneSizes } from '#/shared/workspace-layout.ts'
 import type { RepoState } from '#/web/stores/repos/types.ts'
 import { detailTabForWorktree } from '#/web/lib/detail-tabs.ts'
-import { activeProjectId, projectActivationTarget } from '#/web/stores/repos/workspace-projects.ts'
+import { activeProjectId } from '#/web/stores/repos/workspace-projects.ts'
+import { workspaceActiveContext, workspaceRepositoryListExpanded } from '#/web/stores/repos/workspace-projects.ts'
+import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
+import { branchWorkspaceQueryKey } from '#/web/branch-workspace-query-cache.ts'
+import type { BranchWorkspaceReadResult, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
+import type { WorkspaceActiveContext } from '#/shared/rpc.ts'
 function branchHasWorktree(repo: RepoState, branchName: string | null): boolean {
   return !!branchName && repo.data.branches.some((branch) => branch.name === branchName && !!branch.worktree?.path)
 }
@@ -34,11 +39,48 @@ function detailTabForSelection(repo: RepoState, tab: DetailTab, selectedBranch =
   return detailTabForWorktree(tab, branchHasWorktree(repo, selectedBranch))
 }
 
+function branchWorkspaceSnapshots(rootId: string): BranchWorkspaceSnapshot[] {
+  const result = mainWindowQueryClient.getQueryData<BranchWorkspaceReadResult>(branchWorkspaceQueryKey(rootId))
+  return result?.ok ? result.items : []
+}
+
+function workspaceContextsEqual(left: WorkspaceActiveContext | undefined, right: WorkspaceActiveContext): boolean {
+  if (!left || left.kind !== right.kind) return false
+  if (left.kind === 'repository' && right.kind === 'repository') return left.repositoryId === right.repositoryId
+  if (left.kind === 'branch-workspace' && right.kind === 'branch-workspace') {
+    return left.branchWorkspaceId === right.branchWorkspaceId
+  }
+  return left.kind === 'overview' && right.kind === 'overview'
+}
+
+function activateWorkspaceContext(
+  set: ReposSet,
+  state: ReposStore,
+  rootId: string,
+  context: WorkspaceActiveContext,
+): void {
+  const activeId = context.kind === 'repository' ? context.repositoryId : rootId
+  const repo = state.repos[activeId]
+  if (!repo) return
+  set({
+    activeId,
+    workspaceLayout: repo.ui.workspaceLayout,
+    workspaceActiveContextByRoot: {
+      ...state.workspaceActiveContextByRoot,
+      [rootId]: context,
+    },
+  })
+}
+
 type RestorableWorkspaceSelectionActions = Pick<
   ReposStore,
   | 'setActive'
   | 'activateProject'
+  | 'activateWorkspaceOverview'
   | 'activateWorkspaceRepository'
+  | 'activateBranchWorkspace'
+  | 'setWorkspaceRepositoryListExpanded'
+  | 'toggleWorkspaceRepositoryList'
   | 'setProjectListExpanded'
   | 'toggleProjectListExpanded'
   | 'reorderRepos'
@@ -79,11 +121,13 @@ function createRestorableWorkspaceSelectionActions(
         const repo = s.repos[id]
         if (!repo) return s
         const workspaceRootId = repo.workspaceRootId ?? (s.workspaceProjects[id] ? id : null)
-        const workspaceSelection = repo.workspaceRootId ? id : null
+        const workspaceContext = repo.workspaceRootId
+          ? ({ kind: 'repository', repositoryId: id } as const)
+          : ({ kind: 'overview' } as const)
         if (
           s.activeId === id &&
           s.workspaceLayout === repo.ui.workspaceLayout &&
-          (!workspaceRootId || s.workspaceActiveRepoByRoot[workspaceRootId] === workspaceSelection)
+          (!workspaceRootId || workspaceContextsEqual(s.workspaceActiveContextByRoot[workspaceRootId], workspaceContext))
         ) {
           return s
         }
@@ -92,9 +136,9 @@ function createRestorableWorkspaceSelectionActions(
           workspaceLayout: repo.ui.workspaceLayout,
           ...(workspaceRootId
             ? {
-                workspaceActiveRepoByRoot: {
-                  ...s.workspaceActiveRepoByRoot,
-                  [workspaceRootId]: workspaceSelection,
+                workspaceActiveContextByRoot: {
+                  ...s.workspaceActiveContextByRoot,
+                  [workspaceRootId]: workspaceContext,
                 },
               }
             : {}),
@@ -104,15 +148,64 @@ function createRestorableWorkspaceSelectionActions(
 
     activateProject(id: string) {
       const state = get()
-      get().setActive(projectActivationTarget(state, id))
+      const workspace = state.workspaceProjects[id]
+      if (!workspace) {
+        get().setActive(id)
+        return
+      }
+      const context = workspaceActiveContext(state, id, branchWorkspaceSnapshots(id))
+      activateWorkspaceContext(set, state, id, context)
     },
 
-    activateWorkspaceRepository(rootId: string, repoId: string | null) {
+    activateWorkspaceOverview(rootId: string) {
+      const state = get()
+      if (!state.workspaceProjects[rootId] || !state.repos[rootId]) return
+      activateWorkspaceContext(set, state, rootId, { kind: 'overview' })
+    },
+
+    activateWorkspaceRepository(rootId: string, repoId: string) {
       const state = get()
       const workspace = state.workspaceProjects[rootId]
       if (!workspace) return
-      if (repoId !== null && (!workspace.repositoryIds.includes(repoId) || !state.repos[repoId])) return
-      get().setActive(repoId ?? rootId)
+      if (!workspace.repositoryIds.includes(repoId) || !state.repos[repoId]) return
+      activateWorkspaceContext(set, state, rootId, { kind: 'repository', repositoryId: repoId })
+    },
+
+    activateBranchWorkspace(rootId: string, branchWorkspaceId: string) {
+      const state = get()
+      if (!state.workspaceProjects[rootId] || !state.repos[rootId]) return
+      const requested = { kind: 'branch-workspace' as const, branchWorkspaceId }
+      const next = workspaceActiveContext(
+        { ...state, workspaceActiveContextByRoot: { ...state.workspaceActiveContextByRoot, [rootId]: requested } },
+        rootId,
+        branchWorkspaceSnapshots(rootId),
+      )
+      activateWorkspaceContext(set, state, rootId, next)
+    },
+
+    setWorkspaceRepositoryListExpanded(rootId: string, expanded: boolean) {
+      set((state) => {
+        if (!state.workspaceProjects[rootId]) return state
+        if (state.workspaceRepositoryListExpandedByRoot[rootId] === expanded) return state
+        return {
+          workspaceRepositoryListExpandedByRoot: {
+            ...state.workspaceRepositoryListExpandedByRoot,
+            [rootId]: expanded,
+          },
+        }
+      })
+    },
+
+    toggleWorkspaceRepositoryList(rootId: string) {
+      set((state) => {
+        if (!state.workspaceProjects[rootId]) return state
+        return {
+          workspaceRepositoryListExpandedByRoot: {
+            ...state.workspaceRepositoryListExpandedByRoot,
+            [rootId]: !workspaceRepositoryListExpanded(state, rootId),
+          },
+        }
+      })
     },
 
     setProjectListExpanded(expanded: boolean) {
@@ -143,7 +236,7 @@ function createRestorableWorkspaceSelectionActions(
       const nextIdx = idx === -1 ? 0 : (idx + direction + state.order.length) % state.order.length
       const nextProjectId = state.order[nextIdx]
       if (!nextProjectId || nextProjectId === projectId) return
-      get().setActive(projectActivationTarget(state, nextProjectId))
+      get().activateProject(nextProjectId)
     },
 
     setDetailCollapsed(collapsed: boolean) {
