@@ -295,7 +295,10 @@ describe('repo lifecycle', () => {
       configured: true,
       configurationError: null,
     })
-    useReposStore.setState({ activeId: api, workspaceActiveRepoByRoot: { [root]: api } })
+    useReposStore.setState({
+      activeId: api,
+      workspaceActiveContextByRoot: { [root]: { kind: 'repository', repositoryId: api } },
+    })
 
     await expect(useReposStore.getState().configureWorkspace(root, { repo: ['web'] })).resolves.toEqual({
       ok: true,
@@ -675,7 +678,8 @@ describe('repo lifecycle', () => {
           error: null,
         },
       },
-      workspaceActiveRepoByRoot: { [root]: child },
+      workspaceActiveContextByRoot: { [root]: { kind: 'repository', repositoryId: child } },
+      workspaceRepositoryListExpandedByRoot: { [root]: false },
     })
 
     useReposStore.getState().closeRepo(root)
@@ -684,7 +688,8 @@ describe('repo lifecycle', () => {
     expect(useReposStore.getState().order).toEqual([])
     expect(useReposStore.getState().activeId).toBeNull()
     expect(useReposStore.getState().workspaceProjects).toEqual({})
-    expect(useReposStore.getState().workspaceActiveRepoByRoot).toEqual({})
+    expect(useReposStore.getState().workspaceActiveContextByRoot).toEqual({})
+    expect(useReposStore.getState().workspaceRepositoryListExpandedByRoot).toEqual({})
     expect(mocks.stopPortForwardSessionsForRepo).toHaveBeenCalledWith(root)
     expect(mocks.stopPortForwardSessionsForRepo).toHaveBeenCalledWith(child)
   })

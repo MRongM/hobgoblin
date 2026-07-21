@@ -65,6 +65,7 @@ const terminalHostStub = {
   resize: vi.fn(),
   takeover: vi.fn(),
   close: vi.fn(),
+  closeSessions: vi.fn(),
   notifyBell: vi.fn(),
   listSessions: vi.fn(),
   create: vi.fn(),

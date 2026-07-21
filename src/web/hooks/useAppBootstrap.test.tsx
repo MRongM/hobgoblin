@@ -37,6 +37,10 @@ describe('useAppBootstrap', () => {
     vi.spyOn(useSessionRestoreStore.getState(), 'hydrate').mockResolvedValue({
       openRepos: [{ kind: 'local', id: '/tmp/repo' }],
       activeRepo: '/tmp/repo',
+      workspaceActiveContextByRoot: {
+        '/tmp/repo': { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
+      },
+      workspaceRepositoryListExpandedByRoot: { '/tmp/repo': false },
       projectListExpanded: true,
       detailCollapsed: true,
       detailFocusMode: true,
@@ -47,6 +51,10 @@ describe('useAppBootstrap', () => {
     vi.spyOn(useSessionRestoreStore.getState(), 'consumeBootSessionSnapshot').mockReturnValue({
       openRepos: [{ kind: 'local', id: '/tmp/repo' }],
       activeRepo: '/tmp/repo',
+      workspaceActiveContextByRoot: {
+        '/tmp/repo': { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
+      },
+      workspaceRepositoryListExpandedByRoot: { '/tmp/repo': false },
       projectListExpanded: true,
       detailCollapsed: true,
       detailFocusMode: true,
@@ -65,7 +73,12 @@ describe('useAppBootstrap', () => {
     expect(state.detailFocusMode).toBe(true)
     expect(state.detailPaneSizes).toEqual({ 'top-bottom': 55, 'left-right': 45 })
     expect(state.selectedTerminalByWorktree).toEqual({ '/tmp/repo\0/tmp/worktree': '/tmp/repo\0/tmp/worktree\0terminal-2' })
-    expect(hydrateSession).toHaveBeenCalledWith([{ kind: 'local', id: '/tmp/repo' }], '/tmp/repo', {})
+    expect(hydrateSession).toHaveBeenCalledWith(
+      [{ kind: 'local', id: '/tmp/repo' }],
+      '/tmp/repo',
+      { '/tmp/repo': { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' } },
+      { '/tmp/repo': false },
+    )
   })
 })
 

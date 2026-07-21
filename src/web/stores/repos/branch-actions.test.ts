@@ -62,11 +62,13 @@ function installSuccessfulCreateWorktreeBridge(options?: { onSnapshot?: () => vo
   })
 }
 
-function createNewBranchWorktreeAction(options: {
-  worktreePath?: string
-  newBranch?: string
-  baseRef?: string
-} = {}): RepoBranchAction {
+function createNewBranchWorktreeAction(
+  options: {
+    worktreePath?: string
+    newBranch?: string
+    baseRef?: string
+  } = {},
+): RepoBranchAction {
   return {
     kind: 'createWorktree',
     input: {
@@ -252,6 +254,36 @@ describe('branch action capabilities', () => {
 })
 
 describe('runBranchAction', () => {
+  test('forwards worktree force independently from branch force', async () => {
+    let removeInput: Record<string, unknown> | null = null
+    installGoblinTestBridge({
+      'repo.removeWorktree': async (input: Record<string, unknown>) => {
+        removeInput = input
+        return { ok: true, message: 'ok' }
+      },
+      'repo.snapshot': async () => ({ branches: [createBranchSnapshot('feature/a')], current: 'feature/a' }),
+      'repo.status': async () => [],
+    })
+
+    await useReposStore.getState().runBranchAction(REPO_ID, {
+      kind: 'removeWorktree',
+      branch: 'feature/a',
+      worktreePath: '/tmp/gbl-branch-actions-test-worktree',
+      alsoDeleteBranch: false,
+      forceRemoveWorktree: true,
+      forceDeleteBranch: false,
+    })
+
+    expect(removeInput).toMatchObject({
+      cwd: REPO_ID,
+      branch: 'feature/a',
+      worktreePath: '/tmp/gbl-branch-actions-test-worktree',
+      alsoDeleteBranch: false,
+      forceRemoveWorktree: true,
+      forceDeleteBranch: false,
+    })
+  })
+
   test('blocks local branch actions while remote fetch resource is busy', async () => {
     let checkoutCalls = 0
     installGoblinTestBridge({
@@ -508,11 +540,7 @@ describe('runBranchAction', () => {
 
   test.each([
     ['checkout', { kind: 'checkout', branch: 'feature/a' }, 'repo.checkout'],
-    [
-      'createWorktree',
-      createNewBranchWorktreeAction(),
-      'repo.createWorktree',
-    ],
+    ['createWorktree', createNewBranchWorktreeAction(), 'repo.createWorktree'],
     ['createBranch', { kind: 'createBranch', branch: 'feature/new', baseBranch: 'feature/a' }, 'repo.createBranch'],
     [
       'trackRemoteBranch',
@@ -704,11 +732,13 @@ describe('runBranchAction', () => {
       'repo.status': async () => [],
     })
 
-    await useReposStore.getState().runBranchAction(
-      REPO_ID,
-      { kind: 'trackRemoteBranch', localBranch: 'feature/new', remoteRef: 'origin/feature/new' },
-      { token: 1 },
-    )
+    await useReposStore
+      .getState()
+      .runBranchAction(
+        REPO_ID,
+        { kind: 'trackRemoteBranch', localBranch: 'feature/new', remoteRef: 'origin/feature/new' },
+        { token: 1 },
+      )
 
     expect(useReposStore.getState().repos[REPO_ID]?.events.at(-1)).toMatchObject({
       kind: 'result',

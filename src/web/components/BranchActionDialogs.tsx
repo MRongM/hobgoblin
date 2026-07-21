@@ -29,17 +29,22 @@ interface BranchActionDialogsProps {
   forceRemoveConfirm: RetainedDialogViewState<RemoveConfirm>
   deleteAlsoUpstream: boolean
   removeAlsoDeletes: boolean
+  removeForce: boolean
   removeAlsoUpstream: boolean
   setDeleteAlsoUpstream: (checked: boolean) => void
   setRemoveAlsoDeletes: (checked: boolean) => void
+  setRemoveForce: (checked: boolean) => void
   setRemoveAlsoUpstream: (checked: boolean) => void
   onPushConfirm: (target: string) => void
   onDeleteBranch: (target: string, force: boolean, alsoDeleteUpstream: boolean) => void
   onRemoveWorktree: (
     target: RemoveConfirm,
-    alsoDeleteBranch: boolean,
-    forceDeleteBranch: boolean,
-    alsoDeleteUpstream: boolean,
+    options: {
+      alsoDeleteBranch: boolean
+      forceRemoveWorktree: boolean
+      forceDeleteBranch: boolean
+      alsoDeleteUpstream: boolean
+    },
   ) => void
 }
 
@@ -115,13 +120,16 @@ function RemoveWorktreeConfirmBody({
   branch,
   protectedHint,
   removeAlsoDeletes,
+  removeForce,
   removeConfirmProtected,
   hasUpstream,
   tracking,
   removeAlsoUpstream,
   onRemoveAlsoDeletesChange,
+  onRemoveForceChange,
   onRemoveAlsoUpstreamChange,
   alsoDeleteBranchLabel,
+  forceRemoveLabel,
   alsoDeleteUpstreamLabel,
 }: {
   body: string
@@ -129,13 +137,16 @@ function RemoveWorktreeConfirmBody({
   branch: string
   protectedHint: string
   removeAlsoDeletes: boolean
+  removeForce: boolean
   removeConfirmProtected: boolean
   hasUpstream: boolean
   tracking?: string
   removeAlsoUpstream: boolean
   onRemoveAlsoDeletesChange: (checked: boolean) => void
+  onRemoveForceChange: (checked: boolean) => void
   onRemoveAlsoUpstreamChange: (checked: boolean) => void
   alsoDeleteBranchLabel: string
+  forceRemoveLabel: string
   alsoDeleteUpstreamLabel: string
 }) {
   return (
@@ -144,6 +155,9 @@ function RemoveWorktreeConfirmBody({
         <span>{body}</span>
         <ConfirmValue value={path} />
       </ConfirmSection>
+      <ConfirmCheckbox checked={removeForce} onCheckedChange={onRemoveForceChange} destructive>
+        {forceRemoveLabel}
+      </ConfirmCheckbox>
       <div className="space-y-2">
         <ConfirmSection>
           <ConfirmCheckbox
@@ -233,9 +247,11 @@ export function BranchActionDialogs({
   forceRemoveConfirm,
   deleteAlsoUpstream,
   removeAlsoDeletes,
+  removeForce,
   removeAlsoUpstream,
   setDeleteAlsoUpstream,
   setRemoveAlsoDeletes,
+  setRemoveForce,
   setRemoveAlsoUpstream,
   onPushConfirm,
   onDeleteBranch,
@@ -338,13 +354,16 @@ export function BranchActionDialogs({
               branch={removeConfirm.payload.branch}
               protectedHint={t('action.confirm-remove-worktree-protected-hint')}
               removeAlsoDeletes={removeAlsoDeletes}
+              removeForce={removeForce}
               removeConfirmProtected={removeConfirmProtected}
               hasUpstream={hasUpstream}
               tracking={branch.tracking}
               removeAlsoUpstream={removeAlsoUpstream}
               onRemoveAlsoDeletesChange={setRemoveAlsoDeletes}
+              onRemoveForceChange={setRemoveForce}
               onRemoveAlsoUpstreamChange={setRemoveAlsoUpstream}
               alsoDeleteBranchLabel={t('action.confirm-remove-worktree-also-delete-branch')}
+              forceRemoveLabel={t('action.confirm-remove-worktree-force')}
               alsoDeleteUpstreamLabel={t('action.confirm-delete-branch-also-delete-upstream')}
             />
           ) : (
@@ -359,7 +378,14 @@ export function BranchActionDialogs({
           const alsoDelete = removeAlsoDeletes
           const upstream = removeAlsoUpstream
           removeConfirm.close()
-          if (target) onRemoveWorktree(target, alsoDelete, false, upstream)
+          if (target) {
+            onRemoveWorktree(target, {
+              alsoDeleteBranch: alsoDelete,
+              forceRemoveWorktree: removeForce,
+              forceDeleteBranch: false,
+              alsoDeleteUpstream: upstream,
+            })
+          }
         }}
       />
       <ConfirmDialog
@@ -390,7 +416,14 @@ export function BranchActionDialogs({
           const target = forceRemoveConfirm.payload
           const upstream = removeAlsoUpstream
           forceRemoveConfirm.close()
-          if (target) onRemoveWorktree(target, true, true, upstream)
+          if (target) {
+            onRemoveWorktree(target, {
+              alsoDeleteBranch: true,
+              forceRemoveWorktree: removeForce,
+              forceDeleteBranch: true,
+              alsoDeleteUpstream: upstream,
+            })
+          }
         }}
       />
     </>

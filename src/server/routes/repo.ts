@@ -177,9 +177,19 @@ export function createRepoRoutes() {
   app.post('/worktree-bootstrap-preflight', async (c) => {
     const body = await c.req.json().catch(() => null)
     const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const candidateScope =
+      body?.candidateScope === 'all-untracked' || body?.candidateScope === 'ignored-only'
+        ? body.candidateScope
+        : undefined
+    if (body?.candidateScope !== undefined && candidateScope === undefined) {
+      return c.json({ ok: false, message: 'error.invalid-arguments' })
+    }
     return c.json(
       await jsonOr(
-        () => getRepositoryWorktreeBootstrapPreflight(cwd, c.req.raw.signal),
+        () =>
+          candidateScope
+            ? getRepositoryWorktreeBootstrapPreflight(cwd, c.req.raw.signal, candidateScope)
+            : getRepositoryWorktreeBootstrapPreflight(cwd, c.req.raw.signal),
         { ok: false, message: 'error.failed-read-repo' },
         'worktree-bootstrap-preflight',
       ),
@@ -636,6 +646,7 @@ export function createRepoRoutes() {
     const branch = typeof body?.branch === 'string' ? body.branch : ''
     const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
     const alsoDeleteBranch = body?.alsoDeleteBranch === true
+    const forceRemoveWorktree = body?.forceRemoveWorktree === true
     const forceDeleteBranch = body?.forceDeleteBranch === true
     const alsoDeleteUpstream = body?.alsoDeleteUpstream === true
     const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
@@ -644,7 +655,7 @@ export function createRepoRoutes() {
         () =>
           removeRepositoryWorktree(
             cwd,
-            { branch, worktreePath, alsoDeleteBranch, forceDeleteBranch, alsoDeleteUpstream },
+            { branch, worktreePath, alsoDeleteBranch, forceRemoveWorktree, forceDeleteBranch, alsoDeleteUpstream },
             c.req.raw.signal,
             sourceToken,
           ),

@@ -100,7 +100,6 @@ export const useReposStore = create<ReposStore>()(
       // Runtime-coherent renderer projection.
       repos: {},
       workspaceProjects: {},
-      workspaceActiveRepoByRoot: {},
 
       // Restorable warm-start cache.
       restorableRepoCache: {},
@@ -108,6 +107,8 @@ export const useReposStore = create<ReposStore>()(
       // Restorable workspace state.
       order: [],
       activeId: null,
+      workspaceActiveContextByRoot: {},
+      workspaceRepositoryListExpandedByRoot: {},
       projectListExpanded: DEFAULT_PROJECT_LIST_EXPANDED,
       detailCollapsed: DEFAULT_DETAIL_COLLAPSED,
       detailFocusMode: false,

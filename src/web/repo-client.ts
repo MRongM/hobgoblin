@@ -22,6 +22,7 @@ import type { CommitDetail, CommitHistoryEntry, ExecResult, WorktreeStatus } fro
 import type { ProbeResult } from '#/shared/rpc.ts'
 import type { CreateWorktreeInput } from '#/shared/worktree-create.ts'
 import type {
+  WorktreeBootstrapCandidateScope,
   WorktreeBootstrapDecision,
   WorktreeBootstrapPreflightResult,
   WorktreeBootstrapPreviewResult,
@@ -141,8 +142,9 @@ export async function getRepositoryWorktreeBootstrapPreview(
 export async function getRepositoryWorktreeBootstrapPreflight(
   cwd: string,
   signal?: AbortSignal,
+  candidateScope?: WorktreeBootstrapCandidateScope,
 ): Promise<WorktreeBootstrapPreflightResult> {
-  return await postServerJson('/api/repo/worktree-bootstrap-preflight', { cwd }, { signal })
+  return await postServerJson('/api/repo/worktree-bootstrap-preflight', { cwd, candidateScope }, { signal })
 }
 
 export async function initializeRepositoryWorktreeBootstrapConfig(
@@ -244,6 +246,7 @@ export async function removeRepositoryWorktree(
     branch: string
     worktreePath: string
     alsoDeleteBranch: boolean
+    forceRemoveWorktree?: boolean
     forceDeleteBranch?: boolean
     alsoDeleteUpstream?: boolean
   },

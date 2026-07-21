@@ -28,7 +28,11 @@ vi.mock('#/web/components/ui/dropdown-menu.tsx', () => ({
 const ROOT = '/workspace'
 const API = '/workspace/api'
 const WEB = '/workspace/web'
-const originalAction = useReposStore.getState().activateWorkspaceRepository
+const originalActions = {
+  activateWorkspaceOverview: useReposStore.getState().activateWorkspaceOverview,
+  activateWorkspaceRepository: useReposStore.getState().activateWorkspaceRepository,
+}
+const activateWorkspaceOverview = vi.fn()
 const activateWorkspaceRepository = vi.fn()
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -36,6 +40,7 @@ let root: Root | null = null
 beforeEach(() => {
   ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   resetReposStore()
+  activateWorkspaceOverview.mockReset()
   activateWorkspaceRepository.mockReset()
   const overview = replaceRepo(emptyRepo(ROOT, 'workspace'), (repo) => {
     repo.isGitRepo = false
@@ -62,7 +67,8 @@ beforeEach(() => {
         error: null,
       },
     },
-    workspaceActiveRepoByRoot: { [ROOT]: API },
+    workspaceActiveContextByRoot: { [ROOT]: { kind: 'repository', repositoryId: API } },
+    activateWorkspaceOverview,
     activateWorkspaceRepository,
   })
   container = document.createElement('div')
@@ -75,7 +81,7 @@ afterEach(() => {
   container?.remove()
   root = null
   container = null
-  useReposStore.setState({ activateWorkspaceRepository: originalAction })
+  useReposStore.setState(originalActions)
   ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false
 })
 
@@ -98,7 +104,7 @@ describe('WorkspaceRepositorySwitcher', () => {
 
     act(() => overview?.click())
 
-    expect(activateWorkspaceRepository).toHaveBeenCalledWith(ROOT, null)
+    expect(activateWorkspaceOverview).toHaveBeenCalledWith(ROOT)
   })
 
   test('does not render for a standalone repository', () => {

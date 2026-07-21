@@ -25,7 +25,10 @@ import type {
 import { type CommitDetail, type CommitHistoryEntry, type ExecResult, type WorktreeStatus } from '#/shared/git-types.ts'
 import { isRemoteRepoId, type ProbeResult, type RepoSnapshot } from '#/shared/rpc.ts'
 import { isValidRepoLocator } from '#/shared/input-validation.ts'
-import type { WorktreeBootstrapPreflightResult } from '#/shared/worktree-bootstrap-summary.ts'
+import type {
+  WorktreeBootstrapCandidateScope,
+  WorktreeBootstrapPreflightResult,
+} from '#/shared/worktree-bootstrap-summary.ts'
 
 export async function probeRepository(cwd: string): Promise<ProbeResult> {
   return await runWithRepoBackend(cwd, async (backend) => await backend.probe())
@@ -71,9 +74,13 @@ export async function getRepositoryPatch(cwd: string, worktreePath: string, sign
 export async function getRepositoryWorktreeBootstrapPreflight(
   cwd: string,
   signal?: AbortSignal,
+  candidateScope?: WorktreeBootstrapCandidateScope,
 ): Promise<WorktreeBootstrapPreflightResult> {
   if (!isValidRepoLocator(cwd)) return { ok: false, message: 'error.invalid-arguments' }
-  return await runWithRepoBackend(cwd, async (backend) => await backend.getWorktreeBootstrapPreflight(signal))
+  return await runWithRepoBackend(
+    cwd,
+    async (backend) => await backend.getWorktreeBootstrapPreflight(signal, candidateScope),
+  )
 }
 
 export async function getCommitMessageProviders(signal?: AbortSignal): Promise<CommitMessageProviderAvailability> {

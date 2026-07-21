@@ -69,6 +69,34 @@ describe('local worktree bootstrap candidates', () => {
     expect(mocks.git).not.toHaveBeenCalled()
   })
 
+  test('lists only git-ignored root entries when requested', async () => {
+    await writeFile(path.join(sourceRoot, '.env'), 'TOKEN=placeholder\n')
+    await mkdir(path.join(sourceRoot, 'node_modules'))
+    await mkdir(path.join(sourceRoot, 'coverage'))
+    mocks.git.mockImplementation(async (_cwd, args: string[]) => {
+      if (args.includes('--ignored')) return 'node_modules/\0coverage/summary.json\0'
+      return ''
+    })
+
+    await expect(getLocalWorktreeBootstrapPreflight(sourceRoot, { candidateScope: 'ignored-only' })).resolves.toEqual({
+      ok: true,
+      preflight: {
+        kind: 'candidates',
+        candidates: [
+          { path: 'coverage', kind: 'directory' },
+          { path: 'node_modules', kind: 'directory' },
+        ],
+      },
+    })
+    expect(mocks.git).toHaveBeenNthCalledWith(1, sourceRoot, ['ls-files', '-z'], { signal: undefined })
+    expect(mocks.git).toHaveBeenNthCalledWith(
+      2,
+      sourceRoot,
+      ['ls-files', '--others', '--ignored', '--exclude-standard', '--directory', '-z'],
+      { signal: undefined },
+    )
+  })
+
   test('does not fall back to candidates when goblin.toml is invalid', async () => {
     await writeFile(path.join(sourceRoot, 'goblin.toml'), '[worktree\n')
 
@@ -84,6 +112,16 @@ describe('local worktree bootstrap candidates', () => {
 
     await expect(
       validateLocalWorktreeBootstrapSelections(sourceRoot, [{ path: '.env', mode: 'copy' }]),
+    ).resolves.toEqual({ ok: false, message: 'error.worktree-bootstrap-selection-stale' })
+  })
+
+  test('rejects an existing untracked selection outside the requested ignored-only scope', async () => {
+    await writeFile(path.join(sourceRoot, '.env'), 'TOKEN=placeholder\n')
+
+    await expect(
+      validateLocalWorktreeBootstrapSelections(sourceRoot, [{ path: '.env', mode: 'copy' }], {
+        candidateScope: 'ignored-only',
+      }),
     ).resolves.toEqual({ ok: false, message: 'error.worktree-bootstrap-selection-stale' })
   })
 

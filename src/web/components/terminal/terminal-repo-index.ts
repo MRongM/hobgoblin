@@ -1,4 +1,5 @@
 import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
+import type { BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
 import type { ReposStore } from '#/web/stores/repos/types.ts'
 import type { TerminalRepoIndex } from '#/web/components/terminal/types.ts'
@@ -42,6 +43,29 @@ export function repoIndexEqual(a: TerminalRepoIndex, b: TerminalRepoIndex): bool
     }
   }
   return true
+}
+
+export function repoIndexWithBranchWorkspaces(
+  repoIndex: TerminalRepoIndex,
+  branchWorkspaces: readonly BranchWorkspaceSnapshot[],
+): TerminalRepoIndex {
+  if (branchWorkspaces.length === 0) return repoIndex
+  const next: TerminalRepoIndex = { ...repoIndex }
+  const clonedRoots = new Set<string>()
+  for (const workspace of branchWorkspaces) {
+    if (workspace.lifecycle === 'delete-incomplete') continue
+    const root = next[workspace.rootId]
+    if (!root) continue
+    if (!clonedRoots.has(workspace.rootId)) {
+      next[workspace.rootId] = {
+        ...root,
+        branchByWorktreePath: { ...root.branchByWorktreePath },
+      }
+      clonedRoots.add(workspace.rootId)
+    }
+    next[workspace.rootId]!.branchByWorktreePath[workspace.path] = workspace.branch
+  }
+  return next
 }
 
 export function branchForTerminalWorktree(repoIndex: TerminalRepoIndex, repoRoot: string, worktreePath: string): string | null {

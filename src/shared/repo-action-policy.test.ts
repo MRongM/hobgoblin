@@ -55,6 +55,51 @@ describe('validateRemovableWorktreeState', () => {
       message: 'error.cannot-remove-dirty-worktree',
     })
   })
+
+  test('allows force removal only for known dirty worktrees', () => {
+    expect(
+      validateRemovableWorktreeState(
+        {
+          path: '/tmp/repo-feature',
+          branch: 'feature/test',
+          isBare: false,
+          isPrimary: false,
+          isDirty: true,
+        },
+        { forceRemoveWorktree: true },
+      ),
+    ).toBeNull()
+    expect(
+      validateRemovableWorktreeState(
+        {
+          path: '/tmp/repo-feature',
+          branch: 'feature/test',
+          isBare: false,
+          isPrimary: false,
+          isDirty: true,
+          isLocked: true,
+        },
+        { forceRemoveWorktree: true },
+      ),
+    ).toEqual({
+      ok: false,
+      message: 'error.cannot-remove-locked-worktree',
+    })
+    expect(
+      validateRemovableWorktreeState(
+        {
+          path: '/tmp/repo-feature',
+          branch: 'feature/test',
+          isBare: false,
+          isPrimary: false,
+        },
+        { forceRemoveWorktree: true },
+      ),
+    ).toEqual({
+      ok: false,
+      message: 'error.cannot-remove-dirty-worktree',
+    })
+  })
 })
 
 describe('validateBranchDeletionPolicy', () => {

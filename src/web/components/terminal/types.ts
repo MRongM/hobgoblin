@@ -67,6 +67,8 @@ export interface TerminalSessionBase {
   repoRoot: string
   branch: string
   worktreePath: string
+  targetKind?: 'branch-workspace'
+  branchWorkspaceId?: string
 }
 
 export type TerminalWorktreeScope = Pick<TerminalSessionBase, 'repoRoot' | 'worktreePath'>

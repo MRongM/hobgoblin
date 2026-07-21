@@ -47,12 +47,16 @@ describe('repo session hydration', () => {
 
     await useReposStore
       .getState()
-      .hydrateSession([remoteRepoSessionEntry(rootTarget)], child.id, { [rootTarget.id]: child.id })
+      .hydrateSession([remoteRepoSessionEntry(rootTarget)], child.id, {
+        [rootTarget.id]: { kind: 'repository', repositoryId: child.id },
+      })
 
     expect(useReposStore.getState().order).toEqual([rootTarget.id])
     expect(useReposStore.getState().activeId).toBe(child.id)
     expect(useReposStore.getState().repos[child.id]?.remote.target).toEqual({ ...rootTarget, ...child })
-    expect(useReposStore.getState().workspaceActiveRepoByRoot).toEqual({ [rootTarget.id]: child.id })
+    expect(useReposStore.getState().workspaceActiveContextByRoot).toEqual({
+      [rootTarget.id]: { kind: 'repository', repositoryId: child.id },
+    })
     expect(calls.recent).toEqual([])
   })
 
@@ -76,11 +80,15 @@ describe('repo session hydration', () => {
       }),
     })
 
-    await useReposStore.getState().hydrateSession([localRepoSessionEntry(root)], child, { [root]: child })
+    await useReposStore.getState().hydrateSession([localRepoSessionEntry(root)], child, {
+      [root]: { kind: 'repository', repositoryId: child },
+    })
 
     expect(useReposStore.getState().order).toEqual([root])
     expect(useReposStore.getState().activeId).toBe(child)
-    expect(useReposStore.getState().workspaceActiveRepoByRoot).toEqual({ [root]: child })
+    expect(useReposStore.getState().workspaceActiveContextByRoot).toEqual({
+      [root]: { kind: 'repository', repositoryId: child },
+    })
     expect(useReposStore.getState().workspaceProjects[root]?.repositoryIds).toEqual([child])
     expect(calls.recent).toEqual([])
   })
@@ -100,11 +108,13 @@ describe('repo session hydration', () => {
       }),
     })
 
-    await useReposStore.getState().hydrateSession([localRepoSessionEntry(root)], child, { [root]: child })
+    await useReposStore.getState().hydrateSession([localRepoSessionEntry(root)], child, {
+      [root]: { kind: 'repository', repositoryId: child },
+    })
 
     expect(useReposStore.getState().activeId).toBe(root)
     expect(useReposStore.getState().workspaceProjects).toEqual({})
-    expect(useReposStore.getState().workspaceActiveRepoByRoot).toEqual({})
+    expect(useReposStore.getState().workspaceActiveContextByRoot).toEqual({})
   })
 
   test('hydrateSession restores tabs through the same initial local refresh path without recent-repo side effects', async () => {

@@ -1,0 +1,130 @@
+// @vitest-environment jsdom
+
+import { act, useEffect } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { useBranchWorkspaceActions } from '#/web/hooks/useBranchWorkspaceActions.ts'
+import { branchWorkspaceQueryKey } from '#/web/branch-workspace-queries.ts'
+import type { BranchWorkspacePlan } from '#/shared/branch-workspaces.ts'
+
+const mocks = vi.hoisted(() => ({
+  plan: vi.fn(),
+  execute: vi.fn(),
+  abort: vi.fn(),
+  reorder: vi.fn(),
+}))
+
+vi.mock('#/web/workspace-client.ts', () => ({
+  planBranchWorkspace: mocks.plan,
+  executeBranchWorkspace: mocks.execute,
+  abortBranchWorkspace: mocks.abort,
+  reorderBranchWorkspaces: mocks.reorder,
+}))
+
+const plan = {
+  token: 'sha256:plan',
+  rootId: '/workspace',
+  operation: 'create',
+  branchWorkspaceId: 'branch-1',
+  branch: 'feature/auth',
+  directoryName: 'goblin-feature-auth',
+  path: '/workspace/goblin-feature-auth',
+  manifest: {
+    id: 'branch-1',
+    rootId: '/workspace',
+    branch: 'feature/auth',
+    directoryName: 'goblin-feature-auth',
+    path: '/workspace/goblin-feature-auth',
+    repositories: [],
+    auxiliaryEntries: [],
+  },
+  repositories: [],
+  auxiliaryEntries: [],
+  requiredApprovals: ['worktree-bootstrap'],
+  steps: [],
+  terminalSessionIds: [],
+} satisfies BranchWorkspacePlan
+
+let container: HTMLDivElement | null = null
+let root: Root | null = null
+let queryClient: QueryClient
+
+beforeEach(() => {
+  ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  vi.clearAllMocks()
+  container = document.createElement('div')
+  document.body.append(container)
+  root = createRoot(container)
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+})
+
+afterEach(() => {
+  act(() => root?.unmount())
+  queryClient.clear()
+  container?.remove()
+  root = null
+  container = null
+  ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false
+})
+
+describe('useBranchWorkspaceActions', () => {
+  test('keeps dialog plan/result state and invalidates the exact root after settlement', async () => {
+    mocks.plan.mockResolvedValue({ ok: true, plan })
+    mocks.execute.mockResolvedValue({ ok: true, branchWorkspaceId: 'branch-1' })
+    mocks.abort.mockResolvedValue({ ok: true })
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    let state: ReturnType<typeof useBranchWorkspaceActions> | null = null
+    await act(async () =>
+      root!.render(
+        <QueryClientProvider client={queryClient}>
+          <Harness onReady={(value) => (state = value)} />
+        </QueryClientProvider>,
+      ),
+    )
+    const request = {
+      operation: 'create' as const,
+      branch: 'feature/auth',
+      repositories: [{ repositoryName: 'api', baseBranch: 'main' }],
+      auxiliaryEntries: [],
+    }
+
+    await act(async () => state!.requestPlan(request))
+    expect(state!.plan).toEqual(plan)
+    await act(async () => state!.confirm(['worktree-bootstrap']))
+    expect(state!.result).toEqual({ ok: true, branchWorkspaceId: 'branch-1' })
+    expect(mocks.execute).toHaveBeenCalledWith('/workspace', {
+      planToken: plan.token,
+      approvals: ['worktree-bootstrap'],
+    })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: branchWorkspaceQueryKey('/workspace'), exact: true })
+    await act(async () => state!.cancel())
+    expect(mocks.abort).toHaveBeenCalledWith('/workspace')
+  })
+
+  test('reorders through the server and invalidates only after success', async () => {
+    mocks.reorder.mockResolvedValue({ ok: true })
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    let state: ReturnType<typeof useBranchWorkspaceActions> | null = null
+    await act(async () =>
+      root!.render(
+        <QueryClientProvider client={queryClient}>
+          <Harness onReady={(value) => (state = value)} />
+        </QueryClientProvider>,
+      ),
+    )
+
+    await act(async () => state!.reorder(['third', 'first']))
+
+    expect(mocks.reorder).toHaveBeenCalledWith('/workspace', ['third', 'first'])
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: branchWorkspaceQueryKey('/workspace'), exact: true })
+  })
+})
+
+function Harness({ onReady }: { onReady: (value: ReturnType<typeof useBranchWorkspaceActions>) => void }) {
+  const value = useBranchWorkspaceActions('/workspace')
+  useEffect(() => {
+    onReady(value)
+  }, [onReady, value])
+  return null
+}

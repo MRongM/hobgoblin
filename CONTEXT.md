@@ -44,6 +44,10 @@ _Avoid_: Worktree setup script, post-create hook
 An immediate child file or directory of a repository root that Git does not track, including ignored and ordinary untracked entries. A wholly untracked directory is one candidate, and `.git` is never a candidate.
 _Avoid_: Bootstrap file, untracked path
 
+**Repository dependency candidate**:
+An existing immediate child file or directory of a repository root that Git currently ignores. It may be selected for one newly materialized branch-workspace repository member, while a repository-owned `goblin.toml` takes precedence over manual dependency selection.
+_Avoid_: `.gitignore` rule, workspace auxiliary entry, generic untracked file
+
 **Selected branch context**:
 The branch whose explorer and detail surfaces the user is currently viewing. Changing this context is navigation; it is distinct from checking out a Git branch and from targeting a branch action.
 _Avoid_: Active branch, current branch
@@ -65,29 +69,41 @@ One Git operation boundary. Branches, worktrees, status, history, and Git writes
 _Avoid_: Workspace repository, subproject
 
 **Multi-repository workspace**:
-A project rooted at a readable non-Git directory, either local or reached through one SSH target, whose immediate child entries are directories or directory symlinks resolving to Git repository top levels. A symlink keeps its immediate-child name and logical path as the workspace member identity. The root provides project-level files and terminals; its repositories remain independent Git operation boundaries. Every repository in an SSH multi-repository workspace uses the same SSH target as the workspace root.
+A project rooted at a readable non-Git directory, either local or reached through one SSH target, whose immediate child entries are directories or directory symlinks resolving to Git repository primary worktree top levels. Linked worktrees are not repository candidates. A symlink keeps its immediate-child name and logical path as the workspace member identity. The root provides project-level files and terminals; its repositories remain independent Git operation boundaries. Every repository in an SSH multi-repository workspace uses the same SSH target as the workspace root.
 _Avoid_: Monorepo, repository group, nested repository
 
 **Configured workspace**:
-A multi-repository workspace whose durable, ordered repository membership has been explicitly selected. Membership is stored in Hobgoblin application data; `goblin.toml` remains repository-owned worktree bootstrap configuration. Filesystem discovery supplies candidates but does not silently change a configured workspace. Repository order controls workspace navigation order and sequential workspace batch-operation order.
+A multi-repository workspace whose durable, ordered repository membership has been explicitly selected. Membership is stored in Hobgoblin application data; `goblin.toml` remains repository-owned worktree bootstrap configuration. Filesystem discovery supplies candidates but does not silently change a configured workspace, and a repository referenced by any branch workspace cannot be removed from configuration until those references are removed. Repository order controls workspace navigation order and sequential branch workspace member-operation order.
 _Avoid_: Saved scan, repository registry, primary repository
 
-**Workspace inventory**:
-A derived current-state list of configured repositories and their checked-out worktree branches for agent context. It never determines workspace membership and is not an operation history.
-_Avoid_: Workspace configuration, branch log, changelog
+**Branch workspace**:
+A branch-specific, indivisible working context owned by one configured workspace and presented by its common branch name. Within that parent, a branch name identifies at most one branch workspace; every workspace-level action targets its root directory on the same local or SSH host as the parent, while contained repository worktrees are members rather than nested workspace contexts. Membership may be extended but not reduced or rematerialized as a configuration change, and removal always targets the whole branch workspace. When active, it exposes folder-level file browsing and internal terminals while the parent workspace retains separate repository navigation. Its managed directory remains visible and browsable in the parent file tree but cannot be renamed, moved, or deleted there; inside it, managed member and auxiliary roots receive the same protection while their contents remain operable. Its durable membership and materialization intent remain meaningful when files or worktrees are unavailable, a branch workspace operation is incomplete, or external filesystem changes cause drift. Drift is surfaced for explicit repair or removal rather than silently recreating or forgetting the branch workspace; completed members are retained without automatic rollback, and retries continue the remaining work.
+_Avoid_: Project, workspace repository, generic subworkspace
 
 **Workspace worktree**:
-A set of same-named linked worktrees created across every configured repository. Each repository remains independently navigable and no repository anchors another repository's worktree list.
+A set of same-named linked worktrees belonging to one branch workspace. The configured repository list is the candidate pool; each branch workspace chooses its own members, every member remains an independent Git operation boundary, and newly created target branches may use different base branches per repository. Member provenance distinguishes target branches created for the branch workspace from branches that already existed. A same-named worktree already checked out elsewhere remains repository-only and is never moved or claimed automatically.
 _Avoid_: Shared worktree, combined worktree
 
+**Workspace overview**:
+The parent-level workspace view that lists its branch workspaces in the same contextual list position used for repository worktrees, while retaining the workspace root's file and terminal context. Selecting it does not select a branch workspace.
+_Avoid_: All branch workspace, workspace repository
+
+**Branch workspace item**:
+The non-expandable workspace overview representation of one branch workspace, labelled by the common branch name rather than its directory name. Items have a durable manual order within the parent workspace; new items append without repair or extension changing existing order. Activating an item opens that working context inside the parent project rather than creating another project; its editor and external-terminal actions open the branch workspace root, while its internal-terminal action restores the last root-scoped session or creates one when none exists. Ready items expose all folder actions; creation-incomplete or drifted items remain inspectable and repairable, active operations expose only cancellation, and removal-incomplete items cannot be reopened. Its badges represent only internal terminal sessions scoped to that root directory.
+_Avoid_: Project item, repository row, worktree row
+
+**Workspace auxiliary entry**:
+A selected non-repository direct child of the workspace root that is materialized under a branch workspace with the same name, independently as either a symbolic link or a copy. A symbolic link continues to reference the root entry; a copy is a one-time independent snapshot, dereferencing a symbolic-link source when necessary, and never synchronizes or merges back. A missing copy may be explicitly repaired from the source's current content as a new snapshot but an existing copy is never overwritten. Copying content whose resolved source lies outside the workspace boundary requires separate approval. Configured repositories and all their worktrees, branch workspace directories, and application temporary entries are not eligible.
+_Avoid_: Workspace member, shared file, bootstrap file
+
 **Repository-only worktree**:
-A linked branch worktree that does not exist with the same branch name in every configured repository. It is changed only through that repository's ordinary worktree actions.
+A linked branch worktree that is not a member of a workspace worktree. It is changed only through that repository's ordinary worktree actions.
 _Avoid_: Orphan worktree, detached worktree
 
-**Workspace batch operation**:
-A server-coordinated Git operation applied sequentially to the configured repositories with per-repository results and no automatic rollback.
-When batch worktree removal includes local branch cleanup, that cleanup is explicitly forceful and may discard unpushed commits; dirty, locked, and primary worktrees remain removal safety boundaries.
-_Avoid_: Workspace transaction, multi-repository Git command
+**Branch workspace operation**:
+A server-coordinated creation, extension, repair, or removal of one branch workspace. Member work is applied sequentially with per-member results and no automatic rollback, but this cross-repository orchestration is not exposed as a separate batch concept.
+When removal includes local branch cleanup, that cleanup applies only to branches created for the branch workspace and is explicitly forceful, so it may discard their unpushed commits; pre-existing branches are retained. Dirty worktrees may be removed only when the removal request explicitly enables force removal, which discards their uncommitted changes; locked and primary worktrees remain removal safety boundaries. Modified copied auxiliary entries, unregistered contents, and internal terminals running anywhere under the branch workspace require separate destructive approval; approved terminals are closed before file removal, while symbolic-link removal never removes its target.
+_Avoid_: Workspace batch operation, workspace transaction, multi-repository Git command
 
 **Plain workspace**:
 A readable directory opened as a workspace without requiring Git metadata.

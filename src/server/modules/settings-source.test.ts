@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { defaultSessionState } from '#/shared/settings-defaults.ts'
 import { COLOR_THEMES } from '#/shared/color-theme.ts'
+import { normalizeRemoteRepoRef, remoteRepoSessionEntry } from '#/shared/remote-repo.ts'
 
 let tmp: string | null = null
 let previousDataDir = process.env.GOBLIN_SERVER_DATA_DIR
@@ -651,7 +652,7 @@ test('persists and normalizes the global project list expansion preference', asy
   ).resolves.toMatchObject({ projectListExpanded: false })
 })
 
-test('persists an active child repository for an open multi-repository workspace root', async () => {
+test('migrates an active child repository for an open multi-repository workspace root', async () => {
   useTempServerSettingsDir()
   const mod = await import('#/server/modules/settings-source.ts')
   const root = '/tmp/workspace'
@@ -666,7 +667,26 @@ test('persists an active child repository for an open multi-repository workspace
     }),
   ).resolves.toMatchObject({
     activeRepo: child,
-    workspaceActiveRepoByRoot: { [root]: child },
+    workspaceActiveContextByRoot: { [root]: { kind: 'repository', repositoryId: child } },
+  })
+})
+
+test('migrates an active child repository for an open remote workspace root', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+  const root = normalizeRemoteRepoRef({ alias: 'example', remotePath: '/srv/workspace' })!
+  const child = normalizeRemoteRepoRef({ alias: 'example', remotePath: '/srv/workspace/api' })!
+
+  await expect(
+    mod.setServerSessionState({
+      ...defaultSessionState(),
+      openRepos: [remoteRepoSessionEntry(root)],
+      activeRepo: child.id,
+      workspaceActiveRepoByRoot: { [root.id]: child.id },
+    }),
+  ).resolves.toMatchObject({
+    activeRepo: child.id,
+    workspaceActiveContextByRoot: { [root.id]: { kind: 'repository', repositoryId: child.id } },
   })
 })
 
@@ -687,7 +707,33 @@ test('drops workspace selections that are not immediate children of an open loca
     }),
   ).resolves.toMatchObject({
     activeRepo: null,
-    workspaceActiveRepoByRoot: {},
+    workspaceActiveContextByRoot: {},
+  })
+})
+
+test('normalizes tagged workspace contexts and prunes per-root expansion state', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+  const root = '/tmp/workspace'
+
+  await expect(
+    mod.setServerSessionState({
+      ...defaultSessionState(),
+      openRepos: [{ kind: 'local', id: root }],
+      workspaceActiveContextByRoot: {
+        [root]: { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
+        '/tmp/closed': { kind: 'overview' },
+      },
+      workspaceRepositoryListExpandedByRoot: {
+        [root]: false,
+        '/tmp/closed': false,
+      },
+    }),
+  ).resolves.toMatchObject({
+    workspaceActiveContextByRoot: {
+      [root]: { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
+    },
+    workspaceRepositoryListExpandedByRoot: { [root]: false },
   })
 })
 

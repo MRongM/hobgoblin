@@ -10,6 +10,9 @@ interface WorktreeBootstrapCandidateListProps {
   candidates: readonly WorktreeBootstrapCandidate[]
   choices: Readonly<Record<string, WorktreeBootstrapCandidateChoice | undefined>>
   onChoiceChange: (path: string, choice: WorktreeBootstrapCandidateChoice) => void
+  headingId?: string
+  label?: string
+  description?: string
 }
 
 const CHOICES = [
@@ -22,20 +25,20 @@ export function WorktreeBootstrapCandidateList({
   candidates,
   choices,
   onChoiceChange,
+  headingId = 'worktree-bootstrap-candidates-label',
+  label,
+  description,
 }: WorktreeBootstrapCandidateListProps) {
   const t = useT()
 
   return (
-    <section
-      className="rounded-md border border-border/80 bg-muted/20"
-      aria-labelledby="worktree-bootstrap-candidates-label"
-    >
+    <section className="rounded-md border border-border/80 bg-muted/20" aria-labelledby={headingId}>
       <div className="space-y-0.5 border-b border-border/70 px-3 py-2">
-        <h3 id="worktree-bootstrap-candidates-label" className="text-xs font-medium text-foreground">
-          {t('action.create-worktree-bootstrap-candidates-label')}
+        <h3 id={headingId} className="text-xs font-medium text-foreground">
+          {label ?? t('action.create-worktree-bootstrap-candidates-label')}
         </h3>
         <p className="text-[11px] leading-4 text-muted-foreground">
-          {t('action.create-worktree-bootstrap-candidates-description')}
+          {description ?? t('action.create-worktree-bootstrap-candidates-description')}
         </p>
       </div>
       <ScrollArea className="max-h-44" scrollbarMode="compact">

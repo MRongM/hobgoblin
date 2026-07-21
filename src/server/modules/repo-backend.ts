@@ -97,6 +97,7 @@ import {
 import type { CreateWorktreeInput } from '#/shared/worktree-create.ts'
 import type {
   WorktreeBootstrapDecision,
+  WorktreeBootstrapCandidateScope,
   WorktreeBootstrapPreflightResult,
   WorktreeBootstrapPreviewResult,
 } from '#/shared/worktree-bootstrap-summary.ts'
@@ -154,11 +155,19 @@ export interface RepoBackend {
   deleteLocalTag(name: string, signal?: AbortSignal): Promise<ExecResult>
   pushLocalTag(name: string, signal?: AbortSignal, networkOptions?: GitNetworkOptions): Promise<ExecResult>
   getWorktreeBootstrapPreview(signal?: AbortSignal): Promise<WorktreeBootstrapPreviewResult>
-  getWorktreeBootstrapPreflight(signal?: AbortSignal): Promise<WorktreeBootstrapPreflightResult>
+  getWorktreeBootstrapPreflight(
+    signal?: AbortSignal,
+    candidateScope?: WorktreeBootstrapCandidateScope,
+  ): Promise<WorktreeBootstrapPreflightResult>
   createWorktree(
     input: CreateWorktreeInput,
     signal?: AbortSignal,
     options?: { worktreeBootstrap?: WorktreeBootstrapDecision },
+  ): Promise<ExecResult>
+  bootstrapWorktree(
+    worktreePath: string,
+    decision: WorktreeBootstrapDecision,
+    signal?: AbortSignal,
   ): Promise<ExecResult>
   deleteBranch(
     branch: string,
@@ -170,6 +179,7 @@ export interface RepoBackend {
       branch: string
       worktreePath: string
       alsoDeleteBranch: boolean
+      forceRemoveWorktree?: boolean
       forceDeleteBranch?: boolean
       alsoDeleteUpstream?: boolean
     },
@@ -420,15 +430,21 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       return await getLocalWorktreeBootstrapPreview(repoId, { signal })
     },
-    async getWorktreeBootstrapPreflight(signal) {
+    async getWorktreeBootstrapPreflight(signal, candidateScope) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
-      return await getLocalWorktreeBootstrapPreflight(repoId, { signal })
+      return await getLocalWorktreeBootstrapPreflight(repoId, {
+        signal,
+        ...(candidateScope ? { candidateScope } : {}),
+      })
     },
     async createWorktree(input, signal, options) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       const decision = options?.worktreeBootstrap
       if (decision?.kind === 'materialize') {
-        const validation = await validateLocalWorktreeBootstrapSelections(repoId, decision.selections, { signal })
+        const validation = await validateLocalWorktreeBootstrapSelections(repoId, decision.selections, {
+          signal,
+          ...(decision.candidateScope ? { candidateScope: decision.candidateScope } : {}),
+        })
         if (!validation.ok) return validation
       }
       const created = await createWorktree(repoId, input, signal)
@@ -455,6 +471,23 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
         ...(bootstrapped.worktreeBootstrap ? { worktreeBootstrap: bootstrapped.worktreeBootstrap } : {}),
       }
     },
+    async bootstrapWorktree(worktreePath, decision, signal) {
+      if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
+      if (decision.kind === 'skip') return { ok: true, message: '' }
+      if (decision.kind === 'materialize') {
+        const validation = await validateLocalWorktreeBootstrapSelections(repoId, decision.selections, {
+          signal,
+          ...(decision.candidateScope ? { candidateScope: decision.candidateScope } : {}),
+        })
+        if (!validation.ok) return validation
+        return await bootstrapWorktreeSelectionsAfterCreate(repoId, worktreePath, decision.selections, { signal })
+      }
+      const result = await bootstrapWorktreeAfterCreate(repoId, worktreePath, {
+        signal,
+        expectedConfigHash: decision.configHash,
+      })
+      return result.ok ? result : { ...result, message: `Worktree bootstrap failed: ${result.message}` }
+    },
     async deleteBranch(branch, options, signal) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       const validation = await validateBranchDeletion(branch, { force: options?.force }, signal)
@@ -466,7 +499,9 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       const worktrees = await getWorktrees(repoId, { signal })
       const removable = resolveRemovableWorktree(worktrees, input.branch, input.worktreePath, repoId)
       if (!removable.ok) return { ok: false, message: removable.message }
-      const invalid = validateRemovableWorktreeState(removable.target)
+      const invalid = validateRemovableWorktreeState(removable.target, {
+        forceRemoveWorktree: input.forceRemoveWorktree,
+      })
       if (invalid) return invalid
       if (input.alsoDeleteBranch) {
         const validation = await validateBranchDeletion(
@@ -477,7 +512,10 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
         )
         if (validation) return validation
       }
-      const removed = await removeWorktree(repoId, removable.target.path, signal)
+      const removed = await removeWorktree(repoId, removable.target.path, {
+        force: input.forceRemoveWorktree,
+        signal,
+      })
       if (!removed.ok || !input.alsoDeleteBranch) return removed
       return await deleteBranchAfterValidation(
         input.branch,
@@ -603,13 +641,19 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
     async getWorktreeBootstrapPreview(signal) {
       return await getRemoteWorktreeBootstrapPreview(target, { signal })
     },
-    async getWorktreeBootstrapPreflight(signal) {
-      return await getRemoteWorktreeBootstrapPreflight(target, { signal })
+    async getWorktreeBootstrapPreflight(signal, candidateScope) {
+      return await getRemoteWorktreeBootstrapPreflight(target, {
+        signal,
+        ...(candidateScope ? { candidateScope } : {}),
+      })
     },
     async createWorktree(input, signal, options) {
       const decision = options?.worktreeBootstrap
       if (decision?.kind === 'materialize') {
-        const validation = await validateRemoteWorktreeBootstrapSelections(target, decision.selections, { signal })
+        const validation = await validateRemoteWorktreeBootstrapSelections(target, decision.selections, {
+          signal,
+          ...(decision.candidateScope ? { candidateScope: decision.candidateScope } : {}),
+        })
         if (!validation.ok) return validation
       }
       const created = await createRemoteWorktree(target, { ...input, signal })
@@ -637,6 +681,22 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
         message: [created.message, bootstrapped.message].filter(Boolean).join('\n'),
         ...(bootstrapped.worktreeBootstrap ? { worktreeBootstrap: bootstrapped.worktreeBootstrap } : {}),
       }
+    },
+    async bootstrapWorktree(worktreePath, decision, signal) {
+      if (decision.kind === 'skip') return { ok: true, message: '' }
+      if (decision.kind === 'materialize') {
+        const validation = await validateRemoteWorktreeBootstrapSelections(target, decision.selections, {
+          signal,
+          ...(decision.candidateScope ? { candidateScope: decision.candidateScope } : {}),
+        })
+        if (!validation.ok) return validation
+        return await bootstrapRemoteWorktreeSelectionsAfterCreate(target, worktreePath, decision.selections, { signal })
+      }
+      const result = await bootstrapRemoteWorktreeAfterCreate(target, worktreePath, {
+        signal,
+        expectedConfigHash: decision.configHash,
+      })
+      return result.ok ? result : { ...result, message: `Worktree bootstrap failed: ${result.message}` }
     },
     async deleteBranch(branch, options, signal) {
       return await deleteRemoteBranch(target, { branch, force: options?.force, signal })

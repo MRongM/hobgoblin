@@ -745,6 +745,102 @@ describe('remote git helpers', () => {
     )
   })
 
+  test('removeRemoteWorktree force-removes known dirty worktrees without forcing branch deletion', async () => {
+    const run = vi.fn(async (command: { type: string }) => {
+      switch (command.type) {
+        case 'gitWorktreeList':
+          return okRemoteResult(
+            [
+              'worktree /srv/repo',
+              'HEAD f00ba4',
+              'branch refs/heads/main',
+              '',
+              'worktree /srv/repo-feature',
+              'HEAD ba5eba1',
+              'branch refs/heads/feature/test',
+            ].join('\n'),
+          )
+        case 'gitStatus':
+          return okRemoteResult(' M changed.ts\0')
+        case 'gitWorktreeRemove':
+          return okRemoteResult('Removed worktree')
+        default:
+          return okRemoteResult('')
+      }
+    })
+
+    const result = await removeRemoteWorktree(TARGET, {
+      branch: 'feature/test',
+      worktreePath: '/srv/repo-feature',
+      alsoDeleteBranch: false,
+      forceRemoveWorktree: true,
+      run: run as any,
+    })
+
+    expect(result).toEqual({ ok: true, message: 'Removed worktree' })
+    expect(run).toHaveBeenCalledWith(
+      { type: 'gitWorktreeRemove', path: '/srv/repo', worktreePath: '/srv/repo-feature', force: true },
+      TARGET,
+      { signal: undefined, timeoutMs: 180_000 },
+    )
+    expect(run).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'gitBranchDelete' }),
+      TARGET,
+      expect.anything(),
+    )
+  })
+
+  test.each([
+    {
+      name: 'locked worktree',
+      lockedLine: 'locked',
+      statusResult: okRemoteResult(''),
+      expectedMessage: 'error.cannot-remove-locked-worktree',
+    },
+    {
+      name: 'unavailable status',
+      lockedLine: null,
+      statusResult: failRemoteResult('status failed'),
+      expectedMessage: 'error.cannot-remove-dirty-worktree',
+    },
+  ])('removeRemoteWorktree keeps the $name safety boundary when force is enabled', async (testCase) => {
+    const run = vi.fn(async (command: { type: string }) => {
+      if (command.type === 'gitWorktreeList') {
+        return okRemoteResult(
+          [
+            'worktree /srv/repo',
+            'HEAD f00ba4',
+            'branch refs/heads/main',
+            '',
+            'worktree /srv/repo-feature',
+            'HEAD ba5eba1',
+            'branch refs/heads/feature/test',
+            testCase.lockedLine,
+          ]
+            .filter((line): line is string => line !== null)
+            .join('\n'),
+        )
+      }
+      if (command.type === 'gitStatus') return testCase.statusResult
+      return okRemoteResult('')
+    })
+
+    const result = await removeRemoteWorktree(TARGET, {
+      branch: 'feature/test',
+      worktreePath: '/srv/repo-feature',
+      alsoDeleteBranch: false,
+      forceRemoveWorktree: true,
+      run: run as any,
+    })
+
+    expect(result).toEqual({ ok: false, message: testCase.expectedMessage })
+    expect(run).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'gitWorktreeRemove' }),
+      TARGET,
+      expect.anything(),
+    )
+  })
+
   test('checkoutRemoteBranch rejects invalid branch names before running remote commands', async () => {
     const run = vi.fn()
 
@@ -1139,6 +1235,27 @@ describe('remote git helpers', () => {
     expect(run).toHaveBeenCalledWith({ type: 'worktreeBootstrapCandidates', sourceRoot: '/srv/repo' }, TARGET, {
       signal: undefined,
     })
+  })
+
+  test('forwards ignored-only candidate scope to remote discovery', async () => {
+    const run = vi.fn(async (command: { type: string }) => {
+      if (command.type === 'readFileTreeTextFile') {
+        return okRemoteResult(JSON.stringify({ ok: false, message: 'error.path-not-found' }))
+      }
+      if (command.type === 'worktreeBootstrapCandidates') {
+        return okRemoteResult(JSON.stringify({ ok: true, candidates: [] }))
+      }
+      return okRemoteResult('')
+    })
+
+    await expect(
+      getRemoteWorktreeBootstrapPreflight(TARGET, { candidateScope: 'ignored-only', run: run as any }),
+    ).resolves.toEqual({ ok: true, preflight: { kind: 'candidates', candidates: [] } })
+    expect(run).toHaveBeenCalledWith(
+      { type: 'worktreeBootstrapCandidates', sourceRoot: '/srv/repo', candidateScope: 'ignored-only' },
+      TARGET,
+      { signal: undefined },
+    )
   })
 
   test('returns configured remote preflight for an existing empty goblin.toml', async () => {

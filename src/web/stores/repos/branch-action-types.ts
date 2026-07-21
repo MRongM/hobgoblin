@@ -14,6 +14,7 @@ export type RepoBranchAction =
       branch: string
       worktreePath: string
       alsoDeleteBranch: boolean
+      forceRemoveWorktree?: boolean
       forceDeleteBranch?: boolean
       alsoDeleteUpstream?: boolean
     }

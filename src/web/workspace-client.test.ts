@@ -9,12 +9,17 @@ vi.mock('#/web/lib/server-fetch.ts', () => ({
 }))
 
 import {
-  abortWorkspaceWorktree,
+  abortBranchWorkspace,
   configureWorkspace,
   discoverWorkspace,
-  executeWorkspaceWorktree,
-  planWorkspaceWorktree,
+  executeBranchWorkspace,
+  planBranchWorkspace,
+  readBranchWorkspaces,
+  reorderBranchWorkspaces,
   restoreWorkspace,
+  planWorkspacePull,
+  executeWorkspacePull,
+  abortWorkspacePull,
 } from '#/web/workspace-client.ts'
 
 describe('workspace client', () => {
@@ -63,45 +68,70 @@ describe('workspace client', () => {
     })
   })
 
-  test('posts typed worktree plan, execute, and abort requests', async () => {
+  test('posts the root id to the branch workspace read endpoint with cancellation', async () => {
+    const result = { ok: true, rootId: '/workspace', items: [], auxiliaryCandidates: [] }
+    const controller = new AbortController()
+    mocks.postServerJson.mockResolvedValue(result)
+
+    await expect(readBranchWorkspaces('/workspace', controller.signal)).resolves.toEqual(result)
+    expect(mocks.postServerJson).toHaveBeenCalledWith(
+      '/api/workspace/branch-workspaces/read',
+      { rootId: '/workspace' },
+      { signal: controller.signal },
+    )
+  })
+
+  test('posts typed branch workspace plan, execute, abort, and reorder requests', async () => {
     mocks.postServerJson.mockResolvedValue({ ok: true })
+    const request = {
+      operation: 'create' as const,
+      branch: 'feature/auth',
+      repositories: [{ repositoryName: 'api', baseBranch: 'main' }],
+      auxiliaryEntries: [{ name: 'README.md', mode: 'copy' as const }],
+    }
 
-    await planWorkspaceWorktree('/workspace', {
-      operation: 'remove',
-      branch: 'feature/a',
-      alsoDeleteBranch: true,
-      alsoDeleteUpstream: true,
-    })
-    await executeWorkspaceWorktree('/workspace', { planToken: 'sha256:plan', approveBootstrap: false })
-    await abortWorkspaceWorktree('/workspace')
-
-    expect(mocks.postServerJson).toHaveBeenNthCalledWith(1, '/api/workspace/worktrees/plan', {
-      rootPath: '/workspace',
-      request: {
-        operation: 'remove',
-        branch: 'feature/a',
-        alsoDeleteBranch: true,
-        alsoDeleteUpstream: true,
-      },
-    })
-    expect(mocks.postServerJson).toHaveBeenNthCalledWith(2, '/api/workspace/worktrees/execute', {
-      rootPath: '/workspace',
+    await planBranchWorkspace('/workspace', request)
+    await executeBranchWorkspace('/workspace', {
       planToken: 'sha256:plan',
-      approveBootstrap: false,
+      approvals: ['outside-root-source'],
     })
-    expect(mocks.postServerJson).toHaveBeenNthCalledWith(3, '/api/workspace/worktrees/abort', {
-      rootPath: '/workspace',
+    await abortBranchWorkspace('/workspace')
+    await reorderBranchWorkspaces('/workspace', ['third', 'first'])
+
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(1, '/api/workspace/branch-workspaces/plan', {
+      rootId: '/workspace',
+      request,
+    })
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(2, '/api/workspace/branch-workspaces/execute', {
+      rootId: '/workspace',
+      planToken: 'sha256:plan',
+      approvals: ['outside-root-source'],
+    })
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(3, '/api/workspace/branch-workspaces/abort', {
+      rootId: '/workspace',
+    })
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(4, '/api/workspace/branch-workspaces/reorder', {
+      rootId: '/workspace',
+      orderedIds: ['third', 'first'],
     })
   })
 
-  test('posts a branchless pull plan request', async () => {
+  test('posts pull-only plan, execute, and abort requests', async () => {
     mocks.postServerJson.mockResolvedValue({ ok: true })
 
-    await planWorkspaceWorktree('/workspace', { operation: 'pull' })
+    await planWorkspacePull('/workspace')
+    await executeWorkspacePull('/workspace', { planToken: 'sha256:pull' })
+    await abortWorkspacePull('/workspace')
 
-    expect(mocks.postServerJson).toHaveBeenCalledWith('/api/workspace/worktrees/plan', {
-      rootPath: '/workspace',
-      request: { operation: 'pull' },
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(1, '/api/workspace/pull/plan', {
+      rootId: '/workspace',
+    })
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(2, '/api/workspace/pull/execute', {
+      rootId: '/workspace',
+      planToken: 'sha256:pull',
+    })
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(3, '/api/workspace/pull/abort', {
+      rootId: '/workspace',
     })
   })
 })

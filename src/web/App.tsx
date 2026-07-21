@@ -62,6 +62,7 @@ import { useSessionPersistence } from '#/web/hooks/useSessionPersistence.ts'
 import { useSettingsWriteErrorToast } from '#/web/hooks/useSettingsWriteErrorToast.ts'
 import { useRepoStoreInvalidationRefresh } from '#/web/hooks/useRepoStoreInvalidationRefresh.ts'
 import { useSettingsQueryInvalidationSync } from '#/web/settings-queries.ts'
+import { useBranchWorkspaceInvalidationSync } from '#/web/branch-workspace-queries.ts'
 import { MainWindowNavigationProvider, useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import { useResponsiveUiMode } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { cn } from '#/web/lib/cn.ts'
@@ -102,6 +103,7 @@ export function App({ routeSettingsPage = null, onRouteSettingsPageChange }: App
   useHeuristicRepoStatusRefresh()
   useRepoStoreInvalidationRefresh()
   useSettingsQueryInvalidationSync()
+  useBranchWorkspaceInvalidationSync()
   useRendererEffectIntentRouter({
     navigation,
     currentRepoId: visibleRepoId,

@@ -281,6 +281,23 @@ export class TerminalSessionManager<TOwner extends string | number> {
     this.disposeSessionResources(session)
   }
 
+  closeSessions(sessionIds: string[]): { closed: string[]; missing: string[]; scopes: string[] } {
+    const closed: string[] = []
+    const missing: string[] = []
+    const scopes = new Set<string>()
+    for (const sessionId of new Set(sessionIds)) {
+      const session = this.sessionsById.get(sessionId)
+      if (!session) {
+        missing.push(sessionId)
+        continue
+      }
+      closed.push(sessionId)
+      scopes.add(session.scope)
+      this.closeSession(sessionId)
+    }
+    return { closed, missing, scopes: [...scopes] }
+  }
+
   closeKey(key: string): void {
     for (const session of Array.from(this.sessionsById.values())) {
       if (session.key === key || session.key.startsWith(`${key}\0`)) this.closeSession(session.id)

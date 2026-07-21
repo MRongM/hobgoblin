@@ -42,7 +42,8 @@ export function restorableWorkspaceStateFromStore(
     ReposStore,
     | 'order'
     | 'activeId'
-    | 'workspaceActiveRepoByRoot'
+    | 'workspaceActiveContextByRoot'
+    | 'workspaceRepositoryListExpandedByRoot'
     | 'projectListExpanded'
     | 'detailCollapsed'
     | 'detailFocusMode'
@@ -58,7 +59,8 @@ export function restorableWorkspaceStateFromStore(
   return {
     order: state.order,
     activeId: state.activeId,
-    workspaceActiveRepoByRoot: state.workspaceActiveRepoByRoot,
+    workspaceActiveContextByRoot: state.workspaceActiveContextByRoot,
+    workspaceRepositoryListExpandedByRoot: state.workspaceRepositoryListExpandedByRoot,
     projectListExpanded: state.projectListExpanded,
     detailCollapsed: state.detailCollapsed,
     detailFocusMode: state.detailFocusMode,

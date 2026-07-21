@@ -100,6 +100,7 @@ const mocks = vi.hoisted(() => ({
   generateCommitMessageFromPatch: vi.fn(),
   resetHardToCurrentHead: vi.fn(),
   resetRemoteHard: vi.fn(),
+  assertBranchWorkspaceFileMutationAllowed: vi.fn(),
   testRemoteRepository: vi.fn(),
 }))
 
@@ -118,6 +119,10 @@ vi.mock('#/system/git/branches.ts', () => ({
   getUpstream: mocks.getUpstream,
   isAncestor: mocks.isAncestor,
   isGitRepo: mocks.isGitRepo,
+}))
+
+vi.mock('#/server/modules/branch-workspace-protected-paths.ts', () => ({
+  assertBranchWorkspaceFileMutationAllowed: mocks.assertBranchWorkspaceFileMutationAllowed,
 }))
 
 vi.mock('#/system/git/helper.ts', () => ({
@@ -299,6 +304,7 @@ vi.mock('#/server/modules/background-sync.ts', () => ({
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.runServerCancellable.mockImplementation(async (_cwd, _kind, task) => await task(new AbortController().signal))
+  mocks.assertBranchWorkspaceFileMutationAllowed.mockResolvedValue({ ok: true })
   mocks.checkGitAvailable.mockResolvedValue({ ok: true, message: '' })
   mocks.fsStat.mockResolvedValue({ isDirectory: () => true })
   mocks.fsAccess.mockResolvedValue(undefined)
@@ -1095,6 +1101,22 @@ describe('repo mutation invalidation publishing', () => {
     expect(mocks.getLocalWorktreeBootstrapPreflight).toHaveBeenCalledWith('/tmp/repo', { signal: undefined })
   })
 
+  test('getRepositoryWorktreeBootstrapPreflight forwards candidate scope to the backend', async () => {
+    mocks.getLocalWorktreeBootstrapPreflight.mockResolvedValueOnce({
+      ok: true,
+      preflight: { kind: 'candidates', candidates: [] },
+    })
+    const { getRepositoryWorktreeBootstrapPreflight } = await import('#/server/modules/repo-read-paths.ts')
+
+    await expect(
+      getRepositoryWorktreeBootstrapPreflight('/tmp/repo', undefined, 'ignored-only'),
+    ).resolves.toMatchObject({ ok: true })
+    expect(mocks.getLocalWorktreeBootstrapPreflight).toHaveBeenCalledWith('/tmp/repo', {
+      signal: undefined,
+      candidateScope: 'ignored-only',
+    })
+  })
+
   test('getRepositoryWorktreeBootstrapPreview reads an explicit local worktree path', async () => {
     mocks.getWorktreeBootstrapPreview.mockResolvedValueOnce({
       ok: true,
@@ -1264,6 +1286,31 @@ describe('repo mutation invalidation publishing', () => {
     })
   })
 
+  test('bootstrapRepositoryWorktree revalidates ignored-only selections without creating a worktree', async () => {
+    const selections = [{ path: 'node_modules', mode: 'symlink' as const }]
+    mocks.bootstrapWorktreeSelectionsAfterCreate.mockResolvedValueOnce({ ok: true, message: 'linked' })
+    const { bootstrapRepositoryWorktree } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(
+      bootstrapRepositoryWorktree('/tmp/repo', '/tmp/repo-feature', {
+        kind: 'materialize',
+        candidateScope: 'ignored-only',
+        selections,
+      }),
+    ).resolves.toEqual({ ok: true, message: 'linked' })
+    expect(mocks.validateLocalWorktreeBootstrapSelections).toHaveBeenCalledWith('/tmp/repo', selections, {
+      signal: undefined,
+      candidateScope: 'ignored-only',
+    })
+    expect(mocks.bootstrapWorktreeSelectionsAfterCreate).toHaveBeenCalledWith(
+      '/tmp/repo',
+      '/tmp/repo-feature',
+      selections,
+      { signal: undefined },
+    )
+    expect(mocks.createWorktree).not.toHaveBeenCalled()
+  })
+
   test('createRepositoryBranch creates a local branch and publishes source-token invalidation', async () => {
     const { createRepositoryBranch } = await import('#/server/modules/repo-write-paths.ts')
 
@@ -1424,6 +1471,36 @@ describe('repo mutation invalidation publishing', () => {
     expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
       repoId: 'ssh-config://prod/srv/repo',
       query: 'repo-snapshot',
+    })
+  })
+
+  test('rename, delete, and move stop before filesystem dispatch when a branch workspace root is protected', async () => {
+    mocks.assertBranchWorkspaceFileMutationAllowed.mockResolvedValue({
+      ok: false,
+      message: 'branch-workspace.managed-path-protected',
+    })
+    const { deleteRepositoryFileTreeEntries, moveRepositoryFileTreeEntries, renameRepositoryFileTreeEntry } =
+      await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(
+      renameRepositoryFileTreeEntry('/workspace', '/workspace', '/workspace/goblin-feature', 'renamed'),
+    ).resolves.toEqual({ ok: false, message: 'branch-workspace.managed-path-protected' })
+    await expect(
+      deleteRepositoryFileTreeEntries('/workspace', '/workspace', ['/workspace/goblin-feature']),
+    ).resolves.toEqual({ ok: false, message: 'branch-workspace.managed-path-protected' })
+    await expect(
+      moveRepositoryFileTreeEntries('/workspace', '/workspace', ['/workspace/goblin-feature'], '/workspace/archive'),
+    ).resolves.toEqual({ ok: false, message: 'branch-workspace.managed-path-protected' })
+
+    expect(mocks.renameLocalFileTreeEntry).not.toHaveBeenCalled()
+    expect(mocks.deleteLocalFileTreeEntries).not.toHaveBeenCalled()
+    expect(mocks.moveLocalFileTreeEntries).not.toHaveBeenCalled()
+    expect(mocks.assertBranchWorkspaceFileMutationAllowed).toHaveBeenNthCalledWith(1, {
+      rootId: '/workspace',
+      kind: 'rename',
+      worktreePath: '/workspace',
+      paths: ['/workspace/goblin-feature'],
+      newName: 'renamed',
     })
   })
 
@@ -1780,6 +1857,35 @@ describe('repo mutation invalidation publishing', () => {
     })
   })
 
+  test('removeRepositoryWorktree force-removes a known dirty worktree without forcing branch deletion', async () => {
+    mocks.getWorktrees.mockResolvedValueOnce([
+      {
+        path: '/tmp/repo-worktree',
+        branch: 'feature/a',
+        isBare: false,
+        isPrimary: false,
+        isDirty: true,
+        changeCount: 1,
+      },
+    ])
+    const { removeRepositoryWorktree } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await removeRepositoryWorktree('/tmp/repo', {
+      branch: 'feature/a',
+      worktreePath: '/tmp/repo-worktree',
+      alsoDeleteBranch: false,
+      forceRemoveWorktree: true,
+      forceDeleteBranch: false,
+    })
+
+    expect(result).toEqual({ ok: true, message: 'ok' })
+    expect(mocks.removeWorktree).toHaveBeenCalledWith('/tmp/repo', '/tmp/repo-worktree', {
+      force: true,
+      signal: undefined,
+    })
+    expect(mocks.deleteBranch).not.toHaveBeenCalled()
+  })
+
   test('removeRepositoryWorktree publishes snapshot invalidation once after worktree and branch deletion success', async () => {
     mocks.getWorktrees.mockResolvedValueOnce([
       {
@@ -1847,6 +1953,7 @@ describe('repo mutation invalidation publishing', () => {
       branch: 'feature/a',
       worktreePath: '/tmp/repo-worktree',
       alsoDeleteBranch: false,
+      forceRemoveWorktree: true,
     })
 
     expect(result).toEqual({ ok: false, message: 'error.cannot-remove-locked-worktree' })
@@ -1863,6 +1970,7 @@ describe('repo mutation invalidation publishing', () => {
       branch: 'feature/a',
       worktreePath: '/tmp/repo-worktree',
       alsoDeleteBranch: false,
+      forceRemoveWorktree: true,
     })
 
     expect(result).toEqual({ ok: false, message: 'error.cannot-remove-dirty-worktree' })

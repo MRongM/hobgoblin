@@ -4,6 +4,7 @@ import type { ExecResult } from '#/shared/git-types.ts'
 import {
   isWorktreeBootstrapCandidatePath,
   type WorktreeBootstrapCandidate,
+  type WorktreeBootstrapCandidateScope,
   type WorktreeBootstrapPreflightResult,
   type WorktreeBootstrapSelection,
 } from '#/shared/worktree-bootstrap-summary.ts'
@@ -15,7 +16,7 @@ const CONFIG_FILE = 'goblin.toml'
 
 export async function getLocalWorktreeBootstrapPreflight(
   sourceCwd: string,
-  options: { signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal; candidateScope?: WorktreeBootstrapCandidateScope } = {},
 ): Promise<WorktreeBootstrapPreflightResult> {
   try {
     if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
@@ -27,7 +28,7 @@ export async function getLocalWorktreeBootstrapPreflight(
       return preview.ok ? { ok: true, preflight: { kind: 'configured', preview: preview.preview } } : preview
     }
 
-    const candidates = await listCandidates(sourceRoot, options.signal)
+    const candidates = await listCandidates(sourceRoot, options.candidateScope ?? 'all-untracked', options.signal)
     return { ok: true, preflight: { kind: 'candidates', candidates } }
   } catch (err) {
     if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
@@ -38,7 +39,7 @@ export async function getLocalWorktreeBootstrapPreflight(
 export async function validateLocalWorktreeBootstrapSelections(
   sourceCwd: string,
   selections: readonly WorktreeBootstrapSelection[],
-  options: { signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal; candidateScope?: WorktreeBootstrapCandidateScope } = {},
 ): Promise<ExecResult> {
   if (
     selections.some(
@@ -67,7 +68,11 @@ export async function validateLocalWorktreeBootstrapSelections(
   return { ok: true, message: '' }
 }
 
-async function listCandidates(sourceRoot: string, signal?: AbortSignal): Promise<WorktreeBootstrapCandidate[]> {
+async function listCandidates(
+  sourceRoot: string,
+  candidateScope: WorktreeBootstrapCandidateScope,
+  signal?: AbortSignal,
+): Promise<WorktreeBootstrapCandidate[]> {
   const tracked = await git(sourceRoot, ['ls-files', '-z'], { signal })
   if (signal?.aborted) throw new Error('cancelled')
   const trackedRoots = new Set(
@@ -76,10 +81,29 @@ async function listCandidates(sourceRoot: string, signal?: AbortSignal): Promise
       .filter(Boolean)
       .map((entry) => entry.split('/', 1)[0]!),
   )
+  const ignoredRoots =
+    candidateScope === 'ignored-only'
+      ? new Set(
+          (
+            await git(sourceRoot, ['ls-files', '--others', '--ignored', '--exclude-standard', '--directory', '-z'], {
+              signal,
+            })
+          )
+            .split('\0')
+            .filter(Boolean)
+            .map((entry) => entry.split('/', 1)[0]!),
+        )
+      : null
+  if (signal?.aborted) throw new Error('cancelled')
   const entries = await fs.readdir(sourceRoot, { withFileTypes: true })
   return entries
     .flatMap((entry): WorktreeBootstrapCandidate[] => {
-      if (entry.name === '.git' || trackedRoots.has(entry.name) || !isWorktreeBootstrapCandidatePath(entry.name)) {
+      if (
+        entry.name === '.git' ||
+        trackedRoots.has(entry.name) ||
+        (ignoredRoots !== null && !ignoredRoots.has(entry.name)) ||
+        !isWorktreeBootstrapCandidatePath(entry.name)
+      ) {
         return []
       }
       if (entry.isDirectory()) return [{ path: entry.name, kind: 'directory' }]

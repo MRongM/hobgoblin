@@ -1,4 +1,14 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { execa } from 'execa'
@@ -28,6 +38,25 @@ function testPosix(name: string, fn: () => Promise<void> | void): void {
 }
 
 describe('remote command scripts', () => {
+  test('adds one force flag only to explicitly forced worktree removal commands', () => {
+    const safe = buildRemoteCommandInvocation(TARGET, {
+      type: 'gitWorktreeRemove',
+      path: '/srv/repo',
+      worktreePath: '/srv/repo-feature',
+    })
+    const forced = buildRemoteCommandInvocation(TARGET, {
+      type: 'gitWorktreeRemove',
+      path: '/srv/repo',
+      worktreePath: '/srv/repo-feature',
+      force: true,
+    })
+
+    expect(safe.script).toContain("worktree remove -- '/srv/repo-feature'")
+    expect(safe.script).not.toContain('worktree remove --force')
+    expect(forced.script).toContain("worktree remove --force -- '/srv/repo-feature'")
+    expect(forced.script).not.toContain('worktree remove --force --force')
+  })
+
   test('builds safely quoted worktree bootstrap candidate discovery', () => {
     const invocation = buildRemoteCommandInvocation(TARGET, {
       type: 'worktreeBootstrapCandidates',
@@ -38,6 +67,126 @@ describe('remote command scripts', () => {
     expect(invocation.script).toContain('git", "-C", root, "ls-files", "-z"')
     expect(invocation.script).toContain('os.listdir(root)')
     expect(invocation.script).toContain('os.lstat(os.path.join(root, name))')
+  })
+
+  test('builds fixed branch workspace inspect and list commands with JSON encoded paths', () => {
+    const inspect = buildRemoteCommandInvocation(TARGET, {
+      type: 'inspectBranchWorkspacePath',
+      rootPath: '/srv/workspace',
+      candidatePath: "/srv/workspace/user's docs",
+    })
+    expect(inspect.script).toContain('python3')
+    expect(inspect.script).toContain('os.lstat')
+    expect(inspect.script).toContain('os.path.realpath')
+    expect(inspect.script).toContain("user's docs")
+
+    const list = buildRemoteCommandInvocation(TARGET, {
+      type: 'listBranchWorkspaceCandidates',
+      rootPath: '/srv/workspace',
+      excludedNames: ['api', "team's repo"],
+    })
+    expect(list.script).toContain('os.listdir')
+    expect(list.script).toContain('excluded_names')
+    expect(list.script).toContain("team's repo")
+  })
+
+  test('builds fixed branch workspace copy and fingerprint commands', () => {
+    const copy = buildRemoteCommandInvocation(TARGET, {
+      type: 'copyBranchWorkspaceEntry',
+      rootPath: '/srv/workspace',
+      sourcePath: '/srv/workspace/shared',
+      targetPath: '/srv/workspace/goblin-feature/shared',
+    })
+    expect(copy.script).toContain('shutil.copytree')
+    expect(copy.script).toContain('symlinks=True')
+    expect(copy.script).toContain('os.path.realpath(source_path)')
+
+    const fingerprint = buildRemoteCommandInvocation(TARGET, {
+      type: 'fingerprintBranchWorkspaceEntry',
+      rootPath: '/srv/workspace',
+      targetPath: '/srv/workspace/goblin-feature/shared',
+    })
+    expect(fingerprint.script).toContain('hashlib.sha256')
+    expect(fingerprint.script).toContain('os.readlink')
+    expect(fingerprint.script).toContain('os.lstat')
+  })
+
+  test('builds a no-follow branch workspace removal command', () => {
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'removeBranchWorkspaceEntry',
+      rootPath: '/srv/workspace',
+      targetPath: '/srv/workspace/goblin-feature/shared',
+    })
+    expect(invocation.script).toContain('os.lstat')
+    expect(invocation.script).toContain('os.unlink')
+    expect(invocation.script).not.toContain('os.path.realpath(target_path)')
+  })
+
+  testPosix('executes branch workspace copy, fingerprint, and no-follow removal scripts', async () => {
+    const directory = path.join(os.tmpdir(), `hobgoblin-remote-branch-workspace-${Date.now()}-${process.pid}`)
+    tempDirs.push(directory)
+    const root = path.join(directory, 'workspace')
+    const source = path.join(root, 'docs')
+    const branchRoot = path.join(root, 'goblin-feature')
+    const copied = path.join(branchRoot, 'docs')
+    mkdirSync(source, { recursive: true })
+    writeFileSync(path.join(source, 'guide.md'), 'guide')
+    symlinkSync('guide.md', path.join(source, 'guide-link'))
+
+    await execa('sh', [
+      '-c',
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'createBranchWorkspaceDirectory',
+        rootPath: root,
+        targetPath: branchRoot,
+      }).script,
+    ])
+    await execa('sh', [
+      '-c',
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'copyBranchWorkspaceEntry',
+        rootPath: root,
+        sourcePath: source,
+        targetPath: copied,
+      }).script,
+    ])
+
+    expect(readFileSync(path.join(copied, 'guide.md'), 'utf8')).toBe('guide')
+    expect(lstatSync(path.join(copied, 'guide-link')).isSymbolicLink()).toBe(true)
+    expect(readlinkSync(path.join(copied, 'guide-link'))).toBe('guide.md')
+
+    const fingerprint = await execa('sh', [
+      '-c',
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'fingerprintBranchWorkspaceEntry',
+        rootPath: root,
+        targetPath: copied,
+      }).script,
+    ])
+    expect(fingerprint.stdout).toMatch(/^[a-f0-9]{64}$/)
+
+    const managedLink = path.join(branchRoot, 'README.md')
+    const sourceFile = path.join(root, 'README.md')
+    writeFileSync(sourceFile, 'keep')
+    await execa('sh', [
+      '-c',
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'materializeBranchWorkspaceSymlink',
+        rootPath: root,
+        sourcePath: sourceFile,
+        targetPath: managedLink,
+      }).script,
+    ])
+    await execa('sh', [
+      '-c',
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'removeBranchWorkspaceEntry',
+        rootPath: root,
+        targetPath: managedLink,
+      }).script,
+    ])
+    expect(existsSync(managedLink)).toBe(false)
+    expect(readFileSync(sourceFile, 'utf8')).toBe('keep')
   })
 
   test('builds depth-one workspace marker discovery and path existence commands', () => {
@@ -65,7 +214,7 @@ describe('remote command scripts', () => {
     expect(exists.script).toContain('__HOBGOBLIN_PATH_MISSING__')
   })
 
-  testPosix('workspace marker discovery emits NUL-delimited immediate git directories', async () => {
+  testPosix('workspace discovery emits only NUL-delimited immediate primary worktrees', async () => {
     const dir = path.join(os.tmpdir(), `hobgoblin-workspace-discovery-${Date.now()}-${process.pid}`)
     tempDirs.push(dir)
     const root = path.join(dir, "work space's")
@@ -73,10 +222,23 @@ describe('remote command scripts', () => {
     const web = path.join(root, 'web')
     const linked = path.join(root, 'linked')
     const linkedTarget = path.join(dir, 'linked-target')
-    mkdirSync(path.join(api, '.git'), { recursive: true })
-    mkdirSync(web, { recursive: true })
-    writeFileSync(path.join(web, '.git'), 'gitdir: ../metadata\n')
-    mkdirSync(path.join(linkedTarget, '.git'), { recursive: true })
+    mkdirSync(root, { recursive: true })
+    await execa('git', ['init', api])
+    writeFileSync(path.join(api, 'README.md'), 'workspace repository\n')
+    await execa('git', ['-C', api, 'add', 'README.md'])
+    await execa('git', [
+      '-C',
+      api,
+      '-c',
+      'user.name=Test User',
+      '-c',
+      'user.email=test@example.com',
+      'commit',
+      '-m',
+      'Initial commit',
+    ])
+    await execa('git', ['-C', api, 'worktree', 'add', '-b', 'feature/test', web])
+    await execa('git', ['init', linkedTarget])
     symlinkSync(linkedTarget, linked)
     mkdirSync(path.join(root, 'docs'), { recursive: true })
 
@@ -86,7 +248,7 @@ describe('remote command scripts', () => {
     })
     const result = await execa('sh', ['-c', invocation.script])
 
-    expect(result.stdout.split('\0').filter(Boolean).sort()).toEqual([api, linked, web].sort())
+    expect(result.stdout.split('\0').filter(Boolean).sort()).toEqual([api, linked].sort())
   })
 
   testPosix(

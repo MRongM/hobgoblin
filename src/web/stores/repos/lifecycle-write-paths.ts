@@ -378,9 +378,11 @@ export function createRuntimeRepoLifecycleActions(
         const nextProjectId = nextActiveRepoIdAfterWorkspaceClose(s.order, currentProjectId, projectId)
         const activeId = nextProjectId ? projectActivationTarget(s, nextProjectId) : null
         const workspaceProjects = { ...s.workspaceProjects }
-        const workspaceActiveRepoByRoot = { ...s.workspaceActiveRepoByRoot }
+        const workspaceActiveContextByRoot = { ...s.workspaceActiveContextByRoot }
+        const workspaceRepositoryListExpandedByRoot = { ...s.workspaceRepositoryListExpandedByRoot }
         delete workspaceProjects[projectId]
-        delete workspaceActiveRepoByRoot[projectId]
+        delete workspaceActiveContextByRoot[projectId]
+        delete workspaceRepositoryListExpandedByRoot[projectId]
         return {
           repos,
           branchSearchQueries,
@@ -388,7 +390,8 @@ export function createRuntimeRepoLifecycleActions(
           order,
           activeId,
           workspaceProjects,
-          workspaceActiveRepoByRoot,
+          workspaceActiveContextByRoot,
+          workspaceRepositoryListExpandedByRoot,
         }
       })
     },
@@ -560,9 +563,17 @@ function applyWorkspaceDiscoveryResult(
       result.skipped.length === 0
     ) {
       delete workspaceProjects[rootId]
-      const workspaceActiveRepoByRoot = { ...state.workspaceActiveRepoByRoot }
-      delete workspaceActiveRepoByRoot[rootId]
-      return { repos, order, workspaceProjects, workspaceActiveRepoByRoot }
+      const workspaceActiveContextByRoot = { ...state.workspaceActiveContextByRoot }
+      const workspaceRepositoryListExpandedByRoot = { ...state.workspaceRepositoryListExpandedByRoot }
+      delete workspaceActiveContextByRoot[rootId]
+      delete workspaceRepositoryListExpandedByRoot[rootId]
+      return {
+        repos,
+        order,
+        workspaceProjects,
+        workspaceActiveContextByRoot,
+        workspaceRepositoryListExpandedByRoot,
+      }
     }
     workspaceProjects[rootId] = {
       rootId,
@@ -585,9 +596,12 @@ function applyWorkspaceDiscoveryResult(
         order,
         activeId,
         workspaceProjects,
-        workspaceActiveRepoByRoot: {
-          ...state.workspaceActiveRepoByRoot,
-          [rootId]: activeId === rootId ? null : activeId,
+        workspaceActiveContextByRoot: {
+          ...state.workspaceActiveContextByRoot,
+          [rootId]:
+            activeId === rootId
+              ? { kind: 'overview' as const }
+              : { kind: 'repository' as const, repositoryId: activeId },
         },
       }
     }

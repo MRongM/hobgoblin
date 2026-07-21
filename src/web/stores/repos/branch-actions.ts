@@ -21,17 +21,12 @@ import {
   evaluateBranchActionSchedule as evaluateBranchActionScheduleDecision,
   isNetworkBranchActionKind,
 } from '#/web/stores/repos/branch-action-scheduler.ts'
-import {
-  NON_GIT_REPO_OPERATION_RESULT,
-  repoSupportsGitData,
-} from '#/web/stores/repos/capabilities.ts'
+import { NON_GIT_REPO_OPERATION_RESULT, repoSupportsGitData } from '#/web/stores/repos/capabilities.ts'
 import type { RepoEventAction, RepoState, ReposGet, ReposSet } from '#/web/stores/repos/types.ts'
 import type { ExecResult } from '#/web/types.ts'
 import type { CreateWorktreeInput } from '#/shared/worktree-create.ts'
 import { runRepoRefreshIntent } from '#/web/stores/repos/refresh-coordinator.ts'
-import {
-  runWithRepoInvalidationSource,
-} from '#/web/stores/repos/invalidation-sources.ts'
+import { runWithRepoInvalidationSource } from '#/web/stores/repos/invalidation-sources.ts'
 import {
   checkoutRepositoryBranch,
   createRepositoryBranch,
@@ -118,7 +113,11 @@ function branchActionEventAction(action: RepoBranchAction): RepoEventAction {
     case 'trackRemoteBranch':
       return { kind: action.kind, branch: action.localBranch, remoteRef: action.remoteRef }
     case 'createWorktree':
-      return { kind: action.kind, branch: createWorktreeEventBranch(action.input), worktreePath: action.input.worktreePath }
+      return {
+        kind: action.kind,
+        branch: createWorktreeEventBranch(action.input),
+        worktreePath: action.input.worktreePath,
+      }
     case 'removeWorktree':
       return {
         kind: action.kind,
@@ -261,6 +260,7 @@ function runBranchActionRpc(
           branch: action.branch,
           worktreePath: action.worktreePath,
           alsoDeleteBranch: action.alsoDeleteBranch,
+          forceRemoveWorktree: action.forceRemoveWorktree,
           forceDeleteBranch: action.forceDeleteBranch,
           alsoDeleteUpstream: action.alsoDeleteUpstream,
         },

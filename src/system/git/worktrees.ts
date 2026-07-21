@@ -54,17 +54,20 @@ export async function getWorktrees(cwd: string, options?: GetWorktreesOptions): 
  *  external disk or a busy filesystem still stays inside the budget. */
 const WORKTREE_OP_TIMEOUT_MS = 180_000
 
-/** Plain `git worktree remove` — no `--force`. Git refuses on dirty,
- *  locked, or otherwise non-removable worktrees, which is exactly the
- *  safety net we want; the IPC handler has already pre-checked the
- *  expected cases and surfaced friendlier errors, so anything that
- *  reaches here is a corner case worth showing git's own message for. */
-export async function removeWorktree(cwd: string, worktreePath: string, signal?: AbortSignal): Promise<ExecResult> {
+/** A single `--force` may discard uncommitted changes but cannot override
+ *  a worktree lock. Callers pre-check the expected safety boundaries so
+ *  remaining failures retain Git's own diagnostic. */
+export async function removeWorktree(
+  cwd: string,
+  worktreePath: string,
+  options: { force?: boolean; signal?: AbortSignal } = {},
+): Promise<ExecResult> {
   return gitResultWithOptions(
     cwd,
-    { timeoutMs: WORKTREE_OP_TIMEOUT_MS, signal },
+    { timeoutMs: WORKTREE_OP_TIMEOUT_MS, signal: options.signal },
     'worktree',
     'remove',
+    ...(options.force ? ['--force'] : []),
     '--',
     worktreePath,
   )
@@ -75,7 +78,13 @@ export async function createWorktree(
   input: CreateWorktreeInput,
   signal?: AbortSignal,
 ): Promise<ExecResult> {
-  return gitResultWithOptions(cwd, { timeoutMs: WORKTREE_OP_TIMEOUT_MS, signal }, 'worktree', 'add', ...createWorktreeArgs(input))
+  return gitResultWithOptions(
+    cwd,
+    { timeoutMs: WORKTREE_OP_TIMEOUT_MS, signal },
+    'worktree',
+    'add',
+    ...createWorktreeArgs(input),
+  )
 }
 
 function createWorktreeArgs(input: CreateWorktreeInput): string[] {

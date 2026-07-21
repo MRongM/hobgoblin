@@ -7,7 +7,9 @@ vi.mock('#/system/git/helper.ts', async () => {
   const actual = await vi.importActual<typeof import('#/system/git/helper.ts')>('#/system/git/helper.ts')
   return {
     ...actual,
-    gitResultWithOptions: vi.fn((cwd: string, opts: unknown, ...args: string[]) => gitResultWithOptionsMock(cwd, opts, ...args)),
+    gitResultWithOptions: vi.fn((cwd: string, opts: unknown, ...args: string[]) =>
+      gitResultWithOptionsMock(cwd, opts, ...args),
+    ),
   }
 })
 
@@ -50,19 +52,26 @@ describe('worktree git operations', () => {
       },
       ['worktree', 'add', '--detach', '--', '/tmp/repo-detached', 'origin/feature/branch'],
     ],
-  ])('delegates %s createWorktree to git worktree add with the shared timeout and signal', async (_name, input, expectedArgs) => {
-    const signal = new AbortController().signal
+  ])(
+    'delegates %s createWorktree to git worktree add with the shared timeout and signal',
+    async (_name, input, expectedArgs) => {
+      const signal = new AbortController().signal
 
-    const result = await createWorktree('/tmp/repo', input, signal)
+      const result = await createWorktree('/tmp/repo', input, signal)
 
-    expect(result).toEqual({ ok: false, message: 'cancelled' })
-    expect(gitResultWithOptionsMock).toHaveBeenCalledWith('/tmp/repo', { timeoutMs: 180_000, signal }, ...expectedArgs)
-  })
+      expect(result).toEqual({ ok: false, message: 'cancelled' })
+      expect(gitResultWithOptionsMock).toHaveBeenCalledWith(
+        '/tmp/repo',
+        { timeoutMs: 180_000, signal },
+        ...expectedArgs,
+      )
+    },
+  )
 
   test('delegates removeWorktree to git worktree remove with the shared timeout and signal', async () => {
     const signal = new AbortController().signal
 
-    const result = await removeWorktree('/tmp/repo', '/tmp/repo-feature', signal)
+    const result = await removeWorktree('/tmp/repo', '/tmp/repo-feature', { signal })
 
     expect(result).toEqual({ ok: false, message: 'cancelled' })
     expect(gitResultWithOptionsMock).toHaveBeenCalledWith(
@@ -70,6 +79,23 @@ describe('worktree git operations', () => {
       { timeoutMs: 180_000, signal },
       'worktree',
       'remove',
+      '--',
+      '/tmp/repo-feature',
+    )
+  })
+
+  test('adds one force flag when removing a dirty worktree is explicitly approved', async () => {
+    const signal = new AbortController().signal
+
+    const result = await removeWorktree('/tmp/repo', '/tmp/repo-feature', { force: true, signal })
+
+    expect(result).toEqual({ ok: false, message: 'cancelled' })
+    expect(gitResultWithOptionsMock).toHaveBeenCalledWith(
+      '/tmp/repo',
+      { timeoutMs: 180_000, signal },
+      'worktree',
+      'remove',
+      '--force',
       '--',
       '/tmp/repo-feature',
     )

@@ -15,7 +15,13 @@ import { terminalSessionsQueryKey, terminalSessionsQueryOptions } from '#/web/te
 import { TerminalSessionRegistry } from '#/web/components/terminal/TerminalSessionRegistry.ts'
 import { setTerminalSessionCommandBridge } from '#/web/components/terminal/terminal-session-command-bridge.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
-import { repoIndexEqual, repoIndexFromRepos } from '#/web/components/terminal/terminal-repo-index.ts'
+import {
+  repoIndexEqual,
+  repoIndexFromRepos,
+  repoIndexWithBranchWorkspaces,
+} from '#/web/components/terminal/terminal-repo-index.ts'
+import { useBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
+import { workspaceRootIdForRepo } from '#/web/stores/repos/workspace-projects.ts'
 import { RepoSyncTracker } from '#/web/components/terminal/repo-sync-tracker.ts'
 import { useRuntimeTerminalSettings } from '#/web/runtime-settings-terminal-buttons.ts'
 import type { TerminalSessionContextValue, TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
@@ -27,11 +33,30 @@ interface TerminalSessionProviderProps {
   syncTracker?: RepoSyncTracker
 }
 
+const EMPTY_BRANCH_WORKSPACES = [] as const
+
 export function TerminalSessionProvider({ currentRepoId, children, syncTracker: syncTrackerProp }: TerminalSessionProviderProps) {
-  const repoIndex = useStoreWithEqualityFn(useReposStore, (s) => repoIndexFromRepos(s.repos), repoIndexEqual)
+  const baseRepoIndex = useStoreWithEqualityFn(useReposStore, (s) => repoIndexFromRepos(s.repos), repoIndexEqual)
+  const workspaceRootId = useReposStore(
+    useCallback(
+      (state) =>
+        currentRepoId
+          ? (workspaceRootIdForRepo(state, currentRepoId) ??
+            (state.workspaceProjects[currentRepoId] ? currentRepoId : null))
+          : null,
+      [currentRepoId],
+    ),
+  )
+  const branchWorkspaceQuery = useBranchWorkspaceQuery(workspaceRootId ?? '')
+  const branchWorkspaces = branchWorkspaceQuery.data?.ok ? branchWorkspaceQuery.data.items : EMPTY_BRANCH_WORKSPACES
+  const repoIndex = useMemo(
+    () => repoIndexWithBranchWorkspaces(baseRepoIndex, branchWorkspaces),
+    [baseRepoIndex, branchWorkspaces],
+  )
   const { terminalFontSize, terminalThemeSyncEnabled = true } = useRuntimeTerminalSettings()
   const terminalThemeMode = terminalThemeSyncEnabled ? 'theme' : 'classic'
   const currentRepoInstanceToken = currentRepoId ? (repoIndex[currentRepoId]?.instanceToken ?? null) : null
+  const currentRepoTerminalPaths = currentRepoId ? (repoIndex[currentRepoId]?.branchByWorktreePath ?? null) : null
   const selectedTerminalByWorktree = useReposStore((s) => s.selectedTerminalByWorktree)
   const visibleTerminalWorktreeKey = useReposStore(
     useCallback(
@@ -204,7 +229,7 @@ export function TerminalSessionProvider({ currentRepoId, children, syncTracker: 
       window.removeEventListener('focus', handleFocus)
       offSessionsChanged()
     }
-  }, [currentRepoId, currentRepoInstanceToken, registry, syncServerSessions, syncTracker])
+  }, [currentRepoId, currentRepoInstanceToken, currentRepoTerminalPaths, registry, syncServerSessions, syncTracker])
 
   const commandValue = useMemo<TerminalSessionContextValue>(
     () => ({

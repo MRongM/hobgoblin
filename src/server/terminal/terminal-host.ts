@@ -2,6 +2,7 @@ import type {
   TerminalAttachInput,
   TerminalAttachResult,
   TerminalCatalogMutationResult,
+  TerminalCloseSessionsResult,
   TerminalCreateInput,
   TerminalMutationResult,
   TerminalNotifyBellInput,
@@ -60,11 +61,15 @@ export interface ServerTerminalHost {
   resize(clientId: string, input: TerminalResizeInput): MaybePromise<TerminalMutationResult>
   takeover(clientId: string, input: TerminalTakeoverInput): MaybePromise<TerminalTakeoverResult>
   close(clientId: string, input: TerminalSessionInput): MaybePromise<TerminalMutationResult>
+  closeSessions(sessionIds: string[]): MaybePromise<TerminalCloseSessionsResult>
   notifyBell(clientId: string, input: TerminalNotifyBellInput): MaybePromise<TerminalMutationResult>
   listSessions(clientId: string, repoRoot: string): MaybePromise<TerminalSessionSummary[]>
   create(clientId: string, input: TerminalCreateInput): MaybePromise<TerminalCatalogMutationResult>
   prune(clientId: string, repoRoot: string): MaybePromise<{ pruned: number; remaining: number }>
-  getSessionSnapshot(clientId: string, input: TerminalSessionSnapshotInput): MaybePromise<TerminalSessionSnapshot | null>
+  getSessionSnapshot(
+    clientId: string,
+    input: TerminalSessionSnapshotInput,
+  ): MaybePromise<TerminalSessionSnapshot | null>
   /** Handle an incoming realtime message from a client socket. */
   handleRealtimeMessage(clientId: string, attachmentId: string, socket: ServerTerminalSocket, message: string): void
   shutdown(): void

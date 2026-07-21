@@ -64,6 +64,7 @@ import {
   isWorktreeBootstrapCandidatePath,
   worktreeBootstrapPreviewFromConfig,
   type WorktreeBootstrapCandidate,
+  type WorktreeBootstrapCandidateScope,
   type WorktreeBootstrapPreflightResult,
   type WorktreeBootstrapPreviewResult,
   type WorktreeBootstrapSelection,
@@ -924,6 +925,7 @@ export async function removeRemoteWorktree(
     branch: string
     worktreePath: string
     alsoDeleteBranch: boolean
+    forceRemoveWorktree?: boolean
     forceDeleteBranch?: boolean
     signal?: AbortSignal
     run?: RemoteGitRunner
@@ -943,7 +945,9 @@ export async function removeRemoteWorktree(
   const statusAwareWorktree = !status.ok
     ? { ...resolved, isDirty: undefined }
     : { ...resolved, isDirty: parseStatus(status.stdout).length > 0 }
-  const invalid = validateRemovableWorktreeState(statusAwareWorktree)
+  const invalid = validateRemovableWorktreeState(statusAwareWorktree, {
+    forceRemoveWorktree: input.forceRemoveWorktree,
+  })
   if (invalid) return invalid
 
   const shouldForceDeleteBranch = input.forceDeleteBranch === true
@@ -972,7 +976,12 @@ export async function removeRemoteWorktree(
   }
 
   const removeResult = await run(
-    { type: 'gitWorktreeRemove', path: target.remotePath, worktreePath: resolved.path },
+    {
+      type: 'gitWorktreeRemove',
+      path: target.remotePath,
+      worktreePath: resolved.path,
+      ...(input.forceRemoveWorktree ? { force: true } : {}),
+    },
     target,
     { signal: input.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
   )
@@ -1146,7 +1155,7 @@ export async function getRemoteWorktreeBootstrapPreview(
 
 export async function getRemoteWorktreeBootstrapPreflight(
   target: RemoteRepoTarget,
-  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+  options: { signal?: AbortSignal; candidateScope?: WorktreeBootstrapCandidateScope; run?: RemoteGitRunner } = {},
 ): Promise<WorktreeBootstrapPreflightResult> {
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
@@ -1162,9 +1171,15 @@ export async function getRemoteWorktreeBootstrapPreflight(
     }
   }
 
-  const result = await run({ type: 'worktreeBootstrapCandidates', sourceRoot: loaded.value.sourceRoot }, target, {
-    signal: options.signal,
-  })
+  const result = await run(
+    {
+      type: 'worktreeBootstrapCandidates',
+      sourceRoot: loaded.value.sourceRoot,
+      ...(options.candidateScope ? { candidateScope: options.candidateScope } : {}),
+    },
+    target,
+    { signal: options.signal },
+  )
   if (options.signal?.aborted || result.message === 'cancelled') return { ok: false, message: 'cancelled' }
   if (!result.ok) return { ok: false, message: result.message || result.stderr || 'error.failed-read-repo' }
   const parsed = parseRemoteWorktreeBootstrapCandidates(result.stdout)
@@ -1176,7 +1191,7 @@ export async function getRemoteWorktreeBootstrapPreflight(
 export async function validateRemoteWorktreeBootstrapSelections(
   target: RemoteRepoTarget,
   selections: readonly WorktreeBootstrapSelection[],
-  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+  options: { signal?: AbortSignal; candidateScope?: WorktreeBootstrapCandidateScope; run?: RemoteGitRunner } = {},
 ): Promise<ExecResult> {
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
   if (
@@ -1189,7 +1204,11 @@ export async function validateRemoteWorktreeBootstrapSelections(
     return { ok: false, message: 'error.invalid-arguments' }
   }
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  const preflight = await getRemoteWorktreeBootstrapPreflight(target, { signal: options.signal, run })
+  const preflight = await getRemoteWorktreeBootstrapPreflight(target, {
+    signal: options.signal,
+    candidateScope: options.candidateScope,
+    run,
+  })
   if (!preflight.ok) return preflight
   if (preflight.preflight.kind !== 'candidates') {
     return { ok: false, message: 'error.worktree-bootstrap-selection-stale' }

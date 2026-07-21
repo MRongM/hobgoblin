@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   readRepositoryFileTreeTextFile: vi.fn(),
   replaceRepositoryFileTreeBinaryFile: vi.fn(),
   replaceRepositoryFileTreeTextFile: vi.fn(),
+  removeRepositoryWorktree: vi.fn(),
   searchRepositoryFileTree: vi.fn(),
   exportRepositoryFilesToLocalDirectory: vi.fn(),
   getRepositoryWorktreeBootstrapPreview: vi.fn(),
@@ -71,7 +72,7 @@ vi.mock('#/server/modules/repo-write-paths.ts', () => ({
   renameRepositoryFileTreeEntry: vi.fn(),
   replaceRepositoryFileTreeBinaryFile: mocks.replaceRepositoryFileTreeBinaryFile,
   replaceRepositoryFileTreeTextFile: mocks.replaceRepositoryFileTreeTextFile,
-  removeRepositoryWorktree: vi.fn(),
+  removeRepositoryWorktree: mocks.removeRepositoryWorktree,
   resetRepositoryHard: vi.fn(),
   trackRepositoryRemoteBranch: vi.fn(),
 }))
@@ -159,6 +160,41 @@ describe('repo routes', () => {
     mocks.deleteRepositoryLocalTag.mockResolvedValue({ ok: true, message: 'deleted' })
     mocks.getRepositoryRemoteTags.mockResolvedValue(['origin/v1.0.0'])
     mocks.deleteRepositoryRemoteTag.mockResolvedValue({ ok: true, message: 'deleted' })
+    mocks.removeRepositoryWorktree.mockResolvedValue({ ok: true, message: 'removed' })
+  })
+
+  test('routes worktree force separately from branch force', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/remove-worktree', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        cwd: '/repo',
+        branch: 'feature/test',
+        worktreePath: '/repo-feature',
+        alsoDeleteBranch: false,
+        forceRemoveWorktree: true,
+        forceDeleteBranch: false,
+        sourceToken: 'client_123',
+      }),
+    })
+
+    await expect(response.json()).resolves.toEqual({ ok: true, message: 'removed' })
+    expect(mocks.removeRepositoryWorktree).toHaveBeenCalledWith(
+      '/repo',
+      {
+        branch: 'feature/test',
+        worktreePath: '/repo-feature',
+        alsoDeleteBranch: false,
+        forceRemoveWorktree: true,
+        forceDeleteBranch: false,
+        alsoDeleteUpstream: false,
+      },
+      expect.any(AbortSignal),
+      'client_123',
+    )
   })
 
   test('serves repository history with normalized body values', async () => {
@@ -329,6 +365,28 @@ describe('repo routes', () => {
       preflight: { kind: 'candidates', candidates: [{ path: '.env', kind: 'file' }] },
     })
     expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenCalledWith('/tmp/repo', expect.any(AbortSignal))
+  })
+
+  test('serves ignored-only worktree bootstrap preflight for branch workspaces', async () => {
+    mocks.getRepositoryWorktreeBootstrapPreflight.mockResolvedValueOnce({
+      ok: true,
+      preflight: { kind: 'candidates', candidates: [{ path: 'node_modules', kind: 'directory' }] },
+    })
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/worktree-bootstrap-preflight', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cwd: '/tmp/repo', candidateScope: 'ignored-only' }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenCalledWith(
+      '/tmp/repo',
+      expect.any(AbortSignal),
+      'ignored-only',
+    )
   })
 
   test('serves worktree bootstrap preview for an explicit worktree path', async () => {

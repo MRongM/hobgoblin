@@ -23,9 +23,14 @@ export type WorktreeBootstrapDecision =
       /** Desired trust state for this exact config hash after a successful bootstrap run. */
       configTrusted: boolean
     }
-  | { kind: 'materialize'; selections: WorktreeBootstrapSelection[] }
+  | {
+      kind: 'materialize'
+      selections: WorktreeBootstrapSelection[]
+      candidateScope?: WorktreeBootstrapCandidateScope
+    }
 
 export type WorktreeBootstrapCandidateKind = 'file' | 'directory'
+export type WorktreeBootstrapCandidateScope = 'all-untracked' | 'ignored-only'
 export type WorktreeBootstrapSelectionMode = 'copy' | 'symlink'
 
 export interface WorktreeBootstrapCandidate {

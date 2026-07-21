@@ -2,6 +2,8 @@ import type {
   TerminalAttachInput,
   TerminalAttachResult,
   TerminalCatalogMutationResult,
+  TerminalCloseSessionsInput,
+  TerminalCloseSessionsResult,
   TerminalCreateInput,
   TerminalMutationResult,
   TerminalNotifyBellInput,
@@ -24,6 +26,7 @@ export interface TerminalWorkerRequestInputs {
   resize: TerminalResizeInput
   takeover: TerminalTakeoverInput
   close: TerminalSessionInput
+  'close-sessions': TerminalCloseSessionsInput
   'notify-bell': TerminalNotifyBellInput
   'list-sessions': { repoRoot: string }
   create: TerminalCreateInput
@@ -39,6 +42,7 @@ export interface TerminalWorkerResponseOutputs {
   resize: TerminalMutationResult
   takeover: TerminalTakeoverResult
   close: TerminalMutationResult
+  'close-sessions': TerminalCloseSessionsResult
   'notify-bell': TerminalMutationResult
   'list-sessions': TerminalSessionSummary[]
   create: TerminalCatalogMutationResult

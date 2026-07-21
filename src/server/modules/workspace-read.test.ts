@@ -1,6 +1,7 @@
 import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { execa } from 'execa'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { discoverWorkspaceRepositories, restoreWorkspaceRepositories } from '#/server/modules/workspace-read.ts'
 import type { ProbeResult } from '#/shared/rpc.ts'
@@ -131,6 +132,42 @@ describe('discoverWorkspaceRepositories', () => {
     })
   })
 
+  test('does not restore a configured remote linked worktree as an unavailable candidate', async () => {
+    const target = normalizeRemoteTarget({
+      alias: 'prod',
+      host: 'example.com',
+      user: 'developer',
+      port: 22,
+      remotePath: '/srv/workspace',
+    })!
+    const rootId = normalizeRemoteRepoId(target)
+    const api = normalizeRemoteRepoRef({ alias: 'prod', remotePath: '/srv/workspace/api' })!
+    const runRemote = vi.fn(async (_target, command: RemoteCommandKind): Promise<RemoteCommandResult> => {
+      if (command.type === 'listWorkspaceGitDirectories') return remoteOk('/srv/workspace/api\0')
+      if (command.type !== 'testWorkspaceGitDirectory') throw new Error(`unexpected command: ${command.type}`)
+      if (command.path.endsWith('/api-feature')) {
+        return { ok: false, stdout: '__HOBGOBLIN_WORKSPACE_LINKED_WORKTREE__', stderr: '' }
+      }
+      return remoteOk()
+    })
+
+    await expect(
+      discoverWorkspaceRepositories(rootId, {
+        probeRepository: async () => ({ ok: true, root: rootId, name: 'prod:workspace', isGitRepo: false }),
+        resolveRemoteTarget: async () => ({ target }),
+        runRemote,
+        readConfig: async () => ({ kind: 'ready', config: { repo: ['api-feature'] } }),
+      }),
+    ).resolves.toEqual({
+      ok: true,
+      rootId,
+      repositories: [],
+      candidates: [{ id: api.id, name: 'api', remoteRef: api, selected: false, available: true }],
+      configuration: { kind: 'ready', config: { repo: ['api-feature'] } },
+      skipped: [],
+    })
+  })
+
   test('preserves the SSH config changed error when a remote workspace target no longer resolves', async () => {
     const rootId = normalizeRemoteRepoId({ alias: 'removed', remotePath: '/srv/workspace' })
 
@@ -144,10 +181,10 @@ describe('discoverWorkspaceRepositories', () => {
     ).resolves.toEqual({ ok: false, message: 'error.ssh-config-changed' })
   })
 
-  test('discovers only immediate real directories with git markers in natural name order', async () => {
+  test('discovers only immediate primary worktrees in natural name order', async () => {
     const root = await createTemporaryRoot()
     const api = await createGitDirectory(root, 'api')
-    const web2 = await createGitDirectory(root, 'web2', 'file')
+    const linkedWorktree = await createGitDirectory(root, 'web2', 'file')
     const web10 = await createGitDirectory(root, 'web10')
     const nested = path.join(root, 'nested')
     await createGitDirectory(nested, 'child')
@@ -162,18 +199,69 @@ describe('discoverWorkspaceRepositories', () => {
       rootId: root,
       repositories: [
         { id: api, name: 'api' },
-        { id: web2, name: 'web2' },
         { id: web10, name: 'web10' },
       ],
       candidates: [
         { id: api, name: 'api', selected: false, available: true },
-        { id: web2, name: 'web2', selected: false, available: true },
         { id: web10, name: 'web10', selected: false, available: true },
       ],
       configuration: { kind: 'missing' },
       skipped: [],
     })
+    expect(probeRepository).not.toHaveBeenCalledWith(linkedWorktree)
     expect(probeRepository).not.toHaveBeenCalledWith(path.join(nested, 'child'))
+  })
+
+  test('keeps a primary worktree whose git metadata uses a file marker', async () => {
+    const root = await createTemporaryRoot()
+    const api = await createGitDirectory(root, 'api', 'file')
+    const probeRepository = vi.fn(
+      async (cwd: string): Promise<ProbeResult> => ({
+        ok: true,
+        root: cwd,
+        name: path.basename(cwd),
+        isGitRepo: cwd !== root,
+      }),
+    )
+    const isPrimaryWorktree = vi.fn(async () => true)
+
+    await expect(discoverWorkspaceRepositories(root, { probeRepository, isPrimaryWorktree })).resolves.toMatchObject({
+      repositories: [{ id: api, name: 'api' }],
+      candidates: [{ id: api, name: 'api', selected: false, available: true }],
+    })
+    expect(isPrimaryWorktree).toHaveBeenCalledWith(api)
+  })
+
+  test('excludes a real linked worktree beside its primary repository', async () => {
+    const root = await createTemporaryRoot()
+    const repository = path.join(root, 'api')
+    const linkedWorktree = path.join(root, 'api-feature')
+    await execa('git', ['init', repository])
+    await writeFile(path.join(repository, 'README.md'), 'workspace repository\n')
+    await execa('git', ['-C', repository, 'add', 'README.md'])
+    await execa('git', [
+      '-C',
+      repository,
+      '-c',
+      'user.name=Test User',
+      '-c',
+      'user.email=test@example.com',
+      'commit',
+      '-m',
+      'Initial commit',
+    ])
+    await execa('git', ['-C', repository, 'worktree', 'add', '-b', 'feature/test', linkedWorktree])
+
+    await expect(
+      discoverWorkspaceRepositories(root, {
+        readConfig: async () => ({ kind: 'ready', config: { repo: ['api-feature'] } }),
+      }),
+    ).resolves.toMatchObject({
+      repositories: [],
+      candidates: [{ id: repository, name: 'api', selected: false, available: true }],
+      configuration: { kind: 'ready', config: { repo: ['api-feature'] } },
+      skipped: [],
+    })
   })
 
   test('discovers an immediate repository directory symlink under its logical member name', async () => {

@@ -61,13 +61,22 @@ export interface ThemeState {
   colorTheme: ColorTheme
 }
 
+export type WorkspaceActiveContext =
+  | { kind: 'overview' }
+  | { kind: 'repository'; repositoryId: string }
+  | { kind: 'branch-workspace'; branchWorkspaceId: string }
+
 export interface SessionState {
   /** Repo entries that were open, in tab order. */
   openRepos: RepoSessionEntry[]
   /** The active tab id — null when no repos were open. */
   activeRepo: string | null
-  /** Last Overview/child selection for each open multi-repository workspace root. */
+  /** Last tagged selection for each open multi-repository workspace root. */
+  workspaceActiveContextByRoot?: Record<string, WorkspaceActiveContext>
+  /** @deprecated Read-only migration input from sessions written before tagged workspace contexts. */
   workspaceActiveRepoByRoot?: Record<string, string | null>
+  /** Missing roots default to expanded. */
+  workspaceRepositoryListExpandedByRoot?: Record<string, boolean>
   projectListExpanded: boolean
   detailCollapsed: boolean
   detailFocusMode: boolean

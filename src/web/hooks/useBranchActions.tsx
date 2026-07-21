@@ -85,6 +85,7 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
   const removeConfirm = useRetainedDialogState<RemoveConfirm>()
   const forceRemoveConfirm = useRetainedDialogState<RemoveConfirm>()
   const [removeAlsoDeletes, setRemoveAlsoDeletes] = useState(true)
+  const [removeForce, setRemoveForce] = useState(false)
   const [deleteAlsoUpstream, setDeleteAlsoUpstream] = useState(false)
   const [removeAlsoUpstream, setRemoveAlsoUpstream] = useState(false)
   const hasUpstream = !!branch.tracking && !branch.trackingGone
@@ -183,6 +184,7 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
   function requestRemoveWorktree() {
     if (guardBusy() || !branch.worktree?.path) return
     setRemoveAlsoDeletes(!PROTECTED_BRANCHES.has(branch.name))
+    setRemoveForce(false)
     setRemoveAlsoUpstream(false)
     removeConfirm.openWith({ branch: branch.name, path: branch.worktree.path })
   }
@@ -205,23 +207,25 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
 
   function removeWorktree(
     target: RemoveConfirm,
-    alsoDeleteBranch: boolean,
-    forceDeleteBranch: boolean,
-    alsoDeleteUpstream = false,
+    options: {
+      alsoDeleteBranch: boolean
+      forceRemoveWorktree: boolean
+      forceDeleteBranch: boolean
+      alsoDeleteUpstream: boolean
+    },
   ) {
     void runRepoAction(
       {
         kind: 'removeWorktree',
         branch: target.branch,
         worktreePath: target.path,
-        alsoDeleteBranch,
-        forceDeleteBranch,
-        alsoDeleteUpstream,
+        ...options,
       },
       {
-        deferResultMessages: alsoDeleteBranch && !forceDeleteBranch ? ['error.cannot-remove-unpushed-worktree'] : [],
+        deferResultMessages:
+          options.alsoDeleteBranch && !options.forceDeleteBranch ? ['error.cannot-remove-unpushed-worktree'] : [],
         handleResult: (result) => {
-          if (removeWorktreeNeedsForceConfirm(result, alsoDeleteBranch, forceDeleteBranch)) {
+          if (removeWorktreeNeedsForceConfirm(result, options.alsoDeleteBranch, options.forceDeleteBranch)) {
             forceRemoveConfirm.openWith(target)
             return true
           }
@@ -245,9 +249,11 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
       forceRemoveConfirm={forceRemoveConfirm}
       deleteAlsoUpstream={deleteAlsoUpstream}
       removeAlsoDeletes={removeAlsoDeletes}
+      removeForce={removeForce}
       removeAlsoUpstream={removeAlsoUpstream}
       setDeleteAlsoUpstream={setDeleteAlsoUpstream}
       setRemoveAlsoDeletes={setRemoveAlsoDeletes}
+      setRemoveForce={setRemoveForce}
       setRemoveAlsoUpstream={setRemoveAlsoUpstream}
       onPushConfirm={(target) => {
         void runRepoAction({ kind: 'push', branch: target })
@@ -255,8 +261,8 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
       onDeleteBranch={(target, force, alsoDeleteUpstream) => {
         void deleteBranch(target, force, alsoDeleteUpstream)
       }}
-      onRemoveWorktree={(target, alsoDeleteBranch, forceDeleteBranch, alsoDeleteUpstream) => {
-        void removeWorktree(target, alsoDeleteBranch, forceDeleteBranch, alsoDeleteUpstream)
+      onRemoveWorktree={(target, options) => {
+        void removeWorktree(target, options)
       }}
     />
   )

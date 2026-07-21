@@ -55,6 +55,8 @@ export interface TerminalCreateInput {
   repoRoot: string
   branch: string
   worktreePath: string
+  targetKind?: 'branch-workspace'
+  branchWorkspaceId?: string
   kind: 'primary' | 'additional'
   cols?: number
   rows?: number
@@ -118,6 +120,15 @@ export type TerminalTakeoverInput = TerminalResizeInput
 
 export interface TerminalSessionInput {
   sessionId: string
+}
+
+export interface TerminalCloseSessionsInput {
+  sessionIds: string[]
+}
+
+export interface TerminalCloseSessionsResult {
+  closed: string[]
+  missing: string[]
 }
 
 export interface TerminalNotifyBellInput {
@@ -333,6 +344,8 @@ const TerminalCreateInputSchema = v.object({
   repoRoot: v.string(),
   branch: v.string(),
   worktreePath: v.string(),
+  targetKind: v.optional(v.literal('branch-workspace')),
+  branchWorkspaceId: v.optional(v.string()),
   kind: v.picklist(['primary', 'additional']),
   cols: v.optional(TerminalColsSchema),
   rows: v.optional(TerminalRowsSchema),
