@@ -7,14 +7,19 @@ import {
   WorkspaceRepositoryList,
   type WorkspaceRepositoryListItem,
 } from '#/web/components/repo-workspace/WorkspaceRepositoryList.tsx'
-import { TerminalSessionReadContext } from '#/web/components/terminal/terminal-session-context.ts'
+import {
+  TerminalSessionContext,
+  TerminalSessionReadContext,
+} from '#/web/components/terminal/terminal-session-context.ts'
 import type {
+  TerminalSessionContextValue,
   TerminalSessionReadContextValue,
   TerminalSessionSummary,
   WorktreeTerminalSnapshot,
 } from '#/web/components/terminal/types.ts'
 
 type TestDragEndEvent = { active: { id: string }; over: { id: string } | null }
+type CloseTerminalMock = ReturnType<typeof vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>>
 
 const dndState = vi.hoisted(() => ({
   lastDragEnd: null as ((event: TestDragEndEvent) => void) | null,
@@ -128,23 +133,29 @@ afterEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
 })
 
-function renderList(disabled = false, readContext: TerminalSessionReadContextValue = terminalReadContext(new Map())) {
+function renderList(
+  disabled = false,
+  readContext: TerminalSessionReadContextValue = terminalReadContext(new Map()),
+  closeTerminal: CloseTerminalMock = vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>(),
+) {
   const onActivate = vi.fn()
   const onReorder = vi.fn()
   act(() => {
     root!.render(
-      <TerminalSessionReadContext.Provider value={readContext}>
-        <WorkspaceRepositoryList
-          repositories={repositories}
-          currentRepoId="/workspace/api"
-          disabled={disabled}
-          onActivate={onActivate}
-          onReorder={onReorder}
-        />
-      </TerminalSessionReadContext.Provider>,
+      <TerminalSessionContext.Provider value={terminalCommandContext(closeTerminal)}>
+        <TerminalSessionReadContext.Provider value={readContext}>
+          <WorkspaceRepositoryList
+            repositories={repositories}
+            currentRepoId="/workspace/api"
+            disabled={disabled}
+            onActivate={onActivate}
+            onReorder={onReorder}
+          />
+        </TerminalSessionReadContext.Provider>
+      </TerminalSessionContext.Provider>,
     )
   })
-  return { onActivate, onReorder }
+  return { onActivate, onReorder, closeTerminal }
 }
 
 describe('WorkspaceRepositoryList', () => {
@@ -244,6 +255,33 @@ describe('WorkspaceRepositoryList', () => {
     expect(row?.querySelector('[data-testid="workspace-repository-status-badges"]')).toBeNull()
   })
 
+  test('closes terminals across every listed worktree through the repository row context menu', async () => {
+    const mainKey = '/workspace/api\0/workspace/api'
+    const featureKey = '/workspace/api\0/worktrees/api-feature'
+    const closeTerminal = vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>()
+    renderList(
+      false,
+      terminalReadContext(
+        new Map([
+          [mainKey, worktreeSnapshot(mainKey, terminalSession(mainKey))],
+          [featureKey, worktreeSnapshot(featureKey, terminalSession(featureKey))],
+        ]),
+      ),
+      closeTerminal,
+    )
+    const row = container!.querySelector('[data-sortable-node-id="/workspace/api"]')
+    if (!(row instanceof HTMLElement)) throw new Error('missing workspace repository row')
+
+    await requestCloseAllFromContextMenu(row)
+
+    expect(closeTerminal).not.toHaveBeenCalled()
+    await confirmCloseAll()
+    expect(closeTerminal.mock.calls).toEqual([
+      [`${mainKey}\0terminal-1`, { repoRoot: '/workspace/api', worktreePath: '/workspace/api' }],
+      [`${featureKey}\0terminal-1`, { repoRoot: '/workspace/api', worktreePath: '/worktrees/api-feature' }],
+    ])
+  })
+
   test('shows unavailable repository state', () => {
     renderList()
     const row = container!.querySelector('[data-sortable-activator-id="/workspace/web"]')
@@ -288,6 +326,30 @@ function terminalReadContext(
   }
 }
 
+function terminalCommandContext(closeTerminal: CloseTerminalMock): TerminalSessionContextValue {
+  return {
+    createTerminal: vi.fn(async () => ''),
+    selectTerminal: vi.fn(),
+    scrollToBottom: vi.fn(),
+    focusTerminal: vi.fn(),
+    scrollLines: vi.fn(),
+    clearBell: vi.fn(() => false),
+    closeTerminalAndDismissDetailIfLast: closeTerminal,
+    registerWorktreeHost: vi.fn(),
+    attach: vi.fn(),
+    detach: vi.fn(),
+    restart: vi.fn(),
+    isTerminalFocusTarget: vi.fn(() => false),
+    findNext: vi.fn(() => ({ resultIndex: -1, resultCount: 0, found: false })),
+    findPrevious: vi.fn(() => ({ resultIndex: -1, resultCount: 0, found: false })),
+    clearSearch: vi.fn(),
+    writeInput: vi.fn(),
+    takeover: vi.fn(),
+    reorderSessions: vi.fn(async () => true),
+    serialize: vi.fn(() => ''),
+  }
+}
+
 function worktreeSnapshot(key: string, session: TerminalSessionSummary): WorktreeTerminalSnapshot {
   return {
     worktreeTerminalKey: key,
@@ -312,4 +374,30 @@ function terminalSession(
     hasBell: false,
     ...overrides,
   }
+}
+
+async function requestCloseAllFromContextMenu(row: HTMLElement): Promise<void> {
+  await act(async () => {
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+    await Promise.resolve()
+  })
+  const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) =>
+    candidate.textContent?.includes('terminal.close-all'),
+  )
+  if (!item) throw new Error('missing close all terminals context menu item')
+  await act(async () => {
+    item.click()
+    await Promise.resolve()
+  })
+}
+
+async function confirmCloseAll(): Promise<void> {
+  const confirm = [...document.body.querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
+    candidate.textContent?.includes('terminal.close-all-confirm-confirm'),
+  )
+  if (!confirm) throw new Error('missing close all terminals confirmation')
+  await act(async () => {
+    confirm.click()
+    await Promise.resolve()
+  })
 }

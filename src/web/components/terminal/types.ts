@@ -69,6 +69,8 @@ export interface TerminalSessionBase {
   worktreePath: string
 }
 
+export type TerminalWorktreeScope = Pick<TerminalSessionBase, 'repoRoot' | 'worktreePath'>
+
 export interface TerminalSessionAttachHandlers {
   onRevealPath?: (relativePath: string) => void
   onOpenPathInEditor?: (target: FilePathTarget) => void
@@ -109,7 +111,7 @@ export interface TerminalSessionContextValue {
   focusTerminal: (key: string) => void
   scrollLines: (key: string, amount: number) => void
   clearBell: (key: string) => boolean
-  closeTerminalAndDismissDetailIfLast: (key: string, base: TerminalSessionBase) => void
+  closeTerminalAndDismissDetailIfLast: (key: string, scope: TerminalWorktreeScope) => void
   registerWorktreeHost: (worktreeTerminalKey: string, host: HTMLElement | null) => void
   attach: (descriptor: TerminalDescriptor, host: HTMLElement, handlers?: TerminalSessionAttachHandlers) => void
   detach: (key: string, host: HTMLElement) => void

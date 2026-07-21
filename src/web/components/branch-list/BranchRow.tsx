@@ -10,6 +10,8 @@ import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { AsyncButton } from '#/web/components/AsyncButton.tsx'
 import { Tip } from '#/web/components/Tip.tsx'
+import { TerminalScopeContextMenu } from '#/web/components/terminal/TerminalScopeContextMenu.tsx'
+import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 
 interface BranchRowSortable {
   setNodeRef: (node: HTMLLIElement | null) => void
@@ -48,6 +50,11 @@ export function BranchRow({
   sortable,
 }: BranchRowProps) {
   const isSelected = branch.name === selected
+  const worktreePath = branch.worktree?.path
+  const terminalWorktreeKeys = useMemo(
+    () => (worktreePath ? [worktreeTerminalKey(repo.id, worktreePath)] : []),
+    [repo.id, worktreePath],
+  )
   const setItemRef = useCallback(
     (node: HTMLLIElement | null) => {
       if (isSelected) {
@@ -58,7 +65,7 @@ export function BranchRow({
     [isSelected, selectedRef, sortable],
   )
 
-  return (
+  const row = (
     <li
       {...sortable?.props}
       ref={sortable || isSelected ? setItemRef : undefined}
@@ -94,6 +101,12 @@ export function BranchRow({
         </div>
       ) : null}
     </li>
+  )
+
+  return worktreePath ? (
+    <TerminalScopeContextMenu worktreeTerminalKeys={terminalWorktreeKeys}>{row}</TerminalScopeContextMenu>
+  ) : (
+    row
   )
 }
 

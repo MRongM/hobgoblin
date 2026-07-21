@@ -137,8 +137,7 @@ describe('useBranchActionItems', () => {
     })
     terminalSnapshotsByWorktree = new Map()
     createTerminal = vi.fn<TerminalSessionContextValue['createTerminal']>(async () => 't1')
-    closeTerminalAndDismissDetailIfLast =
-      vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>()
+    closeTerminalAndDismissDetailIfLast = vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>()
   })
 
   afterEach(async () => {
@@ -571,8 +570,8 @@ describe('useBranchActionItems', () => {
     clickButtonByText('terminal.close-all-confirm-confirm')
 
     expect(closeTerminalAndDismissDetailIfLast.mock.calls).toEqual([
-      ['t1', { repoRoot: '/tmp/repo', branch: 'feature/terminals', worktreePath: '/tmp/repo-feature' }],
-      ['t2', { repoRoot: '/tmp/repo', branch: 'feature/terminals', worktreePath: '/tmp/repo-feature' }],
+      ['t1', { repoRoot: '/tmp/repo', worktreePath: '/tmp/repo-feature' }],
+      ['t2', { repoRoot: '/tmp/repo', worktreePath: '/tmp/repo-feature' }],
     ])
   })
 

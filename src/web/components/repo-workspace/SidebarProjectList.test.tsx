@@ -5,8 +5,19 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { SidebarProjectList } from '#/web/components/repo-workspace/SidebarProjectList.tsx'
 import type { ProjectSummary } from '#/web/components/repo-workspace/project-switcher-model.tsx'
+import {
+  TerminalSessionContext,
+  TerminalSessionReadContext,
+} from '#/web/components/terminal/terminal-session-context.ts'
+import type {
+  TerminalSessionContextValue,
+  TerminalSessionReadContextValue,
+  TerminalSessionSummary,
+  WorktreeTerminalSnapshot,
+} from '#/web/components/terminal/types.ts'
 
 type TestDragEndEvent = { active: { id: string }; over: { id: string } | null }
+type CloseTerminalMock = ReturnType<typeof vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>>
 
 const dndState = vi.hoisted(() => ({
   lastDragEnd: null as ((event: TestDragEndEvent) => void) | null,
@@ -153,23 +164,35 @@ afterEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
 })
 
-function renderList() {
+function renderList(
+  fixture: {
+    projects?: ProjectSummary[]
+    snapshots?: ReadonlyMap<string, WorktreeTerminalSnapshot>
+    closeTerminal?: CloseTerminalMock
+  } = {},
+) {
   const onActivate = vi.fn()
   const onClose = vi.fn()
   const onReorder = vi.fn()
+  const closeTerminal =
+    fixture.closeTerminal ?? vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>()
   act(() => {
     root!.render(
-      <SidebarProjectList
-        id="project-list"
-        projects={projects}
-        activeRepoId="/repo-a"
-        onActivate={onActivate}
-        onClose={onClose}
-        onReorder={onReorder}
-      />,
+      <TerminalSessionContext.Provider value={terminalCommandContext(closeTerminal)}>
+        <TerminalSessionReadContext.Provider value={terminalReadContext(fixture.snapshots ?? new Map())}>
+          <SidebarProjectList
+            id="project-list"
+            projects={fixture.projects ?? projects}
+            activeRepoId="/repo-a"
+            onActivate={onActivate}
+            onClose={onClose}
+            onReorder={onReorder}
+          />
+        </TerminalSessionReadContext.Provider>
+      </TerminalSessionContext.Provider>,
     )
   })
-  return { onActivate, onClose, onReorder }
+  return { onActivate, onClose, onReorder, closeTerminal }
 }
 
 describe('SidebarProjectList', () => {
@@ -328,6 +351,30 @@ describe('SidebarProjectList', () => {
     expect(terminal?.getAttribute('aria-busy')).toBe('true')
   })
 
+  test('closes terminals from the project root and member repositories through the row context menu', async () => {
+    const rootKey = '/repo-a\0/repo-a'
+    const memberKey = '/repo-a/api\0/repo-a/api'
+    const closeTerminal = vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>()
+    renderList({
+      projects: [{ ...projects[0]!, terminalWorktreeKeys: [rootKey, memberKey] }, projects[1]!],
+      snapshots: new Map([
+        [rootKey, worktreeSnapshot(rootKey, [terminalSession(rootKey, 1)])],
+        [memberKey, worktreeSnapshot(memberKey, [terminalSession(memberKey, 1)])],
+      ]),
+      closeTerminal,
+    })
+
+    await requestCloseAllFromContextMenu(projectRow('/repo-a'))
+
+    expect(closeTerminal).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('terminal.close-all-confirm-body')
+    await confirmCloseAll()
+    expect(closeTerminal.mock.calls).toEqual([
+      [`${rootKey}\0terminal-1`, { repoRoot: '/repo-a', worktreePath: '/repo-a' }],
+      [`${memberKey}\0terminal-1`, { repoRoot: '/repo-a/api', worktreePath: '/repo-a/api' }],
+    ])
+  })
+
   test('reorders when dropped over a different project', () => {
     const { onReorder } = renderList()
 
@@ -350,4 +397,85 @@ function projectRow(projectId: string): HTMLLIElement {
   const row = container!.querySelector(`[data-sortable-node-id="${projectId}"]`)
   if (!(row instanceof HTMLLIElement)) throw new Error(`missing project row: ${projectId}`)
   return row
+}
+
+async function requestCloseAllFromContextMenu(row: HTMLElement): Promise<void> {
+  await act(async () => {
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+    await Promise.resolve()
+  })
+  const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) =>
+    candidate.textContent?.includes('terminal.close-all'),
+  )
+  if (!item) throw new Error('missing close all terminals context menu item')
+  await act(async () => {
+    item.click()
+    await Promise.resolve()
+  })
+}
+
+async function confirmCloseAll(): Promise<void> {
+  const confirm = [...document.body.querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
+    candidate.textContent?.includes('terminal.close-all-confirm-confirm'),
+  )
+  if (!confirm) throw new Error('missing close all terminals confirmation')
+  await act(async () => {
+    confirm.click()
+    await Promise.resolve()
+  })
+}
+
+function terminalReadContext(
+  snapshots: ReadonlyMap<string, WorktreeTerminalSnapshot>,
+): TerminalSessionReadContextValue {
+  return {
+    worktreeSnapshot: (key) =>
+      snapshots.get(key) ?? { worktreeTerminalKey: key, selectedDescriptor: null, sessions: [], count: 0 },
+    subscribeWorktree: () => () => {},
+    repoSyncReady: () => true,
+    subscribeRepoSync: () => () => {},
+    snapshot: () => ({ phase: 'opening', message: null, processName: 'terminal' }),
+    subscribeSnapshot: () => () => {},
+  }
+}
+
+function terminalCommandContext(closeTerminal: CloseTerminalMock): TerminalSessionContextValue {
+  return {
+    createTerminal: vi.fn(async () => ''),
+    selectTerminal: vi.fn(),
+    scrollToBottom: vi.fn(),
+    focusTerminal: vi.fn(),
+    scrollLines: vi.fn(),
+    clearBell: vi.fn(() => false),
+    closeTerminalAndDismissDetailIfLast: closeTerminal,
+    registerWorktreeHost: vi.fn(),
+    attach: vi.fn(),
+    detach: vi.fn(),
+    restart: vi.fn(),
+    isTerminalFocusTarget: vi.fn(() => false),
+    findNext: vi.fn(() => ({ resultIndex: -1, resultCount: 0, found: false })),
+    findPrevious: vi.fn(() => ({ resultIndex: -1, resultCount: 0, found: false })),
+    clearSearch: vi.fn(),
+    writeInput: vi.fn(),
+    takeover: vi.fn(),
+    reorderSessions: vi.fn(async () => true),
+    serialize: vi.fn(() => ''),
+  }
+}
+
+function worktreeSnapshot(worktreeTerminalKey: string, sessions: TerminalSessionSummary[]): WorktreeTerminalSnapshot {
+  return { worktreeTerminalKey, selectedDescriptor: null, sessions, count: sessions.length }
+}
+
+function terminalSession(worktreeTerminalKey: string, index: number): TerminalSessionSummary {
+  return {
+    key: `${worktreeTerminalKey}\0terminal-${index}`,
+    worktreeTerminalKey,
+    terminalId: `terminal-${index}`,
+    index,
+    title: `terminal ${index}`,
+    phase: 'open',
+    selected: index === 1,
+    hasBell: false,
+  }
 }

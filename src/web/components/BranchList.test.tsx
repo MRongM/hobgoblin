@@ -4,8 +4,11 @@ import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { BranchList } from '#/web/components/BranchList.tsx'
-import { TerminalSessionReadContext } from '#/web/components/terminal/terminal-session-context.ts'
-import type { TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
+import {
+  TerminalSessionContext,
+  TerminalSessionReadContext,
+} from '#/web/components/terminal/terminal-session-context.ts'
+import type { TerminalSessionContextValue, TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 
@@ -178,6 +181,30 @@ function terminalReadContextWithState(
   }
 }
 
+function terminalCommandContext(): TerminalSessionContextValue {
+  return {
+    createTerminal: vi.fn(async () => ''),
+    selectTerminal: vi.fn(),
+    scrollToBottom: vi.fn(),
+    focusTerminal: vi.fn(),
+    scrollLines: vi.fn(),
+    clearBell: vi.fn(() => false),
+    closeTerminalAndDismissDetailIfLast: vi.fn(),
+    registerWorktreeHost: vi.fn(),
+    attach: vi.fn(),
+    detach: vi.fn(),
+    restart: vi.fn(),
+    isTerminalFocusTarget: vi.fn(() => false),
+    findNext: vi.fn(() => ({ resultIndex: -1, resultCount: 0, found: false })),
+    findPrevious: vi.fn(() => ({ resultIndex: -1, resultCount: 0, found: false })),
+    clearSearch: vi.fn(),
+    writeInput: vi.fn(),
+    takeover: vi.fn(),
+    reorderSessions: vi.fn(async () => true),
+    serialize: vi.fn(() => ''),
+  }
+}
+
 function seedWorktreeRepo() {
   seedRepoState({
     id: REPO_ID,
@@ -207,13 +234,15 @@ function renderList(
   )
   act(() => {
     root!.render(
-      <TerminalSessionReadContext.Provider value={readContext}>
-        <BranchList
-          repoId={REPO_ID}
-          showActions={fixture.showActions ?? false}
-          onBranchSelected={fixture.onBranchSelected}
-        />
-      </TerminalSessionReadContext.Provider>,
+      <TerminalSessionContext.Provider value={terminalCommandContext()}>
+        <TerminalSessionReadContext.Provider value={readContext}>
+          <BranchList
+            repoId={REPO_ID}
+            showActions={fixture.showActions ?? false}
+            onBranchSelected={fixture.onBranchSelected}
+          />
+        </TerminalSessionReadContext.Provider>
+      </TerminalSessionContext.Provider>,
     )
   })
 }

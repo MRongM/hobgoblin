@@ -4,10 +4,15 @@ import { act, createRef } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { BranchRow } from '#/web/components/branch-list/BranchRow.tsx'
-import { TerminalSessionReadContext } from '#/web/components/terminal/terminal-session-context.ts'
-import type { TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
+import {
+  TerminalSessionContext,
+  TerminalSessionReadContext,
+} from '#/web/components/terminal/terminal-session-context.ts'
+import type { TerminalSessionContextValue, TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
 import { emptyRepo } from '#/web/stores/repos/helpers.ts'
 import { createRepoBranch } from '#/web/stores/repos/test-utils.ts'
+
+type CloseTerminalMock = ReturnType<typeof vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>>
 
 vi.mock('#/web/stores/i18n.ts', () => ({
   useI18nStore: (selector: (state: { lang: string }) => string) => selector({ lang: 'zh' }),
@@ -562,6 +567,42 @@ describe('BranchRow', () => {
     expect(document.body.querySelector('[data-testid="terminal-count-badge"]')).toBeNull()
   })
 
+  test('closes only the linked worktree terminals from the row context menu when inline actions are hidden', async () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+    const terminalWorktreeKey = '/tmp/repo\0/tmp/worktree-a'
+    const closeTerminal = vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>()
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+      {
+        countsByWorktreeKey: new Map([[terminalWorktreeKey, 1]]),
+        closeTerminal,
+      },
+    )
+    const row = document.body.querySelector('li')
+    if (!(row instanceof HTMLElement)) throw new Error('missing worktree row')
+
+    await requestCloseAllFromContextMenu(row)
+
+    expect(closeTerminal).not.toHaveBeenCalled()
+    await confirmCloseAll()
+    expect(closeTerminal).toHaveBeenCalledWith(`${terminalWorktreeKey}\0terminal-1`, {
+      repoRoot: '/tmp/repo',
+      worktreePath: '/tmp/worktree-a',
+    })
+  })
+
   test('shows only the directory name for remote worktree paths', () => {
     const repo = emptyRepo('ssh-config://prod/srv/repo', 'repo')
     repo.remote.target = {
@@ -924,6 +965,7 @@ function render(
     bellWorktreeKeys?: string[]
     countsByWorktreeKey?: Map<string, number>
     outputActiveWorktreeKeys?: string[]
+    closeTerminal?: CloseTerminalMock
   } = {},
 ) {
   const readContext = terminalReadContextWithState(
@@ -931,9 +973,63 @@ function render(
     fixture.countsByWorktreeKey ?? new Map(),
     new Set(fixture.outputActiveWorktreeKeys ?? []),
   )
+  const closeTerminal =
+    fixture.closeTerminal ?? vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>()
   act(() => {
     root!.render(
-      <TerminalSessionReadContext.Provider value={readContext}>{element}</TerminalSessionReadContext.Provider>,
+      <TerminalSessionContext.Provider value={terminalCommandContext(closeTerminal)}>
+        <TerminalSessionReadContext.Provider value={readContext}>{element}</TerminalSessionReadContext.Provider>
+      </TerminalSessionContext.Provider>,
     )
+  })
+}
+
+function terminalCommandContext(closeTerminal: CloseTerminalMock): TerminalSessionContextValue {
+  return {
+    createTerminal: vi.fn(async () => ''),
+    selectTerminal: vi.fn(),
+    scrollToBottom: vi.fn(),
+    focusTerminal: vi.fn(),
+    scrollLines: vi.fn(),
+    clearBell: vi.fn(() => false),
+    closeTerminalAndDismissDetailIfLast: closeTerminal,
+    registerWorktreeHost: vi.fn(),
+    attach: vi.fn(),
+    detach: vi.fn(),
+    restart: vi.fn(),
+    isTerminalFocusTarget: vi.fn(() => false),
+    findNext: vi.fn(() => ({ resultIndex: -1, resultCount: 0, found: false })),
+    findPrevious: vi.fn(() => ({ resultIndex: -1, resultCount: 0, found: false })),
+    clearSearch: vi.fn(),
+    writeInput: vi.fn(),
+    takeover: vi.fn(),
+    reorderSessions: vi.fn(async () => true),
+    serialize: vi.fn(() => ''),
+  }
+}
+
+async function requestCloseAllFromContextMenu(row: HTMLElement): Promise<void> {
+  await act(async () => {
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+    await Promise.resolve()
+  })
+  const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) =>
+    candidate.textContent?.includes('terminal.close-all'),
+  )
+  if (!item) throw new Error('missing close all terminals context menu item')
+  await act(async () => {
+    item.click()
+    await Promise.resolve()
+  })
+}
+
+async function confirmCloseAll(): Promise<void> {
+  const confirm = [...document.body.querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
+    candidate.textContent?.includes('terminal.close-all-confirm-confirm'),
+  )
+  if (!confirm) throw new Error('missing close all terminals confirmation')
+  await act(async () => {
+    confirm.click()
+    await Promise.resolve()
   })
 }

@@ -24,6 +24,7 @@ import type {
   TerminalSessionAttachHandlers,
   TerminalSessionSummary,
   TerminalSnapshot,
+  TerminalWorktreeScope,
 } from '#/web/components/terminal/types.ts'
 
 const EMPTY_TERMINAL_SNAPSHOT: TerminalSnapshot = {
@@ -457,9 +458,9 @@ export class TerminalSessionRegistry {
     this.sessions.get(key)?.scrollLines(amount)
   }
 
-  closeTerminalAndDismissDetailIfLast = (key: string, base: TerminalSessionBase): void => {
+  closeTerminalAndDismissDetailIfLast = (key: string, scope: TerminalWorktreeScope): void => {
     const session = this.sessions.get(key)
-    if (!session || session.descriptor.worktreeTerminalKey !== worktreeTerminalKey(base.repoRoot, base.worktreePath))
+    if (!session || session.descriptor.worktreeTerminalKey !== worktreeTerminalKey(scope.repoRoot, scope.worktreePath))
       return
     this.closeTerminal(key)
   }
