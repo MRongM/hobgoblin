@@ -27,7 +27,6 @@ function installBridge(sessionOverrides: Record<string, unknown> = {}) {
             shortcutsDisabled: false,
             globalShortcutDisabled: false,
             swapCloseShortcuts: false,
-            toggleDetailOnActionBarBlankClick: false,
             globalShortcut: 'CommandOrControl+Shift+G',
             globalShortcutRegistered: false,
             terminalApp: 'auto',

@@ -120,7 +120,9 @@ export function SidebarProjectHeader({ repoId, onShowCompactDetail }: Props) {
         >
           <ActiveProjectIcon className="size-4 shrink-0" aria-hidden="true" />
           <span className="min-w-0 truncate text-xs font-semibold uppercase tracking-wide">{activeName}</span>
-          {activeProject && <ProjectTerminalStatus terminalWorktreeKeys={activeProject.terminalWorktreeKeys} />}
+          {activeProject && !listExpanded && (
+            <ProjectTerminalStatus terminalWorktreeKeys={activeProject.terminalWorktreeKeys} />
+          )}
           <ChevronDown
             className={cn(
               'size-3.5 shrink-0 text-topbar-muted-foreground transition-transform',

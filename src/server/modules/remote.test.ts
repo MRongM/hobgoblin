@@ -35,7 +35,6 @@ beforeEach(() => {
     shortcutsDisabled: false,
     globalShortcutDisabled: false,
     swapCloseShortcuts: false,
-    toggleDetailOnActionBarBlankClick: false,
     globalShortcut: 'CommandOrControl+Shift+G',
     terminalApp: 'auto',
     editorApp: 'vscode',

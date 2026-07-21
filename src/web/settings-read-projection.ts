@@ -13,14 +13,14 @@ import {
   runtimeSettingsSnapshotFromSettingsSnapshot,
 } from '#/shared/settings-snapshot.ts'
 import {
+  DEFAULT_APP_FONT_SIZE,
   DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
-  DEFAULT_FILE_TREE_FONT_SIZE,
-  DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
   DEFAULT_FONT_FAMILY,
   DEFAULT_GIT_NETWORK_TIMEOUT_SEC,
   DEFAULT_SERVER_PORT,
   DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
   DEFAULT_TERMINAL_FONT_SIZE,
+  DEFAULT_TERMINAL_NOTIFICATIONS_ENABLED,
   DEFAULT_TOOLBAR_HEIGHT_PX,
   DEFAULT_TOPBAR_HEIGHT_PX,
 } from '#/shared/settings-defaults.ts'
@@ -67,8 +67,6 @@ export function readRuntimeShortcutSettings(data: RuntimeSettingsSnapshot | unde
     globalShortcutDisabled: data?.globalShortcutDisabled ?? fallback?.globalShortcutDisabled ?? false,
     globalShortcut: data?.globalShortcut ?? fallback?.globalShortcut ?? 'CommandOrControl+Shift+G',
     globalShortcutRegistered: data?.globalShortcutRegistered ?? fallback?.globalShortcutRegistered ?? false,
-    toggleDetailOnActionBarBlankClick:
-      data?.toggleDetailOnActionBarBlankClick ?? fallback?.toggleDetailOnActionBarBlankClick ?? false,
   }
 }
 
@@ -76,7 +74,10 @@ export function readRuntimeFetchSettings(data: RuntimeSettingsSnapshot | undefin
   const fallback = fallbackInitialSettings()
   return {
     fetchIntervalSec: data?.fetchIntervalSec ?? fallback?.fetchIntervalSec ?? 120,
-    terminalNotificationsEnabled: data?.terminalNotificationsEnabled ?? fallback?.terminalNotificationsEnabled ?? false,
+    terminalNotificationsEnabled:
+      data?.terminalNotificationsEnabled ??
+      fallback?.terminalNotificationsEnabled ??
+      DEFAULT_TERMINAL_NOTIFICATIONS_ENABLED,
   }
 }
 
@@ -97,8 +98,6 @@ export function readRuntimeExternalAppSettings(data: ExternalAppsSnapshot | unde
 export function readRuntimeGeneralSettings(data: RuntimeSettingsSnapshot | undefined) {
   const fallback = fallbackInitialSettings()
   return {
-    toggleDetailOnActionBarBlankClick:
-      data?.toggleDetailOnActionBarBlankClick ?? fallback?.toggleDetailOnActionBarBlankClick ?? false,
     terminalThemeSyncEnabled: data?.terminalThemeSyncEnabled ?? fallback?.terminalThemeSyncEnabled ?? true,
     temporaryFilesDirectory: data?.temporaryFilesDirectory ?? fallback?.temporaryFilesDirectory ?? '',
     serverPort: data?.serverPort ?? fallback?.serverPort ?? DEFAULT_SERVER_PORT,
@@ -109,9 +108,7 @@ export function readRuntimeFontSettings(data: RuntimeSettingsSnapshot | undefine
   const fallback = fallbackInitialSettings()
   return {
     fontFamily: data?.fontFamily ?? fallback?.fontFamily ?? DEFAULT_FONT_FAMILY,
-    fileTreeFontSize: data?.fileTreeFontSize ?? fallback?.fileTreeFontSize ?? DEFAULT_FILE_TREE_FONT_SIZE,
-    fileTreeTopbarFontSize:
-      data?.fileTreeTopbarFontSize ?? fallback?.fileTreeTopbarFontSize ?? DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
+    appFontSize: data?.fileTreeFontSize ?? fallback?.fileTreeFontSize ?? DEFAULT_APP_FONT_SIZE,
     terminalFontSize: data?.terminalFontSize ?? fallback?.terminalFontSize ?? DEFAULT_TERMINAL_FONT_SIZE,
   }
 }
@@ -127,9 +124,6 @@ export function readRuntimeChromeSettings(data: RuntimeSettingsSnapshot | undefi
 export function readRuntimeFileAreaSettings(data: RuntimeSettingsSnapshot | undefined) {
   const fallback = fallbackInitialSettings()
   return {
-    fileTreeFontSize: data?.fileTreeFontSize ?? fallback?.fileTreeFontSize ?? DEFAULT_FILE_TREE_FONT_SIZE,
-    fileTreeTopbarFontSize:
-      data?.fileTreeTopbarFontSize ?? fallback?.fileTreeTopbarFontSize ?? DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
     fileTreeClipboardMaxBytesMb:
       data?.fileTreeClipboardMaxBytesMb ??
       fallback?.fileTreeClipboardMaxBytesMb ??

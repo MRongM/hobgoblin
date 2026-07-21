@@ -91,8 +91,9 @@ describe('app shell client', () => {
   })
 
   test('opens the project GitHub URL through the native shell with https-only policy', async () => {
+    const projectGitHubUrl = 'https://github.com/MRongM/hobgoblin'
     const bridgeModule = await import('#/web/renderer-bridge.ts')
-    const shellOpenExternalUrl = vi.fn(async () => ({ ok: true, message: 'https://github.com/nano-props/goblin' }))
+    const shellOpenExternalUrl = vi.fn(async () => ({ ok: true, message: projectGitHubUrl }))
     bridgeModule.setRendererBridgeForTests(
       testBridge({
         shell: () => ({
@@ -106,9 +107,9 @@ describe('app shell client', () => {
     )
 
     const { openProjectGitHub } = await import('#/web/app-shell-client.ts')
-    await expect(openProjectGitHub()).resolves.toEqual({ ok: true, message: 'https://github.com/nano-props/goblin' })
+    await expect(openProjectGitHub()).resolves.toEqual({ ok: true, message: projectGitHubUrl })
     expect(shellOpenExternalUrl).toHaveBeenCalledWith({
-      url: 'https://github.com/nano-props/goblin',
+      url: projectGitHubUrl,
       allowHttp: false,
     })
     expect(window.open).not.toHaveBeenCalled()

@@ -67,7 +67,6 @@ const appDataClientMocks = vi.hoisted(() => ({
   setTerminalCustomButtonsVisible: vi.fn(async () => {}),
   setTerminalFontSize: vi.fn(async (fontSize: number) => fontSize),
   setTerminalNotificationsEnabled: vi.fn(async () => {}),
-  setToggleDetailOnActionBarBlankClick: vi.fn(async () => {}),
   setWebAccessSettings: vi.fn(async (input) => ({
     enabled: input.enabled === true,
     username: input.username,
@@ -102,7 +101,6 @@ vi.mock('#/web/settings-client.ts', () => ({
   setTerminalCustomButtonsVisible: appDataClientMocks.setTerminalCustomButtonsVisible,
   setTerminalFontSize: appDataClientMocks.setTerminalFontSize,
   setTerminalNotificationsEnabled: appDataClientMocks.setTerminalNotificationsEnabled,
-  setToggleDetailOnActionBarBlankClick: appDataClientMocks.setToggleDetailOnActionBarBlankClick,
   setWebAccessSettings: appDataClientMocks.setWebAccessSettings,
 }))
 
@@ -188,8 +186,6 @@ describe('settings write paths', () => {
     appDataClientMocks.setTerminalFontSize.mockImplementation(async (fontSize: number) => fontSize)
     appDataClientMocks.setTerminalNotificationsEnabled.mockReset()
     appDataClientMocks.setTerminalNotificationsEnabled.mockResolvedValue(undefined)
-    appDataClientMocks.setToggleDetailOnActionBarBlankClick.mockReset()
-    appDataClientMocks.setToggleDetailOnActionBarBlankClick.mockResolvedValue(undefined)
     appDataClientMocks.setWebAccessSettings.mockReset()
     appDataClientMocks.setWebAccessSettings.mockImplementation(async (input) => ({
       enabled: input.enabled === true,

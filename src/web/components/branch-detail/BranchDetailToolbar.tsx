@@ -56,7 +56,7 @@ export function BranchDetailToolbar({
     branchDetailToolbarStoreActionsEqual,
   )
   const navigation = useMainWindowNavigation()
-  const { shortcutsDisabled, toggleDetailOnActionBarBlankClick } = useRuntimeShortcutSettings()
+  const { shortcutsDisabled } = useRuntimeShortcutSettings()
   const compact = useIsCompactUi()
   const behavior = repoWorkspaceBehavior(layout, collapsed, detailFocusMode)
   const activeDetailTab = detailTabForWorktree(repo.ui.detailTab, !!detail.branch?.worktree?.path)
@@ -216,13 +216,7 @@ export function BranchDetailToolbar({
           />
         )}
       </div>
-      <div
-        aria-hidden="true"
-        className={cn('min-w-2 flex-1 self-stretch', compact && 'hidden')}
-        onClick={
-          behavior.detailCollapseAllowed && toggleDetailOnActionBarBlankClick ? toggleDetailCollapsed : undefined
-        }
-      />
+      <div aria-hidden="true" className={cn('min-w-2 flex-1 self-stretch', compact && 'hidden')} />
       <div className="flex shrink-0 items-center gap-1">
         {!compactFocusPresentation && layout === 'top-bottom' && (
           <div className="mx-1 h-4 w-px bg-separator/70" aria-hidden="true" />

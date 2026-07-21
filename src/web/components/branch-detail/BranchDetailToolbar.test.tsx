@@ -19,9 +19,11 @@ import type {
 } from '#/web/components/terminal/types.ts'
 import { MainWindowNavigationProvider, type MainWindowNavigationActions } from '#/web/main-window-navigation.tsx'
 import { emptyRendererBridgeBootstrap, setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
+import { settingsSnapshotQueryKey } from '#/web/settings-queries.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { emptyRepo } from '#/web/stores/repos/helpers.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
+import { defaultSettingsSnapshot } from '#/shared/settings-defaults.ts'
 import { DEFAULT_WORKSPACE_LAYOUT } from '#/shared/workspace-layout.ts'
 import type { RendererBridge } from '#/web/renderer-bridge-types.ts'
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
@@ -122,6 +124,24 @@ describe('BranchDetailToolbar', () => {
     expect(spacer?.className).toContain('min-w-2')
     expect(spacer?.className).toContain('flex-1')
     expect(spacer?.className).not.toContain('shrink-0')
+  })
+
+  test('ignores clicks on the detail toolbar blank area even when a legacy setting enables them', () => {
+    const { container: c } = renderToolbar({
+      terminalCount: 2,
+      detailTab: 'terminal',
+      legacyActionBarBlankToggleEnabled: true,
+      navigation: navigationWith({}),
+    })
+    const blankArea = c.querySelector<HTMLElement>('.min-w-2.flex-1.self-stretch')
+    expect(blankArea).not.toBeNull()
+    expect(useReposStore.getState().detailCollapsed).toBe(false)
+
+    act(() => {
+      blankArea?.click()
+    })
+
+    expect(useReposStore.getState().detailCollapsed).toBe(false)
   })
 
   test('clicking the new-terminal button navigates and creates a terminal', async () => {
@@ -493,6 +513,7 @@ function renderToolbar(options: {
   onShowCompactExplorer?: () => void
   collapsed?: boolean
   layout?: RepoWorkspaceLayout
+  legacyActionBarBlankToggleEnabled?: boolean
 }): {
   container: HTMLDivElement
   terminalTab: HTMLButtonElement
@@ -595,6 +616,12 @@ function renderToolbar(options: {
   document.body.appendChild(container)
   root = createRoot(container)
   queryClient = new QueryClient()
+  if (options.legacyActionBarBlankToggleEnabled) {
+    queryClient.setQueryData(settingsSnapshotQueryKey(), {
+      ...defaultSettingsSnapshot(),
+      toggleDetailOnActionBarBlankClick: true,
+    })
+  }
   act(() => {
     root!.render(
       <QueryClientProvider client={queryClient!}>

@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, test } from 'vitest'
 import electronBuilderConfig from '../../electron-builder.ts'
+import viteConfig from '../../vite.config.ts'
 
 const repoRoot = path.resolve(import.meta.dirname, '../..')
 
@@ -23,6 +24,20 @@ interface DesktopBuilderConfig {
 }
 
 describe('desktop build scripts', () => {
+  test('injects the root package version into renderer build metadata', async () => {
+    const packageJson = JSON.parse(readText('package.json')) as { version: string }
+    if (typeof viteConfig !== 'function') throw new Error('Expected a functional Vite config')
+
+    const config = await viteConfig({
+      command: 'build',
+      mode: 'production',
+      isSsrBuild: false,
+      isPreview: false,
+    })
+
+    expect(config.define?.__APP_VERSION__).toBe(JSON.stringify(packageJson.version))
+  })
+
   test('do not delete local Electron caches', () => {
     const buildScript = readText('scripts/build.ts')
     const downloadCacheScript = readText('scripts/download-electron-cache.ts')
@@ -164,16 +179,16 @@ describe('desktop build scripts', () => {
     expect(releaseScript).toContain('await $`bun ${viteCli} build`')
     expect(releaseScript).toContain('async function buildServerBundle()')
     expect(releaseScript).toContain("const publishArgs = ['--publish', 'never']")
-    expect(releaseScript).toContain("const electronBuilderCli = path.join(repoRoot, 'node_modules/electron-builder/cli.js')")
+    expect(releaseScript).toContain(
+      "const electronBuilderCli = path.join(repoRoot, 'node_modules/electron-builder/cli.js')",
+    )
     expect(releaseScript).toContain('await $`bun ${electronBuilderCli} ${platformArgs} ${archFlag} ${publishArgs}`')
   })
 
   test('desktop packaging includes bundled font notices and licenses', () => {
     const config = electronBuilderConfig as unknown as DesktopBuilderConfig
 
-    expect(config.files).toEqual(
-      expect.arrayContaining(['THIRD_PARTY_NOTICES.md', 'LICENSES/**/*']),
-    )
+    expect(config.files).toEqual(expect.arrayContaining(['THIRD_PARTY_NOTICES.md', 'LICENSES/**/*']))
   })
 
   test('desktop release packaging config includes Windows x64 NSIS output', () => {

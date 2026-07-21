@@ -85,7 +85,7 @@ vi.mock('#/web/runtime-settings-chrome.ts', () => ({
 }))
 
 vi.mock('#/web/components/repo-workspace/project-switcher-model.tsx', () => ({
-  ProjectTerminalStatus: () => null,
+  ProjectTerminalStatus: () => <span data-testid="mock-project-terminal-status" />,
   useProjectSummaries: () => [
     { id: '/repo-a', name: 'Repo A', unavailable: false, isGitRepo: false, terminalWorktreeKeys: [] },
     { id: '/repo-b', name: 'Repo B', unavailable: false, isGitRepo: false, terminalWorktreeKeys: [] },
@@ -194,6 +194,25 @@ describe('SidebarProjectHeader', () => {
     expect(trigger?.getAttribute('data-project-kind')).toBe('plain')
     expect(trigger?.querySelector('svg.lucide-folder')).not.toBeNull()
     expect(trigger?.querySelector('svg.lucide-folder-git-2')).toBeNull()
+  })
+
+  test('shows project terminal status only while the project list is collapsed', () => {
+    act(() => {
+      root!.render(<SidebarProjectHeader repoId="/repo-git" />)
+    })
+    expect(container!.querySelector('[data-testid="mock-project-terminal-status"]')).not.toBeNull()
+
+    repoState.projectListExpanded = true
+    act(() => {
+      root!.render(<SidebarProjectHeader repoId="/repo-git" />)
+    })
+    expect(container!.querySelector('[data-testid="mock-project-terminal-status"]')).toBeNull()
+
+    repoState.projectListExpanded = false
+    act(() => {
+      root!.render(<SidebarProjectHeader repoId="/repo-git" />)
+    })
+    expect(container!.querySelector('[data-testid="mock-project-terminal-status"]')).not.toBeNull()
   })
 
   test('shows current project external actions directly left of Open only while the project list is collapsed', () => {

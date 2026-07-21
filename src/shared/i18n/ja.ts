@@ -812,6 +812,9 @@ export const ja: Record<DictKey, string> = {
   'settings.appearance.dark': 'ダーク',
   'settings.font-family': 'フォント',
   'settings.font-family-hint': 'アプリのインターフェイスと内蔵ターミナルで使うフォントを制御します。',
+  'settings.font-size': 'UI フォントサイズ',
+  'settings.font-size-hint':
+    'アプリ画面全体の文字サイズを調整します。ターミナル内容は独立したフォントサイズを使用します。',
   'settings.font-family.mono': 'Mono',
   'settings.font-family.maple': 'Maple Mono',
   'settings.font-family.system': 'システムフォント',
@@ -829,9 +832,6 @@ export const ja: Record<DictKey, string> = {
   'settings.chrome-heights.toolbar-hint':
     'リポジトリ、ブランチ、ファイルの共通ツールバーの高さを調整します。コンパクトな操作バーは変更されません。',
   'settings.back': '戻る',
-  'settings.action-bar-blank-toggle': 'アクションバーの空白で詳細を折りたたむ/展開',
-  'settings.action-bar-blank-toggle-hint':
-    '上下レイアウトでのみ有効です。アクションバーの空白をクリックして詳細を表示/非表示にします。',
   'settings.server-port': 'プロジェクトポート',
   'settings.server-port-hint':
     'ローカルプロジェクトサーバーのポート(デフォルト 32200)。Hobgoblin の再起動後に有効になります。',

@@ -11,7 +11,7 @@ import type {
   FileTreeClipboardWriteResult,
 } from '#/shared/file-tree-clipboard.ts'
 import { getRendererBridge } from '#/web/renderer-bridge.ts'
-const PROJECT_GITHUB_URL = 'https://github.com/nano-props/goblin'
+const PROJECT_GITHUB_URL = 'https://github.com/MRongM/hobgoblin'
 
 function nativeShell() {
   try {

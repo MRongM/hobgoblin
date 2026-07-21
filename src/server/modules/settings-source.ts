@@ -54,6 +54,7 @@ import {
   DEFAULT_TERMINAL_APP,
   DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
   DEFAULT_TERMINAL_FONT_SIZE,
+  DEFAULT_TERMINAL_NOTIFICATIONS_ENABLED,
   DEFAULT_TERMINAL_THEME_SYNC_ENABLED,
   DEFAULT_THEME_PREF,
   MAX_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
@@ -89,7 +90,6 @@ interface ServerSettingsData {
   shortcutsDisabled: boolean
   globalShortcutDisabled: boolean
   swapCloseShortcuts: boolean
-  toggleDetailOnActionBarBlankClick: boolean
   terminalThemeSyncEnabled: boolean
   temporaryFilesDirectory: string
   globalShortcut: string
@@ -218,7 +218,7 @@ function normalizeToolbarHeightPx(value: unknown): number {
 }
 
 function normalizeTerminalNotificationsEnabled(value: unknown): boolean {
-  return value === true
+  return typeof value === 'boolean' ? value : DEFAULT_TERMINAL_NOTIFICATIONS_ENABLED
 }
 
 function normalizeTemporaryFilesDirectory(value: unknown): string {
@@ -327,7 +327,6 @@ function settingsPrefsFromData(data: ServerSettingsData): SettingsPrefs {
     shortcutsDisabled: data.shortcutsDisabled,
     globalShortcutDisabled: data.globalShortcutDisabled,
     swapCloseShortcuts: data.swapCloseShortcuts,
-    toggleDetailOnActionBarBlankClick: data.toggleDetailOnActionBarBlankClick,
     terminalThemeSyncEnabled: data.terminalThemeSyncEnabled,
     temporaryFilesDirectory: data.temporaryFilesDirectory,
     globalShortcut: data.globalShortcut,
@@ -485,7 +484,6 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       shortcutsDisabled: parsed.shortcutsDisabled === true,
       globalShortcutDisabled: parsed.globalShortcutDisabled === true,
       swapCloseShortcuts: parsed.swapCloseShortcuts === true,
-      toggleDetailOnActionBarBlankClick: parsed.toggleDetailOnActionBarBlankClick === true,
       terminalThemeSyncEnabled: normalizeTerminalThemeSyncEnabled(parsed.terminalThemeSyncEnabled),
       temporaryFilesDirectory: normalizeTemporaryFilesDirectory(parsed.temporaryFilesDirectory),
       globalShortcut: normalizeGlobalShortcut(parsed.globalShortcut),
@@ -661,10 +659,6 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     patch.globalShortcutDisabled === undefined ? data.globalShortcutDisabled : patch.globalShortcutDisabled === true
   const nextSwapCloseShortcuts =
     patch.swapCloseShortcuts === undefined ? data.swapCloseShortcuts : patch.swapCloseShortcuts === true
-  const nextToggleDetailOnActionBarBlankClick =
-    patch.toggleDetailOnActionBarBlankClick === undefined
-      ? data.toggleDetailOnActionBarBlankClick
-      : patch.toggleDetailOnActionBarBlankClick === true
   const nextTerminalThemeSyncEnabled =
     patch.terminalThemeSyncEnabled === undefined
       ? data.terminalThemeSyncEnabled
@@ -724,7 +718,6 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     data.shortcutsDisabled !== nextShortcutsDisabled ||
     data.globalShortcutDisabled !== nextGlobalShortcutDisabled ||
     data.swapCloseShortcuts !== nextSwapCloseShortcuts ||
-    data.toggleDetailOnActionBarBlankClick !== nextToggleDetailOnActionBarBlankClick ||
     data.terminalThemeSyncEnabled !== nextTerminalThemeSyncEnabled ||
     data.temporaryFilesDirectory !== nextTemporaryFilesDirectory ||
     data.globalShortcut !== nextGlobalShortcut ||
@@ -754,7 +747,6 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   data.shortcutsDisabled = nextShortcutsDisabled
   data.globalShortcutDisabled = nextGlobalShortcutDisabled
   data.swapCloseShortcuts = nextSwapCloseShortcuts
-  data.toggleDetailOnActionBarBlankClick = nextToggleDetailOnActionBarBlankClick
   data.terminalThemeSyncEnabled = nextTerminalThemeSyncEnabled
   data.temporaryFilesDirectory = nextTemporaryFilesDirectory
   data.globalShortcut = nextGlobalShortcut

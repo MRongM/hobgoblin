@@ -15,8 +15,7 @@ const REPO_B_ID = '/repo-b'
 const REMOTE_REPO_ID = 'ssh-config://prod/srv/plain'
 let compactUi = false
 const runtimeFontSettings = vi.hoisted(() => ({
-  fileTreeFontSize: 12,
-  fileTreeTopbarFontSize: 13,
+  appFontSize: 15,
   terminalFontSize: 14,
 }))
 const sectionActionMocks = vi.hoisted(() => ({
@@ -920,7 +919,7 @@ describe('RepoExplorerPane', () => {
     await act(async () => root.unmount())
   })
 
-  test('matches file and branch toolbar height while using the configured file topbar font size', async () => {
+  test('matches file and branch toolbar height while inheriting the global file topbar font size', async () => {
     seedRepoState({
       id: REPO_ID,
       branches: [createRepoBranch('main')],
@@ -943,7 +942,7 @@ describe('RepoExplorerPane', () => {
     expect(explorerToolbar?.style.height).toBe('41px')
     expect(explorerToolbar?.className).not.toContain('h-8')
     expect(fileTree?.getAttribute('data-toolbar-height')).toBe('detail')
-    expect(explorerToolbar?.style.getPropertyValue('--goblin-file-tree-topbar-font-size')).toBe('13px')
+    expect(explorerToolbar?.style.getPropertyValue('--goblin-file-tree-topbar-font-size')).toBe('')
     expect(firstTab?.className).toContain('text-[length:var(--goblin-file-tree-topbar-font-size)]')
     expect(tabIcons).toHaveLength(4)
     expect(tabIcons.every((icon) => icon.classList.contains('size-3.5'))).toBe(true)

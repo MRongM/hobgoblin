@@ -51,16 +51,16 @@ export const DEFAULT_LANG_PREF: LangPref = 'auto'
 export const DEFAULT_THEME_PREF: ThemePref = 'auto'
 export const DEFAULT_FONT_FAMILY: FontFamilyPref = 'mono'
 export const DEFAULT_SESSION_DETAIL_FOCUS_MODE = DEFAULT_DETAIL_FOCUS_MODE
-export const DEFAULT_TERMINAL_NOTIFICATIONS_ENABLED = false
+export const DEFAULT_TERMINAL_NOTIFICATIONS_ENABLED = true
 export const DEFAULT_SHORTCUTS_DISABLED = false
 export const DEFAULT_GLOBAL_SHORTCUT_DISABLED = false
 export const DEFAULT_SWAP_CLOSE_SHORTCUTS = false
-export const DEFAULT_TOGGLE_DETAIL_ON_ACTION_BAR_BLANK_CLICK = false
 export const DEFAULT_TERMINAL_THEME_SYNC_ENABLED = true
 export const DEFAULT_TEMPORARY_FILES_DIRECTORY = ''
 export const DEFAULT_TERMINAL_APP: TerminalPref = 'auto'
 export const DEFAULT_EDITOR_APP: EditorPref = 'auto'
 export const DEFAULT_FILE_TREE_FONT_SIZE = 14
+export const DEFAULT_APP_FONT_SIZE = DEFAULT_FILE_TREE_FONT_SIZE
 export const DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE = 13
 export const DEFAULT_TERMINAL_FONT_SIZE = 14
 export const DEFAULT_REMOTE_TERMINAL_TMUX_ENABLED = false
@@ -100,8 +100,6 @@ export function defaultSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): Se
     shortcutsDisabled: overrides.shortcutsDisabled ?? DEFAULT_SHORTCUTS_DISABLED,
     globalShortcutDisabled: overrides.globalShortcutDisabled ?? DEFAULT_GLOBAL_SHORTCUT_DISABLED,
     swapCloseShortcuts: overrides.swapCloseShortcuts ?? DEFAULT_SWAP_CLOSE_SHORTCUTS,
-    toggleDetailOnActionBarBlankClick:
-      overrides.toggleDetailOnActionBarBlankClick ?? DEFAULT_TOGGLE_DETAIL_ON_ACTION_BAR_BLANK_CLICK,
     terminalThemeSyncEnabled: overrides.terminalThemeSyncEnabled ?? DEFAULT_TERMINAL_THEME_SYNC_ENABLED,
     temporaryFilesDirectory: overrides.temporaryFilesDirectory ?? DEFAULT_TEMPORARY_FILES_DIRECTORY,
     globalShortcut: overrides.globalShortcut ?? DEFAULT_GLOBAL_SHORTCUT,
@@ -146,7 +144,6 @@ export function initialSettingsFromSnapshot(
     | 'shortcutsDisabled'
     | 'globalShortcutDisabled'
     | 'swapCloseShortcuts'
-    | 'toggleDetailOnActionBarBlankClick'
     | 'terminalThemeSyncEnabled'
     | 'temporaryFilesDirectory'
     | 'globalShortcut'
@@ -177,7 +174,6 @@ export function initialSettingsFromSnapshot(
     shortcutsDisabled: snapshot.shortcutsDisabled,
     globalShortcutDisabled: snapshot.globalShortcutDisabled,
     swapCloseShortcuts: snapshot.swapCloseShortcuts,
-    toggleDetailOnActionBarBlankClick: snapshot.toggleDetailOnActionBarBlankClick,
     terminalThemeSyncEnabled: snapshot.terminalThemeSyncEnabled,
     temporaryFilesDirectory: snapshot.temporaryFilesDirectory,
     globalShortcut: snapshot.globalShortcut,

@@ -47,11 +47,10 @@ test('initializes server-settings.json with defaults when no persisted settings 
     gitNetworkProxyEnabled: false,
     gitNetworkProxyUrl: '',
     gitNetworkTimeoutSec: 120,
-    terminalNotificationsEnabled: false,
+    terminalNotificationsEnabled: true,
     shortcutsDisabled: false,
     globalShortcutDisabled: false,
     swapCloseShortcuts: false,
-    toggleDetailOnActionBarBlankClick: false,
     terminalThemeSyncEnabled: true,
     temporaryFilesDirectory: '',
     globalShortcut: 'Alt+G',
@@ -77,6 +76,25 @@ test('initializes server-settings.json with defaults when no persisted settings 
   vi.resetModules()
   const reloaded = await import('#/server/modules/settings-source.ts')
   expect(await reloaded.getServerFetchIntervalSec()).toBe(120)
+})
+
+test('defaults a missing terminal notification preference on and preserves explicit off', async () => {
+  useTempServerSettingsDir()
+  writeSettingsFile({})
+  const missingPreferenceModule = await import('#/server/modules/settings-source.ts')
+
+  await expect(missingPreferenceModule.getServerSettingsPrefs()).resolves.toMatchObject({
+    terminalNotificationsEnabled: true,
+  })
+
+  missingPreferenceModule.resetServerSettingsSourceForTests()
+  vi.resetModules()
+  writeSettingsFile({ terminalNotificationsEnabled: false })
+  const explicitOptOutModule = await import('#/server/modules/settings-source.ts')
+
+  await expect(explicitOptOutModule.getServerSettingsPrefs()).resolves.toMatchObject({
+    terminalNotificationsEnabled: false,
+  })
 })
 
 test('persists web access credentials without exposing password material in public settings', async () => {
@@ -181,7 +199,6 @@ test('persists updates and notifies subscribers from the server settings store',
     shortcutsDisabled: true,
     globalShortcutDisabled: true,
     swapCloseShortcuts: true,
-    toggleDetailOnActionBarBlankClick: true,
     terminalThemeSyncEnabled: false,
     temporaryFilesDirectory: path.join(tmp, 'terminal-paste'),
     globalShortcut: 'CommandOrControl+Alt+G',
@@ -231,7 +248,6 @@ test('persists updates and notifies subscribers from the server settings store',
     shortcutsDisabled: true,
     globalShortcutDisabled: true,
     swapCloseShortcuts: true,
-    toggleDetailOnActionBarBlankClick: true,
     terminalThemeSyncEnabled: false,
     temporaryFilesDirectory: path.join(tmp, 'terminal-paste'),
     globalShortcut: 'Alt+G',

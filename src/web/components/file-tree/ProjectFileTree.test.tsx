@@ -167,11 +167,11 @@ vi.mock('#/web/stores/i18n.ts', () => ({
 }))
 
 vi.mock('#/web/runtime-settings-file-area.ts', () => ({
-  useRuntimeFileAreaSettings: () => ({ fileTreeFontSize: 12, fileTreeClipboardMaxBytesMb: 30 }),
+  useRuntimeFileAreaSettings: () => ({ fileTreeClipboardMaxBytesMb: 30 }),
 }))
 
 vi.mock('#/web/runtime-settings-fonts.ts', () => ({
-  useRuntimeFontSettings: () => ({ fileTreeFontSize: 12, terminalFontSize: 14 }),
+  useRuntimeFontSettings: () => ({ appFontSize: 15, terminalFontSize: 14 }),
 }))
 
 vi.mock('#/web/runtime-settings-chrome.ts', () => ({
@@ -287,6 +287,7 @@ describe('ProjectFileTree', () => {
     expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', '/repo', expect.any(AbortSignal))
     expect(container?.textContent).toContain('src')
     expect(container?.textContent).toContain('README.md')
+    expect(fileTreeRoot().style.getPropertyValue('--goblin-file-tree-font-size')).toBe('15px')
   })
 
   test('loads a non-git local workspace from the repo root', async () => {

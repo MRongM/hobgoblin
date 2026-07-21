@@ -33,7 +33,6 @@ function defaultRpcResult(path: string, input?: unknown) {
       shortcutsDisabled: false,
       globalShortcutDisabled: false,
       swapCloseShortcuts: false,
-      toggleDetailOnActionBarBlankClick: false,
       terminalThemeSyncEnabled: true,
       temporaryFilesDirectory: '',
       globalShortcut: 'CommandOrControl+Shift+G',
@@ -190,7 +189,6 @@ beforeEach(() => {
       shortcutsDisabled: false,
       globalShortcutDisabled: false,
       swapCloseShortcuts: false,
-      toggleDetailOnActionBarBlankClick: false,
       temporaryFilesDirectory: '',
       globalShortcut: 'CommandOrControl+Shift+G',
       globalShortcutRegistered: true,
@@ -222,7 +220,6 @@ beforeEach(() => {
       shortcutsDisabled: false,
       globalShortcutDisabled: false,
       swapCloseShortcuts: false,
-      toggleDetailOnActionBarBlankClick: false,
       temporaryFilesDirectory: '',
       globalShortcut: 'CommandOrControl+Shift+G',
       globalShortcutRegistered: true,
@@ -424,11 +421,11 @@ describe('SettingsSurface', () => {
     ).toBe(true)
   })
 
-  test('edits file tree font size from settings', async () => {
-    await render(<SettingsSurface page="files" onPageChange={() => {}} />)
+  test('edits global UI font size from general settings', async () => {
+    await render(<SettingsSurface page="general" onPageChange={() => {}} />)
 
-    const input = document.getElementById('settings-file-tree-font-size')
-    if (!(input instanceof HTMLInputElement)) throw new Error('Missing file tree font size input')
+    const input = document.getElementById('settings-app-font-size')
+    if (!(input instanceof HTMLInputElement)) throw new Error('Missing application UI font size input')
 
     await act(async () => {
       setInputValue(input, '13')
@@ -443,23 +440,14 @@ describe('SettingsSurface', () => {
     ).toBe(true)
   })
 
-  test('edits file area topbar font size from settings', async () => {
+  test('keeps application and terminal font-size controls out of Files settings', async () => {
     await render(<SettingsSurface page="files" onPageChange={() => {}} />)
 
-    const input = document.getElementById('settings-file-tree-topbar-font-size')
-    if (!(input instanceof HTMLInputElement)) throw new Error('Missing file tree topbar font size input')
-
-    await act(async () => {
-      setInputValue(input, '12')
-      await Promise.resolve()
-    })
-
-    expect(
-      fetchMock.mock.calls.some((call) => {
-        const [, options] = call as unknown as [unknown, RequestInit | undefined]
-        return String(options?.body ?? '').includes('"fileTreeTopbarFontSize":12')
-      }),
-    ).toBe(true)
+    expect(document.getElementById('settings-app-font-size')).toBeNull()
+    expect(document.getElementById('settings-file-tree-font-size')).toBeNull()
+    expect(document.getElementById('settings-file-tree-topbar-font-size')).toBeNull()
+    expect(document.getElementById('settings-terminal-font-size')).toBeNull()
+    expect(document.body.textContent).not.toContain('settings.files.font.title')
   })
 
   test('edits the new project default file area height ratio from settings without changing project overrides', async () => {
@@ -530,6 +518,12 @@ describe('SettingsSurface', () => {
         return body.settings?.terminalThemeSyncEnabled === false
       }),
     ).toBe(true)
+  })
+
+  test('does not expose the removed action bar blank toggle in general settings', async () => {
+    await render(<SettingsSurface page="general" onPageChange={() => {}} />)
+
+    expect(document.getElementById('settings-action-bar-blank-toggle')).toBeNull()
   })
 
   test('lists and writes every shared color theme from general settings', async () => {

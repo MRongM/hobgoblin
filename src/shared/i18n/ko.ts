@@ -800,6 +800,9 @@ export const ko: Record<DictKey, string> = {
   'settings.appearance.dark': '다크',
   'settings.font-family': '글꼴',
   'settings.font-family-hint': '앱 인터페이스와 내장 터미널에서 사용할 글꼴을 제어합니다.',
+  'settings.font-size': 'UI 글꼴 크기',
+  'settings.font-size-hint':
+    '앱 인터페이스 전체의 텍스트 크기를 조절합니다. 터미널 내용은 별도 글꼴 크기를 사용합니다.',
   'settings.font-family.mono': 'Mono',
   'settings.font-family.maple': 'Maple Mono',
   'settings.font-family.system': '시스템 글꼴',
@@ -816,9 +819,6 @@ export const ko: Record<DictKey, string> = {
   'settings.chrome-heights.toolbar-hint':
     '저장소, 브랜치, 파일 공용 도구 모음 높이를 조정합니다. 컴팩트 작업 모음은 변경되지 않습니다.',
   'settings.back': '뒤로',
-  'settings.action-bar-blank-toggle': '작업 막대 빈 영역으로 세부 패널 접기/펼치기',
-  'settings.action-bar-blank-toggle-hint':
-    '상하 레이아웃에서만 작동합니다. 작업 막대 빈 공간을 클릭해 세부 정보를 표시하거나 숨깁니다.',
   'settings.server-port': '프로젝트 포트',
   'settings.server-port-hint': '로컬 프로젝트 서버 포트(기본 32200). Hobgoblin을 다시 시작하면 적용됩니다.',
   'settings.temporary-files-directory': '임시 파일 디렉터리',

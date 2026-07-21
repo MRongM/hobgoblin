@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { PanelLeftOpen } from 'lucide-react'
 import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
-import { EmptyState, Toolbar } from '#/web/components/Layout.tsx'
+import { Toolbar } from '#/web/components/Layout.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { FocusProjectSwitcher } from '#/web/components/repo-workspace/FocusProjectSwitcher.tsx'
 import { WorkspaceRepositorySwitcher } from '#/web/components/repo-workspace/WorkspaceRepositorySwitcher.tsx'
@@ -149,9 +149,7 @@ export function PlainWorkspaceTerminalPanel({
       <div className="flex min-h-0 flex-1 flex-col">
         {snapshot.selectedDescriptor ? (
           <TerminalSlot repoRoot={repoId} branch={snapshot.selectedDescriptor.branch} worktreePath={workspacePath} />
-        ) : (
-          <EmptyState title={t('terminal.label')} body={t('terminal.new')} />
-        )}
+        ) : null}
       </div>
     </section>
   )

@@ -4,7 +4,6 @@ import {
   runSettingsControllerAction,
   setFontFamilyPreference,
   setFileTreeFontSizePreference,
-  setFileTreeTopbarFontSizePreference,
   setTerminalFontSizePreference,
 } from '#/web/settings-write-paths.ts'
 
@@ -14,14 +13,9 @@ export function useRuntimeFontSettings() {
 
 export function useFontSettingsController() {
   return {
-    async setFileTreeFontSize(fontSize: number): Promise<void> {
-      await runSettingsControllerAction('file tree font size update', async () => {
+    async setAppFontSize(fontSize: number): Promise<void> {
+      await runSettingsControllerAction('application font size update', async () => {
         await setFileTreeFontSizePreference(fontSize)
-      })
-    },
-    async setFileTreeTopbarFontSize(fontSize: number): Promise<void> {
-      await runSettingsControllerAction('file tree topbar font size update', async () => {
-        await setFileTreeTopbarFontSizePreference(fontSize)
       })
     },
     async setTerminalFontSize(fontSize: number): Promise<void> {

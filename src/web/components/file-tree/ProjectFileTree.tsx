@@ -109,6 +109,7 @@ import {
   writeFileTreeClipboardFile,
 } from '#/web/app-shell-client.ts'
 import { useRuntimeFileAreaSettings } from '#/web/runtime-settings-file-area.ts'
+import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 import { useRuntimeChromeSettings } from '#/web/runtime-settings-chrome.ts'
 import { fileTreeClipboardMaxBytes as fileTreeClipboardMaxBytesFromMb } from '#/shared/file-tree-clipboard.ts'
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
@@ -189,7 +190,8 @@ export function ProjectFileTree({
   const t = useT()
   const navigation = useMainWindowNavigation()
   const setDetailCollapsed = useReposStore((state) => state.setDetailCollapsed)
-  const { fileTreeFontSize, fileTreeClipboardMaxBytesMb } = useRuntimeFileAreaSettings()
+  const { fileTreeClipboardMaxBytesMb } = useRuntimeFileAreaSettings()
+  const { appFontSize } = useRuntimeFontSettings()
   const fileTreeClipboardMaxBytes = fileTreeClipboardMaxBytesFromMb(fileTreeClipboardMaxBytesMb)
   const view = useProjectFileTreeView(repoId)
   const branch = view.branch
@@ -1219,7 +1221,7 @@ export function ProjectFileTree({
 
   if (!view.exists) return null
   const fileTreeStyle = {
-    '--goblin-file-tree-font-size': `${fileTreeFontSize}px`,
+    '--goblin-file-tree-font-size': `${appFontSize}px`,
   } as CSSProperties
 
   return (

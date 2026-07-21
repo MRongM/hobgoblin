@@ -810,6 +810,8 @@ export const en = {
   'settings.appearance.dark': 'Dark',
   'settings.font-family': 'Font',
   'settings.font-family-hint': 'Controls the font used by the app interface and built-in terminal.',
+  'settings.font-size': 'UI font size',
+  'settings.font-size-hint': 'Controls text size across the app interface. Terminal content uses its own font size.',
   'settings.font-family.mono': 'Mono',
   'settings.font-family.maple': 'Maple Mono',
   'settings.font-family.system': 'System font',
@@ -825,9 +827,6 @@ export const en = {
   'settings.chrome-heights.toolbar': 'Toolbar height',
   'settings.chrome-heights.toolbar-hint':
     'Controls shared repository, branch, and file toolbar height. Compact action bars stay unchanged.',
-  'settings.action-bar-blank-toggle': 'Toggle details from action bar',
-  'settings.action-bar-blank-toggle-hint':
-    'Top/bottom layout only. Click empty action bar space to show or hide details.',
   'settings.server-port': 'Project port',
   'settings.server-port-hint':
     'Port for the local project server (default 32200). Takes effect after restarting Hobgoblin.',

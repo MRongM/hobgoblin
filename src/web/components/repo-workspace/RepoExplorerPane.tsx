@@ -1,6 +1,6 @@
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useCallback, useEffect, useState } from 'react'
-import type { CSSProperties, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import {
   FolderPlus,
   FolderTree,
@@ -41,7 +41,6 @@ import { ToolbarTabStrip, ToolbarTabStripBody } from '#/web/components/tab-strip
 import { useT } from '#/web/stores/i18n.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
-import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 import { repoIsPlainWorkspace } from '#/web/stores/repos/capabilities.ts'
 import { WorkspaceRepositoryRail } from '#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx'
 import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.tsx'
@@ -316,7 +315,6 @@ function ExplorerTabs({
   onTabChange: (tab: ExplorerTab) => void
 }) {
   const t = useT()
-  const { fileTreeTopbarFontSize } = useRuntimeFontSettings()
   const [revealRequest, setRevealRequest] = useState<FileTreeRevealRequest | null>(null)
   const activeRevealRequest = revealRequest?.repoId === repoId ? revealRequest : null
   const isRemoteRepo = isRemoteRepoId(repoId)
@@ -328,10 +326,6 @@ function ExplorerTabs({
     const selected = repo?.data.branches.find((branch) => branch.name === repo.ui.selectedBranch)
     return !!selected?.worktree?.path
   })
-
-  const toolbarStyle = {
-    '--goblin-file-tree-topbar-font-size': `${fileTreeTopbarFontSize}px`,
-  } as CSSProperties
 
   // 基础 tab 列表
   const baseTabs = [
@@ -404,7 +398,7 @@ function ExplorerTabs({
 
   return (
     <section className="flex min-h-0 flex-1 flex-col border-t border-separator/70 bg-pane">
-      <Toolbar data-testid="repo-explorer-toolbar" className="px-2" variant="detail" style={toolbarStyle}>
+      <Toolbar data-testid="repo-explorer-toolbar" className="px-2" variant="detail">
         <ToolbarTabStrip
           compact={false}
           compactContent={null}

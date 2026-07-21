@@ -49,7 +49,6 @@ export interface InitialSettingsSnapshot {
   shortcutsDisabled: boolean
   globalShortcutDisabled: boolean
   swapCloseShortcuts: boolean
-  toggleDetailOnActionBarBlankClick: boolean
   terminalThemeSyncEnabled: boolean
   temporaryFilesDirectory: string
   globalShortcut: string

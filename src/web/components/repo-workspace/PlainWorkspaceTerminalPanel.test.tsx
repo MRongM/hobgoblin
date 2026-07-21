@@ -92,6 +92,13 @@ afterEach(() => {
 })
 
 describe('PlainWorkspaceTerminalPanel', () => {
+  test('does not show an empty-state prompt when no plain-workspace terminal exists', () => {
+    render(<PlainWorkspaceTerminalPanel repoId="/repo" layout="top-bottom" />)
+
+    expect(container!.textContent).not.toContain('terminal.label')
+    expect(container!.textContent).not.toContain('terminal.new')
+  })
+
   test('does not create a terminal when a plain workspace opens or rerenders', () => {
     render(<PlainWorkspaceTerminalPanel repoId="/repo" layout="top-bottom" />)
 

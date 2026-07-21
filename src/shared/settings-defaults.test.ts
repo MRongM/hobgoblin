@@ -9,6 +9,7 @@ import {
   DEFAULT_TOOLBAR_HEIGHT_PX,
   DEFAULT_FILE_TREE_FONT_SIZE,
   DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
+  DEFAULT_TERMINAL_NOTIFICATIONS_ENABLED,
   MAX_CHROME_HEIGHT_PX,
   MIN_CHROME_HEIGHT_PX,
   defaultInitialSettingsSnapshot,
@@ -46,6 +47,13 @@ describe('settings defaults', () => {
   test('defaults terminal custom button size to medium', () => {
     expect(DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE).toBe('medium')
     expect((defaultSettingsPrefs() as { terminalCustomButtonSize?: string }).terminalCustomButtonSize).toBe('medium')
+  })
+
+  test('enables terminal bell notifications by default without overriding opt-out', () => {
+    expect(DEFAULT_TERMINAL_NOTIFICATIONS_ENABLED).toBe(true)
+    expect(defaultSettingsPrefs().terminalNotificationsEnabled).toBe(true)
+    expect(defaultInitialSettingsSnapshot().terminalNotificationsEnabled).toBe(true)
+    expect(defaultSettingsPrefs({ terminalNotificationsEnabled: false }).terminalNotificationsEnabled).toBe(false)
   })
 
   test('defaults global font family to mono', () => {

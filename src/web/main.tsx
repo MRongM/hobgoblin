@@ -6,12 +6,14 @@ import { ResponsiveUiProvider } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { MainWindowRouterProvider } from '#/web/main-router.tsx'
 import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
 import { GlobalFontFamilyProjection } from '#/web/components/GlobalFontFamilyProjection.tsx'
+import { GlobalFontSizeProjection } from '#/web/components/GlobalFontSizeProjection.tsx'
 const rootEl = document.getElementById('root')
 if (!rootEl) throw new Error('root element missing')
 createRoot(rootEl).render(
   <StrictMode>
     <QueryClientProvider client={mainWindowQueryClient}>
       <GlobalFontFamilyProjection />
+      <GlobalFontSizeProjection />
       <ResponsiveUiProvider>
         <MainWindowRouterProvider />
       </ResponsiveUiProvider>

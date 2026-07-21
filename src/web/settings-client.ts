@@ -197,10 +197,6 @@ export async function setSwapCloseShortcuts(swapped: boolean): Promise<void> {
   await updateSettingsPrefsPatch({ swapCloseShortcuts: swapped })
 }
 
-export async function setToggleDetailOnActionBarBlankClick(enabled: boolean): Promise<void> {
-  await updateSettingsPrefsPatch({ toggleDetailOnActionBarBlankClick: enabled })
-}
-
 export async function setTerminalThemeSyncEnabled(enabled: boolean): Promise<void> {
   await updateSettingsPrefsPatch({ terminalThemeSyncEnabled: enabled })
 }

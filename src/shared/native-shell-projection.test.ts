@@ -29,7 +29,6 @@ describe('native shell projection helpers', () => {
     expect(
       pickNativeSettingsProjectionPatch({
         terminalNotificationsEnabled: true,
-        toggleDetailOnActionBarBlankClick: true,
       }),
     ).toBeNull()
   })
@@ -48,7 +47,6 @@ describe('native shell projection helpers', () => {
         shortcutsDisabled: true,
         globalShortcutDisabled: true,
         swapCloseShortcuts: true,
-        toggleDetailOnActionBarBlankClick: false,
         terminalThemeSyncEnabled: true,
         temporaryFilesDirectory: '',
         globalShortcut: 'Alt+K',
