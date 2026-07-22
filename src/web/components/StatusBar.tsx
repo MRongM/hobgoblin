@@ -1,5 +1,5 @@
-// Bottom status bar of the sidebar column — mirrors the sidebar header's
-// token family so the sidebar is framed top and bottom, while the terminal
+// Bottom status bar of the sidebar column — uses the sidebar header's token
+// family while remaining visually continuous with navigation. The terminal
 // pane keeps the window's full height. Left corner is the ambient app chrome
 // (settings entry + project theme); the right side shows the selected branch.
 // App also renders it full-width on the desktop empty state (repoId null) so
@@ -47,7 +47,7 @@ export function StatusBar({ repoId, fileAreaCollapsed, onToggleFileArea }: Props
   return (
     <footer
       data-testid="statusbar"
-      className="flex h-7 shrink-0 items-center gap-1 border-t border-topbar-border bg-topbar px-1.5 text-xs text-topbar-muted-foreground"
+      className="flex h-7 shrink-0 items-center gap-1 bg-topbar px-1.5 text-xs text-topbar-muted-foreground"
     >
       {shellActions && (
         <Tip label={t('topbar.settings')}>

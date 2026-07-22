@@ -457,7 +457,7 @@ function BranchWorkspaceRow({
         id={memberListId}
         data-testid="branch-workspace-member-list"
         data-branch-workspace-scope-spine
-        className="relative ml-5 border-l border-brand-border/50 pl-2"
+        className="relative ml-5 pl-2"
       >
         {item.repositories.map((member) => (
           <BranchWorkspaceMemberRow

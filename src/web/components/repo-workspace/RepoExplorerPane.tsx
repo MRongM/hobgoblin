@@ -229,7 +229,7 @@ function BranchSectionLabel({ repoId }: { repoId: string }) {
             <AsyncButton
               type="button"
               variant="ghost"
-              size="icon-xs"
+              size="icon-sm"
               disabled
               aria-label={t('action.create-worktree-title')}
             >
@@ -243,7 +243,7 @@ function BranchSectionLabel({ repoId }: { repoId: string }) {
           <AsyncButton
             type="button"
             variant="ghost"
-            size="icon-xs"
+            size="icon-sm"
             loading={syncBusy}
             disabled={syncDisabled}
             aria-label={t('action.refresh')}
@@ -270,7 +270,7 @@ function BranchCreateWorktreeButton({ repo, branch }: { repo: BranchActionRepo; 
           <AsyncButton
             type="button"
             variant="ghost"
-            size="icon-xs"
+            size="icon-sm"
             loading={action.busy}
             disabled={action.disabled}
             aria-label={action.ariaLabel ?? action.title ?? t('action.create-worktree-title')}

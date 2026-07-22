@@ -96,13 +96,9 @@ export function SidebarProjectHeader({ repoId, onShowCompactDetail, onShowCompac
   return (
     <div
       data-testid="sidebar-project-header"
-      className="flex shrink-0 flex-col border-b border-topbar-border bg-topbar text-topbar-foreground"
+      className="flex shrink-0 flex-col bg-topbar text-topbar-foreground"
     >
-      {/* The bottom border lives on the outer wrapper (it must also wrap the
-          expanded project list), so subtract it here to keep the collapsed
-          header at exactly topbarHeightPx — the same border-box height every
-          other topbar row (Toolbar chrome="topbar", Topbar) renders with. */}
-      <div className="topbar flex shrink-0 items-center gap-0.5" style={{ height: topbarHeightPx - 1 }}>
+      <div className="topbar flex shrink-0 items-center gap-0.5" style={{ height: topbarHeightPx }}>
         <Button
           type="button"
           variant="ghost"
@@ -205,7 +201,7 @@ export function SidebarProjectHeader({ repoId, onShowCompactDetail, onShowCompac
         )}
       </div>
       {listExpanded && (
-        <div className="border-t border-separator/70">
+        <div>
           <div className="flex h-7 shrink-0 items-center px-4 pt-1 text-[length:var(--goblin-project-titlebar-font-size)] font-semibold uppercase tracking-[0.08em] text-topbar-muted-foreground">
             {t('repo-tabs.repos')}
           </div>

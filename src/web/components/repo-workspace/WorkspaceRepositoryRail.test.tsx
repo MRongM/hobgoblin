@@ -513,6 +513,31 @@ describe('WorkspaceRepositoryRail', () => {
     expect(container?.querySelector('button[aria-label="workspace.configure"]')).not.toBeNull()
   })
 
+  test('renders navigation sections without decorative separators', () => {
+    useReposStore.setState({
+      activeId: ROOT,
+      workspaceActiveContextByRoot: { [ROOT]: { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' } },
+    })
+    renderRail({ currentRepoId: ROOT })
+
+    const upperList = container?.querySelector<HTMLElement>('[data-testid="workspace-repository-upper-list"]')
+    const railRoot = upperList?.parentElement?.parentElement
+    const branchSection = container?.querySelector<HTMLElement>(
+      'section[aria-label="workspace.branch-workspace.list"]',
+    )
+    const status = container?.querySelector<HTMLElement>('[role="status"]')
+
+    expect(branchSection).not.toBeNull()
+    expect(status).not.toBeNull()
+    expect(railRoot?.className).not.toContain('border-b')
+    expect(railRoot?.className).not.toContain('border-separator')
+    expect(upperList?.querySelector('.bg-separator')).toBeNull()
+    expect(branchSection?.className).not.toContain('border-t')
+    expect(branchSection?.className).not.toContain('border-separator')
+    expect(status?.className).not.toContain('border-t')
+    expect(status?.className).not.toContain('border-separator')
+  })
+
   test('identifies Overview with the workspace root folder icon and name', () => {
     renderRail()
 

@@ -78,13 +78,12 @@ export function WorkspaceRepositoryList({ repositories, currentRepoId, disabled,
     >
       <SortableContext items={repositories.map((repository) => repository.id)} strategy={verticalListSortingStrategy}>
         <ul>
-          {repositories.map((repository, index) => (
+          {repositories.map((repository) => (
             <SortableWorkspaceRepositoryRow
               key={repository.id}
               repository={repository}
               active={currentRepoId === repository.id}
               disabled={disabled}
-              terminal={index === repositories.length - 1}
               onActivate={onActivate}
             />
           ))}
@@ -98,13 +97,11 @@ function SortableWorkspaceRepositoryRow({
   repository,
   active,
   disabled,
-  terminal,
   onActivate,
 }: {
   repository: WorkspaceRepositoryListItem
   active: boolean
   disabled: boolean
-  terminal: boolean
   onActivate: (id: string) => void
 }) {
   const t = useT()
@@ -249,12 +246,6 @@ function SortableWorkspaceRepositoryRow({
         </span>
         {repository.unavailable ? (
           <span className="shrink-0 text-[9px] text-danger">{t('workspace.repository-unavailable')}</span>
-        ) : null}
-        {terminal ? (
-          <span
-            className="absolute bottom-0 left-[0.68rem] h-1.5 w-1.5 border-b border-l border-separator"
-            aria-hidden="true"
-          />
         ) : null}
       </WorkspaceListItemFrame>
     </WorkspaceItemContextMenu>
