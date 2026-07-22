@@ -10,7 +10,8 @@
 #          /etc/hobgoblin/server.env (secret generated once, preserved forever),
 #          then enables and starts the service.
 # update:  git pull --ff-only (unless --no-pull), bun install, rebuild web UI,
-#          restart the service. Never touches the env file or unit.
+#          rewrite the unit for this checkout, and restart the service. Never
+#          touches the env file.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -172,6 +173,7 @@ cmd_update() {
     fi
   fi
   build
+  write_unit
   start_and_verify update
 }
 
