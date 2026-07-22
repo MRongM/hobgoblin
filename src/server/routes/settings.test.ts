@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   applyServerSessionWrite: vi.fn(),
   applyServerSettingsPrefsWrite: vi.fn(),
   applyServerWebAccessSettingsWrite: vi.fn(),
+  applyServerTelegramNotificationSettingsWrite: vi.fn(),
 }))
 
 vi.mock('#/server/modules/external-apps.ts', () => ({
@@ -36,6 +37,7 @@ vi.mock('#/server/modules/settings-write-paths.ts', () => ({
   applyServerSessionWrite: mocks.applyServerSessionWrite,
   applyServerSettingsPrefsWrite: mocks.applyServerSettingsPrefsWrite,
   applyServerWebAccessSettingsWrite: mocks.applyServerWebAccessSettingsWrite,
+  applyServerTelegramNotificationSettingsWrite: mocks.applyServerTelegramNotificationSettingsWrite,
 }))
 
 describe('settings routes', () => {
@@ -126,6 +128,32 @@ describe('settings routes', () => {
       session,
     })
     expect(mocks.applyServerSessionWrite).toHaveBeenCalledWith({ session })
+  })
+
+  test('delegates Telegram settings writes without exposing the Bot Token', async () => {
+    mocks.applyServerTelegramNotificationSettingsWrite.mockResolvedValue({
+      ok: true,
+      telegramNotifications: { enabled: true, botTokenConfigured: true, chatId: '-100123' },
+    })
+    const { createSettingsRoutes } = await import('#/server/routes/settings.ts')
+    const app = createSettingsRoutes(createServerSettingsState())
+    const response = await app.request('http://127.0.0.1:32100/telegram', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: true, botToken: '123456:test-token', chatId: '-100123' }),
+    })
+
+    const result = await response.json()
+    expect(result).toEqual({
+      ok: true,
+      telegramNotifications: { enabled: true, botTokenConfigured: true, chatId: '-100123' },
+    })
+    expect(JSON.stringify(result)).not.toContain('test-token')
+    expect(mocks.applyServerTelegramNotificationSettingsWrite).toHaveBeenCalledWith({
+      enabled: true,
+      botToken: '123456:test-token',
+      chatId: '-100123',
+    })
   })
 
   test('delegates recent-repo writes to the settings write-path application layer', async () => {

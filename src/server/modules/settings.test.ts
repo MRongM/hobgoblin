@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getServerRecentRepos: vi.fn(),
   getServerRepoSettings: vi.fn(),
   getServerWebAccessSettings: vi.fn(),
+  getServerTelegramNotificationSettings: vi.fn(),
 }))
 
 vi.mock('#/server/modules/settings-source.ts', () => ({
@@ -16,6 +17,7 @@ vi.mock('#/server/modules/settings-source.ts', () => ({
   getServerRecentRepos: mocks.getServerRecentRepos,
   getServerRepoSettings: mocks.getServerRepoSettings,
   getServerWebAccessSettings: mocks.getServerWebAccessSettings,
+  getServerTelegramNotificationSettings: mocks.getServerTelegramNotificationSettings,
 }))
 
 describe('server settings snapshot runtime state', () => {
@@ -51,6 +53,11 @@ describe('server settings snapshot runtime state', () => {
       enabled: false,
       username: '',
       passwordConfigured: false,
+    })
+    mocks.getServerTelegramNotificationSettings.mockResolvedValue({
+      enabled: false,
+      botTokenConfigured: false,
+      chatId: '',
     })
 
     const state = createServerSettingsState()

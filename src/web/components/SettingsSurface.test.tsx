@@ -59,6 +59,7 @@ function defaultRpcResult(path: string, input?: unknown) {
       },
       recentRepos: [],
       webAccess: { enabled: false, username: '', passwordConfigured: false },
+      telegramNotifications: { enabled: false, botTokenConfigured: false, chatId: '' },
     }
   }
   if (path === 'externalApps.get' || path === 'externalApps.refresh') {
@@ -155,6 +156,18 @@ const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
         passwordConfigured: true,
       },
     }
+  } else if (url.pathname === '/api/settings/telegram') {
+    const body = JSON.parse(String(init?.body ?? '{}')) as { enabled?: boolean; botToken?: string; chatId?: string }
+    result = {
+      ok: true,
+      telegramNotifications: {
+        enabled: body.enabled === true,
+        botTokenConfigured: Boolean(body.botToken),
+        chatId: body.chatId?.trim() ?? '',
+      },
+    }
+  } else if (url.pathname === '/api/telegram-notifications/test') {
+    result = { ok: true }
   }
   return {
     ok: true,
@@ -320,6 +333,50 @@ describe('SettingsSurface', () => {
     await render(<SettingsSurface page="notifications" onPageChange={() => {}} />)
 
     await waitForSwitchState('settings-terminal-notifications', 'true')
+  })
+
+  test('configures and tests Telegram notifications without echoing the Bot Token', async () => {
+    await render(<SettingsSurface page="notifications" onPageChange={() => {}} />)
+
+    const tokenInput = document.getElementById('settings-telegram-bot-token')
+    const chatIdInput = document.getElementById('settings-telegram-chat-id')
+    if (!(tokenInput instanceof HTMLInputElement)) throw new Error('Missing Telegram Bot Token input')
+    if (!(chatIdInput instanceof HTMLInputElement)) throw new Error('Missing Telegram Chat ID input')
+    expect(tokenInput.type).toBe('password')
+    expect(tokenInput.value).toBe('')
+    expect(document.body.textContent).toContain('settings.telegram.master-off-hint')
+
+    await act(async () => {
+      switchById('settings-telegram-enabled').click()
+      setInputValue(tokenInput, '123456:test-token')
+      setInputValue(chatIdInput, '-100123')
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText('settings.telegram.save').click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const write = fetchMock.mock.calls.find((call) => {
+      const [url] = call as unknown as [unknown, RequestInit | undefined]
+      return new URL(String(url)).pathname === '/api/settings/telegram'
+    })
+    expect(write).toBeDefined()
+    const [, options] = write as unknown as [unknown, RequestInit]
+    expect(JSON.parse(String(options.body))).toEqual({
+      enabled: true,
+      botToken: '123456:test-token',
+      chatId: '-100123',
+    })
+    expect((document.getElementById('settings-telegram-bot-token') as HTMLInputElement).value).toBe('')
+
+    await act(async () => {
+      buttonByText('settings.telegram.test-button').click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(toastMocks.success).toHaveBeenCalledWith('settings.telegram.test-sent')
   })
 
   test('renders the SSH remotes settings page', async () => {

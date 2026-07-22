@@ -18,6 +18,7 @@ import type {
 import type { RepoSessionEntry } from '#/shared/remote-repo.ts'
 import type { RepoQueryInvalidationEvent } from '#/shared/repo-query-invalidation.ts'
 import type { RepoSettingsEntry } from '#/shared/repo-settings.ts'
+import type { TelegramNotificationSettingsSnapshot } from '#/shared/telegram-notifications.ts'
 import { NativeShellProjectionSchema, type NativeShellProjection } from '#/shared/native-shell-projection.ts'
 
 export type { WorkspaceLayout } from '#/shared/workspace-layout.ts'
@@ -46,6 +47,13 @@ export type {
   NativeShellProjection,
 } from '#/shared/native-shell-projection.ts'
 export type { RepoSettingsEntry, WorktreeBootstrapTrust } from '#/shared/repo-settings.ts'
+export type {
+  TelegramBellNotificationContext,
+  TelegramNotificationErrorCode,
+  TelegramNotificationResult,
+  TelegramNotificationSettingsSnapshot,
+  TelegramNotificationSettingsUpdateInput,
+} from '#/shared/telegram-notifications.ts'
 
 export interface LanInfo {
   host: string
@@ -114,6 +122,7 @@ export interface SettingsSnapshot extends RuntimeSettingsSnapshot, RuntimeRecent
   session: SessionState
   repoSettings: RepoSettingsEntry[]
   webAccess: WebAccessSettingsSnapshot
+  telegramNotifications: TelegramNotificationSettingsSnapshot
 }
 
 export interface GlobalShortcutState {

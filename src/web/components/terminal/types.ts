@@ -10,6 +10,8 @@ export interface TerminalDescriptor {
   repoRoot: string
   branch: string
   worktreePath: string
+  targetKind?: 'branch-workspace'
+  branchWorkspaceId?: string
 }
 
 export interface TerminalProgressState {

@@ -72,6 +72,11 @@ const appDataClientMocks = vi.hoisted(() => ({
     username: input.username,
     passwordConfigured: true,
   })),
+  saveTelegramNotificationSettings: vi.fn(async (input) => ({
+    enabled: input.enabled === true,
+    botTokenConfigured: Boolean(input.botToken),
+    chatId: input.chatId,
+  })),
 }))
 
 vi.mock('#/web/settings-client.ts', () => ({
@@ -102,6 +107,7 @@ vi.mock('#/web/settings-client.ts', () => ({
   setTerminalFontSize: appDataClientMocks.setTerminalFontSize,
   setTerminalNotificationsEnabled: appDataClientMocks.setTerminalNotificationsEnabled,
   setWebAccessSettings: appDataClientMocks.setWebAccessSettings,
+  saveTelegramNotificationSettings: appDataClientMocks.saveTelegramNotificationSettings,
 }))
 
 describe('settings write paths', () => {
@@ -191,6 +197,12 @@ describe('settings write paths', () => {
       enabled: input.enabled === true,
       username: input.username,
       passwordConfigured: true,
+    }))
+    appDataClientMocks.saveTelegramNotificationSettings.mockReset()
+    appDataClientMocks.saveTelegramNotificationSettings.mockImplementation(async (input) => ({
+      enabled: input.enabled === true,
+      botTokenConfigured: Boolean(input.botToken),
+      chatId: input.chatId,
     }))
   })
 
@@ -329,6 +341,23 @@ describe('settings write paths', () => {
     expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
       webAccess: { enabled: true, username: 'operator', passwordConfigured: true },
     })
+  })
+
+  test('saveTelegramNotificationSettingsPreference updates only the masked Telegram cache', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    const input = { enabled: true, botToken: '123456:test-token', chatId: '-100123' }
+    const { saveTelegramNotificationSettingsPreference } = await import('#/web/settings-write-paths.ts')
+
+    await expect(saveTelegramNotificationSettingsPreference(input)).resolves.toEqual({
+      enabled: true,
+      botTokenConfigured: true,
+      chatId: '-100123',
+    })
+    const snapshot = mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())
+    expect(snapshot).toMatchObject({
+      telegramNotifications: { enabled: true, botTokenConfigured: true, chatId: '-100123' },
+    })
+    expect(JSON.stringify(snapshot)).not.toContain('test-token')
   })
 
   test('setGitNetworkProxyUrlPreference updates runtime settings cache', async () => {

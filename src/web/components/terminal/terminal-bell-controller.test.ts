@@ -85,7 +85,11 @@ describe('terminal bell controller', () => {
     )
     const controller = createTerminalBellController(notify, vi.fn())
 
-    controller.handleBell(descriptor, { processName: 'zsh', canonicalTitle: '~/Developer/goblin — npm run dev', visible: false })
+    controller.handleBell(descriptor, {
+      processName: 'zsh',
+      canonicalTitle: '~/Developer/goblin — npm run dev',
+      visible: false,
+    })
     await Promise.resolve()
 
     expect(window.goblinNative.terminal.notifyBell).toHaveBeenCalledWith({
@@ -95,6 +99,41 @@ describe('terminal bell controller', () => {
       repoRoot: '/tmp/repo',
     })
 
+    hasFocus.mockRestore()
+  })
+
+  test('sends system and Telegram notifications for the same enabled bell', async () => {
+    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true }) }))
+    vi.stubGlobal('fetch', fetchMock)
+    mainWindowQueryClient.setQueryData(
+      settingsSnapshotQueryKey(),
+      defaultSettingsSnapshot({
+        terminalNotificationsEnabled: true,
+        telegramNotifications: { enabled: true, botTokenConfigured: true, chatId: '-100123' },
+      }),
+    )
+    const controller = createTerminalBellController(vi.fn(), vi.fn())
+
+    controller.handleBell(descriptor, { processName: 'bun', canonicalTitle: 'bun run test', visible: false })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(window.goblinNative.terminal.notifyBell).toHaveBeenCalledTimes(1)
+    const telegramCall = fetchMock.mock.calls.find((call) => {
+      const [url] = call as unknown as [unknown, RequestInit | undefined]
+      return new URL(String(url)).pathname.endsWith('/bell')
+    })
+    expect(telegramCall).toBeDefined()
+    const [, request] = telegramCall as unknown as [unknown, RequestInit]
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      terminalKey: 'terminal-key',
+      branch: 'feature/test',
+      terminalIndex: 1,
+      terminalTitle: 'bun run test',
+    })
+
+    vi.unstubAllGlobals()
     hasFocus.mockRestore()
   })
 
@@ -142,8 +181,13 @@ describe('terminal bell controller', () => {
     const now = vi.spyOn(Date, 'now')
     mainWindowQueryClient.setQueryData(
       settingsSnapshotQueryKey(),
-      defaultSettingsSnapshot({ terminalNotificationsEnabled: true }),
+      defaultSettingsSnapshot({
+        terminalNotificationsEnabled: true,
+        telegramNotifications: { enabled: true, botTokenConfigured: true, chatId: '-100123' },
+      }),
     )
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true }) }))
+    vi.stubGlobal('fetch', fetchMock)
     const controller = createTerminalBellController(notify, vi.fn())
 
     now.mockReturnValueOnce(10_000)
@@ -160,7 +204,9 @@ describe('terminal bell controller', () => {
 
     expect(notify).toHaveBeenCalledTimes(1)
     expect(window.goblinNative.terminal.notifyBell).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
 
+    vi.unstubAllGlobals()
     now.mockRestore()
     hasFocus.mockRestore()
   })

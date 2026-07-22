@@ -13,6 +13,7 @@ import {
   applyServerSessionWrite,
   applyServerSettingsPrefsWrite,
   applyServerWebAccessSettingsWrite,
+  applyServerTelegramNotificationSettingsWrite,
 } from '#/server/modules/settings-write-paths.ts'
 import { getLanUrls, isLanAddress } from '#/shared/lan-addresses.ts'
 import type { LanInfo } from '#/shared/rpc.ts'
@@ -24,10 +25,16 @@ const WEB_ACCESS_ERROR_CODES = new Set([
   'password-too-short',
   'password-too-long',
 ])
+const TELEGRAM_SETTINGS_ERROR_CODES = new Set(['configuration-incomplete', 'invalid-input'])
 
 function readWebAccessErrorCode(error: unknown): string | null {
   const code = (error as { code?: unknown } | null)?.code
   return typeof code === 'string' && WEB_ACCESS_ERROR_CODES.has(code) ? code : null
+}
+
+function readTelegramSettingsErrorCode(error: unknown): string | null {
+  const code = (error as { code?: unknown } | null)?.code
+  return typeof code === 'string' && TELEGRAM_SETTINGS_ERROR_CODES.has(code) ? code : null
 }
 
 export function createSettingsRoutes(
@@ -71,6 +78,16 @@ export function createSettingsRoutes(
       const code = readWebAccessErrorCode(error)
       if (!code) throw error
       return c.json({ ok: false as const, error: { code } }, 400)
+    }
+  })
+  app.post('/telegram', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    try {
+      return c.json(await applyServerTelegramNotificationSettingsWrite(body))
+    } catch (error) {
+      const code = readTelegramSettingsErrorCode(error)
+      if (!code) throw error
+      return c.json({ ok: false as const, error: { code } })
     }
   })
   app.post('/global-shortcut-state', async (c) => {

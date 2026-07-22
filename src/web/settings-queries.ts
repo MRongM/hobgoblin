@@ -36,6 +36,7 @@ function initialSettingsSnapshot(): SettingsSnapshot | undefined {
     recentRepos: [],
     repoSettings: [],
     webAccess: { enabled: false, username: '', passwordConfigured: false },
+    telegramNotifications: { enabled: false, botTokenConfigured: false, chatId: '' },
   }
 }
 

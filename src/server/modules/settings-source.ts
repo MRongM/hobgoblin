@@ -77,6 +77,13 @@ import {
   defaultSettingsPrefs,
 } from '#/shared/settings-defaults.ts'
 import { DEFAULT_TOPBAR_HEIGHT_PX, DEFAULT_TOOLBAR_HEIGHT_PX, normalizeChromeHeightPx } from '#/shared/window-chrome.ts'
+import {
+  TELEGRAM_BOT_TOKEN_MAX_LENGTH,
+  TELEGRAM_CHAT_ID_MAX_LENGTH,
+  type TelegramNotificationErrorCode,
+  type TelegramNotificationSettingsSnapshot,
+  type TelegramNotificationSettingsUpdateInput,
+} from '#/shared/telegram-notifications.ts'
 
 type FetchIntervalListener = (sec: number) => void
 interface ServerSettingsData {
@@ -112,6 +119,9 @@ interface ServerSettingsData {
   webAccessEnabled: boolean
   webAccessUsername: string
   webAccessPasswordHash: string
+  telegramNotificationsEnabled: boolean
+  telegramBotToken: string
+  telegramChatId: string
   session: SessionState
   recentRepos: RepoSessionEntry[]
   repoSettings: RepoSettingsEntry[]
@@ -140,6 +150,16 @@ export class WebAccessSettingsError extends Error {
   constructor(code: WebAccessSettingsErrorCode) {
     super(code)
     this.name = 'WebAccessSettingsError'
+    this.code = code
+  }
+}
+
+export class TelegramNotificationSettingsError extends Error {
+  readonly code: TelegramNotificationErrorCode
+
+  constructor(code: TelegramNotificationErrorCode) {
+    super(code)
+    this.name = 'TelegramNotificationSettingsError'
     this.code = code
   }
 }
@@ -291,6 +311,28 @@ function webAccessSettingsFromData(data: ServerSettingsData): WebAccessSettingsS
     enabled: data.webAccessEnabled && passwordConfigured,
     username: passwordConfigured ? data.webAccessUsername : '',
     passwordConfigured,
+  }
+}
+
+function normalizeTelegramBotToken(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  const token = value.trim()
+  return token && token.length <= TELEGRAM_BOT_TOKEN_MAX_LENGTH && !/[\u0000-\u0020\u007f]/u.test(token) ? token : ''
+}
+
+function normalizeTelegramChatId(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  const chatId = value.trim()
+  if (!chatId || chatId.length > TELEGRAM_CHAT_ID_MAX_LENGTH) return ''
+  return /^-?\d+$/u.test(chatId) || /^@[A-Za-z][A-Za-z0-9_]{4,31}$/u.test(chatId) ? chatId : ''
+}
+
+function telegramNotificationSettingsFromData(data: ServerSettingsData): TelegramNotificationSettingsSnapshot {
+  const botTokenConfigured = Boolean(data.telegramBotToken)
+  return {
+    enabled: data.telegramNotificationsEnabled && botTokenConfigured && Boolean(data.telegramChatId),
+    botTokenConfigured,
+    chatId: data.telegramChatId,
   }
 }
 
@@ -552,6 +594,8 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
   try {
     const raw = await readFile(serverDataFile('server-settings.json'), 'utf-8')
     const parsed = JSON.parse(raw) as Partial<ServerSettingsData>
+    const telegramBotToken = normalizeTelegramBotToken(parsed.telegramBotToken)
+    const telegramChatId = normalizeTelegramChatId(parsed.telegramChatId)
     return {
       lang: normalizeLangPref(parsed.lang),
       theme: normalizeThemePref(parsed.theme),
@@ -593,6 +637,10 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
         normalizeWebAccessUsername(parsed.webAccessUsername) && isWebAccessPasswordHash(parsed.webAccessPasswordHash)
           ? parsed.webAccessPasswordHash
           : '',
+      telegramNotificationsEnabled:
+        parsed.telegramNotificationsEnabled === true && Boolean(telegramBotToken && telegramChatId),
+      telegramBotToken,
+      telegramChatId,
       session: normalizeSession(parsed.session),
       recentRepos: normalizeRecentRepos(parsed.recentRepos),
       repoSettings: normalizeRepoSettings(parsed.repoSettings),
@@ -616,6 +664,9 @@ async function loadServerSettings(): Promise<ServerSettingsData> {
       webAccessEnabled: false,
       webAccessUsername: '',
       webAccessPasswordHash: '',
+      telegramNotificationsEnabled: false,
+      telegramBotToken: '',
+      telegramChatId: '',
       session: defaultSession(),
       recentRepos: [],
       repoSettings: [],
@@ -638,6 +689,47 @@ export async function getServerSettingsPrefs(): Promise<SettingsPrefs> {
 
 export async function getServerWebAccessSettings(): Promise<WebAccessSettingsSnapshot> {
   return webAccessSettingsFromData(await loadServerSettings())
+}
+
+export async function getServerTelegramNotificationSettings(): Promise<TelegramNotificationSettingsSnapshot> {
+  return telegramNotificationSettingsFromData(await loadServerSettings())
+}
+
+export interface ServerTelegramNotificationConfig extends TelegramNotificationSettingsSnapshot {
+  botToken: string
+}
+
+export async function getServerTelegramNotificationConfig(): Promise<ServerTelegramNotificationConfig> {
+  const data = await loadServerSettings()
+  const snapshot = telegramNotificationSettingsFromData(data)
+  return {
+    ...snapshot,
+    botToken: snapshot.botTokenConfigured ? data.telegramBotToken : '',
+  }
+}
+
+export async function updateServerTelegramNotificationSettings(
+  input: TelegramNotificationSettingsUpdateInput,
+): Promise<TelegramNotificationSettingsSnapshot> {
+  const data = await loadServerSettings()
+  const rawToken = typeof input.botToken === 'string' ? input.botToken.trim() : ''
+  const normalizedToken = normalizeTelegramBotToken(rawToken)
+  if (rawToken && !normalizedToken) throw new TelegramNotificationSettingsError('invalid-input')
+
+  const rawChatId = typeof input.chatId === 'string' ? input.chatId.trim() : ''
+  const chatId = normalizeTelegramChatId(rawChatId)
+  if (rawChatId && !chatId) throw new TelegramNotificationSettingsError('invalid-input')
+
+  const botToken = normalizedToken || data.telegramBotToken
+  if (input.enabled && (!botToken || !chatId)) {
+    throw new TelegramNotificationSettingsError('configuration-incomplete')
+  }
+
+  data.telegramNotificationsEnabled = input.enabled === true
+  data.telegramBotToken = botToken
+  data.telegramChatId = chatId
+  await writeServerSettingsFile(data)
+  return telegramNotificationSettingsFromData(data)
 }
 
 export async function getServerWebAccessCredentials(): Promise<{
