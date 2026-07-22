@@ -31,3 +31,13 @@ Use this doc for UI language and presentation rules.
 - Keep compact surface selection in component-local state. Responsive changes must not persist either compact selection or Desktop Focus; returning to desktop starts in the left/right split.
 - Preserve terminal-first entry when an internal terminal target exists; otherwise fall back to the nearest navigable scope surface.
 - In a branch workspace, compact member navigation must keep the branch workspace active and reuse the ordinary member file and detail surfaces.
+
+## Detached file area windows
+
+- Keep the source file area tab in place when it is dragged into a detached file area window; detaching creates a live copy rather than moving navigation state.
+- Bind the detached window to the repository and branch or worktree context captured when the drag starts. Main-window navigation must not silently retarget it.
+- Use the compact context topbar to identify the repository, branch or worktree, current file area panel, and live state. Do not repeat the full file area tab bar inside a one-panel window.
+- Keep detached window bounds, internal panel navigation, and open/closed state local and ephemeral. Do not persist or restore them.
+- Offer the same drag-out and `Shift+Enter` interaction in Electron and Web. In Web, open a same-origin browser window and show an actionable failure toast when the browser blocks it.
+- Never place repository paths or branch names in a detached browser window URL; transfer them through a short-lived, consume-once same-origin handoff.
+- Do not call this presentation Focus. Desktop Focus continues to mean maximizing an internal terminal inside the main window.

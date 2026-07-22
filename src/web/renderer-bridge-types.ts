@@ -34,6 +34,7 @@ import type {
   TerminalWriteInput,
 } from '#/shared/terminal.ts'
 import type { TerminalOwnershipViewModel } from '#/web/components/terminal/types.ts'
+import type { DetachedFileAreaWindowRequest, OpenDetachedFileAreaWindowResult } from '#/shared/file-area.ts'
 
 export interface RendererTerminalBridge {
   attach: (input: TerminalAttachInput) => Promise<TerminalAttachResult>
@@ -68,6 +69,7 @@ export interface RendererShellBridge {
   saveClipboardBinaryFiles?: (input: SaveClipboardBinaryFilesInput) => Promise<SaveClipboardBinaryFilesResult>
   writeFileTreeClipboardFile?: (input: FileTreeClipboardFilePayload) => Promise<FileTreeClipboardWriteResult>
   readFileTreeClipboardFile?: (input: FileTreeClipboardReadInput) => Promise<FileTreeClipboardReadResult>
+  openDetachedFileAreaWindow?: (input: DetachedFileAreaWindowRequest) => Promise<OpenDetachedFileAreaWindowResult>
 }
 
 export interface RendererBridge {

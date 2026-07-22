@@ -11,11 +11,12 @@ import type { WorkspaceDetailPaneSizes, WorkspaceLayout } from '#/shared/workspa
 import type { SessionState } from '#/shared/rpc.ts'
 import type { WorkspaceActiveContext } from '#/shared/rpc.ts'
 import type { WorkspaceConfig, WorkspaceDiscoveryIssue, WorkspaceRepositoryCandidate } from '#/shared/workspace.ts'
+import type { FileAreaTabId } from '#/shared/file-area.ts'
 import type { RepoBranchAction, RunBranchActionOptions } from '#/web/stores/repos/branch-action-types.ts'
 import type { RepoOperationsState } from '#/web/stores/repos/operations.ts'
 import type { RepoResourcesState } from '#/web/stores/repos/resources.ts'
 export type DetailTab = 'status' | 'changes' | 'terminal'
-export type ExplorerTab = 'files' | 'changes' | 'status' | 'history' | 'local' | 'remoteBranches' | 'ports'
+export type ExplorerTab = FileAreaTabId
 export type RepoWorkspaceLayout = WorkspaceLayout
 export type RepoDataSource = 'cache' | 'fresh'
 // Renderer branches keep only the worktree reference; metadata lives in worktreesByPath.

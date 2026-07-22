@@ -10,8 +10,13 @@ import {
 } from '@tanstack/react-router'
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 import { App } from '#/web/App.tsx'
+import { DetachedFileAreaWindow } from '#/web/components/detached-file-area/DetachedFileAreaWindow.tsx'
 import { getInitialBootstrap } from '#/web/bootstrap.ts'
 import { isSettingsPage, type SettingsPage } from '#/shared/settings-pages.ts'
+import type { DetachedFileAreaWindowRequest } from '#/shared/file-area.ts'
+import { consumeWebDetachedFileAreaWindowHandoff } from '#/web/lib/web-detached-file-area.ts'
+
+let initialWebDetachedFileAreaRequest: DetachedFileAreaWindowRequest | null | undefined
 
 const rootRoute = createRootRoute({ component: MainWindowRoute })
 
@@ -26,6 +31,16 @@ const indexRoute = createRoute({
 const workspaceRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/workspace',
+})
+
+const detachedFileAreaRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/detached/file-area',
+  beforeLoad: () => {
+    if (!initialDetachedFileAreaRequest()) {
+      throw redirect({ to: '/workspace' })
+    }
+  },
 })
 
 const settingsIndexRoute = createRoute({
@@ -104,6 +119,7 @@ const settingsAboutRoute = createRoute({
 const mainRouteTree = rootRoute.addChildren([
   indexRoute,
   workspaceRoute,
+  detachedFileAreaRoute,
   settingsIndexRoute,
   settingsGeneralRoute,
   settingsFilesRoute,
@@ -131,6 +147,25 @@ export const mainRouter = createRouter({
 })
 
 function MainWindowRoute() {
+  const request = initialDetachedFileAreaRequest()
+  if (request) {
+    return <DetachedFileAreaWindow request={request} />
+  }
+  return <PrimaryMainWindowRoute />
+}
+
+function initialDetachedFileAreaRequest(): DetachedFileAreaWindowRequest | null {
+  const bootstrap = getInitialBootstrap()
+  if (bootstrap.runtime.kind === 'electron') {
+    return bootstrap.surface?.kind === 'detached-file-area' ? bootstrap.surface.request : null
+  }
+  if (initialWebDetachedFileAreaRequest === undefined) {
+    initialWebDetachedFileAreaRequest = consumeWebDetachedFileAreaWindowHandoff()
+  }
+  return initialWebDetachedFileAreaRequest
+}
+
+function PrimaryMainWindowRoute() {
   const pathname = useLocation({ select: (location) => location.pathname })
   const navigate = useNavigate()
   const routeSettingsPage = settingsPageFromPathname(pathname)

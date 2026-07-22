@@ -556,6 +556,13 @@ export const ko: Record<DictKey, string> = {
   'file-tree.collapse-all': '트리 접기',
   'file-tree.tabs.expand': '탭 더 보기',
   'file-tree.tabs.collapse': '탭 접기',
+  'file-area.detach-hint': '밖으로 드래그하거나 Shift+Enter를 눌러 별도 창에서 열기',
+  'file-area.detached.live': '실시간',
+  'file-area.detached.back': '{tab}로 돌아가기',
+  'file-area.detached.unavailable-title': '이 파일 영역을 사용할 수 없습니다',
+  'file-area.detached.unavailable-body':
+    '저장소, 브랜치 또는 보기를 더 이상 사용할 수 없습니다. 원본 컨텍스트를 새로 고친 뒤 다시 드래그하세요.',
+  'error.failed-open-window': '창을 열 수 없습니다',
   'file-area.collapse': '파일 영역 접기',
   'file-area.expand': '파일 영역 펼치기',
   'file-tree.new-file': '새 파일',

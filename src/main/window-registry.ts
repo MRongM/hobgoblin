@@ -30,6 +30,7 @@ export interface RegisteredRendererSurfaceHandle extends RegisteredRendererSurfa
 }
 
 let mainWindow: BrowserWindowType | null = null
+const windowsByWebContentsId = new Map<number, BrowserWindowType>()
 const surfacesByWebContentsId = new Map<number, RegisteredRendererSurface>()
 
 function defaultCapabilities(): RegisteredRendererSurfaceCapabilities {
@@ -46,12 +47,14 @@ function resolveCapabilities(
 }
 
 function registerSurface(win: BrowserWindowType, surface: RegisteredRendererSurface): void {
+  windowsByWebContentsId.set(win.webContents.id, win)
   surfacesByWebContentsId.set(win.webContents.id, surface)
 }
 
 function unregisterSurface(win?: BrowserWindowType | null): void {
   if (!win) return
   try {
+    windowsByWebContentsId.delete(win.webContents.id)
     surfacesByWebContentsId.delete(win.webContents.id)
   } catch {}
 }
@@ -70,8 +73,16 @@ export function getMainWindow(): BrowserWindowType | null {
 }
 
 function allRegisteredWindows(): BrowserWindowType[] {
-  const main = getMainWindow()
-  return main ? [main] : []
+  const windows: BrowserWindowType[] = []
+  for (const win of windowsByWebContentsId.values()) {
+    if (win.isDestroyed()) {
+      unregisterSurface(win)
+      if (mainWindow === win) mainWindow = null
+      continue
+    }
+    windows.push(win)
+  }
+  return windows
 }
 
 function allRegisteredSurfaces(): RegisteredRendererSurfaceHandle[] {
@@ -95,9 +106,13 @@ export function isRegisteredRendererSurfaceId(webContentsId: number): boolean {
 }
 
 function registeredWindowByWebContentsId(webContentsId: number): BrowserWindowType | null {
-  const main = getMainWindow()
-  if (main?.webContents.id === webContentsId) return main
-  return null
+  const win = windowsByWebContentsId.get(webContentsId)
+  if (!win || win.isDestroyed()) {
+    unregisterSurface(win)
+    if (mainWindow === win) mainWindow = null
+    return null
+  }
+  return win
 }
 
 export function registeredRendererSurfaceByWebContentsId(webContentsId: number): RegisteredRendererSurface | null {
@@ -124,7 +139,7 @@ export function focusedRegisteredSurface(): RegisteredRendererSurfaceHandle | nu
 export function getFocusedRegisteredWindow(): BrowserWindowType | null {
   const focused = BrowserWindow.getFocusedWindow()
   if (!focused || focused.isDestroyed()) return null
-  return focused === getMainWindow() ? focused : null
+  return registeredWindowByWebContentsId(focused.webContents.id) === focused ? focused : null
 }
 
 export function sendToRegisteredWindow(
@@ -178,8 +193,12 @@ export function broadcastToSurfaceCapability(
   })
 }
 
-export function registerRendererWindowSurface(win: BrowserWindowType, surface: RendererSurfaceSpec): void {
-  mainWindow = win
+export function registerRendererWindowSurface(
+  win: BrowserWindowType,
+  surface: RendererSurfaceSpec,
+  options?: { main?: boolean },
+): void {
+  if (options?.main === true || surface.windowKey === 'main') mainWindow = win
   registerSurface(win, {
     windowKey: surface.windowKey,
     capabilities: resolveCapabilities(surface.capabilities),
@@ -187,5 +206,10 @@ export function registerRendererWindowSurface(win: BrowserWindowType, surface: R
 }
 
 export function unregisterRendererWindowSurface(_surface: RendererSurfaceSpec, win?: BrowserWindowType): void {
-  unregisterMainWindow(win)
+  if (!win) {
+    if (_surface.windowKey === 'main') unregisterMainWindow()
+    return
+  }
+  if (mainWindow === win) mainWindow = null
+  unregisterSurface(win)
 }

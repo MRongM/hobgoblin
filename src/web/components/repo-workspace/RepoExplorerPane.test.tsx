@@ -23,6 +23,15 @@ const sectionActionMocks = vi.hoisted(() => ({
   createWorktree: vi.fn(),
   refreshIntent: vi.fn(),
 }))
+const detachedWindowMocks = vi.hoisted(() => ({
+  enabled: false,
+  open: vi.fn(async () => ({ ok: true as const, windowKey: 'detached-file-area:test' })),
+}))
+
+vi.mock('#/web/app-shell-client.ts', () => ({
+  canOpenDetachedFileAreaWindow: () => detachedWindowMocks.enabled,
+  openDetachedFileAreaWindow: detachedWindowMocks.open,
+}))
 
 vi.mock('#/web/runtime-settings-fonts.ts', () => ({
   useRuntimeFontSettings: () => runtimeFontSettings,
@@ -281,6 +290,8 @@ beforeEach(() => {
   compactUi = false
   sectionActionMocks.createWorktree.mockReset()
   sectionActionMocks.refreshIntent.mockReset()
+  detachedWindowMocks.enabled = false
+  detachedWindowMocks.open.mockClear()
   resetReposStore()
   resetExplorerOverflowExpanded()
   seedRepoState({
@@ -297,6 +308,100 @@ afterEach(() => {
 })
 
 describe('RepoExplorerPane', () => {
+  test('opens an Electron file area tab in a detached window after an outside drag release', async () => {
+    detachedWindowMocks.enabled = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="left-right" showActions />)
+    })
+
+    const filesTab = container.querySelector<HTMLButtonElement>('[role="tab"]')
+    expect(filesTab?.draggable).toBe(true)
+    const dataTransfer = { effectAllowed: '', setData: vi.fn() }
+    const dragStart = new Event('dragstart', { bubbles: true })
+    Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer })
+    const dragEnd = new Event('dragend', { bubbles: true })
+    Object.defineProperties(dragEnd, {
+      clientX: { value: -1 },
+      clientY: { value: 100 },
+      screenX: { value: 1200 },
+      screenY: { value: 420 },
+    })
+
+    await act(async () => {
+      filesTab?.dispatchEvent(dragStart)
+      filesTab?.dispatchEvent(dragEnd)
+    })
+
+    expect(dataTransfer.effectAllowed).toBe('copy')
+    expect(detachedWindowMocks.open).toHaveBeenCalledWith({
+      repo: { kind: 'local', id: REPO_ID },
+      branch: 'main',
+      tab: 'files',
+      releasePoint: { x: 1200, y: 420 },
+    })
+    await act(async () => root.unmount())
+  })
+
+  test('keeps an Electron file area tab in place after a drag release inside the source window', async () => {
+    detachedWindowMocks.enabled = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="left-right" showActions />)
+    })
+
+    const filesTab = container.querySelector<HTMLButtonElement>('[role="tab"]')
+    const dragEnd = new Event('dragend', { bubbles: true })
+    Object.defineProperties(dragEnd, {
+      clientX: { value: 100 },
+      clientY: { value: 100 },
+      screenX: { value: 500 },
+      screenY: { value: 300 },
+    })
+    await act(async () => filesTab?.dispatchEvent(dragEnd))
+
+    expect(detachedWindowMocks.open).not.toHaveBeenCalled()
+    expect(container.querySelector('[data-testid="project-file-tree"]')).toBeTruthy()
+    await act(async () => root.unmount())
+  })
+
+  test('opens the focused file area tab with Shift+Enter and leaves unavailable renderer tabs unchanged', async () => {
+    detachedWindowMocks.enabled = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="left-right" showActions />)
+    })
+
+    const filesTab = container.querySelector<HTMLButtonElement>('[role="tab"]')
+    await act(async () => {
+      filesTab?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter', shiftKey: true }))
+    })
+    expect(detachedWindowMocks.open).toHaveBeenCalledWith({
+      repo: { kind: 'local', id: REPO_ID },
+      branch: 'main',
+      tab: 'files',
+    })
+
+    detachedWindowMocks.enabled = false
+    detachedWindowMocks.open.mockClear()
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="left-right" showActions />)
+    })
+    const webFilesTab = container.querySelector<HTMLButtonElement>('[role="tab"]')
+    expect(webFilesTab?.draggable).toBe(false)
+    await act(async () => {
+      webFilesTab?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter', shiftKey: true }))
+    })
+    expect(detachedWindowMocks.open).not.toHaveBeenCalled()
+    await act(async () => root.unmount())
+  })
+
   test('renders the repository manifest above the root file tree on workspace Overview', async () => {
     seedRepoState({
       id: REPO_ID,

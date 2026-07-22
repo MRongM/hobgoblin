@@ -20,6 +20,11 @@ import type {
   FileTreeClipboardReadResult,
   FileTreeClipboardWriteResult,
 } from '#/shared/file-tree-clipboard.ts'
+import type {
+  DetachedFileAreaWindowRequest,
+  OpenDetachedFileAreaWindowResult,
+  RendererSurfaceBootstrap,
+} from '#/shared/file-area.ts'
 
 interface GoblinNativeBridge {
   runtime: RendererRuntimeSnapshot
@@ -27,6 +32,7 @@ interface GoblinNativeBridge {
   initialI18n: I18nSnapshot | null
   initialSettings: InitialSettingsSnapshot | null
   initialServer: InitialServerSnapshot | null
+  surface: RendererSurfaceBootstrap
   invokeRpc: (request: RpcRequest) => Promise<unknown>
   abortRpc: (requestId: string) => Promise<boolean>
   onEvent: (cb: (event: RpcEvent) => void) => () => void
@@ -43,6 +49,7 @@ interface GoblinNativeBridge {
     saveClipboardBinaryFiles?: (input: SaveClipboardBinaryFilesInput) => Promise<SaveClipboardBinaryFilesResult>
     writeFileTreeClipboardFile?: (input: FileTreeClipboardFilePayload) => Promise<FileTreeClipboardWriteResult>
     readFileTreeClipboardFile?: (input: FileTreeClipboardReadInput) => Promise<FileTreeClipboardReadResult>
+    openDetachedFileAreaWindow?: (input: DetachedFileAreaWindowRequest) => Promise<OpenDetachedFileAreaWindowResult>
   }
   terminal: {
     notifyBell: (input: TerminalNotifyBellInput) => Promise<TerminalMutationResult>

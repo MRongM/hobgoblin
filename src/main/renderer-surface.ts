@@ -14,14 +14,15 @@ import { configureTrustedRendererWindow } from '#/main/window-shell.ts'
 interface AttachRendererSurfaceWindowOptions {
   logLabel: string
   surface: RendererSurfaceSpec
+  main?: boolean
 }
 
 export function attachRendererSurfaceWindow(
   win: BrowserWindow,
-  { logLabel, surface }: AttachRendererSurfaceWindowOptions,
+  { logLabel, surface, main }: AttachRendererSurfaceWindowOptions,
 ): void {
   configureTrustedRendererWindow(win, logLabel)
-  registerRendererWindowSurface(win, surface)
+  registerRendererWindowSurface(win, surface, { main })
 }
 
 export function detachRendererSurfaceWindow(win: BrowserWindow, surface: RendererSurfaceSpec): void {

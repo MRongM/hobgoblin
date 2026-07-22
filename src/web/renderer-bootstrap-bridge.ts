@@ -1,5 +1,6 @@
 import type { RendererBootstrapSnapshot, RendererRuntimeSnapshot } from '#/shared/bootstrap.ts'
 import { RENDERER_BRIDGE_VERSION } from '#/shared/bootstrap.ts'
+import { normalizeDetachedFileAreaWindowRequest, type RendererSurfaceBootstrap } from '#/shared/file-area.ts'
 
 const EMPTY_BOOTSTRAP: RendererBootstrapSnapshot = {
   runtime: { kind: 'web', bridgeVersion: RENDERER_BRIDGE_VERSION, capabilities: [] },
@@ -7,6 +8,20 @@ const EMPTY_BOOTSTRAP: RendererBootstrapSnapshot = {
   initialI18n: null,
   initialSettings: null,
   initialServer: null,
+  surface: { kind: 'main' },
+}
+
+function normalizeRendererSurfaceBootstrap(
+  value: unknown,
+  runtimeKind: RendererRuntimeSnapshot['kind'],
+): RendererSurfaceBootstrap {
+  if (runtimeKind !== 'electron') return { kind: 'main' }
+  if (!value || typeof value !== 'object') return { kind: 'main' }
+  const candidate = value as Partial<RendererSurfaceBootstrap>
+  if (candidate.kind === 'main') return { kind: 'main' }
+  if (candidate.kind !== 'detached-file-area') return { kind: 'main' }
+  const request = normalizeDetachedFileAreaWindowRequest(candidate.request)
+  return request ? { kind: 'detached-file-area', request } : { kind: 'main' }
 }
 
 function isRendererRuntimeSnapshot(value: unknown): value is RendererRuntimeSnapshot {
@@ -20,7 +35,9 @@ function isRendererRuntimeSnapshot(value: unknown): value is RendererRuntimeSnap
   )
 }
 
-function isRendererBootstrapSnapshot(value: unknown): value is RendererBootstrapSnapshot {
+type RendererBootstrapCandidate = Omit<RendererBootstrapSnapshot, 'surface'> & { surface?: unknown }
+
+function isRendererBootstrapSnapshot(value: unknown): value is RendererBootstrapCandidate {
   if (!value || typeof value !== 'object') return false
   const candidate = value as Partial<RendererBootstrapSnapshot>
   return (
@@ -48,13 +65,26 @@ function normalizeServerClientId(value: string | null | undefined): string | nul
 
 export function readInjectedWebBootstrap(): RendererBootstrapSnapshot | null {
   try {
-    if (isRendererBootstrapSnapshot(window.__GOBLIN_BOOTSTRAP__)) return window.__GOBLIN_BOOTSTRAP__
+    if (isRendererBootstrapSnapshot(window.__GOBLIN_BOOTSTRAP__)) {
+      return {
+        ...window.__GOBLIN_BOOTSTRAP__,
+        surface: normalizeRendererSurfaceBootstrap(
+          window.__GOBLIN_BOOTSTRAP__.surface,
+          window.__GOBLIN_BOOTSTRAP__.runtime.kind,
+        ),
+      }
+    }
   } catch {}
   try {
     const raw = document.getElementById('goblin-bootstrap')?.textContent
     if (!raw) return null
     const parsed = JSON.parse(raw)
-    if (isRendererBootstrapSnapshot(parsed)) return parsed
+    if (isRendererBootstrapSnapshot(parsed)) {
+      return {
+        ...parsed,
+        surface: normalizeRendererSurfaceBootstrap(parsed.surface, parsed.runtime.kind),
+      }
+    }
   } catch {}
   return null
 }
