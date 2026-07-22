@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from 'vitest'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { markRepoOperationTargets, nextRepoOperationId, repoOperation } from '#/web/stores/repos/runtime.ts'
+import { repoBranchActionReason } from '#/web/stores/repos/branch-actions.ts'
 import { replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { getBranchActionCapabilities } from '#/web/hooks/useBranchActions.tsx'
 import { branchBrowserRemoteProvider } from '#/web/hooks/useBranchActionItems.tsx'
@@ -147,6 +148,31 @@ describe('branch action capabilities', () => {
     })
   })
 
+  test('keeps removal but enables separate cleanup for a prunable linked worktree', () => {
+    const worktreePath = '/tmp/gbl-branch-actions-stale-worktree'
+    const branch = createRepoBranch('feature/stale', { worktree: { path: worktreePath } })
+    const repo = seedRepoState({
+      id: REPO_ID,
+      branches: [branch],
+      currentBranch: 'main',
+      worktreesByPath: {
+        [worktreePath]: {
+          path: worktreePath,
+          branch: branch.name,
+          isMain: false,
+          isLocked: false,
+          isPrunable: true,
+        },
+      },
+    })
+
+    expect(getBranchActionCapabilities(repo, branch)).toMatchObject({
+      checkedOutInAnotherWorktree: true,
+      canRemoveWorktree: false,
+      canCleanupWorktree: true,
+    })
+  })
+
   test('allows browser actions for non-GitHub web remotes', () => {
     const branch = createRepoBranch('feature/gitlab')
     seedRepoState({
@@ -254,6 +280,34 @@ describe('branch action capabilities', () => {
 })
 
 describe('runBranchAction', () => {
+  test('assigns invalid worktree cleanup its own serialized operation reason', () => {
+    expect(repoBranchActionReason('cleanupWorktree' as RepoBranchAction['kind'])).toBe('branch:cleanupWorktree')
+  })
+
+  test('forwards invalid worktree cleanup through the repository action queue', async () => {
+    let cleanupInput: Record<string, unknown> | null = null
+    installGoblinTestBridge({
+      'repo.cleanupWorktree': async (input: Record<string, unknown>) => {
+        cleanupInput = input
+        return { ok: true, message: 'pruned' }
+      },
+      'repo.snapshot': async () => ({ branches: [createBranchSnapshot('feature/a')], current: 'feature/a' }),
+      'repo.status': async () => [],
+    })
+
+    await useReposStore.getState().runBranchAction(REPO_ID, {
+      kind: 'cleanupWorktree',
+      branch: 'feature/a',
+      worktreePath: '/tmp/gbl-branch-actions-test-worktree',
+    })
+
+    expect(cleanupInput).toMatchObject({
+      cwd: REPO_ID,
+      worktreePath: '/tmp/gbl-branch-actions-test-worktree',
+      sourceToken: expect.any(String),
+    })
+  })
+
   test('forwards worktree force independently from branch force', async () => {
     let removeInput: Record<string, unknown> | null = null
     installGoblinTestBridge({
@@ -557,6 +611,15 @@ describe('runBranchAction', () => {
         alsoDeleteBranch: false,
       },
       'repo.removeWorktree',
+    ],
+    [
+      'cleanupWorktree',
+      {
+        kind: 'cleanupWorktree',
+        branch: 'feature/a',
+        worktreePath: '/tmp/gbl-branch-actions-test-worktree',
+      },
+      'repo.cleanupWorktree',
     ],
   ] satisfies Array<[string, RepoBranchAction, string]>)(
     'waits for core refresh reads before running queued %s actions',
@@ -904,6 +967,15 @@ describe('runBranchAction', () => {
         alsoDeleteBranch: false,
       },
       'repo.removeWorktree',
+    ],
+    [
+      'cleanupWorktree',
+      {
+        kind: 'cleanupWorktree',
+        branch: 'feature/a',
+        worktreePath: '/tmp/gbl-branch-actions-test-worktree',
+      },
+      'repo.cleanupWorktree',
     ],
   ] satisfies Array<[string, RepoBranchAction, string]>)(
     'rejects %s for non-git repositories before rpc scheduling',

@@ -42,11 +42,7 @@ export function WorkspaceRepositorySwitcher({ repoId, compact = false }: Props) 
     const repo = repos[id]
     return repo ? [{ id, name: repo.name, unavailable: repo.availability.phase === 'unavailable' }] : []
   })
-  const branchWorkspaces = branchQuery.data?.ok
-    ? branchQuery.data.items.filter(
-        (item) => item.available && item.lifecycle !== 'delete-incomplete' && item.operation?.kind !== 'remove',
-      )
-    : []
+  const branchWorkspaces = branchQuery.data?.ok ? branchQuery.data.items.filter((item) => item.available) : []
   const activeBranchWorkspace =
     activeContext?.kind === 'branch-workspace'
       ? branchWorkspaces.find((item) => item.id === activeContext.branchWorkspaceId)

@@ -39,8 +39,8 @@ describe('BranchWorkspaceFileTree', () => {
             id: 'branch-1',
             branch: 'feature/auth',
             path: '/workspace/goblin-feature-auth',
-            lifecycle: 'ready',
             available: true,
+            busy: false,
             managedRootNames: ['api'],
           }}
         />,

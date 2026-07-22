@@ -79,8 +79,8 @@ export function RepoWorktreeExplorer({
     ...orderedTabs,
     ...(isRemoteRepo ? [{ id: 'ports' as const, label: t('ports.title'), icon: RadioTower }] : []),
   ] satisfies { id: ExplorerTab; label: string; icon: LucideIcon }[]
-  const primaryTabs = tabs.slice(0, 4)
-  const overflowTabs = tabs.slice(4)
+  const primaryTabs = tabs.slice(0, 3)
+  const overflowTabs = tabs.slice(3)
   const [overflowExpanded, setOverflowExpanded] = useState(() => lastOverflowExpanded)
   const toggleOverflow = () =>
     setOverflowExpanded((current) => {

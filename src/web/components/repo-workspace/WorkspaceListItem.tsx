@@ -39,7 +39,7 @@ type DataAttributes = {
   'data-sortable-id'?: string
   'data-project-kind'?: string
   'data-testid'?: string
-  'data-branch-workspace-lifecycle'?: string
+  'data-branch-workspace-state'?: string
   'data-branch-workspace-id'?: string
 }
 
@@ -121,7 +121,7 @@ export const WorkspaceListItemFrame = forwardRef<HTMLLIElement, WorkspaceListIte
             data-workspace-list-item-main=""
             className={cn(
               'relative flex w-full min-w-0 items-center gap-2 rounded-[var(--goblin-brand-radius-sm,var(--radius-sm))] pl-2 pr-[4.25rem] text-left transition-colors duration-100',
-              size === 'project' ? 'h-9 text-[13px]' : size === 'member' ? 'h-7 text-xs' : 'h-8 text-[13px]',
+              size === 'project' ? 'h-9 text-sm' : size === 'member' ? 'h-7 text-xs' : 'h-8 text-sm',
               selected
                 ? 'bg-list-row-selected text-list-row-selected-foreground'
                 : 'text-foreground hover:bg-list-row-hover',

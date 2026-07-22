@@ -18,7 +18,7 @@ const branchWorkspaceQueryState = vi.hoisted(() => ({
     branchOrigin: 'created'
     worktreePath: string
     progress: 'complete'
-    observedState: 'ready' | 'pending'
+    ready: boolean
   }>,
 }))
 
@@ -106,14 +106,14 @@ vi.mock('#/web/branch-workspace-queries.ts', () => ({
       items: branchWorkspaceQueryState.includeItem
         ? [
             {
-          id: 'branch-1',
-          rootId: REPO_ID,
-          branch: 'feature/auth',
-          directoryName: 'goblin-feature-auth',
-          path: `${REPO_ID}/goblin-feature-auth`,
-          lifecycle: 'ready',
-          available: true,
-          issues: [],
+              id: 'branch-1',
+              rootId: REPO_ID,
+              branch: 'feature/auth',
+              directoryName: 'goblin-feature-auth',
+              path: `${REPO_ID}/goblin-feature-auth`,
+              state: { kind: 'ready' },
+              available: true,
+              issues: [],
               repositories: branchWorkspaceQueryState.repositories,
               auxiliaryEntries: [],
             },
@@ -637,7 +637,7 @@ describe('RepoView', () => {
         branchOrigin: 'created',
         worktreePath: memberWorktreePath,
         progress: 'complete',
-        observedState: 'ready',
+        ready: true,
       },
     ]
     useReposStore.setState({
@@ -689,7 +689,7 @@ describe('RepoView', () => {
         branchOrigin: 'created',
         worktreePath: memberWorktreePath,
         progress: 'complete',
-        observedState: 'ready',
+        ready: true,
       },
     ]
     const activateBranchWorkspace = vi.fn((rootId: string, branchWorkspaceId: string) => {
@@ -761,7 +761,7 @@ describe('RepoView', () => {
         branchOrigin: 'created',
         worktreePath: memberWorktreePath,
         progress: 'complete',
-        observedState: 'pending',
+        ready: false,
       },
     ]
     branchWorkspaceQueryState.isFetching = true
@@ -810,7 +810,7 @@ describe('RepoView', () => {
       container?.querySelector('[data-testid="branch-workspace-pane"]')?.getAttribute('data-fallback-member'),
     ).toBe('')
 
-    branchWorkspaceQueryState.repositories[0]!.observedState = 'ready'
+    branchWorkspaceQueryState.repositories[0]!.ready = true
     branchWorkspaceQueryState.isFetching = false
     rerenderRepoView(REPO_ID)
 

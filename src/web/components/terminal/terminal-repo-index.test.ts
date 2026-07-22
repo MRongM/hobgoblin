@@ -59,19 +59,18 @@ describe('repoIndexFromRepos', () => {
   })
 })
 
-function branchWorkspace(
-  rootId: string,
-  path: string,
-  lifecycle: 'ready' | 'delete-incomplete',
-) {
+function branchWorkspace(rootId: string, path: string, stateName: 'ready' | 'delete-incomplete') {
   return {
     id: path,
     rootId,
     branch: 'feature/auth',
     directoryName: path.split('/').at(-1) ?? 'goblin-feature',
     path,
-    lifecycle,
-    available: lifecycle === 'ready',
+    state:
+      stateName === 'ready'
+        ? { kind: 'ready' as const }
+        : { kind: 'needs-action' as const, action: 'continue-delete' as const },
+    available: stateName === 'ready',
     issues: [],
     repositories: [],
     auxiliaryEntries: [],

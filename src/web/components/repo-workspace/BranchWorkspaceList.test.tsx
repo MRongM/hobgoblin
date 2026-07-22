@@ -7,11 +7,7 @@ import {
   BranchWorkspaceList,
   branchWorkspaceFolderContext,
 } from '#/web/components/repo-workspace/BranchWorkspaceList.tsx'
-import type {
-  BranchWorkspaceLifecycle,
-  BranchWorkspaceRepositorySnapshot,
-  BranchWorkspaceSnapshot,
-} from '#/shared/branch-workspaces.ts'
+import type { BranchWorkspaceRepositorySnapshot, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import {
   TerminalSessionContext,
   TerminalSessionReadContext,
@@ -100,7 +96,7 @@ describe('BranchWorkspaceList', () => {
         sourcePath: '/workspace/README.md',
         targetPath: '/workspace/goblin-feature-auth/README.md',
         progress: 'complete',
-        observedState: 'ready',
+        ready: true,
       },
     ]
 
@@ -141,7 +137,7 @@ describe('BranchWorkspaceList', () => {
       '[data-testid="branch-workspace-root-branch-1"]',
     )
     const branchWorkspaceItem = container.querySelector('[data-branch-workspace-id="branch-1"]')
-    expect(branchWorkspaceRow?.className).toContain('text-[13px]')
+    expect(branchWorkspaceRow?.className).toContain('text-sm')
     expect(branchWorkspaceRow?.getAttribute('aria-current')).toBe('page')
     expect(branchWorkspaceRow?.getAttribute('aria-expanded')).toBeNull()
     const toggle = container.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.expand"]')
@@ -674,7 +670,7 @@ describe('BranchWorkspaceList', () => {
   })
 
   test('keeps a non-navigable repository member visible but disabled', () => {
-    const member = repositoryMember({ observedState: 'unavailable' })
+    const member = repositoryMember({ ready: false })
     act(() =>
       root.render(
         withTerminalContexts(
@@ -703,7 +699,7 @@ describe('BranchWorkspaceList', () => {
 
   test.each([
     ['active', ['workspace.branch-workspace.cancel'], []],
-    ['create-incomplete', ['workspace.branch-workspace.retry'], ['workspace.branch-workspace.inspect']],
+    ['creation-interrupted', ['workspace.branch-workspace.retry'], ['workspace.branch-workspace.inspect']],
     ['reduce-incomplete', ['workspace.branch-workspace.continue-reduce'], ['workspace.branch-workspace.inspect']],
     [
       'needs-repair',
@@ -711,10 +707,10 @@ describe('BranchWorkspaceList', () => {
       ['workspace.branch-workspace.inspect', 'workspace.branch-workspace.delete'],
     ],
     ['delete-incomplete', ['workspace.branch-workspace.continue-delete'], ['workspace.branch-workspace.inspect']],
-  ] as const)('exposes the exact %s lifecycle actions', async (lifecycle, directLabels, menuLabels) => {
+  ] as const)('exposes the exact %s state actions', async (stateName, directLabels, menuLabels) => {
     const onRemove = vi.fn()
     const onReduce = vi.fn()
-    const item = workspace(lifecycle)
+    const item = workspace(stateName)
     act(() =>
       root.render(
         withTerminalContexts(
@@ -733,7 +729,7 @@ describe('BranchWorkspaceList', () => {
         ),
       ),
     )
-    const row = container.querySelector(`[data-branch-workspace-lifecycle="${lifecycle}"]`)
+    const row = container.querySelector(`[data-branch-workspace-state="${stateName}"]`)
     const possibleDirectLabels = [
       'workspace.branch-workspace.cancel',
       'workspace.branch-workspace.retry',
@@ -743,7 +739,7 @@ describe('BranchWorkspaceList', () => {
     ]
     expect(possibleDirectLabels.filter((label) => row?.querySelector(`[aria-label="${label}"]`))).toEqual(directLabels)
     expect(await openMenuLabels(row)).toEqual(menuLabels)
-    if (lifecycle === 'reduce-incomplete') {
+    if (stateName === 'reduce-incomplete') {
       act(() =>
         row?.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.continue-reduce"]')?.click(),
       )
@@ -772,7 +768,7 @@ describe('BranchWorkspaceList', () => {
         ),
       ),
     )
-    const row = container.querySelector('[data-branch-workspace-lifecycle="ready"]')
+    const row = container.querySelector('[data-branch-workspace-state="ready"]')
     expect(row?.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="editor"]')?.disabled).toBe(true)
     expect(row?.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="terminal"]')?.disabled).toBe(true)
 
@@ -812,7 +808,7 @@ describe('BranchWorkspaceList', () => {
         ),
       ),
     )
-    const row = container.querySelector('[data-branch-workspace-lifecycle="ready"]')
+    const row = container.querySelector('[data-branch-workspace-state="ready"]')
     if (!(row instanceof HTMLElement)) throw new Error('missing branch workspace row')
 
     expect((await openContextMenu(row)).map((menuItem) => menuItem.textContent?.trim())).toEqual([
@@ -842,15 +838,15 @@ describe('BranchWorkspaceList', () => {
     })
   })
 
-  test.each(['active', 'create-incomplete', 'needs-repair', 'reduce-incomplete', 'delete-incomplete'] as const)(
+  test.each(['active', 'creation-interrupted', 'needs-repair', 'reduce-incomplete', 'delete-incomplete'] as const)(
     'keeps folder-open context actions disabled for a %s branch workspace',
-    async (lifecycle) => {
+    async (stateName) => {
       act(() =>
         root.render(
           withTerminalContexts(
             <BranchWorkspaceList
               rootId="/workspace"
-              items={[workspace(lifecycle)]}
+              items={[workspace(stateName)]}
               activeId={null}
               onActivate={() => {}}
               onReorder={() => {}}
@@ -862,7 +858,7 @@ describe('BranchWorkspaceList', () => {
           ),
         ),
       )
-      const row = container.querySelector(`[data-branch-workspace-lifecycle="${lifecycle}"]`)
+      const row = container.querySelector(`[data-branch-workspace-state="${stateName}"]`)
       if (!(row instanceof HTMLElement)) throw new Error('missing branch workspace row')
 
       const items = await openContextMenu(row)
@@ -994,20 +990,38 @@ async function confirmCloseAll(): Promise<void> {
   })
 }
 
-function workspace(lifecycle: BranchWorkspaceLifecycle): BranchWorkspaceSnapshot {
+type WorkspaceFixtureState =
+  | 'ready'
+  | 'active'
+  | 'creation-interrupted'
+  | 'needs-repair'
+  | 'reduce-incomplete'
+  | 'delete-incomplete'
+
+function workspace(stateName: WorkspaceFixtureState): BranchWorkspaceSnapshot {
+  const state: BranchWorkspaceSnapshot['state'] =
+    stateName === 'creation-interrupted'
+      ? { kind: 'needs-action', action: 'repair', reason: 'creation-interrupted' }
+      : stateName === 'needs-repair'
+        ? { kind: 'needs-action', action: 'repair', reason: 'drift' }
+        : stateName === 'reduce-incomplete'
+          ? { kind: 'needs-action', action: 'continue-reduce' }
+          : stateName === 'delete-incomplete'
+            ? { kind: 'needs-action', action: 'continue-delete' }
+            : { kind: 'ready' }
   return {
     id: 'branch-1',
     rootId: '/workspace',
     branch: 'feature/auth',
     directoryName: 'goblin-feature-auth',
     path: '/workspace/goblin-feature-auth',
-    lifecycle,
-    available: lifecycle !== 'delete-incomplete',
+    state,
+    available: stateName !== 'delete-incomplete',
     issues: [],
     repositories: [],
     auxiliaryEntries: [],
-    ...(lifecycle === 'active'
-      ? { activeOperation: { kind: 'create', currentStep: 1, completedCount: 0, totalCount: 2, cancellable: true } }
+    ...(stateName === 'active'
+      ? { activeOperation: { kind: 'pull', currentStep: 1, completedCount: 0, totalCount: 2, cancellable: true } }
       : {}),
   }
 }
@@ -1022,7 +1036,7 @@ function repositoryMember(
     branchOrigin: 'created',
     worktreePath: '/workspace/goblin-feature-auth/api',
     progress: 'complete',
-    observedState: 'ready',
+    ready: true,
     ...overrides,
   }
 }

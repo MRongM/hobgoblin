@@ -645,6 +645,21 @@ export async function removeRepositoryWorktree(
   })
 }
 
+export async function cleanupRepositoryWorktree(
+  cwd: string,
+  worktreePath: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  return await runWithRepoBackend(cwd, async (backend) => {
+    return await publishSnapshotInvalidationAfterMutation(
+      cwd,
+      await backend.cleanupWorktree(worktreePath, signal),
+      sourceToken,
+    )
+  })
+}
+
 export async function openRepositoryRemote(cwd: string, branch?: string, signal?: AbortSignal): Promise<ExecResult> {
   const url = await runWithRepoBackend(cwd, async (backend) => await backend.getBrowserRemoteUrl(branch, signal))
   return url ? { ok: true, message: url } : { ok: false, message: 'error.no-remote-url' }

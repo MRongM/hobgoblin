@@ -10,6 +10,7 @@ vi.mock('#/web/lib/server-fetch.ts', () => ({
 
 import {
   abortBranchWorkspace,
+  cleanupBranchWorkspaceRegistry,
   configureWorkspace,
   discoverWorkspace,
   executeBranchWorkspace,
@@ -82,6 +83,16 @@ describe('workspace client', () => {
       { rootId: '/workspace' },
       { signal: controller.signal },
     )
+  })
+
+  test('posts the root id to the branch workspace cleanup endpoint', async () => {
+    const result = { ok: true, outcome: 'repaired', removedRecords: 2 }
+    mocks.postServerJson.mockResolvedValue(result)
+
+    await expect(cleanupBranchWorkspaceRegistry('/workspace')).resolves.toEqual(result)
+    expect(mocks.postServerJson).toHaveBeenCalledWith('/api/workspace/branch-workspaces/cleanup', {
+      rootId: '/workspace',
+    })
   })
 
   test('posts typed branch workspace plan, execute, abort, and reorder requests', async () => {

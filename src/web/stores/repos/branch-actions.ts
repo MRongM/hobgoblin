@@ -29,6 +29,7 @@ import { runRepoRefreshIntent } from '#/web/stores/repos/refresh-coordinator.ts'
 import { runWithRepoInvalidationSource } from '#/web/stores/repos/invalidation-sources.ts'
 import {
   checkoutRepositoryBranch,
+  cleanupRepositoryWorktree,
   createRepositoryBranch,
   createRepositoryWorktree,
   deleteRepositoryBranch,
@@ -48,6 +49,7 @@ const BRANCH_ACTION_REASON_BY_KIND: Record<RepoBranchActionKind, RepoBranchActio
   createBranch: 'branch:createBranch',
   trackRemoteBranch: 'branch:trackRemoteBranch',
   deleteBranch: 'branch:deleteBranch',
+  cleanupWorktree: 'branch:cleanupWorktree',
   removeWorktree: 'branch:removeWorktree',
 }
 type NetworkRepoBranchAction = Extract<RepoBranchAction, { kind: 'pull' | 'push' }>
@@ -86,6 +88,7 @@ function branchActionOperationTarget(action: RepoBranchAction): string | null {
     case 'pull':
     case 'push':
     case 'deleteBranch':
+    case 'cleanupWorktree':
     case 'removeWorktree':
       return action.branch
     case 'createWorktree':
@@ -108,6 +111,8 @@ function branchActionEventAction(action: RepoBranchAction): RepoEventAction {
     case 'push':
     case 'deleteBranch':
       return { kind: action.kind, branch: action.branch }
+    case 'cleanupWorktree':
+      return { kind: action.kind, branch: action.branch, worktreePath: action.worktreePath }
     case 'createBranch':
       return { kind: action.kind, branch: action.branch, baseBranch: action.baseBranch }
     case 'trackRemoteBranch':
@@ -253,6 +258,8 @@ function runBranchActionRpc(
         signal,
         sourceToken,
       )
+    case 'cleanupWorktree':
+      return cleanupRepositoryWorktree(repoId, action.worktreePath, signal, sourceToken)
     case 'removeWorktree':
       return removeRepositoryWorktree(
         repoId,

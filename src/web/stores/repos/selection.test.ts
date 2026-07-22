@@ -605,11 +605,11 @@ describe('multi-repository workspace selection', () => {
   })
 
   test.each([
-    { label: 'missing', selectedId: 'branch-missing', lifecycle: 'ready' as const },
-    { label: 'delete-incomplete', selectedId: 'branch-1', lifecycle: 'delete-incomplete' as const },
-  ])('falls back to Overview for a $label branch workspace', ({ selectedId, lifecycle }) => {
+    { label: 'missing', selectedId: 'branch-missing', stateName: 'ready' as const },
+    { label: 'delete-incomplete', selectedId: 'branch-1', stateName: 'delete-incomplete' as const },
+  ])('falls back to Overview for a $label branch workspace', ({ selectedId, stateName }) => {
     seedWorkspaceSelection()
-    seedBranchWorkspaceQuery('branch-1', lifecycle)
+    seedBranchWorkspaceQuery('branch-1', stateName)
 
     useReposStore.getState().activateBranchWorkspace(rootId, selectedId)
 
@@ -653,7 +653,7 @@ describe('multi-repository workspace selection', () => {
   })
 })
 
-function seedBranchWorkspaceQuery(id: string, lifecycle: 'ready' | 'delete-incomplete') {
+function seedBranchWorkspaceQuery(id: string, stateName: 'ready' | 'delete-incomplete') {
   mainWindowQueryClient.setQueryData(branchWorkspaceQueryKey('/tmp/gbl-workspace'), {
     ok: true,
     rootId: '/tmp/gbl-workspace',
@@ -665,14 +665,14 @@ function seedBranchWorkspaceQuery(id: string, lifecycle: 'ready' | 'delete-incom
         branch: 'feature/auth',
         directoryName: 'goblin-feature',
         path: '/tmp/gbl-workspace/goblin-feature',
-        lifecycle,
-        available: lifecycle === 'ready',
+        state:
+          stateName === 'ready'
+            ? { kind: 'ready' as const }
+            : { kind: 'needs-action' as const, action: 'continue-delete' as const },
+        available: stateName === 'ready',
         issues: [],
         repositories: [],
         auxiliaryEntries: [],
-        ...(lifecycle === 'delete-incomplete'
-          ? { operation: { kind: 'remove' as const, phase: 'failed' as const, startedAt: '2026-07-21T00:00:00.000Z' } }
-          : {}),
       },
     ],
   })

@@ -126,19 +126,18 @@ async function projectBranchWorkspace(
   const activeOperation = dependencies.readActiveOperation
     ? await dependencies.readActiveOperation(manifest.rootId, manifest.id)
     : null
-  const lifecycle = projectLifecycle(manifest, issues, activeOperation)
+  const state = projectState(manifest, issues)
   return {
     id: manifest.id,
     rootId: manifest.rootId,
     branch: manifest.branch,
     directoryName: manifest.directoryName,
     path: manifest.path,
-    lifecycle,
-    available: rootReady && lifecycle !== 'delete-incomplete',
+    state,
+    available: rootReady && !(state.kind === 'needs-action' && state.action === 'continue-delete'),
     issues,
     repositories,
     auxiliaryEntries,
-    ...(manifest.operation ? { operation: { ...manifest.operation } } : {}),
     ...(activeOperation ? { activeOperation } : {}),
   }
 }
@@ -154,11 +153,11 @@ async function reconcileRepositoryMember(
     member.progress === 'removed' &&
     (manifest.operation?.kind === 'remove' || manifest.operation?.kind === 'reduce')
   ) {
-    return { ...member, observedState: 'missing' }
+    return { ...member, ready: false }
   }
   if (member.progress === 'pending') {
     issues.push({ kind: 'repository-pending', repositoryName: member.repositoryName })
-    return { ...member, observedState: 'pending' }
+    return { ...member, ready: false }
   }
   if (member.progress === 'failed') {
     issues.push({
@@ -166,30 +165,30 @@ async function reconcileRepositoryMember(
       repositoryName: member.repositoryName,
       ...(member.lastError ? { message: member.lastError } : {}),
     })
-    return { ...member, observedState: 'failed', ...(member.lastError ? { message: member.lastError } : {}) }
+    return { ...member, ready: false }
   }
   if (!configuredRepositories.has(member.repositoryName) || !snapshotPromise) {
     issues.push({ kind: 'repository-unavailable', repositoryName: member.repositoryName })
-    return { ...member, observedState: 'unavailable' }
+    return { ...member, ready: false }
   }
 
   const snapshot = await snapshotPromise
   if (!snapshot) {
     issues.push({ kind: 'repository-unavailable', repositoryName: member.repositoryName })
-    return { ...member, observedState: 'unavailable' }
+    return { ...member, ready: false }
   }
   const branch = snapshot.branches.find((item) => item.name === member.targetBranch)
   if (!branch?.worktree) {
     issues.push({ kind: 'worktree-missing', repositoryName: member.repositoryName })
-    return { ...member, observedState: 'missing' }
+    return { ...member, ready: false }
   }
   if (!sameHostPath(manifest.rootId, branch.worktree.path, member.worktreePath)) {
     issues.push({ kind: 'worktree-path-mismatch', repositoryName: member.repositoryName })
-    return { ...member, observedState: 'path-mismatch' }
+    return { ...member, ready: false }
   }
   if (member.bootstrapProgress === 'pending') {
     issues.push({ kind: 'repository-bootstrap-pending', repositoryName: member.repositoryName })
-    return { ...member, observedState: 'pending' }
+    return { ...member, ready: false }
   }
   if (member.bootstrapProgress === 'failed') {
     issues.push({
@@ -197,13 +196,9 @@ async function reconcileRepositoryMember(
       repositoryName: member.repositoryName,
       ...(member.bootstrapLastError ? { message: member.bootstrapLastError } : {}),
     })
-    return {
-      ...member,
-      observedState: 'failed',
-      ...(member.bootstrapLastError ? { message: member.bootstrapLastError } : {}),
-    }
+    return { ...member, ready: false }
   }
-  return { ...member, observedState: 'ready' }
+  return { ...member, ready: true }
 }
 
 async function reconcileAuxiliaryEntry(
@@ -214,11 +209,11 @@ async function reconcileAuxiliaryEntry(
   issues: BranchWorkspaceIssue[],
 ): Promise<BranchWorkspaceAuxiliarySnapshot> {
   if (entry.progress === 'removed' && manifest.operation?.kind === 'remove') {
-    return { ...entry, observedState: 'missing' }
+    return { ...entry, ready: false }
   }
   if (entry.progress === 'pending') {
     issues.push({ kind: 'auxiliary-pending', entryName: entry.name })
-    return { ...entry, observedState: 'pending' }
+    return { ...entry, ready: false }
   }
   if (entry.progress === 'failed') {
     issues.push({
@@ -226,13 +221,13 @@ async function reconcileAuxiliaryEntry(
       entryName: entry.name,
       ...(entry.lastError ? { message: entry.lastError } : {}),
     })
-    return { ...entry, observedState: 'failed', ...(entry.lastError ? { message: entry.lastError } : {}) }
+    return { ...entry, ready: false }
   }
 
   const observed = await inspect(manifest.rootId, entry.targetPath, signal).catch(() => null)
   if (!observed || !observed.exists || observed.kind === 'missing') {
     issues.push({ kind: 'auxiliary-missing', entryName: entry.name })
-    return { ...entry, observedState: 'missing' }
+    return { ...entry, ready: false }
   }
   if (entry.mode === 'symlink') {
     if (
@@ -244,28 +239,28 @@ async function reconcileAuxiliaryEntry(
       issues.push({ kind: 'auxiliary-path-mismatch', entryName: entry.name })
       return {
         ...entry,
-        observedState: 'path-mismatch',
+        ready: false,
         ...(observed.resolvedPath ? { resolvedSourcePath: observed.resolvedPath } : {}),
       }
     }
-    return { ...entry, observedState: 'ready', resolvedSourcePath: observed.resolvedPath }
+    return { ...entry, ready: true, resolvedSourcePath: observed.resolvedPath }
   }
   if (observed.kind === 'symlink') {
     issues.push({ kind: 'auxiliary-path-mismatch', entryName: entry.name })
-    return { ...entry, observedState: 'path-mismatch' }
+    return { ...entry, ready: false }
   }
-  return { ...entry, observedState: 'ready' }
+  return { ...entry, ready: true }
 }
 
-function projectLifecycle(
+function projectState(
   manifest: BranchWorkspaceManifest,
   issues: BranchWorkspaceIssue[],
-  activeOperation: BranchWorkspaceActiveOperation | null,
-): BranchWorkspaceSnapshot['lifecycle'] {
-  if (activeOperation) return 'active'
-  if (manifest.operation?.kind === 'remove') return 'delete-incomplete'
-  if (manifest.operation?.kind === 'reduce') return 'reduce-incomplete'
-  if (manifest.operation?.kind === 'repair') return 'needs-repair'
+): BranchWorkspaceSnapshot['state'] {
+  if (manifest.operation?.kind === 'remove') return { kind: 'needs-action', action: 'continue-delete' }
+  if (manifest.operation?.kind === 'reduce') return { kind: 'needs-action', action: 'continue-reduce' }
+  if (manifest.operation?.kind === 'repair') {
+    return { kind: 'needs-action', action: 'repair', reason: 'drift' }
+  }
   const hasCreateProgress = issues.some(
     (issue) =>
       issue.kind === 'repository-pending' ||
@@ -276,9 +271,9 @@ function projectLifecycle(
       issue.kind === 'auxiliary-failed',
   )
   if (manifest.operation?.kind === 'create' || manifest.operation?.kind === 'extend' || hasCreateProgress) {
-    return 'create-incomplete'
+    return { kind: 'needs-action', action: 'repair', reason: 'creation-interrupted' }
   }
-  return issues.length > 0 ? 'needs-repair' : 'ready'
+  return issues.length > 0 ? { kind: 'needs-action', action: 'repair', reason: 'drift' } : { kind: 'ready' }
 }
 
 function sameHostPath(rootId: string, left: string, right: string): boolean {

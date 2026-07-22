@@ -24,7 +24,11 @@ export interface WorktreeListItemActionProjection {
 const ordinaryMainExclusions = new Set(['checkout', 'createWorktree', 'sync'])
 const memberMainExclusions = new Set([...ordinaryMainExclusions, 'checkoutTo'])
 const ordinaryDestructiveExclusions = new Set(['deleteBranch'])
-const memberDestructiveExclusions = new Set([...ordinaryDestructiveExclusions, 'removeWorktree'])
+const memberDestructiveExclusions = new Set([
+  ...ordinaryDestructiveExclusions,
+  'removeWorktree',
+  'cleanupWorktree',
+])
 
 export function projectWorktreeListItemActions(
   groups: BranchActionItemGroups,

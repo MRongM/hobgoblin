@@ -327,6 +327,21 @@ export function useBranchActionItems(
       onSelect: actions.requestRemoveWorktree,
     },
     {
+      id: 'cleanupWorktree',
+      label: branchActionLabel(
+        'cleanupWorktree',
+        'action.cleanup-invalid-worktree',
+        'action.cleanup-invalid-worktree-cleaning-title',
+        'action.cleanup-invalid-worktree-queued-title',
+      ),
+      disabled: disabled || !capabilities.canCleanupWorktree,
+      busy: busy('cleanupWorktree'),
+      visible: capabilities.canCleanupWorktree,
+      destructive: true,
+      icon: createElement(Trash2),
+      onSelect: actions.requestCleanupWorktree,
+    },
+    {
       id: 'deleteBranch',
       label: branchActionLabel(
         'deleteBranch',

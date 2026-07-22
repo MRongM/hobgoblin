@@ -21,9 +21,7 @@ export function workspaceRootIdForRepo(
   return state.repos[repoId]?.workspaceRootId ?? null
 }
 
-export function activeProjectId(
-  state: Pick<WorkspaceProjectLookupState, 'activeId' | 'repos'>,
-): string | null {
+export function activeProjectId(state: Pick<WorkspaceProjectLookupState, 'activeId' | 'repos'>): string | null {
   if (!state.activeId) return null
   return workspaceRootIdForRepo(state, state.activeId) ?? state.activeId
 }
@@ -53,9 +51,7 @@ export function workspaceActiveContext(
       : { kind: 'overview' }
   }
   const branchWorkspace = branchWorkspaces.find((item) => item.id === context.branchWorkspaceId)
-  return branchWorkspace && branchWorkspace.available && branchWorkspace.lifecycle !== 'delete-incomplete' && branchWorkspace.operation?.kind !== 'remove'
-    ? context
-    : { kind: 'overview' }
+  return branchWorkspace?.available ? context : { kind: 'overview' }
 }
 
 export function projectRepositoryIds(

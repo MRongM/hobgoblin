@@ -36,6 +36,7 @@ function actionGroups(): BranchActionItemGroups {
     destructiveItems: [
       action('closeAllTerminals', { menuOnly: true }),
       action('removeWorktree', { destructive: true }),
+      action('cleanupWorktree', { destructive: true }),
       action('deleteBranch', { destructive: true }),
       action('resetHard', { destructive: true }),
     ],
@@ -60,7 +61,7 @@ describe('projectWorktreeListItemActions', () => {
       ['externalTerminal', 'remote'],
       ['pull', 'push', 'createBranch', 'pullRemoteBranch', 'checkoutTo', 'merge', 'commit', 'copyPatch'],
       ['createTag'],
-      ['closeAllTerminals', 'removeWorktree', 'resetHard'],
+      ['closeAllTerminals', 'removeWorktree', 'cleanupWorktree', 'resetHard'],
     ])
     expect(projection.menuGroups[1]?.[0]?.disabled).toBe(true)
     expect(projection.contextMenu.editor.disabled).toBe(false)
@@ -91,7 +92,7 @@ describe('projectWorktreeListItemActions', () => {
         'copyPatch',
       ],
       ['createTag'],
-      ['closeAllTerminals', 'removeWorktree', 'deleteBranch', 'resetHard'],
+      ['closeAllTerminals', 'removeWorktree', 'cleanupWorktree', 'deleteBranch', 'resetHard'],
     ])
   })
 

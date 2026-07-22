@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from 'vitest'
+import * as remoteGitOperations from '#/system/ssh/git.ts'
 import {
   bootstrapRemoteWorktreeAfterCreate,
   bootstrapRemoteWorktreeSelectionsAfterCreate,
@@ -55,6 +56,19 @@ const TARGET = normalizeRemoteTarget({
   port: 22,
   remotePath: '/srv/repo',
 })!
+
+async function pruneRemoteWorktrees(
+  input: { worktreePath: string; signal?: AbortSignal; run?: unknown },
+) {
+  const prune = (remoteGitOperations as Record<string, unknown>).pruneRemoteWorktrees
+  expect(prune).toBeTypeOf('function')
+  return await (
+    prune as (
+      target: typeof TARGET,
+      options: { worktreePath: string; signal?: AbortSignal; run?: unknown },
+    ) => Promise<unknown>
+  )(TARGET, input)
+}
 
 describe('remote git helpers', () => {
   test('builds browser and pull request URLs from remote verbose output', async () => {
@@ -820,6 +834,36 @@ describe('remote git helpers', () => {
       expect.objectContaining({ type: 'gitBranchDelete' }),
       TARGET,
       expect.anything(),
+    )
+  })
+
+  test('pruneRemoteWorktrees revalidates the selected prunable path before pruning', async () => {
+    const run = vi.fn(async (command: { type: string }) => {
+      if (command.type === 'gitWorktreeList') {
+        return okRemoteResult(
+          [
+            'worktree /srv/repo',
+            'HEAD f00ba4',
+            'branch refs/heads/main',
+            '',
+            'worktree /srv/repo-stale',
+            'HEAD ba5eba1',
+            'branch refs/heads/feature/stale',
+            'prunable gitdir file points to non-existent location',
+          ].join('\n'),
+        )
+      }
+      if (command.type === 'gitWorktreePrune') return okRemoteResult('Pruned worktrees')
+      return okRemoteResult('')
+    })
+
+    const result = await pruneRemoteWorktrees({ worktreePath: '/srv/repo-stale', run })
+
+    expect(result).toEqual({ ok: true, message: 'Pruned worktrees' })
+    expect(run).toHaveBeenCalledWith(
+      { type: 'gitWorktreePrune', path: '/srv/repo' },
+      TARGET,
+      { signal: undefined, timeoutMs: 180_000 },
     )
   })
 

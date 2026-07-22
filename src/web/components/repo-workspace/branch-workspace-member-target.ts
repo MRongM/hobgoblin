@@ -35,7 +35,7 @@ export function resolveBranchWorkspaceMemberTarget({
   if (!repository || repository.availability.phase !== 'available') {
     return { ok: false, reason: 'workspace.branch-workspace.member-unavailable' }
   }
-  if (member.observedState !== 'ready') {
+  if (!member.ready) {
     return { ok: false, reason: 'workspace.branch-workspace.member-not-ready' }
   }
 

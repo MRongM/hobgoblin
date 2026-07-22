@@ -120,7 +120,6 @@ describe('branch workspace write service', () => {
       createDirectory,
       createWorktree,
       publishInvalidation,
-      now: () => '2026-07-21T00:00:00.000Z',
     })
     await service.plan(ROOT, {
       operation: 'create',
@@ -157,7 +156,6 @@ describe('branch workspace write service', () => {
       updateManifests: source.updateManifests,
       createDirectory: vi.fn(async () => undefined),
       createWorktree,
-      now: () => '2026-07-21T00:00:00.000Z',
     })
     const request = {
       operation: 'create' as const,
@@ -203,7 +201,6 @@ describe('branch workspace write service', () => {
       updateManifests: source.updateManifests,
       createDirectory: vi.fn(async () => undefined),
       createWorktree: vi.fn(async () => ({ ok: false, message: 'link failed', repoChanged: true })),
-      now: () => '2026-07-21T00:00:00.000Z',
     })
     await service.plan(ROOT, {
       operation: 'create',
@@ -264,7 +261,6 @@ describe('branch workspace write service', () => {
       updateManifests: source.updateManifests,
       createDirectory: vi.fn(async () => undefined),
       createWorktree,
-      now: () => '2026-07-21T00:00:00.000Z',
     })
     await service.plan(ROOT, {
       operation: 'create',
@@ -281,7 +277,7 @@ describe('branch workspace write service', () => {
     })
     expect(service.abort(ROOT)).toBe(true)
     await expect(running).resolves.toMatchObject({ ok: false, message: 'cancelled' })
-    expect(source.manifests[0]?.operation?.phase).toBe('cancelled')
+    expect(source.manifests[0]?.operation).toEqual({ kind: 'create' })
     resolveCreate?.({ ok: true, message: 'late' })
   })
 
@@ -325,7 +321,6 @@ describe('branch workspace write service', () => {
       materializeSymlink: vi.fn(async () => {
         events.push('symlink')
       }),
-      now: () => '2026-07-21T00:00:00.000Z',
     })
     await service.plan(ROOT, { operation: 'repair', branchWorkspaceId: plan.branchWorkspaceId })
 
@@ -370,7 +365,6 @@ describe('branch workspace write service', () => {
       copyEntry: vi.fn(async () => {
         throw new Error('copy failed')
       }),
-      now: () => '2026-07-22T00:00:00.000Z',
     })
     await service.plan(ROOT, { operation: 'repair', branchWorkspaceId: plan.branchWorkspaceId })
 
@@ -422,7 +416,6 @@ describe('branch workspace write service', () => {
       updateManifests: source.updateManifests,
       createWorktree,
       bootstrapWorktree,
-      now: () => '2026-07-21T00:00:00.000Z',
     })
     await service.plan(ROOT, { operation: 'repair', branchWorkspaceId: plan.branchWorkspaceId })
 
@@ -486,7 +479,6 @@ describe('branch workspace write service', () => {
       readManifests: source.readManifests,
       updateManifests: source.updateManifests,
       bootstrapWorktree,
-      now: () => '2026-07-21T00:00:00.000Z',
     })
     await service.plan(ROOT, { operation: 'repair', branchWorkspaceId: plan.branchWorkspaceId })
 
@@ -571,7 +563,6 @@ describe('branch workspace write service', () => {
       removeWorktree,
       deleteBranch,
       removeEntry,
-      now: () => '2026-07-21T00:00:00.000Z',
     })
     await service.plan(ROOT, {
       operation: 'remove',
@@ -624,7 +615,6 @@ describe('branch workspace write service', () => {
       removeWorktree,
       deleteBranch: vi.fn(async () => ({ ok: true, message: 'deleted' })),
       removeEntry,
-      now: () => '2026-07-21T00:00:00.000Z',
     })
     await service.plan(ROOT, {
       operation: 'remove',
@@ -637,7 +627,7 @@ describe('branch workspace write service', () => {
       ok: false,
       message: 'busy',
     })
-    expect(source.manifests[0]?.operation).toMatchObject({ kind: 'remove', phase: 'failed' })
+    expect(source.manifests[0]?.operation).toEqual({ kind: 'remove' })
     expect(source.manifests[0]?.repositories.map((member) => member.progress)).toEqual(['removed', 'failed'])
     expect(removeEntry).not.toHaveBeenCalled()
   })
@@ -665,7 +655,6 @@ describe('branch workspace write service', () => {
       removeWorktree,
       deleteBranch,
       deleteRemoteBranch,
-      now: () => '2026-07-22T00:00:00.000Z',
     })
     await service.plan(ROOT, {
       operation: 'reduce',
@@ -715,7 +704,6 @@ describe('branch workspace write service', () => {
       updateManifests: source.updateManifests,
       createWorktree: vi.fn(async () => ({ ok: true, message: 'created' })),
       removeWorktree,
-      now: () => '2026-07-22T00:00:00.000Z',
     })
     const request = {
       operation: 'reduce' as const,
@@ -728,7 +716,7 @@ describe('branch workspace write service', () => {
       ok: false,
       message: 'busy',
     })
-    expect(source.manifests[0]?.operation).toMatchObject({ kind: 'reduce', phase: 'failed' })
+    expect(source.manifests[0]?.operation).toEqual({ kind: 'reduce' })
     expect(source.manifests[0]?.repositories.map((member) => [member.repositoryName, member.progress])).toEqual([
       ['api', 'removed'],
       ['web', 'failed'],

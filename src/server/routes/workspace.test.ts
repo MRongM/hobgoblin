@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   restoreWorkspaceRepositories: vi.fn(),
   saveWorkspaceConfig: vi.fn(),
   readBranchWorkspaceSnapshot: vi.fn(),
+  cleanupBranchWorkspaceRegistryRecords: vi.fn(),
   createBranchWorkspaceWriteService: vi.fn(),
   createBranchWorkspaceGitActionWriteService: vi.fn(),
   planBranchWorkspace: vi.fn(),
@@ -33,6 +34,10 @@ vi.mock('#/server/modules/workspace-write-paths.ts', () => ({
 
 vi.mock('#/server/modules/branch-workspace-read.ts', () => ({
   readBranchWorkspaceSnapshot: mocks.readBranchWorkspaceSnapshot,
+}))
+
+vi.mock('#/server/modules/branch-workspace-registry-write-paths.ts', () => ({
+  cleanupBranchWorkspaceRegistryRecords: mocks.cleanupBranchWorkspaceRegistryRecords,
 }))
 
 vi.mock('#/server/modules/branch-workspace-write-paths.ts', () => ({
@@ -71,6 +76,7 @@ describe('workspace routes', () => {
     mocks.restoreWorkspaceRepositories.mockReset()
     mocks.saveWorkspaceConfig.mockReset()
     mocks.readBranchWorkspaceSnapshot.mockReset()
+    mocks.cleanupBranchWorkspaceRegistryRecords.mockReset()
     mocks.planBranchWorkspace.mockReset()
     mocks.executeBranchWorkspace.mockReset()
     mocks.abortBranchWorkspace.mockReset()
@@ -199,6 +205,22 @@ describe('workspace routes', () => {
     expect(mocks.readBranchWorkspaceSnapshot).toHaveBeenNthCalledWith(2, '/workspace', expect.any(AbortSignal), {
       readActiveOperation: mocks.activeBranchWorkspaceGitAction,
     })
+  })
+
+  test('delegates branch workspace registry cleanup for the requesting root', async () => {
+    const result = { ok: true as const, outcome: 'repaired' as const, removedRecords: 2 }
+    mocks.cleanupBranchWorkspaceRegistryRecords.mockResolvedValue(result)
+    const app = new Hono().route('/api/workspace', createWorkspaceRoutes())
+
+    const response = await app.request('/api/workspace/branch-workspaces/cleanup', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ rootId: '/workspace' }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual(result)
+    expect(mocks.cleanupBranchWorkspaceRegistryRecords).toHaveBeenCalledWith('/workspace')
   })
 
   test('injects terminal enumeration and administrative closure into the branch workspace service', async () => {

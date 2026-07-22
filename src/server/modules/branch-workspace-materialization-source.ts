@@ -4,10 +4,12 @@ import { cp, lstat, mkdir, readdir, readlink, realpath, rmdir, symlink, unlink }
 import path from 'node:path'
 import { workspaceRepositoryPath } from '#/server/modules/workspace-paths.ts'
 import { getWorktrees } from '#/system/git/worktrees.ts'
-import type {
-  BranchWorkspaceAuxiliaryCandidate,
-  BranchWorkspacePathInspection,
-  BranchWorkspacePathKind,
+import {
+  isBranchWorkspaceDirectoryName,
+  isManagedBranchWorkspaceEntryName,
+  type BranchWorkspaceAuxiliaryCandidate,
+  type BranchWorkspacePathInspection,
+  type BranchWorkspacePathKind,
 } from '#/shared/branch-workspaces.ts'
 import { isRemoteRepoId, parseRemoteRepoId, type RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import {
@@ -56,7 +58,7 @@ export async function listBranchWorkspaceAuxiliaryCandidates(
   const candidates: BranchWorkspaceAuxiliaryCandidate[] = []
   for (const name of names.sort(compareText)) {
     signal?.throwIfAborted()
-    if (excludedNames.has(name) || isManagedOrTemporaryName(name)) continue
+    if (excludedNames.has(name) || isManagedBranchWorkspaceEntryName(name)) continue
     const inspection = await inspectLocalPath(rootPath, path.join(rootPath, name))
     if (!inspection.exists || inspection.kind === 'missing') continue
     if (inspection.resolvedPath && excludedWorktreePaths.has(inspection.resolvedPath)) continue
@@ -125,7 +127,7 @@ export async function createBranchWorkspaceDirectory(
   await assertSafeTargetParents(rootPath, targetPath)
   if (
     path.dirname(path.resolve(targetPath)) !== path.resolve(rootPath) ||
-    !path.basename(targetPath).startsWith('goblin-')
+    !isBranchWorkspaceDirectoryName(path.basename(targetPath))
   ) {
     throw new Error('workspace.branch-workspace.invalid-path')
   }
@@ -402,10 +404,6 @@ async function resolveMaterializationRemoteTarget(
   const ref = parseRemoteRepoId(rootId)
   if (!ref) throw new Error('workspace.branch-workspace.invalid-root')
   return (await (dependencies.resolveRemoteTarget ?? resolveSshRemoteTarget)(ref, signal)).target
-}
-
-function isManagedOrTemporaryName(name: string): boolean {
-  return name.startsWith('goblin-') || name.startsWith('.goblin-') || name.startsWith('.hobgoblin-')
 }
 
 function pathKind(stat: Awaited<ReturnType<typeof lstat>>): Exclude<BranchWorkspacePathKind, 'missing'> {

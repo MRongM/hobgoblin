@@ -70,6 +70,36 @@ describe('repo-client', () => {
     setRendererBridgeForTests(null)
   })
 
+  test('requests invalid worktree cleanup with the selected path and source token', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, message: 'pruned' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const repoClient = await import('#/web/repo-client.ts')
+    const cleanupRepositoryWorktree = (repoClient as Record<string, unknown>).cleanupRepositoryWorktree
+    expect(cleanupRepositoryWorktree).toBeTypeOf('function')
+
+    await expect(
+      (
+        cleanupRepositoryWorktree as (
+          cwd: string,
+          worktreePath: string,
+          signal?: AbortSignal,
+          sourceToken?: string,
+        ) => Promise<unknown>
+      )('/repo', '/repo-stale', undefined, 'client_123'),
+    ).resolves.toEqual({ ok: true, message: 'pruned' })
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:32100/api/repo/cleanup-worktree',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ cwd: '/repo', worktreePath: '/repo-stale', sourceToken: 'client_123' }),
+      }),
+    )
+  })
+
   test('opens repository remote through the native shell bridge when available', async () => {
     installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
     window.open = vi.fn(() => null)

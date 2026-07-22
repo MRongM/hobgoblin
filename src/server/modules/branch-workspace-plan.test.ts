@@ -164,7 +164,7 @@ describe('branch workspace create planner', () => {
       plan: {
         operation: 'create',
         branch: BRANCH,
-        directoryName: 'goblin-feature-auth',
+        directoryName: 'hobgoblin-feature-auth',
         repositories: [
           {
             repositoryName: 'api',
@@ -181,7 +181,7 @@ describe('branch workspace create planner', () => {
     })
     if (!result.ok) throw new Error('Expected a create plan')
     expect(result.plan.steps.find((step) => step.kind === 'create-directory')).toMatchObject({
-      label: 'goblin-feature-auth',
+      label: 'hobgoblin-feature-auth',
     })
   })
 
@@ -229,8 +229,8 @@ describe('branch workspace create planner', () => {
   })
 
   test('uses an existing branch and recognizes only its exact expected worktree as satisfied', async () => {
-    const expectedApi = path.join(ROOT, 'goblin-feature-auth', 'api')
-    const expectedWeb = path.join(ROOT, 'goblin-feature-auth', 'web')
+    const expectedApi = path.join(ROOT, 'hobgoblin-feature-auth', 'api')
+    const expectedWeb = path.join(ROOT, 'hobgoblin-feature-auth', 'web')
     const deps = dependencies({
       [path.join(ROOT, 'api')]: snapshot(branch('main'), branch(BRANCH)),
       [path.join(ROOT, 'web')]: snapshot(branch('develop'), branch(BRANCH, expectedWeb)),
@@ -524,7 +524,7 @@ describe('branch workspace repair planner', () => {
 
   test('clears an incomplete operation after all one-time auxiliary work was released', async () => {
     const current = existingManifest()
-    current.operation = { kind: 'create', phase: 'failed', startedAt: '2026-07-22T00:00:00.000Z' }
+    current.operation = { kind: 'create' }
     const deps = repairDependencies(current)
 
     await expect(

@@ -18,6 +18,7 @@ export type BranchActionItemId =
   | 'pullRemoteBranch'
   | 'deleteBranch'
   | 'removeWorktree'
+  | 'cleanupWorktree'
   | 'checkoutTo'
   | 'merge'
   | 'commit'
@@ -54,6 +55,8 @@ export function branchActionItemIdFromKind(kind: RepoBranchActionKind): BranchAc
       return 'deleteBranch'
     case 'removeWorktree':
       return 'removeWorktree'
+    case 'cleanupWorktree':
+      return 'cleanupWorktree'
     case 'createWorktree':
       return null
   }

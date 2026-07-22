@@ -178,7 +178,7 @@ describe('BranchWorkspaceDialog', () => {
         sourcePath: '/workspace/docs',
         targetPath: '/workspace/goblin-feature-auth/docs',
         progress: 'complete',
-        observedState: 'ready',
+        ready: true,
       },
     ]
     renderDialog({
@@ -650,7 +650,7 @@ function existingWorkspace(): BranchWorkspaceSnapshot {
     branch: 'feature/auth',
     directoryName: 'goblin-feature-auth',
     path: '/workspace/goblin-feature-auth',
-    lifecycle: 'ready',
+    state: { kind: 'ready' },
     available: true,
     issues: [],
     repositories: [
@@ -661,7 +661,7 @@ function existingWorkspace(): BranchWorkspaceSnapshot {
         branchOrigin: 'created',
         worktreePath: '/workspace/goblin-feature-auth/api',
         progress: 'complete',
-        observedState: 'ready',
+        ready: true,
       },
     ],
     auxiliaryEntries: [],
@@ -681,7 +681,7 @@ function workspaceWithTwoMembers(): BranchWorkspaceSnapshot {
         branchOrigin: 'pre-existing',
         worktreePath: '/workspace/goblin-feature-auth/web',
         progress: 'complete',
-        observedState: 'ready',
+        ready: true,
       },
     ],
   }

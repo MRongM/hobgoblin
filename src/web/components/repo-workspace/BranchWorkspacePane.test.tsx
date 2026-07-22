@@ -482,7 +482,7 @@ function workspace(): BranchWorkspaceSnapshot {
     branch: 'feature/auth',
     directoryName: 'goblin-feature-auth',
     path: '/workspace/goblin-feature-auth',
-    lifecycle: 'ready',
+    state: { kind: 'ready' },
     available: true,
     issues: [],
     repositories: [],
@@ -498,6 +498,6 @@ function repositoryMember(): BranchWorkspaceSnapshot['repositories'][number] {
     branchOrigin: 'created',
     worktreePath: '/workspace/goblin-feature-auth/api',
     progress: 'complete',
-    observedState: 'ready',
+    ready: true,
   }
 }

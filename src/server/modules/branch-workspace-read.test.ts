@@ -96,8 +96,8 @@ describe('branch workspace read model', () => {
       ok: true,
       rootId: ROOT,
       items: [
-        { id: 'branch:feature/second', lifecycle: 'ready', issues: [] },
-        { id: 'branch:feature/first', lifecycle: 'ready', issues: [] },
+        { id: 'branch:feature/second', state: { kind: 'ready' }, issues: [] },
+        { id: 'branch:feature/first', state: { kind: 'ready' }, issues: [] },
       ],
       auxiliaryCandidates: [{ name: 'README.md' }],
     })
@@ -118,7 +118,7 @@ describe('branch workspace read model', () => {
       items: [
         {
           id: current.id,
-          lifecycle: 'needs-repair',
+          state: { kind: 'needs-action', action: 'repair', reason: 'drift' },
           available: false,
           issues: [{ kind: 'root-missing' }],
         },
@@ -129,24 +129,27 @@ describe('branch workspace read model', () => {
   test('normalizes stale create and remove operations into durable incomplete lifecycles', async () => {
     const pending = manifest('feature/pending')
     pending.repositories[0]!.progress = 'pending'
-    pending.operation = { kind: 'create', phase: 'running', startedAt: '2026-07-21T00:00:00.000Z' }
+    pending.operation = { kind: 'create' }
     const removing = manifest('feature/removing', {
-      operation: { kind: 'remove', phase: 'running', startedAt: '2026-07-21T00:00:00.000Z' },
+      operation: { kind: 'remove' },
     })
     const deps = dependencies([pending, removing])
     const result = await readBranchWorkspaceSnapshot(ROOT, undefined, deps)
     expect(result).toMatchObject({
       ok: true,
       items: [
-        { id: pending.id, lifecycle: 'create-incomplete' },
-        { id: removing.id, lifecycle: 'delete-incomplete', available: false },
+        {
+          id: pending.id,
+          state: { kind: 'needs-action', action: 'repair', reason: 'creation-interrupted' },
+        },
+        { id: removing.id, state: { kind: 'needs-action', action: 'continue-delete' }, available: false },
       ],
     })
   })
 
   test('projects interrupted member reduction without reporting removed progress as drift', async () => {
     const reducing = manifest('feature/reducing', {
-      operation: { kind: 'reduce', phase: 'failed', startedAt: '2026-07-22T00:00:00.000Z' },
+      operation: { kind: 'reduce' },
     })
     reducing.repositories[0] = { ...reducing.repositories[0]!, progress: 'removed' }
     const deps = dependencies([reducing])
@@ -156,10 +159,10 @@ describe('branch workspace read model', () => {
       items: [
         {
           id: reducing.id,
-          lifecycle: 'reduce-incomplete',
+          state: { kind: 'needs-action', action: 'continue-reduce' },
           available: true,
           issues: [],
-          repositories: [{ repositoryName: 'api', progress: 'removed', observedState: 'missing' }],
+          repositories: [{ repositoryName: 'api', progress: 'removed', ready: false }],
         },
       ],
     })
@@ -184,7 +187,7 @@ describe('branch workspace read model', () => {
       items: [
         {
           id: current.id,
-          lifecycle: 'create-incomplete',
+          state: { kind: 'needs-action', action: 'repair', reason: 'creation-interrupted' },
           issues: [
             {
               kind: 'repository-bootstrap-failed',
@@ -192,7 +195,7 @@ describe('branch workspace read model', () => {
               message: 'link failed',
             },
           ],
-          repositories: [{ repositoryName: 'api', observedState: 'failed' }],
+          repositories: [{ repositoryName: 'api', ready: false }],
         },
       ],
     })
@@ -200,7 +203,7 @@ describe('branch workspace read model', () => {
 
   test('does not project completed auxiliary materialization as tracked state or drift', async () => {
     const current = manifest('feature/auth', {
-      operation: { kind: 'create', phase: 'failed', startedAt: '2026-07-22T00:00:00.000Z' },
+      operation: { kind: 'create' },
     })
     current.auxiliaryEntries = [
       {
@@ -220,7 +223,13 @@ describe('branch workspace read model', () => {
 
     await expect(readBranchWorkspaceSnapshot(ROOT, undefined, deps)).resolves.toMatchObject({
       ok: true,
-      items: [{ lifecycle: 'create-incomplete', issues: [], auxiliaryEntries: [] }],
+      items: [
+        {
+          state: { kind: 'needs-action', action: 'repair', reason: 'creation-interrupted' },
+          issues: [],
+          auxiliaryEntries: [],
+        },
+      ],
     })
   })
 
@@ -242,16 +251,39 @@ describe('branch workspace read model', () => {
       items: [
         {
           id: unavailable.id,
-          lifecycle: 'needs-repair',
+          state: { kind: 'needs-action', action: 'repair', reason: 'drift' },
           issues: [{ kind: 'repository-unavailable', repositoryName: 'api' }],
         },
         {
           id: moved.id,
-          lifecycle: 'needs-repair',
+          state: { kind: 'needs-action', action: 'repair', reason: 'drift' },
           issues: [{ kind: 'worktree-path-mismatch', repositoryName: 'web' }],
         },
       ],
     })
   })
 
+  test('keeps the durable state while exposing a running Git action orthogonally', async () => {
+    const current = manifest()
+    const deps = {
+      ...dependencies([current]),
+      readActiveOperation: vi.fn(() => ({
+        kind: 'pull' as const,
+        currentStep: 1,
+        completedCount: 0,
+        totalCount: 1,
+        cancellable: true,
+      })),
+    }
+
+    await expect(readBranchWorkspaceSnapshot(ROOT, undefined, deps)).resolves.toMatchObject({
+      ok: true,
+      items: [
+        {
+          state: { kind: 'ready' },
+          activeOperation: { kind: 'pull', currentStep: 1 },
+        },
+      ],
+    })
+  })
 })

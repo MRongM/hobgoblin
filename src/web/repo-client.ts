@@ -256,6 +256,15 @@ export async function removeRepositoryWorktree(
   return await postServerJson('/api/repo/remove-worktree', { cwd, ...options, sourceToken }, { signal })
 }
 
+export async function cleanupRepositoryWorktree(
+  cwd: string,
+  worktreePath: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  return await postServerJson('/api/repo/cleanup-worktree', { cwd, worktreePath, sourceToken }, { signal })
+}
+
 export async function getRepositoryPatch(cwd: string, worktreePath: string, signal?: AbortSignal): Promise<ExecResult> {
   return await postServerJson('/api/repo/patch', { cwd, worktreePath }, { signal })
 }

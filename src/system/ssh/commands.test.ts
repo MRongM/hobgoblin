@@ -38,6 +38,27 @@ function testPosix(name: string, fn: () => Promise<void> | void): void {
 }
 
 describe('remote command scripts', () => {
+  test('requests immediate expiry annotations when listing worktrees', () => {
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'gitWorktreeList',
+      path: '/srv/repo',
+    })
+
+    expect(invocation.script).toBe("git -C '/srv/repo' worktree list --porcelain --expire now")
+  })
+
+  test('prunes immediately expired remote worktree records', () => {
+    let invocation: ReturnType<typeof buildRemoteCommandInvocation> | undefined
+    expect(() => {
+      invocation = buildRemoteCommandInvocation(TARGET, {
+        type: 'gitWorktreePrune',
+        path: '/srv/repo',
+      })
+    }).not.toThrow()
+
+    expect(invocation?.script).toBe("git -C '/srv/repo' worktree prune --expire now")
+  })
+
   test('adds one force flag only to explicitly forced worktree removal commands', () => {
     const safe = buildRemoteCommandInvocation(TARGET, {
       type: 'gitWorktreeRemove',
@@ -88,6 +109,14 @@ describe('remote command scripts', () => {
     expect(list.script).toContain('os.listdir')
     expect(list.script).toContain('excluded_names')
     expect(list.script).toContain("team's repo")
+    expect(list.script).toMatch(/hobgoblin-.*goblin-/)
+
+    const create = buildRemoteCommandInvocation(TARGET, {
+      type: 'createBranchWorkspaceDirectory',
+      rootPath: '/srv/workspace',
+      targetPath: '/srv/workspace/hobgoblin-feature',
+    })
+    expect(create.script).toMatch(/hobgoblin-.*goblin-/)
   })
 
   test('builds fixed branch workspace copy and fingerprint commands', () => {
@@ -127,7 +156,7 @@ describe('remote command scripts', () => {
     tempDirs.push(directory)
     const root = path.join(directory, 'workspace')
     const source = path.join(root, 'docs')
-    const branchRoot = path.join(root, 'goblin-feature')
+    const branchRoot = path.join(root, 'hobgoblin-feature')
     const copied = path.join(branchRoot, 'docs')
     mkdirSync(source, { recursive: true })
     writeFileSync(path.join(source, 'guide.md'), 'guide')
@@ -744,11 +773,9 @@ describe('remote command scripts', () => {
       hardlink: [],
       exclude: [],
     }
-    const unapproved = await execa(
-      'bash',
-      ['-lc', buildRemoteCommandInvocation(TARGET, base).script],
-      { reject: false },
-    )
+    const unapproved = await execa('bash', ['-lc', buildRemoteCommandInvocation(TARGET, base).script], {
+      reject: false,
+    })
     const outsidePlan = await execa(
       'bash',
       [

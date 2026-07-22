@@ -103,6 +103,7 @@ describe('useBranchActionItems', () => {
         isCurrent: false,
         checkedOutInAnotherWorktree: true,
         canRemoveWorktree: false,
+        canCleanupWorktree: false,
         isRegularBranch: false,
         canCopyPatch: false,
         canPull: false,
@@ -121,6 +122,7 @@ describe('useBranchActionItems', () => {
         openRemote: vi.fn(),
         requestDeleteBranch: vi.fn(),
         requestRemoveWorktree: vi.fn(),
+        requestCleanupWorktree: vi.fn(),
       },
       dialogs: null,
     })
@@ -180,6 +182,53 @@ describe('useBranchActionItems', () => {
     expect(itemIds).toContain('externalTerminal')
     expect(itemIds).toContain('editor')
     expect(groups.externalItems.find((item) => item.id === 'externalTerminal')?.disabled).toBe(false)
+  })
+
+  test('adds cleanup beside the retained remove action only for prunable worktrees', async () => {
+    const requestCleanupWorktree = vi.fn()
+    mocks.useBranchActions.mockReturnValue({
+      blocked: false,
+      busyAction: null,
+      capabilities: {
+        isCurrent: false,
+        checkedOutInAnotherWorktree: true,
+        canRemoveWorktree: false,
+        canCleanupWorktree: true,
+        isRegularBranch: false,
+        canCopyPatch: false,
+        canPull: false,
+        canPush: false,
+        canOpenRemote: false,
+        canOpenTerminal: false,
+        canOpenEditor: false,
+      },
+      actions: {
+        copyPatch: vi.fn(),
+        checkout: vi.fn(),
+        pull: vi.fn(),
+        push: vi.fn(),
+        openExternalTerminal: vi.fn(),
+        openEditor: vi.fn(),
+        openRemote: vi.fn(),
+        requestDeleteBranch: vi.fn(),
+        requestRemoveWorktree: vi.fn(),
+        requestCleanupWorktree,
+      },
+      dialogs: null,
+    })
+    const branch = createRepoBranch('feature/stale', { worktree: { path: '/tmp/repo-stale' } })
+    const repo = seedRepoState({ id: '/tmp/repo', branches: [branch] })
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
+    const groups = await renderItemGroups(useItems, repo, branch)
+    const visibleDestructive = groups.destructiveItems.filter((item) => item.visible)
+
+    expect(visibleDestructive.map((item) => item.id)).toContain('removeWorktree')
+    expect(visibleDestructive.map((item) => item.id)).toContain('cleanupWorktree')
+    expect(visibleDestructive.find((item) => item.id === 'removeWorktree')?.disabled).toBe(true)
+    expect(visibleDestructive.find((item) => item.id === 'cleanupWorktree')?.disabled).toBe(false)
+    visibleDestructive.find((item) => item.id === 'cleanupWorktree')?.onSelect()
+    expect(requestCleanupWorktree).toHaveBeenCalledTimes(1)
   })
 
   test('selects the target branch before creating an internal terminal', async () => {

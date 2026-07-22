@@ -18,6 +18,7 @@ import {
   parseWorktrees,
 } from '#/system/git/parsers.ts'
 import { markDefaultBranch, prioritizeDefaultBranch } from '#/system/git/branches.ts'
+import { resolvePrunableWorktree } from '#/shared/worktree-guards.ts'
 import { isProtectedRemoteBranchRef, parseRemoteBranchInput } from '#/shared/remote-branches.ts'
 import { parseRemoteTagInput, remoteTagRefsFromLsRemote, remoteTagSortKey } from '#/shared/remote-tags.ts'
 import {
@@ -1023,6 +1024,35 @@ export async function removeRemoteWorktree(
     { signal: input.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
   )
   return remoteExecResult(deleteResult)
+}
+
+export async function pruneRemoteWorktrees(
+  target: RemoteRepoTarget,
+  input: {
+    worktreePath: string
+    signal?: AbortSignal
+    run?: RemoteGitRunner
+  },
+): Promise<ExecResult> {
+  const run: RemoteGitRunner = input.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const listResult = await run({ type: 'gitWorktreeList', path: target.remotePath }, target, { signal: input.signal })
+  if (input.signal?.aborted) return { ok: false, message: 'cancelled' }
+  if (!listResult.ok) return remoteExecResult(listResult)
+
+  const prunable = resolvePrunableWorktree(
+    parseWorktrees(listResult.stdout),
+    input.worktreePath,
+    target.remotePath,
+  )
+  if (!prunable.ok) return { ok: false, message: prunable.message }
+
+  const result = await run(
+    { type: 'gitWorktreePrune', path: target.remotePath },
+    target,
+    { signal: input.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
+  )
+  if (input.signal?.aborted) return { ok: false, message: 'cancelled' }
+  return remoteExecResult(result)
 }
 
 export async function deleteRemoteBranch(

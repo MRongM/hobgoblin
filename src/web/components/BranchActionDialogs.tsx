@@ -26,6 +26,7 @@ interface BranchActionDialogsProps {
   deleteConfirm: RetainedDialogViewState<string>
   forceDeleteConfirm: RetainedDialogViewState<string>
   removeConfirm: RetainedDialogViewState<RemoveConfirm>
+  cleanupConfirm: RetainedDialogViewState<RemoveConfirm>
   forceRemoveConfirm: RetainedDialogViewState<RemoveConfirm>
   deleteAlsoUpstream: boolean
   removeAlsoDeletes: boolean
@@ -46,6 +47,7 @@ interface BranchActionDialogsProps {
       alsoDeleteUpstream: boolean
     },
   ) => void
+  onCleanupWorktree: (target: RemoveConfirm) => void
 }
 
 function ConfirmValue({ value }: { value: string }) {
@@ -244,6 +246,7 @@ export function BranchActionDialogs({
   deleteConfirm,
   forceDeleteConfirm,
   removeConfirm,
+  cleanupConfirm,
   forceRemoveConfirm,
   deleteAlsoUpstream,
   removeAlsoDeletes,
@@ -256,6 +259,7 @@ export function BranchActionDialogs({
   onPushConfirm,
   onDeleteBranch,
   onRemoveWorktree,
+  onCleanupWorktree,
 }: BranchActionDialogsProps) {
   const t = useT()
   const removeConfirmProtected = removeConfirm.payload ? PROTECTED_BRANCHES.has(removeConfirm.payload.branch) : false
@@ -386,6 +390,31 @@ export function BranchActionDialogs({
               alsoDeleteUpstream: upstream,
             })
           }
+        }}
+      />
+      <ConfirmDialog
+        open={cleanupConfirm.open}
+        title={cleanupConfirm.payload ? t('action.confirm-cleanup-invalid-worktree-title') : ''}
+        message={
+          cleanupConfirm.payload ? (
+            <ConfirmStack>
+              <ConfirmSection>
+                <span>{t('action.confirm-cleanup-invalid-worktree-body')}</span>
+                <ConfirmValue value={formatWorktreePath(cleanupConfirm.payload.path, remoteTarget)} />
+              </ConfirmSection>
+              <ConfirmNote>{t('action.confirm-cleanup-invalid-worktree-note')}</ConfirmNote>
+            </ConfirmStack>
+          ) : (
+            ''
+          )
+        }
+        confirmLabel={t('action.confirm-cleanup-invalid-worktree-confirm')}
+        destructive
+        onCancel={cleanupConfirm.close}
+        onConfirm={() => {
+          const target = cleanupConfirm.payload
+          cleanupConfirm.close()
+          if (target) onCleanupWorktree(target)
         }}
       />
       <ConfirmDialog

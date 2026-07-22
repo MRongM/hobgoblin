@@ -5,6 +5,7 @@ import type {
   BranchWorkspacePlanRequest,
   BranchWorkspacePlanResult,
   BranchWorkspaceReadResult,
+  BranchWorkspaceRegistryCleanupResult,
   BranchWorkspaceReorderResult,
 } from '#/shared/branch-workspaces.ts'
 import type {
@@ -34,6 +35,12 @@ export async function configureWorkspace(rootPath: string, config: WorkspaceConf
 
 export async function readBranchWorkspaces(rootId: string, signal?: AbortSignal): Promise<BranchWorkspaceReadResult> {
   return await postServerJson('/api/workspace/branch-workspaces/read', { rootId }, { signal })
+}
+
+export async function cleanupBranchWorkspaceRegistry(
+  rootId: string,
+): Promise<BranchWorkspaceRegistryCleanupResult> {
+  return await postServerJson('/api/workspace/branch-workspaces/cleanup', { rootId })
 }
 
 export async function planBranchWorkspace(

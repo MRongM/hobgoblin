@@ -23,6 +23,7 @@ import {
   abortRepositoryOperation,
   checkoutRepositoryBranch,
   checkoutWorktreeBranch,
+  cleanupRepositoryWorktree,
   cloneRepository,
   commitRepositoryChanges,
   createRepositoryBranch,
@@ -661,6 +662,19 @@ export function createRepoRoutes() {
           ),
         { ok: false, message: 'error.failed-read-repo' },
         'remove-worktree',
+      ),
+    )
+  })
+  app.post('/cleanup-worktree', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => cleanupRepositoryWorktree(cwd, worktreePath, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'cleanup-worktree',
       ),
     )
   })

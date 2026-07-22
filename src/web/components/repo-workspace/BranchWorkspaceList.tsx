@@ -231,8 +231,13 @@ function BranchWorkspaceRow({
   onToggleExpanded: () => void
 }) {
   const t = useT()
-  const ready = item.lifecycle === 'ready'
-  const folderAvailable = item.available && item.lifecycle !== 'delete-incomplete'
+  const ready = item.state.kind === 'ready'
+  const busy = item.activeOperation !== undefined
+  const interactiveReady = ready && !busy
+  const recoveryAction = item.state.kind === 'needs-action' ? item.state.action : null
+  const creationInterrupted =
+    item.state.kind === 'needs-action' && item.state.action === 'repair' && item.state.reason === 'creation-interrupted'
+  const folderAvailable = item.available
   const context = branchWorkspaceFolderContext(rootId, item)
   const externalActions = useFolderExternalOpenActions({ repoId: rootId, path: item.path, available: folderAvailable })
   const terminalContext = useContext(TerminalSessionContext)
@@ -245,11 +250,11 @@ function BranchWorkspaceRow({
   const hasTerminalOutputActivity = useWorktreeTerminalHasOutputActivity(terminalKey)
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
-    disabled: disabled || !ready,
+    disabled: disabled || !interactiveReady,
   })
   const rootSelected = scopeActive && !activeMemberRepositoryName
   const activate = () => {
-    if (!folderAvailable || item.lifecycle === 'active') return
+    if (!folderAvailable || busy) return
     if (!rootSelected) onActivate(item.id)
   }
   const openInternal = async () => {
@@ -262,9 +267,9 @@ function BranchWorkspaceRow({
       activate,
     })
   }
-  const openActionsDisabled = disabled || !ready || !folderAvailable
+  const openActionsDisabled = disabled || !interactiveReady || !folderAvailable
   const memberListId = `branch-workspace-members-${item.id}`
-  const editorAction: WorkspaceListItemAction | undefined = ready
+  const editorAction: WorkspaceListItemAction | undefined = interactiveReady
     ? {
         id: 'editor',
         label: t('worktrees.open-in-editor-label'),
@@ -274,7 +279,7 @@ function BranchWorkspaceRow({
         onSelect: () => (onOpenEditor ? onOpenEditor(item) : externalActions.editor.onSelect()),
       }
     : undefined
-  const internalTerminalAction: WorkspaceListItemAction | undefined = ready
+  const internalTerminalAction: WorkspaceListItemAction | undefined = interactiveReady
     ? {
         id: 'terminal',
         label: t('terminal.internal'),
@@ -283,7 +288,7 @@ function BranchWorkspaceRow({
         onSelect: openInternal,
       }
     : undefined
-  const readyOpenMenuActions: BranchWorkspaceItemAction[] = ready
+  const readyOpenMenuActions: BranchWorkspaceItemAction[] = interactiveReady
     ? [
         {
           label: 'terminal.external',
@@ -296,7 +301,7 @@ function BranchWorkspaceRow({
       ]
     : []
   const readyGitActions: BranchWorkspaceItemAction[] =
-    ready && onGitAction
+    interactiveReady && onGitAction
       ? [
           {
             label: 'workspace.branch-workspace.git-action.batch-commit',
@@ -325,7 +330,7 @@ function BranchWorkspaceRow({
           },
         ]
       : []
-  const readyMembershipActions: BranchWorkspaceItemAction[] = ready
+  const readyMembershipActions: BranchWorkspaceItemAction[] = interactiveReady
     ? [
         ...(onExtend
           ? [
@@ -351,19 +356,27 @@ function BranchWorkspaceRow({
           : []),
       ]
     : []
-  const lowFrequencyActions: BranchWorkspaceItemAction[] =
-    item.lifecycle === 'ready'
+  const lowFrequencyActions: BranchWorkspaceItemAction[] = interactiveReady
+    ? [
+        {
+          label: 'workspace.branch-workspace.delete',
+          icon: <Trash2 aria-hidden="true" />,
+          disabled,
+          destructive: true,
+          separated: true,
+          onSelect: () => onRemove(item),
+        },
+      ]
+    : recoveryAction === 'continue-reduce' || creationInterrupted
       ? [
           {
-            label: 'workspace.branch-workspace.delete',
-            icon: <Trash2 aria-hidden="true" />,
+            label: 'workspace.branch-workspace.inspect',
+            icon: <Eye aria-hidden="true" />,
             disabled,
-            destructive: true,
-            separated: true,
-            onSelect: () => onRemove(item),
+            onSelect: () => onInspect(item),
           },
         ]
-      : item.lifecycle === 'create-incomplete' || item.lifecycle === 'reduce-incomplete'
+      : recoveryAction === 'repair'
         ? [
             {
               label: 'workspace.branch-workspace.inspect',
@@ -371,8 +384,16 @@ function BranchWorkspaceRow({
               disabled,
               onSelect: () => onInspect(item),
             },
+            {
+              label: 'workspace.branch-workspace.delete',
+              icon: <Trash2 aria-hidden="true" />,
+              disabled,
+              destructive: true,
+              separated: true,
+              onSelect: () => onRemove(item),
+            },
           ]
-        : item.lifecycle === 'needs-repair'
+        : recoveryAction === 'continue-delete'
           ? [
               {
                 label: 'workspace.branch-workspace.inspect',
@@ -380,25 +401,8 @@ function BranchWorkspaceRow({
                 disabled,
                 onSelect: () => onInspect(item),
               },
-              {
-                label: 'workspace.branch-workspace.delete',
-                icon: <Trash2 aria-hidden="true" />,
-                disabled,
-                destructive: true,
-                separated: true,
-                onSelect: () => onRemove(item),
-              },
             ]
-          : item.lifecycle === 'delete-incomplete'
-            ? [
-                {
-                  label: 'workspace.branch-workspace.inspect',
-                  icon: <Eye aria-hidden="true" />,
-                  disabled,
-                  onSelect: () => onInspect(item),
-                },
-              ]
-            : []
+          : []
   const rowMenuActions = [
     ...readyOpenMenuActions,
     ...readyMembershipActions,
@@ -406,31 +410,26 @@ function BranchWorkspaceRow({
     ...lowFrequencyActions,
   ]
   const moreMenu = rowMenuActions.length > 0 ? <BranchWorkspaceItemMenu actions={rowMenuActions} /> : undefined
-  const lifecycleAction =
-    item.lifecycle === 'active' ? (
-      <RowAction label="workspace.branch-workspace.cancel" onClick={() => void onCancel(item)}>
-        <X />
-      </RowAction>
-    ) : item.lifecycle === 'create-incomplete' || item.lifecycle === 'needs-repair' ? (
-      <RowAction
-        label={
-          item.lifecycle === 'create-incomplete'
-            ? 'workspace.branch-workspace.retry'
-            : 'workspace.branch-workspace.repair'
-        }
-        onClick={() => onRepair(item)}
-      >
-        <RotateCcw />
-      </RowAction>
-    ) : item.lifecycle === 'reduce-incomplete' && onReduce ? (
-      <RowAction label="workspace.branch-workspace.continue-reduce" destructive onClick={() => onReduce(item, true)}>
-        <FolderMinus />
-      </RowAction>
-    ) : item.lifecycle === 'delete-incomplete' ? (
-      <RowAction label="workspace.branch-workspace.continue-delete" destructive onClick={() => onRemove(item)}>
-        <Trash2 />
-      </RowAction>
-    ) : null
+  const stateAction = busy ? (
+    <RowAction label="workspace.branch-workspace.cancel" onClick={() => void onCancel(item)}>
+      <X />
+    </RowAction>
+  ) : recoveryAction === 'repair' ? (
+    <RowAction
+      label={creationInterrupted ? 'workspace.branch-workspace.retry' : 'workspace.branch-workspace.repair'}
+      onClick={() => onRepair(item)}
+    >
+      <RotateCcw />
+    </RowAction>
+  ) : recoveryAction === 'continue-reduce' && onReduce ? (
+    <RowAction label="workspace.branch-workspace.continue-reduce" destructive onClick={() => onReduce(item, true)}>
+      <FolderMinus />
+    </RowAction>
+  ) : recoveryAction === 'continue-delete' ? (
+    <RowAction label="workspace.branch-workspace.continue-delete" destructive onClick={() => onRemove(item)}>
+      <Trash2 />
+    </RowAction>
+  ) : null
   const branchWorkspaceAuxiliaryActions = (
     <div className="flex w-10 shrink-0 items-center justify-end gap-0.5">
       <span className="inline-flex size-5">
@@ -442,14 +441,14 @@ function BranchWorkspaceRow({
             aria-label={t(expanded ? 'workspace.branch-workspace.collapse' : 'workspace.branch-workspace.expand')}
             aria-expanded={expanded}
             aria-controls={memberListId}
-            disabled={disabled || item.lifecycle === 'active'}
+            disabled={disabled || busy}
             onClick={onToggleExpanded}
           >
             {expanded ? <ChevronDown aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}
           </Button>
         ) : null}
       </span>
-      <span className="inline-flex size-5">{lifecycleAction}</span>
+      <span className="inline-flex size-5">{stateAction}</span>
     </div>
   )
   const memberList =
@@ -466,7 +465,7 @@ function BranchWorkspaceRow({
             item={item}
             member={member}
             selected={scopeActive && activeMemberRepositoryName === member.repositoryName}
-            disabled={disabled || item.lifecycle === 'active'}
+            disabled={disabled || busy}
             presentation={
               getMemberPresentation?.(item, member) ?? {
                 dirty: false,
@@ -508,16 +507,16 @@ function BranchWorkspaceRow({
         itemRef={setNodeRef}
         itemStyle={{ transform: CSS.Transform.toString(transform), transition }}
         itemProps={{
-          'data-branch-workspace-lifecycle': item.lifecycle,
+          'data-branch-workspace-state': branchWorkspaceStateName(item),
           'data-branch-workspace-id': item.id,
         }}
         selected={rootSelected}
         unavailable={!folderAvailable}
         dragging={isDragging}
-        busy={item.lifecycle === 'active'}
+        busy={busy}
         leadingIcon={<FolderKanban className="size-3.5" aria-hidden="true" />}
         dragHandle={
-          ready && !disabled
+          interactiveReady && !disabled
             ? {
                 label: t('workspace.branch-workspace.reorder'),
                 setActivatorNodeRef,
@@ -528,7 +527,7 @@ function BranchWorkspaceRow({
         buttonProps={{
           'data-testid': `branch-workspace-root-${item.id}`,
           'aria-current': rootSelected ? 'page' : undefined,
-          disabled: disabled || !folderAvailable || item.lifecycle === 'active',
+          disabled: disabled || !folderAvailable || busy,
           title: item.branch,
           className: 'pr-[7.25rem]',
           onClick: activate,
@@ -585,25 +584,25 @@ function BranchWorkspaceRow({
           </Badge>
         ) : null}
         {hasTerminalBell ? <TerminalBellDot label={t('terminal.bell-unread')} /> : null}
-        <LifecycleSummary item={item} />
+        <StateSummary item={item} />
       </WorkspaceListItemFrame>
     </WorkspaceItemContextMenu>
   )
 }
 
-function LifecycleSummary({ item }: { item: BranchWorkspaceSnapshot }) {
+function StateSummary({ item }: { item: BranchWorkspaceSnapshot }) {
   const t = useT()
-  if (item.lifecycle === 'ready') return null
-  if (item.lifecycle === 'active' && item.activeOperation) {
+  if (item.activeOperation) {
     return (
       <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
         {item.activeOperation.completedCount}/{item.activeOperation.totalCount}
       </span>
     )
   }
+  if (item.state.kind === 'ready') return null
   return (
     <span className="ml-auto shrink-0 text-[9px] text-warning">
-      {t(`workspace.branch-workspace.lifecycle.${item.lifecycle}`)}
+      {t(`workspace.branch-workspace.lifecycle.${branchWorkspaceStateName(item)}`)}
     </span>
   )
 }
@@ -649,10 +648,18 @@ export function branchWorkspaceFolderContext(
     id: item.id,
     branch: item.branch,
     path: item.path,
-    lifecycle: item.lifecycle,
     available: item.available,
+    busy: item.activeOperation !== undefined,
     managedRootNames: Array.from(
       new Set(item.repositories.map((member) => lastPathSegment(member.worktreePath)).filter(Boolean)),
     ),
   }
+}
+
+function branchWorkspaceStateName(item: BranchWorkspaceSnapshot): string {
+  if (item.activeOperation) return 'active'
+  if (item.state.kind === 'ready') return 'ready'
+  if (item.state.action === 'continue-reduce') return 'reduce-incomplete'
+  if (item.state.action === 'continue-delete') return 'delete-incomplete'
+  return item.state.reason === 'creation-interrupted' ? 'creation-interrupted' : 'needs-repair'
 }

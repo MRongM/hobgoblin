@@ -280,12 +280,13 @@ describe('SidebarProjectList', () => {
     expect(firstRow?.className).not.toContain('touch-none')
   })
 
-  test('gives project names enough line height for letter descenders', () => {
+  test('renders project names one font size above supporting text', () => {
     renderList()
     const projectName = Array.from(container!.querySelectorAll('span')).find(
       (element) => element.textContent === 'Repo A' && element.children.length === 0,
     )
 
+    expect(projectName?.className).toContain('text-sm')
     expect(projectName?.className).toContain('leading-4')
     expect(projectName?.className).not.toContain('leading-none')
   })

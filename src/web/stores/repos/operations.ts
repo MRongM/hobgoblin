@@ -14,6 +14,7 @@ export type RepoBranchActionReason =
   | 'branch:createBranch'
   | 'branch:trackRemoteBranch'
   | 'branch:deleteBranch'
+  | 'branch:cleanupWorktree'
   | 'branch:removeWorktree'
 export type RepoOperationReason =
   | 'fetch'

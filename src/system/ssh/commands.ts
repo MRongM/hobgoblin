@@ -6,6 +6,7 @@ import {
   FILE_TREE_MAX_ENTRIES,
   FILE_TREE_TEXT_FILE_MAX_BYTES,
 } from '#/shared/file-tree.ts'
+import { BRANCH_WORKSPACE_DIRECTORY_PREFIXES } from '#/shared/branch-workspaces.ts'
 import { FIELD_SEP } from '#/system/git/parsers.ts'
 import { buildManagedRemoteTerminalInvocation } from '#/system/remote-terminal.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
@@ -68,6 +69,7 @@ export type RemoteCommandKind =
   | { type: 'gitSnapshot'; path: string }
   | { type: 'gitPatch'; path: string }
   | { type: 'gitWorktreeList'; path: string }
+  | { type: 'gitWorktreePrune'; path: string }
   | { type: 'gitStatus'; path: string }
   | { type: 'gitHistory'; path: string; branch: string; limit?: number; skip?: number }
   | { type: 'gitCommitMetadata'; path: string; commit: string }
@@ -398,7 +400,9 @@ function scriptForCommand(command: RemoteCommandKind): string {
         '[ "$code" -eq 0 ] || [ "$code" -eq 1 ]',
       ].join('; ')
     case 'gitWorktreeList':
-      return `git -C ${shellQuote(command.path)} worktree list --porcelain`
+      return `git -C ${shellQuote(command.path)} worktree list --porcelain --expire now`
+    case 'gitWorktreePrune':
+      return `git -C ${shellQuote(command.path)} worktree prune --expire now`
     case 'gitStatus':
       return `git -C ${shellQuote(command.path)} status --porcelain -z`
     case 'gitHistory': {
@@ -522,6 +526,7 @@ function remoteBranchWorkspaceScript(command: RemoteBranchWorkspaceCommand): str
     case 'listBranchWorkspaceCandidates':
       return remoteBranchWorkspacePython(command.rootPath, [
         `excluded_names = set(json.loads(${pythonString(JSON.stringify(command.excludedNames))}))`,
+        `managed_prefixes = tuple(json.loads(${pythonString(JSON.stringify(BRANCH_WORKSPACE_DIRECTORY_PREFIXES))}))`,
         'root_real = os.path.realpath(root_path)',
         'excluded_worktrees = set()',
         'for repository_name in excluded_names:',
@@ -537,7 +542,7 @@ function remoteBranchWorkspaceScript(command: RemoteBranchWorkspaceCommand): str
         '            excluded_worktrees.add(os.path.realpath(line[len("worktree "):]))',
         'candidates = []',
         'for name in sorted(os.listdir(root_path)):',
-        '    if name in excluded_names or name.startswith("goblin-") or name.startswith(".goblin-") or name.startswith(".hobgoblin-"):',
+        '    if name in excluded_names or name.startswith(managed_prefixes) or name.startswith(".goblin-") or name.startswith(".hobgoblin-"):',
         '        continue',
         '    candidate_path = os.path.join(root_path, name)',
         '    info = os.lstat(candidate_path)',
@@ -581,7 +586,8 @@ function remoteBranchWorkspaceScript(command: RemoteBranchWorkspaceCommand): str
     case 'createBranchWorkspaceDirectory':
       return remoteBranchWorkspacePython(command.rootPath, [
         `target_path = checked_path(${pythonString(command.targetPath)}, False)`,
-        'if os.path.dirname(target_path) != root_path or not os.path.basename(target_path).startswith("goblin-"):',
+        `managed_prefixes = tuple(json.loads(${pythonString(JSON.stringify(BRANCH_WORKSPACE_DIRECTORY_PREFIXES))}))`,
+        'if os.path.dirname(target_path) != root_path or not os.path.basename(target_path).startswith(managed_prefixes):',
         '    fail("workspace.branch-workspace.invalid-path")',
         'ensure_safe_parents(target_path)',
         'os.mkdir(target_path)',

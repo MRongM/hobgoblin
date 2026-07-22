@@ -13,6 +13,7 @@ const BRANCH_ACTION_LOADING_LABEL_KEYS: Record<RepoBranchActionKind, string> = {
   createBranch: 'action.create-branch-loading',
   trackRemoteBranch: 'action.pull-remote-branch-loading',
   deleteBranch: 'action.delete-branch-deleting-title',
+  cleanupWorktree: 'action.cleanup-invalid-worktree-cleaning-title',
   removeWorktree: 'action.remove-worktree-removing-title',
 }
 
@@ -24,6 +25,7 @@ const BRANCH_ACTION_QUEUED_LABEL_KEYS: Record<RepoBranchActionKind, string> = {
   createBranch: 'action.create-branch-queued',
   trackRemoteBranch: 'action.pull-remote-branch-queued',
   deleteBranch: 'action.delete-branch-queued-title',
+  cleanupWorktree: 'action.cleanup-invalid-worktree-queued-title',
   removeWorktree: 'action.remove-worktree-queued-title',
 }
 
@@ -54,6 +56,8 @@ export function repoEventActionSuccessLabel(action: RepoEventAction | undefined)
           ? 'action.remove-worktree-removed-with-branch-title'
           : 'action.remove-worktree-removed-title',
       }
+    case 'cleanupWorktree':
+      return { labelKey: 'action.cleanup-invalid-worktree-cleaned-title' }
     case 'deleteBranch':
       return { labelKey: 'action.delete-branch-deleted-title' }
     case 'checkout':

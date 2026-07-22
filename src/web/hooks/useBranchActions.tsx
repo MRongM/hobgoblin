@@ -38,6 +38,7 @@ export interface BranchActionCapabilities {
   isCurrent: boolean
   checkedOutInAnotherWorktree: boolean
   canRemoveWorktree: boolean
+  canCleanupWorktree: boolean
   isRegularBranch: boolean
   canCopyPatch: boolean
   canPull: boolean
@@ -53,12 +54,19 @@ export function getBranchActionCapabilities(repo: BranchActionRepo, branch: Repo
   const isProtected = PROTECTED_BRANCHES.has(branch.name)
   const isRegularBranch = !isCurrent && !branch.worktree?.path && !isProtected
   const worktreeState = getBranchWorktreeState(repo, branch)
-  const canRemoveWorktree = checkedOutInAnotherWorktree && !worktreeState?.isMain
+  const canRemoveWorktree =
+    checkedOutInAnotherWorktree && !worktreeState?.isMain && worktreeState?.isPrunable !== true
+  const canCleanupWorktree =
+    checkedOutInAnotherWorktree &&
+    !worktreeState?.isMain &&
+    !worktreeState?.isLocked &&
+    worktreeState?.isPrunable === true
   const canCopyPatch = !!branch.worktree?.path && (worktreeState?.dirty ?? false)
   return {
     isCurrent,
     checkedOutInAnotherWorktree,
     canRemoveWorktree,
+    canCleanupWorktree,
     isRegularBranch,
     canCopyPatch,
     canPull: !!branch.tracking,
@@ -83,6 +91,7 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
   const deleteConfirm = useRetainedDialogState<string>()
   const forceDeleteConfirm = useRetainedDialogState<string>()
   const removeConfirm = useRetainedDialogState<RemoveConfirm>()
+  const cleanupConfirm = useRetainedDialogState<RemoveConfirm>()
   const forceRemoveConfirm = useRetainedDialogState<RemoveConfirm>()
   const [removeAlsoDeletes, setRemoveAlsoDeletes] = useState(true)
   const [removeForce, setRemoveForce] = useState(false)
@@ -189,6 +198,11 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
     removeConfirm.openWith({ branch: branch.name, path: branch.worktree.path })
   }
 
+  function requestCleanupWorktree() {
+    if (guardBusy() || !branch.worktree?.path) return
+    cleanupConfirm.openWith({ branch: branch.name, path: branch.worktree.path })
+  }
+
   function deleteBranch(target: string, force = false, alsoDeleteUpstream = false) {
     void runRepoAction(
       { kind: 'deleteBranch', branch: target, force, alsoDeleteUpstream },
@@ -235,6 +249,14 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
     )
   }
 
+  function cleanupWorktree(target: RemoveConfirm) {
+    void runRepoAction({
+      kind: 'cleanupWorktree',
+      branch: target.branch,
+      worktreePath: target.path,
+    })
+  }
+
   const capabilities = getBranchActionCapabilities(repo, branch)
 
   const dialogs = (
@@ -246,6 +268,7 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
       deleteConfirm={deleteConfirm}
       forceDeleteConfirm={forceDeleteConfirm}
       removeConfirm={removeConfirm}
+      cleanupConfirm={cleanupConfirm}
       forceRemoveConfirm={forceRemoveConfirm}
       deleteAlsoUpstream={deleteAlsoUpstream}
       removeAlsoDeletes={removeAlsoDeletes}
@@ -264,6 +287,9 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
       onRemoveWorktree={(target, options) => {
         void removeWorktree(target, options)
       }}
+      onCleanupWorktree={(target) => {
+        void cleanupWorktree(target)
+      }}
     />
   )
 
@@ -281,6 +307,7 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
       openRemote,
       requestDeleteBranch,
       requestRemoveWorktree,
+      requestCleanupWorktree,
     },
     dialogs,
   }

@@ -11,7 +11,7 @@ import { createRepoBranch, resetReposStore } from '#/web/stores/repos/test-utils
 import type { WorkspaceConfig } from '#/shared/workspace.ts'
 import type { WorkspacePullResult } from '#/shared/workspace-pull.ts'
 import type { TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
-import type { BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
+import type { BranchWorkspaceReadResult, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import type { BranchWorkspaceGitActionKind } from '#/shared/branch-workspace-git-actions.ts'
 
 const toastMocks = vi.hoisted(() => ({
@@ -60,7 +60,7 @@ const branchWorkspaceState = vi.hoisted(() => ({
       branch: 'feature/auth',
       directoryName: 'goblin-feature-auth',
       path: '/workspace/goblin-feature-auth',
-      lifecycle: 'ready' as const,
+      state: { kind: 'ready' as const },
       available: true,
       issues: [],
       repositories: [
@@ -71,7 +71,7 @@ const branchWorkspaceState = vi.hoisted(() => ({
           branchOrigin: 'created' as const,
           worktreePath: '/workspace/goblin-feature-auth/api',
           progress: 'complete' as const,
-          observedState: 'ready' as const,
+          ready: true,
         },
         {
           repositoryName: 'web',
@@ -80,7 +80,7 @@ const branchWorkspaceState = vi.hoisted(() => ({
           branchOrigin: 'created' as const,
           worktreePath: '/workspace/goblin-feature-auth/web',
           progress: 'complete' as const,
-          observedState: 'ready' as const,
+          ready: true,
         },
       ],
       auxiliaryEntries: [],
@@ -91,13 +91,14 @@ const branchWorkspaceState = vi.hoisted(() => ({
       branch: 'feature/search',
       directoryName: 'goblin-feature-search',
       path: '/workspace/goblin-feature-search',
-      lifecycle: 'ready' as const,
+      state: { kind: 'ready' as const },
       available: true,
       issues: [],
       repositories: [],
       auxiliaryEntries: [],
     },
   ] as BranchWorkspaceSnapshot[],
+  queryResult: null as BranchWorkspaceReadResult | null,
   reorder: vi.fn(async () => true),
   cancel: vi.fn(async () => {}),
   requestPlan: vi.fn(async () => true),
@@ -108,6 +109,10 @@ const branchWorkspaceState = vi.hoisted(() => ({
     mode: string
     workspace: BranchWorkspaceSnapshot | null
   },
+}))
+
+const branchWorkspaceCleanupState = vi.hoisted(() => ({
+  cleanup: vi.fn(),
 }))
 
 const branchGitActionState = vi.hoisted(() => ({
@@ -169,10 +174,19 @@ const branchWorkspaceListState = vi.hoisted(() => ({
 
 vi.mock('#/web/branch-workspace-queries.ts', () => ({
   useBranchWorkspaceQuery: () => ({
-    data: { ok: true, rootId: ROOT, items: branchWorkspaceState.items, auxiliaryCandidates: [] },
+    data: branchWorkspaceState.queryResult ?? {
+      ok: true,
+      rootId: ROOT,
+      items: branchWorkspaceState.items,
+      auxiliaryCandidates: [],
+    },
     isPending: false,
     refresh: branchWorkspaceState.refresh,
   }),
+}))
+
+vi.mock('#/web/workspace-client.ts', () => ({
+  cleanupBranchWorkspaceRegistry: branchWorkspaceCleanupState.cleanup,
 }))
 
 vi.mock('#/web/hooks/useBranchWorkspaceActions.ts', () => ({
@@ -326,6 +340,8 @@ beforeEach(() => {
     auxiliaryCandidates: [],
   })
   branchWorkspaceState.dialogRefresh = null
+  branchWorkspaceState.queryResult = null
+  branchWorkspaceCleanupState.cleanup.mockReset()
   branchWorkspaceState.cancel.mockReset()
   branchWorkspaceState.cancel.mockResolvedValue(undefined)
   branchWorkspaceState.requestPlan.mockReset()
@@ -421,6 +437,60 @@ afterEach(() => {
 })
 
 describe('WorkspaceRepositoryRail', () => {
+  test('confirms and runs registry cleanup only for the branch workspace read failure', async () => {
+    branchWorkspaceState.queryResult = { ok: false, message: 'workspace.branch-workspace.read-failed' }
+    branchWorkspaceCleanupState.cleanup.mockResolvedValue({ ok: true, outcome: 'repaired', removedRecords: 2 })
+    renderRail({ currentRepoId: ROOT })
+
+    const cleanup = container?.querySelector<HTMLButtonElement>(
+      'button[aria-label="workspace.branch-workspace.cleanup"]',
+    )
+    expect(cleanup).not.toBeNull()
+    act(() => cleanup?.click())
+    const dialog = document.body.querySelector('[role="alertdialog"]')
+    expect(dialog?.textContent).toContain('workspace.branch-workspace.cleanup-description')
+    const confirm = Array.from(dialog?.querySelectorAll<HTMLButtonElement>('button') ?? []).find(
+      (button) => button.textContent === 'workspace.branch-workspace.cleanup-confirm',
+    )
+
+    await act(async () => confirm?.click())
+
+    expect(branchWorkspaceCleanupState.cleanup).toHaveBeenCalledWith(ROOT)
+    expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
+    expect(toastMocks.success).toHaveBeenCalledWith('workspace.branch-workspace.cleanup-success.repaired')
+    expect(document.body.querySelector('[role="alertdialog"]')).toBeNull()
+  })
+
+  test('keeps the read failure visible and reports registry cleanup failure', async () => {
+    branchWorkspaceState.queryResult = { ok: false, message: 'workspace.branch-workspace.read-failed' }
+    branchWorkspaceCleanupState.cleanup.mockResolvedValue({
+      ok: false,
+      message: 'workspace.branch-workspace.cleanup-failed',
+    })
+    renderRail({ currentRepoId: ROOT })
+
+    act(() =>
+      container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.branch-workspace.cleanup"]')?.click(),
+    )
+    const confirm = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')).find(
+      (button) => button.textContent === 'workspace.branch-workspace.cleanup-confirm',
+    )
+    await act(async () => confirm?.click())
+
+    expect(container?.textContent).toContain('workspace.branch-workspace.read-failed')
+    expect(toastMocks.error).toHaveBeenCalledWith('workspace.branch-workspace.cleanup-failed')
+    expect(document.body.querySelector('[role="alertdialog"]')).not.toBeNull()
+  })
+
+  test('does not offer registry cleanup for a different branch workspace read error', () => {
+    branchWorkspaceState.queryResult = { ok: false, message: 'workspace.config.missing' }
+    renderRail({ currentRepoId: ROOT })
+
+    expect(
+      container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.branch-workspace.cleanup"]'),
+    ).toBeNull()
+  })
+
   test('renders Overview and repository state as one depth-one manifest', () => {
     renderRail()
 
@@ -634,12 +704,11 @@ describe('WorkspaceRepositoryRail', () => {
 
     const interrupted: BranchWorkspaceSnapshot = {
       ...item,
-      lifecycle: 'reduce-incomplete',
-      operation: { kind: 'reduce', phase: 'failed', startedAt: '2026-07-22T00:00:00.000Z' },
+      state: { kind: 'needs-action', action: 'continue-reduce' },
       repositories: item.repositories.map((member, index) => ({
         ...member,
         progress: index === 0 ? 'removed' : 'failed',
-        observedState: index === 0 ? 'missing' : 'failed',
+        ready: false,
       })),
     }
     await act(async () => {
@@ -659,12 +728,9 @@ describe('WorkspaceRepositoryRail', () => {
     branchWorkspaceState.items = [
       {
         ...current,
-        lifecycle: 'reduce-incomplete',
-        operation: { kind: 'reduce', phase: 'failed', startedAt: '2026-07-22T00:00:00.000Z' },
+        state: { kind: 'needs-action', action: 'continue-reduce' },
         repositories: current.repositories.map((member) =>
-          member.repositoryName === 'api'
-            ? { ...member, progress: 'removed' as const, observedState: 'missing' as const }
-            : member,
+          member.repositoryName === 'api' ? { ...member, progress: 'removed' as const, ready: false } : member,
         ),
       },
     ]
@@ -685,7 +751,6 @@ describe('WorkspaceRepositoryRail', () => {
     renderRail({ currentRepoId: ROOT })
     const activeItem: BranchWorkspaceSnapshot = {
       ...branchWorkspaceState.items[0]!,
-      lifecycle: 'active',
       activeOperation: {
         kind: 'push',
         currentStep: 1,

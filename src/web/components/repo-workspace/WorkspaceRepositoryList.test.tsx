@@ -250,7 +250,7 @@ describe('WorkspaceRepositoryList', () => {
     expect(row?.textContent).toContain('2')
     expect(row?.getAttribute('aria-current')).toBe('page')
     expect(item.getAttribute('data-selected')).toBe('true')
-    expect(row?.className).toContain('text-[13px]')
+    expect(row?.className).toContain('text-sm')
     act(() => row?.dispatchEvent(new MouseEvent('click', { bubbles: true })))
     expect(onActivate).toHaveBeenCalledWith('/workspace/api')
   })

@@ -80,6 +80,27 @@ describe('i18n dictionaries', () => {
     expect(zh['action.delete-branch']).toBe('删除分支')
   })
 
+  test('includes invalid worktree cleanup copy in every locale', () => {
+    const keys = [
+      'action.cleanup-invalid-worktree',
+      'action.cleanup-invalid-worktree-cleaning-title',
+      'action.cleanup-invalid-worktree-queued-title',
+      'action.cleanup-invalid-worktree-cleaned-title',
+      'action.confirm-cleanup-invalid-worktree-title',
+      'action.confirm-cleanup-invalid-worktree-body',
+      'action.confirm-cleanup-invalid-worktree-note',
+      'action.confirm-cleanup-invalid-worktree-confirm',
+      'error.worktree-not-prunable',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['action.cleanup-invalid-worktree']).toBe('清理无效工作树')
+    expect(zh['action.confirm-cleanup-invalid-worktree-body']).toContain('不会删除分支')
+    expect(zh['action.confirm-cleanup-invalid-worktree-note']).toContain('磁盘')
+  })
+
   test('warns that branch workspace removal discards uncommitted changes in every locale', () => {
     expect(en['workspace.branch-workspace.delete-warning']).toContain('uncommitted changes')
     expect(zh['workspace.branch-workspace.delete-warning']).toContain('未提交改动')
@@ -117,6 +138,26 @@ describe('i18n dictionaries', () => {
     }
     expect(en['workspace.branch-workspace.member.open-worktree']).toBe('Open this member worktree')
     expect(zh['workspace.branch-workspace.member.open-worktree']).toBe('打开此成员工作树')
+  })
+
+  test('describes branch workspace registry cleanup without claiming filesystem deletion', () => {
+    const keys = [
+      'workspace.branch-workspace.cleanup',
+      'workspace.branch-workspace.cleanup-title',
+      'workspace.branch-workspace.cleanup-description',
+      'workspace.branch-workspace.cleanup-confirm',
+      'workspace.branch-workspace.cleanup-success.repaired',
+      'workspace.branch-workspace.cleanup-success.reset',
+      'workspace.branch-workspace.cleanup-success.unchanged',
+      'workspace.branch-workspace.cleanup-failed',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['workspace.branch-workspace.cleanup-description']).toContain('不会删除')
+    expect(zh['workspace.branch-workspace.cleanup-description']).toContain('工作树')
+    expect(zh['workspace.branch-workspace.cleanup-description']).toContain('分支')
   })
 
   test('uses branch workspace dependency copy and includes member sync actions in every locale', () => {

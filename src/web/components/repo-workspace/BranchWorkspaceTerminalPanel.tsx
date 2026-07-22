@@ -52,8 +52,7 @@ export function BranchWorkspaceTerminalPanel({
     reorderSessions,
   } = useTerminalSessionContext()
   const terminalBase = useMemo(() => branchWorkspaceTerminalBase(context), [context])
-  const terminalCreationAvailable =
-    context.available && context.lifecycle !== 'delete-incomplete' && context.lifecycle !== 'active'
+  const terminalCreationAvailable = context.available && !context.busy
 
   const handleNewTerminal = useCallback(async () => {
     if (!terminalCreationAvailable) return
@@ -128,7 +127,7 @@ export async function openBranchWorkspaceInternalTerminal(
   context: BranchWorkspaceFolderContext,
   dependencies: OpenBranchWorkspaceInternalTerminalDependencies,
 ): Promise<boolean> {
-  if (!context.available || context.lifecycle === 'delete-incomplete' || context.lifecycle === 'active') return false
+  if (!context.available || context.busy) return false
   dependencies.activate()
   const terminalWorktreeKey = worktreeTerminalKey(context.rootId, context.path)
   const snapshot = dependencies.worktreeSnapshot(terminalWorktreeKey)

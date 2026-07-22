@@ -1,5 +1,6 @@
 import { Hono, type Context } from 'hono'
 import { readBranchWorkspaceSnapshot } from '#/server/modules/branch-workspace-read.ts'
+import { cleanupBranchWorkspaceRegistryRecords } from '#/server/modules/branch-workspace-registry-write-paths.ts'
 import { createBranchWorkspaceWriteService } from '#/server/modules/branch-workspace-write-paths.ts'
 import { createBranchWorkspaceGitActionWriteService } from '#/server/modules/branch-workspace-git-action-write-paths.ts'
 import { discoverWorkspaceRepositories, restoreWorkspaceRepositories } from '#/server/modules/workspace-read.ts'
@@ -88,6 +89,13 @@ export function createWorkspaceRoutes(options: WorkspaceRouteOptions = {}) {
       c,
       branchWorkspaceGitActionWriteService.activeOperation,
     )
+  })
+
+  app.post('/branch-workspaces/cleanup', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const rootId = typeof body?.rootId === 'string' ? body.rootId : ''
+    if (!isNonEmptyString(rootId)) return c.json({ ok: false as const, message: 'error.invalid-arguments' })
+    return c.json(await cleanupBranchWorkspaceRegistryRecords(rootId))
   })
 
   app.post('/branch-workspaces/plan', async (c) => {

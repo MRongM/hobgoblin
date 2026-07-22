@@ -8,6 +8,7 @@ import type { WorkspaceConfig } from '#/shared/workspace.ts'
 import type { WorkspacePullResult } from '#/shared/workspace-pull.ts'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
+import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import { BranchWorkspaceDialog } from '#/web/components/repo-workspace/BranchWorkspaceDialog.tsx'
 import { BranchWorkspaceGitActionPanel } from '#/web/components/repo-workspace/BranchWorkspaceGitActionDialog.tsx'
 import { BranchWorkspaceList } from '#/web/components/repo-workspace/BranchWorkspaceList.tsx'
@@ -27,6 +28,7 @@ import {
 } from '#/web/components/terminal/terminal-session-store.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { useBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
+import { cleanupBranchWorkspaceRegistry } from '#/web/workspace-client.ts'
 import { useBranchWorkspaceActions } from '#/web/hooks/useBranchWorkspaceActions.ts'
 import { useBranchWorkspaceGitActions } from '#/web/hooks/useBranchWorkspaceGitActions.ts'
 import { useWorkspacePullActions } from '#/web/hooks/useWorkspacePullActions.ts'
@@ -88,6 +90,7 @@ export function WorkspaceRepositoryRail({
   const [gitActionOpen, setGitActionOpen] = useState(false)
   const [gitActionKind, setGitActionKind] = useState<BranchWorkspaceGitActionKind>('batch-commit')
   const [gitActionTargetId, setGitActionTargetId] = useState<string | null>(null)
+  const [registryCleanupOpen, setRegistryCleanupOpen] = useState(false)
 
   const overviewRootPath = repoPlainWorkspacePath(repos[workspaceRootId]) ?? workspaceRootId
   const overviewName = lastPathSegment(overviewRootPath) || repos[workspaceRootId]?.name || workspaceRootId
@@ -270,6 +273,19 @@ export function WorkspaceRepositoryRail({
     setGitActionKind(kind)
     setGitActionOpen(true)
     void branchGitActions.requestPlan(kind, item.id)
+  }
+  const cleanupRegistry = async () => {
+    const result = await cleanupBranchWorkspaceRegistry(workspaceRootId).catch(() => ({
+      ok: false as const,
+      message: 'workspace.branch-workspace.cleanup-failed',
+    }))
+    if (!result.ok) {
+      toast.error(t(result.message))
+      return
+    }
+    setRegistryCleanupOpen(false)
+    await branchQuery.refresh().catch(() => undefined)
+    toast.success(t(`workspace.branch-workspace.cleanup-success.${result.outcome}`))
   }
   const gitActionPanel =
     gitActionOpen && gitActionTarget
@@ -477,7 +493,20 @@ export function WorkspaceRepositoryRail({
             {branchQuery.isPending ? (
               <div className="px-2 py-2 text-xs text-muted-foreground">{t('workspace.branch-workspace.loading')}</div>
             ) : branchQuery.data && !branchQuery.data.ok ? (
-              <div className="px-2 py-2 text-xs text-danger">{t(branchQuery.data.message)}</div>
+              <div className="flex items-center gap-2 px-2 py-2 text-xs text-danger" role="alert">
+                <span className="min-w-0 flex-1">{t(branchQuery.data.message)}</span>
+                {branchQuery.data.message === 'workspace.branch-workspace.read-failed' ? (
+                  <Button
+                    type="button"
+                    variant="destructive-soft"
+                    size="sm"
+                    aria-label={t('workspace.branch-workspace.cleanup')}
+                    onClick={() => setRegistryCleanupOpen(true)}
+                  >
+                    {t('workspace.branch-workspace.cleanup')}
+                  </Button>
+                ) : null}
+              </div>
             ) : branchItems.length === 0 ? (
               <div className="px-2 py-2 text-xs text-muted-foreground">{t('workspace.branch-workspace.empty')}</div>
             ) : (
@@ -495,9 +524,9 @@ export function WorkspaceRepositoryRail({
                 onReorder={(orderedIds) => void branchActions.reorder(orderedIds)}
                 onInspect={(item) =>
                   openBranchDialog(
-                    item.lifecycle === 'delete-incomplete'
+                    item.state.kind === 'needs-action' && item.state.action === 'continue-delete'
                       ? 'remove'
-                      : item.lifecycle === 'reduce-incomplete'
+                      : item.state.kind === 'needs-action' && item.state.action === 'continue-reduce'
                         ? 'reduce'
                         : 'repair',
                     item,
@@ -506,15 +535,17 @@ export function WorkspaceRepositoryRail({
                 onExtend={(item) => openBranchDialog('extend', item)}
                 onReduce={(item, resume = false) => openBranchDialog('reduce', item, resume)}
                 onRepair={(item) => openBranchDialog('repair', item, true)}
-                onRemove={(item) => openBranchDialog('remove', item, item.lifecycle === 'delete-incomplete')}
+                onRemove={(item) =>
+                  openBranchDialog(
+                    'remove',
+                    item,
+                    item.state.kind === 'needs-action' && item.state.action === 'continue-delete',
+                  )
+                }
                 getMemberPresentation={(_item, member) => getMemberPresentation(member)}
                 onOpenRepositoryMember={openRepositoryMember}
                 onOpenRepositoryMemberTerminal={openRepositoryMemberTerminal}
-                onCancel={(item) =>
-                  isBranchWorkspaceGitAction(item.activeOperation?.kind)
-                    ? branchGitActions.cancel()
-                    : branchActions.cancel()
-                }
+                onCancel={() => branchGitActions.cancel()}
               />
             )}
           </section>
@@ -577,12 +608,17 @@ export function WorkspaceRepositoryRail({
         onRetry={pullActions.retry}
         onCancel={pullActions.cancel}
       />
+      <ConfirmDialog
+        open={registryCleanupOpen}
+        title={t('workspace.branch-workspace.cleanup-title')}
+        message={t('workspace.branch-workspace.cleanup-description')}
+        confirmLabel={t('workspace.branch-workspace.cleanup-confirm')}
+        destructive
+        onCancel={() => setRegistryCleanupOpen(false)}
+        onConfirm={cleanupRegistry}
+      />
     </>
   )
-}
-
-function isBranchWorkspaceGitAction(kind: string | undefined): boolean {
-  return kind === 'batch-commit' || kind === 'merge-back' || kind === 'pull' || kind === 'push'
 }
 
 function ManifestRow({

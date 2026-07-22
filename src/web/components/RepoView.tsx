@@ -113,13 +113,7 @@ export function RepoView({ repoId }: Props) {
   if (!view.exists || !repo) return <div />
   const repoUnavailable = repo.availability.phase === 'unavailable'
   if (view.initialLoading && !repoUnavailable) {
-    return (
-      <RepoWorkspaceSkeleton
-        layout={layout}
-        detailFocusMode={false}
-        compact={uiMode === 'compact'}
-      />
-    )
+    return <RepoWorkspaceSkeleton layout={layout} detailFocusMode={false} compact={uiMode === 'compact'} />
   }
   if (multiRepositoryWorkspace && view.branchWorkspaceId) {
     return (
@@ -289,13 +283,7 @@ function ActiveBranchWorkspaceView({
   const repos = useReposStore((state) => state.repos)
   const [fallbackNotice, setFallbackNotice] = useState<{ repositoryName: string; reason: string } | null>(null)
   const workspace = query.data?.ok
-    ? query.data.items.find(
-        (item) =>
-          item.id === branchWorkspaceId &&
-          item.available &&
-          item.lifecycle !== 'delete-incomplete' &&
-          item.operation?.kind !== 'remove',
-      )
+    ? query.data.items.find((item) => item.id === branchWorkspaceId && item.available)
     : undefined
   const member = memberRepositoryName
     ? workspace?.repositories.find((repository) => repository.repositoryName === memberRepositoryName)

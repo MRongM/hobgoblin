@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  cleanupRepositoryWorktree: vi.fn(),
   createRepositoryFileTreeFile: vi.fn(),
   discardRepositoryChanges: vi.fn(),
   getRepositoryCommitDetail: vi.fn(),
@@ -45,6 +46,7 @@ vi.mock('#/server/modules/repo-write-paths.ts', () => ({
   abortRepositoryOperation: vi.fn(),
   checkoutRepositoryBranch: vi.fn(),
   checkoutWorktreeBranch: vi.fn(),
+  cleanupRepositoryWorktree: mocks.cleanupRepositoryWorktree,
   cloneRepository: vi.fn(),
   commitRepositoryChanges: vi.fn(),
   createRepositoryBranch: vi.fn(),
@@ -161,6 +163,31 @@ describe('repo routes', () => {
     mocks.getRepositoryRemoteTags.mockResolvedValue(['origin/v1.0.0'])
     mocks.deleteRepositoryRemoteTag.mockResolvedValue({ ok: true, message: 'deleted' })
     mocks.removeRepositoryWorktree.mockResolvedValue({ ok: true, message: 'removed' })
+    mocks.cleanupRepositoryWorktree.mockResolvedValue({ ok: true, message: 'pruned' })
+  })
+
+  test('routes invalid worktree cleanup with the exact selected path', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/cleanup-worktree', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        cwd: '/repo',
+        worktreePath: '/repo-stale',
+        sourceToken: 'client_123',
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true, message: 'pruned' })
+    expect(mocks.cleanupRepositoryWorktree).toHaveBeenCalledWith(
+      '/repo',
+      '/repo-stale',
+      expect.any(AbortSignal),
+      'client_123',
+    )
   })
 
   test('routes worktree force separately from branch force', async () => {

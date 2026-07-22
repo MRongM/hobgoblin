@@ -143,6 +143,10 @@ During reduction, selected dirty member worktrees require explicit approval befo
 When removal includes local branch cleanup, that cleanup applies only to branches created for the branch workspace and is explicitly forceful, so it may discard their unpushed commits; pre-existing branches are retained. Removing a branch workspace always force-removes its managed worktrees and may discard their uncommitted changes without a separate dirty-worktree preflight, while locked and primary worktrees remain removal safety boundaries. Modified copied auxiliary entries, unregistered contents, and internal terminals running anywhere under the branch workspace require separate destructive approval; approved terminals are closed before file removal, while symbolic-link removal never removes its target.
 _Avoid_: Workspace batch operation, workspace transaction, multi-repository Git command
 
+**Branch workspace registry cleanup**:
+An explicit recovery action for an unreadable branch workspace registry. It removes only invalid application records when they can be isolated, or resets all branch workspace records when the registry cannot be parsed at all. It never removes branch workspace directories, repository worktrees, local branches, or remote branches.
+_Avoid_: Delete branch workspace, worktree cleanup, repository cleanup
+
 **Branch workspace batch commit**:
 An application-coordinated action that presents every dirty repository member with one editable, repository-specific AI commit message bound to the inspected change set. Before any commit it verifies that every member still matches that change set; after one explicit confirmation, it creates exactly one commit per dirty member sequentially, stops at the first failure, and never rolls back completed commits.
 _Avoid_: AI commit handoff, shared commit message, automatic commit

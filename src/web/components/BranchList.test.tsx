@@ -310,7 +310,7 @@ describe('BranchList worktree drag ordering', () => {
     })
 
     expect(
-      Array.from(container?.querySelectorAll('.text-\\[13px\\].font-medium') ?? []).map((node) => node.textContent),
+      Array.from(container?.querySelectorAll('.text-sm.font-medium') ?? []).map((node) => node.textContent),
     ).toEqual(['main', 'feature/a'])
     expect(container?.querySelector('[data-testid="terminal-count-badge"]')?.textContent).toBe('2')
     expect(container?.querySelector('[title*="worktree-a"]')).not.toBeNull()

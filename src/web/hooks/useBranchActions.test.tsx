@@ -189,6 +189,43 @@ describe('useBranchActions', () => {
     )
   })
 
+  test('confirms invalid worktree cleanup before submitting the repository action', async () => {
+    const branch = createRepoBranch('feature/stale', { worktree: { path: '/tmp/repo-stale' } })
+    const repo = seedRepoState({ id: REPO_ID, branches: [branch] })
+    const runBranchAction = vi.fn(async () => ({ ok: true as const, message: 'pruned' }))
+    useReposStore.setState({ runBranchAction })
+
+    let actions: ReturnType<typeof useBranchActions>['actions'] | null = null
+    root = createRoot(container)
+    await act(async () => {
+      root!.render(<BranchActionsDialogHarness repo={repo} onReady={(value) => (actions = value)} />)
+    })
+    const requestCleanupWorktree = (actions as unknown as Record<string, unknown>)?.requestCleanupWorktree
+    expect(requestCleanupWorktree).toBeTypeOf('function')
+
+    act(() => (requestCleanupWorktree as () => void)())
+    expect(document.body.textContent).toContain('action.confirm-cleanup-invalid-worktree-title')
+    expect(document.body.textContent).toContain('/tmp/repo-stale')
+    act(() => document.querySelector<HTMLButtonElement>('[data-slot="alert-dialog-cancel"]')?.click())
+    expect(runBranchAction).not.toHaveBeenCalled()
+
+    act(() => (requestCleanupWorktree as () => void)())
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[data-slot="alert-dialog-footer"] button:last-child')?.click()
+      await Promise.resolve()
+    })
+
+    expect(runBranchAction).toHaveBeenCalledWith(
+      REPO_ID,
+      {
+        kind: 'cleanupWorktree',
+        branch: 'feature/stale',
+        worktreePath: '/tmp/repo-stale',
+      },
+      expect.objectContaining({ token: repo.instanceToken }),
+    )
+  })
+
   test('opens remote terminals through the remote terminal client without selecting the in-app terminal tab', async () => {
     mocks.openRemoteRepositoryTerminal.mockResolvedValue({ ok: true, message: '' })
     const branch = createRepoBranch('feature/remote-terminal', { worktree: { path: '/srv/repo-feature' } })

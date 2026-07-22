@@ -155,13 +155,7 @@ function restoreBranchWorkspaceMemberScope(
     branchWorkspaceQueryKey(scope.workspaceRootId),
   )
   const workspace = query?.ok
-    ? query.items.find(
-        (item) =>
-          item.id === scope.branchWorkspaceId &&
-          item.available &&
-          item.lifecycle !== 'delete-incomplete' &&
-          item.operation?.kind !== 'remove',
-      )
+    ? query.items.find((item) => item.id === scope.branchWorkspaceId && item.available)
     : undefined
   if (!workspace) return false
 

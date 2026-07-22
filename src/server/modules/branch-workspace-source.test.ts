@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, test } from 'vitest'
 import {
+  cleanupBranchWorkspaceRegistry,
   readBranchWorkspaceManifests,
   replaceBranchWorkspaceManifests,
   updateBranchWorkspaceManifests,
@@ -21,9 +22,14 @@ async function createFixture(): Promise<{ directory: string; dataFile: string; r
   return { directory, dataFile: path.join(directory, 'app-data', 'branch-workspaces.json'), root }
 }
 
-function manifest(rootId: string, branch: string, repositoryName = 'api'): BranchWorkspaceManifest {
+function manifest(
+  rootId: string,
+  branch: string,
+  repositoryName = 'api',
+  directoryPrefix = 'goblin-',
+): BranchWorkspaceManifest {
   const slug = branch.replaceAll('/', '-').replaceAll('.', '-')
-  const directoryName = `goblin-${slug}`
+  const directoryName = `${directoryPrefix}${slug}`
   const workspacePath = branchWorkspacePath(rootId, directoryName)
   const pathApi = rootId.startsWith('ssh-config://') ? path.posix : path
   return {
@@ -79,14 +85,23 @@ describe('branch workspace source', () => {
     })
   })
 
+  test('round-trips manifests using the current directory prefix', async () => {
+    const { dataFile, root } = await createFixture()
+    const current = manifest(root, 'feature/auth', 'api', 'hobgoblin-')
+
+    await replaceBranchWorkspaceManifests(root, [current], { dataFile })
+
+    await expect(readBranchWorkspaceManifests(root, { dataFile })).resolves.toEqual({
+      kind: 'ready',
+      manifests: [current],
+    })
+  })
+
   test('releases completed auxiliary entries while retaining incomplete materialization intent', async () => {
     const { dataFile, root } = await createFixture()
     const item = manifest(root, 'feature/dependencies')
-    item.auxiliaryEntries = [
-      auxiliaryEntry(item, 'README.md', 'complete'),
-      auxiliaryEntry(item, 'notes.md', 'failed'),
-    ]
-    item.operation = { kind: 'create', phase: 'failed', startedAt: '2026-07-22T00:00:00.000Z' }
+    item.auxiliaryEntries = [auxiliaryEntry(item, 'README.md', 'complete'), auxiliaryEntry(item, 'notes.md', 'failed')]
+    item.operation = { kind: 'create' }
 
     await replaceBranchWorkspaceManifests(root, [item], { dataFile })
 
@@ -125,13 +140,49 @@ describe('branch workspace source', () => {
     const { dataFile, root } = await createFixture()
     const item = manifest(root, 'feature/reduce')
     item.repositories[0] = { ...item.repositories[0]!, progress: 'removed' }
-    item.operation = { kind: 'reduce', phase: 'failed', startedAt: '2026-07-22T00:00:00.000Z' }
+    item.operation = { kind: 'reduce' }
 
     await replaceBranchWorkspaceManifests(root, [item], { dataFile })
 
     await expect(readBranchWorkspaceManifests(root, { dataFile })).resolves.toEqual({
       kind: 'ready',
       manifests: [item],
+    })
+  })
+
+  test('persists compact operation intent and normalizes legacy operation metadata', async () => {
+    const { dataFile, root } = await createFixture()
+    const compact = manifest(root, 'feature/compact')
+    compact.operation = { kind: 'create' }
+
+    await replaceBranchWorkspaceManifests(root, [compact], { dataFile })
+    await expect(readBranchWorkspaceManifests(root, { dataFile })).resolves.toEqual({
+      kind: 'ready',
+      manifests: [compact],
+    })
+
+    const legacy = manifest(root, 'feature/legacy')
+    await writeFile(
+      dataFile,
+      JSON.stringify({
+        version: 1,
+        workspaces: [
+          {
+            rootId: root,
+            branchWorkspaces: [
+              {
+                ...legacy,
+                operation: { kind: 'repair', phase: 'failed', startedAt: '2026-07-22T00:00:00.000Z' },
+              },
+            ],
+          },
+        ],
+      }),
+    )
+
+    await expect(readBranchWorkspaceManifests(root, { dataFile })).resolves.toEqual({
+      kind: 'ready',
+      manifests: [{ ...legacy, operation: { kind: 'repair' } }],
     })
   })
 
@@ -226,6 +277,80 @@ describe('branch workspace source', () => {
       'workspace.branch-workspace.read-failed',
     )
     await expect(readFile(dataFile, 'utf8')).resolves.toBe(contents)
+  })
+
+  test('leaves a valid or missing registry unchanged during cleanup', async () => {
+    const missing = await createFixture()
+    const ready = await createFixture()
+    await replaceBranchWorkspaceManifests(ready.root, [manifest(ready.root, 'feature/a')], {
+      dataFile: ready.dataFile,
+    })
+    const original = await readFile(ready.dataFile, 'utf8')
+
+    await expect(cleanupBranchWorkspaceRegistry({ dataFile: missing.dataFile })).resolves.toEqual({
+      ok: true,
+      outcome: 'unchanged',
+      removedRecords: 0,
+    })
+    await expect(cleanupBranchWorkspaceRegistry({ dataFile: ready.dataFile })).resolves.toEqual({
+      ok: true,
+      outcome: 'unchanged',
+      removedRecords: 0,
+    })
+    await expect(readFile(missing.dataFile, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(readFile(ready.dataFile, 'utf8')).resolves.toBe(original)
+  })
+
+  test('removes only invalid and duplicate records from a parseable registry', async () => {
+    const { dataFile, root } = await createFixture()
+    const valid = manifest(root, 'feature/a')
+    const invalid = { ...manifest(root, 'feature/b'), path: path.join(root, 'wrong') }
+    const duplicate = { ...manifest(root, 'feature/c'), id: valid.id }
+    await mkdir(path.dirname(dataFile), { recursive: true })
+    await writeFile(
+      dataFile,
+      JSON.stringify({
+        version: 1,
+        workspaces: [
+          { rootId: root, branchWorkspaces: [valid, invalid, duplicate] },
+          { rootId: 42, branchWorkspaces: [] },
+        ],
+      }),
+    )
+
+    await expect(cleanupBranchWorkspaceRegistry({ dataFile })).resolves.toEqual({
+      ok: true,
+      outcome: 'repaired',
+      removedRecords: 3,
+    })
+    await expect(readBranchWorkspaceManifests(root, { dataFile })).resolves.toEqual({
+      kind: 'ready',
+      manifests: [valid],
+    })
+  })
+
+  test('resets only registry records when the registry cannot be parsed', async () => {
+    const { dataFile, root } = await createFixture()
+    await mkdir(path.dirname(dataFile), { recursive: true })
+    await writeFile(dataFile, '{')
+
+    await expect(cleanupBranchWorkspaceRegistry({ dataFile })).resolves.toEqual({
+      ok: true,
+      outcome: 'reset',
+      removedRecords: 0,
+    })
+    await expect(JSON.parse(await readFile(dataFile, 'utf8'))).toEqual({ version: 1, workspaces: [] })
+    await expect(readBranchWorkspaceManifests(root, { dataFile })).resolves.toEqual({ kind: 'missing' })
+  })
+
+  test('propagates an atomic cleanup write failure and preserves the invalid registry', async () => {
+    const { dataFile } = await createFixture()
+    await mkdir(path.dirname(dataFile), { recursive: true })
+    await writeFile(dataFile, '{')
+    await writeFile(path.join(path.dirname(dataFile), '.branch-workspaces.json.safe.tmp'), 'occupied')
+
+    await expect(cleanupBranchWorkspaceRegistry({ dataFile, randomId: () => 'safe' })).rejects.toThrow()
+    await expect(readFile(dataFile, 'utf8')).resolves.toBe('{')
   })
 
   test('preserves a pre-existing temporary file when atomic creation collides', async () => {

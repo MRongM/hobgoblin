@@ -131,7 +131,7 @@ describe('project terminal switcher model', () => {
           branch: 'feature/auth',
           directoryName: 'feature-auth',
           path: branchWorkspacePath,
-          lifecycle: 'ready',
+          state: { kind: 'ready' },
           available: true,
           issues: [],
           repositories: [],

@@ -11,6 +11,7 @@ export function extractWorktreePathFromAction(action: RepoEventAction): string |
     case 'commit':
     case 'merge':
     case 'createWorktree':
+    case 'cleanupWorktree':
     case 'removeWorktree':
       return action.worktreePath
     default:

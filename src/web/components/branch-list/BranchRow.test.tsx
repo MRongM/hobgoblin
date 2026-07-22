@@ -385,7 +385,7 @@ describe('BranchRow', () => {
       </ul>,
     )
 
-    expect(document.body.querySelector('.text-\\[13px\\].font-medium')?.textContent).toBe('feature/a')
+    expect(document.body.querySelector('.text-sm.font-medium')?.textContent).toBe('feature/a')
     // worktree 路径不再作为独立 aria-label 元素显示
     expect(document.body.querySelector('[aria-label="hobgoblin-feat-optimize"]')).toBeNull()
     // 但仍出现在整行的 title 悬停中
@@ -411,7 +411,7 @@ describe('BranchRow', () => {
       </ul>,
     )
 
-    const branchName = document.body.querySelector('.text-\\[13px\\].font-medium')
+    const branchName = document.body.querySelector('.text-sm.font-medium')
     const hashTag = document.body.querySelector<HTMLElement>('[data-testid="branch-hash-tag"]')
 
     expect(branchName?.textContent).toBe('feature/a')
@@ -471,7 +471,7 @@ describe('BranchRow', () => {
       </ul>,
     )
 
-    expect(document.body.querySelector('.text-\\[13px\\].font-medium')?.textContent).toBe('feature/a')
+    expect(document.body.querySelector('.text-sm.font-medium')?.textContent).toBe('feature/a')
     // worktree 路径不再作为独立 aria-label / 文本内容显示（已移入整行的 title 悬停）
     expect(document.body.querySelector('[aria-label="worktree-a"]')).toBeNull()
     expect(document.body.textContent).not.toContain('工作树')
@@ -523,7 +523,7 @@ describe('BranchRow', () => {
     )
 
     const text = document.body.textContent ?? ''
-    expect(document.body.querySelector('.text-\\[13px\\].font-medium')?.textContent).toBe('feature/a')
+    expect(document.body.querySelector('.text-sm.font-medium')?.textContent).toBe('feature/a')
     expect(text).not.toContain('Add workspace branch summary')
     expect(text).not.toContain('../worktree-a')
     // worktree 路径不再作为独立 aria-label 显示，但仍存在于行 title 悬停中
@@ -779,7 +779,7 @@ describe('BranchRow', () => {
       </ul>,
     )
 
-    expect(document.body.querySelector('.text-\\[13px\\].font-medium')?.textContent).toBe('feature/a')
+    expect(document.body.querySelector('.text-sm.font-medium')?.textContent).toBe('feature/a')
     // 目录名不再作为独立 aria-label 元素显示，但仍出现在整行 title 悬停中
     expect(document.body.querySelector('[aria-label="repo-feature"]')).toBeNull()
     expect(document.body.querySelector('[title*="repo-feature"]')).not.toBeNull()

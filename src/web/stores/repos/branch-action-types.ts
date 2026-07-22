@@ -9,6 +9,7 @@ export type RepoBranchAction =
   | { kind: 'createBranch'; branch: string; baseBranch: string }
   | { kind: 'trackRemoteBranch'; localBranch: string; remoteRef: string }
   | { kind: 'deleteBranch'; branch: string; force?: boolean; alsoDeleteUpstream?: boolean }
+  | { kind: 'cleanupWorktree'; branch: string; worktreePath: string }
   | {
       kind: 'removeWorktree'
       branch: string

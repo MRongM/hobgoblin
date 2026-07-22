@@ -1,4 +1,3 @@
-import type { BranchWorkspaceLifecycle } from '#/shared/branch-workspaces.ts'
 import type { ReactNode } from 'react'
 import { ProjectFileTree, type ProjectFileTreeContext } from '#/web/components/file-tree/ProjectFileTree.tsx'
 
@@ -7,8 +6,8 @@ export interface BranchWorkspaceFolderContext {
   id: string
   branch: string
   path: string
-  lifecycle: BranchWorkspaceLifecycle
   available: boolean
+  busy: boolean
   managedRootNames: string[]
 }
 

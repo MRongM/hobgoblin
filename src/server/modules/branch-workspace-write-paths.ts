@@ -60,7 +60,6 @@ export interface BranchWorkspaceWriteDependencies {
   deleteRemoteBranch?: typeof deleteRepositoryRemoteBranch
   closeSessions?: (sessionIds: string[]) => Promise<TerminalCloseSessionsResult>
   publishInvalidation?: typeof publishWorkspaceInvalidation
-  now?: () => string
 }
 
 export interface BranchWorkspaceWriteService {
@@ -91,7 +90,6 @@ export function createBranchWorkspaceWriteService(
   const closeSessions =
     dependencies.closeSessions ?? (async (sessionIds: string[]) => ({ closed: [], missing: [...new Set(sessionIds)] }))
   const publishInvalidation = dependencies.publishInvalidation ?? publishWorkspaceInvalidation
-  const now = dependencies.now ?? (() => new Date().toISOString())
 
   async function persist(
     rootId: string,
@@ -110,20 +108,7 @@ export function createBranchWorkspaceWriteService(
     publishInvalidation(rootId)
   }
 
-  async function failOperation(
-    rootId: string,
-    branchWorkspaceId: string,
-    phase: 'cancelled' | 'failed',
-    message: string,
-  ): Promise<BranchWorkspaceExecuteResult> {
-    await persist(
-      rootId,
-      (manifest) => ({
-        ...manifest,
-        operation: manifest.operation ? { ...manifest.operation, phase } : undefined,
-      }),
-      branchWorkspaceId,
-    ).catch(() => undefined)
+  function failOperation(branchWorkspaceId: string, message: string): BranchWorkspaceExecuteResult {
     return { ok: false, message, branchWorkspaceId }
   }
 
@@ -197,13 +182,12 @@ export function createBranchWorkspaceWriteService(
             }
             pending.terminalsClosed = true
           }
-          const startedAt = now()
           await updateManifests(rootId, (manifests) => {
             const nextManifest: BranchWorkspaceManifest = {
               ...plan.manifest,
               repositories: plan.manifest.repositories.map((member) => ({ ...member })),
               auxiliaryEntries: plan.manifest.auxiliaryEntries.map((entry) => ({ ...entry })),
-              operation: { kind: plan.operation, phase: 'pending', startedAt },
+              operation: { kind: plan.operation },
             }
             const existingIndex = manifests.findIndex((manifest) => manifest.id === plan.branchWorkspaceId)
             if (existingIndex < 0) return [...manifests, nextManifest]
@@ -212,17 +196,6 @@ export function createBranchWorkspaceWriteService(
           pending.persisted = true
           publishInvalidation(rootId)
         }
-
-        await persist(
-          rootId,
-          (manifest) => ({
-            ...manifest,
-            operation: manifest.operation
-              ? { ...manifest.operation, phase: 'running' }
-              : { kind: plan.operation, phase: 'running', startedAt: now() },
-          }),
-          plan.branchWorkspaceId,
-        )
 
         if (plan.operation === 'reduce') {
           for (const repository of plan.repositories) {
@@ -233,7 +206,7 @@ export function createBranchWorkspaceWriteService(
             if (!member) throw new Error('workspace.branch-workspace.manifest-missing')
             if (member.progress === 'removed') continue
             if (controller.signal.aborted) {
-              return await failOperation(rootId, plan.branchWorkspaceId, 'cancelled', 'cancelled')
+              return failOperation(plan.branchWorkspaceId, 'cancelled')
             }
             const result = await removeWorktree(
               repository.repoId,
@@ -256,12 +229,7 @@ export function createBranchWorkspaceWriteService(
                 'failed',
                 result.message,
               )
-              return await failOperation(
-                rootId,
-                plan.branchWorkspaceId,
-                controller.signal.aborted || result.message === 'cancelled' ? 'cancelled' : 'failed',
-                result.message,
-              )
+              return failOperation(plan.branchWorkspaceId, result.message)
             }
             await persistMemberProgress(persist, rootId, plan.branchWorkspaceId, repository.repositoryName, 'removed')
           }
@@ -290,7 +258,7 @@ export function createBranchWorkspaceWriteService(
             )
             if (!member) throw new Error('workspace.branch-workspace.manifest-missing')
             if (controller.signal.aborted) {
-              return await failOperation(rootId, plan.branchWorkspaceId, 'cancelled', 'cancelled')
+              return failOperation(plan.branchWorkspaceId, 'cancelled')
             }
             if (member.progress !== 'removed') {
               let result = { ok: true, message: 'satisfied' }
@@ -321,12 +289,7 @@ export function createBranchWorkspaceWriteService(
                   'failed',
                   result.message,
                 )
-                return await failOperation(
-                  rootId,
-                  plan.branchWorkspaceId,
-                  controller.signal.aborted || result.message === 'cancelled' ? 'cancelled' : 'failed',
-                  result.message,
-                )
+                return failOperation(plan.branchWorkspaceId, result.message)
               }
               await persistMemberProgress(persist, rootId, plan.branchWorkspaceId, repository.repositoryName, 'removed')
             }
@@ -351,7 +314,7 @@ export function createBranchWorkspaceWriteService(
                   'failed',
                   result.message,
                 )
-                return await failOperation(rootId, plan.branchWorkspaceId, 'failed', result.message)
+                return failOperation(plan.branchWorkspaceId, result.message)
               }
               await persistRepositoryCleanup(
                 persist,
@@ -369,12 +332,7 @@ export function createBranchWorkspaceWriteService(
             if (repository.deleteUpstream && member.upstreamCleanupProgress !== 'complete') {
               const upstream = repository.upstream ? parseRemoteBranchRef(repository.upstream) : null
               if (!upstream) {
-                return await failOperation(
-                  rootId,
-                  plan.branchWorkspaceId,
-                  'failed',
-                  'workspace.branch-workspace.upstream-unavailable',
-                )
+                return failOperation(plan.branchWorkspaceId, 'workspace.branch-workspace.upstream-unavailable')
               }
               const result = await deleteRemoteBranch(
                 repository.repoId,
@@ -392,7 +350,7 @@ export function createBranchWorkspaceWriteService(
                   'failed',
                   result.message,
                 )
-                return await failOperation(rootId, plan.branchWorkspaceId, 'failed', result.message)
+                return failOperation(plan.branchWorkspaceId, result.message)
               }
               await persistRepositoryCleanup(
                 persist,
@@ -410,7 +368,7 @@ export function createBranchWorkspaceWriteService(
             const persistedEntry = current.auxiliaryEntries.find((candidate) => candidate.name === entry.name)
             if (persistedEntry?.progress === 'removed') continue
             if (controller.signal.aborted) {
-              return await failOperation(rootId, plan.branchWorkspaceId, 'cancelled', 'cancelled')
+              return failOperation(plan.branchWorkspaceId, 'cancelled')
             }
             try {
               await removeEntry(rootId, entry.targetPath, controller.signal)
@@ -418,25 +376,25 @@ export function createBranchWorkspaceWriteService(
             } catch (error) {
               const message = operationMessage(error)
               await persistAuxiliaryProgress(persist, rootId, plan.branchWorkspaceId, entry.name, 'failed', message)
-              return await failOperation(rootId, plan.branchWorkspaceId, 'failed', message)
+              return failOperation(plan.branchWorkspaceId, message)
             }
           }
 
           for (const entryName of plan.unmanagedEntries ?? []) {
             if (controller.signal.aborted) {
-              return await failOperation(rootId, plan.branchWorkspaceId, 'cancelled', 'cancelled')
+              return failOperation(plan.branchWorkspaceId, 'cancelled')
             }
             try {
               await removeEntry(rootId, childPath(rootId, plan.path, entryName), controller.signal)
             } catch (error) {
-              return await failOperation(rootId, plan.branchWorkspaceId, 'failed', operationMessage(error))
+              return failOperation(plan.branchWorkspaceId, operationMessage(error))
             }
           }
           if (plan.steps.some((step) => step.kind === 'remove-directory')) {
             try {
               await removeEntry(rootId, plan.path, controller.signal)
             } catch (error) {
-              return await failOperation(rootId, plan.branchWorkspaceId, 'failed', operationMessage(error))
+              return failOperation(plan.branchWorkspaceId, operationMessage(error))
             }
           }
           await updateManifests(rootId, (manifests) =>
@@ -452,12 +410,7 @@ export function createBranchWorkspaceWriteService(
             await createDirectory(rootId, plan.path, controller.signal)
             pending.directoryReady = true
           } catch (error) {
-            return await failOperation(
-              rootId,
-              plan.branchWorkspaceId,
-              controller.signal.aborted ? 'cancelled' : 'failed',
-              operationMessage(error),
-            )
+            return failOperation(plan.branchWorkspaceId, operationMessage(error))
           }
         }
 
@@ -471,7 +424,7 @@ export function createBranchWorkspaceWriteService(
             continue
           }
           if (controller.signal.aborted) {
-            return await failOperation(rootId, plan.branchWorkspaceId, 'cancelled', 'cancelled')
+            return failOperation(plan.branchWorkspaceId, 'cancelled')
           }
           let result
           try {
@@ -512,12 +465,7 @@ export function createBranchWorkspaceWriteService(
                 result.message,
               )
             }
-            return await failOperation(
-              rootId,
-              plan.branchWorkspaceId,
-              controller.signal.aborted || result.message === 'cancelled' ? 'cancelled' : 'failed',
-              result.message,
-            )
+            return failOperation(plan.branchWorkspaceId, result.message)
           }
           await persistMemberProgress(persist, rootId, plan.branchWorkspaceId, repository.repositoryName, 'complete')
           if (member?.worktreeBootstrap) {
@@ -536,7 +484,7 @@ export function createBranchWorkspaceWriteService(
           const persistedEntry = current.auxiliaryEntries.find((candidate) => candidate.name === entry.name)
           if (persistedEntry?.progress === 'complete' || persistedEntry?.progress === 'removed') continue
           if (controller.signal.aborted) {
-            return await failOperation(rootId, plan.branchWorkspaceId, 'cancelled', 'cancelled')
+            return failOperation(plan.branchWorkspaceId, 'cancelled')
           }
           try {
             if (entry.action === 'replace-symlink') {
@@ -561,12 +509,7 @@ export function createBranchWorkspaceWriteService(
           } catch (error) {
             const message = operationMessage(error)
             await persistAuxiliaryProgress(persist, rootId, plan.branchWorkspaceId, entry.name, 'failed', message)
-            return await failOperation(
-              rootId,
-              plan.branchWorkspaceId,
-              controller.signal.aborted || message === 'cancelled' ? 'cancelled' : 'failed',
-              message,
-            )
+            return failOperation(plan.branchWorkspaceId, message)
           }
         }
 
@@ -584,12 +527,7 @@ export function createBranchWorkspaceWriteService(
         pendingByRoot.delete(rootId)
         return { ok: true, branchWorkspaceId: plan.branchWorkspaceId }
       } catch (error) {
-        return await failOperation(
-          rootId,
-          plan.branchWorkspaceId,
-          controller.signal.aborted ? 'cancelled' : 'failed',
-          operationMessage(error),
-        )
+        return failOperation(plan.branchWorkspaceId, operationMessage(error))
       } finally {
         if (activeByRoot.get(rootId) === controller) activeByRoot.delete(rootId)
       }

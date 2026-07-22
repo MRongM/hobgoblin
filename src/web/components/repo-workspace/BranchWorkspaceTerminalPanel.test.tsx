@@ -223,8 +223,8 @@ function branchWorkspaceContext() {
     id: 'branch-1',
     branch: 'feature/auth',
     path: PATH,
-    lifecycle: 'ready' as const,
     available: true,
+    busy: false,
     managedRootNames: ['api'],
   }
 }

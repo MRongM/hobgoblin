@@ -404,7 +404,7 @@ function branchWorkspace(rootId: string, worktreePath: string) {
     branch: 'feature/auth',
     directoryName: 'goblin-feature-auth',
     path: `${rootId}/goblin-feature-auth`,
-    lifecycle: 'ready' as const,
+    state: { kind: 'ready' as const },
     available: true,
     issues: [],
     repositories: [
@@ -415,7 +415,7 @@ function branchWorkspace(rootId: string, worktreePath: string) {
         branchOrigin: 'created' as const,
         worktreePath,
         progress: 'complete' as const,
-        observedState: 'ready' as const,
+        ready: true,
       },
     ],
     auxiliaryEntries: [],

@@ -109,20 +109,20 @@ describe('workspace project selectors', () => {
   })
 })
 
-function branchWorkspace(lifecycle: 'ready' | 'delete-incomplete') {
+function branchWorkspace(stateName: 'ready' | 'delete-incomplete') {
   return {
     id: 'branch-1',
     rootId: ROOT,
     branch: 'feature/auth',
     directoryName: 'goblin-feature',
     path: `${ROOT}/goblin-feature`,
-    lifecycle,
-    available: lifecycle === 'ready',
+    state:
+      stateName === 'ready'
+        ? { kind: 'ready' as const }
+        : { kind: 'needs-action' as const, action: 'continue-delete' as const },
+    available: stateName === 'ready',
     issues: [],
     repositories: [],
     auxiliaryEntries: [],
-    ...(lifecycle === 'delete-incomplete'
-      ? { operation: { kind: 'remove' as const, phase: 'failed' as const, startedAt: '2026-07-21T00:00:00.000Z' } }
-      : {}),
   }
 }

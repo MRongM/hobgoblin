@@ -81,6 +81,8 @@ const mocks = vi.hoisted(() => ({
   pullRemoteBranch: vi.fn(),
   pushBranch: vi.fn(),
   pushRemoteBranch: vi.fn(),
+  pruneWorktrees: vi.fn(),
+  pruneRemoteWorktrees: vi.fn(),
   readLocalFileTreeBinaryFile: vi.fn(),
   readLocalFileTreeTextFile: vi.fn(),
   readRemoteFileTreeBinaryFile: vi.fn(),
@@ -200,6 +202,7 @@ vi.mock('#/system/git/status.ts', () => ({
 vi.mock('#/system/git/worktrees.ts', () => ({
   createWorktree: mocks.createWorktree,
   getWorktrees: mocks.getWorktrees,
+  pruneWorktrees: mocks.pruneWorktrees,
   removeWorktree: mocks.removeWorktree,
 }))
 
@@ -274,6 +277,7 @@ vi.mock('#/system/ssh/git.ts', () => ({
   getRemoteStatus: vi.fn(),
   pullRemoteBranch: mocks.pullRemoteBranch,
   pushRemoteBranch: mocks.pushRemoteBranch,
+  pruneRemoteWorktrees: mocks.pruneRemoteWorktrees,
   readRemoteFileTreeBinaryFile: mocks.readRemoteFileTreeBinaryFile,
   readRemoteFileTreeTextFile: mocks.readRemoteFileTreeTextFile,
   mergeRemoteBranch: mocks.mergeRemoteBranch,
@@ -338,6 +342,8 @@ beforeEach(() => {
   mocks.pullRemoteBranch.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.pushBranch.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.pushRemoteBranch.mockResolvedValue({ ok: true, message: 'ok' })
+  mocks.pruneWorktrees.mockResolvedValue({ ok: true, message: 'pruned local' })
+  mocks.pruneRemoteWorktrees.mockResolvedValue({ ok: true, message: 'pruned remote' })
   mocks.readLocalFileTreeBinaryFile.mockResolvedValue({
     ok: true,
     name: 'image.bin',
@@ -2137,6 +2143,98 @@ describe('repo mutation invalidation publishing', () => {
 
     expect(result).toEqual({ ok: false, message: 'error.cannot-remove-dirty-worktree' })
     expect(mocks.removeWorktree).not.toHaveBeenCalled()
+  })
+
+  test('local backend revalidates a prunable worktree before pruning', async () => {
+    mocks.getWorktrees.mockResolvedValueOnce([
+      {
+        path: '/tmp/repo-stale',
+        branch: 'feature/stale',
+        isBare: false,
+        isPrimary: false,
+        isPrunable: true,
+      },
+    ])
+    const { resolveRepoBackend } = await import('#/server/modules/repo-backend.ts')
+    const backend = await resolveRepoBackend('/tmp/repo')
+    const cleanupWorktree = (backend as unknown as { cleanupWorktree?: (path: string) => Promise<unknown> })
+      .cleanupWorktree
+    expect(cleanupWorktree).toBeTypeOf('function')
+
+    const result = await cleanupWorktree!('/tmp/repo-stale')
+
+    expect(result).toEqual({ ok: true, message: 'pruned local' })
+    expect(mocks.getWorktrees).toHaveBeenCalledWith('/tmp/repo', { includeStatus: false, signal: undefined })
+    expect(mocks.pruneWorktrees).toHaveBeenCalledWith('/tmp/repo', { signal: undefined })
+  })
+
+  test('local backend refuses cleanup when the selected worktree is no longer prunable', async () => {
+    mocks.getWorktrees.mockResolvedValueOnce([
+      {
+        path: '/tmp/repo-stale',
+        branch: 'feature/stale',
+        isBare: false,
+        isPrimary: false,
+        isPrunable: false,
+      },
+    ])
+    const { resolveRepoBackend } = await import('#/server/modules/repo-backend.ts')
+    const backend = await resolveRepoBackend('/tmp/repo')
+    const cleanupWorktree = (backend as unknown as { cleanupWorktree?: (path: string) => Promise<unknown> })
+      .cleanupWorktree
+    expect(cleanupWorktree).toBeTypeOf('function')
+
+    const result = await cleanupWorktree!('/tmp/repo-stale')
+
+    expect(result).toEqual({ ok: false, message: 'error.worktree-not-prunable' })
+    expect(mocks.pruneWorktrees).not.toHaveBeenCalled()
+  })
+
+  test('cleanupRepositoryWorktree publishes snapshot invalidation after success', async () => {
+    mocks.getWorktrees.mockResolvedValueOnce([
+      {
+        path: '/tmp/repo-stale',
+        branch: 'feature/stale',
+        isBare: false,
+        isPrimary: false,
+        isPrunable: true,
+      },
+    ])
+    const repoWritePaths = await import('#/server/modules/repo-write-paths.ts')
+    const cleanupRepositoryWorktree = (repoWritePaths as Record<string, unknown>).cleanupRepositoryWorktree
+    expect(cleanupRepositoryWorktree).toBeTypeOf('function')
+
+    const result = await (
+      cleanupRepositoryWorktree as (
+        cwd: string,
+        worktreePath: string,
+        signal?: AbortSignal,
+        sourceToken?: string,
+      ) => Promise<unknown>
+    )('/tmp/repo', '/tmp/repo-stale', undefined, 'client_123')
+
+    expect(result).toEqual({ ok: true, message: 'pruned local' })
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: '/tmp/repo',
+      query: 'repo-snapshot',
+      sourceToken: 'client_123',
+    })
+  })
+
+  test('remote backend delegates cleanup to the revalidating remote helper', async () => {
+    const { resolveRepoBackend } = await import('#/server/modules/repo-backend.ts')
+    const backend = await resolveRepoBackend('ssh-config://prod/srv/repo')
+    const cleanupWorktree = (backend as unknown as { cleanupWorktree?: (path: string) => Promise<unknown> })
+      .cleanupWorktree
+    expect(cleanupWorktree).toBeTypeOf('function')
+
+    const result = await cleanupWorktree!('/srv/repo-stale')
+
+    expect(result).toEqual({ ok: true, message: 'pruned remote' })
+    expect(mocks.pruneRemoteWorktrees).toHaveBeenCalledWith(
+      expect.objectContaining({ remotePath: '/srv/repo' }),
+      { worktreePath: '/srv/repo-stale', signal: undefined },
+    )
   })
 
   test('commitRepositoryChanges commits local worktrees through the local backend and publishes invalidation', async () => {

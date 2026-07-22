@@ -11,17 +11,22 @@ import {
   type WorktreeBootstrapTargetEntry,
 } from '#/shared/worktree-bootstrap-summary.ts'
 
+export const BRANCH_WORKSPACE_DIRECTORY_PREFIX = 'hobgoblin-'
+export const BRANCH_WORKSPACE_DIRECTORY_PREFIXES = [BRANCH_WORKSPACE_DIRECTORY_PREFIX, 'goblin-'] as const
+
+export function isBranchWorkspaceDirectoryName(value: string): boolean {
+  return (
+    isWorkspaceRepositoryName(value) && BRANCH_WORKSPACE_DIRECTORY_PREFIXES.some((prefix) => value.startsWith(prefix))
+  )
+}
+
+export function isManagedBranchWorkspaceEntryName(value: string): boolean {
+  return isBranchWorkspaceDirectoryName(value) || value.startsWith('.goblin-') || value.startsWith('.hobgoblin-')
+}
+
 export type BranchWorkspaceProgress = 'pending' | 'complete' | 'removed' | 'failed'
 export type BranchWorkspaceBootstrapProgress = Exclude<BranchWorkspaceProgress, 'removed'>
-export type BranchWorkspaceLifecycle =
-  | 'ready'
-  | 'create-incomplete'
-  | 'needs-repair'
-  | 'reduce-incomplete'
-  | 'delete-incomplete'
-  | 'active'
 export type BranchWorkspaceOperationKind = 'create' | 'extend' | 'reduce' | 'repair' | 'remove'
-export type BranchWorkspaceOperationPhase = 'pending' | 'running' | 'cancelled' | 'failed'
 export type BranchWorkspaceBranchOrigin = 'created' | 'pre-existing'
 export type BranchWorkspaceAuxiliaryMode = 'symlink' | 'copy'
 export type BranchWorkspacePathKind = 'file' | 'directory' | 'symlink' | 'other' | 'missing'
@@ -71,8 +76,6 @@ export interface BranchWorkspaceAuxiliaryEntry {
 
 export interface BranchWorkspaceOperationSnapshot {
   kind: BranchWorkspaceOperationKind
-  phase: BranchWorkspaceOperationPhase
-  startedAt: string
 }
 
 export interface BranchWorkspaceManifest {
@@ -86,28 +89,17 @@ export interface BranchWorkspaceManifest {
   operation?: BranchWorkspaceOperationSnapshot
 }
 
-export type BranchWorkspaceObservedState =
-  | 'ready'
-  | 'pending'
-  | 'missing'
-  | 'path-mismatch'
-  | 'modified'
-  | 'unavailable'
-  | 'failed'
-
 export interface BranchWorkspaceRepositorySnapshot extends BranchWorkspaceRepositoryMember {
-  observedState: BranchWorkspaceObservedState
-  message?: string
+  ready: boolean
 }
 
 export interface BranchWorkspaceAuxiliarySnapshot extends BranchWorkspaceAuxiliaryEntry {
-  observedState: BranchWorkspaceObservedState
+  ready: boolean
   resolvedSourcePath?: string
-  message?: string
 }
 
 export interface BranchWorkspaceActiveOperation {
-  kind: BranchWorkspaceOperationKind | BranchWorkspaceGitActionKind
+  kind: BranchWorkspaceGitActionKind
   currentStep: number
   completedCount: number
   totalCount: number
@@ -138,18 +130,27 @@ export interface BranchWorkspaceIssue {
   message?: string
 }
 
+export type BranchWorkspaceState =
+  | { kind: 'ready' }
+  | {
+      kind: 'needs-action'
+      action: 'repair'
+      reason: 'creation-interrupted' | 'drift'
+    }
+  | { kind: 'needs-action'; action: 'continue-reduce' }
+  | { kind: 'needs-action'; action: 'continue-delete' }
+
 export interface BranchWorkspaceSnapshot {
   id: string
   rootId: string
   branch: string
   directoryName: string
   path: string
-  lifecycle: BranchWorkspaceLifecycle
+  state: BranchWorkspaceState
   available: boolean
   issues: BranchWorkspaceIssue[]
   repositories: BranchWorkspaceRepositorySnapshot[]
   auxiliaryEntries: BranchWorkspaceAuxiliarySnapshot[]
-  operation?: BranchWorkspaceOperationSnapshot
   activeOperation?: BranchWorkspaceActiveOperation
 }
 
@@ -294,6 +295,14 @@ export interface BranchWorkspaceExecuteInput {
 }
 
 export type BranchWorkspaceReorderResult = { ok: true } | { ok: false; message: string }
+
+export type BranchWorkspaceRegistryCleanupResult =
+  | {
+      ok: true
+      outcome: 'unchanged' | 'repaired' | 'reset'
+      removedRecords: number
+    }
+  | { ok: false; message: string }
 
 export type BranchWorkspaceReadResult =
   | {

@@ -3,12 +3,14 @@ import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { serverDataFile } from '#/server/common/data-dir.ts'
 import { branchWorkspacePath, workspaceRepositoryPath, workspaceRootId } from '#/server/modules/workspace-paths.ts'
-import type {
-  BranchWorkspaceAuxiliaryEntry,
-  BranchWorkspaceBootstrapProgress,
-  BranchWorkspaceManifest,
-  BranchWorkspaceOperationSnapshot,
-  BranchWorkspaceRepositoryMember,
+import {
+  isBranchWorkspaceDirectoryName,
+  type BranchWorkspaceAuxiliaryEntry,
+  type BranchWorkspaceBootstrapProgress,
+  type BranchWorkspaceManifest,
+  type BranchWorkspaceOperationSnapshot,
+  type BranchWorkspaceRegistryCleanupResult,
+  type BranchWorkspaceRepositoryMember,
 } from '#/shared/branch-workspaces.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 import { isWorktreeBootstrapConfigHash } from '#/shared/repo-settings.ts'
@@ -81,6 +83,49 @@ export async function updateBranchWorkspaceManifests(
   await mutateBranchWorkspaceManifests(rootId, mutate, dependencies)
 }
 
+export async function cleanupBranchWorkspaceRegistry(
+  dependencies: BranchWorkspaceSourceDependencies = {},
+): Promise<BranchWorkspaceRegistryCleanupResult> {
+  const dataFile = dependencies.dataFile ?? serverDataFile(registryFileName)
+  let result: BranchWorkspaceRegistryCleanupResult = { ok: true, outcome: 'unchanged', removedRecords: 0 }
+
+  await enqueueWrite(dataFile, async () => {
+    let raw: string
+    try {
+      raw = await readFile(dataFile, 'utf8')
+    } catch (error) {
+      if (isErrno(error, 'ENOENT')) return
+      throw error
+    }
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      await writeRegistry(dataFile, emptyRegistry(), dependencies.randomId?.() ?? randomUUID())
+      result = { ok: true, outcome: 'reset', removedRecords: 0 }
+      return
+    }
+
+    try {
+      normalizeRegistry(parsed)
+      return
+    } catch {}
+
+    const recovered = recoverRegistry(parsed)
+    if (!recovered) {
+      await writeRegistry(dataFile, emptyRegistry(), dependencies.randomId?.() ?? randomUUID())
+      result = { ok: true, outcome: 'reset', removedRecords: 0 }
+      return
+    }
+
+    await writeRegistry(dataFile, recovered.registry, dependencies.randomId?.() ?? randomUUID())
+    result = { ok: true, outcome: 'repaired', removedRecords: recovered.removedRecords }
+  })
+
+  return result
+}
+
 async function mutateBranchWorkspaceManifests(
   rootId: string,
   mutate: (manifests: BranchWorkspaceManifest[]) => BranchWorkspaceManifest[] | Promise<BranchWorkspaceManifest[]>,
@@ -148,6 +193,57 @@ function normalizeRegistry(value: unknown): BranchWorkspaceRegistry {
   return { version: 1, workspaces }
 }
 
+function recoverRegistry(value: unknown): { registry: BranchWorkspaceRegistry; removedRecords: number } | null {
+  const registry = asRecord(value)
+  if (!registry || registry.version !== 1 || !Array.isArray(registry.workspaces)) return null
+
+  const workspaces: PersistedBranchWorkspaceGroup[] = []
+  const roots = new Set<string>()
+  let removedRecords = 0
+  for (const value of registry.workspaces) {
+    const workspace = asRecord(value)
+    const rawRootId = exactText(workspace?.rootId)
+    if (!workspace || !rawRootId || !Array.isArray(workspace.branchWorkspaces)) {
+      removedRecords += 1
+      continue
+    }
+    const rootId = workspaceRootId(rawRootId)
+    if (rootId !== rawRootId || roots.has(rootId)) {
+      removedRecords += 1
+      continue
+    }
+
+    roots.add(rootId)
+    const branchWorkspaces: BranchWorkspaceManifest[] = []
+    const ids = new Set<string>()
+    const branches = new Set<string>()
+    const directoryNames = new Set<string>()
+    for (const candidate of workspace.branchWorkspaces) {
+      let manifest: BranchWorkspaceManifest
+      try {
+        manifest = normalizeManifest(candidate, rootId)
+      } catch {
+        removedRecords += 1
+        continue
+      }
+      if (ids.has(manifest.id) || branches.has(manifest.branch) || directoryNames.has(manifest.directoryName)) {
+        removedRecords += 1
+        continue
+      }
+      ids.add(manifest.id)
+      branches.add(manifest.branch)
+      directoryNames.add(manifest.directoryName)
+      branchWorkspaces.push(manifest)
+    }
+    workspaces.push({ rootId, branchWorkspaces })
+  }
+  return { registry: { version: 1, workspaces }, removedRecords }
+}
+
+function emptyRegistry(): BranchWorkspaceRegistry {
+  return { version: 1, workspaces: [] }
+}
+
 function normalizeManifestList(value: unknown, rootId: string): BranchWorkspaceManifest[] {
   if (!Array.isArray(value)) throw new Error(invalidRegistryMessage)
   const manifests: BranchWorkspaceManifest[] = []
@@ -178,8 +274,7 @@ function normalizeManifest(value: unknown, rootId: string): BranchWorkspaceManif
     manifest.rootId !== rootId ||
     !branch ||
     !directoryName ||
-    !isWorkspaceRepositoryName(directoryName) ||
-    !directoryName.startsWith('goblin-') ||
+    !isBranchWorkspaceDirectoryName(directoryName) ||
     !Array.isArray(manifest.repositories) ||
     manifest.repositories.length === 0 ||
     !Array.isArray(manifest.auxiliaryEntries)
@@ -327,11 +422,8 @@ function normalizeAuxiliaryEntry(
 
 function normalizeOperation(value: unknown): BranchWorkspaceOperationSnapshot {
   const operation = asRecord(value)
-  const startedAt = exactText(operation?.startedAt)
-  if (!operation || !isOperationKind(operation.kind) || !isOperationPhase(operation.phase) || !startedAt) {
-    throw new Error(invalidRegistryMessage)
-  }
-  return { kind: operation.kind, phase: operation.phase, startedAt }
+  if (!operation || !isOperationKind(operation.kind)) throw new Error(invalidRegistryMessage)
+  return { kind: operation.kind }
 }
 
 function optionalProgress(value: unknown): BranchWorkspaceRepositoryMember['progress'] | undefined {
@@ -399,10 +491,6 @@ function isProgress(value: unknown): value is BranchWorkspaceRepositoryMember['p
 
 function isOperationKind(value: unknown): value is BranchWorkspaceOperationSnapshot['kind'] {
   return value === 'create' || value === 'extend' || value === 'reduce' || value === 'repair' || value === 'remove'
-}
-
-function isOperationPhase(value: unknown): value is BranchWorkspaceOperationSnapshot['phase'] {
-  return value === 'pending' || value === 'running' || value === 'cancelled' || value === 'failed'
 }
 
 function exactText(value: unknown): string | null {

@@ -32,7 +32,7 @@ import {
   getRemoteTrackingBranches as getLocalRemoteTrackingBranches,
 } from '#/system/git/remote-refs.ts'
 import { getWorkingStatus } from '#/system/git/status.ts'
-import { createWorktree, getWorktrees, removeWorktree } from '#/system/git/worktrees.ts'
+import { createWorktree, getWorktrees, pruneWorktrees, removeWorktree } from '#/system/git/worktrees.ts'
 import { getWorktreePatch } from '#/system/git/patch.ts'
 import {
   bootstrapWorktreeAfterCreate,
@@ -49,7 +49,11 @@ import { commitAllChanges } from '#/system/git/commit.ts'
 import { mergeBranch } from '#/system/git/merge.ts'
 import { discardChangesForPaths, resetHardToCurrentHead } from '#/system/git/reset.ts'
 import { type CommitDetail, type CommitHistoryEntry, type ExecResult, type WorktreeStatus } from '#/shared/git-types.ts'
-import { resolveKnownWorktree, resolveRemovableWorktree } from '#/shared/worktree-guards.ts'
+import {
+  resolveKnownWorktree,
+  resolvePrunableWorktree,
+  resolveRemovableWorktree,
+} from '#/shared/worktree-guards.ts'
 import { isValidCwd, MAX_IPC_PATH_LENGTH } from '#/shared/input-validation.ts'
 import { validateBranchDeletionPolicy, validateRemovableWorktreeState } from '#/shared/repo-action-policy.ts'
 import { resolveRemoteTarget as resolveSshRemoteTarget } from '#/system/ssh/config.ts'
@@ -86,6 +90,7 @@ import {
   mergeRemoteBranch,
   pullRemoteBranch,
   pushRemoteBranch,
+  pruneRemoteWorktrees,
   resetRemoteHard,
   removeRemoteWorktree,
   validateRemoteWorktreeBootstrapSelections,
@@ -202,6 +207,7 @@ export interface RepoBackend {
     },
     signal?: AbortSignal,
   ): Promise<ExecResult>
+  cleanupWorktree(worktreePath: string, signal?: AbortSignal): Promise<ExecResult>
   getCommitMessageContext?(worktreePath: string, signal?: AbortSignal): Promise<CommitMessageContextResult>
   getPatch(worktreePath: string, signal?: AbortSignal): Promise<ExecResult>
   getBrowserRemoteUrl(branch?: string, signal?: AbortSignal): Promise<string | null>
@@ -567,6 +573,13 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
         signal,
       )
     },
+    async cleanupWorktree(worktreePath, signal) {
+      if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
+      const worktrees = await getWorktrees(repoId, { includeStatus: false, signal })
+      const prunable = resolvePrunableWorktree(worktrees, worktreePath, repoId)
+      if (!prunable.ok) return { ok: false, message: prunable.message }
+      return await pruneWorktrees(repoId, { signal })
+    },
     async getCommitMessageContext(worktreePath, signal) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       const worktrees = await getWorktrees(repoId, { includeStatus: false, signal })
@@ -764,6 +777,9 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
     },
     async removeWorktree(input, signal) {
       return await removeRemoteWorktree(target, { ...input, signal })
+    },
+    async cleanupWorktree(worktreePath, signal) {
+      return await pruneRemoteWorktrees(target, { worktreePath, signal })
     },
     async getPatch(worktreePath, signal) {
       return await getRemotePatch(target, worktreePath, { signal })

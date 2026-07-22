@@ -15,7 +15,7 @@ function member(overrides: Partial<BranchWorkspaceRepositorySnapshot> = {}): Bra
     branchOrigin: 'created',
     worktreePath,
     progress: 'complete',
-    observedState: 'ready',
+    ready: true,
     ...overrides,
   }
 }
@@ -72,7 +72,7 @@ describe('resolveBranchWorkspaceMemberTarget', () => {
   })
 
   test('rejects a member whose observed worktree is not ready', () => {
-    expect(resolve(member({ observedState: 'missing' }))).toEqual({
+    expect(resolve(member({ ready: false }))).toEqual({
       ok: false,
       reason: 'workspace.branch-workspace.member-not-ready',
     })

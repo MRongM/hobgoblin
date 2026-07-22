@@ -37,6 +37,7 @@ describe('branch workspace local materialization source', () => {
     await mkdir(path.join(root, 'api'))
     await mkdir(path.join(root, 'docs'))
     await mkdir(path.join(root, 'goblin-existing'))
+    await mkdir(path.join(root, 'hobgoblin-existing'))
     await mkdir(path.join(root, '.goblin-staging'))
     await mkdir(outside)
     await writeFile(path.join(root, 'README.md'), 'readme')
@@ -182,6 +183,15 @@ describe('branch workspace local materialization source', () => {
     await expect(readFile(source, 'utf8')).resolves.toBe('keep')
     await removeBranchWorkspaceEntry(root, branchRoot)
     await expect(lstat(branchRoot)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  test('creates directories with the current managed prefix', async () => {
+    const { root } = await createFixture()
+    const branchRoot = path.join(root, 'hobgoblin-feature-auth')
+
+    await createBranchWorkspaceDirectory(root, branchRoot)
+
+    await expect(lstat(branchRoot)).resolves.toMatchObject({})
   })
 
   test('rejects mutations outside the workspace and sources below a root child', async () => {

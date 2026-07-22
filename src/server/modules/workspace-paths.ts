@@ -3,6 +3,7 @@ import { access } from 'node:fs/promises'
 import path from 'node:path'
 import { REMOTE_PATH_EXISTS_MARKER, REMOTE_PATH_MISSING_MARKER, runRemoteCommand } from '#/system/ssh/commands.ts'
 import { resolveRemoteTarget as resolveSshRemoteTarget } from '#/system/ssh/config.ts'
+import { BRANCH_WORKSPACE_DIRECTORY_PREFIX, isBranchWorkspaceDirectoryName } from '#/shared/branch-workspaces.ts'
 import {
   isRemoteRepoId,
   normalizeRemoteRepoId,
@@ -13,7 +14,6 @@ import {
 } from '#/shared/remote-repo.ts'
 import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
 
-const branchWorkspacePrefix = 'goblin-'
 const branchWorkspaceReadableLength = 48
 
 export function workspaceRootId(rootId: string): string {
@@ -56,7 +56,7 @@ export function branchWorkspaceDirectoryName(branch: string, occupiedNames: Read
     .replace(/^-+|-+$/g, '')
     .slice(0, branchWorkspaceReadableLength)
     .replace(/-+$/g, '')
-  const base = `${branchWorkspacePrefix}${readable || 'branch'}`
+  const base = `${BRANCH_WORKSPACE_DIRECTORY_PREFIX}${readable || 'branch'}`
   if (!occupiedNames.has(base)) return base
 
   const hash = createHash('sha256').update(normalizedBranch).digest('hex')
@@ -71,7 +71,7 @@ export function branchWorkspaceDirectoryName(branch: string, occupiedNames: Read
 }
 
 export function branchWorkspacePath(rootId: string, directoryName: string): string {
-  if (!isWorkspaceRepositoryName(directoryName) || !directoryName.startsWith(branchWorkspacePrefix)) {
+  if (!isBranchWorkspaceDirectoryName(directoryName)) {
     throw new Error('workspace.branch-workspace.invalid-directory')
   }
   if (!isRemoteRepoId(rootId)) return path.join(workspaceRootId(rootId), directoryName)

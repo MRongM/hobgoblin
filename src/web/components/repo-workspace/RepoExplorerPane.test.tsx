@@ -1080,7 +1080,7 @@ describe('RepoExplorerPane', () => {
     expect(fileTree?.getAttribute('data-toolbar-height')).toBe('detail')
     expect(explorerToolbar?.style.getPropertyValue('--goblin-file-tree-topbar-font-size')).toBe('')
     expect(firstTab?.className).toContain('text-[length:var(--goblin-file-tree-topbar-font-size)]')
-    expect(tabIcons).toHaveLength(4)
+    expect(tabIcons).toHaveLength(3)
     expect(tabIcons.every((icon) => icon.classList.contains('size-3.5'))).toBe(true)
     await act(async () => root.unmount())
   })
@@ -1336,7 +1336,7 @@ describe('RepoExplorerPane', () => {
     })
 
     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['file-tree.title', 'tab.changes', 'tab.status', 'tab.history'])
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['file-tree.title', 'tab.changes', 'tab.status'])
     expect(container.querySelector('[data-testid="project-file-tree"]')).toBeTruthy()
 
     await act(async () => {
@@ -1418,7 +1418,7 @@ describe('RepoExplorerPane', () => {
   test('keeps the ports tab available for remote repositories', async () => {
     seedRepoState({
       id: 'ssh-config://prod/srv/repo',
-      branches: [createRepoBranch('main')],
+      branches: [createRepoBranch('main', { worktree: { path: '/srv/repo' } })],
       currentBranch: 'main',
       selectedBranch: 'main',
     })
@@ -1429,12 +1429,24 @@ describe('RepoExplorerPane', () => {
       root.render(<RepoExplorerPane repoId="ssh-config://prod/srv/repo" layout="left-right" showActions />)
     })
 
-    const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['file-tree.title', 'tab.changes', 'tab.status', 'tab.history'])
+    let tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['tab.status', 'file-tree.title', 'tab.changes'])
 
-    // ports is in the collapsed overflow area — activate it via the store action
     await act(async () => {
-      useReposStore.getState().setExplorerTab('ssh-config://prod/srv/repo', 'ports')
+      container.querySelector<HTMLButtonElement>('[data-testid="explorer-tabs-overflow-toggle"]')?.click()
+    })
+    tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'tab.status',
+      'file-tree.title',
+      'tab.changes',
+      'tab.history',
+      'tab.local',
+      'tab.remote-branches',
+      'ports.title',
+    ])
+    await act(async () => {
+      tabs[6]?.click()
     })
 
     expect(container.querySelector('[data-testid="project-file-tree"]')).toBeNull()
@@ -1494,7 +1506,7 @@ describe('RepoExplorerPane', () => {
     expect(tablist?.className).toContain('min-w-full')
     expect(tablist?.className).toContain('gap-0.5')
     expect(tablist?.getAttribute('aria-orientation')).toBe('horizontal')
-    expect(container.querySelectorAll('[role="tab"]').length).toBe(4)
+    expect(container.querySelectorAll('[role="tab"]').length).toBe(3)
     await act(async () => root.unmount())
   })
 
@@ -1530,9 +1542,14 @@ describe('RepoExplorerPane', () => {
       root.render(<RepoExplorerPane repoId="/repo" layout="left-right" showActions />)
     })
 
-    const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
     await act(async () => {
-      tabs[3]?.click()
+      container.querySelector<HTMLButtonElement>('[data-testid="explorer-tabs-overflow-toggle"]')?.click()
+    })
+    const historyTab = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find(
+      (tab) => tab.textContent === 'tab.history',
+    )
+    await act(async () => {
+      historyTab?.click()
     })
     await act(async () => {
       container.querySelector<HTMLButtonElement>('[data-testid="project-history-panel"]')?.click()
@@ -1588,7 +1605,7 @@ describe('RepoExplorerPane', () => {
     })
 
     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['file-tree.title', 'tab.changes', 'tab.status', 'tab.history'])
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['file-tree.title', 'tab.changes', 'tab.status'])
     const toggle = container.querySelector<HTMLButtonElement>('[data-testid="explorer-tabs-overflow-toggle"]')
     expect(toggle).toBeTruthy()
     expect(toggle?.getAttribute('aria-expanded')).toBe('false')
@@ -1636,9 +1653,32 @@ describe('RepoExplorerPane', () => {
       'file-tree.title',
       'tab.changes',
       'tab.status',
-      'tab.history',
       'tab.local',
     ])
+    await act(async () => root.unmount())
+  })
+
+  test('shows the active history tab inline while overflow is collapsed', async () => {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="left-right" showActions />)
+    })
+
+    await act(async () => {
+      useReposStore.getState().setExplorerTab(REPO_ID, 'history')
+    })
+
+    const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'file-tree.title',
+      'tab.changes',
+      'tab.status',
+      'tab.history',
+    ])
+    expect(tabs[3]?.getAttribute('aria-selected')).toBe('true')
+    expect(container.querySelector('[data-testid="project-history-panel"]')).toBeTruthy()
     await act(async () => root.unmount())
   })
 
@@ -1659,10 +1699,9 @@ describe('RepoExplorerPane', () => {
       'file-tree.title',
       'tab.changes',
       'tab.status',
-      'tab.history',
       'tab.remote-branches',
     ])
-    expect(tabs[4]?.getAttribute('aria-selected')).toBe('true')
+    expect(tabs[3]?.getAttribute('aria-selected')).toBe('true')
     expect(container.querySelector('[data-testid="project-remote-branches-panel"]')).toBeTruthy()
     await act(async () => root.unmount())
   })

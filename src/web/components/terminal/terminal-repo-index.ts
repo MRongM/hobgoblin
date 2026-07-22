@@ -53,7 +53,7 @@ export function repoIndexWithBranchWorkspaces(
   const next: TerminalRepoIndex = { ...repoIndex }
   const clonedRoots = new Set<string>()
   for (const workspace of branchWorkspaces) {
-    if (workspace.lifecycle === 'delete-incomplete') continue
+    if (!workspace.available) continue
     const root = next[workspace.rootId]
     if (!root) continue
     if (!clonedRoots.has(workspace.rootId)) {
@@ -68,6 +68,10 @@ export function repoIndexWithBranchWorkspaces(
   return next
 }
 
-export function branchForTerminalWorktree(repoIndex: TerminalRepoIndex, repoRoot: string, worktreePath: string): string | null {
+export function branchForTerminalWorktree(
+  repoIndex: TerminalRepoIndex,
+  repoRoot: string,
+  worktreePath: string,
+): string | null {
   return repoIndex[repoRoot]?.branchByWorktreePath[worktreePath] ?? null
 }

@@ -329,7 +329,12 @@ beforeEach(() => {
   closeMock.mockResolvedValue(true)
   createTerminalMock.mockReset()
   branchWorkspaceMocks.readBranchWorkspaces.mockReset()
-  branchWorkspaceMocks.readBranchWorkspaces.mockResolvedValue({ ok: true, rootId: REPO_ID, items: [], auxiliaryCandidates: [] })
+  branchWorkspaceMocks.readBranchWorkspaces.mockResolvedValue({
+    ok: true,
+    rootId: REPO_ID,
+    items: [],
+    auxiliaryCandidates: [],
+  })
   createTerminalMock.mockImplementation(async (input) => {
     const currentSessions = await listSessionsMock({ repoRoot: input.repoRoot })
     const terminalId =
@@ -1164,7 +1169,7 @@ describe('TerminalSessionProvider', () => {
           branch: 'feature/auth',
           directoryName: 'goblin-feature',
           path: branchWorkspacePath,
-          lifecycle: 'ready',
+          state: { kind: 'ready' },
           available: true,
           issues: [],
           repositories: [],

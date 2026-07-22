@@ -113,11 +113,20 @@ describe('parseBranches', () => {
   test('attaches worktree info when branch matches', () => {
     const line = ['feat', 'h', 's', 'd', 'a', '', ''].join(SEP)
     const result = parseBranches(line, 'main', [
-      { path: '/wt/feat', branch: 'feat', isBare: false, isPrimary: false, isDirty: true, changeCount: 3 },
+      {
+        path: '/wt/feat',
+        branch: 'feat',
+        isBare: false,
+        isPrimary: false,
+        isDirty: true,
+        changeCount: 3,
+        isPrunable: true,
+      },
     ])
     expect(result[0]?.worktree?.path).toBe('/wt/feat')
     expect(result[0]?.worktree?.summary?.dirty).toBe(true)
     expect(result[0]?.worktree?.isPrimary).toBe(false)
+    expect(result[0]?.worktree?.isPrunable).toBe(true)
     expect(result[0]?.worktree?.summary?.changeCount).toBe(3)
   })
 
@@ -315,6 +324,19 @@ describe('parseWorktrees', () => {
 
     const bare = ['worktree /repo/wt2', 'HEAD a', 'branch refs/heads/x', 'locked'].join('\n')
     expect(parseWorktrees(bare)[0]?.isLocked).toBe(true)
+  })
+
+  test('flags immediately prunable worktrees (with or without reason)', () => {
+    const withReason = [
+      'worktree /repo/wt',
+      'HEAD a',
+      'branch refs/heads/feat',
+      'prunable gitdir file points to non-existent location',
+    ].join('\n')
+    expect(parseWorktrees(withReason)[0]?.isPrunable).toBe(true)
+
+    const bare = ['worktree /repo/wt2', 'HEAD a', 'branch refs/heads/x', 'prunable'].join('\n')
+    expect(parseWorktrees(bare)[0]?.isPrunable).toBe(true)
   })
 
   test('detached HEAD has no branch line — branch left undefined', () => {

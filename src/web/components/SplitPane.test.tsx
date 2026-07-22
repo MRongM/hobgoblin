@@ -63,19 +63,20 @@ afterEach(() => {
 })
 
 describe('SplitPane controlled trailing panel', () => {
-  test('hides the trailing panel while collapsed and restores the layout on expand', () => {
+  test('keeps the trailing panel root measurable while collapsed and restores the layout on expand', () => {
     const onAfterSizeChange = vi.fn()
     renderSplitPane(false, onAfterSizeChange)
 
-    expect(group()?.className).not.toContain('[&>[data-panel]:last-child]:!hidden')
+    expect(group()?.className).not.toContain('[&>[data-panel]:last-child]:!grow-0')
     expect(resizable.setLayout).toHaveBeenLastCalledWith({ before: 65, after: 35 })
 
     renderSplitPane(true, onAfterSizeChange)
 
-    // Collapse is CSS-only: the trailing panel and handle are display:none
-    // (via a group-level rule — Panel does not forward className), the
-    // layout is left untouched, and no size writes reach the store.
-    expect(group()?.className).toContain('[&>[data-panel]:last-child]:!hidden')
+    // Keep the panel root in flex layout so react-resizable-panels can retain
+    // its DOM order while the nested panel content and handle stay hidden.
+    expect(group()?.className).toContain('[&>[data-panel]:last-child]:!grow-0')
+    expect(group()?.className).not.toContain('[&>[data-panel]:last-child]:!hidden')
+    expect(panel('after')?.classList.contains('hidden')).toBe(true)
     expect(handle()?.className).toContain('!hidden')
     expect(handle()?.getAttribute('data-disabled')).toBe('true')
     resizable.setLayout.mockClear()
@@ -88,7 +89,8 @@ describe('SplitPane controlled trailing panel', () => {
 
     // Expand re-applies the controlled percentage layout.
     expect(resizable.setLayout).toHaveBeenLastCalledWith({ before: 65, after: 35 })
-    expect(group()?.className).not.toContain('[&>[data-panel]:last-child]:!hidden')
+    expect(group()?.className).not.toContain('[&>[data-panel]:last-child]:!grow-0')
+    expect(panel('after')?.classList.contains('hidden')).toBe(false)
     expect(handle()?.className ?? '').not.toContain('!hidden')
     expect(handle()?.getAttribute('data-disabled')).toBe('false')
   })
@@ -97,7 +99,9 @@ describe('SplitPane controlled trailing panel', () => {
     const onAfterSizeChange = vi.fn()
     renderSplitPane(false, onAfterSizeChange, true)
 
-    expect(group()?.className).toContain('[&>[data-panel]:first-child]:!hidden')
+    expect(group()?.className).toContain('[&>[data-panel]:first-child]:!grow-0')
+    expect(group()?.className).not.toContain('[&>[data-panel]:first-child]:!hidden')
+    expect(panel('before')?.classList.contains('hidden')).toBe(true)
     expect(handle()?.className).toContain('!hidden')
     expect(handle()?.getAttribute('data-disabled')).toBe('true')
 
@@ -107,7 +111,8 @@ describe('SplitPane controlled trailing panel', () => {
     resizable.setLayout.mockClear()
     renderSplitPane(false, onAfterSizeChange, false)
 
-    expect(group()?.className).not.toContain('[&>[data-panel]:first-child]:!hidden')
+    expect(group()?.className).not.toContain('[&>[data-panel]:first-child]:!grow-0')
+    expect(panel('before')?.classList.contains('hidden')).toBe(false)
     expect(resizable.setLayout).toHaveBeenLastCalledWith({ before: 65, after: 35 })
   })
 
@@ -129,6 +134,10 @@ function group() {
 
 function handle() {
   return container?.querySelector('[data-testid="resizable-handle"]')
+}
+
+function panel(id: 'before' | 'after') {
+  return container?.querySelector(`[data-testid="resizable-panel-${id}"]`)
 }
 
 function renderSplitPane(afterCollapsed: boolean, onAfterSizeChange: (size: number) => void, beforeCollapsed = false) {

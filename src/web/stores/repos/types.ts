@@ -34,6 +34,7 @@ export type RepoEventAction =
   | { kind: 'createBranch'; branch: string; baseBranch: string }
   | { kind: 'trackRemoteBranch'; branch: string; remoteRef: string }
   | { kind: 'deleteBranch'; branch: string }
+  | { kind: 'cleanupWorktree'; branch: string; worktreePath: string }
   | { kind: 'removeWorktree'; branch: string; worktreePath: string; alsoDeleteBranch: boolean }
 
 export interface RepoResultEventOptions {
@@ -66,6 +67,7 @@ export interface RepoWorktreeState {
   isDirty?: boolean
   changeCount?: number
   isLocked?: boolean
+  isPrunable?: boolean
 }
 
 export interface RepoUiState {
