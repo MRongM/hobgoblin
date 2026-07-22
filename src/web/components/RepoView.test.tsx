@@ -10,6 +10,7 @@ import { useReposStore } from '#/web/stores/repos/store.ts'
 
 const branchWorkspaceQueryState = vi.hoisted(() => ({
   includeItem: true,
+  isFetching: false,
   repositories: [] as Array<{
     repositoryName: string
     targetBranch: string
@@ -17,7 +18,7 @@ const branchWorkspaceQueryState = vi.hoisted(() => ({
     branchOrigin: 'created'
     worktreePath: string
     progress: 'complete'
-    observedState: 'ready'
+    observedState: 'ready' | 'pending'
   }>,
 }))
 
@@ -120,6 +121,7 @@ vi.mock('#/web/branch-workspace-queries.ts', () => ({
         : [],
     },
     isPending: false,
+    isFetching: branchWorkspaceQueryState.isFetching,
   }),
 }))
 
@@ -236,6 +238,7 @@ beforeEach(() => {
   resetReposStore()
   branchWorkspaceQueryState.repositories = []
   branchWorkspaceQueryState.includeItem = true
+  branchWorkspaceQueryState.isFetching = false
   setCompactUi(true)
 })
 
@@ -732,6 +735,88 @@ describe('RepoView', () => {
       kind: 'branch-workspace',
       branchWorkspaceId: 'branch-1',
     })
+  })
+
+  test('keeps the selected member while a stale not-ready snapshot is refetching', () => {
+    const memberRepoId = `${REPO_ID}/api`
+    const memberWorktreePath = `${REPO_ID}/goblin-feature-auth/api`
+    const rootRepo = seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    const memberRepo = seedRepoState({
+      id: memberRepoId,
+      branches: [createRepoBranch('feature/auth', { worktree: { path: memberWorktreePath } })],
+      currentBranch: 'main',
+      selectedBranch: 'feature/auth',
+    })
+    branchWorkspaceQueryState.repositories = [
+      {
+        repositoryName: 'api',
+        targetBranch: 'feature/auth',
+        baseBranch: 'main',
+        branchOrigin: 'created',
+        worktreePath: memberWorktreePath,
+        progress: 'complete',
+        observedState: 'pending',
+      },
+    ]
+    branchWorkspaceQueryState.isFetching = true
+    const activateBranchWorkspace = vi.fn((rootId: string, branchWorkspaceId: string) => {
+      useReposStore.setState((state) => ({
+        activeId: rootId,
+        workspaceActiveContextByRoot: {
+          ...state.workspaceActiveContextByRoot,
+          [rootId]: { kind: 'branch-workspace', branchWorkspaceId },
+        },
+      }))
+    })
+    useReposStore.setState({
+      repos: { [REPO_ID]: rootRepo, [memberRepoId]: memberRepo },
+      activeId: REPO_ID,
+      workspaceProjects: {
+        [REPO_ID]: {
+          rootId: REPO_ID,
+          repositoryIds: [memberRepoId],
+          candidates: [{ id: memberRepoId, name: 'api', selected: true, available: true }],
+          configured: true,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+      workspaceActiveContextByRoot: {
+        [REPO_ID]: {
+          kind: 'branch-workspace',
+          branchWorkspaceId: 'branch-1',
+          memberRepositoryName: 'api',
+        },
+      },
+      activateBranchWorkspace,
+    })
+
+    renderRepoView()
+
+    expect(activateBranchWorkspace).not.toHaveBeenCalled()
+    expect(useReposStore.getState().workspaceActiveContextByRoot[REPO_ID]).toMatchObject({
+      kind: 'branch-workspace',
+      memberRepositoryName: 'api',
+    })
+    expect(
+      container?.querySelector('[data-testid="branch-workspace-pane"]')?.getAttribute('data-fallback-member'),
+    ).toBe('')
+
+    branchWorkspaceQueryState.repositories[0]!.observedState = 'ready'
+    branchWorkspaceQueryState.isFetching = false
+    rerenderRepoView(REPO_ID)
+
+    expect(container?.querySelector('[data-testid="branch-workspace-pane"]')?.getAttribute('data-member-repo-id')).toBe(
+      memberRepoId,
+    )
   })
 
   test('expands the persisted file area when a branch workspace member requests navigation', () => {

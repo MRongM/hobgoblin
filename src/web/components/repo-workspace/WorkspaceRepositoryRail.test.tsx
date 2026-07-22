@@ -97,11 +97,17 @@ const branchWorkspaceState = vi.hoisted(() => ({
       repositories: [],
       auxiliaryEntries: [],
     },
-  ],
+  ] as BranchWorkspaceSnapshot[],
   reorder: vi.fn(async () => true),
   cancel: vi.fn(async () => {}),
+  requestPlan: vi.fn(async () => true),
   refresh: vi.fn(),
   dialogRefresh: null as null | (() => Promise<unknown>),
+  dialogProps: null as null | {
+    open: boolean
+    mode: string
+    workspace: BranchWorkspaceSnapshot | null
+  },
 }))
 
 const branchGitActionState = vi.hoisted(() => ({
@@ -156,6 +162,8 @@ const branchWorkspaceListState = vi.hoisted(() => ({
     onGitAction?: (item: BranchWorkspaceSnapshot, kind: BranchWorkspaceGitActionKind) => void
     gitActionPanel?: { itemId: string; content: ReactNode } | null
     onCancel?: (item: BranchWorkspaceSnapshot) => void | Promise<void>
+    onExtend?: (item: BranchWorkspaceSnapshot) => void
+    onReduce?: (item: BranchWorkspaceSnapshot, resume?: boolean) => void
   },
 }))
 
@@ -173,7 +181,7 @@ vi.mock('#/web/hooks/useBranchWorkspaceActions.ts', () => ({
     result: null,
     pending: false,
     error: null,
-    requestPlan: vi.fn(async () => true),
+    requestPlan: branchWorkspaceState.requestPlan,
     confirm: vi.fn(async () => null),
     retry: vi.fn(async () => null),
     cancel: branchWorkspaceState.cancel,
@@ -211,10 +219,17 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspaceList.tsx', () => ({
 
 vi.mock('#/web/components/repo-workspace/BranchWorkspaceDialog.tsx', () => ({
   BranchWorkspaceDialog: ({
+    open,
+    mode,
+    workspace,
     onRefreshAuxiliaryCandidates,
   }: {
+    open: boolean
+    mode: string
+    workspace: BranchWorkspaceSnapshot | null
     onRefreshAuxiliaryCandidates?: () => Promise<unknown>
   }) => {
+    branchWorkspaceState.dialogProps = { open, mode, workspace }
     branchWorkspaceState.dialogRefresh = onRefreshAuxiliaryCandidates ?? null
     return null
   },
@@ -313,6 +328,9 @@ beforeEach(() => {
   branchWorkspaceState.dialogRefresh = null
   branchWorkspaceState.cancel.mockReset()
   branchWorkspaceState.cancel.mockResolvedValue(undefined)
+  branchWorkspaceState.requestPlan.mockReset()
+  branchWorkspaceState.requestPlan.mockResolvedValue(true)
+  branchWorkspaceState.dialogProps = null
   branchGitActionState.requestPlan.mockReset()
   branchGitActionState.requestPlan.mockResolvedValue(true)
   branchGitActionState.executeBatchCommit.mockReset()
@@ -602,6 +620,65 @@ describe('WorkspaceRepositoryRail', () => {
       'push',
     )
     expect(branchGitPanelState.props?.activeOperation).toBeNull()
+  })
+
+  test('opens directional member dialogs and resumes durable reduction intent', async () => {
+    renderRail({ currentRepoId: ROOT })
+    const item = branchWorkspaceState.items[0]!
+
+    act(() => branchWorkspaceListState.props?.onExtend?.(item))
+    expect(branchWorkspaceState.dialogProps).toMatchObject({ open: true, mode: 'extend', workspace: item })
+
+    act(() => branchWorkspaceListState.props?.onReduce?.(item))
+    expect(branchWorkspaceState.dialogProps).toMatchObject({ open: true, mode: 'reduce', workspace: item })
+
+    const interrupted: BranchWorkspaceSnapshot = {
+      ...item,
+      lifecycle: 'reduce-incomplete',
+      operation: { kind: 'reduce', phase: 'failed', startedAt: '2026-07-22T00:00:00.000Z' },
+      repositories: item.repositories.map((member, index) => ({
+        ...member,
+        progress: index === 0 ? 'removed' : 'failed',
+        observedState: index === 0 ? 'missing' : 'failed',
+      })),
+    }
+    await act(async () => {
+      branchWorkspaceListState.props?.onReduce?.(interrupted, true)
+      await Promise.resolve()
+    })
+    expect(branchWorkspaceState.requestPlan).toHaveBeenCalledWith({
+      operation: 'reduce',
+      branchWorkspaceId: interrupted.id,
+      repositories: ['api', 'web'],
+    })
+  })
+
+  test('falls back to the branch workspace root when the selected member is removed', () => {
+    const originalItems = branchWorkspaceState.items
+    const current = originalItems[0]!
+    branchWorkspaceState.items = [
+      {
+        ...current,
+        lifecycle: 'reduce-incomplete',
+        operation: { kind: 'reduce', phase: 'failed', startedAt: '2026-07-22T00:00:00.000Z' },
+        repositories: current.repositories.map((member) =>
+          member.repositoryName === 'api'
+            ? { ...member, progress: 'removed' as const, observedState: 'missing' as const }
+            : member,
+        ),
+      },
+    ]
+    useReposStore.setState({
+      activeId: ROOT,
+      workspaceActiveContextByRoot: {
+        [ROOT]: { kind: 'branch-workspace', branchWorkspaceId: current.id, memberRepositoryName: 'api' },
+      },
+    })
+
+    renderRail({ currentRepoId: ROOT })
+
+    branchWorkspaceState.items = originalItems
+    expect(activateBranchWorkspace).toHaveBeenCalledWith(ROOT, current.id)
   })
 
   test('routes active batch Git cancellation to the rail-owned Git action hook', async () => {

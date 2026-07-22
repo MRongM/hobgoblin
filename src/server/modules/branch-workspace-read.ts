@@ -117,8 +117,9 @@ async function projectBranchWorkspace(
         ),
     ),
   )
+  const retainedAuxiliaryEntries = manifest.auxiliaryEntries.filter((entry) => entry.progress !== 'complete')
   const auxiliaryEntries = await Promise.all(
-    manifest.auxiliaryEntries.map(
+    retainedAuxiliaryEntries.map(
       async (entry) => await reconcileAuxiliaryEntry(manifest, entry, inspect, signal, issues),
     ),
   )
@@ -149,7 +150,10 @@ async function reconcileRepositoryMember(
   snapshotPromise: Promise<RepoSnapshot | null> | undefined,
   issues: BranchWorkspaceIssue[],
 ): Promise<BranchWorkspaceRepositorySnapshot> {
-  if (member.progress === 'removed' && manifest.operation?.kind === 'remove') {
+  if (
+    member.progress === 'removed' &&
+    (manifest.operation?.kind === 'remove' || manifest.operation?.kind === 'reduce')
+  ) {
     return { ...member, observedState: 'missing' }
   }
   if (member.progress === 'pending') {
@@ -260,6 +264,7 @@ function projectLifecycle(
 ): BranchWorkspaceSnapshot['lifecycle'] {
   if (activeOperation) return 'active'
   if (manifest.operation?.kind === 'remove') return 'delete-incomplete'
+  if (manifest.operation?.kind === 'reduce') return 'reduce-incomplete'
   if (manifest.operation?.kind === 'repair') return 'needs-repair'
   const hasCreateProgress = issues.some(
     (issue) =>

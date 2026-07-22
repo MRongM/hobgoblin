@@ -4,6 +4,7 @@ import { isBranchWorkspaceApproval, normalizeBranchWorkspacePlanRequest } from '
 describe('branch workspace contracts', () => {
   test('recognizes repository dependency replacement approval without accepting broader overwrite intent', () => {
     expect(isBranchWorkspaceApproval('replace-repository-dependencies')).toBe(true)
+    expect(isBranchWorkspaceApproval('discard-member-changes')).toBe(true)
     expect(isBranchWorkspaceApproval('replace-everything')).toBe(false)
   })
 
@@ -99,6 +100,23 @@ describe('branch workspace contracts', () => {
     })
   })
 
+  test('normalizes member reduction requests while preserving selected repository order', () => {
+    expect(
+      normalizeBranchWorkspacePlanRequest({
+        operation: 'reduce',
+        branchWorkspaceId: ' workspace-1 ',
+        repositories: [' web ', 'api'],
+      }),
+    ).toEqual({
+      ok: true,
+      request: {
+        operation: 'reduce',
+        branchWorkspaceId: 'workspace-1',
+        repositories: ['web', 'api'],
+      },
+    })
+  })
+
   test.each([
     ['unknown operation', { operation: 'move' }],
     [
@@ -159,6 +177,16 @@ describe('branch workspace contracts', () => {
         alsoDeleteUpstream: true,
       },
     ],
+    ['empty member reduction', { operation: 'reduce', branchWorkspaceId: 'workspace-1', repositories: [] }],
+    [
+      'duplicate member reduction',
+      { operation: 'reduce', branchWorkspaceId: 'workspace-1', repositories: ['api', 'api'] },
+    ],
+    [
+      'unsafe member reduction name',
+      { operation: 'reduce', branchWorkspaceId: 'workspace-1', repositories: ['../api'] },
+    ],
+    ['non-array member reduction', { operation: 'reduce', branchWorkspaceId: 'workspace-1', repositories: 'api' }],
   ])('rejects %s', (_label, request) => {
     expect(normalizeBranchWorkspacePlanRequest(request)).toEqual({
       ok: false,

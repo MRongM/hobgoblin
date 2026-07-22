@@ -23,7 +23,9 @@ import {
   ChevronDown,
   ChevronRight,
   Eye,
+  FolderMinus,
   FolderKanban,
+  FolderPlus,
   GitCompareArrows,
   GitMerge,
   RotateCcw,
@@ -84,6 +86,8 @@ export interface BranchWorkspaceListProps {
   onInspect: (item: BranchWorkspaceSnapshot) => void
   onRepair: (item: BranchWorkspaceSnapshot) => void
   onRemove: (item: BranchWorkspaceSnapshot) => void
+  onExtend?: (item: BranchWorkspaceSnapshot) => void
+  onReduce?: (item: BranchWorkspaceSnapshot, resume?: boolean) => void
   onCancel: (item: BranchWorkspaceSnapshot) => void | Promise<void>
   getMemberPresentation?: (
     item: BranchWorkspaceSnapshot,
@@ -111,6 +115,8 @@ export function BranchWorkspaceList({
   onInspect,
   onRepair,
   onRemove,
+  onExtend,
+  onReduce,
   onCancel,
   getMemberPresentation,
   onOpenRepositoryMember,
@@ -122,7 +128,7 @@ export function BranchWorkspaceList({
   onGitAction,
   gitActionPanel = null,
 }: BranchWorkspaceListProps) {
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => (activeId ? new Set([activeId]) : new Set()))
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -172,6 +178,8 @@ export function BranchWorkspaceList({
               onInspect={onInspect}
               onRepair={onRepair}
               onRemove={onRemove}
+              onExtend={onExtend}
+              onReduce={onReduce}
               onCancel={onCancel}
               getMemberPresentation={getMemberPresentation}
               onOpenRepositoryMember={onOpenRepositoryMember}
@@ -203,6 +211,8 @@ function BranchWorkspaceRow({
   onInspect,
   onRepair,
   onRemove,
+  onExtend,
+  onReduce,
   onCancel,
   getMemberPresentation,
   onOpenRepositoryMember,
@@ -315,6 +325,32 @@ function BranchWorkspaceRow({
           },
         ]
       : []
+  const readyMembershipActions: BranchWorkspaceItemAction[] = ready
+    ? [
+        ...(onExtend
+          ? [
+              {
+                label: 'workspace.branch-workspace.add-members',
+                icon: <FolderPlus aria-hidden="true" />,
+                disabled,
+                separated: true,
+                onSelect: () => onExtend(item),
+              },
+            ]
+          : []),
+        ...(onReduce
+          ? [
+              {
+                label: 'workspace.branch-workspace.remove-members',
+                icon: <FolderMinus aria-hidden="true" />,
+                disabled,
+                destructive: true,
+                onSelect: () => onReduce(item),
+              },
+            ]
+          : []),
+      ]
+    : []
   const lowFrequencyActions: BranchWorkspaceItemAction[] =
     item.lifecycle === 'ready'
       ? [
@@ -327,7 +363,7 @@ function BranchWorkspaceRow({
             onSelect: () => onRemove(item),
           },
         ]
-      : item.lifecycle === 'create-incomplete'
+      : item.lifecycle === 'create-incomplete' || item.lifecycle === 'reduce-incomplete'
         ? [
             {
               label: 'workspace.branch-workspace.inspect',
@@ -363,7 +399,12 @@ function BranchWorkspaceRow({
                 },
               ]
             : []
-  const rowMenuActions = [...readyOpenMenuActions, ...readyGitActions, ...lowFrequencyActions]
+  const rowMenuActions = [
+    ...readyOpenMenuActions,
+    ...readyMembershipActions,
+    ...readyGitActions,
+    ...lowFrequencyActions,
+  ]
   const moreMenu = rowMenuActions.length > 0 ? <BranchWorkspaceItemMenu actions={rowMenuActions} /> : undefined
   const lifecycleAction =
     item.lifecycle === 'active' ? (
@@ -380,6 +421,10 @@ function BranchWorkspaceRow({
         onClick={() => onRepair(item)}
       >
         <RotateCcw />
+      </RowAction>
+    ) : item.lifecycle === 'reduce-incomplete' && onReduce ? (
+      <RowAction label="workspace.branch-workspace.continue-reduce" destructive onClick={() => onReduce(item, true)}>
+        <FolderMinus />
       </RowAction>
     ) : item.lifecycle === 'delete-incomplete' ? (
       <RowAction label="workspace.branch-workspace.continue-delete" destructive onClick={() => onRemove(item)}>
@@ -607,10 +652,7 @@ export function branchWorkspaceFolderContext(
     lifecycle: item.lifecycle,
     available: item.available,
     managedRootNames: Array.from(
-      new Set([
-        ...item.repositories.map((member) => lastPathSegment(member.worktreePath)).filter(Boolean),
-        ...item.auxiliaryEntries.map((entry) => entry.name),
-      ]),
+      new Set(item.repositories.map((member) => lastPathSegment(member.worktreePath)).filter(Boolean)),
     ),
   }
 }

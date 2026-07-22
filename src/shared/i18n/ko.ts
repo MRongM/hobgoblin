@@ -98,6 +98,8 @@ export const ko: Record<DictKey, string> = {
   'workspace.repositories.show': '워크스페이스 저장소 표시',
   'workspace.branch-workspace.list': '브랜치 워크스페이스',
   'workspace.branch-workspace.create': '브랜치 워크스페이스 추가',
+  'workspace.branch-workspace.add-members': '구성원 작업 트리 추가',
+  'workspace.branch-workspace.remove-members': '구성원 작업 트리 제거',
   'workspace.branch-workspace.empty': '브랜치 워크스페이스가 없습니다.',
   'workspace.branch-workspace.loading': '브랜치 워크스페이스 불러오는 중…',
   'workspace.branch-workspace.reorder': '드래그하여 브랜치 워크스페이스 순서 변경',
@@ -147,6 +149,8 @@ export const ko: Record<DictKey, string> = {
     '목록의 리포지토리 의존성을 삭제하고 다시 생성',
   'workspace.branch-workspace.approval.modified-copy': '수정된 복사 콘텐츠 삭제',
   'workspace.branch-workspace.approval.unmanaged-content': '관리되지 않은 콘텐츠 삭제',
+  'workspace.branch-workspace.approval.discard-member-changes':
+    '선택한 구성원 작업 트리의 커밋하지 않은 변경 사항 삭제',
   'workspace.branch-workspace.approval.close-terminals': '목록의 내부 터미널 닫기',
   'workspace.branch-workspace.open-editor': '편집기에서 열기',
   'workspace.branch-workspace.open-external-terminal': '외부 터미널에서 열기',
@@ -213,6 +217,9 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.retry': '작업 다시 시도',
   'workspace.branch-workspace.repair': '브랜치 워크스페이스 복구',
   'workspace.branch-workspace.continue-delete': '삭제 계속',
+  'workspace.branch-workspace.continue-reduce': '구성원 제거 계속',
+  'workspace.branch-workspace.reduce-retains-branches':
+    '선택한 구성원 작업 트리는 제거되지만 로컬 및 원격 브랜치는 유지됩니다.',
   'workspace.branch-workspace.delete-warning':
     '관리되는 작업 트리와 이 폴더를 제거하고 커밋하지 않은 변경 사항을 삭제합니다. 외부 터미널은 감지할 수 없습니다.',
   'workspace.branch-workspace.delete-local-branch': '대상 로컬 브랜치도 삭제',
@@ -225,6 +232,14 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.dialog.create.title': '브랜치 워크스페이스 추가',
   'workspace.branch-workspace.dialog.create.description': '공통 브랜치의 작업 트리와 추가 항목을 선택합니다.',
   'workspace.branch-workspace.dialog.create.confirm': '추가',
+  'workspace.branch-workspace.dialog.extend.title': '구성원 작업 트리 추가',
+  'workspace.branch-workspace.dialog.extend.description':
+    '공통 브랜치로 이 브랜치 워크스페이스에 추가할 저장소를 선택합니다.',
+  'workspace.branch-workspace.dialog.extend.confirm': '구성원 추가',
+  'workspace.branch-workspace.dialog.reduce.title': '구성원 작업 트리 제거',
+  'workspace.branch-workspace.dialog.reduce.description':
+    '이 브랜치 워크스페이스에서 제거할 구성원 작업 트리를 선택합니다.',
+  'workspace.branch-workspace.dialog.reduce.confirm': '구성원 제거',
   'workspace.branch-workspace.dialog.repair.title': '브랜치 워크스페이스 복구',
   'workspace.branch-workspace.dialog.repair.description': '변경을 확인하고 누락된 관리 콘텐츠만 다시 만듭니다.',
   'workspace.branch-workspace.dialog.repair.confirm': '복구',
@@ -235,6 +250,7 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.lifecycle.active': '진행 중',
   'workspace.branch-workspace.lifecycle.create-incomplete': '생성 미완료',
   'workspace.branch-workspace.lifecycle.needs-repair': '복구 필요',
+  'workspace.branch-workspace.lifecycle.reduce-incomplete': '구성원 제거 미완료',
   'workspace.branch-workspace.lifecycle.delete-incomplete': '삭제 미완료',
   'workspace.branch-workspace.issue.root-missing': '폴더가 없습니다.',
   'workspace.branch-workspace.issue.root-not-directory': '경로가 폴더가 아닙니다.',
@@ -252,6 +268,7 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.invalid-branch': '올바른 Git 브랜치 이름을 입력하세요.',
   'workspace.branch-workspace.base-unavailable': '선택한 기준 브랜치를 사용할 수 없습니다.',
   'workspace.branch-workspace.repository-unavailable': '선택한 저장소를 사용할 수 없습니다.',
+  'workspace.branch-workspace.member-required': '구성원 작업 트리를 하나 이상 유지해야 합니다.',
   'workspace.branch-workspace.invalid-entry': '선택한 추가 항목이 잘못되었습니다.',
   'workspace.branch-workspace.invalid-root': '워크스페이스 루트가 잘못되었습니다.',
   'workspace.branch-workspace.invalid-path': '브랜치 워크스페이스 경로가 잘못되었습니다.',
@@ -279,6 +296,8 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.not-directory': '대상이 디렉터리가 아닙니다.',
   'workspace.branch-workspace.worktree-elsewhere': '브랜치가 다른 위치에서 체크아웃되었습니다.',
   'workspace.branch-workspace.dirty-worktree': '작업 트리에 커밋하지 않은 변경 사항이 있습니다.',
+  'workspace.branch-workspace.dirty-state-unknown':
+    '선택한 구성원 작업 트리에 커밋하지 않은 변경 사항이 있는지 확인할 수 없습니다.',
   'workspace.branch-workspace.locked-worktree': '작업 트리가 잠겨 있습니다.',
   'workspace.branch-workspace.primary-worktree': '기본 작업 트리는 제거할 수 없습니다.',
   'workspace.branch-workspace.protected-branch': '보호된 브랜치는 삭제할 수 없습니다.',

@@ -48,7 +48,7 @@ type RepositoryBootstrapState =
 
 interface BranchWorkspaceDialogProps {
   open: boolean
-  mode: 'create' | 'repair' | 'remove'
+  mode: 'create' | 'extend' | 'reduce' | 'repair' | 'remove'
   repositories: BranchWorkspaceRepositoryOption[]
   auxiliaryCandidates: BranchWorkspaceAuxiliaryCandidate[]
   workspace: BranchWorkspaceSnapshot | null
@@ -114,7 +114,10 @@ export function BranchWorkspaceDialog({
     setBranch(initial.workspace?.branch ?? '')
     setSelectedRepositories(
       Object.fromEntries(
-        initial.repositories.map((repository) => [repository.name, initial.fixedRepositories.has(repository.name)]),
+        initial.repositories.map((repository) => [
+          repository.name,
+          mode === 'reduce' ? false : initial.fixedRepositories.has(repository.name),
+        ]),
       ),
     )
     setBaseBranches(
@@ -155,7 +158,7 @@ export function BranchWorkspaceDialog({
   useEffect(() => () => Object.values(bootstrapControllers.current).forEach((controller) => controller.abort()), [])
 
   useEffect(() => {
-    if (plan && (mode === 'create' || mode === 'remove')) {
+    if (plan && (mode === 'create' || mode === 'extend' || mode === 'remove')) {
       setApprovals(plan.requiredApprovals)
       return
     }
@@ -236,12 +239,23 @@ export function BranchWorkspaceDialog({
     }
   }
   const request = (): BranchWorkspacePlanRequest | null => {
-    if (mode === 'create') {
+    if (mode === 'create' || mode === 'extend') {
       const value = createRequest()
-      return value.branch && value.repositories.length > 0 ? value : null
+      const hasNewRepository = value.repositories.some(
+        (repository) => !fixedRepositories.has(repository.repositoryName),
+      )
+      return value.branch && value.repositories.length > 0 && (mode === 'create' || hasNewRepository) ? value : null
     }
     if (!workspace) return null
     if (mode === 'repair') return { operation: 'repair', branchWorkspaceId: workspace.id }
+    if (mode === 'reduce') {
+      const selected = workspace.repositories.flatMap((member) =>
+        selectedRepositories[member.repositoryName] ? [member.repositoryName] : [],
+      )
+      return selected.length > 0 && selected.length < workspace.repositories.length
+        ? { operation: 'reduce', branchWorkspaceId: workspace.id, repositories: selected }
+        : null
+    }
     return {
       operation: 'remove',
       branchWorkspaceId: workspace.id,
@@ -261,7 +275,9 @@ export function BranchWorkspaceDialog({
   }
   const requiredApprovalsSatisfied = !plan || plan.requiredApprovals.every((approval) => approvals.includes(approval))
   const destructiveConfirm =
-    mode === 'remove' || plan?.requiredApprovals.includes('replace-repository-dependencies') === true
+    mode === 'reduce' ||
+    mode === 'remove' ||
+    plan?.requiredApprovals.includes('replace-repository-dependencies') === true
   const repositoryBootstrapPending = repositories.some(
     (repository) =>
       selectedRepositories[repository.name] &&
@@ -277,7 +293,7 @@ export function BranchWorkspaceDialog({
           <DialogDescription>{t(`workspace.branch-workspace.dialog.${mode}.description`)}</DialogDescription>
         </DialogHeader>
 
-        {!plan && mode === 'create' ? (
+        {!plan && (mode === 'create' || mode === 'extend') ? (
           <div className="grid gap-4">
             <label className="grid gap-1.5 text-xs font-medium">
               {t('workspace.branch-workspace.branch')}
@@ -291,150 +307,183 @@ export function BranchWorkspaceDialog({
             </label>
             <fieldset className="grid gap-2 rounded-md border border-separator p-3">
               <legend className="px-1 text-xs font-medium">{t('workspace.branch-workspace.repositories')}</legend>
-              {repositories.map((repository) => {
-                const fixed = fixedRepositories.has(repository.name)
-                const bootstrap = repositoryBootstraps[repository.name]
-                return (
-                  <div key={repository.name} className="grid gap-2">
-                    <div className="grid grid-cols-[minmax(0,1fr)_minmax(8rem,0.8fr)] gap-3">
-                      <label className={cn('flex items-center gap-2 text-xs', !repository.available && 'opacity-60')}>
-                        <input
-                          type="checkbox"
-                          aria-label={t('workspace.branch-workspace.repository-named', { name: repository.name })}
-                          checked={selectedRepositories[repository.name] === true}
-                          disabled={pending || fixed || !repository.available}
-                          onChange={(event) => {
-                            setSelectedRepositories((current) => ({
-                              ...current,
-                              [repository.name]: event.target.checked,
-                            }))
-                            if (event.target.checked) void loadRepositoryBootstrap(repository)
-                            else bootstrapControllers.current[repository.name]?.abort()
-                          }}
-                        />
-                        <span className="truncate font-medium">{repository.name}</span>
+              {repositories
+                .filter((repository) => mode !== 'extend' || !fixedRepositories.has(repository.name))
+                .map((repository) => {
+                  const fixed = fixedRepositories.has(repository.name)
+                  const bootstrap = repositoryBootstraps[repository.name]
+                  return (
+                    <div key={repository.name} className="grid gap-2">
+                      <div className="grid grid-cols-[minmax(0,1fr)_minmax(8rem,0.8fr)] gap-3">
+                        <label className={cn('flex items-center gap-2 text-xs', !repository.available && 'opacity-60')}>
+                          <input
+                            type="checkbox"
+                            aria-label={t('workspace.branch-workspace.repository-named', { name: repository.name })}
+                            checked={selectedRepositories[repository.name] === true}
+                            disabled={pending || fixed || !repository.available}
+                            onChange={(event) => {
+                              setSelectedRepositories((current) => ({
+                                ...current,
+                                [repository.name]: event.target.checked,
+                              }))
+                              if (event.target.checked) void loadRepositoryBootstrap(repository)
+                              else bootstrapControllers.current[repository.name]?.abort()
+                            }}
+                          />
+                          <span className="truncate font-medium">{repository.name}</span>
+                          {fixed ? (
+                            <span className="text-[10px] text-muted-foreground">
+                              {t('workspace.branch-workspace.member-fixed')}
+                            </span>
+                          ) : null}
+                        </label>
+                        <select
+                          aria-label={t('workspace.branch-workspace.base-named', { name: repository.name })}
+                          value={baseBranches[repository.name] ?? ''}
+                          disabled={pending || fixed || !selectedRepositories[repository.name]}
+                          className="h-8 rounded-md border border-input bg-background px-2 font-mono text-xs"
+                          onChange={(event) =>
+                            setBaseBranches((current) => ({ ...current, [repository.name]: event.target.value }))
+                          }
+                        >
+                          {repository.branches.map((candidate) => (
+                            <option key={candidate} value={candidate}>
+                              {candidate}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {selectedRepositories[repository.name] && !fixed ? (
+                        <div className="pl-6">
+                          {bootstrap?.status === 'loading' ? (
+                            <p className="text-xs text-muted-foreground" role="status">
+                              {t('workspace.branch-workspace.repository-dependencies-loading')}
+                            </p>
+                          ) : null}
+                          {bootstrap?.status === 'error' ? (
+                            <p className="text-xs text-muted-foreground" role="status">
+                              {t('workspace.branch-workspace.repository-dependencies-error')}
+                            </p>
+                          ) : null}
+                          {bootstrap?.status === 'ready' && bootstrap.preflight.kind === 'configured' ? (
+                            <p className="rounded-md border border-separator bg-muted/20 p-2 text-xs text-muted-foreground">
+                              {t('workspace.branch-workspace.repository-dependencies-configured')}
+                            </p>
+                          ) : null}
+                          {bootstrap?.status === 'ready' &&
+                          bootstrap.preflight.kind === 'candidates' &&
+                          bootstrap.preflight.candidates.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">
+                              {t('workspace.branch-workspace.repository-dependencies-empty')}
+                            </p>
+                          ) : null}
+                          {bootstrap?.status === 'ready' &&
+                          bootstrap.preflight.kind === 'candidates' &&
+                          bootstrap.preflight.candidates.length > 0 ? (
+                            <WorktreeBootstrapCandidateList
+                              headingId={`branch-workspace-repository-dependencies-${repository.name}`}
+                              label={t('workspace.branch-workspace.repository-dependencies')}
+                              description={t('workspace.branch-workspace.repository-dependencies-description')}
+                              candidates={bootstrap.preflight.candidates}
+                              choices={repositoryBootstrapChoices[repository.name] ?? {}}
+                              disabled={pending}
+                              onChoiceChange={(candidatePath, choice) =>
+                                setRepositoryBootstrapChoices((current) => ({
+                                  ...current,
+                                  [repository.name]: {
+                                    ...current[repository.name],
+                                    [candidatePath]: choice,
+                                  },
+                                }))
+                              }
+                            />
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  )
+                })}
+            </fieldset>
+            {mode === 'create' ? (
+              <MaterializationCandidateList
+                items={auxiliaryCandidates.map((candidate) => {
+                  const fixed = fixedAuxiliary.has(candidate.name)
+                  return {
+                    id: candidate.name,
+                    label: candidate.name,
+                    kind: candidate.kind === 'directory' ? 'directory' : 'file',
+                    disabled: fixed,
+                    annotation: (
+                      <>
+                        {candidate.outsideRoot ? (
+                          <span className="shrink-0 text-[10px] text-warning">
+                            {t('workspace.branch-workspace.outside-root')}
+                          </span>
+                        ) : null}
                         {fixed ? (
-                          <span className="text-[10px] text-muted-foreground">
+                          <span className="shrink-0 text-[10px] text-muted-foreground">
                             {t('workspace.branch-workspace.member-fixed')}
                           </span>
                         ) : null}
-                      </label>
-                      <select
-                        aria-label={t('workspace.branch-workspace.base-named', { name: repository.name })}
-                        value={baseBranches[repository.name] ?? ''}
-                        disabled={pending || fixed || !selectedRepositories[repository.name]}
-                        className="h-8 rounded-md border border-input bg-background px-2 font-mono text-xs"
-                        onChange={(event) =>
-                          setBaseBranches((current) => ({ ...current, [repository.name]: event.target.value }))
-                        }
-                      >
-                        {repository.branches.map((candidate) => (
-                          <option key={candidate} value={candidate}>
-                            {candidate}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {selectedRepositories[repository.name] && !fixed ? (
-                      <div className="pl-6">
-                        {bootstrap?.status === 'loading' ? (
-                          <p className="text-xs text-muted-foreground" role="status">
-                            {t('workspace.branch-workspace.repository-dependencies-loading')}
-                          </p>
-                        ) : null}
-                        {bootstrap?.status === 'error' ? (
-                          <p className="text-xs text-muted-foreground" role="status">
-                            {t('workspace.branch-workspace.repository-dependencies-error')}
-                          </p>
-                        ) : null}
-                        {bootstrap?.status === 'ready' && bootstrap.preflight.kind === 'configured' ? (
-                          <p className="rounded-md border border-separator bg-muted/20 p-2 text-xs text-muted-foreground">
-                            {t('workspace.branch-workspace.repository-dependencies-configured')}
-                          </p>
-                        ) : null}
-                        {bootstrap?.status === 'ready' &&
-                        bootstrap.preflight.kind === 'candidates' &&
-                        bootstrap.preflight.candidates.length === 0 ? (
-                          <p className="text-xs text-muted-foreground">
-                            {t('workspace.branch-workspace.repository-dependencies-empty')}
-                          </p>
-                        ) : null}
-                        {bootstrap?.status === 'ready' &&
-                        bootstrap.preflight.kind === 'candidates' &&
-                        bootstrap.preflight.candidates.length > 0 ? (
-                          <WorktreeBootstrapCandidateList
-                            headingId={`branch-workspace-repository-dependencies-${repository.name}`}
-                            label={t('workspace.branch-workspace.repository-dependencies')}
-                            description={t('workspace.branch-workspace.repository-dependencies-description')}
-                            candidates={bootstrap.preflight.candidates}
-                            choices={repositoryBootstrapChoices[repository.name] ?? {}}
-                            disabled={pending}
-                            onChoiceChange={(candidatePath, choice) =>
-                              setRepositoryBootstrapChoices((current) => ({
-                                ...current,
-                                [repository.name]: {
-                                  ...current[repository.name],
-                                  [candidatePath]: choice,
-                                },
-                              }))
-                            }
-                          />
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                )
-              })}
-            </fieldset>
-            <MaterializationCandidateList
-              items={auxiliaryCandidates.map((candidate) => {
-                const fixed = fixedAuxiliary.has(candidate.name)
-                return {
-                  id: candidate.name,
-                  label: candidate.name,
-                  kind: candidate.kind === 'directory' ? 'directory' : 'file',
-                  disabled: fixed,
-                  annotation: (
-                    <>
-                      {candidate.outsideRoot ? (
-                        <span className="shrink-0 text-[10px] text-warning">
-                          {t('workspace.branch-workspace.outside-root')}
-                        </span>
-                      ) : null}
-                      {fixed ? (
-                        <span className="shrink-0 text-[10px] text-muted-foreground">
-                          {t('workspace.branch-workspace.member-fixed')}
-                        </span>
-                      ) : null}
-                    </>
-                  ),
+                      </>
+                    ),
+                  }
+                })}
+                choices={auxiliaryChoices}
+                onChoiceChange={(name, choice) => setAuxiliaryChoices((current) => ({ ...current, [name]: choice }))}
+                headingId="branch-workspace-auxiliary-candidates"
+                label={t('workspace.branch-workspace.auxiliary')}
+                emptyMessage={t('workspace.branch-workspace.auxiliary-empty')}
+                headerAction={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={t('workspace.branch-workspace.auxiliary-refresh')}
+                    title={t('workspace.branch-workspace.auxiliary-refresh')}
+                    disabled={pending || auxiliaryRefreshPending}
+                    onClick={() => void refreshAuxiliaryCandidates()}
+                  >
+                    <RefreshCw className={cn(auxiliaryRefreshPending && 'animate-spin')} aria-hidden="true" />
+                  </Button>
                 }
-              })}
-              choices={auxiliaryChoices}
-              onChoiceChange={(name, choice) => setAuxiliaryChoices((current) => ({ ...current, [name]: choice }))}
-              headingId="branch-workspace-auxiliary-candidates"
-              label={t('workspace.branch-workspace.auxiliary')}
-              emptyMessage={t('workspace.branch-workspace.auxiliary-empty')}
-              headerAction={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  aria-label={t('workspace.branch-workspace.auxiliary-refresh')}
-                  title={t('workspace.branch-workspace.auxiliary-refresh')}
-                  disabled={pending || auxiliaryRefreshPending}
-                  onClick={() => void refreshAuxiliaryCandidates()}
-                >
-                  <RefreshCw className={cn(auxiliaryRefreshPending && 'animate-spin')} aria-hidden="true" />
-                </Button>
-              }
-              disabled={pending}
-            />
-            {auxiliaryRefreshError ? (
+                disabled={pending}
+              />
+            ) : null}
+            {mode === 'create' && auxiliaryRefreshError ? (
               <p className="text-xs text-danger" role="alert">
                 {t(auxiliaryRefreshError)}
               </p>
             ) : null}
+          </div>
+        ) : null}
+
+        {!plan && mode === 'reduce' && workspace ? (
+          <div className="grid gap-3">
+            <p className="rounded-md border border-warning/40 bg-warning/5 p-3 text-xs text-muted-foreground">
+              {t('workspace.branch-workspace.reduce-retains-branches')}
+            </p>
+            <fieldset className="grid gap-2 rounded-md border border-separator p-3">
+              <legend className="px-1 text-xs font-medium">{t('workspace.branch-workspace.repositories')}</legend>
+              {workspace.repositories.map((member) => (
+                <label key={member.repositoryName} className="flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    data-branch-workspace-reduce-member={member.repositoryName}
+                    aria-label={t('workspace.branch-workspace.repository-named', { name: member.repositoryName })}
+                    checked={selectedRepositories[member.repositoryName] === true}
+                    disabled={pending}
+                    onChange={(event) =>
+                      setSelectedRepositories((current) => ({
+                        ...current,
+                        [member.repositoryName]: event.target.checked,
+                      }))
+                    }
+                  />
+                  <span className="truncate font-medium">{member.repositoryName}</span>
+                </label>
+              ))}
+            </fieldset>
           </div>
         ) : null}
 

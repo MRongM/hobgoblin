@@ -105,6 +105,8 @@ export const ja: Record<DictKey, string> = {
   'workspace.repositories.show': 'ワークスペースリポジトリを表示',
   'workspace.branch-workspace.list': 'ブランチワークスペース',
   'workspace.branch-workspace.create': 'ブランチワークスペースを追加',
+  'workspace.branch-workspace.add-members': 'メンバー worktree を追加',
+  'workspace.branch-workspace.remove-members': 'メンバー worktree を削除',
   'workspace.branch-workspace.empty': 'ブランチワークスペースはありません。',
   'workspace.branch-workspace.loading': 'ブランチワークスペースを読み込み中…',
   'workspace.branch-workspace.reorder': 'ドラッグしてブランチワークスペースを並べ替え',
@@ -150,10 +152,11 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.approvals': '必要な確認',
   'workspace.branch-workspace.approval.outside-root-source': 'ワークスペース外のソースを許可',
   'workspace.branch-workspace.approval.worktree-bootstrap': '確認済みの bootstrap 操作を実行',
-  'workspace.branch-workspace.approval.replace-repository-dependencies':
-    '一覧のリポジトリ依存関係を削除して再作成',
+  'workspace.branch-workspace.approval.replace-repository-dependencies': '一覧のリポジトリ依存関係を削除して再作成',
   'workspace.branch-workspace.approval.modified-copy': '変更されたコピー内容を削除',
   'workspace.branch-workspace.approval.unmanaged-content': '未管理の内容を削除',
+  'workspace.branch-workspace.approval.discard-member-changes':
+    '選択したメンバー worktree の未コミットの変更を破棄する',
   'workspace.branch-workspace.approval.close-terminals': '一覧の内部ターミナルを閉じる',
   'workspace.branch-workspace.open-editor': 'エディタで開く',
   'workspace.branch-workspace.open-external-terminal': '外部ターミナルで開く',
@@ -225,6 +228,9 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.retry': '操作を再試行',
   'workspace.branch-workspace.repair': 'ブランチワークスペースを修復',
   'workspace.branch-workspace.continue-delete': '削除を続行',
+  'workspace.branch-workspace.continue-reduce': 'メンバーの削除を続行',
+  'workspace.branch-workspace.reduce-retains-branches':
+    '選択したメンバー worktree は削除されますが、ローカルおよびリモートブランチは保持されます。',
   'workspace.branch-workspace.delete-warning':
     '管理対象 worktree とこのフォルダを削除し、未コミットの変更を破棄します。外部ターミナルは検出できません。',
   'workspace.branch-workspace.delete-local-branch': '対象のローカルブランチも削除',
@@ -237,6 +243,14 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.dialog.create.title': 'ブランチワークスペースを追加',
   'workspace.branch-workspace.dialog.create.description': '共通ブランチ用の worktree と追加項目を選択します。',
   'workspace.branch-workspace.dialog.create.confirm': '追加',
+  'workspace.branch-workspace.dialog.extend.title': 'メンバー worktree を追加',
+  'workspace.branch-workspace.dialog.extend.description':
+    '共通ブランチでこのブランチワークスペースに追加するリポジトリを選択します。',
+  'workspace.branch-workspace.dialog.extend.confirm': 'メンバーを追加',
+  'workspace.branch-workspace.dialog.reduce.title': 'メンバー worktree を削除',
+  'workspace.branch-workspace.dialog.reduce.description':
+    'このブランチワークスペースから削除するメンバー worktree を選択します。',
+  'workspace.branch-workspace.dialog.reduce.confirm': 'メンバーを削除',
   'workspace.branch-workspace.dialog.repair.title': 'ブランチワークスペースを修復',
   'workspace.branch-workspace.dialog.repair.description': '差分を確認し、欠落した管理内容のみ再作成します。',
   'workspace.branch-workspace.dialog.repair.confirm': '修復',
@@ -247,6 +261,7 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.lifecycle.active': '実行中',
   'workspace.branch-workspace.lifecycle.create-incomplete': '作成未完了',
   'workspace.branch-workspace.lifecycle.needs-repair': '修復が必要',
+  'workspace.branch-workspace.lifecycle.reduce-incomplete': 'メンバーの削除が未完了',
   'workspace.branch-workspace.lifecycle.delete-incomplete': '削除未完了',
   'workspace.branch-workspace.issue.root-missing': 'フォルダがありません。',
   'workspace.branch-workspace.issue.root-not-directory': 'パスがフォルダではありません。',
@@ -264,6 +279,7 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.invalid-branch': '有効な Git ブランチ名を入力してください。',
   'workspace.branch-workspace.base-unavailable': '選択したベースブランチを利用できません。',
   'workspace.branch-workspace.repository-unavailable': '選択したリポジトリを利用できません。',
+  'workspace.branch-workspace.member-required': '少なくとも 1 つのメンバー worktree を残す必要があります。',
   'workspace.branch-workspace.invalid-entry': '選択した追加項目が無効です。',
   'workspace.branch-workspace.invalid-root': 'ワークスペースルートが無効です。',
   'workspace.branch-workspace.invalid-path': 'ブランチワークスペースのパスが無効です。',
@@ -291,6 +307,8 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.not-directory': '対象はディレクトリではありません。',
   'workspace.branch-workspace.worktree-elsewhere': 'ブランチは別の場所で checkout 済みです。',
   'workspace.branch-workspace.dirty-worktree': 'worktree に未コミットの変更があります。',
+  'workspace.branch-workspace.dirty-state-unknown':
+    '選択したメンバー worktree に未コミットの変更があるか確認できませんでした。',
   'workspace.branch-workspace.locked-worktree': 'worktree はロックされています。',
   'workspace.branch-workspace.primary-worktree': 'プライマリ worktree は削除できません。',
   'workspace.branch-workspace.protected-branch': '保護ブランチは削除できません。',

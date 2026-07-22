@@ -321,14 +321,23 @@ function ActiveBranchWorkspaceView({
   useEffect(() => setFallbackNotice(null), [branchWorkspaceId])
 
   useEffect(() => {
-    if (!query.data?.ok || !workspace || !memberRepositoryName) return
+    if (query.isFetching || !query.data?.ok || !workspace || !memberRepositoryName) return
     if (!memberReason) {
       setFallbackNotice(null)
       return
     }
     setFallbackNotice({ repositoryName: memberRepositoryName, reason: memberReason })
     activateBranchWorkspace(rootId, branchWorkspaceId)
-  }, [activateBranchWorkspace, branchWorkspaceId, memberReason, memberRepositoryName, query.data, rootId, workspace])
+  }, [
+    activateBranchWorkspace,
+    branchWorkspaceId,
+    memberReason,
+    memberRepositoryName,
+    query.data,
+    query.isFetching,
+    rootId,
+    workspace,
+  ])
 
   if (!workspace) return <div className="min-h-0 flex-1" />
   return (

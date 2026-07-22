@@ -13,8 +13,14 @@ import {
 
 export type BranchWorkspaceProgress = 'pending' | 'complete' | 'removed' | 'failed'
 export type BranchWorkspaceBootstrapProgress = Exclude<BranchWorkspaceProgress, 'removed'>
-export type BranchWorkspaceLifecycle = 'ready' | 'create-incomplete' | 'needs-repair' | 'delete-incomplete' | 'active'
-export type BranchWorkspaceOperationKind = 'create' | 'extend' | 'repair' | 'remove'
+export type BranchWorkspaceLifecycle =
+  | 'ready'
+  | 'create-incomplete'
+  | 'needs-repair'
+  | 'reduce-incomplete'
+  | 'delete-incomplete'
+  | 'active'
+export type BranchWorkspaceOperationKind = 'create' | 'extend' | 'reduce' | 'repair' | 'remove'
 export type BranchWorkspaceOperationPhase = 'pending' | 'running' | 'cancelled' | 'failed'
 export type BranchWorkspaceBranchOrigin = 'created' | 'pre-existing'
 export type BranchWorkspaceAuxiliaryMode = 'symlink' | 'copy'
@@ -167,6 +173,11 @@ export type BranchWorkspacePlanRequest =
     }
   | { operation: 'repair'; branchWorkspaceId: string }
   | {
+      operation: 'reduce'
+      branchWorkspaceId: string
+      repositories: string[]
+    }
+  | {
       operation: 'remove'
       branchWorkspaceId: string
       alsoDeleteBranch: boolean
@@ -177,6 +188,7 @@ export type BranchWorkspaceApproval =
   | 'outside-root-source'
   | 'worktree-bootstrap'
   | 'replace-repository-dependencies'
+  | 'discard-member-changes'
   | 'modified-copy'
   | 'unmanaged-content'
   | 'close-terminals'
@@ -186,6 +198,7 @@ export function isBranchWorkspaceApproval(value: unknown): value is BranchWorksp
     value === 'outside-root-source' ||
     value === 'worktree-bootstrap' ||
     value === 'replace-repository-dependencies' ||
+    value === 'discard-member-changes' ||
     value === 'modified-copy' ||
     value === 'unmanaged-content' ||
     value === 'close-terminals'
@@ -231,6 +244,7 @@ export interface BranchWorkspaceRepositoryPlan {
   deleteBranch?: boolean
   deleteUpstream?: boolean
   upstream?: string
+  dirty?: boolean
 }
 
 export interface BranchWorkspaceAuxiliaryPlan {
@@ -304,6 +318,20 @@ export function normalizeBranchWorkspacePlanRequest(value: unknown): BranchWorks
   if (!branchWorkspaceId) return invalidRequest()
   if (request.operation === 'repair') {
     return { ok: true, request: { operation: 'repair', branchWorkspaceId } }
+  }
+  if (request.operation === 'reduce') {
+    if (!Array.isArray(request.repositories) || request.repositories.length === 0) return invalidRequest()
+    const repositories: string[] = []
+    const repositoryNames = new Set<string>()
+    for (const value of request.repositories) {
+      const repositoryName = normalizedText(value)
+      if (!repositoryName || !isWorkspaceRepositoryName(repositoryName) || repositoryNames.has(repositoryName)) {
+        return invalidRequest()
+      }
+      repositoryNames.add(repositoryName)
+      repositories.push(repositoryName)
+    }
+    return { ok: true, request: { operation: 'reduce', branchWorkspaceId, repositories } }
   }
   if (request.operation !== 'remove') return invalidRequest()
   if (typeof request.alsoDeleteBranch !== 'boolean' || typeof request.alsoDeleteUpstream !== 'boolean') {

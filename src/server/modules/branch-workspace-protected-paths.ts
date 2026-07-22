@@ -35,7 +35,6 @@ export async function assertBranchWorkspaceFileMutationAllowed(
     if (samePath(pathApi, normalizedWorktreePath, rootPath)) protectedPaths.add(pathApi.resolve(manifest.path))
     if (!samePath(pathApi, normalizedWorktreePath, manifest.path)) continue
     for (const repository of manifest.repositories) protectedPaths.add(pathApi.resolve(repository.worktreePath))
-    for (const entry of manifest.auxiliaryEntries) protectedPaths.add(pathApi.resolve(entry.targetPath))
   }
   if (protectedPaths.size === 0) return { ok: true }
 

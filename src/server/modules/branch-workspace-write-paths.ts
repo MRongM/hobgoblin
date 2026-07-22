@@ -182,7 +182,7 @@ export function createBranchWorkspaceWriteService(
               branchWorkspaceId: plan.branchWorkspaceId,
             }
           }
-          if (plan.operation === 'remove' && !pending.terminalsClosed) {
+          if ((plan.operation === 'reduce' || plan.operation === 'remove') && !pending.terminalsClosed) {
             const closed = await closeSessions(plan.terminalSessionIds).catch(() => ({
               closed: [],
               missing: [...plan.terminalSessionIds],
@@ -223,6 +223,64 @@ export function createBranchWorkspaceWriteService(
           }),
           plan.branchWorkspaceId,
         )
+
+        if (plan.operation === 'reduce') {
+          for (const repository of plan.repositories) {
+            const current = await currentManifest(readManifests, rootId, plan.branchWorkspaceId)
+            const member = current.repositories.find(
+              (candidate) => candidate.repositoryName === repository.repositoryName,
+            )
+            if (!member) throw new Error('workspace.branch-workspace.manifest-missing')
+            if (member.progress === 'removed') continue
+            if (controller.signal.aborted) {
+              return await failOperation(rootId, plan.branchWorkspaceId, 'cancelled', 'cancelled')
+            }
+            const result = await removeWorktree(
+              repository.repoId,
+              {
+                branch: repository.targetBranch,
+                worktreePath: repository.worktreePath,
+                alsoDeleteBranch: false,
+                forceRemoveWorktree: repository.dirty === true,
+                forceDeleteBranch: false,
+                alsoDeleteUpstream: false,
+              },
+              controller.signal,
+            ).catch((error) => ({ ok: false, message: operationMessage(error) }))
+            if (!result.ok) {
+              await persistMemberProgress(
+                persist,
+                rootId,
+                plan.branchWorkspaceId,
+                repository.repositoryName,
+                'failed',
+                result.message,
+              )
+              return await failOperation(
+                rootId,
+                plan.branchWorkspaceId,
+                controller.signal.aborted || result.message === 'cancelled' ? 'cancelled' : 'failed',
+                result.message,
+              )
+            }
+            await persistMemberProgress(persist, rootId, plan.branchWorkspaceId, repository.repositoryName, 'removed')
+          }
+
+          const removedNames = new Set(plan.repositories.map((repository) => repository.repositoryName))
+          await persist(
+            rootId,
+            (manifest) => {
+              const { operation: _operation, ...ready } = manifest
+              return {
+                ...ready,
+                repositories: manifest.repositories.filter((member) => !removedNames.has(member.repositoryName)),
+              }
+            },
+            plan.branchWorkspaceId,
+          )
+          pendingByRoot.delete(rootId)
+          return { ok: true, branchWorkspaceId: plan.branchWorkspaceId }
+        }
 
         if (plan.operation === 'remove') {
           for (const repository of plan.repositories) {
@@ -516,7 +574,10 @@ export function createBranchWorkspaceWriteService(
           rootId,
           (manifest) => {
             const { operation: _operation, ...ready } = manifest
-            return ready
+            return {
+              ...ready,
+              auxiliaryEntries: manifest.auxiliaryEntries.filter((entry) => entry.progress !== 'complete'),
+            }
           },
           plan.branchWorkspaceId,
         )
@@ -686,19 +747,25 @@ async function persistAuxiliaryProgress(
 ): Promise<void> {
   await persist(
     rootId,
-    (manifest) => ({
-      ...manifest,
-      auxiliaryEntries: manifest.auxiliaryEntries.map((entry) =>
-        entry.name === entryName
-          ? {
-              ...entry,
-              progress,
-              ...(lastError ? { lastError } : { lastError: undefined }),
-              ...(copyBaseline ? { copyBaseline } : {}),
-            }
-          : entry,
-      ),
-    }),
+    (manifest) =>
+      progress === 'complete'
+        ? {
+            ...manifest,
+            auxiliaryEntries: manifest.auxiliaryEntries.filter((entry) => entry.name !== entryName),
+          }
+        : {
+            ...manifest,
+            auxiliaryEntries: manifest.auxiliaryEntries.map((entry) =>
+              entry.name === entryName
+                ? {
+                    ...entry,
+                    progress,
+                    ...(lastError ? { lastError } : { lastError: undefined }),
+                    ...(copyBaseline ? { copyBaseline } : {}),
+                  }
+                : entry,
+            ),
+          },
     branchWorkspaceId,
   )
 }

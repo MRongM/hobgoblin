@@ -26,7 +26,6 @@ function manifest(rootId: string, branch: string, repositoryName = 'api'): Branc
   const directoryName = `goblin-${slug}`
   const workspacePath = branchWorkspacePath(rootId, directoryName)
   const pathApi = rootId.startsWith('ssh-config://') ? path.posix : path
-  const rootPath = rootId.startsWith('ssh-config://') ? new URL(rootId).pathname : path.resolve(rootId)
   return {
     id: `branch-workspace:${branch}`,
     rootId,
@@ -43,15 +42,7 @@ function manifest(rootId: string, branch: string, repositoryName = 'api'): Branc
         progress: 'complete',
       },
     ],
-    auxiliaryEntries: [
-      {
-        name: 'README.md',
-        mode: 'symlink',
-        sourcePath: pathApi.join(rootPath, 'README.md'),
-        targetPath: pathApi.join(workspacePath, 'README.md'),
-        progress: 'complete',
-      },
-    ],
+    auxiliaryEntries: [],
   }
 }
 
@@ -88,6 +79,26 @@ describe('branch workspace source', () => {
     })
   })
 
+  test('releases completed auxiliary entries while retaining incomplete materialization intent', async () => {
+    const { dataFile, root } = await createFixture()
+    const item = manifest(root, 'feature/dependencies')
+    item.auxiliaryEntries = [
+      auxiliaryEntry(item, 'README.md', 'complete'),
+      auxiliaryEntry(item, 'notes.md', 'failed'),
+    ]
+    item.operation = { kind: 'create', phase: 'failed', startedAt: '2026-07-22T00:00:00.000Z' }
+
+    await replaceBranchWorkspaceManifests(root, [item], { dataFile })
+
+    await expect(readBranchWorkspaceManifests(root, { dataFile })).resolves.toMatchObject({
+      kind: 'ready',
+      manifests: [{ auxiliaryEntries: [{ name: 'notes.md', progress: 'failed' }] }],
+    })
+    expect(JSON.parse(await readFile(dataFile, 'utf8'))).toMatchObject({
+      workspaces: [{ branchWorkspaces: [{ auxiliaryEntries: [{ name: 'notes.md', progress: 'failed' }] }] }],
+    })
+  })
+
   test('round-trips repository bootstrap intent and progress', async () => {
     const { dataFile, root } = await createFixture()
     const item = manifest(root, 'feature/dependencies')
@@ -101,6 +112,20 @@ describe('branch workspace source', () => {
       bootstrapProgress: 'failed',
       bootstrapLastError: 'link failed',
     }
+
+    await replaceBranchWorkspaceManifests(root, [item], { dataFile })
+
+    await expect(readBranchWorkspaceManifests(root, { dataFile })).resolves.toEqual({
+      kind: 'ready',
+      manifests: [item],
+    })
+  })
+
+  test('round-trips interrupted member reduction intent', async () => {
+    const { dataFile, root } = await createFixture()
+    const item = manifest(root, 'feature/reduce')
+    item.repositories[0] = { ...item.repositories[0]!, progress: 'removed' }
+    item.operation = { kind: 'reduce', phase: 'failed', startedAt: '2026-07-22T00:00:00.000Z' }
 
     await replaceBranchWorkspaceManifests(root, [item], { dataFile })
 
@@ -220,3 +245,17 @@ describe('branch workspace source', () => {
     await expect(readFile(temporaryFile, 'utf8')).resolves.toBe('pre-existing')
   })
 })
+
+function auxiliaryEntry(
+  item: BranchWorkspaceManifest,
+  name: string,
+  progress: 'complete' | 'failed',
+): BranchWorkspaceManifest['auxiliaryEntries'][number] {
+  return {
+    name,
+    mode: 'copy',
+    sourcePath: path.join(item.rootId, name),
+    targetPath: path.join(item.path, name),
+    progress,
+  }
+}

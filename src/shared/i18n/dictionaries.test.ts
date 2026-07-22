@@ -87,6 +87,30 @@ describe('i18n dictionaries', () => {
     expect(ko['workspace.branch-workspace.delete-warning']).toContain('커밋하지 않은 변경 사항')
   })
 
+  test('includes branch workspace member management copy in every locale', () => {
+    const keys = [
+      'workspace.branch-workspace.add-members',
+      'workspace.branch-workspace.remove-members',
+      'workspace.branch-workspace.continue-reduce',
+      'workspace.branch-workspace.reduce-retains-branches',
+      'workspace.branch-workspace.approval.discard-member-changes',
+      'workspace.branch-workspace.dialog.extend.title',
+      'workspace.branch-workspace.dialog.extend.description',
+      'workspace.branch-workspace.dialog.extend.confirm',
+      'workspace.branch-workspace.dialog.reduce.title',
+      'workspace.branch-workspace.dialog.reduce.description',
+      'workspace.branch-workspace.dialog.reduce.confirm',
+      'workspace.branch-workspace.lifecycle.reduce-incomplete',
+      'workspace.branch-workspace.member-required',
+      'workspace.branch-workspace.dirty-state-unknown',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['workspace.branch-workspace.reduce-retains-branches']).toContain('保留')
+  })
+
   test('uses the agreed branch workspace terminology in Chinese product copy', () => {
     for (const [key, value] of Object.entries(zh)) {
       expect(value, key).not.toContain('子仓库')

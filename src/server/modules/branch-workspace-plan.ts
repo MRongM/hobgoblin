@@ -254,7 +254,194 @@ async function buildExistingBranchWorkspacePlan(
     }
     return await buildRepairPlan(manifest, resources.config.repo, dependencies, signal)
   }
+  if (request.operation === 'reduce') {
+    return await buildReducePlan(manifest, resources.config.repo, request, dependencies, signal)
+  }
   return await buildRemovePlan(manifest, resources.config.repo, request, dependencies, signal)
+}
+
+async function buildReducePlan(
+  manifest: BranchWorkspaceManifest,
+  configuredRepositories: string[],
+  request: Extract<BranchWorkspacePlanRequest, { operation: 'reduce' }>,
+  dependencies: BranchWorkspacePlanDependencies,
+  signal?: AbortSignal,
+): Promise<BranchWorkspacePlanResult> {
+  if (manifest.operation && manifest.operation.kind !== 'reduce') {
+    return { ok: false, message: 'workspace.branch-workspace.operation-incomplete' }
+  }
+  const requestedNames = new Set(request.repositories)
+  const memberByName = new Map(manifest.repositories.map((member) => [member.repositoryName, member]))
+  if ([...requestedNames].some((name) => !memberByName.has(name))) {
+    return { ok: false, message: 'workspace.branch-workspace.member-unavailable' }
+  }
+  if (requestedNames.size >= manifest.repositories.length) {
+    return { ok: false, message: 'workspace.branch-workspace.member-required' }
+  }
+  if (manifest.operation?.kind === 'reduce') {
+    const persistedNames = new Set(
+      manifest.repositories.filter((member) => member.progress !== 'complete').map((member) => member.repositoryName),
+    )
+    if (!sameStringSet(requestedNames, persistedNames)) {
+      return { ok: false, message: 'workspace.branch-workspace.operation-incomplete' }
+    }
+  } else if (
+    manifest.repositories.some(
+      (member) =>
+        member.progress !== 'complete' ||
+        (member.worktreeBootstrap !== undefined && member.bootstrapProgress !== 'complete'),
+    ) ||
+    manifest.auxiliaryEntries.some((entry) => entry.progress !== 'complete')
+  ) {
+    return { ok: false, message: 'workspace.branch-workspace.needs-repair' }
+  }
+
+  const root = await (dependencies.inspectPath ?? inspectBranchWorkspacePath)(
+    manifest.rootId,
+    manifest.path,
+    signal,
+  ).catch(() => null)
+  if (!root?.exists || root.kind !== 'directory') {
+    return { ok: false, message: 'workspace.branch-workspace.needs-repair' }
+  }
+  const inspect = dependencies.inspectPath ?? inspectBranchWorkspacePath
+  for (const entry of manifest.auxiliaryEntries) {
+    signal?.throwIfAborted()
+    const target = await inspect(manifest.rootId, entry.targetPath, signal).catch(() => null)
+    const ready =
+      !!target?.exists &&
+      (entry.mode === 'copy'
+        ? target.kind !== 'symlink'
+        : target.kind === 'symlink' &&
+          !!target.linkTarget &&
+          sameHostPath(manifest.rootId, target.linkTarget, entry.sourcePath))
+    if (!ready) return { ok: false, message: 'workspace.branch-workspace.needs-repair' }
+  }
+
+  const selectedMembers = configuredRepositories.flatMap((repositoryName) => {
+    const member = memberByName.get(repositoryName)
+    return member && requestedNames.has(repositoryName) ? [member] : []
+  })
+  if (selectedMembers.length !== requestedNames.size) {
+    return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
+  }
+
+  const repositorySnapshots = new Map<string, { repoId: string; snapshot: RepoSnapshot }>()
+  for (const member of manifest.repositories) {
+    signal?.throwIfAborted()
+    if (member.progress === 'removed' && manifest.operation?.kind === 'reduce') continue
+    const repoId = workspaceRepositoryId(manifest.rootId, member.repositoryName)
+    if (!repoId || !configuredRepositories.includes(member.repositoryName)) {
+      return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
+    }
+    const snapshot = await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal, {
+      includeWorktreeStatus: true,
+      includeRemote: false,
+    }).catch(() => null)
+    if (!snapshot) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
+    const worktree = snapshot.branches.find((branch) => branch.name === member.targetBranch)?.worktree
+    if (!worktree) return { ok: false, message: 'workspace.branch-workspace.needs-repair' }
+    if (!sameHostPath(manifest.rootId, worktree.path, member.worktreePath)) {
+      return {
+        ok: false,
+        message: requestedNames.has(member.repositoryName)
+          ? 'workspace.branch-workspace.worktree-elsewhere'
+          : 'workspace.branch-workspace.needs-repair',
+      }
+    }
+    repositorySnapshots.set(member.repositoryName, { repoId, snapshot })
+  }
+
+  const repositories: BranchWorkspaceRepositoryPlan[] = []
+  for (const member of selectedMembers) {
+    signal?.throwIfAborted()
+    const repoId = workspaceRepositoryId(manifest.rootId, member.repositoryName)
+    if (!repoId) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
+    if (member.progress === 'removed' && manifest.operation?.kind === 'reduce') {
+      repositories.push(reduceRepositoryPlan(member, repoId, false, true))
+      continue
+    }
+    const snapshot = repositorySnapshots.get(member.repositoryName)?.snapshot
+    if (!snapshot) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
+    const worktree = snapshot.branches.find((branch) => branch.name === member.targetBranch)?.worktree
+    if (!worktree) return { ok: false, message: 'workspace.branch-workspace.needs-repair' }
+    if (worktree.isPrimary) return { ok: false, message: 'workspace.branch-workspace.primary-worktree' }
+    if (worktree.isLocked) return { ok: false, message: 'workspace.branch-workspace.locked-worktree' }
+    if (typeof worktree.summary?.dirty !== 'boolean') {
+      return { ok: false, message: 'workspace.branch-workspace.dirty-state-unknown' }
+    }
+    repositories.push(reduceRepositoryPlan(member, repoId, worktree.summary.dirty, false))
+  }
+
+  const terminalSessionIds = await terminalSessionIdsForPaths(
+    manifest,
+    configuredRepositories,
+    selectedMembers.map((member) => member.worktreePath),
+    dependencies,
+  )
+  if (!terminalSessionIds) return { ok: false, message: 'workspace.branch-workspace.terminal-read-failed' }
+  const requiredApprovals: BranchWorkspaceApproval[] = []
+  if (repositories.some((repository) => repository.dirty)) requiredApprovals.push('discard-member-changes')
+  if (terminalSessionIds.length > 0) requiredApprovals.push('close-terminals')
+  const reducingManifest: BranchWorkspaceManifest = {
+    ...manifest,
+    repositories: manifest.repositories.map((member) =>
+      requestedNames.has(member.repositoryName) && member.progress !== 'removed'
+        ? { ...member, progress: 'pending', lastError: undefined }
+        : { ...member },
+    ),
+    auxiliaryEntries: manifest.auxiliaryEntries.map((entry) => ({ ...entry })),
+  }
+  const steps = repositories.flatMap((repository) =>
+    repository.satisfied
+      ? []
+      : [
+          {
+            id: `repository:${repository.repositoryName}`,
+            kind: 'remove-worktree' as const,
+            label: repository.repositoryName,
+            repositoryName: repository.repositoryName,
+          },
+        ],
+  )
+  const planWithoutToken: Omit<BranchWorkspacePlan, 'token'> = {
+    rootId: manifest.rootId,
+    operation: 'reduce',
+    branchWorkspaceId: manifest.id,
+    branch: manifest.branch,
+    directoryName: manifest.directoryName,
+    path: manifest.path,
+    manifest: reducingManifest,
+    repositories,
+    auxiliaryEntries: [],
+    requiredApprovals,
+    steps,
+    terminalSessionIds,
+  }
+  return { ok: true, plan: { token: planToken(planWithoutToken), ...planWithoutToken } }
+}
+
+function reduceRepositoryPlan(
+  member: BranchWorkspaceManifest['repositories'][number],
+  repoId: string,
+  dirty: boolean,
+  satisfied: boolean,
+): BranchWorkspaceRepositoryPlan {
+  return {
+    repositoryName: member.repositoryName,
+    repoId,
+    targetBranch: member.targetBranch,
+    baseBranch: member.baseBranch,
+    branchOrigin: member.branchOrigin,
+    worktreePath: member.worktreePath,
+    mode: { kind: 'existingBranch', branch: member.targetBranch },
+    worktreeBootstrap: { kind: 'skip' },
+    confirmationRequired: false,
+    satisfied,
+    action: satisfied ? 'satisfied' : 'remove-worktree',
+    worktreePresent: !satisfied,
+    dirty,
+  }
 }
 
 async function buildRepairPlan(
@@ -340,9 +527,7 @@ async function buildRepairPlan(
         {
           id: `repository:${repository.repositoryName}`,
           kind:
-            repository.action === 'bootstrap-worktree'
-              ? ('bootstrap-worktree' as const)
-              : ('create-worktree' as const),
+            repository.action === 'bootstrap-worktree' ? ('bootstrap-worktree' as const) : ('create-worktree' as const),
           label: repository.repositoryName,
           repositoryName: repository.repositoryName,
         },
@@ -369,7 +554,9 @@ async function buildRepairPlan(
         : [createStep]
     }),
   ]
-  if (steps.length === 0) return { ok: false, message: 'workspace.branch-workspace.nothing-to-repair' }
+  if (steps.length === 0 && !manifest.operation) {
+    return { ok: false, message: 'workspace.branch-workspace.nothing-to-repair' }
+  }
   const planWithoutToken: Omit<BranchWorkspacePlan, 'token'> = {
     rootId: manifest.rootId,
     operation: 'repair',
@@ -415,12 +602,7 @@ async function planRepairRepository(
       return {
         ok: true,
         repository: {
-          ...repairRepositoryPlan(
-            member,
-            repoId,
-            { kind: 'existingBranch', branch: member.targetBranch },
-            satisfied,
-          ),
+          ...repairRepositoryPlan(member, repoId, { kind: 'existingBranch', branch: member.targetBranch }, satisfied),
           ...(!satisfied
             ? {
                 worktreeBootstrap: cloneBootstrapDecision(member.worktreeBootstrap!),
@@ -437,12 +619,7 @@ async function planRepairRepository(
     return {
       ok: true,
       repository: {
-        ...repairRepositoryPlan(
-          member,
-          repoId,
-          { kind: 'existingBranch', branch: member.targetBranch },
-          true,
-        ),
+        ...repairRepositoryPlan(member, repoId, { kind: 'existingBranch', branch: member.targetBranch }, true),
       },
     }
   }
@@ -778,6 +955,43 @@ async function descendantTerminalSessionIds(
   }
 }
 
+async function terminalSessionIdsForPaths(
+  manifest: BranchWorkspaceManifest,
+  configuredRepositories: string[],
+  selectedPaths: string[],
+  dependencies: BranchWorkspacePlanDependencies,
+): Promise<string[] | null> {
+  if (!dependencies.listTerminalSessions) return []
+  const scopes = [
+    manifest.rootId,
+    ...configuredRepositories
+      .map((repositoryName) => workspaceRepositoryId(manifest.rootId, repositoryName))
+      .filter((repoId): repoId is string => !!repoId),
+  ]
+  try {
+    const sessions = (
+      await Promise.all(scopes.map(async (scope) => await dependencies.listTerminalSessions!(scope)))
+    ).flat()
+    const ids: string[] = []
+    const seen = new Set<string>()
+    for (const session of sessions) {
+      const targetPath = terminalTargetPath(session)
+      if (
+        !targetPath ||
+        !selectedPaths.some((selectedPath) => sameHostDescendant(manifest.rootId, selectedPath, targetPath)) ||
+        seen.has(session.sessionId)
+      ) {
+        continue
+      }
+      seen.add(session.sessionId)
+      ids.push(session.sessionId)
+    }
+    return ids
+  } catch {
+    return null
+  }
+}
+
 function terminalTargetPath(session: TerminalSessionSummary): string | null {
   const parts = session.key.split('\0')
   return parts.length >= 3 && parts[1] ? parts[1] : null
@@ -791,6 +1005,10 @@ function sameHostDescendant(rootId: string, parentPath: string, candidatePath: s
   return (
     relative === '' || (!relative.startsWith(`..${pathApi.sep}`) && relative !== '..' && !pathApi.isAbsolute(relative))
   )
+}
+
+function sameStringSet(left: ReadonlySet<string>, right: ReadonlySet<string>): boolean {
+  return left.size === right.size && [...left].every((value) => right.has(value))
 }
 
 function buildRemoveSteps(

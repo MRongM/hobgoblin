@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { arrayMove } from '@dnd-kit/sortable'
 import { Download, Eye, EyeOff, Folder, FolderPlus, LoaderCircle, RefreshCw, Settings2, Terminal } from 'lucide-react'
@@ -77,7 +77,9 @@ export function WorkspaceRepositoryRail({
   const branchGitActions = useBranchWorkspaceGitActions(workspaceRootId)
   const [configurationOpen, setConfigurationOpen] = useState(false)
   const [branchDialogOpen, setBranchDialogOpen] = useState(false)
-  const [branchDialogMode, setBranchDialogMode] = useState<'create' | 'repair' | 'remove'>('create')
+  const [branchDialogMode, setBranchDialogMode] = useState<'create' | 'extend' | 'reduce' | 'repair' | 'remove'>(
+    'create',
+  )
   const [dialogWorkspace, setDialogWorkspace] = useState<BranchWorkspaceSnapshot | null>(null)
   const [pullOpen, setPullOpen] = useState(false)
   const [optimisticRepositoryIds, setOptimisticRepositoryIds] = useState<string[] | null>(null)
@@ -177,6 +179,17 @@ export function WorkspaceRepositoryRail({
     [t, workspaceRootId],
   )
   const pullActions = useWorkspacePullActions(workspaceRootId, settlePull)
+
+  useEffect(() => {
+    if (activeContext.kind !== 'branch-workspace' || !activeContext.memberRepositoryName) return
+    const branchWorkspace = branchItems.find((item) => item.id === activeContext.branchWorkspaceId)
+    if (!branchWorkspace) return
+    const member = branchWorkspace.repositories.find(
+      (repository) => repository.repositoryName === activeContext.memberRepositoryName,
+    )
+    if (member && member.progress !== 'removed') return
+    activateBranchWorkspace(workspaceRootId, branchWorkspace.id)
+  }, [activeContext, activateBranchWorkspace, branchItems, workspaceRootId])
 
   if (!workspace) return null
   const resolveMemberTarget = (member: BranchWorkspaceRepositorySnapshot) => {
@@ -314,7 +327,7 @@ export function WorkspaceRepositoryRail({
     setConfigurationOpen(true)
   }
   const openBranchDialog = (
-    mode: 'create' | 'repair' | 'remove',
+    mode: 'create' | 'extend' | 'reduce' | 'repair' | 'remove',
     item: BranchWorkspaceSnapshot | null,
     requestPlan = false,
   ) => {
@@ -326,12 +339,20 @@ export function WorkspaceRepositoryRail({
       void branchActions.requestPlan(
         mode === 'repair'
           ? { operation: 'repair', branchWorkspaceId: item.id }
-          : {
-              operation: 'remove',
-              branchWorkspaceId: item.id,
-              alsoDeleteBranch: false,
-              alsoDeleteUpstream: false,
-            },
+          : mode === 'reduce'
+            ? {
+                operation: 'reduce',
+                branchWorkspaceId: item.id,
+                repositories: item.repositories
+                  .filter((repository) => repository.progress !== 'complete')
+                  .map((repository) => repository.repositoryName),
+              }
+            : {
+                operation: 'remove',
+                branchWorkspaceId: item.id,
+                alsoDeleteBranch: false,
+                alsoDeleteUpstream: false,
+              },
       )
     }
   }
@@ -473,8 +494,17 @@ export function WorkspaceRepositoryRail({
                 onActivate={(id) => activateBranchWorkspace(workspaceRootId, id)}
                 onReorder={(orderedIds) => void branchActions.reorder(orderedIds)}
                 onInspect={(item) =>
-                  openBranchDialog(item.lifecycle === 'delete-incomplete' ? 'remove' : 'repair', item)
+                  openBranchDialog(
+                    item.lifecycle === 'delete-incomplete'
+                      ? 'remove'
+                      : item.lifecycle === 'reduce-incomplete'
+                        ? 'reduce'
+                        : 'repair',
+                    item,
+                  )
                 }
+                onExtend={(item) => openBranchDialog('extend', item)}
+                onReduce={(item, resume = false) => openBranchDialog('reduce', item, resume)}
                 onRepair={(item) => openBranchDialog('repair', item, true)}
                 onRemove={(item) => openBranchDialog('remove', item, item.lifecycle === 'delete-incomplete')}
                 getMemberPresentation={(_item, member) => getMemberPresentation(member)}

@@ -3,7 +3,10 @@
 import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { BranchWorkspaceList } from '#/web/components/repo-workspace/BranchWorkspaceList.tsx'
+import {
+  BranchWorkspaceList,
+  branchWorkspaceFolderContext,
+} from '#/web/components/repo-workspace/BranchWorkspaceList.tsx'
 import type {
   BranchWorkspaceLifecycle,
   BranchWorkspaceRepositorySnapshot,
@@ -87,9 +90,28 @@ afterEach(() => {
 })
 
 describe('BranchWorkspaceList', () => {
+  test('protects only member worktree roots in the branch workspace folder context', () => {
+    const item = workspace('ready')
+    item.repositories = [repositoryMember()]
+    item.auxiliaryEntries = [
+      {
+        name: 'README.md',
+        mode: 'copy',
+        sourcePath: '/workspace/README.md',
+        targetPath: '/workspace/goblin-feature-auth/README.md',
+        progress: 'complete',
+        observedState: 'ready',
+      },
+    ]
+
+    expect(branchWorkspaceFolderContext('/workspace', item).managedRootNames).toEqual(['api'])
+  })
+
   test('separates root selection, expansion, reordering, and more actions', async () => {
     const onActivate = vi.fn()
     const onGitAction = vi.fn()
+    const onExtend = vi.fn()
+    const onReduce = vi.fn()
     const item = { ...workspace('ready'), repositories: [repositoryMember()] }
     act(() =>
       root.render(
@@ -100,6 +122,8 @@ describe('BranchWorkspaceList', () => {
             activeId="branch-1"
             onActivate={onActivate}
             onGitAction={onGitAction}
+            onExtend={onExtend}
+            onReduce={onReduce}
             gitActionPanel={{ itemId: item.id, content: <div data-testid="mock-branch-git-panel" /> }}
             onReorder={() => {}}
             onInspect={() => {}}
@@ -120,10 +144,11 @@ describe('BranchWorkspaceList', () => {
     expect(branchWorkspaceRow?.className).toContain('text-[13px]')
     expect(branchWorkspaceRow?.getAttribute('aria-current')).toBe('page')
     expect(branchWorkspaceRow?.getAttribute('aria-expanded')).toBeNull()
-    const toggle = container.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.collapse"]')
+    const toggle = container.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.expand"]')
     const handle = container.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.reorder"]')
     const more = container.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.more"]')
-    expect(toggle?.getAttribute('aria-expanded')).toBe('true')
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false')
+    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).toBeNull()
     expect(handle).not.toBeNull()
     expect(more).not.toBeNull()
     expect(branchWorkspaceItem?.matches('[data-workspace-list-item]')).toBe(true)
@@ -137,13 +162,33 @@ describe('BranchWorkspaceList', () => {
     const menuItems = await openMenuItems(branchWorkspaceItem)
     expect(menuItems.map((entry) => entry.textContent?.trim())).toEqual([
       'terminal.external',
+      'workspace.branch-workspace.add-members',
+      'workspace.branch-workspace.remove-members',
       'workspace.branch-workspace.git-action.batch-commit',
       'workspace.branch-workspace.git-action.pull',
       'workspace.branch-workspace.git-action.push',
       'workspace.branch-workspace.git-action.merge-back',
       'workspace.branch-workspace.delete',
     ])
-    const batchCommitItem = menuItems.find(
+    const addMembersItem = menuItems.find(
+      (entry) => entry.textContent?.trim() === 'workspace.branch-workspace.add-members',
+    )
+    await act(async () => {
+      addMembersItem?.click()
+      await Promise.resolve()
+    })
+    expect(onExtend).toHaveBeenCalledWith(item)
+    const reduceMembersItem = (await openMenuItems(branchWorkspaceItem)).find(
+      (entry) => entry.textContent?.trim() === 'workspace.branch-workspace.remove-members',
+    )
+    expect(reduceMembersItem?.getAttribute('data-variant')).toBe('destructive')
+    await act(async () => {
+      reduceMembersItem?.click()
+      await Promise.resolve()
+    })
+    expect(onReduce).toHaveBeenCalledWith(item)
+    const reopenedMenuItems = await openMenuItems(branchWorkspaceItem)
+    const batchCommitItem = reopenedMenuItems.find(
       (entry) => entry.textContent?.trim() === 'workspace.branch-workspace.git-action.batch-commit',
     )
     await act(async () => {
@@ -156,6 +201,7 @@ describe('BranchWorkspaceList', () => {
     expect(container.querySelector('[data-terminal-output-activity-indicator="active"]')).not.toBeNull()
     expect(container.querySelector('[data-testid="mock-branch-git-panel"]')).not.toBeNull()
     expect(container.querySelector('[aria-label="workspace.branch-workspace.open-editor"]')).toBeNull()
+    act(() => toggle?.click())
     const memberRow = container.querySelector('[data-testid="branch-workspace-member-api"]')
     const memberItem = memberRow?.closest('[data-workspace-list-item]')
     expect(memberItem?.getAttribute('data-size')).toBe('member')
@@ -206,7 +252,7 @@ describe('BranchWorkspaceList', () => {
     expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).toBeNull()
   })
 
-  test('returns from a selected repository member to the workspace root before allowing collapse', () => {
+  test('keeps a restored repository member collapsed when returning to the workspace root', () => {
     const item = { ...workspace('ready'), repositories: [repositoryMember()] }
     const onActivate = vi.fn()
     act(() =>
@@ -231,10 +277,11 @@ describe('BranchWorkspaceList', () => {
     const branchWorkspaceRow = container.querySelector<HTMLButtonElement>(
       '[data-testid="branch-workspace-root-branch-1"]',
     )
+    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).toBeNull()
     act(() => branchWorkspaceRow?.click())
 
     expect(onActivate).toHaveBeenCalledWith(item.id)
-    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).toBeNull()
   })
 
   test('renders an inline Git action panel only below its target item', () => {
@@ -427,6 +474,13 @@ describe('BranchWorkspaceList', () => {
       ),
     )
 
+    act(() =>
+      container
+        .querySelector<HTMLButtonElement>(
+          `[data-branch-workspace-id="${activeWorkspace.id}"] [aria-label="workspace.branch-workspace.expand"]`,
+        )
+        ?.click(),
+    )
     const lists = container.querySelectorAll('[data-testid="branch-workspace-member-list"]')
     expect(lists).toHaveLength(1)
     expect(lists[0]?.textContent).toContain('api')
@@ -475,6 +529,7 @@ describe('BranchWorkspaceList', () => {
       ),
     )
 
+    act(() => container.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.expand"]')?.click())
     const summary = container.querySelector('[data-branch-workspace-member-summary]')
     const terminalBadge = container.querySelector('[data-testid="branch-workspace-member-terminal-count-badge"]')
     const dirtyBadge = container.querySelector('[data-testid="branch-workspace-member-change-count-badge"]')
@@ -483,7 +538,7 @@ describe('BranchWorkspaceList', () => {
     expect(dirtyBadge?.previousElementSibling).toBe(terminalBadge)
   })
 
-  test('collapses and restores the active repository member list without reactivating the workspace', () => {
+  test('starts the active repository member list collapsed and toggles it without reactivating the workspace', () => {
     const activeWorkspace = { ...workspace('ready'), repositories: [repositoryMember()] }
     const onActivate = vi.fn()
     act(() =>
@@ -505,20 +560,20 @@ describe('BranchWorkspaceList', () => {
       ),
     )
 
-    const toggle = container.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.collapse"]')
+    const toggle = container.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.expand"]')
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false')
+    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).toBeNull()
+
+    act(() => toggle?.click())
+
     expect(toggle?.getAttribute('aria-expanded')).toBe('true')
     expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).not.toBeNull()
+    expect(onActivate).not.toHaveBeenCalled()
 
     act(() => toggle?.click())
 
     expect(toggle?.getAttribute('aria-expanded')).toBe('false')
     expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).toBeNull()
-    expect(onActivate).not.toHaveBeenCalled()
-
-    act(() => toggle?.click())
-
-    expect(toggle?.getAttribute('aria-expanded')).toBe('true')
-    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).not.toBeNull()
     expect(onActivate).not.toHaveBeenCalled()
   })
 
@@ -544,14 +599,14 @@ describe('BranchWorkspaceList', () => {
     )
 
     const itemButton = container.querySelector<HTMLButtonElement>('[data-testid="branch-workspace-root-branch-1"]')
-    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).toBeNull()
 
     act(() => itemButton?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 })))
-    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).toBeNull()
+    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).not.toBeNull()
     expect(onActivate).not.toHaveBeenCalled()
 
     act(() => itemButton?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 })))
-    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).toBeNull()
     expect(onActivate).not.toHaveBeenCalled()
   })
 
@@ -640,6 +695,7 @@ describe('BranchWorkspaceList', () => {
       ),
     )
 
+    act(() => container.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.expand"]')?.click())
     expect(container.querySelector<HTMLButtonElement>('[data-testid="branch-workspace-member-api"]')?.disabled).toBe(
       true,
     )
@@ -648,6 +704,7 @@ describe('BranchWorkspaceList', () => {
   test.each([
     ['active', ['workspace.branch-workspace.cancel'], []],
     ['create-incomplete', ['workspace.branch-workspace.retry'], ['workspace.branch-workspace.inspect']],
+    ['reduce-incomplete', ['workspace.branch-workspace.continue-reduce'], ['workspace.branch-workspace.inspect']],
     [
       'needs-repair',
       ['workspace.branch-workspace.repair'],
@@ -656,18 +713,21 @@ describe('BranchWorkspaceList', () => {
     ['delete-incomplete', ['workspace.branch-workspace.continue-delete'], ['workspace.branch-workspace.inspect']],
   ] as const)('exposes the exact %s lifecycle actions', async (lifecycle, directLabels, menuLabels) => {
     const onRemove = vi.fn()
+    const onReduce = vi.fn()
+    const item = workspace(lifecycle)
     act(() =>
       root.render(
         withTerminalContexts(
           <BranchWorkspaceList
             rootId="/workspace"
-            items={[workspace(lifecycle)]}
+            items={[item]}
             activeId={null}
             onActivate={() => {}}
             onReorder={() => {}}
             onInspect={() => {}}
             onRepair={() => {}}
             onRemove={onRemove}
+            onReduce={onReduce}
             onCancel={() => {}}
           />,
         ),
@@ -678,10 +738,17 @@ describe('BranchWorkspaceList', () => {
       'workspace.branch-workspace.cancel',
       'workspace.branch-workspace.retry',
       'workspace.branch-workspace.repair',
+      'workspace.branch-workspace.continue-reduce',
       'workspace.branch-workspace.continue-delete',
     ]
     expect(possibleDirectLabels.filter((label) => row?.querySelector(`[aria-label="${label}"]`))).toEqual(directLabels)
     expect(await openMenuLabels(row)).toEqual(menuLabels)
+    if (lifecycle === 'reduce-incomplete') {
+      act(() =>
+        row?.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.continue-reduce"]')?.click(),
+      )
+      expect(onReduce).toHaveBeenCalledWith(item, true)
+    }
   })
 
   test('keeps disabled ready actions visible in the fixed dock and More menu', async () => {
@@ -775,7 +842,7 @@ describe('BranchWorkspaceList', () => {
     })
   })
 
-  test.each(['active', 'create-incomplete', 'needs-repair', 'delete-incomplete'] as const)(
+  test.each(['active', 'create-incomplete', 'needs-repair', 'reduce-incomplete', 'delete-incomplete'] as const)(
     'keeps folder-open context actions disabled for a %s branch workspace',
     async (lifecycle) => {
       act(() =>

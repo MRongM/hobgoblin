@@ -105,6 +105,8 @@ export const en = {
   'workspace.repositories.show': 'Show workspace repositories',
   'workspace.branch-workspace.list': 'Branch workspaces',
   'workspace.branch-workspace.create': 'New branch workspace',
+  'workspace.branch-workspace.add-members': 'Add member worktrees',
+  'workspace.branch-workspace.remove-members': 'Remove member worktrees',
   'workspace.branch-workspace.empty': 'No branch workspaces yet.',
   'workspace.branch-workspace.loading': 'Loading branch workspaces…',
   'workspace.branch-workspace.reorder': 'Drag to reorder branch workspace',
@@ -154,6 +156,8 @@ export const en = {
     'Delete and rematerialize the listed repository dependencies',
   'workspace.branch-workspace.approval.modified-copy': 'Delete modified copied content',
   'workspace.branch-workspace.approval.unmanaged-content': 'Delete unmanaged folder content',
+  'workspace.branch-workspace.approval.discard-member-changes':
+    'Discard uncommitted changes in selected member worktrees',
   'workspace.branch-workspace.approval.close-terminals': 'Close listed internal terminals',
   'workspace.branch-workspace.open-editor': 'Open branch workspace in editor',
   'workspace.branch-workspace.open-external-terminal': 'Open branch workspace in external terminal',
@@ -223,6 +227,9 @@ export const en = {
   'workspace.branch-workspace.retry': 'Retry operation',
   'workspace.branch-workspace.repair': 'Repair branch workspace',
   'workspace.branch-workspace.continue-delete': 'Continue deletion',
+  'workspace.branch-workspace.continue-reduce': 'Continue member removal',
+  'workspace.branch-workspace.reduce-retains-branches':
+    'Selected member worktrees will be removed, but their local and remote branches will be retained.',
   'workspace.branch-workspace.delete-warning':
     'Managed worktrees and this folder will be removed, discarding uncommitted changes. External terminals cannot be detected.',
   'workspace.branch-workspace.delete-local-branch': 'Also delete eligible local branches',
@@ -236,6 +243,14 @@ export const en = {
   'workspace.branch-workspace.dialog.create.description':
     'Choose repository worktrees and optional root files or folders for one common branch.',
   'workspace.branch-workspace.dialog.create.confirm': 'Create branch workspace',
+  'workspace.branch-workspace.dialog.extend.title': 'Add member worktrees',
+  'workspace.branch-workspace.dialog.extend.description':
+    'Choose additional repositories to join this branch workspace on its common branch.',
+  'workspace.branch-workspace.dialog.extend.confirm': 'Add members',
+  'workspace.branch-workspace.dialog.reduce.title': 'Remove member worktrees',
+  'workspace.branch-workspace.dialog.reduce.description':
+    'Choose member worktrees to remove from this branch workspace.',
+  'workspace.branch-workspace.dialog.reduce.confirm': 'Remove members',
   'workspace.branch-workspace.dialog.repair.title': 'Repair branch workspace',
   'workspace.branch-workspace.dialog.repair.description': 'Review drift and recreate only missing managed content.',
   'workspace.branch-workspace.dialog.repair.confirm': 'Repair',
@@ -246,6 +261,7 @@ export const en = {
   'workspace.branch-workspace.lifecycle.active': 'In progress',
   'workspace.branch-workspace.lifecycle.create-incomplete': 'Creation incomplete',
   'workspace.branch-workspace.lifecycle.needs-repair': 'Needs repair',
+  'workspace.branch-workspace.lifecycle.reduce-incomplete': 'Member removal incomplete',
   'workspace.branch-workspace.lifecycle.delete-incomplete': 'Deletion incomplete',
   'workspace.branch-workspace.issue.root-missing': 'Branch workspace folder is missing.',
   'workspace.branch-workspace.issue.root-not-directory': 'Branch workspace path is not a folder.',
@@ -263,6 +279,7 @@ export const en = {
   'workspace.branch-workspace.invalid-branch': 'Enter a valid Git branch name.',
   'workspace.branch-workspace.base-unavailable': 'A selected base branch is unavailable.',
   'workspace.branch-workspace.repository-unavailable': 'A selected workspace repository is unavailable.',
+  'workspace.branch-workspace.member-required': 'At least one member worktree must remain.',
   'workspace.branch-workspace.invalid-entry': 'A selected additional entry is invalid.',
   'workspace.branch-workspace.invalid-root': 'The workspace root is invalid.',
   'workspace.branch-workspace.invalid-path': 'A branch workspace path is invalid.',
@@ -290,6 +307,8 @@ export const en = {
   'workspace.branch-workspace.not-directory': 'The target is not a directory.',
   'workspace.branch-workspace.worktree-elsewhere': 'The branch is checked out elsewhere.',
   'workspace.branch-workspace.dirty-worktree': 'A worktree has uncommitted changes.',
+  'workspace.branch-workspace.dirty-state-unknown':
+    'Could not determine whether a selected member worktree has uncommitted changes.',
   'workspace.branch-workspace.locked-worktree': 'A worktree is locked.',
   'workspace.branch-workspace.primary-worktree': 'A primary worktree cannot be removed.',
   'workspace.branch-workspace.protected-branch': 'A protected branch cannot be deleted.',

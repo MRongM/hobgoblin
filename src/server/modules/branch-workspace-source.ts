@@ -202,15 +202,15 @@ function normalizeManifest(value: unknown, rootId: string): BranchWorkspaceManif
     repositories.push(member)
   }
 
+  const operation = manifest.operation === undefined ? undefined : normalizeOperation(manifest.operation)
   const auxiliaryEntries: BranchWorkspaceAuxiliaryEntry[] = []
   for (const value of manifest.auxiliaryEntries) {
     const entry = normalizeAuxiliaryEntry(value, rootPath, expectedPath, pathApi)
     if (names.has(entry.name)) throw new Error(invalidRegistryMessage)
     names.add(entry.name)
-    auxiliaryEntries.push(entry)
+    if (entry.progress !== 'complete') auxiliaryEntries.push(entry)
   }
 
-  const operation = manifest.operation === undefined ? undefined : normalizeOperation(manifest.operation)
   return {
     id,
     rootId,
@@ -398,7 +398,7 @@ function isProgress(value: unknown): value is BranchWorkspaceRepositoryMember['p
 }
 
 function isOperationKind(value: unknown): value is BranchWorkspaceOperationSnapshot['kind'] {
-  return value === 'create' || value === 'extend' || value === 'repair' || value === 'remove'
+  return value === 'create' || value === 'extend' || value === 'reduce' || value === 'repair' || value === 'remove'
 }
 
 function isOperationPhase(value: unknown): value is BranchWorkspaceOperationSnapshot['phase'] {

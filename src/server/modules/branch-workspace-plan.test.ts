@@ -512,6 +512,29 @@ describe('branch workspace create planner', () => {
 })
 
 describe('branch workspace repair planner', () => {
+  test('does not recreate released auxiliary content during repair', async () => {
+    const current = existingManifest()
+    const deps = repairDependencies(current)
+
+    await expect(
+      buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, deps),
+    ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.nothing-to-repair' })
+    expect(deps.inspectPath).not.toHaveBeenCalledWith(ROOT, path.join(current.path, 'README.md'), undefined)
+  })
+
+  test('clears an incomplete operation after all one-time auxiliary work was released', async () => {
+    const current = existingManifest()
+    current.operation = { kind: 'create', phase: 'failed', startedAt: '2026-07-22T00:00:00.000Z' }
+    const deps = repairDependencies(current)
+
+    await expect(
+      buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, deps),
+    ).resolves.toMatchObject({
+      ok: true,
+      plan: { operation: 'repair', auxiliaryEntries: [], steps: [] },
+    })
+  })
+
   test('plans exact approved replacement for persisted repository dependency conflicts', async () => {
     const current = existingManifest()
     current.repositories[0] = {
@@ -610,11 +633,7 @@ describe('branch workspace repair planner', () => {
     })
 
     for (const deps of [pendingDeps, setupDeps]) {
-      const result = await buildBranchWorkspacePlan(
-        ROOT,
-        { operation: 'repair', branchWorkspaceId: current.id },
-        deps,
-      )
+      const result = await buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, deps)
       expect(result).toMatchObject({
         ok: true,
         plan: {
@@ -810,6 +829,46 @@ describe('branch workspace remove planner', () => {
     expect(getStatus).not.toHaveBeenCalled()
   })
 
+  test('treats released auxiliary content as unmanaged when removing the whole workspace', async () => {
+    const current = existingManifest()
+    const memberBranch = {
+      ...branch(BRANCH, current.repositories[0]!.worktreePath),
+      worktree: {
+        path: current.repositories[0]!.worktreePath,
+        summary: { dirty: false, changeCount: 0 },
+      },
+    }
+    const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch('main'), memberBranch) })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
+    deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+    deps.inspectPath.mockImplementation(async (_rootId, candidatePath) => ({
+      ...missing(candidatePath),
+      exists: true,
+      kind: candidatePath === current.path ? 'directory' : 'file',
+      resolvedPath: candidatePath,
+    }))
+
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      {
+        operation: 'remove',
+        branchWorkspaceId: current.id,
+        alsoDeleteBranch: false,
+        alsoDeleteUpstream: false,
+      },
+      { ...deps, listChildren: vi.fn(async () => ['api', 'README.md']) },
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        auxiliaryEntries: [],
+        unmanagedEntries: ['README.md'],
+        requiredApprovals: ['unmanaged-content'],
+      },
+    })
+  })
+
   test('plans provenance-aware cleanup and independent modified, unmanaged, and terminal approvals', async () => {
     const current = manifestForRemoval()
     const deps = dependencies({
@@ -945,6 +1004,179 @@ describe('branch workspace remove planner', () => {
   })
 })
 
+describe('branch workspace reduce planner', () => {
+  test('plans selected members in configured order with dirty and terminal approvals', async () => {
+    const current = manifestForReduction()
+    const memberBranch = (index: number, dirty: boolean) => ({
+      ...branch(BRANCH, current.repositories[index]!.worktreePath),
+      worktree: {
+        path: current.repositories[index]!.worktreePath,
+        summary: { dirty, changeCount: dirty ? 1 : 0 },
+      },
+    })
+    const deps = dependencies({
+      [path.join(ROOT, 'api')]: snapshot(branch('main'), memberBranch(0, false)),
+      [path.join(ROOT, 'web')]: snapshot(branch('develop'), memberBranch(1, false)),
+      [path.join(ROOT, 'worker')]: snapshot(branch('main'), memberBranch(2, true)),
+    })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api', 'web', 'worker'] } })
+    deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+    deps.inspectPath.mockImplementation(async (_rootId, candidatePath) => ({
+      ...missing(candidatePath),
+      exists: candidatePath === current.path,
+      kind: candidatePath === current.path ? 'directory' : 'missing',
+      ...(candidatePath === current.path ? { resolvedPath: candidatePath } : {}),
+    }))
+    const listTerminalSessions = vi.fn(async (repoId: string) =>
+      repoId === ROOT
+        ? [terminal('terminal-root-1234', ROOT, current.path)]
+        : repoId === path.join(ROOT, 'api')
+          ? [terminal('terminal-api-12345', repoId, current.repositories[0]!.worktreePath)]
+          : repoId === path.join(ROOT, 'web')
+            ? [terminal('terminal-web-12345', repoId, current.repositories[1]!.worktreePath)]
+            : repoId === path.join(ROOT, 'worker')
+              ? [terminal('terminal-worker-1', repoId, current.repositories[2]!.worktreePath)]
+              : [],
+    )
+
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      {
+        operation: 'reduce',
+        branchWorkspaceId: current.id,
+        repositories: ['worker', 'api'],
+      },
+      { ...deps, listTerminalSessions },
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        operation: 'reduce',
+        repositories: [
+          { repositoryName: 'api', action: 'remove-worktree', dirty: false },
+          { repositoryName: 'worker', action: 'remove-worktree', dirty: true },
+        ],
+        requiredApprovals: ['discard-member-changes', 'close-terminals'],
+        terminalSessionIds: ['terminal-api-12345', 'terminal-worker-1'],
+        steps: [
+          { kind: 'remove-worktree', repositoryName: 'api' },
+          { kind: 'remove-worktree', repositoryName: 'worker' },
+        ],
+      },
+    })
+    if (!result.ok) throw new Error('Expected a reduction plan')
+    expect(result.plan.manifest.repositories.map((member) => [member.repositoryName, member.progress])).toEqual([
+      ['api', 'pending'],
+      ['web', 'complete'],
+      ['worker', 'pending'],
+    ])
+    expect(result.plan.steps.some((step) => step.kind === 'delete-local-branch')).toBe(false)
+    expect(result.plan.steps.some((step) => step.kind === 'delete-upstream-branch')).toBe(false)
+    expect(result.plan.steps.some((step) => step.kind === 'remove-directory')).toBe(false)
+  })
+
+  test('rejects removing the final member or a repository outside current membership', async () => {
+    const current = manifestForRemoval()
+    const deps = dependencies({
+      [path.join(ROOT, 'api')]: snapshot(branch(BRANCH, current.repositories[0]!.worktreePath)),
+      [path.join(ROOT, 'web')]: snapshot(branch(BRANCH, current.repositories[1]!.worktreePath)),
+    })
+    deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+
+    await expect(
+      buildBranchWorkspacePlan(
+        ROOT,
+        { operation: 'reduce', branchWorkspaceId: current.id, repositories: ['api', 'web'] },
+        deps,
+      ),
+    ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.member-required' })
+    await expect(
+      buildBranchWorkspacePlan(
+        ROOT,
+        { operation: 'reduce', branchWorkspaceId: current.id, repositories: ['worker'] },
+        deps,
+      ),
+    ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.member-unavailable' })
+  })
+
+  test('rejects a new reduction when an unselected member has drifted', async () => {
+    const current = manifestForReduction()
+    const cleanMember = (index: number) => ({
+      ...branch(BRANCH, current.repositories[index]!.worktreePath),
+      worktree: {
+        path: current.repositories[index]!.worktreePath,
+        summary: { dirty: false, changeCount: 0 },
+      },
+    })
+    const deps = dependencies({
+      [path.join(ROOT, 'api')]: snapshot(cleanMember(0)),
+      [path.join(ROOT, 'web')]: snapshot(branch(BRANCH)),
+      [path.join(ROOT, 'worker')]: snapshot(cleanMember(2)),
+    })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api', 'web', 'worker'] } })
+    deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+    deps.inspectPath.mockImplementation(async (_rootId, candidatePath) => ({
+      ...missing(candidatePath),
+      exists: candidatePath === current.path,
+      kind: candidatePath === current.path ? 'directory' : 'missing',
+    }))
+
+    await expect(
+      buildBranchWorkspacePlan(
+        ROOT,
+        { operation: 'reduce', branchWorkspaceId: current.id, repositories: ['api'] },
+        deps,
+      ),
+    ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.needs-repair' })
+  })
+
+  test('rejects a new reduction when an auxiliary entry has drifted', async () => {
+    const current = manifestForReduction()
+    current.auxiliaryEntries = [
+      {
+        name: 'README.md',
+        mode: 'symlink',
+        sourcePath: path.join(ROOT, 'README.md'),
+        targetPath: path.join(current.path, 'README.md'),
+        progress: 'complete',
+      },
+    ]
+    const memberBranch = (index: number) => ({
+      ...branch(BRANCH, current.repositories[index]!.worktreePath),
+      worktree: {
+        path: current.repositories[index]!.worktreePath,
+        summary: { dirty: false, changeCount: 0 },
+      },
+    })
+    const deps = dependencies({
+      [path.join(ROOT, 'api')]: snapshot(memberBranch(0)),
+      [path.join(ROOT, 'web')]: snapshot(memberBranch(1)),
+      [path.join(ROOT, 'worker')]: snapshot(memberBranch(2)),
+    })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api', 'web', 'worker'] } })
+    deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+    deps.inspectPath.mockImplementation(async (_rootId, candidatePath) =>
+      candidatePath === current.path
+        ? { ...missing(candidatePath), exists: true, kind: 'directory' }
+        : {
+            ...missing(candidatePath),
+            exists: true,
+            kind: 'symlink',
+            linkTarget: path.join(ROOT, 'other.md'),
+          },
+    )
+
+    await expect(
+      buildBranchWorkspacePlan(
+        ROOT,
+        { operation: 'reduce', branchWorkspaceId: current.id, repositories: ['api'] },
+        deps,
+      ),
+    ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.needs-repair' })
+  })
+})
+
 function manifestWithAuxiliaryEntries(): BranchWorkspaceManifest {
   const current = existingManifest()
   return {
@@ -985,6 +1217,25 @@ function manifestForRemoval(): BranchWorkspaceManifest {
       },
     ],
     auxiliaryEntries: current.auxiliaryEntries.filter((entry) => entry.mode === 'copy'),
+  }
+}
+
+function manifestForReduction(): BranchWorkspaceManifest {
+  const current = manifestForRemoval()
+  return {
+    ...current,
+    repositories: [
+      ...current.repositories,
+      {
+        repositoryName: 'worker',
+        targetBranch: BRANCH,
+        baseBranch: 'main',
+        branchOrigin: 'created',
+        worktreePath: path.join(current.path, 'worker'),
+        progress: 'complete',
+      },
+    ],
+    auxiliaryEntries: [],
   }
 }
 

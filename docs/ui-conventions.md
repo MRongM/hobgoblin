@@ -16,7 +16,7 @@ Use this doc for UI language and presentation rules.
 - Treat a branch workspace and its member worktrees as one parent scope. Selecting a member must keep the branch workspace active.
 - Give parent selection, member expansion, drag reordering, and the More menu separate interaction targets. The Chevron explicitly changes expansion without selection; double-clicking the parent item selects its root context through the normal click sequence and toggles member expansion.
 - Show exactly one selected row. When a member is selected, use a subtle parent scope marker instead of a second selected state.
-- Place actions that affect every member in the branch workspace item's More menu, keep them grouped together, and label their whole-scope impact explicitly.
+- Place actions that affect every member or change membership in the branch workspace item's More menu, keep them grouped together, and label their parent-scope impact explicitly. Adding or removing members opens a branch workspace dialog; do not put removal on an individual member row.
 - Reuse the ordinary repository worktree explorer and detail surfaces for a selected member worktree.
 - Reuse the ordinary worktree action model for member worktree items, but omit drag, checkout, worktree creation or refresh, and individual worktree or branch removal. Keep unavailable member actions visible and disabled.
 - In Chinese UI copy, use “子工作区” and “成员工作树”; avoid “子仓库”. In English copy, use “branch workspace” and “member worktree”.

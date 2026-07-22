@@ -11,7 +11,6 @@ describe('branch workspace protected paths', () => {
   test.each([
     { worktreePath: ROOT, paths: [BRANCH_PATH] },
     { worktreePath: BRANCH_PATH, paths: [path.join(BRANCH_PATH, 'api')] },
-    { worktreePath: BRANCH_PATH, paths: [path.join(BRANCH_PATH, 'README.md')] },
   ])('blocks deleting a registered managed root %#', async ({ worktreePath, paths }) => {
     await expect(
       assertBranchWorkspaceFileMutationAllowed(
@@ -19,6 +18,20 @@ describe('branch workspace protected paths', () => {
         dependencies(manifest(ROOT)),
       ),
     ).resolves.toEqual({ ok: false, message: 'branch-workspace.managed-path-protected' })
+  })
+
+  test('allows released auxiliary roots to retain generic file actions', async () => {
+    await expect(
+      assertBranchWorkspaceFileMutationAllowed(
+        {
+          rootId: ROOT,
+          kind: 'delete',
+          worktreePath: BRANCH_PATH,
+          paths: [path.join(BRANCH_PATH, 'README.md')],
+        },
+        dependencies(manifest(ROOT)),
+      ),
+    ).resolves.toEqual({ ok: true })
   })
 
   test('allows descendants and unmanaged roots to retain generic file actions', async () => {

@@ -41,7 +41,7 @@ describe('BranchWorkspaceFileTree', () => {
             path: '/workspace/goblin-feature-auth',
             lifecycle: 'ready',
             available: true,
-            managedRootNames: ['api', 'README.md'],
+            managedRootNames: ['api'],
           }}
         />,
       )
@@ -56,7 +56,7 @@ describe('BranchWorkspaceFileTree', () => {
           branch: 'feature/auth',
           isGitRepo: false,
           status: [],
-          protectedRootNames: ['api', 'README.md'],
+          protectedRootNames: ['api'],
         },
       }),
       undefined,

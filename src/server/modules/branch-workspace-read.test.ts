@@ -144,6 +144,27 @@ describe('branch workspace read model', () => {
     })
   })
 
+  test('projects interrupted member reduction without reporting removed progress as drift', async () => {
+    const reducing = manifest('feature/reducing', {
+      operation: { kind: 'reduce', phase: 'failed', startedAt: '2026-07-22T00:00:00.000Z' },
+    })
+    reducing.repositories[0] = { ...reducing.repositories[0]!, progress: 'removed' }
+    const deps = dependencies([reducing])
+
+    await expect(readBranchWorkspaceSnapshot(ROOT, undefined, deps)).resolves.toMatchObject({
+      ok: true,
+      items: [
+        {
+          id: reducing.id,
+          lifecycle: 'reduce-incomplete',
+          available: true,
+          issues: [],
+          repositories: [{ repositoryName: 'api', progress: 'removed', observedState: 'missing' }],
+        },
+      ],
+    })
+  })
+
   test('projects failed repository dependency bootstrap as repairable state', async () => {
     const current = manifest()
     current.repositories[0] = {
@@ -177,6 +198,32 @@ describe('branch workspace read model', () => {
     })
   })
 
+  test('does not project completed auxiliary materialization as tracked state or drift', async () => {
+    const current = manifest('feature/auth', {
+      operation: { kind: 'create', phase: 'failed', startedAt: '2026-07-22T00:00:00.000Z' },
+    })
+    current.auxiliaryEntries = [
+      {
+        name: 'README.md',
+        mode: 'copy',
+        sourcePath: path.join(ROOT, 'README.md'),
+        targetPath: path.join(current.path, 'README.md'),
+        progress: 'complete',
+      },
+    ]
+    const deps = dependencies([current])
+    deps.inspectPath.mockImplementation(async (_rootId, candidatePath) =>
+      candidatePath === current.auxiliaryEntries[0]!.targetPath
+        ? inspection(candidatePath, 'missing')
+        : inspection(candidatePath),
+    )
+
+    await expect(readBranchWorkspaceSnapshot(ROOT, undefined, deps)).resolves.toMatchObject({
+      ok: true,
+      items: [{ lifecycle: 'create-incomplete', issues: [], auxiliaryEntries: [] }],
+    })
+  })
+
   test('distinguishes unavailable repositories from worktrees checked out elsewhere', async () => {
     const unavailable = manifest('feature/unavailable')
     const moved = manifest('feature/moved')
@@ -207,45 +254,4 @@ describe('branch workspace read model', () => {
     })
   })
 
-  test('reconciles symlink identity but never fingerprints completed copies during ordinary reads', async () => {
-    const current = manifest()
-    current.auxiliaryEntries = [
-      {
-        name: 'README.md',
-        mode: 'symlink',
-        sourcePath: path.join(ROOT, 'README.md'),
-        targetPath: path.join(current.path, 'README.md'),
-        progress: 'complete',
-      },
-      {
-        name: 'docs',
-        mode: 'copy',
-        sourcePath: path.join(ROOT, 'docs'),
-        targetPath: path.join(current.path, 'docs'),
-        copyBaseline: 'a'.repeat(64),
-        progress: 'complete',
-      },
-    ]
-    const deps = dependencies([current])
-    deps.inspectPath.mockImplementation(async (_rootId, candidatePath) => {
-      if (candidatePath.endsWith('README.md')) {
-        return { ...inspection(candidatePath, 'symlink'), linkTarget: path.join(ROOT, 'other.md') }
-      }
-      return inspection(candidatePath)
-    })
-
-    await expect(readBranchWorkspaceSnapshot(ROOT, undefined, deps)).resolves.toMatchObject({
-      ok: true,
-      items: [
-        {
-          lifecycle: 'needs-repair',
-          issues: [{ kind: 'auxiliary-path-mismatch', entryName: 'README.md' }],
-          auxiliaryEntries: [
-            { name: 'README.md', observedState: 'path-mismatch' },
-            { name: 'docs', observedState: 'ready' },
-          ],
-        },
-      ],
-    })
-  })
 })

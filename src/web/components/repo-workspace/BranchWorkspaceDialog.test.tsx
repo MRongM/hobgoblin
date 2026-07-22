@@ -475,6 +475,80 @@ describe('BranchWorkspaceDialog', () => {
       alsoDeleteUpstream: false,
     })
   })
+
+  test('extends an existing branch workspace with only non-member repository controls', async () => {
+    const onPreview = vi.fn(async () => true)
+    renderDialog({ mode: 'extend', workspace: existingWorkspace(), onPreview })
+
+    const branchInput = document.querySelector<HTMLInputElement>('[aria-label="workspace.branch-workspace.branch"]')
+    expect(branchInput?.value).toBe('feature/auth')
+    expect(branchInput?.disabled).toBe(true)
+    expect(document.body.textContent).not.toContain('workspace.branch-workspace.member-fixed')
+    expect(document.querySelector('[aria-labelledby="branch-workspace-auxiliary-candidates"]')).toBeNull()
+    expect(document.querySelectorAll('[aria-label="workspace.branch-workspace.repository-named"]')).toHaveLength(1)
+    expect(document.querySelector<HTMLButtonElement>('[data-action="preview"]')?.disabled).toBe(true)
+
+    click('workspace.branch-workspace.repository-named')
+    await flushAsyncWork()
+    await clickAction('preview')
+
+    expect(onPreview).toHaveBeenCalledWith({
+      operation: 'create',
+      branch: 'feature/auth',
+      repositories: [
+        { repositoryName: 'api', baseBranch: 'main' },
+        { repositoryName: 'web', baseBranch: 'trunk' },
+      ],
+      auxiliaryEntries: [],
+    })
+  })
+
+  test('previews a member reduction while retaining at least one member', async () => {
+    const onPreview = vi.fn(async () => true)
+    renderDialog({ mode: 'reduce', workspace: workspaceWithTwoMembers(), onPreview })
+
+    const preview = document.querySelector<HTMLButtonElement>('[data-action="preview"]')
+    expect(preview?.disabled).toBe(true)
+    expect(document.body.textContent).toContain('workspace.branch-workspace.reduce-retains-branches')
+
+    const checkboxes = Array.from(document.querySelectorAll<HTMLInputElement>('[data-branch-workspace-reduce-member]'))
+    expect(checkboxes).toHaveLength(2)
+    act(() => checkboxes[0]?.click())
+    expect(preview?.disabled).toBe(false)
+    await clickAction('preview')
+
+    expect(onPreview).toHaveBeenCalledWith({
+      operation: 'reduce',
+      branchWorkspaceId: 'branch-1',
+      repositories: ['api'],
+    })
+
+    act(() => checkboxes[1]?.click())
+    expect(preview?.disabled).toBe(true)
+  })
+
+  test('requires explicit dirty and terminal approvals for member reduction', async () => {
+    const onConfirm = vi.fn(async () => ({ ok: true as const, branchWorkspaceId: 'branch-1' }))
+    renderDialog({ mode: 'reduce', workspace: workspaceWithTwoMembers(), plan: reductionPlan(), onConfirm })
+
+    const dirtyApproval = document.querySelector<HTMLInputElement>(
+      '[aria-label="workspace.branch-workspace.approval.discard-member-changes"]',
+    )
+    const terminalApproval = document.querySelector<HTMLInputElement>(
+      '[aria-label="workspace.branch-workspace.approval.close-terminals"]',
+    )
+    const confirm = document.querySelector<HTMLButtonElement>('[data-action="confirm"]')
+    expect(dirtyApproval?.checked).toBe(false)
+    expect(terminalApproval?.checked).toBe(false)
+    expect(confirm?.disabled).toBe(true)
+    expect(confirm?.dataset.variant).toBe('destructive')
+
+    act(() => dirtyApproval?.click())
+    act(() => terminalApproval?.click())
+    expect(confirm?.disabled).toBe(false)
+    await clickAction('confirm')
+    expect(onConfirm).toHaveBeenCalledWith(['discard-member-changes', 'close-terminals'])
+  })
 })
 
 function renderDialog(overrides: Partial<React.ComponentProps<typeof BranchWorkspaceDialog>>) {
@@ -594,6 +668,25 @@ function existingWorkspace(): BranchWorkspaceSnapshot {
   }
 }
 
+function workspaceWithTwoMembers(): BranchWorkspaceSnapshot {
+  const workspace = existingWorkspace()
+  return {
+    ...workspace,
+    repositories: [
+      ...workspace.repositories,
+      {
+        repositoryName: 'web',
+        targetBranch: 'feature/auth',
+        baseBranch: 'trunk',
+        branchOrigin: 'pre-existing',
+        worktreePath: '/workspace/goblin-feature-auth/web',
+        progress: 'complete',
+        observedState: 'ready',
+      },
+    ],
+  }
+}
+
 function approvalPlan(): BranchWorkspacePlan {
   const workspace = existingWorkspace()
   return {
@@ -650,5 +743,33 @@ function removalPlan(): BranchWorkspacePlan {
       },
     ],
     removalOptions: { alsoDeleteBranch: true, alsoDeleteUpstream: true },
+  }
+}
+
+function reductionPlan(): BranchWorkspacePlan {
+  const plan = approvalPlan()
+  return {
+    ...plan,
+    operation: 'reduce',
+    repositories: [
+      {
+        repositoryName: 'api',
+        repoId: '/workspace/api',
+        targetBranch: 'feature/auth',
+        baseBranch: 'main',
+        branchOrigin: 'created',
+        worktreePath: '/workspace/goblin-feature-auth/api',
+        mode: { kind: 'existingBranch', branch: 'feature/auth' },
+        worktreeBootstrap: { kind: 'skip' },
+        confirmationRequired: false,
+        satisfied: false,
+        action: 'remove-worktree',
+        worktreePresent: true,
+        dirty: true,
+      },
+    ],
+    requiredApprovals: ['discard-member-changes', 'close-terminals'],
+    terminalSessionIds: ['terminal-api'],
+    steps: [{ id: 'repository:api', kind: 'remove-worktree', label: 'api', repositoryName: 'api' }],
   }
 }
