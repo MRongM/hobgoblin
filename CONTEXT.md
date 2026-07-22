@@ -72,6 +72,10 @@ _Avoid_: Detail area, file tab area
 The top row of the repository file area, containing the Status, Files, Changes, History, Local, Remote Branches, and optional Ports explorer tabs together with their overflow control.
 _Avoid_: Detail tabs, file tabs
 
+**Detached file area window**:
+A temporary auxiliary window that shows a live copy of one file area tab while keeping the source tab in its captured repository and branch or worktree context. Electron uses a native application window; Web uses a same-origin browser window.
+_Avoid_: File area focus mode, moved file tab, generic secondary window
+
 **Branch action target**:
 The branch or worktree explicitly targeted by an action. It may differ from the selected branch context, and targeting it does not imply navigating to it unless the action opens branch-specific application content.
 _Avoid_: Active branch, implicitly selected branch

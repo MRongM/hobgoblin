@@ -11,6 +11,7 @@ import { assertDictionaryParity, resolveLang, setCurrentLang } from '#/main/i18n
 import { wireRpcIpc } from '#/main/rpc.ts'
 import { wireShellBridgeIpc } from '#/main/shell-bridge.ts'
 import { wireTerminalIpc } from '#/main/terminal.ts'
+import { closeDetachedFileAreaWindows, wireDetachedFileAreaWindowIpc } from '#/main/detached-file-area-window.ts'
 import { syncGlobalShortcuts, unregisterAppShortcuts } from '#/main/shortcuts.ts'
 import { enqueueExternalOpenPath } from '#/main/external-open.ts'
 import { broadcastRendererEffectIntent } from '#/main/renderer-surface-events.ts'
@@ -115,6 +116,7 @@ async function main(): Promise<void> {
 
 async function finalizeMainProcessExit(): Promise<void> {
   try {
+    closeDetachedFileAreaWindows()
     broadcastRendererEffectIntent({ type: 'app-quitting' })
     const windowStateFlushed = await flushWindowState()
     if (!windowStateFlushed) console.error('[window-state] final flush failed before quit')
@@ -166,6 +168,7 @@ function wireMainProcessIpc(): void {
   wireRpcIpc()
   wireShellBridgeIpc()
   wireTerminalIpc()
+  wireDetachedFileAreaWindowIpc()
 }
 
 async function syncInitialGlobalShortcutState(settingsSnapshot: SettingsSnapshot): Promise<void> {

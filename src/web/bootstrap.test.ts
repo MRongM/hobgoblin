@@ -10,6 +10,7 @@ function webBootstrap(overrides: Partial<RendererBootstrapSnapshot> = {}): Rende
     initialI18n: null,
     initialSettings: null,
     initialServer: null,
+    surface: { kind: 'main' },
     ...overrides,
   }
 }
@@ -25,6 +26,7 @@ function electronBootstrap(overrides: Partial<RendererBootstrapSnapshot> = {}): 
     initialI18n: null,
     initialSettings: null,
     initialServer: null,
+    surface: { kind: 'main' },
     ...overrides,
   }
 }
@@ -97,6 +99,7 @@ describe('renderer bootstrap', () => {
       initialI18n: null,
       initialSettings: null,
       initialServer: null,
+      surface: { kind: 'main' },
     })
   })
 
@@ -108,6 +111,7 @@ describe('renderer bootstrap', () => {
       initialI18n: null,
       initialSettings: null,
       initialServer: null,
+      surface: { kind: 'main' },
     })
 
     Object.defineProperty(globalThis, 'window', {
@@ -156,6 +160,7 @@ describe('renderer bootstrap', () => {
       initialI18n: null,
       initialSettings: null,
       initialServer: null,
+      surface: { kind: 'main' },
     })
   })
 
@@ -251,6 +256,29 @@ describe('renderer bootstrap', () => {
     expect(getInitialBootstrap()).toEqual(bootstrap)
   })
 
+  test('normalizes a detached surface injected into a Web bootstrap back to the main surface', async () => {
+    const bootstrap = webBootstrap({
+      surface: {
+        kind: 'detached-file-area',
+        request: {
+          repo: { kind: 'local', id: '/repo' },
+          branch: 'main',
+          tab: 'files',
+        },
+      },
+    })
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        __GOBLIN_BOOTSTRAP__: bootstrap,
+        location: { href: 'http://127.0.0.1:32100/', origin: 'http://127.0.0.1:32100', search: '' },
+      },
+    })
+
+    const { getInitialBootstrap } = await import('#/web/bootstrap.ts')
+    expect(getInitialBootstrap().surface).toEqual({ kind: 'main' })
+  })
+
   test('reads injected web bootstrap from the html json script when the Electron bridge is unavailable', async () => {
     const bootstrap: RendererBootstrapSnapshot = webBootstrap({
       homeDir: '/Users/tester',
@@ -297,6 +325,7 @@ describe('renderer bootstrap', () => {
         secret: 'test-secret',
         clientId: expect.stringMatching(/^web_/),
       },
+      surface: { kind: 'main' },
     })
   })
 })

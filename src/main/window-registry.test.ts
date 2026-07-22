@@ -86,4 +86,40 @@ describe('window registry', () => {
       },
     ])
   })
+
+  test('tracks auxiliary renderer surfaces without replacing the main window', async () => {
+    const registry = await import('#/main/window-registry.ts')
+    const main = makeWindow()
+    const firstAuxiliary = makeWindow()
+    const secondAuxiliary = makeWindow()
+
+    registry.registerRendererWindowSurface(main, { windowKey: 'main' }, { main: true })
+    registry.registerRendererWindowSurface(firstAuxiliary, { windowKey: 'detached-file-area:1' })
+    registry.registerRendererWindowSurface(secondAuxiliary, { windowKey: 'detached-file-area:2' })
+
+    expect(registry.getMainWindow()).toBe(main)
+    expect(registry.allRegisteredSurfacesWithCapability('rpcBroadcast')).toHaveLength(3)
+
+    mocks.getFocusedWindow.mockReturnValue(firstAuxiliary)
+    expect(registry.getFocusedRegisteredWindow()).toBe(firstAuxiliary)
+    expect(registry.focusedRegisteredSurface()?.windowKey).toBe('detached-file-area:1')
+
+    registry.unregisterRendererWindowSurface({ windowKey: 'detached-file-area:1' }, firstAuxiliary)
+    expect(registry.getMainWindow()).toBe(main)
+    expect(registry.isRegisteredRendererSurfaceId(firstAuxiliary.webContents.id)).toBe(false)
+    expect(registry.allRegisteredSurfacesWithCapability('rpcBroadcast')).toHaveLength(2)
+  })
+
+  test('broadcasts matching events to main and auxiliary renderer surfaces', async () => {
+    const registry = await import('#/main/window-registry.ts')
+    const main = makeWindow()
+    const auxiliary = makeWindow()
+
+    registry.registerRendererWindowSurface(main, { windowKey: 'main' }, { main: true })
+    registry.registerRendererWindowSurface(auxiliary, { windowKey: 'detached-file-area:1' })
+    registry.broadcastToSurfaceCapability('rpcBroadcast', RPC_EVENT_CHANNEL, [{ type: 'settings-write-error' }])
+
+    expect(main.webContents.send).toHaveBeenCalledWith(RPC_EVENT_CHANNEL, { type: 'settings-write-error' })
+    expect(auxiliary.webContents.send).toHaveBeenCalledWith(RPC_EVENT_CHANNEL, { type: 'settings-write-error' })
+  })
 })

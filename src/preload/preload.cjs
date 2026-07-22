@@ -23,6 +23,7 @@ const IPC = {
     saveClipboardBinaryFiles: 'goblin:shell-save-clipboard-binary-files',
     writeFileTreeClipboardFile: 'goblin:shell-write-file-tree-clipboard-file',
     readFileTreeClipboardFile: 'goblin:shell-read-file-tree-clipboard-file',
+    openDetachedFileAreaWindow: 'goblin:shell-open-detached-file-area-window',
   },
   terminal: {
     notifyBell: 'goblin:terminal-notify-bell',
@@ -113,6 +114,7 @@ const initialServer =
   (typeof bootstrap.server.clientId === 'undefined' || typeof bootstrap.server.clientId === 'string')
     ? bootstrap.server
     : null
+const surface = isObject(bootstrap?.surface) ? bootstrap.surface : { kind: 'main' }
 const rpcEventSubscribers = new Set()
 let rpcEventListener = null
 const effectIntentSubscribers = new Set()
@@ -164,6 +166,7 @@ contextBridge.exposeInMainWorld('goblinNative', {
   initialI18n,
   initialSettings,
   initialServer,
+  surface,
   invokeRpc: ({ path, input, requestId }) => rpcCall({ path, input, requestId }),
   abortRpc: (requestId) => safeInvoke(IPC.rpc.abort, { requestId }),
   pathForFile: (file) => webUtils.getPathForFile(file),
@@ -178,6 +181,7 @@ contextBridge.exposeInMainWorld('goblinNative', {
     saveClipboardBinaryFiles: (input) => safeInvoke(IPC.shell.saveClipboardBinaryFiles, input),
     writeFileTreeClipboardFile: (input) => safeInvoke(IPC.shell.writeFileTreeClipboardFile, input),
     readFileTreeClipboardFile: (input) => safeInvoke(IPC.shell.readFileTreeClipboardFile, input),
+    openDetachedFileAreaWindow: (input) => safeInvoke(IPC.shell.openDetachedFileAreaWindow, input),
   },
   terminal: {
     notifyBell: (input) => safeInvoke(IPC.terminal.notifyBell, input),

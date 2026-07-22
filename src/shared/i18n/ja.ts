@@ -587,6 +587,13 @@ export const ja: Record<DictKey, string> = {
   'file-tree.collapse-all': 'ツリーを折りたたむ',
   'file-tree.tabs.expand': 'タブをさらに表示',
   'file-tree.tabs.collapse': 'タブを折りたたむ',
+  'file-area.detach-hint': 'ドラッグして外すか Shift+Enter で別ウインドウに開く',
+  'file-area.detached.live': 'ライブ',
+  'file-area.detached.back': '{tab} に戻る',
+  'file-area.detached.unavailable-title': 'このファイル領域は利用できません',
+  'file-area.detached.unavailable-body':
+    'リポジトリ、ブランチ、またはビューを利用できません。元のコンテキストを更新して、もう一度ドラッグしてください。',
+  'error.failed-open-window': 'ウインドウを開けませんでした',
   'file-area.collapse': 'ファイル領域を折りたたむ',
   'file-area.expand': 'ファイル領域を展開',
   'file-tree.new-file': '新しいファイル',

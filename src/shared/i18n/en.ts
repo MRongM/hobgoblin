@@ -588,6 +588,13 @@ export const en = {
   'file-tree.collapse-all': 'Collapse tree',
   'file-tree.tabs.expand': 'Show more tabs',
   'file-tree.tabs.collapse': 'Show fewer tabs',
+  'file-area.detach-hint': 'Drag out or press Shift+Enter to open in a separate window',
+  'file-area.detached.live': 'Live',
+  'file-area.detached.back': 'Back to {tab}',
+  'file-area.detached.unavailable-title': 'File area unavailable',
+  'file-area.detached.unavailable-body':
+    'The repository, branch, or view is no longer available. Refresh the source context and drag it out again.',
+  'error.failed-open-window': 'Unable to open the window',
   'file-area.collapse': 'Collapse file area',
   'file-area.expand': 'Expand file area',
   'file-tree.new-file': 'New file',
