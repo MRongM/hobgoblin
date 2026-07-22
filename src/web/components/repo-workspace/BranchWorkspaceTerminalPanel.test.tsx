@@ -47,7 +47,9 @@ vi.mock('#/web/components/terminal/TerminalTabs.tsx', () => ({
 }))
 
 vi.mock('#/web/components/terminal/TerminalSlot.tsx', () => ({
-  TerminalSlot: (props: Record<string, unknown>) => <div data-testid="terminal-slot" data-props={JSON.stringify(props)} />,
+  TerminalSlot: (props: Record<string, unknown>) => (
+    <div data-testid="terminal-slot" data-props={JSON.stringify(props)} />
+  ),
 }))
 
 vi.mock('#/web/components/tab-strip/useFocusRegistry.ts', () => ({
@@ -55,6 +57,12 @@ vi.mock('#/web/components/tab-strip/useFocusRegistry.ts', () => ({
 }))
 
 vi.mock('#/web/stores/i18n.ts', () => ({ useT: () => (key: string) => key }))
+vi.mock('#/web/components/repo-workspace/FocusProjectSwitcher.tsx', () => ({
+  FocusProjectSwitcher: () => <div data-testid="focus-project-switcher" />,
+}))
+vi.mock('#/web/components/repo-workspace/WorkspaceRepositorySwitcher.tsx', () => ({
+  WorkspaceRepositorySwitcher: () => <div data-testid="workspace-repository-switcher" />,
+}))
 vi.mock('#/web/runtime-settings-chrome.ts', () => ({
   useRuntimeChromeSettings: () => ({ topbarHeightPx: 39, toolbarHeightPx: 41 }),
 }))
@@ -125,6 +133,35 @@ describe('BranchWorkspaceTerminalPanel', () => {
       worktreePath: PATH,
     })
   })
+
+  test('leaves the terminal content empty when no session is selected', async () => {
+    await renderPanel()
+
+    expect(container.querySelector('[data-testid="terminal-slot"]')).toBeNull()
+    expect(container.textContent).not.toContain('terminal.label')
+    expect(container.textContent).not.toContain('terminal.new')
+  })
+
+  test('does not expose terminal focus from the terminal toolbar', async () => {
+    await renderPanel()
+
+    expect(container.querySelector('button[aria-label="terminal.focus"]')).toBeNull()
+    expect(createTerminal).not.toHaveBeenCalled()
+  })
+
+  test('exits terminal focus through the focused toolbar control', async () => {
+    const onExitTerminalFocus = vi.fn()
+    await renderPanel({ terminalFocusMode: true, onExitTerminalFocus })
+
+    expect(container.querySelector('[data-testid="focus-project-switcher"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="workspace-repository-switcher"]')).not.toBeNull()
+    expect(terminalTabsProps.at(-1)?.focusMode).toBe(true)
+
+    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="terminal.exit-focus"]')?.click())
+
+    expect(onExitTerminalFocus).toHaveBeenCalledTimes(1)
+    expect(createTerminal).not.toHaveBeenCalled()
+  })
 })
 
 describe('openBranchWorkspaceInternalTerminal', () => {
@@ -168,9 +205,14 @@ describe('openBranchWorkspaceInternalTerminal', () => {
   })
 })
 
-async function renderPanel() {
+async function renderPanel(
+  props: {
+    terminalFocusMode?: boolean
+    onExitTerminalFocus?: () => void
+  } = {},
+) {
   await act(async () => {
-    root!.render(<BranchWorkspaceTerminalPanel context={branchWorkspaceContext()} />)
+    root!.render(<BranchWorkspaceTerminalPanel context={branchWorkspaceContext()} {...props} />)
     await Promise.resolve()
   })
 }

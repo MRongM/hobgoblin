@@ -60,7 +60,6 @@ const runtimeSettingsMocks = vi.hoisted(() => ({
 }))
 
 vi.mock('#/web/runtime-settings-terminal-buttons.ts', () => ({
-  useRuntimeTerminalCustomButtons: () => runtimeSettingsMocks.terminalCustomButtons,
   useRuntimeTerminalSettings: () => ({
     temporaryFilesDirectory: runtimeSettingsMocks.temporaryFilesDirectory,
     terminalFontSize: runtimeSettingsMocks.terminalFontSize,

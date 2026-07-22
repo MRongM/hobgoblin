@@ -5,7 +5,11 @@ import { selectedBranchForBranchSet } from '#/web/stores/repos/branch-view-mode.
 import type { ExplorerTab, RestorableRepoSnapshot, RepoState } from '#/web/stores/repos/types.ts'
 import { finishResourceSuccess } from '#/web/stores/repos/resources.ts'
 import { stripBranchWorktreeMetadata } from '#/web/stores/repos/worktree-state.ts'
-import { DEFAULT_WORKSPACE_LAYOUT, normalizeFileTreePaneSizes } from '#/shared/workspace-layout.ts'
+import {
+  DEFAULT_WORKSPACE_LAYOUT,
+  normalizeFileTreePaneSizes,
+  normalizeWorkspaceLayout,
+} from '#/shared/workspace-layout.ts'
 import type { BranchActionItemId } from '#/web/hooks/branch-action-state.ts'
 
 export const rememberedQuickActions = new Map<string, BranchActionItemId>()
@@ -177,7 +181,7 @@ function restoreProjectionFromSnapshot(repo: RepoState, snapshot: RestorableRepo
       selectedBranch,
       detailTab: normalizeCachedDetailTab(snapshot.ui.detailTab),
       explorerTabByBranch: snapshot.ui.explorerTabByBranch ?? {},
-      workspaceLayout: snapshot.ui.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT,
+      workspaceLayout: normalizeWorkspaceLayout(snapshot.ui.workspaceLayout),
       fileTreePaneSizes: snapshot.ui.fileTreePaneSizes,
       worktreePathOrder: snapshot.ui.worktreePathOrder,
     },
@@ -272,6 +276,7 @@ function normalizeRestorableRepoSnapshotEntry(value: unknown): RestorableRepoSna
     fileTreePaneSizes: _rawFileTreePaneSizes,
     explorerTab: rawExplorerTab,
     explorerTabByBranch: rawExplorerTabByBranch,
+    workspaceLayout: rawWorkspaceLayout,
     ...ui
   } = snapshot.ui
   const explorerTabByBranch = normalizeCachedExplorerTabByBranch(rawExplorerTabByBranch, rawExplorerTab)
@@ -285,7 +290,7 @@ function normalizeRestorableRepoSnapshotEntry(value: unknown): RestorableRepoSna
       ...ui,
       detailTab: normalizeCachedDetailTab(snapshot.ui.detailTab),
       ...(Object.keys(explorerTabByBranch).length > 0 ? { explorerTabByBranch } : {}),
-      workspaceLayout: snapshot.ui.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT,
+      workspaceLayout: normalizeWorkspaceLayout(rawWorkspaceLayout),
       ...(fileTreePaneSizes ? { fileTreePaneSizes } : {}),
     },
   }

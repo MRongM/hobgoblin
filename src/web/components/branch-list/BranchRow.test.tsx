@@ -18,6 +18,7 @@ const branchActionState = vi.hoisted(() => ({
   editorOnSelect: vi.fn(),
   externalTerminalOnSelect: vi.fn(),
   internalTerminalOnSelect: vi.fn(),
+  pullDisabled: false,
 }))
 
 vi.mock('#/web/stores/i18n.ts', () => ({
@@ -56,8 +57,58 @@ vi.mock('#/web/stores/i18n.ts', () => ({
 
 vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
   useBranchActionItems: () => ({
-    patchItems: [],
-    mainItems: [],
+    patchItems: [
+      {
+        id: 'createTag',
+        label: 'action.create-tag',
+        icon: <span />,
+        disabled: false,
+        visible: true,
+        onSelect: vi.fn(),
+      },
+    ],
+    mainItems: [
+      {
+        id: 'checkout',
+        label: 'action.checkout',
+        icon: <span />,
+        disabled: false,
+        visible: false,
+        onSelect: vi.fn(),
+      },
+      {
+        id: 'pull',
+        label: 'action.pull',
+        icon: <span />,
+        disabled: branchActionState.pullDisabled,
+        visible: true,
+        onSelect: vi.fn(),
+      },
+      {
+        id: 'push',
+        label: 'action.push',
+        icon: <span />,
+        disabled: false,
+        visible: true,
+        onSelect: vi.fn(),
+      },
+      {
+        id: 'createWorktree',
+        label: 'action.create-worktree',
+        icon: <span />,
+        disabled: false,
+        visible: true,
+        onSelect: vi.fn(),
+      },
+      {
+        id: 'sync',
+        label: 'action.refresh',
+        icon: <span />,
+        disabled: false,
+        visible: true,
+        onSelect: vi.fn(),
+      },
+    ],
     externalItems: [
       {
         id: 'editor',
@@ -93,7 +144,26 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
         onSelect: branchActionState.externalTerminalOnSelect,
       },
     ],
-    destructiveItems: [],
+    destructiveItems: [
+      {
+        id: 'removeWorktree',
+        label: 'action.remove-worktree',
+        icon: <span />,
+        disabled: false,
+        visible: true,
+        destructive: true,
+        onSelect: vi.fn(),
+      },
+      {
+        id: 'deleteBranch',
+        label: 'action.delete-branch',
+        icon: <span />,
+        disabled: false,
+        visible: true,
+        destructive: true,
+        onSelect: vi.fn(),
+      },
+    ],
     dialogs: null,
     inlinePanel: <div data-testid="inline-commit-form">inline commit</div>,
   }),
@@ -122,6 +192,7 @@ beforeEach(() => {
   branchActionState.editorOnSelect.mockReset()
   branchActionState.externalTerminalOnSelect.mockReset()
   branchActionState.internalTerminalOnSelect.mockReset()
+  branchActionState.pullDisabled = false
 })
 
 afterEach(() => {
@@ -370,11 +441,12 @@ describe('BranchRow', () => {
       </ul>,
     )
 
-    const summary = document.querySelector<HTMLElement>('li > .pointer-events-none > [title*="feature/a"]')
+    const summary = document.querySelector<HTMLElement>('[data-workspace-list-item-main] [title*="feature/a"]')
     const [iconColumn, textColumn] = Array.from(summary?.children ?? []) as HTMLElement[]
 
     expect(summary?.className).toContain('grid-cols-[1rem_minmax(0,1fr)]')
     expect(summary?.className).toContain('items-center')
+    expect(iconColumn?.className).toContain('workspace-list-item-leading-icon')
     expect(iconColumn?.querySelector('svg')?.classList.contains('lucide-folder-tree')).toBe(true)
     expect(textColumn?.textContent).toContain('feature/a')
     // 单行显示：worktree 路径不再作为文本内容出现在 textColumn
@@ -778,13 +850,12 @@ describe('BranchRow', () => {
       </ul>,
     )
 
-    const row = document.querySelector('li')
-    const content = row?.querySelector('.pointer-events-none')
+    const row = document.querySelector('[data-workspace-list-item]')
+    const content = row?.querySelector('[data-workspace-list-item-main]')
 
-    expect(row?.className).toContain('min-h-8')
-    expect(row?.className).not.toContain('min-h-9')
-    expect(content?.className).toContain('py-1')
-    expect(content?.className).not.toContain('py-1.5')
+    expect(row?.getAttribute('data-size')).toBe('primary')
+    expect(content?.className).toContain('h-8')
+    expect(content?.className).not.toContain('h-9')
   })
 
   test('does not render commit author or commit time in visible branch row text', () => {
@@ -816,7 +887,7 @@ describe('BranchRow', () => {
     expect(text).not.toContain('MRongM')
   })
 
-  test('applies sortable props to the row without rendering a drag handle', () => {
+  test('applies sortable props only to a dedicated drag handle', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
 
@@ -832,19 +903,22 @@ describe('BranchRow', () => {
           showActions={false}
           sortable={{
             setNodeRef: vi.fn(),
-            props: { role: 'button' },
+            dragHandle: {
+              setActivatorNodeRef: vi.fn(),
+              props: { 'data-sortable-id': '/tmp/worktree-a' },
+            },
           }}
         />
       </ul>,
     )
 
     const handle = document.querySelector('[aria-label="重新排序工作树"]')
-    const row = document.querySelector('li[role="button"]')
-    expect(handle).toBeNull()
-    expect(document.querySelector('.lucide-grip-vertical')).toBeNull()
-    expect(row).not.toBeNull()
-    expect(row?.className).toContain('grid-cols-1')
-    expect(row?.className).not.toContain('1.75rem')
+    const row = document.querySelector('[data-workspace-list-item]')
+    const main = document.querySelector('[data-workspace-list-item-main]')
+    expect(handle?.getAttribute('data-sortable-id')).toBe('/tmp/worktree-a')
+    expect(handle?.querySelector('.lucide-grip-vertical')).not.toBeNull()
+    expect(row?.hasAttribute('data-sortable-id')).toBe(false)
+    expect(main?.hasAttribute('data-sortable-id')).toBe(false)
   })
 
   test('keeps standard content padding when sortable props are provided', () => {
@@ -863,19 +937,20 @@ describe('BranchRow', () => {
           showActions={false}
           sortable={{
             setNodeRef: vi.fn(),
-            props: { role: 'button' },
+            dragHandle: {
+              setActivatorNodeRef: vi.fn(),
+              props: { 'data-sortable-id': '/tmp/worktree-a' },
+            },
           }}
         />
       </ul>,
     )
 
-    const content = Array.from(document.querySelectorAll<HTMLElement>('li > .pointer-events-none')).find((node) =>
-      node.textContent?.includes('feature/a'),
-    )
+    const content = document.querySelector<HTMLElement>('[data-workspace-list-item-main]')
 
-    expect(content?.className).toContain('pl-2.5')
-    expect(content?.className).toContain('py-1')
-    expect(content?.className).not.toContain('pr-2.5')
+    expect(content?.className).toContain('pl-2')
+    expect(content?.className).toContain('pr-2')
+    expect(content?.className).toContain('h-8')
   })
 
   test('renders inline action panel below the branch row content', () => {
@@ -897,7 +972,7 @@ describe('BranchRow', () => {
 
     const panel = document.body.querySelector('[data-testid="inline-commit-form"]')
     expect(panel).not.toBeNull()
-    expect(panel?.parentElement?.className).toContain('col-span-full')
+    expect(panel?.closest('[data-workspace-list-item]')).not.toBeNull()
   })
 
   test('renders inline editor and terminal buttons before the actions dropdown when worktree exists', () => {
@@ -918,8 +993,8 @@ describe('BranchRow', () => {
       </ul>,
     )
 
-    const editorBtn = document.body.querySelector<HTMLButtonElement>('[data-testid="branch-row-editor-btn"]')
-    const terminalBtn = document.body.querySelector<HTMLButtonElement>('[data-testid="branch-row-terminal-btn"]')
+    const editorBtn = document.body.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="editor"]')
+    const terminalBtn = document.body.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="terminal"]')
     const dropdown = document.body.querySelector<HTMLButtonElement>('[aria-label="action.menu"]')
 
     expect(editorBtn).not.toBeNull()
@@ -928,6 +1003,43 @@ describe('BranchRow', () => {
     // 编辑/终端按钮位于 dropdown 之前
     expect(editorBtn!.compareDocumentPosition(dropdown!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(terminalBtn!.compareDocumentPosition(dropdown!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  test('keeps the worktree menu stable while excluding create, refresh, and delete branch', async () => {
+    branchActionState.pullDisabled = true
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions
+        />
+      </ul>,
+    )
+
+    const items = await openRowMenu()
+    const labels = items.map((item) => item.textContent?.trim())
+    expect(labels).toEqual([
+      'open-external-terminal',
+      'action.pull',
+      'action.push',
+      'action.create-tag',
+      'action.remove-worktree',
+    ])
+    expect(labels).not.toContain('action.create-worktree')
+    expect(labels).not.toContain('action.refresh')
+    expect(labels).not.toContain('action.delete-branch')
+    expect(items.find((item) => item.textContent?.includes('action.pull'))?.hasAttribute('data-disabled')).toBe(true)
+    expect(
+      items.find((item) => item.textContent?.includes('action.remove-worktree'))?.getAttribute('data-variant'),
+    ).toBe('destructive')
   })
 
   test('clicking the branch row selects its branch', () => {
@@ -950,7 +1062,7 @@ describe('BranchRow', () => {
     )
 
     act(() => {
-      document.body.querySelector<HTMLLIElement>('li')!.click()
+      document.body.querySelector<HTMLButtonElement>('[data-workspace-list-item-main]')!.click()
     })
 
     expect(onSelectBranch).toHaveBeenCalledWith('feature/a')
@@ -975,7 +1087,7 @@ describe('BranchRow', () => {
       </ul>,
     )
 
-    const editorBtn = document.body.querySelector<HTMLButtonElement>('[data-testid="branch-row-editor-btn"]')
+    const editorBtn = document.body.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="editor"]')
     act(() => {
       editorBtn!.click()
     })
@@ -1002,7 +1114,7 @@ describe('BranchRow', () => {
       </ul>,
     )
 
-    const terminalBtn = document.body.querySelector<HTMLButtonElement>('[data-testid="branch-row-terminal-btn"]')
+    const terminalBtn = document.body.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="terminal"]')
     act(() => {
       terminalBtn!.click()
     })
@@ -1055,8 +1167,8 @@ describe('BranchRow', () => {
       </ul>,
     )
 
-    expect(document.body.querySelector('[data-testid="branch-row-editor-btn"]')).toBeNull()
-    expect(document.body.querySelector('[data-testid="branch-row-terminal-btn"]')).toBeNull()
+    expect(document.body.querySelector('[data-workspace-list-item-action="editor"]')).toBeNull()
+    expect(document.body.querySelector('[data-workspace-list-item-action="terminal"]')).toBeNull()
     // dropdown 仍然存在
     expect(document.body.querySelector('[aria-label="action.menu"]')).not.toBeNull()
   })
@@ -1123,6 +1235,16 @@ async function requestCloseAllFromContextMenu(row: HTMLElement): Promise<void> {
 async function openContextMenu(row: HTMLElement): Promise<HTMLElement[]> {
   await act(async () => {
     row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+    await Promise.resolve()
+  })
+  return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+}
+
+async function openRowMenu(): Promise<HTMLElement[]> {
+  await act(async () => {
+    document.body
+      .querySelector<HTMLButtonElement>('[aria-label="action.menu"]')
+      ?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
     await Promise.resolve()
   })
   return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]

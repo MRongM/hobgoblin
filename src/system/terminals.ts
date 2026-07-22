@@ -116,7 +116,3 @@ export async function openRemoteInPreferredTerminal(
   const resolved = resolveTerminalApp(pref, await getTerminalAppAvailability())
   return await openRemoteInTerminalBackend(resolved ? backends[resolved] : null, { alias, worktreePath: remotePath })
 }
-
-export async function getResolvedTerminalApp(pref: TerminalPref): Promise<ResolvedTerminalApp | null> {
-  return resolveTerminalApp(pref, await getTerminalAppAvailability())
-}

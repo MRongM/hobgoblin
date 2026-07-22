@@ -16,6 +16,14 @@ _Avoid_: Terminal toolbar, detail toolbar
 A Hobgoblin-managed terminal session rendered inside the selected worktree's terminal area.
 _Avoid_: New terminal, embedded terminal
 
+**Terminal focus mode**:
+A temporary desktop presentation that maximizes the selected internal terminal by hiding the workspace navigation and file surfaces until the user exits focus. It is distinct from compact focus surfaces and from maximizing an arbitrary detail surface.
+_Avoid_: Detail focus mode, workspace focus mode
+
+**Selected internal terminal**:
+The specific internal terminal session selected within one branch or worktree terminal area. It is distinct from the selected branch context and from the attachment that currently controls terminal input; a terminal deep link targets this session when it still exists and restores an encoded branch workspace member context when that relationship remains valid.
+_Avoid_: Current terminal, active terminal
+
 **Canonical terminal geometry**:
 The server-owned PTY column and row count published by the current controller attachment.
 _Avoid_: Viewer size, shared viewport size
@@ -48,9 +56,21 @@ _Avoid_: Bootstrap file, untracked path
 An existing immediate child file or directory of a repository root that Git currently ignores. It may be selected for one newly materialized branch-workspace repository member, while a repository-owned `goblin.toml` takes precedence over manual dependency selection.
 _Avoid_: `.gitignore` rule, workspace auxiliary entry, generic untracked file
 
+**Repository dependency replacement**:
+A repair-time deletion and rematerialization of an existing repository dependency target, limited to the exact paths in an explicitly approved branch workspace plan.
+_Avoid_: Overwrite, directory merge, automatic conflict resolution
+
 **Selected branch context**:
 The branch whose explorer and detail surfaces the user is currently viewing. Changing this context is navigation; it is distinct from checking out a Git branch and from targeting a branch action.
 _Avoid_: Active branch, current branch
+
+**File area**:
+The explorer surface for the selected project or branch context. In a repository worktree context, it contains the file area tab bar and the selected explorer panel; in a plain workspace, it contains the file browser without repository explorer tabs. It is distinct from the navigation area and the detail pane.
+_Avoid_: Detail area, file tab area
+
+**File area tab bar**:
+The top row of the repository file area, containing the Status, Files, Changes, History, Local, Remote Branches, and optional Ports explorer tabs together with their overflow control.
+_Avoid_: Detail tabs, file tabs
 
 **Branch action target**:
 The branch or worktree explicitly targeted by an action. It may differ from the selected branch context, and targeting it does not imply navigating to it unless the action opens branch-specific application content.
@@ -77,12 +97,16 @@ A multi-repository workspace whose durable, ordered repository membership has be
 _Avoid_: Saved scan, repository registry, primary repository
 
 **Branch workspace**:
-A branch-specific, indivisible working context owned by one configured workspace and presented by its common branch name. Within that parent, a branch name identifies at most one branch workspace; every workspace-level action targets its root directory on the same local or SSH host as the parent, while contained repository worktrees are members rather than nested workspace contexts. Membership may be extended but not reduced or rematerialized as a configuration change, and removal always targets the whole branch workspace. When active, it exposes folder-level file browsing and internal terminals while the parent workspace retains separate repository navigation. Its managed directory remains visible and browsable in the parent file tree but cannot be renamed, moved, or deleted there; inside it, managed member and auxiliary roots receive the same protection while their contents remain operable. Its durable membership and materialization intent remain meaningful when files or worktrees are unavailable, a branch workspace operation is incomplete, or external filesystem changes cause drift. Drift is surfaced for explicit repair or removal rather than silently recreating or forgetting the branch workspace; completed members are retained without automatic rollback, and retries continue the remaining work.
+A branch-specific, indivisible working context owned by one configured workspace and presented by its common branch name. Within that parent, a branch name identifies at most one branch workspace; every workspace-level action targets its root directory on the same local or SSH host as the parent, while contained repository worktrees are members rather than nested workspace contexts. Membership may be extended but not reduced or rematerialized as a configuration change, and removal always targets the whole branch workspace. When active, its root context exposes folder-level file browsing and internal terminals, and selecting one member worktree exposes that repository's ordinary worktree experience without leaving the branch workspace; the parent workspace retains separate repository navigation. Its managed directory remains visible and browsable in the parent file tree but cannot be renamed, moved, or deleted there; inside it, managed member and auxiliary roots receive the same protection while their contents remain operable. Its durable membership and materialization intent remain meaningful when files or worktrees are unavailable, a branch workspace operation is incomplete, or external filesystem changes cause drift. Drift is surfaced for explicit repair or removal rather than silently recreating or forgetting the branch workspace; completed members are retained without automatic rollback, and retries continue the remaining work.
 _Avoid_: Project, workspace repository, generic subworkspace
 
 **Workspace worktree**:
 A set of same-named linked worktrees belonging to one branch workspace. The configured repository list is the candidate pool; each branch workspace chooses its own members, every member remains an independent Git operation boundary, and newly created target branches may use different base branches per repository. Member provenance distinguishes target branches created for the branch workspace from branches that already existed. A same-named worktree already checked out elsewhere remains repository-only and is never moved or claimed automatically.
 _Avoid_: Shared worktree, combined worktree
+
+**Branch workspace member worktree**:
+The linked worktree contributed by one repository member to a branch workspace while remaining that repository's independent Git operation boundary.
+_Avoid_: Subrepository, child repository worktree, nested workspace
 
 **Branch workspace base branch**:
 The repository-specific destination branch that one branch workspace member is intended to merge back into. Different members may have different base branches, and the destination remains fixed rather than being inferred from the repository's current default or selected branch.
@@ -93,12 +117,17 @@ The parent-level workspace view that lists its branch workspaces in the same con
 _Avoid_: All branch workspace, workspace repository
 
 **Branch workspace item**:
-The non-expandable workspace overview representation of one branch workspace, labelled by the common branch name rather than its directory name. Items have a durable manual order within the parent workspace; new items append without repair or extension changing existing order. Activating an item opens that working context inside the parent project rather than creating another project; its editor and external-terminal actions open the branch workspace root, while its internal-terminal action restores the last root-scoped session or creates one when none exists. Ready items expose all folder actions; creation-incomplete or drifted items remain inspectable and repairable, active operations expose only cancellation, and removal-incomplete items cannot be reopened. Its badges represent only internal terminal sessions scoped to that root directory.
+The workspace overview representation of one branch workspace, labelled by the common branch name rather than its directory name and identified with the branch-workspace icon. Its expanded repository members use the ordinary worktree icon. Items have a durable manual order within the parent workspace; new items append without repair or extension changing existing order. Single-clicking the main item selects its root context without changing member-summary expansion; when a member is selected, that selection first returns to the root context. Double-clicking the main item selects the root through the normal click sequence and toggles its member summaries, while the separate Chevron toggles those summaries without changing selection. A separate control reorders the item. Its editor and external-terminal actions open the branch workspace root, while its internal-terminal action restores the last root-scoped session or creates one when none exists. The item menu owns whole-branch-workspace batch Git actions, which open inline beneath that item without narrowing to a selected member. Ready items expose all folder actions; creation-incomplete or drifted items remain inspectable and repairable, active operations expose only cancellation, and removal-incomplete items cannot be reopened. Its item-level badges represent internal terminal sessions scoped to that root directory and the summed Git change count of its repository member worktrees.
 _Avoid_: Project item, repository row, worktree row
+
+**Branch workspace member summary**:
+The inline representation of one repository member under an expanded branch workspace item, showing its repository identity, target-worktree dirtiness, and internal-terminal activity without a commit hash or Git tag; selecting it keeps the branch workspace active while opening that member worktree's files, Git surfaces, and terminals. It exposes the ordinary worktree's editor, terminal, remote, and repository-scoped Git actions while omitting reordering, checkout, worktree creation or refresh, and individual worktree or branch removal because those operations would escape or violate the owning branch workspace lifecycle.
+_Avoid_: Subrepository, child repository, nested project, branch workspace item
 
 **Workspace auxiliary entry**:
 A selected non-repository direct child of the workspace root that is materialized under a branch workspace with the same name, independently as either a symbolic link or a copy. A symbolic link continues to reference the root entry; a copy is a one-time independent snapshot, dereferencing a symbolic-link source when necessary, and never synchronizes or merges back. A missing copy may be explicitly repaired from the source's current content as a new snapshot but an existing copy is never overwritten. Copying content whose resolved source lies outside the workspace boundary requires separate approval. Configured repositories and all their worktrees, branch workspace directories, and application temporary entries are not eligible.
-_Avoid_: Workspace member, shared file, bootstrap file
+In user-facing language, these entries are grouped as **Branch workspace dependencies**.
+_Avoid_: Workspace member, shared file, bootstrap file, repository dependency candidate
 
 **Repository-only worktree**:
 A linked branch worktree that is not a member of a workspace worktree. It is changed only through that repository's ordinary worktree actions.
@@ -106,15 +135,23 @@ _Avoid_: Orphan worktree, detached worktree
 
 **Branch workspace operation**:
 A server-coordinated creation, extension, repair, or removal of one branch workspace. Member work is applied sequentially with per-member results and no automatic rollback, but this cross-repository orchestration is not exposed as a separate batch concept.
-When removal includes local branch cleanup, that cleanup applies only to branches created for the branch workspace and is explicitly forceful, so it may discard their unpushed commits; pre-existing branches are retained. Dirty worktrees may be removed only when the removal request explicitly enables force removal, which discards their uncommitted changes; locked and primary worktrees remain removal safety boundaries. Modified copied auxiliary entries, unregistered contents, and internal terminals running anywhere under the branch workspace require separate destructive approval; approved terminals are closed before file removal, while symbolic-link removal never removes its target.
+When removal includes local branch cleanup, that cleanup applies only to branches created for the branch workspace and is explicitly forceful, so it may discard their unpushed commits; pre-existing branches are retained. Removing a branch workspace always force-removes its managed worktrees and may discard their uncommitted changes without a separate dirty-worktree preflight, while locked and primary worktrees remain removal safety boundaries. Modified copied auxiliary entries, unregistered contents, and internal terminals running anywhere under the branch workspace require separate destructive approval; approved terminals are closed before file removal, while symbolic-link removal never removes its target.
 _Avoid_: Workspace batch operation, workspace transaction, multi-repository Git command
 
 **Branch workspace batch commit**:
 An application-coordinated action that presents every dirty repository member with one editable, repository-specific AI commit message bound to the inspected change set. Before any commit it verifies that every member still matches that change set; after one explicit confirmation, it creates exactly one commit per dirty member sequentially, stops at the first failure, and never rolls back completed commits.
 _Avoid_: AI commit handoff, shared commit message, automatic commit
 
+**Branch workspace batch pull**:
+An application-coordinated action that fast-forward pulls every repository member's target branch from its configured upstream sequentially, stops at the first failure, and never rolls back completed pulls.
+_Avoid_: Workspace pull-all, base-branch pull, atomic batch pull
+
+**Branch workspace batch push**:
+An application-coordinated action that pushes every repository member's target branch to its resolved push target sequentially, stops at the first failure, and never rolls back completed pushes.
+_Avoid_: Merge-back push, base-branch push, atomic batch push
+
 **Branch workspace merge-back**:
-An application-coordinated action that integrates each repository member's target branch into its fixed branch workspace base branch, either locally or through a pull-merge-push pipeline. Member pipelines run sequentially, stop at the first failed step, and never roll back completed Git or remote writes.
+An application-coordinated action that integrates each repository member's target branch into its fixed branch workspace base branch, either locally or through a pipeline that pulls the base branch, merges the target branch in the base worktree, and pushes the base branch. Member pipelines run sequentially, stop at the first failed step, and never roll back completed Git or remote writes.
 _Avoid_: Source-branch merge, current-branch merge, atomic batch merge
 
 **Plain workspace**:

@@ -227,6 +227,48 @@ describe('useBranchActionItems', () => {
     expect(openExternalTerminal).not.toHaveBeenCalled()
   })
 
+  test('uses a member navigation override before creating an internal terminal', async () => {
+    const selectedBranch = createRepoBranch('feature/selected', {
+      worktree: { path: '/tmp/repo-selected' },
+    })
+    const targetBranch = createRepoBranch('feature/member', {
+      worktree: { path: '/tmp/repo-member' },
+    })
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      branches: [selectedBranch, targetBranch],
+      selectedBranch: selectedBranch.name,
+      detailTab: 'status',
+    })
+    useReposStore.setState({ detailCollapsed: true })
+    const events: string[] = []
+    const onNavigateToInternalTerminal = vi.fn(() => {
+      events.push('navigate-member')
+    })
+    createTerminal.mockImplementationOnce(async () => {
+      events.push('create-terminal')
+      expect(useReposStore.getState().detailCollapsed).toBe(false)
+      return 't1'
+    })
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
+    const groups = await renderItemGroups(useItems, repo, targetBranch, { onNavigateToInternalTerminal })
+    const terminal = groups.externalItems.find((item) => item.id === 'terminal')
+    if (!terminal) throw new Error('missing terminal action')
+
+    await act(async () => {
+      await terminal.onSelect()
+    })
+
+    expect(onNavigateToInternalTerminal).toHaveBeenCalledWith({
+      repoRoot: '/tmp/repo',
+      branch: 'feature/member',
+      worktreePath: '/tmp/repo-member',
+    })
+    expect(events).toEqual(['navigate-member', 'create-terminal'])
+    expect(useReposStore.getState().repos['/tmp/repo']?.ui.selectedBranch).toBe('feature/selected')
+  })
+
   test('opens the external terminal without creating an internal session', async () => {
     mocks.useRuntimeExternalAppSettings.mockReturnValue({
       terminalApp: 'auto',
@@ -891,6 +933,7 @@ async function renderItemGroups(
   useItems: typeof useBranchActionItems,
   repo: ReturnType<typeof seedRepoState>,
   branch: ReturnType<typeof createRepoBranch>,
+  options?: Parameters<typeof useBranchActionItems>[2],
 ): Promise<ReturnType<typeof useBranchActionItems>> {
   let groups: ReturnType<typeof useBranchActionItems> | null = null
   root = createRoot(container)
@@ -899,7 +942,13 @@ async function renderItemGroups(
       <InlineCommitDraftProvider>
         <TerminalSessionReadContext.Provider value={terminalReadContextValue()}>
           <TerminalSessionContext.Provider value={terminalContextValue()}>
-            <ItemsHarness useItems={useItems} repo={repo} branch={branch} onReady={(items) => (groups = items)} />
+            <ItemsHarness
+              useItems={useItems}
+              repo={repo}
+              branch={branch}
+              options={options}
+              onReady={(items) => (groups = items)}
+            />
           </TerminalSessionContext.Provider>
         </TerminalSessionReadContext.Provider>
       </InlineCommitDraftProvider>,
@@ -913,14 +962,16 @@ function ItemsHarness({
   useItems,
   repo,
   branch,
+  options,
   onReady,
 }: {
   useItems: typeof useBranchActionItems
   repo: ReturnType<typeof seedRepoState>
   branch: ReturnType<typeof createRepoBranch>
+  options?: Parameters<typeof useBranchActionItems>[2]
   onReady: (items: ReturnType<typeof useBranchActionItems>) => void
 }) {
-  const items = useItems(repo, branch)
+  const items = useItems(repo, branch, options)
   React.useEffect(() => {
     onReady(items)
   }, [items, onReady])

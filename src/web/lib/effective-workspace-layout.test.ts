@@ -17,9 +17,9 @@ describe('useEffectiveWorkspaceLayout', () => {
     expect(result).toBe('left-right')
   })
 
-  test('returns top-bottom in compact mode', () => {
+  test('keeps left-right as the canonical layout in compact mode', () => {
     vi.mocked(ResponsiveUiMode.useResponsiveUiMode).mockReturnValue('compact')
     const result = useEffectiveWorkspaceLayout()
-    expect(result).toBe('top-bottom')
+    expect(result).toBe('left-right')
   })
 })

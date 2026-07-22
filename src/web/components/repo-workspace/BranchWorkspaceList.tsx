@@ -1,4 +1,4 @@
-import { useContext, useMemo, type ReactNode } from 'react'
+import { useContext, useMemo, useState, type ReactNode } from 'react'
 import {
   DndContext,
   KeyboardSensor,
@@ -17,9 +17,23 @@ import {
 } from '@dnd-kit/sortable'
 import { arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Eye, FolderKanban, GitCommitHorizontal, GitMerge, RotateCcw, Terminal, Trash2, X } from 'lucide-react'
-import type { BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
-import { AsyncButton } from '#/web/components/AsyncButton.tsx'
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronDown,
+  ChevronRight,
+  Eye,
+  FolderKanban,
+  GitCompareArrows,
+  GitMerge,
+  RotateCcw,
+  SendHorizontal,
+  Terminal,
+  Trash2,
+  X,
+} from 'lucide-react'
+import type { BranchWorkspaceGitActionKind } from '#/shared/branch-workspace-git-actions.ts'
+import type { BranchWorkspaceRepositorySnapshot, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
 import { Tip } from '#/web/components/Tip.tsx'
 import { Badge } from '#/web/components/ui/badge.tsx'
@@ -39,10 +53,22 @@ import {
 import { openBranchWorkspaceInternalTerminal } from '#/web/components/repo-workspace/BranchWorkspaceTerminalPanel.tsx'
 import type { BranchWorkspaceFolderContext } from '#/web/components/repo-workspace/BranchWorkspaceFileTree.tsx'
 import { useFolderExternalOpenActions } from '#/web/hooks/useFolderExternalOpenActions.ts'
-import { cn } from '#/web/lib/cn.ts'
 import { lastPathSegment } from '#/web/lib/paths.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { WorkspaceItemContextMenu } from '#/web/components/repo-workspace/WorkspaceItemContextMenu.tsx'
+import {
+  BranchWorkspaceItemMenu,
+  type BranchWorkspaceItemAction,
+} from '#/web/components/repo-workspace/BranchWorkspaceItemMenu.tsx'
+import {
+  WorkspaceListItemActionDock,
+  WorkspaceListItemFrame,
+  type WorkspaceListItemAction,
+} from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
+import {
+  BranchWorkspaceMemberRow,
+  type BranchWorkspaceMemberPresentation,
+} from '#/web/components/repo-workspace/BranchWorkspaceMemberRow.tsx'
 
 const restrictToVerticalBranchWorkspaceList: Modifier = ({ transform }) => ({ ...transform, x: 0 })
 
@@ -50,37 +76,53 @@ export interface BranchWorkspaceListProps {
   rootId: string
   items: BranchWorkspaceSnapshot[]
   activeId: string | null
+  activeMemberRepositoryName?: string | null
   disabled?: boolean
+  changeCountById?: Readonly<Record<string, number>>
   onActivate: (id: string) => void
   onReorder: (orderedIds: string[]) => void | Promise<void>
   onInspect: (item: BranchWorkspaceSnapshot) => void
   onRepair: (item: BranchWorkspaceSnapshot) => void
   onRemove: (item: BranchWorkspaceSnapshot) => void
   onCancel: (item: BranchWorkspaceSnapshot) => void | Promise<void>
-  onBatchCommit?: (item: BranchWorkspaceSnapshot) => void
-  onMergeBack?: (item: BranchWorkspaceSnapshot) => void
+  getMemberPresentation?: (
+    item: BranchWorkspaceSnapshot,
+    member: BranchWorkspaceRepositorySnapshot,
+  ) => BranchWorkspaceMemberPresentation
+  onOpenRepositoryMember?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
+  onOpenRepositoryMemberTerminal?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
   onOpenEditor?: (item: BranchWorkspaceSnapshot) => void | Promise<void>
   onOpenExternalTerminal?: (item: BranchWorkspaceSnapshot) => void | Promise<void>
   onOpenInternalTerminal?: (item: BranchWorkspaceSnapshot) => void | Promise<void>
+  gitActionsDisabled?: boolean
+  onGitAction?: (item: BranchWorkspaceSnapshot, kind: BranchWorkspaceGitActionKind) => void
+  gitActionPanel?: { itemId: string; content: ReactNode } | null
 }
 
 export function BranchWorkspaceList({
   rootId,
   items,
   activeId,
+  activeMemberRepositoryName = null,
   disabled = false,
+  changeCountById = {},
   onActivate,
   onReorder,
   onInspect,
   onRepair,
   onRemove,
   onCancel,
-  onBatchCommit,
-  onMergeBack,
+  getMemberPresentation,
+  onOpenRepositoryMember,
+  onOpenRepositoryMemberTerminal,
   onOpenEditor,
   onOpenExternalTerminal,
   onOpenInternalTerminal,
+  gitActionsDisabled = false,
+  onGitAction,
+  gitActionPanel = null,
 }: BranchWorkspaceListProps) {
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => (activeId ? new Set([activeId]) : new Set()))
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -91,6 +133,19 @@ export function BranchWorkspaceList({
     const toIndex = items.findIndex((item) => item.id === over.id)
     if (fromIndex < 0 || toIndex < 0) return
     void onReorder(arrayMove(items, fromIndex, toIndex).map((item) => item.id))
+  }
+
+  const selectRoot = (id: string) => {
+    onActivate(id)
+  }
+
+  const toggleExpanded = (id: string) => {
+    setExpandedIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
   return (
@@ -107,18 +162,26 @@ export function BranchWorkspaceList({
               key={item.id}
               rootId={rootId}
               item={item}
-              active={item.id === activeId}
+              scopeActive={item.id === activeId}
+              activeMemberRepositoryName={item.id === activeId ? activeMemberRepositoryName : null}
+              expanded={expandedIds.has(item.id)}
               disabled={disabled}
-              onActivate={onActivate}
+              changeCountById={changeCountById}
+              onActivate={selectRoot}
+              onToggleExpanded={() => toggleExpanded(item.id)}
               onInspect={onInspect}
               onRepair={onRepair}
               onRemove={onRemove}
               onCancel={onCancel}
-              onBatchCommit={onBatchCommit}
-              onMergeBack={onMergeBack}
+              getMemberPresentation={getMemberPresentation}
+              onOpenRepositoryMember={onOpenRepositoryMember}
+              onOpenRepositoryMemberTerminal={onOpenRepositoryMemberTerminal}
               onOpenEditor={onOpenEditor}
               onOpenExternalTerminal={onOpenExternalTerminal}
               onOpenInternalTerminal={onOpenInternalTerminal}
+              gitActionsDisabled={gitActionsDisabled}
+              onGitAction={onGitAction}
+              gitActionPanel={gitActionPanel}
             />
           ))}
         </ul>
@@ -130,21 +193,32 @@ export function BranchWorkspaceList({
 function BranchWorkspaceRow({
   rootId,
   item,
-  active,
+  scopeActive,
+  activeMemberRepositoryName,
+  expanded,
   disabled,
+  changeCountById,
   onActivate,
+  onToggleExpanded,
   onInspect,
   onRepair,
   onRemove,
   onCancel,
-  onBatchCommit,
-  onMergeBack,
+  getMemberPresentation,
+  onOpenRepositoryMember,
+  onOpenRepositoryMemberTerminal,
   onOpenEditor,
   onOpenExternalTerminal,
   onOpenInternalTerminal,
-}: Omit<BranchWorkspaceListProps, 'items' | 'activeId' | 'onReorder'> & {
+  gitActionsDisabled,
+  onGitAction,
+  gitActionPanel,
+}: Omit<BranchWorkspaceListProps, 'items' | 'activeId' | 'activeMemberRepositoryName' | 'onReorder'> & {
   item: BranchWorkspaceSnapshot
-  active: boolean
+  scopeActive: boolean
+  activeMemberRepositoryName: string | null
+  expanded: boolean
+  onToggleExpanded: () => void
 }) {
   const t = useT()
   const ready = item.lifecycle === 'ready'
@@ -156,14 +230,17 @@ function BranchWorkspaceRow({
   const terminalKey = worktreeTerminalKey(rootId, item.path)
   const terminalKeys = useMemo(() => [terminalKey], [terminalKey])
   const terminalCount = useWorktreeTerminalCount(terminalKey)
+  const changeCount = changeCountById?.[item.id] ?? 0
   const hasTerminalBell = useWorktreeTerminalHasBell(terminalKey)
   const hasTerminalOutputActivity = useWorktreeTerminalHasOutputActivity(terminalKey)
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
     disabled: disabled || !ready,
   })
+  const rootSelected = scopeActive && !activeMemberRepositoryName
   const activate = () => {
-    if (folderAvailable && item.lifecycle !== 'active') onActivate(item.id)
+    if (!folderAvailable || item.lifecycle === 'active') return
+    if (!rootSelected) onActivate(item.id)
   }
   const openInternal = async () => {
     if (onOpenInternalTerminal) return await onOpenInternalTerminal(item)
@@ -176,6 +253,188 @@ function BranchWorkspaceRow({
     })
   }
   const openActionsDisabled = disabled || !ready || !folderAvailable
+  const memberListId = `branch-workspace-members-${item.id}`
+  const editorAction: WorkspaceListItemAction | undefined = ready
+    ? {
+        id: 'editor',
+        label: t('worktrees.open-in-editor-label'),
+        icon: <EditorAppIcon pref={externalActions.editor.iconPref} />,
+        disabled: openActionsDisabled || externalActions.editor.disabled,
+        busy: externalActions.editor.busy,
+        onSelect: () => (onOpenEditor ? onOpenEditor(item) : externalActions.editor.onSelect()),
+      }
+    : undefined
+  const internalTerminalAction: WorkspaceListItemAction | undefined = ready
+    ? {
+        id: 'terminal',
+        label: t('terminal.internal'),
+        icon: <Terminal aria-hidden="true" />,
+        disabled: openActionsDisabled,
+        onSelect: openInternal,
+      }
+    : undefined
+  const readyOpenMenuActions: BranchWorkspaceItemAction[] = ready
+    ? [
+        {
+          label: 'terminal.external',
+          icon: <TerminalAppIcon pref={externalActions.externalTerminal.iconPref} />,
+          disabled: openActionsDisabled || externalActions.externalTerminal.disabled,
+          busy: externalActions.externalTerminal.busy,
+          onSelect: () =>
+            onOpenExternalTerminal ? onOpenExternalTerminal(item) : externalActions.externalTerminal.onSelect(),
+        },
+      ]
+    : []
+  const readyGitActions: BranchWorkspaceItemAction[] =
+    ready && onGitAction
+      ? [
+          {
+            label: 'workspace.branch-workspace.git-action.batch-commit',
+            icon: <SendHorizontal aria-hidden="true" />,
+            disabled: disabled || gitActionsDisabled,
+            separated: true,
+            onSelect: () => onGitAction(item, 'batch-commit'),
+          },
+          {
+            label: 'workspace.branch-workspace.git-action.pull',
+            icon: <ArrowDown aria-hidden="true" />,
+            disabled: disabled || gitActionsDisabled,
+            onSelect: () => onGitAction(item, 'pull'),
+          },
+          {
+            label: 'workspace.branch-workspace.git-action.push',
+            icon: <ArrowUp aria-hidden="true" />,
+            disabled: disabled || gitActionsDisabled,
+            onSelect: () => onGitAction(item, 'push'),
+          },
+          {
+            label: 'workspace.branch-workspace.git-action.merge-back',
+            icon: <GitMerge aria-hidden="true" />,
+            disabled: disabled || gitActionsDisabled,
+            onSelect: () => onGitAction(item, 'merge-back'),
+          },
+        ]
+      : []
+  const lowFrequencyActions: BranchWorkspaceItemAction[] =
+    item.lifecycle === 'ready'
+      ? [
+          {
+            label: 'workspace.branch-workspace.delete',
+            icon: <Trash2 aria-hidden="true" />,
+            disabled,
+            destructive: true,
+            separated: true,
+            onSelect: () => onRemove(item),
+          },
+        ]
+      : item.lifecycle === 'create-incomplete'
+        ? [
+            {
+              label: 'workspace.branch-workspace.inspect',
+              icon: <Eye aria-hidden="true" />,
+              disabled,
+              onSelect: () => onInspect(item),
+            },
+          ]
+        : item.lifecycle === 'needs-repair'
+          ? [
+              {
+                label: 'workspace.branch-workspace.inspect',
+                icon: <Eye aria-hidden="true" />,
+                disabled,
+                onSelect: () => onInspect(item),
+              },
+              {
+                label: 'workspace.branch-workspace.delete',
+                icon: <Trash2 aria-hidden="true" />,
+                disabled,
+                destructive: true,
+                separated: true,
+                onSelect: () => onRemove(item),
+              },
+            ]
+          : item.lifecycle === 'delete-incomplete'
+            ? [
+                {
+                  label: 'workspace.branch-workspace.inspect',
+                  icon: <Eye aria-hidden="true" />,
+                  disabled,
+                  onSelect: () => onInspect(item),
+                },
+              ]
+            : []
+  const rowMenuActions = [...readyOpenMenuActions, ...readyGitActions, ...lowFrequencyActions]
+  const moreMenu = rowMenuActions.length > 0 ? <BranchWorkspaceItemMenu actions={rowMenuActions} /> : undefined
+  const lifecycleAction =
+    item.lifecycle === 'active' ? (
+      <RowAction label="workspace.branch-workspace.cancel" onClick={() => void onCancel(item)}>
+        <X />
+      </RowAction>
+    ) : item.lifecycle === 'create-incomplete' || item.lifecycle === 'needs-repair' ? (
+      <RowAction
+        label={
+          item.lifecycle === 'create-incomplete'
+            ? 'workspace.branch-workspace.retry'
+            : 'workspace.branch-workspace.repair'
+        }
+        onClick={() => onRepair(item)}
+      >
+        <RotateCcw />
+      </RowAction>
+    ) : item.lifecycle === 'delete-incomplete' ? (
+      <RowAction label="workspace.branch-workspace.continue-delete" destructive onClick={() => onRemove(item)}>
+        <Trash2 />
+      </RowAction>
+    ) : null
+  const branchWorkspaceAuxiliaryActions = (
+    <div className="flex w-10 shrink-0 items-center justify-end gap-0.5">
+      <span className="inline-flex size-5">
+        {item.repositories.length > 0 ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            aria-label={t(expanded ? 'workspace.branch-workspace.collapse' : 'workspace.branch-workspace.expand')}
+            aria-expanded={expanded}
+            aria-controls={memberListId}
+            disabled={disabled || item.lifecycle === 'active'}
+            onClick={onToggleExpanded}
+          >
+            {expanded ? <ChevronDown aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}
+          </Button>
+        ) : null}
+      </span>
+      <span className="inline-flex size-5">{lifecycleAction}</span>
+    </div>
+  )
+  const memberList =
+    expanded && item.repositories.length > 0 ? (
+      <ul
+        id={memberListId}
+        data-testid="branch-workspace-member-list"
+        data-branch-workspace-scope-spine
+        className="relative ml-5 border-l border-brand-border/50 pl-2"
+      >
+        {item.repositories.map((member) => (
+          <BranchWorkspaceMemberRow
+            key={member.repositoryName}
+            item={item}
+            member={member}
+            selected={scopeActive && activeMemberRepositoryName === member.repositoryName}
+            disabled={disabled || item.lifecycle === 'active'}
+            presentation={
+              getMemberPresentation?.(item, member) ?? {
+                dirty: false,
+                changeCount: null,
+                navigable: false,
+              }
+            }
+            onOpenRepositoryMember={onOpenRepositoryMember}
+            onOpenInternalTerminal={onOpenRepositoryMemberTerminal}
+          />
+        ))}
+      </ul>
+    ) : null
 
   return (
     <WorkspaceItemContextMenu
@@ -198,126 +457,91 @@ function BranchWorkspaceRow({
         onSelect: openInternal,
       }}
       worktreeTerminalKeys={terminalKeys}
+      additionalActions={lowFrequencyActions}
     >
-      <li
-        ref={setNodeRef}
-        style={{ transform: CSS.Transform.toString(transform), transition }}
-        data-branch-workspace-lifecycle={item.lifecycle}
-        className={cn('group relative', isDragging && 'z-10 rounded-md bg-card shadow-sm')}
+      <WorkspaceListItemFrame
+        itemRef={setNodeRef}
+        itemStyle={{ transform: CSS.Transform.toString(transform), transition }}
+        itemProps={{
+          'data-branch-workspace-lifecycle': item.lifecycle,
+          'data-branch-workspace-id': item.id,
+        }}
+        selected={rootSelected}
+        unavailable={!folderAvailable}
+        dragging={isDragging}
+        busy={item.lifecycle === 'active'}
+        leadingIcon={<FolderKanban className="size-3.5" aria-hidden="true" />}
+        dragHandle={
+          ready && !disabled
+            ? {
+                label: t('workspace.branch-workspace.reorder'),
+                setActivatorNodeRef,
+                props: { ...attributes, ...listeners },
+              }
+            : undefined
+        }
+        buttonProps={{
+          'data-testid': `branch-workspace-root-${item.id}`,
+          'aria-current': rootSelected ? 'page' : undefined,
+          disabled: disabled || !folderAvailable || item.lifecycle === 'active',
+          title: item.branch,
+          className: 'pr-[7.25rem]',
+          onClick: activate,
+          onDoubleClick: item.repositories.length > 0 ? onToggleExpanded : undefined,
+        }}
+        auxiliaryActions={branchWorkspaceAuxiliaryActions}
+        actions={
+          <WorkspaceListItemActionDock
+            editor={editorAction}
+            internalTerminal={internalTerminalAction}
+            moreMenu={moreMenu}
+          />
+        }
+        expandedContent={
+          <>
+            {memberList}
+            {gitActionPanel?.itemId === item.id ? gitActionPanel.content : null}
+          </>
+        }
       >
-        <button
-          ref={setActivatorNodeRef}
-          type="button"
-          {...attributes}
-          {...listeners}
-          aria-current={active ? 'page' : undefined}
-          disabled={!folderAvailable || item.lifecycle === 'active'}
-          title={item.branch}
-          className={cn(
-            'flex h-8 w-full min-w-0 items-center gap-2 rounded-[var(--goblin-brand-radius-sm,var(--radius-sm))] px-2 pr-40 text-left text-xs transition-colors',
-            ready && !disabled ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
-            active ? 'bg-selected text-selected-foreground' : 'hover:bg-list-row-hover',
-            !folderAvailable && 'opacity-60',
-            isDragging && 'cursor-grabbing bg-card shadow-sm',
-          )}
-          onClick={activate}
-        >
-          <FolderKanban className="size-3.5 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 truncate font-medium">{item.branch}</span>
-          {terminalCount > 0 ? (
-            <Badge
-              data-testid="branch-workspace-terminal-count-badge"
-              variant="brand"
-              aria-label={t('terminal.open-count', { count: terminalCount })}
-              className="h-4 shrink-0 gap-1 rounded-full px-1.5 text-[10px] tabular-nums"
-            >
-              {hasTerminalOutputActivity ? (
-                <TerminalOutputActivityIndicator label={t('terminal.output-active')} className="size-2.5" size={10} />
-              ) : (
-                <Terminal className="size-2.5" aria-hidden="true" />
-              )}
-              {terminalCount}
-            </Badge>
-          ) : null}
-          {hasTerminalBell ? <TerminalBellDot label={t('terminal.bell-unread')} /> : null}
-          <LifecycleSummary item={item} />
-        </button>
-        <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
-          {ready ? (
-            <>
-              {onBatchCommit ? (
-                <RowAction
-                  label="workspace.branch-workspace.git-action.batch-commit"
-                  onClick={() => onBatchCommit(item)}
-                >
-                  <GitCommitHorizontal />
-                </RowAction>
-              ) : null}
-              {onMergeBack ? (
-                <RowAction label="workspace.branch-workspace.git-action.merge-back" onClick={() => onMergeBack(item)}>
-                  <GitMerge />
-                </RowAction>
-              ) : null}
-              <RowAsyncAction
-                label="workspace.branch-workspace.open-editor"
-                busy={externalActions.editor.busy}
-                disabled={externalActions.editor.disabled}
-                onClick={() => (onOpenEditor ? onOpenEditor(item) : externalActions.editor.onSelect())}
-              >
-                <EditorAppIcon pref={externalActions.editor.iconPref} />
-              </RowAsyncAction>
-              <RowAsyncAction
-                label="workspace.branch-workspace.open-external-terminal"
-                busy={externalActions.externalTerminal.busy}
-                disabled={externalActions.externalTerminal.disabled}
-                onClick={() =>
-                  onOpenExternalTerminal ? onOpenExternalTerminal(item) : externalActions.externalTerminal.onSelect()
-                }
-              >
-                <TerminalAppIcon pref={externalActions.externalTerminal.iconPref} />
-              </RowAsyncAction>
-              <RowAction label="workspace.branch-workspace.open-internal-terminal" onClick={() => void openInternal()}>
-                <Terminal />
-              </RowAction>
-              <RowAction label="workspace.branch-workspace.delete" destructive onClick={() => onRemove(item)}>
-                <Trash2 />
-              </RowAction>
-            </>
-          ) : null}
-          {item.lifecycle === 'active' ? (
-            <RowAction label="workspace.branch-workspace.cancel" onClick={() => void onCancel(item)}>
-              <X />
-            </RowAction>
-          ) : null}
-          {item.lifecycle === 'create-incomplete' || item.lifecycle === 'needs-repair' ? (
-            <>
-              <RowAction label="workspace.branch-workspace.inspect" onClick={() => onInspect(item)}>
-                <Eye />
-              </RowAction>
-              <RowAction
-                label={
-                  item.lifecycle === 'create-incomplete'
-                    ? 'workspace.branch-workspace.retry'
-                    : 'workspace.branch-workspace.repair'
-                }
-                onClick={() => onRepair(item)}
-              >
-                <RotateCcw />
-              </RowAction>
-            </>
-          ) : null}
-          {item.lifecycle === 'delete-incomplete' ? (
-            <>
-              <RowAction label="workspace.branch-workspace.inspect" onClick={() => onInspect(item)}>
-                <Eye />
-              </RowAction>
-              <RowAction label="workspace.branch-workspace.continue-delete" destructive onClick={() => onRemove(item)}>
-                <Trash2 />
-              </RowAction>
-            </>
-          ) : null}
-        </div>
-      </li>
+        {scopeActive && activeMemberRepositoryName ? (
+          <span
+            data-testid="branch-workspace-scope-marker"
+            className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-brand-border"
+            aria-hidden="true"
+          />
+        ) : null}
+        <span className="min-w-0 truncate font-medium">{item.branch}</span>
+        {terminalCount > 0 ? (
+          <Badge
+            data-testid="branch-workspace-terminal-count-badge"
+            variant="brand"
+            aria-label={t('terminal.open-count', { count: terminalCount })}
+            className="h-4 shrink-0 gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums"
+          >
+            {hasTerminalOutputActivity ? (
+              <TerminalOutputActivityIndicator label={t('terminal.output-active')} className="size-2.5" size={10} />
+            ) : (
+              <Terminal className="size-2.5" aria-hidden="true" />
+            )}
+            {terminalCount}
+          </Badge>
+        ) : null}
+        {changeCount > 0 ? (
+          <Badge
+            data-testid="branch-workspace-change-count-badge"
+            aria-label={t('branch-status.worktree-dirty', { n: changeCount })}
+            title={t('branch-status.worktree-dirty', { n: changeCount })}
+            variant="attention"
+            className="h-4 shrink-0 gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums"
+          >
+            <GitCompareArrows size={10} aria-hidden="true" />
+            {changeCount}
+          </Badge>
+        ) : null}
+        {hasTerminalBell ? <TerminalBellDot label={t('terminal.bell-unread')} /> : null}
+        <LifecycleSummary item={item} />
+      </WorkspaceListItemFrame>
     </WorkspaceItemContextMenu>
   )
 }
@@ -367,43 +591,6 @@ function RowAction({
       >
         {children}
       </Button>
-    </Tip>
-  )
-}
-
-function RowAsyncAction({
-  label,
-  busy,
-  disabled,
-  onClick,
-  children,
-}: {
-  label: string
-  busy: boolean
-  disabled: boolean
-  onClick: () => void | Promise<void>
-  children: ReactNode
-}) {
-  const t = useT()
-  return (
-    <Tip label={t(label)}>
-      <span className="inline-flex">
-        <AsyncButton
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          loading={busy}
-          disabled={disabled}
-          aria-label={t(label)}
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation()
-            return onClick()
-          }}
-        >
-          {() => children}
-        </AsyncButton>
-      </span>
     </Tip>
   )
 }

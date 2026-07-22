@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { constants as fsConstants, promises as fs } from 'node:fs'
 import { execa, ExecaError } from 'execa'
 import { parse } from 'smol-toml'
@@ -12,12 +12,16 @@ import {
   hasWorktreeBootstrapSummaryDetails,
   isWorktreeBootstrapCandidatePath,
   worktreeBootstrapPreviewFromConfig,
+  type WorktreeBootstrapDecision,
+  type WorktreeBootstrapMaterializationMode,
   type WorktreeBootstrapSelection,
   type WorktreeBootstrapSummary,
   type WorktreeBootstrapPreviewResult,
+  type WorktreeBootstrapTargetEntry,
+  type WorktreeBootstrapTargetPreflightResult,
 } from '#/shared/worktree-bootstrap-summary.ts'
 
-type MaterializationMode = 'copy' | 'symlink' | 'hardlink'
+type MaterializationMode = WorktreeBootstrapMaterializationMode
 
 export interface WorktreeBootstrapConfig {
   copy: string[]
@@ -96,7 +100,11 @@ export async function initializeWorktreeBootstrapConfig(
 export async function bootstrapWorktreeAfterCreate(
   sourceCwd: string,
   targetWorktreePath: string,
-  options?: { signal?: AbortSignal; expectedConfigHash?: string },
+  options?: {
+    signal?: AbortSignal
+    expectedConfigHash?: string
+    replaceExisting?: readonly WorktreeBootstrapTargetEntry[]
+  },
 ): Promise<ExecResult> {
   try {
     if (options?.signal?.aborted) return { ok: false, message: 'cancelled' }
@@ -124,6 +132,7 @@ export async function bootstrapWorktreeAfterCreate(
       planned.operations,
       planned.excludedPaths,
       options?.signal,
+      options?.replaceExisting,
     )
     if (!materialized.ok) return bootstrapFailure(materialized.message)
 
@@ -148,7 +157,7 @@ export async function bootstrapWorktreeSelectionsAfterCreate(
   sourceCwd: string,
   targetWorktreePath: string,
   selections: readonly WorktreeBootstrapSelection[],
-  options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal; replaceExisting?: readonly WorktreeBootstrapTargetEntry[] },
 ): Promise<ExecResult> {
   try {
     if (options?.signal?.aborted) return { ok: false, message: 'cancelled' }
@@ -186,7 +195,14 @@ export async function bootstrapWorktreeSelectionsAfterCreate(
     const unsupported = ready.operations.find((operation) => !operation.stat.isFile() && !operation.stat.isDirectory())
     if (unsupported) return bootstrapFailure(`unsupported worktree bootstrap source: ${unsupported.rel}`)
 
-    const materialized = await materializePlan(sourceRoot, targetRoot, ready.operations, new Set(), options?.signal)
+    const materialized = await materializePlan(
+      sourceRoot,
+      targetRoot,
+      ready.operations,
+      new Set(),
+      options?.signal,
+      options?.replaceExisting,
+    )
     if (!materialized.ok) return bootstrapFailure(materialized.message)
 
     const summary = bootstrapSummary(ready.operations, Array.from(missingSources), undefined)
@@ -198,6 +214,54 @@ export async function bootstrapWorktreeSelectionsAfterCreate(
   } catch (err) {
     if (options?.signal?.aborted) return { ok: false, message: 'cancelled' }
     return bootstrapFailure(errorMessage(err))
+  }
+}
+
+export async function getWorktreeBootstrapTargetPreflight(
+  sourceCwd: string,
+  targetWorktreePath: string,
+  decision: Exclude<WorktreeBootstrapDecision, { kind: 'skip' }>,
+  options?: { signal?: AbortSignal },
+): Promise<WorktreeBootstrapTargetPreflightResult> {
+  try {
+    if (options?.signal?.aborted) return { ok: false, message: 'cancelled' }
+    const sourceRepoRoot = await getRepoRoot(sourceCwd, { signal: options?.signal })
+    if (!sourceRepoRoot) return { ok: false, message: 'failed to resolve source repo root' }
+
+    const sourceRoot = path.resolve(sourceRepoRoot)
+    const targetRoot = path.resolve(targetWorktreePath)
+    let operations: ReadyMaterialization[]
+    let hasSetup = false
+    if (decision.kind === 'run') {
+      const loaded = await loadBootstrapConfig(sourceRoot)
+      if (loaded.kind !== 'ready') {
+        return {
+          ok: false,
+          message: loaded.kind === 'none' ? `${CONFIG_FILE} changed after confirmation` : loaded.message,
+        }
+      }
+      if (loaded.configHash !== decision.configHash) {
+        return { ok: false, message: `${CONFIG_FILE} changed after confirmation` }
+      }
+      const planned = await planMaterializations(sourceRoot, targetRoot, loaded.config, options?.signal)
+      if (!planned.ok) return planned
+      operations = planned.operations
+      hasSetup = !!loaded.config.setup
+    } else {
+      if (await pathExists(path.join(sourceRoot, CONFIG_FILE), { useLstat: true })) {
+        return { ok: false, message: `${CONFIG_FILE} changed after confirmation` }
+      }
+      const planned = await planLiteralSelections(sourceRoot, targetRoot, decision.selections, options?.signal)
+      if (!planned.ok) return planned
+      operations = planned.operations
+    }
+
+    const classified = await classifyMaterializationTargets(operations, options?.signal)
+    if (!classified.ok) return classified
+    return { ok: true, preflight: { ...classified.preflight, hasSetup } }
+  } catch (err) {
+    if (options?.signal?.aborted) return { ok: false, message: 'cancelled' }
+    return { ok: false, message: errorMessage(err) }
   }
 }
 
@@ -356,6 +420,33 @@ async function planMaterializations(
   }
 }
 
+async function planLiteralSelections(
+  sourceRoot: string,
+  targetRoot: string,
+  selections: readonly WorktreeBootstrapSelection[],
+  signal: AbortSignal | undefined,
+): Promise<{ ok: true; operations: ReadyMaterialization[]; missingSources: string[] } | { ok: false; message: string }> {
+  const missingSources = new Set<string>()
+  const literalOperations: PlannedMaterialization[] = []
+  for (const selection of selections) {
+    if (!isWorktreeBootstrapCandidatePath(selection.path)) {
+      return { ok: false, message: `invalid worktree bootstrap selection: ${selection.path}` }
+    }
+    if (selection.mode !== 'copy' && selection.mode !== 'symlink') {
+      return { ok: false, message: `invalid worktree bootstrap mode: ${String(selection.mode)}` }
+    }
+    const source = resolveConfigPath(sourceRoot, selection.path)
+    if (!source.ok) return source
+    literalOperations.push({ ...source, mode: selection.mode })
+  }
+
+  const ready = await validateMaterializations(sourceRoot, targetRoot, literalOperations, missingSources, signal)
+  if (!ready.ok) return ready
+  const unsupported = ready.operations.find((operation) => !operation.stat.isFile() && !operation.stat.isDirectory())
+  if (unsupported) return { ok: false, message: `unsupported worktree bootstrap source: ${unsupported.rel}` }
+  return { ok: true, operations: ready.operations, missingSources: Array.from(missingSources) }
+}
+
 async function expandSources(
   sourceRoot: string,
   entries: string[],
@@ -458,10 +549,6 @@ async function validateMaterializations(
     if (!destination.ok) return destination
     const safeDestination = await validateDestinationPathWithinRoot(targetRoot, item.rel)
     if (!safeDestination.ok) return safeDestination
-    if (await pathExists(destination.abs, { useLstat: true })) {
-      return { ok: false, message: `destination already exists: ${item.rel}` }
-    }
-
     const source = resolveConfigPath(sourceRoot, item.rel)
     if (!source.ok) return source
     operations.push({ ...item, abs: source.abs, dest: destination.abs, stat })
@@ -520,29 +607,117 @@ async function firstSymlinkAncestor(sourceRoot: string, rel: string): Promise<st
   return null
 }
 
+async function classifyMaterializationTargets(
+  operations: readonly ReadyMaterialization[],
+  signal: AbortSignal | undefined,
+): Promise<
+  | {
+      ok: true
+      preflight: {
+        pending: WorktreeBootstrapTargetEntry[]
+        satisfied: WorktreeBootstrapTargetEntry[]
+        conflicts: WorktreeBootstrapTargetEntry[]
+      }
+    }
+  | { ok: false; message: string }
+> {
+  const pending: WorktreeBootstrapTargetEntry[] = []
+  const satisfied: WorktreeBootstrapTargetEntry[] = []
+  const conflicts: WorktreeBootstrapTargetEntry[] = []
+  for (const operation of operations) {
+    if (signal?.aborted) return { ok: false, message: 'cancelled' }
+    const entry = { path: operation.rel, mode: operation.mode }
+    const state = await materializationTargetState(operation)
+    if (!state.ok) return state
+    if (state.state === 'missing') pending.push(entry)
+    else if (state.state === 'satisfied') satisfied.push(entry)
+    else conflicts.push(entry)
+  }
+  return { ok: true, preflight: { pending, satisfied, conflicts } }
+}
+
+async function materializationTargetState(
+  operation: ReadyMaterialization,
+): Promise<{ ok: true; state: 'missing' | 'satisfied' | 'conflict' } | { ok: false; message: string }> {
+  let targetStat: Awaited<ReturnType<typeof fs.lstat>>
+  try {
+    targetStat = await fs.lstat(operation.dest)
+  } catch (err) {
+    if (isErrno(err, 'ENOENT')) return { ok: true, state: 'missing' }
+    return { ok: false, message: `failed to inspect ${operation.rel}: ${errorMessage(err)}` }
+  }
+
+  if (operation.mode === 'symlink' && targetStat.isSymbolicLink()) {
+    try {
+      const target = await fs.readlink(operation.dest)
+      const resolvedTarget = path.resolve(path.dirname(operation.dest), target)
+      if (resolvedTarget === operation.abs) return { ok: true, state: 'satisfied' }
+    } catch (err) {
+      return { ok: false, message: `failed to inspect ${operation.rel}: ${errorMessage(err)}` }
+    }
+  }
+  if (
+    operation.mode === 'hardlink' &&
+    targetStat.isFile() &&
+    targetStat.dev === operation.stat.dev &&
+    targetStat.ino === operation.stat.ino
+  ) {
+    return { ok: true, state: 'satisfied' }
+  }
+  return { ok: true, state: 'conflict' }
+}
+
 async function materializePlan(
   sourceRoot: string,
   targetRoot: string,
   operations: ReadyMaterialization[],
   excludedPaths: Set<string>,
   signal: AbortSignal | undefined,
+  replaceExisting: readonly WorktreeBootstrapTargetEntry[] = [],
 ): Promise<ExecResult> {
+  const concreteByKey = new Map(operations.map((operation) => [targetEntryKey(operation), operation]))
+  const replacementKeys = new Set<string>()
+  for (const replacement of replaceExisting) {
+    const key = targetEntryKey(replacement)
+    if (replacementKeys.has(key) || !concreteByKey.has(key)) {
+      return { ok: false, message: `invalid replacement target: ${replacement.path}` }
+    }
+    replacementKeys.add(key)
+  }
+
+  const preflight = await classifyMaterializationTargets(operations, signal)
+  if (!preflight.ok) return preflight
+  const unapproved = preflight.preflight.conflicts.find((entry) => !replacementKeys.has(targetEntryKey(entry)))
+  if (unapproved) return { ok: false, message: `destination already exists: ${unapproved.path}` }
+
   for (const item of operations) {
     if (signal?.aborted) return { ok: false, message: 'cancelled' }
     try {
       await fs.mkdir(path.dirname(item.dest), { recursive: true })
       const safeDestination = await validateDestinationPathWithinRoot(targetRoot, item.rel)
       if (!safeDestination.ok) return safeDestination
+      const targetState = await materializationTargetState(item)
+      if (!targetState.ok) return targetState
+      if (targetState.state === 'satisfied') continue
+      if (item.mode === 'copy') {
+        const copied = await materializeCopy(
+          sourceRoot,
+          targetRoot,
+          item,
+          excludedPaths,
+          replacementKeys,
+          signal,
+        )
+        if (!copied.ok) return copied
+        continue
+      }
+      if (targetState.state === 'conflict') {
+        if (!replacementKeys.has(targetEntryKey(item))) {
+          return { ok: false, message: `destination already exists: ${item.rel}` }
+        }
+        await fs.rm(item.dest, { recursive: true, force: false })
+      }
       switch (item.mode) {
-        case 'copy':
-          await fs.cp(item.abs, item.dest, {
-            recursive: true,
-            force: false,
-            errorOnExist: true,
-            dereference: false,
-            filter: (sourcePath) => shouldCopyPath(sourceRoot, sourcePath, excludedPaths),
-          })
-          break
         case 'symlink':
           await fs.symlink(item.abs, item.dest, symlinkType(item.stat))
           break
@@ -556,6 +731,51 @@ async function materializePlan(
     }
   }
   return { ok: true, message: '' }
+}
+
+async function materializeCopy(
+  sourceRoot: string,
+  targetRoot: string,
+  item: ReadyMaterialization,
+  excludedPaths: Set<string>,
+  replacementKeys: ReadonlySet<string>,
+  signal: AbortSignal | undefined,
+): Promise<ExecResult> {
+  const temporaryPath = path.join(
+    path.dirname(item.dest),
+    `.${path.basename(item.dest)}.goblin-bootstrap-${randomUUID()}`,
+  )
+  try {
+    await fs.cp(item.abs, temporaryPath, {
+      recursive: true,
+      force: false,
+      errorOnExist: true,
+      dereference: false,
+      filter: (sourcePath) => shouldCopyPath(sourceRoot, sourcePath, excludedPaths),
+    })
+    if (signal?.aborted) return { ok: false, message: 'cancelled' }
+    const safeDestination = await validateDestinationPathWithinRoot(targetRoot, item.rel)
+    if (!safeDestination.ok) return safeDestination
+    const targetState = await materializationTargetState(item)
+    if (!targetState.ok) return targetState
+    if (targetState.state === 'conflict') {
+      if (!replacementKeys.has(targetEntryKey(item))) {
+        return { ok: false, message: `destination already exists: ${item.rel}` }
+      }
+      await fs.rm(item.dest, { recursive: true, force: false })
+    }
+    await fs.rename(temporaryPath, item.dest)
+    return { ok: true, message: '' }
+  } catch (err) {
+    if (isErrno(err, 'EEXIST')) return { ok: false, message: `destination already exists: ${item.rel}` }
+    return { ok: false, message: `failed to copy ${item.rel}: ${errorMessage(err)}` }
+  } finally {
+    await fs.rm(temporaryPath, { recursive: true, force: true }).catch(() => undefined)
+  }
+}
+
+function targetEntryKey(entry: { rel: string; mode: MaterializationMode } | WorktreeBootstrapTargetEntry): string {
+  return 'rel' in entry ? `${entry.mode}\0${entry.rel}` : `${entry.mode}\0${entry.path}`
 }
 
 async function runSetupCommand(

@@ -4,7 +4,11 @@ import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { BranchWorkspaceList } from '#/web/components/repo-workspace/BranchWorkspaceList.tsx'
-import type { BranchWorkspaceLifecycle, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
+import type {
+  BranchWorkspaceLifecycle,
+  BranchWorkspaceRepositorySnapshot,
+  BranchWorkspaceSnapshot,
+} from '#/shared/branch-workspaces.ts'
 import {
   TerminalSessionContext,
   TerminalSessionReadContext,
@@ -20,18 +24,27 @@ const terminalState = vi.hoisted(() => ({ outputActive: true, count: 2 }))
 const folderActionState = vi.hoisted(() => ({
   editorOnSelect: vi.fn(),
   externalTerminalOnSelect: vi.fn(),
+  editorDisabled: false,
+  externalTerminalDisabled: false,
 }))
 
 vi.mock('#/web/stores/i18n.ts', () => ({
-  useT: () => (key: string, params?: Record<string, unknown>) =>
-    params?.count === undefined ? key : `${key}:${String(params.count)}`,
+  useT: () => (key: string, params?: Record<string, unknown>) => {
+    const value = params?.count ?? params?.n
+    return value === undefined ? key : `${key}:${String(value)}`
+  },
 }))
 
 vi.mock('#/web/hooks/useFolderExternalOpenActions.ts', () => ({
   useFolderExternalOpenActions: () => ({
-    editor: { disabled: false, busy: false, iconPref: 'auto', onSelect: folderActionState.editorOnSelect },
+    editor: {
+      disabled: folderActionState.editorDisabled,
+      busy: false,
+      iconPref: 'auto',
+      onSelect: folderActionState.editorOnSelect,
+    },
     externalTerminal: {
-      disabled: false,
+      disabled: folderActionState.externalTerminalDisabled,
       busy: false,
       iconPref: 'ghostty',
       onSelect: folderActionState.externalTerminalOnSelect,
@@ -59,6 +72,8 @@ beforeEach(() => {
   terminalState.count = 2
   folderActionState.editorOnSelect.mockReset()
   folderActionState.externalTerminalOnSelect.mockReset()
+  folderActionState.editorDisabled = false
+  folderActionState.externalTerminalDisabled = false
   ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   container = document.createElement('div')
   document.body.append(container)
@@ -72,26 +87,25 @@ afterEach(() => {
 })
 
 describe('BranchWorkspaceList', () => {
-  test('renders one non-expandable folder row with root-scoped terminal badges and ready actions', () => {
+  test('separates root selection, expansion, reordering, and more actions', async () => {
     const onActivate = vi.fn()
-    const onRemove = vi.fn()
-    const onBatchCommit = vi.fn()
-    const onMergeBack = vi.fn()
+    const onGitAction = vi.fn()
+    const item = { ...workspace('ready'), repositories: [repositoryMember()] }
     act(() =>
       root.render(
         withTerminalContexts(
           <BranchWorkspaceList
             rootId="/workspace"
-            items={[workspace('ready')]}
+            items={[item]}
             activeId="branch-1"
             onActivate={onActivate}
+            onGitAction={onGitAction}
+            gitActionPanel={{ itemId: item.id, content: <div data-testid="mock-branch-git-panel" /> }}
             onReorder={() => {}}
             onInspect={() => {}}
             onRepair={() => {}}
-            onRemove={onRemove}
+            onRemove={() => {}}
             onCancel={() => {}}
-            onBatchCommit={onBatchCommit}
-            onMergeBack={onMergeBack}
           />,
         ),
       ),
@@ -99,36 +113,203 @@ describe('BranchWorkspaceList', () => {
 
     expect(container.textContent).toContain('feature/auth')
     expect(container.textContent).not.toContain('goblin-feature-auth')
-    expect(container.querySelector('[aria-expanded]')).toBeNull()
+    const branchWorkspaceRow = container.querySelector<HTMLButtonElement>(
+      '[data-testid="branch-workspace-root-branch-1"]',
+    )
+    const branchWorkspaceItem = container.querySelector('[data-branch-workspace-id="branch-1"]')
+    expect(branchWorkspaceRow?.className).toContain('text-[13px]')
+    expect(branchWorkspaceRow?.getAttribute('aria-current')).toBe('page')
+    expect(branchWorkspaceRow?.getAttribute('aria-expanded')).toBeNull()
+    const toggle = container.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.collapse"]')
+    const handle = container.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.reorder"]')
+    const more = container.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.more"]')
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true')
+    expect(handle).not.toBeNull()
+    expect(more).not.toBeNull()
+    expect(branchWorkspaceItem?.matches('[data-workspace-list-item]')).toBe(true)
+    expect(branchWorkspaceItem?.querySelector('[data-workspace-list-item-action-dock]')?.children).toHaveLength(3)
+    expect(branchWorkspaceItem?.querySelector('[data-workspace-list-item-action="editor"]')).not.toBeNull()
+    expect(branchWorkspaceItem?.querySelector('[data-workspace-list-item-action="terminal"]')).not.toBeNull()
+    expect(branchWorkspaceItem?.querySelector('[data-workspace-list-item-drag-handle]')).not.toBeNull()
+    expect(branchWorkspaceRow?.hasAttribute('aria-roledescription')).toBe(false)
+    expect(branchWorkspaceRow?.querySelector('.workspace-list-item-leading-icon .lucide-folder-kanban')).not.toBeNull()
+    expect(branchWorkspaceRow?.querySelector('.lucide-folder-tree')).toBeNull()
+    const menuItems = await openMenuItems(branchWorkspaceItem)
+    expect(menuItems.map((entry) => entry.textContent?.trim())).toEqual([
+      'terminal.external',
+      'workspace.branch-workspace.git-action.batch-commit',
+      'workspace.branch-workspace.git-action.pull',
+      'workspace.branch-workspace.git-action.push',
+      'workspace.branch-workspace.git-action.merge-back',
+      'workspace.branch-workspace.delete',
+    ])
+    const batchCommitItem = menuItems.find(
+      (entry) => entry.textContent?.trim() === 'workspace.branch-workspace.git-action.batch-commit',
+    )
+    await act(async () => {
+      batchCommitItem?.click()
+      await Promise.resolve()
+    })
+    expect(onGitAction).toHaveBeenCalledWith(item, 'batch-commit')
     expect(container.querySelector('[data-testid="branch-workspace-terminal-count-badge"]')?.textContent).toBe('2')
     expect(container.querySelector('[data-terminal-bell-dot]')).not.toBeNull()
     expect(container.querySelector('[data-terminal-output-activity-indicator="active"]')).not.toBeNull()
-    expect(container.querySelector('[aria-label="workspace.branch-workspace.open-editor"]')).not.toBeNull()
-    const externalTerminal = container.querySelector('[aria-label="workspace.branch-workspace.open-external-terminal"]')
-    expect(externalTerminal).not.toBeNull()
-    expect(externalTerminal?.querySelector('[data-testid="mock-terminal-app-icon"]')?.getAttribute('data-pref')).toBe(
-      'ghostty',
-    )
-    const internalTerminal = container.querySelector('[aria-label="workspace.branch-workspace.open-internal-terminal"]')
-    expect(internalTerminal).not.toBeNull()
-    expect(internalTerminal?.querySelector('.lucide-terminal')).not.toBeNull()
-    expect(internalTerminal?.querySelector('.lucide-square-terminal')).toBeNull()
+    expect(container.querySelector('[data-testid="mock-branch-git-panel"]')).not.toBeNull()
+    expect(container.querySelector('[aria-label="workspace.branch-workspace.open-editor"]')).toBeNull()
+    const memberRow = container.querySelector('[data-testid="branch-workspace-member-api"]')
+    const memberItem = memberRow?.closest('[data-workspace-list-item]')
+    expect(memberItem?.getAttribute('data-size')).toBe('member')
+    expect(memberRow?.querySelector('.workspace-list-item-leading-icon .lucide-folder-tree')).not.toBeNull()
+    expect(memberRow?.querySelector('.lucide-folder-kanban')).toBeNull()
+    expect(memberItem?.querySelector('[data-workspace-list-item-action-dock]')?.children).toHaveLength(3)
+    expect(memberItem?.querySelector('[data-workspace-list-item-drag-handle]')).toBeNull()
+
+    act(() => branchWorkspaceRow?.click())
+    expect(onActivate).not.toHaveBeenCalled()
+    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).not.toBeNull()
+
+    act(() => toggle?.click())
+    expect(onActivate).not.toHaveBeenCalled()
+    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).toBeNull()
+
+    act(() => toggle?.click())
+    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).not.toBeNull()
+  })
+
+  test('selects an inactive workspace without expanding it when the active state updates', () => {
+    const item = { ...workspace('ready'), repositories: [repositoryMember()] }
+    const onActivate = vi.fn()
+    const renderList = (activeId: string | null) =>
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[item]}
+            activeId={activeId}
+            onActivate={onActivate}
+            onReorder={() => {}}
+            onInspect={() => {}}
+            onRepair={() => {}}
+            onRemove={() => {}}
+            onCancel={() => {}}
+          />,
+        ),
+      )
+
+    act(() => renderList(null))
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="branch-workspace-root-branch-1"]')?.click())
+
+    expect(onActivate).toHaveBeenCalledWith(item.id)
+    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).toBeNull()
+
+    act(() => renderList(item.id))
+    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).toBeNull()
+  })
+
+  test('returns from a selected repository member to the workspace root before allowing collapse', () => {
+    const item = { ...workspace('ready'), repositories: [repositoryMember()] }
+    const onActivate = vi.fn()
     act(() =>
-      container
-        .querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.git-action.batch-commit"]')
-        ?.click(),
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[item]}
+            activeId={item.id}
+            activeMemberRepositoryName="api"
+            onActivate={onActivate}
+            onReorder={() => {}}
+            onInspect={() => {}}
+            onRepair={() => {}}
+            onRemove={() => {}}
+            onCancel={() => {}}
+          />,
+        ),
+      ),
     )
+
+    const branchWorkspaceRow = container.querySelector<HTMLButtonElement>(
+      '[data-testid="branch-workspace-root-branch-1"]',
+    )
+    act(() => branchWorkspaceRow?.click())
+
+    expect(onActivate).toHaveBeenCalledWith(item.id)
+    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).not.toBeNull()
+  })
+
+  test('renders an inline Git action panel only below its target item', () => {
+    const first = { ...workspace('ready'), repositories: [repositoryMember()] }
+    const second = {
+      ...workspace('ready'),
+      id: 'branch-2',
+      branch: 'feature/payments',
+      path: '/workspace/goblin-feature-payments',
+    }
     act(() =>
-      container
-        .querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.git-action.merge-back"]')
-        ?.click(),
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[first, second]}
+            activeId={first.id}
+            gitActionPanel={{ itemId: second.id, content: <div data-testid="mock-branch-git-panel" /> }}
+            onActivate={() => {}}
+            onReorder={() => {}}
+            onInspect={() => {}}
+            onRepair={() => {}}
+            onRemove={() => {}}
+            onCancel={() => {}}
+          />,
+        ),
+      ),
     )
-    expect(onBatchCommit).toHaveBeenCalledWith(expect.objectContaining({ id: 'branch-1' }))
-    expect(onMergeBack).toHaveBeenCalledWith(expect.objectContaining({ id: 'branch-1' }))
-    act(() => container.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.delete"]')?.click())
-    expect(onRemove).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'branch-1', path: '/workspace/goblin-feature-auth' }),
+
+    expect(
+      container.querySelector('[data-branch-workspace-id="branch-1"] [data-testid="mock-branch-git-panel"]'),
+    ).toBeNull()
+    expect(
+      container.querySelector('[data-branch-workspace-id="branch-2"] [data-testid="mock-branch-git-panel"]'),
+    ).not.toBeNull()
+  })
+
+  test('expands an inactive workspace without selecting it', () => {
+    const first = workspace('ready')
+    const second = {
+      ...workspace('ready'),
+      id: 'branch-2',
+      branch: 'feature/payments',
+      directoryName: 'goblin-feature-payments',
+      path: '/workspace/goblin-feature-payments',
+      repositories: [{ ...repositoryMember(), repositoryName: 'web' }],
+    }
+    const onActivate = vi.fn()
+    act(() =>
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[first, second]}
+            activeId={null}
+            onActivate={onActivate}
+            onReorder={() => {}}
+            onInspect={() => {}}
+            onRepair={() => {}}
+            onRemove={() => {}}
+            onCancel={() => {}}
+          />,
+        ),
+      ),
     )
+
+    const toggle = container.querySelector<HTMLButtonElement>(
+      '[data-branch-workspace-id="branch-2"] [aria-label="workspace.branch-workspace.expand"]',
+    )
+    act(() => toggle?.click())
+
+    expect(onActivate).not.toHaveBeenCalled()
+    expect(
+      container.querySelector('[data-branch-workspace-id="branch-2"] [data-testid="branch-workspace-member-list"]'),
+    ).not.toBeNull()
   })
 
   test('uses the worktree terminal icon in the idle terminal count badge', () => {
@@ -153,28 +334,328 @@ describe('BranchWorkspaceList', () => {
 
     const badge = container.querySelector('[data-testid="branch-workspace-terminal-count-badge"]')
     expect(badge?.textContent).toBe('2')
+    expect(badge?.className).toContain('font-semibold')
     expect(badge?.querySelector('.lucide-terminal')).not.toBeNull()
     expect(badge?.querySelector('.lucide-square-terminal')).toBeNull()
   })
 
+  test('renders the summed repository member change count', () => {
+    act(() =>
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[workspace('ready')]}
+            activeId={null}
+            changeCountById={{ 'branch-1': 5 }}
+            onActivate={() => {}}
+            onReorder={() => {}}
+            onInspect={() => {}}
+            onRepair={() => {}}
+            onRemove={() => {}}
+            onCancel={() => {}}
+          />,
+        ),
+      ),
+    )
+
+    const badge = container.querySelector('[data-testid="branch-workspace-change-count-badge"]')
+    expect(badge?.textContent).toBe('5')
+    expect(badge?.getAttribute('aria-label')).toBe('branch-status.worktree-dirty:5')
+    expect(badge?.getAttribute('title')).toBe('branch-status.worktree-dirty:5')
+    expect(badge?.querySelector('.lucide-git-compare-arrows')).not.toBeNull()
+  })
+
+  test('hides the repository member change badge for a zero total', () => {
+    act(() =>
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[workspace('ready')]}
+            activeId={null}
+            changeCountById={{ 'branch-1': 0 }}
+            onActivate={() => {}}
+            onReorder={() => {}}
+            onInspect={() => {}}
+            onRepair={() => {}}
+            onRemove={() => {}}
+            onCancel={() => {}}
+          />,
+        ),
+      ),
+    )
+
+    expect(container.querySelector('[data-testid="branch-workspace-change-count-badge"]')).toBeNull()
+  })
+
+  test('renders only the active repository member list with a dirty badge and opens a ready member', () => {
+    const member = repositoryMember()
+    const activeWorkspace = { ...workspace('ready'), repositories: [member] }
+    const inactiveWorkspace = {
+      ...workspace('ready'),
+      id: 'branch-2',
+      branch: 'feature/payments',
+      path: '/workspace/goblin-feature-payments',
+      repositories: [{ ...member, repositoryName: 'web' }],
+    }
+    const onOpenRepositoryMember = vi.fn()
+    act(() =>
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[activeWorkspace, inactiveWorkspace]}
+            activeId={activeWorkspace.id}
+            activeMemberRepositoryName="api"
+            getMemberPresentation={() => ({
+              dirty: true,
+              changeCount: 3,
+              navigable: true,
+              repositoryId: '/workspace/api',
+              worktreePath: member.worktreePath,
+            })}
+            onOpenRepositoryMember={onOpenRepositoryMember}
+            onActivate={() => {}}
+            onReorder={() => {}}
+            onInspect={() => {}}
+            onRepair={() => {}}
+            onRemove={() => {}}
+            onCancel={() => {}}
+          />,
+        ),
+      ),
+    )
+
+    const lists = container.querySelectorAll('[data-testid="branch-workspace-member-list"]')
+    expect(lists).toHaveLength(1)
+    expect(lists[0]?.textContent).toContain('api')
+    expect(lists[0]?.textContent).not.toContain('web')
+    expect(container.querySelector('[data-testid="branch-workspace-member-hash"]')).toBeNull()
+    const badge = container.querySelector('[data-testid="branch-workspace-member-change-count-badge"]')
+    expect(badge?.textContent).toBe('3')
+    expect(badge?.querySelector('.lucide-git-compare-arrows')).not.toBeNull()
+
+    const memberButton = container.querySelector<HTMLButtonElement>('[data-testid="branch-workspace-member-api"]')
+    if (!memberButton) throw new Error('missing repository member button')
+    expect(memberButton.getAttribute('aria-current')).toBe('page')
+    expect(
+      container.querySelector('[data-testid="branch-workspace-root-branch-1"]')?.getAttribute('aria-current'),
+    ).toBeNull()
+    expect(container.querySelectorAll('[aria-current="page"]')).toHaveLength(1)
+    expect(container.querySelector('[data-testid="branch-workspace-member-terminal-count-badge"]')?.textContent).toBe(
+      '2',
+    )
+    expect(
+      container.querySelector('[data-testid="branch-workspace-member-terminal-count-badge"]')?.className,
+    ).toContain('font-semibold')
+    act(() => memberButton.click())
+    expect(onOpenRepositoryMember).toHaveBeenCalledWith(activeWorkspace, member)
+    expect(onOpenRepositoryMember).toHaveBeenCalledTimes(1)
+  })
+
+  test('left-aligns repository member terminal and dirty badges beside its name', () => {
+    const activeWorkspace = { ...workspace('ready'), repositories: [repositoryMember()] }
+    act(() =>
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[activeWorkspace]}
+            activeId={activeWorkspace.id}
+            getMemberPresentation={() => ({ dirty: true, changeCount: 3, navigable: true })}
+            onActivate={() => {}}
+            onReorder={() => {}}
+            onInspect={() => {}}
+            onRepair={() => {}}
+            onRemove={() => {}}
+            onCancel={() => {}}
+          />,
+        ),
+      ),
+    )
+
+    const summary = container.querySelector('[data-branch-workspace-member-summary]')
+    const terminalBadge = container.querySelector('[data-testid="branch-workspace-member-terminal-count-badge"]')
+    const dirtyBadge = container.querySelector('[data-testid="branch-workspace-member-change-count-badge"]')
+    expect(summary?.querySelector('[data-testid="branch-workspace-member-terminal-count-badge"]')).toBe(terminalBadge)
+    expect(terminalBadge?.previousElementSibling?.textContent).toBe('api')
+    expect(dirtyBadge?.previousElementSibling).toBe(terminalBadge)
+  })
+
+  test('collapses and restores the active repository member list without reactivating the workspace', () => {
+    const activeWorkspace = { ...workspace('ready'), repositories: [repositoryMember()] }
+    const onActivate = vi.fn()
+    act(() =>
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[activeWorkspace]}
+            activeId={activeWorkspace.id}
+            getMemberPresentation={() => ({ dirty: false, changeCount: null, navigable: true })}
+            onActivate={onActivate}
+            onReorder={() => {}}
+            onInspect={() => {}}
+            onRepair={() => {}}
+            onRemove={() => {}}
+            onCancel={() => {}}
+          />,
+        ),
+      ),
+    )
+
+    const toggle = container.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.collapse"]')
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true')
+    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).not.toBeNull()
+
+    act(() => toggle?.click())
+
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false')
+    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).toBeNull()
+    expect(onActivate).not.toHaveBeenCalled()
+
+    act(() => toggle?.click())
+
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true')
+    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).not.toBeNull()
+    expect(onActivate).not.toHaveBeenCalled()
+  })
+
+  test('toggles member worktrees by double-clicking the branch workspace item', () => {
+    const activeWorkspace = { ...workspace('ready'), repositories: [repositoryMember()] }
+    const onActivate = vi.fn()
+    act(() =>
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[activeWorkspace]}
+            activeId={activeWorkspace.id}
+            onActivate={onActivate}
+            onReorder={() => {}}
+            onInspect={() => {}}
+            onRepair={() => {}}
+            onRemove={() => {}}
+            onCancel={() => {}}
+          />,
+        ),
+      ),
+    )
+
+    const itemButton = container.querySelector<HTMLButtonElement>('[data-testid="branch-workspace-root-branch-1"]')
+    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).not.toBeNull()
+
+    act(() => itemButton?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 })))
+    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).toBeNull()
+    expect(onActivate).not.toHaveBeenCalled()
+
+    act(() => itemButton?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 })))
+    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).not.toBeNull()
+    expect(onActivate).not.toHaveBeenCalled()
+  })
+
+  test('selects an inactive item and expands its member worktrees through the double-click sequence', () => {
+    const item = { ...workspace('ready'), repositories: [repositoryMember()] }
+    const onActivate = vi.fn()
+    const renderList = (activeId: string | null) =>
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[item]}
+            activeId={activeId}
+            onActivate={onActivate}
+            onReorder={() => {}}
+            onInspect={() => {}}
+            onRepair={() => {}}
+            onRemove={() => {}}
+            onCancel={() => {}}
+          />,
+        ),
+      )
+
+    act(() => renderList(null))
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="branch-workspace-root-branch-1"]')?.click())
+    expect(onActivate).toHaveBeenCalledWith(item.id)
+
+    act(() => renderList(item.id))
+    act(() =>
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="branch-workspace-root-branch-1"]')
+        ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 })),
+    )
+    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).not.toBeNull()
+  })
+
+  test('does not retain hidden expansion state when double-clicking an item without member worktrees', () => {
+    const emptyItem = workspace('ready')
+    const renderList = (item: BranchWorkspaceSnapshot) =>
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[item]}
+            activeId={null}
+            onActivate={() => {}}
+            onReorder={() => {}}
+            onInspect={() => {}}
+            onRepair={() => {}}
+            onRemove={() => {}}
+            onCancel={() => {}}
+          />,
+        ),
+      )
+
+    act(() => renderList(emptyItem))
+    act(() =>
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="branch-workspace-root-branch-1"]')
+        ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 })),
+    )
+    act(() => renderList({ ...emptyItem, repositories: [repositoryMember()] }))
+
+    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).toBeNull()
+  })
+
+  test('keeps a non-navigable repository member visible but disabled', () => {
+    const member = repositoryMember({ observedState: 'unavailable' })
+    act(() =>
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[{ ...workspace('needs-repair'), repositories: [member] }]}
+            activeId="branch-1"
+            getMemberPresentation={() => ({ dirty: false, changeCount: null, navigable: false })}
+            onOpenRepositoryMember={() => {}}
+            onActivate={() => {}}
+            onReorder={() => {}}
+            onInspect={() => {}}
+            onRepair={() => {}}
+            onRemove={() => {}}
+            onCancel={() => {}}
+          />,
+        ),
+      ),
+    )
+
+    expect(container.querySelector<HTMLButtonElement>('[data-testid="branch-workspace-member-api"]')?.disabled).toBe(
+      true,
+    )
+  })
+
   test.each([
-    ['active', ['workspace.branch-workspace.cancel'], ['workspace.branch-workspace.delete']],
-    [
-      'create-incomplete',
-      ['workspace.branch-workspace.inspect', 'workspace.branch-workspace.retry'],
-      ['workspace.branch-workspace.delete'],
-    ],
+    ['active', ['workspace.branch-workspace.cancel'], []],
+    ['create-incomplete', ['workspace.branch-workspace.retry'], ['workspace.branch-workspace.inspect']],
     [
       'needs-repair',
-      ['workspace.branch-workspace.inspect', 'workspace.branch-workspace.repair'],
-      ['workspace.branch-workspace.delete'],
+      ['workspace.branch-workspace.repair'],
+      ['workspace.branch-workspace.inspect', 'workspace.branch-workspace.delete'],
     ],
-    [
-      'delete-incomplete',
-      ['workspace.branch-workspace.inspect', 'workspace.branch-workspace.continue-delete'],
-      ['workspace.branch-workspace.open-editor'],
-    ],
-  ] as const)('exposes the exact %s lifecycle actions', (lifecycle, present, absent) => {
+    ['delete-incomplete', ['workspace.branch-workspace.continue-delete'], ['workspace.branch-workspace.inspect']],
+  ] as const)('exposes the exact %s lifecycle actions', async (lifecycle, directLabels, menuLabels) => {
+    const onRemove = vi.fn()
     act(() =>
       root.render(
         withTerminalContexts(
@@ -186,14 +667,54 @@ describe('BranchWorkspaceList', () => {
             onReorder={() => {}}
             onInspect={() => {}}
             onRepair={() => {}}
+            onRemove={onRemove}
+            onCancel={() => {}}
+          />,
+        ),
+      ),
+    )
+    const row = container.querySelector(`[data-branch-workspace-lifecycle="${lifecycle}"]`)
+    const possibleDirectLabels = [
+      'workspace.branch-workspace.cancel',
+      'workspace.branch-workspace.retry',
+      'workspace.branch-workspace.repair',
+      'workspace.branch-workspace.continue-delete',
+    ]
+    expect(possibleDirectLabels.filter((label) => row?.querySelector(`[aria-label="${label}"]`))).toEqual(directLabels)
+    expect(await openMenuLabels(row)).toEqual(menuLabels)
+  })
+
+  test('keeps disabled ready actions visible in the fixed dock and More menu', async () => {
+    folderActionState.editorDisabled = true
+    folderActionState.externalTerminalDisabled = true
+    act(() =>
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[workspace('ready')]}
+            activeId={null}
+            disabled
+            onActivate={() => {}}
+            onReorder={() => {}}
+            onInspect={() => {}}
+            onRepair={() => {}}
             onRemove={() => {}}
             onCancel={() => {}}
           />,
         ),
       ),
     )
-    for (const label of present) expect(container.querySelector(`[aria-label="${label}"]`)).not.toBeNull()
-    for (const label of absent) expect(container.querySelector(`[aria-label="${label}"]`)).toBeNull()
+    const row = container.querySelector('[data-branch-workspace-lifecycle="ready"]')
+    expect(row?.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="editor"]')?.disabled).toBe(true)
+    expect(row?.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="terminal"]')?.disabled).toBe(true)
+
+    const menuItems = await openMenuItems(row)
+    expect(menuItems.map((item) => item.textContent?.trim())).toEqual([
+      'terminal.external',
+      'workspace.branch-workspace.delete',
+    ])
+    expect(menuItems.every((item) => item.hasAttribute('data-disabled'))).toBe(true)
   })
 
   test('offers root-scoped actions and restores an existing internal terminal', async () => {
@@ -232,6 +753,7 @@ describe('BranchWorkspaceList', () => {
       'terminal.external',
       'terminal.internal',
       'terminal.close-all',
+      'workspace.branch-workspace.delete',
     ])
 
     await clickContextMenuItem(row, 'worktrees.open-in-editor-label')
@@ -281,6 +803,20 @@ describe('BranchWorkspaceList', () => {
     },
   )
 })
+
+async function openMenuItems(row: Element | null): Promise<HTMLElement[]> {
+  const trigger = row?.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.more"]')
+  if (!trigger) return []
+  await act(async () => {
+    trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+    await Promise.resolve()
+  })
+  return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+}
+
+async function openMenuLabels(row: Element | null): Promise<string[]> {
+  return (await openMenuItems(row)).map((entry) => entry.textContent?.trim() ?? '')
+}
 
 function withTerminalContexts(
   children: ReactNode,
@@ -406,5 +942,20 @@ function workspace(lifecycle: BranchWorkspaceLifecycle): BranchWorkspaceSnapshot
     ...(lifecycle === 'active'
       ? { activeOperation: { kind: 'create', currentStep: 1, completedCount: 0, totalCount: 2, cancellable: true } }
       : {}),
+  }
+}
+
+function repositoryMember(
+  overrides: Partial<BranchWorkspaceRepositorySnapshot> = {},
+): BranchWorkspaceRepositorySnapshot {
+  return {
+    repositoryName: 'api',
+    targetBranch: 'feature/auth',
+    baseBranch: 'main',
+    branchOrigin: 'created',
+    worktreePath: '/workspace/goblin-feature-auth/api',
+    progress: 'complete',
+    observedState: 'ready',
+    ...overrides,
   }
 }

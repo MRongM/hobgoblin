@@ -111,7 +111,6 @@ export const useReposStore = create<ReposStore>()(
       workspaceRepositoryListExpandedByRoot: {},
       projectListExpanded: DEFAULT_PROJECT_LIST_EXPANDED,
       detailCollapsed: DEFAULT_DETAIL_COLLAPSED,
-      detailFocusMode: false,
       workspaceLayout: DEFAULT_WORKSPACE_LAYOUT,
       detailPaneSizes: DEFAULT_DETAIL_PANE_SIZES,
       fileTreePaneSizes: DEFAULT_FILE_TREE_PANE_SIZES,

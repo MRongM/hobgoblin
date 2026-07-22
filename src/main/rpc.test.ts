@@ -161,7 +161,6 @@ vi.mock('#/main/shortcuts.ts', () => ({
 
 vi.mock('#/main/menu.ts', () => ({
   buildAppMenu: vi.fn(),
-  setMenuWorkspaceLayout: vi.fn(),
 }))
 
 vi.mock('#/main/i18n/index.ts', () => ({
@@ -177,7 +176,6 @@ vi.mock('#/main/menu-state.ts', () => ({
 }))
 
 vi.mock('#/system/terminals.ts', () => ({
-  getResolvedTerminalApp: vi.fn(() => Promise.resolve(null)),
   getTerminalActionAvailability: vi.fn(() => ({ ghostty: false, terminal: true })),
   getTerminalAppAvailability: vi.fn(() => Promise.resolve({ ghostty: false, terminal: true })),
   openInPreferredTerminal: vi.fn(),

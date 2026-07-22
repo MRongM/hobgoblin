@@ -244,7 +244,7 @@ export function createBranchWorkspaceWriteService(
                       branch: repository.targetBranch,
                       worktreePath: repository.worktreePath,
                       alsoDeleteBranch: false,
-                      forceRemoveWorktree: plan.removalOptions?.forceRemoveWorktrees === true,
+                      forceRemoveWorktree: true,
                       forceDeleteBranch: false,
                       alsoDeleteUpstream: false,
                     },
@@ -422,6 +422,7 @@ export function createBranchWorkspaceWriteService(
                   repository.repoId,
                   repository.worktreePath,
                   repository.worktreeBootstrap,
+                  repository.bootstrapReplacements ?? [],
                   controller.signal,
                 )
               : await createWorktree(

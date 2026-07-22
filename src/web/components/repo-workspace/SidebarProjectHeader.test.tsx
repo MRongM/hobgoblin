@@ -24,10 +24,15 @@ const shellOverlayState = vi.hoisted(() => ({
   },
 }))
 
+const navigationState = vi.hoisted(() => ({
+  activateRepo: vi.fn(),
+  closeRepo: vi.fn(),
+  showRepoDetailTab: vi.fn(),
+}))
+
 const repoState = {
   ensureWorkspaceOpen: vi.fn(),
   reorderRepos: vi.fn(),
-  toggleDetailFocusMode: vi.fn(),
   toggleProjectListExpanded: vi.fn(),
   projectListExpanded: false,
   repos: {
@@ -47,7 +52,7 @@ vi.mock('#/web/stores/i18n.ts', () => ({
 }))
 
 vi.mock('#/web/main-window-navigation.tsx', () => ({
-  useMainWindowNavigation: () => ({ activateRepo: vi.fn(), closeRepo: vi.fn() }),
+  useMainWindowNavigation: () => navigationState,
 }))
 
 vi.mock('#/web/shell-overlay-actions.tsx', () => ({
@@ -114,7 +119,7 @@ const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENV
 beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   repoState.projectListExpanded = false
-  repoState.toggleDetailFocusMode.mockReset()
+  navigationState.showRepoDetailTab.mockReset()
   repoState.toggleProjectListExpanded.mockReset()
   repoState.toggleProjectListExpanded.mockImplementation(() => {
     repoState.projectListExpanded = !repoState.projectListExpanded
@@ -286,7 +291,28 @@ describe('SidebarProjectHeader', () => {
     act(() => terminalButton?.click())
 
     expect(onShowCompactDetail).toHaveBeenCalledTimes(1)
-    expect(repoState.toggleDetailFocusMode).not.toHaveBeenCalled()
+  })
+
+  test('does not expose desktop terminal maximize without an owner callback', () => {
+    act(() => {
+      root!.render(<SidebarProjectHeader repoId="/repo-a" />)
+    })
+
+    const focusButton = container!.querySelector<HTMLButtonElement>('button[aria-label="branch-detail.focus"]')
+    expect(focusButton).toBeNull()
+  })
+
+  test('uses the owning workspace terminal maximize callback when provided', () => {
+    const onMaximizeTerminal = vi.fn()
+    act(() => {
+      root!.render(<SidebarProjectHeader repoId="/repo-a" onMaximizeTerminal={onMaximizeTerminal} />)
+    })
+
+    const focusButton = container!.querySelector<HTMLButtonElement>('button[aria-label="branch-detail.focus"]')
+    act(() => focusButton?.click())
+
+    expect(onMaximizeTerminal).toHaveBeenCalledTimes(1)
+    expect(navigationState.showRepoDetailTab).not.toHaveBeenCalled()
   })
 
   test('keeps repository navigation available in the compact explorer', () => {

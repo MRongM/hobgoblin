@@ -658,6 +658,116 @@ describe('remote command scripts', () => {
     expect(existsSync(path.join(targetRoot, 'config dir', '.git', 'config'))).toBe(false)
   })
 
+  testPosix('remote bootstrap inspection classifies exact links and conflicts without writing', async () => {
+    const dir = path.join(os.tmpdir(), `goblin-remote-bootstrap-test-${Date.now()}-${process.pid}`)
+    tempDirs.push(dir)
+    const sourceRoot = path.join(dir, 'repo')
+    const targetRoot = path.join(dir, 'worktree')
+    mkdirSync(path.join(sourceRoot, 'node_modules'), { recursive: true })
+    mkdirSync(targetRoot, { recursive: true })
+    writeFileSync(path.join(sourceRoot, '.env'), 'source\n')
+    writeFileSync(path.join(sourceRoot, 'missing.env'), 'missing\n')
+    writeFileSync(path.join(targetRoot, '.env'), 'target\n')
+    symlinkSync(
+      path.relative(targetRoot, path.join(sourceRoot, 'node_modules')),
+      path.join(targetRoot, 'node_modules'),
+      'dir',
+    )
+
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'bootstrapRemoteWorktree',
+      sourceRoot,
+      targetRoot,
+      copy: ['.env', 'missing.env'],
+      symlink: ['node_modules'],
+      hardlink: [],
+      exclude: [],
+      inspectOnly: true,
+    })
+
+    const result = await execa('bash', ['-lc', invocation.script])
+
+    expect(result.stdout).toBe(
+      [
+        'GOBLIN_BOOTSTRAP_CONFLICT copy .env',
+        'GOBLIN_BOOTSTRAP_PENDING copy missing.env',
+        'GOBLIN_BOOTSTRAP_SATISFIED symlink node_modules',
+      ].join('\n'),
+    )
+    expect(readFileSync(path.join(targetRoot, '.env'), 'utf8')).toBe('target\n')
+  })
+
+  test('remote bootstrap replaces only an explicitly approved target', async () => {
+    const dir = path.join(os.tmpdir(), `goblin-remote-bootstrap-test-${Date.now()}-${process.pid}`)
+    tempDirs.push(dir)
+    const sourceRoot = path.join(dir, 'repo')
+    const targetRoot = path.join(dir, 'worktree')
+    mkdirSync(path.join(sourceRoot, 'cache'), { recursive: true })
+    mkdirSync(path.join(targetRoot, 'cache'), { recursive: true })
+    writeFileSync(path.join(sourceRoot, 'cache', 'fresh.txt'), 'fresh\n')
+    writeFileSync(path.join(targetRoot, 'cache', 'stale.txt'), 'stale\n')
+
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'bootstrapRemoteWorktree',
+      sourceRoot,
+      targetRoot,
+      copy: ['cache'],
+      symlink: [],
+      hardlink: [],
+      exclude: [],
+      replaceExisting: [{ path: 'cache', mode: 'copy' }],
+    })
+
+    const result = await execa('bash', ['-lc', invocation.script])
+
+    expect(result.stdout).toBe('GOBLIN_BOOTSTRAP_COPY cache')
+    expect(readFileSync(path.join(targetRoot, 'cache', 'fresh.txt'), 'utf8')).toBe('fresh\n')
+    expect(existsSync(path.join(targetRoot, 'cache', 'stale.txt'))).toBe(false)
+  })
+
+  test('remote bootstrap rejects unapproved and out-of-plan replacement targets without removing content', async () => {
+    const dir = path.join(os.tmpdir(), `goblin-remote-bootstrap-test-${Date.now()}-${process.pid}`)
+    tempDirs.push(dir)
+    const sourceRoot = path.join(dir, 'repo')
+    const targetRoot = path.join(dir, 'worktree')
+    mkdirSync(sourceRoot, { recursive: true })
+    mkdirSync(targetRoot, { recursive: true })
+    writeFileSync(path.join(sourceRoot, '.env'), 'source\n')
+    writeFileSync(path.join(targetRoot, '.env'), 'target\n')
+
+    const base = {
+      type: 'bootstrapRemoteWorktree' as const,
+      sourceRoot,
+      targetRoot,
+      copy: ['.env'],
+      symlink: [],
+      hardlink: [],
+      exclude: [],
+    }
+    const unapproved = await execa(
+      'bash',
+      ['-lc', buildRemoteCommandInvocation(TARGET, base).script],
+      { reject: false },
+    )
+    const outsidePlan = await execa(
+      'bash',
+      [
+        '-lc',
+        buildRemoteCommandInvocation(TARGET, {
+          ...base,
+          replaceExisting: [{ path: 'other.env', mode: 'copy' }],
+        }).script,
+      ],
+      { reject: false },
+    )
+
+    expect(unapproved.exitCode).toBe(1)
+    expect(unapproved.stderr).toContain('destination already exists: .env')
+    expect(outsidePlan.exitCode).toBe(1)
+    expect(outsidePlan.stderr).toContain('invalid replacement target: other.env')
+    expect(readFileSync(path.join(targetRoot, '.env'), 'utf8')).toBe('target\n')
+  })
+
   test('remote bootstrap literal mode does not expand shell metacharacters', async () => {
     const dir = path.join(os.tmpdir(), `goblin-remote-bootstrap-literal-test-${Date.now()}-${process.pid}`)
     tempDirs.push(dir)
@@ -830,7 +940,10 @@ describe('remote command scripts', () => {
     mkdirSync(sourceRoot, { recursive: true })
     mkdirSync(targetRoot, { recursive: true })
     writeFileSync(path.join(sourceRoot, 'a.txt'), 'a\n')
-    chmodSync(targetRoot, 0o500)
+    const fakeBin = path.join(dir, 'bin')
+    mkdirSync(fakeBin)
+    writeFileSync(path.join(fakeBin, 'cp'), '#!/bin/sh\nexit 1\n')
+    chmodSync(path.join(fakeBin, 'cp'), 0o700)
 
     const invocation = buildRemoteCommandInvocation(TARGET, {
       type: 'bootstrapRemoteWorktree',
@@ -842,16 +955,15 @@ describe('remote command scripts', () => {
       exclude: [],
     })
 
-    try {
-      const result = await execa('bash', ['-lc', invocation.script], { reject: false })
+    const result = await execa('bash', ['-c', invocation.script], {
+      reject: false,
+      env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH ?? ''}` },
+    })
 
-      expect(result.exitCode).toBe(1)
-      expect(result.stdout).toBe('')
-      expect(result.stderr).toContain('failed to copy a.txt')
-      expect(existsSync(path.join(targetRoot, 'a.txt'))).toBe(false)
-    } finally {
-      chmodSync(targetRoot, 0o700)
-    }
+    expect(result.exitCode).toBe(1)
+    expect(result.stdout).toBe('')
+    expect(result.stderr).toContain('failed to copy a.txt')
+    expect(existsSync(path.join(targetRoot, 'a.txt'))).toBe(false)
   })
 
   test('renders quoted remote commit command', () => {

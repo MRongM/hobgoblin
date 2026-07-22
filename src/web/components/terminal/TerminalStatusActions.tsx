@@ -14,6 +14,7 @@ import { useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
 import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
+import { useBranchWorkspaceMemberScope } from '#/web/components/repo-workspace/BranchWorkspaceMemberContext.tsx'
 
 interface Props {
   repoId: string
@@ -27,6 +28,7 @@ interface TerminalStatusTarget {
 export function TerminalStatusActions({ repoId }: Props) {
   const t = useT()
   const [lanQrOpen, setLanQrOpen] = useState(false)
+  const branchWorkspaceMemberScope = useBranchWorkspaceMemberScope()
   const target = useStoreWithEqualityFn(
     useReposStore,
     (state): TerminalStatusTarget | null => {
@@ -44,8 +46,7 @@ export function TerminalStatusActions({ repoId }: Props) {
       return branch && worktreePath ? { branch: branch.name, worktreePath } : null
     },
     (left, right) =>
-      left === right ||
-      (!!left && !!right && left.branch === right.branch && left.worktreePath === right.worktreePath),
+      left === right || (!!left && !!right && left.branch === right.branch && left.worktreePath === right.worktreePath),
   )
   const terminalKey = target ? worktreeTerminalKey(repoId, target.worktreePath) : null
   const sessions = useWorktreeTerminalSnapshot(terminalKey).sessions
@@ -59,9 +60,17 @@ export function TerminalStatusActions({ repoId }: Props) {
         worktreePath: target.worktreePath,
         branch: target.branch,
         terminalId: selectedSession?.terminalId,
+        ...(branchWorkspaceMemberScope
+          ? {
+              branchWorkspaceScope: {
+                workspaceRootId: branchWorkspaceMemberScope.workspaceRootId,
+                branchWorkspaceId: branchWorkspaceMemberScope.branchWorkspaceId,
+              },
+            }
+          : {}),
       }),
     )
-  }, [lanInfo?.lanUrls, repoId, selectedSession?.terminalId, target])
+  }, [branchWorkspaceMemberScope, lanInfo?.lanUrls, repoId, selectedSession?.terminalId, target])
   const browserUrl = useMemo(() => {
     if (!target || !lanInfo) return null
     const accessHost = lanInfo.host === '0.0.0.0' ? '127.0.0.1' : lanInfo.host
@@ -70,8 +79,16 @@ export function TerminalStatusActions({ repoId }: Props) {
       worktreePath: target.worktreePath,
       branch: target.branch,
       terminalId: selectedSession?.terminalId,
+      ...(branchWorkspaceMemberScope
+        ? {
+            branchWorkspaceScope: {
+              workspaceRootId: branchWorkspaceMemberScope.workspaceRootId,
+              branchWorkspaceId: branchWorkspaceMemberScope.branchWorkspaceId,
+            },
+          }
+        : {}),
     })
-  }, [lanInfo, repoId, selectedSession?.terminalId, target])
+  }, [branchWorkspaceMemberScope, lanInfo, repoId, selectedSession?.terminalId, target])
 
   if (!target) return null
 

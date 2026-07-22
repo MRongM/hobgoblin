@@ -11,13 +11,11 @@ export interface RestorableWorkspaceOrderStoreActions extends Pick<ReposStore, '
 export interface RestorableWorkspaceLayoutStoreActions
   extends Pick<
     ReposStore,
-    'setDetailCollapsed' | 'toggleDetailCollapsed' | 'toggleDetailFocusMode' | 'setWorkspaceLayout' | 'resetLayout' | 'setSelectedTerminal'
+    'setDetailCollapsed' | 'toggleDetailCollapsed' | 'setWorkspaceLayout' | 'resetLayout' | 'setSelectedTerminal'
   > {}
 
 export interface RestorableWorkspaceDetailVisibilityStoreActions
   extends Pick<ReposStore, 'setDetailCollapsed' | 'toggleDetailCollapsed'> {}
-
-export interface RestorableWorkspaceDetailFocusStoreActions extends Pick<ReposStore, 'toggleDetailFocusMode'> {}
 
 export interface RestorableWorkspaceLayoutPreferenceStoreActions
   extends Pick<ReposStore, 'setWorkspaceLayout' | 'resetLayout' | 'setSelectedTerminal'> {}
@@ -34,7 +32,6 @@ export interface RestorableWorkspaceStoreActions
     | 'cycleActive'
     | 'setDetailCollapsed'
     | 'toggleDetailCollapsed'
-    | 'toggleDetailFocusMode'
     | 'setWorkspaceLayout'
     | 'resetLayout'
     | 'setSelectedTerminal'
@@ -49,13 +46,10 @@ export interface MainWindowNavigationStoreActions
 export interface RepoTabStoreActions extends Pick<ReposStore, 'ensureWorkspaceOpen' | 'reorderRepos'> {}
 
 export interface RendererEffectIntentStoreActions
-  extends Pick<
-    ReposStore,
-    'ensureWorkspaceOpen' | 'setDetailCollapsed' | 'setSelectedTerminal' | 'setWorkspaceLayout' | 'toggleDetailCollapsed' | 'resetLayout'
-  > {}
+  extends Pick<ReposStore, 'ensureWorkspaceOpen' | 'setDetailCollapsed' | 'setSelectedTerminal'> {}
 
 export interface BranchDetailToolbarStoreActions
-  extends Pick<ReposStore, 'setDetailCollapsed' | 'toggleDetailCollapsed' | 'toggleDetailFocusMode'> {}
+  extends Pick<ReposStore, 'setDetailCollapsed'> {}
 
 export interface DetailPanelStoreActions extends Pick<ReposStore, 'setDetailCollapsed'> {}
 
@@ -115,13 +109,12 @@ export function runtimeCoherentRepoNavigationStoreActionsFromStore(
 export function restorableWorkspaceLayoutStoreActionsFromStore(
   state: Pick<
     ReposStore,
-    'setDetailCollapsed' | 'toggleDetailCollapsed' | 'toggleDetailFocusMode' | 'setWorkspaceLayout' | 'resetLayout' | 'setSelectedTerminal'
+    'setDetailCollapsed' | 'toggleDetailCollapsed' | 'setWorkspaceLayout' | 'resetLayout' | 'setSelectedTerminal'
   >,
 ): RestorableWorkspaceLayoutStoreActions {
   return {
     setDetailCollapsed: state.setDetailCollapsed,
     toggleDetailCollapsed: state.toggleDetailCollapsed,
-    toggleDetailFocusMode: state.toggleDetailFocusMode,
     setWorkspaceLayout: state.setWorkspaceLayout,
     resetLayout: state.resetLayout,
     setSelectedTerminal: state.setSelectedTerminal,
@@ -134,14 +127,6 @@ export function restorableWorkspaceDetailVisibilityStoreActionsFromStore(
   return {
     setDetailCollapsed: state.setDetailCollapsed,
     toggleDetailCollapsed: state.toggleDetailCollapsed,
-  }
-}
-
-export function restorableWorkspaceDetailFocusStoreActionsFromStore(
-  state: Pick<ReposStore, 'toggleDetailFocusMode'>,
-): RestorableWorkspaceDetailFocusStoreActions {
-  return {
-    toggleDetailFocusMode: state.toggleDetailFocusMode,
   }
 }
 
@@ -163,7 +148,6 @@ export function restorableWorkspaceStoreActionsFromStore(
     | 'cycleActive'
     | 'setDetailCollapsed'
     | 'toggleDetailCollapsed'
-    | 'toggleDetailFocusMode'
     | 'setWorkspaceLayout'
     | 'resetLayout'
     | 'setSelectedTerminal'
@@ -175,7 +159,6 @@ export function restorableWorkspaceStoreActionsFromStore(
     cycleActive: state.cycleActive,
     setDetailCollapsed: state.setDetailCollapsed,
     toggleDetailCollapsed: state.toggleDetailCollapsed,
-    toggleDetailFocusMode: state.toggleDetailFocusMode,
     setWorkspaceLayout: state.setWorkspaceLayout,
     resetLayout: state.resetLayout,
     setSelectedTerminal: state.setSelectedTerminal,
@@ -235,47 +218,23 @@ export function repoTabStoreActionsFromStore(
 }
 
 export function rendererEffectIntentStoreActionsFromStore(
-  state: Pick<
-    ReposStore,
-    'ensureWorkspaceOpen' | 'setDetailCollapsed' | 'setSelectedTerminal' | 'setWorkspaceLayout' | 'toggleDetailCollapsed' | 'resetLayout'
-  >,
+  state: Pick<ReposStore, 'ensureWorkspaceOpen' | 'setDetailCollapsed' | 'setSelectedTerminal'>,
 ): RendererEffectIntentStoreActions {
-  const detailVisibility = restorableWorkspaceDetailVisibilityStoreActionsFromStore({
-    setDetailCollapsed: state.setDetailCollapsed,
-    toggleDetailCollapsed: state.toggleDetailCollapsed,
-  })
-  const layoutPrefs = restorableWorkspaceLayoutPreferenceStoreActionsFromStore({
-    setWorkspaceLayout: state.setWorkspaceLayout,
-    resetLayout: state.resetLayout,
-    setSelectedTerminal: state.setSelectedTerminal,
-  })
   const runtimeCoherent = runtimeCoherentRepoOpenStoreActionsFromStore({
     ensureWorkspaceOpen: state.ensureWorkspaceOpen,
   })
   return {
     ensureWorkspaceOpen: runtimeCoherent.ensureWorkspaceOpen,
-    setDetailCollapsed: detailVisibility.setDetailCollapsed,
-    setSelectedTerminal: layoutPrefs.setSelectedTerminal,
-    setWorkspaceLayout: layoutPrefs.setWorkspaceLayout,
-    toggleDetailCollapsed: detailVisibility.toggleDetailCollapsed,
-    resetLayout: layoutPrefs.resetLayout,
+    setDetailCollapsed: state.setDetailCollapsed,
+    setSelectedTerminal: state.setSelectedTerminal,
   }
 }
 
 export function branchDetailToolbarStoreActionsFromStore(
-  state: Pick<ReposStore, 'setDetailCollapsed' | 'toggleDetailCollapsed' | 'toggleDetailFocusMode'>,
+  state: Pick<ReposStore, 'setDetailCollapsed'>,
 ): BranchDetailToolbarStoreActions {
-  const detailVisibility = restorableWorkspaceDetailVisibilityStoreActionsFromStore({
-    setDetailCollapsed: state.setDetailCollapsed,
-    toggleDetailCollapsed: state.toggleDetailCollapsed,
-  })
-  const detailFocus = restorableWorkspaceDetailFocusStoreActionsFromStore({
-    toggleDetailFocusMode: state.toggleDetailFocusMode,
-  })
   return {
-    setDetailCollapsed: detailVisibility.setDetailCollapsed,
-    toggleDetailCollapsed: detailVisibility.toggleDetailCollapsed,
-    toggleDetailFocusMode: detailFocus.toggleDetailFocusMode,
+    setDetailCollapsed: state.setDetailCollapsed,
   }
 }
 
@@ -310,10 +269,7 @@ export function rendererEffectIntentStoreActionsEqual(
   return (
     a.ensureWorkspaceOpen === b.ensureWorkspaceOpen &&
     a.setDetailCollapsed === b.setDetailCollapsed &&
-    a.setSelectedTerminal === b.setSelectedTerminal &&
-    a.setWorkspaceLayout === b.setWorkspaceLayout &&
-    a.toggleDetailCollapsed === b.toggleDetailCollapsed &&
-    a.resetLayout === b.resetLayout
+    a.setSelectedTerminal === b.setSelectedTerminal
   )
 }
 
@@ -321,11 +277,7 @@ export function branchDetailToolbarStoreActionsEqual(
   a: BranchDetailToolbarStoreActions,
   b: BranchDetailToolbarStoreActions,
 ): boolean {
-  return (
-    a.setDetailCollapsed === b.setDetailCollapsed &&
-    a.toggleDetailCollapsed === b.toggleDetailCollapsed &&
-    a.toggleDetailFocusMode === b.toggleDetailFocusMode
-  )
+  return a.setDetailCollapsed === b.setDetailCollapsed
 }
 
 export function detailPanelStoreActionsEqual(a: DetailPanelStoreActions, b: DetailPanelStoreActions): boolean {

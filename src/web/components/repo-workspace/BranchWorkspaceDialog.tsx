@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { FolderKanban, LoaderCircle, RefreshCw } from 'lucide-react'
+import { ArrowRight, FolderKanban, LoaderCircle, RefreshCw } from 'lucide-react'
 import type {
   BranchWorkspaceApproval,
   BranchWorkspaceAuxiliaryCandidate,
@@ -95,7 +95,6 @@ export function BranchWorkspaceDialog({
   const [auxiliaryRefreshError, setAuxiliaryRefreshError] = useState<string | null>(null)
   const [alsoDeleteBranch, setAlsoDeleteBranch] = useState(false)
   const [alsoDeleteUpstream, setAlsoDeleteUpstream] = useState(false)
-  const [forceRemoveWorktrees, setForceRemoveWorktrees] = useState(false)
   const [approvals, setApprovals] = useState<BranchWorkspaceApproval[]>([])
 
   const fixedRepositories = useMemo(
@@ -138,7 +137,6 @@ export function BranchWorkspaceDialog({
     setAuxiliaryRefreshError(null)
     setAlsoDeleteBranch(mode === 'remove')
     setAlsoDeleteUpstream(false)
-    setForceRemoveWorktrees(mode === 'remove')
     setApprovals([])
   }, [mode, open, workspace?.id])
 
@@ -249,7 +247,6 @@ export function BranchWorkspaceDialog({
       branchWorkspaceId: workspace.id,
       alsoDeleteBranch,
       alsoDeleteUpstream: alsoDeleteBranch && alsoDeleteUpstream,
-      forceRemoveWorktrees,
     }
   }
   const close = () => {
@@ -263,6 +260,8 @@ export function BranchWorkspaceDialog({
     if (response?.ok) onOpenChange(false)
   }
   const requiredApprovalsSatisfied = !plan || plan.requiredApprovals.every((approval) => approvals.includes(approval))
+  const destructiveConfirm =
+    mode === 'remove' || plan?.requiredApprovals.includes('replace-repository-dependencies') === true
   const repositoryBootstrapPending = repositories.some(
     (repository) =>
       selectedRepositories[repository.name] &&
@@ -445,16 +444,6 @@ export function BranchWorkspaceDialog({
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
-                aria-label={t('action.confirm-remove-worktree-force')}
-                checked={forceRemoveWorktrees}
-                disabled={pending}
-                onChange={(event) => setForceRemoveWorktrees(event.target.checked)}
-              />
-              {t('action.confirm-remove-worktree-force')}
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
                 aria-label={t('workspace.branch-workspace.delete-local-branch')}
                 checked={alsoDeleteBranch}
                 disabled={pending}
@@ -485,11 +474,57 @@ export function BranchWorkspaceDialog({
               {plan.steps.length === 0 ? (
                 <p className="p-3 text-xs text-muted-foreground">{t('workspace.branch-workspace.no-pending-steps')}</p>
               ) : (
-                plan.steps.map((step) => (
-                  <div key={step.id} className="border-b border-separator/60 px-3 py-2 text-xs last:border-b-0">
-                    <PlanStepLabel step={step} />
-                  </div>
-                ))
+                groupBranchCleanupSteps(plan.steps).map((item) => {
+                  if (item.kind === 'branch-group') {
+                    return (
+                      <div
+                        key={item.steps.map((step) => step.id).join(':')}
+                        data-branch-workspace-branch-group={item.repositoryName}
+                        role="group"
+                        aria-label={item.repositoryName}
+                        className="border-b border-separator/60 bg-muted/10 px-3 py-2.5 text-xs last:border-b-0"
+                      >
+                        <div
+                          className={cn(
+                            'grid gap-2',
+                            item.steps.length > 1 && 'sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center',
+                          )}
+                        >
+                          {item.steps.map((step, index) => (
+                            <div key={step.id} className="contents">
+                              {index > 0 ? (
+                                <ArrowRight
+                                  className="mx-auto size-3.5 rotate-90 text-muted-foreground/70 sm:rotate-0"
+                                  aria-hidden="true"
+                                />
+                              ) : null}
+                              <BranchCleanupStepLabel step={step} />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  const { step } = item
+                  return (
+                    <div
+                      key={step.id}
+                      data-branch-workspace-plan-step={step.kind}
+                      className={cn(
+                        'border-b border-separator/60 px-3 py-2 text-xs last:border-b-0',
+                        mode === 'create' &&
+                          step.kind === 'create-directory' &&
+                          'bg-success-surface font-semibold text-success',
+                        mode === 'remove' &&
+                          step.kind === 'remove-directory' &&
+                          'bg-danger-surface font-semibold text-danger',
+                      )}
+                    >
+                      {step.label}
+                    </div>
+                  )
+                })
               )}
             </div>
             {plan.requiredApprovals.length > 0 ? (
@@ -550,7 +585,7 @@ export function BranchWorkspaceDialog({
             <Button
               type="button"
               data-action="confirm"
-              variant={mode === 'remove' ? 'destructive' : 'default'}
+              variant={destructiveConfirm ? 'destructive' : 'default'}
               disabled={pending || !requiredApprovalsSatisfied}
               onClick={() => void run(onConfirm)}
             >
@@ -574,22 +609,52 @@ export function BranchWorkspaceDialog({
   )
 }
 
-function PlanStepLabel({ step }: { step: BranchWorkspacePlanStep }) {
+function BranchCleanupStepLabel({ step }: { step: BranchCleanupStep }) {
   const t = useT()
-  if (!step.repositoryName || (step.kind !== 'delete-local-branch' && step.kind !== 'delete-upstream-branch')) {
-    return step.label
-  }
+  const labelKey =
+    step.kind === 'delete-local-branch'
+      ? 'workspace.branch-workspace.step.local-branch'
+      : 'workspace.branch-workspace.step.upstream-branch'
 
   return (
-    <div className="grid gap-0.5">
-      <span className="text-muted-foreground">
-        {t(`workspace.branch-workspace.step.${step.kind}`, { repository: step.repositoryName })}
-      </span>
+    <div className="grid min-w-0 gap-0.5">
+      <span className="text-[10px] font-medium text-muted-foreground">{t(labelKey)}</span>
       <span className="break-all font-mono text-foreground" title={step.label}>
         {step.label}
       </span>
     </div>
   )
+}
+
+type BranchCleanupStep = BranchWorkspacePlanStep & {
+  kind: 'delete-local-branch' | 'delete-upstream-branch'
+  repositoryName: string
+}
+
+type PlanStepDisplayItem =
+  | { kind: 'step'; step: BranchWorkspacePlanStep }
+  | { kind: 'branch-group'; repositoryName: string; steps: BranchCleanupStep[] }
+
+function groupBranchCleanupSteps(steps: BranchWorkspacePlanStep[]): PlanStepDisplayItem[] {
+  const items: PlanStepDisplayItem[] = []
+  for (const step of steps) {
+    if (!isBranchCleanupStep(step)) {
+      items.push({ kind: 'step', step })
+      continue
+    }
+
+    const previous = items.at(-1)
+    if (previous?.kind === 'branch-group' && previous.repositoryName === step.repositoryName) {
+      previous.steps.push(step)
+    } else {
+      items.push({ kind: 'branch-group', repositoryName: step.repositoryName, steps: [step] })
+    }
+  }
+  return items
+}
+
+function isBranchCleanupStep(step: BranchWorkspacePlanStep): step is BranchCleanupStep {
+  return !!step.repositoryName && (step.kind === 'delete-local-branch' || step.kind === 'delete-upstream-branch')
 }
 
 function WorkspaceSummary({ workspace }: { workspace: BranchWorkspaceSnapshot }) {

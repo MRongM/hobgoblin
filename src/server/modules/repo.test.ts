@@ -55,12 +55,14 @@ const mocks = vi.hoisted(() => ({
   fetchRemoteRepository: vi.fn(),
   getBackgroundSyncRepos: vi.fn(),
   getWorktreeBootstrapPreview: vi.fn(),
+  getWorktreeBootstrapTargetPreflight: vi.fn(),
   getLocalWorktreeBootstrapPreflight: vi.fn(),
   validateLocalWorktreeBootstrapSelections: vi.fn(),
   initializeWorktreeBootstrapConfig: vi.fn(),
   bootstrapWorktreeAfterCreate: vi.fn(),
   bootstrapWorktreeSelectionsAfterCreate: vi.fn(),
   getRemoteWorktreeBootstrapPreview: vi.fn(),
+  getRemoteWorktreeBootstrapTargetPreflight: vi.fn(),
   getRemoteWorktreeBootstrapPreflight: vi.fn(),
   validateRemoteWorktreeBootstrapSelections: vi.fn(),
   bootstrapRemoteWorktreeAfterCreate: vi.fn(),
@@ -204,6 +206,7 @@ vi.mock('#/system/git/worktrees.ts', () => ({
 vi.mock('#/system/git/worktree-bootstrap.ts', () => ({
   DEFAULT_WORKTREE_BOOTSTRAP_CONFIG: '[worktree]\n',
   getWorktreeBootstrapPreview: mocks.getWorktreeBootstrapPreview,
+  getWorktreeBootstrapTargetPreflight: mocks.getWorktreeBootstrapTargetPreflight,
   initializeWorktreeBootstrapConfig: mocks.initializeWorktreeBootstrapConfig,
   bootstrapWorktreeAfterCreate: mocks.bootstrapWorktreeAfterCreate,
   bootstrapWorktreeSelectionsAfterCreate: mocks.bootstrapWorktreeSelectionsAfterCreate,
@@ -227,6 +230,7 @@ vi.mock('#/system/file-tree/local.ts', () => ({
 }))
 
 vi.mock('#/shared/input-validation.ts', () => ({
+  MAX_IPC_PATH_LENGTH: 4096,
   isValidCwd: () => true,
   isValidRepoLocator: () => true,
 }))
@@ -255,6 +259,7 @@ vi.mock('#/system/ssh/git.ts', () => ({
   discardRemoteChangesForPaths: mocks.discardRemoteChangesForPaths,
   fetchRemoteRepository: mocks.fetchRemoteRepository,
   getRemoteWorktreeBootstrapPreview: mocks.getRemoteWorktreeBootstrapPreview,
+  getRemoteWorktreeBootstrapTargetPreflight: mocks.getRemoteWorktreeBootstrapTargetPreflight,
   getRemoteWorktreeBootstrapPreflight: mocks.getRemoteWorktreeBootstrapPreflight,
   validateRemoteWorktreeBootstrapSelections: mocks.validateRemoteWorktreeBootstrapSelections,
   bootstrapRemoteWorktreeAfterCreate: mocks.bootstrapRemoteWorktreeAfterCreate,
@@ -395,6 +400,10 @@ beforeEach(() => {
       excludeCount: 0,
     },
   })
+  mocks.getWorktreeBootstrapTargetPreflight.mockResolvedValue({
+    ok: true,
+    preflight: { pending: [], satisfied: [], conflicts: [], hasSetup: false },
+  })
   mocks.bootstrapWorktreeAfterCreate.mockResolvedValue({ ok: true, message: '' })
   mocks.bootstrapWorktreeSelectionsAfterCreate.mockResolvedValue({ ok: true, message: '' })
   mocks.getLocalWorktreeBootstrapPreflight.mockResolvedValue({
@@ -413,6 +422,10 @@ beforeEach(() => {
       hardlinkCount: 0,
       excludeCount: 0,
     },
+  })
+  mocks.getRemoteWorktreeBootstrapTargetPreflight.mockResolvedValue({
+    ok: true,
+    preflight: { pending: [], satisfied: [], conflicts: [], hasSetup: false },
   })
   mocks.bootstrapRemoteWorktreeAfterCreate.mockResolvedValue({ ok: true, message: '' })
   mocks.bootstrapRemoteWorktreeSelectionsAfterCreate.mockResolvedValue({ ok: true, message: '' })
@@ -553,6 +566,27 @@ describe('getRepositorySnapshot', () => {
     expect(result).toEqual(snapshot)
     expect(mocks.getWorktrees).toHaveBeenCalledWith('/tmp/repo', { signal: undefined, throwOnError: true })
     expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
+  })
+
+  test('skips worktree status and remote metadata for a lightweight snapshot', async () => {
+    mocks.getWorktrees.mockResolvedValueOnce([{ path: '/tmp/repo', branch: 'main', isBare: false, isPrimary: true }])
+    const snapshot = repoSnapshot('main')
+    mocks.getBranches.mockResolvedValueOnce(snapshot.branches)
+    mocks.getCurrentBranch.mockResolvedValueOnce(snapshot.current)
+
+    const { getRepositorySnapshot } = await import('#/server/modules/repo-read-paths.ts')
+    const result = await getRepositorySnapshot('/tmp/repo', undefined, {
+      includeWorktreeStatus: false,
+      includeRemote: false,
+    })
+
+    expect(result).toEqual(snapshot)
+    expect(mocks.getWorktrees).toHaveBeenCalledWith('/tmp/repo', {
+      includeStatus: false,
+      signal: undefined,
+      throwOnError: true,
+    })
+    expect(mocks.getRemoteInfo).not.toHaveBeenCalled()
   })
 
   test('fails local git snapshots when the authoritative worktree list is empty', async () => {
@@ -1142,6 +1176,72 @@ describe('repo mutation invalidation publishing', () => {
     })
   })
 
+  test('getRepositoryWorktreeBootstrapTargetPreflight delegates local target inspection', async () => {
+    const decision = {
+      kind: 'run' as const,
+      configHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      configTrusted: false,
+    }
+    mocks.getWorktreeBootstrapTargetPreflight.mockResolvedValueOnce({
+      ok: true,
+      preflight: {
+        pending: [{ path: 'missing.env', mode: 'copy' }],
+        satisfied: [],
+        conflicts: [{ path: '.env', mode: 'copy' }],
+        hasSetup: false,
+      },
+    })
+    const { getRepositoryWorktreeBootstrapTargetPreflight } = await import('#/server/modules/repo-read-paths.ts')
+
+    await expect(
+      getRepositoryWorktreeBootstrapTargetPreflight('/tmp/repo', '/tmp/repo-feature', decision),
+    ).resolves.toMatchObject({ ok: true, preflight: { conflicts: [{ path: '.env', mode: 'copy' }] } })
+    expect(mocks.getWorktreeBootstrapTargetPreflight).toHaveBeenCalledWith(
+      '/tmp/repo',
+      '/tmp/repo-feature',
+      decision,
+      { signal: undefined },
+    )
+  })
+
+  test('getRepositoryWorktreeBootstrapTargetPreflight delegates remote target inspection', async () => {
+    const decision = {
+      kind: 'materialize' as const,
+      selections: [{ path: 'node_modules', mode: 'symlink' as const }],
+    }
+    mocks.getRemoteWorktreeBootstrapTargetPreflight.mockResolvedValueOnce({
+      ok: true,
+      preflight: { pending: [], satisfied: decision.selections, conflicts: [], hasSetup: false },
+    })
+    const { getRepositoryWorktreeBootstrapTargetPreflight } = await import('#/server/modules/repo-read-paths.ts')
+
+    await expect(
+      getRepositoryWorktreeBootstrapTargetPreflight(
+        'ssh-config://prod/srv/repo',
+        '/srv/repo-feature',
+        decision,
+      ),
+    ).resolves.toMatchObject({ ok: true, preflight: { satisfied: decision.selections } })
+    expect(mocks.getRemoteWorktreeBootstrapTargetPreflight).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
+      '/srv/repo-feature',
+      decision,
+      { signal: undefined },
+    )
+  })
+
+  test('getRepositoryWorktreeBootstrapTargetPreflight rejects invalid worktree paths', async () => {
+    const { getRepositoryWorktreeBootstrapTargetPreflight } = await import('#/server/modules/repo-read-paths.ts')
+
+    await expect(
+      getRepositoryWorktreeBootstrapTargetPreflight('ssh-config://prod/srv/repo', 'relative', {
+        kind: 'materialize',
+        selections: [{ path: '.env', mode: 'copy' }],
+      }),
+    ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+    expect(mocks.getWorktreeBootstrapTargetPreflight).not.toHaveBeenCalled()
+  })
+
   test('getRepositoryWorktreeBootstrapPreview reads an explicit local worktree path', async () => {
     mocks.getWorktreeBootstrapPreview.mockResolvedValueOnce({
       ok: true,
@@ -1334,6 +1434,43 @@ describe('repo mutation invalidation publishing', () => {
       { signal: undefined },
     )
     expect(mocks.createWorktree).not.toHaveBeenCalled()
+  })
+
+  test('bootstrapRepositoryWorktree forwards only supplied replacement entries', async () => {
+    const decision = {
+      kind: 'run' as const,
+      configHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      configTrusted: false,
+    }
+    const replacements = [{ path: '.env', mode: 'copy' as const }]
+    mocks.bootstrapWorktreeAfterCreate.mockResolvedValueOnce({ ok: true, message: 'copied' })
+    const { bootstrapRepositoryWorktree } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(
+      bootstrapRepositoryWorktree('/tmp/repo', '/tmp/repo-feature', decision, replacements),
+    ).resolves.toEqual({ ok: true, message: 'copied' })
+    expect(mocks.bootstrapWorktreeAfterCreate).toHaveBeenCalledWith('/tmp/repo', '/tmp/repo-feature', {
+      signal: undefined,
+      expectedConfigHash: decision.configHash,
+      replaceExisting: replacements,
+    })
+  })
+
+  test('bootstrapRepositoryWorktree does not duplicate a normalized bootstrap failure prefix', async () => {
+    const configHash = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    mocks.bootstrapWorktreeAfterCreate.mockResolvedValueOnce({
+      ok: false,
+      message: 'Worktree bootstrap failed: setup failed',
+    })
+    const { bootstrapRepositoryWorktree } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(
+      bootstrapRepositoryWorktree('/tmp/repo', '/tmp/repo-feature', {
+        kind: 'run',
+        configHash,
+        configTrusted: false,
+      }),
+    ).resolves.toEqual({ ok: false, message: 'Worktree bootstrap failed: setup failed' })
   })
 
   test('createRepositoryBranch creates a local branch and publishes source-token invalidation', async () => {

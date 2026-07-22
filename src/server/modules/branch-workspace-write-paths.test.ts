@@ -391,12 +391,81 @@ describe('branch workspace write service', () => {
       '/workspace/api',
       '/workspace/goblin-feature-auth/api',
       dependency,
+      [],
       expect.any(AbortSignal),
     )
     expect(source.manifests[0]?.repositories[0]).toMatchObject({
       progress: 'complete',
       bootstrapProgress: 'complete',
     })
+  })
+
+  test('requires replacement approval before mutation and forwards only planned dependency conflicts', async () => {
+    const plan = repairPlanned()
+    const dependency = {
+      kind: 'materialize' as const,
+      candidateScope: 'ignored-only' as const,
+      selections: [{ path: 'node_modules', mode: 'symlink' as const }],
+    }
+    const replacements = [{ path: '.env', mode: 'copy' as const }]
+    plan.requiredApprovals = ['replace-repository-dependencies']
+    plan.repositories = [
+      {
+        ...plan.repositories[0]!,
+        action: 'bootstrap-worktree',
+        worktreeBootstrap: dependency,
+        bootstrapReplacements: replacements,
+      },
+    ]
+    plan.manifest.repositories[0] = {
+      ...plan.manifest.repositories[0]!,
+      progress: 'complete',
+      worktreeBootstrap: dependency,
+      bootstrapProgress: 'pending',
+    }
+    plan.steps = [
+      {
+        id: 'repository-replacement:api:.env',
+        kind: 'replace-repository-dependency',
+        label: 'api/.env',
+        repositoryName: 'api',
+        entryName: '.env',
+      },
+      { id: 'repository:api', kind: 'bootstrap-worktree', label: 'api', repositoryName: 'api' },
+    ]
+    plan.auxiliaryEntries = []
+    plan.manifest.auxiliaryEntries = []
+    const source = inMemorySource([plan.manifest])
+    const bootstrapWorktree = vi.fn(async () => ({ ok: true, message: 'copied' }))
+    const service = createBranchWorkspaceWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      readManifests: source.readManifests,
+      updateManifests: source.updateManifests,
+      bootstrapWorktree,
+      now: () => '2026-07-21T00:00:00.000Z',
+    })
+    await service.plan(ROOT, { operation: 'repair', branchWorkspaceId: plan.branchWorkspaceId })
+
+    await expect(service.execute(ROOT, { planToken: plan.token, approvals: [] })).resolves.toMatchObject({
+      ok: false,
+      message: 'workspace.branch-workspace.approval-required',
+    })
+    expect(bootstrapWorktree).not.toHaveBeenCalled()
+    expect(source.updateManifests).not.toHaveBeenCalled()
+
+    await expect(
+      service.execute(ROOT, {
+        planToken: plan.token,
+        approvals: ['replace-repository-dependencies'],
+      }),
+    ).resolves.toEqual({ ok: true, branchWorkspaceId: plan.branchWorkspaceId })
+    expect(bootstrapWorktree).toHaveBeenCalledWith(
+      '/workspace/api',
+      '/workspace/goblin-feature-auth/api',
+      dependency,
+      replacements,
+      expect.any(AbortSignal),
+    )
   })
 
   test('aborts remove before manifest and filesystem mutation when an approved terminal cannot close', async () => {
@@ -417,7 +486,6 @@ describe('branch workspace write service', () => {
       branchWorkspaceId: plan.branchWorkspaceId,
       alsoDeleteBranch: true,
       alsoDeleteUpstream: false,
-      forceRemoveWorktrees: true,
     })
 
     await expect(
@@ -466,7 +534,6 @@ describe('branch workspace write service', () => {
       branchWorkspaceId: plan.branchWorkspaceId,
       alsoDeleteBranch: true,
       alsoDeleteUpstream: false,
-      forceRemoveWorktrees: true,
     })
 
     await expect(
@@ -520,7 +587,6 @@ describe('branch workspace write service', () => {
       branchWorkspaceId: plan.branchWorkspaceId,
       alsoDeleteBranch: true,
       alsoDeleteUpstream: false,
-      forceRemoveWorktrees: true,
     })
 
     await expect(service.execute(ROOT, { planToken: plan.token, approvals: [] })).resolves.toMatchObject({
@@ -626,7 +692,7 @@ function removePlanned(): BranchWorkspacePlan {
     requiredApprovals: ['unmanaged-content', 'close-terminals'],
     terminalSessionIds: ['terminal-root-1234'],
     unmanagedEntries: ['notes.txt'],
-    removalOptions: { alsoDeleteBranch: true, alsoDeleteUpstream: false, forceRemoveWorktrees: true },
+    removalOptions: { alsoDeleteBranch: true, alsoDeleteUpstream: false },
     steps: [
       ...repositories.map((repository) => ({
         id: `repository:${repository.repositoryName}`,

@@ -32,6 +32,12 @@ import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon
 import { WorkspaceItemContextMenu } from '#/web/components/repo-workspace/WorkspaceItemContextMenu.tsx'
 import { useProjectExternalOpenActions } from '#/web/hooks/useProjectExternalOpenActions.ts'
 import { useProjectInternalTerminalAction } from '#/web/hooks/useProjectInternalTerminalAction.ts'
+import {
+  WorkspaceListItemActionDock,
+  WorkspaceListItemFrame,
+  WorkspaceListItemMenu,
+  type WorkspaceListItemAction,
+} from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
 
 const restrictToVerticalRepositoryList: Modifier = ({ transform }) => ({ ...transform, x: 0 })
 
@@ -120,6 +126,33 @@ function SortableWorkspaceRepositoryRow({
     id: repository.id,
     disabled,
   })
+  const editorAction: WorkspaceListItemAction | undefined = externalActions.visible
+    ? {
+        id: 'editor',
+        label: t('worktrees.open-in-editor-label'),
+        icon: <EditorAppIcon pref={externalActions.editor.iconPref} />,
+        disabled: externalActions.editor.disabled,
+        busy: externalActions.editor.busy,
+        onSelect: externalActions.editor.onSelect,
+      }
+    : undefined
+  const internalAction: WorkspaceListItemAction = {
+    id: 'terminal',
+    label: t('terminal.internal'),
+    icon: <Terminal aria-hidden="true" />,
+    disabled: internalTerminalAction.disabled,
+    busy: internalTerminalAction.busy,
+    onSelect: internalTerminalAction.onSelect,
+  }
+  const externalTerminalAction: WorkspaceListItemAction = {
+    id: 'externalTerminal',
+    label: t('terminal.external'),
+    icon: <TerminalAppIcon pref={externalActions.externalTerminal.iconPref} />,
+    disabled: externalActions.externalTerminal.disabled,
+    busy: externalActions.externalTerminal.busy,
+    visible: externalActions.visible,
+    onSelect: externalActions.externalTerminal.onSelect,
+  }
 
   return (
     <WorkspaceItemContextMenu
@@ -131,102 +164,99 @@ function SortableWorkspaceRepositoryRow({
       internalTerminal={{ ...internalTerminalAction, icon: <Terminal aria-hidden="true" /> }}
       worktreeTerminalKeys={terminalWorktreeKeys}
     >
-      <li
-        ref={setNodeRef}
-        style={{ transform: CSS.Transform.toString(transform), transition }}
-        className={cn(
-          'group relative',
-          isDragging && 'z-10 rounded-[var(--goblin-brand-radius-sm,var(--radius-sm))] bg-card shadow-sm',
-        )}
-      >
-        <button
-          ref={setActivatorNodeRef}
-          type="button"
-          {...attributes}
-          {...listeners}
-          aria-current={active ? 'page' : undefined}
-          aria-label={[
+      <WorkspaceListItemFrame
+        size="primary"
+        itemRef={setNodeRef}
+        itemStyle={{ transform: CSS.Transform.toString(transform), transition }}
+        selected={active}
+        unavailable={repository.unavailable}
+        dragging={isDragging}
+        leadingIcon={
+          <span
+            className={cn(
+              'relative z-10 flex size-4 shrink-0 items-center justify-center',
+              active ? 'bg-list-row-selected' : 'bg-sidebar group-hover:bg-list-row-hover',
+            )}
+          >
+            <FolderGit2 className="size-3.5" aria-hidden="true" />
+          </span>
+        }
+        dragHandle={{
+          label: t('workspace.repository-reorder'),
+          setActivatorNodeRef,
+          props: { ...attributes, ...listeners, disabled },
+        }}
+        buttonProps={{
+          'aria-current': active ? 'page' : undefined,
+          'aria-label': [
             repository.name,
             repository.branch,
             terminalCountLabel,
             changeCountLabel,
             hasTerminalBell ? terminalBellLabel : null,
-            t('workspace.repository-reorder'),
           ]
             .filter(Boolean)
-            .join('. ')}
-          title={repository.unavailable ? t('workspace.repository-unavailable') : repository.name}
-          className={cn(
-            'relative flex h-7 w-full min-w-0 items-center gap-2 rounded-[var(--goblin-brand-radius-sm,var(--radius-sm))] px-2 text-left text-xs transition-colors duration-100',
-            disabled ? 'cursor-default' : 'cursor-grab active:cursor-grabbing',
-            active ? 'bg-selected text-selected-foreground' : 'text-foreground hover:bg-list-row-hover',
-            repository.unavailable && 'opacity-60',
-            isDragging && 'cursor-grabbing bg-card shadow-sm',
-          )}
-          onClick={() => onActivate(repository.id)}
-        >
+            .join('. '),
+          title: repository.unavailable ? t('workspace.repository-unavailable') : repository.name,
+          onClick: () => onActivate(repository.id),
+        }}
+        actions={
+          <WorkspaceListItemActionDock
+            editor={editorAction}
+            internalTerminal={internalAction}
+            moreMenu={<WorkspaceListItemMenu label={t('action.menu')} groups={[[externalTerminalAction]]} />}
+          />
+        }
+      >
+        <span data-testid="workspace-repository-primary-content" className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span className="min-w-0 truncate font-medium">{repository.name}</span>
+          {repository.branch ? (
+            <span className="min-w-0 truncate font-mono text-[10px] text-muted-foreground">{repository.branch}</span>
+          ) : null}
+          {terminalCount > 0 || repository.changeCount > 0 || hasTerminalBell ? (
+            <span data-testid="workspace-repository-status-badges" className="flex shrink-0 items-center gap-1">
+              {terminalCount > 0 ? (
+                <Badge
+                  data-testid="workspace-repository-terminal-count-badge"
+                  aria-label={terminalCountLabel ?? undefined}
+                  title={terminalCountLabel ?? undefined}
+                  variant="brand"
+                  className="h-4 gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums"
+                >
+                  {hasTerminalOutputActivity ? (
+                    <TerminalOutputActivityIndicator label={terminalOutputActiveLabel} className="size-2.5" size={10} />
+                  ) : (
+                    <Terminal size={10} aria-hidden="true" />
+                  )}
+                  {terminalCount}
+                </Badge>
+              ) : null}
+              {repository.changeCount > 0 ? (
+                <Badge
+                  data-testid="workspace-repository-change-count-badge"
+                  aria-label={changeCountLabel ?? undefined}
+                  title={changeCountLabel ?? undefined}
+                  variant="attention"
+                  className="h-4 gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums"
+                >
+                  <GitCompareArrows size={10} aria-hidden="true" />
+                  {repository.changeCount}
+                </Badge>
+              ) : null}
+              {hasTerminalBell ? <TerminalBellDot label={terminalBellLabel} /> : null}
+            </span>
+          ) : null}
+        </span>
+        {repository.unavailable ? (
+          <span className="shrink-0 text-[9px] text-danger">{t('workspace.repository-unavailable')}</span>
+        ) : null}
+        {terminal ? (
           <span
-            className={cn(
-              'relative z-10 flex size-4 shrink-0 items-center justify-center',
-              active ? 'bg-selected' : 'bg-sidebar group-hover:bg-list-row-hover',
-            )}
-          >
-            <FolderGit2 className="size-3.5" aria-hidden="true" />
-          </span>
-          <span data-testid="workspace-repository-primary-content" className="flex min-w-0 flex-1 items-center gap-1.5">
-            <span className="min-w-0 truncate font-medium">{repository.name}</span>
-            {repository.branch ? (
-              <span className="min-w-0 truncate font-mono text-[10px] text-muted-foreground">{repository.branch}</span>
-            ) : null}
-            {terminalCount > 0 || repository.changeCount > 0 || hasTerminalBell ? (
-              <span data-testid="workspace-repository-status-badges" className="flex shrink-0 items-center gap-1">
-                {terminalCount > 0 ? (
-                  <Badge
-                    data-testid="workspace-repository-terminal-count-badge"
-                    aria-label={terminalCountLabel ?? undefined}
-                    title={terminalCountLabel ?? undefined}
-                    variant="brand"
-                    className="h-4 gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums"
-                  >
-                    {hasTerminalOutputActivity ? (
-                      <TerminalOutputActivityIndicator
-                        label={terminalOutputActiveLabel}
-                        className="size-2.5"
-                        size={10}
-                      />
-                    ) : (
-                      <Terminal size={10} aria-hidden="true" />
-                    )}
-                    {terminalCount}
-                  </Badge>
-                ) : null}
-                {repository.changeCount > 0 ? (
-                  <Badge
-                    data-testid="workspace-repository-change-count-badge"
-                    aria-label={changeCountLabel ?? undefined}
-                    title={changeCountLabel ?? undefined}
-                    variant="attention"
-                    className="h-4 gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums"
-                  >
-                    <GitCompareArrows size={10} aria-hidden="true" />
-                    {repository.changeCount}
-                  </Badge>
-                ) : null}
-                {hasTerminalBell ? <TerminalBellDot label={terminalBellLabel} /> : null}
-              </span>
-            ) : null}
-          </span>
-          {repository.unavailable ? (
-            <span className="shrink-0 text-[9px] text-danger">{t('workspace.repository-unavailable')}</span>
-          ) : null}
-          {terminal ? (
-            <span
-              className="absolute bottom-0 left-[0.68rem] h-1.5 w-1.5 border-b border-l border-separator"
-              aria-hidden="true"
-            />
-          ) : null}
-        </button>
-      </li>
+            className="absolute bottom-0 left-[0.68rem] h-1.5 w-1.5 border-b border-l border-separator"
+            aria-hidden="true"
+          />
+        ) : null}
+      </WorkspaceListItemFrame>
     </WorkspaceItemContextMenu>
   )
 }

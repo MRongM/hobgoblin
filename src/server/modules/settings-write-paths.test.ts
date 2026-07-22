@@ -144,11 +144,10 @@ describe('settings write paths', () => {
     const session = {
       openRepos: [],
       activeRepo: null,
-      detailCollapsed: true,
+      detailCollapsed: false,
       detailFocusMode: false,
-      workspaceLayout: 'top-bottom',
+      workspaceLayout: 'left-right',
       detailPaneSizes: {
-        'top-bottom': 40,
         'left-right': 50,
       },
       selectedTerminalByWorktree: {},

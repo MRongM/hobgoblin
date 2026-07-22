@@ -176,16 +176,12 @@ export interface RestorableWorkspaceState {
   /** Active workspace tab restored from SessionState.activeRepo. */
   activeId: string | null
   workspaceActiveContextByRoot: Record<string, WorkspaceActiveContext>
-  /** Missing entries mean expanded. */
+  /** Missing entries mean visible. The persisted field name retains compatibility
+   *  with sessions created before visibility replaced collapse behavior. */
   workspaceRepositoryListExpandedByRoot: Record<string, boolean>
   /** Global sidebar project-list expansion preference restored from SessionState. */
   projectListExpanded: boolean
   detailCollapsed: boolean
-  /** Persisted focus-toggle preference for the detail pane. This
-   *  is not itself proof that the workspace is currently rendering in focus
-   *  mode — a collapsed layout preserves the preference while the
-   *  effective layout mode remains collapsed. */
-  detailFocusMode: boolean
   workspaceLayout: RepoWorkspaceLayout
   detailPaneSizes: WorkspaceDetailPaneSizes
   fileTreePaneSizes: WorkspaceDetailPaneSizes
@@ -213,7 +209,7 @@ export interface RestorableWorkspaceActions {
   activateProject: (id: string) => void
   activateWorkspaceOverview: (rootId: string) => void
   activateWorkspaceRepository: (rootId: string, repoId: string) => void
-  activateBranchWorkspace: (rootId: string, branchWorkspaceId: string) => void
+  activateBranchWorkspace: (rootId: string, branchWorkspaceId: string, memberRepositoryName?: string) => void
   setWorkspaceRepositoryListExpanded: (rootId: string, expanded: boolean) => void
   toggleWorkspaceRepositoryList: (rootId: string) => void
   setProjectListExpanded: (expanded: boolean) => void
@@ -225,16 +221,9 @@ export interface RestorableWorkspaceActions {
   reorderRepos: (fromId: string, toId: string) => void
   setDetailCollapsed: (collapsed: boolean) => void
   toggleDetailCollapsed: () => void
-  /** Update the persisted detail focus-toggle preference. The effective
-   *  rendered layout mode should be derived from `repoWorkspaceBehavior()`. */
-  setDetailFocusMode: (focused: boolean) => void
-  toggleDetailFocusMode: () => void
   setWorkspaceLayout: (idOrLayout: string, layout?: RepoWorkspaceLayout) => void
   applySessionLayoutState: (
-    layout: Pick<
-      SessionState,
-      'workspaceLayout' | 'detailCollapsed' | 'detailFocusMode' | 'detailPaneSizes' | 'fileTreePaneSizes'
-    >,
+    layout: Pick<SessionState, 'workspaceLayout' | 'detailCollapsed' | 'detailPaneSizes' | 'fileTreePaneSizes'>,
   ) => void
   applySessionSelectedTerminalState: (selectedTerminalByWorktree: Record<string, string>) => void
   setDetailPaneSize: (layout: RepoWorkspaceLayout, size: number) => void

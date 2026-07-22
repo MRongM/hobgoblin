@@ -6,6 +6,7 @@ import {
   listBranchWorkspaceChildren,
 } from '#/server/modules/branch-workspace-materialization-source.ts'
 import { readBranchWorkspaceManifests } from '#/server/modules/branch-workspace-source.ts'
+import type { RepoSnapshotOptions } from '#/server/modules/repo-backend.ts'
 import { readWorkspaceConfig } from '#/server/modules/workspace-config-source.ts'
 import {
   branchWorkspaceDirectoryName,
@@ -17,8 +18,8 @@ import {
 } from '#/server/modules/workspace-paths.ts'
 import {
   getRepositorySnapshot,
-  getRepositoryStatus,
   getRepositoryWorktreeBootstrapPreflight,
+  getRepositoryWorktreeBootstrapTargetPreflight,
 } from '#/server/modules/repo-read-paths.ts'
 import { getRepositoryWorktreeBootstrapPreview } from '#/server/modules/repo-write-paths.ts'
 import {
@@ -32,7 +33,7 @@ import {
   type BranchWorkspaceRepositoryPlan,
 } from '#/shared/branch-workspaces.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
-import { PROTECTED_BRANCHES, type WorktreeStatus } from '#/shared/git-types.ts'
+import { PROTECTED_BRANCHES } from '#/shared/git-types.ts'
 import { isProtectedRemoteBranchRef, parseRemoteBranchRef } from '#/shared/remote-branches.ts'
 import { isSafeBranchName } from '#/shared/refnames.ts'
 import type { RepoSnapshot } from '#/shared/rpc.ts'
@@ -43,21 +44,27 @@ import type {
   WorktreeBootstrapDecision,
   WorktreeBootstrapPreflightResult,
   WorktreeBootstrapPreviewResult,
+  WorktreeBootstrapTargetPreflightResult,
 } from '#/shared/worktree-bootstrap-summary.ts'
 
 export interface BranchWorkspacePlanDependencies {
   readConfig?: (rootId: string) => Promise<WorkspaceConfigSnapshot>
   readManifests?: typeof readBranchWorkspaceManifests
-  getSnapshot?: (repoId: string, signal?: AbortSignal) => Promise<RepoSnapshot | null>
+  getSnapshot?: (repoId: string, signal?: AbortSignal, options?: RepoSnapshotOptions) => Promise<RepoSnapshot | null>
   getBootstrapPreview?: (repoId: string, signal?: AbortSignal) => Promise<WorktreeBootstrapPreviewResult>
   getBootstrapPreflight?: (
     repoId: string,
     signal?: AbortSignal,
     candidateScope?: WorktreeBootstrapCandidateScope,
   ) => Promise<WorktreeBootstrapPreflightResult>
+  getBootstrapTargetPreflight?: (
+    repoId: string,
+    worktreePath: string,
+    decision: Exclude<WorktreeBootstrapDecision, { kind: 'skip' }>,
+    signal?: AbortSignal,
+  ) => Promise<WorktreeBootstrapTargetPreflightResult>
   inspectPath?: typeof inspectBranchWorkspacePath
   pathExists?: (repoId: string, candidatePath: string) => Promise<boolean>
-  getStatus?: (repoId: string, signal?: AbortSignal) => Promise<WorktreeStatus[]>
   fingerprintEntry?: typeof fingerprintBranchWorkspaceEntry
   listChildren?: typeof listBranchWorkspaceChildren
   listTerminalSessions?: (repoId: string) => Promise<TerminalSessionSummary[]>
@@ -129,21 +136,27 @@ export async function buildBranchWorkspacePlan(
     }
   }
 
-  const repositories: BranchWorkspaceRepositoryPlan[] = []
-  for (const repositoryName of config.repo) {
-    signal?.throwIfAborted()
+  const repositorySelections = config.repo.flatMap((repositoryName) => {
     const selection = selectedRepositories.get(repositoryName)
-    if (!selection || fixedRepositories.has(repositoryName)) continue
-    const planned = await planRepository(
-      normalizedRootId,
-      location.path,
-      createRequest.branch,
-      selection.repositoryName,
-      selection.baseBranch,
-      selection.worktreeBootstrap,
-      dependencies,
-      signal,
-    )
+    return !selection || fixedRepositories.has(repositoryName) ? [] : [selection]
+  })
+  const plannedRepositories = await Promise.all(
+    repositorySelections.map(async (selection) => {
+      signal?.throwIfAborted()
+      return await planRepository(
+        normalizedRootId,
+        location.path,
+        createRequest.branch,
+        selection.repositoryName,
+        selection.baseBranch,
+        selection.worktreeBootstrap,
+        dependencies,
+        signal,
+      )
+    }),
+  )
+  const repositories: BranchWorkspaceRepositoryPlan[] = []
+  for (const planned of plannedRepositories) {
     if (!planned.ok) return planned
     repositories.push(planned.repository)
   }
@@ -283,6 +296,9 @@ async function buildRepairPlan(
   if (repositories.some((repository) => !repository.satisfied && repository.confirmationRequired)) {
     requiredApprovals.push('worktree-bootstrap')
   }
+  if (repositories.some((repository) => (repository.bootstrapReplacements?.length ?? 0) > 0)) {
+    requiredApprovals.push('replace-repository-dependencies')
+  }
   const repositoryByName = new Map(repositories.map((repository) => [repository.repositoryName, repository]))
   const auxiliaryByName = new Map(auxiliaryEntries.map((entry) => [entry.name, entry]))
   const repairedManifest: BranchWorkspaceManifest = {
@@ -309,18 +325,29 @@ async function buildRepairPlan(
     })),
   }
   const steps: BranchWorkspacePlan['steps'] = [
-    ...(!root.exists
-      ? [{ id: 'directory', kind: 'create-directory' as const, label: manifest.directoryName }]
-      : []),
-    ...repositories
-      .filter((repository) => !repository.satisfied)
-      .map((repository) => ({
-        id: `repository:${repository.repositoryName}`,
-        kind:
-          repository.action === 'bootstrap-worktree' ? ('bootstrap-worktree' as const) : ('create-worktree' as const),
-        label: repository.repositoryName,
+    ...(!root.exists ? [{ id: 'directory', kind: 'create-directory' as const, label: manifest.directoryName }] : []),
+    ...repositories.flatMap((repository) => {
+      if (repository.satisfied) return []
+      const replacementSteps = (repository.bootstrapReplacements ?? []).map((entry) => ({
+        id: `repository-replacement:${repository.repositoryName}:${entry.path}`,
+        kind: 'replace-repository-dependency' as const,
+        label: `${repository.repositoryName}/${entry.path}`,
         repositoryName: repository.repositoryName,
-      })),
+        entryName: entry.path,
+      }))
+      return [
+        ...replacementSteps,
+        {
+          id: `repository:${repository.repositoryName}`,
+          kind:
+            repository.action === 'bootstrap-worktree'
+              ? ('bootstrap-worktree' as const)
+              : ('create-worktree' as const),
+          label: repository.repositoryName,
+          repositoryName: repository.repositoryName,
+        },
+      ]
+    }),
     ...auxiliaryEntries.flatMap((entry) => {
       if (entry.satisfied) return []
       const createStep = {
@@ -376,6 +403,37 @@ async function planRepairRepository(
       return { ok: false, message: 'workspace.branch-workspace.worktree-elsewhere' }
     }
     const bootstrapPending = !!member.worktreeBootstrap && member.bootstrapProgress !== 'complete'
+    if (bootstrapPending) {
+      const preflight = await (
+        dependencies.getBootstrapTargetPreflight ?? getRepositoryWorktreeBootstrapTargetPreflight
+      )(repoId, member.worktreePath, member.worktreeBootstrap!, signal)
+      if (!preflight.ok) return preflight
+      const satisfied =
+        preflight.preflight.pending.length === 0 &&
+        preflight.preflight.conflicts.length === 0 &&
+        !preflight.preflight.hasSetup
+      return {
+        ok: true,
+        repository: {
+          ...repairRepositoryPlan(
+            member,
+            repoId,
+            { kind: 'existingBranch', branch: member.targetBranch },
+            satisfied,
+          ),
+          ...(!satisfied
+            ? {
+                worktreeBootstrap: cloneBootstrapDecision(member.worktreeBootstrap!),
+                action: 'bootstrap-worktree' as const,
+                confirmationRequired: false,
+                ...(preflight.preflight.conflicts.length > 0
+                  ? { bootstrapReplacements: preflight.preflight.conflicts }
+                  : {}),
+              }
+            : {}),
+        },
+      }
+    }
     return {
       ok: true,
       repository: {
@@ -383,15 +441,8 @@ async function planRepairRepository(
           member,
           repoId,
           { kind: 'existingBranch', branch: member.targetBranch },
-          !bootstrapPending,
+          true,
         ),
-        ...(bootstrapPending
-          ? {
-              worktreeBootstrap: cloneBootstrapDecision(member.worktreeBootstrap!),
-              action: 'bootstrap-worktree' as const,
-              confirmationRequired: false,
-            }
-          : {}),
       },
     }
   }
@@ -606,13 +657,7 @@ async function buildRemovePlan(
       lastError: undefined,
     })),
   }
-  const steps = buildRemoveSteps(
-    repositories,
-    auxiliaryEntries,
-    unmanagedEntries,
-    root.exists,
-    manifest.directoryName,
-  )
+  const steps = buildRemoveSteps(repositories, auxiliaryEntries, unmanagedEntries, root.exists, manifest.directoryName)
   const planWithoutToken: Omit<BranchWorkspacePlan, 'token'> = {
     rootId: manifest.rootId,
     operation: 'remove',
@@ -630,7 +675,6 @@ async function buildRemovePlan(
     removalOptions: {
       alsoDeleteBranch: request.alsoDeleteBranch,
       alsoDeleteUpstream: request.alsoDeleteUpstream,
-      forceRemoveWorktrees: request.forceRemoveWorktrees,
     },
   }
   return { ok: true, plan: { token: planToken(planWithoutToken), ...planWithoutToken } }
@@ -654,18 +698,7 @@ async function planRemoveRepository(
   }
   if (worktree?.isPrimary) return { ok: false, message: 'workspace.branch-workspace.primary-worktree' }
   if (worktree?.isLocked) return { ok: false, message: 'workspace.branch-workspace.locked-worktree' }
-  if (!request.forceRemoveWorktrees && (worktree?.summary?.dirty || (worktree?.summary?.changeCount ?? 0) > 0)) {
-    return { ok: false, message: 'workspace.branch-workspace.dirty-worktree' }
-  }
-  if (worktree) {
-    const statuses = await (dependencies.getStatus ?? getRepositoryStatus)(repoId, signal).catch(() => null)
-    if (!statuses) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
-    const status = statuses.find((candidate) => sameHostPath(manifest.rootId, candidate.path, member.worktreePath))
-    if (!status) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
-    if (!request.forceRemoveWorktrees && status.entries.length > 0) {
-      return { ok: false, message: 'workspace.branch-workspace.dirty-worktree' }
-    }
-  } else {
+  if (!worktree) {
     const target = await (dependencies.inspectPath ?? inspectBranchWorkspacePath)(
       manifest.rootId,
       member.worktreePath,
@@ -679,16 +712,12 @@ async function planRemoveRepository(
   if (deleteBranch && PROTECTED_BRANCHES.has(member.targetBranch)) {
     return { ok: false, message: 'workspace.branch-workspace.protected-branch' }
   }
-  const deleteUpstream = request.alsoDeleteUpstream && deleteBranch
-  if (deleteUpstream) {
-    if (
-      !branch?.tracking ||
-      branch.trackingGone ||
-      !parseRemoteBranchRef(branch.tracking) ||
-      isProtectedRemoteBranchRef(branch.tracking)
-    ) {
-      return { ok: false, message: 'workspace.branch-workspace.upstream-unavailable' }
-    }
+  const deleteUpstreamRequested = request.alsoDeleteUpstream && deleteBranch
+  const upstream = branch?.tracking ? parseRemoteBranchRef(branch.tracking) : null
+  const upstreamAlreadyAbsent = branch?.trackingGone === true && upstream !== null
+  const deleteUpstream = deleteUpstreamRequested && !upstreamAlreadyAbsent
+  if (deleteUpstream && (!upstream || isProtectedRemoteBranchRef(upstream.fullRef))) {
+    return { ok: false, message: 'workspace.branch-workspace.upstream-unavailable' }
   }
   const satisfied = !worktree && !deleteBranch
   return {
@@ -894,7 +923,10 @@ async function planRepository(
   if (!repoId) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
   let snapshot: RepoSnapshot | null
   try {
-    snapshot = await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal)
+    snapshot = await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal, {
+      includeWorktreeStatus: false,
+      includeRemote: false,
+    })
   } catch {
     snapshot = null
   }

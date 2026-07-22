@@ -41,12 +41,11 @@ export function useRendererEffectIntentRouter({
   // This hook is the single renderer-side subscription point for native effect
   // intents. Routing stays centralized here; intent-specific behavior lives in
   // the handler/plan helpers so components do not subscribe independently.
-  const { ensureWorkspaceOpen, setDetailCollapsed, setSelectedTerminal, setWorkspaceLayout, toggleDetailCollapsed, resetLayout } =
-    useStoreWithEqualityFn(
-      useReposStore,
-      rendererEffectIntentStoreActionsFromStore,
-      rendererEffectIntentStoreActionsEqual,
-    )
+  const { ensureWorkspaceOpen, setDetailCollapsed, setSelectedTerminal } = useStoreWithEqualityFn(
+    useReposStore,
+    rendererEffectIntentStoreActionsFromStore,
+    rendererEffectIntentStoreActionsEqual,
+  )
   const t = useT()
   const navigationRef = useRef(navigation)
   const currentRepoIdRef = useRef(currentRepoId)
@@ -80,9 +79,6 @@ export function useRendererEffectIntentRouter({
       ensureWorkspaceOpen: async (input: string | RepoSessionEntry) => await ensureWorkspaceOpenRef.current(input),
       setDetailCollapsed,
       setSelectedTerminal,
-      setWorkspaceLayout,
-      toggleDetailCollapsed,
-      resetLayout,
       t: (key: string) => tRef.current(key),
     })
 
@@ -125,11 +121,8 @@ export function useRendererEffectIntentRouter({
     openCloneRepo,
     openRemoteRepo,
     openRepoPathDialog,
-    resetLayout,
     setDetailCollapsed,
     setSelectedTerminal,
-    setWorkspaceLayout,
     t,
-    toggleDetailCollapsed,
   ])
 }

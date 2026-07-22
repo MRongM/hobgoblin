@@ -132,9 +132,9 @@ describe('settings snapshot partitions', () => {
         activeRepo: '/tmp/repo-b',
         projectListExpanded: true,
         detailCollapsed: false,
-        detailFocusMode: true,
-        workspaceLayout: 'top-bottom',
-        detailPaneSizes: { 'top-bottom': 40, 'left-right': 50 },
+        detailFocusMode: false,
+        workspaceLayout: 'left-right',
+        detailPaneSizes: { 'left-right': 50 },
         selectedTerminalByWorktree: { '/tmp/repo-b\0/tmp/repo-b': 'terminal-1' },
       },
     })
@@ -166,9 +166,9 @@ describe('settings snapshot partitions', () => {
       activeRepo: '/tmp/repo-b',
       projectListExpanded: true,
       detailCollapsed: false,
-      detailFocusMode: true,
-      workspaceLayout: 'top-bottom',
-      detailPaneSizes: { 'top-bottom': 40, 'left-right': 50 },
+      detailFocusMode: false,
+      workspaceLayout: 'left-right',
+      detailPaneSizes: { 'left-right': 50 },
       selectedTerminalByWorktree: { '/tmp/repo-b\0/tmp/repo-b': 'terminal-1' },
     })
   })

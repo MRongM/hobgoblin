@@ -10,6 +10,7 @@
 import { type ComponentProps, useCallback, useEffect, useRef, useState } from 'react'
 import {
   DndContext,
+  KeyboardSensor,
   type DragEndEvent,
   type Modifier,
   PointerSensor,
@@ -17,7 +18,12 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core'
-import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { FolderTree, GitCommitHorizontal, GitCompareArrows } from 'lucide-react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
@@ -92,7 +98,10 @@ export function BranchList({ repoId, showActions = true, onBranchSelected }: Pro
   const navigation = useMainWindowNavigation()
   const selectedRef = useRef<HTMLLIElement | null>(null)
   const [openActionMenu, setOpenActionMenu] = useState<OpenActionMenu | null>(null)
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
   const handleSelectBranch = useCallback(
     (branch: string) => {
       navigation.selectRepoBranch(repoId, branch)
@@ -243,7 +252,7 @@ function branchListRepoFromState(
 
 function SortableBranchRow(props: ComponentProps<typeof BranchRow> & { id: string }) {
   const { id, ...rowProps } = props
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id,
   })
   const verticalTransform = transform ? { ...transform, x: 0, scaleX: 1, scaleY: 1 } : null
@@ -257,7 +266,10 @@ function SortableBranchRow(props: ComponentProps<typeof BranchRow> & { id: strin
           transition,
         },
         isDragging,
-        props: { ...attributes, ...listeners },
+        dragHandle: {
+          setActivatorNodeRef,
+          props: { ...attributes, ...listeners },
+        },
       }}
     />
   )

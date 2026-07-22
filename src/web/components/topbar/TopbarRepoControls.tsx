@@ -17,7 +17,6 @@ import { useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
-import { repoWorkspaceBehavior } from '#/web/lib/workspace-layout.ts'
 
 interface Props {
   repoId: string
@@ -31,12 +30,7 @@ interface Props {
 export function TopbarRepoControls({ repoId, focusPresentation, tone = 'topbar', menuAlign = 'end' }: Props) {
   const exists = useReposStore((s) => !!s.repos[repoId])
   const isGitRepo = useReposStore((s) => s.repos[repoId]?.isGitRepo ?? true)
-  const workspaceLayout = useReposStore((s) => s.repos[repoId]?.ui.workspaceLayout ?? s.workspaceLayout)
-  const storeFocusMode = useReposStore((s) => {
-    const behavior = repoWorkspaceBehavior(workspaceLayout, s.detailCollapsed, s.detailFocusMode)
-    return behavior.mode === 'focus'
-  })
-  const focusMode = focusPresentation ?? storeFocusMode
+  const focusMode = focusPresentation ?? false
   const mutedForegroundClassName =
     tone === 'toolbar' ? 'text-muted-foreground' : 'text-topbar-muted-foreground'
 

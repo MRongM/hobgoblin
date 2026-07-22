@@ -80,6 +80,56 @@ describe('i18n dictionaries', () => {
     expect(zh['action.delete-branch']).toBe('删除分支')
   })
 
+  test('warns that branch workspace removal discards uncommitted changes in every locale', () => {
+    expect(en['workspace.branch-workspace.delete-warning']).toContain('uncommitted changes')
+    expect(zh['workspace.branch-workspace.delete-warning']).toContain('未提交改动')
+    expect(ja['workspace.branch-workspace.delete-warning']).toContain('未コミットの変更')
+    expect(ko['workspace.branch-workspace.delete-warning']).toContain('커밋하지 않은 변경 사항')
+  })
+
+  test('uses the agreed branch workspace terminology in Chinese product copy', () => {
+    for (const [key, value] of Object.entries(zh)) {
+      expect(value, key).not.toContain('子仓库')
+    }
+    expect(en['workspace.branch-workspace.member.open-worktree']).toBe('Open this member worktree')
+    expect(zh['workspace.branch-workspace.member.open-worktree']).toBe('打开此成员工作树')
+  })
+
+  test('uses branch workspace dependency copy and includes member sync actions in every locale', () => {
+    expect(zh['workspace.branch-workspace.auxiliary']).toBe('子工作区依赖')
+    expect(zh['workspace.branch-workspace.auxiliary-refresh']).toBe('刷新子工作区依赖')
+    expect(zh['workspace.branch-workspace.auxiliary-named']).toBe('包含子工作区依赖 {name}')
+    expect(zh['workspace.branch-workspace.auxiliary-empty']).toBe('没有可选择的子工作区依赖。')
+
+    const keys = [
+      'workspace.branch-workspace.member.open-worktree',
+      'workspace.branch-workspace.git-action.pull',
+      'workspace.branch-workspace.git-action.pull-description',
+      'workspace.branch-workspace.git-action.push',
+      'workspace.branch-workspace.git-action.push-description',
+      'workspace.branch-workspace.git-action.target-upstream-required',
+      'workspace.branch-workspace.git-action.remote-required',
+    ] as const
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+  })
+
+  test('includes repository dependency replacement approval copy in every locale', () => {
+    const keys = [
+      'workspace.branch-workspace.approval.replace-repository-dependencies',
+      'workspace.branch-workspace.step.replace-repository-dependency',
+      'workspace.branch-workspace.repository-dependency-conflict-changed',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['workspace.branch-workspace.approval.replace-repository-dependencies']).toBe(
+      '删除并重新写入列出的仓库依赖',
+    )
+  })
+
   test('distinguishes internal and external terminal actions in every dictionary', () => {
     expect(en['terminal.internal']).toBe('Internal terminal')
     expect(en['terminal.external']).toBe('External terminal')
@@ -89,6 +139,15 @@ describe('i18n dictionaries', () => {
     expect(ja['terminal.external']).toBe('外部ターミナル')
     expect(ko['terminal.internal']).toBe('내부 터미널')
     expect(ko['terminal.external']).toBe('외부 터미널')
+  })
+
+  test('includes terminal focus copy in every dictionary', () => {
+    const keys = ['terminal.focus', 'terminal.exit-focus'] as const
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['terminal.focus']).toBe('最大化终端')
+    expect(zh['terminal.exit-focus']).toBe('退出终端最大化')
   })
 
   test('includes discard selected changes copy', () => {

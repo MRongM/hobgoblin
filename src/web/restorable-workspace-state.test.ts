@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'vitest'
 import { localRepoSessionEntry } from '#/shared/remote-repo.ts'
-import { restoreRestorableWorkspaceStateFromSession, sessionStateFromRestorableWorkspaceState } from '#/web/restorable-workspace-state.ts'
+import {
+  restoreRestorableWorkspaceStateFromSession,
+  sessionStateFromRestorableWorkspaceState,
+} from '#/web/restorable-workspace-state.ts'
 import { createRepoBranch, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { workspaceRepositoryListExpanded } from '#/web/stores/repos/workspace-projects.ts'
 
@@ -20,15 +23,18 @@ describe('restorable-workspace-state', () => {
           order: [repo.id],
           activeId: repo.id,
           workspaceActiveContextByRoot: {
-            '/tmp/workspace': { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
+            '/tmp/workspace': {
+              kind: 'branch-workspace',
+              branchWorkspaceId: 'branch-1',
+              memberRepositoryName: 'web',
+            },
           },
           workspaceRepositoryListExpandedByRoot: { '/tmp/workspace': false },
           projectListExpanded: true,
           detailCollapsed: false,
-          detailFocusMode: true,
           workspaceLayout: 'left-right',
-          detailPaneSizes: { 'top-bottom': 45, 'left-right': 55 },
-          fileTreePaneSizes: { 'top-bottom': 44, 'left-right': 36 },
+          detailPaneSizes: { 'left-right': 55 },
+          fileTreePaneSizes: { 'left-right': 36 },
           selectedTerminalByWorktree: {
             '/tmp/repo\0/tmp/worktree': '/tmp/repo\0/tmp/worktree\0terminal-2',
           },
@@ -38,15 +44,19 @@ describe('restorable-workspace-state', () => {
       openRepos: [localRepoSessionEntry('/tmp/repo')],
       activeRepo: '/tmp/repo',
       workspaceActiveContextByRoot: {
-        '/tmp/workspace': { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
+        '/tmp/workspace': {
+          kind: 'branch-workspace',
+          branchWorkspaceId: 'branch-1',
+          memberRepositoryName: 'web',
+        },
       },
       workspaceRepositoryListExpandedByRoot: { '/tmp/workspace': false },
       projectListExpanded: true,
       detailCollapsed: false,
-      detailFocusMode: true,
+      detailFocusMode: false,
       workspaceLayout: 'left-right',
-      detailPaneSizes: { 'top-bottom': 45, 'left-right': 55 },
-      fileTreePaneSizes: { 'top-bottom': 44, 'left-right': 36 },
+      detailPaneSizes: { 'left-right': 55 },
+      fileTreePaneSizes: { 'left-right': 36 },
       selectedTerminalByWorktree: {
         '/tmp/repo\0/tmp/worktree': '/tmp/repo\0/tmp/worktree\0terminal-2',
       },
@@ -63,11 +73,11 @@ describe('restorable-workspace-state', () => {
         },
         workspaceRepositoryListExpandedByRoot: { '/tmp/workspace': true },
         projectListExpanded: true,
-        detailCollapsed: true,
-        detailFocusMode: false,
-        workspaceLayout: 'top-bottom',
-        detailPaneSizes: { 'top-bottom': 60, 'left-right': 40 },
-        fileTreePaneSizes: { 'top-bottom': 42, 'left-right': 38 },
+        detailCollapsed: false,
+        detailFocusMode: true,
+        workspaceLayout: 'left-right',
+        detailPaneSizes: { 'left-right': 40 },
+        fileTreePaneSizes: { 'left-right': 38 },
         selectedTerminalByWorktree: {
           '/tmp/repo\0/tmp/worktree': '/tmp/repo\0/tmp/worktree\0terminal-1',
         },
@@ -79,13 +89,39 @@ describe('restorable-workspace-state', () => {
       },
       workspaceRepositoryListExpandedByRoot: { '/tmp/workspace': true },
       projectListExpanded: true,
-      detailCollapsed: true,
-      detailFocusMode: false,
-      workspaceLayout: 'top-bottom',
-      detailPaneSizes: { 'top-bottom': 60, 'left-right': 40 },
-      fileTreePaneSizes: { 'top-bottom': 42, 'left-right': 38 },
+      detailCollapsed: false,
+      workspaceLayout: 'left-right',
+      detailPaneSizes: { 'left-right': 40 },
+      fileTreePaneSizes: { 'left-right': 38 },
       selectedTerminalByWorktree: {
         '/tmp/repo\0/tmp/worktree': '/tmp/repo\0/tmp/worktree\0terminal-1',
+      },
+    })
+  })
+
+  test('restores a valid branch workspace member context', () => {
+    const restored = restoreRestorableWorkspaceStateFromSession({
+      openRepos: [],
+      activeRepo: null,
+      workspaceActiveContextByRoot: {
+        '/workspace': {
+          kind: 'branch-workspace',
+          branchWorkspaceId: 'branch-1',
+          memberRepositoryName: 'web',
+        },
+      },
+      projectListExpanded: false,
+      detailCollapsed: false,
+      detailFocusMode: false,
+      workspaceLayout: 'left-right',
+      detailPaneSizes: { 'left-right': 50 },
+    })
+
+    expect(restored.workspaceActiveContextByRoot).toEqual({
+      '/workspace': {
+        kind: 'branch-workspace',
+        branchWorkspaceId: 'branch-1',
+        memberRepositoryName: 'web',
       },
     })
   })
@@ -103,7 +139,7 @@ describe('restorable-workspace-state', () => {
       detailCollapsed: false,
       detailFocusMode: false,
       workspaceLayout: 'left-right',
-      detailPaneSizes: { 'top-bottom': 50, 'left-right': 50 },
+      detailPaneSizes: { 'left-right': 50 },
     })
 
     expect(restored.workspaceActiveContextByRoot).toEqual({
@@ -121,6 +157,11 @@ describe('restorable-workspace-state', () => {
       activeRepo: null,
       workspaceActiveContextByRoot: {
         '/workspace': { kind: 'branch-workspace', branchWorkspaceId: '' },
+        '/member-path': {
+          kind: 'branch-workspace',
+          branchWorkspaceId: 'branch-1',
+          memberRepositoryName: '../web',
+        } as never,
         '/valid': { kind: 'overview' },
       },
       workspaceRepositoryListExpandedByRoot: {
@@ -131,10 +172,13 @@ describe('restorable-workspace-state', () => {
       detailCollapsed: false,
       detailFocusMode: false,
       workspaceLayout: 'left-right',
-      detailPaneSizes: { 'top-bottom': 50, 'left-right': 50 },
+      detailPaneSizes: { 'left-right': 50 },
     })
 
-    expect(restored.workspaceActiveContextByRoot).toEqual({ '/valid': { kind: 'overview' } })
+    expect(restored.workspaceActiveContextByRoot).toEqual({
+      '/member-path': { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
+      '/valid': { kind: 'overview' },
+    })
     expect(restored.workspaceRepositoryListExpandedByRoot).toEqual({ '/valid': false })
   })
 })

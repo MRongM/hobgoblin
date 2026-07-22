@@ -20,13 +20,12 @@ import { activateMainWindow, getMainWindow } from '#/main/window.ts'
 import { t } from '#/main/i18n/index.ts'
 import { sendRendererEffectIntent } from '#/main/renderer-surface-events.ts'
 import { getTheme } from '#/main/theme.ts'
-import { normalizeWorkspaceLayout, type WorkspaceLayout } from '#/shared/workspace-layout.ts'
 import { tildifyPath } from '#/shared/paths.ts'
 import type { LangPref, ThemePref } from '#/shared/rpc.ts'
 import type { RepoSessionEntry } from '#/shared/remote-repo.ts'
 import type { RendererEffectIntent } from '#/shared/renderer-effect-intents.ts'
 import { focusedRegisteredSurface } from '#/main/window-registry.ts'
-import { readMenuRuntimeState, setMenuWorkspaceLayout as setMenuWorkspaceLayoutState } from '#/main/menu-state.ts'
+import { readMenuRuntimeState } from '#/main/menu-state.ts'
 import {
   TERMINAL_SELECTION_SHORTCUTS,
   closeShortcutAccelerators,
@@ -48,10 +47,9 @@ interface AppMenuState {
   swapCloseShortcuts: boolean
   themePref: ThemePref
   langPref: LangPref
-  workspaceLayout: WorkspaceLayout
 }
 
-type AppMenuCommandContext = Pick<AppMenuState, 'swapCloseShortcuts' | 'workspaceLayout'>
+type AppMenuCommandContext = Pick<AppMenuState, 'swapCloseShortcuts'>
 
 const APPEARANCE_MENU_OPTIONS = [
   { pref: 'auto', labelKey: 'settings.appearance.auto' },
@@ -66,17 +64,6 @@ const LANGUAGE_MENU_OPTIONS = [
   { pref: 'ko', labelKey: 'settings.lang.ko' },
   { pref: 'ja', labelKey: 'settings.lang.ja' },
 ] as const
-
-const WORKSPACE_LAYOUT_MENU_OPTIONS = [
-  { layout: 'top-bottom', labelKey: 'menu.view.layout-top-bottom' },
-  { layout: 'left-right', labelKey: 'menu.view.layout-left-right' },
-] as const
-
-// Main keeps an optimistic layout snapshot for the native radio menu.
-// At boot it intentionally starts null so readMenuState falls back to the
-// persisted session; menu clicks update this immediately, and the renderer
-// later confirms the same value through saveSession.
-let menuWorkspaceLayout: WorkspaceLayout | null = null
 
 function send(intent: RendererEffectIntent): void {
   void sendRendererIntent(intent)
@@ -93,14 +80,6 @@ async function sendRendererIntent(intent: RendererEffectIntent): Promise<void> {
 
 function separator(): MenuItemConstructorOptions {
   return { type: 'separator' }
-}
-
-export function setMenuWorkspaceLayout(layout: WorkspaceLayout): void {
-  const next = normalizeWorkspaceLayout(layout)
-  if (menuWorkspaceLayout === next && readMenuRuntimeState().workspaceLayout === next) return
-  menuWorkspaceLayout = next
-  setMenuWorkspaceLayoutState(next)
-  buildAppMenu()
 }
 
 export function buildAppMenu(): void {
@@ -123,7 +102,6 @@ function readMenuState(): AppMenuState {
     swapCloseShortcuts: runtimeState.swapCloseShortcuts,
     themePref: getTheme().pref,
     langPref: runtimeState.langPref,
-    workspaceLayout: normalizeWorkspaceLayout(menuWorkspaceLayout ?? runtimeState.workspaceLayout),
   }
 }
 
@@ -241,8 +219,6 @@ function createViewMenu(state: AppMenuState): MenuItemConstructorOptions {
         click: () => send({ type: 'select-terminal-requested', index }),
       })),
       createRendererCommandMenuItem(state, 'view-terminal-primary-action'),
-      createWorkspaceLayoutMenu(state.workspaceLayout),
-      createRendererCommandMenuItem(state, 'view-toggle-detail'),
       ...(state.isMac ? [] : [separator(), createAppearanceMenu(state.themePref), createLanguageMenu(state.langPref)]),
       separator(),
       createRendererCommandMenuItem(state, 'view-refresh'),
@@ -276,8 +252,6 @@ function createWindowMenu(state: AppMenuState): MenuItemConstructorOptions {
       separator(),
       createRendererCommandMenuItem(state, 'window-next-repo'),
       createRendererCommandMenuItem(state, 'window-prev-repo'),
-      separator(),
-      createRendererCommandMenuItem(state, 'window-reset-layout'),
       ...(state.isMac ? [separator(), { role: 'front' as const, label: t('menu.window.front') }] : []),
     ],
   }
@@ -287,18 +261,6 @@ function createHelpMenu(state: AppMenuState): MenuItemConstructorOptions {
   return {
     label: t('menu.help'),
     submenu: [createRendererCommandMenuItem(state, 'help-shortcuts')],
-  }
-}
-
-function createWorkspaceLayoutMenu(workspaceLayout: WorkspaceLayout): MenuItemConstructorOptions {
-  return {
-    label: t('menu.view.workspace-layout'),
-    submenu: WORKSPACE_LAYOUT_MENU_OPTIONS.map(({ layout, labelKey }) => ({
-      type: 'radio' as const,
-      label: t(labelKey),
-      checked: workspaceLayout === layout,
-      click: () => setWorkspaceLayoutFromMenu(layout),
-    })),
   }
 }
 
@@ -350,13 +312,7 @@ function closeWindowAccelerator(state: AppMenuState): string {
 function menuCommandContext(state: AppMenuState): AppMenuCommandContext {
   return {
     swapCloseShortcuts: state.swapCloseShortcuts,
-    workspaceLayout: state.workspaceLayout,
   }
-}
-
-function setWorkspaceLayoutFromMenu(layout: WorkspaceLayout): void {
-  setMenuWorkspaceLayout(layout)
-  send({ type: 'workspace-layout-set-requested', layout })
 }
 
 async function openWebVersionFromMenu(): Promise<void> {

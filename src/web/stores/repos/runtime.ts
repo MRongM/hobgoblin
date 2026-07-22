@@ -10,7 +10,7 @@ import {
   type RepoOperationTarget,
 } from '#/web/stores/repos/operations.ts'
 export type RepoTaskLane = 'network' | 'read' | 'write'
-export type { RepoOperationKey, RepoOperationTarget as RepoRuntimeOperationTarget }
+export type { RepoOperationTarget as RepoRuntimeOperationTarget }
 
 interface QueuedRepoTask<T> {
   task: (signal: AbortSignal) => Promise<T>

@@ -1,11 +1,13 @@
 import os from 'node:os'
 import path from 'node:path'
-import { mkdir, mkdtemp, readFile, readlink, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { promises as fs } from 'node:fs'
+import { link, mkdir, mkdtemp, readFile, readlink, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { beforeEach, afterEach, describe, expect, test, vi } from 'vitest'
 import {
   bootstrapWorktreeAfterCreate,
   bootstrapWorktreeSelectionsAfterCreate,
   DEFAULT_WORKTREE_BOOTSTRAP_CONFIG,
+  getWorktreeBootstrapTargetPreflight,
   getWorktreeBootstrapPreview,
   initializeWorktreeBootstrapConfig,
   worktreeBootstrapConfigHash,
@@ -44,6 +46,105 @@ afterEach(async () => {
 })
 
 describe('worktree bootstrap', () => {
+  test('classifies missing, satisfied link, and conflicting bootstrap targets without writing', async () => {
+    const config = `[worktree]
+copy = [".env", "missing.env"]
+symlink = ["node_modules"]
+hardlink = ["cache.bin"]
+`
+    await writeConfig(config)
+    await writeFile(path.join(sourceRoot, '.env'), 'source\n')
+    await writeFile(path.join(sourceRoot, 'missing.env'), 'missing\n')
+    await mkdir(path.join(sourceRoot, 'node_modules'))
+    await writeFile(path.join(sourceRoot, 'cache.bin'), 'cache\n')
+    await writeFile(path.join(targetRoot, '.env'), 'target\n')
+    await symlink(path.join(sourceRoot, 'node_modules'), path.join(targetRoot, 'node_modules'))
+    await link(path.join(sourceRoot, 'cache.bin'), path.join(targetRoot, 'cache.bin'))
+
+    const result = await getWorktreeBootstrapTargetPreflight(
+      sourceRoot,
+      targetRoot,
+      { kind: 'run', configHash: worktreeBootstrapConfigHash(config), configTrusted: false },
+    )
+
+    expect(result).toEqual({
+      ok: true,
+      preflight: {
+        pending: [{ path: 'missing.env', mode: 'copy' }],
+        satisfied: [
+          { path: 'node_modules', mode: 'symlink' },
+          { path: 'cache.bin', mode: 'hardlink' },
+        ],
+        conflicts: [{ path: '.env', mode: 'copy' }],
+        hasSetup: false,
+      },
+    })
+    await expect(readFile(path.join(targetRoot, '.env'), 'utf8')).resolves.toBe('target\n')
+  })
+
+  test('replaces only an approved existing copy target as a whole', async () => {
+    const config = `[worktree]
+copy = ["cache"]
+`
+    await writeConfig(config)
+    await mkdir(path.join(sourceRoot, 'cache'))
+    await writeFile(path.join(sourceRoot, 'cache', 'fresh.txt'), 'fresh\n')
+    await mkdir(path.join(targetRoot, 'cache'))
+    await writeFile(path.join(targetRoot, 'cache', 'stale.txt'), 'stale\n')
+
+    const result = await bootstrapWorktreeAfterCreate(sourceRoot, targetRoot, {
+      expectedConfigHash: worktreeBootstrapConfigHash(config),
+      replaceExisting: [{ path: 'cache', mode: 'copy' }],
+    })
+
+    expect(result.ok).toBe(true)
+    await expect(readFile(path.join(targetRoot, 'cache', 'fresh.txt'), 'utf8')).resolves.toBe('fresh\n')
+    await expect(readFile(path.join(targetRoot, 'cache', 'stale.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  test('rejects replacement paths outside the concrete bootstrap plan', async () => {
+    const config = `[worktree]
+copy = [".env"]
+`
+    await writeConfig(config)
+    await writeFile(path.join(sourceRoot, '.env'), 'source\n')
+
+    await expect(
+      bootstrapWorktreeAfterCreate(sourceRoot, targetRoot, {
+        expectedConfigHash: worktreeBootstrapConfigHash(config),
+        replaceExisting: [{ path: 'other.env', mode: 'copy' }],
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      message: 'Worktree bootstrap failed: invalid replacement target: other.env',
+    })
+  })
+
+  test('keeps an approved existing copy target when temporary preparation fails', async () => {
+    const config = `[worktree]
+copy = ["cache"]
+`
+    await writeConfig(config)
+    await mkdir(path.join(sourceRoot, 'cache'))
+    await writeFile(path.join(sourceRoot, 'cache', 'fresh.txt'), 'fresh\n')
+    await mkdir(path.join(targetRoot, 'cache'))
+    await writeFile(path.join(targetRoot, 'cache', 'stale.txt'), 'stale\n')
+    const copy = vi.spyOn(fs, 'cp').mockRejectedValueOnce(new Error('copy interrupted'))
+
+    const result = await bootstrapWorktreeAfterCreate(sourceRoot, targetRoot, {
+      expectedConfigHash: worktreeBootstrapConfigHash(config),
+      replaceExisting: [{ path: 'cache', mode: 'copy' }],
+    })
+
+    copy.mockRestore()
+    expect(result).toEqual({
+      ok: false,
+      message: 'Worktree bootstrap failed: failed to copy cache: copy interrupted',
+    })
+    await expect(readFile(path.join(targetRoot, 'cache', 'stale.txt'), 'utf8')).resolves.toBe('stale\n')
+    await expect(readFile(path.join(targetRoot, 'cache', 'fresh.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
   test('previews configured operations without materializing them', async () => {
     await writeConfig(`
 [worktree]

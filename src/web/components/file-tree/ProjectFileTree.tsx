@@ -192,11 +192,13 @@ export function ProjectFileTree({
   folderContext,
   revealRequest,
   toolbarHeight = 'compact',
+  toolbarLeading,
 }: {
   repoId: string
   folderContext?: ProjectFileTreeContext
   revealRequest?: FileTreeRevealRequest | null
   toolbarHeight?: FileTreeToolbarHeight
+  toolbarLeading?: ReactNode
 }) {
   const t = useT()
   const navigation = useMainWindowNavigation()
@@ -1268,6 +1270,7 @@ export function ProjectFileTree({
         <div className="flex min-h-0 flex-1 flex-col text-[length:var(--goblin-file-tree-font-size)]">
           <FileTreeToolbar
             height={toolbarHeight}
+            leading={toolbarLeading}
             onCollapseAll={collapseAllDirectories}
             onCreateFile={() => beginCreateEntry('file', selectedCreateEntryTarget())}
             onCreateDirectory={() => beginCreateEntry('directory', selectedCreateEntryTarget())}
@@ -1822,6 +1825,7 @@ function FileTreeEmptyContextMenu({
 
 function FileTreeToolbar({
   height,
+  leading,
   onCollapseAll,
   onCreateFile,
   onCreateDirectory,
@@ -1833,6 +1837,7 @@ function FileTreeToolbar({
   onInitializeBootstrapConfig,
 }: {
   height: FileTreeToolbarHeight
+  leading?: ReactNode
   onCollapseAll: () => void
   onCreateFile: () => void
   onCreateDirectory: () => void
@@ -1854,6 +1859,7 @@ function FileTreeToolbar({
       )}
       style={height === 'detail' ? { height: toolbarHeightPx } : undefined}
     >
+      {leading}
       <Button
         type="button"
         size="icon-xs"

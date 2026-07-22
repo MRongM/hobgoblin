@@ -55,6 +55,29 @@ describe('branch workspace Git action inputs', () => {
     }
   })
 
+  test.each(['pull', 'push'] as const)('normalizes a coordinated %s plan and execution input', (kind) => {
+    expect(
+      normalizeBranchWorkspaceGitActionPlanRequest({
+        kind,
+        branchWorkspaceId: ' branch-1 ',
+      }),
+    ).toEqual({
+      ok: true,
+      request: { kind, branchWorkspaceId: 'branch-1' },
+    })
+    expect(
+      normalizeBranchWorkspaceGitActionExecuteInput({
+        kind,
+        planToken: ' sha256:plan ',
+        mode: 'ignored',
+        messages: [{ repositoryName: 'ignored', message: 'ignored' }],
+      }),
+    ).toEqual({
+      ok: true,
+      input: { kind, planToken: 'sha256:plan' },
+    })
+  })
+
   test.each([
     null,
     {},

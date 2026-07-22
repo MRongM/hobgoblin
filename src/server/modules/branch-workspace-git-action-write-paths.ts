@@ -19,7 +19,6 @@ import {
   type BranchWorkspaceGitActionPlanRequest,
   type BranchWorkspaceGitActionPlanResult,
   type BranchWorkspaceGitActionResult,
-  type BranchWorkspaceMergeBackMemberPlan,
 } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceActiveOperation } from '#/shared/branch-workspaces.ts'
 import type { ExecResult } from '#/shared/git-types.ts'
@@ -134,32 +133,44 @@ export function createBranchWorkspaceGitActionWriteService(
         const ignored = new Set([...state.completed, ...state.mergeProgress.keys()])
         const validation = await validatePlan(state.plan, ignored, dependencies.planDependencies, controller.signal)
         if (!validation.ok) return validation
-        return input.kind === 'batch-commit'
-          ? await executeBatchCommit(
-              normalizedRootId,
-              state,
-              input,
-              controller.signal,
-              commit,
-              publishInvalidation,
-              active,
-            )
-          : await executeMergeBack(
-              normalizedRootId,
-              state,
-              input.mode,
-              controller.signal,
-              { pull, merge, push },
-              async (refreshSignal) =>
-                await buildPlan(
-                  state.plan.rootId,
-                  { kind: 'merge-back', branchWorkspaceId: state.plan.branchWorkspaceId },
-                  dependencies.planDependencies,
-                  refreshSignal,
-                ),
-              publishInvalidation,
-              active,
-            )
+        if (input.kind === 'batch-commit') {
+          return await executeBatchCommit(
+            normalizedRootId,
+            state,
+            input,
+            controller.signal,
+            commit,
+            publishInvalidation,
+            active,
+          )
+        }
+        if (input.kind === 'merge-back') {
+          return await executeMergeBack(
+            normalizedRootId,
+            state,
+            input.mode,
+            controller.signal,
+            { pull, merge, push },
+            async (refreshSignal) =>
+              await buildPlan(
+                state.plan.rootId,
+                { kind: 'merge-back', branchWorkspaceId: state.plan.branchWorkspaceId },
+                dependencies.planDependencies,
+                refreshSignal,
+              ),
+            publishInvalidation,
+            active,
+          )
+        }
+        return await executeSync(
+          normalizedRootId,
+          state,
+          input.kind,
+          controller.signal,
+          { pull, push },
+          publishInvalidation,
+          active,
+        )
       } catch (error) {
         return failureResult(state.plan, state.completed, controller.signal.aborted ? 'cancelled' : safeMessage(error))
       } finally {
@@ -294,6 +305,48 @@ async function executeMergeBack(
     publishInvalidation(rootId)
   }
   return successResult(state.plan, state.completed)
+}
+
+async function executeSync(
+  rootId: string,
+  state: PendingAction,
+  kind: 'pull' | 'push',
+  signal: AbortSignal,
+  operations: {
+    pull: typeof pullRepositoryBranch
+    push: typeof pushRepositoryBranch
+  },
+  publishInvalidation: typeof publishWorkspaceInvalidation,
+  active: Map<string, ActiveAction>,
+): Promise<BranchWorkspaceGitActionResult> {
+  if (state.plan.kind !== 'pull' && state.plan.kind !== 'push') {
+    return failureResult(state.plan, state.completed, 'error.invalid-arguments')
+  }
+  const plan = state.plan
+  if (plan.kind !== kind) return failureResult(plan, state.completed, 'error.invalid-arguments')
+  if (!plan.ready) {
+    return failureResult(
+      plan,
+      state.completed,
+      plan.members.find((member) => !member.ready)?.message ?? 'error.invalid-arguments',
+    )
+  }
+  for (let index = 0; index < plan.members.length; index += 1) {
+    const member = plan.members[index]!
+    if (state.completed.has(member.repositoryName)) continue
+    if (signal.aborted) return failureResult(plan, state.completed, 'cancelled')
+    updateActive(active.get(rootId), index + 1, state.completed.size, member.repositoryName, kind)
+    publishInvalidation(rootId)
+    const result =
+      kind === 'pull'
+        ? await operations.pull(member.repoId, member.targetBranch, member.targetWorktreePath, signal)
+        : await operations.push(member.repoId, member.targetBranch, signal)
+    if (!result.ok) return actionFailure(plan, state.completed, member.repositoryName, kind, result)
+    state.completed.add(member.repositoryName)
+    updateActive(active.get(rootId), index + 1, state.completed.size)
+    publishInvalidation(rootId)
+  }
+  return successResult(plan, state.completed)
 }
 
 function updateActive(

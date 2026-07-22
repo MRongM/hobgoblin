@@ -14,6 +14,7 @@ import {
   Folder,
   FolderGit2,
   FolderOpen,
+  FolderTree,
   PanelLeftClose,
   PanelRightOpen,
   Plus,
@@ -48,9 +49,11 @@ import { useProjectExternalOpenActions } from '#/web/hooks/useProjectExternalOpe
 interface Props {
   repoId: string
   onShowCompactDetail?: () => void
+  onShowCompactFiles?: () => void
+  onMaximizeTerminal?: () => void
 }
 
-export function SidebarProjectHeader({ repoId, onShowCompactDetail }: Props) {
+export function SidebarProjectHeader({ repoId, onShowCompactDetail, onShowCompactFiles, onMaximizeTerminal }: Props) {
   const t = useT()
   const listId = useId()
   const listExpanded = useReposStore((state) => state.projectListExpanded)
@@ -60,7 +63,6 @@ export function SidebarProjectHeader({ repoId, onShowCompactDetail }: Props) {
   const shellActions = useShellOverlayActions()
   const ensureWorkspaceOpen = useReposStore((s) => s.ensureWorkspaceOpen)
   const reorderRepos = useReposStore((s) => s.reorderRepos)
-  const toggleDetailFocusMode = useReposStore((s) => s.toggleDetailFocusMode)
   const { topbarHeightPx } = useRuntimeChromeSettings()
   const activeProjectId = useReposStore((s) => workspaceRootIdForRepo(s, repoId) ?? repoId)
   const activeName = useReposStore((s) => s.repos[activeProjectId]?.name ?? '')
@@ -206,16 +208,42 @@ export function SidebarProjectHeader({ repoId, onShowCompactDetail }: Props) {
             </DropdownMenuContent>
           </DropdownMenu>
         )}
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          onClick={onShowCompactDetail ?? toggleDetailFocusMode}
-          aria-label={t(onShowCompactDetail ? 'mobile.show-terminal' : 'branch-detail.focus')}
-          title={t(onShowCompactDetail ? 'mobile.show-terminal' : 'branch-detail.focus-title')}
-        >
-          {onShowCompactDetail ? <PanelRightOpen /> : <PanelLeftClose />}
-        </Button>
+        {onShowCompactFiles && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onShowCompactFiles}
+            aria-label={t('file-tree.title')}
+            title={t('file-tree.title')}
+          >
+            <FolderTree />
+          </Button>
+        )}
+        {onShowCompactDetail && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onShowCompactDetail}
+            aria-label={t('mobile.show-terminal')}
+            title={t('mobile.show-terminal')}
+          >
+            <PanelRightOpen />
+          </Button>
+        )}
+        {!onShowCompactDetail && onMaximizeTerminal && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onMaximizeTerminal}
+            aria-label={t('branch-detail.focus')}
+            title={t('branch-detail.focus-title')}
+          >
+            <PanelLeftClose />
+          </Button>
+        )}
       </div>
       {listExpanded && (
         <div className="border-t border-separator/70">

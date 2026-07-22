@@ -69,10 +69,7 @@ describe('workspace project selectors', () => {
 
   test('uses Overview when the saved repository is stale or explicitly Overview', () => {
     expect(
-      projectActivationTarget(
-        createState(SOLO, { kind: 'repository', repositoryId: '/workspace/removed' }),
-        ROOT,
-      ),
+      projectActivationTarget(createState(SOLO, { kind: 'repository', repositoryId: '/workspace/removed' }), ROOT),
     ).toBe(ROOT)
     expect(projectActivationTarget(createState(SOLO, { kind: 'overview' }), ROOT)).toBe(ROOT)
   })
@@ -88,7 +85,19 @@ describe('workspace project selectors', () => {
     expect(workspaceActiveContext(state, ROOT, [branchWorkspace('delete-incomplete')])).toEqual({ kind: 'overview' })
   })
 
-  test('defaults repository lists to expanded and preserves explicit per-root values', () => {
+  test('preserves a saved member name for a valid branch workspace parent', () => {
+    const context = {
+      kind: 'branch-workspace' as const,
+      branchWorkspaceId: 'branch-1',
+      memberRepositoryName: 'web',
+    }
+    const state = createState(SOLO, context)
+
+    expect(workspaceActiveContext(state, ROOT, [branchWorkspace('ready')])).toEqual(context)
+    expect(projectActivationTarget(state, ROOT, [branchWorkspace('ready')])).toBe(ROOT)
+  })
+
+  test('defaults repository lists to shown and preserves explicit per-root visibility', () => {
     const state = createState()
     expect(workspaceRepositoryListExpanded(state, ROOT)).toBe(true)
     state.workspaceRepositoryListExpandedByRoot[ROOT] = false

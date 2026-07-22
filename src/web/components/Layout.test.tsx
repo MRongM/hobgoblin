@@ -9,6 +9,16 @@ vi.mock('#/web/runtime-settings-chrome.ts', () => ({
   useRuntimeChromeSettings: () => ({ topbarHeightPx: 39, toolbarHeightPx: 41 }),
 }))
 
+vi.mock('react-resizable-panels', () => ({
+  useGroupRef: () => ({ current: { setLayout: vi.fn() } }),
+}))
+
+vi.mock('#/web/components/ui/resizable.tsx', () => ({
+  ResizablePanelGroup: ({ children }: { children: ReactNode }) => <div data-panel-group>{children}</div>,
+  ResizableHandle: () => <div data-resizable-handle />,
+  ResizablePanel: ({ children }: { children: ReactNode }) => <div data-resizable-panel>{children}</div>,
+}))
+
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 
 let container: HTMLDivElement | null = null
@@ -61,19 +71,18 @@ describe('Layout chrome', () => {
     expect(toolbar?.className).not.toContain('bg-toolbar')
   })
 
-  test('uses the runtime app toolbar height for collapsed top-bottom detail row', () => {
+  test('keeps the fixed left-right split even when legacy collapsed state is supplied', () => {
     render(
       <RepoWorkspace
-        layout="top-bottom"
         mode="collapsed"
         branchPane={<div data-testid="branch-pane" />}
         detailPane={<div data-testid="detail-pane" />}
       />,
     )
 
-    const workspace = container!.firstElementChild as HTMLElement
-    expect(workspace.style.gridTemplateRows).toBe('minmax(0, 1fr) 1px 41px')
-    expect(workspace.className).not.toContain('2.25rem')
+    expect(container!.querySelector('[data-panel-group]')).not.toBeNull()
+    expect(container!.querySelector('[data-testid="branch-pane"]')).not.toBeNull()
+    expect(container!.querySelector('[data-testid="detail-pane"]')).not.toBeNull()
   })
 })
 

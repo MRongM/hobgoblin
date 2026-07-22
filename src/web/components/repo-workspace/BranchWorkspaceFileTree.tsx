@@ -1,8 +1,6 @@
 import type { BranchWorkspaceLifecycle } from '#/shared/branch-workspaces.ts'
-import {
-  ProjectFileTree,
-  type ProjectFileTreeContext,
-} from '#/web/components/file-tree/ProjectFileTree.tsx'
+import type { ReactNode } from 'react'
+import { ProjectFileTree, type ProjectFileTreeContext } from '#/web/components/file-tree/ProjectFileTree.tsx'
 
 export interface BranchWorkspaceFolderContext {
   rootId: string
@@ -14,7 +12,13 @@ export interface BranchWorkspaceFolderContext {
   managedRootNames: string[]
 }
 
-export function BranchWorkspaceFileTree({ context }: { context: BranchWorkspaceFolderContext }) {
+export function BranchWorkspaceFileTree({
+  context,
+  toolbarLeading,
+}: {
+  context: BranchWorkspaceFolderContext
+  toolbarLeading?: ReactNode
+}) {
   const folderContext: ProjectFileTreeContext = {
     repoId: context.rootId,
     worktreePath: context.path,
@@ -23,5 +27,5 @@ export function BranchWorkspaceFileTree({ context }: { context: BranchWorkspaceF
     status: [],
     protectedRootNames: context.managedRootNames,
   }
-  return <ProjectFileTree repoId={context.rootId} folderContext={folderContext} />
+  return <ProjectFileTree repoId={context.rootId} folderContext={folderContext} toolbarLeading={toolbarLeading} />
 }

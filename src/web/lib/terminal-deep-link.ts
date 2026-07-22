@@ -3,7 +3,21 @@ export interface TerminalDeepLinkTarget {
   worktreePath: string
   branch?: string
   terminalId?: string
+  branchWorkspaceScope?: {
+    workspaceRootId: string
+    branchWorkspaceId: string
+  }
 }
+
+const TERMINAL_DEEP_LINK_PARAMS = [
+  'view',
+  'repo',
+  'worktree',
+  'branch',
+  'terminal',
+  'workspace',
+  'branchWorkspace',
+] as const
 
 export function buildTerminalDeepLinkUrl(baseUrl: string, target: TerminalDeepLinkTarget): string {
   const url = new URL(baseUrl)
@@ -14,6 +28,10 @@ export function buildTerminalDeepLinkUrl(baseUrl: string, target: TerminalDeepLi
   url.searchParams.set('worktree', target.worktreePath)
   if (target.branch) url.searchParams.set('branch', target.branch)
   if (target.terminalId) url.searchParams.set('terminal', target.terminalId)
+  if (target.branchWorkspaceScope?.workspaceRootId && target.branchWorkspaceScope.branchWorkspaceId) {
+    url.searchParams.set('workspace', target.branchWorkspaceScope.workspaceRootId)
+    url.searchParams.set('branchWorkspace', target.branchWorkspaceScope.branchWorkspaceId)
+  }
   return url.toString()
 }
 
@@ -27,5 +45,19 @@ export function parseTerminalDeepLinkUrl(value: string | URL): TerminalDeepLinkT
 
   const branch = url.searchParams.get('branch')?.trim() || undefined
   const terminalId = url.searchParams.get('terminal')?.trim() || undefined
-  return { repoId, worktreePath, branch, terminalId }
+  const workspaceRootId = url.searchParams.get('workspace')?.trim()
+  const branchWorkspaceId = url.searchParams.get('branchWorkspace')?.trim()
+  return {
+    repoId,
+    worktreePath,
+    branch,
+    terminalId,
+    ...(workspaceRootId && branchWorkspaceId ? { branchWorkspaceScope: { workspaceRootId, branchWorkspaceId } } : {}),
+  }
+}
+
+export function clearTerminalDeepLinkParams(value: string | URL): URL {
+  const url = new URL(value.toString())
+  for (const key of TERMINAL_DEEP_LINK_PARAMS) url.searchParams.delete(key)
+  return url
 }

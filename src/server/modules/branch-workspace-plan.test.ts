@@ -8,6 +8,7 @@ import type { BranchSnapshotInfo } from '#/shared/git-types.ts'
 import type { WorkspaceConfigSnapshot } from '#/shared/workspace.ts'
 import type { WorktreeBootstrapPreviewResult } from '#/shared/worktree-bootstrap-summary.ts'
 import type { WorktreeBootstrapPreflightResult } from '#/shared/worktree-bootstrap-summary.ts'
+import type { WorktreeBootstrapTargetPreflightResult } from '#/shared/worktree-bootstrap-summary.ts'
 
 const ROOT = path.resolve('/workspace')
 const BRANCH = 'feature/auth'
@@ -40,10 +41,6 @@ function missing(candidatePath: string): BranchWorkspacePathInspection {
   }
 }
 
-function cleanStatus(worktreePath: string) {
-  return { path: worktreePath, branch: BRANCH, isMain: false, entries: [] }
-}
-
 function dependencies(snapshots: Record<string, RepoSnapshot | null>) {
   return {
     readConfig: vi.fn(
@@ -69,6 +66,17 @@ function dependencies(snapshots: Record<string, RepoSnapshot | null>) {
       async (): Promise<WorktreeBootstrapPreflightResult> => ({
         ok: true,
         preflight: { kind: 'candidates', candidates: [] },
+      }),
+    ),
+    getBootstrapTargetPreflight: vi.fn(
+      async (): Promise<WorktreeBootstrapTargetPreflightResult> => ({
+        ok: true,
+        preflight: {
+          pending: [{ path: 'node_modules', mode: 'symlink' }],
+          satisfied: [],
+          conflicts: [],
+          hasSetup: false,
+        },
       }),
     ),
     inspectPath: vi.fn(
@@ -98,6 +106,36 @@ function existingManifest(): BranchWorkspaceManifest {
     ],
     auxiliaryEntries: [],
   }
+}
+
+function failedBootstrapManifest(): BranchWorkspaceManifest {
+  const manifest = existingManifest()
+  manifest.repositories[0] = {
+    ...manifest.repositories[0]!,
+    worktreeBootstrap: {
+      kind: 'materialize',
+      candidateScope: 'ignored-only',
+      selections: [{ path: 'node_modules', mode: 'symlink' }],
+    },
+    bootstrapProgress: 'failed',
+    bootstrapLastError: 'link failed',
+  }
+  return manifest
+}
+
+function repairDependencies(current: BranchWorkspaceManifest) {
+  const deps = dependencies({
+    [path.join(ROOT, 'api')]: snapshot(branch('main'), branch(BRANCH, current.repositories[0]!.worktreePath)),
+  })
+  deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
+  deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+  deps.inspectPath.mockImplementation(async (_rootId, candidatePath) => ({
+    ...missing(candidatePath),
+    exists: true,
+    kind: 'directory',
+    resolvedPath: candidatePath,
+  }))
+  return deps
 }
 
 describe('branch workspace create planner', () => {
@@ -144,6 +182,49 @@ describe('branch workspace create planner', () => {
     if (!result.ok) throw new Error('Expected a create plan')
     expect(result.plan.steps.find((step) => step.kind === 'create-directory')).toMatchObject({
       label: 'goblin-feature-auth',
+    })
+  })
+
+  test('plans repositories concurrently from lightweight snapshots while preserving configured order', async () => {
+    const repoSnapshots: Record<string, RepoSnapshot> = {
+      [path.join(ROOT, 'api')]: snapshot(branch('main')),
+      [path.join(ROOT, 'web')]: snapshot(branch('develop')),
+    }
+    const deps = dependencies(repoSnapshots)
+    let activeSnapshots = 0
+    let maxActiveSnapshots = 0
+    deps.getSnapshot.mockImplementation(async (repoId: string) => {
+      activeSnapshots += 1
+      maxActiveSnapshots = Math.max(maxActiveSnapshots, activeSnapshots)
+      await new Promise((resolve) => setTimeout(resolve, repoId.endsWith('api') ? 20 : 5))
+      activeSnapshots -= 1
+      return repoSnapshots[repoId] ?? null
+    })
+
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      {
+        operation: 'create',
+        branch: BRANCH,
+        repositories: [
+          { repositoryName: 'web', baseBranch: 'develop' },
+          { repositoryName: 'api', baseBranch: 'main' },
+        ],
+        auxiliaryEntries: [],
+      },
+      deps,
+    )
+
+    if (!result.ok) throw new Error('Expected a create plan')
+    expect(maxActiveSnapshots).toBe(2)
+    expect(result.plan.repositories.map((repository) => repository.repositoryName)).toEqual(['api', 'web'])
+    expect(deps.getSnapshot).toHaveBeenNthCalledWith(1, path.join(ROOT, 'api'), undefined, {
+      includeWorktreeStatus: false,
+      includeRemote: false,
+    })
+    expect(deps.getSnapshot).toHaveBeenNthCalledWith(2, path.join(ROOT, 'web'), undefined, {
+      includeWorktreeStatus: false,
+      includeRemote: false,
     })
   })
 
@@ -431,7 +512,7 @@ describe('branch workspace create planner', () => {
 })
 
 describe('branch workspace repair planner', () => {
-  test('repairs persisted repository dependencies without recreating an existing worktree', async () => {
+  test('plans exact approved replacement for persisted repository dependency conflicts', async () => {
     const current = existingManifest()
     current.repositories[0] = {
       ...current.repositories[0]!,
@@ -454,6 +535,15 @@ describe('branch workspace repair planner', () => {
       kind: 'directory',
       resolvedPath: candidatePath,
     }))
+    deps.getBootstrapTargetPreflight.mockResolvedValue({
+      ok: true,
+      preflight: {
+        pending: [],
+        satisfied: [],
+        conflicts: [{ path: '.env', mode: 'copy' }],
+        hasSetup: false,
+      },
+    })
 
     const result = await buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, deps)
 
@@ -465,11 +555,91 @@ describe('branch workspace repair planner', () => {
             repositoryName: 'api',
             action: 'bootstrap-worktree',
             worktreeBootstrap: current.repositories[0]!.worktreeBootstrap,
+            bootstrapReplacements: [{ path: '.env', mode: 'copy' }],
           },
         ],
-        steps: [{ kind: 'bootstrap-worktree', repositoryName: 'api' }],
+        requiredApprovals: ['replace-repository-dependencies'],
+        steps: [
+          {
+            id: 'repository-replacement:api:.env',
+            kind: 'replace-repository-dependency',
+            label: 'api/.env',
+            repositoryName: 'api',
+            entryName: '.env',
+          },
+          { kind: 'bootstrap-worktree', repositoryName: 'api' },
+        ],
       },
     })
+  })
+
+  test('treats exact satisfied dependencies as repaired without rerunning bootstrap', async () => {
+    const current = failedBootstrapManifest()
+    const deps = repairDependencies(current)
+    deps.getBootstrapTargetPreflight.mockResolvedValue({
+      ok: true,
+      preflight: {
+        pending: [],
+        satisfied: [{ path: 'node_modules', mode: 'symlink' }],
+        conflicts: [],
+        hasSetup: false,
+      },
+    })
+
+    await expect(
+      buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, deps),
+    ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.nothing-to-repair' })
+  })
+
+  test('reruns bootstrap for pending dependencies and setup-only plans without replacement approval', async () => {
+    const current = failedBootstrapManifest()
+    const pendingDeps = repairDependencies(current)
+    pendingDeps.getBootstrapTargetPreflight.mockResolvedValue({
+      ok: true,
+      preflight: {
+        pending: [{ path: 'node_modules', mode: 'symlink' }],
+        satisfied: [],
+        conflicts: [],
+        hasSetup: false,
+      },
+    })
+    const setupDeps = repairDependencies(current)
+    setupDeps.getBootstrapTargetPreflight.mockResolvedValue({
+      ok: true,
+      preflight: { pending: [], satisfied: [], conflicts: [], hasSetup: true },
+    })
+
+    for (const deps of [pendingDeps, setupDeps]) {
+      const result = await buildBranchWorkspacePlan(
+        ROOT,
+        { operation: 'repair', branchWorkspaceId: current.id },
+        deps,
+      )
+      expect(result).toMatchObject({
+        ok: true,
+        plan: {
+          requiredApprovals: [],
+          repositories: [{ action: 'bootstrap-worktree' }],
+        },
+      })
+    }
+  })
+
+  test('changes the plan token when the exact dependency conflict set changes', async () => {
+    const current = failedBootstrapManifest()
+    const deps = repairDependencies(current)
+    deps.getBootstrapTargetPreflight.mockResolvedValueOnce({
+      ok: true,
+      preflight: { pending: [], satisfied: [], conflicts: [{ path: '.env', mode: 'copy' }], hasSetup: false },
+    })
+    const first = await buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, deps)
+    deps.getBootstrapTargetPreflight.mockResolvedValueOnce({
+      ok: true,
+      preflight: { pending: [], satisfied: [], conflicts: [{ path: 'cache', mode: 'copy' }], hasSetup: false },
+    })
+    const second = await buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, deps)
+
+    expect(first.ok && second.ok && first.plan.token).not.toBe(second.ok && second.plan.token)
   })
 
   test('repairs only missing roots, worktrees, links, and copies at their recorded paths', async () => {
@@ -557,43 +727,38 @@ describe('branch workspace repair planner', () => {
 
 describe('branch workspace remove planner', () => {
   test.each([
-    [{ isPrimary: true }, true, 'workspace.branch-workspace.primary-worktree'],
-    [{ isLocked: true }, true, 'workspace.branch-workspace.locked-worktree'],
-    [{ summary: { dirty: true, changeCount: 1 } }, false, 'workspace.branch-workspace.dirty-worktree'],
-  ])(
-    'blocks unsafe worktrees outside the dirty-force exception',
-    async (worktreeState, forceRemoveWorktrees, message) => {
-      const current = existingManifest()
-      const unsafeBranch = {
-        ...branch(BRANCH, current.repositories[0]!.worktreePath),
-        worktree: { path: current.repositories[0]!.worktreePath, ...worktreeState },
-      }
-      const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch('main'), unsafeBranch) })
-      deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
-      deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
-      deps.inspectPath.mockImplementation(async (_rootId, candidatePath) =>
-        candidatePath === current.path
-          ? { ...missing(candidatePath), exists: true, kind: 'directory', resolvedPath: candidatePath }
-          : missing(candidatePath),
-      )
+    [{ isPrimary: true }, 'workspace.branch-workspace.primary-worktree'],
+    [{ isLocked: true }, 'workspace.branch-workspace.locked-worktree'],
+  ])('blocks unsafe worktrees', async (worktreeState, message) => {
+    const current = existingManifest()
+    const unsafeBranch = {
+      ...branch(BRANCH, current.repositories[0]!.worktreePath),
+      worktree: { path: current.repositories[0]!.worktreePath, ...worktreeState },
+    }
+    const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch('main'), unsafeBranch) })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
+    deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+    deps.inspectPath.mockImplementation(async (_rootId, candidatePath) =>
+      candidatePath === current.path
+        ? { ...missing(candidatePath), exists: true, kind: 'directory', resolvedPath: candidatePath }
+        : missing(candidatePath),
+    )
 
-      await expect(
-        buildBranchWorkspacePlan(
-          ROOT,
-          {
-            operation: 'remove',
-            branchWorkspaceId: current.id,
-            alsoDeleteBranch: false,
-            alsoDeleteUpstream: false,
-            forceRemoveWorktrees,
-          },
-          deps,
-        ),
-      ).resolves.toEqual({ ok: false, message })
-    },
-  )
+    await expect(
+      buildBranchWorkspacePlan(
+        ROOT,
+        {
+          operation: 'remove',
+          branchWorkspaceId: current.id,
+          alsoDeleteBranch: false,
+          alsoDeleteUpstream: false,
+        },
+        deps,
+      ),
+    ).resolves.toEqual({ ok: false, message })
+  })
 
-  test('plans forced removal for a known dirty worktree after authoritative status succeeds', async () => {
+  test('plans removal for a dirty worktree without reading repository status', async () => {
     const current = existingManifest()
     const dirtyBranch = {
       ...branch(BRANCH, current.repositories[0]!.worktreePath),
@@ -620,6 +785,7 @@ describe('branch workspace remove planner', () => {
       resolvedPath: candidatePath,
     }))
 
+    const dependenciesWithStatus = { ...deps, getStatus, listChildren: vi.fn(async () => ['api']) }
     const result = await buildBranchWorkspacePlan(
       ROOT,
       {
@@ -627,9 +793,8 @@ describe('branch workspace remove planner', () => {
         branchWorkspaceId: current.id,
         alsoDeleteBranch: false,
         alsoDeleteUpstream: false,
-        forceRemoveWorktrees: true,
       },
-      { ...deps, getStatus, listChildren: vi.fn(async () => ['api']) },
+      dependenciesWithStatus,
     )
 
     expect(result).toMatchObject({
@@ -639,88 +804,10 @@ describe('branch workspace remove planner', () => {
         removalOptions: {
           alsoDeleteBranch: false,
           alsoDeleteUpstream: false,
-          forceRemoveWorktrees: true,
         },
       },
     })
-    expect(getStatus).toHaveBeenCalledWith(path.join(ROOT, 'api'), undefined)
-  })
-
-  test('does not treat a missing authoritative worktree status as clean when force is enabled', async () => {
-    const current = existingManifest()
-    const deps = dependencies({
-      [path.join(ROOT, 'api')]: snapshot(branch('main'), branch(BRANCH, current.repositories[0]!.worktreePath)),
-    })
-    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
-    deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
-    deps.inspectPath.mockImplementation(async (_rootId, candidatePath) => ({
-      ...missing(candidatePath),
-      exists: true,
-      kind: 'directory',
-      resolvedPath: candidatePath,
-    }))
-
-    await expect(
-      buildBranchWorkspacePlan(
-        ROOT,
-        {
-          operation: 'remove',
-          branchWorkspaceId: current.id,
-          alsoDeleteBranch: false,
-          alsoDeleteUpstream: false,
-          forceRemoveWorktrees: true,
-        },
-        { ...deps, getStatus: vi.fn(async () => []), listChildren: vi.fn(async () => ['api']) },
-      ),
-    ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.repository-unavailable' })
-  })
-
-  test('changes the plan token when force removal changes', async () => {
-    const current = existingManifest()
-    const deps = dependencies({
-      [path.join(ROOT, 'api')]: snapshot(branch('main'), branch(BRANCH, current.repositories[0]!.worktreePath)),
-    })
-    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
-    deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
-    deps.inspectPath.mockImplementation(async (_rootId, candidatePath) => ({
-      ...missing(candidatePath),
-      exists: true,
-      kind: 'directory',
-      resolvedPath: candidatePath,
-    }))
-    const planDependencies = {
-      ...deps,
-      getStatus: vi.fn(async () => [cleanStatus(current.repositories[0]!.worktreePath)]),
-      listChildren: vi.fn(async () => ['api']),
-    }
-
-    const withoutForce = await buildBranchWorkspacePlan(
-      ROOT,
-      {
-        operation: 'remove',
-        branchWorkspaceId: current.id,
-        alsoDeleteBranch: false,
-        alsoDeleteUpstream: false,
-        forceRemoveWorktrees: false,
-      },
-      planDependencies,
-    )
-    const withForce = await buildBranchWorkspacePlan(
-      ROOT,
-      {
-        operation: 'remove',
-        branchWorkspaceId: current.id,
-        alsoDeleteBranch: false,
-        alsoDeleteUpstream: false,
-        forceRemoveWorktrees: true,
-      },
-      planDependencies,
-    )
-
-    expect(withoutForce.ok).toBe(true)
-    expect(withForce.ok).toBe(true)
-    if (!withoutForce.ok || !withForce.ok) throw new Error('Expected removal plans')
-    expect(withForce.plan.token).not.toBe(withoutForce.plan.token)
+    expect(getStatus).not.toHaveBeenCalled()
   })
 
   test('plans provenance-aware cleanup and independent modified, unmanaged, and terminal approvals', async () => {
@@ -742,7 +829,6 @@ describe('branch workspace remove planner', () => {
     }))
     const extendedDeps = {
       ...deps,
-      getStatus: vi.fn(async () => current.repositories.map((member) => cleanStatus(member.worktreePath))),
       fingerprintEntry: vi.fn(async () => 'changed'),
       listChildren: vi.fn(async () => ['api', 'web', 'README.md', 'notes.txt']),
       listTerminalSessions: vi.fn(async (repoId: string) =>
@@ -761,7 +847,6 @@ describe('branch workspace remove planner', () => {
         branchWorkspaceId: current.id,
         alsoDeleteBranch: true,
         alsoDeleteUpstream: true,
-        forceRemoveWorktrees: false,
       },
       extendedDeps,
     )
@@ -785,7 +870,7 @@ describe('branch workspace remove planner', () => {
     })
   })
 
-  test('blocks stale upstream cleanup and protected created branches', async () => {
+  test('treats a gone upstream as already cleaned up during removal', async () => {
     const current = existingManifest()
     const stale = dependencies({
       [path.join(ROOT, 'api')]: snapshot({
@@ -802,20 +887,36 @@ describe('branch workspace remove planner', () => {
       kind: 'directory',
       resolvedPath: candidatePath,
     }))
-    await expect(
-      buildBranchWorkspacePlan(
-        ROOT,
-        {
-          operation: 'remove',
-          branchWorkspaceId: current.id,
-          alsoDeleteBranch: true,
-          alsoDeleteUpstream: true,
-          forceRemoveWorktrees: false,
-        },
-        { ...stale, getStatus: vi.fn(async () => [cleanStatus(current.repositories[0]!.worktreePath)]) },
-      ),
-    ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.upstream-unavailable' })
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      {
+        operation: 'remove',
+        branchWorkspaceId: current.id,
+        alsoDeleteBranch: true,
+        alsoDeleteUpstream: true,
+      },
+      { ...stale, listChildren: vi.fn(async () => ['api']) },
+    )
 
+    if (!result.ok) throw new Error(result.message)
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        repositories: [
+          {
+            repositoryName: 'api',
+            deleteBranch: true,
+            deleteUpstream: false,
+          },
+        ],
+      },
+    })
+    expect(result.plan.repositories[0]).not.toHaveProperty('upstream')
+    expect(result.plan.steps.some((step) => step.kind === 'delete-upstream-branch')).toBe(false)
+  })
+
+  test('blocks protected created branches during removal', async () => {
+    const current = existingManifest()
     const protectedManifest = { ...current, branch: 'main' }
     protectedManifest.repositories = current.repositories.map((member) => ({ ...member, targetBranch: 'main' }))
     const protectedDeps = dependencies({
@@ -837,9 +938,8 @@ describe('branch workspace remove planner', () => {
           branchWorkspaceId: current.id,
           alsoDeleteBranch: true,
           alsoDeleteUpstream: false,
-          forceRemoveWorktrees: false,
         },
-        { ...protectedDeps, getStatus: vi.fn(async () => [cleanStatus(current.repositories[0]!.worktreePath)]) },
+        protectedDeps,
       ),
     ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.protected-branch' })
   })

@@ -90,6 +90,14 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
     [execute, plan],
   )
 
+  const executeSync = useCallback(
+    async (kind: 'pull' | 'push') => {
+      if (!plan || plan.kind !== kind) return null
+      return await execute({ kind, planToken: plan.token })
+    },
+    [execute, plan],
+  )
+
   const cancel = useCallback(async () => {
     if (rootId) await abortBranchWorkspaceGitAction(rootId).catch(() => ({ ok: false }))
   }, [rootId])
@@ -109,8 +117,10 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
     requestPlan,
     executeBatchCommit,
     executeMergeBack,
+    executeSync,
     retryBatchCommit: executeBatchCommit,
     retryMergeBack: executeMergeBack,
+    retrySync: executeSync,
     cancel,
     reset,
   }

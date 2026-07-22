@@ -6,7 +6,6 @@ interface MockMenuRuntimeState {
   shortcutsDisabled: boolean
   swapCloseShortcuts: boolean
   langPref: 'auto' | 'en' | 'zh' | 'ko' | 'ja'
-  workspaceLayout: 'top-bottom' | 'left-right' | 'branches'
 }
 
 function defaultMenuRuntimeState(): MockMenuRuntimeState {
@@ -15,7 +14,6 @@ function defaultMenuRuntimeState(): MockMenuRuntimeState {
     shortcutsDisabled: false,
     swapCloseShortcuts: false,
     langPref: 'auto',
-    workspaceLayout: 'top-bottom',
   }
 }
 
@@ -77,7 +75,6 @@ vi.mock('#/main/i18n/index.ts', () => ({
 vi.mock('#/main/menu-state.ts', () => ({
   readMenuRuntimeState: mocks.readMenuRuntimeState,
   applyMenuRuntimeState: vi.fn(),
-  setMenuWorkspaceLayout: vi.fn(),
 }))
 
 vi.mock('#/main/renderer-surface-events.ts', () => ({
@@ -289,6 +286,16 @@ describe('app menu actions', () => {
       type: 'select-terminal-requested',
       index: 1,
     })
+  })
+
+  test('omits obsolete workspace layout and desktop detail toggle commands', async () => {
+    const { buildAppMenu } = await import('#/main/menu.ts')
+
+    buildAppMenu()
+
+    const viewMenu = mocks.template.find((entry) => entry.label === 'menu.view')
+    expect(viewMenu?.submenu?.find((entry: any) => entry.label === 'menu.view.workspace-layout')).toBeUndefined()
+    expect(viewMenu?.submenu?.find((entry: any) => entry.label === 'menu.view.toggle-detail')).toBeUndefined()
   })
 
   test('wires Ctrl+Shift+I to toggle the web developer tools', async () => {

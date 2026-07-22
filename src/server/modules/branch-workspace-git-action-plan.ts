@@ -15,6 +15,7 @@ import {
   type BranchWorkspaceGitActionPlanRequest,
   type BranchWorkspaceGitActionPlanResult,
   type BranchWorkspaceMergeBackMemberPlan,
+  type BranchWorkspaceSyncMemberPlan,
 } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceManifest } from '#/shared/branch-workspaces.ts'
 import type { ExecResult, StatusEntry, WorktreeStatus } from '#/shared/git-types.ts'
@@ -51,9 +52,13 @@ export async function buildBranchWorkspaceGitActionPlan(
     if (unavailable) return unavailable
     if (!manifest) return { ok: false, message: 'workspace.branch-workspace.manifest-missing' }
 
-    return normalized.request.kind === 'batch-commit'
-      ? await buildBatchCommitPlan(normalizedRootId, manifest, dependencies, signal)
-      : await buildMergeBackPlan(normalizedRootId, manifest, dependencies, signal)
+    if (normalized.request.kind === 'batch-commit') {
+      return await buildBatchCommitPlan(normalizedRootId, manifest, dependencies, signal)
+    }
+    if (normalized.request.kind === 'merge-back') {
+      return await buildMergeBackPlan(normalizedRootId, manifest, dependencies, signal)
+    }
+    return await buildSyncPlan(normalizedRootId, manifest, normalized.request.kind, dependencies, signal)
   } catch (error) {
     return { ok: false, message: safeMessage(error) }
   }
@@ -244,6 +249,64 @@ async function buildMergeBackPlan(
     branchWorkspaceId: manifest.id,
     members,
     pullMergePushReady: members.every((member) => member.pullMergePushReady),
+  }
+  return { ok: true, plan: { token: fingerprint(planWithoutToken), ...planWithoutToken } }
+}
+
+async function buildSyncPlan(
+  rootId: string,
+  manifest: BranchWorkspaceManifest,
+  kind: 'pull' | 'push',
+  dependencies: BranchWorkspaceGitActionPlanDependencies,
+  signal?: AbortSignal,
+): Promise<BranchWorkspaceGitActionPlanResult> {
+  const members: BranchWorkspaceSyncMemberPlan[] = []
+  for (const member of manifest.repositories) {
+    signal?.throwIfAborted()
+    const facts = await readMemberFacts(
+      rootId,
+      member.repositoryName,
+      member.targetBranch,
+      member.worktreePath,
+      dependencies,
+      signal,
+    )
+    if (!facts.ok) return facts
+    const branch = facts.snapshot.branches.find((candidate) => candidate.name === member.targetBranch)!
+    const ready =
+      kind === 'pull' ? Boolean(branch.tracking && !branch.trackingGone) : facts.snapshot.remote?.hasRemotes === true
+    const message = ready
+      ? undefined
+      : kind === 'pull'
+        ? 'workspace.branch-workspace.git-action.target-upstream-required'
+        : 'workspace.branch-workspace.git-action.remote-required'
+    const remotes = (facts.snapshot.remote?.remotes ?? [])
+      .map((remote) => ({ name: remote.name, pushUrl: remote.pushUrl }))
+      .sort((left, right) => left.name.localeCompare(right.name))
+    members.push({
+      repositoryName: member.repositoryName,
+      repoId: facts.repoId,
+      targetBranch: member.targetBranch,
+      targetWorktreePath: member.worktreePath,
+      targetHead: facts.head,
+      ready,
+      ...(message ? { message } : {}),
+      fingerprint: fingerprint({
+        kind,
+        head: facts.head,
+        status: normalizedEntries(facts.status.entries),
+        upstream: branch.tracking ?? null,
+        trackingGone: branch.trackingGone === true,
+        remotes,
+      }),
+    })
+  }
+  const planWithoutToken = {
+    kind,
+    rootId,
+    branchWorkspaceId: manifest.id,
+    members,
+    ready: members.every((member) => member.ready),
   }
   return { ok: true, plan: { token: fingerprint(planWithoutToken), ...planWithoutToken } }
 }

@@ -9,7 +9,7 @@ import type {
 export interface MainWindowWorkspaceState
   extends Pick<
     ReposStore,
-    'activeId' | 'order' | 'detailCollapsed' | 'detailFocusMode' | 'workspaceLayout' | 'sessionReady'
+    'activeId' | 'order' | 'detailCollapsed' | 'workspaceLayout' | 'sessionReady'
   > {}
 
 export interface MainWindowNavigationState extends Pick<ReposStore, 'activeId' | 'order'> {}
@@ -21,7 +21,7 @@ export interface KeyboardRuntimeState {
 }
 
 export interface RestorableWorkspaceViewportState
-  extends Pick<ReposStore, 'activeId' | 'order' | 'detailCollapsed' | 'detailFocusMode' | 'workspaceLayout'> {}
+  extends Pick<ReposStore, 'activeId' | 'order' | 'detailCollapsed' | 'workspaceLayout'> {}
 
 export interface RestorableWorkspaceNavigationState extends Pick<ReposStore, 'activeId' | 'order'> {}
 
@@ -46,7 +46,6 @@ export function restorableWorkspaceStateFromStore(
     | 'workspaceRepositoryListExpandedByRoot'
     | 'projectListExpanded'
     | 'detailCollapsed'
-    | 'detailFocusMode'
     | 'workspaceLayout'
     | 'detailPaneSizes'
     | 'fileTreePaneSizes'
@@ -63,7 +62,6 @@ export function restorableWorkspaceStateFromStore(
     workspaceRepositoryListExpandedByRoot: state.workspaceRepositoryListExpandedByRoot,
     projectListExpanded: state.projectListExpanded,
     detailCollapsed: state.detailCollapsed,
-    detailFocusMode: state.detailFocusMode,
     workspaceLayout,
     detailPaneSizes: state.detailPaneSizes,
     fileTreePaneSizes: state.fileTreePaneSizes,
@@ -81,7 +79,7 @@ export function localWorkspaceStateFromStore(
 }
 
 function restorableWorkspaceViewportStateFromStore(
-  state: Pick<ReposStore, 'activeId' | 'order' | 'detailCollapsed' | 'detailFocusMode' | 'workspaceLayout'> & {
+  state: Pick<ReposStore, 'activeId' | 'order' | 'detailCollapsed' | 'workspaceLayout'> & {
     repos?: ReposStore['repos']
   },
 ): RestorableWorkspaceViewportState {
@@ -92,7 +90,6 @@ function restorableWorkspaceViewportStateFromStore(
     activeId: state.activeId,
     order: state.order,
     detailCollapsed: state.detailCollapsed,
-    detailFocusMode: state.detailFocusMode,
     workspaceLayout,
   }
 }
@@ -123,7 +120,7 @@ export function localWorkspaceSearchStateFromStore(
 }
 
 export function mainWindowWorkspaceStateFromStore(
-  state: Pick<ReposStore, 'activeId' | 'order' | 'detailCollapsed' | 'detailFocusMode' | 'workspaceLayout' | 'sessionReady'> & {
+  state: Pick<ReposStore, 'activeId' | 'order' | 'detailCollapsed' | 'workspaceLayout' | 'sessionReady'> & {
     repos?: ReposStore['repos']
   },
 ): MainWindowWorkspaceState {
@@ -133,7 +130,6 @@ export function mainWindowWorkspaceStateFromStore(
     activeId: restorable.activeId,
     order: restorable.order,
     detailCollapsed: restorable.detailCollapsed,
-    detailFocusMode: restorable.detailFocusMode,
     workspaceLayout: restorable.workspaceLayout,
     sessionReady: local.sessionReady,
   }
@@ -151,7 +147,6 @@ export function mainWindowWorkspaceStateEqual(a: MainWindowWorkspaceState, b: Ma
   return (
     a.activeId === b.activeId &&
     a.detailCollapsed === b.detailCollapsed &&
-    a.detailFocusMode === b.detailFocusMode &&
     a.workspaceLayout === b.workspaceLayout &&
     a.sessionReady === b.sessionReady &&
     arraysEqual(a.order, b.order)
@@ -177,8 +172,7 @@ export function keyboardRuntimeStateFromStore(
     activeId: null,
     order: [],
     detailCollapsed: state.detailCollapsed,
-    detailFocusMode: false,
-    workspaceLayout: 'top-bottom',
+    workspaceLayout: 'left-right',
   })
   const local = localWorkspaceSearchStateFromStore({ branchSearchQueries: state.branchSearchQueries })
   const repo = currentRepoId ? runtimeCoherent.repos[currentRepoId] ?? null : null

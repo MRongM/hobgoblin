@@ -1448,6 +1448,21 @@ describe('ProjectFileTree', () => {
     expect(toolbar.className).toContain('px-2')
   })
 
+  test('renders supplied leading content before the file action buttons', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(
+      <ProjectFileTree repoId="/repo" toolbarLeading={<button data-testid="file-toolbar-leading">back</button>} />,
+    )
+
+    const leading = container?.querySelector('[data-testid="file-toolbar-leading"]')
+    const collapse = container?.querySelector('button[aria-label="file-tree.collapse-all"]')
+    if (!leading || !collapse) throw new Error('missing toolbar controls')
+    expect(leading.compareDocumentPosition(collapse) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    )
+  })
+
   test('uses toolbar-height chrome when requested by a detail pane', async () => {
     seedPlainWorkspace()
 

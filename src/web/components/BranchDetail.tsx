@@ -17,9 +17,12 @@ interface Props {
   layout?: RepoWorkspaceLayout
   collapsed?: boolean
   detailFocusMode?: boolean
+  terminalFocusMode?: boolean
   compactFocusPresentation?: boolean
   onRevealPath?: (relativePath: string) => void
   onShowCompactExplorer?: () => void
+  onShowTerminal?: () => void
+  onExitTerminalFocus?: () => void
 }
 
 // Keep this equality in sync with fields read by BranchDetail children.
@@ -55,9 +58,12 @@ export function BranchDetail({
   layout = DEFAULT_WORKSPACE_LAYOUT,
   collapsed = false,
   detailFocusMode = false,
+  terminalFocusMode = false,
   compactFocusPresentation = false,
   onRevealPath,
   onShowCompactExplorer,
+  onShowTerminal,
+  onExitTerminalFocus,
 }: Props) {
   const detailId = useId()
   const repo = useStoreWithEqualityFn(
@@ -105,7 +111,7 @@ export function BranchDetail({
   const detail = getSelectedBranchDetailPresentation(repo)
   const contentId = `${detailId}-content`
 
-  const focusMode = detailFocusMode
+  const focusMode = detailFocusMode || terminalFocusMode
 
   return (
     <section className="flex min-h-0 flex-1 flex-col bg-detail">
@@ -119,10 +125,13 @@ export function BranchDetail({
           contentId={contentId}
           collapsed={collapsed}
           detailFocusMode={detailFocusMode}
+          terminalFocusMode={terminalFocusMode}
           compactFocusPresentation={compactFocusPresentation}
           layout={layout}
           onRevealPath={onRevealPath}
           onShowCompactExplorer={onShowCompactExplorer}
+          onShowTerminal={onShowTerminal}
+          onExitTerminalFocus={onExitTerminalFocus}
         />
       ) : (
         <>
@@ -133,9 +142,12 @@ export function BranchDetail({
             contentId={contentId}
             collapsed={collapsed}
             detailFocusMode={detailFocusMode}
+            terminalFocusMode={terminalFocusMode}
             compactFocusPresentation={compactFocusPresentation}
             layout={layout}
             onShowCompactExplorer={onShowCompactExplorer}
+            onShowTerminal={onShowTerminal}
+            onExitTerminalFocus={onExitTerminalFocus}
           />
           {!collapsed && (
             <BranchDetailContent
@@ -161,10 +173,13 @@ interface BranchShortcutHandlerProps {
   contentId: string
   collapsed: boolean
   detailFocusMode: boolean
+  terminalFocusMode: boolean
   compactFocusPresentation: boolean
   layout: RepoWorkspaceLayout
   onRevealPath?: (relativePath: string) => void
   onShowCompactExplorer?: () => void
+  onShowTerminal?: () => void
+  onExitTerminalFocus?: () => void
 }
 
 function BranchShortcutHandler({
@@ -175,10 +190,13 @@ function BranchShortcutHandler({
   contentId,
   collapsed,
   detailFocusMode,
+  terminalFocusMode,
   compactFocusPresentation,
   layout,
   onRevealPath,
   onShowCompactExplorer,
+  onShowTerminal,
+  onExitTerminalFocus,
 }: BranchShortcutHandlerProps) {
   const actions = useBranchActionItems(repo, branch)
   useBranchActionShortcutRegistry(actions)
@@ -192,9 +210,12 @@ function BranchShortcutHandler({
         contentId={contentId}
         collapsed={collapsed}
         detailFocusMode={detailFocusMode}
+        terminalFocusMode={terminalFocusMode}
         compactFocusPresentation={compactFocusPresentation}
         layout={layout}
         onShowCompactExplorer={onShowCompactExplorer}
+        onShowTerminal={onShowTerminal}
+        onExitTerminalFocus={onExitTerminalFocus}
       />
       {actions.dialogs}
       {!collapsed && (

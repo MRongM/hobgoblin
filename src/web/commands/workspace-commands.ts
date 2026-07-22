@@ -11,17 +11,16 @@ import type {
   TerminalSessionReadContextValue,
 } from '#/web/components/terminal/types.ts'
 import type { TerminalDeepLinkTarget } from '#/web/lib/terminal-deep-link.ts'
+import type { BranchWorkspaceReadResult } from '#/shared/branch-workspaces.ts'
+import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
+import { branchWorkspaceQueryKey } from '#/web/branch-workspace-query-cache.ts'
+import { resolveBranchWorkspaceMemberTarget } from '#/web/components/repo-workspace/branch-workspace-member-target.ts'
 
 interface ShowDetailTabCommandOptions {
   repoId: string | null
   tab: DetailTab
   navigation: MainWindowNavigationActions
   setDetailCollapsed: (collapsed: boolean) => void
-}
-
-interface ToggleDetailCommandOptions {
-  repoId: string | null
-  toggleDetailCollapsed: () => void
 }
 
 interface TerminalPrimaryActionCommandOptions {
@@ -43,6 +42,7 @@ interface TerminalDeepLinkCommandOptions {
   setDetailCollapsed: (collapsed: boolean) => void
   terminalSessions?: Pick<TerminalSessionReadContextValue, 'worktreeSnapshot'> &
     Pick<TerminalSessionContextValue, 'selectTerminal'>
+  onBranchWorkspaceScopeFallback?: () => void
 }
 
 export function runShowDetailTabCommand({
@@ -54,12 +54,6 @@ export function runShowDetailTabCommand({
   if (!repoId) return false
   navigation.showRepoDetailTab(repoId, tab)
   setDetailCollapsed(false)
-  return true
-}
-
-export function runToggleDetailCommand({ repoId, toggleDetailCollapsed }: ToggleDetailCommandOptions): boolean {
-  if (!repoId) return false
-  toggleDetailCollapsed()
   return true
 }
 
@@ -106,8 +100,10 @@ export function runTerminalDeepLinkCommand({
   navigation,
   setDetailCollapsed,
   terminalSessions,
+  onBranchWorkspaceScopeFallback,
 }: TerminalDeepLinkCommandOptions): boolean {
-  const repo = useReposStore.getState().repos[target.repoId]
+  const state = useReposStore.getState()
+  const repo = state.repos[target.repoId]
   if (!repo) return false
 
   const branch =
@@ -115,7 +111,19 @@ export function runTerminalDeepLinkCommand({
       (candidate) => candidate.name === target.branch && candidate.worktree?.path === target.worktreePath,
     ) ?? repo.data.branches.find((candidate) => candidate.worktree?.path === target.worktreePath)
 
-  if (branch) navigation.showRepoBranchDetailTab(repo.id, branch.name, 'terminal')
+  const restoredMember = target.branchWorkspaceScope ? restoreBranchWorkspaceMemberScope(target) : false
+  if (target.branchWorkspaceScope && !restoredMember) onBranchWorkspaceScopeFallback?.()
+
+  if (restoredMember) {
+    const next = useReposStore.getState()
+    next.selectBranch(repo.id, restoredMember.targetBranch)
+    next.setDetailTab(repo.id, 'terminal')
+    next.activateBranchWorkspace(
+      target.branchWorkspaceScope!.workspaceRootId,
+      target.branchWorkspaceScope!.branchWorkspaceId,
+      restoredMember.repositoryName,
+    )
+  } else if (branch) navigation.showRepoBranchDetailTab(repo.id, branch.name, 'terminal')
   else navigation.showRepoDetailTab(repo.id, 'terminal')
   setDetailCollapsed(false)
 
@@ -126,10 +134,57 @@ export function runTerminalDeepLinkCommand({
   const snapshot = bridge.worktreeSnapshot(worktreeKey)
   const session =
     snapshot.sessions.find(
-      (candidate) => !!target.terminalId && (candidate.terminalId === target.terminalId || candidate.key === target.terminalId),
+      (candidate) =>
+        !!target.terminalId && (candidate.terminalId === target.terminalId || candidate.key === target.terminalId),
     ) ?? snapshot.sessions[0]
   if (session) bridge.selectTerminal(worktreeKey, session.key)
   return true
+}
+
+function restoreBranchWorkspaceMemberScope(
+  target: TerminalDeepLinkTarget,
+): { repositoryName: string; targetBranch: string } | false {
+  const scope = target.branchWorkspaceScope
+  if (!scope) return false
+  const state = useReposStore.getState()
+  const workspaceProject = state.workspaceProjects[scope.workspaceRootId]
+  const rootRepository = state.repos[scope.workspaceRootId]
+  if (!workspaceProject || !rootRepository) return false
+
+  const query = mainWindowQueryClient.getQueryData<BranchWorkspaceReadResult>(
+    branchWorkspaceQueryKey(scope.workspaceRootId),
+  )
+  const workspace = query?.ok
+    ? query.items.find(
+        (item) =>
+          item.id === scope.branchWorkspaceId &&
+          item.available &&
+          item.lifecycle !== 'delete-incomplete' &&
+          item.operation?.kind !== 'remove',
+      )
+    : undefined
+  if (!workspace) return false
+
+  for (const member of workspace.repositories) {
+    const resolution = resolveBranchWorkspaceMemberTarget({
+      member,
+      repositoryIds: workspaceProject.repositoryIds,
+      candidates: workspaceProject.candidates,
+      repos: state.repos,
+    })
+    if (!resolution.ok) continue
+    if (
+      resolution.target.repositoryId === target.repoId &&
+      resolution.target.worktreePath === target.worktreePath &&
+      (!target.branch || resolution.target.targetBranch === target.branch)
+    ) {
+      return {
+        repositoryName: resolution.target.repositoryName,
+        targetBranch: resolution.target.targetBranch,
+      }
+    }
+  }
+  return false
 }
 
 function selectedTerminalBase(repoId: string): TerminalSessionBase | null {

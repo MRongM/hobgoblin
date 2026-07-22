@@ -1,5 +1,9 @@
-import { useCallback, useMemo } from 'react'
-import { EmptyState, Toolbar } from '#/web/components/Layout.tsx'
+import { useCallback, useMemo, type ReactNode } from 'react'
+import { PanelLeftOpen } from 'lucide-react'
+import { Toolbar } from '#/web/components/Layout.tsx'
+import { Button } from '#/web/components/ui/button.tsx'
+import { FocusProjectSwitcher } from '#/web/components/repo-workspace/FocusProjectSwitcher.tsx'
+import { WorkspaceRepositorySwitcher } from '#/web/components/repo-workspace/WorkspaceRepositorySwitcher.tsx'
 import type { BranchWorkspaceFolderContext } from '#/web/components/repo-workspace/BranchWorkspaceFileTree.tsx'
 import { TerminalSlot } from '#/web/components/terminal/TerminalSlot.tsx'
 import { EMPTY_TERMINAL_TAB_FOCUS_KEY, TerminalTabs } from '#/web/components/terminal/TerminalTabs.tsx'
@@ -8,6 +12,7 @@ import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-
 import { useWorktreeTerminalSnapshot } from '#/web/components/terminal/terminal-session-store.ts'
 import { useFocusRegistry } from '#/web/components/tab-strip/useFocusRegistry.ts'
 import { useT } from '#/web/stores/i18n.ts'
+import { cn } from '#/web/lib/cn.ts'
 import type {
   TerminalSessionBase,
   TerminalSessionContextValue,
@@ -16,15 +21,24 @@ import type {
 
 interface BranchWorkspaceTerminalPanelProps {
   context: BranchWorkspaceFolderContext
+  toolbarLeading?: ReactNode
+  terminalFocusMode?: boolean
+  onExitTerminalFocus?: () => void
 }
 
 interface OpenBranchWorkspaceInternalTerminalDependencies
-  extends Pick<TerminalSessionReadContextValue, 'worktreeSnapshot'>,
+  extends
+    Pick<TerminalSessionReadContextValue, 'worktreeSnapshot'>,
     Pick<TerminalSessionContextValue, 'selectTerminal' | 'createTerminal'> {
   activate(): void
 }
 
-export function BranchWorkspaceTerminalPanel({ context }: BranchWorkspaceTerminalPanelProps) {
+export function BranchWorkspaceTerminalPanel({
+  context,
+  toolbarLeading,
+  terminalFocusMode = false,
+  onExitTerminalFocus,
+}: BranchWorkspaceTerminalPanelProps) {
   const t = useT()
   const terminalWorktreeKey = worktreeTerminalKey(context.rootId, context.path)
   const snapshot = useWorktreeTerminalSnapshot(terminalWorktreeKey)
@@ -61,12 +75,35 @@ export function BranchWorkspaceTerminalPanel({ context }: BranchWorkspaceTermina
 
   return (
     <section className="flex min-h-0 flex-1 flex-col bg-pane">
-      <Toolbar data-testid="branch-workspace-terminal-toolbar" variant="detail">
+      <Toolbar
+        data-testid="branch-workspace-terminal-toolbar"
+        variant="detail"
+        chrome={terminalFocusMode ? 'topbar' : 'toolbar'}
+        className={cn(terminalFocusMode && 'topbar [-webkit-app-region:drag]')}
+      >
+        {terminalFocusMode ? (
+          <>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onExitTerminalFocus}
+              aria-label={t('terminal.exit-focus')}
+              title={t('terminal.exit-focus')}
+            >
+              <PanelLeftOpen />
+            </Button>
+            <FocusProjectSwitcher repoId={context.rootId} />
+            <WorkspaceRepositorySwitcher repoId={context.rootId} />
+          </>
+        ) : (
+          toolbarLeading
+        )}
         <TerminalTabs
           worktreeTerminalKey={terminalWorktreeKey}
           sessions={snapshot.sessions}
           detailId={`branch-workspace-terminal-${context.id}`}
           panelActive
+          focusMode={terminalFocusMode}
           focusRegistry={terminalTabFocusRegistry}
           emptyFocusKey={EMPTY_TERMINAL_TAB_FOCUS_KEY}
           onNew={() => void handleNewTerminal()}
@@ -76,13 +113,12 @@ export function BranchWorkspaceTerminalPanel({ context }: BranchWorkspaceTermina
           onClose={handleCloseTerminal}
           onReorder={handleReorderTerminals}
         />
+        <div aria-hidden="true" className="min-w-2 flex-1 self-stretch" />
       </Toolbar>
       <div className="flex min-h-0 flex-1 flex-col">
         {snapshot.selectedDescriptor ? (
           <TerminalSlot repoRoot={context.rootId} branch={context.branch} worktreePath={context.path} />
-        ) : (
-          <EmptyState title={t('terminal.label')} body={t('terminal.new')} />
-        )}
+        ) : null}
       </div>
     </section>
   )

@@ -100,7 +100,7 @@ export function BranchSummaryInline({
 
   return (
     <div title={title} className={cn('grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2', className)}>
-      <span className="flex w-4 shrink-0 items-center justify-center">
+      <span className="workspace-list-item-leading-icon flex w-4 shrink-0 items-center justify-center transition-[opacity,transform] duration-100">
         {hasWorktree ? (
           <FolderTree size={13} className={worktreeDirty ? 'text-attention' : 'text-brand-text'} />
         ) : (

@@ -2,15 +2,7 @@ import { describe, expect, test } from 'vitest'
 import { repoWorkspaceBehavior } from '#/web/lib/workspace-layout.ts'
 
 describe('repoWorkspaceBehavior', () => {
-  test('moves branch actions out of the list in top-bottom focus mode', () => {
-    expect(repoWorkspaceBehavior('top-bottom', false, true)).toMatchObject({
-      mode: 'focus',
-      detailFocusMode: true,
-      branchListActionsVisible: false,
-    })
-  })
-
-  test('moves branch actions out of the list in left-right focus mode', () => {
+  test('maximizes the terminal detail when focus state is true', () => {
     expect(repoWorkspaceBehavior('left-right', false, true)).toMatchObject({
       mode: 'focus',
       detailFocusAllowed: true,
@@ -19,16 +11,12 @@ describe('repoWorkspaceBehavior', () => {
     })
   })
 
-  test('keeps branch list actions visible when focus preference is on but detail is collapsed', () => {
-    expect(repoWorkspaceBehavior('top-bottom', true, true)).toMatchObject({
-      mode: 'collapsed',
-      detailFocusMode: true,
-      branchListActionsVisible: true,
-    })
+  test('ignores collapse while preserving terminal focus in the fixed layout', () => {
     expect(repoWorkspaceBehavior('left-right', true, true)).toMatchObject({
-      mode: 'collapsed',
+      mode: 'focus',
+      detailCollapsed: false,
       detailFocusMode: true,
-      branchListActionsVisible: true,
+      branchListActionsVisible: false,
     })
   })
 })

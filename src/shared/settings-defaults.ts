@@ -202,7 +202,7 @@ export function defaultInitialSettingsSnapshot(
   return initialSettingsFromSnapshot(defaultSettingsSnapshot(overrides))
 }
 
-export { DEFAULT_COLOR_THEME, DEFAULT_GLOBAL_SHORTCUT }
+export { DEFAULT_COLOR_THEME }
 export {
   DEFAULT_TOPBAR_HEIGHT_PX,
   DEFAULT_TOOLBAR_HEIGHT_PX,
@@ -222,4 +222,3 @@ export {
   MIN_TERMINAL_FONT_SIZE,
   MAX_SERVER_PORT,
 }
-export type { ColorTheme }

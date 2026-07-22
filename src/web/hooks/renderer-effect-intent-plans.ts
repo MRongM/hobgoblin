@@ -2,7 +2,6 @@ import { parseTerminalSessionKey, worktreeTerminalKey } from '#/web/components/t
 import type { RendererEffectIntent } from '#/shared/renderer-effect-intents.ts'
 import type { DetailTab, RepoState } from '#/web/stores/repos/types.ts'
 import type { RepoSessionEntry } from '#/shared/remote-repo.ts'
-import type { WorkspaceLayout } from '#/shared/workspace-layout.ts'
 import type { SettingsPage } from '#/shared/settings-pages.ts'
 import type { LangPref, ThemePref } from '#/shared/settings.ts'
 
@@ -18,7 +17,6 @@ type WorkspaceRendererIntent = Extract<
   | { type: 'show-detail-tab-requested' }
   | { type: 'select-terminal-requested' }
   | { type: 'terminal-primary-action-requested' }
-  | { type: 'toggle-detail-requested' }
 >
 
 export type TerminalBellIntentPlan =
@@ -34,8 +32,6 @@ export type TerminalBellIntentPlan =
 
 export type AppLevelIntentPlan =
   | { kind: 'noop' }
-  | { kind: 'set-workspace-layout'; layout: WorkspaceLayout }
-  | { kind: 'reset-workspace-layout' }
   | { kind: 'open-settings'; page: SettingsPage }
   | { kind: 'set-theme-pref'; pref: ThemePref }
   | { kind: 'set-lang-pref'; pref: LangPref }
@@ -55,7 +51,6 @@ export type WorkspaceIntentPlan =
   | { kind: 'show-detail-tab'; repoId: string; tab: DetailTab }
   | { kind: 'select-terminal'; repoId: string; index: number }
   | { kind: 'terminal-primary-action'; repoId: string }
-  | { kind: 'toggle-detail'; repoId: string }
 
 export type ExternalOpenDrainKickPlan =
   | { kind: 'ignore' }
@@ -100,10 +95,6 @@ export function createAppLevelIntentPlan(
   context: AppLevelIntentPlanContext,
 ): AppLevelIntentPlan | null {
   switch (event.type) {
-    case 'workspace-layout-set-requested':
-      return { kind: 'set-workspace-layout', layout: event.layout }
-    case 'workspace-layout-reset-requested':
-      return { kind: 'reset-workspace-layout' }
     case 'open-settings-requested':
       return { kind: 'open-settings', page: event.page }
     case 'theme-pref-set-requested':
@@ -150,9 +141,6 @@ export function createWorkspaceIntentPlan(
     case 'terminal-primary-action-requested':
       if (context.workspaceShortcutSuppressed || !context.currentRepoId) return { kind: 'noop' }
       return { kind: 'terminal-primary-action', repoId: context.currentRepoId }
-    case 'toggle-detail-requested':
-      if (context.workspaceShortcutSuppressed || !context.currentRepoId) return { kind: 'noop' }
-      return { kind: 'toggle-detail', repoId: context.currentRepoId }
   }
 }
 
@@ -176,7 +164,6 @@ function isWorkspaceRendererIntent(event: RendererEffectIntent): event is Worksp
     event.type === 'repo-refresh-requested' ||
     event.type === 'show-detail-tab-requested' ||
     event.type === 'select-terminal-requested' ||
-    event.type === 'terminal-primary-action-requested' ||
-    event.type === 'toggle-detail-requested'
+    event.type === 'terminal-primary-action-requested'
   )
 }

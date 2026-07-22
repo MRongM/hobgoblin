@@ -131,10 +131,6 @@ export function readRuntimeFileAreaSettings(data: RuntimeSettingsSnapshot | unde
   }
 }
 
-export function readRuntimeTerminalCustomButtons(data: RuntimeSettingsSnapshot | undefined) {
-  return readRuntimeTerminalSettings(data).terminalCustomButtons
-}
-
 export function readRuntimeTerminalSettings(data: RuntimeSettingsSnapshot | undefined) {
   const fallback = fallbackInitialSettings()
   return {

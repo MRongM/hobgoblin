@@ -1,32 +1,26 @@
-export const WORKSPACE_LAYOUTS = ['top-bottom', 'left-right'] as const
+export const WORKSPACE_LAYOUTS = ['left-right'] as const
 
 export type WorkspaceLayout = (typeof WORKSPACE_LAYOUTS)[number]
-export type WorkspaceLayoutAxis = 'rows' | 'columns'
+export type WorkspaceLayoutAxis = 'columns'
 export type WorkspaceDetailPaneSizes = Record<WorkspaceLayout, number>
 
 export const DEFAULT_WORKSPACE_LAYOUT: WorkspaceLayout = 'left-right'
 export const DEFAULT_DETAIL_COLLAPSED = false
 export const DEFAULT_DETAIL_FOCUS_MODE = false
-// left-right: the detail pane owns the width — the sidebar (branch list +
-// file area) stays narrow, roughly a quarter of the window.
-export const DEFAULT_DETAIL_PANE_SIZES: WorkspaceDetailPaneSizes = { 'top-bottom': 61.8, 'left-right': 74.2 }
-export const DEFAULT_FILE_TREE_PANE_SIZES: WorkspaceDetailPaneSizes = { 'top-bottom': 66.7, 'left-right': 66.7 }
+// The detail pane owns the width — the sidebar (branch list + file area)
+// stays narrow, roughly a quarter of the window.
+export const DEFAULT_DETAIL_PANE_SIZES: WorkspaceDetailPaneSizes = { 'left-right': 74.2 }
+export const DEFAULT_FILE_TREE_PANE_SIZES: WorkspaceDetailPaneSizes = { 'left-right': 66.7 }
 
 export const MIN_WORKSPACE_PANE_SIZE = 10
 export const MAX_WORKSPACE_PANE_SIZE = 90
 
 const WORKSPACE_LAYOUT_META = {
-  'top-bottom': { axis: 'rows', detailCollapseAllowed: true },
-  'left-right': { axis: 'columns', detailCollapseAllowed: true },
+  'left-right': { axis: 'columns', detailCollapseAllowed: false },
 } satisfies Record<WorkspaceLayout, { axis: WorkspaceLayoutAxis; detailCollapseAllowed: boolean }>
 
-export function normalizeWorkspaceLayout(value: unknown): WorkspaceLayout {
-  if (value === 'top-bottom' || value === 'left-right') return value
+export function normalizeWorkspaceLayout(_value: unknown): WorkspaceLayout {
   return DEFAULT_WORKSPACE_LAYOUT
-}
-
-export function workspaceLayoutAxis(layout: WorkspaceLayout): WorkspaceLayoutAxis {
-  return WORKSPACE_LAYOUT_META[layout].axis
 }
 
 export function workspaceLayoutAllowsDetailCollapse(layout: WorkspaceLayout): boolean {
@@ -45,7 +39,6 @@ function normalizePaneSize(layout: WorkspaceLayout, value: unknown, defaults: Wo
 function normalizePaneSizes(value: unknown, defaults: WorkspaceDetailPaneSizes): WorkspaceDetailPaneSizes {
   const sizes = value && typeof value === 'object' ? (value as Partial<Record<WorkspaceLayout, unknown>>) : {}
   return {
-    'top-bottom': normalizePaneSize('top-bottom', sizes['top-bottom'], defaults),
     'left-right': normalizePaneSize('left-right', sizes['left-right'], defaults),
   }
 }
@@ -84,8 +77,7 @@ export function normalizeWorkspaceSessionLayoutState(value: {
     workspaceLayout,
     typeof value.detailCollapsed === 'boolean' ? value.detailCollapsed : DEFAULT_DETAIL_COLLAPSED,
   )
-  const detailFocusMode =
-    typeof value.detailFocusMode === 'boolean' ? value.detailFocusMode : DEFAULT_DETAIL_FOCUS_MODE
+  const detailFocusMode = DEFAULT_DETAIL_FOCUS_MODE
   return {
     workspaceLayout,
     detailCollapsed,

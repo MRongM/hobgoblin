@@ -224,7 +224,7 @@ function renderList(
 }
 
 describe('SidebarProjectList', () => {
-  test('registers each full project row as a sortable item', () => {
+  test('registers each project row with a dedicated sortable activator', () => {
     renderList()
 
     expect(
@@ -237,6 +237,7 @@ describe('SidebarProjectList', () => {
         node.getAttribute('data-sortable-activator-id'),
       ),
     ).toEqual(['/repo-a', '/repo-b'])
+    expect(container!.querySelectorAll('[data-workspace-list-item-main][data-sortable-id]')).toHaveLength(0)
   })
 
   test('uses the shared pointer threshold and keyboard coordinates', () => {
@@ -262,7 +263,7 @@ describe('SidebarProjectList', () => {
     expect(dndState.sortableStrategy).toBe(dndState.verticalStrategy)
   })
 
-  test('attaches sortable accessibility attributes and listeners to the project button', () => {
+  test('attaches sortable accessibility attributes and listeners only to the project grip', () => {
     renderList()
     const firstRow = container!.querySelector('[data-sortable-activator-id="/repo-a"]')
 
@@ -291,8 +292,8 @@ describe('SidebarProjectList', () => {
 
   test('uses a folder icon for plain projects and a Git folder icon for repositories', () => {
     renderList()
-    const gitProject = container!.querySelector('[data-sortable-activator-id="/repo-a"]')
-    const plainProject = container!.querySelector('[data-sortable-activator-id="/repo-b"]')
+    const gitProject = projectRow('/repo-a').querySelector('[data-workspace-list-item-main]')
+    const plainProject = projectRow('/repo-b').querySelector('[data-workspace-list-item-main]')
 
     expect(gitProject?.getAttribute('data-project-kind')).toBe('git')
     expect(gitProject?.querySelector('svg.lucide-folder-git-2')).not.toBeNull()
@@ -303,80 +304,88 @@ describe('SidebarProjectList', () => {
 
   test('activates a project from its row', () => {
     const { onActivate } = renderList()
-    const firstRow = container!.querySelector('[data-sortable-activator-id="/repo-a"]')
+    const firstRow = projectRow('/repo-a').querySelector('[data-workspace-list-item-main]')
 
     act(() => firstRow?.dispatchEvent(new MouseEvent('click', { bubbles: true })))
 
     expect(onActivate).toHaveBeenCalledWith('/repo-a')
   })
 
-  test('closes a project without activating it', () => {
+  test('closes a project from More without activating it', async () => {
     const { onActivate, onClose } = renderList()
-    const close = container!.querySelector('[aria-label="Close Repo A"]')
+    const items = await openProjectMenu('/repo-a')
+    expect(items.map((item) => item.textContent?.trim())).toEqual(['terminal.external', 'Close Repo A'])
+    const close = items.find((item) => item.textContent?.includes('Close Repo A'))
+    expect(close?.getAttribute('data-variant')).toBe('default')
 
-    act(() => close?.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    await act(async () => {
+      close?.click()
+      await Promise.resolve()
+    })
 
     expect(onClose).toHaveBeenCalledWith('/repo-a')
     expect(onActivate).not.toHaveBeenCalled()
   })
 
-  test('renders project actions at the right side immediately before Close', () => {
+  test('renders every project through the shared frame and three-slot dock', () => {
     renderList()
 
     expect(projectExternalActionState.requestedProjectIds).toEqual(['/repo-a', '/repo-b'])
     for (const project of projects) {
       const row = projectRow(project.id)
-      const actions = row.querySelector<HTMLElement>('[data-testid="project-row-external-actions"]')
-      const close = row.querySelector<HTMLButtonElement>(`[aria-label="Close ${project.name}"]`)
-      const projectButton = row.querySelector<HTMLElement>('[data-sortable-activator-id]')
-      const editor = actions?.querySelector('[data-testid="project-editor-btn"]')
-      const terminal = actions?.querySelector('[data-testid="project-external-terminal-btn"]')
+      const projectButton = row.querySelector<HTMLElement>('[data-workspace-list-item-main]')
+      const dock = row.querySelector('[data-workspace-list-item-action-dock]')
+      const editor = row.querySelector('[data-workspace-list-item-action="editor"]')
+      const terminal = row.querySelector('[data-workspace-list-item-action="terminal"]')
 
-      expect(actions?.nextElementSibling).toBe(close)
-      expect(actions?.className).toContain('right-8')
-      expect(actions?.className).toContain('group-hover:opacity-100')
-      expect(actions?.className).toContain('focus-within:opacity-100')
-      expect(projectButton?.className).toContain('pr-20')
-      expect(close?.className).toContain('right-2')
-      expect(close?.className).toContain('focus-visible:opacity-100')
+      expect(row.getAttribute('data-size')).toBe('project')
+      expect(dock?.children).toHaveLength(3)
+      expect(projectButton?.className).toContain('pr-[4.25rem]')
       expect(editor?.getAttribute('aria-label')).toBe(`worktrees.open-in-editor-label ${project.name}`)
-      expect(terminal?.getAttribute('aria-label')).toBe(`terminal.external ${project.name}`)
+      expect(terminal?.getAttribute('aria-label')).toBe('terminal.internal')
       expect(editor?.querySelector('[data-testid="mock-editor-app-icon"]')?.getAttribute('data-pref')).toBe('cursor')
-      expect(terminal?.querySelector('[data-testid="mock-terminal-app-icon"]')?.getAttribute('data-pref')).toBe(
-        'ghostty',
-      )
+      expect(row.querySelector('[aria-label="action.menu"]')).not.toBeNull()
     }
   })
 
-  test('opens item external apps without activating or closing the project', () => {
+  test('opens quick and menu actions without activating or closing the project', async () => {
     const { onActivate, onClose } = renderList()
     const row = projectRow('/repo-a')
-    const editor = row.querySelector<HTMLButtonElement>('[data-testid="project-editor-btn"]')
-    const terminal = row.querySelector<HTMLButtonElement>('[data-testid="project-external-terminal-btn"]')
+    const editor = row.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="editor"]')
+    const internalTerminal = row.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="terminal"]')
 
     act(() => {
       editor?.click()
-      terminal?.click()
+      internalTerminal?.click()
+    })
+    const externalTerminal = (await openProjectMenu('/repo-a')).find((item) =>
+      item.textContent?.includes('terminal.external'),
+    )
+    await act(async () => {
+      externalTerminal?.click()
+      await Promise.resolve()
     })
 
     expect(projectExternalActionState.editorOnSelect).toHaveBeenCalledWith('/repo-a')
     expect(projectExternalActionState.terminalOnSelect).toHaveBeenCalledWith('/repo-a')
+    expect(projectExternalActionState.internalTerminalOnSelect).toHaveBeenCalledWith('/repo-a')
     expect(onActivate).not.toHaveBeenCalled()
     expect(onClose).not.toHaveBeenCalled()
   })
 
-  test('forwards disabled and busy state to item external actions', () => {
+  test('keeps disabled project actions visible in their stable positions', async () => {
     projectExternalActionState.editorDisabled = true
     projectExternalActionState.terminalDisabled = true
     projectExternalActionState.terminalBusy = true
     renderList()
 
     const row = projectRow('/repo-a')
-    const editor = row.querySelector<HTMLButtonElement>('[data-testid="project-editor-btn"]')
-    const terminal = row.querySelector<HTMLButtonElement>('[data-testid="project-external-terminal-btn"]')
+    const editor = row.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="editor"]')
     expect(editor?.disabled).toBe(true)
-    expect(terminal?.disabled).toBe(true)
-    expect(terminal?.getAttribute('aria-busy')).toBe('true')
+    const externalTerminal = (await openProjectMenu('/repo-a')).find((item) =>
+      item.textContent?.includes('terminal.external'),
+    )
+    expect(externalTerminal?.hasAttribute('data-disabled')).toBe(true)
   })
 
   test('closes terminals from the project root and member repositories through the row context menu', async () => {
@@ -445,6 +454,15 @@ function projectRow(projectId: string): HTMLLIElement {
   const row = container!.querySelector(`[data-sortable-node-id="${projectId}"]`)
   if (!(row instanceof HTMLLIElement)) throw new Error(`missing project row: ${projectId}`)
   return row
+}
+
+async function openProjectMenu(projectId: string): Promise<HTMLElement[]> {
+  const trigger = projectRow(projectId).querySelector<HTMLButtonElement>('[aria-label="action.menu"]')
+  await act(async () => {
+    trigger?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+    await Promise.resolve()
+  })
+  return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
 }
 
 async function requestCloseAllFromContextMenu(row: HTMLElement): Promise<void> {

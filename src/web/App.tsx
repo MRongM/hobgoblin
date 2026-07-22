@@ -172,7 +172,7 @@ interface MainWindowViewportProps {
   settingsOpen: boolean
   visibleRepoId: string | null
   sessionReady: boolean
-  workspaceLayout: 'top-bottom' | 'left-right'
+  workspaceLayout: ReturnType<typeof useMainWindowShellState>['workspaceLayout']
   detailCollapsed: boolean
   detailFocusMode: boolean
   overlays: ReturnType<typeof useMainWindowShellState>['overlays']
@@ -185,7 +185,7 @@ interface MainWindowViewportContentProps {
   settingsOpen: boolean
   visibleRepoId: string | null
   sessionReady: boolean
-  workspaceLayout: 'top-bottom' | 'left-right'
+  workspaceLayout: ReturnType<typeof useMainWindowShellState>['workspaceLayout']
   detailCollapsed: boolean
   detailFocusMode: boolean
   overlays: ReturnType<typeof useMainWindowShellState>['overlays']

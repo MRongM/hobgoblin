@@ -8,6 +8,7 @@ import type { TerminalSessionSummary } from '#/web/components/terminal/types.ts'
 import { buildTerminalDeepLinkUrl } from '#/web/lib/terminal-deep-link.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
+import { BranchWorkspaceMemberContext } from '#/web/components/repo-workspace/BranchWorkspaceMemberContext.tsx'
 
 const { openExternalUrlMock } = vi.hoisted(() => ({
   openExternalUrlMock: vi.fn(async (_url: string) => ({ ok: true, message: '' })),
@@ -187,6 +188,34 @@ describe('StatusBar file area control', () => {
         worktreePath: WORKTREE_PATH,
         branch: 'main',
         terminalId: 'terminal-1',
+      }),
+    )
+  })
+
+  test('adds the active branch workspace member scope to terminal links', async () => {
+    act(() =>
+      root!.render(
+        <BranchWorkspaceMemberContext.Provider
+          value={{ workspaceRootId: '/workspace', branchWorkspaceId: 'branch-1', repositoryName: 'api' }}
+        >
+          <StatusBar repoId={REPO_ID} />
+        </BranchWorkspaceMemberContext.Provider>,
+      ),
+    )
+
+    act(() => container?.querySelector<HTMLButtonElement>('button[aria-label="terminal.open-in-browser"]')?.click())
+    await flush()
+
+    expect(openExternalUrlMock).toHaveBeenCalledWith(
+      buildTerminalDeepLinkUrl('http://127.0.0.1:32215', {
+        repoId: REPO_ID,
+        worktreePath: WORKTREE_PATH,
+        branch: 'main',
+        terminalId: 'terminal-1',
+        branchWorkspaceScope: {
+          workspaceRootId: '/workspace',
+          branchWorkspaceId: 'branch-1',
+        },
       }),
     )
   })

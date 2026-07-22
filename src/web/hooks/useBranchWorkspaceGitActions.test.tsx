@@ -23,6 +23,17 @@ const plan: BranchWorkspaceGitActionPlan = {
   members: [],
 }
 
+function syncPlan(kind: 'pull' | 'push'): BranchWorkspaceGitActionPlan {
+  return {
+    kind,
+    token: `sha256:${kind}`,
+    rootId: '/workspace',
+    branchWorkspaceId: 'ws-1',
+    ready: true,
+    members: [],
+  }
+}
+
 let container: HTMLDivElement
 let root: Root
 let queryClient: QueryClient
@@ -71,6 +82,35 @@ describe('useBranchWorkspaceGitActions', () => {
       kind: 'batch-commit',
       planToken: plan.token,
       messages: [],
+    })
+  })
+
+  test.each(['pull', 'push'] as const)('plans and executes coordinated %s', async (kind) => {
+    const expectedPlan = syncPlan(kind)
+    mocks.plan.mockResolvedValue({ ok: true, plan: expectedPlan })
+    mocks.execute.mockResolvedValue({
+      ok: true,
+      kind,
+      planToken: expectedPlan.token,
+      branchWorkspaceId: 'ws-1',
+      members: [],
+    })
+    let state: ReturnType<typeof useBranchWorkspaceGitActions> | null = null
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <Harness onReady={(value) => (state = value)} />
+        </QueryClientProvider>,
+      ),
+    )
+
+    await act(async () => state!.requestPlan(kind, 'ws-1'))
+    await act(async () => state!.executeSync(kind))
+
+    expect(state!.plan).toEqual(expectedPlan)
+    expect(mocks.execute).toHaveBeenCalledWith('/workspace', {
+      kind,
+      planToken: expectedPlan.token,
     })
   })
 })

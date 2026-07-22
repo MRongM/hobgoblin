@@ -328,22 +328,142 @@ describe('BranchWorkspaceDialog', () => {
     expect(checked('workspace.branch-workspace.approval.modified-copy')).toBe(true)
   })
 
-  test('shows exact local and upstream branch names with repository context before removal', () => {
-    renderDialog({ mode: 'remove', workspace: existingWorkspace(), plan: removalPlan() })
+  test('requires explicit destructive approval for exact repository dependency replacements', () => {
+    const plan: BranchWorkspacePlan = {
+      ...approvalPlan(),
+      operation: 'repair',
+      requiredApprovals: ['replace-repository-dependencies'],
+      steps: [
+        {
+          id: 'repository-replacement:api:.env',
+          kind: 'replace-repository-dependency',
+          label: 'api/.env',
+          repositoryName: 'api',
+          entryName: '.env',
+        },
+        {
+          id: 'repository-replacement:api:node_modules',
+          kind: 'replace-repository-dependency',
+          label: 'api/node_modules',
+          repositoryName: 'api',
+          entryName: 'node_modules',
+        },
+      ],
+    }
+    renderDialog({ mode: 'repair', workspace: existingWorkspace(), plan })
 
-    const text = document.body.textContent ?? ''
-    expect(text).toContain('workspace.branch-workspace.step.delete-local-branch:api')
-    expect(text).toContain('feature/auth')
-    expect(text).toContain('workspace.branch-workspace.step.delete-upstream-branch:api')
-    expect(text).toContain('origin/feature/auth')
+    expect(document.body.textContent).toContain('api/.env')
+    expect(document.body.textContent).toContain('api/node_modules')
+    const approval = document.querySelector<HTMLInputElement>(
+      '[aria-label="workspace.branch-workspace.approval.replace-repository-dependencies"]',
+    )
+    const confirm = document.querySelector<HTMLButtonElement>('[data-action="confirm"]')
+    expect(approval?.checked).toBe(false)
+    expect(confirm?.disabled).toBe(true)
+    expect(confirm?.dataset.variant).toBe('destructive')
+
+    act(() => approval?.click())
+    expect(confirm?.disabled).toBe(false)
   })
 
-  test('previews branch workspace force removal and local branch deletion by default', async () => {
+  test('groups local and upstream branch cleanup by repository before removal', () => {
+    renderDialog({
+      mode: 'remove',
+      workspace: existingWorkspace(),
+      plan: planWithSteps('remove', [
+        { id: 'repository:api', kind: 'remove-worktree', label: 'api', repositoryName: 'api' },
+        { id: 'branch:api', kind: 'delete-local-branch', label: 'feature/auth', repositoryName: 'api' },
+        {
+          id: 'upstream:api',
+          kind: 'delete-upstream-branch',
+          label: 'origin/feature/auth',
+          repositoryName: 'api',
+        },
+      ]),
+    })
+
+    const group = document.querySelector<HTMLElement>('[data-branch-workspace-branch-group="api"]')
+    expect(group).not.toBeNull()
+    expect(group?.getAttribute('role')).toBe('group')
+    expect(group?.getAttribute('aria-label')).toBe('api')
+    expect(group?.textContent).toContain('workspace.branch-workspace.step.local-branch')
+    expect(group?.textContent).toContain('feature/auth')
+    expect(group?.textContent).toContain('workspace.branch-workspace.step.upstream-branch')
+    expect(group?.textContent).toContain('origin/feature/auth')
+    expect(group?.querySelector('.lucide-arrow-right')).not.toBeNull()
+    expect(document.querySelector('[data-branch-workspace-plan-step="remove-worktree"]')?.textContent).toBe('api')
+  })
+
+  test('renders local-only branch cleanup without an upstream rail', () => {
+    renderDialog({
+      mode: 'remove',
+      workspace: existingWorkspace(),
+      plan: planWithSteps('remove', [
+        { id: 'branch:api', kind: 'delete-local-branch', label: 'feature/auth', repositoryName: 'api' },
+      ]),
+    })
+
+    const group = document.querySelector<HTMLElement>('[data-branch-workspace-branch-group="api"]')
+    expect(group).not.toBeNull()
+    expect(group?.textContent).toContain('feature/auth')
+    expect(group?.textContent).not.toContain('workspace.branch-workspace.step.upstream-branch')
+    expect(group?.querySelector('.lucide-arrow-right')).toBeNull()
+  })
+
+  test('highlights only the created branch workspace directory in green', () => {
+    renderDialog({
+      plan: planWithSteps('create', [
+        { id: 'directory', kind: 'create-directory', label: 'goblin-feature-auth' },
+        { id: 'repository:api', kind: 'create-worktree', label: 'api', repositoryName: 'api' },
+      ]),
+    })
+
+    const directory = document.querySelector<HTMLElement>('[data-branch-workspace-plan-step="create-directory"]')
+    const repository = document.querySelector<HTMLElement>('[data-branch-workspace-plan-step="create-worktree"]')
+    expect(directory?.className).toContain('bg-success-surface')
+    expect(directory?.className).toContain('text-success')
+    expect(directory?.className).toContain('font-semibold')
+    expect(repository?.className).not.toContain('text-success')
+    expect(repository?.className).not.toContain('text-danger')
+  })
+
+  test('highlights only the removed branch workspace directory in red', () => {
+    renderDialog({
+      mode: 'remove',
+      workspace: existingWorkspace(),
+      plan: planWithSteps('remove', [
+        { id: 'repository:api', kind: 'remove-worktree', label: 'api', repositoryName: 'api' },
+        { id: 'directory', kind: 'remove-directory', label: 'goblin-feature-auth' },
+      ]),
+    })
+
+    const directory = document.querySelector<HTMLElement>('[data-branch-workspace-plan-step="remove-directory"]')
+    const repository = document.querySelector<HTMLElement>('[data-branch-workspace-plan-step="remove-worktree"]')
+    expect(directory?.className).toContain('bg-danger-surface')
+    expect(directory?.className).toContain('text-danger')
+    expect(directory?.className).toContain('font-semibold')
+    expect(repository?.className).not.toContain('text-success')
+    expect(repository?.className).not.toContain('text-danger')
+  })
+
+  test('does not highlight a branch workspace directory recreated during repair', () => {
+    renderDialog({
+      mode: 'repair',
+      workspace: existingWorkspace(),
+      plan: planWithSteps('repair', [{ id: 'directory', kind: 'create-directory', label: 'goblin-feature-auth' }]),
+    })
+
+    const directory = document.querySelector<HTMLElement>('[data-branch-workspace-plan-step="create-directory"]')
+    expect(directory?.className).not.toContain('bg-success-surface')
+    expect(directory?.className).not.toContain('text-success')
+    expect(directory?.className).not.toContain('font-semibold')
+  })
+
+  test('previews branch workspace removal without a force-worktree option', async () => {
     const onPreview = vi.fn(async () => true)
     renderDialog({ mode: 'remove', workspace: existingWorkspace(), onPreview })
 
-    const force = document.querySelector<HTMLInputElement>('[aria-label="action.confirm-remove-worktree-force"]')
-    expect(force?.checked).toBe(true)
+    expect(document.querySelector('[aria-label="action.confirm-remove-worktree-force"]')).toBeNull()
     expect(checked('workspace.branch-workspace.delete-local-branch')).toBe(true)
     expect(checked('workspace.branch-workspace.delete-upstream-branch')).toBe(false)
     await clickAction('preview')
@@ -353,27 +473,7 @@ describe('BranchWorkspaceDialog', () => {
       branchWorkspaceId: 'branch-1',
       alsoDeleteBranch: true,
       alsoDeleteUpstream: false,
-      forceRemoveWorktrees: true,
     })
-  })
-
-  test('resets removal defaults when switching to another branch workspace', () => {
-    renderDialog({ mode: 'remove', workspace: existingWorkspace() })
-    click('action.confirm-remove-worktree-force')
-    click('workspace.branch-workspace.delete-local-branch')
-    expect(
-      document.querySelector<HTMLInputElement>('[aria-label="action.confirm-remove-worktree-force"]')?.checked,
-    ).toBe(false)
-
-    const nextWorkspace = existingWorkspace()
-    nextWorkspace.id = 'branch-2'
-    nextWorkspace.branch = 'feature/other'
-    renderDialog({ mode: 'remove', workspace: nextWorkspace })
-
-    expect(
-      document.querySelector<HTMLInputElement>('[aria-label="action.confirm-remove-worktree-force"]')?.checked,
-    ).toBe(true)
-    expect(checked('workspace.branch-workspace.delete-local-branch')).toBe(true)
   })
 })
 
@@ -522,6 +622,13 @@ function approvalPlan(): BranchWorkspacePlan {
   }
 }
 
+function planWithSteps(
+  operation: BranchWorkspacePlan['operation'],
+  steps: BranchWorkspacePlan['steps'],
+): BranchWorkspacePlan {
+  return { ...approvalPlan(), operation, steps }
+}
+
 function removalPlan(): BranchWorkspacePlan {
   const plan = approvalPlan()
   return {
@@ -542,6 +649,6 @@ function removalPlan(): BranchWorkspacePlan {
         repositoryName: 'api',
       },
     ],
-    removalOptions: { alsoDeleteBranch: true, alsoDeleteUpstream: true, forceRemoveWorktrees: false },
+    removalOptions: { alsoDeleteBranch: true, alsoDeleteUpstream: true },
   }
 }

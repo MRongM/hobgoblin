@@ -1,8 +1,12 @@
 import type { SessionState, WorkspaceActiveContext } from '#/shared/rpc.ts'
 import type { RestorableWorkspaceState, ReposStore } from '#/web/stores/repos/types.ts'
 import { persistedOpenWorkspaceEntries } from '#/web/open-workspace-state.ts'
-import { persistedActiveRepoIdForSession, persistedSelectedTerminalByWorktreeForSession } from '#/web/session-persistence-state.ts'
+import {
+  persistedActiveRepoIdForSession,
+  persistedSelectedTerminalByWorktreeForSession,
+} from '#/web/session-persistence-state.ts'
 import { DEFAULT_FILE_TREE_PANE_SIZES } from '#/shared/workspace-layout.ts'
+import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
 
 export function sessionStateFromRestorableWorkspaceState(input: {
   repos: ReposStore['repos']
@@ -16,7 +20,7 @@ export function sessionStateFromRestorableWorkspaceState(input: {
     workspaceRepositoryListExpandedByRoot: restorableWorkspaceState.workspaceRepositoryListExpandedByRoot,
     projectListExpanded: restorableWorkspaceState.projectListExpanded,
     detailCollapsed: restorableWorkspaceState.detailCollapsed,
-    detailFocusMode: restorableWorkspaceState.detailFocusMode,
+    detailFocusMode: false,
     workspaceLayout: restorableWorkspaceState.workspaceLayout,
     detailPaneSizes: restorableWorkspaceState.detailPaneSizes,
     fileTreePaneSizes: restorableWorkspaceState.fileTreePaneSizes,
@@ -40,7 +44,6 @@ export function restoreRestorableWorkspaceStateFromSession(
   | 'workspaceRepositoryListExpandedByRoot'
   | 'projectListExpanded'
   | 'detailCollapsed'
-  | 'detailFocusMode'
   | 'workspaceLayout'
   | 'detailPaneSizes'
   | 'fileTreePaneSizes'
@@ -54,7 +57,6 @@ export function restoreRestorableWorkspaceStateFromSession(
     ),
     projectListExpanded: session.projectListExpanded,
     detailCollapsed: session.detailCollapsed,
-    detailFocusMode: session.detailFocusMode,
     workspaceLayout: session.workspaceLayout,
     detailPaneSizes: session.detailPaneSizes,
     fileTreePaneSizes: session.fileTreePaneSizes ?? DEFAULT_FILE_TREE_PANE_SIZES,
@@ -96,7 +98,13 @@ function normalizeWorkspaceActiveContext(value: unknown): WorkspaceActiveContext
     return { kind: 'repository', repositoryId: candidate.repositoryId }
   }
   if (candidate.kind === 'branch-workspace' && validWorkspaceContextId(candidate.branchWorkspaceId)) {
-    return { kind: 'branch-workspace', branchWorkspaceId: candidate.branchWorkspaceId }
+    return {
+      kind: 'branch-workspace',
+      branchWorkspaceId: candidate.branchWorkspaceId,
+      ...(isWorkspaceRepositoryName(candidate.memberRepositoryName)
+        ? { memberRepositoryName: candidate.memberRepositoryName }
+        : {}),
+    }
   }
   return null
 }

@@ -2,7 +2,12 @@ import { runServerCancellable, abortServerNetworkOp } from '#/server/common/netw
 import { publishRepoQueryInvalidation, publishSettingsInvalidation } from '#/server/modules/invalidation-broker.ts'
 import { assertBranchWorkspaceFileMutationAllowed } from '#/server/modules/branch-workspace-protected-paths.ts'
 import { gitNetworkOptionsFromPrefs } from '#/server/modules/git-network-settings.ts'
-import { resolveRemoteRepoTarget, resolveRepoBackend, runWithRepoBackend } from '#/server/modules/repo-backend.ts'
+import {
+  isValidRepositoryWorktreePath,
+  resolveRemoteRepoTarget,
+  resolveRepoBackend,
+  runWithRepoBackend,
+} from '#/server/modules/repo-backend.ts'
 import {
   getServerRepoSettings,
   getServerSettingsPrefs,
@@ -39,7 +44,7 @@ import type { EditorOpenTarget } from '#/shared/file-path-target.ts'
 import type { RepoFileTreeBinaryFileReplaceResult, RepoFileTreeTextFileReplaceResult } from '#/shared/file-tree.ts'
 import { isRemoteRepoId, type NetworkOpKind } from '#/shared/rpc.ts'
 import { checkGitAvailable } from '#/system/git/helper.ts'
-import { isValidCwd, isValidRepoLocator, MAX_IPC_PATH_LENGTH } from '#/shared/input-validation.ts'
+import { isValidCwd, isValidRepoLocator } from '#/shared/input-validation.ts'
 import { type CloneRepoResult } from '#/shared/rpc.ts'
 import { isProtectedRemoteBranchRef, parseRemoteBranchInput } from '#/shared/remote-branches.ts'
 import { parseRemoteTagInput } from '#/shared/remote-tags.ts'
@@ -52,7 +57,11 @@ import {
   type CreateWorktreeInput,
 } from '#/shared/worktree-create.ts'
 import { isRepoWorktreeBootstrapConfigTrusted } from '#/shared/repo-settings.ts'
-import type { WorktreeBootstrapDecision, WorktreeBootstrapPreviewResult } from '#/shared/worktree-bootstrap-summary.ts'
+import type {
+  WorktreeBootstrapDecision,
+  WorktreeBootstrapPreviewResult,
+  WorktreeBootstrapTargetEntry,
+} from '#/shared/worktree-bootstrap-summary.ts'
 import {
   DEFAULT_WORKTREE_BOOTSTRAP_CONFIG,
   getWorktreeBootstrapPreview as getLocalWorktreeBootstrapPreview,
@@ -130,20 +139,6 @@ function isValidCloneOperationId(value: unknown): value is string {
 
 function normalizeInvalidationSourceToken(value: unknown): string | undefined {
   return typeof value === 'string' && INVALIDATION_SOURCE_TOKEN_RE.test(value) ? value : undefined
-}
-
-function isValidRemoteWorktreePath(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    value.length > 0 &&
-    value.length <= MAX_IPC_PATH_LENGTH &&
-    !value.includes('\0') &&
-    path.posix.isAbsolute(value)
-  )
-}
-
-function isValidRepositoryWorktreePath(repoId: string, worktreePath: unknown): worktreePath is string {
-  return isRemoteRepoId(repoId) ? isValidRemoteWorktreePath(worktreePath) : isValidCwd(worktreePath)
 }
 
 function repoSnapshotInvalidationEvent(cwd: string, sourceToken?: string) {
@@ -359,6 +354,7 @@ export async function bootstrapRepositoryWorktree(
   cwd: string,
   worktreePath: string,
   worktreeBootstrap: WorktreeBootstrapDecision,
+  replaceExisting: readonly WorktreeBootstrapTargetEntry[] = [],
   signal?: AbortSignal,
   sourceToken?: string,
 ): Promise<ExecResult> {
@@ -366,7 +362,7 @@ export async function bootstrapRepositoryWorktree(
     return { ok: false, message: 'error.invalid-arguments' }
   }
   const result = await runWithRepoBackend(cwd, async (backend) => {
-    const bootstrapResult = await backend.bootstrapWorktree(worktreePath, worktreeBootstrap, signal)
+    const bootstrapResult = await backend.bootstrapWorktree(worktreePath, worktreeBootstrap, replaceExisting, signal)
     return await syncWorktreeBootstrapTrustAfterSuccessfulRun(cwd, worktreeBootstrap, bootstrapResult)
   })
   return result.ok ? publishSnapshotInvalidationAfterGitAttempt(cwd, result, sourceToken) : result

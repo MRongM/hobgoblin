@@ -25,6 +25,7 @@ interface PlainWorkspaceTerminalPanelProps {
   focusMode?: boolean
   compactFocusPresentation?: boolean
   onShowCompactOverview?: () => void
+  onExitTerminalFocus?: () => void
 }
 
 const DETAIL_ID = 'plain-workspace-terminal'
@@ -35,11 +36,11 @@ export function PlainWorkspaceTerminalPanel({
   focusMode = false,
   compactFocusPresentation = false,
   onShowCompactOverview,
+  onExitTerminalFocus,
 }: PlainWorkspaceTerminalPanelProps) {
   const t = useT()
   const compact = useIsCompactUi()
   const repo = useReposStore((state) => state.repos[repoId])
-  const toggleDetailFocusMode = useReposStore((state) => state.toggleDetailFocusMode)
   const workspacePath = repoPlainWorkspacePath(repo) ?? repoId
   const terminalWorktreeKey = worktreeTerminalKey(repoId, workspacePath)
   const snapshot = useWorktreeTerminalSnapshot(terminalWorktreeKey)
@@ -117,7 +118,7 @@ export function PlainWorkspaceTerminalPanel({
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={toggleDetailFocusMode}
+                  onClick={onExitTerminalFocus}
                   aria-label={t('branch-detail.exit-focus')}
                   title={t('branch-detail.exit-focus-title')}
                 >

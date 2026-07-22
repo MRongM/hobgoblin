@@ -11,6 +11,8 @@ import { setTerminalSessionCommandBridge } from '#/web/components/terminal/termi
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { MainWindowNavigationActions } from '#/web/main-window-navigation.tsx'
+import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
+import { branchWorkspaceQueryKey } from '#/web/branch-workspace-query-cache.ts'
 
 const REPO_ID = '/tmp/gbl-workspace-command-repo'
 const WORKTREE_PATH = '/tmp/gbl-workspace-command-worktree'
@@ -18,6 +20,7 @@ const REMOTE_REPO_ID = 'ssh-config://prod/srv/plain'
 
 beforeEach(() => {
   resetReposStore()
+  mainWindowQueryClient.clear()
 })
 
 afterEach(() => {
@@ -35,7 +38,12 @@ describe('workspace commands', () => {
     })
     const createTerminal = vi.fn(async () => 'terminal-1')
     setTerminalSessionCommandBridge({
-      worktreeSnapshot: () => ({ worktreeTerminalKey: `${REPO_ID}\0${REPO_ID}`, selectedDescriptor: null, sessions: [], count: 0 }),
+      worktreeSnapshot: () => ({
+        worktreeTerminalKey: `${REPO_ID}\0${REPO_ID}`,
+        selectedDescriptor: null,
+        sessions: [],
+        count: 0,
+      }),
       createTerminal,
       selectTerminal: vi.fn(),
       writeInput: vi.fn(),
@@ -106,7 +114,12 @@ describe('workspace commands', () => {
     })
     const createTerminal = vi.fn(async () => 'terminal-1')
     setTerminalSessionCommandBridge({
-      worktreeSnapshot: () => ({ worktreeTerminalKey: `${REPO_ID}\0${WORKTREE_PATH}`, selectedDescriptor: null, sessions: [], count: 0 }),
+      worktreeSnapshot: () => ({
+        worktreeTerminalKey: `${REPO_ID}\0${WORKTREE_PATH}`,
+        selectedDescriptor: null,
+        sessions: [],
+        count: 0,
+      }),
       createTerminal,
       selectTerminal: vi.fn(),
       writeInput: vi.fn(),
@@ -279,7 +292,135 @@ describe('workspace commands', () => {
     expect(useReposStore.getState().detailCollapsed).toBe(false)
     expect(selectTerminal).toHaveBeenCalledWith(`${REPO_ID}\0${WORKTREE_PATH}`, 'session-key-2')
   })
+
+  test('restores a valid branch workspace member scope without activating the repository as a project', () => {
+    const workspaceRootId = '/tmp/workspace'
+    const memberRepoId = `${workspaceRootId}/api`
+    const memberWorktreePath = `${workspaceRootId}/goblin-feature-auth/api`
+    const rootRepo = seedRepoState({
+      id: workspaceRootId,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    const memberRepo = seedRepoState({
+      id: memberRepoId,
+      branches: [createRepoBranch('feature/auth', { worktree: { path: memberWorktreePath } })],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+      detailTab: 'status',
+    })
+    useReposStore.setState({
+      repos: { [workspaceRootId]: rootRepo, [memberRepoId]: memberRepo },
+      activeId: workspaceRootId,
+      workspaceProjects: {
+        [workspaceRootId]: {
+          rootId: workspaceRootId,
+          repositoryIds: [memberRepoId],
+          candidates: [{ id: memberRepoId, name: 'api', selected: true, available: true }],
+          configured: true,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+      workspaceActiveContextByRoot: { [workspaceRootId]: { kind: 'overview' } },
+    })
+    mainWindowQueryClient.setQueryData(branchWorkspaceQueryKey(workspaceRootId), {
+      ok: true,
+      rootId: workspaceRootId,
+      auxiliaryCandidates: [],
+      items: [branchWorkspace(workspaceRootId, memberWorktreePath)],
+    })
+    const navigation = navigationWith()
+    navigation.showRepoBranchDetailTab = vi.fn()
+    navigation.showRepoDetailTab = vi.fn()
+    const onBranchWorkspaceScopeFallback = vi.fn()
+
+    expect(
+      runTerminalDeepLinkCommand({
+        target: {
+          repoId: memberRepoId,
+          worktreePath: memberWorktreePath,
+          branch: 'feature/auth',
+          branchWorkspaceScope: { workspaceRootId, branchWorkspaceId: 'branch-1' },
+        },
+        navigation,
+        setDetailCollapsed: useReposStore.getState().setDetailCollapsed,
+        onBranchWorkspaceScopeFallback,
+      }),
+    ).toBe(true)
+
+    expect(navigation.showRepoBranchDetailTab).not.toHaveBeenCalled()
+    expect(navigation.showRepoDetailTab).not.toHaveBeenCalled()
+    expect(onBranchWorkspaceScopeFallback).not.toHaveBeenCalled()
+    expect(useReposStore.getState().activeId).toBe(workspaceRootId)
+    expect(useReposStore.getState().workspaceActiveContextByRoot[workspaceRootId]).toEqual({
+      kind: 'branch-workspace',
+      branchWorkspaceId: 'branch-1',
+      memberRepositoryName: 'api',
+    })
+    expect(useReposStore.getState().repos[memberRepoId]?.ui.selectedBranch).toBe('feature/auth')
+    expect(useReposStore.getState().repos[memberRepoId]?.ui.detailTab).toBe('terminal')
+  })
+
+  test('falls back to ordinary repository navigation when a branch workspace scope is stale', () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } })],
+      selectedBranch: 'main',
+      detailTab: 'status',
+    })
+    const navigation = navigationWith()
+    const onBranchWorkspaceScopeFallback = vi.fn()
+
+    expect(
+      runTerminalDeepLinkCommand({
+        target: {
+          repoId: REPO_ID,
+          worktreePath: WORKTREE_PATH,
+          branch: 'feature/worktree',
+          branchWorkspaceScope: { workspaceRootId: '/missing-workspace', branchWorkspaceId: 'branch-1' },
+        },
+        navigation,
+        setDetailCollapsed: useReposStore.getState().setDetailCollapsed,
+        onBranchWorkspaceScopeFallback,
+      }),
+    ).toBe(true)
+
+    expect(onBranchWorkspaceScopeFallback).toHaveBeenCalledTimes(1)
+    expect(useReposStore.getState().activeId).toBe(REPO_ID)
+    expect(useReposStore.getState().repos[REPO_ID]?.ui.selectedBranch).toBe('feature/worktree')
+    expect(useReposStore.getState().repos[REPO_ID]?.ui.detailTab).toBe('terminal')
+  })
 })
+
+function branchWorkspace(rootId: string, worktreePath: string) {
+  return {
+    id: 'branch-1',
+    rootId,
+    branch: 'feature/auth',
+    directoryName: 'goblin-feature-auth',
+    path: `${rootId}/goblin-feature-auth`,
+    lifecycle: 'ready' as const,
+    available: true,
+    issues: [],
+    repositories: [
+      {
+        repositoryName: 'api',
+        targetBranch: 'feature/auth',
+        baseBranch: 'main',
+        branchOrigin: 'created' as const,
+        worktreePath,
+        progress: 'complete' as const,
+        observedState: 'ready' as const,
+      },
+    ],
+    auxiliaryEntries: [],
+  }
+}
 
 function navigationWith(): MainWindowNavigationActions {
   return {

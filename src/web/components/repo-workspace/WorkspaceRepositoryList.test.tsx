@@ -38,6 +38,9 @@ const projectActionState = vi.hoisted(() => ({
   editorOnSelect: vi.fn(),
   externalTerminalOnSelect: vi.fn(),
   internalTerminalOnSelect: vi.fn(),
+  editorDisabled: false,
+  externalTerminalDisabled: false,
+  internalTerminalDisabled: false,
 }))
 
 vi.mock('@dnd-kit/core', async () => {
@@ -99,13 +102,13 @@ vi.mock('#/web/hooks/useProjectExternalOpenActions.ts', () => ({
   useProjectExternalOpenActions: (projectId: string) => ({
     visible: true,
     editor: {
-      disabled: false,
+      disabled: projectActionState.editorDisabled,
       busy: false,
       iconPref: 'cursor',
       onSelect: () => projectActionState.editorOnSelect(projectId),
     },
     externalTerminal: {
-      disabled: false,
+      disabled: projectActionState.externalTerminalDisabled,
       busy: false,
       iconPref: 'ghostty',
       onSelect: () => projectActionState.externalTerminalOnSelect(projectId),
@@ -115,7 +118,7 @@ vi.mock('#/web/hooks/useProjectExternalOpenActions.ts', () => ({
 
 vi.mock('#/web/hooks/useProjectInternalTerminalAction.ts', () => ({
   useProjectInternalTerminalAction: (projectId: string) => ({
-    disabled: false,
+    disabled: projectActionState.internalTerminalDisabled,
     busy: false,
     onSelect: () => projectActionState.internalTerminalOnSelect(projectId),
   }),
@@ -160,6 +163,9 @@ beforeEach(() => {
   projectActionState.editorOnSelect.mockReset()
   projectActionState.externalTerminalOnSelect.mockReset()
   projectActionState.internalTerminalOnSelect.mockReset()
+  projectActionState.editorDisabled = false
+  projectActionState.externalTerminalDisabled = false
+  projectActionState.internalTerminalDisabled = false
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
@@ -199,7 +205,7 @@ function renderList(
 }
 
 describe('WorkspaceRepositoryList', () => {
-  test('registers ordered repository ids as full-row sortable activators', () => {
+  test('registers ordered repository ids with dedicated grip activators', () => {
     renderList()
 
     expect(dndState.sortableItems).toEqual(['/workspace/api', '/workspace/web'])
@@ -209,6 +215,7 @@ describe('WorkspaceRepositoryList', () => {
         node.getAttribute('data-sortable-activator-id'),
       ),
     ).toEqual(['/workspace/api', '/workspace/web'])
+    expect(container!.querySelectorAll('[data-workspace-list-item-main][data-sortable-id]')).toHaveLength(0)
   })
 
   test('uses project-list pointer and keyboard drag sensors', () => {
@@ -223,7 +230,7 @@ describe('WorkspaceRepositoryList', () => {
     )
   })
 
-  test('keeps native touch scrolling and accessible keyboard listeners on the row', () => {
+  test('keeps native touch scrolling and accessible keyboard listeners on the grip', () => {
     renderList()
     const row = container!.querySelector('[data-sortable-activator-id="/workspace/api"]')
 
@@ -235,13 +242,15 @@ describe('WorkspaceRepositoryList', () => {
 
   test('renders current repository metadata and activates from a click', () => {
     const { onActivate } = renderList()
-    const row = container!.querySelector('[data-sortable-activator-id="/workspace/api"]')
+    const item = repositoryItem('/workspace/api')
+    const row = item.querySelector('[data-workspace-list-item-main]')
 
     expect(row?.textContent).toContain('api')
     expect(row?.textContent).toContain('main')
     expect(row?.textContent).toContain('2')
     expect(row?.getAttribute('aria-current')).toBe('page')
-    expect(row?.querySelector('span')?.classList.contains('bg-selected')).toBe(true)
+    expect(item.getAttribute('data-selected')).toBe('true')
+    expect(row?.className).toContain('text-[13px]')
     act(() => row?.dispatchEvent(new MouseEvent('click', { bubbles: true })))
     expect(onActivate).toHaveBeenCalledWith('/workspace/api')
   })
@@ -258,7 +267,7 @@ describe('WorkspaceRepositoryList', () => {
         ]),
       ),
     )
-    const row = container!.querySelector('[data-sortable-activator-id="/workspace/api"]')
+    const row = repositoryItem('/workspace/api')
     const terminalBadge = row?.querySelector('[data-testid="workspace-repository-terminal-count-badge"]')
     const changeBadge = row?.querySelector('[data-testid="workspace-repository-change-count-badge"]')
 
@@ -275,7 +284,7 @@ describe('WorkspaceRepositoryList', () => {
       false,
       terminalReadContext(new Map([[mainKey, worktreeSnapshot(mainKey, terminalSession(mainKey, { hasBell: true }))]])),
     )
-    const row = container!.querySelector('[data-sortable-activator-id="/workspace/api"]')
+    const row = repositoryItem('/workspace/api')
     const primaryContent = row?.querySelector('[data-testid="workspace-repository-primary-content"]')
     const statusBadges = row?.querySelector('[data-testid="workspace-repository-status-badges"]')
     const terminalBadge = row?.querySelector('[data-testid="workspace-repository-terminal-count-badge"]')
@@ -290,7 +299,7 @@ describe('WorkspaceRepositoryList', () => {
 
   test('omits repository status badges when terminal, change, and bell state are all empty', () => {
     renderList()
-    const row = container!.querySelector('[data-sortable-activator-id="/workspace/web"]')
+    const row = repositoryItem('/workspace/web')
 
     expect(row?.querySelector('[data-testid="workspace-repository-status-badges"]')).toBeNull()
   })
@@ -343,9 +352,52 @@ describe('WorkspaceRepositoryList', () => {
     expect(projectActionState.internalTerminalOnSelect).toHaveBeenCalledWith('/workspace/api')
   })
 
+  test('uses the shared frame and action dock without activating from row actions', async () => {
+    const { onActivate } = renderList()
+    const item = repositoryItem('/workspace/api')
+    const dock = item.querySelector('[data-workspace-list-item-action-dock]')
+    const editor = item.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="editor"]')
+    const internalTerminal = item.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="terminal"]')
+
+    expect(item.getAttribute('data-size')).toBe('primary')
+    expect(dock?.children).toHaveLength(3)
+    expect(item.querySelector('[data-workspace-list-item-drag-handle]')).not.toBeNull()
+    act(() => {
+      editor?.click()
+      internalTerminal?.click()
+    })
+    const externalTerminal = (await openRepositoryMenu('/workspace/api')).find((entry) =>
+      entry.textContent?.includes('terminal.external'),
+    )
+    await act(async () => {
+      externalTerminal?.click()
+      await Promise.resolve()
+    })
+
+    expect(projectActionState.editorOnSelect).toHaveBeenCalledWith('/workspace/api')
+    expect(projectActionState.internalTerminalOnSelect).toHaveBeenCalledWith('/workspace/api')
+    expect(projectActionState.externalTerminalOnSelect).toHaveBeenCalledWith('/workspace/api')
+    expect(onActivate).not.toHaveBeenCalled()
+  })
+
+  test('keeps disabled repository actions visible in their stable positions', async () => {
+    projectActionState.editorDisabled = true
+    projectActionState.internalTerminalDisabled = true
+    projectActionState.externalTerminalDisabled = true
+    renderList()
+
+    const item = repositoryItem('/workspace/api')
+    expect(item.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="editor"]')?.disabled).toBe(true)
+    expect(item.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="terminal"]')?.disabled).toBe(true)
+    const menuItems = await openRepositoryMenu('/workspace/api')
+    expect(menuItems.map((entry) => entry.textContent?.trim())).toEqual(['terminal.external'])
+    expect(menuItems[0]?.hasAttribute('data-disabled')).toBe(true)
+  })
+
   test('shows unavailable repository state', () => {
     renderList()
-    const row = container!.querySelector('[data-sortable-activator-id="/workspace/web"]')
+    const item = repositoryItem('/workspace/web')
+    const row = item.querySelector('[data-workspace-list-item-main]')
 
     expect(row?.textContent).toContain('workspace.repository-unavailable')
     expect(row?.className).toContain('opacity-60')
@@ -372,6 +424,21 @@ describe('WorkspaceRepositoryList', () => {
     )
   })
 })
+
+function repositoryItem(repositoryId: string): HTMLLIElement {
+  const item = container!.querySelector(`[data-sortable-node-id="${repositoryId}"]`)
+  if (!(item instanceof HTMLLIElement)) throw new Error(`missing repository item: ${repositoryId}`)
+  return item
+}
+
+async function openRepositoryMenu(repositoryId: string): Promise<HTMLElement[]> {
+  const trigger = repositoryItem(repositoryId).querySelector<HTMLButtonElement>('[aria-label="action.menu"]')
+  await act(async () => {
+    trigger?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+    await Promise.resolve()
+  })
+  return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+}
 
 function terminalReadContext(
   snapshots: ReadonlyMap<string, WorktreeTerminalSnapshot>,

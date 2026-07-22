@@ -29,15 +29,27 @@ function manifest(): BranchWorkspaceManifest {
   }
 }
 
-function snapshot(repositoryName: string, options: { tracking?: string; targetHead?: string } = {}): RepoSnapshot {
+function snapshot(
+  repositoryName: string,
+  options: {
+    targetTracking?: string
+    targetTrackingGone?: boolean
+    baseTracking?: string | null
+    targetHead?: string
+    remotes?: readonly string[]
+  } = {},
+): RepoSnapshot {
   const targetPath = `/workspace/goblin-feature-a/${repositoryName}`
   const basePath = `/workspace/${repositoryName}`
+  const baseTracking = options.baseTracking === undefined ? 'origin/main' : options.baseTracking
   return {
     current: 'main',
     branches: [
       {
         name: 'feature/a',
         isCurrent: false,
+        ...(options.targetTracking ? { tracking: options.targetTracking } : {}),
+        ...(options.targetTrackingGone ? { trackingGone: true } : {}),
         ahead: 1,
         behind: 0,
         lastCommitHash: options.targetHead ?? 'target-head',
@@ -49,7 +61,7 @@ function snapshot(repositoryName: string, options: { tracking?: string; targetHe
       {
         name: 'main',
         isCurrent: true,
-        tracking: options.tracking ?? 'origin/main',
+        ...(baseTracking ? { tracking: baseTracking } : {}),
         ahead: 0,
         behind: 0,
         lastCommitHash: 'base-head',
@@ -59,6 +71,21 @@ function snapshot(repositoryName: string, options: { tracking?: string; targetHe
         worktree: { path: basePath, head: 'base-head', isPrimary: true },
       },
     ],
+    ...(options.remotes
+      ? {
+          remote: {
+            remotes: options.remotes.map((name) => ({
+              name,
+              fetchUrl: `https://example.com/${name}/repo.git`,
+              pushUrl: `https://example.com/${name}/repo.git`,
+            })),
+            hasRemotes: options.remotes.length > 0,
+            hasBrowserRemote: false,
+            remoteProviders: {},
+            hasGitHubRemote: false,
+          },
+        }
+      : {}),
   }
 }
 
@@ -129,7 +156,99 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
     expect(first.ok && second.ok && first.plan.token).not.toBe(second.ok && second.plan.token)
   })
 
-  test('uses persisted base branches and exposes pull-merge-push readiness', async () => {
+  test.each([
+    ['pull', { targetTracking: 'origin/feature/a' }],
+    ['push', { remotes: ['origin'] }],
+  ] as const)('builds an ordered ready %s plan for target branches', async (kind, snapshotOptions) => {
+    const result = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind, branchWorkspaceId: WORKSPACE_ID },
+      dependencies({
+        getSnapshot: vi.fn(async (repoId: string) =>
+          snapshot(repoId.endsWith('/api') ? 'api' : 'web', snapshotOptions),
+        ),
+      }),
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        kind,
+        ready: true,
+        members: [
+          {
+            repositoryName: 'api',
+            targetBranch: 'feature/a',
+            targetWorktreePath: '/workspace/goblin-feature-a/api',
+            targetHead: 'target-head',
+            ready: true,
+          },
+          {
+            repositoryName: 'web',
+            targetBranch: 'feature/a',
+            targetWorktreePath: '/workspace/goblin-feature-a/web',
+            targetHead: 'target-head',
+            ready: true,
+          },
+        ],
+      },
+    })
+  })
+
+  test.each([
+    [
+      'pull',
+      { targetTracking: 'origin/feature/a', targetTrackingGone: true },
+      'workspace.branch-workspace.git-action.target-upstream-required',
+    ],
+    ['push', { remotes: [] }, 'workspace.branch-workspace.git-action.remote-required'],
+  ] as const)('keeps an unready %s plan visible with its readiness reason', async (kind, snapshotOptions, message) => {
+    const result = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind, branchWorkspaceId: WORKSPACE_ID },
+      dependencies({
+        getSnapshot: vi.fn(async (repoId: string) =>
+          snapshot(repoId.endsWith('/api') ? 'api' : 'web', snapshotOptions),
+        ),
+      }),
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        kind,
+        ready: false,
+        members: [
+          { repositoryName: 'api', ready: false, message },
+          { repositoryName: 'web', ready: false, message },
+        ],
+      },
+    })
+  })
+
+  test('changes a push plan token when the target head or remote set changes', async () => {
+    const build = async (targetHead: string, remotes: string[]) =>
+      await buildBranchWorkspaceGitActionPlan(
+        ROOT,
+        { kind: 'push', branchWorkspaceId: WORKSPACE_ID },
+        dependencies({
+          getSnapshot: vi.fn(async (repoId: string) =>
+            snapshot(repoId.endsWith('/api') ? 'api' : 'web', { targetHead, remotes }),
+          ),
+        }),
+      )
+
+    const original = await build('target-head', ['origin'])
+    const changedHead = await build('changed-head', ['origin'])
+    const changedRemotes = await build('target-head', ['upstream'])
+
+    expect(original.ok && changedHead.ok && original.plan.token).not.toBe(changedHead.ok && changedHead.plan.token)
+    expect(original.ok && changedRemotes.ok && original.plan.token).not.toBe(
+      changedRemotes.ok && changedRemotes.plan.token,
+    )
+  })
+
+  test('uses the persisted base worktree and base upstream for pull-merge-push readiness', async () => {
     const cleanStatuses = vi.fn(async (repoId: string) => {
       const repositoryName = repoId.endsWith('/api') ? 'api' : 'web'
       return [status(`/workspace/${repositoryName}`), status(`/workspace/goblin-feature-a/${repositoryName}`)]
@@ -146,8 +265,51 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
         kind: 'merge-back',
         pullMergePushReady: true,
         members: [
-          { repositoryName: 'api', targetHead: 'target-head', baseBranch: 'main', baseWorktreePath: '/workspace/api' },
-          { repositoryName: 'web', targetHead: 'target-head', baseBranch: 'main', baseWorktreePath: '/workspace/web' },
+          {
+            repositoryName: 'api',
+            targetHead: 'target-head',
+            baseBranch: 'main',
+            baseWorktreePath: '/workspace/api',
+            pullMergePushReady: true,
+          },
+          {
+            repositoryName: 'web',
+            targetHead: 'target-head',
+            baseBranch: 'main',
+            baseWorktreePath: '/workspace/web',
+            pullMergePushReady: true,
+          },
+        ],
+      },
+    })
+  })
+
+  test('does not use the target upstream when the base branch has no upstream', async () => {
+    const result = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'merge-back', branchWorkspaceId: WORKSPACE_ID },
+      dependencies({
+        getStatus: vi.fn(async (repoId: string) => {
+          const repositoryName = repoId.endsWith('/api') ? 'api' : 'web'
+          return [status(`/workspace/${repositoryName}`), status(`/workspace/goblin-feature-a/${repositoryName}`)]
+        }),
+        getSnapshot: vi.fn(async (repoId: string) =>
+          snapshot(repoId.endsWith('/api') ? 'api' : 'web', {
+            targetTracking: 'origin/feature/a',
+            baseTracking: null,
+          }),
+        ),
+      }),
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        kind: 'merge-back',
+        pullMergePushReady: false,
+        members: [
+          { repositoryName: 'api', pullMergePushReady: false },
+          { repositoryName: 'web', pullMergePushReady: false },
         ],
       },
     })

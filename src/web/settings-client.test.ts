@@ -97,10 +97,10 @@ describe('settings-client', () => {
           session: {
             openRepos: [],
             activeRepo: null,
-            detailCollapsed: true,
+            detailCollapsed: false,
             detailFocusMode: false,
-            workspaceLayout: 'top-bottom',
-            detailPaneSizes: { 'top-bottom': 50, 'left-right': 50 },
+            workspaceLayout: 'left-right',
+            detailPaneSizes: { 'left-right': 50 },
           },
           recentRepos: [],
         }),

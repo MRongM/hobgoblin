@@ -624,12 +624,36 @@ test('persists file tree pane sizes through session save and reload', async () =
 
   const saved = await mod.setServerSessionState({
     ...defaultSessionState(),
-    fileTreePaneSizes: { 'top-bottom': 40, 'left-right': 32.5 },
+    fileTreePaneSizes: { 'left-right': 32.5 },
   })
-  expect(saved.fileTreePaneSizes).toEqual({ 'top-bottom': 40, 'left-right': 32.5 })
+  expect(saved.fileTreePaneSizes).toEqual({ 'left-right': 32.5 })
 
   await expect(mod.getServerSessionState()).resolves.toMatchObject({
-    fileTreePaneSizes: { 'top-bottom': 40, 'left-right': 32.5 },
+    fileTreePaneSizes: { 'left-right': 32.5 },
+  })
+})
+
+test('normalizes legacy top-bottom sessions to left-right without restoring terminal focus', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  const saved = await mod.setServerSessionState(
+    {
+      ...defaultSessionState(),
+      workspaceLayout: 'top-bottom',
+      detailCollapsed: true,
+      detailFocusMode: true,
+      detailPaneSizes: { 'top-bottom': 40, 'left-right': 72 },
+      fileTreePaneSizes: { 'top-bottom': 40, 'left-right': 64 },
+    } as never,
+  )
+
+  expect(saved).toMatchObject({
+    workspaceLayout: 'left-right',
+    detailCollapsed: false,
+    detailFocusMode: false,
+    detailPaneSizes: { 'left-right': 72 },
+    fileTreePaneSizes: { 'left-right': 64 },
   })
 })
 
@@ -721,7 +745,11 @@ test('normalizes tagged workspace contexts and prunes per-root expansion state',
       ...defaultSessionState(),
       openRepos: [{ kind: 'local', id: root }],
       workspaceActiveContextByRoot: {
-        [root]: { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
+        [root]: {
+          kind: 'branch-workspace',
+          branchWorkspaceId: 'branch-1',
+          memberRepositoryName: 'web',
+        },
         '/tmp/closed': { kind: 'overview' },
       },
       workspaceRepositoryListExpandedByRoot: {
@@ -731,7 +759,11 @@ test('normalizes tagged workspace contexts and prunes per-root expansion state',
     }),
   ).resolves.toMatchObject({
     workspaceActiveContextByRoot: {
-      [root]: { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
+      [root]: {
+        kind: 'branch-workspace',
+        branchWorkspaceId: 'branch-1',
+        memberRepositoryName: 'web',
+      },
     },
     workspaceRepositoryListExpandedByRoot: { [root]: false },
   })
@@ -744,5 +776,5 @@ test('normalizes missing or invalid file tree pane sizes to defaults', async () 
   const session = defaultSessionState()
   delete session.fileTreePaneSizes
   const saved = await mod.setServerSessionState(session)
-  expect(saved.fileTreePaneSizes).toEqual({ 'top-bottom': 66.7, 'left-right': 66.7 })
+  expect(saved.fileTreePaneSizes).toEqual({ 'left-right': 66.7 })
 })

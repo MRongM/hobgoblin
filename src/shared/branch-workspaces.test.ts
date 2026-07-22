@@ -1,7 +1,12 @@
 import { describe, expect, test } from 'vitest'
-import { normalizeBranchWorkspacePlanRequest } from '#/shared/branch-workspaces.ts'
+import { isBranchWorkspaceApproval, normalizeBranchWorkspacePlanRequest } from '#/shared/branch-workspaces.ts'
 
 describe('branch workspace contracts', () => {
+  test('recognizes repository dependency replacement approval without accepting broader overwrite intent', () => {
+    expect(isBranchWorkspaceApproval('replace-repository-dependencies')).toBe(true)
+    expect(isBranchWorkspaceApproval('replace-everything')).toBe(false)
+  })
+
   test('normalizes create requests while preserving repository and auxiliary order', () => {
     expect(
       normalizeBranchWorkspacePlanRequest({
@@ -82,7 +87,6 @@ describe('branch workspace contracts', () => {
         branchWorkspaceId: 'workspace-1',
         alsoDeleteBranch: true,
         alsoDeleteUpstream: false,
-        forceRemoveWorktrees: true,
       }),
     ).toEqual({
       ok: true,
@@ -91,7 +95,6 @@ describe('branch workspace contracts', () => {
         branchWorkspaceId: 'workspace-1',
         alsoDeleteBranch: true,
         alsoDeleteUpstream: false,
-        forceRemoveWorktrees: true,
       },
     })
   })
@@ -154,16 +157,6 @@ describe('branch workspace contracts', () => {
         branchWorkspaceId: 'workspace-1',
         alsoDeleteBranch: false,
         alsoDeleteUpstream: true,
-        forceRemoveWorktrees: false,
-      },
-    ],
-    [
-      'missing worktree force decision',
-      {
-        operation: 'remove',
-        branchWorkspaceId: 'workspace-1',
-        alsoDeleteBranch: false,
-        alsoDeleteUpstream: false,
       },
     ],
   ])('rejects %s', (_label, request) => {

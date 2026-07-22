@@ -59,6 +59,10 @@ export interface BranchActionItemGroups {
   inlinePanel?: ReactNode
 }
 
+export interface UseBranchActionItemsOptions {
+  onNavigateToInternalTerminal?: (target: TerminalSessionBase) => void | Promise<void>
+}
+
 export function visibleBranchActionItems({
   patchItems,
   mainItems,
@@ -93,7 +97,11 @@ function browserRemoteIcon(provider: BrowserRemoteProvider | undefined) {
   return ExternalLink
 }
 
-export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchState): BranchActionItemGroups {
+export function useBranchActionItems(
+  repo: BranchActionRepo,
+  branch: RepoBranchState,
+  options: UseBranchActionItemsOptions = {},
+): BranchActionItemGroups {
   const t = useT()
   const syncAndRefresh = useReposStore((s) => s.syncAndRefresh)
   const submitBranchAction = useReposStore((s) => s.submitBranchAction)
@@ -156,7 +164,8 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
 
   async function handleNewTerminal(): Promise<void> {
     if (!terminalBase) return
-    navigation.showRepoBranchDetailTab(repo.id, branch.name, 'terminal')
+    if (options.onNavigateToInternalTerminal) await options.onNavigateToInternalTerminal(terminalBase)
+    else navigation.showRepoBranchDetailTab(repo.id, branch.name, 'terminal')
     setDetailCollapsed(false)
     await createTerminal(terminalBase)
   }

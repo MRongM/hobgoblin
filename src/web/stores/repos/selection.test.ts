@@ -282,16 +282,16 @@ describe('setDetailTab', () => {
     expect(useReposStore.getState().restorableRepoCache[REPO_ID]?.ui.detailTab).toBe('terminal')
   })
 
-  test('dismissing the active exited terminal detail falls back to status and collapses the pane', () => {
+  test('dismissing the active exited terminal detail falls back to status without collapsing the fixed pane', () => {
     seedRepo({ selectedBranch: 'feature/worktree', detailTab: 'terminal' })
-    useReposStore.setState({ workspaceLayout: 'top-bottom', detailCollapsed: false })
+    useReposStore.setState({ workspaceLayout: 'left-right', detailCollapsed: false })
 
     useReposStore
       .getState()
       .dismissExitedTerminalDetail(REPO_ID, '/tmp/feature-worktree', { affectVisibleWorkspace: true })
 
     expect(useReposStore.getState().repos[REPO_ID]?.ui.detailTab).toBe('status')
-    expect(useReposStore.getState().detailCollapsed).toBe(true)
+    expect(useReposStore.getState().detailCollapsed).toBe(false)
     expect(useReposStore.getState().restorableRepoCache[REPO_ID]?.ui.detailTab).toBe('status')
   })
 
@@ -307,7 +307,7 @@ describe('setDetailTab', () => {
     expect(useReposStore.getState().detailCollapsed).toBe(false)
   })
 
-  test('dismissing terminal detail collapses the pane in left-right layout', () => {
+  test('dismissing terminal detail keeps the fixed left-right pane visible', () => {
     seedRepo({ selectedBranch: 'feature/worktree', detailTab: 'terminal' })
     useReposStore.getState().setWorkspaceLayout('left-right')
 
@@ -316,7 +316,7 @@ describe('setDetailTab', () => {
       .dismissExitedTerminalDetail(REPO_ID, '/tmp/feature-worktree', { affectVisibleWorkspace: true })
 
     expect(useReposStore.getState().repos[REPO_ID]?.ui.detailTab).toBe('status')
-    expect(useReposStore.getState().detailCollapsed).toBe(true)
+    expect(useReposStore.getState().detailCollapsed).toBe(false)
   })
 
   test('dismissing a background terminal detail leaves global detail collapse unchanged', () => {
@@ -338,7 +338,7 @@ describe('setWorkspaceLayout', () => {
       repo.ui.workspaceLayout = 'left-right'
     })
     const repoB = replaceRepo(emptyRepo(REPO_B_ID, 'repo-b'), (repo) => {
-      repo.ui.workspaceLayout = 'top-bottom'
+      repo.ui.workspaceLayout = 'left-right'
     })
     useReposStore.setState({
       repos: { [REPO_ID]: repoA, [REPO_B_ID]: repoB },
@@ -347,150 +347,88 @@ describe('setWorkspaceLayout', () => {
       workspaceLayout: 'left-right',
     })
 
-    useReposStore.getState().setWorkspaceLayout(REPO_ID, 'top-bottom')
+    useReposStore.getState().setWorkspaceLayout(REPO_ID, 'left-right')
 
-    expect(useReposStore.getState().repos[REPO_ID]?.ui.workspaceLayout).toBe('top-bottom')
-    expect(useReposStore.getState().repos[REPO_B_ID]?.ui.workspaceLayout).toBe('top-bottom')
-    expect(useReposStore.getState().workspaceLayout).toBe('top-bottom')
+    expect(useReposStore.getState().repos[REPO_ID]?.ui.workspaceLayout).toBe('left-right')
+    expect(useReposStore.getState().repos[REPO_B_ID]?.ui.workspaceLayout).toBe('left-right')
+    expect(useReposStore.getState().workspaceLayout).toBe('left-right')
 
     useReposStore.getState().setWorkspaceLayout(REPO_B_ID, 'left-right')
 
-    expect(useReposStore.getState().repos[REPO_ID]?.ui.workspaceLayout).toBe('top-bottom')
+    expect(useReposStore.getState().repos[REPO_ID]?.ui.workspaceLayout).toBe('left-right')
     expect(useReposStore.getState().repos[REPO_B_ID]?.ui.workspaceLayout).toBe('left-right')
-    expect(useReposStore.getState().workspaceLayout).toBe('top-bottom')
+    expect(useReposStore.getState().workspaceLayout).toBe('left-right')
   })
 
-  test('allows detail collapse changes in top-bottom layout', () => {
-    useReposStore.getState().setWorkspaceLayout('top-bottom')
+  test('allows detail collapse changes in left-right layout', () => {
+    useReposStore.getState().setWorkspaceLayout('left-right')
     useReposStore.getState().setDetailCollapsed(false)
     expect(useReposStore.getState().detailCollapsed).toBe(false)
 
     useReposStore.getState().setDetailCollapsed(true)
-    expect(useReposStore.getState().detailCollapsed).toBe(true)
+    expect(useReposStore.getState().detailCollapsed).toBe(false)
   })
 
   test('allows detail collapse changes in left-right layout', () => {
-    useReposStore.getState().setWorkspaceLayout('top-bottom')
+    useReposStore.getState().setWorkspaceLayout('left-right')
     useReposStore.getState().setDetailCollapsed(true)
 
     useReposStore.getState().setWorkspaceLayout('left-right')
 
     expect(useReposStore.getState().workspaceLayout).toBe('left-right')
-    expect(useReposStore.getState().detailCollapsed).toBe(true)
+    expect(useReposStore.getState().detailCollapsed).toBe(false)
 
     useReposStore.getState().setDetailCollapsed(false)
     expect(useReposStore.getState().detailCollapsed).toBe(false)
 
     useReposStore.getState().toggleDetailCollapsed()
-    expect(useReposStore.getState().detailCollapsed).toBe(true)
+    expect(useReposStore.getState().detailCollapsed).toBe(false)
   })
 
-  test('allows collapse again after returning to top-bottom layout', () => {
+  test('allows collapse again after returning to left-right layout', () => {
     useReposStore.getState().setWorkspaceLayout('left-right')
-    useReposStore.getState().setWorkspaceLayout('top-bottom')
+    useReposStore.getState().setWorkspaceLayout('left-right')
 
     useReposStore.getState().toggleDetailCollapsed()
 
-    expect(useReposStore.getState().workspaceLayout).toBe('top-bottom')
-    expect(useReposStore.getState().detailCollapsed).toBe(true)
+    expect(useReposStore.getState().workspaceLayout).toBe('left-right')
+    expect(useReposStore.getState().detailCollapsed).toBe(false)
   })
 
   test('applies session layout state atomically with shared normalization rules', () => {
     useReposStore.getState().applySessionLayoutState({
       workspaceLayout: 'left-right',
       detailCollapsed: true,
-      detailFocusMode: true,
-      detailPaneSizes: { 'top-bottom': 55, 'left-right': 45 },
+      detailPaneSizes: { 'left-right': 45 },
     })
 
     expect(useReposStore.getState()).toMatchObject({
       workspaceLayout: 'left-right',
-      detailCollapsed: true,
-      detailFocusMode: true,
-      detailPaneSizes: { 'top-bottom': 55, 'left-right': 45 },
+      detailCollapsed: false,
+      detailPaneSizes: { 'left-right': 45 },
     })
   })
 })
 
-describe('setDetailFocusMode', () => {
-  test('enables focus mode and expands detail in top-bottom layout', () => {
-    useReposStore.getState().setWorkspaceLayout('top-bottom')
-    useReposStore.getState().setDetailCollapsed(true)
-
-    useReposStore.getState().setDetailFocusMode(true)
-
-    expect(useReposStore.getState().detailFocusMode).toBe(true)
-    expect(useReposStore.getState().detailCollapsed).toBe(false)
-  })
-
-  test('keeps focus mode when detail is collapsed', () => {
-    useReposStore.getState().setWorkspaceLayout('top-bottom')
-    useReposStore.getState().setDetailFocusMode(true)
-
-    useReposStore.getState().setDetailCollapsed(true)
-
-    expect(useReposStore.getState().detailFocusMode).toBe(true)
-    expect(useReposStore.getState().detailCollapsed).toBe(true)
-  })
-
-  test('exits focus mode without expanding a collapsed detail panel', () => {
-    useReposStore.getState().setWorkspaceLayout('top-bottom')
-    useReposStore.getState().setDetailFocusMode(true)
-    useReposStore.getState().setDetailCollapsed(true)
-
-    useReposStore.getState().setDetailFocusMode(false)
-
-    expect(useReposStore.getState().detailFocusMode).toBe(false)
-    expect(useReposStore.getState().detailCollapsed).toBe(true)
-  })
-
-  test('re-expands into focus mode when focus is enabled while collapsed', () => {
-    useReposStore.getState().setWorkspaceLayout('top-bottom')
-    useReposStore.getState().setDetailFocusMode(true)
-    useReposStore.getState().setDetailCollapsed(true)
-
-    useReposStore.getState().toggleDetailCollapsed()
-
-    expect(useReposStore.getState().detailFocusMode).toBe(true)
-    expect(useReposStore.getState().detailCollapsed).toBe(false)
-  })
-
-  test('preserves focus mode when switching to left-right layout', () => {
-    useReposStore.getState().setWorkspaceLayout('top-bottom')
-    useReposStore.getState().setDetailFocusMode(true)
-
-    useReposStore.getState().setWorkspaceLayout('left-right')
-
-    expect(useReposStore.getState().workspaceLayout).toBe('left-right')
-    expect(useReposStore.getState().detailFocusMode).toBe(true)
-    expect(useReposStore.getState().detailCollapsed).toBe(false)
-  })
-
-  test('enables focus mode in left-right layout', () => {
-    useReposStore.getState().setWorkspaceLayout('left-right')
-
-    useReposStore.getState().setDetailFocusMode(true)
-
-    expect(useReposStore.getState().detailFocusMode).toBe(true)
+describe('terminal Focus state ownership', () => {
+  test('does not expose global terminal Focus state or actions', () => {
+    expect(useReposStore.getState()).not.toHaveProperty('detailFocusMode')
+    expect(useReposStore.getState()).not.toHaveProperty('setDetailFocusMode')
+    expect(useReposStore.getState()).not.toHaveProperty('toggleDetailFocusMode')
   })
 })
 
 describe('setDetailPaneSize', () => {
   test('stores detail pane sizes per workspace layout', () => {
-    useReposStore.getState().setDetailPaneSize('top-bottom', 37.34)
     useReposStore.getState().setDetailPaneSize('left-right', 72.28)
 
-    expect(useReposStore.getState().detailPaneSizes).toEqual({ 'top-bottom': 37.3, 'left-right': 72.3 })
+    expect(useReposStore.getState().detailPaneSizes).toEqual({ 'left-right': 72.3 })
   })
 
   test('normalizes invalid and out-of-range sizes', () => {
-    useReposStore.getState().setDetailPaneSize('top-bottom', Number.NaN)
     useReposStore.getState().setDetailPaneSize('left-right', 200)
 
-    expect(useReposStore.getState().detailPaneSizes).toEqual({
-      'top-bottom': DEFAULT_DETAIL_PANE_SIZES['top-bottom'],
-      'left-right': 90,
-    })
+    expect(useReposStore.getState().detailPaneSizes).toEqual({ 'left-right': 90 })
   })
 })
 
@@ -498,25 +436,21 @@ describe('setRepoFileTreePaneSize', () => {
   test('stores file tree pane sizes per repo without leaking to other repos or defaults', () => {
     seedRepo({ selectedBranch: 'main', branches: [branch('main', { worktree: { path: '/repo' } })] })
     const repoB = replaceRepo(emptyRepo(REPO_B_ID, 'repo-b'), (repo) => {
-      repo.ui.workspaceLayout = 'top-bottom'
+      repo.ui.workspaceLayout = 'left-right'
     })
     useReposStore.setState((s) => ({
       repos: { ...s.repos, [REPO_B_ID]: repoB },
       order: [REPO_ID, REPO_B_ID],
-      fileTreePaneSizes: { 'top-bottom': 66.7, 'left-right': 55.5 },
+      fileTreePaneSizes: { 'left-right': 55.5 },
     }))
 
-    useReposStore.getState().setRepoFileTreePaneSize(REPO_ID, 'top-bottom', 44.44)
+    useReposStore.getState().setRepoFileTreePaneSize(REPO_ID, 'left-right', 44.44)
 
-    expect(useReposStore.getState().repos[REPO_ID]?.ui.fileTreePaneSizes).toEqual({
-      'top-bottom': 44.4,
-      'left-right': 55.5,
-    })
+    expect(useReposStore.getState().repos[REPO_ID]?.ui.fileTreePaneSizes).toEqual({ 'left-right': 44.4 })
     expect(useReposStore.getState().repos[REPO_B_ID]?.ui.fileTreePaneSizes).toBeUndefined()
-    expect(useReposStore.getState().fileTreePaneSizes).toEqual({ 'top-bottom': 66.7, 'left-right': 55.5 })
+    expect(useReposStore.getState().fileTreePaneSizes).toEqual({ 'left-right': 55.5 })
     expect(useReposStore.getState().restorableRepoCache[REPO_ID]?.ui.fileTreePaneSizes).toEqual({
-      'top-bottom': 44.4,
-      'left-right': 55.5,
+      'left-right': 44.4,
     })
   })
 
@@ -531,39 +465,30 @@ describe('setRepoFileTreePaneSize', () => {
 
 describe('setDefaultFileTreePaneSize', () => {
   test('stores default file tree pane sizes per workspace layout', () => {
-    useReposStore.getState().setDefaultFileTreePaneSize('top-bottom', 44.4)
     useReposStore.getState().setDefaultFileTreePaneSize('left-right', 35.2)
 
-    expect(useReposStore.getState().fileTreePaneSizes).toEqual({
-      'top-bottom': 44.4,
-      'left-right': 35.2,
-    })
+    expect(useReposStore.getState().fileTreePaneSizes).toEqual({ 'left-right': 35.2 })
   })
 })
 
 describe('resetLayout', () => {
   test('restores the initial workspace layout defaults', () => {
     seedRepo({ selectedBranch: 'main', branches: [branch('main', { worktree: { path: '/repo' } })] })
-    useReposStore.getState().setRepoFileTreePaneSize(REPO_ID, 'top-bottom', 42)
+    useReposStore.getState().setRepoFileTreePaneSize(REPO_ID, 'left-right', 42)
     useReposStore.setState({
-      workspaceLayout: 'top-bottom',
+      workspaceLayout: 'left-right',
       detailCollapsed: true,
-      detailFocusMode: true,
-      detailPaneSizes: { 'top-bottom': 35, 'left-right': 70 },
-      fileTreePaneSizes: { 'top-bottom': 52, 'left-right': 38 },
+      detailPaneSizes: { 'left-right': 70 },
+      fileTreePaneSizes: { 'left-right': 38 },
     })
 
     useReposStore.getState().resetLayout()
 
     expect(useReposStore.getState().workspaceLayout).toBe('left-right')
     expect(useReposStore.getState().detailCollapsed).toBe(false)
-    expect(useReposStore.getState().detailFocusMode).toBe(false)
     expect(useReposStore.getState().detailPaneSizes).toBe(DEFAULT_DETAIL_PANE_SIZES)
     expect(useReposStore.getState().fileTreePaneSizes).toBe(DEFAULT_FILE_TREE_PANE_SIZES)
-    expect(useReposStore.getState().repos[REPO_ID]?.ui.fileTreePaneSizes).toEqual({
-      'top-bottom': 42,
-      'left-right': DEFAULT_FILE_TREE_PANE_SIZES['left-right'],
-    })
+    expect(useReposStore.getState().repos[REPO_ID]?.ui.fileTreePaneSizes).toEqual({ 'left-right': 42 })
   })
 
   test('is idempotent when layout is already at defaults', () => {
@@ -659,6 +584,26 @@ describe('multi-repository workspace selection', () => {
     })
   })
 
+  test('activates a branch workspace member while keeping the workspace root active', () => {
+    seedWorkspaceSelection()
+    seedBranchWorkspaceQuery('branch-1', 'ready')
+
+    useReposStore.getState().activateBranchWorkspace(rootId, 'branch-1', 'web')
+
+    expect(useReposStore.getState().activeId).toBe(rootId)
+    expect(useReposStore.getState().workspaceActiveContextByRoot[rootId]).toEqual({
+      kind: 'branch-workspace',
+      branchWorkspaceId: 'branch-1',
+      memberRepositoryName: 'web',
+    })
+
+    useReposStore.getState().activateBranchWorkspace(rootId, 'branch-1')
+    expect(useReposStore.getState().workspaceActiveContextByRoot[rootId]).toEqual({
+      kind: 'branch-workspace',
+      branchWorkspaceId: 'branch-1',
+    })
+  })
+
   test.each([
     { label: 'missing', selectedId: 'branch-missing', lifecycle: 'ready' as const },
     { label: 'delete-incomplete', selectedId: 'branch-1', lifecycle: 'delete-incomplete' as const },
@@ -672,7 +617,7 @@ describe('multi-repository workspace selection', () => {
     expect(useReposStore.getState().workspaceActiveContextByRoot[rootId]).toEqual({ kind: 'overview' })
   })
 
-  test('keeps repository list collapse independent per workspace and defaults missing roots to expanded', () => {
+  test('keeps repository visibility independent per workspace and defaults missing roots to shown', () => {
     seedWorkspaceSelection()
     const otherRoot = '/tmp/gbl-workspace-other'
     const other = replaceRepo(emptyRepo(otherRoot, 'workspace-other'), (repo) => {
@@ -708,10 +653,7 @@ describe('multi-repository workspace selection', () => {
   })
 })
 
-function seedBranchWorkspaceQuery(
-  id: string,
-  lifecycle: 'ready' | 'delete-incomplete',
-) {
+function seedBranchWorkspaceQuery(id: string, lifecycle: 'ready' | 'delete-incomplete') {
   mainWindowQueryClient.setQueryData(branchWorkspaceQueryKey('/tmp/gbl-workspace'), {
     ok: true,
     rootId: '/tmp/gbl-workspace',

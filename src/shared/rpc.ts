@@ -64,7 +64,11 @@ export interface ThemeState {
 export type WorkspaceActiveContext =
   | { kind: 'overview' }
   | { kind: 'repository'; repositoryId: string }
-  | { kind: 'branch-workspace'; branchWorkspaceId: string }
+  | {
+      kind: 'branch-workspace'
+      branchWorkspaceId: string
+      memberRepositoryName?: string
+    }
 
 export interface SessionState {
   /** Repo entries that were open, in tab order. */
@@ -75,7 +79,7 @@ export interface SessionState {
   workspaceActiveContextByRoot?: Record<string, WorkspaceActiveContext>
   /** @deprecated Read-only migration input from sessions written before tagged workspace contexts. */
   workspaceActiveRepoByRoot?: Record<string, string | null>
-  /** Missing roots default to expanded. */
+  /** Missing roots default to visible. The legacy field name is retained for session compatibility. */
   workspaceRepositoryListExpandedByRoot?: Record<string, boolean>
   projectListExpanded: boolean
   detailCollapsed: boolean

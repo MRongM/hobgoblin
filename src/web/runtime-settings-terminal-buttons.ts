@@ -1,9 +1,5 @@
 import type { TerminalCustomButton, TerminalCustomButtonSize } from '#/shared/rpc.ts'
-import {
-  readRuntimeTerminalCustomButtons,
-  readRuntimeTerminalSettings,
-  useRuntimeSettingsSnapshot,
-} from '#/web/settings-read-projection.ts'
+import { readRuntimeTerminalSettings, useRuntimeSettingsSnapshot } from '#/web/settings-read-projection.ts'
 import {
   runSettingsControllerAction,
   setRemoteTerminalTmuxEnabledPreference,
@@ -11,10 +7,6 @@ import {
   setTerminalCustomButtonSizePreference,
   setTerminalCustomButtonsVisiblePreference,
 } from '#/web/settings-write-paths.ts'
-
-export function useRuntimeTerminalCustomButtons(): TerminalCustomButton[] {
-  return readRuntimeTerminalCustomButtons(useRuntimeSettingsSnapshot())
-}
 
 export function useRuntimeTerminalSettings() {
   return readRuntimeTerminalSettings(useRuntimeSettingsSnapshot())

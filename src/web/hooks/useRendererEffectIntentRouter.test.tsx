@@ -327,7 +327,6 @@ describe('useRendererEffectIntentRouter', () => {
     await act(async () => {
       for (const listener of intentListeners) {
         listener({ type: 'show-detail-tab-requested', tab: 'terminal' })
-        listener({ type: 'toggle-detail-requested' })
         listener({ type: 'terminal-primary-action-requested' })
         listener({ type: 'close-repo-requested' })
       }

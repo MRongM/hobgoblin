@@ -1,7 +1,7 @@
 import type { GitFailureReason } from '#/shared/git-types.ts'
 import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
 
-export type BranchWorkspaceGitActionKind = 'batch-commit' | 'merge-back'
+export type BranchWorkspaceGitActionKind = 'batch-commit' | 'merge-back' | 'pull' | 'push'
 export type BranchWorkspaceMergeMode = 'merge' | 'pull-merge-push'
 export type BranchWorkspaceGitActionStep = 'commit' | 'pull' | 'merge' | 'push'
 export type BranchWorkspaceGitActionMemberPhase = 'ready' | 'satisfied' | 'succeeded' | 'failed' | 'not-started'
@@ -31,6 +31,17 @@ export interface BranchWorkspaceMergeBackMemberPlan {
   fingerprint: string
 }
 
+export interface BranchWorkspaceSyncMemberPlan {
+  repositoryName: string
+  repoId: string
+  targetBranch: string
+  targetWorktreePath: string
+  targetHead: string
+  ready: boolean
+  message?: string
+  fingerprint: string
+}
+
 interface BranchWorkspaceGitActionPlanBase {
   token: string
   rootId: string
@@ -48,7 +59,16 @@ export interface BranchWorkspaceMergeBackPlan extends BranchWorkspaceGitActionPl
   pullMergePushReady: boolean
 }
 
-export type BranchWorkspaceGitActionPlan = BranchWorkspaceBatchCommitPlan | BranchWorkspaceMergeBackPlan
+export interface BranchWorkspaceSyncPlan extends BranchWorkspaceGitActionPlanBase {
+  kind: 'pull' | 'push'
+  members: BranchWorkspaceSyncMemberPlan[]
+  ready: boolean
+}
+
+export type BranchWorkspaceGitActionPlan =
+  | BranchWorkspaceBatchCommitPlan
+  | BranchWorkspaceMergeBackPlan
+  | BranchWorkspaceSyncPlan
 
 export type BranchWorkspaceGitActionPlanResult =
   | { ok: true; plan: BranchWorkspaceGitActionPlan }
@@ -79,6 +99,10 @@ export type BranchWorkspaceGitActionExecuteInput =
       planToken: string
       mode: BranchWorkspaceMergeMode
     }
+  | {
+      kind: 'pull' | 'push'
+      planToken: string
+    }
 
 export type BranchWorkspaceGitActionExecuteInputResult =
   | { ok: true; input: BranchWorkspaceGitActionExecuteInput }
@@ -106,7 +130,10 @@ export function normalizeBranchWorkspaceGitActionPlanRequest(
 ): BranchWorkspaceGitActionPlanRequestResult {
   const input = asRecord(value)
   const branchWorkspaceId = normalizedText(input?.branchWorkspaceId)
-  if (!branchWorkspaceId || (input?.kind !== 'batch-commit' && input?.kind !== 'merge-back')) {
+  if (
+    !branchWorkspaceId ||
+    (input?.kind !== 'batch-commit' && input?.kind !== 'merge-back' && input?.kind !== 'pull' && input?.kind !== 'push')
+  ) {
     return invalidArguments()
   }
   return { ok: true, request: { kind: input.kind, branchWorkspaceId } }
@@ -122,6 +149,9 @@ export function normalizeBranchWorkspaceGitActionExecuteInput(
   if (input?.kind === 'merge-back') {
     if (input.mode !== 'merge' && input.mode !== 'pull-merge-push') return invalidArguments()
     return { ok: true, input: { kind: 'merge-back', planToken, mode: input.mode } }
+  }
+  if (input?.kind === 'pull' || input?.kind === 'push') {
+    return { ok: true, input: { kind: input.kind, planToken } }
   }
   if (input?.kind !== 'batch-commit' || !Array.isArray(input.messages)) return invalidArguments()
 

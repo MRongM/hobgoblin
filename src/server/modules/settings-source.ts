@@ -7,6 +7,7 @@ import {
   toSafeSessionRepoEntry,
 } from '#/shared/input-validation.ts'
 import { safeRelativePath } from '#/shared/path-semantics.ts'
+import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
 import { serverDataFile } from '#/server/common/data-dir.ts'
 import { hashWebAccessPassword, isWebAccessPasswordHash } from '#/server/modules/web-access-auth.ts'
 import type {
@@ -407,9 +408,8 @@ function normalizeWorkspaceActiveContextByRoot(
   const normalized: Record<string, WorkspaceActiveContext> = {}
   const legacy = normalizeWorkspaceActiveRepoByRoot(legacyValue, openRepos)
   for (const [rootId, repositoryId] of Object.entries(legacy)) {
-    normalized[rootId] = repositoryId === null || repositoryId === rootId
-      ? { kind: 'overview' }
-      : { kind: 'repository', repositoryId }
+    normalized[rootId] =
+      repositoryId === null || repositoryId === rootId ? { kind: 'overview' } : { kind: 'repository', repositoryId }
   }
   if (!taggedValue || typeof taggedValue !== 'object') return normalized
   for (const [rawRootId, rawContext] of Object.entries(taggedValue)) {
@@ -428,7 +428,13 @@ function normalizeWorkspaceActiveContextByRoot(
       continue
     }
     if (context.kind === 'branch-workspace' && isValidBranchWorkspaceContextId(context.branchWorkspaceId)) {
-      normalized[rootId] = { kind: 'branch-workspace', branchWorkspaceId: context.branchWorkspaceId }
+      normalized[rootId] = {
+        kind: 'branch-workspace',
+        branchWorkspaceId: context.branchWorkspaceId,
+        ...(isWorkspaceRepositoryName(context.memberRepositoryName)
+          ? { memberRepositoryName: context.memberRepositoryName }
+          : {}),
+      }
     }
   }
   return normalized
@@ -452,7 +458,12 @@ function isImmediateWorkspaceRepository(rootId: string, repositoryId: string): b
   if (isRemoteRepoId(rootId) || isRemoteRepoId(repositoryId)) {
     const root = parseRemoteRepoId(rootId)
     const repository = parseRemoteRepoId(repositoryId)
-    return !!root && !!repository && root.alias === repository.alias && path.posix.dirname(repository.remotePath) === root.remotePath
+    return (
+      !!root &&
+      !!repository &&
+      root.alias === repository.alias &&
+      path.posix.dirname(repository.remotePath) === root.remotePath
+    )
   }
   return path.dirname(path.resolve(repositoryId)) === path.resolve(rootId)
 }
@@ -478,8 +489,6 @@ function normalizeSession(value: unknown): SessionState {
   const workspaceLayout = normalizeWorkspaceLayout(partial.workspaceLayout)
   const detailCollapsed =
     typeof partial.detailCollapsed === 'boolean' ? partial.detailCollapsed : DEFAULT_DETAIL_COLLAPSED
-  const detailFocusMode =
-    workspaceLayout === 'top-bottom' && partial.detailFocusMode === true ? true : DEFAULT_SESSION_DETAIL_FOCUS_MODE
   return {
     openRepos,
     activeRepo:
@@ -498,7 +507,7 @@ function normalizeSession(value: unknown): SessionState {
     projectListExpanded:
       typeof partial.projectListExpanded === 'boolean' ? partial.projectListExpanded : DEFAULT_PROJECT_LIST_EXPANDED,
     detailCollapsed: effectiveDetailCollapsed(workspaceLayout, detailCollapsed),
-    detailFocusMode,
+    detailFocusMode: DEFAULT_SESSION_DETAIL_FOCUS_MODE,
     workspaceLayout,
     detailPaneSizes: normalizeDetailPaneSizes(partial.detailPaneSizes),
     fileTreePaneSizes: normalizeFileTreePaneSizes(partial.fileTreePaneSizes),

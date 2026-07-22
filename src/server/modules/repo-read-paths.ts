@@ -1,4 +1,9 @@
-import { resolveRemoteRepoTarget, runWithRepoBackend } from '#/server/modules/repo-backend.ts'
+import {
+  isValidRepositoryWorktreePath,
+  resolveRemoteRepoTarget,
+  runWithRepoBackend,
+  type RepoSnapshotOptions,
+} from '#/server/modules/repo-backend.ts'
 import {
   getRepositoryFileTree as getRepositoryFileTreeRead,
   searchRepositoryFileTree as searchRepositoryFileTreeRead,
@@ -27,15 +32,23 @@ import { isRemoteRepoId, type ProbeResult, type RepoSnapshot } from '#/shared/rp
 import { isValidRepoLocator } from '#/shared/input-validation.ts'
 import type {
   WorktreeBootstrapCandidateScope,
+  WorktreeBootstrapDecision,
   WorktreeBootstrapPreflightResult,
+  WorktreeBootstrapTargetPreflightResult,
 } from '#/shared/worktree-bootstrap-summary.ts'
 
 export async function probeRepository(cwd: string): Promise<ProbeResult> {
   return await runWithRepoBackend(cwd, async (backend) => await backend.probe())
 }
 
-export async function getRepositorySnapshot(cwd: string, signal?: AbortSignal): Promise<RepoSnapshot | null> {
-  return signal?.aborted ? null : await runWithRepoBackend(cwd, async (backend) => await backend.getSnapshot(signal))
+export async function getRepositorySnapshot(
+  cwd: string,
+  signal?: AbortSignal,
+  options?: RepoSnapshotOptions,
+): Promise<RepoSnapshot | null> {
+  return signal?.aborted
+    ? null
+    : await runWithRepoBackend(cwd, async (backend) => await backend.getSnapshot(signal, options))
 }
 
 export async function getRepositoryStatus(cwd: string, signal?: AbortSignal): Promise<WorktreeStatus[]> {
@@ -91,6 +104,21 @@ export async function getRepositoryWorktreeBootstrapPreflight(
   return await runWithRepoBackend(
     cwd,
     async (backend) => await backend.getWorktreeBootstrapPreflight(signal, candidateScope),
+  )
+}
+
+export async function getRepositoryWorktreeBootstrapTargetPreflight(
+  cwd: string,
+  worktreePath: string,
+  decision: Exclude<WorktreeBootstrapDecision, { kind: 'skip' }>,
+  signal?: AbortSignal,
+): Promise<WorktreeBootstrapTargetPreflightResult> {
+  if (!isValidRepoLocator(cwd) || !isValidRepositoryWorktreePath(cwd, worktreePath)) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  return await runWithRepoBackend(
+    cwd,
+    async (backend) => await backend.getWorktreeBootstrapTargetPreflight(worktreePath, decision, signal),
   )
 }
 

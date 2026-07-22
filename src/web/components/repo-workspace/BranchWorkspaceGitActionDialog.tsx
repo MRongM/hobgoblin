@@ -1,30 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { GitCommitHorizontal, GitMerge, LoaderCircle, Sparkles } from 'lucide-react'
+import { ArrowDown, ArrowUp, GitMerge, LoaderCircle, SendHorizontal, Sparkles } from 'lucide-react'
 import type { CommitMessageProvider, CommitMessageProviderAvailability } from '#/shared/commit-message-ai.ts'
 import type {
   BranchWorkspaceBatchCommitPlan,
   BranchWorkspaceCommitMessageInput,
+  BranchWorkspaceGitActionKind,
   BranchWorkspaceGitActionPlan,
   BranchWorkspaceGitActionResult,
   BranchWorkspaceMergeMode,
+  BranchWorkspaceSyncPlan,
 } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceActiveOperation } from '#/shared/branch-workspaces.ts'
 import { Button } from '#/web/components/ui/button.tsx'
 import { DialogError } from '#/web/components/ui/dialog-error.tsx'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '#/web/components/ui/dialog.tsx'
 import { generateRepositoryCommitMessage, getCommitMessageProviders } from '#/web/repo-client.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { useT } from '#/web/stores/i18n.ts'
 
-interface BranchWorkspaceGitActionDialogProps {
+interface BranchWorkspaceGitActionPanelProps {
   open: boolean
+  kind: BranchWorkspaceGitActionKind
   plan: BranchWorkspaceGitActionPlan | null
   result: BranchWorkspaceGitActionResult | null
   activeOperation: BranchWorkspaceActiveOperation | null
@@ -33,13 +28,15 @@ interface BranchWorkspaceGitActionDialogProps {
   onOpenChange: (open: boolean) => void
   onBatchCommit: (messages: BranchWorkspaceCommitMessageInput[]) => Promise<BranchWorkspaceGitActionResult | null>
   onMergeBack: (mode: BranchWorkspaceMergeMode) => Promise<BranchWorkspaceGitActionResult | null>
+  onSync: (kind: 'pull' | 'push') => Promise<BranchWorkspaceGitActionResult | null>
   onCancel: () => Promise<unknown>
 }
 
 type GenerationState = 'idle' | 'generating' | 'ready' | 'failed'
 
-export function BranchWorkspaceGitActionDialog({
+export function BranchWorkspaceGitActionPanel({
   open,
+  kind,
   plan,
   result,
   activeOperation,
@@ -48,8 +45,9 @@ export function BranchWorkspaceGitActionDialog({
   onOpenChange,
   onBatchCommit,
   onMergeBack,
+  onSync,
   onCancel,
-}: BranchWorkspaceGitActionDialogProps) {
+}: BranchWorkspaceGitActionPanelProps) {
   const t = useT()
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [generation, setGeneration] = useState<Record<string, GenerationState>>({})
@@ -85,128 +83,145 @@ export function BranchWorkspaceGitActionDialog({
     if (response?.ok) onOpenChange(false)
   }
 
+  if (!open) return null
+  const actionKind = plan?.kind ?? kind
+  const titleKey = `workspace.branch-workspace.git-action.${actionKind}`
+  const descriptionKey = `workspace.branch-workspace.git-action.${actionKind}-description`
+
   return (
-    <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>
+    <div
+      data-testid="branch-workspace-git-action-panel"
+      className="mt-1 grid gap-3 border-t border-app-region-border bg-app-region px-4 py-3"
+      onClick={(event) => event.stopPropagation()}
+      onDoubleClick={(event) => event.stopPropagation()}
+    >
+      <div className="grid gap-1">
+        <h3 className="text-sm font-semibold leading-none tracking-tight">{t(titleKey)}</h3>
+        <p className="text-xs text-muted-foreground">{t(descriptionKey)}</p>
+      </div>
+
+      {!plan ? (
+        <div className="flex min-h-28 items-center justify-center gap-2 text-xs text-muted-foreground">
+          <LoaderCircle className={cn('size-4', pending && 'animate-spin')} aria-hidden="true" />
+          {t('workspace.branch-workspace.git-action.planning')}
+        </div>
+      ) : plan.kind === 'batch-commit' ? (
+        <BatchCommitContent
+          plan={plan}
+          result={result}
+          providers={providers}
+          drafts={drafts}
+          generation={generation}
+          generationErrors={generationErrors}
+          generatingProvider={generatingProvider}
+          disabled={pending}
+          onDraftChange={(repositoryName, message) =>
+            setDrafts((current) => ({ ...current, [repositoryName]: message }))
+          }
+          onGenerateAll={(provider) =>
+            void generateAll(
+              plan,
+              provider,
+              setGeneratingProvider,
+              generationController,
+              setDrafts,
+              setGeneration,
+              setGenerationErrors,
+            )
+          }
+          onGenerateOne={(repositoryName, provider) =>
+            void generateOne(
+              plan,
+              repositoryName,
+              provider,
+              setGeneratingProvider,
+              generationController,
+              setDrafts,
+              setGeneration,
+              setGenerationErrors,
+            )
+          }
+        />
+      ) : plan.kind === 'merge-back' ? (
+        <MergeBackContent plan={plan} result={result} activeOperation={activeOperation} />
+      ) : (
+        <SyncContent plan={plan} result={result} activeOperation={activeOperation} />
+      )}
+
+      {error ? <DialogError>{t(error)}</DialogError> : null}
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button type="button" variant="outline" onClick={close}>
+          {t('dialog.cancel')}
+        </Button>
+        {plan?.kind === 'batch-commit' ? (
+          <Button
+            type="button"
+            data-action="batch-commit"
+            disabled={pending || generatingProvider !== null || !hasAllMessages(plan, drafts)}
+            onClick={() =>
+              void runAndClose(() =>
+                onBatchCommit(
+                  plan.members
+                    .filter((member) => member.dirty)
+                    .map((member) => ({
+                      repositoryName: member.repositoryName,
+                      message: drafts[member.repositoryName]!.trim(),
+                    })),
+                ),
+              )
+            }
+          >
+            <SendHorizontal className="size-4" aria-hidden="true" />
             {t(
-              plan?.kind === 'merge-back'
-                ? 'workspace.branch-workspace.git-action.merge-back'
+              result && !result.ok
+                ? 'workspace.branch-workspace.retry'
                 : 'workspace.branch-workspace.git-action.batch-commit',
             )}
-          </DialogTitle>
-          <DialogDescription>
-            {t(
-              plan?.kind === 'merge-back'
-                ? 'workspace.branch-workspace.git-action.merge-back-description'
-                : 'workspace.branch-workspace.git-action.batch-commit-description',
-            )}
-          </DialogDescription>
-        </DialogHeader>
-
-        {!plan ? (
-          <div className="flex min-h-28 items-center justify-center gap-2 text-xs text-muted-foreground">
-            <LoaderCircle className={cn('size-4', pending && 'animate-spin')} aria-hidden="true" />
-            {t('workspace.branch-workspace.git-action.planning')}
-          </div>
-        ) : plan.kind === 'batch-commit' ? (
-          <BatchCommitContent
-            plan={plan}
-            result={result}
-            providers={providers}
-            drafts={drafts}
-            generation={generation}
-            generationErrors={generationErrors}
-            generatingProvider={generatingProvider}
-            disabled={pending}
-            onDraftChange={(repositoryName, message) =>
-              setDrafts((current) => ({ ...current, [repositoryName]: message }))
-            }
-            onGenerateAll={(provider) =>
-              void generateAll(
-                plan,
-                provider,
-                setGeneratingProvider,
-                generationController,
-                setDrafts,
-                setGeneration,
-                setGenerationErrors,
-              )
-            }
-            onGenerateOne={(repositoryName, provider) =>
-              void generateOne(
-                plan,
-                repositoryName,
-                provider,
-                setGeneratingProvider,
-                generationController,
-                setDrafts,
-                setGeneration,
-                setGenerationErrors,
-              )
-            }
-          />
-        ) : (
-          <MergeBackContent plan={plan} result={result} activeOperation={activeOperation} />
-        )}
-
-        {error ? <DialogError>{t(error)}</DialogError> : null}
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={close}>
-            {t('dialog.cancel')}
           </Button>
-          {plan?.kind === 'batch-commit' ? (
+        ) : null}
+        {plan?.kind === 'merge-back' ? (
+          <>
             <Button
               type="button"
-              data-action="batch-commit"
-              disabled={pending || generatingProvider !== null || !hasAllMessages(plan, drafts)}
-              onClick={() =>
-                void runAndClose(() =>
-                  onBatchCommit(
-                    plan.members
-                      .filter((member) => member.dirty)
-                      .map((member) => ({
-                        repositoryName: member.repositoryName,
-                        message: drafts[member.repositoryName]!.trim(),
-                      })),
-                  ),
-                )
-              }
+              variant="outline"
+              data-action="merge"
+              disabled={pending}
+              onClick={() => void runAndClose(() => onMergeBack('merge'))}
             >
-              <GitCommitHorizontal className="size-4" aria-hidden="true" />
-              {t(
-                result && !result.ok
-                  ? 'workspace.branch-workspace.retry'
-                  : 'workspace.branch-workspace.git-action.batch-commit',
-              )}
+              <GitMerge className="size-4" aria-hidden="true" />
+              {t('workspace.branch-workspace.git-action.merge')}
             </Button>
-          ) : null}
-          {plan?.kind === 'merge-back' ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                data-action="merge"
-                disabled={pending}
-                onClick={() => void runAndClose(() => onMergeBack('merge'))}
-              >
-                <GitMerge className="size-4" aria-hidden="true" />
-                {t('workspace.branch-workspace.git-action.merge')}
-              </Button>
-              <Button
-                type="button"
-                data-action="pull-merge-push"
-                disabled={pending || !plan.pullMergePushReady}
-                onClick={() => void runAndClose(() => onMergeBack('pull-merge-push'))}
-              >
-                {t('workspace.branch-workspace.git-action.pull-merge-push')}
-              </Button>
-            </>
-          ) : null}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+            <Button
+              type="button"
+              data-action="pull-merge-push"
+              disabled={pending || !plan.pullMergePushReady}
+              onClick={() => void runAndClose(() => onMergeBack('pull-merge-push'))}
+            >
+              {t('workspace.branch-workspace.git-action.pull-merge-push')}
+            </Button>
+          </>
+        ) : null}
+        {plan?.kind === 'pull' || plan?.kind === 'push' ? (
+          <Button
+            type="button"
+            data-action={plan.kind}
+            disabled={pending || !plan.ready}
+            onClick={() => void runAndClose(() => onSync(plan.kind))}
+          >
+            {plan.kind === 'pull' ? (
+              <ArrowDown className="size-4" aria-hidden="true" />
+            ) : (
+              <ArrowUp className="size-4" aria-hidden="true" />
+            )}
+            {t(
+              result && !result.ok
+                ? 'workspace.branch-workspace.retry'
+                : `workspace.branch-workspace.git-action.${plan.kind}`,
+            )}
+          </Button>
+        ) : null}
+      </div>
+    </div>
   )
 }
 
@@ -378,6 +393,45 @@ function MergeBackContent({
                     : !member.pullMergePushReady
                       ? t('workspace.branch-workspace.git-action.no-upstream')
                       : t('workspace.branch-workspace.git-action.ready')}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function SyncContent({
+  plan,
+  result,
+  activeOperation,
+}: {
+  plan: BranchWorkspaceSyncPlan
+  result: BranchWorkspaceGitActionResult | null
+  activeOperation: BranchWorkspaceActiveOperation | null
+}) {
+  const t = useT()
+  return (
+    <div className="overflow-hidden rounded-md border border-separator">
+      {plan.members.map((member, index) => {
+        const memberResult = result?.members.find((candidate) => candidate.repositoryName === member.repositoryName)
+        const active = activeOperation?.repositoryName === member.repositoryName
+        return (
+          <div
+            key={member.repositoryName}
+            className="grid grid-cols-[2rem_minmax(0,1fr)_minmax(0,1.4fr)_7rem] items-center gap-2 border-b border-separator/60 px-3 py-2.5 text-xs last:border-b-0"
+          >
+            <span className="font-mono text-[10px] text-muted-foreground">{String(index + 1).padStart(2, '0')}</span>
+            <span className="truncate font-medium">{member.repositoryName}</span>
+            <span className="truncate font-mono text-[10px] text-muted-foreground">{member.targetBranch}</span>
+            <span className={cn('text-[10px] text-muted-foreground', !member.ready && 'text-warning')}>
+              {active && activeOperation.step
+                ? t(`workspace.branch-workspace.git-action.step.${activeOperation.step}`)
+                : memberResult
+                  ? t(`workspace.branch-workspace.git-action.phase.${memberResult.phase}`)
+                  : member.message
+                    ? t(member.message)
+                    : t('workspace.branch-workspace.git-action.ready')}
             </span>
           </div>
         )

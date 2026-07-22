@@ -32,6 +32,23 @@ export type WorktreeBootstrapDecision =
 export type WorktreeBootstrapCandidateKind = 'file' | 'directory'
 export type WorktreeBootstrapCandidateScope = 'all-untracked' | 'ignored-only'
 export type WorktreeBootstrapSelectionMode = 'copy' | 'symlink'
+export type WorktreeBootstrapMaterializationMode = WorktreeBootstrapSelectionMode | 'hardlink'
+
+export interface WorktreeBootstrapTargetEntry {
+  path: string
+  mode: WorktreeBootstrapMaterializationMode
+}
+
+export interface WorktreeBootstrapTargetPreflight {
+  pending: WorktreeBootstrapTargetEntry[]
+  satisfied: WorktreeBootstrapTargetEntry[]
+  conflicts: WorktreeBootstrapTargetEntry[]
+  hasSetup: boolean
+}
+
+export type WorktreeBootstrapTargetPreflightResult =
+  | { ok: true; preflight: WorktreeBootstrapTargetPreflight }
+  | { ok: false; message: string }
 
 export interface WorktreeBootstrapCandidate {
   path: string

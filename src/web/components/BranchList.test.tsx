@@ -21,6 +21,7 @@ let originalScrollIntoView: typeof Element.prototype.scrollIntoView | undefined
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 const dndState = vi.hoisted(() => ({
   lastDragEnd: null as ((event: TestDragEndEvent) => void) | null,
+  sensorCount: 0,
 }))
 const navigationState = vi.hoisted(() => ({
   selectRepoBranch: vi.fn(),
@@ -95,8 +96,11 @@ vi.mock('@dnd-kit/core', async () => {
     },
     PointerSensor: vi.fn(),
     closestCenter: vi.fn(),
-    useSensor: () => ({}),
-    useSensors: () => [],
+    useSensor: (sensor: unknown) => ({ sensor }),
+    useSensors: (...sensors: unknown[]) => {
+      dndState.sensorCount = sensors.length
+      return sensors
+    },
   }
 })
 
@@ -125,6 +129,7 @@ beforeEach(() => {
   originalScrollIntoView = Element.prototype.scrollIntoView
   Element.prototype.scrollIntoView = vi.fn()
   dndState.lastDragEnd = null
+  dndState.sensorCount = 0
   navigationState.selectRepoBranch.mockReset()
   navigationState.showRepoDetailTab.mockReset()
   resetReposStore()
@@ -268,7 +273,7 @@ describe('BranchList worktree drag ordering', () => {
       row.textContent?.includes('feature/solo'),
     )
     expect(soloRow).not.toBeUndefined()
-    expect(soloRow?.querySelector<HTMLButtonElement>('[data-testid="ordinary-remove-worktree"]')).not.toBeNull()
+    expect(soloRow?.querySelector<HTMLButtonElement>('[aria-label="action.menu"]')).not.toBeNull()
     expect(document.querySelector('button[aria-label="workspace.batch.remove-action"]')).toBeNull()
   })
 
@@ -280,7 +285,7 @@ describe('BranchList worktree drag ordering', () => {
     const featureRow = Array.from(container?.querySelectorAll('li') ?? []).find((row) =>
       row.textContent?.includes('feature/a'),
     )
-    act(() => featureRow?.click())
+    act(() => featureRow?.querySelector<HTMLButtonElement>('[data-workspace-list-item-main]')?.click())
 
     expect(navigationState.selectRepoBranch).toHaveBeenCalledWith(REPO_ID, 'feature/a')
     expect(onBranchSelected).toHaveBeenCalledTimes(1)
@@ -381,37 +386,37 @@ describe('BranchList worktree drag ordering', () => {
     expect(dirtyBadge?.getAttribute('aria-label')).toBe('有改动')
   })
 
-  test('hides worktree drag icons while keeping worktree rows sortable', () => {
+  test('binds sortable activators only to dedicated worktree drag handles', () => {
     seedWorktreeRepo()
 
     renderList()
 
-    expect(document.querySelectorAll('[aria-label="重新排序工作树"]')).toHaveLength(0)
-    expect(document.querySelectorAll('.lucide-grip-vertical')).toHaveLength(0)
-
-    const sortableRows = Array.from(container?.querySelectorAll<HTMLLIElement>('li[data-sortable-id]') ?? [])
-    expect(sortableRows.map((row) => row.getAttribute('data-sortable-id'))).toEqual(['/repo', '/tmp/worktree-a'])
-    expect(sortableRows.every((row) => !row.className.includes('1.75rem'))).toBe(true)
+    const handles = Array.from(
+      container?.querySelectorAll<HTMLButtonElement>('[data-workspace-list-item-drag-handle]') ?? [],
+    )
+    expect(handles.map((handle) => handle.getAttribute('data-sortable-id'))).toEqual(['/repo', '/tmp/worktree-a'])
+    expect(handles.every((handle) => handle.querySelector('.lucide-grip-vertical'))).toBe(true)
+    expect(container?.querySelectorAll('li[data-sortable-id]')).toHaveLength(0)
+    expect(container?.querySelectorAll('[data-workspace-list-item-main][data-sortable-id]')).toHaveLength(0)
   })
 
-  test('marks worktree branch rows as sortable', () => {
+  test('uses pointer and keyboard sensors for worktree sorting', () => {
     seedWorktreeRepo()
 
     renderList()
 
-    expect(document.querySelectorAll('[aria-label="重新排序工作树"]')).toHaveLength(0)
-    expect(document.querySelectorAll('.lucide-grip-vertical')).toHaveLength(0)
-    expect(container?.querySelectorAll('li[data-sortable-id]')).not.toHaveLength(0)
+    expect(dndState.sensorCount).toBe(2)
+    expect(container?.querySelectorAll('[data-workspace-list-item-drag-handle]')).toHaveLength(2)
   })
 
-  test('keeps worktree rows visible with stale branch search state without showing drag icons', () => {
+  test('keeps worktree rows and their drag handles visible with stale branch search state', () => {
     seedWorktreeRepo()
     useReposStore.getState().setBranchSearchQuery(REPO_ID, 'feature')
 
     renderList()
 
-    expect(document.querySelectorAll('[aria-label="重新排序工作树"]')).toHaveLength(0)
-    expect(document.querySelectorAll('.lucide-grip-vertical')).toHaveLength(0)
+    expect(document.querySelectorAll('[aria-label="重新排序工作树"]')).toHaveLength(2)
+    expect(document.querySelectorAll('.lucide-grip-vertical')).toHaveLength(2)
     expect(container?.textContent).toContain('main')
     expect(container?.textContent).toContain('feature/a')
   })

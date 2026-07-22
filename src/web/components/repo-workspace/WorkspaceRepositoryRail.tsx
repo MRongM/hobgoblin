@@ -1,25 +1,17 @@
 import { useCallback, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { arrayMove } from '@dnd-kit/sortable'
-import {
-  ChevronDown,
-  ChevronRight,
-  Download,
-  Folder,
-  FolderPlus,
-  LoaderCircle,
-  RefreshCw,
-  Settings2,
-  Terminal,
-} from 'lucide-react'
-import type { BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
+import { Download, Eye, EyeOff, Folder, FolderPlus, LoaderCircle, RefreshCw, Settings2, Terminal } from 'lucide-react'
+import type { BranchWorkspaceGitActionKind } from '#/shared/branch-workspace-git-actions.ts'
+import type { BranchWorkspaceRepositorySnapshot, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import type { WorkspaceConfig } from '#/shared/workspace.ts'
 import type { WorkspacePullResult } from '#/shared/workspace-pull.ts'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { BranchWorkspaceDialog } from '#/web/components/repo-workspace/BranchWorkspaceDialog.tsx'
-import { BranchWorkspaceGitActionDialog } from '#/web/components/repo-workspace/BranchWorkspaceGitActionDialog.tsx'
+import { BranchWorkspaceGitActionPanel } from '#/web/components/repo-workspace/BranchWorkspaceGitActionDialog.tsx'
 import { BranchWorkspaceList } from '#/web/components/repo-workspace/BranchWorkspaceList.tsx'
+import type { BranchWorkspaceMemberPresentation } from '#/web/components/repo-workspace/BranchWorkspaceMemberRow.tsx'
 import { WorkspaceConfigurationDialog } from '#/web/components/repo-workspace/WorkspaceConfigurationDialog.tsx'
 import {
   WorkspaceRepositoryList,
@@ -29,9 +21,9 @@ import { WorkspacePullDialog } from '#/web/components/repo-workspace/WorkspacePu
 import { TerminalBellDot } from '#/web/components/terminal/TerminalBellDot.tsx'
 import { TerminalOutputActivityIndicator } from '#/web/components/terminal/TerminalOutputActivityIndicator.tsx'
 import {
-  useWorktreeTerminalCount,
-  useWorktreeTerminalHasBell,
-  useWorktreeTerminalHasOutputActivity,
+  useTerminalAggregateCount,
+  useTerminalAggregateHasBell,
+  useTerminalAggregateHasOutputActivity,
 } from '#/web/components/terminal/terminal-session-store.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { useBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
@@ -43,26 +35,38 @@ import { lastPathSegment } from '#/web/lib/paths.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
+import { getBranchWorktreeState } from '#/web/stores/repos/worktree-state.ts'
 import { workspaceRepositoryListExpanded } from '#/web/stores/repos/workspace-projects.ts'
 import { repoTerminalWorktreePaths } from '#/web/components/RepoTabs.tsx'
+import { resolveBranchWorkspaceMemberTarget } from '#/web/components/repo-workspace/branch-workspace-member-target.ts'
 
 interface Props {
   workspaceRootId: string
   currentRepoId: string
   fill?: boolean
+  onOpenFileArea?: () => void
+  onOpenDetailArea?: () => void
 }
 
-export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill = false }: Props) {
+export function WorkspaceRepositoryRail({
+  workspaceRootId,
+  currentRepoId,
+  fill = false,
+  onOpenFileArea,
+  onOpenDetailArea,
+}: Props) {
   const t = useT()
   const workspace = useReposStore((state) => state.workspaceProjects[workspaceRootId])
   const repos = useReposStore((state) => state.repos)
   const activeContext = useReposStore(
     (state) => state.workspaceActiveContextByRoot[workspaceRootId] ?? { kind: 'overview' as const },
   )
-  const repositoryListExpanded = useReposStore((state) => workspaceRepositoryListExpanded(state, workspaceRootId))
+  const repositoryListVisible = useReposStore((state) => workspaceRepositoryListExpanded(state, workspaceRootId))
   const toggleRepositoryList = useReposStore((state) => state.toggleWorkspaceRepositoryList)
   const activateWorkspaceOverview = useReposStore((state) => state.activateWorkspaceOverview)
   const activateWorkspaceRepository = useReposStore((state) => state.activateWorkspaceRepository)
+  const selectBranch = useReposStore((state) => state.selectBranch)
+  const setDetailTab = useReposStore((state) => state.setDetailTab)
   const activateBranchWorkspace = useReposStore((state) => state.activateBranchWorkspace)
   const rescanWorkspace = useReposStore((state) => state.rescanWorkspace)
   const configureWorkspace = useReposStore((state) => state.configureWorkspace)
@@ -76,21 +80,60 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
   const [branchDialogMode, setBranchDialogMode] = useState<'create' | 'repair' | 'remove'>('create')
   const [dialogWorkspace, setDialogWorkspace] = useState<BranchWorkspaceSnapshot | null>(null)
   const [pullOpen, setPullOpen] = useState(false)
-  const [branchGitActionOpen, setBranchGitActionOpen] = useState(false)
-  const [branchGitActionWorkspaceId, setBranchGitActionWorkspaceId] = useState<string | null>(null)
   const [optimisticRepositoryIds, setOptimisticRepositoryIds] = useState<string[] | null>(null)
   const [reorderPending, setReorderPending] = useState(false)
   const [reorderError, setReorderError] = useState<string | null>(null)
+  const [gitActionOpen, setGitActionOpen] = useState(false)
+  const [gitActionKind, setGitActionKind] = useState<BranchWorkspaceGitActionKind>('batch-commit')
+  const [gitActionTargetId, setGitActionTargetId] = useState<string | null>(null)
 
   const overviewRootPath = repoPlainWorkspacePath(repos[workspaceRootId]) ?? workspaceRootId
   const overviewName = lastPathSegment(overviewRootPath) || repos[workspaceRootId]?.name || workspaceRootId
   const overviewTerminalWorktreeKey = worktreeTerminalKey(workspaceRootId, overviewRootPath)
-  const overviewTerminalCount = useWorktreeTerminalCount(overviewTerminalWorktreeKey)
-  const overviewHasTerminalBell = useWorktreeTerminalHasBell(overviewTerminalWorktreeKey)
-  const overviewHasTerminalOutputActivity = useWorktreeTerminalHasOutputActivity(overviewTerminalWorktreeKey)
+  const overviewTerminalWorktreeKeys = useMemo(
+    () =>
+      Array.from(
+        new Set([
+          overviewTerminalWorktreeKey,
+          ...branchItems.map((item) => worktreeTerminalKey(workspaceRootId, item.path)),
+        ]),
+      ).sort(),
+    [branchItems, overviewTerminalWorktreeKey, workspaceRootId],
+  )
+  const overviewTerminalCount = useTerminalAggregateCount(overviewTerminalWorktreeKeys)
+  const overviewHasTerminalBell = useTerminalAggregateHasBell(overviewTerminalWorktreeKeys)
+  const overviewHasTerminalOutputActivity = useTerminalAggregateHasOutputActivity(overviewTerminalWorktreeKeys)
   const candidateNameById = useMemo(
     () => new Map((workspace?.candidates ?? []).map((candidate) => [candidate.id, candidate.name])),
     [workspace?.candidates],
+  )
+  const repositoryIdByName = useMemo(
+    () =>
+      new Map(
+        (workspace?.repositoryIds ?? []).flatMap((repositoryId) => {
+          const name = candidateNameById.get(repositoryId)
+          return name ? [[name, repositoryId] as const] : []
+        }),
+      ),
+    [candidateNameById, workspace?.repositoryIds],
+  )
+  const branchWorkspaceChangeCountById = useMemo(
+    () =>
+      Object.fromEntries(
+        branchItems.map((item) => [
+          item.id,
+          item.repositories.reduce((total, member) => {
+            const repositoryId = repositoryIdByName.get(member.repositoryName)
+            const repository = repositoryId ? repos[repositoryId] : undefined
+            const status =
+              repository?.availability.phase === 'available'
+                ? repository.data.status.find((entry) => entry.path === member.worktreePath)
+                : undefined
+            return total + (status?.entries.length ?? 0)
+          }, 0),
+        ]),
+      ),
+    [branchItems, repos, repositoryIdByName],
   )
   const configuredRepositoryNames = useMemo(
     () =>
@@ -122,13 +165,6 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
       }),
     [candidateNameById, repos, workspace?.repositoryIds],
   )
-  const branchGitActionWorkspace = branchItems.find((item) => item.id === branchGitActionWorkspaceId) ?? null
-  const openBranchGitAction = (kind: 'batch-commit' | 'merge-back', item: BranchWorkspaceSnapshot) => {
-    branchGitActions.reset()
-    setBranchGitActionWorkspaceId(item.id)
-    setBranchGitActionOpen(true)
-    void branchGitActions.requestPlan(kind, item.id)
-  }
   const settlePull = useCallback(
     async (result: WorkspacePullResult) => {
       if (result.ok) toast.success(t('workspace.pull-all-success'))
@@ -143,6 +179,51 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
   const pullActions = useWorkspacePullActions(workspaceRootId, settlePull)
 
   if (!workspace) return null
+  const resolveMemberTarget = (member: BranchWorkspaceRepositorySnapshot) => {
+    const resolution = resolveBranchWorkspaceMemberTarget({
+      member,
+      repositoryIds: workspace.repositoryIds,
+      candidates: workspace.candidates,
+      repos,
+    })
+    if (!resolution.ok) return resolution
+    const repo = repos[resolution.target.repositoryId]
+    const branch = repo?.data.branches.find((candidate) => candidate.name === resolution.target.targetBranch)
+    if (!repo || !branch) {
+      return { ok: false as const, reason: 'workspace.branch-workspace.member-branch-missing' }
+    }
+    return { ok: true as const, target: { ...resolution.target, repo, branch } }
+  }
+  const getMemberPresentation = (member: BranchWorkspaceRepositorySnapshot): BranchWorkspaceMemberPresentation => {
+    const resolution = resolveMemberTarget(member)
+    if (!resolution.ok) {
+      return { dirty: false, changeCount: null, navigable: false, reason: resolution.reason }
+    }
+    const worktree = getBranchWorktreeState(resolution.target.repo, resolution.target.branch)
+    return {
+      dirty: worktree?.dirty ?? false,
+      changeCount: worktree?.dirty && worktree.changeCountKnown ? worktree.changeCount : null,
+      navigable: true,
+      repositoryId: resolution.target.repositoryId,
+      worktreePath: resolution.target.worktreePath,
+      actionTarget: { repo: resolution.target.repo, branch: resolution.target.branch },
+    }
+  }
+  const openRepositoryMember = (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => {
+    const resolution = resolveMemberTarget(member)
+    if (!resolution.ok) return
+    selectBranch(resolution.target.repositoryId, member.targetBranch)
+    onOpenFileArea?.()
+    activateBranchWorkspace(workspaceRootId, item.id, member.repositoryName)
+  }
+  const openRepositoryMemberTerminal = (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => {
+    const resolution = resolveMemberTarget(member)
+    if (!resolution.ok) return
+    selectBranch(resolution.target.repositoryId, member.targetBranch)
+    setDetailTab(resolution.target.repositoryId, 'terminal')
+    onOpenDetailArea?.()
+    activateBranchWorkspace(workspaceRootId, item.id, member.repositoryName)
+  }
   const scanning = workspace.phase === 'scanning'
   const displayRepositoryIds = optimisticRepositoryIds ?? workspace.repositoryIds
   const batchReady =
@@ -164,8 +245,47 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
     ]
   })
   const reorderReady = batchReady && !reorderPending
-  const branchListVisible = currentRepoId === workspaceRootId
+  const branchListVisible = currentRepoId === workspaceRootId || !repositoryListVisible
   const selectedBranchWorkspaceId = activeContext.kind === 'branch-workspace' ? activeContext.branchWorkspaceId : null
+  const selectedBranchWorkspaceMemberName =
+    activeContext.kind === 'branch-workspace' ? activeContext.memberRepositoryName : null
+  const gitActionTarget = branchItems.find((item) => item.id === gitActionTargetId) ?? null
+
+  const openGitAction = (item: BranchWorkspaceSnapshot, kind: BranchWorkspaceGitActionKind) => {
+    branchGitActions.reset()
+    setGitActionTargetId(item.id)
+    setGitActionKind(kind)
+    setGitActionOpen(true)
+    void branchGitActions.requestPlan(kind, item.id)
+  }
+  const gitActionPanel =
+    gitActionOpen && gitActionTarget
+      ? {
+          itemId: gitActionTarget.id,
+          content: (
+            <BranchWorkspaceGitActionPanel
+              open
+              kind={gitActionKind}
+              plan={branchGitActions.plan}
+              result={branchGitActions.result}
+              activeOperation={gitActionTarget.activeOperation ?? null}
+              pending={branchGitActions.pending}
+              error={branchGitActions.error}
+              onOpenChange={(open) => {
+                setGitActionOpen(open)
+                if (!open) {
+                  setGitActionTargetId(null)
+                  if (!branchGitActions.pending) branchGitActions.reset()
+                }
+              }}
+              onBatchCommit={branchGitActions.executeBatchCommit}
+              onMergeBack={branchGitActions.executeMergeBack}
+              onSync={branchGitActions.executeSync}
+              onCancel={branchGitActions.cancel}
+            />
+          ),
+        }
+      : null
 
   const reorderRepositories = async (fromId: string, toId: string) => {
     if (!reorderReady) return
@@ -211,7 +331,6 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
               branchWorkspaceId: item.id,
               alsoDeleteBranch: false,
               alsoDeleteUpstream: false,
-              forceRemoveWorktrees: false,
             },
       )
     }
@@ -221,102 +340,118 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
     setPullOpen(true)
     void pullActions.requestPlan()
   }
+  const headerActions = (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        aria-label={t('workspace.branch-workspace.create')}
+        title={t('workspace.branch-workspace.create')}
+        disabled={!batchReady || reorderPending}
+        onClick={() => openBranchDialog('create', null)}
+      >
+        <FolderPlus aria-hidden="true" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        aria-label={t('workspace.pull-all')}
+        title={t('workspace.pull-all')}
+        disabled={!batchReady || reorderPending}
+        onClick={openPull}
+      >
+        <Download aria-hidden="true" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        aria-label={t('workspace.configure')}
+        title={t('workspace.configure')}
+        disabled={scanning || reorderPending}
+        onClick={() => void openConfiguration()}
+      >
+        <Settings2 aria-hidden="true" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        aria-label={t('workspace.rescan')}
+        title={t('workspace.rescan')}
+        disabled={scanning}
+        onClick={() => void rescanWorkspace(workspaceRootId)}
+      >
+        {scanning ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />}
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        aria-label={t(repositoryListVisible ? 'workspace.repositories.hide' : 'workspace.repositories.show')}
+        title={t(repositoryListVisible ? 'workspace.repositories.hide' : 'workspace.repositories.show')}
+        onClick={() => toggleRepositoryList(workspaceRootId)}
+      >
+        {repositoryListVisible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+      </Button>
+    </>
+  )
 
   return (
     <>
-      <section
+      <div
         className={cn(fill ? 'flex min-h-0 flex-1 flex-col' : 'shrink-0', 'border-b border-separator/70 bg-sidebar')}
-        aria-label={t('workspace.repositories')}
       >
-        <div className="flex h-7 items-center gap-1 px-3 pt-1">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            aria-expanded={repositoryListExpanded}
-            aria-label={t(repositoryListExpanded ? 'workspace.repositories.collapse' : 'workspace.repositories.expand')}
-            onClick={() => toggleRepositoryList(workspaceRootId)}
-          >
-            {repositoryListExpanded ? <ChevronDown aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}
-          </Button>
-          <span className="min-w-0 flex-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
-            {t('workspace.repositories')}
-          </span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            aria-label={t('workspace.branch-workspace.create')}
-            title={t('workspace.branch-workspace.create')}
-            disabled={!batchReady || reorderPending}
-            onClick={() => openBranchDialog('create', null)}
-          >
-            <FolderPlus aria-hidden="true" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            aria-label={t('workspace.pull-all')}
-            title={t('workspace.pull-all')}
-            disabled={!batchReady || reorderPending}
-            onClick={openPull}
-          >
-            <Download aria-hidden="true" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            aria-label={t('workspace.configure')}
-            title={t('workspace.configure')}
-            disabled={scanning || reorderPending}
-            onClick={() => void openConfiguration()}
-          >
-            <Settings2 aria-hidden="true" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            aria-label={t('workspace.rescan')}
-            title={t('workspace.rescan')}
-            disabled={scanning}
-            onClick={() => void rescanWorkspace(workspaceRootId)}
-          >
-            {scanning ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />}
-          </Button>
-        </div>
-        {repositoryListExpanded ? (
-          <div
-            className="relative max-h-40 overflow-y-auto px-1.5 pb-1.5"
-            data-testid="workspace-repository-upper-list"
-          >
+        {repositoryListVisible ? (
+          <section className="shrink-0" aria-label={t('workspace.repositories')}>
+            <div className="flex h-7 items-center gap-1 px-3 pt-1">
+              <span className="min-w-0 flex-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
+                {t('workspace.repositories')}
+              </span>
+              {headerActions}
+            </div>
             <div
-              className="pointer-events-none absolute bottom-3 left-[1.12rem] top-3 w-px bg-separator"
-              aria-hidden="true"
-            />
-            <ManifestRow
-              active={activeContext.kind === 'overview'}
-              name={overviewName}
-              terminalCount={overviewTerminalCount}
-              hasTerminalBell={overviewHasTerminalBell}
-              hasTerminalOutputActivity={overviewHasTerminalOutputActivity}
-              onActivate={() => activateWorkspaceOverview(workspaceRootId)}
-            />
-            <WorkspaceRepositoryList
-              repositories={repositoryItems}
-              currentRepoId={currentRepoId}
-              disabled={!reorderReady}
-              onActivate={(repositoryId) => activateWorkspaceRepository(workspaceRootId, repositoryId)}
-              onReorder={(fromId, toId) => void reorderRepositories(fromId, toId)}
-            />
-          </div>
+              className="relative max-h-40 overflow-y-auto px-1.5 pb-1.5"
+              data-testid="workspace-repository-upper-list"
+            >
+              <div
+                className="pointer-events-none absolute bottom-3 left-[1.12rem] top-3 w-px bg-separator"
+                aria-hidden="true"
+              />
+              <ManifestRow
+                active={activeContext.kind === 'overview'}
+                name={overviewName}
+                terminalCount={overviewTerminalCount}
+                hasTerminalBell={overviewHasTerminalBell}
+                hasTerminalOutputActivity={overviewHasTerminalOutputActivity}
+                onActivate={() => activateWorkspaceOverview(workspaceRootId)}
+              />
+              <WorkspaceRepositoryList
+                repositories={repositoryItems}
+                currentRepoId={currentRepoId}
+                disabled={!reorderReady}
+                onActivate={(repositoryId) => activateWorkspaceRepository(workspaceRootId, repositoryId)}
+                onReorder={(fromId, toId) => void reorderRepositories(fromId, toId)}
+              />
+            </div>
+          </section>
         ) : null}
         {branchListVisible ? (
-          <div className={cn('border-t border-separator/60 px-1.5 pb-1.5', fill && 'min-h-0 flex-1 overflow-y-auto')}>
-            <div className="flex h-7 items-center px-2 pt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
-              {t('workspace.branch-workspace.list')}
+          <section
+            aria-label={t('workspace.branch-workspace.list')}
+            className={cn(
+              'px-1.5 pb-1.5',
+              repositoryListVisible && 'border-t border-separator/60',
+              fill && 'min-h-0 flex-1 overflow-y-auto',
+            )}
+          >
+            <div className="flex h-7 items-center gap-1 px-2 pt-1">
+              <span className="min-w-0 flex-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
+                {t('workspace.branch-workspace.list')}
+              </span>
+              {!repositoryListVisible ? headerActions : null}
             </div>
             {branchQuery.isPending ? (
               <div className="px-2 py-2 text-xs text-muted-foreground">{t('workspace.branch-workspace.loading')}</div>
@@ -329,7 +464,12 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
                 rootId={workspaceRootId}
                 items={branchItems}
                 activeId={selectedBranchWorkspaceId}
-                disabled={branchActions.pending || branchGitActions.pending}
+                activeMemberRepositoryName={selectedBranchWorkspaceMemberName}
+                disabled={branchActions.pending}
+                gitActionsDisabled={branchGitActions.pending}
+                onGitAction={openGitAction}
+                gitActionPanel={gitActionPanel}
+                changeCountById={branchWorkspaceChangeCountById}
                 onActivate={(id) => activateBranchWorkspace(workspaceRootId, id)}
                 onReorder={(orderedIds) => void branchActions.reorder(orderedIds)}
                 onInspect={(item) =>
@@ -337,16 +477,17 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
                 }
                 onRepair={(item) => openBranchDialog('repair', item, true)}
                 onRemove={(item) => openBranchDialog('remove', item, item.lifecycle === 'delete-incomplete')}
-                onBatchCommit={(item) => openBranchGitAction('batch-commit', item)}
-                onMergeBack={(item) => openBranchGitAction('merge-back', item)}
+                getMemberPresentation={(_item, member) => getMemberPresentation(member)}
+                onOpenRepositoryMember={openRepositoryMember}
+                onOpenRepositoryMemberTerminal={openRepositoryMemberTerminal}
                 onCancel={(item) =>
-                  item.activeOperation?.kind === 'batch-commit' || item.activeOperation?.kind === 'merge-back'
+                  isBranchWorkspaceGitAction(item.activeOperation?.kind)
                     ? branchGitActions.cancel()
                     : branchActions.cancel()
                 }
               />
             )}
-          </div>
+          </section>
         ) : null}
         {reorderError ? (
           <div className="border-t border-separator/60 px-3 py-1.5 text-[10px] leading-4 text-danger" role="alert">
@@ -364,7 +505,7 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
                   : t('workspace.scan-skipped', { count: workspace.skipped.length })}
           </div>
         )}
-      </section>
+      </div>
       <WorkspaceConfigurationDialog
         open={configurationOpen}
         onOpenChange={setConfigurationOpen}
@@ -392,24 +533,6 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
         onRetry={branchActions.retry}
         onCancel={branchActions.cancel}
       />
-      <BranchWorkspaceGitActionDialog
-        open={branchGitActionOpen}
-        plan={branchGitActions.plan}
-        result={branchGitActions.result}
-        activeOperation={branchGitActionWorkspace?.activeOperation ?? null}
-        pending={branchGitActions.pending}
-        error={branchGitActions.error}
-        onOpenChange={(open) => {
-          setBranchGitActionOpen(open)
-          if (!open && !branchGitActions.pending) {
-            branchGitActions.reset()
-            setBranchGitActionWorkspaceId(null)
-          }
-        }}
-        onBatchCommit={branchGitActions.executeBatchCommit}
-        onMergeBack={branchGitActions.executeMergeBack}
-        onCancel={branchGitActions.cancel}
-      />
       <WorkspacePullDialog
         open={pullOpen}
         plan={pullActions.plan}
@@ -426,6 +549,10 @@ export function WorkspaceRepositoryRail({ workspaceRootId, currentRepoId, fill =
       />
     </>
   )
+}
+
+function isBranchWorkspaceGitAction(kind: string | undefined): boolean {
+  return kind === 'batch-commit' || kind === 'merge-back' || kind === 'pull' || kind === 'push'
 }
 
 function ManifestRow({
@@ -450,7 +577,7 @@ function ManifestRow({
       aria-current={active ? 'page' : undefined}
       title={name}
       className={cn(
-        'group relative flex h-7 w-full min-w-0 items-center gap-2 rounded-[var(--goblin-brand-radius-sm,var(--radius-sm))] px-2 text-left text-xs transition-colors',
+        'group relative flex h-7 w-full min-w-0 items-center gap-2 rounded-[var(--goblin-brand-radius-sm,var(--radius-sm))] px-2 text-left text-[13px] transition-colors',
         active ? 'bg-selected text-selected-foreground' : 'hover:bg-list-row-hover',
       )}
       onClick={onActivate}

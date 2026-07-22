@@ -9,20 +9,13 @@ export interface RepoWorkspaceBehavior {
   detailCollapsed: boolean
   detailCollapseAllowed: boolean
   detailFocusAllowed: boolean
-  /** The normalized focus-toggle preference/pressed state for supported
-   *  layouts. This can stay true while `mode` is `collapsed`, so callers
-   *  should not treat it as proof that the workspace is currently rendering
-   *  in focus mode. */
+  /** Whether the terminal detail is currently maximized. */
   detailFocusMode: boolean
   branchListActionsVisible: boolean
   prTooltipSide: 'right' | 'bottom'
 }
 
 const REPO_WORKSPACE_BEHAVIOR = {
-  'top-bottom': {
-    branchListActionsVisible: true,
-    prTooltipSide: 'right',
-  },
   'left-right': {
     branchListActionsVisible: true,
     prTooltipSide: 'bottom',
@@ -43,7 +36,11 @@ export function repoWorkspaceBehavior(
   const detailCollapsedEffective = effectiveDetailCollapsed(layout, detailCollapsed)
   const detailFocusAllowed = true
   const detailFocusModeEffective = detailFocusAllowed && detailFocusMode
-  const mode: RepoWorkspaceMode = detailCollapsedEffective ? 'collapsed' : detailFocusModeEffective ? 'focus' : 'split'
+  const mode: RepoWorkspaceMode = detailFocusModeEffective
+    ? 'focus'
+    : detailCollapsedEffective
+      ? 'collapsed'
+      : 'split'
   const baseBehavior = REPO_WORKSPACE_BEHAVIOR[layout]
   return {
     ...baseBehavior,

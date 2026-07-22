@@ -73,7 +73,3 @@ export function workspaceRepositoryListExpanded(
 ): boolean {
   return state.workspaceRepositoryListExpandedByRoot?.[rootId] ?? true
 }
-
-export function workspaceRepositoryIdFromContext(context: WorkspaceActiveContext | undefined): string | null {
-  return context?.kind === 'repository' ? context.repositoryId : null
-}

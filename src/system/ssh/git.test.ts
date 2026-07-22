@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from 'vitest'
 import {
   bootstrapRemoteWorktreeAfterCreate,
   bootstrapRemoteWorktreeSelectionsAfterCreate,
+  getRemoteWorktreeBootstrapTargetPreflight,
   checkoutRemoteBranch,
   commitRemoteChanges,
   createRemoteBranch,
@@ -113,6 +114,37 @@ describe('remote git helpers', () => {
       browserRemoteProvider: 'gitlab',
       hasGitHubRemote: false,
     })
+  })
+
+  test('skips worktree status and remote metadata for a lightweight snapshot', async () => {
+    const run = vi.fn(async (command: { type: string }) => {
+      switch (command.type) {
+        case 'gitSnapshot':
+          return okRemoteResult(
+            [
+              '__GOBLIN_REMOTE_CURRENT__',
+              'main',
+              '__GOBLIN_REMOTE_DEFAULT__',
+              'main',
+              '__GOBLIN_REMOTE_BRANCHES__',
+              'main\x1ff00ba4\x1fInitial commit\x1f2024-01-01T00:00:00Z\x1fAlice\x1forigin/main\x1f',
+            ].join('\n'),
+          )
+        case 'gitWorktreeList':
+          return okRemoteResult('worktree /srv/repo\nHEAD f00ba4\nbranch refs/heads/main\n')
+        default:
+          return okRemoteResult('')
+      }
+    })
+
+    const snapshot = await getRemoteSnapshot(TARGET, {
+      run: run as any,
+      includeWorktreeStatus: false,
+      includeRemote: false,
+    })
+
+    expect(snapshot?.branches.map((branch) => branch.name)).toEqual(['main'])
+    expect(run.mock.calls.map(([command]) => command.type).sort()).toEqual(['gitSnapshot', 'gitWorktreeList'])
   })
 
   test('reads structured remote history', async () => {
@@ -1394,6 +1426,96 @@ describe('remote git helpers', () => {
 
     expect(result).toEqual({ ok: true, message: '' })
     expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  test('getRemoteWorktreeBootstrapTargetPreflight parses configured target states', async () => {
+    const content = '[worktree]\ncopy = [".env", "missing.env"]\nsymlink = ["node_modules"]'
+    const run = vi.fn(async (command: { type: string }) => {
+      if (command.type === 'readFileTreeTextFile') {
+        return okRemoteResult(JSON.stringify({ ok: true, content, byteLength: content.length }))
+      }
+      if (command.type === 'bootstrapRemoteWorktree') {
+        return okRemoteResult(
+          [
+            'GOBLIN_BOOTSTRAP_CONFLICT copy .env',
+            'GOBLIN_BOOTSTRAP_PENDING copy missing.env',
+            'GOBLIN_BOOTSTRAP_SATISFIED symlink node_modules',
+          ].join('\n'),
+        )
+      }
+      return okRemoteResult('')
+    })
+
+    const result = await getRemoteWorktreeBootstrapTargetPreflight(
+      TARGET,
+      '/srv/repo-worktree',
+      { kind: 'run', configHash: worktreeBootstrapConfigHash(content), configTrusted: false },
+      { run: run as any },
+    )
+
+    expect(result).toEqual({
+      ok: true,
+      preflight: {
+        pending: [{ path: 'missing.env', mode: 'copy' }],
+        satisfied: [{ path: 'node_modules', mode: 'symlink' }],
+        conflicts: [{ path: '.env', mode: 'copy' }],
+        hasSetup: false,
+      },
+    })
+    expect(run).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'bootstrapRemoteWorktree', inspectOnly: true }),
+      TARGET,
+      { signal: undefined, timeoutMs: 600_000 },
+    )
+  })
+
+  test('bootstrapRemoteWorktreeAfterCreate forwards exact approved replacements', async () => {
+    const content = '[worktree]\ncopy = [".env"]'
+    const run = vi.fn(async (command: { type: string }) => {
+      if (command.type === 'readFileTreeTextFile') {
+        return okRemoteResult(JSON.stringify({ ok: true, content, byteLength: content.length }))
+      }
+      return okRemoteResult('GOBLIN_BOOTSTRAP_COPY .env')
+    })
+
+    await bootstrapRemoteWorktreeAfterCreate(TARGET, '/srv/repo-worktree', {
+      run: run as any,
+      replaceExisting: [{ path: '.env', mode: 'copy' }],
+    })
+
+    expect(run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'bootstrapRemoteWorktree',
+        replaceExisting: [{ path: '.env', mode: 'copy' }],
+      }),
+      TARGET,
+      { signal: undefined, timeoutMs: 600_000 },
+    )
+  })
+
+  test('bootstrapRemoteWorktreeSelectionsAfterCreate forwards exact approved replacements', async () => {
+    const run = vi.fn(async (command: { type: string }) => {
+      if (command.type === 'readFileTreeTextFile') {
+        return okRemoteResult(JSON.stringify({ ok: false, message: 'error.path-not-found' }))
+      }
+      return okRemoteResult('GOBLIN_BOOTSTRAP_COPY .env')
+    })
+
+    await bootstrapRemoteWorktreeSelectionsAfterCreate(
+      TARGET,
+      '/srv/repo-worktree',
+      [{ path: '.env', mode: 'copy' }],
+      { run: run as any, replaceExisting: [{ path: '.env', mode: 'copy' }] },
+    )
+
+    expect(run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'bootstrapRemoteWorktree',
+        replaceExisting: [{ path: '.env', mode: 'copy' }],
+      }),
+      TARGET,
+      { signal: undefined, timeoutMs: 600_000 },
+    )
   })
 
   test('bootstrapRemoteWorktreeAfterCreate runs remote bootstrap and formats output', async () => {

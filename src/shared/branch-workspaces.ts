@@ -8,6 +8,7 @@ import {
   normalizeWorktreeBootstrapSelections,
   type WorktreeBootstrapDecision,
   type WorktreeBootstrapPreview,
+  type WorktreeBootstrapTargetEntry,
 } from '#/shared/worktree-bootstrap-summary.ts'
 
 export type BranchWorkspaceProgress = 'pending' | 'complete' | 'removed' | 'failed'
@@ -170,12 +171,12 @@ export type BranchWorkspacePlanRequest =
       branchWorkspaceId: string
       alsoDeleteBranch: boolean
       alsoDeleteUpstream: boolean
-      forceRemoveWorktrees: boolean
     }
 
 export type BranchWorkspaceApproval =
   | 'outside-root-source'
   | 'worktree-bootstrap'
+  | 'replace-repository-dependencies'
   | 'modified-copy'
   | 'unmanaged-content'
   | 'close-terminals'
@@ -184,6 +185,7 @@ export function isBranchWorkspaceApproval(value: unknown): value is BranchWorksp
   return (
     value === 'outside-root-source' ||
     value === 'worktree-bootstrap' ||
+    value === 'replace-repository-dependencies' ||
     value === 'modified-copy' ||
     value === 'unmanaged-content' ||
     value === 'close-terminals'
@@ -194,6 +196,7 @@ export type BranchWorkspacePlanStepKind =
   | 'create-directory'
   | 'create-worktree'
   | 'bootstrap-worktree'
+  | 'replace-repository-dependency'
   | 'symlink-entry'
   | 'copy-entry'
   | 'remove-worktree'
@@ -220,6 +223,7 @@ export interface BranchWorkspaceRepositoryPlan {
   mode: CreateWorktreeMode
   worktreeBootstrap: WorktreeBootstrapDecision
   bootstrapPreview?: WorktreeBootstrapPreview
+  bootstrapReplacements?: WorktreeBootstrapTargetEntry[]
   confirmationRequired: boolean
   satisfied: boolean
   action?: 'create-worktree' | 'bootstrap-worktree' | 'remove-worktree' | 'delete-branch' | 'satisfied'
@@ -259,7 +263,6 @@ export interface BranchWorkspacePlan {
   removalOptions?: {
     alsoDeleteBranch: boolean
     alsoDeleteUpstream: boolean
-    forceRemoveWorktrees: boolean
   }
 }
 
@@ -303,11 +306,7 @@ export function normalizeBranchWorkspacePlanRequest(value: unknown): BranchWorks
     return { ok: true, request: { operation: 'repair', branchWorkspaceId } }
   }
   if (request.operation !== 'remove') return invalidRequest()
-  if (
-    typeof request.alsoDeleteBranch !== 'boolean' ||
-    typeof request.alsoDeleteUpstream !== 'boolean' ||
-    typeof request.forceRemoveWorktrees !== 'boolean'
-  ) {
+  if (typeof request.alsoDeleteBranch !== 'boolean' || typeof request.alsoDeleteUpstream !== 'boolean') {
     return invalidRequest()
   }
   if (request.alsoDeleteUpstream && !request.alsoDeleteBranch) return invalidRequest()
@@ -318,7 +317,6 @@ export function normalizeBranchWorkspacePlanRequest(value: unknown): BranchWorks
       branchWorkspaceId,
       alsoDeleteBranch: request.alsoDeleteBranch,
       alsoDeleteUpstream: request.alsoDeleteUpstream,
-      forceRemoveWorktrees: request.forceRemoveWorktrees,
     },
   }
 }

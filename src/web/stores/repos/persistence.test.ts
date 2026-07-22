@@ -109,7 +109,6 @@ describe('normalizeRestorableRepoCache', () => {
     const normalized = normalizeRestorableRepoCache({ repo: raw })
 
     expect(normalized.repo?.ui.fileTreePaneSizes).toEqual({
-      'top-bottom': 44.4,
       'left-right': DEFAULT_FILE_TREE_PANE_SIZES['left-right'],
     })
   })
@@ -274,13 +273,12 @@ describe('persistRestorableRepoSnapshot', () => {
       branches: [createRepoBranch('main')],
       currentBranch: 'main',
       selectedBranch: 'main',
-      fileTreePaneSizes: { 'top-bottom': 42.2, 'left-right': 73.4 },
+      fileTreePaneSizes: { 'left-right': 73.4 },
     })
 
     persistRestorableRepoSnapshot(useReposStore.setState, repo, 1)
 
     expect(useReposStore.getState().restorableRepoCache['/repo']?.ui.fileTreePaneSizes).toEqual({
-      'top-bottom': 42.2,
       'left-right': 73.4,
     })
   })
@@ -396,11 +394,11 @@ describe('restoreRepoProjectionFromSnapshot', () => {
   test('restores project file tree pane sizes from cache', () => {
     const now = Date.now()
     const cached = cachedRepo(now)
-    cached.ui.fileTreePaneSizes = { 'top-bottom': 41.5, 'left-right': 70.5 }
+    cached.ui.fileTreePaneSizes = { 'left-right': 70.5 }
 
     const repo = restoreRepoProjectionFromSnapshot(emptyRepo('/repo', 'repo'), cached)
 
-    expect(repo.ui.fileTreePaneSizes).toEqual({ 'top-bottom': 41.5, 'left-right': 70.5 })
+    expect(repo.ui.fileTreePaneSizes).toEqual({ 'left-right': 70.5 })
   })
 
   test('restores per-branch explorer tabs and defaults old snapshots to empty', () => {

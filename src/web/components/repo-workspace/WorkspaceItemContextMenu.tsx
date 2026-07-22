@@ -9,6 +9,7 @@ import {
   ContextMenuTrigger,
 } from '#/web/components/ui/context-menu.tsx'
 import { useT } from '#/web/stores/i18n.ts'
+import type { BranchWorkspaceItemAction } from '#/web/components/repo-workspace/BranchWorkspaceItemMenu.tsx'
 
 export interface WorkspaceItemOpenAction {
   disabled: boolean
@@ -22,6 +23,7 @@ interface WorkspaceItemContextMenuProps {
   externalTerminal: WorkspaceItemOpenAction
   internalTerminal: WorkspaceItemOpenAction
   worktreeTerminalKeys: readonly string[]
+  additionalActions?: readonly BranchWorkspaceItemAction[]
   children: ReactElement
 }
 
@@ -30,6 +32,7 @@ export function WorkspaceItemContextMenu({
   externalTerminal,
   internalTerminal,
   worktreeTerminalKeys,
+  additionalActions = [],
   children,
 }: WorkspaceItemContextMenuProps): ReactElement {
   const t = useT()
@@ -48,6 +51,18 @@ export function WorkspaceItemContextMenu({
             <X aria-hidden="true" />
             {closeScope.label}
           </ContextMenuItem>
+          {additionalActions.length > 0 ? <ContextMenuSeparator /> : null}
+          {additionalActions.map((action, index) => (
+            <ContextMenuItem
+              key={`${action.label}-${index}`}
+              variant={action.destructive ? 'destructive' : 'default'}
+              disabled={action.disabled || action.busy}
+              onSelect={() => void action.onSelect()}
+            >
+              {action.icon}
+              {t(action.label)}
+            </ContextMenuItem>
+          ))}
         </ContextMenuContent>
       </ContextMenu>
       {closeScope.dialog}
