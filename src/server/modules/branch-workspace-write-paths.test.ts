@@ -556,7 +556,7 @@ describe('branch workspace write service', () => {
     expect(deleteBranch).toHaveBeenCalledWith(
       '/workspace/api',
       'feature/auth',
-      { force: false, alsoDeleteUpstream: false },
+      { force: true, alsoDeleteUpstream: false },
       expect.any(AbortSignal),
     )
     expect(events.at(-1)).toBe(`entry:${plan.path}`)

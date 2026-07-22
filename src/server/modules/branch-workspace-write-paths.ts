@@ -280,7 +280,7 @@ export function createBranchWorkspaceWriteService(
               const result = await deleteBranch(
                 repository.repoId,
                 repository.targetBranch,
-                { force: false, alsoDeleteUpstream: false },
+                { force: true, alsoDeleteUpstream: false },
                 controller.signal,
               ).catch((error) => ({ ok: false, message: operationMessage(error) }))
               if (!result.ok) {
