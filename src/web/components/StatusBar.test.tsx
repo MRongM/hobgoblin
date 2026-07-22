@@ -116,6 +116,15 @@ afterEach(() => {
 })
 
 describe('StatusBar file area control', () => {
+  test('renders without a top divider while preserving its fixed height', () => {
+    act(() => root!.render(<StatusBar repoId={REPO_ID} />))
+
+    const statusBar = container?.querySelector<HTMLElement>('[data-testid="statusbar"]')
+    expect(statusBar?.className).toContain('h-7')
+    expect(statusBar?.className).not.toContain('border-t')
+    expect(statusBar?.className).not.toContain('border-topbar-border')
+  })
+
   test('keeps the active settings trigger above the dialog scrim and toggles it closed', () => {
     const toggleSettings = vi.fn()
     shellOverlayMock.state = {

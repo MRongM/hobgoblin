@@ -479,6 +479,8 @@ describe('BranchWorkspaceList', () => {
     )
     const lists = container.querySelectorAll('[data-testid="branch-workspace-member-list"]')
     expect(lists).toHaveLength(1)
+    expect(lists[0]?.className).not.toContain('border-l')
+    expect(lists[0]?.className).not.toContain('border-brand-border')
     expect(lists[0]?.textContent).toContain('api')
     expect(lists[0]?.textContent).not.toContain('web')
     expect(container.querySelector('[data-testid="branch-workspace-member-hash"]')).toBeNull()

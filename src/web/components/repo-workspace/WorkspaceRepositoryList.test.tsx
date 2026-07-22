@@ -268,6 +268,7 @@ describe('WorkspaceRepositoryList', () => {
       ),
     )
     const row = repositoryItem('/workspace/api')
+    const terminalRow = repositoryItem('/workspace/web')
     const terminalBadge = row?.querySelector('[data-testid="workspace-repository-terminal-count-badge"]')
     const changeBadge = row?.querySelector('[data-testid="workspace-repository-change-count-badge"]')
 
@@ -276,6 +277,7 @@ describe('WorkspaceRepositoryList', () => {
     expect(changeBadge?.textContent).toBe('2')
     expect(changeBadge?.querySelector('.lucide-git-compare-arrows')).not.toBeNull()
     expect(row?.querySelector('[data-terminal-bell-dot]')).not.toBeNull()
+    expect(terminalRow.querySelector('span[aria-hidden="true"].absolute.bottom-0')).toBeNull()
   })
 
   test('keeps terminal, change, and unread bell badges in the left-aligned primary content group', () => {

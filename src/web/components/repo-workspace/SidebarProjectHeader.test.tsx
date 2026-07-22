@@ -128,6 +128,22 @@ describe('SidebarProjectHeader', () => {
     expect(targets[0]?.tagName).toBe('UL')
   })
 
+  test('renders the project header and expanded list without decorative separators', () => {
+    repoState.projectListExpanded = true
+    act(() => {
+      root!.render(<SidebarProjectHeader repoId="/repo-a" />)
+    })
+
+    const header = container!.firstElementChild as HTMLElement | null
+    const topbar = header?.querySelector<HTMLElement>('.topbar')
+    const listWrapper = container!.querySelector('ul')?.parentElement
+    expect(header?.className).not.toContain('border-b')
+    expect(header?.className).not.toContain('border-topbar-border')
+    expect(topbar?.style.height).toBe('36px')
+    expect(listWrapper?.className).not.toContain('border-t')
+    expect(listWrapper?.className).not.toContain('border-separator')
+  })
+
   test('keeps the global project list expansion state when the active project changes', () => {
     act(() => {
       root!.render(<SidebarProjectHeader repoId="/repo-a" />)

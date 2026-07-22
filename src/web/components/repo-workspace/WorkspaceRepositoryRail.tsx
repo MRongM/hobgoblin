@@ -382,7 +382,7 @@ export function WorkspaceRepositoryRail({
       <Button
         type="button"
         variant="ghost"
-        size="icon-xs"
+        size="icon-sm"
         aria-label={t('workspace.branch-workspace.create')}
         title={t('workspace.branch-workspace.create')}
         disabled={!batchReady || reorderPending}
@@ -393,7 +393,7 @@ export function WorkspaceRepositoryRail({
       <Button
         type="button"
         variant="ghost"
-        size="icon-xs"
+        size="icon-sm"
         aria-label={t('workspace.pull-all')}
         title={t('workspace.pull-all')}
         disabled={!batchReady || reorderPending}
@@ -404,7 +404,7 @@ export function WorkspaceRepositoryRail({
       <Button
         type="button"
         variant="ghost"
-        size="icon-xs"
+        size="icon-sm"
         aria-label={t('workspace.configure')}
         title={t('workspace.configure')}
         disabled={scanning || reorderPending}
@@ -415,7 +415,7 @@ export function WorkspaceRepositoryRail({
       <Button
         type="button"
         variant="ghost"
-        size="icon-xs"
+        size="icon-sm"
         aria-label={t('workspace.rescan')}
         title={t('workspace.rescan')}
         disabled={scanning}
@@ -426,7 +426,7 @@ export function WorkspaceRepositoryRail({
       <Button
         type="button"
         variant="ghost"
-        size="icon-xs"
+        size="icon-sm"
         aria-label={t(repositoryListVisible ? 'workspace.repositories.hide' : 'workspace.repositories.show')}
         title={t(repositoryListVisible ? 'workspace.repositories.hide' : 'workspace.repositories.show')}
         onClick={() => toggleRepositoryList(workspaceRootId)}
@@ -439,7 +439,7 @@ export function WorkspaceRepositoryRail({
   return (
     <>
       <div
-        className={cn(fill ? 'flex min-h-0 flex-1 flex-col' : 'shrink-0', 'border-b border-separator/70 bg-sidebar')}
+        className={cn(fill ? 'flex min-h-0 flex-1 flex-col' : 'shrink-0', 'bg-sidebar')}
       >
         {repositoryListVisible ? (
           <section className="shrink-0" aria-label={t('workspace.repositories')}>
@@ -453,10 +453,6 @@ export function WorkspaceRepositoryRail({
               className="relative max-h-40 overflow-y-auto px-1.5 pb-1.5"
               data-testid="workspace-repository-upper-list"
             >
-              <div
-                className="pointer-events-none absolute bottom-3 left-[1.12rem] top-3 w-px bg-separator"
-                aria-hidden="true"
-              />
               <ManifestRow
                 active={activeContext.kind === 'overview'}
                 name={overviewName}
@@ -480,7 +476,6 @@ export function WorkspaceRepositoryRail({
             aria-label={t('workspace.branch-workspace.list')}
             className={cn(
               'px-1.5 pb-1.5',
-              repositoryListVisible && 'border-t border-separator/60',
               fill && 'min-h-0 flex-1 overflow-y-auto',
             )}
           >
@@ -551,12 +546,12 @@ export function WorkspaceRepositoryRail({
           </section>
         ) : null}
         {reorderError ? (
-          <div className="border-t border-separator/60 px-3 py-1.5 text-[10px] leading-4 text-danger" role="alert">
+          <div className="px-3 py-1.5 text-[10px] leading-4 text-danger" role="alert">
             {t(reorderError)}
           </div>
         ) : null}
         {(workspace.error || workspace.configurationError || !workspace.configured || workspace.skipped.length > 0) && (
-          <div className="border-t border-separator/60 px-3 py-1.5 text-[10px] leading-4 text-warning" role="status">
+          <div className="px-3 py-1.5 text-[10px] leading-4 text-warning" role="status">
             {workspace.error
               ? t('workspace.scan-failed')
               : workspace.configurationError
