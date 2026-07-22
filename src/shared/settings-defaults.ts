@@ -130,6 +130,7 @@ export function defaultSettingsSnapshot(overrides: Partial<SettingsSnapshot> = {
     recentRepos: overrides.recentRepos ?? [],
     repoSettings: overrides.repoSettings ?? [],
     webAccess: overrides.webAccess ?? { enabled: false, username: '', passwordConfigured: false },
+    telegramNotifications: overrides.telegramNotifications ?? { enabled: false, botTokenConfigured: false, chatId: '' },
   }
 }
 

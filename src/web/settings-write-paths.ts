@@ -11,6 +11,8 @@ import type {
   TerminalPref,
   WebAccessSettingsSnapshot,
   WebAccessSettingsUpdateInput,
+  TelegramNotificationSettingsSnapshot,
+  TelegramNotificationSettingsUpdateInput,
 } from '#/shared/rpc.ts'
 import {
   addRecentRepo,
@@ -45,6 +47,7 @@ import {
   setToolbarHeightPx,
   setTopbarHeightPx,
   setWebAccessSettings,
+  saveTelegramNotificationSettings,
 } from '#/web/settings-client.ts'
 import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
 import {
@@ -84,6 +87,14 @@ export async function setWebAccessSettingsPreference(
   const webAccess = await setWebAccessSettings(input)
   updateSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, webAccess }))
   return webAccess
+}
+
+export async function saveTelegramNotificationSettingsPreference(
+  input: TelegramNotificationSettingsUpdateInput,
+): Promise<TelegramNotificationSettingsSnapshot> {
+  const telegramNotifications = await saveTelegramNotificationSettings(input)
+  updateSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, telegramNotifications }))
+  return telegramNotifications
 }
 
 export async function setTerminalNotificationsEnabledPreference(enabled: boolean): Promise<void> {

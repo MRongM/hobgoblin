@@ -8,6 +8,7 @@ import type {
   SettingsSnapshot,
   WebAccessSettingsSnapshot,
 } from '#/shared/rpc.ts'
+import type { TelegramNotificationSettingsSnapshot } from '#/shared/telegram-notifications.ts'
 
 export function buildRuntimeSettingsSnapshot(input: {
   prefs: SettingsPrefs
@@ -60,6 +61,7 @@ export function buildSettingsSnapshot(input: {
   recentRepos: RepoSessionEntry[]
   repoSettings: RepoSettingsEntry[]
   webAccess: WebAccessSettingsSnapshot
+  telegramNotifications: TelegramNotificationSettingsSnapshot
 }): SettingsSnapshot {
   return {
     ...buildRuntimeSettingsSnapshot({
@@ -70,6 +72,7 @@ export function buildSettingsSnapshot(input: {
     session: input.session,
     repoSettings: input.repoSettings,
     webAccess: input.webAccess,
+    telegramNotifications: input.telegramNotifications,
   }
 }
 

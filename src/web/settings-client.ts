@@ -23,6 +23,10 @@ import type {
   ThemeState,
   WebAccessSettingsSnapshot,
   WebAccessSettingsUpdateInput,
+  TelegramBellNotificationContext,
+  TelegramNotificationResult,
+  TelegramNotificationSettingsSnapshot,
+  TelegramNotificationSettingsUpdateInput,
 } from '#/shared/rpc.ts'
 import type { ColorTheme } from '#/shared/color-theme.ts'
 import type { RepoSettingsEntry } from '#/shared/repo-settings.ts'
@@ -45,6 +49,30 @@ export async function setWebAccessSettings(input: WebAccessSettingsUpdateInput):
     input,
   )
   return result.webAccess
+}
+
+export async function saveTelegramNotificationSettings(
+  input: TelegramNotificationSettingsUpdateInput,
+): Promise<TelegramNotificationSettingsSnapshot> {
+  const result = await postServerJson<
+    TelegramNotificationSettingsUpdateInput,
+    { ok: true; telegramNotifications: TelegramNotificationSettingsSnapshot } | { ok: false; error: { code: string } }
+  >('/api/settings/telegram', input)
+  if (!result.ok) throw new Error(result.error.code)
+  return result.telegramNotifications
+}
+
+export async function sendTelegramTestNotification(): Promise<TelegramNotificationResult> {
+  return await postServerJson<{}, TelegramNotificationResult>('/api/telegram-notifications/test', {})
+}
+
+export async function sendTelegramBellNotification(
+  context: TelegramBellNotificationContext,
+): Promise<TelegramNotificationResult> {
+  return await postServerJson<TelegramBellNotificationContext, TelegramNotificationResult>(
+    '/api/telegram-notifications/bell',
+    context,
+  )
 }
 
 function resolveThemeStateFromPrefs(settings: Pick<SettingsPrefs, 'theme' | 'colorTheme'>): ThemeState {

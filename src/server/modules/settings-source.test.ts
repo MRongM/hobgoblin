@@ -98,6 +98,87 @@ test('defaults a missing terminal notification preference on and preserves expli
   })
 })
 
+test('keeps Telegram Bot Token server-only and retains it on a blank update', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(
+    mod.updateServerTelegramNotificationSettings({
+      enabled: true,
+      botToken: '123456:test-token-value',
+      chatId: '-1001234567890',
+    }),
+  ).resolves.toEqual({
+    enabled: true,
+    botTokenConfigured: true,
+    chatId: '-1001234567890',
+  })
+
+  expect(JSON.stringify(await mod.getServerTelegramNotificationSettings())).not.toContain('test-token-value')
+
+  await mod.updateServerTelegramNotificationSettings({
+    enabled: false,
+    botToken: '',
+    chatId: '-1001234567890',
+  })
+  expect((await mod.getServerTelegramNotificationConfig()).botToken).toBe('123456:test-token-value')
+})
+
+test('does not enable Telegram notifications without a Bot Token and Chat ID', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(
+    mod.updateServerTelegramNotificationSettings({ enabled: true, botToken: '', chatId: '' }),
+  ).rejects.toMatchObject({ code: 'configuration-incomplete' })
+
+  await expect(mod.getServerTelegramNotificationSettings()).resolves.toEqual({
+    enabled: false,
+    botTokenConfigured: false,
+    chatId: '',
+  })
+})
+
+test('tracks a saved Bot Token independently from the Chat ID while disabled', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(
+    mod.updateServerTelegramNotificationSettings({ enabled: false, botToken: '123456:test-token', chatId: '' }),
+  ).resolves.toEqual({ enabled: false, botTokenConfigured: true, chatId: '' })
+  expect((await mod.getServerTelegramNotificationConfig()).botToken).toBe('123456:test-token')
+})
+
+test('rejects malformed Telegram channel usernames', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(
+    mod.updateServerTelegramNotificationSettings({
+      enabled: false,
+      botToken: '123456:test-token',
+      chatId: '@1starts_with_digit',
+    }),
+  ).rejects.toMatchObject({ code: 'invalid-input' })
+})
+
+test('normalizes missing and invalid persisted Telegram notification settings', async () => {
+  useTempServerSettingsDir()
+  writeSettingsFile({
+    telegramNotificationsEnabled: true,
+    telegramBotToken: 'token\u0000material',
+    telegramChatId: 'invalid chat id',
+  })
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(mod.getServerTelegramNotificationSettings()).resolves.toEqual({
+    enabled: false,
+    botTokenConfigured: false,
+    chatId: '',
+  })
+  expect(JSON.stringify(await mod.getServerSettingsPrefs())).not.toContain('telegramBotToken')
+})
+
 test('persists web access credentials without exposing password material in public settings', async () => {
   useTempServerSettingsDir()
   const mod = await import('#/server/modules/settings-source.ts')
@@ -637,16 +718,14 @@ test('normalizes legacy top-bottom sessions to left-right without restoring term
   useTempServerSettingsDir()
   const mod = await import('#/server/modules/settings-source.ts')
 
-  const saved = await mod.setServerSessionState(
-    {
-      ...defaultSessionState(),
-      workspaceLayout: 'top-bottom',
-      detailCollapsed: true,
-      detailFocusMode: true,
-      detailPaneSizes: { 'top-bottom': 40, 'left-right': 72 },
-      fileTreePaneSizes: { 'top-bottom': 40, 'left-right': 64 },
-    } as never,
-  )
+  const saved = await mod.setServerSessionState({
+    ...defaultSessionState(),
+    workspaceLayout: 'top-bottom',
+    detailCollapsed: true,
+    detailFocusMode: true,
+    detailPaneSizes: { 'top-bottom': 40, 'left-right': 72 },
+    fileTreePaneSizes: { 'top-bottom': 40, 'left-right': 64 },
+  } as never)
 
   expect(saved).toMatchObject({
     workspaceLayout: 'left-right',

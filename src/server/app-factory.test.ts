@@ -278,6 +278,21 @@ describe('server app html bootstrap', () => {
     expect(response.status).toBe(200)
     expect(response.headers.get('cache-control')).toBe('no-store')
   })
+
+  test('protects Telegram notification endpoints with the server capability', async () => {
+    const { createApp } = await import('#/server/app-factory.ts')
+    const app = createApp({
+      version: '0.1.0',
+      startedAt: Date.now(),
+      internalSecret: 'secret',
+      terminalHost: terminalHostStub,
+    })
+
+    const response = await app.request('http://127.0.0.1:32100/api/telegram-notifications/test', {
+      method: 'POST',
+    })
+    expect(response.status).toBe(401)
+  })
 })
 
 function serverBootstrapFromHtml(html: string): { secret: string; clientId: string } {

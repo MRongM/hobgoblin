@@ -24,6 +24,14 @@ _Avoid_: Detail focus mode, workspace focus mode
 The specific internal terminal session selected within one branch or worktree terminal area. It is distinct from the selected branch context and from the attachment that currently controls terminal input; a terminal deep link targets this session when it still exists and restores an encoded branch workspace member context when that relationship remains valid.
 _Avoid_: Current terminal, active terminal
 
+**Unread terminal bell**:
+An attention state attached to one internal terminal after it emits a bell while it is not the visible focused terminal. Selecting that terminal clears the state. It is distinct from any external notification delivery, which may fail without clearing or changing the unread state.
+_Avoid_: Telegram message, system notification, terminal output activity
+
+**Terminal bell notification delivery**:
+A best-effort external attention delivery caused by an eligible unread terminal bell. One delivery may use the system notification channel and, when configured, an additional Telegram channel; delivery failure does not change unread terminal bell state.
+_Avoid_: Unread state, queued notification, terminal bell event
+
 **Canonical terminal geometry**:
 The server-owned PTY column and row count published by the current controller attachment.
 _Avoid_: Viewer size, shared viewport size

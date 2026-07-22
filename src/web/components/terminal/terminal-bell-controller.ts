@@ -2,6 +2,9 @@ import { lastPathSegment } from '#/web/lib/paths.ts'
 import { terminalBridge } from '#/web/terminal.ts'
 import type { TerminalBellEvent, TerminalDescriptor } from '#/web/components/terminal/types.ts'
 import { getRuntimeFetchSettings } from '#/web/runtime-settings-fetch.ts'
+import { getRuntimeTelegramNotificationSettings } from '#/web/runtime-settings-telegram-notifications.ts'
+import { sendTelegramBellNotification } from '#/web/settings-client.ts'
+import { terminalNotificationContext } from '#/web/components/terminal/terminal-notification-context.ts'
 const BELL_NOTIFICATION_DEBOUNCE_MS = 5000
 
 export interface TerminalBellController {
@@ -64,6 +67,10 @@ export function createTerminalBellController(
       void terminalBridge
         .notifyBell({ title: repoName, body: bodyParts.join('\n'), key: descriptor.key, repoRoot: descriptor.repoRoot })
         .catch(() => {})
+      const telegram = getRuntimeTelegramNotificationSettings()
+      if (telegram.enabled && telegram.botTokenConfigured && telegram.chatId) {
+        void sendTelegramBellNotification(terminalNotificationContext(descriptor, event)).catch(() => {})
+      }
     },
   }
 }

@@ -15,6 +15,7 @@ import {
   defaultInitialSettingsSnapshot,
   defaultSessionState,
   defaultSettingsPrefs,
+  defaultSettingsSnapshot,
 } from '#/shared/settings-defaults.ts'
 
 describe('settings defaults', () => {
@@ -63,6 +64,14 @@ describe('settings defaults', () => {
     expect(defaultSettingsPrefs().terminalNotificationsEnabled).toBe(true)
     expect(defaultInitialSettingsSnapshot().terminalNotificationsEnabled).toBe(true)
     expect(defaultSettingsPrefs({ terminalNotificationsEnabled: false }).terminalNotificationsEnabled).toBe(false)
+  })
+
+  test('defaults Telegram notifications to disabled and unconfigured', () => {
+    expect(defaultSettingsSnapshot().telegramNotifications).toEqual({
+      enabled: false,
+      botTokenConfigured: false,
+      chatId: '',
+    })
   })
 
   test('defaults global font family to mono', () => {
