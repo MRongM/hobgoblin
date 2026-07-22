@@ -447,7 +447,9 @@ describe('SettingsSurface', () => {
 
     await act(async () => {
       enabledSwitch.click()
+      urlInput.focus()
       setInputValue(urlInput, 'socks5://127.0.0.1:7890')
+      urlInput.blur()
       setInputValue(timeoutInput, '180')
       await Promise.resolve()
     })
@@ -474,6 +476,44 @@ describe('SettingsSurface', () => {
         if (new URL(String(url)).pathname !== '/api/settings/prefs') return false
         const body = JSON.parse(String(options?.body ?? '{}')) as { settings?: Record<string, unknown> }
         return body.settings?.gitNetworkTimeoutSec === 180
+      }),
+    ).toBe(true)
+  })
+
+  test('keeps an incomplete proxy URL editable and persists it after editing finishes', async () => {
+    await render(<SettingsSurface page="proxy" onPageChange={() => {}} />)
+
+    const urlInput = document.getElementById('settings-git-network-proxy-url')
+    if (!(urlInput instanceof HTMLInputElement)) throw new Error('Missing git network proxy url input')
+
+    await act(async () => {
+      urlInput.focus()
+      setInputValue(urlInput, 'http')
+      await Promise.resolve()
+    })
+
+    expect(urlInput.value).toBe('http')
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [url, options] = call as unknown as [unknown, RequestInit | undefined]
+        if (new URL(String(url)).pathname !== '/api/settings/prefs') return false
+        const body = JSON.parse(String(options?.body ?? '{}')) as { settings?: Record<string, unknown> }
+        return body.settings?.gitNetworkProxyUrl !== undefined
+      }),
+    ).toBe(false)
+
+    await act(async () => {
+      setInputValue(urlInput, 'http://127.0.0.1:7890')
+      urlInput.blur()
+      await Promise.resolve()
+    })
+
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [url, options] = call as unknown as [unknown, RequestInit | undefined]
+        if (new URL(String(url)).pathname !== '/api/settings/prefs') return false
+        const body = JSON.parse(String(options?.body ?? '{}')) as { settings?: Record<string, unknown> }
+        return body.settings?.gitNetworkProxyUrl === 'http://127.0.0.1:7890'
       }),
     ).toBe(true)
   })

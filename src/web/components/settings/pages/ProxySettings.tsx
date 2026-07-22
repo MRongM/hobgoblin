@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import {
   SettingsCard,
   SettingsGroup,
@@ -8,10 +9,7 @@ import {
 import { Input } from '#/web/components/ui/input.tsx'
 import { Switch } from '#/web/components/ui/switch.tsx'
 import { MAX_GIT_NETWORK_TIMEOUT_SEC, MIN_GIT_NETWORK_TIMEOUT_SEC } from '#/shared/settings.ts'
-import {
-  useGitNetworkSettingsController,
-  useRuntimeGitNetworkSettings,
-} from '#/web/runtime-settings-git-network.ts'
+import { useGitNetworkSettingsController, useRuntimeGitNetworkSettings } from '#/web/runtime-settings-git-network.ts'
 import { useT } from '#/web/stores/i18n.ts'
 
 export function ProxySettings() {
@@ -19,6 +17,12 @@ export function ProxySettings() {
   const { gitNetworkProxyEnabled, gitNetworkProxyUrl, gitNetworkTimeoutSec } = useRuntimeGitNetworkSettings()
   const { setGitNetworkProxyEnabled, setGitNetworkProxyUrl, setGitNetworkTimeoutSec } =
     useGitNetworkSettingsController()
+  const proxyUrlInputFocusedRef = useRef(false)
+  const [proxyUrlDraft, setProxyUrlDraft] = useState(gitNetworkProxyUrl)
+
+  useEffect(() => {
+    if (!proxyUrlInputFocusedRef.current) setProxyUrlDraft(gitNetworkProxyUrl)
+  }, [gitNetworkProxyUrl])
 
   return (
     <SettingsGroup label={t('settings.proxy.git-title')} hint={t('settings.proxy.git-body')}>
@@ -43,10 +47,19 @@ export function ProxySettings() {
           control={
             <Input
               id="settings-git-network-proxy-url"
-              value={gitNetworkProxyUrl}
+              value={proxyUrlDraft}
               placeholder="socks5://127.0.0.1:7890"
               className="h-8 w-60 max-w-full px-2 text-xs"
-              onChange={(event) => void setGitNetworkProxyUrl(event.currentTarget.value)}
+              onFocus={() => {
+                proxyUrlInputFocusedRef.current = true
+              }}
+              onChange={(event) => setProxyUrlDraft(event.currentTarget.value)}
+              onBlur={(event) => {
+                proxyUrlInputFocusedRef.current = false
+                const nextUrl = event.currentTarget.value.trim()
+                setProxyUrlDraft(nextUrl)
+                void setGitNetworkProxyUrl(nextUrl)
+              }}
             />
           }
         />
