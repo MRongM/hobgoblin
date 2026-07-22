@@ -1083,6 +1083,8 @@ describe('RepoExplorerPane', () => {
     expect(explorerToolbar?.style.height).toBe('41px')
     expect(explorerToolbar?.className).not.toContain('h-8')
     expect(repoFileArea?.className).toContain('project-file-area-tone')
+    expect(repoFileArea?.className).not.toContain('border-t')
+    expect(repoFileArea?.className).not.toContain('border-separator')
     expect(fileTree?.getAttribute('data-toolbar-height')).toBe('detail')
     expect(explorerToolbar?.style.getPropertyValue('--goblin-file-tree-topbar-font-size')).toBe('')
     expect(firstTab?.className).toContain('text-[length:var(--goblin-file-tree-topbar-font-size)]')
