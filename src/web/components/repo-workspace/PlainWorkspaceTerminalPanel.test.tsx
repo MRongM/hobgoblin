@@ -170,14 +170,15 @@ describe('PlainWorkspaceTerminalPanel', () => {
     expect(toolbar?.className).toContain('[-webkit-app-region:drag]')
   })
 
-  test('keeps the compact terminal toolbar on the generic toolbar tone', () => {
+  test('uses the project topbar tone with compact toolbar geometry', () => {
     compactUi = true
     render(<PlainWorkspaceTerminalPanel repoId="/repo" layout="left-right" />)
 
     const toolbar = container!.querySelector<HTMLElement>('[data-testid="plain-workspace-terminal-toolbar"]')
     expect(toolbar?.style.height).toBe('41px')
-    expect(toolbar?.className).toContain('bg-toolbar')
-    expect(toolbar?.className).not.toContain('topbar-tone')
+    expect(toolbar?.className).toContain('topbar-tone')
+    expect(toolbar?.className).toContain('bg-topbar')
+    expect(toolbar?.className).not.toContain('bg-toolbar')
   })
 
   test('collapses the plain-workspace terminal list in compact UI like a Git workspace', () => {
@@ -233,7 +234,10 @@ describe('PlainWorkspaceTerminalPanel', () => {
     )
 
     const toolbar = container!.querySelector<HTMLElement>('[data-testid="plain-workspace-terminal-toolbar"]')
-    expect(toolbar?.className).toContain('bg-toolbar')
+    expect(toolbar?.style.height).toBe('41px')
+    expect(toolbar?.className).toContain('topbar-tone')
+    expect(toolbar?.className).toContain('bg-topbar')
+    expect(toolbar?.className).not.toContain('bg-toolbar')
     expect(toolbar?.classList.contains('topbar')).toBe(false)
     expect(container!.querySelector('[data-testid="focus-project-switcher"]')).not.toBeNull()
     expect(container!.querySelector('button[aria-label="workspace.repositories"]')).not.toBeNull()

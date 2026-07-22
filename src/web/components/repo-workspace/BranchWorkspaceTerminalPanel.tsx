@@ -78,6 +78,7 @@ export function BranchWorkspaceTerminalPanel({
         data-testid="branch-workspace-terminal-toolbar"
         variant="detail"
         chrome={terminalFocusMode ? 'topbar' : 'toolbar'}
+        tone="topbar"
         className={cn(terminalFocusMode && 'topbar [-webkit-app-region:drag]')}
       >
         {terminalFocusMode ? (

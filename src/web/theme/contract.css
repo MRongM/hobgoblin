@@ -160,6 +160,16 @@
   --radius-brand-lg: var(--goblin-brand-radius-lg, var(--radius-lg));
 }
 
+.project-navigation-tone {
+  --color-sidebar: var(--color-topbar);
+}
+
+.project-file-area-tone {
+  --color-sidebar: var(--color-topbar);
+  --color-pane: var(--color-topbar);
+  --color-toolbar: var(--color-topbar);
+}
+
 .topbar,
 .topbar-tone {
   --color-control: var(--color-topbar-control);

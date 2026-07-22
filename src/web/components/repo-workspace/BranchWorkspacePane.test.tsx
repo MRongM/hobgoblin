@@ -208,7 +208,9 @@ describe('BranchWorkspacePane', () => {
   test('composes the parent rail, explicit folder file tree, and root-scoped terminal panel', () => {
     act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={workspace()} layout="left-right" />))
 
-    expect(container.querySelector('[data-testid="rail"]')?.textContent).toContain('/workspace')
+    const rail = container.querySelector('[data-testid="rail"]')
+    expect(rail?.textContent).toContain('/workspace')
+    expect(rail?.closest('.project-navigation-tone')).not.toBeNull()
     expect(container.querySelector('[data-testid="branch-workspace-file-tree"]')?.textContent).toBe(
       '/workspace/goblin-feature-auth',
     )
@@ -343,7 +345,9 @@ describe('BranchWorkspacePane', () => {
 
     act(() => back?.click())
 
-    expect(container.querySelector('[data-testid="rail"]')).not.toBeNull()
+    const rail = container.querySelector('[data-testid="rail"]')
+    expect(rail).not.toBeNull()
+    expect(rail?.closest('.project-navigation-tone')).not.toBeNull()
     expect(container.querySelector('[data-testid="branch-workspace-file-tree"]')).toBeNull()
     expect(container.querySelector('[data-testid="branch-workspace-terminal-panel"]')).toBeNull()
     expect(container.querySelector('[data-testid="split-pane"]')).toBeNull()

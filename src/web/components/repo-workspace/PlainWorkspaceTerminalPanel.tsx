@@ -95,6 +95,7 @@ export function PlainWorkspaceTerminalPanel({
         data-testid="plain-workspace-terminal-toolbar"
         variant="detail"
         chrome={compact ? 'toolbar' : 'topbar'}
+        tone="topbar"
         className={cn(
           'mobile-topbar-scroll',
           layout === 'left-right' && '[-webkit-app-region:drag]',

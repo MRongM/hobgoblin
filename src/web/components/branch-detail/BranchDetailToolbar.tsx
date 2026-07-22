@@ -149,6 +149,7 @@ export function BranchDetailToolbar({
     <Toolbar
       variant="detail"
       chrome={compact ? 'toolbar' : 'topbar'}
+      tone="topbar"
       className={cn('mobile-topbar-scroll', '[-webkit-app-region:drag]', contextRail && !compact && 'topbar')}
     >
       <div className="mobile-topbar-scroll-content flex h-full min-w-0 items-center gap-1 overflow-hidden">

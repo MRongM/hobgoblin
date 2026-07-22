@@ -112,7 +112,7 @@ export function DetachedFileAreaWindow({ request }: DetachedFileAreaWindowProps)
 
   return (
     <ErrorBoundary resetKey={`${request.repo.id}:${request.branch}:${request.tab}`}>
-      <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
+      <div className="project-file-area-tone flex h-full min-h-0 flex-col bg-background text-foreground">
         <EffectiveProjectThemeBridge />
         <Topbar
           actions={

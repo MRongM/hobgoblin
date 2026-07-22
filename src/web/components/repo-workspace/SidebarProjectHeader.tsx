@@ -206,7 +206,7 @@ export function SidebarProjectHeader({ repoId, onShowCompactDetail, onShowCompac
       </div>
       {listExpanded && (
         <div className="border-t border-separator/70">
-          <div className="flex h-7 shrink-0 items-center px-4 pt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-topbar-muted-foreground">
+          <div className="flex h-7 shrink-0 items-center px-4 pt-1 text-[length:var(--goblin-project-titlebar-font-size)] font-semibold uppercase tracking-[0.08em] text-topbar-muted-foreground">
             {t('repo-tabs.repos')}
           </div>
           <SidebarProjectList

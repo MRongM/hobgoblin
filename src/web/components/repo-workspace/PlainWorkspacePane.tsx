@@ -66,7 +66,7 @@ export function PlainWorkspacePane({
           onShowCompactDetail={onShowCompactDetail}
           onShowCompactFiles={onShowCompactFiles}
         />
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
+        <div className="project-navigation-tone flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
           {surface === 'scope' && multiRepositoryWorkspace ? (
             <WorkspaceRepositoryRail
               workspaceRootId={repoId}
@@ -105,7 +105,7 @@ export function PlainWorkspacePane({
             <FileAreaSplitPane
               orientation="vertical"
               navigationArea={
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
+                <div className="project-navigation-tone flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
                   <WorkspaceRepositoryRail
                     workspaceRootId={repoId}
                     currentRepoId={repoId}

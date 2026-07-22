@@ -26,7 +26,26 @@ describe('font contract', () => {
 
     expect(stylesCss).toContain('--goblin-app-font-size: 14px')
     expect(stylesCss).toContain('--goblin-file-tree-font-size: var(--goblin-app-font-size)')
-    expect(stylesCss).toContain('calc(var(--goblin-app-font-size) - 1px)')
+    expect(stylesCss).toContain(
+      '--goblin-project-titlebar-font-size: max(10px, calc(var(--goblin-app-font-size) - 1px))',
+    )
+    expect(stylesCss).toContain(
+      '--goblin-file-tree-topbar-font-size: var(--goblin-project-titlebar-font-size)',
+    )
+  })
+
+  test('uses the shared project titlebar font size across project navigation headings', () => {
+    const titlebarClass = 'text-[length:var(--goblin-project-titlebar-font-size)]'
+    const sources = [
+      [new URL('../components/repo-workspace/SidebarProjectHeader.tsx', import.meta.url), 1],
+      [new URL('../components/repo-workspace/WorkspaceRepositoryRail.tsx', import.meta.url), 2],
+      [new URL('../components/repo-workspace/RepoExplorerPane.tsx', import.meta.url), 1],
+    ] as const
+
+    for (const [url, expectedCount] of sources) {
+      const source = readText(url)
+      expect(source.split(titlebarClass)).toHaveLength(expectedCount + 1)
+    }
   })
 
   test('mounts both global font projections at the renderer root', () => {

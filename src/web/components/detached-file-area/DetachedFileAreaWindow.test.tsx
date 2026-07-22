@@ -105,6 +105,7 @@ describe('DetachedFileAreaWindow', () => {
     expect(container.querySelector('[data-testid="detached-context"]')?.textContent).toContain('repo')
     expect(container.querySelector('[data-testid="detached-context"]')?.textContent).toContain('main')
     expect(container.querySelector('[data-testid="detached-live"]')).toBeTruthy()
+    expect(container.querySelector('.project-file-area-tone')).not.toBeNull()
     expect(document.title).toBe('tab.changes — repo')
     expect(container.querySelector('[data-testid="detached-panel"]')?.getAttribute('data-active-tab')).toBe('changes')
 

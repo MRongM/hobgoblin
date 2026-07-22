@@ -1252,7 +1252,7 @@ export function ProjectFileTree({
 
   return (
     <div
-      className="flex min-h-0 flex-1 flex-col bg-sidebar"
+      className="project-file-area-tone flex min-h-0 flex-1 flex-col bg-sidebar"
       style={fileTreeStyle}
       data-repo-id={repoId}
       onPaste={handlePaste}

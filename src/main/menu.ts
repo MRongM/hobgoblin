@@ -237,7 +237,7 @@ function createViewMenu(state: AppMenuState): MenuItemConstructorOptions {
         : {
             role: 'toggleDevTools',
             label: t('menu.view.toggle-dev-tools'),
-            accelerator: 'Ctrl+Shift+I',
+            accelerator: 'CmdOrCtrl+Shift+I',
           },
     ],
   }

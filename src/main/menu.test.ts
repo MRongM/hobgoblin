@@ -173,7 +173,10 @@ describe('app menu actions', () => {
 
     const helpMenu = mocks.template.find((entry) => entry.label === 'menu.help')
     const shortcutsItem = helpMenu?.submenu?.find((entry: any) => entry.label === 'menu.help.shortcuts')
+    const viewMenu = mocks.template.find((entry) => entry.label === 'menu.view')
+    const devToolsItem = viewMenu?.submenu?.find((entry: any) => entry.label === 'menu.view.toggle-dev-tools')
     expect(shortcutsItem?.enabled).not.toBe(false)
+    expect(devToolsItem?.accelerator).toBeUndefined()
     shortcutsItem.click()
     await Promise.resolve()
 
@@ -298,7 +301,7 @@ describe('app menu actions', () => {
     expect(viewMenu?.submenu?.find((entry: any) => entry.label === 'menu.view.toggle-detail')).toBeUndefined()
   })
 
-  test('wires Ctrl+Shift+I to toggle the web developer tools', async () => {
+  test('wires the platform primary modifier to toggle the web developer tools', async () => {
     const { buildAppMenu } = await import('#/main/menu.ts')
 
     buildAppMenu()
@@ -307,7 +310,7 @@ describe('app menu actions', () => {
     const devToolsItem = viewMenu?.submenu?.find((entry: any) => entry.label === 'menu.view.toggle-dev-tools')
 
     expect(devToolsItem?.role).toBe('toggleDevTools')
-    expect(devToolsItem?.accelerator).toBe('Ctrl+Shift+I')
+    expect(devToolsItem?.accelerator).toBe('CmdOrCtrl+Shift+I')
   })
 
   test('includes standard edit roles and full screen in the menu', async () => {

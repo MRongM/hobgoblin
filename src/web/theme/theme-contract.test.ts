@@ -93,6 +93,20 @@ describe('web theme contract', () => {
     }
   })
 
+  test('scopes project background tone to navigation and file areas', () => {
+    const contract = readText(new URL('contract.css', THEME_ROOT))
+    const navigation = cssRule(contract, '.project-navigation-tone')
+    const fileArea = cssRule(contract, '.project-file-area-tone')
+
+    expect(navigation).toContain('--color-sidebar: var(--color-topbar);')
+    expect(navigation).not.toContain('--color-pane:')
+    expect(navigation).not.toContain('--color-toolbar:')
+
+    expect(fileArea).toContain('--color-sidebar: var(--color-topbar);')
+    expect(fileArea).toContain('--color-pane: var(--color-topbar);')
+    expect(fileArea).toContain('--color-toolbar: var(--color-topbar);')
+  })
+
   test('defines classic terminal tokens for every color theme preset', () => {
     const themeFiles = readdirSync(THEMES_ROOT)
       .filter((file) => file.endsWith('.css'))

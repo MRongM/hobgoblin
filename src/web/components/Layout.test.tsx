@@ -71,6 +71,20 @@ describe('Layout chrome', () => {
     expect(toolbar?.className).not.toContain('bg-toolbar')
   })
 
+  test('allows topbar tone with toolbar geometry', () => {
+    render(
+      <Toolbar data-testid="toolbar" tone="topbar">
+        <span>Compact terminal topbar</span>
+      </Toolbar>,
+    )
+
+    const toolbar = container!.querySelector<HTMLElement>('[data-testid="toolbar"]')
+    expect(toolbar?.style.height).toBe('41px')
+    expect(toolbar?.className).toContain('topbar-tone')
+    expect(toolbar?.className).toContain('bg-topbar')
+    expect(toolbar?.className).not.toContain('bg-toolbar')
+  })
+
   test('keeps the fixed left-right split even when legacy collapsed state is supplied', () => {
     render(
       <RepoWorkspace

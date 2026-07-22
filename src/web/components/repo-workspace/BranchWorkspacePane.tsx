@@ -193,7 +193,7 @@ export function BranchWorkspacePane({
         <FileAreaSplitPane
           orientation="vertical"
           navigationArea={
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
+            <div className="project-navigation-tone flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
               <WorkspaceRepositoryRail
                 workspaceRootId={rootId}
                 currentRepoId={rootId}
@@ -246,7 +246,7 @@ export function BranchWorkspacePane({
   const workspaceBody = compact ? (
     compactSurface === 'scope' ? (
       <RepoWorkspacePane>
-        <div className="flex min-h-0 flex-1 flex-col bg-sidebar">
+        <div className="project-navigation-tone flex min-h-0 flex-1 flex-col bg-sidebar">
           <SidebarProjectHeader
             repoId={memberTarget?.repositoryId ?? rootId}
             onShowCompactDetail={() => showCompactSurface('detail')}

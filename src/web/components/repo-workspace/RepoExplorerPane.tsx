@@ -137,7 +137,7 @@ export function RepoExplorerPane({
           onShowCompactFiles={onShowCompactFiles}
         />
         {surface === 'scope' ? (
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
+          <div className="project-navigation-tone flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
             <BranchArea repoId={repoId} showActions={showActions} onBranchSelected={onBranchSelected} />
           </div>
         ) : (
@@ -161,7 +161,7 @@ export function RepoExplorerPane({
       <FileAreaSplitPane
         orientation="vertical"
         navigationArea={
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
+          <div className="project-navigation-tone flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
             {workspaceRootId && (
               <WorkspaceRepositoryRail
                 workspaceRootId={workspaceRootId}
@@ -219,7 +219,7 @@ function BranchSectionLabel({ repoId }: { repoId: string }) {
   }
 
   return (
-    <div className="flex h-7 shrink-0 items-center gap-2 px-4 pt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
+    <div className="flex h-7 shrink-0 items-center gap-2 px-4 pt-1 text-[length:var(--goblin-project-titlebar-font-size)] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
       <span className="min-w-0 flex-1">{t('branches.filter.worktrees')}</span>
       {repo && branch ? (
         <BranchCreateWorktreeButton repo={repo} branch={branch} />

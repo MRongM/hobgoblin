@@ -444,7 +444,7 @@ export function WorkspaceRepositoryRail({
         {repositoryListVisible ? (
           <section className="shrink-0" aria-label={t('workspace.repositories')}>
             <div className="flex h-7 items-center gap-1 px-3 pt-1">
-              <span className="min-w-0 flex-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
+              <span className="min-w-0 flex-1 text-[length:var(--goblin-project-titlebar-font-size)] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
                 {t('workspace.repositories')}
               </span>
               {headerActions}
@@ -485,7 +485,7 @@ export function WorkspaceRepositoryRail({
             )}
           >
             <div className="flex h-7 items-center gap-1 px-2 pt-1">
-              <span className="min-w-0 flex-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
+              <span className="min-w-0 flex-1 text-[length:var(--goblin-project-titlebar-font-size)] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
                 {t('workspace.branch-workspace.list')}
               </span>
               {!repositoryListVisible ? headerActions : null}

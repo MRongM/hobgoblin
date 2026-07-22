@@ -149,12 +149,28 @@ describe('BranchWorkspaceTerminalPanel', () => {
     expect(createTerminal).not.toHaveBeenCalled()
   })
 
+  test('uses the project topbar tone with standard toolbar geometry', async () => {
+    await renderPanel()
+
+    const toolbar = container.querySelector<HTMLElement>('[data-testid="branch-workspace-terminal-toolbar"]')
+    expect(toolbar?.style.height).toBe('41px')
+    expect(toolbar?.className).toContain('topbar-tone')
+    expect(toolbar?.className).toContain('bg-topbar')
+    expect(toolbar?.className).not.toContain('bg-toolbar')
+  })
+
   test('exits terminal focus through the focused toolbar control', async () => {
     const onExitTerminalFocus = vi.fn()
     await renderPanel({ terminalFocusMode: true, onExitTerminalFocus })
 
     expect(container.querySelector('[data-testid="focus-project-switcher"]')).not.toBeNull()
     expect(container.querySelector('[data-testid="workspace-repository-switcher"]')).not.toBeNull()
+    const toolbar = container.querySelector<HTMLElement>('[data-testid="branch-workspace-terminal-toolbar"]')
+    expect(toolbar?.style.height).toBe('39px')
+    expect(toolbar?.className).toContain('topbar-tone')
+    expect(toolbar?.className).toContain('bg-topbar')
+    expect(toolbar?.className).toContain('topbar')
+    expect(toolbar?.className).toContain('[-webkit-app-region:drag]')
     expect(terminalTabsProps.at(-1)?.focusMode).toBe(true)
 
     act(() => container.querySelector<HTMLButtonElement>('button[aria-label="terminal.exit-focus"]')?.click())

@@ -250,7 +250,7 @@ describe('BranchDetailToolbar', () => {
     expect(toolbar?.className).toContain('text-topbar-foreground')
   })
 
-  test('keeps the compact detail toolbar on the generic toolbar tone', () => {
+  test('uses the project topbar tone with compact toolbar geometry', () => {
     compactUi = true
     const { container: c } = renderToolbar({
       terminalCount: 1,
@@ -261,8 +261,9 @@ describe('BranchDetailToolbar', () => {
 
     const toolbar = c.firstElementChild as HTMLElement | null
     expect(toolbar?.style.height).toBe('41px')
-    expect(toolbar?.className).toContain('bg-toolbar')
-    expect(toolbar?.className).not.toContain('topbar-tone')
+    expect(toolbar?.className).toContain('topbar-tone')
+    expect(toolbar?.className).toContain('bg-topbar')
+    expect(toolbar?.className).not.toContain('bg-toolbar')
   })
 
   test('keeps the complete compact terminal topbar in the shared horizontal scroll flow', () => {

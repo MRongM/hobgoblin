@@ -287,6 +287,7 @@ describe('ProjectFileTree', () => {
     expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', '/repo', expect.any(AbortSignal))
     expect(container?.textContent).toContain('src')
     expect(container?.textContent).toContain('README.md')
+    expect(fileTreeRoot().className).toContain('project-file-area-tone')
     expect(fileTreeRoot().style.getPropertyValue('--goblin-file-tree-font-size')).toBe('15px')
   })
 
