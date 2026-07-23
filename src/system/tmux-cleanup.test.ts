@@ -55,6 +55,60 @@ describe('parseTmuxSessionList', () => {
 })
 
 describe('local tmux commands', () => {
+  test('refreshes a cached executable once when its session list becomes malformed', async () => {
+    vi.resetModules()
+    mocks.execa.mockReset()
+    mocks.execa
+      .mockResolvedValueOnce({ failed: true, code: 'ENOENT', stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '/opt/tools/tmux-v1\n', stderr: '' })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: 'hobgoblin-v1-aebf050981ac829e36100020\t$3\t/srv/repo',
+        stderr: '',
+      })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'unsupported output', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '/opt/tools/tmux-v2\n', stderr: '' })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: 'hobgoblin-v1-aebf050981ac829e36100020\t$3\t/srv/repo',
+        stderr: '',
+      })
+    const { listLocalTmuxSessions: listSessions } = await import('#/system/tmux-cleanup.ts')
+
+    await expect(listSessions()).resolves.toEqual({
+      ok: true,
+      sessions: [
+        {
+          sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+          sessionId: '$3',
+          sessionPath: '/srv/repo',
+        },
+      ],
+    })
+    await expect(listSessions()).resolves.toEqual({
+      ok: true,
+      sessions: [
+        {
+          sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+          sessionId: '$3',
+          sessionPath: '/srv/repo',
+        },
+      ],
+    })
+    expect(mocks.execa).toHaveBeenNthCalledWith(
+      5,
+      expect.stringMatching(/^\//u),
+      ['-lc', 'command -v tmux'],
+      expect.objectContaining({ reject: false }),
+    )
+    expect(mocks.execa).toHaveBeenNthCalledWith(
+      6,
+      '/opt/tools/tmux-v2',
+      ['list-sessions', '-F', TMUX_SESSION_LIST_FORMAT],
+      expect.objectContaining({ reject: false }),
+    )
+  })
+
   test('resolves tmux through the login shell and reuses it when the GUI PATH cannot find it', async () => {
     mocks.execa
       .mockResolvedValueOnce({
