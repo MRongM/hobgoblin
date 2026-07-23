@@ -1,7 +1,11 @@
 import { QueryClient } from '@tanstack/react-query'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { BranchWorkspaceReadResult } from '#/shared/branch-workspaces.ts'
-import { branchWorkspaceQueryKey, refreshBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
+import {
+  branchWorkspaceQueryKey,
+  branchWorkspaceQueryOptions,
+  refreshBranchWorkspaceQuery,
+} from '#/web/branch-workspace-queries.ts'
 
 const mocks = vi.hoisted(() => ({
   readBranchWorkspaces: vi.fn(),
@@ -12,12 +16,34 @@ vi.mock('#/web/workspace-client.ts', () => ({
 }))
 
 const ROOT = '/workspace'
+const REMOTE_ROOT = 'ssh-config://prod/srv/workspace'
+
+beforeEach(() => {
+  mocks.readBranchWorkspaces.mockReset()
+})
+
+describe('branch workspace query cache', () => {
+  test('reuses an SSH workspace snapshot for one minute', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+    const queryClient = new QueryClient()
+    const current = successfulRead([], REMOTE_ROOT)
+    mocks.readBranchWorkspaces.mockResolvedValue(current)
+
+    try {
+      await queryClient.fetchQuery(branchWorkspaceQueryOptions(REMOTE_ROOT))
+      vi.advanceTimersByTime(59_999)
+      await queryClient.fetchQuery(branchWorkspaceQueryOptions(REMOTE_ROOT))
+
+      expect(mocks.readBranchWorkspaces).toHaveBeenCalledTimes(1)
+    } finally {
+      queryClient.clear()
+      vi.useRealTimers()
+    }
+  })
+})
 
 describe('manual branch workspace query refresh', () => {
-  beforeEach(() => {
-    mocks.readBranchWorkspaces.mockReset()
-  })
-
   test('replaces the cached snapshot after a successful read', async () => {
     const queryClient = new QueryClient()
     const current = successfulRead(['docs'])
@@ -44,14 +70,14 @@ describe('manual branch workspace query refresh', () => {
   })
 })
 
-function successfulRead(names: string[]): Extract<BranchWorkspaceReadResult, { ok: true }> {
+function successfulRead(names: string[], rootId = ROOT): Extract<BranchWorkspaceReadResult, { ok: true }> {
   return {
     ok: true,
-    rootId: ROOT,
+    rootId,
     items: [],
     auxiliaryCandidates: names.map((name) => ({
       name,
-      path: `${ROOT}/${name}`,
+      path: `${rootId}/${name}`,
       kind: 'file',
       outsideRoot: false,
     })),
