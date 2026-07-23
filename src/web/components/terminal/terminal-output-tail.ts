@@ -13,11 +13,19 @@ export function createTerminalOutputTail(maxCharacters = TELEGRAM_OUTPUT_TAIL_MA
   let characters: string[] = []
   let previousWasCarriageReturn = false
   let whitespacePending = false
+  let horizontalRuleLength = 0
 
   function append(character: string): void {
     if (character === ' ' || character === '\t' || character === '\n' || character === '\r') {
       whitespacePending = characters.length > 0
+      horizontalRuleLength = 0
       return
+    }
+    if (character === '─') {
+      horizontalRuleLength += 1
+      if (horizontalRuleLength > 3) return
+    } else {
+      horizontalRuleLength = 0
     }
     if (whitespacePending) characters.push(' ')
     characters.push(character)
@@ -77,6 +85,7 @@ export function createTerminalOutputTail(maxCharacters = TELEGRAM_OUTPUT_TAIL_MA
       characters = []
       previousWasCarriageReturn = false
       whitespacePending = false
+      horizontalRuleLength = 0
     },
   }
 }

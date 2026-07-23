@@ -1030,7 +1030,7 @@ export const ja: Record<DictKey, string> = {
   'settings.terminal-notifications-test-failed-hint':
     'システム設定 → 通知 → Hobgoblin を開き、通知が許可されているか確認してください。',
   'telegram.notification.message.title': '🔔 Hobgoblin 未読ターミナルベル',
-  'telegram.notification.message.output-completion-title': '✅ Hobgoblin ターミナル実行終了',
+  'telegram.notification.message.output-completion-title': '✅ Hobgoblin ターミナルに新しい出力なし',
   'telegram.notification.message.output-tail': 'ターミナル出力',
   'telegram.notification.message.project': 'プロジェクト',
   'telegram.notification.message.context': 'コンテキスト',

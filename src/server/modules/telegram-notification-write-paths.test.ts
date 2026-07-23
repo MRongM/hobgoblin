@@ -6,6 +6,7 @@ import type {
 } from '#/shared/telegram-notifications.ts'
 import {
   formatTelegramBellMessage,
+  formatTelegramOutputCompletionMessage,
   resetTelegramNotificationWritePathsForTests,
   sendConfiguredTelegramBellNotification,
   sendConfiguredTelegramOutputCompletionNotification,
@@ -56,16 +57,14 @@ function dependencies(overrides: Record<string, unknown> = {}) {
 describe('Telegram notification write paths', () => {
   beforeEach(() => resetTelegramNotificationWritePathsForTests())
 
-  test('formats localized worktree context and omits an absent workspace branch', () => {
+  test('formats a compact summary and omits a branch duplicated by the context', () => {
     expect(formatTelegramBellMessage(context(), 'zh')).toBe(
       [
         '🔔 Hobgoblin 未读终端提醒',
-        '项目：api',
-        '上下文：工作树 feature/login',
-        '目录：~/src/api-feature-login',
-        '分支：feature/login',
-        '终端：#2',
-        '标题：bun run test',
+        '',
+        'api · 工作树 feature/login · #2',
+        '🖥 bun run test',
+        '📁 ~/src/api-feature-login',
       ].join('\n'),
     )
     expect(
@@ -73,12 +72,47 @@ describe('Telegram notification write paths', () => {
     ).toBe(
       [
         '🔔 Hobgoblin unread terminal bell',
-        'Project: api',
-        'Context: Workspace platform',
-        'Directory: ~/src/api-feature-login',
-        'Terminal: #2',
-        'Title: bun run test',
+        '',
+        'api · Workspace platform · #2',
+        '🖥 bun run test',
+        '📁 ~/src/api-feature-login',
       ].join('\n'),
+    )
+  })
+
+  test('keeps a distinct branch and separates terminal output', () => {
+    expect(
+      formatTelegramBellMessage(
+        context({ context: 'api-feature-login', branch: 'feature/login', outputTail: 'tests passed' }),
+        'zh',
+      ),
+    ).toBe(
+      [
+        '🔔 Hobgoblin 未读终端提醒',
+        '',
+        'api · 工作树 api-feature-login · #2',
+        '🖥 bun run test',
+        '📁 ~/src/api-feature-login',
+        '🌿 feature/login',
+        '',
+        '── 终端输出 ──',
+        'tests passed',
+      ].join('\n'),
+    )
+  })
+
+  test('describes idle terminal output without claiming that the process completed', () => {
+    expect(formatTelegramOutputCompletionMessage(context(), 'zh').split('\n')[0]).toBe(
+      '✅ Hobgoblin 终端暂无新输出',
+    )
+    expect(formatTelegramOutputCompletionMessage(context(), 'en').split('\n')[0]).toBe(
+      '✅ Hobgoblin terminal has no new output',
+    )
+    expect(formatTelegramOutputCompletionMessage(context(), 'ja').split('\n')[0]).toBe(
+      '✅ Hobgoblin ターミナルに新しい出力なし',
+    )
+    expect(formatTelegramOutputCompletionMessage(context(), 'ko').split('\n')[0]).toBe(
+      '✅ Hobgoblin 터미널 새 출력 없음',
     )
   })
 
@@ -111,7 +145,7 @@ describe('Telegram notification write paths', () => {
     expect(deps.sendMessage).toHaveBeenCalledWith({
       botToken: '123456:test-token',
       chatId: '-100123',
-      text: expect.stringContaining('项目：api'),
+      text: expect.stringContaining('api · 工作树 feature/login · #2'),
       proxyUrl: 'socks5://127.0.0.1:1080',
     })
     expect(deps.warn).toHaveBeenCalledWith('network-failed')
@@ -147,7 +181,7 @@ describe('Telegram notification write paths', () => {
 
     expect(deps.sendMessage).toHaveBeenCalledTimes(2)
     expect(deps.sendMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ text: expect.stringContaining('终端运行结束') }),
+      expect.objectContaining({ text: expect.stringContaining('终端暂无新输出') }),
     )
   })
 
@@ -211,6 +245,19 @@ describe('Telegram notification write paths', () => {
     ).resolves.toEqual({ ok: true })
 
     expect(deps.sendMessage.mock.calls[0]?.[0].text).toMatch(/new end$/u)
+  })
+
+  test('preserves native visible terminal text without redaction', async () => {
+    const deps = dependencies()
+    const outputTail = 'token=example-token\turl=https://example.test/path\nuser@example.test <raw>&value'
+
+    await expect(
+      sendConfiguredTelegramBellNotification(context({ terminalKey: 'native-text', outputTail }), deps),
+    ).resolves.toEqual({ ok: true })
+
+    expect(deps.sendMessage.mock.calls[0]?.[0].text).toContain(
+      'token=example-token url=https://example.test/path user@example.test <raw>&value',
+    )
   })
 
   test('fits terminal output into the complete 4096-character Telegram message budget', async () => {

@@ -972,7 +972,7 @@ export const zh: Record<DictKey, string> = {
   'settings.terminal-notifications-test-failed': '无法显示测试通知',
   'settings.terminal-notifications-test-failed-hint': '请前往系统设置 → 通知 → Hobgoblin，确认已允许通知。',
   'telegram.notification.message.title': '🔔 Hobgoblin 未读终端提醒',
-  'telegram.notification.message.output-completion-title': '✅ Hobgoblin 终端运行结束',
+  'telegram.notification.message.output-completion-title': '✅ Hobgoblin 终端暂无新输出',
   'telegram.notification.message.output-tail': '终端输出',
   'telegram.notification.message.project': '项目',
   'telegram.notification.message.context': '上下文',

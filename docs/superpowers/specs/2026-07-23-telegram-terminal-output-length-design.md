@@ -12,6 +12,12 @@ The value remains editable and persisted independently of the include-output swi
 
 All four supported languages receive equivalent labels and hints.
 
+## Message Layout
+
+Terminal notifications use a compact plain-text layout. The localized notification title is followed by a blank line and one summary line containing the project, localized context kind and context name, and terminal number separated by ` · `. The optional terminal title and directory use `🖥` and `📁` prefixes. An optional branch uses `🌿` and is omitted only when its trimmed value exactly equals the trimmed context name; path or naming similarity is not sufficient to discard authoritative branch information.
+
+The output section is separated with `── <localized output label> ──`. No Telegram parse mode is added, so dynamic terminal content, paths, and branch names remain literal and cannot break message formatting. The output-activity notification title describes the observed condition as “no new terminal output” rather than claiming that a process or command completed.
+
 ## Settings Contract and Persistence
 
 `TelegramNotificationSettingsSnapshot` and `TelegramNotificationSettingsUpdateInput` gain `outputTailLength: number`.
@@ -30,7 +36,7 @@ Every managed terminal collector strips terminal control sequences and increment
 
 When either a bell or output-completion notification is prepared, the renderer reads the current runtime Telegram settings, applies the same whitespace normalization defensively, and keeps only the final `outputTailLength` code points. Disabling terminal output still removes the excerpt entirely. Changing the setting therefore affects existing terminal sessions immediately while preserving the current session isolation, ANSI stripping, and reset lifecycle.
 
-The renderer remains a best-effort producer. It does not format Telegram messages or calculate the final whole-message budget.
+The renderer remains a best-effort producer. It does not format Telegram messages or calculate the final whole-message budget. Printable terminal content is kept literally: commands, paths, URL-like values, credential-like values, and punctuation are not redacted, masked, classified, or escaped. ANSI/OSC and non-display control sequences are still excluded because they are terminal presentation instructions rather than visible text. As one explicit visual-normalization exception, a run of four or more box-drawing horizontal characters (`─`) is collapsed to exactly three (`───`) before counting. ASCII hyphens and other printable characters are unchanged. Apart from that exception, whitespace folding and configured suffix truncation are the only content transformations.
 
 ## Authoritative Server Enforcement
 
@@ -52,6 +58,7 @@ This policy applies identically to unread-bell and terminal-output-completion me
 
 - Existing settings without the new field migrate to the new 400-character default.
 - Output remains opt-in and ephemeral; increasing the configured maximum does not persist a transcript.
+- Native visible output is not redacted or masked; users who enable it may send sensitive terminal content to Telegram. Long `─` separators are compacted but their presence remains visible.
 - Notification failures keep the current safe-code logging behavior and never log terminal output or credentials.
 - Unicode truncation operates on code points rather than UTF-16 code units, avoiding split surrogate pairs.
 - ANSI/VT stripping and forbidden-control filtering remain unchanged.
