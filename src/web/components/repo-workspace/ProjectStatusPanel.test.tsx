@@ -94,6 +94,9 @@ describe('ProjectStatusPanel', () => {
     expect(container?.textContent).toContain('Test Author')
     expect(container?.textContent).toContain('branch-status.signal.commit-time')
     expect(container?.textContent).toContain('2026')
+    const statusRows = container?.querySelector<HTMLElement>('[role="list"]')
+    expect(statusRows?.className).not.toContain('divide-y')
+    expect(statusRows?.className).not.toContain('border-b')
     const copyAllButton = container?.querySelector<HTMLButtonElement>('button[aria-label="branch-status.copy-all"]')
     expect(container?.querySelector('[data-testid="project-status-left-actions"]')?.contains(copyAllButton ?? null)).toBe(
       true,

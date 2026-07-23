@@ -183,7 +183,7 @@ export function RepoWorktreeExplorer({
       data-repo-worktree-explorer={repoId}
       className="project-file-area-tone flex min-h-0 flex-1 flex-col bg-pane"
     >
-      <Toolbar data-testid="repo-explorer-toolbar" className="px-2" variant="detail">
+      <Toolbar data-testid="repo-explorer-toolbar" className="border-y-0 px-2" variant="detail">
         {toolbarLeading}
         <ToolbarTabStrip
           compact={false}
