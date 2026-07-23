@@ -629,7 +629,7 @@ export const zh: Record<DictKey, string> = {
   'terminal.sessions': '终端',
   'terminal.label': '终端',
   'terminal.new': '新终端',
-  'terminal.new-with-tmux': '使用 tmux 新建终端',
+  'terminal.new-with-tmux': 'tmux终端',
   'terminal.internal': '内部终端',
   'terminal.external': '外部终端',
   'terminal.focus': '最大化终端',

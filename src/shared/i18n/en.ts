@@ -670,7 +670,7 @@ export const en = {
   'terminal.sessions': 'Terminals',
   'terminal.label': 'Terminal',
   'terminal.new': 'New terminal',
-  'terminal.new-with-tmux': 'New terminal with tmux',
+  'terminal.new-with-tmux': 'tmux terminal',
   'terminal.internal': 'Internal terminal',
   'terminal.external': 'External terminal',
   'terminal.focus': 'Maximize terminal',
