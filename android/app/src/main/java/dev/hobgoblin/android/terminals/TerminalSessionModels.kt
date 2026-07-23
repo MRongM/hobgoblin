@@ -9,6 +9,7 @@ data class TerminalSessionRecord(
     val displayName: String = "",
     val terminalId: Int? = null,
     val repositoryRemotePath: String? = null,
+    val tmuxIdentity: TmuxSessionIdentity? = null,
     val status: TerminalSessionStatus,
     val lastOutputSnapshot: String = "",
     val lastActivityAt: Long? = null,
@@ -30,6 +31,12 @@ data class TerminalSessionRecord(
         }
         require(repositoryRemotePath == null || terminalId != null) {
             "Project terminal records require a terminal id"
+        }
+        require(tmuxIdentity == null || repositoryRemotePath != null) {
+            "Tmux-backed terminals require a repository path"
+        }
+        require(tmuxIdentity == null || TmuxSessionProtocol.normalizePath(remotePath) == tmuxIdentity.initialPath) {
+            "Tmux initial path must match the terminal remote path"
         }
         require(lastOutputSnapshot.length <= MaxOutputSnapshotChars) {
             "Terminal output snapshot must be bounded"

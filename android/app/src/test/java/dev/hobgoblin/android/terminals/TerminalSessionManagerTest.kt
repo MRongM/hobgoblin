@@ -77,6 +77,62 @@ class TerminalSessionManagerTest {
     }
 
     @Test
+    fun `project terminal defaults to native launch without tmux identity`() {
+        val service = FakeTerminalSessionFactory()
+        val manager = terminalSessionManager(service, ids = terminalIds())
+
+        val record = manager.createNew(
+            target = target(remotePath = "/srv/repo-feature"),
+            repositoryId = "repo-1",
+            repositoryRemotePath = "/srv/repo",
+            targetLabel = "App - /srv/repo-feature",
+        )
+
+        assertNull(record.tmuxIdentity)
+        assertNull(service.startupContext()?.tmuxIdentity)
+    }
+
+    @Test
+    fun `explicit tmux project terminal retains the current protocol identity`() {
+        val service = FakeTerminalSessionFactory()
+        val manager = terminalSessionManager(service, ids = terminalIds())
+
+        val record = manager.createNew(
+            target = target(remotePath = "/srv/repo-feature/./"),
+            repositoryId = "repo-1",
+            repositoryRemotePath = "/srv//repo/",
+            targetLabel = "App - /srv/repo-feature",
+            launchMode = TerminalLaunchMode.TmuxIfAvailable,
+        )
+        val expected = TmuxSessionProtocol.identity(
+            TmuxSessionDescriptor(
+                projectRoot = "/srv/repo",
+                workingDirectory = "/srv/repo-feature",
+                terminalNumber = 1,
+            ),
+        )
+
+        assertEquals(expected, record.tmuxIdentity)
+        assertEquals(expected, service.startupContext()?.tmuxIdentity)
+    }
+
+    @Test
+    fun `temporary terminal ignores tmux launch intent`() {
+        val service = FakeTerminalSessionFactory()
+        val manager = terminalSessionManager(service, ids = terminalIds())
+
+        val record = manager.createNew(
+            target = target(remotePath = "/"),
+            repositoryId = null,
+            targetLabel = "Dev - /",
+            launchMode = TerminalLaunchMode.TmuxIfAvailable,
+        )
+
+        assertNull(record.tmuxIdentity)
+        assertNull(service.startupContext())
+    }
+
+    @Test
     fun `terminal ids are scoped by repository root and worktree path`() {
         val service = FakeTerminalSessionFactory()
         val manager = terminalSessionManager(service, ids = terminalIds())
@@ -250,6 +306,31 @@ class TerminalSessionManagerTest {
         assertEquals(1, service.startupContext(index = 1)?.terminalId)
         assertEquals("/srv/repo", service.startupContext(index = 1)?.repositoryRemotePath)
         assertEquals("/srv/repo-feature", service.startupContext(index = 1)?.worktreeRemotePath)
+    }
+
+    @Test
+    fun `reconnect preserves an exact current tmux identity`() {
+        val service = FakeTerminalSessionFactory()
+        val manager = terminalSessionManager(service, ids = terminalIds())
+        val record = manager.createNew(
+            target = target(remotePath = "/srv/repo-feature"),
+            repositoryId = "repo-1",
+            repositoryRemotePath = "/srv/repo",
+            targetLabel = "App - /srv/repo-feature",
+            launchMode = TerminalLaunchMode.TmuxIfAvailable,
+        )
+        service.fail(IOException("connection lost"))
+
+        val reconnected = manager.reconnect(
+            sessionId = record.id,
+            target = target(remotePath = "/srv/repo-feature/"),
+            repositoryId = "repo-1",
+            repositoryRemotePath = "/srv/repo/",
+            targetLabel = "App - /srv/repo-feature",
+        )
+
+        assertEquals(record.tmuxIdentity, reconnected?.tmuxIdentity)
+        assertEquals(record.tmuxIdentity, service.startupContext(index = 1)?.tmuxIdentity)
     }
 
     @Test

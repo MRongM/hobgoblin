@@ -9,8 +9,10 @@ import dev.hobgoblin.android.domain.ssh.RemoteRepositorySnapshot
 import dev.hobgoblin.android.domain.ssh.RemoteRepositoryWorktree
 import dev.hobgoblin.android.domain.ssh.SshHostProfile
 import dev.hobgoblin.android.terminals.TerminalDisconnectedReason
+import dev.hobgoblin.android.terminals.TerminalLaunchMode
 import dev.hobgoblin.android.terminals.TerminalSessionRecord
 import dev.hobgoblin.android.terminals.TerminalSessionStatus
+import dev.hobgoblin.android.terminals.TmuxSessionIdentity
 import dev.hobgoblin.android.termux.ExternalTermuxLaunchResult
 import dev.hobgoblin.android.ui.screens.placeholders.localTerminalPlaceholderText
 import org.junit.Assert.assertEquals
@@ -329,6 +331,44 @@ class RepositorySetupStateTest {
     }
 
     @Test
+    fun `repository terminal creation offers explicit native and tmux actions`() {
+        assertEquals(
+            listOf(
+                RepositoryTerminalCreationAction(
+                    label = "New terminal",
+                    launchMode = TerminalLaunchMode.Native,
+                    primary = true,
+                ),
+                RepositoryTerminalCreationAction(
+                    label = "New terminal with tmux",
+                    launchMode = TerminalLaunchMode.TmuxIfAvailable,
+                    primary = false,
+                ),
+            ),
+            repositoryTerminalCreationActions(),
+        )
+    }
+
+    @Test
+    fun `only a retained current tmux identity offers exact session close`() {
+        val plain = terminalSession()
+        val tmux = terminalSession(
+            terminalId = 1,
+            repositoryRemotePath = "/srv/app",
+            tmuxIdentity = TmuxSessionIdentity(
+                sessionName = "hobgoblin-v1-aebf050981ac829e36100020",
+                initialPath = "/srv/app",
+            ),
+        )
+
+        assertFalse(canCloseTerminalTmuxSession(plain))
+        assertTrue(canCloseTerminalTmuxSession(tmux))
+        assertTrue(terminalTmuxCloseWarning().contains("running processes"))
+        assertTrue(terminalTmuxCloseWarning().contains("other clients"))
+        assertFalse(terminalTmuxCloseWarning().contains(tmux.tmuxIdentity!!.sessionName))
+    }
+
+    @Test
     fun `inactive terminal delete does not require running process confirmation`() {
         assertFalse(requiresTerminalDeleteConfirmation(terminalSession(status = TerminalSessionStatus.Exited)))
         assertFalse(requiresTerminalDeleteConfirmation(terminalSession(status = TerminalSessionStatus.Failed)))
@@ -518,12 +558,18 @@ class RepositorySetupStateTest {
         lastActivityAt: Long? = openedAt,
         foregroundServiceOwned: Boolean = false,
         disconnectedReason: TerminalDisconnectedReason? = null,
+        terminalId: Int? = null,
+        repositoryRemotePath: String? = null,
+        tmuxIdentity: TmuxSessionIdentity? = null,
     ): TerminalSessionRecord = TerminalSessionRecord(
         id = id,
         hostId = hostId,
         repositoryId = repositoryId,
         remotePath = remotePath,
         targetLabel = "App - $remotePath",
+        terminalId = terminalId,
+        repositoryRemotePath = repositoryRemotePath,
+        tmuxIdentity = tmuxIdentity,
         status = status,
         openedAt = openedAt,
         lastActivityAt = lastActivityAt,

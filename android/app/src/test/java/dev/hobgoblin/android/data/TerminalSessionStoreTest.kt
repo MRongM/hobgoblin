@@ -3,6 +3,7 @@ package dev.hobgoblin.android.data
 import dev.hobgoblin.android.terminals.TerminalDisconnectedReason
 import dev.hobgoblin.android.terminals.TerminalSessionRecord
 import dev.hobgoblin.android.terminals.TerminalSessionStatus
+import dev.hobgoblin.android.terminals.TmuxSessionIdentity
 import dev.hobgoblin.android.terminals.terminalOutputSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -24,6 +25,13 @@ class TerminalSessionStoreTest {
         assertEquals("terminal-2", decoded.single().displayName)
         assertEquals(2, decoded.single().terminalId)
         assertEquals("/srv/repo", decoded.single().repositoryRemotePath)
+        assertEquals(
+            TmuxSessionIdentity(
+                sessionName = "hobgoblin-v1-aebf050981ac829e36100020",
+                initialPath = "/srv/app",
+            ),
+            decoded.single().tmuxIdentity,
+        )
         assertEquals(TerminalSessionStatus.Disconnected, decoded.single().status)
         assertEquals(250L, decoded.single().lastActivityAt)
         assertEquals("recent output", decoded.single().lastOutputSnapshot)
@@ -66,6 +74,19 @@ class TerminalSessionStoreTest {
 
         assertEquals(null, decoded.terminalId)
         assertEquals(null, decoded.repositoryRemotePath)
+        assertEquals(null, decoded.tmuxIdentity)
+    }
+
+    @Test
+    fun `legacy fifteen field terminal payload decodes without current tmux identity`() {
+        val currentPayload = TerminalSessionCodec.encode(listOf(terminalRecord()))
+        val legacyPayload = currentPayload.split('.').take(15).joinToString(".")
+
+        val decoded = TerminalSessionCodec.decode(legacyPayload).single()
+
+        assertEquals(2, decoded.terminalId)
+        assertEquals("/srv/repo", decoded.repositoryRemotePath)
+        assertEquals(null, decoded.tmuxIdentity)
     }
 
     @Test
@@ -96,6 +117,14 @@ class TerminalSessionStoreTest {
         displayName = "terminal-${terminalId ?: 1}",
         terminalId = terminalId,
         repositoryRemotePath = repositoryRemotePath,
+        tmuxIdentity = if (terminalId == null) {
+            null
+        } else {
+            TmuxSessionIdentity(
+                sessionName = "hobgoblin-v1-aebf050981ac829e36100020",
+                initialPath = "/srv/app",
+            )
+        },
         lastOutputSnapshot = lastOutputSnapshot,
         lastActivityAt = 250L,
         openedAt = 100L,

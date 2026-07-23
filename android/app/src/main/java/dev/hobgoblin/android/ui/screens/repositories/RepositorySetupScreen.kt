@@ -27,6 +27,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -69,6 +70,7 @@ import dev.hobgoblin.android.domain.ssh.RemoteTarget
 import dev.hobgoblin.android.ssh.evaluateWorktreeRemoval
 import dev.hobgoblin.android.ssh.worktreeRemovalConfirmationText
 import dev.hobgoblin.android.terminals.TerminalDisconnectedReason
+import dev.hobgoblin.android.terminals.TerminalLaunchMode
 import dev.hobgoblin.android.terminals.TerminalSessionRecord
 import dev.hobgoblin.android.terminals.TerminalSessionStatus
 import dev.hobgoblin.android.termux.ExternalTermuxLaunchResult
@@ -351,6 +353,31 @@ internal fun terminalDeleteConfirmationText(label: String, session: TerminalSess
     } else {
         "$label at ${session.remotePath} will be removed from the terminal list."
     }
+
+internal data class RepositoryTerminalCreationAction(
+    val label: String,
+    val launchMode: TerminalLaunchMode,
+    val primary: Boolean,
+)
+
+internal fun repositoryTerminalCreationActions(): List<RepositoryTerminalCreationAction> = listOf(
+    RepositoryTerminalCreationAction(
+        label = "New terminal",
+        launchMode = TerminalLaunchMode.Native,
+        primary = true,
+    ),
+    RepositoryTerminalCreationAction(
+        label = "New terminal with tmux",
+        launchMode = TerminalLaunchMode.TmuxIfAvailable,
+        primary = false,
+    ),
+)
+
+internal fun canCloseTerminalTmuxSession(session: TerminalSessionRecord): Boolean =
+    session.tmuxIdentity != null
+
+internal fun terminalTmuxCloseWarning(): String =
+    "Also close the tmux session. This ends its running processes and disconnects other clients."
 
 private data class TerminalDeleteTarget(
     val session: TerminalSessionRecord,
@@ -778,7 +805,7 @@ fun RepositoryWorkspaceScreen(
     onLoadSnapshot: () -> RemoteRepositorySnapshot,
     initialTerminalWorkspacePath: String? = null,
     terminalSessions: List<TerminalSessionRecord> = emptyList(),
-    onCreateTerminalAtPath: (String) -> TerminalSessionRecord = {
+    onCreateTerminalAtPath: (String, TerminalLaunchMode) -> TerminalSessionRecord = { _, _ ->
         throw UnsupportedOperationException("Terminal sessions are not available")
     },
     onOpenExternalTermuxAtPath: (RemoteTarget) -> ExternalTermuxLaunchResult = {
@@ -786,7 +813,7 @@ fun RepositoryWorkspaceScreen(
     },
     onCopyExternalTermuxCommandAtPath: (RemoteTarget) -> Boolean = { false },
     onOpenTerminalSession: (TerminalSessionRecord) -> Unit = {},
-    onDeleteTerminalSession: (String) -> Unit = {},
+    onDeleteTerminalSession: (String, Boolean) -> Unit = { _, _ -> },
     onDeleteRepository: () -> Unit,
     onCreateBranch: (String, String) -> Unit = { _, _ -> },
     onCheckoutBranch: (RemoteRepositoryBranch) -> Unit = {},
@@ -814,6 +841,8 @@ fun RepositoryWorkspaceScreen(
     var branchDeleteTarget by remember(repository.id) { mutableStateOf<RemoteRepositoryBranch?>(null) }
     var removeTarget by remember(repository.id) { mutableStateOf<RemoteRepositoryWorktree?>(null) }
     var terminalDeleteTarget by remember(repository.id) { mutableStateOf<TerminalDeleteTarget?>(null) }
+    var closeTmuxSessionOnDelete by remember(repository.id) { mutableStateOf(false) }
+    var terminalDeletePending by remember(repository.id) { mutableStateOf(false) }
     var actionError by remember(repository.id) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val workspaceTabs = remember(repository.id, repository.remotePath) {
@@ -915,11 +944,11 @@ fun RepositoryWorkspaceScreen(
         selectedTab = RepositoryWorkspaceTab.Terminal
     }
 
-    fun createTerminal(path: String) {
+    fun createTerminal(path: String, launchMode: TerminalLaunchMode) {
         actionError = null
         scope.launch {
             runCatching {
-                withContext(Dispatchers.IO) { onCreateTerminalAtPath(path) }
+                withContext(Dispatchers.IO) { onCreateTerminalAtPath(path, launchMode) }
             }.onSuccess { session ->
                 onOpenTerminalSession(session)
             }.onFailure {
@@ -969,20 +998,33 @@ fun RepositoryWorkspaceScreen(
     }
 
     fun deleteTerminalSession(session: TerminalSessionRecord) {
+        if (terminalDeletePending) return
         actionError = null
+        terminalDeletePending = true
         scope.launch {
             runCatching {
-                withContext(Dispatchers.IO) { onDeleteTerminalSession(session.id) }
+                withContext(Dispatchers.IO) {
+                    onDeleteTerminalSession(session.id, closeTmuxSessionOnDelete)
+                }
             }.onSuccess {
                 terminalDeleteTarget = null
+                closeTmuxSessionOnDelete = false
             }.onFailure {
                 actionError = it.message ?: "Terminal delete failed"
             }
+            terminalDeletePending = false
         }
     }
 
     fun requestDeleteTerminalSession(session: TerminalSessionRecord, label: String) {
+        closeTmuxSessionOnDelete = false
         terminalDeleteTarget = TerminalDeleteTarget(session = session, label = label)
+    }
+
+    fun dismissTerminalDelete() {
+        if (terminalDeletePending) return
+        terminalDeleteTarget = null
+        closeTmuxSessionOnDelete = false
     }
 
     LaunchedEffect(repository.id) {
@@ -1197,16 +1239,40 @@ fun RepositoryWorkspaceScreen(
 
     terminalDeleteTarget?.let { target ->
         AlertDialog(
-            onDismissRequest = { terminalDeleteTarget = null },
+            onDismissRequest = ::dismissTerminalDelete,
             title = { Text("Delete terminal?") },
-            text = { Text(terminalDeleteConfirmationText(target.label, target.session)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm)) {
+                    Text(terminalDeleteConfirmationText(target.label, target.session))
+                    if (canCloseTerminalTmuxSession(target.session)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(enabled = !terminalDeletePending) {
+                                    closeTmuxSessionOnDelete = !closeTmuxSessionOnDelete
+                                },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(
+                                checked = closeTmuxSessionOnDelete,
+                                onCheckedChange = { closeTmuxSessionOnDelete = it },
+                                enabled = !terminalDeletePending,
+                            )
+                            Text(terminalTmuxCloseWarning(), style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            },
             confirmButton = {
-                TextButton(onClick = { deleteTerminalSession(target.session) }) {
+                TextButton(
+                    onClick = { deleteTerminalSession(target.session) },
+                    enabled = !terminalDeletePending,
+                ) {
                     Text(if (requiresTerminalDeleteConfirmation(target.session)) "Stop and delete" else "Delete")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { terminalDeleteTarget = null }) {
+                TextButton(onClick = ::dismissTerminalDelete, enabled = !terminalDeletePending) {
                     Text("Cancel")
                 }
             },
@@ -1666,7 +1732,7 @@ private fun RepositoryTerminalPanel(
     workspaceOptions: List<TerminalWorkspaceOption>,
     sessions: List<TerminalSessionRecord>,
     onSelectWorkspace: (String) -> Unit,
-    onCreateTerminalAtPath: (String) -> Unit,
+    onCreateTerminalAtPath: (String, TerminalLaunchMode) -> Unit,
     onOpenExternalTermuxAtPath: (String, (ExternalTermuxLaunchResult) -> Unit) -> Unit,
     onCopyExternalTermuxCommandAtPath: (String, (Boolean) -> Unit) -> Unit,
     onOpenTerminalSession: (TerminalSessionRecord) -> Unit,
@@ -1831,10 +1897,13 @@ private fun RemoteSshTerminalPanelContent(
     workspaceMenuExpanded: Boolean,
     onWorkspaceMenuExpandedChange: (Boolean) -> Unit,
     onSelectWorkspace: (String) -> Unit,
-    onCreateTerminalAtPath: (String) -> Unit,
+    onCreateTerminalAtPath: (String, TerminalLaunchMode) -> Unit,
     onOpenTerminalSession: (TerminalSessionRecord) -> Unit,
     onDeleteTerminalSession: (TerminalSessionRecord, String) -> Unit,
 ) {
+    val creationActions = repositoryTerminalCreationActions()
+    val nativeCreationAction = creationActions.first { it.primary }
+    val tmuxCreationAction = creationActions.first { !it.primary }
     Card(Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(HobgoblinSpacing.Md),
@@ -1881,9 +1950,21 @@ private fun RemoteSshTerminalPanelContent(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                Button(onClick = { onCreateTerminalAtPath(selectedWorkspaceOption.path) }) {
-                    Text("New terminal", maxLines = 1)
+                Button(
+                    onClick = {
+                        onCreateTerminalAtPath(selectedWorkspaceOption.path, nativeCreationAction.launchMode)
+                    },
+                ) {
+                    Text(nativeCreationAction.label, maxLines = 1)
                 }
+            }
+            OutlinedButton(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = {
+                    onCreateTerminalAtPath(selectedWorkspaceOption.path, tmuxCreationAction.launchMode)
+                },
+            ) {
+                Text(tmuxCreationAction.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             DropdownMenu(
                 expanded = workspaceMenuExpanded,

@@ -20,6 +20,7 @@ import dev.hobgoblin.android.ssh.RemoteBranchService
 import dev.hobgoblin.android.ssh.RemoteRepositoryGitService
 import dev.hobgoblin.android.ssh.RemoteWorktreeService
 import dev.hobgoblin.android.terminals.AndroidTerminalForegroundOwner
+import dev.hobgoblin.android.terminals.RemoteTmuxSessionService
 import dev.hobgoblin.android.terminals.SshTerminalService
 import dev.hobgoblin.android.terminals.TerminalForegroundBridge
 import dev.hobgoblin.android.terminals.TerminalNavigationRequest
@@ -73,6 +74,10 @@ class MainActivity : ComponentActivity() {
             hostKeyTrustStore = hostKeyStore,
             keepAliveIntervalSeconds = terminalSettingsStore::loadKeepAliveIntervalSeconds,
         )
+        val remoteTmuxSessionService = RemoteTmuxSessionService(
+            client = SshjClientFacade(identityStore = secureIdentityStore),
+            hostKeyStore = hostKeyStore,
+        )
         val terminalManager = TerminalSessionRuntime.manager(
             terminalService = terminalService,
             sessionStore = terminalSessionStore,
@@ -99,6 +104,7 @@ class MainActivity : ComponentActivity() {
                     terminalSettingsStore = terminalSettingsStore,
                     initializationService = initializationService,
                     terminalSessionManager = terminalManager,
+                    remoteTmuxSessionService = remoteTmuxSessionService,
                     terminalForegroundBridge = terminalForegroundBridge,
                     externalTermuxLauncher = externalTermuxLauncher,
                     hostPortForwardManager = hostPortForwardManager,

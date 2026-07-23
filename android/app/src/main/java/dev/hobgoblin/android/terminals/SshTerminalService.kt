@@ -9,7 +9,6 @@ import dev.hobgoblin.android.ssh.SshPublicKeyEncoding
 import dev.hobgoblin.android.ssh.SshjClients
 import dev.hobgoblin.android.ssh.SshPrivateKeys
 import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
@@ -96,58 +95,31 @@ internal object SshTerminalStartupCommand {
             return "cd ${shellQuote(normalizedPath)} && pwd\r"
         }
 
-        val sessionName = tmuxSessionName(target, startupContext)
-        return """
-            hobgoblin_remote_path=${shellQuote(normalizedPath)}
-            hobgoblin_tmux_session=${shellQuote(sessionName)}
-            if cd "${'$'}hobgoblin_remote_path"; then
-              if command -v tmux >/dev/null 2>&1; then
-                tmux new-session -A -s "${'$'}hobgoblin_tmux_session"
-                hobgoblin_tmux_status=${'$'}?
-                if [ "${'$'}hobgoblin_tmux_status" -eq 0 ]; then
-                  exit 0
-                fi
-                printf '\r\ntmux unavailable (exit %s); falling back to shell\r\n' "${'$'}hobgoblin_tmux_status"
-              fi
-              exec "${'$'}{SHELL:-sh}"
-            else
-              exit 1
-            fi
-        """.trimIndent() + "\r"
-    }
-
-    fun tmuxSessionName(
-        target: RemoteTarget,
-        startupContext: TerminalStartupContext,
-    ): String {
-        val identity = listOf(
-            target.authority,
-            normalizeRemotePath(startupContext.repositoryRemotePath),
-            normalizeRemotePath(startupContext.worktreeRemotePath),
-            startupContext.terminalId.toString(),
-        ).joinToString("\u0000")
-        return "$TmuxSessionNamePrefix${sha256HexPrefix(identity, TmuxHashHexChars)}"
+        val tmuxIdentity = startupContext.tmuxIdentity
+        val lines = buildList {
+            add("cd ${shellQuote(normalizedPath)} || exit")
+            if (tmuxIdentity != null) {
+                add("if command -v tmux >/dev/null 2>&1; then")
+                add(
+                    "  exec tmux new-session -A -s ${shellQuote(tmuxIdentity.sessionName)} " +
+                        "-c ${shellQuote(tmuxIdentity.initialPath)} \\; " +
+                        "set-option -t ${shellQuote("=${tmuxIdentity.sessionName}:")} mouse on",
+                )
+                add("fi")
+            }
+            add("exec \"${'$'}{SHELL:-/bin/sh}\" -l")
+        }
+        return lines.joinToString("\n") + "\r"
     }
 
     fun startupInputFailureOutput(error: Throwable): String =
         "\r\nStartup cd failed: ${error.toTerminalDetail()}\r\n"
 
     private fun normalizeRemotePath(remotePath: String): String {
-        val trimmed = remotePath.trim()
-        if (trimmed.isEmpty() || trimmed == "/") return "/"
-        return trimmed.trimEnd('/')
-    }
-
-    private fun sha256HexPrefix(value: String, hexChars: Int): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-            .digest(value.toByteArray(StandardCharsets.UTF_8))
-        return digest
-            .take((hexChars + 1) / 2)
-            .joinToString("") { byte ->
-                val intValue = byte.toInt() and 0xff
-                "${HexChars[intValue ushr 4]}${HexChars[intValue and 0x0f]}"
-            }
-            .take(hexChars)
+        val value = remotePath.ifEmpty { "/" }
+        return requireNotNull(TmuxSessionProtocol.normalizePath(value)) {
+            "Remote terminal path must be a safe absolute path"
+        }
     }
 
     private fun shellQuote(value: String): String = "'${value.replace("'", "'\"'\"'")}'"
@@ -159,9 +131,6 @@ internal object SshTerminalStartupCommand {
         return message ?: className
     }
 
-    private val HexChars = "0123456789abcdef".toCharArray()
-    private const val TmuxSessionNamePrefix = "hobgoblin-"
-    private const val TmuxHashHexChars = 22
 }
 
 internal object TerminalHostKeyPolicy {

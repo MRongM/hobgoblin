@@ -3,25 +3,50 @@ package dev.hobgoblin.android.terminals
 import dev.hobgoblin.android.domain.ssh.RemoteTarget
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SshTerminalStartupCommandTest {
     @Test
-    fun `project workspace shell starts tmux first and falls back to native shell`() {
+    fun `project workspace shell defaults to native without probing tmux`() {
         val target = target(remotePath = "/srv/repo-feature")
         val context = startupContext(terminalId = 2)
         val command = SshTerminalStartupCommand.initialInputForTarget(target, context)
         val output = command.orEmpty()
-        val sessionName = SshTerminalStartupCommand.tmuxSessionName(target, context)
 
-        assertTrue(output.contains("hobgoblin_remote_path='/srv/repo-feature'"))
-        assertTrue(output.contains("hobgoblin_tmux_session='$sessionName'"))
+        assertTrue(output.contains("cd '/srv/repo-feature' || exit"))
+        assertTrue(output.contains("exec \"\${SHELL:-/bin/sh}\" -l"))
+        assertFalse(output.contains("tmux"))
+        assertTrue(output.endsWith("\r"))
+    }
+
+    @Test
+    fun `explicit tmux launch matches current attach create and mouse command`() {
+        val identity = requireNotNull(
+            TmuxSessionProtocol.identity(
+                TmuxSessionDescriptor(
+                    projectRoot = "/srv/repo",
+                    workingDirectory = "/srv/repo-feature",
+                    terminalNumber = 2,
+                ),
+            ),
+        )
+        val command = SshTerminalStartupCommand.initialInputForTarget(
+            target(remotePath = "/srv/repo-feature"),
+            startupContext(terminalId = 2, tmuxIdentity = identity),
+        )
+        val output = command.orEmpty()
+
+        assertTrue(output.contains("cd '/srv/repo-feature' || exit"))
         assertTrue(output.contains("command -v tmux >/dev/null 2>&1"))
-        assertTrue(output.contains("tmux new-session -A -s \"\$hobgoblin_tmux_session\""))
-        assertTrue(output.contains("tmux unavailable (exit %s); falling back to shell"))
-        assertTrue(output.contains("exec \"\${SHELL:-sh}\""))
+        assertTrue(
+            output.contains(
+                "exec tmux new-session -A -s '${identity.sessionName}' -c '/srv/repo-feature' " +
+                    "\\; set-option -t '=${identity.sessionName}:' mouse on",
+            ),
+        )
+        assertTrue(output.contains("exec \"\${SHELL:-/bin/sh}\" -l"))
+        assertFalse(output.contains("session_id"))
         assertTrue(output.endsWith("\r"))
     }
 
@@ -33,55 +58,21 @@ class SshTerminalStartupCommandTest {
         )
         val output = command.orEmpty()
 
-        assertTrue(output.contains("hobgoblin_remote_path='/srv/app'\"'\"'s worktree'"))
-        assertTrue(output.contains("cd \"\$hobgoblin_remote_path\""))
-        assertFalse(output.contains("hobgoblin_remote_path=/srv/app's worktree"))
+        assertTrue(output.contains("cd '/srv/app'\"'\"'s worktree' || exit"))
+        assertFalse(output.contains("cd '/srv/app's worktree'"))
     }
 
     @Test
-    fun `root project path still starts tmux first`() {
+    fun `root project path starts native shell when tmux is not requested`() {
         val command = SshTerminalStartupCommand.initialInputForTarget(
             target(remotePath = "/"),
             startupContext(terminalId = 1, worktreeRemotePath = "/"),
         )
         val output = command.orEmpty()
 
-        assertTrue(output.contains("hobgoblin_remote_path='/'"))
-        assertTrue(output.contains("command -v tmux >/dev/null 2>&1"))
-        assertTrue(output.contains("tmux new-session -A -s \"\$hobgoblin_tmux_session\""))
-        assertTrue(output.contains("exec \"\${SHELL:-sh}\""))
-    }
-
-    @Test
-    fun `tmux session name includes repository path worktree path and numeric terminal id`() {
-        val target = target(remotePath = "/srv/repo-feature")
-        val first = SshTerminalStartupCommand.tmuxSessionName(
-            target = target,
-            startupContext = startupContext(terminalId = 1),
-        )
-        val second = SshTerminalStartupCommand.tmuxSessionName(
-            target = target,
-            startupContext = startupContext(terminalId = 2),
-        )
-
-        assertTrue(first.matches(Regex("hobgoblin-[0-9a-f]{22}")))
-        assertTrue(second.matches(Regex("hobgoblin-[0-9a-f]{22}")))
-        assertNotEquals(first, second)
-        assertTrue(first.length <= 32)
-    }
-
-    @Test
-    fun `tmux session name ignores ssh alias`() {
-        val first = SshTerminalStartupCommand.tmuxSessionName(
-            target = target(alias = "Dev", remotePath = "/srv/repo-feature"),
-            startupContext = startupContext(terminalId = 1),
-        )
-        val second = SshTerminalStartupCommand.tmuxSessionName(
-            target = target(alias = "Renamed", remotePath = "/srv/repo-feature"),
-            startupContext = startupContext(terminalId = 1),
-        )
-
-        assertEquals(first, second)
+        assertTrue(output.contains("cd '/' || exit"))
+        assertFalse(output.contains("tmux"))
+        assertTrue(output.contains("exec \"\${SHELL:-/bin/sh}\" -l"))
     }
 
     @Test
@@ -107,11 +98,13 @@ class SshTerminalStartupCommandTest {
         terminalId: Int,
         repositoryRemotePath: String = "/srv/repo",
         worktreeRemotePath: String = "/srv/repo-feature",
+        tmuxIdentity: TmuxSessionIdentity? = null,
     ): TerminalStartupContext =
         TerminalStartupContext(
             repositoryRemotePath = repositoryRemotePath,
             worktreeRemotePath = worktreeRemotePath,
             terminalId = terminalId,
+            tmuxIdentity = tmuxIdentity,
         )
 
     private fun target(

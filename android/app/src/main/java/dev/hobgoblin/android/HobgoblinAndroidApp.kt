@@ -26,6 +26,8 @@ import dev.hobgoblin.android.ssh.SshDiagnosticsService
 import dev.hobgoblin.android.ssh.SshInitializationService
 import dev.hobgoblin.android.navigation.AppRoute.Companion.terminal
 import dev.hobgoblin.android.terminals.TerminalForegroundBridge
+import dev.hobgoblin.android.terminals.RemoteTmuxCloseResult
+import dev.hobgoblin.android.terminals.RemoteTmuxSessionService
 import dev.hobgoblin.android.terminals.TerminalNavigationRequest
 import dev.hobgoblin.android.terminals.TerminalSessionManager
 import dev.hobgoblin.android.terminals.TerminalSessionRecord
@@ -63,6 +65,7 @@ fun HobgoblinAndroidApp(
     initializationService: SshInitializationService,
     terminalSettingsStore: TerminalSettingsStore,
     terminalSessionManager: TerminalSessionManager,
+    remoteTmuxSessionService: RemoteTmuxSessionService,
     terminalForegroundBridge: TerminalForegroundBridge,
     externalTermuxLauncher: ExternalTermuxLauncher,
     hostPortForwardManager: HostPortForwardManager,
@@ -372,12 +375,13 @@ fun HobgoblinAndroidApp(
                     },
                     initialTerminalWorkspacePath = currentRoute.terminalWorkspacePath,
                     terminalSessions = terminalSessions,
-                    onCreateTerminalAtPath = { remotePath ->
+                    onCreateTerminalAtPath = { remotePath, launchMode ->
                         val session = terminalSessionManager.createNew(
                             target = RemoteTarget.fromHostProfile(host, remotePath),
                             repositoryId = repository.id,
                             repositoryRemotePath = repository.remotePath,
                             targetLabel = terminalTargetLabel(repository.title, remotePath),
+                            launchMode = launchMode,
                         )
                         terminalForegroundBridge.sync()
                         session
@@ -405,7 +409,24 @@ fun HobgoblinAndroidApp(
                             terminalSessionId = session.id,
                         )
                     },
-                    onDeleteTerminalSession = { sessionId ->
+                    onDeleteTerminalSession = { sessionId, closeTmuxSession ->
+                        val session = terminalSessionManager.session(sessionId)
+                        if (closeTmuxSession) {
+                            val identity = requireNotNull(session?.tmuxIdentity) {
+                                "This terminal has no current Hobgoblin tmux identity."
+                            }
+                            when (
+                                val result = remoteTmuxSessionService.closeAssociatedSession(
+                                    target = RemoteTarget.fromHostProfile(host, session.remotePath),
+                                    identity = identity,
+                                )
+                            ) {
+                                RemoteTmuxCloseResult.Closed,
+                                RemoteTmuxCloseResult.Missing,
+                                -> Unit
+                                is RemoteTmuxCloseResult.Failed -> error(result.message)
+                            }
+                        }
                         terminalSessionManager.removeSession(sessionId)
                         terminalForegroundBridge.sync()
                     },

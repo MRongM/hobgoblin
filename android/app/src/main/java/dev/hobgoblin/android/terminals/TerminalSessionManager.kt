@@ -104,6 +104,7 @@ class TerminalSessionManager(
         repositoryId: String?,
         targetLabel: String,
         repositoryRemotePath: String? = null,
+        launchMode: TerminalLaunchMode = TerminalLaunchMode.Native,
         secrets: SshConnectionSecrets = SshConnectionSecrets(),
     ): TerminalSessionRecord {
         val sessionId = idGenerator()
@@ -122,6 +123,21 @@ class TerminalSessionManager(
             ?: synchronized(lock) {
                 nextWorkspaceTerminalDisplayName(hostId = target.id, remotePath = target.remotePath)
             }
+        val tmuxIdentity = if (launchMode == TerminalLaunchMode.TmuxIfAvailable) {
+            terminalId?.let { allocatedTerminalId ->
+                normalizedRepositoryPath?.let { repositoryPath ->
+                    TmuxSessionProtocol.identity(
+                        TmuxSessionDescriptor(
+                            projectRoot = repositoryPath,
+                            workingDirectory = target.remotePath,
+                            terminalNumber = allocatedTerminalId,
+                        ),
+                    )
+                }
+            }
+        } else {
+            null
+        }
         val starting = TerminalSessionRecord(
             id = sessionId,
             hostId = target.id,
@@ -131,6 +147,7 @@ class TerminalSessionManager(
             displayName = displayName,
             terminalId = terminalId,
             repositoryRemotePath = normalizedRepositoryPath,
+            tmuxIdentity = tmuxIdentity,
             status = TerminalSessionStatus.Starting,
             openedAt = openedAt,
             lastActivityAt = openedAt,
@@ -189,6 +206,16 @@ class TerminalSessionManager(
             }
         val resolvedDisplayName = resolvedTerminalId?.let(::terminalSessionDisplayNameFromIndex)
             ?: existing.displayName
+        val retainedTmuxIdentity = existing.tmuxIdentity?.takeIf { identity ->
+            if (normalizedRepositoryPath == null || resolvedTerminalId == null) return@takeIf false
+            TmuxSessionProtocol.identity(
+                TmuxSessionDescriptor(
+                    projectRoot = normalizedRepositoryPath,
+                    workingDirectory = target.remotePath,
+                    terminalNumber = resolvedTerminalId,
+                ),
+            ) == identity
+        }
         val starting = existing.copy(
             hostId = target.id,
             repositoryId = repositoryId,
@@ -197,6 +224,7 @@ class TerminalSessionManager(
             displayName = resolvedDisplayName,
             terminalId = resolvedTerminalId,
             repositoryRemotePath = normalizedRepositoryPath,
+            tmuxIdentity = retainedTmuxIdentity,
             status = TerminalSessionStatus.Starting,
             lastActivityAt = clock(),
             foregroundServiceOwned = false,
@@ -695,9 +723,8 @@ class TerminalSessionManager(
     private fun terminalSessionDisplayNameFromIndex(index: Int): String = "terminal-$index"
 
     private fun normalizeRepositoryRemotePath(path: String?): String? {
-        val trimmed = path?.trim()?.takeIf { it.isNotBlank() } ?: return null
-        if (trimmed == "/") return "/"
-        return trimmed.trimEnd('/').ifEmpty { "/" }
+        val value = path?.takeIf { it.isNotEmpty() } ?: return null
+        return TmuxSessionProtocol.normalizePath(value)
     }
 
     private fun nextProjectTerminalId(
@@ -730,11 +757,12 @@ class TerminalSessionManager(
             repositoryRemotePath = repositoryPath,
             worktreeRemotePath = record.remotePath,
             terminalId = terminalId,
+            tmuxIdentity = record.tmuxIdentity,
         )
     }
 
     private fun terminalSessionRemotePath(remotePath: String): String =
-        remotePath.ifBlank { "/" }.trimEnd('/').ifEmpty { "/" }
+        TmuxSessionProtocol.normalizePath(remotePath.ifBlank { "/" }) ?: "/"
 
     private fun TerminalDisconnectedReason.toInactiveStatus(): TerminalSessionStatus =
         when (this) {

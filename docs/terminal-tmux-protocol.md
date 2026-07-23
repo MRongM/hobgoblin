@@ -86,10 +86,13 @@ Each displayed `<NUL>` is one byte with value `0x00`, not source text or a strin
 After computing the name, an external application may create or attach idempotently:
 
 ```sh
-tmux new-session -A -s 'hobgoblin-v1-aebf050981ac829e36100020' -c '/srv/projects/example/worktrees/feature'
+tmux new-session -A \
+  -s 'hobgoblin-v1-aebf050981ac829e36100020' \
+  -c '/srv/projects/example/worktrees/feature' \
+  \; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' mouse on
 ```
 
-Do not add a forced-detach option. Hobgoblin and external tmux clients intentionally have concurrent shared control.
+Do not supply a tmux `session_id` or add a forced-detach option. Tmux allocates the session ID, while Hobgoblin and external tmux clients intentionally have concurrent shared control. The exact session-name target enables mouse support only on the selected session.
 
 ## Runtime association and exact close
 
