@@ -2,6 +2,9 @@ package dev.hobgoblin.android.domain.ssh
 
 import java.util.UUID
 
+const val HOST_DIAGNOSTIC_STATUS_HEALTHY = "healthy"
+const val HOST_DIAGNOSTIC_STATUS_UNHEALTHY = "unhealthy"
+
 data class SshHostProfile(
     val id: String,
     val alias: String?,
@@ -86,3 +89,11 @@ data class SshHostProfile(
         }
     }
 }
+
+fun SshHostProfile.withDiagnosticResult(result: DiagnosticsResult): SshHostProfile = copy(
+    lastDiagnosticStatus = if (result.ok) {
+        HOST_DIAGNOSTIC_STATUS_HEALTHY
+    } else {
+        HOST_DIAGNOSTIC_STATUS_UNHEALTHY
+    },
+)

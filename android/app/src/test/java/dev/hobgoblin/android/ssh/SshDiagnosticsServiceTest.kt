@@ -14,6 +14,23 @@ import org.junit.Test
 
 class SshDiagnosticsServiceTest {
     @Test
+    fun `diagnostics require an associated identity before network access`() {
+        listOf(null, "", "   ").forEach { identityRefId ->
+            val client = FakeSshClient(fingerprint = "SHA256:test", failures = emptyMap())
+            val result = SshDiagnosticsService(
+                client = client,
+                hostKeyStore = FakeHostKeyTrustStore("SHA256:test"),
+            ).runDiagnostics(target(identityRefId = identityRefId))
+
+            assertFalse(result.ok)
+            assertEquals(DiagnosticCategory.AuthFailed, result.category)
+            assertEquals("Configure SSH key access before running diagnostics.", result.message)
+            assertEquals(0, client.fingerprintRequests)
+            assertTrue(client.probes.isEmpty())
+        }
+    }
+
+    @Test
     fun `diagnostics pass when all probes succeed`() {
         val result = service().runDiagnostics(target())
 
@@ -90,14 +107,14 @@ class SshDiagnosticsServiceTest {
         hostKeyStore = FakeHostKeyTrustStore(trustedFingerprint),
     )
 
-    private fun target(): RemoteTarget = RemoteTarget(
+    private fun target(identityRefId: String? = "identity-1"): RemoteTarget = RemoteTarget(
         id = "lee@example.com:22/home/lee/app",
         alias = "Dev",
         host = "example.com",
         user = "lee",
         port = 22,
         remotePath = "/home/lee/app",
-        identityRefId = "identity-1",
+        identityRefId = identityRefId,
     )
 
     private fun failed(message: String): SshCommandResult = SshCommandResult(ok = false, stderr = message, message = message)
@@ -110,9 +127,13 @@ class SshDiagnosticsServiceTest {
         private val fingerprint: String,
         private val failures: Map<SshDiagnosticProbe, SshCommandResult>,
     ) : SshClientFacade {
+        var fingerprintRequests = 0
         val probes = mutableListOf<SshDiagnosticProbe>()
 
-        override fun fetchHostFingerprint(target: RemoteTarget): String = fingerprint
+        override fun fetchHostFingerprint(target: RemoteTarget): String {
+            fingerprintRequests += 1
+            return fingerprint
+        }
 
         override fun runDiagnosticProbe(
             target: RemoteTarget,

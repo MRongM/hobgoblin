@@ -13,7 +13,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -26,7 +25,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import dev.hobgoblin.android.domain.ResourceState
 import dev.hobgoblin.android.domain.ssh.DiagnosticCategory
 import dev.hobgoblin.android.domain.ssh.DiagnosticStage
@@ -35,7 +33,6 @@ import dev.hobgoblin.android.domain.ssh.DiagnosticStatus
 import dev.hobgoblin.android.domain.ssh.DiagnosticsResult
 import dev.hobgoblin.android.domain.ssh.RemoteTarget
 import dev.hobgoblin.android.domain.ssh.SshHostProfile
-import dev.hobgoblin.android.ssh.SshInitializationCheck
 import dev.hobgoblin.android.ui.theme.HobgoblinSpacing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -47,77 +44,21 @@ fun DiagnosticsScreen(
     host: SshHostProfile,
     onBack: () -> Unit,
     onOpenTerminal: () -> Unit,
-    onCheckSshInitialization: () -> SshInitializationCheck = { SshInitializationCheck.Ready },
-    onInitializeSshAccess: (CharArray) -> Unit = {},
     onRunDiagnostics: () -> DiagnosticsResult,
     onTrustHostKey: (String) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var diagnosticsState: ResourceState<DiagnosticsResult> by remember { mutableStateOf(ResourceState.Idle) }
-    var initializationCheck: SshInitializationCheck? by remember { mutableStateOf(null) }
-    var initializationPassword by remember { mutableStateOf("") }
-    var initializationError by remember { mutableStateOf<String?>(null) }
 
     fun runDiagnostics() {
         diagnosticsState = ResourceState.Loading
         scope.launch {
-            if (host.identityRefId != null) {
-                initializationCheck = null
-                diagnosticsState = runCatching {
-                    withContext(Dispatchers.IO) { onRunDiagnostics() }
-                }.fold(
-                    onSuccess = { ResourceState.Loaded(it) },
-                    onFailure = { ResourceState.Error(it.message ?: "Diagnostics failed", it) },
-                )
-                return@launch
-            }
-
-            val ready = runCatching {
-                withContext(Dispatchers.IO) { onCheckSshInitialization() }
-            }.getOrElse {
-                diagnosticsState = ResourceState.Error(it.message ?: "SSH initialization check failed", it)
-                return@launch
-            }
-            if (ready != SshInitializationCheck.Ready) {
-                initializationCheck = ready
-                diagnosticsState = ResourceState.Idle
-                return@launch
-            }
-            initializationCheck = null
             diagnosticsState = runCatching {
                 withContext(Dispatchers.IO) { onRunDiagnostics() }
             }.fold(
                 onSuccess = { ResourceState.Loaded(it) },
                 onFailure = { ResourceState.Error(it.message ?: "Diagnostics failed", it) },
             )
-        }
-    }
-
-    fun refreshInitializationCheck() {
-        scope.launch {
-            initializationCheck = runCatching {
-                withContext(Dispatchers.IO) { onCheckSshInitialization() }
-            }.getOrElse {
-                initializationError = it.message ?: "SSH initialization check failed"
-                null
-            }
-        }
-    }
-
-    fun initializeSshAccess() {
-        val password = initializationPassword.toCharArray()
-        initializationError = null
-        scope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) { onInitializeSshAccess(password) }
-            }.onSuccess {
-                initializationPassword = ""
-                initializationCheck = null
-                runDiagnostics()
-            }.onFailure {
-                initializationPassword = ""
-                initializationError = it.message ?: "SSH initialization failed"
-            }
         }
     }
 
@@ -143,19 +84,6 @@ fun DiagnosticsScreen(
         ) {
             Text(host.title, style = MaterialTheme.typography.titleLarge)
             Text(host.subtitle, style = MaterialTheme.typography.bodyMedium)
-            initializationCheck?.let { check ->
-                SshInitializationCard(
-                    check = check,
-                    password = initializationPassword,
-                    error = initializationError,
-                    onPasswordChange = { initializationPassword = it },
-                    onTrustHostKey = {
-                        onTrustHostKey(it)
-                        refreshInitializationCheck()
-                    },
-                    onInitialize = { initializeSshAccess() },
-                )
-            }
             Button(onClick = { runDiagnostics() }) {
                 Text("Run diagnostics")
             }
@@ -181,62 +109,6 @@ fun DiagnosticsScreen(
                     onRunDiagnostics = { runDiagnostics() },
                     onOpenTerminal = onOpenTerminal,
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SshInitializationCard(
-    check: SshInitializationCheck,
-    password: String,
-    error: String?,
-    onPasswordChange: (String) -> Unit,
-    onTrustHostKey: (String) -> Unit,
-    onInitialize: () -> Unit,
-) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(HobgoblinSpacing.Md),
-            verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm),
-        ) {
-            when (check) {
-                SshInitializationCheck.Ready -> Text("SSH access is initialized.")
-                is SshInitializationCheck.NeedsHostKeyTrust -> {
-                    Text("Trust this host key before initializing SSH access.")
-                    Text(check.fingerprint, style = MaterialTheme.typography.bodySmall)
-                    Button(onClick = { onTrustHostKey(check.fingerprint) }) {
-                        Text("Trust host key")
-                    }
-                }
-                SshInitializationCheck.NeedsServerPassword -> {
-                    Text("Enter the temporary server password to install Hobgoblin Android's public key.")
-                    OutlinedTextField(
-                        modifier = Modifier.fillMaxWidth(),
-                        value = password,
-                        onValueChange = onPasswordChange,
-                        label = { Text("Temporary password") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                    )
-                    Button(
-                        enabled = password.isNotEmpty(),
-                        onClick = onInitialize,
-                    ) {
-                        Text("Initialize SSH access")
-                    }
-                }
-                is SshInitializationCheck.HostKeyChanged -> {
-                    Text(
-                        "Host key changed. Review this server before trusting it again.",
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                    Text("Previous: ${check.previousFingerprint}", style = MaterialTheme.typography.bodySmall)
-                    Text("Current: ${check.currentFingerprint}", style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            if (error != null) {
-                Text(error, color = MaterialTheme.colorScheme.error)
             }
         }
     }
