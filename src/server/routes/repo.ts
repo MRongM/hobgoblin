@@ -692,10 +692,11 @@ export function createRepoRoutes() {
   })
   app.post('/open-terminal', async (c) => {
     const body = await c.req.json().catch(() => null)
-    const path = typeof body?.path === 'string' ? body.path : ''
+    const projectRoot = typeof body?.projectRoot === 'string' ? body.projectRoot : ''
+    const workingDirectory = typeof body?.workingDirectory === 'string' ? body.workingDirectory : ''
     return c.json(
       await jsonOr(
-        () => openRepositoryTerminal(path),
+        () => openRepositoryTerminal({ projectRoot, workingDirectory }),
         { ok: false, message: 'error.failed-read-repo' },
         'open-terminal',
       ),

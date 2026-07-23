@@ -54,8 +54,7 @@ export function getBranchActionCapabilities(repo: BranchActionRepo, branch: Repo
   const isProtected = PROTECTED_BRANCHES.has(branch.name)
   const isRegularBranch = !isCurrent && !branch.worktree?.path && !isProtected
   const worktreeState = getBranchWorktreeState(repo, branch)
-  const canRemoveWorktree =
-    checkedOutInAnotherWorktree && !worktreeState?.isMain && worktreeState?.isPrunable !== true
+  const canRemoveWorktree = checkedOutInAnotherWorktree && !worktreeState?.isMain && worktreeState?.isPrunable !== true
   const canCleanupWorktree =
     checkedOutInAnotherWorktree &&
     !worktreeState?.isMain &&
@@ -168,7 +167,9 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
     if (repo.remote.target) {
       return runUiAction('externalTerminal', () => openRemoteRepositoryTerminal(repo.id, worktreePath))
     }
-    return runUiAction('externalTerminal', () => openRepositoryTerminal(worktreePath))
+    return runUiAction('externalTerminal', () =>
+      openRepositoryTerminal({ projectRoot: repo.id, workingDirectory: worktreePath }),
+    )
   }
 
   function openEditor() {

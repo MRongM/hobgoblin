@@ -64,7 +64,7 @@ export interface InitialSettingsSnapshot {
   fileTreeTopbarFontSize: number
   fileTreeClipboardMaxBytesMb: number
   terminalFontSize: number
-  remoteTerminalTmuxEnabled: boolean
+  internalTerminalTmuxEnabled: boolean
   terminalCustomButtonsVisible: boolean
   terminalCustomButtonSize: TerminalCustomButtonSize
   terminalCustomButtons: TerminalCustomButton[]

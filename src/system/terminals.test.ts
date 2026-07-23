@@ -10,19 +10,25 @@ import { isWindowsTerminalAvailable, openInWindowsTerminal } from '#/system/wind
 
 vi.mock('#/system/ghostty.ts', () => ({
   isGhosttyInstalled: vi.fn(() => false),
-  openInGhostty: vi.fn(async (path: string) => ({ ok: true, message: path })),
-  openRemoteInGhostty: vi.fn(async (target: { alias: string; worktreePath: string }) => ({
+  openInGhostty: vi.fn(async (target: { workingDirectory: string }) => ({
     ok: true,
-    message: `${target.alias}:${target.worktreePath}`,
+    message: target.workingDirectory,
+  })),
+  openRemoteInGhostty: vi.fn(async (target: { alias: string; workingDirectory: string }) => ({
+    ok: true,
+    message: `${target.alias}:${target.workingDirectory}`,
   })),
 }))
 
 vi.mock('#/system/apple-terminal.ts', () => ({
   isAppleTerminalInstalled: vi.fn(async () => true),
-  openInAppleTerminal: vi.fn(async (path: string) => ({ ok: true, message: path })),
-  openRemoteInAppleTerminal: vi.fn(async (target: { alias: string; worktreePath: string }) => ({
+  openInAppleTerminal: vi.fn(async (target: { workingDirectory: string }) => ({
     ok: true,
-    message: `${target.alias}:${target.worktreePath}`,
+    message: target.workingDirectory,
+  })),
+  openRemoteInAppleTerminal: vi.fn(async (target: { alias: string; workingDirectory: string }) => ({
+    ok: true,
+    message: `${target.alias}:${target.workingDirectory}`,
   })),
 }))
 
@@ -33,6 +39,14 @@ vi.mock('#/system/windows-terminal.ts', () => ({
 
 describe('openInPreferredTerminal', () => {
   const originalPlatform = process.platform
+  const localTarget = { projectRoot: '/repo', workingDirectory: '/repo', terminalNumber: 1 }
+  const windowsTarget = { projectRoot: 'C:\\repo', workingDirectory: 'C:\\repo', terminalNumber: 1 }
+  const remoteTarget = {
+    alias: 'prod',
+    projectRoot: '/srv/repo',
+    workingDirectory: '/srv/repo-feature',
+    terminalNumber: 1,
+  }
 
   function setPlatform(platform: NodeJS.Platform) {
     Object.defineProperty(process, 'platform', { value: platform })
@@ -51,20 +65,20 @@ describe('openInPreferredTerminal', () => {
     vi.mocked(isGhosttyInstalled).mockReturnValue(false)
     vi.mocked(isAppleTerminalInstalled).mockResolvedValue(true)
 
-    await expect(openInPreferredTerminal('/repo', 'terminal')).resolves.toEqual({
+    await expect(openInPreferredTerminal(localTarget, 'terminal')).resolves.toEqual({
       ok: true,
       message: '/repo',
     })
-    expect(openInAppleTerminal).toHaveBeenCalledWith('/repo')
+    expect(openInAppleTerminal).toHaveBeenCalledWith(localTarget, {})
   })
 
   test('prefers Ghostty in auto mode when it is installed', async () => {
     vi.mocked(isGhosttyInstalled).mockReturnValue(true)
     vi.mocked(isAppleTerminalInstalled).mockResolvedValue(true)
 
-    await openInPreferredTerminal('/repo', 'auto')
+    await openInPreferredTerminal(localTarget, 'auto')
 
-    expect(openInGhostty).toHaveBeenCalledWith('/repo')
+    expect(openInGhostty).toHaveBeenCalledWith(localTarget, {})
     expect(openInAppleTerminal).not.toHaveBeenCalled()
   })
 
@@ -72,19 +86,19 @@ describe('openInPreferredTerminal', () => {
     vi.mocked(isGhosttyInstalled).mockReturnValue(false)
     vi.mocked(isAppleTerminalInstalled).mockResolvedValue(true)
 
-    await expect(openInPreferredTerminal('/repo', 'auto')).resolves.toEqual({
+    await expect(openInPreferredTerminal(localTarget, 'auto')).resolves.toEqual({
       ok: true,
       message: '/repo',
     })
 
-    expect(openInAppleTerminal).toHaveBeenCalledWith('/repo')
+    expect(openInAppleTerminal).toHaveBeenCalledWith(localTarget, {})
   })
 
   test('does not open Terminal.app on darwin when detection reports unavailable', async () => {
     vi.mocked(isGhosttyInstalled).mockReturnValue(false)
     vi.mocked(isAppleTerminalInstalled).mockResolvedValue(false)
 
-    await expect(openInPreferredTerminal('/repo', 'terminal')).resolves.toEqual({
+    await expect(openInPreferredTerminal(localTarget, 'terminal')).resolves.toEqual({
       ok: false,
       message: 'error.terminal-not-installed',
     })
@@ -97,7 +111,7 @@ describe('openInPreferredTerminal', () => {
     vi.mocked(isGhosttyInstalled).mockReturnValue(false)
     vi.mocked(isAppleTerminalInstalled).mockResolvedValue(true)
 
-    await expect(openInPreferredTerminal('/repo', 'terminal')).resolves.toEqual({
+    await expect(openInPreferredTerminal(localTarget, 'terminal')).resolves.toEqual({
       ok: false,
       message: 'error.terminal-not-installed',
     })
@@ -111,7 +125,7 @@ describe('openInPreferredTerminal', () => {
     vi.mocked(isGhosttyInstalled).mockReturnValue(false)
     vi.mocked(isAppleTerminalInstalled).mockResolvedValue(true)
 
-    await expect(openInPreferredTerminal('/repo', 'auto')).resolves.toEqual({
+    await expect(openInPreferredTerminal(localTarget, 'auto')).resolves.toEqual({
       ok: false,
       message: 'error.terminal-not-installed',
     })
@@ -123,7 +137,7 @@ describe('openInPreferredTerminal', () => {
     setPlatform('win32')
     vi.mocked(isWindowsTerminalAvailable).mockReturnValue(true)
 
-    await expect(openInPreferredTerminal('C:\\repo', 'terminal')).resolves.toEqual({
+    await expect(openInPreferredTerminal(windowsTarget, 'terminal')).resolves.toEqual({
       ok: true,
       message: 'C:\\repo',
     })
@@ -136,7 +150,7 @@ describe('openInPreferredTerminal', () => {
     setPlatform('win32')
     vi.mocked(isWindowsTerminalAvailable).mockReturnValue(false)
 
-    await expect(openInPreferredTerminal('C:\\repo', 'terminal')).resolves.toEqual({
+    await expect(openInPreferredTerminal(windowsTarget, 'terminal')).resolves.toEqual({
       ok: false,
       message: 'error.terminal-not-installed',
     })
@@ -148,12 +162,12 @@ describe('openInPreferredTerminal', () => {
     vi.mocked(isGhosttyInstalled).mockReturnValue(false)
     vi.mocked(isAppleTerminalInstalled).mockResolvedValue(true)
 
-    await expect(openRemoteInPreferredTerminal('prod', '/srv/repo-feature', 'terminal')).resolves.toEqual({
+    await expect(openRemoteInPreferredTerminal(remoteTarget, 'terminal')).resolves.toEqual({
       ok: true,
       message: 'prod:/srv/repo-feature',
     })
 
-    expect(openRemoteInAppleTerminal).toHaveBeenCalledWith({ alias: 'prod', worktreePath: '/srv/repo-feature' })
+    expect(openRemoteInAppleTerminal).toHaveBeenCalledWith(remoteTarget, {})
     expect(openRemoteInGhostty).not.toHaveBeenCalled()
   })
 
@@ -161,12 +175,12 @@ describe('openInPreferredTerminal', () => {
     vi.mocked(isGhosttyInstalled).mockReturnValue(true)
     vi.mocked(isAppleTerminalInstalled).mockResolvedValue(true)
 
-    await expect(openRemoteInPreferredTerminal('prod', '/srv/repo-feature', 'auto')).resolves.toEqual({
+    await expect(openRemoteInPreferredTerminal(remoteTarget, 'auto')).resolves.toEqual({
       ok: true,
       message: 'prod:/srv/repo-feature',
     })
 
-    expect(openRemoteInGhostty).toHaveBeenCalledWith({ alias: 'prod', worktreePath: '/srv/repo-feature' })
+    expect(openRemoteInGhostty).toHaveBeenCalledWith(remoteTarget, {})
     expect(openRemoteInAppleTerminal).not.toHaveBeenCalled()
   })
 
@@ -174,7 +188,7 @@ describe('openInPreferredTerminal', () => {
     vi.mocked(isGhosttyInstalled).mockReturnValue(false)
     vi.mocked(isAppleTerminalInstalled).mockResolvedValue(false)
 
-    await expect(openRemoteInPreferredTerminal('prod', '/srv/repo-feature', 'auto')).resolves.toEqual({
+    await expect(openRemoteInPreferredTerminal(remoteTarget, 'auto')).resolves.toEqual({
       ok: false,
       message: 'error.terminal-not-installed',
     })
@@ -188,9 +202,9 @@ describe('openInPreferredTerminal', () => {
       openRemoteInTerminalBackend(
         {
           isInstalled: () => true,
-          open: async (path: string) => ({ ok: true, message: path }),
+          open: async (target) => ({ ok: true, message: target.workingDirectory }),
         },
-        { alias: 'prod', worktreePath: '/srv/repo-feature' },
+        remoteTarget,
       ),
     ).resolves.toEqual({
       ok: false,

@@ -1118,11 +1118,11 @@ export const en = {
   'settings.terminal-font.title': 'Font',
   'settings.terminal-font-size': 'Font size',
   'settings.terminal-font-size-hint': 'Controls the in-app terminal font size.',
-  'settings.terminal-remote.title': 'Remote terminal',
-  'settings.terminal-remote.hint': 'Controls how in-app remote terminal shells are started.',
-  'settings.terminal-remote-tmux': 'Use tmux for remote terminals',
-  'settings.terminal-remote-tmux-hint':
-    'When enabled, in-app remote terminals attach to resumable tmux sessions. When disabled, they start a remote login shell directly.',
+  'settings.terminal-tmux.title': 'Tmux sessions',
+  'settings.terminal-tmux.hint': 'Controls how in-app and external terminal shells are started.',
+  'settings.terminal-tmux': 'Use tmux for internal terminals',
+  'settings.terminal-tmux-hint':
+    'When enabled, eligible local and remote terminals attach to resumable tmux sessions. When disabled, they start a login shell directly.',
   'settings.terminal-custom-buttons.title': 'Custom terminal buttons',
   'settings.terminal-custom-buttons.hint':
     'Show a terminal bottom button bar. Buttons can run immediately or fill the terminal input line for editing.',

@@ -38,7 +38,7 @@ export function buildRuntimeSettingsSnapshot(input: {
     fileTreeTopbarFontSize: input.prefs.fileTreeTopbarFontSize,
     fileTreeClipboardMaxBytesMb: input.prefs.fileTreeClipboardMaxBytesMb,
     terminalFontSize: input.prefs.terminalFontSize,
-    remoteTerminalTmuxEnabled: input.prefs.remoteTerminalTmuxEnabled,
+    internalTerminalTmuxEnabled: input.prefs.internalTerminalTmuxEnabled,
     terminalCustomButtonsVisible: input.prefs.terminalCustomButtonsVisible,
     terminalCustomButtonSize: input.prefs.terminalCustomButtonSize,
     terminalCustomButtons: input.prefs.terminalCustomButtons,
@@ -100,7 +100,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     | 'fileTreeTopbarFontSize'
     | 'fileTreeClipboardMaxBytesMb'
     | 'terminalFontSize'
-    | 'remoteTerminalTmuxEnabled'
+    | 'internalTerminalTmuxEnabled'
     | 'terminalCustomButtonsVisible'
     | 'terminalCustomButtonSize'
     | 'terminalCustomButtons'
@@ -133,7 +133,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     fileTreeTopbarFontSize: snapshot.fileTreeTopbarFontSize,
     fileTreeClipboardMaxBytesMb: snapshot.fileTreeClipboardMaxBytesMb,
     terminalFontSize: snapshot.terminalFontSize,
-    remoteTerminalTmuxEnabled: snapshot.remoteTerminalTmuxEnabled,
+    internalTerminalTmuxEnabled: snapshot.internalTerminalTmuxEnabled,
     terminalCustomButtonsVisible: snapshot.terminalCustomButtonsVisible,
     terminalCustomButtonSize: snapshot.terminalCustomButtonSize,
     terminalCustomButtons: snapshot.terminalCustomButtons,

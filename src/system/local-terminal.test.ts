@@ -1,0 +1,50 @@
+import { describe, expect, test } from 'vitest'
+import { buildManagedLocalTerminalInvocation } from '#/system/local-terminal.ts'
+
+const TARGET = {
+  projectRoot: '/srv/projects/example',
+  workingDirectory: '/srv/projects/example/worktrees/feature',
+  terminalNumber: 1,
+}
+
+describe('buildManagedLocalTerminalInvocation', () => {
+  test('builds a tmux-first local shell invocation when enabled on POSIX', () => {
+    const invocation = buildManagedLocalTerminalInvocation(TARGET, {
+      useTmux: true,
+      platform: 'darwin',
+      fallbackShell: '/bin/zsh',
+    })
+
+    expect(invocation).toMatchObject({ command: '/bin/sh', args: ['-lc', expect.any(String)] })
+    expect(invocation?.script).toContain('command -v tmux >/dev/null 2>&1')
+    expect(invocation?.script).toContain(
+      "exec tmux new-session -A -s 'hobgoblin-v1-aebf050981ac829e36100020' -c '/srv/projects/example/worktrees/feature'",
+    )
+    expect(invocation?.script).toContain("exec '/bin/zsh' -l")
+    expect(invocation?.script).not.toContain("-s 'goblin-")
+  })
+
+  test('returns null when tmux is disabled or the platform is Windows', () => {
+    expect(buildManagedLocalTerminalInvocation(TARGET, { useTmux: false, platform: 'darwin' })).toBeNull()
+    expect(buildManagedLocalTerminalInvocation(TARGET, { useTmux: true, platform: 'win32' })).toBeNull()
+  })
+
+  test('quotes apostrophes in working directories and fallback shells', () => {
+    const invocation = buildManagedLocalTerminalInvocation(
+      { ...TARGET, workingDirectory: "/srv/user's feature" },
+      { useTmux: true, platform: 'linux', fallbackShell: "/opt/user's shell" },
+    )
+
+    expect(invocation?.script).toContain("-c '/srv/user'\\''s feature'")
+    expect(invocation?.script).toContain("exec '/opt/user'\\''s shell' -l")
+  })
+
+  test('rejects an invalid tmux descriptor', () => {
+    expect(
+      buildManagedLocalTerminalInvocation(
+        { ...TARGET, workingDirectory: 'relative/path' },
+        { useTmux: true, platform: 'darwin' },
+      ),
+    ).toBeNull()
+  })
+})

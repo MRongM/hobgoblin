@@ -44,7 +44,7 @@ function defaultRpcResult(path: string, input?: unknown) {
       fileTreeFontSize: 12,
       fileTreeTopbarFontSize: 13,
       terminalFontSize: 14,
-      remoteTerminalTmuxEnabled: false,
+      internalTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
       terminalCustomButtonSize: 'medium',
       terminalCustomButtons: [],
@@ -199,7 +199,7 @@ beforeEach(() => {
       fileTreeFontSize: 12,
       fileTreeTopbarFontSize: 13,
       terminalFontSize: 14,
-      remoteTerminalTmuxEnabled: false,
+      internalTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
       terminalCustomButtonSize: 'medium',
       terminalCustomButtons: [],
@@ -230,7 +230,7 @@ beforeEach(() => {
       fileTreeFontSize: 12,
       fileTreeTopbarFontSize: 13,
       terminalFontSize: 14,
-      remoteTerminalTmuxEnabled: false,
+      internalTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
       terminalCustomButtonSize: 'medium',
       terminalCustomButtons: [],
@@ -649,7 +649,7 @@ describe('SettingsSurface', () => {
   test('edits terminal custom buttons from settings', async () => {
     await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
 
-    expect(document.body.textContent).toContain('settings.terminal-remote.title')
+    expect(document.body.textContent).toContain('settings.terminal-tmux.title')
     expect(document.body.textContent).not.toContain(['settings', ['terminal', 'external', 'input'].join('-')].join('.'))
     expect(document.body.textContent).toContain('settings.terminal-custom-buttons.visible')
 
@@ -763,7 +763,7 @@ describe('SettingsSurface', () => {
 
     const removedSwitchId = ['settings', 'terminal', 'external', 'input'].join('-')
     expect(document.getElementById(removedSwitchId)).toBeNull()
-    const remoteTmuxSwitch = switchById('settings-terminal-remote-tmux')
+    const remoteTmuxSwitch = switchById('settings-terminal-tmux')
     const buttonsVisibleSwitch = switchById('settings-terminal-custom-buttons-visible')
 
     await act(async () => {
@@ -781,7 +781,7 @@ describe('SettingsSurface', () => {
     expect(
       fetchMock.mock.calls.some((call) => {
         const [, options] = call as unknown as [unknown, RequestInit | undefined]
-        return String(options?.body ?? '').includes('remoteTerminalTmuxEnabled')
+        return String(options?.body ?? '').includes('internalTerminalTmuxEnabled')
       }),
     ).toBe(true)
     expect(

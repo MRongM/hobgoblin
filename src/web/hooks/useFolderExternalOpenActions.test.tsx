@@ -62,7 +62,10 @@ describe('useFolderExternalOpenActions', () => {
     await act(async () => await actions().externalTerminal.onSelect())
 
     expect(mocks.openEditor).toHaveBeenCalledWith('/workspace/goblin-feature')
-    expect(mocks.openTerminal).toHaveBeenCalledWith('/workspace/goblin-feature')
+    expect(mocks.openTerminal).toHaveBeenCalledWith({
+      projectRoot: '/workspace',
+      workingDirectory: '/workspace/goblin-feature',
+    })
   })
 
   test('dispatches SSH folder opens through the remote boundary and disables unavailable folders', async () => {

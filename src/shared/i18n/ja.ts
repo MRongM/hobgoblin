@@ -1126,11 +1126,11 @@ export const ja: Record<DictKey, string> = {
   'settings.terminal-font.title': 'フォント',
   'settings.terminal-font-size': 'フォントサイズ',
   'settings.terminal-font-size-hint': 'アプリ内ターミナルのフォントサイズを調整します。',
-  'settings.terminal-remote.title': 'リモートターミナル',
-  'settings.terminal-remote.hint': 'アプリ内リモートターミナルのシェル起動方法を制御します。',
-  'settings.terminal-remote-tmux': 'リモートターミナルで tmux を使用',
-  'settings.terminal-remote-tmux-hint':
-    '有効にすると、アプリ内のリモートターミナルは再開可能な tmux セッションに接続します。無効にすると、リモートログインシェルを直接起動します。',
+  'settings.terminal-tmux.title': 'Tmux セッション',
+  'settings.terminal-tmux.hint': 'アプリ内および外部ターミナルのシェル起動方法を制御します。',
+  'settings.terminal-tmux': '内部ターミナルで tmux を使用',
+  'settings.terminal-tmux-hint':
+    '有効にすると、対応するローカルおよびリモートターミナルは再開可能な tmux セッションに接続します。無効にすると、ログインシェルを直接起動します。',
   'settings.terminal-custom-buttons.title': 'カスタムターミナルボタン',
   'settings.terminal-custom-buttons.hint':
     'ターミナル下部のボタンバーを表示します。ボタンはすぐ実行するか、編集できるようターミナル入力行へ入力できます。',

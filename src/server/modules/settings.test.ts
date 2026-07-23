@@ -39,7 +39,7 @@ describe('server settings snapshot runtime state', () => {
       editorApp: 'auto',
       fileTreeFontSize: 12,
       terminalFontSize: 14,
-      remoteTerminalTmuxEnabled: false,
+      internalTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
       terminalCustomButtons: [],
       lanEnabled: false,

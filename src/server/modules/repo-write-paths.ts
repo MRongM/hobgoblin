@@ -665,9 +665,17 @@ export async function openRepositoryRemote(cwd: string, branch?: string, signal?
   return url ? { ok: true, message: url } : { ok: false, message: 'error.no-remote-url' }
 }
 
-export async function openRepositoryTerminal(path: string): Promise<ExecResult> {
+export async function openRepositoryTerminal(input: {
+  projectRoot: string
+  workingDirectory: string
+}): Promise<ExecResult> {
+  if (!isValidCwd(input.projectRoot) || !isValidCwd(input.workingDirectory)) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
   const prefs = await getServerSettingsPrefs()
-  return await openInPreferredTerminal(path, prefs.terminalApp)
+  return await openInPreferredTerminal({ ...input, terminalNumber: 1 }, prefs.terminalApp, {
+    useTmux: prefs.internalTerminalTmuxEnabled,
+  })
 }
 
 export async function openRepositoryEditor(target: EditorOpenTarget): Promise<ExecResult> {

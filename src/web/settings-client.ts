@@ -255,8 +255,8 @@ export async function setFontFamily(fontFamily: FontFamilyPref): Promise<FontFam
   return result.settings.fontFamily
 }
 
-export async function setRemoteTerminalTmuxEnabled(enabled: boolean): Promise<void> {
-  await updateSettingsPrefsPatch({ remoteTerminalTmuxEnabled: enabled })
+export async function setInternalTerminalTmuxEnabled(enabled: boolean): Promise<void> {
+  await updateSettingsPrefsPatch({ internalTerminalTmuxEnabled: enabled })
 }
 
 export async function setTerminalCustomButtonsVisible(visible: boolean): Promise<void> {

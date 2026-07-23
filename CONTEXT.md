@@ -24,6 +24,14 @@ _Avoid_: Detail focus mode, workspace focus mode
 The specific internal terminal session selected within one branch or worktree terminal area. It is distinct from the selected branch context and from the attachment that currently controls terminal input; a terminal deep link targets this session when it still exists and restores an encoded branch workspace member context when that relationship remains valid.
 _Avoid_: Current terminal, active terminal
 
+**Tmux session descriptor**:
+The normalized project root path, terminal working-directory path, and positive terminal slot number that together identify one tmux-backed internal terminal independently of whether Hobgoblin or an external terminal application creates it first. It excludes transport endpoint, display, branch, and ephemeral PTY identity, preserves logical path identity without resolving symbolic links, and is the public input for deterministic tmux session naming.
+_Avoid_: Terminal session ID, tmux connection settings, SSH terminal identity
+
+**Tmux session name**:
+The deterministic `hobgoblin-v1-<digest>` identifier derived from a tmux session descriptor and used by internal and external terminal applications to create or attach to the same tmux session. It is distinct from a `terminal-N` slot, a server terminal key, and an ephemeral `term_<UUID>` PTY session ID.
+_Avoid_: Terminal session ID, terminal ID, PTY session ID
+
 **Canonical terminal geometry**:
 The server-owned PTY column and row count published by the current controller attachment.
 _Avoid_: Viewer size, shared viewport size

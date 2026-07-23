@@ -2118,7 +2118,7 @@ async function openNodeInEditor(repoId: string, node: FileTreeNode) {
 async function openNodeInTerminal(repoId: string, node: FileTreeNode) {
   const terminalPath = node.kind === 'directory' ? node.absolutePath : parentDirectoryPath(node.absolutePath)
   if (isRemoteRepoId(repoId)) await openRemoteRepositoryTerminal(repoId, terminalPath)
-  else await openRepositoryTerminal(terminalPath)
+  else await openRepositoryTerminal({ projectRoot: repoId, workingDirectory: terminalPath })
 }
 
 function editorPathForNode(node: FileTreeNode): string {

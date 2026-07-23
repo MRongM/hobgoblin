@@ -212,7 +212,10 @@ describe('useProjectExternalOpenActions', () => {
 
     await act(async () => await actions().externalTerminal.onSelect())
 
-    expect(mocks.openRepositoryTerminal).toHaveBeenCalledWith('/workspace')
+    expect(mocks.openRepositoryTerminal).toHaveBeenCalledWith({
+      projectRoot: '/workspace',
+      workingDirectory: '/workspace',
+    })
     expect(mocks.openRemoteRepositoryTerminal).not.toHaveBeenCalled()
     expect(mocks.setLastResult).not.toHaveBeenCalled()
   })

@@ -6,6 +6,7 @@ import { resolveKnownWorktree } from '#/shared/worktree-guards.ts'
 import { isValidBranch, isValidCwd, isValidRepoLocator } from '#/shared/input-validation.ts'
 import { resolveRemoteTarget } from '#/system/ssh/config.ts'
 import { buildRemoteTerminalInvocation } from '#/system/ssh/commands.ts'
+import { buildManagedLocalTerminalInvocation } from '#/system/local-terminal.ts'
 import { isRemoteRepoId, parseRemoteRepoId } from '#/shared/remote-repo.ts'
 import { terminalSessionScope } from '#/server/terminal/terminal-scope.ts'
 import {
@@ -83,7 +84,7 @@ interface TerminalCatalogOptions {
   isValidClientId(value: unknown): value is string
   isValidTerminalId(value: unknown): value is string
   manager: TerminalCatalogManager
-  remoteTerminalTmuxEnabled(): MaybePromise<boolean>
+  internalTerminalTmuxEnabled(): MaybePromise<boolean>
   attachmentIsConnected(clientId: string, attachmentId?: string): boolean | undefined
   broadcastSessionsChanged(repoRoot: string): void
   withSessionSnapshot(
@@ -105,6 +106,9 @@ class TerminalCatalog {
     if (!isValidCwd(input.worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
     const targetAuthorization = await authorizeBranchWorkspaceTerminalTarget(input)
     if (!targetAuthorization.ok) return targetAuthorization
+    const repoRoot = normalizeTerminalRepoRoot(input.repoRoot)
+    const worktreePath = normalizeTerminalWorkingPath(input.repoRoot, targetAuthorization.worktreePath)
+    const canonicalInput = { ...input, repoRoot, worktreePath }
 
     const terminalId = input.terminalId ?? formatTerminalId(1)
     const cols = input.cols ?? 80
@@ -112,9 +116,9 @@ class TerminalCatalog {
     if (!this.options.isValidTerminalId(terminalId)) return { ok: false, message: 'error.invalid-arguments' }
     if (!isValidTerminalSize(cols, rows)) return { ok: false, message: 'error.invalid-arguments' }
 
-    const scope = terminalSessionScope(input.repoRoot)
+    const scope = terminalSessionScope(repoRoot)
     const existingSessions = await this.options.manager.listSessions(scope)
-    const targetSessionKey = sessionKey(input.repoRoot, input.worktreePath, terminalId)
+    const targetSessionKey = sessionKey(repoRoot, worktreePath, terminalId)
     const existingSession = existingSessions.find((session) => session.key === targetSessionKey)
     const action: TerminalCatalogAction = existingSession
       ? existingSession.controller
@@ -122,10 +126,10 @@ class TerminalCatalog {
         : 'reused'
       : 'created'
 
-    if (isRemoteRepoId(input.repoRoot)) {
-      return await this.ensureRemote(clientId, input, { terminalId, cols, rows, targetSessionKey, action })
+    if (isRemoteRepoId(repoRoot)) {
+      return await this.ensureRemote(clientId, canonicalInput, { terminalId, cols, rows, targetSessionKey, action })
     }
-    return await this.ensureLocal(clientId, input, { cols, rows, targetSessionKey, action })
+    return await this.ensureLocal(clientId, canonicalInput, { terminalId, cols, rows, targetSessionKey, action })
   }
 
   async create(clientId: string, input: TerminalCreateInput): Promise<TerminalCatalogMutationResult> {
@@ -196,11 +200,19 @@ class TerminalCatalog {
   }
 
   async nextTerminalId(repoRoot: string, worktreePath: string): Promise<string> {
-    const sessions = await this.options.manager.listSessions(terminalSessionScope(repoRoot))
+    const normalizedRepoRoot = normalizeTerminalRepoRoot(repoRoot)
+    const normalizedWorktreePath = normalizeTerminalWorkingPath(repoRoot, worktreePath)
+    const sessions = await this.options.manager.listSessions(terminalSessionScope(normalizedRepoRoot))
     const usedIndexes = new Set<number>()
     for (const session of sessions) {
       const parsed = parseSessionKey(session.key)
-      if (!parsed || parsed.repoRoot !== repoRoot || parsed.worktreePath !== worktreePath) continue
+      if (
+        !parsed ||
+        normalizeTerminalRepoRoot(parsed.repoRoot) !== normalizedRepoRoot ||
+        normalizeTerminalWorkingPath(repoRoot, parsed.worktreePath) !== normalizedWorktreePath
+      ) {
+        continue
+      }
       const index = parseTerminalIdIndex(parsed.terminalId)
       if (index !== null) usedIndexes.add(index)
     }
@@ -230,7 +242,7 @@ class TerminalCatalog {
     }
     const terminalNumber = parseTerminalIdIndex(context.terminalId)
     if (terminalNumber === null) return { ok: false, message: 'error.invalid-arguments' }
-    const useTmux = (await this.options.remoteTerminalTmuxEnabled()) === true
+    const useTmux = (await this.options.internalTerminalTmuxEnabled()) === true
 
     const invocation = buildRemoteTerminalInvocation(resolved.target, input.worktreePath, {
       cols: context.cols,
@@ -260,6 +272,7 @@ class TerminalCatalog {
     clientId: string,
     input: EnsureTerminalCatalogInput,
     context: {
+      terminalId: string
       cols: number
       rows: number
       targetSessionKey: string
@@ -299,6 +312,7 @@ class TerminalCatalog {
     clientId: string,
     input: EnsureTerminalCatalogInput,
     context: {
+      terminalId: string
       cols: number
       rows: number
       targetSessionKey: string
@@ -307,6 +321,17 @@ class TerminalCatalog {
       worktreePath: string
     },
   ): Promise<EnsureTerminalCatalogResult> {
+    const terminalNumber = parseTerminalIdIndex(context.terminalId)
+    if (terminalNumber === null) return { ok: false, message: 'error.invalid-arguments' }
+    const useTmux = (await this.options.internalTerminalTmuxEnabled()) === true
+    const invocation = buildManagedLocalTerminalInvocation(
+      {
+        projectRoot: context.repoRoot,
+        workingDirectory: context.worktreePath,
+        terminalNumber,
+      },
+      { useTmux, fallbackShell: process.env.SHELL },
+    )
     const result = this.options.manager.ensureSession({
       ownerId: clientId,
       scope: context.repoRoot,
@@ -317,6 +342,8 @@ class TerminalCatalog {
       attachmentId: input.attachmentId,
       attachmentConnected: this.options.attachmentIsConnected(clientId, input.attachmentId),
       forceNew: context.action === 'created',
+      command: invocation?.command,
+      args: invocation?.args,
     })
     if (!result.ok) return { ok: false, message: result.message }
     this.options.broadcastSessionsChanged(input.repoRoot)
@@ -325,13 +352,12 @@ class TerminalCatalog {
 }
 
 async function authorizeBranchWorkspaceTerminalTarget(
-  input: Pick<
-    EnsureTerminalCatalogInput,
-    'repoRoot' | 'branch' | 'worktreePath' | 'targetKind' | 'branchWorkspaceId'
-  >,
-): Promise<{ ok: true } | { ok: false; message: string }> {
+  input: Pick<EnsureTerminalCatalogInput, 'repoRoot' | 'branch' | 'worktreePath' | 'targetKind' | 'branchWorkspaceId'>,
+): Promise<{ ok: true; worktreePath: string } | { ok: false; message: string }> {
   if (input.targetKind === undefined) {
-    return input.branchWorkspaceId === undefined ? { ok: true } : { ok: false, message: 'error.invalid-arguments' }
+    return input.branchWorkspaceId === undefined
+      ? { ok: true, worktreePath: input.worktreePath }
+      : { ok: false, message: 'error.invalid-arguments' }
   }
   if (
     input.targetKind !== 'branch-workspace' ||
@@ -355,7 +381,15 @@ async function authorizeBranchWorkspaceTerminalTarget(
   ) {
     return { ok: false, message: 'workspace.branch-workspace.terminal-unavailable' }
   }
-  return { ok: true }
+  return { ok: true, worktreePath: manifest.path }
+}
+
+function normalizeTerminalRepoRoot(repoRoot: string): string {
+  return isRemoteRepoId(repoRoot) ? repoRoot : terminalSessionScope(repoRoot)
+}
+
+function normalizeTerminalWorkingPath(repoRoot: string, value: string): string {
+  return isRemoteRepoId(repoRoot) ? path.posix.normalize(value) : terminalSessionScope(value)
 }
 
 function sameBranchWorkspaceTerminalPath(rootId: string, left: string, right: string): boolean {

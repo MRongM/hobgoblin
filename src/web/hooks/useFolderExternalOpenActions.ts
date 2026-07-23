@@ -40,7 +40,7 @@ export function useFolderExternalOpenActions(input: {
           : () => openRepositoryEditor(input.path)
         : remote
           ? () => openRemoteRepositoryTerminal(input.repoId, input.path)
-          : () => openRepositoryTerminal(input.path)
+          : () => openRepositoryTerminal({ projectRoot: input.repoId, workingDirectory: input.path })
     const result = run(actionId, operation)
     return result ? Promise.resolve(result).then(() => undefined) : undefined
   }

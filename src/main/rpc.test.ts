@@ -44,7 +44,7 @@ function settingsPrefs(overrides: Partial<SettingsPrefs> = {}): SettingsPrefs {
     fileTreeTopbarFontSize: overrides.fileTreeTopbarFontSize ?? 13,
     fileTreeClipboardMaxBytesMb: overrides.fileTreeClipboardMaxBytesMb ?? 30,
     terminalFontSize: 14,
-    remoteTerminalTmuxEnabled: false,
+    internalTerminalTmuxEnabled: false,
     terminalCustomButtonsVisible: true,
     terminalCustomButtonSize: 'medium',
     terminalCustomButtons: [],
