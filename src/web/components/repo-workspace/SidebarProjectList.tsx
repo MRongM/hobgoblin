@@ -15,7 +15,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Folder, FolderGit2, Terminal, X } from 'lucide-react'
+import { Folder, FolderGit2, GitCompareArrows, Terminal, X } from 'lucide-react'
 import {
   ProjectTerminalStatus,
   projectLocation,
@@ -26,6 +26,7 @@ import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon
 import { useProjectExternalOpenActions } from '#/web/hooks/useProjectExternalOpenActions.ts'
 import { useProjectInternalTerminalAction } from '#/web/hooks/useProjectInternalTerminalAction.ts'
 import { WorkspaceItemContextMenu } from '#/web/components/repo-workspace/WorkspaceItemContextMenu.tsx'
+import { Badge } from '#/web/components/ui/badge.tsx'
 import {
   WorkspaceListItemActionDock,
   WorkspaceListItemFrame,
@@ -106,6 +107,8 @@ function SortableProjectRow({
   const ProjectIcon = project.isGitRepo ? FolderGit2 : Folder
   const projectExternalActions = useProjectExternalOpenActions(project.id)
   const projectInternalTerminalAction = useProjectInternalTerminalAction(project.id)
+  const changeCountLabel =
+    project.changeCount > 0 ? t('branch-status.worktree-dirty', { n: project.changeCount }) : null
   const editorAction: WorkspaceListItemAction | undefined = projectExternalActions.visible
     ? {
         id: 'editor',
@@ -191,6 +194,18 @@ function SortableProjectRow({
       >
         <span className="flex min-w-0 flex-1 items-center gap-2">
           <span className="min-w-0 truncate text-sm font-medium leading-4">{project.name}</span>
+          {project.changeCount > 0 ? (
+            <Badge
+              data-testid="project-change-count-badge"
+              aria-label={changeCountLabel ?? undefined}
+              title={changeCountLabel ?? undefined}
+              variant="attention"
+              className="h-4 shrink-0 gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums"
+            >
+              <GitCompareArrows size={10} aria-hidden="true" />
+              {project.changeCount}
+            </Badge>
+          ) : null}
           <ProjectTerminalStatus
             terminalWorktreeKeys={project.terminalWorktreeKeys}
             branchWorkspaceRootId={project.branchWorkspaceRootId}

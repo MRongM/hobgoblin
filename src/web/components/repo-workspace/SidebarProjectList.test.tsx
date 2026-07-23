@@ -144,6 +144,7 @@ const projects: ProjectSummary[] = [
     name: 'Repo A',
     unavailable: false,
     isGitRepo: true,
+    changeCount: 5,
     terminalWorktreeKeys: [],
     branchWorkspaceRootId: null,
   },
@@ -152,6 +153,7 @@ const projects: ProjectSummary[] = [
     name: 'Repo B',
     unavailable: false,
     isGitRepo: false,
+    changeCount: 0,
     terminalWorktreeKeys: [],
     branchWorkspaceRootId: null,
   },
@@ -289,6 +291,15 @@ describe('SidebarProjectList', () => {
     expect(projectName?.className).toContain('text-sm')
     expect(projectName?.className).toContain('leading-4')
     expect(projectName?.className).not.toContain('leading-none')
+  })
+
+  test('shows the cumulative project change count and omits a zero count', () => {
+    renderList()
+
+    const changeBadge = projectRow('/repo-a').querySelector('[data-testid="project-change-count-badge"]')
+    expect(changeBadge?.textContent).toBe('5')
+    expect(changeBadge?.querySelector('.lucide-git-compare-arrows')).not.toBeNull()
+    expect(projectRow('/repo-b').querySelector('[data-testid="project-change-count-badge"]')).toBeNull()
   })
 
   test('uses a folder icon for plain projects and a Git folder icon for repositories', () => {
