@@ -81,6 +81,7 @@ export function defaultSessionState(): SessionState {
     activeProject: null,
     workspaceActiveContextByRoot: {},
     workspaceRepositoryListExpandedByRoot: {},
+    workspaceRepositoryListHeightByRoot: {},
     projectListExpanded: DEFAULT_PROJECT_LIST_EXPANDED,
     detailCollapsed: DEFAULT_DETAIL_COLLAPSED,
     detailFocusMode: DEFAULT_DETAIL_FOCUS_MODE,

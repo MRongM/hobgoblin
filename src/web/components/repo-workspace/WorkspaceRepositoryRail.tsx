@@ -6,6 +6,7 @@ import type { BranchWorkspaceGitActionKind } from '#/shared/branch-workspace-git
 import type { BranchWorkspaceRepositorySnapshot, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import type { WorkspaceConfig } from '#/shared/workspace.ts'
 import type { WorkspacePullResult } from '#/shared/workspace-pull.ts'
+import { DEFAULT_WORKSPACE_REPOSITORY_LIST_HEIGHT } from '#/shared/workspace-layout.ts'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
@@ -65,7 +66,16 @@ export function WorkspaceRepositoryRail({
     (state) => state.workspaceActiveContextByRoot[workspaceRootId] ?? { kind: 'overview' as const },
   )
   const repositoryListVisible = useReposStore((state) => workspaceRepositoryListExpanded(state, workspaceRootId))
+  const repositoryListHeight = useReposStore(
+    (state) =>
+      state.workspaceRepositoryListHeightByRoot[workspaceRootId] ?? DEFAULT_WORKSPACE_REPOSITORY_LIST_HEIGHT,
+  )
   const toggleRepositoryList = useReposStore((state) => state.toggleWorkspaceRepositoryList)
+  const setRepositoryListHeight = useReposStore((state) => state.setWorkspaceRepositoryListHeight)
+  const handleRepositoryListHeightChange = useCallback(
+    (height: number) => setRepositoryListHeight(workspaceRootId, height),
+    [setRepositoryListHeight, workspaceRootId],
+  )
   const activateWorkspaceOverview = useReposStore((state) => state.activateWorkspaceOverview)
   const activateWorkspaceRepository = useReposStore((state) => state.activateWorkspaceRepository)
   const selectBranch = useReposStore((state) => state.selectBranch)
@@ -451,7 +461,12 @@ export function WorkspaceRepositoryRail({
     <>
       <div className={cn(fill ? 'flex min-h-0 flex-1 flex-col' : 'shrink-0', 'bg-sidebar')}>
         {repositoryListVisible ? (
-          <WorkspaceRepositoryListPane label={t('workspace.repositories')} actions={headerActions}>
+          <WorkspaceRepositoryListPane
+            label={t('workspace.repositories')}
+            actions={headerActions}
+            height={repositoryListHeight}
+            onHeightChange={handleRepositoryListHeightChange}
+          >
             <ManifestRow
               active={activeContext.kind === 'overview'}
               name={overviewName}

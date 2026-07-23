@@ -29,6 +29,7 @@ import {
   effectiveDetailCollapsed,
   normalizeDetailPaneSizes,
   normalizeFileTreePaneSizes,
+  normalizeWorkspaceRepositoryListHeight,
   normalizeWorkspaceLayout,
 } from '#/shared/workspace-layout.ts'
 import { isRemoteRepoId, parseRemoteRepoId, repoSessionEntryId, type RepoSessionEntry } from '#/shared/remote-repo.ts'
@@ -523,6 +524,21 @@ function normalizeWorkspaceRepositoryListExpandedByRoot(
   return normalized
 }
 
+function normalizeWorkspaceRepositoryListHeightByRoot(
+  value: unknown,
+  openRepos: RepoSessionEntry[],
+): Record<string, number> {
+  if (!value || typeof value !== 'object') return {}
+  const openRootIds = new Set(openRepos.map(repoSessionEntryId))
+  const normalized: Record<string, number> = {}
+  for (const [rawRootId, height] of Object.entries(value)) {
+    const rootId = toSafeRepoLocator(rawRootId)
+    const normalizedHeight = normalizeWorkspaceRepositoryListHeight(height)
+    if (rootId && openRootIds.has(rootId) && normalizedHeight !== null) normalized[rootId] = normalizedHeight
+  }
+  return normalized
+}
+
 function isImmediateWorkspaceRepository(rootId: string, repositoryId: string): boolean {
   if (isRemoteRepoId(rootId) || isRemoteRepoId(repositoryId)) {
     const root = parseRemoteRepoId(rootId)
@@ -578,6 +594,10 @@ function normalizeSession(value: unknown): SessionState {
     workspaceActiveContextByRoot,
     workspaceRepositoryListExpandedByRoot: normalizeWorkspaceRepositoryListExpandedByRoot(
       partial.workspaceRepositoryListExpandedByRoot,
+      openRepos,
+    ),
+    workspaceRepositoryListHeightByRoot: normalizeWorkspaceRepositoryListHeightByRoot(
+      partial.workspaceRepositoryListHeightByRoot,
       openRepos,
     ),
     projectListExpanded:

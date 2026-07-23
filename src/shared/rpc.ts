@@ -92,6 +92,8 @@ export interface SessionState {
   workspaceActiveRepoByRoot?: Record<string, string | null>
   /** Missing roots default to visible. The legacy field name is retained for session compatibility. */
   workspaceRepositoryListExpandedByRoot?: Record<string, boolean>
+  /** Desktop repository-list heights by open multi-repository workspace root. */
+  workspaceRepositoryListHeightByRoot?: Record<string, number>
   projectListExpanded: boolean
   detailCollapsed: boolean
   detailFocusMode: boolean

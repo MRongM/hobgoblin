@@ -457,6 +457,36 @@ describe('WorkspaceRepositoryRail', () => {
     expect(resizeHandle?.getAttribute('aria-orientation')).toBe('horizontal')
   })
 
+  test('restores the desktop repository list height for the workspace root', () => {
+    useReposStore.setState({ workspaceRepositoryListHeightByRoot: { [ROOT]: 224 } })
+
+    renderRail()
+
+    const upperList = container?.querySelector<HTMLElement>('[data-testid="workspace-repository-upper-list"]')
+    expect(upperList?.style.height).toBe('224px')
+  })
+
+  test('clamps a restored height to the available navigation area', () => {
+    vi.spyOn(container!, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 320,
+      bottom: 300,
+      width: 320,
+      height: 300,
+      toJSON: () => ({}),
+    })
+    useReposStore.setState({ workspaceRepositoryListHeightByRoot: { [ROOT]: 400 } })
+
+    renderRail()
+
+    const upperList = container?.querySelector<HTMLElement>('[data-testid="workspace-repository-upper-list"]')
+    expect(upperList?.style.height).toBe('172px')
+    expect(useReposStore.getState().workspaceRepositoryListHeightByRoot).toEqual({ [ROOT]: 172 })
+  })
+
   test('clamps pointer resizing between the minimum and the available navigation height', () => {
     vi.spyOn(container!, 'getBoundingClientRect').mockReturnValue({
       x: 0,
@@ -483,6 +513,7 @@ describe('WorkspaceRepositoryRail', () => {
       window.dispatchEvent(new MouseEvent('pointerup'))
     })
     expect(upperList.style.height).toBe('272px')
+    expect(useReposStore.getState().workspaceRepositoryListHeightByRoot).toEqual({ [ROOT]: 272 })
 
     act(() => {
       resizeHandle.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, clientY: 100 }))
@@ -490,10 +521,12 @@ describe('WorkspaceRepositoryRail', () => {
       window.dispatchEvent(new MouseEvent('pointerup'))
     })
     expect(upperList.style.height).toBe('96px')
+    expect(useReposStore.getState().workspaceRepositoryListHeightByRoot).toEqual({ [ROOT]: 96 })
   })
 
   test('keeps the compact repository list fixed without a resize handle', () => {
     compactUi = true
+    useReposStore.setState({ workspaceRepositoryListHeightByRoot: { [ROOT]: 224 } })
     renderRail()
 
     const upperList = container?.querySelector<HTMLElement>('[data-testid="workspace-repository-upper-list"]')
@@ -501,6 +534,7 @@ describe('WorkspaceRepositoryRail', () => {
     expect(upperList?.style.height).toBe('')
     expect(upperList?.className).toContain('max-h-40')
     expect(container?.querySelector('[data-testid="workspace-repository-list-resize-handle"]')).toBeNull()
+    expect(useReposStore.getState().workspaceRepositoryListHeightByRoot).toEqual({ [ROOT]: 224 })
   })
 
   test('supports keyboard resizing through the focused separator', () => {
@@ -525,12 +559,40 @@ describe('WorkspaceRepositoryRail', () => {
 
     act(() => resizeHandle.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowDown' })))
     expect(upperList.style.height).toBe('176px')
+    expect(useReposStore.getState().workspaceRepositoryListHeightByRoot).toEqual({ [ROOT]: 176 })
 
     act(() => resizeHandle.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Home' })))
     expect(upperList.style.height).toBe('96px')
 
     act(() => resizeHandle.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'End' })))
     expect(upperList.style.height).toBe('272px')
+  })
+
+  test('caps the keyboard maximum at the persisted height limit', () => {
+    vi.spyOn(container!, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 320,
+      bottom: 5000,
+      width: 320,
+      height: 5000,
+      toJSON: () => ({}),
+    })
+    renderRail()
+
+    const upperList = container?.querySelector<HTMLElement>('[data-testid="workspace-repository-upper-list"]')
+    const resizeHandle = container?.querySelector<HTMLElement>(
+      '[data-testid="workspace-repository-list-resize-handle"]',
+    )
+    if (!upperList || !resizeHandle) throw new Error('missing resizable repository list')
+
+    act(() => resizeHandle.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'End' })))
+
+    expect(upperList.style.height).toBe('4096px')
+    expect(resizeHandle.getAttribute('aria-valuemax')).toBe('4096')
+    expect(useReposStore.getState().workspaceRepositoryListHeightByRoot).toEqual({ [ROOT]: 4096 })
   })
 
   test('confirms and runs registry cleanup only for the branch workspace read failure', async () => {

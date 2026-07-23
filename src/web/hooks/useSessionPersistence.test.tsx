@@ -48,6 +48,7 @@ describe('useSessionPersistence', () => {
         '/tmp/workspace': { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
       },
       workspaceRepositoryListExpandedByRoot: { '/tmp/workspace': false },
+      workspaceRepositoryListHeightByRoot: { '/tmp/workspace': 224 },
       sessionReady: true,
       projectListExpanded: true,
       selectedTerminalByWorktree: {
@@ -65,6 +66,7 @@ describe('useSessionPersistence', () => {
           '/tmp/workspace': { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
         },
         workspaceRepositoryListExpandedByRoot: { '/tmp/workspace': false },
+        workspaceRepositoryListHeightByRoot: { '/tmp/workspace': 224 },
         projectListExpanded: true,
         selectedTerminalByWorktree: {
           '/tmp/repo\0/tmp/worktree': '/tmp/repo\0/tmp/worktree\0terminal-2',

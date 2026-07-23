@@ -20,6 +20,7 @@ export function sessionStateFromRestorableWorkspaceState(input: {
     activeProject: restorableWorkspaceState.activeProjectId,
     workspaceActiveContextByRoot: restorableWorkspaceState.workspaceActiveContextByRoot,
     workspaceRepositoryListExpandedByRoot: restorableWorkspaceState.workspaceRepositoryListExpandedByRoot,
+    workspaceRepositoryListHeightByRoot: restorableWorkspaceState.workspaceRepositoryListHeightByRoot,
     projectListExpanded: restorableWorkspaceState.projectListExpanded,
     detailCollapsed: restorableWorkspaceState.detailCollapsed,
     detailFocusMode: false,
@@ -45,6 +46,7 @@ export function restoreRestorableWorkspaceStateFromSession(
   | 'activeProjectId'
   | 'workspaceActiveContextByRoot'
   | 'workspaceRepositoryListExpandedByRoot'
+  | 'workspaceRepositoryListHeightByRoot'
   | 'projectListExpanded'
   | 'detailCollapsed'
   | 'workspaceLayout'
@@ -59,6 +61,7 @@ export function restoreRestorableWorkspaceStateFromSession(
     workspaceRepositoryListExpandedByRoot: normalizeWorkspaceRepositoryListExpansion(
       session.workspaceRepositoryListExpandedByRoot,
     ),
+    workspaceRepositoryListHeightByRoot: session.workspaceRepositoryListHeightByRoot ?? {},
     projectListExpanded: session.projectListExpanded,
     detailCollapsed: session.detailCollapsed,
     workspaceLayout: session.workspaceLayout,

@@ -41,6 +41,7 @@ describe('useAppBootstrap', () => {
         '/tmp/repo': { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
       },
       workspaceRepositoryListExpandedByRoot: { '/tmp/repo': false },
+      workspaceRepositoryListHeightByRoot: { '/tmp/repo': 224 },
       projectListExpanded: true,
       detailCollapsed: true,
       detailFocusMode: true,
@@ -55,6 +56,7 @@ describe('useAppBootstrap', () => {
         '/tmp/repo': { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
       },
       workspaceRepositoryListExpandedByRoot: { '/tmp/repo': false },
+      workspaceRepositoryListHeightByRoot: { '/tmp/repo': 224 },
       projectListExpanded: true,
       detailCollapsed: true,
       detailFocusMode: true,
@@ -81,6 +83,7 @@ describe('useAppBootstrap', () => {
       { '/tmp/repo': { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' } },
       { '/tmp/repo': false },
       '/tmp/repo',
+      { '/tmp/repo': 224 },
     )
   })
 })

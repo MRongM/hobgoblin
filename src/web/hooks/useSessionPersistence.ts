@@ -11,6 +11,7 @@ export function useSessionPersistence() {
   const order = useReposStore((s) => s.order)
   const workspaceActiveContextByRoot = useReposStore((s) => s.workspaceActiveContextByRoot)
   const workspaceRepositoryListExpandedByRoot = useReposStore((s) => s.workspaceRepositoryListExpandedByRoot)
+  const workspaceRepositoryListHeightByRoot = useReposStore((s) => s.workspaceRepositoryListHeightByRoot)
   const projectListExpanded = useReposStore((s) => s.projectListExpanded)
   const detailCollapsed = useReposStore((s) => s.detailCollapsed)
   const workspaceLayout = useReposStore((s) =>
@@ -36,6 +37,7 @@ export function useSessionPersistence() {
       activeProjectId,
       workspaceActiveContextByRoot,
       workspaceRepositoryListExpandedByRoot,
+      workspaceRepositoryListHeightByRoot,
       projectListExpanded,
       detailCollapsed,
       workspaceLayout,
@@ -82,6 +84,7 @@ export function useSessionPersistence() {
     activeProjectId,
     workspaceActiveContextByRoot,
     workspaceRepositoryListExpandedByRoot,
+    workspaceRepositoryListHeightByRoot,
     projectListExpanded,
     detailCollapsed,
     detailPaneSizes,

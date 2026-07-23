@@ -61,6 +61,7 @@ Representative examples:
 
 - saved session state
 - fixed desktop detail pane size
+- per-workspace desktop repository-list height
 - active repo and open repo set for next launch
 - `restorableRepoCache` for warm restore
 - boot-only `useSessionRestoreStore`

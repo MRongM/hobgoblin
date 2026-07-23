@@ -23,6 +23,7 @@ describe('settings defaults', () => {
     expect(defaultSessionState()).toMatchObject({
       workspaceActiveContextByRoot: {},
       workspaceRepositoryListExpandedByRoot: {},
+      workspaceRepositoryListHeightByRoot: {},
     })
     expect(defaultSessionState()).not.toHaveProperty('workspaceActiveRepoByRoot')
   })

@@ -49,6 +49,7 @@ export function restorableWorkspaceStateFromStore(
     | 'activeProjectId'
     | 'workspaceActiveContextByRoot'
     | 'workspaceRepositoryListExpandedByRoot'
+    | 'workspaceRepositoryListHeightByRoot'
     | 'projectListExpanded'
     | 'detailCollapsed'
     | 'workspaceLayout'
@@ -66,6 +67,7 @@ export function restorableWorkspaceStateFromStore(
     activeProjectId: state.activeProjectId,
     workspaceActiveContextByRoot: state.workspaceActiveContextByRoot,
     workspaceRepositoryListExpandedByRoot: state.workspaceRepositoryListExpandedByRoot,
+    workspaceRepositoryListHeightByRoot: state.workspaceRepositoryListHeightByRoot,
     projectListExpanded: state.projectListExpanded,
     detailCollapsed: state.detailCollapsed,
     workspaceLayout,

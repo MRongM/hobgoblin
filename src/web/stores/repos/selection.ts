@@ -15,6 +15,7 @@ import {
   normalizeDetailPaneSize,
   normalizeDetailPaneSizes,
   normalizeFileTreePaneSize,
+  normalizeWorkspaceRepositoryListHeight,
   normalizeWorkspaceSessionLayoutState,
   workspaceLayoutAllowsDetailCollapse,
 } from '#/shared/workspace-layout.ts'
@@ -82,6 +83,7 @@ type RestorableWorkspaceSelectionActions = Pick<
   | 'activateBranchWorkspace'
   | 'setWorkspaceRepositoryListExpanded'
   | 'toggleWorkspaceRepositoryList'
+  | 'setWorkspaceRepositoryListHeight'
   | 'setProjectListExpanded'
   | 'toggleProjectListExpanded'
   | 'reorderRepos'
@@ -109,6 +111,21 @@ type RepoMutationSelectionActions = Pick<ReposStore, 'checkoutSelectedInRepo' | 
 
 function createRestorableWorkspaceSelectionActions(set: ReposSet, get: ReposGet): RestorableWorkspaceSelectionActions {
   return {
+    setWorkspaceRepositoryListHeight(rootId: string, height: number) {
+      set((state) => {
+        const normalizedHeight = normalizeWorkspaceRepositoryListHeight(height)
+        if (normalizedHeight === null || state.workspaceRepositoryListHeightByRoot[rootId] === normalizedHeight) {
+          return state
+        }
+        return {
+          workspaceRepositoryListHeightByRoot: {
+            ...state.workspaceRepositoryListHeightByRoot,
+            [rootId]: normalizedHeight,
+          },
+        }
+      })
+    },
+
     setActive(id: string) {
       set((s) => {
         const repo = s.repos[id]

@@ -20,6 +20,7 @@ export const DEFAULT_RESTORABLE_SESSION_STATE: SessionState = {
   activeRepo: null,
   workspaceActiveContextByRoot: {},
   workspaceRepositoryListExpandedByRoot: {},
+  workspaceRepositoryListHeightByRoot: {},
   projectListExpanded: DEFAULT_PROJECT_LIST_EXPANDED,
   detailCollapsed: DEFAULT_DETAIL_COLLAPSED,
   detailFocusMode: false,

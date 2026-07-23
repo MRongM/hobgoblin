@@ -184,6 +184,8 @@ export interface RestorableWorkspaceState {
   /** Missing entries mean visible. The persisted field name retains compatibility
    *  with sessions created before visibility replaced collapse behavior. */
   workspaceRepositoryListExpandedByRoot: Record<string, boolean>
+  /** Desktop repository-list height for each multi-repository workspace root. */
+  workspaceRepositoryListHeightByRoot: Record<string, number>
   /** Global sidebar project-list expansion preference restored from SessionState. */
   projectListExpanded: boolean
   detailCollapsed: boolean
@@ -217,6 +219,7 @@ export interface RestorableWorkspaceActions {
   activateBranchWorkspace: (rootId: string, branchWorkspaceId: string, memberRepositoryName?: string) => void
   setWorkspaceRepositoryListExpanded: (rootId: string, expanded: boolean) => void
   toggleWorkspaceRepositoryList: (rootId: string) => void
+  setWorkspaceRepositoryListHeight: (rootId: string, height: number) => void
   setProjectListExpanded: (expanded: boolean) => void
   toggleProjectListExpanded: () => void
   /** Reorder the tab strip so `fromId` lands at `toId`'s position, using
@@ -266,6 +269,7 @@ export interface RuntimeCoherentRepoProjectionActions {
     workspaceActiveContextByRoot?: Record<string, WorkspaceActiveContext>,
     workspaceRepositoryListExpandedByRoot?: Record<string, boolean>,
     activeProject?: string | null,
+    workspaceRepositoryListHeightByRoot?: Record<string, number>,
   ) => Promise<void>
   /** Clear the fetchFailed flag — called by manual fetch success and
    *  by an explicit refresh, so a stale badge doesn't follow the user

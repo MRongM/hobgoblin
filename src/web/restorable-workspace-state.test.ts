@@ -31,6 +31,7 @@ describe('restorable-workspace-state', () => {
             },
           },
           workspaceRepositoryListExpandedByRoot: { '/tmp/workspace': false },
+          workspaceRepositoryListHeightByRoot: { '/tmp/workspace': 224 },
           projectListExpanded: true,
           detailCollapsed: false,
           workspaceLayout: 'left-right',
@@ -53,6 +54,7 @@ describe('restorable-workspace-state', () => {
         },
       },
       workspaceRepositoryListExpandedByRoot: { '/tmp/workspace': false },
+      workspaceRepositoryListHeightByRoot: { '/tmp/workspace': 224 },
       projectListExpanded: true,
       detailCollapsed: false,
       detailFocusMode: false,
@@ -75,6 +77,7 @@ describe('restorable-workspace-state', () => {
           '/tmp/workspace': { kind: 'repository', repositoryId: '/tmp/workspace/api' },
         },
         workspaceRepositoryListExpandedByRoot: { '/tmp/workspace': true },
+        workspaceRepositoryListHeightByRoot: { '/tmp/workspace': 208 },
         projectListExpanded: true,
         detailCollapsed: false,
         detailFocusMode: true,
@@ -92,6 +95,7 @@ describe('restorable-workspace-state', () => {
         '/tmp/workspace': { kind: 'repository', repositoryId: '/tmp/workspace/api' },
       },
       workspaceRepositoryListExpandedByRoot: { '/tmp/workspace': true },
+      workspaceRepositoryListHeightByRoot: { '/tmp/workspace': 208 },
       projectListExpanded: true,
       detailCollapsed: false,
       workspaceLayout: 'left-right',
@@ -152,6 +156,7 @@ describe('restorable-workspace-state', () => {
       '/workspace-child': { kind: 'repository', repositoryId: '/workspace-child/api' },
     })
     expect(restored.workspaceRepositoryListExpandedByRoot).toEqual({})
+    expect(restored.workspaceRepositoryListHeightByRoot).toEqual({})
     expect(workspaceRepositoryListExpanded(restored, '/workspace-child')).toBe(true)
   })
 

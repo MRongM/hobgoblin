@@ -19,6 +19,16 @@ import {
 beforeEach(resetLifecycleTest)
 
 describe('repo session hydration', () => {
+  test('restores workspace repository list heights into restorable store state', async () => {
+    installGoblin()
+
+    await useReposStore
+      .getState()
+      .hydrateSession([localRepoSessionEntry(REPO_A)], REPO_A, {}, {}, REPO_A, { [REPO_A]: 224 })
+
+    expect(useReposStore.getState().workspaceRepositoryListHeightByRoot).toEqual({ [REPO_A]: 224 })
+  })
+
   test('restores configured remote workspace children before restoring an active child repository', async () => {
     const rootTarget = normalizeRemoteTarget({
       alias: 'example',

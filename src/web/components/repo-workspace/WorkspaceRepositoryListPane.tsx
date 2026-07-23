@@ -7,28 +7,38 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react'
+import {
+  DEFAULT_WORKSPACE_REPOSITORY_LIST_HEIGHT,
+  MAX_WORKSPACE_REPOSITORY_LIST_HEIGHT,
+  MIN_WORKSPACE_REPOSITORY_LIST_HEIGHT,
+} from '#/shared/workspace-layout.ts'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { cn } from '#/web/lib/cn.ts'
 
-const DEFAULT_REPOSITORY_LIST_HEIGHT = 160
-const MIN_REPOSITORY_LIST_HEIGHT = 96
 const RESERVED_NAVIGATION_HEIGHT = 128
 const REPOSITORY_LIST_KEYBOARD_STEP = 16
 
 interface WorkspaceRepositoryListPaneProps {
   label: string
   actions: ReactNode
+  height: number
+  onHeightChange: (height: number) => void
   children: ReactNode
 }
 
 function clampRepositoryListHeight(height: number, maxHeight: number): number {
-  return Math.min(Math.max(Math.round(height), MIN_REPOSITORY_LIST_HEIGHT), maxHeight)
+  return Math.min(Math.max(Math.round(height), MIN_WORKSPACE_REPOSITORY_LIST_HEIGHT), maxHeight)
 }
 
-export function WorkspaceRepositoryListPane({ label, actions, children }: WorkspaceRepositoryListPaneProps) {
+export function WorkspaceRepositoryListPane({
+  label,
+  actions,
+  height,
+  onHeightChange,
+  children,
+}: WorkspaceRepositoryListPaneProps) {
   const compact = useIsCompactUi()
-  const [height, setHeight] = useState(DEFAULT_REPOSITORY_LIST_HEIGHT)
-  const [maximumHeight, setMaximumHeight] = useState(DEFAULT_REPOSITORY_LIST_HEIGHT)
+  const [maximumHeight, setMaximumHeight] = useState(DEFAULT_WORKSPACE_REPOSITORY_LIST_HEIGHT)
   const [resizing, setResizing] = useState(false)
   const sectionRef = useRef<HTMLElement>(null)
   const resizeCleanupRef = useRef<(() => void) | null>(null)
@@ -50,12 +60,24 @@ export function WorkspaceRepositoryListPane({ label, actions, children }: Worksp
 
   const calculateMaximumHeight = useCallback(() => {
     const availableHeight = sectionRef.current?.parentElement?.parentElement?.getBoundingClientRect().height ?? 0
-    const fallbackHeight = typeof window === 'undefined' ? DEFAULT_REPOSITORY_LIST_HEIGHT : window.innerHeight
-    return Math.max(
-      MIN_REPOSITORY_LIST_HEIGHT,
-      Math.round((availableHeight || fallbackHeight) - RESERVED_NAVIGATION_HEIGHT),
+    const fallbackHeight =
+      typeof window === 'undefined' ? DEFAULT_WORKSPACE_REPOSITORY_LIST_HEIGHT : window.innerHeight
+    return Math.min(
+      MAX_WORKSPACE_REPOSITORY_LIST_HEIGHT,
+      Math.max(
+        MIN_WORKSPACE_REPOSITORY_LIST_HEIGHT,
+        Math.round((availableHeight || fallbackHeight) - RESERVED_NAVIGATION_HEIGHT),
+      ),
     )
   }, [])
+
+  useEffect(() => {
+    if (compact) return
+    const maxHeight = calculateMaximumHeight()
+    setMaximumHeight(maxHeight)
+    const clampedHeight = clampRepositoryListHeight(height, maxHeight)
+    if (clampedHeight !== height) onHeightChange(clampedHeight)
+  }, [calculateMaximumHeight, compact, height, onHeightChange])
 
   const startResize = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -69,7 +91,7 @@ export function WorkspaceRepositoryListPane({ label, actions, children }: Worksp
       setMaximumHeight(maxHeight)
 
       function handlePointerMove(pointerEvent: PointerEvent) {
-        setHeight(clampRepositoryListHeight(startHeight + pointerEvent.clientY - startY, maxHeight))
+        onHeightChange(clampRepositoryListHeight(startHeight + pointerEvent.clientY - startY, maxHeight))
       }
 
       function stopListening() {
@@ -90,7 +112,7 @@ export function WorkspaceRepositoryListPane({ label, actions, children }: Worksp
       resizeCleanupRef.current = stopListening
       setResizing(true)
     },
-    [calculateMaximumHeight, height],
+    [calculateMaximumHeight, height, onHeightChange],
   )
 
   const handleResizeKeyDown = useCallback(
@@ -99,15 +121,15 @@ export function WorkspaceRepositoryListPane({ label, actions, children }: Worksp
       let nextHeight: number
       if (event.key === 'ArrowUp') nextHeight = height - REPOSITORY_LIST_KEYBOARD_STEP
       else if (event.key === 'ArrowDown') nextHeight = height + REPOSITORY_LIST_KEYBOARD_STEP
-      else if (event.key === 'Home') nextHeight = MIN_REPOSITORY_LIST_HEIGHT
+      else if (event.key === 'Home') nextHeight = MIN_WORKSPACE_REPOSITORY_LIST_HEIGHT
       else if (event.key === 'End') nextHeight = maxHeight
       else return
 
       event.preventDefault()
       setMaximumHeight(maxHeight)
-      setHeight(clampRepositoryListHeight(nextHeight, maxHeight))
+      onHeightChange(clampRepositoryListHeight(nextHeight, maxHeight))
     },
-    [calculateMaximumHeight, height],
+    [calculateMaximumHeight, height, onHeightChange],
   )
 
   return (
@@ -130,7 +152,7 @@ export function WorkspaceRepositoryListPane({ label, actions, children }: Worksp
           role="separator"
           aria-label={label}
           aria-orientation="horizontal"
-          aria-valuemin={MIN_REPOSITORY_LIST_HEIGHT}
+          aria-valuemin={MIN_WORKSPACE_REPOSITORY_LIST_HEIGHT}
           aria-valuemax={maximumHeight}
           aria-valuenow={height}
           tabIndex={0}

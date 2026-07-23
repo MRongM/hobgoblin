@@ -30,6 +30,7 @@ function createRestorableWorkspaceLifecycleActions(set: ReposSet, get: ReposGet)
       workspaceActiveContextByRoot: Record<string, WorkspaceActiveContext> = {},
       workspaceRepositoryListExpandedByRoot: Record<string, boolean> = {},
       activeProject: string | null = null,
+      workspaceRepositoryListHeightByRoot: Record<string, number> = {},
     ) {
       // Boot/session restore of workspace membership and active tab. This
       // reopens what SessionState described, but does not subscribe the repos
@@ -42,6 +43,7 @@ function createRestorableWorkspaceLifecycleActions(set: ReposSet, get: ReposGet)
       set({
         workspaceActiveContextByRoot: { ...workspaceActiveContextByRoot },
         workspaceRepositoryListExpandedByRoot: { ...workspaceRepositoryListExpandedByRoot },
+        workspaceRepositoryListHeightByRoot: { ...workspaceRepositoryListHeightByRoot },
       })
       const limitProbe = pLimit(SESSION_PROBE_CONCURRENCY)
       await Promise.all(

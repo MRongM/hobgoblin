@@ -11,6 +11,9 @@ export const DEFAULT_DETAIL_FOCUS_MODE = false
 // stays narrow, roughly a quarter of the window.
 export const DEFAULT_DETAIL_PANE_SIZES: WorkspaceDetailPaneSizes = { 'left-right': 74.2 }
 export const DEFAULT_FILE_TREE_PANE_SIZES: WorkspaceDetailPaneSizes = { 'left-right': 66.7 }
+export const DEFAULT_WORKSPACE_REPOSITORY_LIST_HEIGHT = 160
+export const MIN_WORKSPACE_REPOSITORY_LIST_HEIGHT = 96
+export const MAX_WORKSPACE_REPOSITORY_LIST_HEIGHT = 4096
 
 export const MIN_WORKSPACE_PANE_SIZE = 10
 export const MAX_WORKSPACE_PANE_SIZE = 90
@@ -57,6 +60,14 @@ export function normalizeDetailPaneSizes(value: unknown): WorkspaceDetailPaneSiz
 
 export function normalizeFileTreePaneSizes(value: unknown): WorkspaceDetailPaneSizes {
   return normalizePaneSizes(value, DEFAULT_FILE_TREE_PANE_SIZES)
+}
+
+export function normalizeWorkspaceRepositoryListHeight(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  return Math.max(
+    MIN_WORKSPACE_REPOSITORY_LIST_HEIGHT,
+    Math.min(MAX_WORKSPACE_REPOSITORY_LIST_HEIGHT, Math.round(value)),
+  )
 }
 
 export function normalizeWorkspaceSessionLayoutState(value: {

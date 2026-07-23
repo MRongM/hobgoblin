@@ -110,6 +110,7 @@ export const useReposStore = create<ReposStore>()(
       activeProjectId: null,
       workspaceActiveContextByRoot: {},
       workspaceRepositoryListExpandedByRoot: {},
+      workspaceRepositoryListHeightByRoot: {},
       projectListExpanded: DEFAULT_PROJECT_LIST_EXPANDED,
       detailCollapsed: DEFAULT_DETAIL_COLLAPSED,
       workspaceLayout: DEFAULT_WORKSPACE_LAYOUT,

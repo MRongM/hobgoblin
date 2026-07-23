@@ -395,9 +395,11 @@ export function createRuntimeRepoLifecycleActions(
         const workspaceProjects = { ...s.workspaceProjects }
         const workspaceActiveContextByRoot = { ...s.workspaceActiveContextByRoot }
         const workspaceRepositoryListExpandedByRoot = { ...s.workspaceRepositoryListExpandedByRoot }
+        const workspaceRepositoryListHeightByRoot = { ...s.workspaceRepositoryListHeightByRoot }
         delete workspaceProjects[projectId]
         delete workspaceActiveContextByRoot[projectId]
         delete workspaceRepositoryListExpandedByRoot[projectId]
+        delete workspaceRepositoryListHeightByRoot[projectId]
         const nextState = {
           ...s,
           repos,
@@ -416,6 +418,7 @@ export function createRuntimeRepoLifecycleActions(
           workspaceProjects,
           workspaceActiveContextByRoot,
           workspaceRepositoryListExpandedByRoot,
+          workspaceRepositoryListHeightByRoot,
         }
       })
     },

@@ -44,6 +44,7 @@ export function useAppBootstrap() {
           restoredWorkspaceState.workspaceActiveContextByRoot,
           restoredWorkspaceState.workspaceRepositoryListExpandedByRoot,
           restoredWorkspaceState.activeProjectId,
+          restoredWorkspaceState.workspaceRepositoryListHeightByRoot,
         )
       } catch (err) {
         console.warn('[bootstrap] failed', err)

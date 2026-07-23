@@ -432,6 +432,21 @@ describe('setDetailPaneSize', () => {
   })
 })
 
+describe('setWorkspaceRepositoryListHeight', () => {
+  test('stores normalized heights independently by workspace root', () => {
+    const setHeight = useReposStore.getState().setWorkspaceRepositoryListHeight
+
+    expect(setHeight).toBeTypeOf('function')
+    setHeight?.('/tmp/workspace-a', 212.4)
+    setHeight?.('/tmp/workspace-b', 240)
+
+    expect(useReposStore.getState().workspaceRepositoryListHeightByRoot).toEqual({
+      '/tmp/workspace-a': 212,
+      '/tmp/workspace-b': 240,
+    })
+  })
+})
+
 describe('setRepoFileTreePaneSize', () => {
   test('stores file tree pane sizes per repo without leaking to other repos or defaults', () => {
     seedRepo({ selectedBranch: 'main', branches: [branch('main', { worktree: { path: '/repo' } })] })

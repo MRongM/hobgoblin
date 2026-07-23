@@ -738,6 +738,7 @@ describe('repo lifecycle', () => {
       },
       workspaceActiveContextByRoot: { [root]: { kind: 'repository', repositoryId: child } },
       workspaceRepositoryListExpandedByRoot: { [root]: false },
+      workspaceRepositoryListHeightByRoot: { [root]: 224 },
     })
 
     useReposStore.getState().closeRepo(root)
@@ -748,6 +749,7 @@ describe('repo lifecycle', () => {
     expect(useReposStore.getState().workspaceProjects).toEqual({})
     expect(useReposStore.getState().workspaceActiveContextByRoot).toEqual({})
     expect(useReposStore.getState().workspaceRepositoryListExpandedByRoot).toEqual({})
+    expect(useReposStore.getState().workspaceRepositoryListHeightByRoot).toEqual({})
     expect(mocks.stopPortForwardSessionsForRepo).toHaveBeenCalledWith(root)
     expect(mocks.stopPortForwardSessionsForRepo).toHaveBeenCalledWith(child)
   })

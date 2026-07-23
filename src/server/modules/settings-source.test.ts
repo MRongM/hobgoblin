@@ -919,6 +919,50 @@ test('persists file tree pane sizes through session save and reload', async () =
   })
 })
 
+test('persists and normalizes workspace-specific repository list heights', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+  const root = '/tmp/workspace'
+
+  const saved = await mod.setServerSessionState({
+    ...defaultSessionState(),
+    openRepos: [{ kind: 'local', id: root }],
+    activeRepo: root,
+    workspaceRepositoryListHeightByRoot: {
+      [root]: 212.4,
+      '/tmp/closed-workspace': 240,
+    },
+  } as never)
+  expect(saved.workspaceRepositoryListHeightByRoot).toEqual({ [root]: 212 })
+  await expect(mod.getServerSessionState()).resolves.toMatchObject({
+    workspaceRepositoryListHeightByRoot: { [root]: 212 },
+  })
+
+  await expect(
+    mod.setServerSessionState({
+      ...defaultSessionState(),
+      openRepos: [{ kind: 'local', id: root }],
+      workspaceRepositoryListHeightByRoot: { [root]: 0 },
+    } as never),
+  ).resolves.toMatchObject({ workspaceRepositoryListHeightByRoot: { [root]: 96 } })
+
+  await expect(
+    mod.setServerSessionState({
+      ...defaultSessionState(),
+      openRepos: [{ kind: 'local', id: root }],
+      workspaceRepositoryListHeightByRoot: { [root]: 10_000 },
+    } as never),
+  ).resolves.toMatchObject({ workspaceRepositoryListHeightByRoot: { [root]: 4096 } })
+
+  await expect(
+    mod.setServerSessionState({
+      ...defaultSessionState(),
+      openRepos: [{ kind: 'local', id: root }],
+      workspaceRepositoryListHeightByRoot: { [root]: 'invalid' },
+    } as never),
+  ).resolves.toMatchObject({ workspaceRepositoryListHeightByRoot: {} })
+})
+
 test('normalizes legacy top-bottom sessions to left-right without restoring terminal focus', async () => {
   useTempServerSettingsDir()
   const mod = await import('#/server/modules/settings-source.ts')
