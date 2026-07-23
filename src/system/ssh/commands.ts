@@ -226,7 +226,7 @@ function scriptForCommand(command: RemoteCommandKind): string {
     case 'tmuxListSessions':
       return [
         'command -v tmux >/dev/null 2>&1 || exit 127',
-        `tmux list-sessions -F ${shellQuote(TMUX_SESSION_LIST_FORMAT)}`,
+        `tmux -u list-sessions -F ${shellQuote(TMUX_SESSION_LIST_FORMAT)}`,
       ].join('\n')
     case 'tmuxKillSessionByName':
       if (!isHobgoblinTmuxSessionName(command.sessionName)) throw new TypeError('error.invalid-arguments')

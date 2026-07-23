@@ -48,7 +48,7 @@ export function parseTmuxSessionList(output: string): TmuxSessionRecord[] | null
 }
 
 export async function listLocalTmuxSessions(options: LocalTmuxCommandOptions = {}): Promise<TmuxListResult> {
-  const args = ['list-sessions', '-F', TMUX_SESSION_LIST_FORMAT]
+  const args = ['-u', 'list-sessions', '-F', TMUX_SESSION_LIST_FORMAT]
   const run = options.run ?? runLocalTmuxCommand
   const result = tmuxListResultFromProcessResult(await run(args, options.signal))
   if (options.run || result.ok || result.message !== 'error.tmux-invalid-output') return result
