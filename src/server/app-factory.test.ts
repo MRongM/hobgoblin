@@ -46,7 +46,9 @@ const mocks = vi.hoisted(() => ({
     includeTerminalOutput: true,
     outputTailLength: 400,
   })),
-  sendTelegramMessage: vi.fn(async () => ({ ok: true as const })),
+  sendTelegramMessage: vi.fn(
+    async (_input: { botToken: string; chatId: string; text: string; proxyUrl?: string }) => ({ ok: true as const }),
+  ),
   sendTelegramPhoto: vi.fn(async () => ({ ok: true as const })),
   telegramProxyUrlFromPrefs: vi.fn(() => undefined),
 }))
@@ -321,7 +323,7 @@ describe('server app html bootstrap', () => {
     expect(response.status).toBe(401)
   })
 
-  test('reads Telegram terminal screens through the worker-backed host and falls back to text', async () => {
+  test('reads Telegram terminal screens through the worker-backed host and falls back to metadata', async () => {
     const currentPrefs = await mocks.getServerSettingsPrefs()
     mocks.getServerSettingsPrefs.mockResolvedValueOnce({
       ...currentPrefs,
@@ -363,13 +365,11 @@ describe('server app html bootstrap', () => {
       maxColumns: 140,
       maxRows: 40,
     })
-    expect(terminalHostStub.getOutputExcerpt).toHaveBeenCalledWith({
-      sessionId: 'session-1',
-      maxCharacters: 400,
-    })
+    expect(terminalHostStub.getOutputExcerpt).not.toHaveBeenCalled()
     expect(mocks.sendTelegramMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ text: expect.stringContaining('server screen output') }),
+      expect.objectContaining({ text: expect.stringContaining('项目：api') }),
     )
+    expect(mocks.sendTelegramMessage.mock.calls.at(-1)?.[0].text).not.toContain('server screen output')
   })
 
   test('protects tmux cleanup endpoints with the server capability', async () => {

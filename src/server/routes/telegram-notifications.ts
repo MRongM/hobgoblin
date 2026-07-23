@@ -11,7 +11,6 @@ import type {
 } from '#/shared/telegram-notifications.ts'
 
 export interface TelegramNotificationRouteOptions {
-  readTerminalOutputExcerpt?: TelegramNotificationWriteOptions['readTerminalOutputExcerpt']
   readTerminalScreenSnapshot?: TelegramNotificationWriteOptions['readTerminalScreenSnapshot']
 }
 
@@ -29,7 +28,7 @@ export function createTelegramNotificationRoutes(options: TelegramNotificationRo
     return c.json(
       await sendConfiguredTelegramBellNotification(context as TelegramBellNotificationContext, {
         acceptLanguage: c.req.header('accept-language'),
-        readTerminalOutputExcerpt: options.readTerminalOutputExcerpt,
+        readTerminalScreenSnapshot: options.readTerminalScreenSnapshot,
       }),
     )
   })
@@ -38,7 +37,6 @@ export function createTelegramNotificationRoutes(options: TelegramNotificationRo
     return c.json(
       await sendConfiguredTelegramOutputCompletionNotification(context as TelegramOutputCompletionNotificationContext, {
         acceptLanguage: c.req.header('accept-language'),
-        readTerminalOutputExcerpt: options.readTerminalOutputExcerpt,
         readTerminalScreenSnapshot: options.readTerminalScreenSnapshot,
       }),
     )

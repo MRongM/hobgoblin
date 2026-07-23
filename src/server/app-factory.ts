@@ -148,7 +148,6 @@ export function createApp(options: ServerAppOptions): Hono {
   app.route(
     '/api/telegram-notifications',
     createTelegramNotificationRoutes({
-      readTerminalOutputExcerpt: (input) => Promise.resolve(options.terminalHost.getOutputExcerpt(input)),
       readTerminalScreenSnapshot: (input) => Promise.resolve(options.terminalHost.getScreenSnapshot(input)),
     }),
   )

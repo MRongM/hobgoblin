@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add bounded, low-quality, in-memory terminal screen images to eligible Telegram output-completion notifications while preserving text fallback and privacy opt-in behavior.
+**Goal:** Add bounded, low-quality, in-memory terminal screen images to eligible Telegram unread-bell and output-completion notifications while preserving metadata fallback and privacy opt-in behavior.
 
 **Architecture:** Extend the existing terminal-host boundary with a bounded active-viewport snapshot, render it asynchronously in the server to JPEG, and send it through a multipart Telegram transport. Reuse existing settings, validation, idempotency, proxy, and fallback boundaries; serialize media work at concurrency 1.
 
@@ -16,9 +16,9 @@
 - Cap screen extraction at 140 columns × 40 rows and JPEG output at 1280×720, quality 65.
 - Cap Telegram photo captions at 1024 Unicode characters and uploaded images below a conservative 2 MiB application limit.
 - Keep media generation/upload concurrency at 1.
-- Preserve text-only delivery when output inclusion is disabled and excerpt fallback when image generation is unavailable.
+- Preserve metadata-only delivery when image inclusion is disabled or image generation is unavailable.
 - Do not retry an ambiguous photo transport failure as text.
-- Remove the decorative localized terminal-output separator without removing text fallback content.
+- Remove the decorative localized terminal-output separator and all Telegram terminal-character fallbacks.
 - Pin new package versions exactly and update Bun/Electron packaging for native assets.
 - Do not stage, commit, branch, push, or alter unrelated user changes.
 
@@ -94,7 +94,7 @@
 
 ---
 
-### Task 4: Completion Delivery Integration and Separator Removal
+### Task 4: Bell and Completion Delivery Integration
 
 **Files:**
 
@@ -112,13 +112,13 @@
 
 **Interfaces:**
 
-- Completion delivery reads `TerminalScreenSnapshot`, renders JPEG, and calls `sendTelegramPhoto` inside a PQueue with concurrency 1.
-- Bell delivery retains excerpt behavior. Text formatters append `\n\n${outputTail}` with no localized separator.
+- Bell and completion delivery read `TerminalScreenSnapshot`, render JPEG, and call `sendTelegramPhoto` inside a shared PQueue with concurrency 1.
+- Text messages and photo captions contain localized key-value metadata without terminal output characters.
 
-- [x] **Step 1: Add failing formatter/write-path/route tests** for separator removal, 1024-character photo caption, successful image delivery, output opt-out, render failure excerpt fallback, no text retry after photo transport failure, idempotency, and serialized media work.
+- [x] **Step 1: Add failing formatter/write-path/route tests** for separator removal, 1024-character photo caption, successful bell/completion image delivery, image opt-out, metadata-only render fallback, no text retry after photo transport failure, idempotency, and serialized media work.
 - [x] **Step 2: Run the Telegram focused tests and verify RED** on missing media options and old separator behavior.
-- [x] **Step 3: Implement the minimal dependency wiring and completion orchestration.** Claim idempotency before screen reads, skip image work when output is disabled, and keep all content out of logs.
-- [x] **Step 4: Update four locale hints** so “include terminal output” explains completion images and text fallback without renaming persisted fields or stable keys.
+- [x] **Step 3: Implement the minimal dependency wiring and shared bell/completion orchestration.** Apply debounce/idempotency before screen reads, skip image work when image inclusion is disabled, and keep all content out of logs.
+- [x] **Step 4: Update four locale hints** so the visible setting explains bell/completion images and metadata-only fallback without renaming persisted fields.
 - [x] **Step 5: Re-run Telegram, route, app-factory, and i18n tests and verify GREEN.**
 
 ---

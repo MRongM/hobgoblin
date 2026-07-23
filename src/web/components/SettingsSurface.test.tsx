@@ -410,30 +410,23 @@ describe('SettingsSurface', () => {
 
     const tokenInput = document.getElementById('settings-telegram-bot-token')
     const chatIdInput = document.getElementById('settings-telegram-chat-id')
-    const outputTailLengthInput = document.getElementById('settings-telegram-output-tail-length')
     if (!(tokenInput instanceof HTMLInputElement)) throw new Error('Missing Telegram Bot Token input')
     if (!(chatIdInput instanceof HTMLInputElement)) throw new Error('Missing Telegram Chat ID input')
-    if (!(outputTailLengthInput instanceof HTMLInputElement)) {
-      throw new Error('Missing Telegram output tail length input')
-    }
     expect(tokenInput.type).toBe('password')
     expect(tokenInput.value).toBe('')
     expect(document.body.textContent).toContain('settings.telegram.master-off-hint')
     expect(switchById('settings-telegram-bell-enabled').getAttribute('data-state')).toBe('checked')
     expect(switchById('settings-telegram-output-completion-enabled').getAttribute('data-state')).toBe('unchecked')
-    expect(switchById('settings-telegram-include-terminal-output').getAttribute('data-state')).toBe('unchecked')
-    expect(outputTailLengthInput.value).toBe('400')
-    expect(outputTailLengthInput.min).toBe('1')
-    expect(outputTailLengthInput.max).toBe('4096')
-    expect(document.body.textContent).toContain('settings.telegram.output-tail-length')
+    expect(switchById('settings-telegram-include-terminal-screen-image').getAttribute('data-state')).toBe('unchecked')
+    expect(document.getElementById('settings-telegram-output-tail-length')).toBeNull()
+    expect(document.body.textContent).not.toContain('settings.telegram.output-tail-length')
 
     await act(async () => {
       switchById('settings-telegram-enabled').click()
       switchById('settings-telegram-output-completion-enabled').click()
-      switchById('settings-telegram-include-terminal-output').click()
+      switchById('settings-telegram-include-terminal-screen-image').click()
       setInputValue(tokenInput, '123456:test-token')
       setInputValue(chatIdInput, '-100123')
-      setInputValue(outputTailLengthInput, '1024')
       await Promise.resolve()
     })
     await act(async () => {
@@ -456,7 +449,7 @@ describe('SettingsSurface', () => {
       outputCompletionEnabled: true,
       outputCompletionMinimumActivitySeconds: 10,
       includeTerminalOutput: true,
-      outputTailLength: 1024,
+      outputTailLength: 400,
     })
     expect((document.getElementById('settings-telegram-bot-token') as HTMLInputElement).value).toBe('')
 

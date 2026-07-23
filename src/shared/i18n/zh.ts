@@ -1011,7 +1011,6 @@ export const zh: Record<DictKey, string> = {
   'settings.terminal-notifications-test-failed-hint': '请前往系统设置 → 通知 → Hobgoblin，确认已允许通知。',
   'telegram.notification.message.title': '🔔 Hobgoblin 未读终端提醒',
   'telegram.notification.message.output-completion-title': '✅ Hobgoblin 终端暂无新输出',
-  'telegram.notification.message.output-tail': '终端输出',
   'telegram.notification.message.project': '项目',
   'telegram.notification.message.context': '上下文',
   'telegram.notification.message.directory': '目录',
@@ -1039,12 +1038,9 @@ export const zh: Record<DictKey, string> = {
   'settings.telegram.output-completion-min-activity-medium': '中 · 10 秒',
   'settings.telegram.output-completion-min-activity-high': '高 · 30 秒',
   'settings.telegram.output-completion-min-activity-unit': '秒',
-  'settings.telegram.include-terminal-output': '包含终端输出',
-  'settings.telegram.include-terminal-output-hint':
-    '完成通知优先发送低质量终端屏幕图片，无法生成时附加末尾文本；终端内容可能包含敏感信息。',
-  'settings.telegram.output-tail-length': '终端输出字符数',
-  'settings.telegram.output-tail-length-hint':
-    '范围 1–4096，默认 400；连续空格、Tab 和换行按一个空格计算，受 Telegram 整条消息上限影响，实际片段可能更短。',
+  'settings.telegram.include-terminal-screen-image': '包含终端屏幕图片',
+  'settings.telegram.include-terminal-screen-image-hint':
+    '在未读提醒和完成通知中附加低质量终端屏幕图片；图片不可用时仅发送元数据。终端图片可能包含敏感信息。',
   'settings.telegram.bot-token': 'Bot Token',
   'settings.telegram.bot-token-hint-configured': 'Bot Token 已配置；留空可保留当前 Token。',
   'settings.telegram.bot-token-hint-new': '通过 BotFather 创建 Bot，然后粘贴 Token。',

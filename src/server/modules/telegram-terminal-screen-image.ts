@@ -62,7 +62,11 @@ export async function renderTelegramTerminalScreenImage(snapshot: TerminalScreen
 }
 
 async function loadSharp(): Promise<SharpFactory> {
-  sharpFactoryPromise ??= import('sharp').then((module) => module.default)
+  sharpFactoryPromise ??= import('sharp').then((module) => {
+    module.default.cache(false)
+    module.default.concurrency(1)
+    return module.default
+  })
   return await sharpFactoryPromise
 }
 
