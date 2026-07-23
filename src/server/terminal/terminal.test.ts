@@ -23,7 +23,10 @@ import {
 } from '#/server/terminal/terminal.ts'
 
 const settingsSourceMocks = vi.hoisted(() => ({
-  getServerSettingsPrefs: vi.fn(async () => ({ internalTerminalTmuxEnabled: false })),
+  getServerSettingsPrefs: vi.fn(async () => ({
+    localTerminalTmuxEnabled: false,
+    remoteTerminalTmuxEnabled: false,
+  })),
 }))
 
 const branchWorkspaceSourceMocks = vi.hoisted(() => ({
@@ -119,7 +122,10 @@ beforeEach(() => {
   autoEmitOnDataSubscribe = null
   vi.clearAllMocks()
   vi.mocked(spawn).mockClear()
-  settingsSourceMocks.getServerSettingsPrefs.mockResolvedValue({ internalTerminalTmuxEnabled: false })
+  settingsSourceMocks.getServerSettingsPrefs.mockResolvedValue({
+    localTerminalTmuxEnabled: false,
+    remoteTerminalTmuxEnabled: false,
+  })
   branchWorkspaceSourceMocks.readBranchWorkspaceManifests.mockReset()
   branchWorkspaceSourceMocks.readBranchWorkspaceManifests.mockResolvedValue({ kind: 'missing' })
 })
@@ -435,7 +441,10 @@ describe('server terminal sessions', () => {
   })
 
   test('creates remote terminal sessions with a tmux-aware ssh command when enabled', async () => {
-    settingsSourceMocks.getServerSettingsPrefs.mockResolvedValue({ internalTerminalTmuxEnabled: true })
+    settingsSourceMocks.getServerSettingsPrefs.mockResolvedValue({
+      localTerminalTmuxEnabled: false,
+      remoteTerminalTmuxEnabled: true,
+    })
 
     const result = await createServerTerminal('client_1', {
       repoRoot: 'ssh-config://prod/srv/repo',
@@ -475,7 +484,10 @@ describe('server terminal sessions', () => {
   })
 
   test('creates local terminal sessions with the same tmux identity protocol when enabled', async () => {
-    settingsSourceMocks.getServerSettingsPrefs.mockResolvedValue({ internalTerminalTmuxEnabled: true })
+    settingsSourceMocks.getServerSettingsPrefs.mockResolvedValue({
+      localTerminalTmuxEnabled: true,
+      remoteTerminalTmuxEnabled: false,
+    })
 
     const result = await createServerTerminal('client_1', {
       repoRoot: '/repo',
@@ -493,14 +505,17 @@ describe('server terminal sessions', () => {
       terminalNumber: 1,
     })
     expect(spawn).toHaveBeenCalledWith(
-      '/bin/sh',
+      '/bin/zsh',
       ['-lc', expect.stringContaining(`tmux new-session -A -s '${expectedName}' -c '/repo-linked'`)],
       expect.objectContaining({ cwd: '/repo-linked', cols: 100, rows: 30 }),
     )
   })
 
   test('uses the persisted remote branch workspace path for the session key and tmux identity', async () => {
-    settingsSourceMocks.getServerSettingsPrefs.mockResolvedValue({ internalTerminalTmuxEnabled: true })
+    settingsSourceMocks.getServerSettingsPrefs.mockResolvedValue({
+      localTerminalTmuxEnabled: false,
+      remoteTerminalTmuxEnabled: true,
+    })
     branchWorkspaceSourceMocks.readBranchWorkspaceManifests.mockResolvedValue({
       kind: 'ready',
       manifests: [branchWorkspaceManifest('ssh-config://prod/srv/repo', '/srv/repo/goblin-feature')],

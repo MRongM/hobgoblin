@@ -61,7 +61,8 @@ const appDataClientMocks = vi.hoisted(() => ({
   setShortcutsDisabled: vi.fn(async () => {}),
   setSwapCloseShortcuts: vi.fn(async () => {}),
   setTemporaryFilesDirectory: vi.fn(async () => {}),
-  setInternalTerminalTmuxEnabled: vi.fn(async () => {}),
+  setLocalTerminalTmuxEnabled: vi.fn(async () => {}),
+  setRemoteTerminalTmuxEnabled: vi.fn(async () => {}),
   setTerminalCustomButtonSize: vi.fn(async () => {}),
   setTerminalCustomButtons: vi.fn(async (buttons: TerminalCustomButton[]) => buttons),
   setTerminalCustomButtonsVisible: vi.fn(async () => {}),
@@ -95,7 +96,8 @@ vi.mock('#/web/settings-client.ts', () => ({
   setShortcutsDisabled: appDataClientMocks.setShortcutsDisabled,
   setSwapCloseShortcuts: appDataClientMocks.setSwapCloseShortcuts,
   setTemporaryFilesDirectory: appDataClientMocks.setTemporaryFilesDirectory,
-  setInternalTerminalTmuxEnabled: appDataClientMocks.setInternalTerminalTmuxEnabled,
+  setLocalTerminalTmuxEnabled: appDataClientMocks.setLocalTerminalTmuxEnabled,
+  setRemoteTerminalTmuxEnabled: appDataClientMocks.setRemoteTerminalTmuxEnabled,
   setTerminalCustomButtonSize: appDataClientMocks.setTerminalCustomButtonSize,
   setTerminalCustomButtons: appDataClientMocks.setTerminalCustomButtons,
   setTerminalCustomButtonsVisible: appDataClientMocks.setTerminalCustomButtonsVisible,
@@ -174,8 +176,10 @@ describe('settings write paths', () => {
     appDataClientMocks.setSwapCloseShortcuts.mockResolvedValue(undefined)
     appDataClientMocks.setTemporaryFilesDirectory.mockReset()
     appDataClientMocks.setTemporaryFilesDirectory.mockResolvedValue(undefined)
-    appDataClientMocks.setInternalTerminalTmuxEnabled.mockReset()
-    appDataClientMocks.setInternalTerminalTmuxEnabled.mockResolvedValue(undefined)
+    appDataClientMocks.setLocalTerminalTmuxEnabled.mockReset()
+    appDataClientMocks.setLocalTerminalTmuxEnabled.mockResolvedValue(undefined)
+    appDataClientMocks.setRemoteTerminalTmuxEnabled.mockReset()
+    appDataClientMocks.setRemoteTerminalTmuxEnabled.mockResolvedValue(undefined)
     appDataClientMocks.setTerminalCustomButtonSize.mockReset()
     appDataClientMocks.setTerminalCustomButtonSize.mockResolvedValue(undefined)
     appDataClientMocks.setTerminalCustomButtons.mockReset()
@@ -443,15 +447,29 @@ describe('settings write paths', () => {
     })
   })
 
-  test('setInternalTerminalTmuxEnabledPreference updates runtime settings cache', async () => {
+  test('setLocalTerminalTmuxEnabledPreference updates only the local runtime setting', async () => {
     mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
-    const { setInternalTerminalTmuxEnabledPreference } = await import('#/web/settings-write-paths.ts')
+    const { setLocalTerminalTmuxEnabledPreference } = await import('#/web/settings-write-paths.ts')
 
-    await setInternalTerminalTmuxEnabledPreference(true)
+    await setLocalTerminalTmuxEnabledPreference(true)
 
-    expect(appDataClientMocks.setInternalTerminalTmuxEnabled).toHaveBeenCalledWith(true)
+    expect(appDataClientMocks.setLocalTerminalTmuxEnabled).toHaveBeenCalledWith(true)
     expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
-      internalTerminalTmuxEnabled: true,
+      localTerminalTmuxEnabled: true,
+      remoteTerminalTmuxEnabled: false,
+    })
+  })
+
+  test('setRemoteTerminalTmuxEnabledPreference updates only the remote runtime setting', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    const { setRemoteTerminalTmuxEnabledPreference } = await import('#/web/settings-write-paths.ts')
+
+    await setRemoteTerminalTmuxEnabledPreference(true)
+
+    expect(appDataClientMocks.setRemoteTerminalTmuxEnabled).toHaveBeenCalledWith(true)
+    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
+      localTerminalTmuxEnabled: false,
+      remoteTerminalTmuxEnabled: true,
     })
   })
 })

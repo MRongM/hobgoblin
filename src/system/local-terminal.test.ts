@@ -15,13 +15,32 @@ describe('buildManagedLocalTerminalInvocation', () => {
       fallbackShell: '/bin/zsh',
     })
 
-    expect(invocation).toMatchObject({ command: '/bin/sh', args: ['-lc', expect.any(String)] })
+    expect(invocation).toMatchObject({ command: '/bin/zsh', args: ['-lc', expect.any(String)] })
     expect(invocation?.script).toContain('command -v tmux >/dev/null 2>&1')
     expect(invocation?.script).toContain(
       "exec tmux new-session -A -s 'hobgoblin-v1-aebf050981ac829e36100020' -c '/srv/projects/example/worktrees/feature'",
     )
     expect(invocation?.script).toContain("exec '/bin/zsh' -l")
+    expect(invocation?.shellCommand).toContain("'/bin/zsh' '-lc'")
     expect(invocation?.script).not.toContain("-s 'goblin-")
+  })
+
+  test('defaults to zsh as the macOS login-shell wrapper', () => {
+    const previousShell = process.env.SHELL
+    delete process.env.SHELL
+
+    try {
+      const invocation = buildManagedLocalTerminalInvocation(TARGET, {
+        useTmux: true,
+        platform: 'darwin',
+      })
+
+      expect(invocation).toMatchObject({ command: '/bin/zsh', args: ['-lc', expect.any(String)] })
+      expect(invocation?.script).toContain("exec '/bin/zsh' -l")
+    } finally {
+      if (previousShell === undefined) delete process.env.SHELL
+      else process.env.SHELL = previousShell
+    }
   })
 
   test('returns null when tmux is disabled or the platform is Windows', () => {

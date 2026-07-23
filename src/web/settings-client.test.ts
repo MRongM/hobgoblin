@@ -90,7 +90,8 @@ describe('settings-client', () => {
           editorApp: 'auto',
           fileTreeFontSize: 12,
           terminalFontSize: 14,
-          internalTerminalTmuxEnabled: false,
+          localTerminalTmuxEnabled: false,
+          remoteTerminalTmuxEnabled: false,
           terminalCustomButtonsVisible: true,
           terminalCustomButtons: [],
           lanEnabled: false,
@@ -131,7 +132,8 @@ describe('settings-client', () => {
           editorApp: 'auto',
           fileTreeFontSize: 12,
           terminalFontSize: 14,
-          internalTerminalTmuxEnabled: false,
+          localTerminalTmuxEnabled: false,
+          remoteTerminalTmuxEnabled: false,
           terminalCustomButtonsVisible: true,
           terminalCustomButtons: [],
           lanEnabled: false,
@@ -292,7 +294,8 @@ describe('settings-client', () => {
           editorApp: 'auto',
           fileTreeFontSize: 12,
           terminalFontSize: 14,
-          internalTerminalTmuxEnabled: false,
+          localTerminalTmuxEnabled: false,
+          remoteTerminalTmuxEnabled: false,
           terminalCustomButtonsVisible: true,
           terminalCustomButtons: [],
           lanEnabled: false,
@@ -462,7 +465,8 @@ describe('settings-client', () => {
           editorApp: 'auto',
           fileTreeFontSize: 12,
           terminalFontSize: 14,
-          internalTerminalTmuxEnabled: false,
+          localTerminalTmuxEnabled: false,
+          remoteTerminalTmuxEnabled: false,
           terminalCustomButtonsVisible: true,
           terminalCustomButtons: [],
           lanEnabled: false,
@@ -518,7 +522,8 @@ describe('settings-client', () => {
           editorApp: 'cursor',
           fileTreeFontSize: 12,
           terminalFontSize: 14,
-          internalTerminalTmuxEnabled: false,
+          localTerminalTmuxEnabled: false,
+          remoteTerminalTmuxEnabled: false,
           terminalCustomButtonsVisible: true,
           terminalCustomButtons: [],
           lanEnabled: false,
@@ -607,6 +612,35 @@ describe('settings-client', () => {
             recentRepos: [{ kind: 'local', id: '/existing' }],
           },
         },
+      }),
+    )
+  })
+
+  test('writes local and remote tmux preferences as independent patches', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, settings: {} }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { setLocalTerminalTmuxEnabled, setRemoteTerminalTmuxEnabled } = await import('#/web/settings-client.ts')
+
+    await setLocalTerminalTmuxEnabled(true)
+    await setRemoteTerminalTmuxEnabled(false)
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'http://127.0.0.1:32100/api/settings/prefs',
+      expect.objectContaining({
+        body: JSON.stringify({ settings: { localTerminalTmuxEnabled: true } }),
+      }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'http://127.0.0.1:32100/api/settings/prefs',
+      expect.objectContaining({
+        body: JSON.stringify({ settings: { remoteTerminalTmuxEnabled: false } }),
       }),
     )
   })

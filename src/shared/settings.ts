@@ -68,7 +68,8 @@ export interface SettingsPrefs {
   fileTreeTopbarFontSize: number
   fileTreeClipboardMaxBytesMb: number
   terminalFontSize: number
-  internalTerminalTmuxEnabled: boolean
+  localTerminalTmuxEnabled: boolean
+  remoteTerminalTmuxEnabled: boolean
   terminalCustomButtonsVisible: boolean
   terminalCustomButtonSize: TerminalCustomButtonSize
   terminalCustomButtons: TerminalCustomButton[]

@@ -97,8 +97,11 @@ const catalog = createTerminalCatalog({
   isValidClientId: isValidTerminalClientId,
   isValidTerminalId,
   manager,
-  async internalTerminalTmuxEnabled() {
-    return (await getServerSettingsPrefs()).internalTerminalTmuxEnabled
+  async localTerminalTmuxEnabled() {
+    return (await getServerSettingsPrefs()).localTerminalTmuxEnabled
+  },
+  async remoteTerminalTmuxEnabled() {
+    return (await getServerSettingsPrefs()).remoteTerminalTmuxEnabled
   },
   attachmentIsConnected(clientId, attachmentId) {
     return broker.attachmentIsConnected(clientId, attachmentId)

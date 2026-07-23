@@ -32,6 +32,14 @@ _Avoid_: Terminal session ID, tmux connection settings, SSH terminal identity
 The deterministic `hobgoblin-v1-<digest>` identifier derived from a tmux session descriptor and used by internal and external terminal applications to create or attach to the same tmux session. It is distinct from a `terminal-N` slot, a server terminal key, and an ephemeral `term_<UUID>` PTY session ID.
 _Avoid_: Terminal session ID, terminal ID, PTY session ID
 
+**Local tmux preference**:
+The setting that determines whether eligible local internal and external terminal launches create or attach to a tmux session. It is independent of the remote tmux preference and affects new or restarted terminal launches rather than rebuilding an existing terminal.
+_Avoid_: Global tmux setting, internal terminal tmux setting
+
+**Remote tmux preference**:
+The setting that determines whether eligible SSH internal and external terminal launches create or attach to a tmux session. It is independent of the local tmux preference and affects new or restarted terminal launches rather than rebuilding an existing terminal.
+_Avoid_: Global tmux setting, internal terminal tmux setting
+
 **Canonical terminal geometry**:
 The server-owned PTY column and row count published by the current controller attachment.
 _Avoid_: Viewer size, shared viewport size

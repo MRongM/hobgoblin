@@ -84,7 +84,8 @@ interface TerminalCatalogOptions {
   isValidClientId(value: unknown): value is string
   isValidTerminalId(value: unknown): value is string
   manager: TerminalCatalogManager
-  internalTerminalTmuxEnabled(): MaybePromise<boolean>
+  localTerminalTmuxEnabled(): MaybePromise<boolean>
+  remoteTerminalTmuxEnabled(): MaybePromise<boolean>
   attachmentIsConnected(clientId: string, attachmentId?: string): boolean | undefined
   broadcastSessionsChanged(repoRoot: string): void
   withSessionSnapshot(
@@ -242,7 +243,7 @@ class TerminalCatalog {
     }
     const terminalNumber = parseTerminalIdIndex(context.terminalId)
     if (terminalNumber === null) return { ok: false, message: 'error.invalid-arguments' }
-    const useTmux = (await this.options.internalTerminalTmuxEnabled()) === true
+    const useTmux = (await this.options.remoteTerminalTmuxEnabled()) === true
 
     const invocation = buildRemoteTerminalInvocation(resolved.target, input.worktreePath, {
       cols: context.cols,
@@ -323,7 +324,7 @@ class TerminalCatalog {
   ): Promise<EnsureTerminalCatalogResult> {
     const terminalNumber = parseTerminalIdIndex(context.terminalId)
     if (terminalNumber === null) return { ok: false, message: 'error.invalid-arguments' }
-    const useTmux = (await this.options.internalTerminalTmuxEnabled()) === true
+    const useTmux = (await this.options.localTerminalTmuxEnabled()) === true
     const invocation = buildManagedLocalTerminalInvocation(
       {
         projectRoot: context.repoRoot,

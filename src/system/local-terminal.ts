@@ -5,7 +5,7 @@ import {
 } from '#/system/tmux-session.ts'
 
 export interface LocalTerminalInvocation {
-  command: '/bin/sh'
+  command: string
   args: string[]
   script: string
   shellCommand: string
@@ -26,7 +26,10 @@ export function buildManagedLocalTerminalInvocation(
   const descriptor = normalizeTmuxSessionDescriptor(target)
   const sessionName = descriptor ? buildTmuxSessionName(descriptor) : null
   if (!descriptor || !sessionName) return null
-  const fallbackShell = safeAbsoluteCommand(options.fallbackShell) ?? '/bin/sh'
+  const fallbackShell =
+    safeAbsoluteCommand(options.fallbackShell) ??
+    safeAbsoluteCommand(process.env.SHELL) ??
+    (platform === 'darwin' ? '/bin/zsh' : '/bin/sh')
   const script = [
     `cd ${shellQuote(descriptor.workingDirectory)} || exit`,
     'if command -v tmux >/dev/null 2>&1; then',
@@ -35,10 +38,10 @@ export function buildManagedLocalTerminalInvocation(
     `exec ${shellQuote(fallbackShell)} -l`,
   ].join('\n')
   return {
-    command: '/bin/sh',
+    command: fallbackShell,
     args: ['-lc', script],
     script,
-    shellCommand: ['/bin/sh', '-lc', script].map(shellQuote).join(' '),
+    shellCommand: [fallbackShell, '-lc', script].map(shellQuote).join(' '),
   }
 }
 

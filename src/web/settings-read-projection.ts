@@ -137,7 +137,8 @@ export function readRuntimeTerminalSettings(data: RuntimeSettingsSnapshot | unde
     fontFamily: data?.fontFamily ?? fallback?.fontFamily ?? DEFAULT_FONT_FAMILY,
     terminalFontSize: data?.terminalFontSize ?? fallback?.terminalFontSize ?? DEFAULT_TERMINAL_FONT_SIZE,
     terminalThemeSyncEnabled: data?.terminalThemeSyncEnabled ?? fallback?.terminalThemeSyncEnabled ?? true,
-    internalTerminalTmuxEnabled: data?.internalTerminalTmuxEnabled ?? fallback?.internalTerminalTmuxEnabled ?? false,
+    localTerminalTmuxEnabled: data?.localTerminalTmuxEnabled ?? fallback?.localTerminalTmuxEnabled ?? false,
+    remoteTerminalTmuxEnabled: data?.remoteTerminalTmuxEnabled ?? fallback?.remoteTerminalTmuxEnabled ?? false,
     temporaryFilesDirectory: data?.temporaryFilesDirectory ?? fallback?.temporaryFilesDirectory ?? '',
     terminalCustomButtonsVisible: data?.terminalCustomButtonsVisible ?? fallback?.terminalCustomButtonsVisible ?? true,
     terminalCustomButtonSize:
