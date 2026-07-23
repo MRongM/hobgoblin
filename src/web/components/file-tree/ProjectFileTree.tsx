@@ -1853,10 +1853,7 @@ function FileTreeToolbar({
 
   return (
     <div
-      className={cn(
-        'flex shrink-0 items-center gap-1 border-b border-toolbar-border bg-toolbar px-2',
-        height === 'detail' ? null : 'min-h-8',
-      )}
+      className={cn('flex shrink-0 items-center gap-1 bg-toolbar px-2', height === 'detail' ? null : 'min-h-8')}
       style={height === 'detail' ? { height: toolbarHeightPx } : undefined}
     >
       {leading}

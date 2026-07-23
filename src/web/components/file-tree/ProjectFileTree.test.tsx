@@ -1447,7 +1447,8 @@ describe('ProjectFileTree', () => {
     const toolbar = fileTreeToolbar()
 
     expect(toolbar.className).toContain('min-h-8')
-    expect(toolbar.className).toContain('border-toolbar-border')
+    expect(toolbar.classList.contains('border-b')).toBe(false)
+    expect(toolbar.classList.contains('border-toolbar-border')).toBe(false)
     expect(toolbar.className).toContain('bg-toolbar')
     expect(toolbar.className).toContain('px-2')
   })
@@ -1476,7 +1477,8 @@ describe('ProjectFileTree', () => {
 
     expect(toolbar.style.height).toBe('41px')
     expect(toolbar.className).not.toContain('min-h-8')
-    expect(toolbar.className).toContain('border-toolbar-border')
+    expect(toolbar.classList.contains('border-b')).toBe(false)
+    expect(toolbar.classList.contains('border-toolbar-border')).toBe(false)
     expect(toolbar.className).toContain('bg-toolbar')
   })
 

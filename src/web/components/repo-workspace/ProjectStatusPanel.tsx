@@ -110,7 +110,7 @@ function ProjectStatusToolbar({ copyAllValue }: { copyAllValue: string }) {
   const t = useT()
 
   return (
-    <Toolbar data-testid="project-status-toolbar" className="gap-2 px-2">
+    <Toolbar data-testid="project-status-toolbar" className="gap-2 border-b-0 border-transparent px-2">
       <div data-testid="project-status-left-actions" className="flex min-w-0 items-center gap-1">
         <CopyButton
           value={copyAllValue}

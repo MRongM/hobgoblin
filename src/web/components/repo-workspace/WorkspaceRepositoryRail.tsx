@@ -41,6 +41,7 @@ import { getBranchWorktreeState } from '#/web/stores/repos/worktree-state.ts'
 import { workspaceRepositoryListExpanded } from '#/web/stores/repos/workspace-projects.ts'
 import { repoTerminalWorktreePaths } from '#/web/components/RepoTabs.tsx'
 import { resolveBranchWorkspaceMemberTarget } from '#/web/components/repo-workspace/branch-workspace-member-target.ts'
+import { WorkspaceRepositoryListPane } from '#/web/components/repo-workspace/WorkspaceRepositoryListPane.tsx'
 
 interface Props {
   workspaceRootId: string
@@ -448,46 +449,30 @@ export function WorkspaceRepositoryRail({
 
   return (
     <>
-      <div
-        className={cn(fill ? 'flex min-h-0 flex-1 flex-col' : 'shrink-0', 'bg-sidebar')}
-      >
+      <div className={cn(fill ? 'flex min-h-0 flex-1 flex-col' : 'shrink-0', 'bg-sidebar')}>
         {repositoryListVisible ? (
-          <section className="shrink-0" aria-label={t('workspace.repositories')}>
-            <div className="flex h-7 items-center gap-1 px-3 pt-1">
-              <span className="min-w-0 flex-1 text-[length:var(--goblin-project-titlebar-font-size)] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
-                {t('workspace.repositories')}
-              </span>
-              {headerActions}
-            </div>
-            <div
-              className="relative max-h-40 overflow-y-auto px-1.5 pb-1.5"
-              data-testid="workspace-repository-upper-list"
-            >
-              <ManifestRow
-                active={activeContext.kind === 'overview'}
-                name={overviewName}
-                terminalCount={overviewTerminalCount}
-                hasTerminalBell={overviewHasTerminalBell}
-                hasTerminalOutputActivity={overviewHasTerminalOutputActivity}
-                onActivate={() => activateWorkspaceOverview(workspaceRootId)}
-              />
-              <WorkspaceRepositoryList
-                repositories={repositoryItems}
-                currentRepoId={currentRepoId}
-                disabled={!reorderReady}
-                onActivate={(repositoryId) => activateWorkspaceRepository(workspaceRootId, repositoryId)}
-                onReorder={(fromId, toId) => void reorderRepositories(fromId, toId)}
-              />
-            </div>
-          </section>
+          <WorkspaceRepositoryListPane label={t('workspace.repositories')} actions={headerActions}>
+            <ManifestRow
+              active={activeContext.kind === 'overview'}
+              name={overviewName}
+              terminalCount={overviewTerminalCount}
+              hasTerminalBell={overviewHasTerminalBell}
+              hasTerminalOutputActivity={overviewHasTerminalOutputActivity}
+              onActivate={() => activateWorkspaceOverview(workspaceRootId)}
+            />
+            <WorkspaceRepositoryList
+              repositories={repositoryItems}
+              currentRepoId={currentRepoId}
+              disabled={!reorderReady}
+              onActivate={(repositoryId) => activateWorkspaceRepository(workspaceRootId, repositoryId)}
+              onReorder={(fromId, toId) => void reorderRepositories(fromId, toId)}
+            />
+          </WorkspaceRepositoryListPane>
         ) : null}
         {branchListVisible ? (
           <section
             aria-label={t('workspace.branch-workspace.list')}
-            className={cn(
-              'px-1.5 pb-1.5',
-              fill && 'min-h-0 flex-1 overflow-y-auto',
-            )}
+            className={cn('px-1.5 pb-1.5', fill && 'min-h-0 flex-1 overflow-y-auto')}
           >
             <div className="flex h-7 items-center gap-1 px-2 pt-1">
               <span className="min-w-0 flex-1 text-[length:var(--goblin-project-titlebar-font-size)] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">

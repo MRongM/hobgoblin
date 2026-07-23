@@ -95,12 +95,15 @@ describe('ProjectStatusPanel', () => {
     expect(container?.textContent).toContain('branch-status.signal.commit-time')
     expect(container?.textContent).toContain('2026')
     const statusRows = container?.querySelector<HTMLElement>('[role="list"]')
+    const statusToolbar = container?.querySelector<HTMLElement>('[data-testid="project-status-toolbar"]')
+    expect(statusToolbar?.classList.contains('border-b')).toBe(false)
+    expect(statusToolbar?.classList.contains('border-toolbar-border')).toBe(false)
     expect(statusRows?.className).not.toContain('divide-y')
     expect(statusRows?.className).not.toContain('border-b')
     const copyAllButton = container?.querySelector<HTMLButtonElement>('button[aria-label="branch-status.copy-all"]')
-    expect(container?.querySelector('[data-testid="project-status-left-actions"]')?.contains(copyAllButton ?? null)).toBe(
-      true,
-    )
+    expect(
+      container?.querySelector('[data-testid="project-status-left-actions"]')?.contains(copyAllButton ?? null),
+    ).toBe(true)
     expect(copyAllButton?.textContent).toBe('')
 
     await act(async () => {

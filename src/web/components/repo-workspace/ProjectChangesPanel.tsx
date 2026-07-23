@@ -287,7 +287,7 @@ function ProjectChangesActionBar({
   return (
     <div
       data-testid="project-changes-action-bar"
-      className="flex shrink-0 items-center gap-2 border-b border-toolbar-border bg-toolbar px-2"
+      className="flex shrink-0 items-center gap-2 bg-toolbar px-2"
       style={{ height: toolbarHeightPx }}
     >
       <div data-testid="project-changes-left-actions" className="flex min-w-0 items-center gap-1">
