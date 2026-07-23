@@ -14,6 +14,8 @@ import type { TerminalSessionReadContextValue } from '#/web/components/terminal/
 import type { BranchWorkspaceReadResult, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import type { BranchWorkspaceGitActionKind } from '#/shared/branch-workspace-git-actions.ts'
 
+let compactUi = false
+
 const toastMocks = vi.hoisted(() => ({
   success: vi.fn(),
   error: vi.fn(),
@@ -29,6 +31,10 @@ vi.mock('sonner', () => ({
 vi.mock('#/web/stores/i18n.ts', () => ({
   useT: () => (key: string, params?: Record<string, unknown>) =>
     params?.count === undefined ? key : `${key}:${params.count}`,
+}))
+
+vi.mock('#/web/hooks/useResponsiveUiMode.tsx', () => ({
+  useIsCompactUi: () => compactUi,
 }))
 
 const repositoryListState = vi.hoisted(() => ({
@@ -321,6 +327,7 @@ const configureWorkspace = vi.fn(
 
 beforeEach(() => {
   ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  compactUi = false
   resetReposStore()
   useReposStore.setState(originalActions)
   activateWorkspaceOverview.mockReset()
@@ -437,6 +444,95 @@ afterEach(() => {
 })
 
 describe('WorkspaceRepositoryRail', () => {
+  test('renders the desktop repository list as a resizable region with the default height', () => {
+    renderRail()
+
+    const upperList = container?.querySelector<HTMLElement>('[data-testid="workspace-repository-upper-list"]')
+    const resizeHandle = container?.querySelector<HTMLElement>(
+      '[data-testid="workspace-repository-list-resize-handle"]',
+    )
+
+    expect(upperList?.style.height).toBe('160px')
+    expect(resizeHandle?.getAttribute('role')).toBe('separator')
+    expect(resizeHandle?.getAttribute('aria-orientation')).toBe('horizontal')
+  })
+
+  test('clamps pointer resizing between the minimum and the available navigation height', () => {
+    vi.spyOn(container!, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 320,
+      bottom: 400,
+      width: 320,
+      height: 400,
+      toJSON: () => ({}),
+    })
+    renderRail()
+
+    const upperList = container?.querySelector<HTMLElement>('[data-testid="workspace-repository-upper-list"]')
+    const resizeHandle = container?.querySelector<HTMLElement>(
+      '[data-testid="workspace-repository-list-resize-handle"]',
+    )
+    if (!upperList || !resizeHandle) throw new Error('missing resizable repository list')
+
+    act(() => {
+      resizeHandle.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, clientY: 100 }))
+      window.dispatchEvent(new MouseEvent('pointermove', { clientY: 500 }))
+      window.dispatchEvent(new MouseEvent('pointerup'))
+    })
+    expect(upperList.style.height).toBe('272px')
+
+    act(() => {
+      resizeHandle.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, clientY: 100 }))
+      window.dispatchEvent(new MouseEvent('pointermove', { clientY: -500 }))
+      window.dispatchEvent(new MouseEvent('pointerup'))
+    })
+    expect(upperList.style.height).toBe('96px')
+  })
+
+  test('keeps the compact repository list fixed without a resize handle', () => {
+    compactUi = true
+    renderRail()
+
+    const upperList = container?.querySelector<HTMLElement>('[data-testid="workspace-repository-upper-list"]')
+
+    expect(upperList?.style.height).toBe('')
+    expect(upperList?.className).toContain('max-h-40')
+    expect(container?.querySelector('[data-testid="workspace-repository-list-resize-handle"]')).toBeNull()
+  })
+
+  test('supports keyboard resizing through the focused separator', () => {
+    vi.spyOn(container!, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 320,
+      bottom: 400,
+      width: 320,
+      height: 400,
+      toJSON: () => ({}),
+    })
+    renderRail()
+
+    const upperList = container?.querySelector<HTMLElement>('[data-testid="workspace-repository-upper-list"]')
+    const resizeHandle = container?.querySelector<HTMLElement>(
+      '[data-testid="workspace-repository-list-resize-handle"]',
+    )
+    if (!upperList || !resizeHandle) throw new Error('missing resizable repository list')
+
+    act(() => resizeHandle.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowDown' })))
+    expect(upperList.style.height).toBe('176px')
+
+    act(() => resizeHandle.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Home' })))
+    expect(upperList.style.height).toBe('96px')
+
+    act(() => resizeHandle.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'End' })))
+    expect(upperList.style.height).toBe('272px')
+  })
+
   test('confirms and runs registry cleanup only for the branch workspace read failure', async () => {
     branchWorkspaceState.queryResult = { ok: false, message: 'workspace.branch-workspace.read-failed' }
     branchWorkspaceCleanupState.cleanup.mockResolvedValue({ ok: true, outcome: 'repaired', removedRecords: 2 })
@@ -522,9 +618,7 @@ describe('WorkspaceRepositoryRail', () => {
 
     const upperList = container?.querySelector<HTMLElement>('[data-testid="workspace-repository-upper-list"]')
     const railRoot = upperList?.parentElement?.parentElement
-    const branchSection = container?.querySelector<HTMLElement>(
-      'section[aria-label="workspace.branch-workspace.list"]',
-    )
+    const branchSection = container?.querySelector<HTMLElement>('section[aria-label="workspace.branch-workspace.list"]')
     const status = container?.querySelector<HTMLElement>('[role="status"]')
 
     expect(branchSection).not.toBeNull()
