@@ -7,12 +7,15 @@ const SESSION_SAVE_DEBOUNCE_MS = 200
 
 export function useSessionPersistence() {
   const activeId = useReposStore((s) => s.activeId)
+  const activeProjectId = useReposStore((s) => s.activeProjectId)
   const order = useReposStore((s) => s.order)
   const workspaceActiveContextByRoot = useReposStore((s) => s.workspaceActiveContextByRoot)
   const workspaceRepositoryListExpandedByRoot = useReposStore((s) => s.workspaceRepositoryListExpandedByRoot)
   const projectListExpanded = useReposStore((s) => s.projectListExpanded)
   const detailCollapsed = useReposStore((s) => s.detailCollapsed)
-  const workspaceLayout = useReposStore((s) => (s.activeId ? s.repos[s.activeId]?.ui.workspaceLayout ?? s.workspaceLayout : s.workspaceLayout))
+  const workspaceLayout = useReposStore((s) =>
+    s.activeId ? (s.repos[s.activeId]?.ui.workspaceLayout ?? s.workspaceLayout) : s.workspaceLayout,
+  )
   const detailPaneSizes = useReposStore((s) => s.detailPaneSizes)
   const fileTreePaneSizes = useReposStore((s) => s.fileTreePaneSizes)
   const selectedTerminalByWorktree = useReposStore((s) => s.selectedTerminalByWorktree)
@@ -30,6 +33,7 @@ export function useSessionPersistence() {
       repos,
       order,
       activeId,
+      activeProjectId,
       workspaceActiveContextByRoot,
       workspaceRepositoryListExpandedByRoot,
       projectListExpanded,
@@ -47,6 +51,7 @@ export function useSessionPersistence() {
     const immediateKey = JSON.stringify({
       openRepos: session.openRepos,
       activeRepo: session.activeRepo,
+      activeProject: session.activeProject,
       workspaceActiveContextByRoot: session.workspaceActiveContextByRoot,
       workspaceRepositoryListExpandedByRoot: session.workspaceRepositoryListExpandedByRoot,
       projectListExpanded,
@@ -74,6 +79,7 @@ export function useSessionPersistence() {
     sessionReady,
     order,
     activeId,
+    activeProjectId,
     workspaceActiveContextByRoot,
     workspaceRepositoryListExpandedByRoot,
     projectListExpanded,

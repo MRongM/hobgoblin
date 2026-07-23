@@ -7,6 +7,7 @@ import {
 } from '#/web/session-persistence-state.ts'
 import { DEFAULT_FILE_TREE_PANE_SIZES } from '#/shared/workspace-layout.ts'
 import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
+import { repoSessionEntryId } from '#/shared/remote-repo.ts'
 
 export function sessionStateFromRestorableWorkspaceState(input: {
   repos: ReposStore['repos']
@@ -16,6 +17,7 @@ export function sessionStateFromRestorableWorkspaceState(input: {
   return {
     openRepos: persistedOpenWorkspaceEntries(restorableWorkspaceState.order, repos),
     activeRepo: persistedActiveRepoIdForSession(restorableWorkspaceState.activeId),
+    activeProject: restorableWorkspaceState.activeProjectId,
     workspaceActiveContextByRoot: restorableWorkspaceState.workspaceActiveContextByRoot,
     workspaceRepositoryListExpandedByRoot: restorableWorkspaceState.workspaceRepositoryListExpandedByRoot,
     projectListExpanded: restorableWorkspaceState.projectListExpanded,
@@ -40,6 +42,7 @@ export function restoreRestorableWorkspaceStateFromSession(
 ): Pick<
   RestorableWorkspaceState,
   | 'activeId'
+  | 'activeProjectId'
   | 'workspaceActiveContextByRoot'
   | 'workspaceRepositoryListExpandedByRoot'
   | 'projectListExpanded'
@@ -51,6 +54,7 @@ export function restoreRestorableWorkspaceStateFromSession(
 > {
   return {
     activeId,
+    activeProjectId: restoredActiveProjectId(session, activeId),
     workspaceActiveContextByRoot: normalizeWorkspaceActiveContexts(session),
     workspaceRepositoryListExpandedByRoot: normalizeWorkspaceRepositoryListExpansion(
       session.workspaceRepositoryListExpandedByRoot,
@@ -62,6 +66,19 @@ export function restoreRestorableWorkspaceStateFromSession(
     fileTreePaneSizes: session.fileTreePaneSizes ?? DEFAULT_FILE_TREE_PANE_SIZES,
     selectedTerminalByWorktree: session.selectedTerminalByWorktree ?? {},
   }
+}
+
+function restoredActiveProjectId(session: SessionState, activeId: string | null): string | null {
+  if (session.activeProject !== undefined) return session.activeProject
+  if (!activeId) return null
+  const openProjectIds = new Set(session.openRepos.map(repoSessionEntryId))
+  if (openProjectIds.has(activeId)) return activeId
+  return (
+    Object.entries(normalizeWorkspaceActiveContexts(session)).find(
+      ([rootId, context]) =>
+        openProjectIds.has(rootId) && context.kind === 'repository' && context.repositoryId === activeId,
+    )?.[0] ?? null
+  )
 }
 
 function normalizeWorkspaceActiveContexts(session: SessionState): Record<string, WorkspaceActiveContext> {

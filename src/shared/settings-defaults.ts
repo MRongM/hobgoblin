@@ -77,6 +77,7 @@ export function defaultSessionState(): SessionState {
   return {
     openRepos: [],
     activeRepo: null,
+    activeProject: null,
     workspaceActiveContextByRoot: {},
     workspaceRepositoryListExpandedByRoot: {},
     projectListExpanded: DEFAULT_PROJECT_LIST_EXPANDED,

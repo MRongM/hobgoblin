@@ -72,12 +72,15 @@ describe('useAppBootstrap', () => {
     expect(state.detailCollapsed).toBe(false)
     expect(state).not.toHaveProperty('detailFocusMode')
     expect(state.detailPaneSizes).toEqual({ 'left-right': 45 })
-    expect(state.selectedTerminalByWorktree).toEqual({ '/tmp/repo\0/tmp/worktree': '/tmp/repo\0/tmp/worktree\0terminal-2' })
+    expect(state.selectedTerminalByWorktree).toEqual({
+      '/tmp/repo\0/tmp/worktree': '/tmp/repo\0/tmp/worktree\0terminal-2',
+    })
     expect(hydrateSession).toHaveBeenCalledWith(
       [{ kind: 'local', id: '/tmp/repo' }],
       '/tmp/repo',
       { '/tmp/repo': { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' } },
       { '/tmp/repo': false },
+      '/tmp/repo',
     )
   })
 })

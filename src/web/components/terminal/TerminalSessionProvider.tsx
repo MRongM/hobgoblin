@@ -22,7 +22,7 @@ import {
   repoIndexWithBranchWorkspaces,
 } from '#/web/components/terminal/terminal-repo-index.ts'
 import { useBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
-import { workspaceRootIdForRepo } from '#/web/stores/repos/workspace-projects.ts'
+import { activeWorkspaceRootId } from '#/web/stores/repos/workspace-projects.ts'
 import { RepoSyncTracker } from '#/web/components/terminal/repo-sync-tracker.ts'
 import { useRuntimeTerminalSettings } from '#/web/runtime-settings-terminal-buttons.ts'
 import type { TerminalSessionContextValue, TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
@@ -36,18 +36,13 @@ interface TerminalSessionProviderProps {
 
 const EMPTY_BRANCH_WORKSPACES = [] as const
 
-export function TerminalSessionProvider({ currentRepoId, children, syncTracker: syncTrackerProp }: TerminalSessionProviderProps) {
+export function TerminalSessionProvider({
+  currentRepoId,
+  children,
+  syncTracker: syncTrackerProp,
+}: TerminalSessionProviderProps) {
   const baseRepoIndex = useStoreWithEqualityFn(useReposStore, (s) => repoIndexFromRepos(s.repos), repoIndexEqual)
-  const workspaceRootId = useReposStore(
-    useCallback(
-      (state) =>
-        currentRepoId
-          ? (workspaceRootIdForRepo(state, currentRepoId) ??
-            (state.workspaceProjects[currentRepoId] ? currentRepoId : null))
-          : null,
-      [currentRepoId],
-    ),
-  )
+  const workspaceRootId = useReposStore(activeWorkspaceRootId)
   const branchWorkspaceQuery = useBranchWorkspaceQuery(workspaceRootId ?? '')
   const branchWorkspaces = branchWorkspaceQuery.data?.ok ? branchWorkspaceQuery.data.items : EMPTY_BRANCH_WORKSPACES
   const repoIndex = useMemo(

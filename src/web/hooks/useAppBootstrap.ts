@@ -28,12 +28,8 @@ export function useAppBootstrap() {
         ])
         const session = useSessionRestoreStore.getState().consumeBootSessionSnapshot()
         const normalizedLayout = normalizeWorkspaceSessionLayoutState(session)
-        const {
-          hydrateSession,
-          applySessionLayoutState,
-          applySessionSelectedTerminalState,
-          setProjectListExpanded,
-        } = useReposStore.getState()
+        const { hydrateSession, applySessionLayoutState, applySessionSelectedTerminalState, setProjectListExpanded } =
+          useReposStore.getState()
         // Apply layout prefs before repo probing finishes so the first
         // restored paint uses the saved geometry. useSessionPersistence
         // still waits for sessionReady, so this cannot overwrite the
@@ -47,6 +43,7 @@ export function useAppBootstrap() {
           session.activeRepo,
           restoredWorkspaceState.workspaceActiveContextByRoot,
           restoredWorkspaceState.workspaceRepositoryListExpandedByRoot,
+          restoredWorkspaceState.activeProjectId,
         )
       } catch (err) {
         console.warn('[bootstrap] failed', err)

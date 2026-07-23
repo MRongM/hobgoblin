@@ -16,6 +16,7 @@ interface Props {
 export function UnavailableRepoView({ repo }: Props) {
   const t = useT()
   const navigation = useMainWindowNavigation()
+  const activeProjectId = useReposStore((state) => state.activeProjectId)
   const reason = repo.availability.phase === 'unavailable' ? repo.availability.reason : 'error.failed-read-repo'
   const isRemote = !!repo.remote.target
   const bodyKey = unavailableBodyKey(isRemote, reason)
@@ -62,7 +63,7 @@ export function UnavailableRepoView({ repo }: Props) {
                   {t('repo-tabs.open-remote-open-ssh-settings')}
                 </Button>
               )}
-              <Button type="button" variant="ghost" onClick={() => navigation.closeRepo(repo.id)}>
+              <Button type="button" variant="ghost" onClick={() => navigation.closeRepo(activeProjectId ?? repo.id)}>
                 <X />
                 {t('repo-unavailable.close')}
               </Button>

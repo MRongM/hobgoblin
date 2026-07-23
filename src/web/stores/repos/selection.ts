@@ -64,6 +64,7 @@ function activateWorkspaceContext(
   if (!repo) return
   set({
     activeId,
+    activeProjectId: rootId,
     workspaceLayout: repo.ui.workspaceLayout,
     workspaceActiveContextByRoot: {
       ...state.workspaceActiveContextByRoot,
@@ -112,12 +113,18 @@ function createRestorableWorkspaceSelectionActions(set: ReposSet, get: ReposGet)
       set((s) => {
         const repo = s.repos[id]
         if (!repo) return s
-        const workspaceRootId = repo.workspaceRootId ?? (s.workspaceProjects[id] ? id : null)
-        const workspaceContext = repo.workspaceRootId
-          ? ({ kind: 'repository', repositoryId: id } as const)
-          : ({ kind: 'overview' } as const)
+        const standaloneProject = s.order.includes(id) && !s.workspaceProjects[id]
+        const workspaceRootId = standaloneProject
+          ? null
+          : (repo.workspaceRootId ?? (s.workspaceProjects[id] ? id : null))
+        const workspaceContext =
+          repo.workspaceRootId && !standaloneProject
+            ? ({ kind: 'repository', repositoryId: id } as const)
+            : ({ kind: 'overview' } as const)
+        const nextActiveProjectId = workspaceRootId ?? id
         if (
           s.activeId === id &&
+          s.activeProjectId === nextActiveProjectId &&
           s.workspaceLayout === repo.ui.workspaceLayout &&
           (!workspaceRootId ||
             workspaceContextsEqual(s.workspaceActiveContextByRoot[workspaceRootId], workspaceContext))
@@ -126,6 +133,7 @@ function createRestorableWorkspaceSelectionActions(set: ReposSet, get: ReposGet)
         }
         return {
           activeId: id,
+          activeProjectId: nextActiveProjectId,
           workspaceLayout: repo.ui.workspaceLayout,
           ...(workspaceRootId
             ? {

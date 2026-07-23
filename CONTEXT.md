@@ -125,7 +125,7 @@ A top-level working context in the project list. A project is either one Git rep
 _Avoid_: Using project as a synonym for every repository inside a multi-repository workspace
 
 **Repository**:
-One Git operation boundary. Branches, worktrees, status, history, and Git writes always belong to exactly one repository, even when several repositories share a project.
+One Git operation boundary. Branches, worktrees, status, history, and Git writes always belong to exactly one repository, even when several repositories share a project. The same repository may appear simultaneously as its own project and as a multi-repository workspace member; both contexts share one repository state.
 _Avoid_: Workspace repository, subproject
 
 **Multi-repository workspace**:

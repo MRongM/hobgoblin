@@ -20,6 +20,8 @@ const navigationState = vi.hoisted(() => ({
 }))
 
 const repoState = {
+  activeId: '/repo-a/api',
+  activeProjectId: '/repo-a',
   ensureWorkspaceOpen: vi.fn(),
   reorderRepos: vi.fn(),
   toggleProjectListExpanded: vi.fn(),
@@ -81,6 +83,8 @@ const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENV
 
 beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
+  repoState.activeId = '/repo-a/api'
+  repoState.activeProjectId = '/repo-a'
   repoState.projectListExpanded = false
   navigationState.showRepoDetailTab.mockReset()
   repoState.toggleProjectListExpanded.mockReset()
@@ -151,6 +155,8 @@ describe('SidebarProjectHeader', () => {
     const trigger = container!.querySelector<HTMLButtonElement>('button[aria-label="repo-tabs.repos"]')
 
     act(() => trigger?.click())
+    repoState.activeId = '/repo-b'
+    repoState.activeProjectId = '/repo-b'
     act(() => root!.render(<SidebarProjectHeader repoId="/repo-b" />))
 
     const nextTrigger = container!.querySelector<HTMLButtonElement>('button[aria-label="repo-tabs.repos"]')
@@ -160,6 +166,8 @@ describe('SidebarProjectHeader', () => {
   })
 
   test('uses a folder icon when the active project is a plain workspace', () => {
+    repoState.activeId = '/repo-b'
+    repoState.activeProjectId = '/repo-b'
     act(() => {
       root!.render(<SidebarProjectHeader repoId="/repo-b" />)
     })
@@ -171,6 +179,8 @@ describe('SidebarProjectHeader', () => {
   })
 
   test('shows project terminal status only while the project list is collapsed', () => {
+    repoState.activeId = '/repo-git'
+    repoState.activeProjectId = '/repo-git'
     act(() => {
       root!.render(<SidebarProjectHeader repoId="/repo-git" />)
     })
@@ -190,6 +200,8 @@ describe('SidebarProjectHeader', () => {
   })
 
   test('omits editor and external terminal shortcuts from the project topbar', () => {
+    repoState.activeId = '/repo-git'
+    repoState.activeProjectId = '/repo-git'
     act(() => {
       root!.render(<SidebarProjectHeader repoId="/repo-git" />)
     })

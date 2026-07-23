@@ -529,6 +529,7 @@ describe('multi-repository workspace selection', () => {
       repos: { [rootId]: root, [childId]: child, [soloId]: solo },
       order: [rootId, soloId],
       activeId: rootId,
+      activeProjectId: rootId,
       workspaceProjects: {
         [rootId]: {
           rootId,
@@ -557,6 +558,21 @@ describe('multi-repository workspace selection', () => {
       kind: 'repository',
       repositoryId: childId,
     })
+  })
+
+  test('distinguishes a standalone project from the same repository selected inside a workspace', () => {
+    seedWorkspaceSelection()
+    useReposStore.setState((state) => ({ order: [rootId, childId, soloId], repos: state.repos }))
+
+    useReposStore.getState().activateProject(childId)
+
+    expect(useReposStore.getState().activeId).toBe(childId)
+    expect(useReposStore.getState().activeProjectId).toBe(childId)
+
+    useReposStore.getState().activateWorkspaceRepository(rootId, childId)
+
+    expect(useReposStore.getState().activeId).toBe(childId)
+    expect(useReposStore.getState().activeProjectId).toBe(rootId)
   })
 
   test('selects Overview explicitly', () => {

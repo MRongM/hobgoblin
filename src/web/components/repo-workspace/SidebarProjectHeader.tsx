@@ -39,7 +39,7 @@ import {
   DropdownMenuTrigger,
 } from '#/web/components/ui/dropdown-menu.tsx'
 import { cn } from '#/web/lib/cn.ts'
-import { workspaceRootIdForRepo } from '#/web/stores/repos/workspace-projects.ts'
+import { activeProjectId as selectActiveProjectId } from '#/web/stores/repos/workspace-projects.ts'
 import { WorkspaceRepositorySwitcher } from '#/web/components/repo-workspace/WorkspaceRepositorySwitcher.tsx'
 
 interface Props {
@@ -60,7 +60,7 @@ export function SidebarProjectHeader({ repoId, onShowCompactDetail, onShowCompac
   const ensureWorkspaceOpen = useReposStore((s) => s.ensureWorkspaceOpen)
   const reorderRepos = useReposStore((s) => s.reorderRepos)
   const { topbarHeightPx } = useRuntimeChromeSettings()
-  const activeProjectId = useReposStore((s) => workspaceRootIdForRepo(s, repoId) ?? repoId)
+  const activeProjectId = useReposStore(selectActiveProjectId) ?? repoId
   const activeName = useReposStore((s) => s.repos[activeProjectId]?.name ?? '')
   const projects = useProjectSummaries()
 
@@ -94,10 +94,7 @@ export function SidebarProjectHeader({ repoId, onShowCompactDetail, onShowCompac
   }
 
   return (
-    <div
-      data-testid="sidebar-project-header"
-      className="flex shrink-0 flex-col bg-topbar text-topbar-foreground"
-    >
+    <div data-testid="sidebar-project-header" className="flex shrink-0 flex-col bg-topbar text-topbar-foreground">
       <div className="topbar flex shrink-0 items-center gap-0.5" style={{ height: topbarHeightPx }}>
         <Button
           type="button"

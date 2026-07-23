@@ -52,10 +52,7 @@ export type WorkspaceIntentPlan =
   | { kind: 'select-terminal'; repoId: string; index: number }
   | { kind: 'terminal-primary-action'; repoId: string }
 
-export type ExternalOpenDrainKickPlan =
-  | { kind: 'ignore' }
-  | { kind: 'schedule-rerun' }
-  | { kind: 'start-drain' }
+export type ExternalOpenDrainKickPlan = { kind: 'ignore' } | { kind: 'schedule-rerun' } | { kind: 'start-drain' }
 
 interface AppLevelIntentPlanContext {
   overlayBlocked: boolean
@@ -66,6 +63,7 @@ interface WorkspaceIntentPlanContext {
   workspaceShortcutSuppressed: boolean
   terminalFocused: boolean
   currentRepoId: string | null
+  currentProjectId: string | null
   currentRepo: Pick<RepoState, 'id' | 'instanceToken'> | null
 }
 
@@ -126,11 +124,14 @@ export function createWorkspaceIntentPlan(
       return { kind: 'open-remote-repo' }
     case 'close-repo-requested':
       if (context.workspaceShortcutSuppressed) return { kind: 'noop' }
-      return context.currentRepoId ? { kind: 'close-repo', repoId: context.currentRepoId } : { kind: 'close-window' }
+      return context.currentProjectId
+        ? { kind: 'close-repo', repoId: context.currentProjectId }
+        : { kind: 'close-window' }
     case 'cycle-repo-requested':
       return context.workspaceShortcutSuppressed ? { kind: 'noop' } : { kind: 'cycle-repo', direction: event.direction }
     case 'repo-refresh-requested':
-      if (context.workspaceShortcutSuppressed || context.terminalFocused || !context.currentRepo) return { kind: 'noop' }
+      if (context.workspaceShortcutSuppressed || context.terminalFocused || !context.currentRepo)
+        return { kind: 'noop' }
       return { kind: 'refresh-repo', repoId: context.currentRepo.id, token: context.currentRepo.instanceToken }
     case 'show-detail-tab-requested':
       if (context.workspaceShortcutSuppressed || !context.currentRepoId) return { kind: 'noop' }

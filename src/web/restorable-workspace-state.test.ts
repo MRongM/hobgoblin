@@ -22,6 +22,7 @@ describe('restorable-workspace-state', () => {
         restorableWorkspaceState: {
           order: [repo.id],
           activeId: repo.id,
+          activeProjectId: repo.id,
           workspaceActiveContextByRoot: {
             '/tmp/workspace': {
               kind: 'branch-workspace',
@@ -43,6 +44,7 @@ describe('restorable-workspace-state', () => {
     ).toEqual({
       openRepos: [localRepoSessionEntry('/tmp/repo')],
       activeRepo: '/tmp/repo',
+      activeProject: '/tmp/repo',
       workspaceActiveContextByRoot: {
         '/tmp/workspace': {
           kind: 'branch-workspace',
@@ -68,6 +70,7 @@ describe('restorable-workspace-state', () => {
       restoreRestorableWorkspaceStateFromSession({
         openRepos: [localRepoSessionEntry('/tmp/repo')],
         activeRepo: '/tmp/repo',
+        activeProject: '/tmp/repo',
         workspaceActiveContextByRoot: {
           '/tmp/workspace': { kind: 'repository', repositoryId: '/tmp/workspace/api' },
         },
@@ -84,6 +87,7 @@ describe('restorable-workspace-state', () => {
       }),
     ).toEqual({
       activeId: '/tmp/repo',
+      activeProjectId: '/tmp/repo',
       workspaceActiveContextByRoot: {
         '/tmp/workspace': { kind: 'repository', repositoryId: '/tmp/workspace/api' },
       },

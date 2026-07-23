@@ -45,11 +45,9 @@ describe('repo session hydration', () => {
       }),
     })
 
-    await useReposStore
-      .getState()
-      .hydrateSession([remoteRepoSessionEntry(rootTarget)], child.id, {
-        [rootTarget.id]: { kind: 'repository', repositoryId: child.id },
-      })
+    await useReposStore.getState().hydrateSession([remoteRepoSessionEntry(rootTarget)], child.id, {
+      [rootTarget.id]: { kind: 'repository', repositoryId: child.id },
+    })
 
     expect(useReposStore.getState().order).toEqual([rootTarget.id])
     expect(useReposStore.getState().activeId).toBe(child.id)
@@ -91,6 +89,45 @@ describe('repo session hydration', () => {
     })
     expect(useReposStore.getState().workspaceProjects[root]?.repositoryIds).toEqual([child])
     expect(calls.recent).toEqual([])
+  })
+
+  test.each([
+    { label: 'workspace', activeProject: '/tmp/gbl-workspace' },
+    { label: 'standalone repository', activeProject: '/tmp/gbl-workspace/api' },
+  ])('restores a shared repository with the $label project active', async ({ activeProject }) => {
+    const root = '/tmp/gbl-workspace'
+    const child = `${root}/api`
+    installGoblin({
+      probe: (cwd: string) => ({
+        ok: true,
+        root: cwd,
+        name: cwd.split('/').at(-1) ?? cwd,
+        isGitRepo: cwd !== root,
+      }),
+      'workspace.discover': () => ({
+        ok: true,
+        rootId: root,
+        repositories: [{ id: child, name: 'api' }],
+        candidates: [{ id: child, name: 'api', selected: false, available: true }],
+        configuration: { kind: 'missing' },
+        skipped: [],
+      }),
+    })
+
+    await useReposStore
+      .getState()
+      .hydrateSession(
+        [localRepoSessionEntry(root), localRepoSessionEntry(child)],
+        child,
+        { [root]: { kind: 'repository', repositoryId: child } },
+        {},
+        activeProject,
+      )
+
+    expect(useReposStore.getState().order).toEqual([root, child])
+    expect(useReposStore.getState().activeId).toBe(child)
+    expect(useReposStore.getState().activeProjectId).toBe(activeProject)
+    expect(useReposStore.getState().workspaceProjects[root]?.repositoryIds).toEqual([child])
   })
 
   test('drops a stale child selection when the root is no longer a multi-repository workspace', async () => {

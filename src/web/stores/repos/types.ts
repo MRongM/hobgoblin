@@ -127,7 +127,7 @@ export interface RepoState {
   /** Absolute repo root — also the unique id. */
   id: string
   name: string
-  /** Multi-repository workspace root that owns this child repository. */
+  /** Multi-repository workspace root that also references this repository. */
   workspaceRootId?: string
   /** false when the directory is readable but not yet a git repository. */
   isGitRepo: boolean
@@ -178,6 +178,8 @@ export interface RestorableWorkspaceState {
   order: string[]
   /** Active workspace tab restored from SessionState.activeRepo. */
   activeId: string | null
+  /** Active top-level project; may differ from activeId for a workspace member. */
+  activeProjectId: string | null
   workspaceActiveContextByRoot: Record<string, WorkspaceActiveContext>
   /** Missing entries mean visible. The persisted field name retains compatibility
    *  with sessions created before visibility replaced collapse behavior. */
@@ -263,6 +265,7 @@ export interface RuntimeCoherentRepoProjectionActions {
     activeRepo: string | null,
     workspaceActiveContextByRoot?: Record<string, WorkspaceActiveContext>,
     workspaceRepositoryListExpandedByRoot?: Record<string, boolean>,
+    activeProject?: string | null,
   ) => Promise<void>
   /** Clear the fetchFailed flag — called by manual fetch success and
    *  by an explicit refresh, so a stale badge doesn't follow the user

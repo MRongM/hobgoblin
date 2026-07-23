@@ -338,10 +338,7 @@ function normalizeTelegramChatId(value: unknown): string {
 
 function normalizeTelegramOutputTailLength(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH
-  return Math.max(
-    TELEGRAM_OUTPUT_TAIL_MIN_LENGTH,
-    Math.min(TELEGRAM_OUTPUT_TAIL_MAX_LENGTH, Math.round(value)),
-  )
+  return Math.max(TELEGRAM_OUTPUT_TAIL_MIN_LENGTH, Math.min(TELEGRAM_OUTPUT_TAIL_MAX_LENGTH, Math.round(value)))
 }
 
 function telegramNotificationSettingsFromData(data: ServerSettingsData): TelegramNotificationSettingsSnapshot {
@@ -553,6 +550,12 @@ function normalizeSession(value: unknown): SessionState {
   const workspaceLayout = normalizeWorkspaceLayout(partial.workspaceLayout)
   const detailCollapsed =
     typeof partial.detailCollapsed === 'boolean' ? partial.detailCollapsed : DEFAULT_DETAIL_COLLAPSED
+  const activeProject = normalizeActiveProject(
+    partial.activeProject,
+    activeRepo,
+    openRepos,
+    workspaceActiveContextByRoot,
+  )
   return {
     openRepos,
     activeRepo:
@@ -563,6 +566,7 @@ function normalizeSession(value: unknown): SessionState {
         ))
         ? activeRepo
         : null,
+    activeProject,
     workspaceActiveContextByRoot,
     workspaceRepositoryListExpandedByRoot: normalizeWorkspaceRepositoryListExpandedByRoot(
       partial.workspaceRepositoryListExpandedByRoot,
@@ -579,6 +583,25 @@ function normalizeSession(value: unknown): SessionState {
       partial.selectedTerminalByWorktree ?? partial.activeTerminalByGroup,
     ),
   }
+}
+
+function normalizeActiveProject(
+  value: unknown,
+  activeRepo: string | null,
+  openRepos: RepoSessionEntry[],
+  workspaceActiveContextByRoot: Record<string, WorkspaceActiveContext>,
+): string | null {
+  const openProjectIds = new Set(openRepos.map(repoSessionEntryId))
+  const requested = toSafeRepoLocator(value)
+  if (requested && openProjectIds.has(requested)) return requested
+  if (activeRepo && openProjectIds.has(activeRepo)) return activeRepo
+  if (!activeRepo) return null
+  return (
+    Object.entries(workspaceActiveContextByRoot).find(
+      ([rootId, context]) =>
+        openProjectIds.has(rootId) && context.kind === 'repository' && context.repositoryId === activeRepo,
+    )?.[0] ?? null
+  )
 }
 
 function normalizeRecentRepos(value: unknown): RepoSessionEntry[] {
@@ -669,8 +692,7 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       telegramNotificationsEnabled:
         parsed.telegramNotificationsEnabled === true && Boolean(telegramBotToken && telegramChatId),
       telegramBellNotificationsEnabled: parsed.telegramBellNotificationsEnabled !== false,
-      telegramOutputCompletionNotificationsEnabled:
-        parsed.telegramOutputCompletionNotificationsEnabled === true,
+      telegramOutputCompletionNotificationsEnabled: parsed.telegramOutputCompletionNotificationsEnabled === true,
       telegramIncludeTerminalOutput: parsed.telegramIncludeTerminalOutput === true,
       telegramOutputTailLength: normalizeTelegramOutputTailLength(parsed.telegramOutputTailLength),
       telegramBotToken,

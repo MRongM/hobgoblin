@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from '#/web/components/ui/dropdown-menu.tsx'
 import { cn } from '#/web/lib/cn.ts'
-import { workspaceRootIdForRepo } from '#/web/stores/repos/workspace-projects.ts'
+import { activeProjectId as selectActiveProjectId } from '#/web/stores/repos/workspace-projects.ts'
 
 interface Props {
   repoId: string
@@ -30,7 +30,7 @@ interface Props {
 export function FocusProjectSwitcher({ repoId, compact = false }: Props) {
   const t = useT()
   const navigation = useMainWindowNavigation()
-  const activeProjectId = useReposStore((s) => workspaceRootIdForRepo(s, repoId) ?? repoId)
+  const activeProjectId = useReposStore(selectActiveProjectId) ?? repoId
   const activeName = useReposStore((s) => s.repos[activeProjectId]?.name ?? '')
   const projects = useProjectSummaries()
   if (projects.length === 0) return null

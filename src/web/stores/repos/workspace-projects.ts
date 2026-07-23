@@ -9,6 +9,7 @@ interface WorkspaceProjectRepoLike {
 
 interface WorkspaceProjectLookupState {
   activeId: string | null
+  activeProjectId?: string | null
   repos: Record<string, WorkspaceProjectRepoLike | undefined>
   workspaceProjects: Record<string, WorkspaceProjectState | undefined>
   workspaceActiveContextByRoot: Record<string, WorkspaceActiveContext | undefined>
@@ -21,9 +22,19 @@ export function workspaceRootIdForRepo(
   return state.repos[repoId]?.workspaceRootId ?? null
 }
 
-export function activeProjectId(state: Pick<WorkspaceProjectLookupState, 'activeId' | 'repos'>): string | null {
+export function activeProjectId(
+  state: Pick<WorkspaceProjectLookupState, 'activeId' | 'activeProjectId' | 'repos'>,
+): string | null {
   if (!state.activeId) return null
+  if (state.activeProjectId) return state.activeProjectId
   return workspaceRootIdForRepo(state, state.activeId) ?? state.activeId
+}
+
+export function activeWorkspaceRootId(
+  state: Pick<WorkspaceProjectLookupState, 'activeId' | 'activeProjectId' | 'repos' | 'workspaceProjects'>,
+): string | null {
+  const projectId = activeProjectId(state)
+  return projectId && state.workspaceProjects[projectId] ? projectId : null
 }
 
 export function projectActivationTarget(

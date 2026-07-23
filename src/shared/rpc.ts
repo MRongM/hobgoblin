@@ -82,8 +82,10 @@ export type WorkspaceActiveContext =
 export interface SessionState {
   /** Repo entries that were open, in tab order. */
   openRepos: RepoSessionEntry[]
-  /** The active tab id — null when no repos were open. */
+  /** The visible repository id — null when no project is open. */
   activeRepo: string | null
+  /** The active top-level project id. Missing values are migrated from activeRepo. */
+  activeProject?: string | null
   /** Last tagged selection for each open multi-repository workspace root. */
   workspaceActiveContextByRoot?: Record<string, WorkspaceActiveContext>
   /** @deprecated Read-only migration input from sessions written before tagged workspace contexts. */

@@ -6,13 +6,12 @@ import type {
   RuntimeCoherentRepoProjectionState,
 } from '#/web/stores/repos/types.ts'
 
-export interface MainWindowWorkspaceState
-  extends Pick<
-    ReposStore,
-    'activeId' | 'order' | 'detailCollapsed' | 'workspaceLayout' | 'sessionReady'
-  > {}
+export interface MainWindowWorkspaceState extends Pick<
+  ReposStore,
+  'activeId' | 'activeProjectId' | 'order' | 'detailCollapsed' | 'workspaceLayout' | 'sessionReady'
+> {}
 
-export interface MainWindowNavigationState extends Pick<ReposStore, 'activeId' | 'order'> {}
+export interface MainWindowNavigationState extends Pick<ReposStore, 'activeId' | 'activeProjectId' | 'order'> {}
 
 export interface KeyboardRuntimeState {
   detailCollapsed: boolean
@@ -20,10 +19,15 @@ export interface KeyboardRuntimeState {
   searchQuery: string
 }
 
-export interface RestorableWorkspaceViewportState
-  extends Pick<ReposStore, 'activeId' | 'order' | 'detailCollapsed' | 'workspaceLayout'> {}
+export interface RestorableWorkspaceViewportState extends Pick<
+  ReposStore,
+  'activeId' | 'activeProjectId' | 'order' | 'detailCollapsed' | 'workspaceLayout'
+> {}
 
-export interface RestorableWorkspaceNavigationState extends Pick<ReposStore, 'activeId' | 'order'> {}
+export interface RestorableWorkspaceNavigationState extends Pick<
+  ReposStore,
+  'activeId' | 'activeProjectId' | 'order'
+> {}
 
 export interface LocalWorkspaceSessionState extends Pick<ReposStore, 'sessionReady'> {}
 
@@ -42,6 +46,7 @@ export function restorableWorkspaceStateFromStore(
     ReposStore,
     | 'order'
     | 'activeId'
+    | 'activeProjectId'
     | 'workspaceActiveContextByRoot'
     | 'workspaceRepositoryListExpandedByRoot'
     | 'projectListExpanded'
@@ -53,11 +58,12 @@ export function restorableWorkspaceStateFromStore(
   > & { repos?: ReposStore['repos'] },
 ): RestorableWorkspaceState {
   const workspaceLayout = state.activeId
-    ? state.repos?.[state.activeId]?.ui.workspaceLayout ?? state.workspaceLayout
+    ? (state.repos?.[state.activeId]?.ui.workspaceLayout ?? state.workspaceLayout)
     : state.workspaceLayout
   return {
     order: state.order,
     activeId: state.activeId,
+    activeProjectId: state.activeProjectId,
     workspaceActiveContextByRoot: state.workspaceActiveContextByRoot,
     workspaceRepositoryListExpandedByRoot: state.workspaceRepositoryListExpandedByRoot,
     projectListExpanded: state.projectListExpanded,
@@ -79,15 +85,16 @@ export function localWorkspaceStateFromStore(
 }
 
 function restorableWorkspaceViewportStateFromStore(
-  state: Pick<ReposStore, 'activeId' | 'order' | 'detailCollapsed' | 'workspaceLayout'> & {
+  state: Pick<ReposStore, 'activeId' | 'activeProjectId' | 'order' | 'detailCollapsed' | 'workspaceLayout'> & {
     repos?: ReposStore['repos']
   },
 ): RestorableWorkspaceViewportState {
   const workspaceLayout = state.activeId
-    ? state.repos?.[state.activeId]?.ui.workspaceLayout ?? state.workspaceLayout
+    ? (state.repos?.[state.activeId]?.ui.workspaceLayout ?? state.workspaceLayout)
     : state.workspaceLayout
   return {
     activeId: state.activeId,
+    activeProjectId: state.activeProjectId,
     order: state.order,
     detailCollapsed: state.detailCollapsed,
     workspaceLayout,
@@ -95,10 +102,11 @@ function restorableWorkspaceViewportStateFromStore(
 }
 
 export function restorableWorkspaceNavigationStateFromStore(
-  state: Pick<ReposStore, 'activeId' | 'order'>,
+  state: Pick<ReposStore, 'activeId' | 'activeProjectId' | 'order'>,
 ): RestorableWorkspaceNavigationState {
   return {
     activeId: state.activeId,
+    activeProjectId: state.activeProjectId,
     order: state.order,
   }
 }
@@ -120,7 +128,10 @@ export function localWorkspaceSearchStateFromStore(
 }
 
 export function mainWindowWorkspaceStateFromStore(
-  state: Pick<ReposStore, 'activeId' | 'order' | 'detailCollapsed' | 'workspaceLayout' | 'sessionReady'> & {
+  state: Pick<
+    ReposStore,
+    'activeId' | 'activeProjectId' | 'order' | 'detailCollapsed' | 'workspaceLayout' | 'sessionReady'
+  > & {
     repos?: ReposStore['repos']
   },
 ): MainWindowWorkspaceState {
@@ -128,6 +139,7 @@ export function mainWindowWorkspaceStateFromStore(
   const local = localWorkspaceSessionStateFromStore({ sessionReady: state.sessionReady })
   return {
     activeId: restorable.activeId,
+    activeProjectId: restorable.activeProjectId,
     order: restorable.order,
     detailCollapsed: restorable.detailCollapsed,
     workspaceLayout: restorable.workspaceLayout,
@@ -135,10 +147,13 @@ export function mainWindowWorkspaceStateFromStore(
   }
 }
 
-export function navigationWorkspaceStateFromStore(state: Pick<ReposStore, 'activeId' | 'order'>): MainWindowNavigationState {
+export function navigationWorkspaceStateFromStore(
+  state: Pick<ReposStore, 'activeId' | 'activeProjectId' | 'order'>,
+): MainWindowNavigationState {
   const restorable = restorableWorkspaceNavigationStateFromStore(state)
   return {
     activeId: restorable.activeId,
+    activeProjectId: restorable.activeProjectId,
     order: restorable.order,
   }
 }
@@ -146,6 +161,7 @@ export function navigationWorkspaceStateFromStore(state: Pick<ReposStore, 'activ
 export function mainWindowWorkspaceStateEqual(a: MainWindowWorkspaceState, b: MainWindowWorkspaceState): boolean {
   return (
     a.activeId === b.activeId &&
+    a.activeProjectId === b.activeProjectId &&
     a.detailCollapsed === b.detailCollapsed &&
     a.workspaceLayout === b.workspaceLayout &&
     a.sessionReady === b.sessionReady &&
@@ -154,7 +170,7 @@ export function mainWindowWorkspaceStateEqual(a: MainWindowWorkspaceState, b: Ma
 }
 
 export function navigationWorkspaceStateEqual(a: MainWindowNavigationState, b: MainWindowNavigationState): boolean {
-  return a.activeId === b.activeId && arraysEqual(a.order, b.order)
+  return a.activeId === b.activeId && a.activeProjectId === b.activeProjectId && arraysEqual(a.order, b.order)
 }
 
 export function activeRepoFromStore(state: Pick<ReposStore, 'activeId' | 'repos'>): RepoState | null {
@@ -170,16 +186,17 @@ export function keyboardRuntimeStateFromStore(
   const runtimeCoherent = runtimeCoherentRepoProjectionStateFromStore({ repos: state.repos })
   const restorable = restorableWorkspaceViewportStateFromStore({
     activeId: null,
+    activeProjectId: null,
     order: [],
     detailCollapsed: state.detailCollapsed,
     workspaceLayout: 'left-right',
   })
   const local = localWorkspaceSearchStateFromStore({ branchSearchQueries: state.branchSearchQueries })
-  const repo = currentRepoId ? runtimeCoherent.repos[currentRepoId] ?? null : null
+  const repo = currentRepoId ? (runtimeCoherent.repos[currentRepoId] ?? null) : null
   return {
     detailCollapsed: restorable.detailCollapsed,
     repo,
-    searchQuery: repo ? local.branchSearchQueries[repo.id] ?? '' : '',
+    searchQuery: repo ? (local.branchSearchQueries[repo.id] ?? '') : '',
   }
 }
 

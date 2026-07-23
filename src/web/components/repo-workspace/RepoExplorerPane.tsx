@@ -25,6 +25,7 @@ import {
   type FileTreeRevealRequest,
 } from '#/web/components/repo-workspace/RepoWorktreeExplorer.tsx'
 import type { CompactWorkspaceSurface } from '#/web/components/repo-workspace/model.ts'
+import { activeWorkspaceRootId } from '#/web/stores/repos/workspace-projects.ts'
 
 interface RepoExplorerPaneProps {
   repoId: string
@@ -100,7 +101,7 @@ export function RepoExplorerPane({
     const repo = s.repos[repoId]
     return repoIsPlainWorkspace(repo)
   })
-  const workspaceRootId = useReposStore((s) => s.repos[repoId]?.workspaceRootId)
+  const workspaceRootId = useReposStore(activeWorkspaceRootId)
 
   const compact = useIsCompactUi()
   const desktopFileAreaCollapsed = !compact && fileAreaCollapsed
@@ -130,7 +131,11 @@ export function RepoExplorerPane({
   if (compact) {
     const surface = compactSurface ?? 'scope'
     return (
-      <div data-file-tree-layout={layout} data-compact-surface={surface} className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div
+        data-file-tree-layout={layout}
+        data-compact-surface={surface}
+        className="flex min-h-0 min-w-0 flex-1 flex-col"
+      >
         <SidebarProjectHeader
           repoId={repoId}
           onShowCompactDetail={onShowCompactDetail}

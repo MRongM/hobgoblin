@@ -8,7 +8,7 @@ import { useThemeStore } from '#/web/stores/theme.ts'
 export function EffectiveProjectThemeBridge() {
   const resolved = useThemeStore((s) => s.resolved)
   const globalColorTheme = useThemeStore((s) => s.colorTheme)
-  const activeRepoId = useStoreWithEqualityFn(useReposStore, (s) => s.activeId, Object.is)
+  const activeRepoId = useStoreWithEqualityFn(useReposStore, (s) => s.activeProjectId ?? s.activeId, Object.is)
   const { data } = useSettingsSnapshotQuery()
   const effectiveColorTheme = effectiveProjectColorTheme({
     activeRepoId,

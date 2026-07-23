@@ -96,6 +96,7 @@ beforeEach(() => {
     repos: { [ROOT]: overview, [API]: api, [WEB]: web },
     order: [ROOT],
     activeId: API,
+    activeProjectId: ROOT,
     workspaceProjects: {
       [ROOT]: {
         rootId: ROOT,
@@ -188,6 +189,14 @@ describe('WorkspaceRepositorySwitcher', () => {
 
   test('does not render for a standalone repository', () => {
     act(() => root!.render(<WorkspaceRepositorySwitcher repoId="/standalone" />))
+
+    expect(container?.textContent).toBe('')
+  })
+
+  test('does not render when a workspace member is active through its standalone project', () => {
+    useReposStore.setState({ order: [ROOT, API], activeId: API, activeProjectId: API })
+
+    act(() => root!.render(<WorkspaceRepositorySwitcher repoId={API} />))
 
     expect(container?.textContent).toBe('')
   })

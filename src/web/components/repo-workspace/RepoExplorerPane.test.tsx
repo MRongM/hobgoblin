@@ -447,6 +447,7 @@ describe('RepoExplorerPane', () => {
       repo.workspaceRootId = '/workspace'
       return {
         repos: { ...state.repos, [REPO_ID]: repo },
+        activeProjectId: '/workspace',
         workspaceProjects: {
           '/workspace': {
             rootId: '/workspace',
@@ -474,6 +475,42 @@ describe('RepoExplorerPane', () => {
     expect(rail?.getAttribute('data-workspace-root-id')).toBe('/workspace')
     expect(rail?.getAttribute('data-current-repo-id')).toBe(REPO_ID)
     expect(sidebar?.querySelector('[data-testid="branch-list"]')).not.toBeNull()
+    await act(async () => root.unmount())
+  })
+
+  test('does not render workspace navigation for a shared repository opened as a standalone project', async () => {
+    useReposStore.setState((state) => {
+      const repo = state.repos[REPO_ID]
+      if (!repo) return state
+      repo.workspaceRootId = '/workspace'
+      return {
+        repos: { ...state.repos, [REPO_ID]: repo },
+        order: ['/workspace', REPO_ID],
+        activeId: REPO_ID,
+        activeProjectId: REPO_ID,
+        workspaceProjects: {
+          '/workspace': {
+            rootId: '/workspace',
+            repositoryIds: [REPO_ID],
+            candidates: [{ id: REPO_ID, name: 'repo', selected: true, available: true }],
+            configured: true,
+            configurationError: null,
+            phase: 'ready',
+            skipped: [],
+            error: null,
+          },
+        },
+      }
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="left-right" showActions />)
+    })
+
+    expect(container.querySelector('[data-testid="workspace-repository-rail"]')).toBeNull()
     await act(async () => root.unmount())
   })
 
@@ -1659,12 +1696,7 @@ describe('RepoExplorerPane', () => {
     })
     tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
     // collapsed again, but the active overflow tab stays visible beside the toggle
-    expect(tabs.map((tab) => tab.textContent)).toEqual([
-      'file-tree.title',
-      'tab.changes',
-      'tab.status',
-      'tab.local',
-    ])
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['file-tree.title', 'tab.changes', 'tab.status', 'tab.local'])
     await act(async () => root.unmount())
   })
 
@@ -1681,12 +1713,7 @@ describe('RepoExplorerPane', () => {
     })
 
     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-    expect(tabs.map((tab) => tab.textContent)).toEqual([
-      'file-tree.title',
-      'tab.changes',
-      'tab.status',
-      'tab.history',
-    ])
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['file-tree.title', 'tab.changes', 'tab.status', 'tab.history'])
     expect(tabs[3]?.getAttribute('aria-selected')).toBe('true')
     expect(container.querySelector('[data-testid="project-history-panel"]')).toBeTruthy()
     await act(async () => root.unmount())

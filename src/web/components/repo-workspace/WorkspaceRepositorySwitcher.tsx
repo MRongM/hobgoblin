@@ -11,7 +11,7 @@ import {
 import { cn } from '#/web/lib/cn.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
-import { workspaceRootIdForRepo } from '#/web/stores/repos/workspace-projects.ts'
+import { activeWorkspaceRootId } from '#/web/stores/repos/workspace-projects.ts'
 
 interface Props {
   repoId: string
@@ -20,9 +20,7 @@ interface Props {
 
 export function WorkspaceRepositorySwitcher({ repoId, compact = false }: Props) {
   const t = useT()
-  const workspaceRootId = useReposStore(
-    (state) => workspaceRootIdForRepo(state, repoId) ?? (state.workspaceProjects[repoId] ? repoId : null),
-  )
+  const workspaceRootId = useReposStore((state) => (state.activeId === repoId ? activeWorkspaceRootId(state) : null))
   const workspace = useReposStore((state) => (workspaceRootId ? state.workspaceProjects[workspaceRootId] : undefined))
   const currentRepositoryName = useReposStore((state) =>
     repoId === workspaceRootId ? t('workspace.overview') : (state.repos[repoId]?.name ?? ''),

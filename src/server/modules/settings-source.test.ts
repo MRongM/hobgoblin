@@ -937,6 +937,30 @@ test('migrates an active child repository for an open multi-repository workspace
   })
 })
 
+test('preserves the active project when one repository is also an open workspace member', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+  const root = '/tmp/workspace'
+  const child = '/tmp/workspace/api'
+
+  await expect(
+    mod.setServerSessionState({
+      ...defaultSessionState(),
+      openRepos: [
+        { kind: 'local', id: root },
+        { kind: 'local', id: child },
+      ],
+      activeRepo: child,
+      activeProject: root,
+      workspaceActiveContextByRoot: { [root]: { kind: 'repository', repositoryId: child } },
+    }),
+  ).resolves.toMatchObject({
+    activeRepo: child,
+    activeProject: root,
+    workspaceActiveContextByRoot: { [root]: { kind: 'repository', repositoryId: child } },
+  })
+})
+
 test('migrates an active child repository for an open remote workspace root', async () => {
   useTempServerSettingsDir()
   const mod = await import('#/server/modules/settings-source.ts')

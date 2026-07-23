@@ -87,6 +87,7 @@ describe('repo selectors', () => {
       restorableWorkspaceStateFromStore({
         order: ['/tmp/repo'],
         activeId: '/tmp/repo',
+        activeProjectId: '/tmp/repo',
         workspaceActiveContextByRoot: {
           '/tmp/repo': { kind: 'repository', repositoryId: '/tmp/repo/api' },
         },
@@ -103,6 +104,7 @@ describe('repo selectors', () => {
     ).toEqual({
       order: ['/tmp/repo'],
       activeId: '/tmp/repo',
+      activeProjectId: '/tmp/repo',
       workspaceActiveContextByRoot: {
         '/tmp/repo': { kind: 'repository', repositoryId: '/tmp/repo/api' },
       },
@@ -122,10 +124,12 @@ describe('repo selectors', () => {
     expect(
       restorableWorkspaceNavigationStateFromStore({
         activeId: '/tmp/repo',
+        activeProjectId: '/tmp/repo',
         order: ['/tmp/repo'],
       }),
     ).toEqual({
       activeId: '/tmp/repo',
+      activeProjectId: '/tmp/repo',
       order: ['/tmp/repo'],
     })
   })
@@ -135,6 +139,7 @@ describe('repo selectors', () => {
       mainWindowWorkspaceStateEqual(
         mainWindowWorkspaceStateFromStore({
           activeId: '/tmp/repo-a',
+          activeProjectId: '/tmp/repo-a',
           order: ['/tmp/repo-a', '/tmp/repo-b'],
           detailCollapsed: false,
           workspaceLayout: 'left-right',
@@ -142,6 +147,7 @@ describe('repo selectors', () => {
         }),
         mainWindowWorkspaceStateFromStore({
           activeId: '/tmp/repo-a',
+          activeProjectId: '/tmp/repo-a',
           order: ['/tmp/repo-a', '/tmp/repo-b'],
           detailCollapsed: false,
           workspaceLayout: 'left-right',
@@ -156,10 +162,12 @@ describe('repo selectors', () => {
       navigationWorkspaceStateEqual(
         navigationWorkspaceStateFromStore({
           activeId: '/tmp/repo-a',
+          activeProjectId: '/tmp/repo-a',
           order: ['/tmp/repo-a', '/tmp/repo-b'],
         }),
         navigationWorkspaceStateFromStore({
           activeId: '/tmp/repo-a',
+          activeProjectId: '/tmp/repo-a',
           order: ['/tmp/repo-a', '/tmp/repo-b'],
         }),
       ),
