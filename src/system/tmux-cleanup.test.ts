@@ -10,6 +10,14 @@ import {
   type TmuxProcessRunner,
 } from '#/system/tmux-cleanup.ts'
 
+const mocks = vi.hoisted(() => ({
+  execa: vi.fn(),
+}))
+
+vi.mock('execa', () => ({
+  execa: mocks.execa,
+}))
+
 describe('tmux cleanup contract', () => {
   test('accepts only tmux server session ids', () => {
     expect(isValidTmuxSessionId('$0')).toBe(true)
@@ -47,6 +55,68 @@ describe('parseTmuxSessionList', () => {
 })
 
 describe('local tmux commands', () => {
+  test('resolves tmux through the login shell and reuses it when the GUI PATH cannot find it', async () => {
+    mocks.execa
+      .mockResolvedValueOnce({
+        failed: true,
+        code: 'ENOENT',
+        stdout: '',
+        stderr: '',
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: '/opt/homebrew/bin/tmux\n',
+        stderr: '',
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: 'hobgoblin-v1-aebf050981ac829e36100020\t$3\t/srv/repo',
+        stderr: '',
+      })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })
+
+    await expect(listLocalTmuxSessions()).resolves.toEqual({
+      ok: true,
+      sessions: [
+        {
+          sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+          sessionId: '$3',
+          sessionPath: '/srv/repo',
+        },
+      ],
+    })
+    expect(mocks.execa).toHaveBeenNthCalledWith(
+      2,
+      expect.stringMatching(/^\//u),
+      ['-lc', 'command -v tmux'],
+      expect.objectContaining({ reject: false }),
+    )
+    expect(mocks.execa).toHaveBeenNthCalledWith(
+      3,
+      '/opt/homebrew/bin/tmux',
+      ['list-sessions', '-F', TMUX_SESSION_LIST_FORMAT],
+      expect.objectContaining({ reject: false }),
+    )
+    await expect(killLocalTmuxSessionByName('hobgoblin-v1-aebf050981ac829e36100020')).resolves.toEqual({
+      ok: true,
+      message: '',
+    })
+    await expect(killLocalTmuxSession('$3')).resolves.toEqual({ ok: true, message: '' })
+    expect(mocks.execa).toHaveBeenNthCalledWith(
+      4,
+      '/opt/homebrew/bin/tmux',
+      ['kill-session', '-t', 'hobgoblin-v1-aebf050981ac829e36100020'],
+      expect.objectContaining({ reject: false }),
+    )
+    expect(mocks.execa).toHaveBeenNthCalledWith(
+      5,
+      '/opt/homebrew/bin/tmux',
+      ['kill-session', '-t', '$3'],
+      expect.objectContaining({ reject: false }),
+    )
+  })
+
   test('lists sessions with the protocol format', async () => {
     const run = vi.fn<TmuxProcessRunner>(async () => ({
       ok: true,

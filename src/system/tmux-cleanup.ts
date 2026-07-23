@@ -1,11 +1,14 @@
+import path from 'node:path'
 import { execa } from 'execa'
 import { isValidTmuxSessionId, type TmuxSessionRecord } from '#/shared/tmux-cleanup.ts'
 import { isHobgoblinTmuxSessionName, normalizeTmuxSessionPath } from '#/system/tmux-session.ts'
 
 const TMUX_COMMAND_TIMEOUT_MS = 15_000
+const TMUX_COMMAND = 'tmux'
 const NO_TMUX_SERVER_RE = /(?:no server running|failed to connect to server|no sessions)/iu
 const MISSING_TMUX_SESSION_RE =
   /(?:no server running|failed to connect to server|no sessions|can't find session|session not found)/iu
+let localTmuxExecutable = TMUX_COMMAND
 
 export const TMUX_SESSION_LIST_FORMAT = '#{session_name}\t#{session_id}\t#{session_path}'
 
@@ -87,22 +90,80 @@ export function isTmuxSessionMissingMessage(message: string): boolean {
 async function runLocalTmuxCommand(args: string[], signal?: AbortSignal): Promise<TmuxProcessResult> {
   if (signal?.aborted) return { ok: false, stdout: '', stderr: '', message: 'cancelled' }
   try {
-    const result = await execa('tmux', args, {
+    let result = await runLocalTmuxExecutable(localTmuxExecutable, args, signal)
+    if (isExecutableMissing(result)) {
+      const resolved = await resolveTmuxFromLoginShell(signal)
+      if (!resolved.ok) return { ...resolved, stdout: '', stderr: '' }
+      localTmuxExecutable = resolved.executable
+      result = await runLocalTmuxExecutable(localTmuxExecutable, args, signal)
+    }
+    const stdout = result.stdout.trimEnd()
+    const stderr = result.stderr.trimEnd()
+    if (isExecutableMissing(result)) {
+      return { ok: false, stdout, stderr, message: 'error.tmux-unavailable' }
+    }
+    return result.exitCode === 0
+      ? { ok: true, stdout, stderr }
+      : { ok: false, stdout, stderr, message: stderr || 'error.tmux-command-failed' }
+  } catch (error) {
+    const failure = error as {
+      cause?: { code?: unknown }
+      code?: unknown
+      isCanceled?: boolean
+      timedOut?: boolean
+      message?: string
+    }
+    if (signal?.aborted || failure.isCanceled) return { ok: false, stdout: '', stderr: '', message: 'cancelled' }
+    if (isExecutableMissing(failure)) {
+      localTmuxExecutable = TMUX_COMMAND
+      return { ok: false, stdout: '', stderr: '', message: 'error.tmux-unavailable' }
+    }
+    if (failure.timedOut) return { ok: false, stdout: '', stderr: '', message: 'timeout' }
+    return { ok: false, stdout: '', stderr: '', message: failure.message || 'error.tmux-command-failed' }
+  }
+}
+
+async function runLocalTmuxExecutable(executable: string, args: string[], signal?: AbortSignal) {
+  return await execa(executable, args, {
+    cancelSignal: signal,
+    timeout: TMUX_COMMAND_TIMEOUT_MS,
+    forceKillAfterDelay: 500,
+    reject: false,
+  })
+}
+
+async function resolveTmuxFromLoginShell(
+  signal?: AbortSignal,
+): Promise<{ ok: true; executable: string } | { ok: false; message: string }> {
+  const configuredShell = process.env.SHELL
+  const shell =
+    configuredShell && path.isAbsolute(configuredShell) && !/[\0-\x1f\x7f]/u.test(configuredShell)
+      ? configuredShell
+      : process.platform === 'darwin'
+        ? '/bin/zsh'
+        : '/bin/sh'
+  try {
+    const result = await execa(shell, ['-lc', `command -v ${TMUX_COMMAND}`], {
       cancelSignal: signal,
       timeout: TMUX_COMMAND_TIMEOUT_MS,
       forceKillAfterDelay: 500,
       reject: false,
     })
-    const stdout = result.stdout.trimEnd()
-    const stderr = result.stderr.trimEnd()
-    return result.exitCode === 0
-      ? { ok: true, stdout, stderr }
-      : { ok: false, stdout, stderr, message: stderr || 'error.tmux-command-failed' }
+    if (signal?.aborted || result.isCanceled) return { ok: false, message: 'cancelled' }
+    if (result.exitCode !== 0) return { ok: false, message: 'error.tmux-unavailable' }
+    const executable = result.stdout.trim().split(/\r?\n/u).at(-1)?.trim()
+    return executable && path.isAbsolute(executable) && !/[\0-\x1f\x7f]/u.test(executable)
+      ? { ok: true, executable }
+      : { ok: false, message: 'error.tmux-unavailable' }
   } catch (error) {
-    const failure = error as { code?: unknown; isCanceled?: boolean; timedOut?: boolean; message?: string }
-    if (signal?.aborted || failure.isCanceled) return { ok: false, stdout: '', stderr: '', message: 'cancelled' }
-    if (failure.code === 'ENOENT') return { ok: false, stdout: '', stderr: '', message: 'error.tmux-unavailable' }
-    if (failure.timedOut) return { ok: false, stdout: '', stderr: '', message: 'timeout' }
-    return { ok: false, stdout: '', stderr: '', message: failure.message || 'error.tmux-command-failed' }
+    const failure = error as { isCanceled?: boolean; timedOut?: boolean }
+    if (signal?.aborted || failure.isCanceled) return { ok: false, message: 'cancelled' }
+    return { ok: false, message: failure.timedOut ? 'timeout' : 'error.tmux-unavailable' }
   }
+}
+
+function isExecutableMissing(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  const failure = value as { cause?: { code?: unknown }; code?: unknown }
+  return failure.code === 'ENOENT' || failure.cause?.code === 'ENOENT'
 }
