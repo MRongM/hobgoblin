@@ -90,13 +90,12 @@ describe('useAssociatedTmuxCleanup', () => {
     expect(mocks.toastInfo).not.toHaveBeenCalled()
   })
 
-  test('confirms listed session names and executes only previewed ids', async () => {
+  test('confirms listed session names and executes only previewed names', async () => {
     mocks.preview.mockResolvedValue({
       ok: true,
       targetPath: '/work/feature',
       sessions: [
         {
-          sessionId: '$1',
           sessionName: 'hobgoblin-v1-0123456789abcdef01234567',
           sessionPath: '/work/feature',
         },
@@ -107,12 +106,11 @@ describe('useAssociatedTmuxCleanup', () => {
       targetPath: '/work/feature',
       deleted: [
         {
-          sessionId: '$1',
           sessionName: 'hobgoblin-v1-0123456789abcdef01234567',
           sessionPath: '/work/feature',
         },
       ],
-      missingSessionIds: [],
+      missingSessionNames: [],
       failed: [],
     })
     renderHarness('/work/repo')
@@ -125,7 +123,7 @@ describe('useAssociatedTmuxCleanup', () => {
     expect(mocks.cleanup).toHaveBeenCalledWith({
       projectRoot: '/work/repo',
       itemPath: '/work/feature',
-      approvedSessionIds: ['$1'],
+      approvedSessionNames: ['hobgoblin-v1-0123456789abcdef01234567'],
     })
     expect(mocks.toastSuccess).toHaveBeenCalledWith('tmux.cleanup.success:1')
   })
@@ -135,18 +133,16 @@ describe('useAssociatedTmuxCleanup', () => {
       ok: true,
       targetPath: '/work/feature',
       sessions: [
-        { sessionId: '$1', sessionName: 'hobgoblin-v1-0123456789abcdef01234567', sessionPath: '/work/feature' },
-        { sessionId: '$2', sessionName: 'hobgoblin-v1-89abcdef0123456789abcdef', sessionPath: '/work/feature' },
+        { sessionName: 'hobgoblin-v1-0123456789abcdef01234567', sessionPath: '/work/feature' },
+        { sessionName: 'hobgoblin-v1-89abcdef0123456789abcdef', sessionPath: '/work/feature' },
       ],
     })
     mocks.cleanup.mockResolvedValue({
       ok: true,
       targetPath: '/work/feature',
-      deleted: [
-        { sessionId: '$1', sessionName: 'hobgoblin-v1-0123456789abcdef01234567', sessionPath: '/work/feature' },
-      ],
-      missingSessionIds: [],
-      failed: [{ sessionId: '$2', sessionName: 'hobgoblin-v1-89abcdef0123456789abcdef', message: 'denied' }],
+      deleted: [{ sessionName: 'hobgoblin-v1-0123456789abcdef01234567', sessionPath: '/work/feature' }],
+      missingSessionNames: [],
+      failed: [{ sessionName: 'hobgoblin-v1-89abcdef0123456789abcdef', message: 'denied' }],
     })
     renderHarness('/work/repo')
 
