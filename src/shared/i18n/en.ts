@@ -1065,6 +1065,13 @@ export const en = {
   'settings.telegram.output-completion-enabled': 'Terminal run completed',
   'settings.telegram.output-completion-enabled-hint':
     'Send Telegram whenever the terminal activity indicator changes from active to idle.',
+  'settings.telegram.output-completion-min-activity': 'Completion notification minimum activity',
+  'settings.telegram.output-completion-min-activity-hint':
+    'Send a Telegram completion notification only when terminal output activity lasts at least this long. This does not affect the terminal activity indicator.',
+  'settings.telegram.output-completion-min-activity-low': 'Low · 1s',
+  'settings.telegram.output-completion-min-activity-medium': 'Medium · 10s',
+  'settings.telegram.output-completion-min-activity-high': 'High · 30s',
+  'settings.telegram.output-completion-min-activity-unit': 'seconds',
   'settings.telegram.include-terminal-output': 'Include terminal output',
   'settings.telegram.include-terminal-output-hint':
     'Append trailing visible terminal output. Terminal output may contain sensitive information.',
@@ -1172,8 +1179,7 @@ export const en = {
   'settings.terminal-tmux.title': 'Tmux sessions',
   'settings.terminal-tmux.hint': 'Control whether local and remote terminal launches use tmux.',
   'settings.terminal-tmux.local': 'Use tmux for local terminals',
-  'settings.terminal-tmux.local-hint':
-    'Applies to in-app terminals and supported external terminals on this computer.',
+  'settings.terminal-tmux.local-hint': 'Applies to in-app terminals and supported external terminals on this computer.',
   'settings.terminal-tmux.remote': 'Use tmux for remote terminals',
   'settings.terminal-tmux.remote-hint':
     'Applies to in-app terminals and supported external terminals opened through SSH.',

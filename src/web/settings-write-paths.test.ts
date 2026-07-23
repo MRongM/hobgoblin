@@ -79,6 +79,7 @@ const appDataClientMocks = vi.hoisted(() => ({
     chatId: input.chatId,
     bellEnabled: input.bellEnabled,
     outputCompletionEnabled: input.outputCompletionEnabled,
+    outputCompletionMinimumActivitySeconds: input.outputCompletionMinimumActivitySeconds,
     includeTerminalOutput: input.includeTerminalOutput,
     outputTailLength: input.outputTailLength,
   })),
@@ -213,6 +214,7 @@ describe('settings write paths', () => {
       chatId: input.chatId,
       bellEnabled: input.bellEnabled,
       outputCompletionEnabled: input.outputCompletionEnabled,
+      outputCompletionMinimumActivitySeconds: input.outputCompletionMinimumActivitySeconds,
       includeTerminalOutput: input.includeTerminalOutput,
       outputTailLength: input.outputTailLength,
     }))
@@ -363,6 +365,7 @@ describe('settings write paths', () => {
       chatId: '-100123',
       bellEnabled: true,
       outputCompletionEnabled: true,
+      outputCompletionMinimumActivitySeconds: 30,
       includeTerminalOutput: true,
       outputTailLength: 400,
     }
@@ -374,6 +377,7 @@ describe('settings write paths', () => {
       chatId: '-100123',
       bellEnabled: true,
       outputCompletionEnabled: true,
+      outputCompletionMinimumActivitySeconds: 30,
       includeTerminalOutput: true,
       outputTailLength: 400,
     })
@@ -385,6 +389,7 @@ describe('settings write paths', () => {
         chatId: '-100123',
         bellEnabled: true,
         outputCompletionEnabled: true,
+        outputCompletionMinimumActivitySeconds: 30,
         includeTerminalOutput: true,
         outputTailLength: 400,
       },

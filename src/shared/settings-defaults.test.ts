@@ -73,6 +73,7 @@ describe('settings defaults', () => {
       chatId: '',
       bellEnabled: true,
       outputCompletionEnabled: false,
+      outputCompletionMinimumActivitySeconds: 10,
       includeTerminalOutput: false,
       outputTailLength: 400,
     })

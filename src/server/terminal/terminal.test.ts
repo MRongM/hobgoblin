@@ -8,6 +8,7 @@ import {
   closeServerTerminalSessions,
   closeServerTerminal,
   createServerTerminal,
+  getServerTerminalOutputExcerpt,
   getServerTerminalSessionSnapshot,
   handleRealtimeServerMessage,
   listServerTerminalSessions,
@@ -1306,6 +1307,19 @@ describe('server terminal sessions', () => {
 
     unregisterTerminalSocket('client_1', 'attachment_a', socketA)
     unregisterTerminalSocket('client_2', 'attachment_b', socketB)
+  })
+
+  test('returns a bounded canonical output excerpt for a valid server session', async () => {
+    const sessionId = await createTerminalSession('client_1')
+    mockPtys[0]?.emitData('build passed')
+
+    await expect(getServerTerminalOutputExcerpt({ sessionId, maxCharacters: 400 })).resolves.toMatchObject({
+      sessionId,
+      output: 'build passed',
+      sequence: 1,
+    })
+    await expect(getServerTerminalOutputExcerpt({ sessionId: 'invalid', maxCharacters: 400 })).resolves.toBeNull()
+    await expect(getServerTerminalOutputExcerpt({ sessionId, maxCharacters: 4_097 })).resolves.toBeNull()
   })
 
   test('cleans up disconnected sessions after the reconnect grace period elapses', async () => {

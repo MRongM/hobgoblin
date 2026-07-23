@@ -276,7 +276,47 @@ describe('TerminalSessionRegistry', () => {
         vi.advanceTimersByTime(1)
         expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]?.isOutputActive).toBe(false)
         expect(outputCompletions).toEqual([
-          expect.objectContaining({ sessionId: 'session-a', finalOutputSeq: 1_000, outputTail: 'tickticktickticktickticktickticktickticktick' }),
+          expect.objectContaining({
+            sessionId: 'session-a',
+            finalOutputSeq: 1_000,
+            activityDurationMs: 1_000,
+          }),
+        ])
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    test('measures consecutive output activity periods independently', () => {
+      vi.useFakeTimers()
+      try {
+        registry.setRepoIndex(makeRepoIndex())
+        registry.reconcileServerSessions(
+          REPO_ROOT,
+          [makeServerSession('session-a', 'terminal-1')],
+          'attachment_local',
+          new Map(),
+        )
+
+        const emitBurst = (sequenceBase: number, durationMs: number) => {
+          for (let elapsed = 0; elapsed <= durationMs; elapsed += 1_000) {
+            registry.handleOutput({
+              sessionId: 'session-a',
+              data: 'tick',
+              seq: sequenceBase + elapsed,
+              processName: 'bash',
+            })
+            if (elapsed < durationMs) vi.advanceTimersByTime(1_000)
+          }
+          vi.advanceTimersByTime(1_200)
+        }
+
+        emitBurst(0, 10_000)
+        emitBurst(100_000, 30_000)
+
+        expect(outputCompletions).toEqual([
+          expect.objectContaining({ activityDurationMs: 10_000 }),
+          expect.objectContaining({ activityDurationMs: 30_000 }),
         ])
       } finally {
         vi.useRealTimers()

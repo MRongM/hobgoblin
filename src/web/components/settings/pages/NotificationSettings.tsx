@@ -18,9 +18,17 @@ import {
 import { useT } from '#/web/stores/i18n.ts'
 import { terminalBridge } from '#/web/terminal.ts'
 import {
+  TELEGRAM_OUTPUT_COMPLETION_MAX_ACTIVITY_SECONDS,
+  TELEGRAM_OUTPUT_COMPLETION_MIN_ACTIVITY_SECONDS,
   TELEGRAM_OUTPUT_TAIL_MAX_LENGTH,
   TELEGRAM_OUTPUT_TAIL_MIN_LENGTH,
 } from '#/shared/telegram-notifications.ts'
+
+const TELEGRAM_ACTIVITY_DURATION_PRESETS = [
+  { seconds: 1, label: 'settings.telegram.output-completion-min-activity-low' },
+  { seconds: 10, label: 'settings.telegram.output-completion-min-activity-medium' },
+  { seconds: 30, label: 'settings.telegram.output-completion-min-activity-high' },
+] as const
 
 export function NotificationSettings() {
   const t = useT()
@@ -33,6 +41,9 @@ export function NotificationSettings() {
   const [telegramBellEnabled, setTelegramBellEnabled] = useState(telegramSettings.bellEnabled)
   const [telegramOutputCompletionEnabled, setTelegramOutputCompletionEnabled] = useState(
     telegramSettings.outputCompletionEnabled,
+  )
+  const [telegramOutputCompletionMinimumActivitySeconds, setTelegramOutputCompletionMinimumActivitySeconds] = useState(
+    telegramSettings.outputCompletionMinimumActivitySeconds,
   )
   const [telegramIncludeTerminalOutput, setTelegramIncludeTerminalOutput] = useState(
     telegramSettings.includeTerminalOutput,
@@ -49,6 +60,7 @@ export function NotificationSettings() {
     setTelegramEnabled(telegramSettings.enabled)
     setTelegramBellEnabled(telegramSettings.bellEnabled)
     setTelegramOutputCompletionEnabled(telegramSettings.outputCompletionEnabled)
+    setTelegramOutputCompletionMinimumActivitySeconds(telegramSettings.outputCompletionMinimumActivitySeconds)
     setTelegramIncludeTerminalOutput(telegramSettings.includeTerminalOutput)
     setTelegramOutputTailLength(telegramSettings.outputTailLength)
     setBotTokenConfigured(telegramSettings.botTokenConfigured)
@@ -62,6 +74,7 @@ export function NotificationSettings() {
     telegramSettings.enabled,
     telegramSettings.includeTerminalOutput,
     telegramSettings.outputCompletionEnabled,
+    telegramSettings.outputCompletionMinimumActivitySeconds,
     telegramSettings.outputTailLength,
   ])
 
@@ -71,6 +84,7 @@ export function NotificationSettings() {
     telegramEnabled !== telegramSettings.enabled ||
     telegramBellEnabled !== telegramSettings.bellEnabled ||
     telegramOutputCompletionEnabled !== telegramSettings.outputCompletionEnabled ||
+    telegramOutputCompletionMinimumActivitySeconds !== telegramSettings.outputCompletionMinimumActivitySeconds ||
     telegramIncludeTerminalOutput !== telegramSettings.includeTerminalOutput ||
     telegramOutputTailLength !== telegramSettings.outputTailLength ||
     normalizedChatId !== telegramSettings.chatId ||
@@ -112,6 +126,7 @@ export function NotificationSettings() {
       chatId: normalizedChatId,
       bellEnabled: telegramBellEnabled,
       outputCompletionEnabled: telegramOutputCompletionEnabled,
+      outputCompletionMinimumActivitySeconds: telegramOutputCompletionMinimumActivitySeconds,
       includeTerminalOutput: telegramIncludeTerminalOutput,
       outputTailLength: telegramOutputTailLength,
     })
@@ -124,6 +139,7 @@ export function NotificationSettings() {
     setTelegramEnabled(saved.enabled)
     setTelegramBellEnabled(saved.bellEnabled)
     setTelegramOutputCompletionEnabled(saved.outputCompletionEnabled)
+    setTelegramOutputCompletionMinimumActivitySeconds(saved.outputCompletionMinimumActivitySeconds)
     setTelegramIncludeTerminalOutput(saved.includeTerminalOutput)
     setTelegramOutputTailLength(saved.outputTailLength)
     setBotTokenConfigured(saved.botTokenConfigured)
@@ -221,6 +237,36 @@ export function NotificationSettings() {
                 onCheckedChange={setTelegramOutputCompletionEnabled}
                 aria-label={t('settings.telegram.output-completion-enabled')}
               />
+            }
+          />
+          <SettingsRow
+            controlId="settings-telegram-output-completion-min-activity"
+            label={t('settings.telegram.output-completion-min-activity')}
+            hint={t('settings.telegram.output-completion-min-activity-hint')}
+            control={
+              <div className="flex flex-wrap items-center justify-end gap-1.5">
+                {TELEGRAM_ACTIVITY_DURATION_PRESETS.map(({ seconds, label }) => (
+                  <Button
+                    key={seconds}
+                    type="button"
+                    size="sm"
+                    variant={telegramOutputCompletionMinimumActivitySeconds === seconds ? 'default' : 'outline'}
+                    onClick={() => setTelegramOutputCompletionMinimumActivitySeconds(seconds)}
+                  >
+                    {t(label)}
+                  </Button>
+                ))}
+                <SettingsNumberInput
+                  id="settings-telegram-output-completion-min-activity"
+                  min={TELEGRAM_OUTPUT_COMPLETION_MIN_ACTIVITY_SECONDS}
+                  max={TELEGRAM_OUTPUT_COMPLETION_MAX_ACTIVITY_SECONDS}
+                  value={telegramOutputCompletionMinimumActivitySeconds}
+                  onChange={setTelegramOutputCompletionMinimumActivitySeconds}
+                />
+                <span className="text-xs text-muted-foreground">
+                  {t('settings.telegram.output-completion-min-activity-unit')}
+                </span>
+              </div>
             }
           />
           <SettingsRow

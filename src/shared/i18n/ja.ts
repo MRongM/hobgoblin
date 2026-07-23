@@ -1072,6 +1072,13 @@ export const ja: Record<DictKey, string> = {
   'settings.telegram.output-completion-enabled': 'ターミナル実行終了',
   'settings.telegram.output-completion-enabled-hint':
     'ターミナルのアクティビティ表示が実行中からアイドルに変わるたびに送信します。',
+  'settings.telegram.output-completion-min-activity': '完了通知の最小アクティビティ時間',
+  'settings.telegram.output-completion-min-activity-hint':
+    'ターミナル出力のアクティビティがこの時間以上続いた場合のみ、Telegram の完了通知を送信します。ターミナルのアクティビティインジケーターには影響しません。',
+  'settings.telegram.output-completion-min-activity-low': '低 · 1秒',
+  'settings.telegram.output-completion-min-activity-medium': '中 · 10秒',
+  'settings.telegram.output-completion-min-activity-high': '高 · 30秒',
+  'settings.telegram.output-completion-min-activity-unit': '秒',
   'settings.telegram.include-terminal-output': 'ターミナル出力を含める',
   'settings.telegram.include-terminal-output-hint':
     '末尾の表示可能なターミナル出力を追加します。機密情報が含まれる場合があります。',
@@ -1180,11 +1187,9 @@ export const ja: Record<DictKey, string> = {
   'settings.terminal-tmux.title': 'Tmux セッション',
   'settings.terminal-tmux.hint': 'ローカルとリモートのターミナルで tmux を使用するか個別に設定します。',
   'settings.terminal-tmux.local': 'ローカルターミナルで tmux を使用',
-  'settings.terminal-tmux.local-hint':
-    'このコンピューターのアプリ内ターミナルと対応する外部ターミナルに適用します。',
+  'settings.terminal-tmux.local-hint': 'このコンピューターのアプリ内ターミナルと対応する外部ターミナルに適用します。',
   'settings.terminal-tmux.remote': 'リモートターミナルで tmux を使用',
-  'settings.terminal-tmux.remote-hint':
-    'SSH 経由で開くアプリ内ターミナルと対応する外部ターミナルに適用します。',
+  'settings.terminal-tmux.remote-hint': 'SSH 経由で開くアプリ内ターミナルと対応する外部ターミナルに適用します。',
   'settings.terminal-custom-buttons.title': 'カスタムターミナルボタン',
   'settings.terminal-custom-buttons.hint':
     'ターミナル下部のボタンバーを表示します。ボタンはすぐ実行するか、編集できるようターミナル入力行へ入力できます。',

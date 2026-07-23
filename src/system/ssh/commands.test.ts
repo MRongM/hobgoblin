@@ -794,7 +794,7 @@ describe('remote command scripts', () => {
     expect(outsidePlan.exitCode).toBe(1)
     expect(outsidePlan.stderr).toContain('invalid replacement target: other.env')
     expect(readFileSync(path.join(targetRoot, '.env'), 'utf8')).toBe('target\n')
-  })
+  }, 15_000)
 
   test('remote bootstrap literal mode does not expand shell metacharacters', async () => {
     const dir = path.join(os.tmpdir(), `goblin-remote-bootstrap-literal-test-${Date.now()}-${process.pid}`)

@@ -142,7 +142,12 @@ export function createApp(options: ServerAppOptions): Hono {
   app.use('/api/workspace/*', capabilityMiddleware)
   app.use('/api/port-forwarding/*', capabilityMiddleware)
   app.route('/api/settings', createSettingsRoutes(settingsState, { revokeAllWebSessions: webAccessAuth.revokeAll }))
-  app.route('/api/telegram-notifications', createTelegramNotificationRoutes())
+  app.route(
+    '/api/telegram-notifications',
+    createTelegramNotificationRoutes({
+      readTerminalOutputExcerpt: (input) => Promise.resolve(options.terminalHost.getOutputExcerpt(input)),
+    }),
+  )
   app.route('/api/remote', createRemoteRoutes())
   app.route('/api/repo', createRepoRoutes())
   app.route('/api/workspace', createWorkspaceRoutes({ terminalHost: options.terminalHost, terminalClientId }))

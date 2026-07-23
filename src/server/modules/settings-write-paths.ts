@@ -71,6 +71,7 @@ export async function applyServerTelegramNotificationSettingsWrite(
     chatId?: unknown
     bellEnabled?: unknown
     outputCompletionEnabled?: unknown
+    outputCompletionMinimumActivitySeconds?: unknown
     includeTerminalOutput?: unknown
     outputTailLength?: unknown
   } | null
@@ -80,6 +81,10 @@ export async function applyServerTelegramNotificationSettingsWrite(
     chatId: typeof input?.chatId === 'string' ? input.chatId : '',
     bellEnabled: input?.bellEnabled === true,
     outputCompletionEnabled: input?.outputCompletionEnabled === true,
+    outputCompletionMinimumActivitySeconds:
+      typeof input?.outputCompletionMinimumActivitySeconds === 'number'
+        ? input.outputCompletionMinimumActivitySeconds
+        : Number.NaN,
     includeTerminalOutput: input?.includeTerminalOutput === true,
     outputTailLength: typeof input?.outputTailLength === 'number' ? input.outputTailLength : Number.NaN,
   })

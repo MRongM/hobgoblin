@@ -174,6 +174,7 @@ describe('settings write paths', () => {
       chatId: '-100123',
       bellEnabled: true,
       outputCompletionEnabled: true,
+      outputCompletionMinimumActivitySeconds: 30,
       includeTerminalOutput: true,
       outputTailLength: 1024,
     }
@@ -187,6 +188,7 @@ describe('settings write paths', () => {
         chatId: '-100123',
         bellEnabled: true,
         outputCompletionEnabled: true,
+        outputCompletionMinimumActivitySeconds: 30,
         includeTerminalOutput: true,
         outputTailLength: 1024,
       }),
@@ -197,6 +199,7 @@ describe('settings write paths', () => {
       chatId: '-100123',
       bellEnabled: true,
       outputCompletionEnabled: true,
+      outputCompletionMinimumActivitySeconds: 30,
       includeTerminalOutput: true,
       outputTailLength: 1024,
     })

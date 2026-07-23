@@ -24,6 +24,8 @@ import {
   type TerminalClientMessage,
   type TerminalMutationResult,
   type TerminalNotifyBellInput,
+  type TerminalOutputExcerpt,
+  type TerminalOutputExcerptInput,
   type TerminalReorderInput,
   type TerminalResizeInput,
   type TerminalRestartInput,
@@ -332,6 +334,14 @@ export async function getServerTerminalSessionSnapshot(
   if (!isValidTerminalClientId(clientId)) return null
   if (!isValidTerminalSessionId(input?.sessionId)) return null
   return await manager.snapshotSession(input.sessionId)
+}
+
+export async function getServerTerminalOutputExcerpt(
+  input: TerminalOutputExcerptInput,
+): Promise<TerminalOutputExcerpt | null> {
+  if (!isValidTerminalSessionId(input?.sessionId)) return null
+  if (!Number.isInteger(input?.maxCharacters) || input.maxCharacters < 1 || input.maxCharacters > 4_096) return null
+  return await manager.outputExcerpt(input.sessionId, input.maxCharacters)
 }
 
 export function reorderServerTerminals(clientId: string, input: TerminalReorderInput): TerminalMutationResult {

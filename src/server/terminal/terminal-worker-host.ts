@@ -8,6 +8,8 @@ import type {
   TerminalCreateInput,
   TerminalMutationResult,
   TerminalNotifyBellInput,
+  TerminalOutputExcerpt,
+  TerminalOutputExcerptInput,
   TerminalResizeInput,
   TerminalRestartInput,
   TerminalSessionInput,
@@ -179,6 +181,10 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
 
   getSessionSnapshot(clientId: string, input: TerminalSessionSnapshotInput): Promise<TerminalSessionSnapshot | null> {
     return this.request('session-snapshot', clientId, input)
+  }
+
+  getOutputExcerpt(input: TerminalOutputExcerptInput): Promise<TerminalOutputExcerpt | null> {
+    return this.request('output-excerpt', 'server', input)
   }
 
   handleRealtimeMessage(clientId: string, attachmentId: string, socket: ServerTerminalSocket, message: string): void {

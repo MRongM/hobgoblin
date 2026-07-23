@@ -80,6 +80,9 @@ import { DEFAULT_TOPBAR_HEIGHT_PX, DEFAULT_TOOLBAR_HEIGHT_PX, normalizeChromeHei
 import {
   TELEGRAM_BOT_TOKEN_MAX_LENGTH,
   TELEGRAM_CHAT_ID_MAX_LENGTH,
+  TELEGRAM_OUTPUT_COMPLETION_DEFAULT_ACTIVITY_SECONDS,
+  TELEGRAM_OUTPUT_COMPLETION_MAX_ACTIVITY_SECONDS,
+  TELEGRAM_OUTPUT_COMPLETION_MIN_ACTIVITY_SECONDS,
   TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH,
   TELEGRAM_OUTPUT_TAIL_MAX_LENGTH,
   TELEGRAM_OUTPUT_TAIL_MIN_LENGTH,
@@ -126,6 +129,7 @@ interface ServerSettingsData {
   telegramNotificationsEnabled: boolean
   telegramBellNotificationsEnabled: boolean
   telegramOutputCompletionNotificationsEnabled: boolean
+  telegramOutputCompletionMinimumActivitySeconds: number
   telegramIncludeTerminalOutput: boolean
   telegramOutputTailLength: number
   telegramBotToken: string
@@ -338,10 +342,19 @@ function normalizeTelegramChatId(value: unknown): string {
 
 function normalizeTelegramOutputTailLength(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH
-  return Math.max(
-    TELEGRAM_OUTPUT_TAIL_MIN_LENGTH,
-    Math.min(TELEGRAM_OUTPUT_TAIL_MAX_LENGTH, Math.round(value)),
-  )
+  return Math.max(TELEGRAM_OUTPUT_TAIL_MIN_LENGTH, Math.min(TELEGRAM_OUTPUT_TAIL_MAX_LENGTH, Math.round(value)))
+}
+
+function normalizeTelegramOutputCompletionMinimumActivitySeconds(value: unknown): number {
+  if (
+    typeof value !== 'number' ||
+    !Number.isInteger(value) ||
+    value < TELEGRAM_OUTPUT_COMPLETION_MIN_ACTIVITY_SECONDS ||
+    value > TELEGRAM_OUTPUT_COMPLETION_MAX_ACTIVITY_SECONDS
+  ) {
+    return TELEGRAM_OUTPUT_COMPLETION_DEFAULT_ACTIVITY_SECONDS
+  }
+  return value
 }
 
 function telegramNotificationSettingsFromData(data: ServerSettingsData): TelegramNotificationSettingsSnapshot {
@@ -352,6 +365,7 @@ function telegramNotificationSettingsFromData(data: ServerSettingsData): Telegra
     chatId: data.telegramChatId,
     bellEnabled: data.telegramBellNotificationsEnabled,
     outputCompletionEnabled: data.telegramOutputCompletionNotificationsEnabled,
+    outputCompletionMinimumActivitySeconds: data.telegramOutputCompletionMinimumActivitySeconds,
     includeTerminalOutput: data.telegramIncludeTerminalOutput,
     outputTailLength: data.telegramOutputTailLength,
   }
@@ -669,8 +683,10 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       telegramNotificationsEnabled:
         parsed.telegramNotificationsEnabled === true && Boolean(telegramBotToken && telegramChatId),
       telegramBellNotificationsEnabled: parsed.telegramBellNotificationsEnabled !== false,
-      telegramOutputCompletionNotificationsEnabled:
-        parsed.telegramOutputCompletionNotificationsEnabled === true,
+      telegramOutputCompletionNotificationsEnabled: parsed.telegramOutputCompletionNotificationsEnabled === true,
+      telegramOutputCompletionMinimumActivitySeconds: normalizeTelegramOutputCompletionMinimumActivitySeconds(
+        parsed.telegramOutputCompletionMinimumActivitySeconds,
+      ),
       telegramIncludeTerminalOutput: parsed.telegramIncludeTerminalOutput === true,
       telegramOutputTailLength: normalizeTelegramOutputTailLength(parsed.telegramOutputTailLength),
       telegramBotToken,
@@ -701,6 +717,7 @@ async function loadServerSettings(): Promise<ServerSettingsData> {
       telegramNotificationsEnabled: false,
       telegramBellNotificationsEnabled: true,
       telegramOutputCompletionNotificationsEnabled: false,
+      telegramOutputCompletionMinimumActivitySeconds: TELEGRAM_OUTPUT_COMPLETION_DEFAULT_ACTIVITY_SECONDS,
       telegramIncludeTerminalOutput: false,
       telegramOutputTailLength: TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH,
       telegramBotToken: '',
@@ -763,6 +780,9 @@ export async function updateServerTelegramNotificationSettings(
     throw new TelegramNotificationSettingsError('configuration-incomplete')
   }
   if (
+    !Number.isInteger(input.outputCompletionMinimumActivitySeconds) ||
+    input.outputCompletionMinimumActivitySeconds < TELEGRAM_OUTPUT_COMPLETION_MIN_ACTIVITY_SECONDS ||
+    input.outputCompletionMinimumActivitySeconds > TELEGRAM_OUTPUT_COMPLETION_MAX_ACTIVITY_SECONDS ||
     !Number.isInteger(input.outputTailLength) ||
     input.outputTailLength < TELEGRAM_OUTPUT_TAIL_MIN_LENGTH ||
     input.outputTailLength > TELEGRAM_OUTPUT_TAIL_MAX_LENGTH
@@ -773,6 +793,7 @@ export async function updateServerTelegramNotificationSettings(
   data.telegramNotificationsEnabled = input.enabled === true
   data.telegramBellNotificationsEnabled = input.bellEnabled === true
   data.telegramOutputCompletionNotificationsEnabled = input.outputCompletionEnabled === true
+  data.telegramOutputCompletionMinimumActivitySeconds = input.outputCompletionMinimumActivitySeconds
   data.telegramIncludeTerminalOutput = input.includeTerminalOutput === true
   data.telegramOutputTailLength = input.outputTailLength
   data.telegramBotToken = botToken

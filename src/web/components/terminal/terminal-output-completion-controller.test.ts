@@ -12,7 +12,6 @@ const mocks = vi.hoisted(() => ({
     context: 'api',
     directory: '/repo',
     terminalIndex: 1,
-    outputTail: 'done',
   })),
 }))
 
@@ -25,7 +24,7 @@ vi.mock('#/web/components/terminal/terminal-notification-context.ts', () => ({
   terminalNotificationContext: mocks.context,
 }))
 
-const intent: TerminalOutputCompletionIntent = {
+const intent: TerminalOutputCompletionIntent & { activityDurationMs: number } = {
   descriptor: {
     key: 'terminal-key',
     worktreeTerminalKey: 'worktree-key',
@@ -37,8 +36,8 @@ const intent: TerminalOutputCompletionIntent = {
   },
   sessionId: 'session-1',
   finalOutputSeq: 42,
+  activityDurationMs: 10_000,
   processName: 'bun',
-  outputTail: 'done',
 }
 
 describe('terminal output completion controller', () => {
@@ -51,56 +50,44 @@ describe('terminal output completion controller', () => {
       chatId: '-100123',
       bellEnabled: true,
       outputCompletionEnabled: true,
+      outputCompletionMinimumActivitySeconds: 10,
       includeTerminalOutput: true,
       outputTailLength: 400,
     })
   })
 
   test('sends completion context independently of terminal focus', async () => {
-    const { notifyTerminalOutputCompletion } = await import(
-      '#/web/components/terminal/terminal-output-completion-controller.ts'
-    )
+    const { notifyTerminalOutputCompletion } =
+      await import('#/web/components/terminal/terminal-output-completion-controller.ts')
     notifyTerminalOutputCompletion(intent)
     await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(1))
     expect(mocks.send).toHaveBeenCalledWith(
-      expect.objectContaining({ sessionId: 'session-1', finalOutputSeq: 42, outputTail: 'done' }),
+      expect.objectContaining({
+        sessionId: 'session-1',
+        finalOutputSeq: 42,
+        activityDurationMs: 10_000,
+      }),
     )
-  })
-
-  test('omits output when terminal output inclusion is disabled', async () => {
-    mocks.getTelegramSettings.mockReturnValue({
-      ...mocks.getTelegramSettings(),
-      includeTerminalOutput: false,
-    })
-    const { notifyTerminalOutputCompletion } = await import(
-      '#/web/components/terminal/terminal-output-completion-controller.ts'
-    )
-    notifyTerminalOutputCompletion(intent)
-    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(1))
     expect(mocks.send.mock.calls[0]?.[0]).not.toHaveProperty('outputTail')
   })
 
-  test('sends only the configured terminal output suffix', async () => {
-    mocks.context.mockReturnValue({
-      terminalKey: 'terminal-key',
-      project: 'api',
-      contextKind: 'directory',
-      context: 'api',
-      directory: '/repo',
-      terminalIndex: 1,
-      outputTail: 'abc🙂de',
-    })
-    mocks.getTelegramSettings.mockReturnValue({
-      ...mocks.getTelegramSettings(),
-      outputTailLength: 3,
-    })
-    const { notifyTerminalOutputCompletion } = await import(
-      '#/web/components/terminal/terminal-output-completion-controller.ts'
-    )
+  test('sends only activity periods at or above the configured minimum', async () => {
+    const { notifyTerminalOutputCompletion } =
+      await import('#/web/components/terminal/terminal-output-completion-controller.ts')
 
-    notifyTerminalOutputCompletion(intent)
+    notifyTerminalOutputCompletion({ ...intent, activityDurationMs: 9_999 })
+    expect(mocks.send).not.toHaveBeenCalled()
 
+    notifyTerminalOutputCompletion({ ...intent, activityDurationMs: 10_000 })
     await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(1))
-    expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({ outputTail: '🙂de' }))
+    expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({ activityDurationMs: 10_000 }))
+  })
+
+  test('never transports renderer output even when inclusion is enabled', async () => {
+    const { notifyTerminalOutputCompletion } =
+      await import('#/web/components/terminal/terminal-output-completion-controller.ts')
+    notifyTerminalOutputCompletion(intent)
+    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(1))
+    expect(mocks.send.mock.calls[0]?.[0]).not.toHaveProperty('outputTail')
   })
 })

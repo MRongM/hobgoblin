@@ -2602,7 +2602,12 @@ describe('ManagedTerminalSession', () => {
     await flushUntil(() => session.snapshot().phase === 'open')
 
     xtermMocks.terminals[0]!.emitBell()
-    expect(onBell).toHaveBeenCalledWith(descriptor, { processName: 'zsh', canonicalTitle: null, visible: true })
+    expect(onBell).toHaveBeenCalledWith(descriptor, {
+      sessionId: 'session-1',
+      processName: 'zsh',
+      canonicalTitle: null,
+      visible: true,
+    })
   })
 
   test('emits bell events for BEL output when no xterm view is attached', () => {
@@ -2616,10 +2621,10 @@ describe('ManagedTerminalSession', () => {
 
     session.handleOutput({ sessionId: 'session-1', data: 'done\x07', seq: 2, processName: 'claude' })
     expect(onBell).toHaveBeenCalledWith(descriptor, {
+      sessionId: 'session-1',
       processName: 'claude',
       canonicalTitle: null,
       visible: false,
-      outputTail: 'working…done',
     })
   })
 
@@ -2631,10 +2636,10 @@ describe('ManagedTerminalSession', () => {
 
     session.handleOutput({ sessionId: 'session-1', data: 'finished\x07', seq: 1, processName: 'zsh' })
     expect(onBell).toHaveBeenCalledWith(descriptor, {
+      sessionId: 'session-1',
       processName: 'zsh',
       canonicalTitle: null,
       visible: false,
-      outputTail: 'finished',
     })
   })
 

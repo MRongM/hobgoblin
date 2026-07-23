@@ -1054,6 +1054,13 @@ export const ko: Record<DictKey, string> = {
   'settings.telegram.output-completion-enabled': '터미널 실행 종료',
   'settings.telegram.output-completion-enabled-hint':
     '터미널 활동 표시가 실행 중에서 유휴 상태로 바뀔 때마다 전송합니다.',
+  'settings.telegram.output-completion-min-activity': '완료 알림 최소 활동 시간',
+  'settings.telegram.output-completion-min-activity-hint':
+    '터미널 출력 활동이 이 시간 이상 지속된 경우에만 Telegram 완료 알림을 보냅니다. 터미널 활동 표시기에는 영향을 주지 않습니다.',
+  'settings.telegram.output-completion-min-activity-low': '낮음 · 1초',
+  'settings.telegram.output-completion-min-activity-medium': '중간 · 10초',
+  'settings.telegram.output-completion-min-activity-high': '높음 · 30초',
+  'settings.telegram.output-completion-min-activity-unit': '초',
   'settings.telegram.include-terminal-output': '터미널 출력 포함',
   'settings.telegram.include-terminal-output-hint':
     '마지막으로 표시된 터미널 출력을 추가합니다. 민감한 정보가 포함될 수 있습니다.',
@@ -1162,11 +1169,9 @@ export const ko: Record<DictKey, string> = {
   'settings.terminal-tmux.title': 'Tmux 세션',
   'settings.terminal-tmux.hint': '로컬 및 원격 터미널의 tmux 사용 여부를 각각 설정합니다.',
   'settings.terminal-tmux.local': '로컬 터미널에서 tmux 사용',
-  'settings.terminal-tmux.local-hint':
-    '이 컴퓨터의 앱 내 터미널과 지원되는 외부 터미널에 적용됩니다.',
+  'settings.terminal-tmux.local-hint': '이 컴퓨터의 앱 내 터미널과 지원되는 외부 터미널에 적용됩니다.',
   'settings.terminal-tmux.remote': '원격 터미널에서 tmux 사용',
-  'settings.terminal-tmux.remote-hint':
-    'SSH를 통해 여는 앱 내 터미널과 지원되는 외부 터미널에 적용됩니다.',
+  'settings.terminal-tmux.remote-hint': 'SSH를 통해 여는 앱 내 터미널과 지원되는 외부 터미널에 적용됩니다.',
   'settings.terminal-custom-buttons.title': '사용자 지정 터미널 버튼',
   'settings.terminal-custom-buttons.hint':
     '터미널 하단 버튼 막대를 표시합니다. 버튼은 즉시 실행하거나 편집할 수 있도록 터미널 입력 줄에 채울 수 있습니다.',

@@ -5,7 +5,12 @@ import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import type { TerminalDescriptor, TerminalBellEvent } from '#/web/components/terminal/types.ts'
 import { terminalNotificationContext } from '#/web/components/terminal/terminal-notification-context.ts'
 
-const event: TerminalBellEvent = { processName: 'bun', canonicalTitle: 'bun run test', visible: false }
+const event: TerminalBellEvent = {
+  sessionId: 'session-1',
+  processName: 'bun',
+  canonicalTitle: 'bun run test',
+  visible: false,
+}
 
 function descriptor(overrides: Partial<TerminalDescriptor> = {}): TerminalDescriptor {
   return {
@@ -40,13 +45,15 @@ describe('terminalNotificationContext', () => {
       branch: 'feature/login',
       terminalIndex: 2,
       terminalTitle: 'bun run test',
+      sessionId: 'session-1',
     })
   })
 
-  test('includes the triggering terminal output tail', () => {
-    expect(
-      terminalNotificationContext(descriptor(), { ...event, outputTail: 'tests passed\nready' }, { [localRepo.id]: localRepo }),
-    ).toMatchObject({ outputTail: 'tests passed\nready' })
+  test('includes session identity without transporting renderer output', () => {
+    const context = terminalNotificationContext(descriptor(), event, { [localRepo.id]: localRepo })
+
+    expect(context).toMatchObject({ sessionId: 'session-1' })
+    expect(context).not.toHaveProperty('outputTail')
   })
 
   test('describes plain workspaces without a branch', () => {

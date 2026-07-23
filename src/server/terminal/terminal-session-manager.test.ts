@@ -1,18 +1,22 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { TerminalSessionManager } from '#/server/terminal/terminal-session-manager.ts'
 
-const ptys: Array<{ kill: ReturnType<typeof vi.fn> }> = []
+const ptys: Array<{ kill: ReturnType<typeof vi.fn>; emitData: (data: string) => void }> = []
 
 vi.mock('node-pty', () => ({
   spawn: vi.fn(() => {
-    const pty = { kill: vi.fn() }
+    let onData: ((data: string) => void) | null = null
+    const pty = { kill: vi.fn(), emitData: (data: string) => onData?.(data) }
     ptys.push(pty)
     return {
       process: 'zsh',
       write: vi.fn(),
       resize: vi.fn(),
       kill: pty.kill,
-      onData: vi.fn(() => ({ dispose: vi.fn() })),
+      onData: vi.fn((listener: (data: string) => void) => {
+        onData = listener
+        return { dispose: vi.fn() }
+      }),
       onExit: vi.fn(() => ({ dispose: vi.fn() })),
     }
   }),
@@ -54,5 +58,30 @@ describe('terminal session manager administrative close', () => {
     expect(ptys.map((pty) => pty.kill.mock.calls.length)).toEqual([1, 1])
     expect(manager.getSession('client_a', first.sessionId)).toBeUndefined()
     expect(manager.getSession('client_b', second.sessionId)).toBeUndefined()
+  })
+})
+
+describe('terminal session manager output excerpts', () => {
+  test('reads the canonical headless screen for an existing session', async () => {
+    const manager = new TerminalSessionManager<string>({ onOutput: vi.fn(), onExit: vi.fn() })
+    const result = manager.ensureSession({
+      ownerId: 'client_a',
+      scope: '/workspace',
+      key: '/workspace\0/workspace/goblin-feature\0terminal-1',
+      cwd: '/workspace/goblin-feature',
+      cols: 80,
+      rows: 24,
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    ptys[0]?.emitData('build passed')
+
+    await expect(manager.outputExcerpt(result.sessionId, 400)).resolves.toMatchObject({
+      sessionId: result.sessionId,
+      output: 'build passed',
+      sequence: 1,
+    })
+    await expect(manager.outputExcerpt('term_missing_1234', 400)).resolves.toBeNull()
   })
 })

@@ -37,6 +37,19 @@ const mocks = vi.hoisted(() => ({
     lanEnabled: false,
   })),
   getServerWebAccessCredentials: vi.fn(async () => ({ enabled: false, username: '', passwordHash: '' })),
+  getServerTelegramNotificationConfig: vi.fn(async () => ({
+    enabled: true,
+    botTokenConfigured: true,
+    botToken: '123456:test-token',
+    chatId: '-100123',
+    bellEnabled: true,
+    outputCompletionEnabled: true,
+    outputCompletionMinimumActivitySeconds: 10,
+    includeTerminalOutput: true,
+    outputTailLength: 400,
+  })),
+  sendTelegramMessage: vi.fn(async () => ({ ok: true as const })),
+  telegramProxyUrlFromPrefs: vi.fn(() => undefined),
 }))
 
 const terminalHostStub = {
@@ -72,6 +85,11 @@ const terminalHostStub = {
   create: vi.fn(),
   prune: vi.fn(),
   getSessionSnapshot: vi.fn(),
+  getOutputExcerpt: vi.fn(async ({ sessionId }) => ({
+    sessionId,
+    output: 'server screen output',
+    sequence: 42,
+  })),
   handleRealtimeMessage: vi.fn(),
   shutdown: vi.fn(),
 } satisfies ServerTerminalHost
@@ -84,6 +102,12 @@ vi.mock('node:fs/promises', () => ({
 vi.mock('#/server/modules/settings-source.ts', () => ({
   getServerSettingsPrefs: mocks.getServerSettingsPrefs,
   getServerWebAccessCredentials: mocks.getServerWebAccessCredentials,
+  getServerTelegramNotificationConfig: mocks.getServerTelegramNotificationConfig,
+}))
+
+vi.mock('#/server/modules/telegram-notification-source.ts', () => ({
+  sendTelegramMessage: mocks.sendTelegramMessage,
+  telegramProxyUrlFromPrefs: mocks.telegramProxyUrlFromPrefs,
 }))
 
 describe('server app html bootstrap', () => {
@@ -293,6 +317,51 @@ describe('server app html bootstrap', () => {
       method: 'POST',
     })
     expect(response.status).toBe(401)
+  })
+
+  test('reads Telegram output excerpts through the worker-backed terminal host', async () => {
+    const currentPrefs = await mocks.getServerSettingsPrefs()
+    mocks.getServerSettingsPrefs.mockResolvedValueOnce({
+      ...currentPrefs,
+      lang: 'zh',
+      terminalNotificationsEnabled: true,
+    })
+    terminalHostStub.getOutputExcerpt.mockClear()
+    const { createApp } = await import('#/server/app-factory.ts')
+    const app = createApp({
+      version: '0.1.0',
+      startedAt: Date.now(),
+      internalSecret: 'secret',
+      terminalHost: terminalHostStub,
+    })
+
+    const response = await app.request('http://127.0.0.1:32100/api/telegram-notifications/output-completion', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-goblin-internal-secret': 'secret',
+      },
+      body: JSON.stringify({
+        terminalKey: 'terminal-1',
+        project: 'api',
+        contextKind: 'directory',
+        context: 'api',
+        directory: '~/src/api',
+        terminalIndex: 1,
+        sessionId: 'session-1',
+        finalOutputSeq: 42,
+        activityDurationMs: 10_000,
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(terminalHostStub.getOutputExcerpt).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      maxCharacters: 400,
+    })
+    expect(mocks.sendTelegramMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ text: expect.stringContaining('server screen output') }),
+    )
   })
 })
 

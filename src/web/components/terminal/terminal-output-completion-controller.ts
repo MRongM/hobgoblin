@@ -1,7 +1,4 @@
-import {
-  truncateTelegramOutputTail,
-  type TelegramOutputCompletionNotificationContext,
-} from '#/shared/telegram-notifications.ts'
+import type { TelegramOutputCompletionNotificationContext } from '#/shared/telegram-notifications.ts'
 import { terminalNotificationContext } from '#/web/components/terminal/terminal-notification-context.ts'
 import type { TerminalOutputCompletionIntent } from '#/web/components/terminal/types.ts'
 import { getRuntimeFetchSettings } from '#/web/runtime-settings-fetch.ts'
@@ -12,17 +9,17 @@ export function notifyTerminalOutputCompletion(intent: TerminalOutputCompletionI
   if (!getRuntimeFetchSettings().terminalNotificationsEnabled) return
   const telegram = getRuntimeTelegramNotificationSettings()
   if (!telegram.enabled || !telegram.outputCompletionEnabled || !telegram.botTokenConfigured || !telegram.chatId) return
+  if (intent.activityDurationMs < telegram.outputCompletionMinimumActivitySeconds * 1_000) return
   const context: TelegramOutputCompletionNotificationContext = {
     ...terminalNotificationContext(intent.descriptor, {
       processName: intent.processName,
       canonicalTitle: intent.canonicalTitle,
       visible: false,
-      outputTail: intent.outputTail,
+      sessionId: intent.sessionId,
     }),
     sessionId: intent.sessionId,
     finalOutputSeq: intent.finalOutputSeq,
+    activityDurationMs: intent.activityDurationMs,
   }
-  if (!telegram.includeTerminalOutput) delete context.outputTail
-  else context.outputTail = truncateTelegramOutputTail(context.outputTail, telegram.outputTailLength)
   void sendTelegramOutputCompletionNotification(context).catch(() => {})
 }

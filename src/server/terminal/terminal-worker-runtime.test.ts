@@ -52,6 +52,7 @@ function createTerminalFacadeStub(): TerminalFacade {
     })),
     prune: vi.fn(async () => ({ pruned: 1, remaining: 0 })),
     getSessionSnapshot: vi.fn(async () => null),
+    getOutputExcerpt: vi.fn(async () => null),
     reorder: vi.fn(() => true),
     handleRealtimeMessage: vi.fn(),
     shutdown: vi.fn(),
@@ -114,6 +115,29 @@ describe('terminal worker runtime', () => {
         payload: { closed: ['term_123456789012'], missing: ['term_abcdefghijkl'] },
       },
     ])
+  })
+
+  test('dispatches output excerpt requests through the terminal facade', async () => {
+    const service = createTerminalFacadeStub()
+    const emitted: TerminalWorkerMessage[] = []
+    const runtime = new TerminalWorkerRuntime({ service, emit: (message) => emitted.push(message), exit: vi.fn() })
+    const input = { sessionId: 'term_123456789012', maxCharacters: 400 }
+
+    await runtime.handleMessage({
+      type: 'request',
+      requestId: 'req_excerpt',
+      action: 'output-excerpt',
+      clientId: 'server',
+      input,
+    })
+
+    expect(service.getOutputExcerpt).toHaveBeenCalledWith(input)
+    expect(emitted.at(-1)).toEqual({
+      type: 'response',
+      requestId: 'req_excerpt',
+      ok: true,
+      payload: null,
+    })
   })
 
   test('proxies socket messages through the transport emitter', async () => {

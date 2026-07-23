@@ -1012,6 +1012,13 @@ export const zh: Record<DictKey, string> = {
   'settings.telegram.bell-enabled-hint': '后台终端产生未读 bell 时发送 Telegram。',
   'settings.telegram.output-completion-enabled': '终端运行结束',
   'settings.telegram.output-completion-enabled-hint': '终端活动呼吸灯从运行变为空闲时发送 Telegram。',
+  'settings.telegram.output-completion-min-activity': '完成通知最短活动时长',
+  'settings.telegram.output-completion-min-activity-hint':
+    '仅当终端输出活动持续达到该时长时发送 Telegram 完成通知；不影响终端活动呼吸灯。',
+  'settings.telegram.output-completion-min-activity-low': '低 · 1 秒',
+  'settings.telegram.output-completion-min-activity-medium': '中 · 10 秒',
+  'settings.telegram.output-completion-min-activity-high': '高 · 30 秒',
+  'settings.telegram.output-completion-min-activity-unit': '秒',
   'settings.telegram.include-terminal-output': '包含终端输出',
   'settings.telegram.include-terminal-output-hint': '附加终端末尾的可见输出；终端输出可能包含敏感信息。',
   'settings.telegram.output-tail-length': '终端输出字符数',

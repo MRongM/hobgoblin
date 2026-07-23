@@ -66,6 +66,7 @@ function defaultRpcResult(path: string, input?: unknown) {
         chatId: '',
         bellEnabled: true,
         outputCompletionEnabled: false,
+        outputCompletionMinimumActivitySeconds: 10,
         includeTerminalOutput: false,
         outputTailLength: 400,
       },
@@ -173,6 +174,7 @@ const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
       bellEnabled?: boolean
       outputCompletionEnabled?: boolean
       includeTerminalOutput?: boolean
+      outputCompletionMinimumActivitySeconds?: number
       outputTailLength?: number
     }
     result = {
@@ -183,6 +185,7 @@ const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
         chatId: body.chatId?.trim() ?? '',
         bellEnabled: body.bellEnabled === true,
         outputCompletionEnabled: body.outputCompletionEnabled === true,
+        outputCompletionMinimumActivitySeconds: body.outputCompletionMinimumActivitySeconds ?? 10,
         includeTerminalOutput: body.includeTerminalOutput === true,
         outputTailLength: body.outputTailLength ?? 400,
       },
@@ -358,6 +361,56 @@ describe('SettingsSurface', () => {
     await waitForSwitchState('settings-terminal-notifications', 'true')
   })
 
+  test('uses Telegram completion activity shortcuts and manual seconds as one saved value', async () => {
+    await render(<SettingsSurface page="notifications" onPageChange={() => {}} />)
+
+    const input = document.getElementById('settings-telegram-output-completion-min-activity')
+    if (!(input instanceof HTMLInputElement)) throw new Error('Missing Telegram completion activity duration input')
+    expect(input.value).toBe('10')
+    expect(input.min).toBe('1')
+    expect(input.max).toBe('3600')
+
+    await act(async () => {
+      buttonByText('settings.telegram.output-completion-min-activity-low').click()
+      await Promise.resolve()
+    })
+    expect(input.value).toBe('1')
+
+    await act(async () => {
+      buttonByText('settings.telegram.output-completion-min-activity-medium').click()
+      await Promise.resolve()
+    })
+    expect(input.value).toBe('10')
+
+    await act(async () => {
+      buttonByText('settings.telegram.output-completion-min-activity-high').click()
+      await Promise.resolve()
+    })
+    expect(input.value).toBe('30')
+
+    await act(async () => {
+      setInputValue(input, '125')
+      await Promise.resolve()
+    })
+    expect(input.value).toBe('125')
+
+    await act(async () => {
+      buttonByText('settings.telegram.save').click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const write = fetchMock.mock.calls.find((call) => {
+      const [url] = call as unknown as [unknown, RequestInit | undefined]
+      return new URL(String(url)).pathname === '/api/settings/telegram'
+    })
+    expect(write).toBeDefined()
+    const [, options] = write as unknown as [unknown, RequestInit]
+    expect(JSON.parse(String(options.body))).toMatchObject({
+      outputCompletionMinimumActivitySeconds: 125,
+    })
+  })
+
   test('configures and tests Telegram notifications without echoing the Bot Token', async () => {
     await render(<SettingsSurface page="notifications" onPageChange={() => {}} />)
 
@@ -407,6 +460,7 @@ describe('SettingsSurface', () => {
       chatId: '-100123',
       bellEnabled: true,
       outputCompletionEnabled: true,
+      outputCompletionMinimumActivitySeconds: 10,
       includeTerminalOutput: true,
       outputTailLength: 1024,
     })

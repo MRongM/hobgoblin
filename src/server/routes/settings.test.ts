@@ -139,6 +139,7 @@ describe('settings routes', () => {
         chatId: '-100123',
         bellEnabled: true,
         outputCompletionEnabled: true,
+        outputCompletionMinimumActivitySeconds: 30,
         includeTerminalOutput: true,
       },
     })
@@ -153,6 +154,7 @@ describe('settings routes', () => {
         chatId: '-100123',
         bellEnabled: true,
         outputCompletionEnabled: true,
+        outputCompletionMinimumActivitySeconds: 30,
         includeTerminalOutput: true,
       }),
     })
@@ -166,6 +168,7 @@ describe('settings routes', () => {
         chatId: '-100123',
         bellEnabled: true,
         outputCompletionEnabled: true,
+        outputCompletionMinimumActivitySeconds: 30,
         includeTerminalOutput: true,
       },
     })
@@ -176,6 +179,7 @@ describe('settings routes', () => {
       chatId: '-100123',
       bellEnabled: true,
       outputCompletionEnabled: true,
+      outputCompletionMinimumActivitySeconds: 30,
       includeTerminalOutput: true,
     })
   })
