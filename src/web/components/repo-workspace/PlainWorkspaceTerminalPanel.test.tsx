@@ -125,11 +125,14 @@ describe('PlainWorkspaceTerminalPanel', () => {
     })
 
     expect(createTerminal).toHaveBeenCalledTimes(1)
-    expect(createTerminal).toHaveBeenCalledWith({
-      repoRoot: '/repo',
-      branch: NON_GIT_WORKSPACE_TERMINAL_BRANCH,
-      worktreePath: '/repo',
-    })
+    expect(createTerminal).toHaveBeenCalledWith(
+      {
+        repoRoot: '/repo',
+        branch: NON_GIT_WORKSPACE_TERMINAL_BRANCH,
+        worktreePath: '/repo',
+      },
+      'native',
+    )
   })
 
   test('passes terminal focus command to terminal tabs', () => {
@@ -349,11 +352,14 @@ describe('PlainWorkspaceTerminalPanel', () => {
     })
 
     expect(createTerminal).toHaveBeenCalledTimes(1)
-    expect(createTerminal).toHaveBeenCalledWith({
-      repoRoot: REMOTE_REPO_ID,
-      branch: NON_GIT_WORKSPACE_TERMINAL_BRANCH,
-      worktreePath: '/srv/plain',
-    })
+    expect(createTerminal).toHaveBeenCalledWith(
+      {
+        repoRoot: REMOTE_REPO_ID,
+        branch: NON_GIT_WORKSPACE_TERMINAL_BRANCH,
+        worktreePath: '/srv/plain',
+      },
+      'native',
+    )
   })
 })
 

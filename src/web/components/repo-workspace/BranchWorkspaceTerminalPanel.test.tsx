@@ -99,13 +99,16 @@ describe('BranchWorkspaceTerminalPanel', () => {
     await act(async () => {
       await (terminalTabsProps.at(-1)?.onNew as () => Promise<void>)()
     })
-    expect(createTerminal).toHaveBeenCalledWith({
-      repoRoot: ROOT,
-      branch: 'feature/auth',
-      worktreePath: PATH,
-      targetKind: 'branch-workspace',
-      branchWorkspaceId: 'branch-1',
-    })
+    expect(createTerminal).toHaveBeenCalledWith(
+      {
+        repoRoot: ROOT,
+        branch: 'feature/auth',
+        worktreePath: PATH,
+        targetKind: 'branch-workspace',
+        branchWorkspaceId: 'branch-1',
+      },
+      'native',
+    )
   })
 
   test('renders the selected root-scoped session in the shared terminal slot', async () => {
@@ -219,6 +222,28 @@ describe('openBranchWorkspaceInternalTerminal', () => {
     expect(activate).toHaveBeenCalledTimes(1)
     expect(selectTerminal).not.toHaveBeenCalled()
     expect(createTerminal).toHaveBeenCalledTimes(1)
+  })
+
+  test('explicit tmux launch always creates a new root-scoped terminal', async () => {
+    const activate = vi.fn()
+    await openBranchWorkspaceInternalTerminal(
+      branchWorkspaceContext(),
+      {
+        activate,
+        worktreeSnapshot: () => ({
+          worktreeTerminalKey: WORKTREE_KEY,
+          count: 1,
+          sessions: [{ key: `${WORKTREE_KEY}\0terminal-1`, selected: true } as any],
+          selectedDescriptor: { key: `${WORKTREE_KEY}\0terminal-1` } as any,
+        }),
+        selectTerminal,
+        createTerminal,
+      },
+      'tmux-if-available',
+    )
+
+    expect(selectTerminal).not.toHaveBeenCalled()
+    expect(createTerminal).toHaveBeenCalledWith(expect.any(Object), 'tmux-if-available')
   })
 })
 

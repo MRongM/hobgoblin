@@ -28,6 +28,41 @@ beforeEach(() => {
 })
 
 describe('terminal session manager administrative close', () => {
+  test('retains private tmux identity while projecting only tmux eligibility', async () => {
+    const manager = new TerminalSessionManager<string>({ onOutput: vi.fn(), onExit: vi.fn() })
+    const created = manager.ensureSession({
+      ownerId: 'client_a',
+      scope: '/workspace',
+      key: '/workspace\0/workspace/feature\0terminal-1',
+      cwd: '/workspace/feature',
+      cols: 80,
+      rows: 24,
+      tmuxSessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+      tmuxWorkingDirectory: '/workspace/feature',
+    })
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+
+    expect(await manager.listSessions('/workspace')).toEqual([expect.objectContaining({ tmuxBacked: true })])
+    expect(manager.getSession('client_a', created.sessionId)).toMatchObject({
+      tmuxSessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+      tmuxWorkingDirectory: '/workspace/feature',
+    })
+
+    manager.ensureSession({
+      ownerId: 'client_a',
+      scope: '/workspace',
+      key: '/workspace\0/workspace/feature\0terminal-1',
+      cwd: '/workspace/feature',
+      cols: 100,
+      rows: 30,
+    })
+    expect(manager.getSession('client_a', created.sessionId)).toMatchObject({
+      tmuxSessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+      tmuxWorkingDirectory: '/workspace/feature',
+    })
+  })
+
   test('closes specified sessions across owners and reports affected scopes and missing ids', () => {
     const manager = new TerminalSessionManager<string>({ onOutput: vi.fn(), onExit: vi.fn() })
     const first = manager.ensureSession({

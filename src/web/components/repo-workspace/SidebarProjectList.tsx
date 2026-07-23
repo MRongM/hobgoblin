@@ -137,6 +137,14 @@ function SortableProjectRow({
     visible: projectExternalActions.visible,
     onSelect: projectExternalActions.externalTerminal.onSelect,
   }
+  const tmuxTerminalAction: WorkspaceListItemAction = {
+    id: 'terminalTmux',
+    label: t('terminal.new-with-tmux'),
+    icon: <Terminal aria-hidden="true" />,
+    disabled: projectInternalTerminalAction.disabled,
+    busy: projectInternalTerminalAction.busy,
+    onSelect: () => projectInternalTerminalAction.onSelect('tmux-if-available'),
+  }
   const closeAction: WorkspaceListItemAction = {
     id: 'closeProject',
     label: t('repo-tabs.close-named', { name: project.name }),
@@ -156,6 +164,11 @@ function SortableProjectRow({
         icon: <TerminalAppIcon pref={projectExternalActions.externalTerminal.iconPref} />,
       }}
       internalTerminal={{ ...projectInternalTerminalAction, icon: <Terminal aria-hidden="true" /> }}
+      tmuxTerminal={{
+        ...projectInternalTerminalAction,
+        icon: <Terminal aria-hidden="true" />,
+        onSelect: () => projectInternalTerminalAction.onSelect('tmux-if-available'),
+      }}
       worktreeTerminalKeys={project.terminalWorktreeKeys}
     >
       <WorkspaceListItemFrame
@@ -187,7 +200,10 @@ function SortableProjectRow({
             editor={editorAction}
             internalTerminal={internalTerminalAction}
             moreMenu={
-              <WorkspaceListItemMenu label={t('action.menu')} groups={[[externalTerminalAction], [closeAction]]} />
+              <WorkspaceListItemMenu
+                label={t('action.menu')}
+                groups={[[tmuxTerminalAction, externalTerminalAction], [closeAction]]}
+              />
             }
           />
         }

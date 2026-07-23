@@ -667,6 +667,8 @@ describe('WorkspaceRepositoryRail', () => {
       changeCount: null,
       navigable: false,
       reason: 'workspace.branch-workspace.member-unavailable',
+      repositoryId: '/workspace/web',
+      worktreePath: '/workspace/goblin-feature-auth/web',
     })
     expect(branchWorkspaceListState.props?.activeMemberRepositoryName).toBe('api')
 

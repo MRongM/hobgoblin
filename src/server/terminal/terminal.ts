@@ -1,5 +1,9 @@
 import { isValidRepoLocator } from '#/shared/input-validation.ts'
-import { getServerSettingsPrefs } from '#/server/modules/settings-source.ts'
+import {
+  closeAssociatedTmuxSessionByName,
+  type AssociatedTmuxSessionNameInput,
+  type TerminalTmuxCloseResult,
+} from '#/server/modules/tmux-cleanup.ts'
 import {
   TerminalSessionManager,
   isValidTerminalSessionId,
@@ -11,6 +15,7 @@ import { TerminalRealtimeBroker, type TerminalRealtimeSocket } from '#/server/te
 import { terminalSessionScope } from '#/server/terminal/terminal-scope.ts'
 import {
   type TerminalCatalogMutationResult,
+  type TerminalCloseResult,
   type TerminalCloseSessionsResult,
   type TerminalCreateInput,
 } from '#/shared/terminal.ts'
@@ -99,12 +104,6 @@ const catalog = createTerminalCatalog({
   isValidClientId: isValidTerminalClientId,
   isValidTerminalId,
   manager,
-  async localTerminalTmuxEnabled() {
-    return (await getServerSettingsPrefs()).localTerminalTmuxEnabled
-  },
-  async remoteTerminalTmuxEnabled() {
-    return (await getServerSettingsPrefs()).remoteTerminalTmuxEnabled
-  },
   attachmentIsConnected(clientId, attachmentId) {
     return broker.attachmentIsConnected(clientId, attachmentId)
   },
@@ -275,16 +274,39 @@ export function resizeServerTerminal(clientId: string, input: TerminalResizeInpu
   )
 }
 
-export function closeServerTerminal(clientId: string, input: TerminalSessionInput): TerminalMutationResult {
-  if (!isValidTerminalClientId(clientId)) return false
-  const repoRoot = isValidTerminalSessionId(input?.sessionId)
-    ? manager.getSession(clientId, input.sessionId)?.scope
-    : undefined
-  const closed = isValidTerminalSessionId(input?.sessionId)
-    ? manager.closeOwnedSession(clientId, input.sessionId)
-    : false
-  if (closed && repoRoot) broker.broadcastGlobal({ type: 'sessions-changed', repoRoot })
-  return closed
+export interface TerminalCloseDependencies {
+  closeTmuxSession?: (input: AssociatedTmuxSessionNameInput) => Promise<TerminalTmuxCloseResult>
+}
+
+export async function closeServerTerminal(
+  clientId: string,
+  input: TerminalSessionInput,
+  dependencies: TerminalCloseDependencies = {},
+): Promise<TerminalCloseResult> {
+  if (
+    !isValidTerminalClientId(clientId) ||
+    !isValidTerminalSessionId(input?.sessionId) ||
+    (input.closeTmuxSession !== undefined && typeof input.closeTmuxSession !== 'boolean')
+  ) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  const session = manager.getSession(clientId, input.sessionId)
+  if (!session) return { ok: true }
+  if (input.closeTmuxSession === true) {
+    if (!session.tmuxSessionName || !session.tmuxWorkingDirectory) {
+      return { ok: false, message: 'error.terminal-tmux-unavailable' }
+    }
+    const result = await (dependencies.closeTmuxSession ?? closeAssociatedTmuxSessionByName)({
+      projectRoot: session.scope,
+      itemPath: session.tmuxWorkingDirectory,
+      sessionName: session.tmuxSessionName,
+    })
+    if (!result.ok) return result
+  }
+  const repoRoot = session.scope
+  const closed = manager.closeOwnedSession(clientId, input.sessionId)
+  if (closed) broker.broadcastGlobal({ type: 'sessions-changed', repoRoot })
+  return { ok: true }
 }
 
 export function closeServerTerminalSessions(sessionIds: string[]): TerminalCloseSessionsResult {

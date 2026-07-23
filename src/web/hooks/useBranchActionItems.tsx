@@ -33,6 +33,7 @@ import type { WorktreeBootstrapDecision, WorktreeBootstrapPreflight } from '#/sh
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { useTerminalSessionContext } from '#/web/components/terminal/terminal-session-context.ts'
 import type { TerminalSessionBase } from '#/web/components/terminal/types.ts'
+import type { TerminalLaunchMode } from '#/shared/terminal.ts'
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import { useCloseTerminalScope } from '#/web/components/terminal/TerminalScopeContextMenu.tsx'
 export interface BranchActionItem {
@@ -162,12 +163,12 @@ export function useBranchActionItems(
     )
   }
 
-  async function handleNewTerminal(): Promise<void> {
+  async function handleNewTerminal(launchMode: TerminalLaunchMode): Promise<void> {
     if (!terminalBase) return
     if (options.onNavigateToInternalTerminal) await options.onNavigateToInternalTerminal(terminalBase)
     else navigation.showRepoBranchDetailTab(repo.id, branch.name, 'terminal')
     setDetailCollapsed(false)
-    await createTerminal(terminalBase)
+    await createTerminal(terminalBase, launchMode)
   }
 
   async function handleSync(): Promise<void> {
@@ -274,7 +275,18 @@ export function useBranchActionItems(
       disabled: disabled || !terminalBase,
       visible: true,
       icon: createElement(Terminal),
-      onSelect: handleNewTerminal,
+      onSelect: () => handleNewTerminal('native'),
+    },
+    {
+      id: 'terminalTmux',
+      label: t('terminal.new-with-tmux'),
+      title: t('terminal.new-with-tmux'),
+      ariaLabel: t('terminal.new-with-tmux'),
+      disabled: disabled || !terminalBase,
+      visible: true,
+      menuOnly: true,
+      icon: createElement(Terminal),
+      onSelect: () => handleNewTerminal('tmux-if-available'),
     },
     {
       id: 'externalTerminal',

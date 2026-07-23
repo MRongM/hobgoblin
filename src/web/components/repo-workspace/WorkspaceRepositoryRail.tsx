@@ -211,9 +211,19 @@ export function WorkspaceRepositoryRail({
     return { ok: true as const, target: { ...resolution.target, repo, branch } }
   }
   const getMemberPresentation = (member: BranchWorkspaceRepositorySnapshot): BranchWorkspaceMemberPresentation => {
+    const candidate = workspace.candidates.find(
+      (entry) => entry.name === member.repositoryName && workspace.repositoryIds.includes(entry.id),
+    )
     const resolution = resolveMemberTarget(member)
     if (!resolution.ok) {
-      return { dirty: false, changeCount: null, navigable: false, reason: resolution.reason }
+      return {
+        dirty: false,
+        changeCount: null,
+        navigable: false,
+        reason: resolution.reason,
+        repositoryId: candidate?.id,
+        worktreePath: member.worktreePath,
+      }
     }
     const worktree = getBranchWorktreeState(resolution.target.repo, resolution.target.branch)
     return {

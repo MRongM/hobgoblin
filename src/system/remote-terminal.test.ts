@@ -22,6 +22,7 @@ describe('buildManagedRemoteTerminalInvocation', () => {
     expect(invocation?.script).toContain('exec "${SHELL:-/bin/sh}" -l')
     expect(invocation?.script).not.toContain('tmux')
     expect(invocation?.shellCommand).not.toContain('tmux')
+    expect(invocation?.tmuxSessionName).toBeNull()
   })
 
   test('builds a tmux-first ssh invocation with native shell fallback when enabled', () => {
@@ -35,10 +36,15 @@ describe('buildManagedRemoteTerminalInvocation', () => {
     expect(invocation?.script).toContain(
       "exec tmux new-session -A -s 'hobgoblin-v1-aebf050981ac829e36100020' -c '/srv/projects/example/worktrees/feature'",
     )
+    expect(invocation?.script).toContain(
+      "exec tmux new-session -A -s 'hobgoblin-v1-aebf050981ac829e36100020' -c '/srv/projects/example/worktrees/feature' \\; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' mouse on",
+    )
+    expect(invocation?.script).not.toContain('set-option -g')
     expect(invocation?.script).toContain('exec "${SHELL:-/bin/sh}" -l')
     expect(invocation?.shellCommand).toContain('ssh')
     expect(invocation?.shellCommand).toContain('prod')
     expect(invocation?.shellCommand).toContain('tmux')
+    expect(invocation?.tmuxSessionName).toBe('hobgoblin-v1-aebf050981ac829e36100020')
   })
 
   test('includes caller-provided ssh options before the destination', () => {

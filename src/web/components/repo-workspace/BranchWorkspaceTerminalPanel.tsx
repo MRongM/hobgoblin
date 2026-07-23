@@ -18,6 +18,7 @@ import type {
   TerminalSessionContextValue,
   TerminalSessionReadContextValue,
 } from '#/web/components/terminal/types.ts'
+import type { TerminalLaunchMode } from '#/shared/terminal.ts'
 
 interface BranchWorkspaceTerminalPanelProps {
   context: BranchWorkspaceFolderContext
@@ -54,17 +55,21 @@ export function BranchWorkspaceTerminalPanel({
   const terminalBase = useMemo(() => branchWorkspaceTerminalBase(context), [context])
   const terminalCreationAvailable = context.available && !context.busy
 
-  const handleNewTerminal = useCallback(async () => {
-    if (!terminalCreationAvailable) return
-    await createTerminal(terminalBase)
-  }, [createTerminal, terminalBase, terminalCreationAvailable])
+  const handleNewTerminal = useCallback(
+    async (launchMode: TerminalLaunchMode = 'native') => {
+      if (!terminalCreationAvailable) return
+      await createTerminal(terminalBase, launchMode)
+    },
+    [createTerminal, terminalBase, terminalCreationAvailable],
+  )
 
   const handleSelectTerminal = useCallback(
     (key: string) => selectTerminal(terminalWorktreeKey, key),
     [selectTerminal, terminalWorktreeKey],
   )
   const handleCloseTerminal = useCallback(
-    (key: string) => closeTerminalAndDismissDetailIfLast(key, terminalBase),
+    (key: string, options?: Parameters<typeof closeTerminalAndDismissDetailIfLast>[2]) =>
+      closeTerminalAndDismissDetailIfLast(key, terminalBase, options),
     [closeTerminalAndDismissDetailIfLast, terminalBase],
   )
   const handleReorderTerminals = useCallback(
@@ -106,7 +111,7 @@ export function BranchWorkspaceTerminalPanel({
           focusMode={terminalFocusMode}
           focusRegistry={terminalTabFocusRegistry}
           emptyFocusKey={EMPTY_TERMINAL_TAB_FOCUS_KEY}
-          onNew={() => void handleNewTerminal()}
+          onNew={(launchMode) => void handleNewTerminal(launchMode)}
           onSelect={(_worktreeKey, key) => handleSelectTerminal(key)}
           onScrollToBottom={scrollToBottom}
           onFocusTerminal={focusTerminal}
@@ -127,9 +132,14 @@ export function BranchWorkspaceTerminalPanel({
 export async function openBranchWorkspaceInternalTerminal(
   context: BranchWorkspaceFolderContext,
   dependencies: OpenBranchWorkspaceInternalTerminalDependencies,
+  launchMode: TerminalLaunchMode = 'native',
 ): Promise<boolean> {
   if (!context.available || context.busy) return false
   dependencies.activate()
+  if (launchMode === 'tmux-if-available') {
+    await dependencies.createTerminal(branchWorkspaceTerminalBase(context), launchMode)
+    return true
+  }
   const terminalWorktreeKey = worktreeTerminalKey(context.rootId, context.path)
   const snapshot = dependencies.worktreeSnapshot(terminalWorktreeKey)
   const selectedKey =
@@ -140,7 +150,7 @@ export async function openBranchWorkspaceInternalTerminal(
     dependencies.selectTerminal(terminalWorktreeKey, selectedKey)
     return true
   }
-  await dependencies.createTerminal(branchWorkspaceTerminalBase(context))
+  await dependencies.createTerminal(branchWorkspaceTerminalBase(context), 'native')
   return true
 }
 

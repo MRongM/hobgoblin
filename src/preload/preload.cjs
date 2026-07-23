@@ -105,6 +105,7 @@ const runtime =
     ? bootstrap.runtime
     : { kind: 'electron', bridgeVersion: 1, capabilities: [] }
 const homeDir = typeof bootstrap?.homeDir === 'string' ? bootstrap.homeDir : ''
+const hostPlatform = typeof bootstrap?.hostPlatform === 'string' ? bootstrap.hostPlatform : null
 const initialI18n = isObject(bootstrap?.i18n) ? bootstrap.i18n : null
 const initialSettings = isObject(bootstrap?.settings) ? bootstrap.settings : null
 const initialServer =
@@ -163,6 +164,7 @@ function maybeDisposeEffectIntentListener() {
 contextBridge.exposeInMainWorld('goblinNative', {
   runtime,
   homeDir,
+  ...(hostPlatform ? { hostPlatform } : {}),
   initialI18n,
   initialSettings,
   initialServer,

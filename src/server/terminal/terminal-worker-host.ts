@@ -4,6 +4,7 @@ import type {
   TerminalAttachInput,
   TerminalAttachResult,
   TerminalCatalogMutationResult,
+  TerminalCloseResult,
   TerminalCloseSessionsResult,
   TerminalCreateInput,
   TerminalMutationResult,
@@ -155,7 +156,7 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
     return this.request('takeover', clientId, input)
   }
 
-  close(clientId: string, input: TerminalSessionInput): Promise<TerminalMutationResult> {
+  close(clientId: string, input: TerminalSessionInput): Promise<TerminalCloseResult> {
     return this.request('close', clientId, input)
   }
 

@@ -50,6 +50,7 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
           worktreePath: '/workspace/goblin-feature-auth/api',
         })
       }),
+      branchAction('terminalTmux'),
       branchAction('externalTerminal', actionState.externalTerminal),
       branchAction('remote', actionState.remote),
     ],
@@ -160,6 +161,7 @@ describe('BranchWorkspaceMemberRow', () => {
 
     const menuItems = await openMenu()
     expect(menuItems.map((entry) => entry.getAttribute('data-action'))).toEqual([
+      'terminalTmux',
       'externalTerminal',
       'remote',
       'pull',
@@ -172,6 +174,7 @@ describe('BranchWorkspaceMemberRow', () => {
       'createTag',
       'closeAllTerminals',
       'resetHard',
+      'cleanupTmuxSessions',
     ])
     expect(menuItems.find((entry) => entry.getAttribute('data-action') === 'pull')?.hasAttribute('data-disabled')).toBe(
       true,
@@ -226,6 +229,7 @@ describe('BranchWorkspaceMemberRow', () => {
     )
     const menuItems = await openMenu()
     expect(menuItems.map((entry) => entry.getAttribute('data-action'))).toEqual([
+      'terminalTmux',
       'externalTerminal',
       'remote',
       'pull',
@@ -276,7 +280,9 @@ describe('BranchWorkspaceMemberRow', () => {
       'worktrees.open-in-editor-label',
       'terminal.external',
       'terminal.internal',
+      'terminal.new-with-tmux',
       'terminal.close-all',
+      'tmux.cleanup.action',
     ])
 
     await act(async () => {

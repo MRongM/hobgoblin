@@ -326,7 +326,11 @@ describe('SidebarProjectList', () => {
   test('closes a project from More without activating it', async () => {
     const { onActivate, onClose } = renderList()
     const items = await openProjectMenu('/repo-a')
-    expect(items.map((item) => item.textContent?.trim())).toEqual(['terminal.external', 'Close Repo A'])
+    expect(items.map((item) => item.textContent?.trim())).toEqual([
+      'terminal.new-with-tmux',
+      'terminal.external',
+      'Close Repo A',
+    ])
     const close = items.find((item) => item.textContent?.includes('Close Repo A'))
     expect(close?.getAttribute('data-variant')).toBe('default')
 
@@ -432,6 +436,7 @@ describe('SidebarProjectList', () => {
       'worktrees.open-in-editor-label',
       'terminal.external',
       'terminal.internal',
+      'terminal.new-with-tmux',
       'terminal.close-all',
     ])
 

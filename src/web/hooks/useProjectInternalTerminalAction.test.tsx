@@ -84,11 +84,25 @@ describe('useProjectInternalTerminalAction', () => {
 
     expect(navigation.showRepoBranchDetailTab).toHaveBeenCalledWith(repo.id, 'feature/demo', 'terminal')
     expect(setDetailCollapsed).toHaveBeenCalledWith(false)
-    expect(createTerminal).toHaveBeenCalledWith({
-      repoRoot: repo.id,
-      branch: 'feature/demo',
-      worktreePath: '/worktrees/demo',
-    })
+    expect(createTerminal).toHaveBeenCalledWith(
+      {
+        repoRoot: repo.id,
+        branch: 'feature/demo',
+        worktreePath: '/worktrees/demo',
+      },
+      'native',
+    )
+
+    createTerminal.mockClear()
+    await act(async () => await action().onSelect('tmux-if-available'))
+    expect(createTerminal).toHaveBeenCalledWith(
+      {
+        repoRoot: repo.id,
+        branch: 'feature/demo',
+        worktreePath: '/worktrees/demo',
+      },
+      'tmux-if-available',
+    )
   })
 
   test('activates a multi-repository workspace overview before creating a root terminal', async () => {
@@ -104,11 +118,14 @@ describe('useProjectInternalTerminalAction', () => {
 
     expect(activateWorkspaceOverview).toHaveBeenCalledWith(workspace.id)
     expect(navigation.activateRepo).not.toHaveBeenCalled()
-    expect(createTerminal).toHaveBeenCalledWith({
-      repoRoot: workspace.id,
-      branch: NON_GIT_WORKSPACE_TERMINAL_BRANCH,
-      worktreePath: workspace.id,
-    })
+    expect(createTerminal).toHaveBeenCalledWith(
+      {
+        repoRoot: workspace.id,
+        branch: NON_GIT_WORKSPACE_TERMINAL_BRANCH,
+        worktreePath: workspace.id,
+      },
+      'native',
+    )
   })
 
   test('activates an ordinary plain workspace before creating a root terminal', async () => {

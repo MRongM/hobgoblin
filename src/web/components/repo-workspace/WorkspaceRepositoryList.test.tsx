@@ -342,6 +342,7 @@ describe('WorkspaceRepositoryList', () => {
       'worktrees.open-in-editor-label',
       'terminal.external',
       'terminal.internal',
+      'terminal.new-with-tmux',
       'terminal.close-all',
     ])
 
@@ -392,7 +393,7 @@ describe('WorkspaceRepositoryList', () => {
     expect(item.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="editor"]')?.disabled).toBe(true)
     expect(item.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="terminal"]')?.disabled).toBe(true)
     const menuItems = await openRepositoryMenu('/workspace/api')
-    expect(menuItems.map((entry) => entry.textContent?.trim())).toEqual(['terminal.external'])
+    expect(menuItems.map((entry) => entry.textContent?.trim())).toEqual(['terminal.new-with-tmux', 'terminal.external'])
     expect(menuItems[0]?.hasAttribute('data-disabled')).toBe(true)
   })
 

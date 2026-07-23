@@ -22,6 +22,7 @@ import {
   type TerminalCreateInput,
   type TerminalSessionSummary,
   type TerminalWindowsPty,
+  normalizeTerminalLaunchMode,
 } from '#/shared/terminal.ts'
 
 interface EnsureTerminalCatalogInput {
@@ -31,6 +32,7 @@ interface EnsureTerminalCatalogInput {
   targetKind?: 'branch-workspace'
   branchWorkspaceId?: string
   terminalId?: string
+  launchMode?: TerminalCreateInput['launchMode']
   cols?: number
   rows?: number
   attachmentId?: string
@@ -78,14 +80,10 @@ interface TerminalCatalogManager {
   closeSession(sessionId: string): void
 }
 
-type MaybePromise<T> = T | Promise<T>
-
 interface TerminalCatalogOptions {
   isValidClientId(value: unknown): value is string
   isValidTerminalId(value: unknown): value is string
   manager: TerminalCatalogManager
-  localTerminalTmuxEnabled(): MaybePromise<boolean>
-  remoteTerminalTmuxEnabled(): MaybePromise<boolean>
   attachmentIsConnected(clientId: string, attachmentId?: string): boolean | undefined
   broadcastSessionsChanged(repoRoot: string): void
   withSessionSnapshot(
@@ -243,7 +241,7 @@ class TerminalCatalog {
     }
     const terminalNumber = parseTerminalIdIndex(context.terminalId)
     if (terminalNumber === null) return { ok: false, message: 'error.invalid-arguments' }
-    const useTmux = (await this.options.remoteTerminalTmuxEnabled()) === true
+    const useTmux = normalizeTerminalLaunchMode(input.launchMode) === 'tmux-if-available'
 
     const invocation = buildRemoteTerminalInvocation(resolved.target, input.worktreePath, {
       cols: context.cols,
@@ -263,6 +261,9 @@ class TerminalCatalog {
       forceNew: context.action === 'created',
       command: invocation.command,
       args: invocation.args,
+      ...(invocation.tmuxSessionName
+        ? { tmuxSessionName: invocation.tmuxSessionName, tmuxWorkingDirectory: input.worktreePath }
+        : {}),
     })
     if (!result.ok) return { ok: false, message: result.message }
     this.options.broadcastSessionsChanged(input.repoRoot)
@@ -324,7 +325,7 @@ class TerminalCatalog {
   ): Promise<EnsureTerminalCatalogResult> {
     const terminalNumber = parseTerminalIdIndex(context.terminalId)
     if (terminalNumber === null) return { ok: false, message: 'error.invalid-arguments' }
-    const useTmux = (await this.options.localTerminalTmuxEnabled()) === true
+    const useTmux = normalizeTerminalLaunchMode(input.launchMode) === 'tmux-if-available'
     const invocation = buildManagedLocalTerminalInvocation(
       {
         projectRoot: context.repoRoot,
@@ -345,6 +346,9 @@ class TerminalCatalog {
       forceNew: context.action === 'created',
       command: invocation?.command,
       args: invocation?.args,
+      ...(invocation
+        ? { tmuxSessionName: invocation.tmuxSessionName, tmuxWorkingDirectory: context.worktreePath }
+        : {}),
     })
     if (!result.ok) return { ok: false, message: result.message }
     this.options.broadcastSessionsChanged(input.repoRoot)

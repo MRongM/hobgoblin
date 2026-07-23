@@ -39,7 +39,7 @@ function createTerminalFacadeStub(): TerminalFacade {
       canonicalRows: 24,
       phase: 'open' as const,
     })),
-    close: vi.fn(() => true),
+    close: vi.fn(() => ({ ok: true as const })),
     closeSessions: vi.fn(() => ({ closed: [], missing: [] })),
     notifyBell: vi.fn(() => true),
     listSessions: vi.fn(async () => []),

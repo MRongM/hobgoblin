@@ -18,7 +18,13 @@ function action(id: BranchActionItemId, overrides: Partial<BranchActionItem> = {
 
 function actionGroups(): BranchActionItemGroups {
   return {
-    externalItems: [action('editor'), action('terminal'), action('externalTerminal'), action('remote')],
+    externalItems: [
+      action('editor'),
+      action('terminal'),
+      action('terminalTmux', { menuOnly: true }),
+      action('externalTerminal'),
+      action('remote'),
+    ],
     mainItems: [
       action('checkout', { visible: false }),
       action('pull', { disabled: true }),
@@ -58,7 +64,7 @@ describe('projectWorktreeListItemActions', () => {
     expect(projection.editor?.id).toBe('editor')
     expect(projection.internalTerminal?.id).toBe('terminal')
     expect(ids(projection.menuGroups)).toEqual([
-      ['externalTerminal', 'remote'],
+      ['terminalTmux', 'externalTerminal', 'remote'],
       ['pull', 'push', 'createBranch', 'pullRemoteBranch', 'checkoutTo', 'merge', 'commit', 'copyPatch'],
       ['createTag'],
       ['closeAllTerminals', 'removeWorktree', 'cleanupWorktree', 'resetHard'],
@@ -66,6 +72,7 @@ describe('projectWorktreeListItemActions', () => {
     expect(projection.menuGroups[1]?.[0]?.disabled).toBe(true)
     expect(projection.contextMenu.editor.disabled).toBe(false)
     expect(projection.contextMenu.internalTerminal.disabled).toBe(false)
+    expect(projection.contextMenu.tmuxTerminal.disabled).toBe(false)
   })
 
   test('retains the ordinary non-worktree branch projection', () => {
@@ -77,7 +84,7 @@ describe('projectWorktreeListItemActions', () => {
     expect(projection.editor).toBeUndefined()
     expect(projection.internalTerminal).toBeUndefined()
     expect(ids(projection.menuGroups)).toEqual([
-      ['editor', 'terminal', 'externalTerminal', 'remote'],
+      ['editor', 'terminal', 'terminalTmux', 'externalTerminal', 'remote'],
       [
         'checkout',
         'pull',
@@ -103,7 +110,7 @@ describe('projectWorktreeListItemActions', () => {
     })
 
     expect(ids(projection.menuGroups)).toEqual([
-      ['externalTerminal', 'remote'],
+      ['terminalTmux', 'externalTerminal', 'remote'],
       ['pull', 'push', 'createBranch', 'pullRemoteBranch', 'merge', 'commit', 'copyPatch'],
       ['createTag'],
       ['closeAllTerminals', 'resetHard'],

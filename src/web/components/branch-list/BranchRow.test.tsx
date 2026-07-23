@@ -695,7 +695,7 @@ describe('BranchRow', () => {
     })
   })
 
-  test('offers the four scoped worktree actions from the row context menu', async () => {
+  test('offers scoped worktree and tmux cleanup actions from the row context menu', async () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
     render(
@@ -718,7 +718,9 @@ describe('BranchRow', () => {
       'worktrees.open-in-editor-label',
       'terminal.external',
       'terminal.internal',
+      'terminal.new-with-tmux',
       'terminal.close-all',
+      'tmux.cleanup.action',
     ])
 
     await clickContextMenuItem(row, 'worktrees.open-in-editor-label')
@@ -1032,6 +1034,7 @@ describe('BranchRow', () => {
       'action.push',
       'action.create-tag',
       'action.remove-worktree',
+      'tmux.cleanup.action',
     ])
     expect(labels).not.toContain('action.create-worktree')
     expect(labels).not.toContain('action.refresh')
@@ -1040,6 +1043,9 @@ describe('BranchRow', () => {
     expect(
       items.find((item) => item.textContent?.includes('action.remove-worktree'))?.getAttribute('data-variant'),
     ).toBe('destructive')
+    expect(items.find((item) => item.textContent?.includes('tmux.cleanup.action'))?.getAttribute('data-variant')).toBe(
+      'destructive',
+    )
   })
 
   test('clicking the branch row selects its branch', () => {

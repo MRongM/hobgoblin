@@ -249,7 +249,9 @@ describe('useBranchActionItems', () => {
     const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
     const groups = await renderItemGroups(useItems, repo, targetBranch)
     const terminal = groups.externalItems.find((item) => item.id === 'terminal')
+    const tmuxTerminal = groups.externalItems.find((item) => item.id === 'terminalTmux')
     if (!terminal) throw new Error('missing terminal action')
+    if (!tmuxTerminal) throw new Error('missing tmux terminal action')
 
     expect(terminal.disabled).toBe(false)
     expect(terminal.label).toBe('terminal.internal')
@@ -267,11 +269,27 @@ describe('useBranchActionItems', () => {
       await terminal.onSelect()
     })
 
-    expect(createTerminal).toHaveBeenCalledWith({
-      repoRoot: '/tmp/repo',
-      branch: 'feature/internal',
-      worktreePath: '/tmp/repo-feature',
+    expect(createTerminal).toHaveBeenCalledWith(
+      {
+        repoRoot: '/tmp/repo',
+        branch: 'feature/internal',
+        worktreePath: '/tmp/repo-feature',
+      },
+      'native',
+    )
+
+    createTerminal.mockClear()
+    await act(async () => {
+      await tmuxTerminal.onSelect()
     })
+    expect(createTerminal).toHaveBeenCalledWith(
+      {
+        repoRoot: '/tmp/repo',
+        branch: 'feature/internal',
+        worktreePath: '/tmp/repo-feature',
+      },
+      'tmux-if-available',
+    )
     expect(useReposStore.getState().repos['/tmp/repo']?.ui.selectedBranch).toBe('feature/internal')
     expect(openExternalTerminal).not.toHaveBeenCalled()
   })
@@ -403,6 +421,7 @@ describe('useBranchActionItems', () => {
     expect(groups.externalItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
       'editor',
       'terminal',
+      'terminalTmux',
       'externalTerminal',
       'remote',
     ])
@@ -489,6 +508,7 @@ describe('useBranchActionItems', () => {
     expect(groups.externalItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
       'editor',
       'terminal',
+      'terminalTmux',
       'externalTerminal',
       'remote',
     ])

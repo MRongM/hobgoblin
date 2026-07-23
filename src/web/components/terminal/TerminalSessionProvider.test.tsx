@@ -29,6 +29,7 @@ import type {
 } from '#/web/components/terminal/types.ts'
 import type {
   TerminalCatalogMutationResult,
+  TerminalCloseResult,
   TerminalCreateInput,
   TerminalExitEvent,
   TerminalAttachResult,
@@ -255,8 +256,6 @@ vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
 vi.mock('#/web/runtime-settings-terminal-buttons.ts', () => ({
   useRuntimeTerminalSettings: () => ({
     fontFamily: runtimeTerminalSettingsMock.fontFamily,
-    localTerminalTmuxEnabled: false,
-    remoteTerminalTmuxEnabled: false,
     terminalCustomButtonsVisible: true,
     terminalCustomButtons: [],
     terminalFontSize: 14,
@@ -288,7 +287,7 @@ const listSessionsMock = vi.fn<(...args: Array<{ repoRoot: string }>) => Promise
 const getSessionSnapshotMock = vi.fn<
   (...args: Array<{ sessionId: string }>) => Promise<TerminalSessionSnapshot | null>
 >(async () => null)
-const closeMock = vi.fn(async () => true)
+const closeMock = vi.fn(async (): Promise<TerminalCloseResult> => ({ ok: true }))
 const createTerminalMock = vi.fn<(input: TerminalCreateInput) => Promise<TerminalCatalogMutationResult>>()
 let managedServerSessions: TerminalSessionSummary[] = []
 
@@ -327,7 +326,7 @@ beforeEach(() => {
   getSessionSnapshotMock.mockReset()
   getSessionSnapshotMock.mockResolvedValue(null)
   closeMock.mockReset()
-  closeMock.mockResolvedValue(true)
+  closeMock.mockResolvedValue({ ok: true })
   createTerminalMock.mockReset()
   branchWorkspaceMocks.readBranchWorkspaces.mockReset()
   branchWorkspaceMocks.readBranchWorkspaces.mockResolvedValue({
@@ -607,7 +606,7 @@ describe('TerminalSessionProvider', () => {
       const base = { repoRoot: REPO_ID, branch: 'feature/worktree', worktreePath: WORKTREE_PATH }
       await act(async () => {
         await getContext().createTerminal(base)
-        await getContext().createTerminal(base)
+        await getContext().createTerminal(base, 'tmux-if-available')
       })
 
       expect(createTerminalMock).toHaveBeenCalledTimes(2)
@@ -617,6 +616,7 @@ describe('TerminalSessionProvider', () => {
         attachmentId: 'attachment_local',
         cols: 80,
         rows: 24,
+        launchMode: 'native',
       })
       expect(createTerminalMock).toHaveBeenNthCalledWith(2, {
         ...base,
@@ -624,6 +624,7 @@ describe('TerminalSessionProvider', () => {
         attachmentId: 'attachment_local',
         cols: 80,
         rows: 24,
+        launchMode: 'tmux-if-available',
       })
       expect(getProbe().summaries.map((session) => [session.terminalId, session.selected, session.hasBell])).toEqual([
         ['terminal-1', false, false],

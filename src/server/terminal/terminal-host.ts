@@ -2,6 +2,7 @@ import type {
   TerminalAttachInput,
   TerminalAttachResult,
   TerminalCatalogMutationResult,
+  TerminalCloseResult,
   TerminalCloseSessionsResult,
   TerminalCreateInput,
   TerminalMutationResult,
@@ -62,7 +63,7 @@ export interface ServerTerminalHost {
   write(clientId: string, input: TerminalWriteInput): MaybePromise<TerminalMutationResult>
   resize(clientId: string, input: TerminalResizeInput): MaybePromise<TerminalMutationResult>
   takeover(clientId: string, input: TerminalTakeoverInput): MaybePromise<TerminalTakeoverResult>
-  close(clientId: string, input: TerminalSessionInput): MaybePromise<TerminalMutationResult>
+  close(clientId: string, input: TerminalSessionInput): MaybePromise<TerminalCloseResult>
   closeSessions(sessionIds: string[]): MaybePromise<TerminalCloseSessionsResult>
   notifyBell(clientId: string, input: TerminalNotifyBellInput): MaybePromise<TerminalMutationResult>
   listSessions(clientId: string, repoRoot: string): MaybePromise<TerminalSessionSummary[]>

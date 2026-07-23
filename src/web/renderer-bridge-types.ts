@@ -14,6 +14,7 @@ import type {
 } from '#/shared/file-tree-clipboard.ts'
 import type {
   TerminalCatalogMutationResult,
+  TerminalCloseResult,
   TerminalAttachInput,
   TerminalAttachResult,
   TerminalCreateInput,
@@ -42,7 +43,7 @@ export interface RendererTerminalBridge {
   write: (input: TerminalWriteInput) => Promise<TerminalMutationResult>
   resize: (input: TerminalResizeInput) => Promise<TerminalMutationResult>
   takeover: (input: TerminalTakeoverInput) => Promise<TerminalTakeoverResult>
-  close: (input: TerminalSessionInput) => Promise<TerminalMutationResult>
+  close: (input: TerminalSessionInput) => Promise<TerminalCloseResult>
   create: (input: TerminalCreateInput) => Promise<TerminalCatalogMutationResult>
   pruneTerminals: (repoRoot: string) => Promise<{ pruned: number; remaining: number }>
   listSessions: (input: { repoRoot: string }) => Promise<TerminalSessionSummary[]>

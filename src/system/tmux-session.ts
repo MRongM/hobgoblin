@@ -3,6 +3,7 @@ import path from 'node:path'
 
 const TMUX_SESSION_PROTOCOL = 'hobgoblin-terminal-session-v1'
 const TMUX_SESSION_PREFIX = 'hobgoblin-v1-'
+const HOBGOBLIN_TMUX_SESSION_NAME_RE = /^hobgoblin-v1-[a-f0-9]{24}$/u
 const MAX_TMUX_SESSION_PATH_CHARS = 4096
 const UNSAFE_PATH_CHARS_RE = /[\0-\x1f\x7f]/
 
@@ -32,7 +33,7 @@ export function buildTmuxSessionName(input: TmuxSessionDescriptor): string | nul
   return `${TMUX_SESSION_PREFIX}${digest}`
 }
 
-function normalizeTmuxSessionPath(value: string): string | null {
+export function normalizeTmuxSessionPath(value: string): string | null {
   if (
     typeof value !== 'string' ||
     value.length === 0 ||
@@ -44,6 +45,10 @@ function normalizeTmuxSessionPath(value: string): string | null {
   }
   const normalized = path.posix.normalize(value)
   return normalized === '/' ? normalized : normalized.replace(/\/$/u, '')
+}
+
+export function isHobgoblinTmuxSessionName(value: unknown): value is string {
+  return typeof value === 'string' && HOBGOBLIN_TMUX_SESSION_NAME_RE.test(value)
 }
 
 function isSafeTerminalNumber(value: number): boolean {

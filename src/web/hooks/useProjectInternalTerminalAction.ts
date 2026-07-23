@@ -1,4 +1,4 @@
-import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
+import { NON_GIT_WORKSPACE_TERMINAL_BRANCH, type TerminalLaunchMode } from '#/shared/terminal.ts'
 import { useTerminalSessionContext } from '#/web/components/terminal/terminal-session-context.ts'
 import type { TerminalSessionBase } from '#/web/components/terminal/types.ts'
 import { useAsyncPending } from '#/web/hooks/useAsyncPending.ts'
@@ -10,7 +10,7 @@ import type { RepoState } from '#/web/stores/repos/types.ts'
 export interface ProjectInternalTerminalAction {
   disabled: boolean
   busy: boolean
-  onSelect: () => Promise<void>
+  onSelect: (launchMode?: TerminalLaunchMode) => Promise<void>
 }
 
 export function resolveProjectInternalTerminalBase(repo: RepoState | null | undefined): TerminalSessionBase | null {
@@ -40,7 +40,7 @@ export function useProjectInternalTerminalAction(projectId: string): ProjectInte
   const terminalBase = resolveProjectInternalTerminalBase(repo)
   const disabled = !repo || repo.availability.phase === 'unavailable' || !terminalBase || isPending
 
-  async function onSelect(): Promise<void> {
+  async function onSelect(launchMode: TerminalLaunchMode = 'native'): Promise<void> {
     if (disabled || !repo || !terminalBase) return
     await run('internalTerminal', async () => {
       if (repo.isGitRepo === false) {
@@ -50,7 +50,7 @@ export function useProjectInternalTerminalAction(projectId: string): ProjectInte
         navigation.showRepoBranchDetailTab(projectId, terminalBase.branch, 'terminal')
       }
       setDetailCollapsed(false)
-      await createTerminal(terminalBase)
+      await createTerminal(terminalBase, launchMode)
     })
   }
 

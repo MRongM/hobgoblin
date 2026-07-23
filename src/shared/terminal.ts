@@ -24,6 +24,7 @@ export type TerminalSessionPhase = 'opening' | 'restarting' | 'open' | 'error' |
 export type TerminalControllerStatus = 'connected' | 'none'
 export type TerminalAttachmentRole = 'controller' | 'viewer' | 'unowned'
 export type TerminalWindowsPtyBackend = 'conpty' | 'winpty'
+export type TerminalLaunchMode = 'native' | 'tmux-if-available'
 
 export interface TerminalWindowsPty {
   backend?: TerminalWindowsPtyBackend
@@ -69,6 +70,7 @@ export interface TerminalCreateInput {
   targetKind?: 'branch-workspace'
   branchWorkspaceId?: string
   kind: 'primary' | 'additional'
+  launchMode?: TerminalLaunchMode
   cols?: number
   rows?: number
   attachmentId?: string
@@ -131,7 +133,10 @@ export type TerminalTakeoverInput = TerminalResizeInput
 
 export interface TerminalSessionInput {
   sessionId: string
+  closeTmuxSession?: boolean
 }
+
+export type TerminalCloseResult = { ok: true } | { ok: false; message: string }
 
 export interface TerminalCloseSessionsInput {
   sessionIds: string[]
@@ -174,6 +179,7 @@ export interface TerminalSessionSummary {
   phase: TerminalSessionPhase
   message: string | null
   windowsPty?: TerminalWindowsPty
+  tmuxBacked?: boolean
 }
 
 export interface TerminalSessionSnapshotInput {
@@ -240,7 +246,7 @@ export interface TerminalSocketResponseOutputs {
   write: TerminalMutationResult
   resize: TerminalMutationResult
   takeover: TerminalTakeoverResult
-  close: TerminalMutationResult
+  close: TerminalCloseResult
   'list-sessions': TerminalSessionSummary[]
   create: TerminalCatalogMutationResult
   prune: { pruned: number; remaining: number }
@@ -347,6 +353,7 @@ const TerminalWriteInputSchema = v.object({
 const TerminalResizeInputSchema = TerminalAttachInputSchema
 const TerminalSessionInputSchema = v.object({
   sessionId: TerminalSessionIdSchema,
+  closeTmuxSession: v.optional(v.boolean()),
 })
 const TerminalListSessionsInputSchema = v.object({
   repoRoot: v.string(),
@@ -358,6 +365,7 @@ const TerminalCreateInputSchema = v.object({
   targetKind: v.optional(v.literal('branch-workspace')),
   branchWorkspaceId: v.optional(v.string()),
   kind: v.picklist(['primary', 'additional']),
+  launchMode: v.optional(v.unknown()),
   cols: v.optional(TerminalColsSchema),
   rows: v.optional(TerminalRowsSchema),
   attachmentId: TerminalOptionalAttachmentIdSchema,
@@ -386,6 +394,7 @@ const TerminalSessionSummarySchema = v.object({
   phase: TerminalSessionPhaseSchema,
   message: v.nullable(v.string()),
   windowsPty: v.optional(TerminalWindowsPtySchema),
+  tmuxBacked: v.optional(v.boolean()),
 })
 const TerminalSessionSnapshotSchema = v.object({
   sessionId: v.string(),
@@ -524,6 +533,10 @@ export function normalizeTerminalSize(cols: unknown, rows: unknown): { cols: num
   return { cols: c, rows: r }
 }
 
+export function normalizeTerminalLaunchMode(value: unknown): TerminalLaunchMode {
+  return value === 'tmux-if-available' ? value : 'native'
+}
+
 export function isValidTerminalSize(cols: unknown, rows: unknown): boolean {
   return normalizeTerminalSize(cols, rows) !== null
 }
@@ -570,7 +583,15 @@ export function normalizeTerminalSocketServerMessage(value: unknown): TerminalSo
 
 export function normalizeTerminalClientMessage(value: unknown): TerminalClientMessage | null {
   const parsed = v.safeParse(TerminalClientMessageSchema, value)
-  return parsed.success ? parsed.output : null
+  if (!parsed.success) return null
+  if (parsed.output.action !== 'create') return parsed.output
+  return {
+    ...parsed.output,
+    input: {
+      ...parsed.output.input,
+      launchMode: normalizeTerminalLaunchMode(parsed.output.input.launchMode),
+    },
+  }
 }
 
 export function resolveTerminalAttachmentRole(

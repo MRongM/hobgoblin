@@ -7,6 +7,10 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { TerminalTabs } from '#/web/components/terminal/TerminalTabs.tsx'
 import type { TerminalSessionSummary } from '#/web/components/terminal/types.ts'
 
+const toastError = vi.hoisted(() => vi.fn())
+
+vi.mock('sonner', () => ({ toast: { error: toastError } }))
+
 let container: HTMLDivElement | null = null
 let root: Root | null = null
 const reactActEnvironment = globalThis as typeof globalThis & {
@@ -17,6 +21,7 @@ const reactActEnvironment = globalThis as typeof globalThis & {
 beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   vi.useFakeTimers()
+  toastError.mockClear()
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
     configurable: true,
     value: vi.fn(),
@@ -156,6 +161,31 @@ describe('TerminalTabs', () => {
 
     clickElementByText('term-1')
     expect(onSelect).toHaveBeenCalledWith(String.raw`/repo\0/repo/worktree`, 't1')
+  })
+
+  test('keeps direct creation native and exposes explicit tmux creation in terminal menus', async () => {
+    const onNew = vi.fn()
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        responsiveCompact
+        sessions={[session()]}
+        onNew={onNew}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    await openCompactTerminalDropdown()
+    clickElementByText('terminal.new-with-tmux')
+    expect(onNew).toHaveBeenCalledWith('tmux-if-available')
+
+    onNew.mockClear()
+    await clickTabContextMenuItem('t1', 'terminal.new')
+    expect(onNew).toHaveBeenCalledWith('native')
   })
 
   test('keeps the compact close action outside the terminal dropdown trigger', () => {
@@ -860,6 +890,7 @@ describe('TerminalTabs', () => {
     expect(onClose).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain('terminal.close-confirm-title')
     expect(document.body.textContent).toContain('terminal.close-confirm-body')
+    expect(document.body.querySelector('[role="checkbox"]')).toBeNull()
 
     const confirmButton = [...document.body.querySelectorAll('button')].find((button) =>
       button.textContent?.includes('terminal.close-confirm-confirm'),
@@ -872,6 +903,84 @@ describe('TerminalTabs', () => {
 
     expect(onClose).toHaveBeenCalledTimes(1)
     expect(onClose).toHaveBeenCalledWith('t1')
+  })
+
+  test('offers an unchecked exact tmux close option for a tmux-backed terminal', async () => {
+    const onClose = vi.fn(async () => ({ ok: true as const }))
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[session({ key: 't1', title: 'term-1', tmuxBacked: true })]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+
+    clickCloseButton()
+    const checkbox = document.body.querySelector<HTMLElement>('[role="checkbox"]')
+    expect(checkbox?.getAttribute('data-state')).toBe('unchecked')
+    expect(document.body.textContent).toContain('terminal.close-tmux-session')
+    expect(document.body.textContent).toContain('terminal.close-tmux-session-hint')
+
+    act(() => checkbox?.click())
+    await clickSingleCloseConfirm()
+
+    expect(onClose).toHaveBeenCalledWith('t1', { closeTmuxSession: true })
+    expect(document.body.textContent).not.toContain('terminal.close-confirm-title')
+  })
+
+  test('resets the tmux close option after cancellation', () => {
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[session({ key: 't1', title: 'term-1', tmuxBacked: true })]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    clickCloseButton()
+    act(() => document.body.querySelector<HTMLElement>('[role="checkbox"]')?.click())
+    clickElementByText('dialog.cancel')
+    clickCloseButton()
+
+    expect(document.body.querySelector<HTMLElement>('[role="checkbox"]')?.getAttribute('data-state')).toBe('unchecked')
+  })
+
+  test('keeps the dialog open and reports a checked tmux close failure', async () => {
+    const onClose = vi.fn(async () => ({ ok: false as const, message: 'error.tmux-command-failed' }))
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[session({ key: 't1', title: 'term-1', tmuxBacked: true })]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+
+    clickCloseButton()
+    act(() => document.body.querySelector<HTMLElement>('[role="checkbox"]')?.click())
+    await clickSingleCloseConfirm()
+
+    expect(document.body.textContent).toContain('terminal.close-confirm-title')
+    expect(toastError).toHaveBeenCalledWith('terminal.close-tmux-session-failed', {
+      description: 'error.tmux-command-failed',
+    })
   })
 
   test('cancels terminal close confirmation without closing the tab', () => {
@@ -1036,6 +1145,21 @@ function clickElementByText(text: string) {
   const element = elementByText(text)
   act(() => {
     element.click()
+  })
+}
+
+function clickCloseButton() {
+  const closeButton = document.body.querySelector<HTMLButtonElement>('button[aria-label="terminal.close-named"]')
+  if (!closeButton) throw new Error('missing terminal close button')
+  act(() => closeButton.click())
+}
+
+async function clickSingleCloseConfirm() {
+  const confirm = elementByText('terminal.close-confirm-confirm')
+  await act(async () => {
+    confirm.click()
+    await Promise.resolve()
+    await Promise.resolve()
   })
 }
 

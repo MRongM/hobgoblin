@@ -14,6 +14,7 @@ import { createRealtimeRoutes } from '#/server/routes/realtime.ts'
 import { createRepoRoutes } from '#/server/routes/repo.ts'
 import { createSettingsRoutes } from '#/server/routes/settings.ts'
 import { createTelegramNotificationRoutes } from '#/server/routes/telegram-notifications.ts'
+import { createTmuxCleanupRoutes } from '#/server/routes/tmux-cleanup.ts'
 import { createWorkspaceRoutes } from '#/server/routes/workspace.ts'
 import { createWebAccessAuthRoutes, readWebAccessSessionCookie } from '#/server/routes/web-access-auth.ts'
 import type { ServerTerminalHost } from '#/server/terminal/terminal-host.ts'
@@ -53,6 +54,7 @@ function buildWebBootstrap(
   return createRendererBootstrapSnapshot({
     runtime: createRendererRuntimeSnapshot('web', WEB_RENDERER_CAPABILITIES),
     homeDir: os.homedir(),
+    hostPlatform: process.platform,
     i18n: resolveI18nSnapshot(langPref, acceptLanguageHeader),
     settings: initialSettingsFromSnapshot({
       ...settings,
@@ -137,6 +139,7 @@ export function createApp(options: ServerAppOptions): Hono {
   )
   app.use('/api/settings/*', capabilityMiddleware)
   app.use('/api/telegram-notifications/*', capabilityMiddleware)
+  app.use('/api/tmux-cleanup/*', capabilityMiddleware)
   app.use('/api/remote/*', capabilityMiddleware)
   app.use('/api/repo/*', capabilityMiddleware)
   app.use('/api/workspace/*', capabilityMiddleware)
@@ -148,6 +151,7 @@ export function createApp(options: ServerAppOptions): Hono {
       readTerminalOutputExcerpt: (input) => Promise.resolve(options.terminalHost.getOutputExcerpt(input)),
     }),
   )
+  app.route('/api/tmux-cleanup', createTmuxCleanupRoutes())
   app.route('/api/remote', createRemoteRoutes())
   app.route('/api/repo', createRepoRoutes())
   app.route('/api/workspace', createWorkspaceRoutes({ terminalHost: options.terminalHost, terminalClientId }))

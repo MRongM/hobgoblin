@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import { PanelLeftOpen } from 'lucide-react'
-import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
+import { NON_GIT_WORKSPACE_TERMINAL_BRANCH, type TerminalLaunchMode } from '#/shared/terminal.ts'
 import { Toolbar } from '#/web/components/Layout.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { FocusProjectSwitcher } from '#/web/components/repo-workspace/FocusProjectSwitcher.tsx'
@@ -64,9 +64,12 @@ export function PlainWorkspaceTerminalPanel({
     [repoId, workspacePath],
   )
 
-  const handleNewTerminal = useCallback(() => {
-    void createTerminal(terminalBase)
-  }, [createTerminal, terminalBase])
+  const handleNewTerminal = useCallback(
+    (launchMode: TerminalLaunchMode = 'native') => {
+      void createTerminal(terminalBase, launchMode)
+    },
+    [createTerminal, terminalBase],
+  )
 
   const handleSelectTerminal = useCallback(
     (key: string) => {
@@ -76,8 +79,8 @@ export function PlainWorkspaceTerminalPanel({
   )
 
   const handleCloseTerminal = useCallback(
-    (key: string) => {
-      closeTerminalAndDismissDetailIfLast(key, terminalBase)
+    (key: string, options?: Parameters<typeof closeTerminalAndDismissDetailIfLast>[2]) => {
+      return closeTerminalAndDismissDetailIfLast(key, terminalBase, options)
     },
     [closeTerminalAndDismissDetailIfLast, terminalBase],
   )

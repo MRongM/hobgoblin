@@ -62,8 +62,6 @@ export function TerminalSettings() {
   const t = useT()
   const {
     terminalCustomButtons: buttons,
-    localTerminalTmuxEnabled,
-    remoteTerminalTmuxEnabled,
     terminalCustomButtonsVisible,
     terminalCustomButtonSize,
     terminalFontSize,
@@ -73,8 +71,6 @@ export function TerminalSettings() {
   const [dirty, setDirty] = useState(false)
   const {
     setTerminalCustomButtons,
-    setLocalTerminalTmuxEnabled,
-    setRemoteTerminalTmuxEnabled,
     setTerminalCustomButtonsVisible,
     setTerminalCustomButtonSize,
   } = useTerminalCustomButtonsController()
@@ -129,36 +125,6 @@ export function TerminalSettings() {
                 max={MAX_TERMINAL_FONT_SIZE}
                 value={terminalFontSize}
                 onChange={(fontSize) => void setTerminalFontSize(fontSize)}
-              />
-            }
-          />
-        </SettingsList>
-      </SettingsGroup>
-      <SettingsGroup label={t('settings.terminal-tmux.title')} hint={t('settings.terminal-tmux.hint')}>
-        <SettingsList>
-          <SettingsRow
-            controlId="settings-terminal-tmux-local"
-            label={t('settings.terminal-tmux.local')}
-            hint={t('settings.terminal-tmux.local-hint')}
-            control={
-              <Switch
-                id="settings-terminal-tmux-local"
-                checked={localTerminalTmuxEnabled}
-                onCheckedChange={(enabled) => void setLocalTerminalTmuxEnabled(enabled)}
-                aria-label={t('settings.terminal-tmux.local')}
-              />
-            }
-          />
-          <SettingsRow
-            controlId="settings-terminal-tmux-remote"
-            label={t('settings.terminal-tmux.remote')}
-            hint={t('settings.terminal-tmux.remote-hint')}
-            control={
-              <Switch
-                id="settings-terminal-tmux-remote"
-                checked={remoteTerminalTmuxEnabled}
-                onCheckedChange={(enabled) => void setRemoteTerminalTmuxEnabled(enabled)}
-                aria-label={t('settings.terminal-tmux.remote')}
               />
             }
           />
