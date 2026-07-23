@@ -19,6 +19,7 @@ export interface TerminalDescriptor {
   targetKind?: 'branch-workspace'
   branchWorkspaceId?: string
   tmuxBacked?: boolean
+  tmuxCloseSupported?: boolean
 }
 
 export interface TerminalProgressState {
@@ -117,6 +118,7 @@ export interface TerminalSessionSummary {
   selected: boolean
   hasBell: boolean
   tmuxBacked?: boolean
+  tmuxCloseSupported?: boolean
 }
 
 export interface TerminalCloseOptions {

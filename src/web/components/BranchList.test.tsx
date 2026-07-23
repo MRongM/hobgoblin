@@ -294,6 +294,23 @@ describe('BranchList worktree drag ordering', () => {
     )
   })
 
+  test('keeps worktree double clicks on branch selection without opening status', () => {
+    seedWorktreeRepo()
+    renderList()
+    const featureButton = Array.from(container?.querySelectorAll('li') ?? [])
+      .find((row) => row.textContent?.includes('feature/a'))
+      ?.querySelector<HTMLButtonElement>('[data-workspace-list-item-main]')
+
+    act(() => {
+      featureButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+      featureButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 2 }))
+      featureButton?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 }))
+    })
+
+    expect(navigationState.selectRepoBranch).toHaveBeenCalledWith(REPO_ID, 'feature/a')
+    expect(navigationState.showRepoDetailTab).not.toHaveBeenCalled()
+  })
+
   test('renders branch names and exposes worktree directory names in row tooltips', () => {
     seedRepoState({
       id: REPO_ID,

@@ -28,7 +28,7 @@ beforeEach(() => {
 })
 
 describe('terminal session manager administrative close', () => {
-  test('retains private tmux identity while projecting only tmux eligibility', async () => {
+  test('retains tmux identity and projects close capability for catalog recovery', async () => {
     const manager = new TerminalSessionManager<string>({ onOutput: vi.fn(), onExit: vi.fn() })
     const created = manager.ensureSession({
       ownerId: 'client_a',
@@ -39,14 +39,22 @@ describe('terminal session manager administrative close', () => {
       rows: 24,
       tmuxSessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
       tmuxWorkingDirectory: '/workspace/feature',
+      tmuxCloseSupported: false,
     })
     expect(created.ok).toBe(true)
     if (!created.ok) return
 
-    expect(await manager.listSessions('/workspace')).toEqual([expect.objectContaining({ tmuxBacked: true })])
+    expect(await manager.listSessions('/workspace')).toEqual([
+      expect.objectContaining({
+        tmuxBacked: true,
+        tmuxSessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+        tmuxCloseSupported: false,
+      }),
+    ])
     expect(manager.getSession('client_a', created.sessionId)).toMatchObject({
       tmuxSessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
       tmuxWorkingDirectory: '/workspace/feature',
+      tmuxCloseSupported: false,
     })
 
     manager.ensureSession({
@@ -60,6 +68,7 @@ describe('terminal session manager administrative close', () => {
     expect(manager.getSession('client_a', created.sessionId)).toMatchObject({
       tmuxSessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
       tmuxWorkingDirectory: '/workspace/feature',
+      tmuxCloseSupported: false,
     })
   })
 

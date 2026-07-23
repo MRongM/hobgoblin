@@ -265,7 +265,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -294,7 +293,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -328,7 +326,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -353,7 +350,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -378,7 +374,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -404,7 +399,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -434,7 +428,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -464,7 +457,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -489,7 +481,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -515,7 +506,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -542,7 +532,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -567,7 +556,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -594,7 +582,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -621,7 +608,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -646,7 +632,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -672,7 +657,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -705,7 +689,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -742,7 +725,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -774,7 +756,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -799,7 +780,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -822,7 +802,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -845,7 +824,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -875,7 +853,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -900,7 +877,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
           sortable={{
@@ -934,7 +910,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
           sortable={{
@@ -966,7 +941,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
         />
       </ul>,
@@ -988,7 +962,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions
         />
@@ -1019,7 +992,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions
         />
@@ -1060,7 +1032,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={onSelectBranch}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -1086,7 +1057,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={onSelectBranch}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions
         />
@@ -1113,7 +1083,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={onSelectBranch}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions
         />
@@ -1140,7 +1109,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={onSelectBranch}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions
         />
@@ -1166,7 +1134,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions
         />

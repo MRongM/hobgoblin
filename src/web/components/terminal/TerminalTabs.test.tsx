@@ -934,6 +934,33 @@ describe('TerminalTabs', () => {
     expect(document.body.textContent).not.toContain('terminal.close-confirm-title')
   })
 
+  test('tells users to run exit when the tmux name does not match the assigned terminal slot', async () => {
+    const onClose = vi.fn(async () => ({ ok: true as const }))
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[
+          session({ key: 't1', title: 'term-1', tmuxBacked: true, tmuxCloseSupported: false }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+
+    clickCloseButton()
+
+    expect(document.body.querySelector('[role="checkbox"]')).toBeNull()
+    expect(document.body.textContent).toContain('terminal.close-tmux-session-exit-required')
+
+    await clickSingleCloseConfirm()
+    expect(onClose).toHaveBeenCalledWith('t1')
+  })
+
   test('resets the tmux close option after cancellation', () => {
     render(
       <TerminalTabs

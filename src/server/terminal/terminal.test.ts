@@ -3,6 +3,7 @@ import { spawn } from 'node-pty'
 import { getWorktrees } from '#/system/git/worktrees.ts'
 import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
 import { buildTmuxSessionName } from '#/system/tmux-session.ts'
+import * as terminalServer from '#/server/terminal/terminal.ts'
 import {
   closeAllServerTerminalSessions,
   closeServerTerminalSessions,
@@ -26,9 +27,17 @@ import {
 const branchWorkspaceSourceMocks = vi.hoisted(() => ({
   readBranchWorkspaceManifests: vi.fn(),
 }))
+const tmuxCleanupMocks = vi.hoisted(() => ({
+  previewAssociatedTmuxSessions: vi.fn(),
+}))
 
 vi.mock('#/server/modules/branch-workspace-source.ts', () => ({
   readBranchWorkspaceManifests: branchWorkspaceSourceMocks.readBranchWorkspaceManifests,
+}))
+
+vi.mock('#/server/modules/tmux-cleanup.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('#/server/modules/tmux-cleanup.ts')>()),
+  previewAssociatedTmuxSessions: tmuxCleanupMocks.previewAssociatedTmuxSessions,
 }))
 
 vi.mock('#/system/git/worktrees.ts', () => ({
@@ -114,6 +123,12 @@ beforeEach(() => {
   vi.mocked(spawn).mockClear()
   branchWorkspaceSourceMocks.readBranchWorkspaceManifests.mockReset()
   branchWorkspaceSourceMocks.readBranchWorkspaceManifests.mockResolvedValue({ kind: 'missing' })
+  tmuxCleanupMocks.previewAssociatedTmuxSessions.mockReset()
+  tmuxCleanupMocks.previewAssociatedTmuxSessions.mockResolvedValue({
+    ok: true,
+    targetPath: '/repo-linked',
+    sessions: [],
+  })
 })
 
 async function createTerminalSession(
@@ -144,6 +159,146 @@ async function createTerminalSession(
 }
 
 describe('server terminal sessions', () => {
+  test('opens every associated tmux session in original terminal-number order with one discovery', async () => {
+    const terminalOne = buildTmuxSessionName({
+      projectRoot: '/repo',
+      workingDirectory: '/repo-linked',
+      terminalNumber: 1,
+    })!
+    const terminalTwo = buildTmuxSessionName({
+      projectRoot: '/repo',
+      workingDirectory: '/repo-linked',
+      terminalNumber: 2,
+    })!
+    tmuxCleanupMocks.previewAssociatedTmuxSessions.mockResolvedValueOnce({
+      ok: true,
+      targetPath: '/repo-linked',
+      sessions: [
+        { sessionName: terminalTwo, initialPath: '/repo-linked', terminalNumber: 2 },
+        { sessionName: terminalOne, initialPath: '/repo-linked', terminalNumber: 1 },
+      ],
+    })
+    const openTmuxSessions = (
+      terminalServer as typeof terminalServer & {
+        openServerTmuxSessions?: (
+          clientId: string,
+          input: {
+            repoRoot: string
+            branch: string
+            worktreePath: string
+            attachmentId?: string
+            cols?: number
+            rows?: number
+          },
+        ) => Promise<Awaited<ReturnType<typeof createServerTerminal>>>
+      }
+    ).openServerTmuxSessions
+    expect(openTmuxSessions).toBeTypeOf('function')
+
+    const result = await openTmuxSessions!('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+      attachmentId: 'attachment_1',
+      cols: 100,
+      rows: 30,
+    })
+
+    expect(result).toMatchObject({ ok: true, key: '/repo\0/repo-linked\0terminal-1' })
+    if (!result.ok) return
+    expect(result.sessions).toEqual([
+      expect.objectContaining({
+        key: '/repo\0/repo-linked\0terminal-1',
+        tmuxSessionName: terminalOne,
+        tmuxCloseSupported: true,
+      }),
+      expect.objectContaining({
+        key: '/repo\0/repo-linked\0terminal-2',
+        tmuxSessionName: terminalTwo,
+        tmuxCloseSupported: true,
+      }),
+    ])
+    expect(tmuxCleanupMocks.previewAssociatedTmuxSessions).toHaveBeenCalledTimes(1)
+    expect(spawn).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(spawn).mock.calls.map((call) => (call[1] as string[]).at(-1))).toEqual([
+      expect.stringContaining(`tmux attach-session -t '=${terminalOne}'`),
+      expect.stringContaining(`tmux attach-session -t '=${terminalTwo}'`),
+    ])
+  })
+
+  test('falls back to a free internal slot and blocks unsafe tmux closure when the hash no longer matches', async () => {
+    const occupied = await createServerTerminal('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+      kind: 'primary',
+    })
+    expect(occupied.ok).toBe(true)
+    const terminalOne = buildTmuxSessionName({
+      projectRoot: '/repo',
+      workingDirectory: '/repo-linked',
+      terminalNumber: 1,
+    })!
+    tmuxCleanupMocks.previewAssociatedTmuxSessions.mockResolvedValueOnce({
+      ok: true,
+      targetPath: '/repo-linked',
+      sessions: [{ sessionName: terminalOne, initialPath: '/repo-linked', terminalNumber: 1 }],
+    })
+    const openTmuxSessions = (
+      terminalServer as typeof terminalServer & {
+        openServerTmuxSessions?: (
+          clientId: string,
+          input: { repoRoot: string; branch: string; worktreePath: string },
+        ) => Promise<Awaited<ReturnType<typeof createServerTerminal>>>
+      }
+    ).openServerTmuxSessions
+    expect(openTmuxSessions).toBeTypeOf('function')
+
+    const result = await openTmuxSessions!('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+    })
+
+    expect(result).toMatchObject({ ok: true, key: '/repo\0/repo-linked\0terminal-2' })
+    if (!result.ok) return
+    expect(result.sessions.find((session) => session.key === result.key)).toMatchObject({
+      tmuxSessionName: terminalOne,
+      tmuxCloseSupported: false,
+    })
+    const closeTmuxSession = vi.fn()
+    await expect(
+      closeServerTerminal('client_1', { sessionId: result.sessionId, closeTmuxSession: true }, { closeTmuxSession }),
+    ).resolves.toEqual({ ok: false, message: 'terminal.close-tmux-session-exit-required' })
+    expect(closeTmuxSession).not.toHaveBeenCalled()
+  })
+
+  test('creates one tmux terminal when the current directory has no associated sessions', async () => {
+    const openTmuxSessions = (
+      terminalServer as typeof terminalServer & {
+        openServerTmuxSessions?: (
+          clientId: string,
+          input: { repoRoot: string; branch: string; worktreePath: string },
+        ) => Promise<Awaited<ReturnType<typeof createServerTerminal>>>
+      }
+    ).openServerTmuxSessions
+    expect(openTmuxSessions).toBeTypeOf('function')
+
+    const result = await openTmuxSessions!('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+    })
+
+    expect(result).toMatchObject({ ok: true, key: '/repo\0/repo-linked\0terminal-1' })
+    if (!result.ok) return
+    expect(result.sessions[0]).toMatchObject({ tmuxBacked: true, tmuxCloseSupported: true })
+    expect(spawn).toHaveBeenCalledWith(
+      expect.any(String),
+      ['-lc', expect.stringContaining('tmux new-session -A')],
+      expect.any(Object),
+    )
+  })
   test('creates an authorized local branch workspace terminal without resolving Git worktrees', async () => {
     branchWorkspaceSourceMocks.readBranchWorkspaceManifests.mockResolvedValue({
       kind: 'ready',

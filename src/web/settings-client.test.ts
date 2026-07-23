@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { RendererBootstrapSnapshot } from '#/shared/bootstrap.ts'
 import { ELECTRON_RENDERER_CAPABILITIES, RENDERER_BRIDGE_VERSION } from '#/shared/bootstrap.ts'
-import type { RendererBridge } from '#/web/renderer-bridge-types.ts'
 import { setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
 
 function webBootstrap(overrides: Partial<RendererBootstrapSnapshot> = {}): RendererBootstrapSnapshot {
@@ -43,24 +42,6 @@ function installWebBootstrap(bootstrap: RendererBootstrapSnapshot): void {
       matchMedia: vi.fn(() => ({ matches: true })),
     },
   })
-}
-
-function testBridge(overrides: Partial<RendererBridge> = {}): RendererBridge {
-  return {
-    kind: () => 'web',
-    hasCapability: () => false,
-    getBootstrap: () => electronBootstrap(),
-    invokeRpc: vi.fn(),
-    abortRpc: vi.fn(async () => false),
-    onRpcEvent: () => () => {},
-    onEffectIntent: () => () => {},
-    pathForFile: () => '',
-    shell: () => null,
-    terminal: (() => {
-      throw new Error('unused terminal bridge')
-    }) as never,
-    ...overrides,
-  }
 }
 
 describe('settings-client', () => {

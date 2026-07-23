@@ -686,6 +686,8 @@ export const ja: Record<DictKey, string> = {
   'terminal.close-tmux-session': 'tmux セッションも閉じる',
   'terminal.close-tmux-session-hint':
     '実行中のプロセスを終了し、このセッションに接続している他のクライアントを切断します。',
+  'terminal.close-tmux-session-exit-required':
+    'この tmux セッションは現在の端末番号と一致しないため、Hobgoblin から安全に閉じられません。tmux 端末内で exit を実行してください。',
   'terminal.close-tmux-session-failed': 'tmux セッションを閉じられませんでした',
   'terminal.close-all': 'すべてのターミナルを閉じる',
   'terminal.close-all-confirm-title': 'すべてのターミナルを閉じますか？',

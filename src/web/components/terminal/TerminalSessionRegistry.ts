@@ -108,7 +108,6 @@ export class TerminalSessionRegistry {
   )
 
   constructor(
-    private readonly getCurrentRepoId: () => string | null,
     private readonly onSelectedWorktreeChange: (worktreeTerminalKey: string, key: string | null) => void = () => {},
     private readonly onWorktreeEmpty: (repoRoot: string, worktreePath: string) => void = () => {},
     private readonly onOutputCompletion: (intent: TerminalOutputCompletionIntent) => void = () => {},
@@ -247,6 +246,7 @@ export class TerminalSessionRegistry {
           parseTerminalIdIndex(parsed.terminalId) ?? 1,
         ),
         tmuxBacked: serverSession.tmuxBacked === true,
+        tmuxCloseSupported: serverSession.tmuxCloseSupported,
       }
       if (!this.sessions.has(descriptor.key)) {
         missingLocalCount += 1
@@ -320,18 +320,24 @@ export class TerminalSessionRegistry {
     const attachmentId = readOrCreateWebTerminalAttachmentId()
     const terminalWorktreeKey = worktreeTerminalKey(base.repoRoot, base.worktreePath)
     const geometry = this.measureCreateGeometry(terminalWorktreeKey)
-    const result = await terminalBridge.create({
+    const requestInput = {
       repoRoot: base.repoRoot,
       branch: base.branch,
       worktreePath: base.worktreePath,
       ...(base.targetKind ? { targetKind: base.targetKind } : {}),
       ...(base.branchWorkspaceId ? { branchWorkspaceId: base.branchWorkspaceId } : {}),
-      kind: this.sessionSummaries(terminalWorktreeKey).length === 0 ? 'primary' : 'additional',
       attachmentId,
       cols: geometry.cols,
       rows: geometry.rows,
-      launchMode,
-    })
+    }
+    const result =
+      launchMode === 'tmux-if-available'
+        ? await terminalBridge.openTmuxSessions(requestInput)
+        : await terminalBridge.create({
+            ...requestInput,
+            kind: this.sessionSummaries(terminalWorktreeKey).length === 0 ? 'primary' : 'additional',
+            launchMode,
+          })
     if (!result.ok) {
       throw new Error(result.message)
     }
@@ -418,6 +424,7 @@ export class TerminalSessionRegistry {
         selected: session.descriptor.key === selectedKey,
         hasBell: this.bellController.hasBell(session.descriptor.key),
         tmuxBacked: session.descriptor.tmuxBacked === true,
+        tmuxCloseSupported: session.descriptor.tmuxCloseSupported,
       }
     })
   }

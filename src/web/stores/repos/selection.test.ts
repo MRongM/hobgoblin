@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from 'vitest'
 import { emptyRepo, replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
-import type { DetailTab, RepoState } from '#/web/stores/repos/types.ts'
+import type { DetailTab } from '#/web/stores/repos/types.ts'
 import {
   createRepoBranch as branch,
   installGoblinTestBridge,
@@ -40,14 +40,6 @@ function seedRepo(options: {
       remoteProviders: { origin: 'github' },
       hasGitHubRemote: true,
     },
-  })
-}
-
-function updateRepoForTest(mutator: (repo: RepoState) => void) {
-  useReposStore.setState((s) => {
-    const repo = s.repos[REPO_ID]
-    if (!repo) return s
-    return { repos: { ...s.repos, [REPO_ID]: replaceRepo(repo, mutator) } }
   })
 }
 

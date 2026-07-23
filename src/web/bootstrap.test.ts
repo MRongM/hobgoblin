@@ -224,6 +224,7 @@ describe('renderer bootstrap', () => {
                 message: null,
                 sessions: [],
               },
+        openTmuxSessions: async () => ({ ok: false as const, message: 'unavailable' }),
         pruneTerminals: async () => ({ pruned: 0, remaining: 0 }),
         listSessions: async () => [],
         getSessionSnapshot: async () => null,

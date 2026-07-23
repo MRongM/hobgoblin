@@ -579,16 +579,6 @@ function buttonByProvider(provider: 'codex' | 'claude'): HTMLButtonElement {
   return element
 }
 
-function setTextareaValue(selector: string, value: string) {
-  const element = textarea(selector)
-  const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')
-  descriptor?.set?.call(element, value)
-  act(() => {
-    element.dispatchEvent(new Event('input', { bubbles: true }))
-    element.dispatchEvent(new Event('change', { bubbles: true }))
-  })
-}
-
 function setInputValue(selector: string, value: string) {
   const element = input(selector)
   const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')

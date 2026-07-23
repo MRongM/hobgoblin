@@ -18,14 +18,13 @@ import type {
   WorktreeTerminalSnapshot,
 } from '#/web/components/terminal/types.ts'
 import { MainWindowNavigationProvider, type MainWindowNavigationActions } from '#/web/main-window-navigation.tsx'
-import { emptyRendererBridgeBootstrap, setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
+import { setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
 import { settingsSnapshotQueryKey } from '#/web/settings-queries.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { emptyRepo } from '#/web/stores/repos/helpers.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { defaultSettingsSnapshot } from '#/shared/settings-defaults.ts'
 import { DEFAULT_WORKSPACE_LAYOUT } from '#/shared/workspace-layout.ts'
-import type { RendererBridge } from '#/web/renderer-bridge-types.ts'
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 
 let compactUi = false
@@ -706,11 +705,4 @@ function navigationWith(overrides: Partial<MainWindowNavigationActions>): MainWi
 
 async function flush() {
   await new Promise((resolve) => setTimeout(resolve, 0))
-}
-
-async function flushUntil(condition: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    await flush()
-    if (condition()) return
-  }
 }

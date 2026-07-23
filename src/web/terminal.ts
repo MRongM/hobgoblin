@@ -1,26 +1,5 @@
-import type {
-  TerminalAttachInput,
-  TerminalAttachResult,
-  TerminalCatalogMutationResult,
-  TerminalCreateInput,
-  TerminalExitEvent,
-  TerminalMutationResult,
-  TerminalNotifyBellInput,
-  TerminalOutputEvent,
-  TerminalResizeInput,
-  TerminalRestartInput,
-  TerminalSessionSnapshot,
-  TerminalSessionSnapshotInput,
-  TerminalSessionSummary,
-  TerminalSessionInput,
-  TerminalTakeoverInput,
-  TerminalTakeoverResult,
-  TerminalTitleEvent,
-  TerminalWriteInput,
-} from '#/shared/terminal.ts'
 import { getRendererBridge } from '#/web/renderer-bridge.ts'
 import type { RendererTerminalBridge } from '#/web/renderer-bridge-types.ts'
-import type { TerminalOwnershipViewModel } from '#/web/components/terminal/types.ts'
 
 function getTerminalBridge(): RendererTerminalBridge {
   return getRendererBridge().terminal()
@@ -41,6 +20,7 @@ export const terminalBridge: RendererTerminalBridge = {
   takeover: bindTerminalMethod('takeover'),
   close: bindTerminalMethod('close'),
   create: bindTerminalMethod('create'),
+  openTmuxSessions: bindTerminalMethod('openTmuxSessions'),
   pruneTerminals: bindTerminalMethod('pruneTerminals'),
   listSessions: bindTerminalMethod('listSessions'),
   getSessionSnapshot: bindTerminalMethod('getSessionSnapshot'),

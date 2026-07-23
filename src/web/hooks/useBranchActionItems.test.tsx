@@ -987,17 +987,6 @@ describe('useBranchActionItems', () => {
   })
 })
 
-async function renderItems(
-  useItems: typeof useBranchActionItems,
-  repo: ReturnType<typeof seedRepoState>,
-  branch: ReturnType<typeof createRepoBranch>,
-): Promise<string[]> {
-  const groups = await renderItemGroups(useItems, repo, branch)
-  return [...groups.patchItems, ...groups.mainItems, ...groups.externalItems, ...groups.destructiveItems].map(
-    (item) => item.id,
-  )
-}
-
 async function renderItemGroups(
   useItems: typeof useBranchActionItems,
   repo: ReturnType<typeof seedRepoState>,

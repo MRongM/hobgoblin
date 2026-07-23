@@ -8,6 +8,7 @@ import { resolveRemoteTarget } from '#/system/ssh/config.ts'
 import { buildRemoteTerminalInvocation } from '#/system/ssh/commands.ts'
 import { buildManagedLocalTerminalInvocation } from '#/system/local-terminal.ts'
 import { isRemoteRepoId, parseRemoteRepoId } from '#/shared/remote-repo.ts'
+import type { TmuxCleanupPreviewResult, TmuxSessionRecord } from '#/shared/tmux-cleanup.ts'
 import { terminalSessionScope } from '#/server/terminal/terminal-scope.ts'
 import {
   formatTerminalId,
@@ -20,6 +21,7 @@ import {
   type TerminalCatalogMutationResult,
   type TerminalControllerStatus,
   type TerminalCreateInput,
+  type TerminalOpenTmuxSessionsInput,
   type TerminalSessionSummary,
   type TerminalWindowsPty,
   normalizeTerminalLaunchMode,
@@ -36,6 +38,8 @@ interface EnsureTerminalCatalogInput {
   cols?: number
   rows?: number
   attachmentId?: string
+  existingTmuxSession?: TmuxSessionRecord
+  tmuxCloseSupported?: boolean
 }
 
 type EnsureTerminalCatalogResult =
@@ -72,6 +76,9 @@ interface TerminalCatalogEnsureSessionInput {
   forceNew?: boolean
   command?: string
   args?: string[]
+  tmuxSessionName?: string
+  tmuxWorkingDirectory?: string
+  tmuxCloseSupported?: boolean
 }
 
 interface TerminalCatalogManager {
@@ -89,6 +96,10 @@ interface TerminalCatalogOptions {
   withSessionSnapshot(
     result: Extract<TerminalAttachResult, { ok: true }>,
   ): Promise<Extract<TerminalAttachResult, { ok: true }>>
+  previewAssociatedTmuxSessions(input: {
+    projectRoot: string
+    itemPath: string
+  }): Promise<TmuxCleanupPreviewResult>
 }
 
 class TerminalCatalog {
@@ -146,23 +157,76 @@ class TerminalCatalog {
     if (!sessions.some((session) => session.sessionId === createResult.sessionId)) {
       return { ok: false, message: 'error.terminal-create-failed' }
     }
-    return {
-      ok: true,
-      action: createResult.action,
-      key: createResult.key,
-      sessionId: createResult.sessionId,
-      processName: createResult.processName,
-      canonicalTitle: createResult.canonicalTitle,
-      snapshot: createResult.snapshot ?? '',
-      snapshotSeq: createResult.snapshotSeq ?? createResult.replaySeq,
-      controller: createResult.controller,
-      canonicalCols: createResult.canonicalCols,
-      canonicalRows: createResult.canonicalRows,
-      phase: createResult.phase,
-      message: createResult.message,
-      windowsPty: createResult.windowsPty,
-      sessions,
+    return toCatalogMutationResult(createResult, sessions)
+  }
+
+  async openTmuxSessions(
+    clientId: string,
+    input: TerminalOpenTmuxSessionsInput,
+  ): Promise<TerminalCatalogMutationResult> {
+    if (!this.options.isValidClientId(clientId)) return { ok: false, message: 'error.invalid-arguments' }
+    if (!isValidRepoLocator(input.repoRoot) || !isValidBranch(input.branch) || !isValidCwd(input.worktreePath)) {
+      return { ok: false, message: 'error.invalid-arguments' }
     }
+    if (!isValidTerminalAttachmentId(input.attachmentId)) return { ok: false, message: 'error.invalid-arguments' }
+    const targetAuthorization = await authorizeBranchWorkspaceTerminalTarget(input)
+    if (!targetAuthorization.ok) return targetAuthorization
+    const canonicalInput = {
+      ...input,
+      repoRoot: normalizeTerminalRepoRoot(input.repoRoot),
+      worktreePath: normalizeTerminalWorkingPath(input.repoRoot, targetAuthorization.worktreePath),
+    }
+    const preview = await this.options.previewAssociatedTmuxSessions({
+      projectRoot: canonicalInput.repoRoot,
+      itemPath: canonicalInput.worktreePath,
+    })
+    if (!preview.ok) {
+      if (preview.message === 'error.tmux-unavailable' || preview.message === 'error.tmux-unsupported') {
+        return await this.create(clientId, {
+          ...canonicalInput,
+          kind: 'additional',
+          launchMode: 'tmux-if-available',
+        })
+      }
+      return preview
+    }
+    if (preview.sessions.length === 0) {
+      return await this.create(clientId, {
+        ...canonicalInput,
+        kind: 'additional',
+        launchMode: 'tmux-if-available',
+      })
+    }
+
+    const scope = terminalSessionScope(canonicalInput.repoRoot)
+    const existingSessions = await this.options.manager.listSessions(scope)
+    const usedKeys = new Set(existingSessions.map((session) => session.key))
+    const sessions = [...preview.sessions].sort(compareRecoveredTmuxSessions)
+    let selectedResult: Extract<EnsureTerminalCatalogResult, { ok: true }> | null = null
+    for (const tmuxSession of sessions) {
+      const existing = existingSessions.find((session) => session.tmuxSessionName === tmuxSession.sessionName)
+      const existingTerminalId = existing ? parseSessionKey(existing.key)?.terminalId : undefined
+      const preferredTerminalId = formatTerminalId(tmuxSession.terminalNumber)
+      const preferredKey = sessionKey(canonicalInput.repoRoot, canonicalInput.worktreePath, preferredTerminalId)
+      const terminalId =
+        existingTerminalId ??
+        (!usedKeys.has(preferredKey)
+          ? preferredTerminalId
+          : nextAvailableTerminalId(canonicalInput.repoRoot, canonicalInput.worktreePath, usedKeys))
+      const key = sessionKey(canonicalInput.repoRoot, canonicalInput.worktreePath, terminalId)
+      usedKeys.add(key)
+      const result = await this.ensureOrRestore(clientId, {
+        ...canonicalInput,
+        terminalId,
+        launchMode: 'tmux-if-available',
+        existingTmuxSession: tmuxSession,
+        tmuxCloseSupported: tmuxSession.terminalNumber === parseTerminalIdIndex(terminalId),
+      })
+      if (!result.ok) return result
+      selectedResult ??= result
+    }
+    if (!selectedResult) return { ok: false, message: 'error.terminal-create-failed' }
+    return toCatalogMutationResult(selectedResult, await this.options.manager.listSessions(scope))
   }
 
   async prune(clientId: string, repoRoot: string): Promise<{ pruned: number; remaining: number }> {
@@ -248,6 +312,7 @@ class TerminalCatalog {
       rows: context.rows,
       terminalNumber,
       useTmux,
+      existingTmuxSessionName: input.existingTmuxSession?.sessionName,
     })
     const result = this.options.manager.ensureSession({
       ownerId: clientId,
@@ -262,7 +327,11 @@ class TerminalCatalog {
       command: invocation.command,
       args: invocation.args,
       ...(invocation.tmuxSessionName
-        ? { tmuxSessionName: invocation.tmuxSessionName, tmuxWorkingDirectory: input.worktreePath }
+        ? {
+            tmuxSessionName: invocation.tmuxSessionName,
+            tmuxWorkingDirectory: input.worktreePath,
+            tmuxCloseSupported: input.tmuxCloseSupported,
+          }
         : {}),
     })
     if (!result.ok) return { ok: false, message: result.message }
@@ -332,7 +401,11 @@ class TerminalCatalog {
         workingDirectory: context.worktreePath,
         terminalNumber,
       },
-      { useTmux, fallbackShell: process.env.SHELL },
+      {
+        useTmux,
+        fallbackShell: process.env.SHELL,
+        existingTmuxSessionName: input.existingTmuxSession?.sessionName,
+      },
     )
     const result = this.options.manager.ensureSession({
       ownerId: clientId,
@@ -347,7 +420,11 @@ class TerminalCatalog {
       command: invocation?.command,
       args: invocation?.args,
       ...(invocation
-        ? { tmuxSessionName: invocation.tmuxSessionName, tmuxWorkingDirectory: context.worktreePath }
+        ? {
+            tmuxSessionName: invocation.tmuxSessionName,
+            tmuxWorkingDirectory: context.worktreePath,
+            tmuxCloseSupported: input.tmuxCloseSupported,
+          }
         : {}),
     })
     if (!result.ok) return { ok: false, message: result.message }
@@ -437,6 +514,39 @@ function toEnsureResult(
     message: snapshotResult.message,
     windowsPty: snapshotResult.windowsPty,
   }
+}
+
+function toCatalogMutationResult(
+  result: Extract<EnsureTerminalCatalogResult, { ok: true }>,
+  sessions: TerminalSessionSummary[],
+): Extract<TerminalCatalogMutationResult, { ok: true }> {
+  return {
+    ok: true,
+    action: result.action,
+    key: result.key,
+    sessionId: result.sessionId,
+    processName: result.processName,
+    canonicalTitle: result.canonicalTitle,
+    snapshot: result.snapshot ?? '',
+    snapshotSeq: result.snapshotSeq ?? result.replaySeq,
+    controller: result.controller,
+    canonicalCols: result.canonicalCols,
+    canonicalRows: result.canonicalRows,
+    phase: result.phase,
+    message: result.message,
+    windowsPty: result.windowsPty,
+    sessions,
+  }
+}
+
+function compareRecoveredTmuxSessions(left: TmuxSessionRecord, right: TmuxSessionRecord): number {
+  return left.terminalNumber - right.terminalNumber || left.sessionName.localeCompare(right.sessionName)
+}
+
+function nextAvailableTerminalId(repoRoot: string, worktreePath: string, usedKeys: ReadonlySet<string>): string {
+  let terminalNumber = 1
+  while (usedKeys.has(sessionKey(repoRoot, worktreePath, formatTerminalId(terminalNumber)))) terminalNumber += 1
+  return formatTerminalId(terminalNumber)
 }
 
 function sessionKey(repoRoot: string, worktreePath: string, terminalId?: string): string {

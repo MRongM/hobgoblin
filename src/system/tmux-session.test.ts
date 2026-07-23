@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest'
+import * as tmuxSession from '#/system/tmux-session.ts'
 import {
   buildTmuxSessionName,
   isHobgoblinTmuxSessionName,
@@ -104,4 +105,56 @@ describe('tmux cleanup protocol helpers', () => {
     expect(normalizeTmuxSessionPath('srv/repo')).toBeNull()
     expect(normalizeTmuxSessionPath('/srv/repo\nfeature')).toBeNull()
   })
+
+  test('accepts only sessions whose initial path, terminal number, and name hash all match', () => {
+    const resolveTerminalNumbers = (
+      tmuxSession as typeof tmuxSession & {
+        resolveTmuxSessionTerminalNumbers?: (
+          projectRoot: string,
+          sessions: Array<{ sessionName: string; initialPath: string; terminalNumber: number }>,
+        ) => Map<string, number>
+      }
+    ).resolveTmuxSessionTerminalNumbers
+    expect(resolveTerminalNumbers).toBeTypeOf('function')
+
+    const terminalSevenName = buildTmuxSessionName({ ...REFERENCE_DESCRIPTOR, terminalNumber: 7 })!
+    const unknownName = 'hobgoblin-v1-0123456789abcdef01234567'
+    const resolved = resolveTerminalNumbers!(
+      REFERENCE_DESCRIPTOR.projectRoot,
+      [
+        {
+          sessionName: REFERENCE_DESCRIPTOR_NAME,
+          initialPath: REFERENCE_DESCRIPTOR.workingDirectory,
+          terminalNumber: 1,
+        },
+        {
+          sessionName: terminalSevenName,
+          initialPath: REFERENCE_DESCRIPTOR.workingDirectory,
+          terminalNumber: 7,
+        },
+        {
+          sessionName: terminalSevenName,
+          initialPath: '/srv/projects/example/worktrees/other',
+          terminalNumber: 7,
+        },
+        {
+          sessionName: terminalSevenName,
+          initialPath: REFERENCE_DESCRIPTOR.workingDirectory,
+          terminalNumber: 8,
+        },
+        {
+          sessionName: unknownName,
+          initialPath: REFERENCE_DESCRIPTOR.workingDirectory,
+          terminalNumber: 3,
+        },
+      ],
+    )
+
+    expect([...resolved]).toEqual([
+      [REFERENCE_DESCRIPTOR_NAME, 1],
+      [terminalSevenName, 7],
+    ])
+  })
 })
+
+const REFERENCE_DESCRIPTOR_NAME = 'hobgoblin-v1-aebf050981ac829e36100020'

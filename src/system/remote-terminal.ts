@@ -1,6 +1,9 @@
 import {
   buildTmuxSessionName,
+  isHobgoblinTmuxSessionName,
   normalizeTmuxSessionDescriptor,
+  TMUX_INIT_PATH_OPTION,
+  TMUX_TERMINAL_NUMBER_OPTION,
   type TmuxSessionDescriptor,
 } from '#/system/tmux-session.ts'
 
@@ -21,6 +24,7 @@ export interface RemoteTerminalInvocation {
 export interface RemoteTerminalInvocationOptions {
   sshOptions?: readonly string[]
   useTmux?: boolean
+  existingTmuxSessionName?: string
 }
 
 export function buildManagedRemoteTerminalInvocation(
@@ -30,10 +34,13 @@ export function buildManagedRemoteTerminalInvocation(
   const descriptor = normalizeTmuxSessionDescriptor(target)
   if (!isSafeRemoteAlias(target.alias) || !descriptor) return null
 
-  const tmuxSessionName = options.useTmux === true ? buildTmuxSessionName(descriptor) : null
+  const existingSessionName = options.existingTmuxSessionName
+  if (existingSessionName !== undefined && !isHobgoblinTmuxSessionName(existingSessionName)) return null
+  const tmuxSessionName =
+    options.useTmux === true ? (existingSessionName ?? buildTmuxSessionName(descriptor)) : null
   if (options.useTmux === true && !tmuxSessionName) return null
   const script = tmuxSessionName
-    ? buildTmuxRemoteLoginShellScript(descriptor, tmuxSessionName)
+    ? buildTmuxRemoteLoginShellScript(descriptor, tmuxSessionName, existingSessionName !== undefined)
     : buildPlainRemoteLoginShellScript(descriptor.workingDirectory)
   return buildSshInvocation(target.alias, script, tmuxSessionName, options)
 }
@@ -49,11 +56,18 @@ function buildPlainRemoteLoginShellScript(worktreePath: string): string {
   return [`cd ${shellQuote(worktreePath)} || exit`, 'exec "${SHELL:-/bin/sh}" -l'].join('\n')
 }
 
-function buildTmuxRemoteLoginShellScript(target: TmuxSessionDescriptor, sessionName: string): string {
+function buildTmuxRemoteLoginShellScript(
+  target: TmuxSessionDescriptor,
+  sessionName: string,
+  attachExisting: boolean,
+): string {
+  const tmuxCommand = attachExisting
+    ? `  exec tmux attach-session -t ${shellQuote(`=${sessionName}`)}`
+    : `  exec tmux new-session -A -s ${shellQuote(sessionName)} -c ${shellQuote(target.workingDirectory)} \\; set-option -t ${shellQuote(`=${sessionName}`)} ${TMUX_INIT_PATH_OPTION} ${shellQuote(target.workingDirectory)} \\; set-option -t ${shellQuote(`=${sessionName}`)} ${TMUX_TERMINAL_NUMBER_OPTION} ${shellQuote(String(target.terminalNumber))} \\; set-option -t ${shellQuote(`=${sessionName}:`)} mouse on`
   return [
     `cd ${shellQuote(target.workingDirectory)} || exit`,
     'if command -v tmux >/dev/null 2>&1; then',
-    `  exec tmux new-session -A -s ${shellQuote(sessionName)} -c ${shellQuote(target.workingDirectory)} \\; set-option -t ${shellQuote(`=${sessionName}:`)} mouse on`,
+    tmuxCommand,
     'fi',
     'exec "${SHELL:-/bin/sh}" -l',
   ].join('\n')

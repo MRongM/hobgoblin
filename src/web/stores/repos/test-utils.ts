@@ -394,6 +394,7 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
       takeover: async (input) => callTerminalHandler('terminal.takeover', input),
       close: async (input) => callTerminalHandler('terminal.close', input),
       create: async (input) => callTerminalHandler('terminal.create', input),
+      openTmuxSessions: async () => ({ ok: false as const, message: 'unhandled terminal tmux open' }),
       pruneTerminals: async (repoRoot) => callTerminalHandler('terminal.prune', { repoRoot }),
       listSessions: async (input) => callTerminalHandler('terminal.listSessions', input),
       getSessionSnapshot: async (input) => callTerminalHandler('terminal.getSessionSnapshot', input),

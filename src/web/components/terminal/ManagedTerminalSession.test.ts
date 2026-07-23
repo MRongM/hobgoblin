@@ -729,6 +729,7 @@ beforeEach(() => {
               sessions: [],
             },
       ),
+      openTmuxSessions: vi.fn(async () => ({ ok: false as const, message: 'unavailable' })),
       pruneTerminals: vi.fn(async () => ({ pruned: 0, remaining: 0 })),
       listSessions: vi.fn(async () => []),
       getSessionSnapshot: vi.fn(async () => null),
@@ -2826,12 +2827,6 @@ async function flushResizeDebounce(): Promise<void> {
 async function flushFontRefit(): Promise<void> {
   await Promise.resolve()
   await new Promise((resolve) => setTimeout(resolve, 100))
-  await Promise.resolve()
-}
-
-async function flushTerminalRenderSettle(): Promise<void> {
-  await flushTerminalStart()
-  await new Promise((resolve) => setTimeout(resolve, 120))
   await Promise.resolve()
 }
 

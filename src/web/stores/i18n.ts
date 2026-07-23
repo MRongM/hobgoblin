@@ -140,7 +140,3 @@ export function useT() {
     return t(key, params) as string
   }
 }
-
-export function translate(key: string, params?: Record<string, string | number>): string {
-  return i18next.t(key, params) as string
-}

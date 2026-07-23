@@ -672,6 +672,8 @@ export const ko: Record<DictKey, string> = {
   'terminal.close-tmux-session': 'tmux 세션도 닫기',
   'terminal.close-tmux-session-hint':
     '실행 중인 프로세스를 종료하고 이 세션에 연결된 다른 클라이언트의 연결을 끊습니다.',
+  'terminal.close-tmux-session-exit-required':
+    '이 tmux 세션은 현재 터미널 번호와 일치하지 않아 Hobgoblin에서 안전하게 닫을 수 없습니다. tmux 터미널 안에서 exit를 실행해 닫으세요.',
   'terminal.close-tmux-session-failed': 'tmux 세션을 닫지 못했습니다',
   'terminal.close-all': '모든 터미널 닫기',
   'terminal.close-all-confirm-title': '모든 터미널을 닫을까요?',

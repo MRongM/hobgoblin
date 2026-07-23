@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { buildManagedLocalTerminalInvocation } from '#/system/local-terminal.ts'
+import { TMUX_TERMINAL_NUMBER_OPTION } from '#/system/tmux-session.ts'
 
 const TARGET = {
   projectRoot: '/srv/projects/example',
@@ -22,8 +23,12 @@ describe('buildManagedLocalTerminalInvocation', () => {
       "exec tmux new-session -A -s 'hobgoblin-v1-aebf050981ac829e36100020' -c '/srv/projects/example/worktrees/feature'",
     )
     expect(invocation?.script).toContain(
-      "exec tmux new-session -A -s 'hobgoblin-v1-aebf050981ac829e36100020' -c '/srv/projects/example/worktrees/feature' \\; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' mouse on",
+      "set-option -t '=hobgoblin-v1-aebf050981ac829e36100020' @hobgoblin_terminal_number '1'",
     )
+    expect(invocation?.script).toContain(
+      "set-option -t '=hobgoblin-v1-aebf050981ac829e36100020' @hobgoblin_init_path '/srv/projects/example/worktrees/feature'",
+    )
+    expect(invocation?.script).toContain("set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' mouse on")
     expect(invocation?.script).not.toContain('set-option -g')
     expect(invocation?.script).toContain("exec '/bin/zsh' -l")
     expect(invocation?.shellCommand).toContain("'/bin/zsh' '-lc'")
@@ -51,6 +56,24 @@ describe('buildManagedLocalTerminalInvocation', () => {
   test('returns null when tmux is disabled or the platform is Windows', () => {
     expect(buildManagedLocalTerminalInvocation(TARGET, { useTmux: false, platform: 'darwin' })).toBeNull()
     expect(buildManagedLocalTerminalInvocation(TARGET, { useTmux: true, platform: 'win32' })).toBeNull()
+  })
+
+  test('attaches an existing tmux session by exact name without creating another session', () => {
+    const sessionName = 'hobgoblin-v1-aebf050981ac829e36100020'
+    const invocation = buildManagedLocalTerminalInvocation(
+      { ...TARGET, terminalNumber: 2 },
+      {
+        useTmux: true,
+        existingTmuxSessionName: sessionName,
+        platform: 'darwin',
+        fallbackShell: '/bin/zsh',
+      },
+    )
+
+    expect(invocation?.tmuxSessionName).toBe(sessionName)
+    expect(invocation?.script).toContain(`exec tmux attach-session -t '=${sessionName}'`)
+    expect(invocation?.script).not.toContain('tmux new-session')
+    expect(invocation?.script).not.toContain(TMUX_TERMINAL_NUMBER_OPTION)
   })
 
   test('quotes apostrophes in working directories and fallback shells', () => {

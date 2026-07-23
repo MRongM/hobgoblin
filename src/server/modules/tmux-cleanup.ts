@@ -17,7 +17,11 @@ import {
   type TmuxCommandResult,
   type TmuxListResult,
 } from '#/system/tmux-cleanup.ts'
-import { isHobgoblinTmuxSessionName, normalizeTmuxSessionPath } from '#/system/tmux-session.ts'
+import {
+  isHobgoblinTmuxSessionName,
+  normalizeTmuxSessionPath,
+  resolveTmuxSessionTerminalNumbers,
+} from '#/system/tmux-session.ts'
 
 const MAX_APPROVED_SESSION_NAMES = 256
 
@@ -30,6 +34,7 @@ export interface TmuxCleanupDependencies {
 }
 
 interface TmuxRuntime {
+  projectRoot: string
   targetPath: string
   list: () => Promise<TmuxListResult>
   killName: (sessionName: string) => Promise<TmuxCommandResult>
@@ -55,7 +60,11 @@ export async function closeAssociatedTmuxSessionByName(
   if (!resolved.ok) return resolved
   const listed = await safelyList(resolved.runtime)
   if (!listed.ok) return listed
-  const session = associatedSessions(listed.sessions, resolved.runtime.targetPath).find(
+  const session = associatedSessions(
+    listed.sessions,
+    resolved.runtime.projectRoot,
+    resolved.runtime.targetPath,
+  ).find(
     (candidate) => candidate.sessionName === input.sessionName,
   )
   if (!session) return { ok: true, status: 'missing' }
@@ -82,7 +91,7 @@ export async function previewAssociatedTmuxSessions(
   return {
     ok: true,
     targetPath: resolved.runtime.targetPath,
-    sessions: associatedSessions(listed.sessions, resolved.runtime.targetPath),
+    sessions: associatedSessions(listed.sessions, resolved.runtime.projectRoot, resolved.runtime.targetPath),
   }
 }
 
@@ -99,7 +108,10 @@ export async function cleanupAssociatedTmuxSessions(
   if (!listed.ok) return listed
 
   const sessionsByName = new Map(
-    associatedSessions(listed.sessions, resolved.runtime.targetPath).map((session) => [session.sessionName, session]),
+    associatedSessions(listed.sessions, resolved.runtime.projectRoot, resolved.runtime.targetPath).map((session) => [
+      session.sessionName,
+      session,
+    ]),
   )
   const missingSessionNames = approvedSessionNames.filter((sessionName) => !sessionsByName.has(sessionName))
   const deleted: TmuxSessionRecord[] = []
@@ -142,6 +154,7 @@ async function resolveTmuxRuntime(
     return {
       ok: true,
       runtime: {
+        projectRoot: normalizeTmuxSessionPath(input.projectRoot) ?? input.projectRoot,
         targetPath,
         list: async () => await listLocal({ signal }),
         killName: async (sessionName) => await killLocalByName(sessionName, { signal }),
@@ -155,6 +168,7 @@ async function resolveTmuxRuntime(
     return {
       ok: true,
       runtime: {
+        projectRoot: target.remotePath,
         targetPath,
         list: async () => remoteListResult(await runRemote(target, { type: 'tmuxListSessions' }, { signal })),
         killName: async (sessionName) => {
@@ -189,13 +203,17 @@ function remoteListResult(result: RemoteCommandResult): TmuxListResult {
   )
 }
 
-function associatedSessions(sessions: readonly TmuxSessionRecord[], targetPath: string): TmuxSessionRecord[] {
-  return sessions.flatMap((session) => {
-    const sessionPath = normalizeTmuxSessionPath(session.sessionPath)
-    return sessionPath === targetPath && isHobgoblinTmuxSessionName(session.sessionName)
-      ? [{ ...session, sessionPath }]
-      : []
+function associatedSessions(
+  sessions: readonly TmuxSessionRecord[],
+  projectRoot: string,
+  targetPath: string,
+): TmuxSessionRecord[] {
+  const pathMatches = sessions.flatMap((session) => {
+    const initialPath = normalizeTmuxSessionPath(session.initialPath)
+    return initialPath === targetPath ? [{ ...session, initialPath }] : []
   })
+  const terminalNumbers = resolveTmuxSessionTerminalNumbers(projectRoot, pathMatches)
+  return pathMatches.filter((session) => terminalNumbers.get(session.sessionName) === session.terminalNumber)
 }
 
 function normalizeApprovedSessionNames(value: unknown): string[] | null {

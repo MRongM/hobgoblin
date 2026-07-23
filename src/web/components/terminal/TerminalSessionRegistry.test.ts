@@ -3,11 +3,12 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { TerminalSessionRegistry } from '#/web/components/terminal/TerminalSessionRegistry.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
-import type { TerminalDescriptor, TerminalRepoIndex } from '#/web/components/terminal/types.ts'
+import type { TerminalRepoIndex } from '#/web/components/terminal/types.ts'
 import type { TerminalCloseResult } from '#/shared/terminal.ts'
 
 const bridgeMocks = vi.hoisted(() => ({
   create: vi.fn(),
+  openTmuxSessions: vi.fn(),
   close: vi.fn(async (): Promise<TerminalCloseResult> => ({ ok: true })),
   reorder: vi.fn(async () => true),
   setBadge: vi.fn(),
@@ -17,6 +18,7 @@ const bridgeMocks = vi.hoisted(() => ({
 vi.mock('#/web/terminal.ts', () => ({
   terminalBridge: {
     create: bridgeMocks.create,
+    openTmuxSessions: bridgeMocks.openTmuxSessions,
     close: bridgeMocks.close,
     reorder: bridgeMocks.reorder,
     setBadge: bridgeMocks.setBadge,
@@ -29,18 +31,6 @@ const WORKTREE_PATH = '/repo'
 const BRANCH = 'main'
 const WORKTREE_KEY = worktreeTerminalKey(REPO_ROOT, WORKTREE_PATH)
 const BRANCH_WORKSPACE_PATH = '/repo/goblin-feature'
-
-function makeDescriptor(terminalId: string, index: number): TerminalDescriptor {
-  return {
-    key: `${REPO_ROOT}\0${WORKTREE_PATH}\0${terminalId}`,
-    worktreeTerminalKey: WORKTREE_KEY,
-    terminalId,
-    index,
-    repoRoot: REPO_ROOT,
-    branch: BRANCH,
-    worktreePath: WORKTREE_PATH,
-  }
-}
 
 function makeRepoIndex(): TerminalRepoIndex {
   return {
@@ -91,6 +81,7 @@ describe('TerminalSessionRegistry', () => {
     selectedChanges = []
     outputCompletions = []
     bridgeMocks.create.mockReset()
+    bridgeMocks.openTmuxSessions.mockReset()
     bridgeMocks.close.mockReset()
     bridgeMocks.close.mockResolvedValue({ ok: true })
     bridgeMocks.reorder.mockClear()
@@ -98,7 +89,6 @@ describe('TerminalSessionRegistry', () => {
     bridgeMocks.takeover.mockClear()
     window.sessionStorage.setItem('goblin:web-terminal-attachment-id', 'attachment_local')
     registry = new TerminalSessionRegistry(
-      () => REPO_ROOT,
       (worktreeTerminalKey, key) => selectedChanges.push({ worktreeTerminalKey, key }),
       () => {},
       (intent) => outputCompletions.push(intent),
@@ -231,6 +221,46 @@ describe('TerminalSessionRegistry', () => {
       await expect(
         registry.createTerminal({ repoRoot: REPO_ROOT, branch: BRANCH, worktreePath: WORKTREE_PATH }),
       ).rejects.toThrow('error.terminal-create-failed')
+    })
+
+    test('opens and reconciles every associated tmux session in one request', async () => {
+      registry.setRepoIndex(makeRepoIndex())
+      bridgeMocks.openTmuxSessions.mockResolvedValueOnce({
+        ok: true,
+        action: 'restored',
+        key: `${REPO_ROOT}\0${WORKTREE_PATH}\0terminal-1`,
+        sessionId: 'tmux-session-1',
+        processName: 'tmux',
+        canonicalTitle: null,
+        snapshot: 'first-frame',
+        snapshotSeq: 4,
+        controller: { attachmentId: 'attachment_local', status: 'connected' },
+        canonicalCols: 80,
+        canonicalRows: 24,
+        phase: 'open',
+        message: null,
+        sessions: [
+          makeServerSession('tmux-session-1', 'terminal-1', { tmuxBacked: true }),
+          makeServerSession('tmux-session-2', 'terminal-2', { tmuxBacked: true }),
+        ],
+      })
+
+      const key = await registry.createTerminal(
+        { repoRoot: REPO_ROOT, branch: BRANCH, worktreePath: WORKTREE_PATH },
+        'tmux-if-available',
+      )
+
+      expect(bridgeMocks.openTmuxSessions).toHaveBeenCalledWith({
+        repoRoot: REPO_ROOT,
+        branch: BRANCH,
+        worktreePath: WORKTREE_PATH,
+        attachmentId: 'attachment_local',
+        cols: 80,
+        rows: 24,
+      })
+      expect(bridgeMocks.create).not.toHaveBeenCalled()
+      expect(key).toBe(`${REPO_ROOT}\0${WORKTREE_PATH}\0terminal-1`)
+      expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions).toHaveLength(2)
     })
   })
 

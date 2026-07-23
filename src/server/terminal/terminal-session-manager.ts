@@ -59,6 +59,7 @@ export interface TerminalEnsureSessionInput<TOwner extends string | number> {
   args?: string[]
   tmuxSessionName?: string
   tmuxWorkingDirectory?: string
+  tmuxCloseSupported?: boolean
 }
 
 interface TerminalSession<TOwner extends string | number> {
@@ -71,6 +72,7 @@ interface TerminalSession<TOwner extends string | number> {
   args?: string[]
   tmuxSessionName: string | null
   tmuxWorkingDirectory: string | null
+  tmuxCloseSupported: boolean
   cols: number
   rows: number
   pty: TerminalPtyRuntime | null
@@ -136,6 +138,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
       args: input.args,
       tmuxSessionName: input.tmuxSessionName ?? null,
       tmuxWorkingDirectory: input.tmuxSessionName ? (input.tmuxWorkingDirectory ?? null) : null,
+      tmuxCloseSupported: input.tmuxSessionName ? input.tmuxCloseSupported !== false : false,
       cols: size.cols,
       rows: size.rows,
       pty: null,
@@ -374,6 +377,12 @@ export class TerminalSessionManager<TOwner extends string | number> {
           message: session.message,
           windowsPty: session.windowsPty,
           tmuxBacked: session.tmuxSessionName !== null,
+          ...(session.tmuxSessionName
+            ? {
+                tmuxSessionName: session.tmuxSessionName,
+                tmuxCloseSupported: session.tmuxCloseSupported,
+              }
+            : {}),
         })
       }
     }

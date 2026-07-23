@@ -7,7 +7,6 @@ import { PROTECTED_BRANCHES } from '#/shared/git-types.ts'
 import {
   getRepositoryPatch,
   openRepositoryEditor,
-  openRepositoryRemote,
   openRepositoryTerminal,
 } from '#/web/repo-client.ts'
 import { openRemoteRepositoryEditor, openRemoteRepositoryTerminal } from '#/web/remote-client.ts'

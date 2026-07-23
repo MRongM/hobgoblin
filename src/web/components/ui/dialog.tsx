@@ -39,7 +39,6 @@ function DialogContent({
   showCloseButton?: boolean
   overlayClassName?: string
 }) {
-  const compact = useIsCompactUi()
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay className={overlayClassName} />
