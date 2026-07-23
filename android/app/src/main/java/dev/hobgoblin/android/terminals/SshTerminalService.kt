@@ -1,0 +1,239 @@
+package dev.hobgoblin.android.terminals
+
+import dev.hobgoblin.android.data.ssh.HostKeyTrustStore
+import dev.hobgoblin.android.data.ssh.SecureIdentityStore
+import dev.hobgoblin.android.domain.ssh.HostKeyTrust
+import dev.hobgoblin.android.domain.ssh.RemoteTarget
+import dev.hobgoblin.android.ssh.SshConnectionSecrets
+import dev.hobgoblin.android.ssh.SshPublicKeyEncoding
+import dev.hobgoblin.android.ssh.SshjClients
+import dev.hobgoblin.android.ssh.SshPrivateKeys
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.thread
+import net.schmizz.sshj.SSHClient
+import net.schmizz.sshj.connection.channel.direct.PTYMode
+import net.schmizz.sshj.connection.channel.direct.Session
+import net.schmizz.sshj.transport.verification.HostKeyVerifier
+
+class SshTerminalService(
+    private val identityStore: SecureIdentityStore? = null,
+    private val hostKeyTrustStore: HostKeyTrustStore? = null,
+    private val keepAliveIntervalSeconds: () -> Long = { TerminalHeartbeatIntervalSeconds },
+) : TerminalSessionFactory {
+    // Shares the same SSHJ boundary and trust expectations as SshClientFacade.kt.
+    override fun openShell(
+        target: RemoteTarget,
+        secrets: SshConnectionSecrets,
+        startupContext: TerminalStartupContext?,
+        cols: Int,
+        rows: Int,
+        onOutput: (ByteArray) -> Unit,
+        onExit: () -> Unit,
+        onFailure: (Throwable) -> Unit,
+    ): TerminalSession {
+        val client = SshjClients.create()
+        val interval = keepAliveIntervalSeconds()
+            .coerceIn(MinTerminalHeartbeatIntervalSeconds..MaxTerminalHeartbeatIntervalSeconds)
+        client.getConnection().getKeepAlive().setKeepAliveInterval(interval.toInt())
+        client.addHostKeyVerifier(capturingVerifier(target, secrets.acceptedHostFingerprint))
+        client.connect(target.host, target.port)
+        val identityBytes = secrets.identityBytes ?: target.identityRefId?.let { identityStore?.loadProtectedBytesById(it) }
+        if (identityBytes != null) {
+            client.authPublickey(target.user, SshPrivateKeys.keyProvider(client, identityBytes, secrets.passphrase))
+        } else {
+            client.authPublickey(target.user)
+        }
+
+        val sshSession = client.startSession()
+        sshSession.allocatePTY("xterm-256color", cols, rows, 0, 0, emptyMap<PTYMode, Int>())
+        val shell = sshSession.startShell()
+        val terminalSession = SshTerminalSession(
+            id = UUID.randomUUID().toString(),
+            client = client,
+            sshSession = sshSession,
+            shell = shell,
+            onExit = onExit,
+            onFailure = onFailure,
+        )
+        terminalSession.startReader(onOutput)
+        terminalSession.scheduleStartupInput(
+            input = SshTerminalStartupCommand.initialInputForTarget(target, startupContext),
+            onOutput = onOutput,
+        )
+        return terminalSession
+    }
+
+    private fun capturingVerifier(target: RemoteTarget, expectedFingerprint: String?): HostKeyVerifier =
+        object : HostKeyVerifier {
+            override fun verify(hostname: String, port: Int, key: java.security.PublicKey): Boolean {
+                val fingerprint = SshPublicKeyEncoding.fingerprint(key)
+                return TerminalHostKeyPolicy.accepts(
+                    target = target,
+                    fingerprint = fingerprint,
+                    explicitFingerprint = expectedFingerprint,
+                    trustStore = hostKeyTrustStore,
+                )
+            }
+
+            override fun findExistingAlgorithms(hostname: String, port: Int): MutableList<String> = mutableListOf()
+        }
+
+}
+
+internal object SshTerminalStartupCommand {
+    const val InputDelayMillis = 150L
+
+    fun initialInputForTarget(
+        target: RemoteTarget,
+        startupContext: TerminalStartupContext?,
+    ): String? {
+        val normalizedPath = normalizeRemotePath(target.remotePath)
+        if (startupContext == null) {
+            if (normalizedPath == "/") return null
+            return "cd ${shellQuote(normalizedPath)} && pwd\r"
+        }
+
+        val sessionName = tmuxSessionName(target, startupContext)
+        return """
+            hobgoblin_remote_path=${shellQuote(normalizedPath)}
+            hobgoblin_tmux_session=${shellQuote(sessionName)}
+            if cd "${'$'}hobgoblin_remote_path"; then
+              if command -v tmux >/dev/null 2>&1; then
+                tmux new-session -A -s "${'$'}hobgoblin_tmux_session"
+                hobgoblin_tmux_status=${'$'}?
+                if [ "${'$'}hobgoblin_tmux_status" -eq 0 ]; then
+                  exit 0
+                fi
+                printf '\r\ntmux unavailable (exit %s); falling back to shell\r\n' "${'$'}hobgoblin_tmux_status"
+              fi
+              exec "${'$'}{SHELL:-sh}"
+            else
+              exit 1
+            fi
+        """.trimIndent() + "\r"
+    }
+
+    fun tmuxSessionName(
+        target: RemoteTarget,
+        startupContext: TerminalStartupContext,
+    ): String {
+        val identity = listOf(
+            target.authority,
+            normalizeRemotePath(startupContext.repositoryRemotePath),
+            normalizeRemotePath(startupContext.worktreeRemotePath),
+            startupContext.terminalId.toString(),
+        ).joinToString("\u0000")
+        return "$TmuxSessionNamePrefix${sha256HexPrefix(identity, TmuxHashHexChars)}"
+    }
+
+    fun startupInputFailureOutput(error: Throwable): String =
+        "\r\nStartup cd failed: ${error.toTerminalDetail()}\r\n"
+
+    private fun normalizeRemotePath(remotePath: String): String {
+        val trimmed = remotePath.trim()
+        if (trimmed.isEmpty() || trimmed == "/") return "/"
+        return trimmed.trimEnd('/')
+    }
+
+    private fun sha256HexPrefix(value: String, hexChars: Int): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(value.toByteArray(StandardCharsets.UTF_8))
+        return digest
+            .take((hexChars + 1) / 2)
+            .joinToString("") { byte ->
+                val intValue = byte.toInt() and 0xff
+                "${HexChars[intValue ushr 4]}${HexChars[intValue and 0x0f]}"
+            }
+            .take(hexChars)
+    }
+
+    private fun shellQuote(value: String): String = "'${value.replace("'", "'\"'\"'")}'"
+
+    private fun Throwable.toTerminalDetail(): String {
+        val message = message?.trim()?.takeIf { it.isNotBlank() }
+        val className = this::class.java.simpleName.takeIf { it.isNotBlank() }
+            ?: this::class.java.name
+        return message ?: className
+    }
+
+    private val HexChars = "0123456789abcdef".toCharArray()
+    private const val TmuxSessionNamePrefix = "hobgoblin-"
+    private const val TmuxHashHexChars = 22
+}
+
+internal object TerminalHostKeyPolicy {
+    fun accepts(
+        target: RemoteTarget,
+        fingerprint: String,
+        explicitFingerprint: String?,
+        trustStore: HostKeyTrustStore?,
+    ): Boolean {
+        if (explicitFingerprint != null) return explicitFingerprint == fingerprint
+        return trustStore?.evaluate(target, fingerprint) is HostKeyTrust.Trusted
+    }
+}
+
+private class SshTerminalSession(
+    override val id: String,
+    private val client: SSHClient,
+    private val sshSession: Session,
+    private val shell: Session.Shell,
+    private val onExit: () -> Unit,
+    private val onFailure: (Throwable) -> Unit,
+) : TerminalSession {
+    private val open = AtomicBoolean(true)
+
+    override fun isConnected(): Boolean = runCatching {
+        open.get() && client.isConnected && sshSession.isOpen && shell.isOpen
+    }.getOrDefault(false)
+
+    fun startReader(onOutput: (ByteArray) -> Unit) {
+        thread(name = "hobgoblin-ssh-terminal-$id", isDaemon = true) {
+            runCatching {
+                val buffer = ByteArray(4096)
+                while (open.get()) {
+                    val count = shell.inputStream.read(buffer)
+                    if (count < 0) break
+                    if (count > 0) onOutput(buffer.copyOf(count))
+                }
+            }.onFailure {
+                if (open.get()) onFailure(it)
+            }
+            if (open.getAndSet(false)) onExit()
+        }
+    }
+
+    fun scheduleStartupInput(input: String?, onOutput: (ByteArray) -> Unit) {
+        if (input == null) return
+        thread(name = "hobgoblin-ssh-terminal-startup-$id", isDaemon = true) {
+            runCatching {
+                Thread.sleep(SshTerminalStartupCommand.InputDelayMillis)
+                if (!open.get()) return@thread
+                sendInputBytes(input.toByteArray(StandardCharsets.UTF_8))
+            }.onFailure {
+                if (open.get()) {
+                    onOutput(SshTerminalStartupCommand.startupInputFailureOutput(it).toByteArray(StandardCharsets.UTF_8))
+                }
+            }
+        }
+    }
+
+    override fun sendInputBytes(value: ByteArray) {
+        shell.outputStream.write(value)
+        shell.outputStream.flush()
+    }
+
+    override fun resize(cols: Int, rows: Int) {
+        shell.changeWindowDimensions(cols, rows, 0, 0)
+    }
+
+    override fun close() {
+        if (!open.getAndSet(false)) return
+        runCatching { shell.close() }
+        runCatching { sshSession.close() }
+        runCatching { client.close() }
+    }
+}
