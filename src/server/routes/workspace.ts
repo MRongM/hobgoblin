@@ -110,6 +110,10 @@ export function createWorkspaceRoutes(options: WorkspaceRouteOptions = {}) {
     const body = await c.req.json().catch(() => null)
     const rootId = typeof body?.rootId === 'string' ? body.rootId : ''
     const planToken = typeof body?.planToken === 'string' ? body.planToken.trim() : ''
+    const sourceToken =
+      typeof body?.sourceToken === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(body.sourceToken)
+        ? body.sourceToken
+        : undefined
     if (
       !planToken ||
       !Array.isArray(body?.approvals) ||
@@ -121,6 +125,7 @@ export function createWorkspaceRoutes(options: WorkspaceRouteOptions = {}) {
       await branchWorkspaceWriteService.execute(rootId, {
         planToken,
         approvals: Array.from(new Set(body.approvals)),
+        ...(sourceToken ? { sourceToken } : {}),
       }),
     )
   })

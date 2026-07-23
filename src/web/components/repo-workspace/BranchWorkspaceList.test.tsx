@@ -701,8 +701,16 @@ describe('BranchWorkspaceList', () => {
 
   test.each([
     ['active', ['workspace.branch-workspace.cancel'], []],
-    ['creation-interrupted', ['workspace.branch-workspace.retry'], ['workspace.branch-workspace.inspect']],
-    ['reduce-incomplete', ['workspace.branch-workspace.continue-reduce'], ['workspace.branch-workspace.inspect']],
+    [
+      'creation-interrupted',
+      ['workspace.branch-workspace.retry'],
+      ['workspace.branch-workspace.inspect', 'workspace.branch-workspace.delete'],
+    ],
+    [
+      'reduce-incomplete',
+      ['workspace.branch-workspace.continue-reduce'],
+      ['workspace.branch-workspace.inspect', 'workspace.branch-workspace.delete'],
+    ],
     [
       'needs-repair',
       ['workspace.branch-workspace.repair'],

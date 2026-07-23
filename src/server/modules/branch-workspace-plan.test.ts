@@ -745,6 +745,40 @@ describe('branch workspace repair planner', () => {
 })
 
 describe('branch workspace remove planner', () => {
+  test('builds a force-removal plan from an interrupted manifest after materialization drift', async () => {
+    const current = existingManifest()
+    current.operation = { kind: 'create' }
+    current.repositories[0] = {
+      ...current.repositories[0]!,
+      progress: 'failed',
+      lastError: 'interrupted',
+    }
+    const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch('main'), branch(BRANCH)) })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
+    deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+    deps.inspectPath.mockImplementation(async (_rootId, candidatePath) => missing(candidatePath))
+
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      {
+        operation: 'remove',
+        branchWorkspaceId: current.id,
+        alsoDeleteBranch: false,
+        alsoDeleteUpstream: false,
+      },
+      deps,
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        operation: 'remove',
+        branchWorkspaceId: current.id,
+        repositories: [{ repositoryName: 'api', action: 'satisfied' }],
+      },
+    })
+  })
+
   test.each([
     [{ isPrimary: true }, 'workspace.branch-workspace.primary-worktree'],
     [{ isLocked: true }, 'workspace.branch-workspace.locked-worktree'],

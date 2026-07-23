@@ -5,6 +5,7 @@ import type {
   BranchWorkspaceExecuteResult,
   BranchWorkspacePlan,
   BranchWorkspacePlanRequest,
+  BranchWorkspaceReadResult,
 } from '#/shared/branch-workspaces.ts'
 import { branchWorkspaceQueryKey } from '#/web/branch-workspace-query-cache.ts'
 import {
@@ -13,6 +14,7 @@ import {
   planBranchWorkspace,
   reorderBranchWorkspaces,
 } from '#/web/workspace-client.ts'
+import { runWithRepoInvalidationSource } from '#/web/stores/repos/invalidation-sources.ts'
 
 export function useBranchWorkspaceActions(rootId: string | null) {
   const queryClient = useQueryClient()
@@ -55,11 +57,13 @@ export function useBranchWorkspaceActions(rootId: string | null) {
       if (!rootId || !plan) return null
       setPending(true)
       setError(null)
-      const response = await executeBranchWorkspace(rootId, { planToken: plan.token, approvals }).catch(() => ({
-        ok: false as const,
-        message: 'workspace.branch-workspace.execute-failed',
-        branchWorkspaceId: plan.branchWorkspaceId,
-      }))
+      const response = await runWithRepoInvalidationSource('workspace', async (sourceToken) =>
+        executeBranchWorkspace(rootId, { planToken: plan.token, approvals, sourceToken }).catch(() => ({
+          ok: false as const,
+          message: 'workspace.branch-workspace.execute-failed',
+          branchWorkspaceId: plan.branchWorkspaceId,
+        })),
+      )
       setPending(false)
       if (!response.ok && response.message === 'workspace.branch-workspace.plan-stale' && request) {
         await requestPlan(request)
@@ -67,10 +71,28 @@ export function useBranchWorkspaceActions(rootId: string | null) {
       }
       setResult(response)
       if (!response.ok) setError(response.message)
-      await invalidate().catch(() => undefined)
+      if (response.ok && response.snapshot) {
+        const snapshot = response.snapshot
+        queryClient.setQueryData<BranchWorkspaceReadResult>(branchWorkspaceQueryKey(rootId), (current) => {
+          const items = current?.ok ? current.items : []
+          const existingIndex = items.findIndex((item) => item.id === snapshot.id)
+          const nextItems =
+            existingIndex < 0
+              ? [...items, snapshot]
+              : items.map((item, index) => (index === existingIndex ? snapshot : item))
+          return {
+            ok: true,
+            rootId,
+            items: nextItems,
+            auxiliaryCandidates: current?.ok ? current.auxiliaryCandidates : [],
+          }
+        })
+      } else {
+        await invalidate().catch(() => undefined)
+      }
       return response
     },
-    [invalidate, plan, request, requestPlan, rootId],
+    [invalidate, plan, queryClient, request, requestPlan, rootId],
   )
 
   const cancel = useCallback(async () => {

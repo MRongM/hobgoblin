@@ -270,6 +270,7 @@ describe('workspace routes', () => {
         rootId: '/workspace',
         planToken: 'sha256:plan',
         approvals: ['outside-root-source', 'worktree-bootstrap'],
+        sourceToken: 'workspace_create_1',
       }),
     })
     const abortResponse = await app.request('/api/workspace/branch-workspaces/abort', {
@@ -292,6 +293,7 @@ describe('workspace routes', () => {
     expect(mocks.executeBranchWorkspace).toHaveBeenCalledWith('/workspace', {
       planToken: 'sha256:plan',
       approvals: ['outside-root-source', 'worktree-bootstrap'],
+      sourceToken: 'workspace_create_1',
     })
     expect(mocks.abortBranchWorkspace).toHaveBeenCalledWith('/workspace')
     expect(mocks.reorderBranchWorkspaces).toHaveBeenCalledWith('/workspace', ['third', 'first'])

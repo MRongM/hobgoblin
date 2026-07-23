@@ -1,6 +1,10 @@
 import { describe, expect, test, vi } from 'vitest'
 import { createBranchWorkspaceWriteService } from '#/server/modules/branch-workspace-write-paths.ts'
-import type { BranchWorkspaceManifest, BranchWorkspacePlan } from '#/shared/branch-workspaces.ts'
+import type {
+  BranchWorkspaceManifest,
+  BranchWorkspacePlan,
+  BranchWorkspaceSnapshot,
+} from '#/shared/branch-workspaces.ts'
 
 const ROOT = '/workspace'
 
@@ -100,7 +104,102 @@ function cloneManifest(manifest: BranchWorkspaceManifest): BranchWorkspaceManife
   }
 }
 
+function readySnapshot(plan: BranchWorkspacePlan): BranchWorkspaceSnapshot {
+  return {
+    id: plan.branchWorkspaceId,
+    rootId: plan.rootId,
+    branch: plan.branch,
+    directoryName: plan.directoryName,
+    path: plan.path,
+    state: { kind: 'ready' },
+    available: true,
+    issues: [],
+    repositories: plan.manifest.repositories.map((member) => ({ ...member, progress: 'complete', ready: true })),
+    auxiliaryEntries: [],
+  }
+}
+
 describe('branch workspace write service', () => {
+  test('returns the final ready snapshot after successful creation', async () => {
+    const plan = planned()
+    const source = inMemorySource()
+    const snapshot = readySnapshot(plan)
+    const readSnapshot = vi.fn(async () => ({
+      ok: true as const,
+      rootId: ROOT,
+      items: [snapshot],
+      auxiliaryCandidates: [],
+    }))
+    const publishInvalidation = vi.fn()
+    const service = createBranchWorkspaceWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      readManifests: source.readManifests,
+      updateManifests: source.updateManifests,
+      createDirectory: vi.fn(async () => undefined),
+      createWorktree: vi.fn(async () => ({ ok: true, message: 'created' })),
+      readSnapshot,
+      publishInvalidation,
+    })
+    await service.plan(ROOT, {
+      operation: 'create',
+      branch: 'feature/auth',
+      repositories: [
+        { repositoryName: 'api', baseBranch: 'main' },
+        { repositoryName: 'web', baseBranch: 'develop' },
+      ],
+      auxiliaryEntries: [],
+    })
+
+    const result = await service.execute(ROOT, {
+      planToken: plan.token,
+      approvals: [],
+      sourceToken: 'workspace_create_1',
+    })
+
+    expect(readSnapshot).toHaveBeenCalledWith(ROOT, expect.any(AbortSignal))
+    expect(publishInvalidation).toHaveBeenCalledWith(ROOT, 'workspace_create_1')
+    expect(source.manifests[0]?.operation).toBeUndefined()
+    expect(result).toEqual({ ok: true, branchWorkspaceId: plan.branchWorkspaceId, snapshot })
+  })
+
+  test('does not report creation success when final reconciliation is not ready', async () => {
+    const plan = planned()
+    const source = inMemorySource()
+    const snapshot: BranchWorkspaceSnapshot = {
+      ...readySnapshot(plan),
+      state: { kind: 'needs-action', action: 'repair', reason: 'drift' },
+      issues: [{ kind: 'worktree-missing', repositoryName: 'api' }],
+    }
+    const service = createBranchWorkspaceWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      readManifests: source.readManifests,
+      updateManifests: source.updateManifests,
+      createDirectory: vi.fn(async () => undefined),
+      createWorktree: vi.fn(async () => ({ ok: true, message: 'created' })),
+      readSnapshot: vi.fn(async () => ({
+        ok: true as const,
+        rootId: ROOT,
+        items: [snapshot],
+        auxiliaryCandidates: [],
+      })),
+    })
+    await service.plan(ROOT, {
+      operation: 'create',
+      branch: 'feature/auth',
+      repositories: [
+        { repositoryName: 'api', baseBranch: 'main' },
+        { repositoryName: 'web', baseBranch: 'develop' },
+      ],
+      auxiliaryEntries: [],
+    })
+
+    await expect(service.execute(ROOT, { planToken: plan.token, approvals: [] })).resolves.toEqual({
+      ok: false,
+      message: 'workspace.branch-workspace.needs-repair',
+      branchWorkspaceId: plan.branchWorkspaceId,
+    })
+  })
+
   test('persists intent before filesystem mutation and executes repositories sequentially in configured order', async () => {
     const plan = planned()
     const events: string[] = []
@@ -120,6 +219,12 @@ describe('branch workspace write service', () => {
       createDirectory,
       createWorktree,
       publishInvalidation,
+      readSnapshot: vi.fn(async () => ({
+        ok: true as const,
+        rootId: ROOT,
+        items: [readySnapshot(plan)],
+        auxiliaryCandidates: [],
+      })),
     })
     await service.plan(ROOT, {
       operation: 'create',
@@ -156,6 +261,12 @@ describe('branch workspace write service', () => {
       updateManifests: source.updateManifests,
       createDirectory: vi.fn(async () => undefined),
       createWorktree,
+      readSnapshot: vi.fn(async () => ({
+        ok: true as const,
+        rootId: ROOT,
+        items: [readySnapshot(plan)],
+        auxiliaryCandidates: [],
+      })),
     })
     const request = {
       operation: 'create' as const,
