@@ -149,14 +149,15 @@ describe('BranchWorkspaceTerminalPanel', () => {
     expect(createTerminal).not.toHaveBeenCalled()
   })
 
-  test('uses the project topbar tone with standard toolbar geometry', async () => {
+  test('uses draggable project topbar chrome in the desktop split', async () => {
     await renderPanel()
 
     const toolbar = container.querySelector<HTMLElement>('[data-testid="branch-workspace-terminal-toolbar"]')
-    expect(toolbar?.style.height).toBe('41px')
+    expect(toolbar?.style.height).toBe('39px')
     expect(toolbar?.className).toContain('topbar-tone')
     expect(toolbar?.className).toContain('bg-topbar')
     expect(toolbar?.className).not.toContain('bg-toolbar')
+    expect(toolbar?.className).toContain('[-webkit-app-region:drag]')
   })
 
   test('exits terminal focus through the focused toolbar control', async () => {
