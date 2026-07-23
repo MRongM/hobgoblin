@@ -1082,6 +1082,7 @@ describe('RepoExplorerPane', () => {
     expect(branchToolbar).toBeNull()
     expect(explorerToolbar?.style.height).toBe('41px')
     expect(explorerToolbar?.className).not.toContain('h-8')
+    expect(explorerToolbar?.className).toContain('border-y-0')
     expect(repoFileArea?.className).toContain('project-file-area-tone')
     expect(repoFileArea?.className).not.toContain('border-t')
     expect(repoFileArea?.className).not.toContain('border-separator')

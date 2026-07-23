@@ -46,11 +46,7 @@ export const StatusChip = forwardRef<HTMLSpanElement, StatusChipProps>(function 
 })
 
 export function StatusRows({ children }: { children: ReactNode }) {
-  return (
-    <div role="list" className="divide-y divide-separator border-b border-separator">
-      {children}
-    </div>
-  )
+  return <div role="list">{children}</div>
 }
 
 type StatusRowProps = Omit<ComponentPropsWithoutRef<'div'>, 'value'> & {
