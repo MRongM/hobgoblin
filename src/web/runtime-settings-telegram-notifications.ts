@@ -12,6 +12,9 @@ const DEFAULT_TELEGRAM_SETTINGS: TelegramNotificationSettingsSnapshot = {
   enabled: false,
   botTokenConfigured: false,
   chatId: '',
+  bellEnabled: true,
+  outputCompletionEnabled: false,
+  includeTerminalOutput: false,
 }
 
 export function getRuntimeTelegramNotificationSettings(): TelegramNotificationSettingsSnapshot {

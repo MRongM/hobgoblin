@@ -133,26 +133,50 @@ describe('settings routes', () => {
   test('delegates Telegram settings writes without exposing the Bot Token', async () => {
     mocks.applyServerTelegramNotificationSettingsWrite.mockResolvedValue({
       ok: true,
-      telegramNotifications: { enabled: true, botTokenConfigured: true, chatId: '-100123' },
+      telegramNotifications: {
+        enabled: true,
+        botTokenConfigured: true,
+        chatId: '-100123',
+        bellEnabled: true,
+        outputCompletionEnabled: true,
+        includeTerminalOutput: true,
+      },
     })
     const { createSettingsRoutes } = await import('#/server/routes/settings.ts')
     const app = createSettingsRoutes(createServerSettingsState())
     const response = await app.request('http://127.0.0.1:32100/telegram', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ enabled: true, botToken: '123456:test-token', chatId: '-100123' }),
+      body: JSON.stringify({
+        enabled: true,
+        botToken: '123456:test-token',
+        chatId: '-100123',
+        bellEnabled: true,
+        outputCompletionEnabled: true,
+        includeTerminalOutput: true,
+      }),
     })
 
     const result = await response.json()
     expect(result).toEqual({
       ok: true,
-      telegramNotifications: { enabled: true, botTokenConfigured: true, chatId: '-100123' },
+      telegramNotifications: {
+        enabled: true,
+        botTokenConfigured: true,
+        chatId: '-100123',
+        bellEnabled: true,
+        outputCompletionEnabled: true,
+        includeTerminalOutput: true,
+      },
     })
     expect(JSON.stringify(result)).not.toContain('test-token')
     expect(mocks.applyServerTelegramNotificationSettingsWrite).toHaveBeenCalledWith({
       enabled: true,
       botToken: '123456:test-token',
       chatId: '-100123',
+      bellEnabled: true,
+      outputCompletionEnabled: true,
+      includeTerminalOutput: true,
     })
   })
 

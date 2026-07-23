@@ -25,6 +25,13 @@ export function NotificationSettings() {
   const telegramController = useTelegramNotificationSettingsController()
   const [testingTerminalNotification, setTestingTerminalNotification] = useState(false)
   const [telegramEnabled, setTelegramEnabled] = useState(telegramSettings.enabled)
+  const [telegramBellEnabled, setTelegramBellEnabled] = useState(telegramSettings.bellEnabled)
+  const [telegramOutputCompletionEnabled, setTelegramOutputCompletionEnabled] = useState(
+    telegramSettings.outputCompletionEnabled,
+  )
+  const [telegramIncludeTerminalOutput, setTelegramIncludeTerminalOutput] = useState(
+    telegramSettings.includeTerminalOutput,
+  )
   const [botTokenConfigured, setBotTokenConfigured] = useState(telegramSettings.botTokenConfigured)
   const [botToken, setBotToken] = useState('')
   const [chatId, setChatId] = useState(telegramSettings.chatId)
@@ -34,16 +41,29 @@ export function NotificationSettings() {
 
   useEffect(() => {
     setTelegramEnabled(telegramSettings.enabled)
+    setTelegramBellEnabled(telegramSettings.bellEnabled)
+    setTelegramOutputCompletionEnabled(telegramSettings.outputCompletionEnabled)
+    setTelegramIncludeTerminalOutput(telegramSettings.includeTerminalOutput)
     setBotTokenConfigured(telegramSettings.botTokenConfigured)
     setBotToken('')
     setChatId(telegramSettings.chatId)
     setTelegramSaveFailed(false)
-  }, [telegramSettings.botTokenConfigured, telegramSettings.chatId, telegramSettings.enabled])
+  }, [
+    telegramSettings.bellEnabled,
+    telegramSettings.botTokenConfigured,
+    telegramSettings.chatId,
+    telegramSettings.enabled,
+    telegramSettings.includeTerminalOutput,
+    telegramSettings.outputCompletionEnabled,
+  ])
 
   const normalizedChatId = chatId.trim()
   const configurationComplete = Boolean((botTokenConfigured || botToken.trim()) && normalizedChatId)
   const telegramChanged =
     telegramEnabled !== telegramSettings.enabled ||
+    telegramBellEnabled !== telegramSettings.bellEnabled ||
+    telegramOutputCompletionEnabled !== telegramSettings.outputCompletionEnabled ||
+    telegramIncludeTerminalOutput !== telegramSettings.includeTerminalOutput ||
     normalizedChatId !== telegramSettings.chatId ||
     Boolean(botToken.trim())
   const telegramConfigurationError = telegramEnabled && !configurationComplete
@@ -81,6 +101,9 @@ export function NotificationSettings() {
       enabled: telegramEnabled,
       ...(botToken.trim() ? { botToken: botToken.trim() } : {}),
       chatId: normalizedChatId,
+      bellEnabled: telegramBellEnabled,
+      outputCompletionEnabled: telegramOutputCompletionEnabled,
+      includeTerminalOutput: telegramIncludeTerminalOutput,
     })
     setSavingTelegram(false)
     if (!saved) {
@@ -89,6 +112,9 @@ export function NotificationSettings() {
     }
     setBotToken('')
     setTelegramEnabled(saved.enabled)
+    setTelegramBellEnabled(saved.bellEnabled)
+    setTelegramOutputCompletionEnabled(saved.outputCompletionEnabled)
+    setTelegramIncludeTerminalOutput(saved.includeTerminalOutput)
     setBotTokenConfigured(saved.botTokenConfigured)
     setChatId(saved.chatId)
     toast.success(t('settings.telegram.saved'))
@@ -157,6 +183,45 @@ export function NotificationSettings() {
                 checked={telegramEnabled}
                 onCheckedChange={setTelegramEnabled}
                 aria-label={t('settings.telegram.enabled')}
+              />
+            }
+          />
+          <SettingsRow
+            controlId="settings-telegram-bell-enabled"
+            label={t('settings.telegram.bell-enabled')}
+            hint={t('settings.telegram.bell-enabled-hint')}
+            control={
+              <Switch
+                id="settings-telegram-bell-enabled"
+                checked={telegramBellEnabled}
+                onCheckedChange={setTelegramBellEnabled}
+                aria-label={t('settings.telegram.bell-enabled')}
+              />
+            }
+          />
+          <SettingsRow
+            controlId="settings-telegram-output-completion-enabled"
+            label={t('settings.telegram.output-completion-enabled')}
+            hint={t('settings.telegram.output-completion-enabled-hint')}
+            control={
+              <Switch
+                id="settings-telegram-output-completion-enabled"
+                checked={telegramOutputCompletionEnabled}
+                onCheckedChange={setTelegramOutputCompletionEnabled}
+                aria-label={t('settings.telegram.output-completion-enabled')}
+              />
+            }
+          />
+          <SettingsRow
+            controlId="settings-telegram-include-terminal-output"
+            label={t('settings.telegram.include-terminal-output')}
+            hint={t('settings.telegram.include-terminal-output-hint')}
+            control={
+              <Switch
+                id="settings-telegram-include-terminal-output"
+                checked={telegramIncludeTerminalOutput}
+                onCheckedChange={setTelegramIncludeTerminalOutput}
+                aria-label={t('settings.telegram.include-terminal-output')}
               />
             }
           />

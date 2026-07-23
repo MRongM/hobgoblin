@@ -59,7 +59,14 @@ function defaultRpcResult(path: string, input?: unknown) {
       },
       recentRepos: [],
       webAccess: { enabled: false, username: '', passwordConfigured: false },
-      telegramNotifications: { enabled: false, botTokenConfigured: false, chatId: '' },
+      telegramNotifications: {
+        enabled: false,
+        botTokenConfigured: false,
+        chatId: '',
+        bellEnabled: true,
+        outputCompletionEnabled: false,
+        includeTerminalOutput: false,
+      },
     }
   }
   if (path === 'externalApps.get' || path === 'externalApps.refresh') {
@@ -157,13 +164,23 @@ const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
       },
     }
   } else if (url.pathname === '/api/settings/telegram') {
-    const body = JSON.parse(String(init?.body ?? '{}')) as { enabled?: boolean; botToken?: string; chatId?: string }
+    const body = JSON.parse(String(init?.body ?? '{}')) as {
+      enabled?: boolean
+      botToken?: string
+      chatId?: string
+      bellEnabled?: boolean
+      outputCompletionEnabled?: boolean
+      includeTerminalOutput?: boolean
+    }
     result = {
       ok: true,
       telegramNotifications: {
         enabled: body.enabled === true,
         botTokenConfigured: Boolean(body.botToken),
         chatId: body.chatId?.trim() ?? '',
+        bellEnabled: body.bellEnabled === true,
+        outputCompletionEnabled: body.outputCompletionEnabled === true,
+        includeTerminalOutput: body.includeTerminalOutput === true,
       },
     }
   } else if (url.pathname === '/api/telegram-notifications/test') {
@@ -345,9 +362,14 @@ describe('SettingsSurface', () => {
     expect(tokenInput.type).toBe('password')
     expect(tokenInput.value).toBe('')
     expect(document.body.textContent).toContain('settings.telegram.master-off-hint')
+    expect(switchById('settings-telegram-bell-enabled').getAttribute('data-state')).toBe('checked')
+    expect(switchById('settings-telegram-output-completion-enabled').getAttribute('data-state')).toBe('unchecked')
+    expect(switchById('settings-telegram-include-terminal-output').getAttribute('data-state')).toBe('unchecked')
 
     await act(async () => {
       switchById('settings-telegram-enabled').click()
+      switchById('settings-telegram-output-completion-enabled').click()
+      switchById('settings-telegram-include-terminal-output').click()
       setInputValue(tokenInput, '123456:test-token')
       setInputValue(chatIdInput, '-100123')
       await Promise.resolve()
@@ -368,6 +390,9 @@ describe('SettingsSurface', () => {
       enabled: true,
       botToken: '123456:test-token',
       chatId: '-100123',
+      bellEnabled: true,
+      outputCompletionEnabled: true,
+      includeTerminalOutput: true,
     })
     expect((document.getElementById('settings-telegram-bot-token') as HTMLInputElement).value).toBe('')
 
@@ -447,7 +472,9 @@ describe('SettingsSurface', () => {
 
     await act(async () => {
       enabledSwitch.click()
+      urlInput.focus()
       setInputValue(urlInput, 'socks5://127.0.0.1:7890')
+      urlInput.blur()
       setInputValue(timeoutInput, '180')
       await Promise.resolve()
     })
@@ -474,6 +501,44 @@ describe('SettingsSurface', () => {
         if (new URL(String(url)).pathname !== '/api/settings/prefs') return false
         const body = JSON.parse(String(options?.body ?? '{}')) as { settings?: Record<string, unknown> }
         return body.settings?.gitNetworkTimeoutSec === 180
+      }),
+    ).toBe(true)
+  })
+
+  test('keeps an incomplete proxy URL editable and persists it after editing finishes', async () => {
+    await render(<SettingsSurface page="proxy" onPageChange={() => {}} />)
+
+    const urlInput = document.getElementById('settings-git-network-proxy-url')
+    if (!(urlInput instanceof HTMLInputElement)) throw new Error('Missing git network proxy url input')
+
+    await act(async () => {
+      urlInput.focus()
+      setInputValue(urlInput, 'http')
+      await Promise.resolve()
+    })
+
+    expect(urlInput.value).toBe('http')
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [url, options] = call as unknown as [unknown, RequestInit | undefined]
+        if (new URL(String(url)).pathname !== '/api/settings/prefs') return false
+        const body = JSON.parse(String(options?.body ?? '{}')) as { settings?: Record<string, unknown> }
+        return body.settings?.gitNetworkProxyUrl !== undefined
+      }),
+    ).toBe(false)
+
+    await act(async () => {
+      setInputValue(urlInput, 'http://127.0.0.1:7890')
+      urlInput.blur()
+      await Promise.resolve()
+    })
+
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [url, options] = call as unknown as [unknown, RequestInit | undefined]
+        if (new URL(String(url)).pathname !== '/api/settings/prefs') return false
+        const body = JSON.parse(String(options?.body ?? '{}')) as { settings?: Record<string, unknown> }
+        return body.settings?.gitNetworkProxyUrl === 'http://127.0.0.1:7890'
       }),
     ).toBe(true)
   })

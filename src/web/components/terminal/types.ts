@@ -26,6 +26,16 @@ export interface TerminalBellEvent {
   /** Server-canonical terminal title from the headless session model. */
   canonicalTitle?: string | null
   visible: boolean
+  outputTail?: string
+}
+
+export interface TerminalOutputCompletionIntent {
+  descriptor: TerminalDescriptor
+  sessionId: string
+  finalOutputSeq: number
+  processName: string
+  canonicalTitle?: string | null
+  outputTail?: string
 }
 
 export interface TerminalAttachmentOwnershipViewModel {

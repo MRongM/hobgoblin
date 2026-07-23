@@ -82,9 +82,11 @@ function makeServerSession(
 describe('TerminalSessionRegistry', () => {
   let registry: TerminalSessionRegistry
   let selectedChanges: Array<{ worktreeTerminalKey: string; key: string | null }>
+  let outputCompletions: unknown[]
 
   beforeEach(() => {
     selectedChanges = []
+    outputCompletions = []
     bridgeMocks.create.mockReset()
     bridgeMocks.close.mockClear()
     bridgeMocks.reorder.mockClear()
@@ -94,6 +96,8 @@ describe('TerminalSessionRegistry', () => {
     registry = new TerminalSessionRegistry(
       () => REPO_ROOT,
       (worktreeTerminalKey, key) => selectedChanges.push({ worktreeTerminalKey, key }),
+      () => {},
+      (intent) => outputCompletions.push(intent),
     )
   })
 
@@ -271,6 +275,9 @@ describe('TerminalSessionRegistry', () => {
 
         vi.advanceTimersByTime(1)
         expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]?.isOutputActive).toBe(false)
+        expect(outputCompletions).toEqual([
+          expect.objectContaining({ sessionId: 'session-a', finalOutputSeq: 1_000, outputTail: 'tickticktickticktickticktickticktickticktick' }),
+        ])
       } finally {
         vi.useRealTimers()
       }

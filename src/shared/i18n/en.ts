@@ -1042,6 +1042,8 @@ export const en = {
   'settings.terminal-notifications-test-failed-hint':
     'Go to System Settings → Notifications → Hobgoblin and make sure notifications are allowed.',
   'telegram.notification.message.title': '🔔 Hobgoblin unread terminal bell',
+  'telegram.notification.message.output-completion-title': '✅ Hobgoblin terminal run completed',
+  'telegram.notification.message.output-tail': 'Terminal output',
   'telegram.notification.message.project': 'Project',
   'telegram.notification.message.context': 'Context',
   'telegram.notification.message.directory': 'Directory',
@@ -1058,6 +1060,14 @@ export const en = {
   'settings.telegram.hint': 'Send an additional Telegram message for unread terminal bells.',
   'settings.telegram.enabled': 'Telegram notifications',
   'settings.telegram.enabled-hint': 'Uses the saved bot and chat when terminal bell notifications are enabled.',
+  'settings.telegram.bell-enabled': 'Unread bell',
+  'settings.telegram.bell-enabled-hint': 'Send Telegram when a background terminal bell becomes unread.',
+  'settings.telegram.output-completion-enabled': 'Terminal run completed',
+  'settings.telegram.output-completion-enabled-hint':
+    'Send Telegram whenever the terminal activity indicator changes from active to idle.',
+  'settings.telegram.include-terminal-output': 'Include terminal output',
+  'settings.telegram.include-terminal-output-hint':
+    'Append the last 200 visible characters. Terminal output may contain sensitive information.',
   'settings.telegram.bot-token': 'Bot Token',
   'settings.telegram.bot-token-hint-configured': 'A Bot Token is configured. Leave blank to keep it.',
   'settings.telegram.bot-token-hint-new': 'Create a bot with BotFather and paste its Token.',

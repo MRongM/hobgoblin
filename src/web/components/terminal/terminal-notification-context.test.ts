@@ -43,6 +43,12 @@ describe('terminalNotificationContext', () => {
     })
   })
 
+  test('includes the triggering terminal output tail', () => {
+    expect(
+      terminalNotificationContext(descriptor(), { ...event, outputTail: 'tests passed\nready' }, { [localRepo.id]: localRepo }),
+    ).toMatchObject({ outputTail: 'tests passed\nready' })
+  })
+
   test('describes plain workspaces without a branch', () => {
     const root = '/Users/tester/src/platform'
     expect(

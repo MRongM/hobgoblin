@@ -67,5 +67,6 @@ export function terminalNotificationContext(
     ...(branch ? { branch } : {}),
     terminalIndex: descriptor.index,
     ...(canonicalTitle || processName ? { terminalTitle: canonicalTitle || processName } : {}),
+    ...(event.outputTail ? { outputTail: event.outputTail } : {}),
   }
 }

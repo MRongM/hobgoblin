@@ -2615,7 +2615,12 @@ describe('ManagedTerminalSession', () => {
     expect(onBell).not.toHaveBeenCalled()
 
     session.handleOutput({ sessionId: 'session-1', data: 'done\x07', seq: 2, processName: 'claude' })
-    expect(onBell).toHaveBeenCalledWith(descriptor, { processName: 'claude', canonicalTitle: null, visible: false })
+    expect(onBell).toHaveBeenCalledWith(descriptor, {
+      processName: 'claude',
+      canonicalTitle: null,
+      visible: false,
+      outputTail: 'working…done',
+    })
   })
 
   test('emits bell events for BEL output when the session is not the controller', () => {
@@ -2625,7 +2630,12 @@ describe('ManagedTerminalSession', () => {
     hydrateManagedSession(session, { role: 'viewer' })
 
     session.handleOutput({ sessionId: 'session-1', data: 'finished\x07', seq: 1, processName: 'zsh' })
-    expect(onBell).toHaveBeenCalledWith(descriptor, { processName: 'zsh', canonicalTitle: null, visible: false })
+    expect(onBell).toHaveBeenCalledWith(descriptor, {
+      processName: 'zsh',
+      canonicalTitle: null,
+      visible: false,
+      outputTail: 'finished',
+    })
   })
 
   test('progress state appears in snapshot and clears on state 0', async () => {

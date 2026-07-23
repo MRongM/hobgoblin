@@ -76,6 +76,9 @@ const appDataClientMocks = vi.hoisted(() => ({
     enabled: input.enabled === true,
     botTokenConfigured: Boolean(input.botToken),
     chatId: input.chatId,
+    bellEnabled: input.bellEnabled,
+    outputCompletionEnabled: input.outputCompletionEnabled,
+    includeTerminalOutput: input.includeTerminalOutput,
   })),
 }))
 
@@ -203,6 +206,9 @@ describe('settings write paths', () => {
       enabled: input.enabled === true,
       botTokenConfigured: Boolean(input.botToken),
       chatId: input.chatId,
+      bellEnabled: input.bellEnabled,
+      outputCompletionEnabled: input.outputCompletionEnabled,
+      includeTerminalOutput: input.includeTerminalOutput,
     }))
   })
 
@@ -345,17 +351,34 @@ describe('settings write paths', () => {
 
   test('saveTelegramNotificationSettingsPreference updates only the masked Telegram cache', async () => {
     mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
-    const input = { enabled: true, botToken: '123456:test-token', chatId: '-100123' }
+    const input = {
+      enabled: true,
+      botToken: '123456:test-token',
+      chatId: '-100123',
+      bellEnabled: true,
+      outputCompletionEnabled: true,
+      includeTerminalOutput: true,
+    }
     const { saveTelegramNotificationSettingsPreference } = await import('#/web/settings-write-paths.ts')
 
     await expect(saveTelegramNotificationSettingsPreference(input)).resolves.toEqual({
       enabled: true,
       botTokenConfigured: true,
       chatId: '-100123',
+      bellEnabled: true,
+      outputCompletionEnabled: true,
+      includeTerminalOutput: true,
     })
     const snapshot = mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())
     expect(snapshot).toMatchObject({
-      telegramNotifications: { enabled: true, botTokenConfigured: true, chatId: '-100123' },
+      telegramNotifications: {
+        enabled: true,
+        botTokenConfigured: true,
+        chatId: '-100123',
+        bellEnabled: true,
+        outputCompletionEnabled: true,
+        includeTerminalOutput: true,
+      },
     })
     expect(JSON.stringify(snapshot)).not.toContain('test-token')
   })

@@ -107,11 +107,17 @@ test('keeps Telegram Bot Token server-only and retains it on a blank update', as
       enabled: true,
       botToken: '123456:test-token-value',
       chatId: '-1001234567890',
+      bellEnabled: false,
+      outputCompletionEnabled: true,
+      includeTerminalOutput: true,
     }),
   ).resolves.toEqual({
     enabled: true,
     botTokenConfigured: true,
     chatId: '-1001234567890',
+    bellEnabled: false,
+    outputCompletionEnabled: true,
+    includeTerminalOutput: true,
   })
 
   expect(JSON.stringify(await mod.getServerTelegramNotificationSettings())).not.toContain('test-token-value')
@@ -120,6 +126,9 @@ test('keeps Telegram Bot Token server-only and retains it on a blank update', as
     enabled: false,
     botToken: '',
     chatId: '-1001234567890',
+    bellEnabled: true,
+    outputCompletionEnabled: false,
+    includeTerminalOutput: false,
   })
   expect((await mod.getServerTelegramNotificationConfig()).botToken).toBe('123456:test-token-value')
 })
@@ -129,13 +138,23 @@ test('does not enable Telegram notifications without a Bot Token and Chat ID', a
   const mod = await import('#/server/modules/settings-source.ts')
 
   await expect(
-    mod.updateServerTelegramNotificationSettings({ enabled: true, botToken: '', chatId: '' }),
+    mod.updateServerTelegramNotificationSettings({
+      enabled: true,
+      botToken: '',
+      chatId: '',
+      bellEnabled: true,
+      outputCompletionEnabled: false,
+      includeTerminalOutput: false,
+    }),
   ).rejects.toMatchObject({ code: 'configuration-incomplete' })
 
   await expect(mod.getServerTelegramNotificationSettings()).resolves.toEqual({
     enabled: false,
     botTokenConfigured: false,
     chatId: '',
+    bellEnabled: true,
+    outputCompletionEnabled: false,
+    includeTerminalOutput: false,
   })
 })
 
@@ -144,8 +163,22 @@ test('tracks a saved Bot Token independently from the Chat ID while disabled', a
   const mod = await import('#/server/modules/settings-source.ts')
 
   await expect(
-    mod.updateServerTelegramNotificationSettings({ enabled: false, botToken: '123456:test-token', chatId: '' }),
-  ).resolves.toEqual({ enabled: false, botTokenConfigured: true, chatId: '' })
+    mod.updateServerTelegramNotificationSettings({
+      enabled: false,
+      botToken: '123456:test-token',
+      chatId: '',
+      bellEnabled: true,
+      outputCompletionEnabled: false,
+      includeTerminalOutput: false,
+    }),
+  ).resolves.toEqual({
+    enabled: false,
+    botTokenConfigured: true,
+    chatId: '',
+    bellEnabled: true,
+    outputCompletionEnabled: false,
+    includeTerminalOutput: false,
+  })
   expect((await mod.getServerTelegramNotificationConfig()).botToken).toBe('123456:test-token')
 })
 
@@ -158,6 +191,9 @@ test('rejects malformed Telegram channel usernames', async () => {
       enabled: false,
       botToken: '123456:test-token',
       chatId: '@1starts_with_digit',
+      bellEnabled: true,
+      outputCompletionEnabled: false,
+      includeTerminalOutput: false,
     }),
   ).rejects.toMatchObject({ code: 'invalid-input' })
 })
@@ -175,8 +211,30 @@ test('normalizes missing and invalid persisted Telegram notification settings', 
     enabled: false,
     botTokenConfigured: false,
     chatId: '',
+    bellEnabled: true,
+    outputCompletionEnabled: false,
+    includeTerminalOutput: false,
   })
   expect(JSON.stringify(await mod.getServerSettingsPrefs())).not.toContain('telegramBotToken')
+})
+
+test('migrates legacy Telegram settings to bell-only delivery', async () => {
+  useTempServerSettingsDir()
+  writeSettingsFile({
+    telegramNotificationsEnabled: true,
+    telegramBotToken: '123456:test-token',
+    telegramChatId: '-100123',
+  })
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(mod.getServerTelegramNotificationSettings()).resolves.toEqual({
+    enabled: true,
+    botTokenConfigured: true,
+    chatId: '-100123',
+    bellEnabled: true,
+    outputCompletionEnabled: false,
+    includeTerminalOutput: false,
+  })
 })
 
 test('persists web access credentials without exposing password material in public settings', async () => {

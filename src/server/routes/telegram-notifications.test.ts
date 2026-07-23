@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   sendTest: vi.fn(),
   sendBell: vi.fn(),
+  sendCompletion: vi.fn(),
 }))
 
 vi.mock('#/server/modules/telegram-notification-write-paths.ts', () => ({
   sendConfiguredTelegramTestNotification: mocks.sendTest,
   sendConfiguredTelegramBellNotification: mocks.sendBell,
+  sendConfiguredTelegramOutputCompletionNotification: mocks.sendCompletion,
 }))
 
 describe('Telegram notification routes', () => {
@@ -41,5 +43,30 @@ describe('Telegram notification routes', () => {
     })
     expect(await bellResponse.json()).toEqual({ ok: true })
     expect(mocks.sendBell).toHaveBeenCalledWith(context, { acceptLanguage: 'en-US' })
+  })
+
+  test('forwards output completion context to the dedicated write path', async () => {
+    mocks.sendCompletion.mockResolvedValue({ ok: true })
+    const { createTelegramNotificationRoutes } = await import('#/server/routes/telegram-notifications.ts')
+    const app = createTelegramNotificationRoutes()
+    const context = {
+      terminalKey: 'terminal-1',
+      project: 'api',
+      contextKind: 'directory',
+      context: 'api',
+      directory: '~/src/api',
+      terminalIndex: 1,
+      sessionId: 'session-1',
+      finalOutputSeq: 42,
+    }
+
+    const response = await app.request('http://127.0.0.1:32100/output-completion', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'accept-language': 'zh-CN' },
+      body: JSON.stringify(context),
+    })
+
+    expect(await response.json()).toEqual({ ok: true })
+    expect(mocks.sendCompletion).toHaveBeenCalledWith(context, { acceptLanguage: 'zh-CN' })
   })
 })

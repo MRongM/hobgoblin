@@ -58,6 +58,9 @@ describe('server settings snapshot runtime state', () => {
       enabled: false,
       botTokenConfigured: false,
       chatId: '',
+      bellEnabled: true,
+      outputCompletionEnabled: false,
+      includeTerminalOutput: false,
     })
 
     const state = createServerSettingsState()

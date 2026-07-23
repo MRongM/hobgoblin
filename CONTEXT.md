@@ -32,6 +32,18 @@ _Avoid_: Telegram message, system notification, terminal output activity
 A best-effort external attention delivery caused by an eligible unread terminal bell. One delivery may use the system notification channel and, when configured, an additional Telegram channel; delivery failure does not change unread terminal bell state.
 _Avoid_: Unread state, queued notification, terminal bell event
 
+**Terminal output excerpt**:
+An optional, ephemeral Telegram-only excerpt of at most 200 sanitized visible characters from the same internal terminal at the time of an eligible unread terminal bell. It is disabled by default, never persisted, and may still contain sensitive shell content when explicitly enabled.
+_Avoid_: Terminal transcript, command result, durable output history
+
+**Terminal output activity**:
+A renderer-observed state attached to one internal terminal after its output has remained active long enough to exclude brief bursts and input echo. It becomes idle after the same quiet interval used by terminal-count activity indicators. It describes sustained output rather than a process lifecycle.
+_Avoid_: Running process, command execution state, terminal busy state
+
+**Terminal output completion notification delivery**:
+A best-effort Telegram delivery caused when an observed terminal output activity period becomes idle. It is independent of terminal visibility and focus, and one observed activity period produces at most one delivery across clients. A quiet interval may therefore complete one activity period even when the underlying command has not exited.
+_Avoid_: Process exit notification, command completion proof, unread terminal bell
+
 **Canonical terminal geometry**:
 The server-owned PTY column and row count published by the current controller attachment.
 _Avoid_: Viewer size, shared viewport size

@@ -53,6 +53,7 @@ export type {
   TelegramNotificationResult,
   TelegramNotificationSettingsSnapshot,
   TelegramNotificationSettingsUpdateInput,
+  TelegramOutputCompletionNotificationContext,
 } from '#/shared/telegram-notifications.ts'
 
 export interface LanInfo {

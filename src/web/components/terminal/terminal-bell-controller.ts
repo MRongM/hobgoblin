@@ -68,8 +68,10 @@ export function createTerminalBellController(
         .notifyBell({ title: repoName, body: bodyParts.join('\n'), key: descriptor.key, repoRoot: descriptor.repoRoot })
         .catch(() => {})
       const telegram = getRuntimeTelegramNotificationSettings()
-      if (telegram.enabled && telegram.botTokenConfigured && telegram.chatId) {
-        void sendTelegramBellNotification(terminalNotificationContext(descriptor, event)).catch(() => {})
+      if (telegram.enabled && telegram.bellEnabled && telegram.botTokenConfigured && telegram.chatId) {
+        const context = terminalNotificationContext(descriptor, event)
+        if (!telegram.includeTerminalOutput) delete context.outputTail
+        void sendTelegramBellNotification(context).catch(() => {})
       }
     },
   }

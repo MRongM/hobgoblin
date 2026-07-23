@@ -13,6 +13,7 @@ import { readOrCreateWebTerminalAttachmentId } from '#/web/renderer-terminal-bri
 import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
 import { terminalSessionsQueryKey, terminalSessionsQueryOptions } from '#/web/terminal-session-queries.ts'
 import { TerminalSessionRegistry } from '#/web/components/terminal/TerminalSessionRegistry.ts'
+import { notifyTerminalOutputCompletion } from '#/web/components/terminal/terminal-output-completion-controller.ts'
 import { setTerminalSessionCommandBridge } from '#/web/components/terminal/terminal-session-command-bridge.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import {
@@ -93,6 +94,7 @@ export function TerminalSessionProvider({ currentRepoId, children, syncTracker: 
       () => currentRepoIdRef.current,
       setSelectedTerminal,
       (repoRoot, worktreePath) => dismissExitedTerminalDetail(repoRoot, worktreePath),
+      notifyTerminalOutputCompletion,
     )
   }
   const registry = registryRef.current

@@ -25,6 +25,7 @@ import type {
   TerminalSessionSummary,
   TerminalSnapshot,
   TerminalWorktreeScope,
+  TerminalOutputCompletionIntent,
 } from '#/web/components/terminal/types.ts'
 
 const EMPTY_TERMINAL_SNAPSHOT: TerminalSnapshot = {
@@ -82,6 +83,7 @@ export class TerminalSessionRegistry {
   private readonly lastTerminalInputAt = new Map<string, number>()
   private readonly outputBurstStartAt = new Map<string, number>()
   private readonly outputBurstLastAt = new Map<string, number>()
+  private readonly outputBurstLastSeq = new Map<string, number>()
   private readonly worktreeListeners = new Map<string, Set<() => void>>()
   private readonly snapshotListeners = new Map<string, Set<() => void>>()
   private readonly displayOrderByKey = new Map<string, number>()
@@ -106,6 +108,7 @@ export class TerminalSessionRegistry {
     private readonly getCurrentRepoId: () => string | null,
     private readonly onSelectedWorktreeChange: (worktreeTerminalKey: string, key: string | null) => void = () => {},
     private readonly onWorktreeEmpty: (repoRoot: string, worktreePath: string) => void = () => {},
+    private readonly onOutputCompletion: (intent: TerminalOutputCompletionIntent) => void = () => {},
   ) {}
 
   setRepoIndex(repoIndex: TerminalRepoIndex): void {
@@ -152,6 +155,7 @@ export class TerminalSessionRegistry {
     this.lastTerminalInputAt.clear()
     this.outputBurstStartAt.clear()
     this.outputBurstLastAt.clear()
+    this.outputBurstLastSeq.clear()
     this.worktreeListeners.clear()
     this.snapshotListeners.clear()
     this.hostByWorktree.clear()
@@ -171,7 +175,7 @@ export class TerminalSessionRegistry {
     const directSession = directKey ? this.sessions.get(directKey) : null
     if (directKey && directSession) {
       directSession.handleOutput(event)
-      if (event.data.length > 0) this.markOutputActive(directKey)
+      if (event.data.length > 0) this.markOutputActive(directKey, event.seq)
     }
   }
 
@@ -606,19 +610,35 @@ export class TerminalSessionRegistry {
     return now - burstStartAt >= TERMINAL_OUTPUT_ACTIVE_SUSTAIN_MS
   }
 
-  private markOutputActive(key: string): void {
+  private markOutputActive(key: string, outputSeq: number): void {
     const session = this.sessions.get(key)
     if (!session) return
     if (!this.isSustainedOutput(key)) return
     const wasActive = this.outputActiveKeys.has(key)
     this.outputActiveKeys.add(key)
+    this.outputBurstLastSeq.set(key, outputSeq)
+    const sessionId = session.currentSessionId()
     const currentTimer = this.outputActiveIdleTimers.get(key)
     if (currentTimer) clearTimeout(currentTimer)
     const timer = setTimeout(() => {
       this.outputActiveIdleTimers.delete(key)
       if (!this.outputActiveKeys.delete(key)) return
       const latestSession = this.sessions.get(key)
-      if (latestSession) this.notifyWorktree(latestSession.descriptor.worktreeTerminalKey)
+      if (!latestSession) return
+      this.notifyWorktree(latestSession.descriptor.worktreeTerminalKey)
+      const finalOutputSeq = this.outputBurstLastSeq.get(key)
+      const snapshot = latestSession.snapshot()
+      if (sessionId && latestSession.currentSessionId() === sessionId && finalOutputSeq !== undefined) {
+        const outputTail = latestSession.outputTail()
+        this.onOutputCompletion({
+          descriptor: latestSession.descriptor,
+          sessionId,
+          finalOutputSeq,
+          processName: snapshot.processName,
+          canonicalTitle: snapshot.canonicalTitle,
+          ...(outputTail ? { outputTail } : {}),
+        })
+      }
     }, TERMINAL_OUTPUT_ACTIVE_IDLE_MS)
     this.outputActiveIdleTimers.set(key, timer)
     if (!wasActive) this.notifyWorktree(session.descriptor.worktreeTerminalKey)
@@ -632,6 +652,7 @@ export class TerminalSessionRegistry {
     this.lastTerminalInputAt.delete(key)
     this.outputBurstStartAt.delete(key)
     this.outputBurstLastAt.delete(key)
+    this.outputBurstLastSeq.delete(key)
   }
 
   private subscribeToKeyedListeners(

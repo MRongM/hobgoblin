@@ -120,6 +120,9 @@ interface ServerSettingsData {
   webAccessUsername: string
   webAccessPasswordHash: string
   telegramNotificationsEnabled: boolean
+  telegramBellNotificationsEnabled: boolean
+  telegramOutputCompletionNotificationsEnabled: boolean
+  telegramIncludeTerminalOutput: boolean
   telegramBotToken: string
   telegramChatId: string
   session: SessionState
@@ -333,6 +336,9 @@ function telegramNotificationSettingsFromData(data: ServerSettingsData): Telegra
     enabled: data.telegramNotificationsEnabled && botTokenConfigured && Boolean(data.telegramChatId),
     botTokenConfigured,
     chatId: data.telegramChatId,
+    bellEnabled: data.telegramBellNotificationsEnabled,
+    outputCompletionEnabled: data.telegramOutputCompletionNotificationsEnabled,
+    includeTerminalOutput: data.telegramIncludeTerminalOutput,
   }
 }
 
@@ -639,6 +645,10 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
           : '',
       telegramNotificationsEnabled:
         parsed.telegramNotificationsEnabled === true && Boolean(telegramBotToken && telegramChatId),
+      telegramBellNotificationsEnabled: parsed.telegramBellNotificationsEnabled !== false,
+      telegramOutputCompletionNotificationsEnabled:
+        parsed.telegramOutputCompletionNotificationsEnabled === true,
+      telegramIncludeTerminalOutput: parsed.telegramIncludeTerminalOutput === true,
       telegramBotToken,
       telegramChatId,
       session: normalizeSession(parsed.session),
@@ -665,6 +675,9 @@ async function loadServerSettings(): Promise<ServerSettingsData> {
       webAccessUsername: '',
       webAccessPasswordHash: '',
       telegramNotificationsEnabled: false,
+      telegramBellNotificationsEnabled: true,
+      telegramOutputCompletionNotificationsEnabled: false,
+      telegramIncludeTerminalOutput: false,
       telegramBotToken: '',
       telegramChatId: '',
       session: defaultSession(),
@@ -726,6 +739,9 @@ export async function updateServerTelegramNotificationSettings(
   }
 
   data.telegramNotificationsEnabled = input.enabled === true
+  data.telegramBellNotificationsEnabled = input.bellEnabled === true
+  data.telegramOutputCompletionNotificationsEnabled = input.outputCompletionEnabled === true
+  data.telegramIncludeTerminalOutput = input.includeTerminalOutput === true
   data.telegramBotToken = botToken
   data.telegramChatId = chatId
   await writeServerSettingsFile(data)

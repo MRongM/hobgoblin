@@ -110,7 +110,14 @@ describe('terminal bell controller', () => {
       settingsSnapshotQueryKey(),
       defaultSettingsSnapshot({
         terminalNotificationsEnabled: true,
-        telegramNotifications: { enabled: true, botTokenConfigured: true, chatId: '-100123' },
+        telegramNotifications: {
+          enabled: true,
+          botTokenConfigured: true,
+          chatId: '-100123',
+          bellEnabled: true,
+          outputCompletionEnabled: false,
+          includeTerminalOutput: false,
+        },
       }),
     )
     const controller = createTerminalBellController(vi.fn(), vi.fn())
@@ -183,7 +190,14 @@ describe('terminal bell controller', () => {
       settingsSnapshotQueryKey(),
       defaultSettingsSnapshot({
         terminalNotificationsEnabled: true,
-        telegramNotifications: { enabled: true, botTokenConfigured: true, chatId: '-100123' },
+        telegramNotifications: {
+          enabled: true,
+          botTokenConfigured: true,
+          chatId: '-100123',
+          bellEnabled: true,
+          outputCompletionEnabled: false,
+          includeTerminalOutput: false,
+        },
       }),
     )
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true }) }))
