@@ -10,6 +10,8 @@ import type {
   TerminalNotifyBellInput,
   TerminalOutputExcerpt,
   TerminalOutputExcerptInput,
+  TerminalScreenSnapshot,
+  TerminalScreenSnapshotInput,
   TerminalReorderInput,
   TerminalResizeInput,
   TerminalRestartInput,
@@ -36,6 +38,7 @@ export interface TerminalWorkerRequestInputs {
   prune: { repoRoot: string }
   'session-snapshot': TerminalSessionSnapshotInput
   'output-excerpt': TerminalOutputExcerptInput
+  'screen-snapshot': TerminalScreenSnapshotInput
   reorder: TerminalReorderInput
 }
 
@@ -53,6 +56,7 @@ export interface TerminalWorkerResponseOutputs {
   prune: { pruned: number; remaining: number }
   'session-snapshot': TerminalSessionSnapshot | null
   'output-excerpt': TerminalOutputExcerpt | null
+  'screen-snapshot': TerminalScreenSnapshot | null
   reorder: TerminalMutationResult
 }
 

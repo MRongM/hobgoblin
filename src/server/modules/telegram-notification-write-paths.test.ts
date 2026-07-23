@@ -7,6 +7,7 @@ import type {
 import {
   formatTelegramBellMessage,
   formatTelegramOutputCompletionMessage,
+  formatTelegramPhotoCaption,
   resetTelegramNotificationWritePathsForTests,
   sendConfiguredTelegramBellNotification,
   sendConfiguredTelegramOutputCompletionNotification,
@@ -66,6 +67,11 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     sendMessage: vi.fn(async (_input: { botToken: string; chatId: string; text: string; proxyUrl?: string }) => ({
       ok: true as const,
     })),
+    sendPhoto: vi.fn(
+      async (_input: { botToken: string; chatId: string; caption: string; photo: Buffer; proxyUrl?: string }) => ({
+        ok: true as const,
+      }),
+    ),
     warn: vi.fn(),
     now: vi.fn(() => 10_000),
     ...overrides,
@@ -98,7 +104,7 @@ describe('Telegram notification write paths', () => {
     )
   })
 
-  test('keeps a distinct branch and separates terminal output', () => {
+  test('keeps a distinct branch and appends terminal output without a separator title', () => {
     expect(
       formatTelegramBellMessage(
         {
@@ -116,10 +122,26 @@ describe('Telegram notification write paths', () => {
         '📁 ~/src/api-feature-login',
         '🌿 feature/login',
         '',
-        '── 终端输出 ──',
         'tests passed',
       ].join('\n'),
     )
+  })
+
+  test('bounds photo captions to the Telegram caption limit', () => {
+    const caption = formatTelegramPhotoCaption(
+      context({
+        project: '项'.repeat(300),
+        context: '上下文'.repeat(100),
+        directory: `/${'目录'.repeat(150)}`,
+        branch: '分支'.repeat(150),
+        terminalTitle: '终端'.repeat(150),
+      }),
+      'zh',
+    )
+
+    expect(Array.from(caption)).toHaveLength(1_024)
+    expect(caption).toMatch(/^\u2705 Hobgoblin 终端暂无新输出/u)
+    expect(caption).not.toContain('── 终端输出 ──')
   })
 
   test('describes idle terminal output without claiming that the process completed', () => {
@@ -133,6 +155,157 @@ describe('Telegram notification write paths', () => {
     expect(formatTelegramOutputCompletionMessage(context(), 'ko').split('\n')[0]).toBe(
       '✅ Hobgoblin 터미널 새 출력 없음',
     )
+  })
+
+  test('sends a bounded terminal screen image for completion notifications', async () => {
+    const photo = Buffer.from([0xff, 0xd8, 0xff, 0xd9])
+    const snapshot = {
+      sessionId: 'session-photo',
+      lines: ['tests passed'],
+      columns: 80,
+      rows: 24,
+      sequence: 42,
+    }
+    const readTerminalScreenSnapshot = vi.fn(async () => snapshot)
+    const renderTerminalScreenImage = vi.fn(async () => photo)
+    const readTerminalOutputExcerpt = vi.fn()
+    const deps = dependencies({ readTerminalScreenSnapshot, renderTerminalScreenImage, readTerminalOutputExcerpt })
+
+    await expect(
+      sendConfiguredTelegramOutputCompletionNotification(
+        completionContext({ terminalKey: 'completion-photo', sessionId: 'session-photo' }),
+        deps,
+      ),
+    ).resolves.toEqual({ ok: true })
+
+    expect(readTerminalScreenSnapshot).toHaveBeenCalledWith({
+      sessionId: 'session-photo',
+      maxColumns: 140,
+      maxRows: 40,
+    })
+    expect(renderTerminalScreenImage).toHaveBeenCalledWith(snapshot)
+    expect(deps.sendPhoto).toHaveBeenCalledWith({
+      botToken: '123456:test-token',
+      chatId: '-100123',
+      caption: expect.stringContaining('终端暂无新输出'),
+      photo,
+      proxyUrl: 'socks5://127.0.0.1:1080',
+    })
+    expect(deps.sendMessage).not.toHaveBeenCalled()
+    expect(readTerminalOutputExcerpt).not.toHaveBeenCalled()
+  })
+
+  test('does not read or render a terminal screen when output inclusion is disabled', async () => {
+    const readTerminalScreenSnapshot = vi.fn()
+    const renderTerminalScreenImage = vi.fn()
+    const deps = dependencies({
+      readTerminalScreenSnapshot,
+      renderTerminalScreenImage,
+      getTelegramConfig: vi.fn(async () => telegramConfig({ includeTerminalOutput: false })),
+    })
+
+    await sendConfiguredTelegramOutputCompletionNotification(
+      completionContext({ terminalKey: 'completion-no-photo', sessionId: 'session-no-photo' }),
+      deps,
+    )
+
+    expect(readTerminalScreenSnapshot).not.toHaveBeenCalled()
+    expect(renderTerminalScreenImage).not.toHaveBeenCalled()
+    expect(deps.sendPhoto).not.toHaveBeenCalled()
+    expect(deps.sendMessage).toHaveBeenCalledTimes(1)
+  })
+
+  test('falls back to the text excerpt when terminal screen rendering fails', async () => {
+    const readTerminalScreenSnapshot = vi.fn(async () => ({
+      sessionId: 'session-render-failure',
+      lines: ['tests passed'],
+      columns: 80,
+      rows: 24,
+      sequence: 42,
+    }))
+    const renderTerminalScreenImage = vi.fn(async () => {
+      throw new Error('render failed')
+    })
+    const readTerminalOutputExcerpt = vi.fn(async ({ sessionId }: { sessionId: string }) => ({
+      sessionId,
+      output: 'text fallback',
+      sequence: 42,
+    }))
+    const deps = dependencies({ readTerminalScreenSnapshot, renderTerminalScreenImage, readTerminalOutputExcerpt })
+
+    await sendConfiguredTelegramOutputCompletionNotification(
+      completionContext({ terminalKey: 'completion-render-failure', sessionId: 'session-render-failure' }),
+      deps,
+    )
+
+    expect(deps.sendPhoto).not.toHaveBeenCalled()
+    expect(deps.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ text: expect.stringMatching(/\n\ntext fallback$/u) }),
+    )
+  })
+
+  test('does not retry an ambiguous photo delivery as text', async () => {
+    const deps = dependencies({
+      readTerminalScreenSnapshot: vi.fn(async () => ({
+        sessionId: 'session-photo-failure',
+        lines: ['tests passed'],
+        columns: 80,
+        rows: 24,
+        sequence: 42,
+      })),
+      renderTerminalScreenImage: vi.fn(async () => Buffer.from([0xff, 0xd8, 0xff, 0xd9])),
+      sendPhoto: vi.fn(async () => ({ ok: false as const, error: { code: 'network-failed' as const } })),
+    })
+
+    await expect(
+      sendConfiguredTelegramOutputCompletionNotification(
+        completionContext({ terminalKey: 'completion-photo-failure', sessionId: 'session-photo-failure' }),
+        deps,
+      ),
+    ).resolves.toEqual({ ok: false, error: { code: 'network-failed' } })
+
+    expect(deps.sendMessage).not.toHaveBeenCalled()
+    expect(deps.warn).toHaveBeenCalledWith('network-failed')
+  })
+
+  test('serializes terminal screen rendering and photo delivery', async () => {
+    let releaseFirstRender: (() => void) | undefined
+    const firstRenderGate = new Promise<void>((resolve) => {
+      releaseFirstRender = resolve
+    })
+    let renderCount = 0
+    const renderTerminalScreenImage = vi.fn(async () => {
+      renderCount += 1
+      if (renderCount === 1) await firstRenderGate
+      return Buffer.from([0xff, 0xd8, 0xff, 0xd9])
+    })
+    const deps = dependencies({
+      readTerminalScreenSnapshot: vi.fn(async ({ sessionId }: { sessionId: string }) => ({
+        sessionId,
+        lines: ['tests passed'],
+        columns: 80,
+        rows: 24,
+        sequence: 42,
+      })),
+      renderTerminalScreenImage,
+    })
+
+    const first = sendConfiguredTelegramOutputCompletionNotification(
+      completionContext({ terminalKey: 'completion-queue-1', sessionId: 'session-queue-1' }),
+      deps,
+    )
+    const second = sendConfiguredTelegramOutputCompletionNotification(
+      completionContext({ terminalKey: 'completion-queue-2', sessionId: 'session-queue-2', finalOutputSeq: 43 }),
+      deps,
+    )
+
+    await vi.waitFor(() => expect(renderTerminalScreenImage).toHaveBeenCalledTimes(1))
+    expect(deps.sendPhoto).not.toHaveBeenCalled()
+    releaseFirstRender?.()
+    await Promise.all([first, second])
+
+    expect(renderTerminalScreenImage).toHaveBeenCalledTimes(2)
+    expect(deps.sendPhoto).toHaveBeenCalledTimes(2)
   })
 
   test('does not send when either authoritative notification switch is off', async () => {

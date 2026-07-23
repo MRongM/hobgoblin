@@ -20,6 +20,7 @@ import {
   type TerminalCreateInput,
 } from '#/shared/terminal.ts'
 import {
+  TERMINAL_SIZE_LIMITS,
   isValidTerminalAttachmentId,
   isValidTerminalNotifyBellInput,
   isValidTerminalSize,
@@ -31,6 +32,8 @@ import {
   type TerminalNotifyBellInput,
   type TerminalOutputExcerpt,
   type TerminalOutputExcerptInput,
+  type TerminalScreenSnapshot,
+  type TerminalScreenSnapshotInput,
   type TerminalReorderInput,
   type TerminalResizeInput,
   type TerminalRestartInput,
@@ -364,6 +367,23 @@ export async function getServerTerminalOutputExcerpt(
   if (!isValidTerminalSessionId(input?.sessionId)) return null
   if (!Number.isInteger(input?.maxCharacters) || input.maxCharacters < 1 || input.maxCharacters > 4_096) return null
   return await manager.outputExcerpt(input.sessionId, input.maxCharacters)
+}
+
+export async function getServerTerminalScreenSnapshot(
+  input: TerminalScreenSnapshotInput,
+): Promise<TerminalScreenSnapshot | null> {
+  if (!isValidTerminalSessionId(input?.sessionId)) return null
+  if (
+    !Number.isInteger(input?.maxColumns) ||
+    input.maxColumns < TERMINAL_SIZE_LIMITS.minCols ||
+    input.maxColumns > TERMINAL_SIZE_LIMITS.maxCols ||
+    !Number.isInteger(input?.maxRows) ||
+    input.maxRows < TERMINAL_SIZE_LIMITS.minRows ||
+    input.maxRows > TERMINAL_SIZE_LIMITS.maxRows
+  ) {
+    return null
+  }
+  return await manager.screenSnapshot(input.sessionId, input)
 }
 
 export function reorderServerTerminals(clientId: string, input: TerminalReorderInput): TerminalMutationResult {

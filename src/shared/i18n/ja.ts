@@ -1102,7 +1102,7 @@ export const ja: Record<DictKey, string> = {
   'settings.telegram.output-completion-min-activity-unit': '秒',
   'settings.telegram.include-terminal-output': 'ターミナル出力を含める',
   'settings.telegram.include-terminal-output-hint':
-    '末尾の表示可能なターミナル出力を追加します。機密情報が含まれる場合があります。',
+    '完了通知では低品質のターミナル画面画像を優先し、生成できない場合は末尾のテキストにフォールバックします。ターミナルの内容には機密情報が含まれる場合があります。',
   'settings.telegram.output-tail-length': 'ターミナル出力の文字数',
   'settings.telegram.output-tail-length-hint':
     '1～4096 文字（既定値 400）。連続する空白、タブ、改行は 1 つの空白として数えます。Telegram のメッセージ全体の上限により短くなる場合があります。',

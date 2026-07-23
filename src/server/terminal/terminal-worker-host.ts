@@ -11,6 +11,8 @@ import type {
   TerminalNotifyBellInput,
   TerminalOutputExcerpt,
   TerminalOutputExcerptInput,
+  TerminalScreenSnapshot,
+  TerminalScreenSnapshotInput,
   TerminalResizeInput,
   TerminalRestartInput,
   TerminalSessionInput,
@@ -186,6 +188,10 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
 
   getOutputExcerpt(input: TerminalOutputExcerptInput): Promise<TerminalOutputExcerpt | null> {
     return this.request('output-excerpt', 'server', input)
+  }
+
+  getScreenSnapshot(input: TerminalScreenSnapshotInput): Promise<TerminalScreenSnapshot | null> {
+    return this.request('screen-snapshot', 'server', input)
   }
 
   handleRealtimeMessage(clientId: string, attachmentId: string, socket: ServerTerminalSocket, message: string): void {

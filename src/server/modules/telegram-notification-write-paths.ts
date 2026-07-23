@@ -1,17 +1,31 @@
+import PQueue from 'p-queue'
 import { serverLogger } from '#/server/logger.ts'
 import { getServerSettingsPrefs, getServerTelegramNotificationConfig } from '#/server/modules/settings-source.ts'
-import { sendTelegramMessage, telegramProxyUrlFromPrefs } from '#/server/modules/telegram-notification-source.ts'
+import {
+  sendTelegramMessage,
+  sendTelegramPhoto,
+  telegramProxyUrlFromPrefs,
+} from '#/server/modules/telegram-notification-source.ts'
+import type { renderTelegramTerminalScreenImage } from '#/server/modules/telegram-terminal-screen-image.ts'
 import { DICTS } from '#/shared/i18n/dictionaries.ts'
 import { resolvePreferredLang } from '#/shared/i18n/resolve-lang.ts'
 import type { Lang, SettingsPrefs } from '#/shared/rpc.ts'
 import {
   TELEGRAM_CONTEXT_TEXT_MAX_LENGTH,
   TELEGRAM_MESSAGE_MAX_LENGTH,
+  TELEGRAM_PHOTO_CAPTION_MAX_LENGTH,
+  TELEGRAM_TERMINAL_SCREEN_MAX_COLUMNS,
+  TELEGRAM_TERMINAL_SCREEN_MAX_ROWS,
   type TelegramBellNotificationContext,
   type TelegramNotificationResult,
   type TelegramOutputCompletionNotificationContext,
 } from '#/shared/telegram-notifications.ts'
-import type { TerminalOutputExcerpt, TerminalOutputExcerptInput } from '#/shared/terminal.ts'
+import type {
+  TerminalOutputExcerpt,
+  TerminalOutputExcerptInput,
+  TerminalScreenSnapshot,
+  TerminalScreenSnapshotInput,
+} from '#/shared/terminal.ts'
 import { truncateTerminalOutputExcerpt } from '#/shared/terminal-output-excerpt.ts'
 
 const TELEGRAM_BELL_DEBOUNCE_MS = 5_000
@@ -19,6 +33,7 @@ const TELEGRAM_TERMINAL_KEY_MAX_LENGTH = 1_024
 const telegramNotificationLogger = serverLogger.child({ module: 'telegram-notifications' })
 const lastBellAtByTerminal = new Map<string, number>()
 const completionAtByCycle = new Map<string, number>()
+const terminalScreenMediaQueue = new PQueue({ concurrency: 1 })
 const TELEGRAM_COMPLETION_CACHE_MAX_ENTRIES = 1_000
 const TELEGRAM_COMPLETION_CACHE_TTL_MS = 24 * 60 * 60 * 1_000
 
@@ -33,13 +48,23 @@ type TelegramConfig = {
   outputTailLength: number
 }
 type SendMessage = typeof sendTelegramMessage
+type SendPhoto = typeof sendTelegramPhoto
+type RenderTerminalScreenImage = typeof renderTelegramTerminalScreenImage
+
+const defaultRenderTerminalScreenImage: RenderTerminalScreenImage = async (snapshot) => {
+  const imageModule = await import('#/server/modules/telegram-terminal-screen-image.ts')
+  return await imageModule.renderTelegramTerminalScreenImage(snapshot)
+}
 
 export interface TelegramNotificationWriteOptions {
   acceptLanguage?: string | null
   getSettingsPrefs?: () => Promise<SettingsPrefs>
   getTelegramConfig?: () => Promise<TelegramConfig>
   sendMessage?: SendMessage
+  sendPhoto?: SendPhoto
   readTerminalOutputExcerpt?: (input: TerminalOutputExcerptInput) => Promise<TerminalOutputExcerpt | null>
+  readTerminalScreenSnapshot?: (input: TerminalScreenSnapshotInput) => Promise<TerminalScreenSnapshot | null>
+  renderTerminalScreenImage?: RenderTerminalScreenImage
   now?: () => number
   warn?: (code: string) => void
 }
@@ -59,6 +84,14 @@ export function formatTelegramOutputCompletionMessage(
   return formatTelegramTerminalMessage(context, lang, 'telegram.notification.message.output-completion-title')
 }
 
+export function formatTelegramPhotoCaption(
+  context: TelegramBellNotificationContext,
+  lang: Lang = 'zh',
+): string {
+  const caption = formatTelegramOutputCompletionMessage(context, lang)
+  return Array.from(caption).slice(0, TELEGRAM_PHOTO_CAPTION_MAX_LENGTH).join('')
+}
+
 function formatTelegramTerminalMessage(
   context: TelegramTerminalDeliveryContext,
   lang: Lang,
@@ -76,7 +109,7 @@ function formatTelegramTerminalMessage(
   if (context.branch && context.branch.trim() !== context.context.trim()) lines.push(`🌿 ${context.branch}`)
   const prefix = lines.join('\n')
   if (!context.outputTail) return prefix
-  const outputPrefix = `\n\n── ${dict['telegram.notification.message.output-tail']} ──\n`
+  const outputPrefix = '\n\n'
   const remainingCharacters = TELEGRAM_MESSAGE_MAX_LENGTH - Array.from(prefix + outputPrefix).length
   const outputTail = truncateTerminalOutputExcerpt(context.outputTail, remainingCharacters)
   return outputTail ? `${prefix}${outputPrefix}${outputTail}` : prefix
@@ -142,7 +175,10 @@ function writeDependencies(options: TelegramNotificationWriteOptions) {
     getSettingsPrefs: options.getSettingsPrefs ?? getServerSettingsPrefs,
     getTelegramConfig: options.getTelegramConfig ?? getServerTelegramNotificationConfig,
     sendMessage: options.sendMessage ?? sendTelegramMessage,
+    sendPhoto: options.sendPhoto ?? sendTelegramPhoto,
     readTerminalOutputExcerpt: options.readTerminalOutputExcerpt,
+    readTerminalScreenSnapshot: options.readTerminalScreenSnapshot,
+    renderTerminalScreenImage: options.renderTerminalScreenImage ?? defaultRenderTerminalScreenImage,
     now: options.now ?? Date.now,
     warn:
       options.warn ??
@@ -177,6 +213,27 @@ async function sendConfiguredMessage(
     botToken: config.botToken,
     chatId: config.chatId,
     text,
+    ...(proxyUrl ? { proxyUrl } : {}),
+  })
+  if (!result.ok) dependencies.warn(result.error.code)
+  return result
+}
+
+async function sendConfiguredPhoto(
+  caption: string,
+  photo: Buffer,
+  prefs: SettingsPrefs,
+  config: TelegramConfig,
+  options: TelegramNotificationWriteOptions,
+): Promise<TelegramNotificationResult> {
+  if (!config.botToken || !config.chatId) return { ok: false, error: { code: 'configuration-incomplete' } }
+  const dependencies = writeDependencies(options)
+  const proxyUrl = telegramProxyUrlFromPrefs(prefs)
+  const result = await dependencies.sendPhoto({
+    botToken: config.botToken,
+    chatId: config.chatId,
+    caption,
+    photo,
     ...(proxyUrl ? { proxyUrl } : {}),
   })
   if (!result.ok) dependencies.warn(result.error.code)
@@ -259,16 +316,39 @@ export async function sendConfiguredTelegramOutputCompletionNotification(
   }
 
   const lang = resolvePreferredLang(prefs.lang, options.acceptLanguage)
+  if (config.includeTerminalOutput && dependencies.readTerminalScreenSnapshot) {
+    const result = await terminalScreenMediaQueue.add(async () => {
+      const snapshot = await dependencies
+        .readTerminalScreenSnapshot?.({
+          sessionId,
+          maxColumns: TELEGRAM_TERMINAL_SCREEN_MAX_COLUMNS,
+          maxRows: TELEGRAM_TERMINAL_SCREEN_MAX_ROWS,
+        })
+        .catch(() => null)
+      const photo = snapshot
+        ? await dependencies.renderTerminalScreenImage(snapshot).catch(() => null)
+        : null
+      if (photo) {
+        return await sendConfiguredPhoto(formatTelegramPhotoCaption(safeContext, lang), photo, prefs, config, options)
+      }
+
+      const deliveryContext = await deliveryContextWithOutput(safeContext, sessionId, config, dependencies)
+      return await sendConfiguredMessage(
+        formatTelegramOutputCompletionMessage(deliveryContext, lang),
+        prefs,
+        config,
+        options,
+      )
+    })
+    return result ?? { ok: false, error: { code: 'network-failed' } }
+  }
+
   const deliveryContext = await deliveryContextWithOutput(safeContext, sessionId, config, dependencies)
-  return await sendConfiguredMessage(
-    formatTelegramOutputCompletionMessage(deliveryContext, lang),
-    prefs,
-    config,
-    options,
-  )
+  return await sendConfiguredMessage(formatTelegramOutputCompletionMessage(deliveryContext, lang), prefs, config, options)
 }
 
 export function resetTelegramNotificationWritePathsForTests(): void {
   lastBellAtByTerminal.clear()
   completionAtByCycle.clear()
+  terminalScreenMediaQueue.clear()
 }

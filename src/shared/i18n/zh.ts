@@ -1040,7 +1040,8 @@ export const zh: Record<DictKey, string> = {
   'settings.telegram.output-completion-min-activity-high': '高 · 30 秒',
   'settings.telegram.output-completion-min-activity-unit': '秒',
   'settings.telegram.include-terminal-output': '包含终端输出',
-  'settings.telegram.include-terminal-output-hint': '附加终端末尾的可见输出；终端输出可能包含敏感信息。',
+  'settings.telegram.include-terminal-output-hint':
+    '完成通知优先发送低质量终端屏幕图片，无法生成时附加末尾文本；终端内容可能包含敏感信息。',
   'settings.telegram.output-tail-length': '终端输出字符数',
   'settings.telegram.output-tail-length-hint':
     '范围 1–4096，默认 400；连续空格、Tab 和换行按一个空格计算，受 Telegram 整条消息上限影响，实际片段可能更短。',

@@ -24,7 +24,7 @@ const config: Configuration = {
     '!src/**/*.test.ts',
     '!**/*.map',
   ],
-  asarUnpack: ['node_modules/node-pty/prebuilds/**/*'],
+  asarUnpack: ['node_modules/node-pty/prebuilds/**/*', 'node_modules/sharp/**/*', 'node_modules/@img/**/*'],
   mac: {
     category: 'public.app-category.developer-tools',
     extendInfo: {
