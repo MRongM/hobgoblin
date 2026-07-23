@@ -1,5 +1,5 @@
 import {
-  buildTmuxSessionName,
+  buildTmuxAttachShellCommand,
   normalizeTmuxSessionDescriptor,
   type TmuxSessionDescriptor,
 } from '#/system/tmux-session.ts'
@@ -25,8 +25,8 @@ export function buildManagedLocalTerminalInvocation(
   const platform = options.platform ?? process.platform
   if (options.useTmux !== true || platform === 'win32') return null
   const descriptor = normalizeTmuxSessionDescriptor(target)
-  const sessionName = descriptor ? buildTmuxSessionName(descriptor) : null
-  if (!descriptor || !sessionName) return null
+  const tmuxInvocation = descriptor ? buildTmuxAttachShellCommand(descriptor) : null
+  if (!descriptor || !tmuxInvocation) return null
   const fallbackShell =
     safeAbsoluteCommand(options.fallbackShell) ??
     safeAbsoluteCommand(process.env.SHELL) ??
@@ -34,7 +34,7 @@ export function buildManagedLocalTerminalInvocation(
   const script = [
     `cd ${shellQuote(descriptor.workingDirectory)} || exit`,
     'if command -v tmux >/dev/null 2>&1; then',
-    `  exec tmux new-session -A -s ${shellQuote(sessionName)} -c ${shellQuote(descriptor.workingDirectory)} \\; set-option -t ${shellQuote(`=${sessionName}:`)} mouse on`,
+    `  ${tmuxInvocation.command}`,
     'fi',
     `exec ${shellQuote(fallbackShell)} -l`,
   ].join('\n')
@@ -43,7 +43,7 @@ export function buildManagedLocalTerminalInvocation(
     args: ['-lc', script],
     script,
     shellCommand: [fallbackShell, '-lc', script].map(shellQuote).join(' '),
-    tmuxSessionName: sessionName,
+    tmuxSessionName: tmuxInvocation.sessionName,
   }
 }
 

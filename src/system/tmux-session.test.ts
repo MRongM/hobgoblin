@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import {
+  buildTmuxAttachShellCommand,
   buildTmuxSessionName,
   isHobgoblinTmuxSessionName,
   normalizeTmuxSessionDescriptor,
@@ -87,6 +88,29 @@ describe('normalizeTmuxSessionDescriptor', () => {
       workingDirectory: '/srv/projects/example/worktrees/feature',
       terminalNumber: 7,
     })
+  })
+})
+
+describe('buildTmuxAttachShellCommand', () => {
+  test('writes fixed Hobgoblin identity metadata on the exact session', () => {
+    expect(buildTmuxAttachShellCommand(REFERENCE_DESCRIPTOR)).toEqual({
+      sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+      command:
+        "exec tmux new-session -A -s 'hobgoblin-v1-aebf050981ac829e36100020' -c '/srv/projects/example/worktrees/feature'" +
+        " \\; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' mouse on" +
+        " \\; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020' @hobgoblin_init_path '/srv/projects/example/worktrees/feature'" +
+        " \\; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020' @hobgoblin_terminal_number '1'",
+    })
+  })
+
+  test('quotes normalized path metadata and rejects invalid descriptors', () => {
+    const invocation = buildTmuxAttachShellCommand({
+      ...REFERENCE_DESCRIPTOR,
+      workingDirectory: "/srv/user's feature/./",
+    })
+
+    expect(invocation?.command).toContain("@hobgoblin_init_path '/srv/user'\\''s feature'")
+    expect(buildTmuxAttachShellCommand({ ...REFERENCE_DESCRIPTOR, terminalNumber: 0 })).toBeNull()
   })
 })
 

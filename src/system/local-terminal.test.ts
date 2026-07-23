@@ -24,6 +24,12 @@ describe('buildManagedLocalTerminalInvocation', () => {
     expect(invocation?.script).toContain(
       "exec tmux new-session -A -s 'hobgoblin-v1-aebf050981ac829e36100020' -c '/srv/projects/example/worktrees/feature' \\; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' mouse on",
     )
+    expect(invocation?.script).toContain(
+      "set-option -t '=hobgoblin-v1-aebf050981ac829e36100020' @hobgoblin_init_path '/srv/projects/example/worktrees/feature'",
+    )
+    expect(invocation?.script).toContain(
+      "set-option -t '=hobgoblin-v1-aebf050981ac829e36100020' @hobgoblin_terminal_number '1'",
+    )
     expect(invocation?.script).not.toContain('set-option -g')
     expect(invocation?.script).toContain("exec '/bin/zsh' -l")
     expect(invocation?.shellCommand).toContain("'/bin/zsh' '-lc'")
@@ -60,6 +66,7 @@ describe('buildManagedLocalTerminalInvocation', () => {
     )
 
     expect(invocation?.script).toContain("-c '/srv/user'\\''s feature'")
+    expect(invocation?.script).toContain("@hobgoblin_init_path '/srv/user'\\''s feature'")
     expect(invocation?.script).toContain("exec '/opt/user'\\''s shell' -l")
   })
 

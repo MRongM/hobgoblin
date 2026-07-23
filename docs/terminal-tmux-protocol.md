@@ -62,6 +62,17 @@ The result matches:
 
 The truncated digest prevents raw path disclosure and provides ample collision resistance for terminal-session naming. It is not an authentication secret.
 
+## Session metadata
+
+Every Hobgoblin v1 attach-or-create invocation writes two exact session-scoped tmux user options:
+
+```text
+@hobgoblin_init_path=<normalized workingDirectory>
+@hobgoblin_terminal_number=<canonical terminalNumber>
+```
+
+The initial path records descriptor identity and does not change when a shell later changes directory. The terminal number is positive base-10 ASCII without a sign or leading zeroes. These values are discoverable protocol metadata, not authentication claims; another tmux client may change them, in which case the session no longer passes discovery validation.
+
 ## Reference vector
 
 ```text
@@ -89,10 +100,35 @@ After computing the name, an external application may create or attach idempoten
 tmux new-session -A \
   -s 'hobgoblin-v1-aebf050981ac829e36100020' \
   -c '/srv/projects/example/worktrees/feature' \
-  \; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' mouse on
+  \; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' mouse on \
+  \; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020' \
+       @hobgoblin_init_path '/srv/projects/example/worktrees/feature' \
+  \; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020' \
+       @hobgoblin_terminal_number '1'
 ```
 
 Do not supply a tmux `session_id` or add a forced-detach option. Tmux allocates the session ID, while Hobgoblin and external tmux clients intentionally have concurrent shared control. The exact session-name target enables mouse support only on the selected session.
+
+All current Hobgoblin launch adapters set the two options after creating or attaching. Reattaching through a known descriptor therefore adds or repairs missing metadata idempotently. A third-party creator that wants Android discovery must write the same options.
+
+## Android discovery and recovery
+
+When an Android project Terminals surface opens, it may list live sessions with:
+
+```sh
+tmux list-sessions -F '#{session_name}\t#{@hobgoblin_init_path}\t#{@hobgoblin_terminal_number}'
+```
+
+Android accepts one row only when:
+
+- the initial path is already lexically normalized and exactly matches the project root or a known non-missing worktree path;
+- the terminal number is canonical positive base-10 ASCII;
+- the session name matches the v1 name pattern; and
+- hashing the project root, initial path, and terminal number reproduces that exact session name.
+
+Invalid rows, ordinary user sessions, legacy names, and v1 sessions without both options are ignored independently. An accepted session missing from Android's retained records becomes a disconnected `terminal-N` record. Discovery does not open an SSH shell; opening that record uses the ordinary reconnect path to attach to the verified session.
+
+Removing only the Android record leaves tmux alive, so a later scan may recover it again. Closing the associated tmux session through the explicit checked close action prevents later recovery.
 
 ## Runtime association and exact close
 

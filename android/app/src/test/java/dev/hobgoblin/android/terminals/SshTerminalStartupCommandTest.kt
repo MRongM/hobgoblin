@@ -42,7 +42,10 @@ class SshTerminalStartupCommandTest {
         assertTrue(
             output.contains(
                 "exec tmux new-session -A -s '${identity.sessionName}' -c '/srv/repo-feature' " +
-                    "\\; set-option -t '=${identity.sessionName}:' mouse on",
+                    "\\; set-option -t '=${identity.sessionName}:' mouse on " +
+                    "\\; set-option -t '=${identity.sessionName}' " +
+                    "@hobgoblin_init_path '/srv/repo-feature' " +
+                    "\\; set-option -t '=${identity.sessionName}' @hobgoblin_terminal_number '2'",
             ),
         )
         assertTrue(output.contains("exec \"\${SHELL:-/bin/sh}\" -l"))

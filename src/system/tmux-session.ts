@@ -7,6 +7,9 @@ const HOBGOBLIN_TMUX_SESSION_NAME_RE = /^hobgoblin-v1-[a-f0-9]{24}$/u
 const MAX_TMUX_SESSION_PATH_CHARS = 4096
 const UNSAFE_PATH_CHARS_RE = /[\0-\x1f\x7f]/
 
+export const HOBGOBLIN_TMUX_INIT_PATH_OPTION = '@hobgoblin_init_path'
+export const HOBGOBLIN_TMUX_TERMINAL_NUMBER_OPTION = '@hobgoblin_terminal_number'
+
 export interface TmuxSessionDescriptor {
   projectRoot: string
   workingDirectory: string
@@ -33,6 +36,24 @@ export function buildTmuxSessionName(input: TmuxSessionDescriptor): string | nul
   return `${TMUX_SESSION_PREFIX}${digest}`
 }
 
+export function buildTmuxAttachShellCommand(
+  input: TmuxSessionDescriptor,
+): { sessionName: string; command: string } | null {
+  const descriptor = normalizeTmuxSessionDescriptor(input)
+  const sessionName = descriptor ? buildTmuxSessionName(descriptor) : null
+  if (!descriptor || !sessionName) return null
+  const sessionTarget = `=${sessionName}`
+  return {
+    sessionName,
+    command: [
+      `exec tmux new-session -A -s ${shellQuote(sessionName)} -c ${shellQuote(descriptor.workingDirectory)}`,
+      `set-option -t ${shellQuote(`${sessionTarget}:`)} mouse on`,
+      `set-option -t ${shellQuote(sessionTarget)} ${HOBGOBLIN_TMUX_INIT_PATH_OPTION} ${shellQuote(descriptor.workingDirectory)}`,
+      `set-option -t ${shellQuote(sessionTarget)} ${HOBGOBLIN_TMUX_TERMINAL_NUMBER_OPTION} ${shellQuote(String(descriptor.terminalNumber))}`,
+    ].join(' \\; '),
+  }
+}
+
 export function normalizeTmuxSessionPath(value: string): string | null {
   if (
     typeof value !== 'string' ||
@@ -53,4 +74,8 @@ export function isHobgoblinTmuxSessionName(value: unknown): value is string {
 
 function isSafeTerminalNumber(value: number): boolean {
   return Number.isSafeInteger(value) && value >= 1
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`
 }

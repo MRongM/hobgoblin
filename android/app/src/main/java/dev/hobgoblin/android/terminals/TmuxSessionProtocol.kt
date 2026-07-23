@@ -33,7 +33,24 @@ data class RemoteTmuxSession(
     val sessionPath: String,
 )
 
+data class DiscoveredTmuxSession(
+    val identity: TmuxSessionIdentity,
+    val terminalNumber: Int,
+)
+
 object TmuxSessionProtocol {
+    fun attachOrCreateCommand(identity: TmuxSessionIdentity, terminalNumber: Int): String? {
+        if (terminalNumber < 1) return null
+        val target = "=${identity.sessionName}"
+        return listOf(
+            "exec tmux new-session -A -s ${shellQuote(identity.sessionName)} " +
+                "-c ${shellQuote(identity.initialPath)}",
+            "set-option -t ${shellQuote("$target:")} mouse on",
+            "set-option -t ${shellQuote(target)} $InitPathOption ${shellQuote(identity.initialPath)}",
+            "set-option -t ${shellQuote(target)} $TerminalNumberOption ${shellQuote(terminalNumber.toString())}",
+        ).joinToString(" \\; ")
+    }
+
     fun normalizePath(value: String): String? {
         if (
             value.isEmpty() ||
@@ -96,6 +113,45 @@ object TmuxSessionProtocol {
         return sessions
     }
 
+    fun parseDiscoverableSessions(
+        output: String,
+        projectRoot: String,
+        allowedInitialPaths: Set<String>,
+    ): List<DiscoveredTmuxSession>? {
+        val normalizedProjectRoot = normalizePath(projectRoot) ?: return null
+        val normalizedAllowedPaths = allowedInitialPaths.mapNotNull(::normalizePath).toSet()
+        val sessionsByName = linkedMapOf<String, DiscoveredTmuxSession>()
+        output.lineSequence().forEach { rawLine ->
+            val line = rawLine.removeSuffix("\r")
+            if (line.isEmpty()) return@forEach
+            val fields = line.split('\t')
+            if (fields.size != 3) return@forEach
+            val sessionName = fields[0]
+            if (!isCurrentSessionName(sessionName)) return@forEach
+            val initialPath = fields[1]
+            if (normalizePath(initialPath) != initialPath || initialPath !in normalizedAllowedPaths) return@forEach
+            val terminalNumberText = fields[2]
+            if (!CanonicalTerminalNumberPattern.matches(terminalNumberText)) return@forEach
+            val terminalNumber = terminalNumberText.toIntOrNull() ?: return@forEach
+            val expectedIdentity = identity(
+                TmuxSessionDescriptor(
+                    projectRoot = normalizedProjectRoot,
+                    workingDirectory = initialPath,
+                    terminalNumber = terminalNumber,
+                ),
+            ) ?: return@forEach
+            if (expectedIdentity.sessionName != sessionName) return@forEach
+            sessionsByName.putIfAbsent(
+                sessionName,
+                DiscoveredTmuxSession(identity = expectedIdentity, terminalNumber = terminalNumber),
+            )
+        }
+        return sessionsByName.values.sortedWith(
+            compareBy<DiscoveredTmuxSession> { it.identity.initialPath }
+                .thenBy { it.terminalNumber },
+        )
+    }
+
     fun matches(identity: TmuxSessionIdentity, session: RemoteTmuxSession): Boolean =
         isCurrentSessionName(identity.sessionName) &&
             session.sessionName == identity.sessionName &&
@@ -104,6 +160,11 @@ object TmuxSessionProtocol {
     fun listSessionsScript(): String = listOf(
         "command -v tmux >/dev/null 2>&1 || exit 127",
         "tmux list-sessions -F '#{session_name}\\t#{session_path}'",
+    ).joinToString("\n")
+
+    fun listDiscoverableSessionsScript(): String = listOf(
+        "command -v tmux >/dev/null 2>&1 || exit 127",
+        "tmux list-sessions -F '#{session_name}\\t#{${InitPathOption}}\\t#{${TerminalNumberOption}}'",
     ).joinToString("\n")
 
     fun killSessionScript(sessionName: String): String? {
@@ -118,8 +179,11 @@ object TmuxSessionProtocol {
 
     private const val SessionProtocol = "hobgoblin-terminal-session-v1"
     private const val SessionNamePrefix = "hobgoblin-v1-"
+    private const val InitPathOption = "@hobgoblin_init_path"
+    private const val TerminalNumberOption = "@hobgoblin_terminal_number"
     private const val HashHexChars = 24
     private const val MaxPathChars = 4_096
     private val CurrentSessionNamePattern = Regex("^hobgoblin-v1-[a-f0-9]{24}$")
+    private val CanonicalTerminalNumberPattern = Regex("^[1-9][0-9]*$")
     private val HexChars = "0123456789abcdef".toCharArray()
 }

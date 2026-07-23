@@ -6,9 +6,10 @@ data class RemoteDirectoryEntry(
     val isDirectory: Boolean,
 )
 
-data class RemoteRepositoryInspection(
+data class RemoteProjectInspection(
     val requestedPath: String,
-    val topLevel: String,
+    val resolvedPath: String,
+    val kind: RemoteProjectKind,
     val currentRef: String?,
     val defaultBranch: String?,
 )

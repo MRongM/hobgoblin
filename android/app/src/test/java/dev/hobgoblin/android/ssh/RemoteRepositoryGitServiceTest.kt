@@ -3,6 +3,7 @@ package dev.hobgoblin.android.ssh
 import dev.hobgoblin.android.data.ssh.HostKeyTrustPolicy
 import dev.hobgoblin.android.data.ssh.HostKeyTrustStore
 import dev.hobgoblin.android.domain.ssh.HostKeyTrust
+import dev.hobgoblin.android.domain.ssh.RemoteProjectKind
 import dev.hobgoblin.android.domain.ssh.RemoteTarget
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -42,28 +43,71 @@ class RemoteRepositoryGitServiceTest {
     }
 
     @Test
-    fun `repository inspection parser reads top level current ref and default branch`() {
+    fun `project inspection parser classifies git repositories`() {
         val output = """
-            __HOBGOBLIN_ANDROID_INSPECT_TOP__
+            __HOBGOBLIN_ANDROID_PROJECT_KIND__
+            git
+            __HOBGOBLIN_ANDROID_PROJECT_PATH__
             /srv/app
-            __HOBGOBLIN_ANDROID_INSPECT_CURRENT__
+            __HOBGOBLIN_ANDROID_PROJECT_CURRENT__
             feature/android
-            __HOBGOBLIN_ANDROID_INSPECT_DEFAULT__
+            __HOBGOBLIN_ANDROID_PROJECT_DEFAULT__
             main
         """.trimIndent()
 
-        val inspection = parseRemoteRepositoryInspection("/srv/app/subdir", output)
+        val inspection = parseRemoteProjectInspection("/srv/app/subdir", output)
 
-        assertEquals("/srv/app", inspection.topLevel)
+        assertEquals(RemoteProjectKind.GitRepository, inspection.kind)
+        assertEquals("/srv/app", inspection.resolvedPath)
         assertEquals("feature/android", inspection.currentRef)
         assertEquals("main", inspection.defaultBranch)
     }
 
     @Test
-    fun `repository inspection rejects non git paths`() {
+    fun `project inspection parser classifies readable non git directories as plain workspaces`() {
+        val output = """
+            __HOBGOBLIN_ANDROID_PROJECT_KIND__
+            plain
+            __HOBGOBLIN_ANDROID_PROJECT_PATH__
+            /srv/scripts
+            __HOBGOBLIN_ANDROID_PROJECT_CURRENT__
+            __HOBGOBLIN_ANDROID_PROJECT_DEFAULT__
+        """.trimIndent()
+
+        val inspection = parseRemoteProjectInspection("/srv/scripts", output)
+
+        assertEquals(RemoteProjectKind.PlainWorkspace, inspection.kind)
+        assertEquals("/srv/scripts", inspection.resolvedPath)
+        assertEquals(null, inspection.currentRef)
+        assertEquals(null, inspection.defaultBranch)
+    }
+
+    @Test
+    fun `project inspection service accepts a plain workspace`() {
+        val output = """
+            __HOBGOBLIN_ANDROID_PROJECT_KIND__
+            plain
+            __HOBGOBLIN_ANDROID_PROJECT_PATH__
+            /srv/scripts
+            __HOBGOBLIN_ANDROID_PROJECT_CURRENT__
+            __HOBGOBLIN_ANDROID_PROJECT_DEFAULT__
+        """.trimIndent()
+        val service = RemoteRepositoryGitService(
+            client = FakeSshClient(commandResults = listOf(SshCommandResult(ok = true, stdout = output))),
+            hostKeyStore = FakeHostKeyTrustStore("SHA256:test"),
+        )
+
+        val inspection = service.inspectProject(target("/srv/scripts"))
+
+        assertEquals(RemoteProjectKind.PlainWorkspace, inspection.kind)
+        assertEquals("/srv/scripts", inspection.resolvedPath)
+    }
+
+    @Test
+    fun `project inspection rejects inaccessible paths`() {
         val client = FakeSshClient(
             commandResults = listOf(
-                SshCommandResult(ok = false, stderr = "fatal: not a git repository", message = "fatal: not a git repository"),
+                SshCommandResult(ok = false, stderr = "Remote path is not readable", message = "Remote path is not readable"),
             ),
         )
         val service = RemoteRepositoryGitService(
@@ -72,10 +116,34 @@ class RemoteRepositoryGitServiceTest {
         )
 
         val error = assertThrows(IllegalArgumentException::class.java) {
-            service.inspectRepository(target("/srv/not-a-repo"))
+            service.inspectProject(target("/srv/missing"))
         }
 
-        assertEquals("fatal: not a git repository", error.message)
+        assertEquals("Remote path is not readable", error.message)
+    }
+
+    @Test
+    fun `project inspection script requires a readable directory before classification`() {
+        val output = """
+            __HOBGOBLIN_ANDROID_PROJECT_KIND__
+            plain
+            __HOBGOBLIN_ANDROID_PROJECT_PATH__
+            /srv/scripts
+            __HOBGOBLIN_ANDROID_PROJECT_CURRENT__
+            __HOBGOBLIN_ANDROID_PROJECT_DEFAULT__
+        """.trimIndent()
+        val client = FakeSshClient(commandResults = listOf(SshCommandResult(ok = true, stdout = output)))
+        val service = RemoteRepositoryGitService(
+            client = client,
+            hostKeyStore = FakeHostKeyTrustStore("SHA256:test"),
+        )
+
+        service.inspectProject(target("/srv/scripts"))
+        val script = client.scripts.single()
+
+        assertTrue(script.contains("[ -d \"\$requested\" ]"))
+        assertTrue(script.contains("[ -r \"\$requested\" ]"))
+        assertTrue(script.indexOf("[ -r \"\$requested\" ]") < script.indexOf("git -C"))
     }
 
     @Test
@@ -194,6 +262,7 @@ class RemoteRepositoryGitServiceTest {
         private val commandResults: List<SshCommandResult> = emptyList(),
     ) : SshClientFacade {
         private var commandIndex = 0
+        val scripts = mutableListOf<String>()
 
         override fun fetchHostFingerprint(target: RemoteTarget): String = fingerprint
 
@@ -207,7 +276,10 @@ class RemoteRepositoryGitServiceTest {
             target: RemoteTarget,
             script: String,
             secrets: SshConnectionSecrets,
-        ): SshCommandResult = commandResults.getOrNull(commandIndex++) ?: SshCommandResult(ok = true, stdout = "")
+        ): SshCommandResult {
+            scripts += script
+            return commandResults.getOrNull(commandIndex++) ?: SshCommandResult(ok = true, stdout = "")
+        }
     }
 
     private class FakeHostKeyTrustStore(

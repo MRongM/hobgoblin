@@ -2,13 +2,26 @@ package dev.hobgoblin.android.domain.ssh
 
 import java.util.UUID
 
+enum class RemoteProjectKind(val storageValue: String) {
+    GitRepository("git"),
+    PlainWorkspace("plain"),
+    ;
+
+    companion object {
+        fun fromStorageValue(value: String): RemoteProjectKind? =
+            entries.firstOrNull { it.storageValue == value }
+    }
+}
+
 data class RemoteRepositoryProfile(
     val id: String,
     val hostProfileId: String,
     val alias: String?,
     val remotePath: String,
+    val kind: RemoteProjectKind = RemoteProjectKind.GitRepository,
 ) {
     val title: String = alias?.takeIf { it.isNotBlank() } ?: remotePath
+    val isGitRepository: Boolean = kind == RemoteProjectKind.GitRepository
 
     init {
         require(id.isNotBlank()) { "Remote repository id is required" }
@@ -21,6 +34,7 @@ data class RemoteRepositoryProfile(
             hostProfileId: String,
             alias: String?,
             remotePath: String,
+            kind: RemoteProjectKind = RemoteProjectKind.GitRepository,
         ): RemoteRepositoryProfile {
             val normalizedHostProfileId = hostProfileId.trim()
             val normalizedAlias = alias?.trim()?.takeIf { it.isNotEmpty() }
@@ -32,6 +46,7 @@ data class RemoteRepositoryProfile(
                 hostProfileId = normalizedHostProfileId,
                 alias = normalizedAlias,
                 remotePath = normalizedRemotePath,
+                kind = kind,
             )
         }
     }

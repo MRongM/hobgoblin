@@ -58,6 +58,22 @@ class TmuxSessionProtocolTest {
     }
 
     @Test
+    fun `attach command writes fixed metadata on the exact session`() {
+        val identity = requireNotNull(TmuxSessionProtocol.identity(descriptor()))
+
+        assertEquals(
+            "exec tmux new-session -A -s '${identity.sessionName}' " +
+                "-c '/srv/projects/example/worktrees/feature' " +
+                "\\; set-option -t '=${identity.sessionName}:' mouse on " +
+                "\\; set-option -t '=${identity.sessionName}' " +
+                "@hobgoblin_init_path '/srv/projects/example/worktrees/feature' " +
+                "\\; set-option -t '=${identity.sessionName}' @hobgoblin_terminal_number '1'",
+            TmuxSessionProtocol.attachOrCreateCommand(identity, terminalNumber = 1),
+        )
+        assertNull(TmuxSessionProtocol.attachOrCreateCommand(identity, terminalNumber = 0))
+    }
+
+    @Test
     fun `current protocol name validator excludes legacy and malformed names`() {
         assertTrue(TmuxSessionProtocol.isCurrentSessionName("hobgoblin-v1-aebf050981ac829e36100020"))
         assertFalse(TmuxSessionProtocol.isCurrentSessionName("hobgoblin-aebf050981ac829e3610"))
@@ -82,6 +98,84 @@ class TmuxSessionProtocolTest {
         assertNull(TmuxSessionProtocol.parseSessionList("missing-tab"))
         assertNull(TmuxSessionProtocol.parseSessionList("name\trelative/path"))
         assertNull(TmuxSessionProtocol.parseSessionList("name\t/path\textra"))
+    }
+
+    @Test
+    fun `discoverable session parser verifies metadata allowed path and exact descriptor hash`() {
+        val secondIdentity = requireNotNull(
+            TmuxSessionProtocol.identity(
+                TmuxSessionDescriptor(
+                    projectRoot = "/srv/projects/example",
+                    workingDirectory = "/srv/projects/example",
+                    terminalNumber = 2,
+                ),
+            ),
+        )
+        val output = listOf(
+            "${secondIdentity.sessionName}\t/srv/projects/example\t2",
+            "hobgoblin-v1-aebf050981ac829e36100020\t/srv/projects/example/worktrees/feature\t1",
+            "hobgoblin-v1-aebf050981ac829e36100020\t/srv/projects/example/worktrees/feature\t1",
+            "user-session\t/srv/projects/example/worktrees/feature\t1",
+            "hobgoblin-v1-aebf050981ac829e36100020\t/srv/projects/example/worktrees/./feature\t1",
+            "hobgoblin-v1-aebf050981ac829e36100020\t/srv/projects/example/worktrees/other\t1",
+            "hobgoblin-v1-aebf050981ac829e36100020\t/srv/projects/example/worktrees/feature\t01",
+            "hobgoblin-v1-aebf050981ac829e36100020\t/srv/projects/example/worktrees/feature\t2147483648",
+            "hobgoblin-v1-0123456789abcdef01234567\t/srv/projects/example/worktrees/feature\t1",
+            "missing-fields",
+        ).joinToString("\n")
+
+        assertEquals(
+            listOf(
+                DiscoveredTmuxSession(
+                    identity = secondIdentity,
+                    terminalNumber = 2,
+                ),
+                DiscoveredTmuxSession(
+                    identity = TmuxSessionIdentity(
+                        "hobgoblin-v1-aebf050981ac829e36100020",
+                        "/srv/projects/example/worktrees/feature",
+                    ),
+                    terminalNumber = 1,
+                ),
+            ),
+            TmuxSessionProtocol.parseDiscoverableSessions(
+                output = output,
+                projectRoot = "/srv/projects/./example/",
+                allowedInitialPaths = setOf(
+                    "/srv/projects/example/",
+                    "/srv/projects/example/worktrees/feature",
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `discoverable parser rejects invalid caller root and accepts empty session output`() {
+        assertNull(
+            TmuxSessionProtocol.parseDiscoverableSessions(
+                output = "",
+                projectRoot = "relative/project",
+                allowedInitialPaths = setOf("/srv/project"),
+            ),
+        )
+        assertEquals(
+            emptyList<DiscoveredTmuxSession>(),
+            TmuxSessionProtocol.parseDiscoverableSessions(
+                output = "",
+                projectRoot = "/srv/project",
+                allowedInitialPaths = setOf("/srv/project"),
+            ),
+        )
+    }
+
+    @Test
+    fun `discoverable session list command reads fixed Hobgoblin metadata`() {
+        assertEquals(
+            "command -v tmux >/dev/null 2>&1 || exit 127\n" +
+                "tmux list-sessions -F '#{session_name}\\t#{@hobgoblin_init_path}\\t" +
+                "#{@hobgoblin_terminal_number}'",
+            TmuxSessionProtocol.listDiscoverableSessionsScript(),
+        )
     }
 
     @Test

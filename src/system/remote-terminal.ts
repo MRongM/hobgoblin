@@ -1,5 +1,5 @@
 import {
-  buildTmuxSessionName,
+  buildTmuxAttachShellCommand,
   normalizeTmuxSessionDescriptor,
   type TmuxSessionDescriptor,
 } from '#/system/tmux-session.ts'
@@ -30,12 +30,12 @@ export function buildManagedRemoteTerminalInvocation(
   const descriptor = normalizeTmuxSessionDescriptor(target)
   if (!isSafeRemoteAlias(target.alias) || !descriptor) return null
 
-  const tmuxSessionName = options.useTmux === true ? buildTmuxSessionName(descriptor) : null
-  if (options.useTmux === true && !tmuxSessionName) return null
-  const script = tmuxSessionName
-    ? buildTmuxRemoteLoginShellScript(descriptor, tmuxSessionName)
+  const tmuxInvocation = options.useTmux === true ? buildTmuxAttachShellCommand(descriptor) : null
+  if (options.useTmux === true && !tmuxInvocation) return null
+  const script = tmuxInvocation
+    ? buildTmuxRemoteLoginShellScript(descriptor, tmuxInvocation.command)
     : buildPlainRemoteLoginShellScript(descriptor.workingDirectory)
-  return buildSshInvocation(target.alias, script, tmuxSessionName, options)
+  return buildSshInvocation(target.alias, script, tmuxInvocation?.sessionName ?? null, options)
 }
 
 export function buildExternalRemoteTerminalInvocation(
@@ -49,11 +49,11 @@ function buildPlainRemoteLoginShellScript(worktreePath: string): string {
   return [`cd ${shellQuote(worktreePath)} || exit`, 'exec "${SHELL:-/bin/sh}" -l'].join('\n')
 }
 
-function buildTmuxRemoteLoginShellScript(target: TmuxSessionDescriptor, sessionName: string): string {
+function buildTmuxRemoteLoginShellScript(target: TmuxSessionDescriptor, tmuxCommand: string): string {
   return [
     `cd ${shellQuote(target.workingDirectory)} || exit`,
     'if command -v tmux >/dev/null 2>&1; then',
-    `  exec tmux new-session -A -s ${shellQuote(sessionName)} -c ${shellQuote(target.workingDirectory)} \\; set-option -t ${shellQuote(`=${sessionName}:`)} mouse on`,
+    `  ${tmuxCommand}`,
     'fi',
     'exec "${SHELL:-/bin/sh}" -l',
   ].join('\n')

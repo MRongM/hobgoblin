@@ -4,6 +4,7 @@ import dev.hobgoblin.android.data.TerminalSessionSnapshotStore
 import dev.hobgoblin.android.domain.ssh.RemoteTarget
 import dev.hobgoblin.android.ssh.SshConnectionSecrets
 import dev.hobgoblin.android.terminals.emulator.RemoteTerminalEmulatorController
+import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
@@ -71,6 +72,66 @@ class TerminalSessionManager(
 
     fun sessions(): List<TerminalSessionRecord> = synchronized(lock) {
         sortedSessionsLocked()
+    }
+
+    fun recoverTmuxSessions(
+        candidates: List<TmuxTerminalRecoveryCandidate>,
+    ): List<TerminalSessionRecord> {
+        if (candidates.isEmpty()) return emptyList()
+        val recovered = mutableListOf<TerminalSessionRecord>()
+        val snapshot = synchronized(lock) {
+            candidates.forEach { candidate ->
+                val repositoryPath = TmuxSessionProtocol.normalizePath(candidate.repositoryRemotePath)
+                    ?: return@forEach
+                val remotePath = TmuxSessionProtocol.normalizePath(candidate.target.remotePath)
+                    ?: return@forEach
+                if (
+                    candidate.repositoryId.isBlank() ||
+                    candidate.target.id.isBlank() ||
+                    candidate.targetLabel.isBlank() ||
+                    remotePath != candidate.discovery.identity.initialPath
+                ) {
+                    return@forEach
+                }
+                val expectedIdentity = TmuxSessionProtocol.identity(
+                    TmuxSessionDescriptor(
+                        projectRoot = repositoryPath,
+                        workingDirectory = remotePath,
+                        terminalNumber = candidate.discovery.terminalNumber,
+                    ),
+                ) ?: return@forEach
+                if (expectedIdentity != candidate.discovery.identity) return@forEach
+                val slotOccupied = sessions.values.any { session ->
+                    session.hostId == candidate.target.id &&
+                        session.repositoryRemotePath == repositoryPath &&
+                        terminalSessionRemotePath(session.remotePath) == remotePath &&
+                        session.terminalId == candidate.discovery.terminalNumber
+                }
+                if (slotOccupied) return@forEach
+                val sessionId = recoveredTmuxSessionId(candidate.target, expectedIdentity.sessionName)
+                if (sessionId in sessions) return@forEach
+                val record = TerminalSessionRecord(
+                    id = sessionId,
+                    hostId = candidate.target.id,
+                    repositoryId = candidate.repositoryId,
+                    remotePath = remotePath,
+                    targetLabel = candidate.targetLabel,
+                    displayName = terminalSessionDisplayNameFromIndex(candidate.discovery.terminalNumber),
+                    terminalId = candidate.discovery.terminalNumber,
+                    repositoryRemotePath = repositoryPath,
+                    tmuxIdentity = expectedIdentity,
+                    status = TerminalSessionStatus.Disconnected,
+                    openedAt = clock(),
+                )
+                sessions[record.id] = record
+                recovered += record
+            }
+            sortedSessionsLocked()
+        }
+        if (recovered.isEmpty()) return emptyList()
+        sessionStore?.saveSessions(snapshot)
+        notifyCollectionObservers()
+        return recovered
     }
 
     fun session(sessionId: String): TerminalSessionRecord? = synchronized(lock) {
@@ -721,6 +782,15 @@ class TerminalSessionManager(
         TerminalDisplayNamePattern.matchEntire(displayName)?.groupValues?.getOrNull(1)?.toIntOrNull()
 
     private fun terminalSessionDisplayNameFromIndex(index: Int): String = "terminal-$index"
+
+    private fun recoveredTmuxSessionId(target: RemoteTarget, sessionName: String): String {
+        val material = listOf(
+            "hobgoblin-android-recovered-tmux-v1",
+            target.authority,
+            sessionName,
+        ).joinToString("\u0000")
+        return UUID.nameUUIDFromBytes(material.toByteArray(StandardCharsets.UTF_8)).toString()
+    }
 
     private fun normalizeRepositoryRemotePath(path: String?): String? {
         val value = path?.takeIf { it.isNotEmpty() } ?: return null

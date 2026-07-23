@@ -60,8 +60,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextOverflow
 import dev.hobgoblin.android.domain.ResourceState
 import dev.hobgoblin.android.domain.ssh.RemoteDirectoryEntry
+import dev.hobgoblin.android.domain.ssh.RemoteProjectInspection
+import dev.hobgoblin.android.domain.ssh.RemoteProjectKind
 import dev.hobgoblin.android.domain.ssh.RemoteRepositoryBranch
-import dev.hobgoblin.android.domain.ssh.RemoteRepositoryInspection
 import dev.hobgoblin.android.domain.ssh.RemoteRepositoryProfile
 import dev.hobgoblin.android.domain.ssh.RemoteRepositorySnapshot
 import dev.hobgoblin.android.domain.ssh.RemoteRepositoryWorktree
@@ -73,6 +74,7 @@ import dev.hobgoblin.android.terminals.TerminalDisconnectedReason
 import dev.hobgoblin.android.terminals.TerminalLaunchMode
 import dev.hobgoblin.android.terminals.TerminalSessionRecord
 import dev.hobgoblin.android.terminals.TerminalSessionStatus
+import dev.hobgoblin.android.terminals.TmuxSessionProtocol
 import dev.hobgoblin.android.termux.ExternalTermuxLaunchResult
 import dev.hobgoblin.android.ui.screens.terminals.terminalSessionRemotePath
 import dev.hobgoblin.android.ui.screens.terminals.terminalSessionDisplayName
@@ -161,15 +163,50 @@ internal fun shouldLoadDirectoryPage(state: ResourceState<List<RemoteDirectoryEn
 }
 
 internal fun repositoryWorkspaceTabs(repository: RemoteRepositoryProfile): List<RepositoryWorkspaceTab> =
-    if (repository.remotePath.startsWith("/")) {
+    if (repository.isGitRepository) {
         listOf(
             RepositoryWorkspaceTab.Branches,
             RepositoryWorkspaceTab.Worktrees,
             RepositoryWorkspaceTab.Terminal,
         )
     } else {
-        emptyList()
+        listOf(RepositoryWorkspaceTab.Terminal)
     }
+
+internal fun initialRepositoryWorkspaceTab(
+    repository: RemoteRepositoryProfile,
+    initialTerminalWorkspacePath: String?,
+): RepositoryWorkspaceTab = if (initialTerminalWorkspacePath != null || !repository.isGitRepository) {
+    RepositoryWorkspaceTab.Terminal
+} else {
+    RepositoryWorkspaceTab.Branches
+}
+
+internal fun shouldLoadRepositorySnapshot(repository: RemoteRepositoryProfile): Boolean =
+    repository.isGitRepository
+
+internal fun repositoryTmuxDiscoveryPaths(
+    repository: RemoteRepositoryProfile,
+    snapshotState: ResourceState<RemoteRepositorySnapshot>,
+): List<String>? {
+    val rootPath = TmuxSessionProtocol.normalizePath(repository.remotePath) ?: return null
+    if (!repository.isGitRepository) return listOf(rootPath)
+    val worktrees = when (snapshotState) {
+        is ResourceState.Loaded -> snapshotState.value.worktrees
+        is ResourceState.Stale -> snapshotState.value.worktrees
+        ResourceState.Idle,
+        ResourceState.Loading,
+        is ResourceState.Error,
+        -> return null
+    }
+    return buildList {
+        add(rootPath)
+        worktrees.asSequence()
+            .filterNot { it.isMissing }
+            .mapNotNull { TmuxSessionProtocol.normalizePath(it.path) }
+            .forEach(::add)
+    }.distinct()
+}
 
 internal fun repositoryWorkspaceTabsUseScrollableStrip(tabs: List<RepositoryWorkspaceTab>): Boolean =
     tabs.size > CompactWorkspaceTabLimit
@@ -246,14 +283,15 @@ internal fun repositoriesAfterLocalDelete(
     repositoryId: String,
 ): List<RemoteRepositoryProfile> = repositories.filterNot { it.id == repositoryId }
 
-internal fun createRepositoryFromInspection(
+internal fun createProjectFromInspection(
     host: SshHostProfile,
     alias: String,
-    inspection: RemoteRepositoryInspection,
+    inspection: RemoteProjectInspection,
 ): RemoteRepositoryProfile = RemoteRepositoryProfile.create(
     hostProfileId = host.id,
     alias = alias,
-    remotePath = inspection.topLevel,
+    remotePath = inspection.resolvedPath,
+    kind = inspection.kind,
 )
 
 internal fun repositorySnapshotStateAfterRefreshFailure(
@@ -423,8 +461,8 @@ fun RepositorySetupScreen(
     onOpenRepository: (String) -> Unit,
     onDeleteRepository: (String) -> Unit,
     onBrowseDirectories: (SshHostProfile, String) -> List<RemoteDirectoryEntry> = { _, _ -> emptyList() },
-    onInspectRepository: (SshHostProfile, String) -> RemoteRepositoryInspection = { _, path ->
-        RemoteRepositoryInspection(path, path, null, null)
+    onInspectProject: (SshHostProfile, String) -> RemoteProjectInspection = { _, path ->
+        RemoteProjectInspection(path, path, RemoteProjectKind.GitRepository, null, null)
     },
 ) {
     val authenticated = authenticatedHosts(hosts)
@@ -487,8 +525,8 @@ fun RepositorySetupScreen(
         scope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
-                    val inspection = onInspectRepository(host, remotePath)
-                    createRepositoryFromInspection(host, alias, inspection)
+                    val inspection = onInspectProject(host, remotePath)
+                    createProjectFromInspection(host, alias, inspection)
                 }
             }.onSuccess {
                 onSaveRepository(it)
@@ -497,7 +535,7 @@ fun RepositorySetupScreen(
                 clearDirectoryBrowser()
                 error = null
             }.onFailure {
-                error = it.message ?: "Repository validation failed"
+                error = it.message ?: "Project validation failed"
             }
             saving = false
         }
@@ -805,6 +843,7 @@ fun RepositoryWorkspaceScreen(
     onLoadSnapshot: () -> RemoteRepositorySnapshot,
     initialTerminalWorkspacePath: String? = null,
     terminalSessions: List<TerminalSessionRecord> = emptyList(),
+    onDiscoverTmuxTerminals: (List<String>) -> Unit = {},
     onCreateTerminalAtPath: (String, TerminalLaunchMode) -> TerminalSessionRecord = { _, _ ->
         throw UnsupportedOperationException("Terminal sessions are not available")
     },
@@ -822,13 +861,7 @@ fun RepositoryWorkspaceScreen(
     onRemoveWorktree: (RemoteRepositoryWorktree) -> Unit = {},
 ) {
     var selectedTab by remember(repository.id) {
-        mutableStateOf(
-            if (initialTerminalWorkspacePath == null) {
-                RepositoryWorkspaceTab.Branches
-            } else {
-                RepositoryWorkspaceTab.Terminal
-            },
-        )
+        mutableStateOf(initialRepositoryWorkspaceTab(repository, initialTerminalWorkspacePath))
     }
     var selectedTerminalWorkspacePath by remember(repository.id) {
         mutableStateOf(initialTerminalWorkspacePath ?: repositoryTerminalPath(repository))
@@ -845,14 +878,18 @@ fun RepositoryWorkspaceScreen(
     var terminalDeletePending by remember(repository.id) { mutableStateOf(false) }
     var actionError by remember(repository.id) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    val workspaceTabs = remember(repository.id, repository.remotePath) {
+    val workspaceTabs = remember(repository.id, repository.remotePath, repository.kind) {
         repositoryWorkspaceTabs(repository)
     }
     val terminalWorkspaceOptions = remember(repository, snapshotState) {
         repositoryTerminalWorkspaceOptions(repository = repository, snapshotState = snapshotState)
     }
+    val tmuxDiscoveryPaths = remember(repository, snapshotState) {
+        repositoryTmuxDiscoveryPaths(repository = repository, snapshotState = snapshotState)
+    }
 
     fun refreshSnapshot() {
+        if (!shouldLoadRepositorySnapshot(repository)) return
         val previous = snapshotState
         snapshotState = ResourceState.Loading
         scope.launch {
@@ -1028,11 +1065,22 @@ fun RepositoryWorkspaceScreen(
     }
 
     LaunchedEffect(repository.id) {
-        refreshSnapshot()
+        if (shouldLoadRepositorySnapshot(repository)) refreshSnapshot()
     }
 
     LaunchedEffect(repository.id, initialTerminalWorkspacePath) {
         initialTerminalWorkspacePath?.let { selectTerminalWorkspace(it) }
+    }
+
+    LaunchedEffect(repository.id, selectedTab, tmuxDiscoveryPaths) {
+        if (selectedTab != RepositoryWorkspaceTab.Terminal || tmuxDiscoveryPaths == null) {
+            return@LaunchedEffect
+        }
+        runCatching {
+            withContext(Dispatchers.IO) { onDiscoverTmuxTerminals(tmuxDiscoveryPaths) }
+        }.onFailure {
+            actionError = it.message ?: "Tmux terminal discovery failed"
+        }
     }
 
     BackHandler { onBack() }
@@ -1090,8 +1138,10 @@ fun RepositoryWorkspaceScreen(
                     }
                 },
                 actions = {
-                    TextButton(onClick = { refreshSnapshot() }) {
-                        Text("Refresh")
+                    if (shouldLoadRepositorySnapshot(repository)) {
+                        TextButton(onClick = { refreshSnapshot() }) {
+                            Text("Refresh")
+                        }
                     }
                     TextButton(onClick = { confirmDelete = true }) {
                         Text("Delete")

@@ -60,6 +60,14 @@ _Avoid_: Terminal session ID, tmux connection settings, SSH terminal identity
 The deterministic `hobgoblin-v1-<digest>` identifier derived from a tmux session descriptor and used by internal and external terminal applications to create or attach to the same tmux session. It is distinct from a `terminal-N` slot, a server terminal key, and an ephemeral `term_<UUID>` PTY session ID.
 _Avoid_: Terminal session ID, terminal ID, PTY session ID
 
+**Discoverable Hobgoblin tmux session**:
+A current-protocol tmux session whose fixed initial-path and positive terminal-number metadata reproduce its exact tmux session name and associate it with a recognized project terminal path. It is eligible for Android recovery but is not authenticated by that metadata.
+_Avoid_: Any Hobgoblin-prefixed session, arbitrary tmux session, authenticated tmux session
+
+**Recovered Android tmux terminal**:
+A retained, disconnected Android project-terminal record reconstructed from a discoverable Hobgoblin tmux session while preserving its terminal slot. It attaches only when the user opens or reconnects it.
+_Avoid_: Connected terminal, imported shell, automatically attached terminal
+
 **Internal terminal launch mode**:
 The per-launch choice between the native login shell and tmux-if-available for one new local or SSH internal terminal. Ordinary terminal actions use the native login shell. Explicit tmux actions create or attach to the deterministic tmux session when tmux is available on the target host and otherwise fall back to the native login shell. The choice is not a persisted preference and does not change an existing terminal.
 _Avoid_: Tmux setting, terminal preference, external terminal mode

@@ -28,11 +28,14 @@ import dev.hobgoblin.android.ssh.SshDiagnosticsService
 import dev.hobgoblin.android.ssh.SshInitializationService
 import dev.hobgoblin.android.navigation.AppRoute.Companion.terminal
 import dev.hobgoblin.android.terminals.TerminalForegroundBridge
+import dev.hobgoblin.android.terminals.DiscoveredTmuxSession
 import dev.hobgoblin.android.terminals.RemoteTmuxCloseResult
+import dev.hobgoblin.android.terminals.RemoteTmuxDiscoveryResult
 import dev.hobgoblin.android.terminals.RemoteTmuxSessionService
 import dev.hobgoblin.android.terminals.TerminalNavigationRequest
 import dev.hobgoblin.android.terminals.TerminalSessionManager
 import dev.hobgoblin.android.terminals.TerminalSessionRecord
+import dev.hobgoblin.android.terminals.TmuxTerminalRecoveryCandidate
 import dev.hobgoblin.android.termux.ExternalTermuxLauncher
 import dev.hobgoblin.android.termux.externalTermuxLaunchRequest
 import dev.hobgoblin.android.ui.screens.addhost.AddHostScreen
@@ -55,6 +58,21 @@ import dev.hobgoblin.android.ui.screens.terminals.terminalTargetLabel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+internal fun tmuxRecoveryCandidates(
+    host: SshHostProfile,
+    repository: RemoteRepositoryProfile,
+    discoveries: List<DiscoveredTmuxSession>,
+): List<TmuxTerminalRecoveryCandidate> = discoveries.map { discovery ->
+    val remotePath = discovery.identity.initialPath
+    TmuxTerminalRecoveryCandidate(
+        target = RemoteTarget.fromHostProfile(host, remotePath),
+        repositoryId = repository.id,
+        repositoryRemotePath = repository.remotePath,
+        targetLabel = terminalTargetLabel(repository.title, remotePath),
+        discovery = discovery,
+    )
+}
 
 @Composable
 fun HobgoblinAndroidApp(
@@ -369,8 +387,8 @@ fun HobgoblinAndroidApp(
             onBrowseDirectories = { host, remotePath ->
                 remoteRepositoryGitService.browseDirectories(RemoteTarget.fromHostProfile(host, remotePath))
             },
-            onInspectRepository = { host, remotePath ->
-                remoteRepositoryGitService.inspectRepository(RemoteTarget.fromHostProfile(host, remotePath))
+            onInspectProject = { host, remotePath ->
+                remoteRepositoryGitService.inspectProject(RemoteTarget.fromHostProfile(host, remotePath))
             },
         )
 
@@ -391,6 +409,26 @@ fun HobgoblinAndroidApp(
                     },
                     initialTerminalWorkspacePath = currentRoute.terminalWorkspacePath,
                     terminalSessions = terminalSessions,
+                    onDiscoverTmuxTerminals = { allowedPaths ->
+                        when (
+                            val result = remoteTmuxSessionService.discoverAssociatedSessions(
+                                target = RemoteTarget.fromHostProfile(host, repository.remotePath),
+                                projectRoot = repository.remotePath,
+                                allowedInitialPaths = allowedPaths.toSet(),
+                            )
+                        ) {
+                            is RemoteTmuxDiscoveryResult.Found -> {
+                                terminalSessionManager.recoverTmuxSessions(
+                                    tmuxRecoveryCandidates(
+                                        host = host,
+                                        repository = repository,
+                                        discoveries = result.sessions,
+                                    ),
+                                )
+                            }
+                            is RemoteTmuxDiscoveryResult.Failed -> error(result.message)
+                        }
+                    },
                     onCreateTerminalAtPath = { remotePath, launchMode ->
                         val session = terminalSessionManager.createNew(
                             target = RemoteTarget.fromHostProfile(host, remotePath),
