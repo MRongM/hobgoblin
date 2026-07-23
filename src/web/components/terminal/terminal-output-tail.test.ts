@@ -37,6 +37,69 @@ describe('terminal output tail', () => {
     expect(tail.value()).toBe('redplain')
   })
 
+  test('consumes charset designators split across chunks without leaking final bytes', () => {
+    const tail = createTerminalOutputTail()
+    tail.push('left\u001b(')
+    tail.push('Bright')
+    expect(tail.value()).toBe('leftright')
+  })
+
+  test('adds a text boundary for cursor commands but not SGR styling', () => {
+    const tail = createTerminalOutputTail()
+    tail.push('first\u001b[2;1Hsecond\u001b[31mred\u001b[0mtext')
+    expect(tail.value()).toBe('first secondredtext')
+  })
+
+  test('removes DCS, SOS, PM, and APC string controls split across chunks', () => {
+    const tail = createTerminalOutputTail()
+    tail.push('one\u001bPdrop\u001b')
+    tail.push('\\two\u001bXdrop\u001b\\three\u001b^drop\u001b\\four\u001b_drop\u001b\\five')
+    tail.push('\u0090drop\u009csix\u0098drop\u009cseven\u009edrop\u009ceight\u009fdrop\u009cnine')
+    expect(tail.value()).toBe('onetwothreefourfivesixseveneightnine')
+  })
+
+  test('resumes visible text after CAN or SUB cancels an in-flight control', () => {
+    const tail = createTerminalOutputTail()
+    tail.push('one\u001bPdrop\u0018two\u001b]drop\u001athree')
+    expect(tail.value()).toBe('onetwothree')
+  })
+
+  test('projects DEC Special Graphics without leaking raw glyph bytes', () => {
+    const tail = createTerminalOutputTail()
+    tail.push('\u001b(0lqqqqk\u001b(B text')
+    expect(tail.value()).toBe('─── text')
+  })
+
+  test('selects G1 DEC Special Graphics with SO and returns to G0 with SI', () => {
+    const tail = createTerminalOutputTail()
+    tail.push('\u001b)0\u000eg\u000fq')
+    expect(tail.value()).toBe('±q')
+  })
+
+  test('turns direct Unicode frame edges into boundaries before applying the limit', () => {
+    const tail = createTerminalOutputTail()
+    tail.push('╭────╮\n│ OpenAI Codex │\n╰────╯ --flag ± plain')
+    expect(tail.value()).toBe('─── OpenAI Codex ─── --flag ± plain')
+  })
+
+  test('removes repeated charset designators from framed TUI output', () => {
+    const tail = createTerminalOutputTail()
+    tail.push('\u001b(B╭────╮\u001b(B│ >_ \u001b(BOpenAI Codex\u001b(B │\u001b(B╰────╯')
+    expect(tail.value()).toBe('─── >_ OpenAI Codex ───')
+  })
+
+  test('resets string-control and character-set state', () => {
+    const tail = createTerminalOutputTail()
+    tail.push('\u001bPdrop')
+    tail.reset()
+    tail.push('\u001b(0q')
+    expect(tail.value()).toBe('─')
+
+    tail.reset()
+    tail.push('q')
+    expect(tail.value()).toBe('q')
+  })
+
   test('collapses whitespace across chunks before applying the character limit', () => {
     const tail = createTerminalOutputTail(8)
     tail.push(`one${' '.repeat(5_000)}\t\r\n`)
