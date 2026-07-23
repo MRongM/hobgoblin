@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { SidebarProjectList } from '#/web/components/repo-workspace/SidebarProjectList.tsx'
 import type { ProjectSummary } from '#/web/components/repo-workspace/project-switcher-model.tsx'
+import { normalizeRemoteRepoId } from '#/shared/remote-repo.ts'
 import {
   TerminalSessionContext,
   TerminalSessionReadContext,
@@ -42,6 +43,12 @@ const projectExternalActionState = vi.hoisted(() => ({
   internalTerminalOnSelect: vi.fn(),
   internalTerminalDisabled: false,
   internalTerminalBusy: false,
+}))
+
+const tmuxCleanupState = vi.hoisted(() => ({
+  calls: [] as Array<{ projectRoot?: string; itemPath?: string; disabled?: boolean }>,
+  onSelect: vi.fn(),
+  visible: true,
 }))
 
 vi.mock('@dnd-kit/core', async () => {
@@ -126,6 +133,34 @@ vi.mock('#/web/hooks/useProjectInternalTerminalAction.ts', () => ({
   }),
 }))
 
+vi.mock('#/web/hooks/useAssociatedTmuxCleanup.tsx', () => ({
+  useAssociatedTmuxCleanup: (options: { projectRoot?: string; itemPath?: string; disabled?: boolean }) => {
+    tmuxCleanupState.calls.push(options)
+    return {
+      visible: tmuxCleanupState.visible,
+      action: {
+        id: 'cleanupTmuxSessions',
+        label: 'tmux.cleanup.action',
+        icon: null,
+        disabled: false,
+        busy: false,
+        destructive: true,
+        onSelect: tmuxCleanupState.onSelect,
+      },
+      contextAction: {
+        label: 'tmux.cleanup.action',
+        icon: null,
+        disabled: false,
+        busy: false,
+        destructive: true,
+        separated: true,
+        onSelect: tmuxCleanupState.onSelect,
+      },
+      dialog: <div data-testid="project-tmux-cleanup-dialog" />,
+    }
+  },
+}))
+
 vi.mock('#/web/components/ExternalAppIcon/index.tsx', () => ({
   EditorAppIcon: ({ pref }: { pref: string }) => <span data-testid="mock-editor-app-icon" data-pref={pref} />,
   TerminalAppIcon: ({ pref }: { pref: string }) => <span data-testid="mock-terminal-app-icon" data-pref={pref} />,
@@ -181,6 +216,9 @@ beforeEach(() => {
   projectExternalActionState.internalTerminalOnSelect.mockReset()
   projectExternalActionState.internalTerminalDisabled = false
   projectExternalActionState.internalTerminalBusy = false
+  tmuxCleanupState.calls = []
+  tmuxCleanupState.onSelect.mockReset()
+  tmuxCleanupState.visible = true
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -293,6 +331,29 @@ describe('SidebarProjectList', () => {
     expect(projectName?.className).not.toContain('leading-none')
   })
 
+  test('prefixes only remote project row names and labels with their SSH alias', async () => {
+    const remoteId = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/kooky' })
+    const prefixedRemoteId = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/workspace' })
+    renderList({
+      projects: [
+        { ...projects[0]!, id: remoteId, name: 'kooky' },
+        { ...projects[1]!, id: '/workspace', name: 'workspace' },
+        { ...projects[1]!, id: prefixedRemoteId, name: 'prod:workspace' },
+      ],
+    })
+
+    expect(projectRow(remoteId).textContent).toContain('prod:kooky')
+    expect(
+      projectRow(remoteId).querySelector('[data-workspace-list-item-action="editor"]')?.getAttribute('aria-label'),
+    ).toBe('worktrees.open-in-editor-label prod:kooky')
+    expect((await openProjectMenu(remoteId)).map((item) => item.textContent?.trim())).toContain('Close prod:kooky')
+    expect(projectRow('/workspace').textContent).toContain('workspace')
+    expect(projectRow('/workspace').textContent).not.toContain(':workspace')
+    expect(projectRow(prefixedRemoteId).querySelector('[data-workspace-list-item-main]')?.textContent).toBe(
+      'prod:workspace',
+    )
+  })
+
   test('shows the cumulative project change count and omits a zero count', () => {
     renderList()
 
@@ -330,6 +391,7 @@ describe('SidebarProjectList', () => {
       'terminal.new-with-tmux',
       'terminal.external',
       'Close Repo A',
+      'tmux.cleanup.action',
     ])
     const close = items.find((item) => item.textContent?.includes('Close Repo A'))
     expect(close?.getAttribute('data-variant')).toBe('default')
@@ -341,6 +403,32 @@ describe('SidebarProjectList', () => {
 
     expect(onClose).toHaveBeenCalledWith('/repo-a')
     expect(onActivate).not.toHaveBeenCalled()
+  })
+
+  test('offers destructive tmux cleanup from More without activating or closing the project', async () => {
+    const { onActivate, onClose } = renderList()
+    const cleanup = (await openProjectMenu('/repo-a')).find((item) => item.textContent?.includes('tmux.cleanup.action'))
+
+    expect(cleanup?.getAttribute('data-variant')).toBe('destructive')
+    await act(async () => {
+      cleanup?.click()
+      await Promise.resolve()
+    })
+
+    expect(tmuxCleanupState.onSelect).toHaveBeenCalledTimes(1)
+    expect(onActivate).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  test('targets only each local or remote project root for tmux cleanup', () => {
+    const remoteId = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/kooky' })
+    renderList({ projects: [projects[0]!, { ...projects[1]!, id: remoteId, name: 'kooky' }] })
+
+    expect(tmuxCleanupState.calls).toEqual([
+      { projectRoot: '/repo-a', itemPath: '/repo-a', disabled: false },
+      { projectRoot: remoteId, itemPath: '/srv/kooky', disabled: false },
+    ])
+    expect(container!.querySelectorAll('[data-testid="project-tmux-cleanup-dialog"]')).toHaveLength(2)
   })
 
   test('renders every project through the shared frame and three-slot dock', () => {
@@ -438,15 +526,18 @@ describe('SidebarProjectList', () => {
       'terminal.internal',
       'terminal.new-with-tmux',
       'terminal.close-all',
+      'tmux.cleanup.action',
     ])
 
     await clickContextMenuItem(row, 'worktrees.open-in-editor-label')
     await clickContextMenuItem(row, 'terminal.external')
     await clickContextMenuItem(row, 'terminal.internal')
+    await clickContextMenuItem(row, 'tmux.cleanup.action')
 
     expect(projectExternalActionState.editorOnSelect).toHaveBeenCalledWith('/repo-a')
     expect(projectExternalActionState.terminalOnSelect).toHaveBeenCalledWith('/repo-a')
     expect(projectExternalActionState.internalTerminalOnSelect).toHaveBeenCalledWith('/repo-a')
+    expect(tmuxCleanupState.onSelect).toHaveBeenCalledTimes(1)
   })
 
   test('reorders when dropped over a different project', () => {
