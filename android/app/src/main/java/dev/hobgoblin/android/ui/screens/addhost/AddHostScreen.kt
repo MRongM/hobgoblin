@@ -38,8 +38,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import dev.hobgoblin.android.domain.ResourceState
+import dev.hobgoblin.android.domain.ssh.DiagnosticsResult
+import dev.hobgoblin.android.domain.ssh.HOST_DIAGNOSTIC_STATUS_UNHEALTHY
 import dev.hobgoblin.android.domain.ssh.SshIdentityRef
 import dev.hobgoblin.android.domain.ssh.SshHostProfile
+import dev.hobgoblin.android.domain.ssh.withDiagnosticResult
 import dev.hobgoblin.android.ssh.SshInitializationCheck
 import dev.hobgoblin.android.ui.theme.HobgoblinColors
 import dev.hobgoblin.android.ui.theme.HobgoblinSpacing
@@ -63,6 +67,11 @@ internal fun resolveHostIdentityRefId(
     existingIdentityRefId: String?,
 ): String? = selectedIdentityId ?: initializedIdentityRefId ?: existingIdentityRefId
 
+internal fun isLatestConnectionTest(
+    requestGeneration: Int,
+    currentGeneration: Int,
+): Boolean = requestGeneration == currentGeneration
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddHostScreen(
@@ -72,6 +81,7 @@ fun AddHostScreen(
     onCheckSshInitialization: (SshHostProfile) -> SshInitializationCheck = { SshInitializationCheck.Ready },
     onTrustHostKey: (SshHostProfile, String) -> Unit = { _, _ -> },
     onInitializeSshAccess: (SshHostProfile, CharArray) -> SshHostProfile = { profile, _ -> profile },
+    onRunDiagnostics: (SshHostProfile) -> DiagnosticsResult,
     onSaveHost: (SshHostProfile) -> Unit,
 ) {
     val context = LocalContext.current
@@ -86,12 +96,24 @@ fun AddHostScreen(
     var initializationPassword by remember(initialHost) { mutableStateOf("") }
     var initializationError by remember(initialHost) { mutableStateOf<String?>(null) }
     var initializedIdentityRefId by remember(initialHost) { mutableStateOf<String?>(null) }
+    var connectionTestState: ResourceState<DiagnosticsResult> by remember(initialHost) {
+        mutableStateOf(ResourceState.Idle)
+    }
+    var lastDiagnosticStatus by remember(initialHost) { mutableStateOf(initialHost?.lastDiagnosticStatus) }
+    var connectionTestGeneration by remember(initialHost) { mutableStateOf(0) }
+
+    fun resetConnectionTestState() {
+        connectionTestGeneration += 1
+        connectionTestState = ResourceState.Idle
+        lastDiagnosticStatus = null
+    }
 
     fun clearInitializationState() {
         initializationCheck = null
         initializationPassword = ""
         initializationError = null
         initializedIdentityRefId = null
+        resetConnectionTestState()
     }
 
     val importPrivateKey = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -124,7 +146,7 @@ fun AddHostScreen(
             user = user,
             port = port,
             identityRefId = identityRefId,
-        )
+        ).copy(lastDiagnosticStatus = lastDiagnosticStatus)
 
     fun runInitializationCheck() {
         initializationError = null
@@ -170,6 +192,7 @@ fun AddHostScreen(
                 initializationPassword = ""
                 initializedIdentityRefId = initializedProfile.identityRefId
                 initializationCheck = SshInitializationCheck.Ready
+                resetConnectionTestState()
                 error = null
             }.onFailure {
                 initializationPassword = ""
@@ -215,6 +238,35 @@ fun AddHostScreen(
                     error = null
                 }
             }
+        }
+    }
+
+    fun testConnection() {
+        val profile = runCatching { currentDraftProfile() }.getOrElse {
+            connectionTestState = ResourceState.Error(it.message ?: "Validation error", it)
+            lastDiagnosticStatus = HOST_DIAGNOSTIC_STATUS_UNHEALTHY
+            return
+        }
+        connectionTestGeneration += 1
+        val requestGeneration = connectionTestGeneration
+        connectionTestState = ResourceState.Loading
+        scope.launch {
+            val result = runCatching {
+                withContext(Dispatchers.IO) { onRunDiagnostics(profile) }
+            }
+            if (!isLatestConnectionTest(requestGeneration, connectionTestGeneration)) {
+                return@launch
+            }
+            connectionTestState = result.fold(
+                onSuccess = { result ->
+                    lastDiagnosticStatus = profile.withDiagnosticResult(result).lastDiagnosticStatus
+                    ResourceState.Loaded(result)
+                },
+                onFailure = {
+                    lastDiagnosticStatus = HOST_DIAGNOSTIC_STATUS_UNHEALTHY
+                    ResourceState.Error(it.message ?: "Connection test failed", it)
+                },
+            )
         }
     }
 
@@ -329,10 +381,12 @@ fun AddHostScreen(
                 password = initializationPassword,
                 error = initializationError,
                 initializedIdentityRefId = initializedIdentityRefId,
+                connectionTestState = connectionTestState,
                 onStartCheck = { runInitializationCheck() },
                 onPasswordChange = { initializationPassword = it },
                 onTrustHostKey = { trustHostKey(it) },
                 onInitialize = { prepareOrInitializeSshAccess() },
+                onTestConnection = { testConnection() },
                 onReset = { clearInitializationState() },
             )
             if (error != null) {
@@ -349,10 +403,12 @@ private fun SshInitializationSection(
     password: String,
     error: String?,
     initializedIdentityRefId: String?,
+    connectionTestState: ResourceState<DiagnosticsResult>,
     onStartCheck: () -> Unit,
     onPasswordChange: (String) -> Unit,
     onTrustHostKey: (String) -> Unit,
     onInitialize: () -> Unit,
+    onTestConnection: () -> Unit,
     onReset: () -> Unit,
 ) {
     val success = check == SshInitializationCheck.Ready
@@ -430,6 +486,22 @@ private fun SshInitializationSection(
                         "Saved identity is available for this host."
                     }
                     Text(identityText, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (initializedIdentityRefId != null) {
+                        Button(
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = connectionTestState !is ResourceState.Loading,
+                            onClick = onTestConnection,
+                        ) {
+                            Text(
+                                if (connectionTestState is ResourceState.Loading) {
+                                    "Testing connection…"
+                                } else {
+                                    "Test connection"
+                                },
+                            )
+                        }
+                        ConnectionTestFeedback(connectionTestState)
+                    }
                     TextButton(onClick = onReset) {
                         Text("Set up again")
                     }
@@ -482,6 +554,54 @@ private fun SshInitializationSection(
             }
         }
     }
+}
+
+@Composable
+private fun ConnectionTestFeedback(state: ResourceState<DiagnosticsResult>) {
+    when (state) {
+        ResourceState.Idle,
+        ResourceState.Loading,
+        -> Unit
+
+        is ResourceState.Error -> {
+            Text(
+                text = "offline",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.error,
+            )
+            Text(state.message, color = MaterialTheme.colorScheme.error)
+        }
+
+        is ResourceState.Loaded -> ConnectionTestResultFeedback(state.value)
+        is ResourceState.Stale -> ConnectionTestResultFeedback(state.value)
+    }
+}
+
+@Composable
+private fun ConnectionTestResultFeedback(result: DiagnosticsResult) {
+    if (result.ok) {
+        Text(
+            text = "online",
+            style = MaterialTheme.typography.labelLarge,
+            color = HobgoblinColors.Success,
+        )
+        Text(
+            text = "Private-key connection succeeded. Save this host to keep its online status.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+
+    Text(
+        text = "offline",
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.error,
+    )
+    Text(
+        text = result.message.ifBlank { result.category?.label ?: "Connection test failed" },
+        color = MaterialTheme.colorScheme.error,
+    )
 }
 
 @Composable

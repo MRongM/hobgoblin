@@ -16,7 +16,9 @@ import dev.hobgoblin.android.domain.ResourceState
 import dev.hobgoblin.android.domain.ssh.RemoteRepositoryProfile
 import dev.hobgoblin.android.domain.ssh.RemoteTarget
 import dev.hobgoblin.android.domain.ssh.SshHostProfile
+import dev.hobgoblin.android.domain.ssh.withDiagnosticResult
 import dev.hobgoblin.android.navigation.AppRoute
+import dev.hobgoblin.android.navigation.terminalReturnRoute
 import dev.hobgoblin.android.ssh.HostPortForwardManager
 import dev.hobgoblin.android.ssh.HostPortForwardStatus
 import dev.hobgoblin.android.ssh.RemoteBranchService
@@ -48,6 +50,7 @@ import dev.hobgoblin.android.ui.screens.repositories.RepositoryWorkspaceScreen
 import dev.hobgoblin.android.ui.screens.terminals.TerminalBackClosesSessionHint
 import dev.hobgoblin.android.ui.screens.terminals.TerminalBackKeepsSessionHint
 import dev.hobgoblin.android.ui.screens.terminals.TerminalScreen
+import dev.hobgoblin.android.ui.screens.terminals.TerminalsScreen
 import dev.hobgoblin.android.ui.screens.terminals.terminalTargetLabel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -167,12 +170,14 @@ fun HobgoblinAndroidApp(
         route = when (tab) {
             MainTab.Hosts -> AppRoute.Hosts
             MainTab.Projects -> AppRoute.Projects
+            MainTab.Terminals -> AppRoute.Terminals
         }
     }
 
     fun mainTabForRoute(currentRoute: AppRoute): MainTab? = when (currentRoute) {
         AppRoute.Hosts -> MainTab.Hosts
         AppRoute.Projects -> MainTab.Projects
+        AppRoute.Terminals -> MainTab.Terminals
         else -> null
     }
 
@@ -189,6 +194,7 @@ fun HobgoblinAndroidApp(
     when (val currentRoute = route) {
         AppRoute.Hosts,
         AppRoute.Projects,
+        AppRoute.Terminals,
         -> {
             val selectedTab = mainTabForRoute(currentRoute) ?: MainTab.Hosts
             MainTabShell(
@@ -233,6 +239,18 @@ fun HobgoblinAndroidApp(
                         },
                     )
                 },
+                terminalsContent = {
+                    TerminalsScreen(
+                        sessions = terminalSessions,
+                        onOpenTerminalSession = { session ->
+                            val current = terminalSessionManager.session(session.id)
+                            if (current != null) {
+                                terminalSessionManager.touchSession(current.id)
+                                route = AppRoute.terminal(current, returnToTerminals = true)
+                            }
+                        },
+                    )
+                },
             )
         }
 
@@ -245,6 +263,9 @@ fun HobgoblinAndroidApp(
             onInitializeSshAccess = { input, password ->
                 val result = initializationService.initialize(input, password)
                 result.profile
+            },
+            onRunDiagnostics = { input ->
+                diagnosticsService.runDiagnostics(RemoteTarget.fromHostProfile(input))
             },
             onSaveHost = { input ->
                 hostProfileStore.saveHost(input)
@@ -267,6 +288,9 @@ fun HobgoblinAndroidApp(
                     onInitializeSshAccess = { input, password ->
                         val result = initializationService.initialize(input, password)
                         result.profile
+                    },
+                    onRunDiagnostics = { input ->
+                        diagnosticsService.runDiagnostics(RemoteTarget.fromHostProfile(input))
                     },
                     onSaveHost = { input ->
                         hostProfileStore.saveHost(input)
@@ -316,18 +340,10 @@ fun HobgoblinAndroidApp(
                     host = host,
                     onBack = { route = AppRoute.Hosts },
                     onOpenTerminal = { route = AppRoute.Terminal(currentRoute.hostId) },
-                    onCheckSshInitialization = { initializationService.check(routeHost()) },
-                    onInitializeSshAccess = { password ->
-                        val result = initializationService.initialize(routeHost(), password)
-                        hostProfileStore.saveHost(result.profile)
-                        reloadHosts()
-                    },
                     onRunDiagnostics = {
                         val currentHost = routeHost()
                         val result = diagnosticsService.runDiagnostics(RemoteTarget.fromHostProfile(currentHost))
-                        hostProfileStore.saveHost(
-                            currentHost.copy(lastDiagnosticStatus = if (result.ok) "healthy" else "unhealthy"),
-                        )
+                        hostProfileStore.saveHost(currentHost.withDiagnosticResult(result))
                         reloadHosts()
                         result
                     },
@@ -494,7 +510,10 @@ fun HobgoblinAndroidApp(
                     },
                     onSwitchGlobalTerminal = { session ->
                         terminalSessionManager.touchSession(session.id)
-                        route = AppRoute.terminal(session)
+                        route = AppRoute.terminal(
+                            session,
+                            returnToTerminals = currentRoute.returnToTerminals,
+                        )
                     },
                     backHint = if (isHostTemporaryTerminal(currentRoute.remotePath, currentRoute.repositoryId)) {
                         TerminalBackClosesSessionHint
@@ -504,19 +523,15 @@ fun HobgoblinAndroidApp(
                     terminalSessionManager = terminalSessionManager,
                     terminalForegroundBridge = terminalForegroundBridge,
                     onBack = { activeSessionId ->
-                        when {
-                            isHostTemporaryTerminal(currentRoute.remotePath, currentRoute.repositoryId) -> {
-                                closeHostTemporaryTerminal(activeSessionId ?: currentRoute.terminalSessionId)
-                                route = AppRoute.Hosts
-                            }
-                            currentRoute.repositoryId != null -> {
-                                route = AppRoute.Repository(
-                                    currentRoute.repositoryId,
-                                    terminalWorkspacePath = currentRoute.remotePath,
-                                )
-                            }
-                            else -> route = AppRoute.Diagnostics(host.id)
+                        val temporary = isHostTemporaryTerminal(currentRoute.remotePath, currentRoute.repositoryId)
+                        if (temporary) {
+                            closeHostTemporaryTerminal(activeSessionId ?: currentRoute.terminalSessionId)
                         }
+                        route = terminalReturnRoute(
+                            route = currentRoute,
+                            resolvedHostId = host.id,
+                            temporary = temporary,
+                        )
                     },
                 )
             }

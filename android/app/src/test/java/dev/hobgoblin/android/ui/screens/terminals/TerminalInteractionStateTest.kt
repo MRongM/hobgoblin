@@ -368,6 +368,84 @@ class TerminalInteractionStateTest {
     }
 
     @Test
+    fun `terminal overview includes host and project sessions across every status`() {
+        val sessions = listOf(
+            terminalRecord(
+                id = "exited",
+                repositoryId = "repo-1",
+                remotePath = "/srv/app",
+                openedAt = 100L,
+                status = TerminalSessionStatus.Exited,
+                lastActivityAt = 700L,
+            ),
+            terminalRecord(
+                id = "temporary-running",
+                repositoryId = null,
+                remotePath = "/",
+                openedAt = 200L,
+                status = TerminalSessionStatus.Running,
+                lastActivityAt = 500L,
+            ),
+            terminalRecord(
+                id = "failed",
+                repositoryId = "repo-1",
+                remotePath = "/srv/app",
+                openedAt = 300L,
+                status = TerminalSessionStatus.Failed,
+                lastActivityAt = 800L,
+            ),
+            terminalRecord(
+                id = "starting",
+                repositoryId = "repo-2",
+                remotePath = "/srv/other",
+                openedAt = 400L,
+                status = TerminalSessionStatus.Starting,
+                lastActivityAt = 400L,
+            ),
+            terminalRecord(
+                id = "disconnected",
+                repositoryId = "repo-2",
+                remotePath = "/srv/other",
+                openedAt = 500L,
+                status = TerminalSessionStatus.Disconnected,
+                lastActivityAt = 900L,
+            ),
+        )
+
+        assertEquals(
+            listOf("temporary-running", "starting", "disconnected", "failed", "exited"),
+            terminalOverviewOrderedSessions(sessions).map { it.id },
+        )
+    }
+
+    @Test
+    fun `terminal overview ordering uses id as the final deterministic tie breaker`() {
+        val sessions = listOf(
+            terminalRecord(
+                id = "session-b",
+                repositoryId = "repo-1",
+                remotePath = "/srv/app",
+                openedAt = 100L,
+                status = TerminalSessionStatus.Disconnected,
+                lastActivityAt = 200L,
+            ),
+            terminalRecord(
+                id = "session-a",
+                repositoryId = null,
+                remotePath = "/",
+                openedAt = 100L,
+                status = TerminalSessionStatus.Exited,
+                lastActivityAt = 200L,
+            ),
+        )
+
+        assertEquals(
+            listOf("session-a", "session-b"),
+            terminalOverviewOrderedSessions(sessions).map { it.id },
+        )
+    }
+
+    @Test
     fun `terminal cycle session id wraps forward and backward`() {
         val sessions = listOf(
             terminalRecord(id = "session-a", repositoryId = "repo-a", remotePath = "/srv/a", openedAt = 100L),
@@ -470,13 +548,16 @@ class TerminalInteractionStateTest {
         repositoryId: String?,
         remotePath: String,
         openedAt: Long,
+        status: TerminalSessionStatus = TerminalSessionStatus.Running,
+        lastActivityAt: Long? = null,
     ): TerminalSessionRecord = TerminalSessionRecord(
         id = id,
         hostId = hostId,
         repositoryId = repositoryId,
         remotePath = remotePath,
         targetLabel = "App - $remotePath",
-        status = TerminalSessionStatus.Running,
+        status = status,
+        lastActivityAt = lastActivityAt,
         openedAt = openedAt,
     )
 }

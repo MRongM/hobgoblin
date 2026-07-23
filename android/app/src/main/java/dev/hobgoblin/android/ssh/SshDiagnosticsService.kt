@@ -18,6 +18,16 @@ class SshDiagnosticsService(
         secrets: SshConnectionSecrets = SshConnectionSecrets(),
     ): DiagnosticsResult {
         val stages = createStages()
+        if (target.identityRefId.isNullOrBlank()) {
+            return fail(
+                target = target,
+                stages = stages,
+                failedIndex = 0,
+                category = DiagnosticCategory.AuthFailed,
+                message = "Configure SSH key access before running diagnostics.",
+                details = "",
+            )
+        }
         val fingerprint = try {
             client.fetchHostFingerprint(target)
         } catch (err: SshClientException) {

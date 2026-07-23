@@ -31,10 +31,12 @@ fun MainTabShell(
     repositoriesState: ResourceState<List<RemoteRepositoryProfile>>,
     hostsContent: @Composable () -> Unit,
     projectsContent: @Composable () -> Unit,
+    terminalsContent: @Composable () -> Unit,
 ) {
     val topBarTitle = when (selectedTab) {
         MainTab.Hosts -> "SSH Hosts"
         MainTab.Projects -> repositoriesState.projectScreenTitle()
+        MainTab.Terminals -> "Terminals"
     }
     val density = LocalDensity.current
     val swipeThresholdPx = with(density) { 72.dp.toPx() }
@@ -50,6 +52,7 @@ fun MainTabShell(
                     when (selectedTab) {
                         MainTab.Hosts -> TextButton(onClick = onAddHost) { Text("Add host") }
                         MainTab.Projects -> TextButton(onClick = onAddProject) { Text("Add project") }
+                        MainTab.Terminals -> Unit
                     }
                 },
             )
@@ -70,16 +73,14 @@ fun MainTabShell(
                     detectHorizontalDragGestures(
                         onHorizontalDrag = { _, amount ->
                             draggedDistance += amount
-                            when {
-                                selectedTab == MainTab.Hosts && draggedDistance <= -swipeThresholdPx -> {
-                                    onSelectTab(MainTab.Projects)
-                                    draggedDistance = 0f
-                                }
-
-                                selectedTab == MainTab.Projects && draggedDistance >= swipeThresholdPx -> {
-                                    onSelectTab(MainTab.Hosts)
-                                    draggedDistance = 0f
-                                }
+                            val direction = when {
+                                draggedDistance <= -swipeThresholdPx -> MainTabSwipeDirection.Next
+                                draggedDistance >= swipeThresholdPx -> MainTabSwipeDirection.Previous
+                                else -> null
+                            }
+                            if (direction != null) {
+                                mainTabAfterSwipe(selectedTab, direction)?.let(onSelectTab)
+                                draggedDistance = 0f
                             }
                         },
                         onDragEnd = {
@@ -98,6 +99,10 @@ fun MainTabShell(
             MainTabPane(
                 visible = selectedTab == MainTab.Projects,
                 content = projectsContent,
+            )
+            MainTabPane(
+                visible = selectedTab == MainTab.Terminals,
+                content = terminalsContent,
             )
         }
     }

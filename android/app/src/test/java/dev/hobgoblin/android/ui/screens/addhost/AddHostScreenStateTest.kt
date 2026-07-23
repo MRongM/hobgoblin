@@ -72,4 +72,10 @@ class AddHostScreenStateTest {
             ),
         )
     }
+
+    @Test
+    fun `connection test result is applied only to the latest draft generation`() {
+        assertTrue(isLatestConnectionTest(requestGeneration = 3, currentGeneration = 3))
+        assertFalse(isLatestConnectionTest(requestGeneration = 2, currentGeneration = 3))
+    }
 }

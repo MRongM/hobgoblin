@@ -8,6 +8,10 @@ Core model: **multi-project × multi-worktree/branch × multi-terminal**. Users 
 
 ## Language
 
+**Android terminals tab**:
+The Android main-navigation destination that lists every retained Host temporary terminal and Project terminal so an existing session can be reopened quickly. It is distinct from the terminal tabs inside the desktop/web terminal topbar and does not create or delete sessions.
+_Avoid_: Terminal manager, terminal creator, internal terminal tab
+
 **Terminal topbar**:
 The top row of the terminal area, containing terminal tabs and terminal-level actions.
 _Avoid_: Terminal toolbar, detail toolbar
@@ -219,6 +223,18 @@ _Avoid_: Non-Git repository
 **Web access protection**:
 The optional server-owned authentication gate for browser clients. When enabled, browser access requires configured web credentials while the Electron client continues to use its private internal capability.
 _Avoid_: Security mode, LAN password
+
+**Android SSH access initialization**:
+The explicit first-time flow that may use a temporary server password to install a Hobgoblin-managed public key for one Android SSH host profile. The password is used only for that installation and is never part of later connectivity diagnostics.
+_Avoid_: Host diagnostic, password login, saved server password
+
+**Android host connectivity diagnostic**:
+An explicit SSH reachability and shell probe that authenticates with the private key already associated with an Android SSH host profile. It never creates or installs an identity and never requests a server password.
+_Avoid_: SSH access initialization, realtime presence check
+
+**Android host online state**:
+The persisted outcome of the most recent Android host connectivity diagnostic. `online` means that diagnostic passed; `offline` means it failed or no successful diagnostic has been recorded. It is not a continuously monitored presence signal.
+_Avoid_: Live connection, terminal session state
 
 ## Stack
 
