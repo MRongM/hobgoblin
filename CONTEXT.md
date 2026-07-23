@@ -32,13 +32,9 @@ _Avoid_: Telegram message, system notification, terminal output activity
 A best-effort external attention delivery caused by an eligible unread terminal bell. One delivery may use the system notification channel and, when configured, an additional Telegram channel; delivery failure does not change unread terminal bell state.
 _Avoid_: Unread state, queued notification, terminal bell event
 
-**Terminal output excerpt**:
-An optional, ephemeral Telegram-only linear excerpt from the same internal terminal at the time of an eligible notification. It excludes terminal control instructions and decorative frame edges without claiming to reconstruct the terminal screen. Its native visible content is not redacted or masked; presentation boundaries and consecutive spaces, tabs, and line breaks are collapsed to one space, and visually long terminal horizontal rules are compacted before its characters are counted. Its configured maximum is 1–4096 visible characters, defaults to 400, may be shortened to keep the complete Telegram message within 4096 characters, is disabled by default, is never persisted, and may contain sensitive shell content when explicitly enabled.
-_Avoid_: Terminal transcript, command result, durable output history
-
 **Terminal screen image**:
-An optional, ephemeral Telegram-only JPEG rendering of the server-owned headless terminal's final active viewport for an eligible terminal output completion notification. It is a bounded visual projection of terminal screen text rather than a screenshot of the Hobgoblin application window, uses reduced image quality and dimensions for delivery, is enabled by the existing explicit terminal-output inclusion preference, stays in memory only, and is discarded after the delivery attempt. If it cannot be produced, delivery falls back to the terminal output excerpt.
-_Avoid_: Application screenshot, terminal transcript, persisted screenshot
+An optional, ephemeral Telegram-only JPEG rendering of the server-owned headless terminal's active viewport for an eligible unread bell or terminal output completion notification. It is a bounded visual projection of terminal screen text rather than a screenshot of the Hobgoblin application window, uses reduced image quality and dimensions for delivery, is enabled by the explicit terminal-screen-image inclusion preference, stays in memory only, and is discarded after the delivery attempt. Telegram never appends terminal output characters to notification text; if the image cannot be produced, delivery falls back to metadata only.
+_Avoid_: Application screenshot, terminal transcript, terminal output excerpt, persisted screenshot
 
 **Terminal output activity**:
 A renderer-observed state attached to one internal terminal after its output has remained active long enough to exclude brief bursts and input echo. It becomes idle after the same quiet interval used by terminal-count activity indicators. It describes sustained output rather than a process lifecycle.

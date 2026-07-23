@@ -1053,7 +1053,6 @@ export const ko: Record<DictKey, string> = {
     '시스템 설정 → 알림 → Hobgoblin으로 이동하여 알림이 허용되어 있는지 확인하세요.',
   'telegram.notification.message.title': '🔔 Hobgoblin 읽지 않은 터미널 벨',
   'telegram.notification.message.output-completion-title': '✅ Hobgoblin 터미널 새 출력 없음',
-  'telegram.notification.message.output-tail': '터미널 출력',
   'telegram.notification.message.project': '프로젝트',
   'telegram.notification.message.context': '컨텍스트',
   'telegram.notification.message.directory': '디렉터리',
@@ -1082,12 +1081,9 @@ export const ko: Record<DictKey, string> = {
   'settings.telegram.output-completion-min-activity-medium': '중간 · 10초',
   'settings.telegram.output-completion-min-activity-high': '높음 · 30초',
   'settings.telegram.output-completion-min-activity-unit': '초',
-  'settings.telegram.include-terminal-output': '터미널 출력 포함',
-  'settings.telegram.include-terminal-output-hint':
-    '완료 알림은 저품질 터미널 화면 이미지를 우선 전송하고, 생성할 수 없으면 마지막 텍스트로 대체합니다. 터미널 내용에 민감한 정보가 포함될 수 있습니다.',
-  'settings.telegram.output-tail-length': '터미널 출력 문자 수',
-  'settings.telegram.output-tail-length-hint':
-    '1~4096자(기본값 400). 연속된 공백, 탭, 줄바꿈은 공백 하나로 계산하며 Telegram 전체 메시지 제한에 따라 실제 내용은 더 짧아질 수 있습니다.',
+  'settings.telegram.include-terminal-screen-image': '터미널 화면 이미지 포함',
+  'settings.telegram.include-terminal-screen-image-hint':
+    '읽지 않은 벨 및 완료 알림에 저품질 터미널 화면 이미지를 첨부합니다. 이미지를 사용할 수 없으면 Telegram은 메타데이터만 전송합니다. 이미지에 민감한 정보가 포함될 수 있습니다.',
   'settings.telegram.bot-token': 'Bot Token',
   'settings.telegram.bot-token-hint-configured': 'Bot Token이 설정되어 있습니다. 비워 두면 유지됩니다.',
   'settings.telegram.bot-token-hint-new': 'BotFather에서 Bot을 만들고 Token을 붙여 넣으세요.',

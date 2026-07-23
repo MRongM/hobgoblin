@@ -6,6 +6,7 @@ import type {
 } from '#/shared/telegram-notifications.ts'
 import {
   formatTelegramBellMessage,
+  formatTelegramBellPhotoCaption,
   formatTelegramOutputCompletionMessage,
   formatTelegramPhotoCaption,
   resetTelegramNotificationWritePathsForTests,
@@ -81,14 +82,16 @@ function dependencies(overrides: Record<string, unknown> = {}) {
 describe('Telegram notification write paths', () => {
   beforeEach(() => resetTelegramNotificationWritePathsForTests())
 
-  test('formats a compact summary and omits a branch duplicated by the context', () => {
+  test('formats localized key-value metadata for bells and completion captions', () => {
     expect(formatTelegramBellMessage(context(), 'zh')).toBe(
       [
         '🔔 Hobgoblin 未读终端提醒',
-        '',
-        'api · 工作树 feature/login · #2',
-        '🖥 bun run test',
-        '📁 ~/src/api-feature-login',
+        '项目：api',
+        '上下文：工作树 feature/login',
+        '目录：~/src/api-feature-login',
+        '分支：feature/login',
+        '终端：#2',
+        '标题：bun run test',
       ].join('\n'),
     )
     expect(
@@ -96,33 +99,34 @@ describe('Telegram notification write paths', () => {
     ).toBe(
       [
         '🔔 Hobgoblin unread terminal bell',
-        '',
-        'api · Workspace platform · #2',
-        '🖥 bun run test',
-        '📁 ~/src/api-feature-login',
+        'Project: api',
+        'Context: Workspace platform',
+        'Directory: ~/src/api-feature-login',
+        'Terminal: #2',
+        'Title: bun run test',
       ].join('\n'),
     )
+    expect(formatTelegramPhotoCaption(context(), 'zh')).toContain('终端：#2')
+    expect(formatTelegramBellPhotoCaption(context(), 'zh')).toMatch(/^🔔 Hobgoblin 未读终端提醒/u)
   })
 
-  test('keeps a distinct branch and appends terminal output without a separator title', () => {
+  test('ignores legacy terminal output characters when formatting Telegram text', () => {
+    const legacyContext = {
+      ...context({ context: 'api-feature-login', branch: 'feature/login' }),
+      outputTail: 'tests passed',
+    }
+
     expect(
-      formatTelegramBellMessage(
-        {
-          ...context({ context: 'api-feature-login', branch: 'feature/login' }),
-          outputTail: 'tests passed',
-        },
-        'zh',
-      ),
+      formatTelegramBellMessage(legacyContext, 'zh'),
     ).toBe(
       [
         '🔔 Hobgoblin 未读终端提醒',
-        '',
-        'api · 工作树 api-feature-login · #2',
-        '🖥 bun run test',
-        '📁 ~/src/api-feature-login',
-        '🌿 feature/login',
-        '',
-        'tests passed',
+        '项目：api',
+        '上下文：工作树 api-feature-login',
+        '目录：~/src/api-feature-login',
+        '分支：feature/login',
+        '终端：#2',
+        '标题：bun run test',
       ].join('\n'),
     )
   })
@@ -157,6 +161,42 @@ describe('Telegram notification write paths', () => {
     )
   })
 
+  test('sends a bounded terminal screen image for unread bell notifications', async () => {
+    const photo = Buffer.from([0xff, 0xd8, 0xff, 0xd9])
+    const snapshot = {
+      sessionId: 'session-bell-photo',
+      lines: ['tests passed'],
+      columns: 80,
+      rows: 24,
+      sequence: 42,
+    }
+    const readTerminalScreenSnapshot = vi.fn(async () => snapshot)
+    const renderTerminalScreenImage = vi.fn(async () => photo)
+    const deps = dependencies({ readTerminalScreenSnapshot, renderTerminalScreenImage })
+
+    await expect(
+      sendConfiguredTelegramBellNotification(
+        context({ terminalKey: 'bell-photo', sessionId: 'session-bell-photo' }),
+        deps,
+      ),
+    ).resolves.toEqual({ ok: true })
+
+    expect(readTerminalScreenSnapshot).toHaveBeenCalledWith({
+      sessionId: 'session-bell-photo',
+      maxColumns: 140,
+      maxRows: 40,
+    })
+    expect(renderTerminalScreenImage).toHaveBeenCalledWith(snapshot)
+    expect(deps.sendPhoto).toHaveBeenCalledWith({
+      botToken: '123456:test-token',
+      chatId: '-100123',
+      caption: expect.stringContaining('未读终端提醒'),
+      photo,
+      proxyUrl: 'socks5://127.0.0.1:1080',
+    })
+    expect(deps.sendMessage).not.toHaveBeenCalled()
+  })
+
   test('sends a bounded terminal screen image for completion notifications', async () => {
     const photo = Buffer.from([0xff, 0xd8, 0xff, 0xd9])
     const snapshot = {
@@ -168,8 +208,7 @@ describe('Telegram notification write paths', () => {
     }
     const readTerminalScreenSnapshot = vi.fn(async () => snapshot)
     const renderTerminalScreenImage = vi.fn(async () => photo)
-    const readTerminalOutputExcerpt = vi.fn()
-    const deps = dependencies({ readTerminalScreenSnapshot, renderTerminalScreenImage, readTerminalOutputExcerpt })
+    const deps = dependencies({ readTerminalScreenSnapshot, renderTerminalScreenImage })
 
     await expect(
       sendConfiguredTelegramOutputCompletionNotification(
@@ -192,7 +231,6 @@ describe('Telegram notification write paths', () => {
       proxyUrl: 'socks5://127.0.0.1:1080',
     })
     expect(deps.sendMessage).not.toHaveBeenCalled()
-    expect(readTerminalOutputExcerpt).not.toHaveBeenCalled()
   })
 
   test('does not read or render a terminal screen when output inclusion is disabled', async () => {
@@ -208,14 +246,18 @@ describe('Telegram notification write paths', () => {
       completionContext({ terminalKey: 'completion-no-photo', sessionId: 'session-no-photo' }),
       deps,
     )
+    await sendConfiguredTelegramBellNotification(
+      context({ terminalKey: 'bell-no-photo', sessionId: 'session-bell-no-photo' }),
+      deps,
+    )
 
     expect(readTerminalScreenSnapshot).not.toHaveBeenCalled()
     expect(renderTerminalScreenImage).not.toHaveBeenCalled()
     expect(deps.sendPhoto).not.toHaveBeenCalled()
-    expect(deps.sendMessage).toHaveBeenCalledTimes(1)
+    expect(deps.sendMessage).toHaveBeenCalledTimes(2)
   })
 
-  test('falls back to the text excerpt when terminal screen rendering fails', async () => {
+  test('falls back to metadata only when terminal screen rendering fails', async () => {
     const readTerminalScreenSnapshot = vi.fn(async () => ({
       sessionId: 'session-render-failure',
       lines: ['tests passed'],
@@ -226,22 +268,23 @@ describe('Telegram notification write paths', () => {
     const renderTerminalScreenImage = vi.fn(async () => {
       throw new Error('render failed')
     })
-    const readTerminalOutputExcerpt = vi.fn(async ({ sessionId }: { sessionId: string }) => ({
-      sessionId,
-      output: 'text fallback',
-      sequence: 42,
-    }))
-    const deps = dependencies({ readTerminalScreenSnapshot, renderTerminalScreenImage, readTerminalOutputExcerpt })
+    const deps = dependencies({ readTerminalScreenSnapshot, renderTerminalScreenImage })
 
     await sendConfiguredTelegramOutputCompletionNotification(
       completionContext({ terminalKey: 'completion-render-failure', sessionId: 'session-render-failure' }),
       deps,
     )
+    await sendConfiguredTelegramBellNotification(
+      context({ terminalKey: 'bell-render-failure', sessionId: 'session-bell-render-failure' }),
+      deps,
+    )
 
     expect(deps.sendPhoto).not.toHaveBeenCalled()
-    expect(deps.sendMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ text: expect.stringMatching(/\n\ntext fallback$/u) }),
-    )
+    expect(deps.sendMessage).toHaveBeenCalledTimes(2)
+    expect(deps.sendMessage.mock.calls.map((call) => call[0].text)).toEqual([
+      expect.stringContaining('终端暂无新输出'),
+      expect.stringContaining('未读终端提醒'),
+    ])
   })
 
   test('does not retry an ambiguous photo delivery as text', async () => {
@@ -268,7 +311,7 @@ describe('Telegram notification write paths', () => {
     expect(deps.warn).toHaveBeenCalledWith('network-failed')
   })
 
-  test('serializes terminal screen rendering and photo delivery', async () => {
+  test('serializes terminal screen rendering and photo delivery across notification types', async () => {
     let releaseFirstRender: (() => void) | undefined
     const firstRenderGate = new Promise<void>((resolve) => {
       releaseFirstRender = resolve
@@ -294,8 +337,8 @@ describe('Telegram notification write paths', () => {
       completionContext({ terminalKey: 'completion-queue-1', sessionId: 'session-queue-1' }),
       deps,
     )
-    const second = sendConfiguredTelegramOutputCompletionNotification(
-      completionContext({ terminalKey: 'completion-queue-2', sessionId: 'session-queue-2', finalOutputSeq: 43 }),
+    const second = sendConfiguredTelegramBellNotification(
+      context({ terminalKey: 'bell-queue-2', sessionId: 'session-queue-2' }),
       deps,
     )
 
@@ -337,7 +380,7 @@ describe('Telegram notification write paths', () => {
     expect(deps.sendMessage).toHaveBeenCalledWith({
       botToken: '123456:test-token',
       chatId: '-100123',
-      text: expect.stringContaining('api · 工作树 feature/login · #2'),
+      text: expect.stringContaining('项目：api'),
       proxyUrl: 'socks5://127.0.0.1:1080',
     })
     expect(deps.warn).toHaveBeenCalledWith('network-failed')
@@ -413,13 +456,9 @@ describe('Telegram notification write paths', () => {
     expect(deps.sendMessage).toHaveBeenCalledTimes(1)
   })
 
-  test('uses the canonical server screen for bell and completion excerpts', async () => {
-    const readTerminalOutputExcerpt = vi.fn(async ({ sessionId }: { sessionId: string }) => ({
-      sessionId,
-      output: 'build passed [hobgoblin0:node* "done workspace"]',
-      sequence: 42,
-    }))
-    const deps = dependencies({ readTerminalOutputExcerpt })
+  test('ignores renderer-supplied terminal output characters for bell and completion text', async () => {
+    const readTerminalScreenSnapshot = vi.fn(async () => null)
+    const deps = dependencies({ readTerminalScreenSnapshot })
     const maliciousBell = {
       ...context({ terminalKey: 'bell-with-screen' }),
       sessionId: 'session-bell',
@@ -432,185 +471,22 @@ describe('Telegram notification write paths', () => {
       deps,
     )
 
-    expect(readTerminalOutputExcerpt).toHaveBeenNthCalledWith(1, {
-      sessionId: 'session-bell',
-      maxCharacters: 400,
-    })
-    expect(readTerminalOutputExcerpt).toHaveBeenNthCalledWith(2, {
-      sessionId: 'session-completion',
-      maxCharacters: 400,
-    })
     for (const call of deps.sendMessage.mock.calls) {
-      expect(call[0].text).toContain('build passed [hobgoblin0:node* "done workspace"]')
       expect(call[0].text).not.toContain('renderer supplied text')
+      expect(call[0].text).toContain('项目：api')
     }
   })
 
-  test('does not read terminal text when output inclusion is disabled', async () => {
-    const readTerminalOutputExcerpt = vi.fn()
-    const deps = dependencies({
-      readTerminalOutputExcerpt,
-      getTelegramConfig: vi.fn(async () => telegramConfig({ includeTerminalOutput: false })),
-    })
-
-    await sendConfiguredTelegramBellNotification(
-      {
-        ...context({ terminalKey: 'bell-without-output' }),
-        sessionId: 'session-bell',
-      } as TelegramBellNotificationContext,
-      deps,
-    )
-
-    expect(readTerminalOutputExcerpt).not.toHaveBeenCalled()
-    expect(deps.sendMessage.mock.calls[0]?.[0].text).not.toContain('── 终端输出 ──')
-  })
-
   test('falls back to metadata when the terminal screen is unavailable', async () => {
-    const readTerminalOutputExcerpt = vi.fn(async () => null)
-    const deps = dependencies({ readTerminalOutputExcerpt })
+    const deps = dependencies()
 
     await sendConfiguredTelegramOutputCompletionNotification(
       completionContext({ terminalKey: 'completion-missing-screen', sessionId: 'missing-session' }),
       deps,
     )
 
-    expect(readTerminalOutputExcerpt).toHaveBeenCalledTimes(1)
     expect(deps.sendMessage).toHaveBeenCalledTimes(1)
-    expect(deps.sendMessage.mock.calls[0]?.[0].text).not.toContain('── 终端输出 ──')
-  })
-
-  test('applies the authoritative output length and ignores legacy Renderer output payloads', async () => {
-    const deps = dependencies({
-      readTerminalOutputExcerpt: vi.fn(async ({ sessionId }: { sessionId: string }) => ({
-        sessionId,
-        output: 'abc🙂de',
-        sequence: 1,
-      })),
-      getTelegramConfig: vi.fn(async () => ({
-        enabled: true,
-        botToken: '123456:test-token',
-        chatId: '-100123',
-        bellEnabled: true,
-        outputCompletionEnabled: true,
-        outputCompletionMinimumActivitySeconds: 10,
-        includeTerminalOutput: true,
-        outputTailLength: 3,
-      })),
-    })
-
-    await expect(
-      sendConfiguredTelegramBellNotification(context({ sessionId: 'session-bell-limit' }), deps),
-    ).resolves.toEqual({ ok: true })
-    expect(deps.sendMessage).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringMatching(/🙂de$/u) }))
-    expect(deps.sendMessage.mock.calls[0]?.[0].text).not.toContain('abc🙂de')
-
-    await expect(
-      sendConfiguredTelegramOutputCompletionNotification(
-        {
-          ...context(),
-          sessionId: 'session-authoritative-limit',
-          finalOutputSeq: 1,
-          activityDurationMs: 10_000,
-        },
-        deps,
-      ),
-    ).resolves.toEqual({ ok: true })
-    expect(deps.sendMessage.mock.calls[1]?.[0].text).toMatch(/🙂de$/u)
-    expect(deps.sendMessage.mock.calls[1]?.[0].text).not.toContain('abc🙂de')
-
-    await expect(
-      sendConfiguredTelegramBellNotification(
-        {
-          ...context({ terminalKey: 'another' }),
-          outputTail: 'x'.repeat(4097),
-        } as unknown as TelegramBellNotificationContext,
-        deps,
-      ),
-    ).resolves.toEqual({ ok: true })
-  })
-
-  test('normalizes consecutive terminal whitespace before enforcing the configured length', async () => {
-    const deps = dependencies({
-      readTerminalOutputExcerpt: vi.fn(async ({ sessionId }: { sessionId: string }) => ({
-        sessionId,
-        output: `old${' '.repeat(4_096)}\t\r\n new end`,
-        sequence: 1,
-      })),
-      getTelegramConfig: vi.fn(async () => ({
-        enabled: true,
-        botToken: '123456:test-token',
-        chatId: '-100123',
-        bellEnabled: true,
-        outputCompletionEnabled: true,
-        outputCompletionMinimumActivitySeconds: 10,
-        includeTerminalOutput: true,
-        outputTailLength: 7,
-      })),
-    })
-
-    await expect(
-      sendConfiguredTelegramBellNotification(context({ sessionId: 'session-whitespace' }), deps),
-    ).resolves.toEqual({ ok: true })
-
-    expect(deps.sendMessage.mock.calls[0]?.[0].text).toMatch(/new end$/u)
-  })
-
-  test('preserves native visible terminal text without redaction', async () => {
-    const outputTail = 'token=example-token\turl=https://example.test/path\nuser@example.test <raw>&value'
-    const deps = dependencies({
-      readTerminalOutputExcerpt: vi.fn(async ({ sessionId }: { sessionId: string }) => ({
-        sessionId,
-        output: outputTail,
-        sequence: 1,
-      })),
-    })
-
-    await expect(
-      sendConfiguredTelegramBellNotification(
-        context({ terminalKey: 'native-text', sessionId: 'session-native-text' }),
-        deps,
-      ),
-    ).resolves.toEqual({ ok: true })
-
-    expect(deps.sendMessage.mock.calls[0]?.[0].text).toContain(
-      'token=example-token url=https://example.test/path user@example.test <raw>&value',
-    )
-  })
-
-  test('fits terminal output into the complete 4096-character Telegram message budget', async () => {
-    const deps = dependencies({
-      readTerminalOutputExcerpt: vi.fn(async ({ sessionId }: { sessionId: string }) => ({
-        sessionId,
-        output: 'z'.repeat(4096),
-        sequence: 1,
-      })),
-      getTelegramConfig: vi.fn(async () => ({
-        enabled: true,
-        botToken: '123456:test-token',
-        chatId: '-100123',
-        bellEnabled: true,
-        outputCompletionEnabled: true,
-        outputCompletionMinimumActivitySeconds: 10,
-        includeTerminalOutput: true,
-        outputTailLength: 4096,
-      })),
-    })
-
-    await sendConfiguredTelegramBellNotification(
-      context({
-        project: 'p'.repeat(300),
-        context: 'c'.repeat(300),
-        directory: 'd'.repeat(300),
-        branch: 'b'.repeat(300),
-        terminalTitle: 't'.repeat(300),
-        sessionId: 'session-message-budget',
-      }),
-      deps,
-    )
-
-    const text = deps.sendMessage.mock.calls[0]?.[0].text
-    expect(Array.from(text)).toHaveLength(4096)
-    expect(text).toMatch(/z+$/u)
+    expect(deps.sendMessage.mock.calls[0]?.[0].text).toContain('项目：api')
   })
 
   test('accepts the NUL-delimited terminal keys used by live terminal sessions', async () => {

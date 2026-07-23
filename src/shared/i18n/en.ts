@@ -1064,7 +1064,6 @@ export const en = {
     'Go to System Settings → Notifications → Hobgoblin and make sure notifications are allowed.',
   'telegram.notification.message.title': '🔔 Hobgoblin unread terminal bell',
   'telegram.notification.message.output-completion-title': '✅ Hobgoblin terminal has no new output',
-  'telegram.notification.message.output-tail': 'Terminal output',
   'telegram.notification.message.project': 'Project',
   'telegram.notification.message.context': 'Context',
   'telegram.notification.message.directory': 'Directory',
@@ -1093,12 +1092,9 @@ export const en = {
   'settings.telegram.output-completion-min-activity-medium': 'Medium · 10s',
   'settings.telegram.output-completion-min-activity-high': 'High · 30s',
   'settings.telegram.output-completion-min-activity-unit': 'seconds',
-  'settings.telegram.include-terminal-output': 'Include terminal output',
-  'settings.telegram.include-terminal-output-hint':
-    'Completion notifications prefer a low-quality terminal screen image and fall back to trailing text. Terminal content may contain sensitive information.',
-  'settings.telegram.output-tail-length': 'Terminal output characters',
-  'settings.telegram.output-tail-length-hint':
-    "Use 1–4096 characters (default 400). Consecutive spaces, tabs, and line breaks count as one space; Telegram's whole-message limit may shorten the excerpt.",
+  'settings.telegram.include-terminal-screen-image': 'Include terminal screen image',
+  'settings.telegram.include-terminal-screen-image-hint':
+    'Attach a low-quality terminal screen image to unread bell and completion notifications. If the image is unavailable, Telegram sends metadata only. Terminal images may contain sensitive information.',
   'settings.telegram.bot-token': 'Bot Token',
   'settings.telegram.bot-token-hint-configured': 'A Bot Token is configured. Leave blank to keep it.',
   'settings.telegram.bot-token-hint-new': 'Create a bot with BotFather and paste its Token.',

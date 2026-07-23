@@ -1071,7 +1071,6 @@ export const ja: Record<DictKey, string> = {
     'システム設定 → 通知 → Hobgoblin を開き、通知が許可されているか確認してください。',
   'telegram.notification.message.title': '🔔 Hobgoblin 未読ターミナルベル',
   'telegram.notification.message.output-completion-title': '✅ Hobgoblin ターミナルに新しい出力なし',
-  'telegram.notification.message.output-tail': 'ターミナル出力',
   'telegram.notification.message.project': 'プロジェクト',
   'telegram.notification.message.context': 'コンテキスト',
   'telegram.notification.message.directory': 'ディレクトリ',
@@ -1100,12 +1099,9 @@ export const ja: Record<DictKey, string> = {
   'settings.telegram.output-completion-min-activity-medium': '中 · 10秒',
   'settings.telegram.output-completion-min-activity-high': '高 · 30秒',
   'settings.telegram.output-completion-min-activity-unit': '秒',
-  'settings.telegram.include-terminal-output': 'ターミナル出力を含める',
-  'settings.telegram.include-terminal-output-hint':
-    '完了通知では低品質のターミナル画面画像を優先し、生成できない場合は末尾のテキストにフォールバックします。ターミナルの内容には機密情報が含まれる場合があります。',
-  'settings.telegram.output-tail-length': 'ターミナル出力の文字数',
-  'settings.telegram.output-tail-length-hint':
-    '1～4096 文字（既定値 400）。連続する空白、タブ、改行は 1 つの空白として数えます。Telegram のメッセージ全体の上限により短くなる場合があります。',
+  'settings.telegram.include-terminal-screen-image': 'ターミナル画面画像を含める',
+  'settings.telegram.include-terminal-screen-image-hint':
+    '未読ベル通知と完了通知に低品質のターミナル画面画像を添付します。画像が利用できない場合、Telegram はメタデータのみを送信します。画像には機密情報が含まれる場合があります。',
   'settings.telegram.bot-token': 'Bot Token',
   'settings.telegram.bot-token-hint-configured': 'Bot Token は設定済みです。空欄のままにすると保持されます。',
   'settings.telegram.bot-token-hint-new': 'BotFather で Bot を作成し、Token を貼り付けてください。',

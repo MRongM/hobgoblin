@@ -19,8 +19,8 @@ describe('Telegram notification routes', () => {
     mocks.sendTest.mockResolvedValue({ ok: true })
     mocks.sendBell.mockResolvedValue({ ok: true })
     const { createTelegramNotificationRoutes } = await import('#/server/routes/telegram-notifications.ts')
-    const readTerminalOutputExcerpt = vi.fn()
-    const app = createTelegramNotificationRoutes({ readTerminalOutputExcerpt })
+    const readTerminalScreenSnapshot = vi.fn()
+    const app = createTelegramNotificationRoutes({ readTerminalScreenSnapshot })
 
     const testResponse = await app.request('http://127.0.0.1:32100/test', {
       method: 'POST',
@@ -45,16 +45,15 @@ describe('Telegram notification routes', () => {
     expect(await bellResponse.json()).toEqual({ ok: true })
     expect(mocks.sendBell).toHaveBeenCalledWith(context, {
       acceptLanguage: 'en-US',
-      readTerminalOutputExcerpt,
+      readTerminalScreenSnapshot,
     })
   })
 
   test('forwards output completion context to the dedicated write path', async () => {
     mocks.sendCompletion.mockResolvedValue({ ok: true })
     const { createTelegramNotificationRoutes } = await import('#/server/routes/telegram-notifications.ts')
-    const readTerminalOutputExcerpt = vi.fn()
     const readTerminalScreenSnapshot = vi.fn()
-    const app = createTelegramNotificationRoutes({ readTerminalOutputExcerpt, readTerminalScreenSnapshot })
+    const app = createTelegramNotificationRoutes({ readTerminalScreenSnapshot })
     const context = {
       terminalKey: 'terminal-1',
       project: 'api',
@@ -76,7 +75,6 @@ describe('Telegram notification routes', () => {
     expect(await response.json()).toEqual({ ok: true })
     expect(mocks.sendCompletion).toHaveBeenCalledWith(context, {
       acceptLanguage: 'zh-CN',
-      readTerminalOutputExcerpt,
       readTerminalScreenSnapshot,
     })
   })

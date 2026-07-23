@@ -20,8 +20,6 @@ import { terminalBridge } from '#/web/terminal.ts'
 import {
   TELEGRAM_OUTPUT_COMPLETION_MAX_ACTIVITY_SECONDS,
   TELEGRAM_OUTPUT_COMPLETION_MIN_ACTIVITY_SECONDS,
-  TELEGRAM_OUTPUT_TAIL_MAX_LENGTH,
-  TELEGRAM_OUTPUT_TAIL_MIN_LENGTH,
 } from '#/shared/telegram-notifications.ts'
 
 const TELEGRAM_ACTIVITY_DURATION_PRESETS = [
@@ -45,10 +43,9 @@ export function NotificationSettings() {
   const [telegramOutputCompletionMinimumActivitySeconds, setTelegramOutputCompletionMinimumActivitySeconds] = useState(
     telegramSettings.outputCompletionMinimumActivitySeconds,
   )
-  const [telegramIncludeTerminalOutput, setTelegramIncludeTerminalOutput] = useState(
+  const [telegramIncludeTerminalScreenImage, setTelegramIncludeTerminalScreenImage] = useState(
     telegramSettings.includeTerminalOutput,
   )
-  const [telegramOutputTailLength, setTelegramOutputTailLength] = useState(telegramSettings.outputTailLength)
   const [botTokenConfigured, setBotTokenConfigured] = useState(telegramSettings.botTokenConfigured)
   const [botToken, setBotToken] = useState('')
   const [chatId, setChatId] = useState(telegramSettings.chatId)
@@ -61,8 +58,7 @@ export function NotificationSettings() {
     setTelegramBellEnabled(telegramSettings.bellEnabled)
     setTelegramOutputCompletionEnabled(telegramSettings.outputCompletionEnabled)
     setTelegramOutputCompletionMinimumActivitySeconds(telegramSettings.outputCompletionMinimumActivitySeconds)
-    setTelegramIncludeTerminalOutput(telegramSettings.includeTerminalOutput)
-    setTelegramOutputTailLength(telegramSettings.outputTailLength)
+    setTelegramIncludeTerminalScreenImage(telegramSettings.includeTerminalOutput)
     setBotTokenConfigured(telegramSettings.botTokenConfigured)
     setBotToken('')
     setChatId(telegramSettings.chatId)
@@ -75,7 +71,6 @@ export function NotificationSettings() {
     telegramSettings.includeTerminalOutput,
     telegramSettings.outputCompletionEnabled,
     telegramSettings.outputCompletionMinimumActivitySeconds,
-    telegramSettings.outputTailLength,
   ])
 
   const normalizedChatId = chatId.trim()
@@ -85,8 +80,7 @@ export function NotificationSettings() {
     telegramBellEnabled !== telegramSettings.bellEnabled ||
     telegramOutputCompletionEnabled !== telegramSettings.outputCompletionEnabled ||
     telegramOutputCompletionMinimumActivitySeconds !== telegramSettings.outputCompletionMinimumActivitySeconds ||
-    telegramIncludeTerminalOutput !== telegramSettings.includeTerminalOutput ||
-    telegramOutputTailLength !== telegramSettings.outputTailLength ||
+    telegramIncludeTerminalScreenImage !== telegramSettings.includeTerminalOutput ||
     normalizedChatId !== telegramSettings.chatId ||
     Boolean(botToken.trim())
   const telegramConfigurationError = telegramEnabled && !configurationComplete
@@ -127,8 +121,8 @@ export function NotificationSettings() {
       bellEnabled: telegramBellEnabled,
       outputCompletionEnabled: telegramOutputCompletionEnabled,
       outputCompletionMinimumActivitySeconds: telegramOutputCompletionMinimumActivitySeconds,
-      includeTerminalOutput: telegramIncludeTerminalOutput,
-      outputTailLength: telegramOutputTailLength,
+      includeTerminalOutput: telegramIncludeTerminalScreenImage,
+      outputTailLength: telegramSettings.outputTailLength,
     })
     setSavingTelegram(false)
     if (!saved) {
@@ -140,8 +134,7 @@ export function NotificationSettings() {
     setTelegramBellEnabled(saved.bellEnabled)
     setTelegramOutputCompletionEnabled(saved.outputCompletionEnabled)
     setTelegramOutputCompletionMinimumActivitySeconds(saved.outputCompletionMinimumActivitySeconds)
-    setTelegramIncludeTerminalOutput(saved.includeTerminalOutput)
-    setTelegramOutputTailLength(saved.outputTailLength)
+    setTelegramIncludeTerminalScreenImage(saved.includeTerminalOutput)
     setBotTokenConfigured(saved.botTokenConfigured)
     setChatId(saved.chatId)
     toast.success(t('settings.telegram.saved'))
@@ -270,29 +263,15 @@ export function NotificationSettings() {
             }
           />
           <SettingsRow
-            controlId="settings-telegram-include-terminal-output"
-            label={t('settings.telegram.include-terminal-output')}
-            hint={t('settings.telegram.include-terminal-output-hint')}
+            controlId="settings-telegram-include-terminal-screen-image"
+            label={t('settings.telegram.include-terminal-screen-image')}
+            hint={t('settings.telegram.include-terminal-screen-image-hint')}
             control={
               <Switch
-                id="settings-telegram-include-terminal-output"
-                checked={telegramIncludeTerminalOutput}
-                onCheckedChange={setTelegramIncludeTerminalOutput}
-                aria-label={t('settings.telegram.include-terminal-output')}
-              />
-            }
-          />
-          <SettingsRow
-            controlId="settings-telegram-output-tail-length"
-            label={t('settings.telegram.output-tail-length')}
-            hint={t('settings.telegram.output-tail-length-hint')}
-            control={
-              <SettingsNumberInput
-                id="settings-telegram-output-tail-length"
-                min={TELEGRAM_OUTPUT_TAIL_MIN_LENGTH}
-                max={TELEGRAM_OUTPUT_TAIL_MAX_LENGTH}
-                value={telegramOutputTailLength}
-                onChange={setTelegramOutputTailLength}
+                id="settings-telegram-include-terminal-screen-image"
+                checked={telegramIncludeTerminalScreenImage}
+                onCheckedChange={setTelegramIncludeTerminalScreenImage}
+                aria-label={t('settings.telegram.include-terminal-screen-image')}
               />
             }
           />
