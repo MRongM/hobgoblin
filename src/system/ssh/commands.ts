@@ -162,13 +162,8 @@ export function buildRemoteTerminalInvocation(
   const invocation = buildManagedRemoteTerminalInvocation(
     {
       alias: target.alias,
-      endpoint: {
-        user: target.user,
-        host: target.host,
-        port: target.port,
-      },
-      repoPath: target.remotePath,
-      worktreePath: remotePath,
+      projectRoot: target.remotePath,
+      workingDirectory: remotePath,
       terminalNumber: options.terminalNumber,
     },
     {

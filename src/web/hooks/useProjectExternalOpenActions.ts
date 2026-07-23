@@ -55,7 +55,7 @@ export function useProjectExternalOpenActions(projectId: string): ProjectExterna
           : () => openRepositoryEditor(targetPath)
         : remote
           ? () => openRemoteRepositoryTerminal(projectId, targetPath)
-          : () => openRepositoryTerminal(targetPath)
+          : () => openRepositoryTerminal({ projectRoot: projectId, workingDirectory: targetPath })
     const result = run(actionId, () =>
       dispatchRepoUiAction(projectId, repo.instanceToken, actionId, opener, setLastResult, {
         silentSuccessOps: SILENT_SUCCESS_OPS,

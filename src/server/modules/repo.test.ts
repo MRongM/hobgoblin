@@ -39,6 +39,7 @@ const mocks = vi.hoisted(() => ({
   getCurrentBranch: vi.fn(),
   getDefaultBranch: vi.fn(),
   getServerSettingsPrefs: vi.fn(),
+  openInPreferredTerminal: vi.fn(),
   getRepoName: vi.fn(),
   getRepoRoot: vi.fn(),
   getRemoteInfo: vi.fn(),
@@ -244,6 +245,10 @@ vi.mock('#/system/ssh/config.ts', () => ({
 
 vi.mock('#/system/ssh/diagnostics.ts', () => ({
   testRemoteRepository: mocks.testRemoteRepository,
+}))
+
+vi.mock('#/system/terminals.ts', () => ({
+  openInPreferredTerminal: mocks.openInPreferredTerminal,
 }))
 
 vi.mock('#/system/ssh/git.ts', () => ({
@@ -513,7 +518,9 @@ beforeEach(() => {
     gitNetworkTimeoutSec: 240,
     terminalApp: 'auto',
     editorApp: 'auto',
+    internalTerminalTmuxEnabled: false,
   })
+  mocks.openInPreferredTerminal.mockResolvedValue({ ok: true, message: '/tmp/repo-worktree' })
   mocks.getRepoName.mockResolvedValue('repo')
   mocks.getRepoRoot.mockResolvedValue('/tmp/repo')
   mocks.getWorktrees.mockResolvedValue([])
@@ -1202,12 +1209,9 @@ describe('repo mutation invalidation publishing', () => {
     await expect(
       getRepositoryWorktreeBootstrapTargetPreflight('/tmp/repo', '/tmp/repo-feature', decision),
     ).resolves.toMatchObject({ ok: true, preflight: { conflicts: [{ path: '.env', mode: 'copy' }] } })
-    expect(mocks.getWorktreeBootstrapTargetPreflight).toHaveBeenCalledWith(
-      '/tmp/repo',
-      '/tmp/repo-feature',
-      decision,
-      { signal: undefined },
-    )
+    expect(mocks.getWorktreeBootstrapTargetPreflight).toHaveBeenCalledWith('/tmp/repo', '/tmp/repo-feature', decision, {
+      signal: undefined,
+    })
   })
 
   test('getRepositoryWorktreeBootstrapTargetPreflight delegates remote target inspection', async () => {
@@ -1222,11 +1226,7 @@ describe('repo mutation invalidation publishing', () => {
     const { getRepositoryWorktreeBootstrapTargetPreflight } = await import('#/server/modules/repo-read-paths.ts')
 
     await expect(
-      getRepositoryWorktreeBootstrapTargetPreflight(
-        'ssh-config://prod/srv/repo',
-        '/srv/repo-feature',
-        decision,
-      ),
+      getRepositoryWorktreeBootstrapTargetPreflight('ssh-config://prod/srv/repo', '/srv/repo-feature', decision),
     ).resolves.toMatchObject({ ok: true, preflight: { satisfied: decision.selections } })
     expect(mocks.getRemoteWorktreeBootstrapTargetPreflight).toHaveBeenCalledWith(
       expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
@@ -2231,10 +2231,10 @@ describe('repo mutation invalidation publishing', () => {
     const result = await cleanupWorktree!('/srv/repo-stale')
 
     expect(result).toEqual({ ok: true, message: 'pruned remote' })
-    expect(mocks.pruneRemoteWorktrees).toHaveBeenCalledWith(
-      expect.objectContaining({ remotePath: '/srv/repo' }),
-      { worktreePath: '/srv/repo-stale', signal: undefined },
-    )
+    expect(mocks.pruneRemoteWorktrees).toHaveBeenCalledWith(expect.objectContaining({ remotePath: '/srv/repo' }), {
+      worktreePath: '/srv/repo-stale',
+      signal: undefined,
+    })
   })
 
   test('commitRepositoryChanges commits local worktrees through the local backend and publishes invalidation', async () => {
@@ -2392,5 +2392,27 @@ describe('repo mutation invalidation publishing', () => {
       repoId: 'ssh-config://prod/srv/repo',
       query: 'repo-snapshot',
     })
+  })
+
+  test('opens local terminal-1 with project identity and the global tmux preference', async () => {
+    mocks.getServerSettingsPrefs.mockResolvedValue({
+      terminalApp: 'ghostty',
+      internalTerminalTmuxEnabled: true,
+    })
+    const { openRepositoryTerminal } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(
+      openRepositoryTerminal({ projectRoot: '/tmp/repo', workingDirectory: '/tmp/repo-worktree' }),
+    ).resolves.toEqual({ ok: true, message: '/tmp/repo-worktree' })
+
+    expect(mocks.openInPreferredTerminal).toHaveBeenCalledWith(
+      {
+        projectRoot: '/tmp/repo',
+        workingDirectory: '/tmp/repo-worktree',
+        terminalNumber: 1,
+      },
+      'ghostty',
+      { useTmux: true },
+    )
   })
 })

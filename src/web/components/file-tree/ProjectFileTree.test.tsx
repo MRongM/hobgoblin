@@ -101,7 +101,10 @@ const initializeRepositoryWorktreeBootstrapConfig = vi.fn(
 )
 const getCommitMessageProviders = vi.fn(async () => ({ codex: true, claude: true }))
 const openRepositoryEditor = vi.fn(async (_path: string): Promise<ExecResult> => ({ ok: true, message: '' }))
-const openRepositoryTerminal = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
+const openRepositoryTerminal = vi.fn(async (_target: { projectRoot: string; workingDirectory: string }) => ({
+  ok: true as const,
+  message: '',
+}))
 const openInFinder = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
 const readSystemClipboardFilePaths = vi.fn(async () => ['/tmp/report.pdf'])
 const chooseFileTreeDownloadDirectory = vi.fn(async () => '/Downloads')
@@ -137,7 +140,7 @@ vi.mock('#/web/repo-client.ts', () => ({
     initializeRepositoryWorktreeBootstrapConfig(...args),
   getCommitMessageProviders: () => getCommitMessageProviders(),
   openRepositoryEditor: (path: string) => openRepositoryEditor(path),
-  openRepositoryTerminal: (path: string) => openRepositoryTerminal(path),
+  openRepositoryTerminal: (target: { projectRoot: string; workingDirectory: string }) => openRepositoryTerminal(target),
   transferRepositoryFiles: (input: unknown) => transferRepositoryFiles(input),
   exportRepositoryFilesToLocalDirectory: (input: unknown) => exportRepositoryFilesToLocalDirectory(input),
 }))

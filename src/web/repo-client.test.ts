@@ -217,7 +217,9 @@ describe('repo-client', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const { openRepositoryEditor, openRepositoryTerminal } = await import('#/web/repo-client.ts')
-    await expect(openRepositoryTerminal('/tmp/repo')).resolves.toEqual({ ok: true, message: 'server-terminal' })
+    await expect(
+      openRepositoryTerminal({ projectRoot: '/tmp/repo', workingDirectory: '/tmp/repo/worktree' }),
+    ).resolves.toEqual({ ok: true, message: 'server-terminal' })
     await expect(openRepositoryEditor('/tmp/repo')).resolves.toEqual({ ok: true, message: 'server-editor' })
     await expect(openRepositoryEditor({ path: '/tmp/repo/src/app.ts', line: 12 })).resolves.toEqual({
       ok: true,
@@ -231,7 +233,7 @@ describe('repo-client', () => {
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
-        body: JSON.stringify({ path: '/tmp/repo' }),
+        body: JSON.stringify({ projectRoot: '/tmp/repo', workingDirectory: '/tmp/repo/worktree' }),
       }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
@@ -586,20 +588,21 @@ describe('repo-client', () => {
       })
     vi.stubGlobal('fetch', fetchMock)
 
-    const { readRepositoryFileTreeBinaryFile, replaceRepositoryFileTreeBinaryFile } = await import('#/web/repo-client.ts')
+    const { readRepositoryFileTreeBinaryFile, replaceRepositoryFileTreeBinaryFile } =
+      await import('#/web/repo-client.ts')
     await expect(readRepositoryFileTreeBinaryFile('/repo', '/repo', '/repo/image.bin', 30)).resolves.toEqual({
       ok: true,
       name: 'image.bin',
       byteLength: 3,
       bytesBase64: 'AQID',
     })
-    await expect(
-      replaceRepositoryFileTreeBinaryFile('/repo', '/repo', '/repo/image.bin', 'AQI=', 30),
-    ).resolves.toEqual({
-      ok: true,
-      previousBytesBase64: 'CQg=',
-      previousByteLength: 2,
-    })
+    await expect(replaceRepositoryFileTreeBinaryFile('/repo', '/repo', '/repo/image.bin', 'AQI=', 30)).resolves.toEqual(
+      {
+        ok: true,
+        previousBytesBase64: 'CQg=',
+        previousByteLength: 2,
+      },
+    )
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       'http://127.0.0.1:32100/api/repo/file-tree/read-binary-file',

@@ -62,7 +62,7 @@ test('initializes server-settings.json with defaults when no persisted settings 
     fileTreeFontSize: 14,
     fileTreeTopbarFontSize: 13,
     terminalFontSize: 14,
-    remoteTerminalTmuxEnabled: false,
+    internalTerminalTmuxEnabled: false,
     terminalCustomButtonsVisible: true,
     terminalCustomButtonSize: 'medium',
     terminalCustomButtons: [],
@@ -237,6 +237,36 @@ test('migrates legacy Telegram settings to bell-only delivery', async () => {
   })
 })
 
+test.each([
+  { persisted: { internalTerminalTmuxEnabled: true, remoteTerminalTmuxEnabled: false }, expected: true },
+  { persisted: { internalTerminalTmuxEnabled: false, remoteTerminalTmuxEnabled: true }, expected: false },
+  { persisted: { remoteTerminalTmuxEnabled: true }, expected: true },
+  { persisted: { remoteTerminalTmuxEnabled: false }, expected: false },
+  { persisted: { internalTerminalTmuxEnabled: 'invalid', remoteTerminalTmuxEnabled: true }, expected: true },
+  { persisted: {}, expected: false },
+])('migrates the internal terminal tmux preference from persisted settings %#', async ({ persisted, expected }) => {
+  useTempServerSettingsDir()
+  writeSettingsFile(persisted)
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  const prefs = await mod.getServerSettingsPrefs()
+
+  expect(prefs.internalTerminalTmuxEnabled).toBe(expected)
+  expect(prefs).not.toHaveProperty('remoteTerminalTmuxEnabled')
+})
+
+test('writes only the new internal terminal tmux preference', async () => {
+  useTempServerSettingsDir()
+  writeSettingsFile({ remoteTerminalTmuxEnabled: true })
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await mod.updateServerSettingsPrefs({ internalTerminalTmuxEnabled: false })
+
+  const persisted = JSON.parse(readFileSync(path.join(tmp!, 'server-settings.json'), 'utf-8'))
+  expect(persisted.internalTerminalTmuxEnabled).toBe(false)
+  expect(persisted).not.toHaveProperty('remoteTerminalTmuxEnabled')
+})
+
 test('persists web access credentials without exposing password material in public settings', async () => {
   useTempServerSettingsDir()
   const mod = await import('#/server/modules/settings-source.ts')
@@ -349,7 +379,7 @@ test('persists updates and notifies subscribers from the server settings store',
     fileTreeFontSize: 13.4,
     fileTreeTopbarFontSize: 12.2,
     terminalFontSize: 15.6,
-    remoteTerminalTmuxEnabled: true,
+    internalTerminalTmuxEnabled: true,
     terminalCustomButtonsVisible: false,
     terminalCustomButtonSize: 'large',
     terminalCustomButtons: [
@@ -398,7 +428,7 @@ test('persists updates and notifies subscribers from the server settings store',
     fileTreeFontSize: 13,
     fileTreeTopbarFontSize: 12,
     terminalFontSize: 16,
-    remoteTerminalTmuxEnabled: true,
+    internalTerminalTmuxEnabled: true,
     terminalCustomButtonsVisible: false,
     terminalCustomButtonSize: 'large',
     terminalCustomButtons: [

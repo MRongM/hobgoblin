@@ -9,7 +9,6 @@ release
 .superpowers
 .electron-cache/
 
-android/
 .idea
 tmp
 .gstack/

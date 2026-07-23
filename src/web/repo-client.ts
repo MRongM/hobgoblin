@@ -407,8 +407,11 @@ export async function openRepositoryRemote(cwd: string, branch?: string): Promis
   return opened.ok ? { ok: true, message: '' } : opened
 }
 
-export async function openRepositoryTerminal(path: string): Promise<ExecResult> {
-  return await postServerJson('/api/repo/open-terminal', { path })
+export async function openRepositoryTerminal(input: {
+  projectRoot: string
+  workingDirectory: string
+}): Promise<ExecResult> {
+  return await postServerJson('/api/repo/open-terminal', input)
 }
 
 export async function openRepositoryEditor(target: EditorOpenTarget): Promise<ExecResult> {

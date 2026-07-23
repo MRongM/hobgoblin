@@ -44,6 +44,14 @@ _Avoid_: Running process, command execution state, terminal busy state
 A best-effort Telegram delivery caused when an observed terminal output activity period becomes idle. It is independent of terminal visibility and focus, and one observed activity period produces at most one delivery across clients. A quiet interval may therefore complete one activity period even when the underlying command has not exited.
 _Avoid_: Process exit notification, command completion proof, unread terminal bell
 
+**Tmux session descriptor**:
+The normalized project root path, terminal working-directory path, and positive terminal slot number that together identify one tmux-backed internal terminal independently of whether Hobgoblin or an external terminal application creates it first. It excludes transport endpoint, display, branch, and ephemeral PTY identity, preserves logical path identity without resolving symbolic links, and is the public input for deterministic tmux session naming.
+_Avoid_: Terminal session ID, tmux connection settings, SSH terminal identity
+
+**Tmux session name**:
+The deterministic `hobgoblin-v1-<digest>` identifier derived from a tmux session descriptor and used by internal and external terminal applications to create or attach to the same tmux session. It is distinct from a `terminal-N` slot, a server terminal key, and an ephemeral `term_<UUID>` PTY session ID.
+_Avoid_: Terminal session ID, terminal ID, PTY session ID
+
 **Canonical terminal geometry**:
 The server-owned PTY column and row count published by the current controller attachment.
 _Avoid_: Viewer size, shared viewport size

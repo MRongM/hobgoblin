@@ -28,12 +28,16 @@ import type { ExecResult } from '#/shared/git-types.ts'
 
 async function resolveRemoteHomeDirectory(target: RemoteRepoTarget, signal?: AbortSignal): Promise<string> {
   const homeResult = await runRemoteCommand(target, { type: 'printHome' }, { signal })
-  const homePath = homeResult.ok ? homeResult.stdout.trim().split(/\r?\n/, 1)[0]?.trim() ?? '' : ''
+  const homePath = homeResult.ok ? (homeResult.stdout.trim().split(/\r?\n/, 1)[0]?.trim() ?? '') : ''
   if (!homePath.startsWith('/')) throw new Error('repo-tabs.open-remote-home-unavailable')
   return homePath
 }
 
-async function expandRemotePathInput(target: RemoteRepoTarget, remotePath: string, signal?: AbortSignal): Promise<string> {
+async function expandRemotePathInput(
+  target: RemoteRepoTarget,
+  remotePath: string,
+  signal?: AbortSignal,
+): Promise<string> {
   if (!isHomeRelativeRemotePath(remotePath)) return remotePath.trim()
   const homePath = await resolveRemoteHomeDirectory(target, signal)
   return `${homePath}/${remotePath.trim().slice(2)}`.replace(/\/+/g, '/')
@@ -87,7 +91,10 @@ export async function getServerRemotePathSuggestions(
   const suggestions = result.stdout
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter((line) => line.startsWith('/') && (typedLeaf.length === 0 || line.slice(line.lastIndexOf('/') + 1).startsWith(typedLeaf)))
+    .filter(
+      (line) =>
+        line.startsWith('/') && (typedLeaf.length === 0 || line.slice(line.lastIndexOf('/') + 1).startsWith(typedLeaf)),
+    )
   let output = suggestions
   if (isHomeRelativeRemotePath(prefix)) {
     try {
@@ -169,5 +176,14 @@ export async function openServerRemoteTerminal(
   }
 
   const prefs = await getServerSettingsPrefs()
-  return await openRemoteInPreferredTerminal(resolved.target.alias, input.worktreePath, prefs.terminalApp)
+  return await openRemoteInPreferredTerminal(
+    {
+      alias: resolved.target.alias,
+      projectRoot: resolved.target.remotePath,
+      workingDirectory: input.worktreePath,
+      terminalNumber: 1,
+    },
+    prefs.terminalApp,
+    { useTmux: prefs.internalTerminalTmuxEnabled },
+  )
 }

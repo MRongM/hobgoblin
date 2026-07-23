@@ -62,7 +62,7 @@ export function TerminalSettings() {
   const t = useT()
   const {
     terminalCustomButtons: buttons,
-    remoteTerminalTmuxEnabled,
+    internalTerminalTmuxEnabled,
     terminalCustomButtonsVisible,
     terminalCustomButtonSize,
     terminalFontSize,
@@ -72,7 +72,7 @@ export function TerminalSettings() {
   const [dirty, setDirty] = useState(false)
   const {
     setTerminalCustomButtons,
-    setRemoteTerminalTmuxEnabled,
+    setInternalTerminalTmuxEnabled,
     setTerminalCustomButtonsVisible,
     setTerminalCustomButtonSize,
   } = useTerminalCustomButtonsController()
@@ -132,18 +132,18 @@ export function TerminalSettings() {
           />
         </SettingsList>
       </SettingsGroup>
-      <SettingsGroup label={t('settings.terminal-remote.title')} hint={t('settings.terminal-remote.hint')}>
+      <SettingsGroup label={t('settings.terminal-tmux.title')} hint={t('settings.terminal-tmux.hint')}>
         <SettingsList>
           <SettingsRow
-            controlId="settings-terminal-remote-tmux"
-            label={t('settings.terminal-remote-tmux')}
-            hint={t('settings.terminal-remote-tmux-hint')}
+            controlId="settings-terminal-tmux"
+            label={t('settings.terminal-tmux')}
+            hint={t('settings.terminal-tmux-hint')}
             control={
               <Switch
-                id="settings-terminal-remote-tmux"
-                checked={remoteTerminalTmuxEnabled}
-                onCheckedChange={(enabled) => void setRemoteTerminalTmuxEnabled(enabled)}
-                aria-label={t('settings.terminal-remote-tmux')}
+                id="settings-terminal-tmux"
+                checked={internalTerminalTmuxEnabled}
+                onCheckedChange={(enabled) => void setInternalTerminalTmuxEnabled(enabled)}
+                aria-label={t('settings.terminal-tmux')}
               />
             }
           />

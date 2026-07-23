@@ -277,7 +277,10 @@ describe('useBranchActions', () => {
       await actions?.openExternalTerminal?.()
     })
 
-    expect(mocks.openRepositoryTerminal).toHaveBeenCalledWith('/tmp/repo-feature')
+    expect(mocks.openRepositoryTerminal).toHaveBeenCalledWith({
+      projectRoot: '/tmp/gbl-use-branch-actions-test-repo',
+      workingDirectory: '/tmp/repo-feature',
+    })
     expect(mocks.openRemoteRepositoryTerminal).not.toHaveBeenCalled()
     expect(mocks.showRepoBranchDetailTab).not.toHaveBeenCalled()
   })

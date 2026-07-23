@@ -1156,11 +1156,11 @@ export const ko: Record<DictKey, string> = {
   'settings.terminal-font.title': '글꼴',
   'settings.terminal-font-size': '글꼴 크기',
   'settings.terminal-font-size-hint': '앱 내 터미널의 글꼴 크기를 조정합니다.',
-  'settings.terminal-remote.title': '원격 터미널',
-  'settings.terminal-remote.hint': '앱 내 원격 터미널 셸을 시작하는 방식을 제어합니다.',
-  'settings.terminal-remote-tmux': '원격 터미널에서 tmux 사용',
-  'settings.terminal-remote-tmux-hint':
-    '켜면 앱 내 원격 터미널이 재개 가능한 tmux 세션에 연결됩니다. 끄면 원격 로그인 셸을 직접 시작합니다.',
+  'settings.terminal-tmux.title': 'Tmux 세션',
+  'settings.terminal-tmux.hint': '앱 내 및 외부 터미널 셸을 시작하는 방식을 제어합니다.',
+  'settings.terminal-tmux': '내부 터미널에서 tmux 사용',
+  'settings.terminal-tmux-hint':
+    '켜면 지원되는 로컬 및 원격 터미널이 재개 가능한 tmux 세션에 연결됩니다. 끄면 로그인 셸을 직접 시작합니다.',
   'settings.terminal-custom-buttons.title': '사용자 지정 터미널 버튼',
   'settings.terminal-custom-buttons.hint':
     '터미널 하단 버튼 막대를 표시합니다. 버튼은 즉시 실행하거나 편집할 수 있도록 터미널 입력 줄에 채울 수 있습니다.',

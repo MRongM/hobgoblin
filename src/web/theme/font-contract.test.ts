@@ -27,7 +27,7 @@ describe('font contract', () => {
     expect(stylesCss).toContain('--goblin-app-font-size: 14px')
     expect(stylesCss).toContain('--goblin-file-tree-font-size: var(--goblin-app-font-size)')
     expect(stylesCss).toContain(
-      '--goblin-project-titlebar-font-size: max(10px, calc(var(--goblin-app-font-size) - 1px))',
+      '--goblin-project-titlebar-font-size: max(10px, calc(var(--goblin-app-font-size) - 2px))',
     )
     expect(stylesCss).toContain(
       '--goblin-file-tree-topbar-font-size: var(--goblin-project-titlebar-font-size)',

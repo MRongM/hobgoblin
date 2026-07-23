@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   discardRepositoryChanges: vi.fn(),
   getRepositoryCommitDetail: vi.fn(),
   getRepositoryHistory: vi.fn(),
+  openRepositoryTerminal: vi.fn(),
   openRepositoryEditor: vi.fn(),
   readRepositoryFileTreeBinaryFile: vi.fn(),
   readRepositoryFileTreeTextFile: vi.fn(),
@@ -68,7 +69,7 @@ vi.mock('#/server/modules/repo-write-paths.ts', () => ({
   moveRepositoryFileTreeEntries: vi.fn(),
   openRepositoryEditor: mocks.openRepositoryEditor,
   openRepositoryRemote: vi.fn(),
-  openRepositoryTerminal: vi.fn(),
+  openRepositoryTerminal: mocks.openRepositoryTerminal,
   pullRepositoryBranch: vi.fn(),
   pushRepositoryBranch: vi.fn(),
   renameRepositoryFileTreeEntry: vi.fn(),
@@ -99,6 +100,7 @@ vi.mock('#/server/modules/settings-source.ts', () => ({
 describe('repo routes', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.openRepositoryTerminal.mockResolvedValue({ ok: true, message: '/tmp/repo/worktree' })
     mocks.getRepositoryHistory.mockResolvedValue([
       {
         hash: 'abc123456789',
@@ -164,6 +166,24 @@ describe('repo routes', () => {
     mocks.deleteRepositoryRemoteTag.mockResolvedValue({ ok: true, message: 'deleted' })
     mocks.removeRepositoryWorktree.mockResolvedValue({ ok: true, message: 'removed' })
     mocks.cleanupRepositoryWorktree.mockResolvedValue({ ok: true, message: 'pruned' })
+  })
+
+  test('passes local project identity separately from the requested terminal directory', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/open-terminal', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ projectRoot: '/tmp/repo', workingDirectory: '/tmp/repo/worktree' }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true, message: '/tmp/repo/worktree' })
+    expect(mocks.openRepositoryTerminal).toHaveBeenCalledWith({
+      projectRoot: '/tmp/repo',
+      workingDirectory: '/tmp/repo/worktree',
+    })
   })
 
   test('routes invalid worktree cleanup with the exact selected path', async () => {

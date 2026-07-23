@@ -40,7 +40,7 @@ beforeEach(() => {
     editorApp: 'vscode',
     fileTreeFontSize: 12,
     terminalFontSize: 14,
-    remoteTerminalTmuxEnabled: false,
+    internalTerminalTmuxEnabled: false,
     terminalCustomButtonsVisible: true,
     terminalCustomButtons: [],
     lanEnabled: false,
@@ -114,7 +114,11 @@ describe('openServerRemoteEditor', () => {
 })
 
 describe('openServerRemoteTerminal', () => {
-  test('resolves ssh config and opens the configured remote terminal', async () => {
+  test('resolves project identity and opens terminal-1 with the global tmux preference', async () => {
+    mocks.getServerSettingsPrefs.mockResolvedValue({
+      terminalApp: 'auto',
+      internalTerminalTmuxEnabled: true,
+    })
     const { openServerRemoteTerminal } = await import('#/server/modules/remote.ts')
 
     await expect(
@@ -122,7 +126,16 @@ describe('openServerRemoteTerminal', () => {
     ).resolves.toEqual({ ok: true, message: '/srv/repo-feature' })
 
     expect(mocks.resolveRemoteTarget).toHaveBeenCalledWith({ alias: 'prod', remotePath: '/srv/repo' }, undefined)
-    expect(mocks.openRemoteInPreferredTerminal).toHaveBeenCalledWith('prod', '/srv/repo-feature', 'auto')
+    expect(mocks.openRemoteInPreferredTerminal).toHaveBeenCalledWith(
+      {
+        alias: 'prod',
+        projectRoot: '/srv/repo',
+        workingDirectory: '/srv/repo-feature',
+        terminalNumber: 1,
+      },
+      'auto',
+      { useTmux: true },
+    )
   })
 
   test('rejects invalid repo ids and remote worktree paths', async () => {

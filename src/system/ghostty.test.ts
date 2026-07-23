@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { buildTmuxSessionName } from '#/system/tmux-session.ts'
 
 const mocks = vi.hoisted(() => ({
   execa: vi.fn(),
@@ -19,18 +20,45 @@ function childProcessPromise() {
   return child
 }
 
-describe('openRemoteInGhostty', () => {
+const REMOTE_TARGET = {
+  alias: 'prod',
+  projectRoot: '/srv/repo',
+  workingDirectory: '/srv/repo-feature',
+  terminalNumber: 1,
+}
+
+describe('Ghostty integration', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.existsSync.mockImplementation((path: string) => path === '/Applications/Ghostty.app')
     mocks.execa.mockReturnValue(childProcessPromise())
   })
 
+  test('opens a local tmux command in a running Ghostty window', async () => {
+    const { openInGhostty } = await import('#/system/ghostty.ts')
+    mocks.execa.mockResolvedValueOnce({ stdout: 'opened' })
+
+    await expect(
+      openInGhostty(
+        {
+          projectRoot: '/srv/projects/example',
+          workingDirectory: '/srv/projects/example/worktrees/feature',
+          terminalNumber: 1,
+        },
+        { useTmux: true },
+      ),
+    ).resolves.toEqual({ ok: true, message: '/srv/projects/example/worktrees/feature' })
+
+    const command = mocks.execa.mock.calls[0]![1][2]
+    expect(command).toContain('tmux new-session -A')
+    expect(command).toContain('hobgoblin-v1-aebf050981ac829e36100020')
+  })
+
   test('opens a remote command in a running Ghostty window', async () => {
     const { openRemoteInGhostty } = await import('#/system/ghostty.ts')
     mocks.execa.mockResolvedValueOnce({ stdout: 'opened' })
 
-    await expect(openRemoteInGhostty({ alias: 'prod', worktreePath: '/srv/repo-feature' })).resolves.toEqual({
+    await expect(openRemoteInGhostty(REMOTE_TARGET)).resolves.toEqual({
       ok: true,
       message: '/srv/repo-feature',
     })
@@ -45,12 +73,27 @@ describe('openRemoteInGhostty', () => {
     expect(mocks.execa.mock.calls[0]![1][2]).not.toContain('tmux')
   })
 
+  test('passes the remote tmux attach/create command to a running Ghostty window', async () => {
+    const { openRemoteInGhostty } = await import('#/system/ghostty.ts')
+    mocks.execa.mockResolvedValueOnce({ stdout: 'opened' })
+
+    await expect(openRemoteInGhostty(REMOTE_TARGET, { useTmux: true })).resolves.toEqual({
+      ok: true,
+      message: '/srv/repo-feature',
+    })
+
+    const command = mocks.execa.mock.calls[0]![1][2]
+    expect(command).toContain('tmux new-session -A')
+    expect(command).toContain(buildTmuxSessionName(REMOTE_TARGET)!)
+    expect(command).not.toContain('detach')
+  })
+
   test('cold-starts Ghostty with ssh as the initial command when it is not running', async () => {
     const { openRemoteInGhostty } = await import('#/system/ghostty.ts')
     mocks.execa.mockResolvedValueOnce({ stdout: 'not-running' })
     mocks.execa.mockReturnValueOnce(childProcessPromise())
 
-    await expect(openRemoteInGhostty({ alias: 'prod', worktreePath: '/srv/repo-feature' })).resolves.toEqual({
+    await expect(openRemoteInGhostty(REMOTE_TARGET)).resolves.toEqual({
       ok: true,
       message: '/srv/repo-feature',
     })
@@ -67,11 +110,11 @@ describe('openRemoteInGhostty', () => {
   test('rejects invalid remote inputs before launching Ghostty', async () => {
     const { openRemoteInGhostty } = await import('#/system/ghostty.ts')
 
-    await expect(openRemoteInGhostty({ alias: 'bad alias', worktreePath: '/srv/repo' })).resolves.toEqual({
+    await expect(openRemoteInGhostty({ ...REMOTE_TARGET, alias: 'bad alias' })).resolves.toEqual({
       ok: false,
       message: 'error.invalid-arguments',
     })
-    await expect(openRemoteInGhostty({ alias: 'prod', worktreePath: 'relative/repo' })).resolves.toEqual({
+    await expect(openRemoteInGhostty({ ...REMOTE_TARGET, workingDirectory: 'relative/repo' })).resolves.toEqual({
       ok: false,
       message: 'error.invalid-arguments',
     })
@@ -83,7 +126,7 @@ describe('openRemoteInGhostty', () => {
     mocks.existsSync.mockReturnValue(false)
     const { openRemoteInGhostty } = await import('#/system/ghostty.ts')
 
-    await expect(openRemoteInGhostty({ alias: 'prod', worktreePath: '/srv/repo' })).resolves.toEqual({
+    await expect(openRemoteInGhostty(REMOTE_TARGET)).resolves.toEqual({
       ok: false,
       message: 'error.ghostty-not-installed',
     })

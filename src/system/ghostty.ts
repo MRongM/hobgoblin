@@ -2,7 +2,9 @@ import { execa } from 'execa'
 import { existsSync, statSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { buildManagedLocalTerminalInvocation } from '#/system/local-terminal.ts'
 import { buildExternalRemoteTerminalInvocation, type ExternalRemoteTerminalTarget } from '#/system/remote-terminal.ts'
+import { normalizeTmuxSessionDescriptor, type TmuxSessionDescriptor } from '#/system/tmux-session.ts'
 
 const GHOSTTY_BUNDLE_ID = 'com.mitchellh.ghostty'
 const APPLE_SCRIPT_TIMEOUT_MS = 5_000
@@ -73,33 +75,52 @@ function openInRunningGhostty(dir: string): Promise<boolean> {
 //
 // Spawned children are detached + unref'd so quitting Goblin doesn't
 // bring the terminal down with it.
-export async function openInGhostty(p: string): Promise<{ ok: boolean; message: string }> {
-  if (!isUsableDirectory(p)) return { ok: false, message: 'error.invalid-path' }
+export async function openInGhostty(
+  target: TmuxSessionDescriptor,
+  options: { useTmux?: boolean } = {},
+): Promise<{ ok: boolean; message: string }> {
+  const descriptor = normalizeTmuxSessionDescriptor(target)
+  if (!descriptor || !isUsableDirectory(descriptor.workingDirectory)) {
+    return { ok: false, message: 'error.invalid-path' }
+  }
   if (!isGhosttyInstalled()) return { ok: false, message: 'error.ghostty-not-installed' }
 
+  const invocation = buildManagedLocalTerminalInvocation(descriptor, options)
+  if (options.useTmux === true && !invocation) return { ok: false, message: 'error.invalid-arguments' }
+
+  if (invocation) {
+    return await openCommandInGhostty(invocation, descriptor.workingDirectory, 'local')
+  }
+
   try {
-    if (await openInRunningGhostty(p)) return { ok: true, message: p }
+    if (await openInRunningGhostty(descriptor.workingDirectory)) {
+      return { ok: true, message: descriptor.workingDirectory }
+    }
   } catch (err) {
     console.warn('[ghostty] AppleScript open failed, falling back to launch', err)
   }
 
   try {
-    const child = execa('open', ['-na', 'Ghostty.app', '--args', `--working-directory=${p}`], {
-      detached: true,
-      stdio: 'ignore',
-      cleanup: false,
-      timeout: OPEN_TIMEOUT_MS,
-      forceKillAfterDelay: 500,
-    })
+    const child = execa(
+      'open',
+      ['-na', 'Ghostty.app', '--args', `--working-directory=${descriptor.workingDirectory}`],
+      {
+        detached: true,
+        stdio: 'ignore',
+        cleanup: false,
+        timeout: OPEN_TIMEOUT_MS,
+        forceKillAfterDelay: 500,
+      },
+    )
     child.unref()
     await child
-    return { ok: true, message: p }
+    return { ok: true, message: descriptor.workingDirectory }
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : String(err) }
   }
 }
 
-function openRemoteInRunningGhostty(commandText: string): Promise<boolean> {
+function openCommandInRunningGhostty(commandText: string): Promise<boolean> {
   const script = `
     on run argv
       set commandText to item 1 of argv
@@ -124,15 +145,24 @@ function openRemoteInRunningGhostty(commandText: string): Promise<boolean> {
 
 export async function openRemoteInGhostty(
   target: ExternalRemoteTerminalTarget,
+  options: { useTmux?: boolean } = {},
 ): Promise<{ ok: boolean; message: string }> {
-  const invocation = buildExternalRemoteTerminalInvocation(target)
+  const invocation = buildExternalRemoteTerminalInvocation(target, options)
   if (!invocation) return { ok: false, message: 'error.invalid-arguments' }
   if (!isGhosttyInstalled()) return { ok: false, message: 'error.ghostty-not-installed' }
 
+  return await openCommandInGhostty(invocation, target.workingDirectory, 'remote')
+}
+
+async function openCommandInGhostty(
+  invocation: { command: string; args: string[]; shellCommand: string },
+  successMessage: string,
+  context: 'local' | 'remote',
+): Promise<{ ok: boolean; message: string }> {
   try {
-    if (await openRemoteInRunningGhostty(invocation.shellCommand)) return { ok: true, message: target.worktreePath }
+    if (await openCommandInRunningGhostty(invocation.shellCommand)) return { ok: true, message: successMessage }
   } catch (err) {
-    console.warn('[ghostty] AppleScript remote open failed, falling back to launch', err)
+    console.warn(`[ghostty] AppleScript ${context} open failed, falling back to launch`, err)
   }
 
   try {
@@ -145,7 +175,7 @@ export async function openRemoteInGhostty(
     })
     child.unref()
     await child
-    return { ok: true, message: target.worktreePath }
+    return { ok: true, message: successMessage }
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : String(err) }
   }
