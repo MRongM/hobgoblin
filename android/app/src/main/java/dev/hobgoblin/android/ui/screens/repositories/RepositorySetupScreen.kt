@@ -208,6 +208,12 @@ internal fun repositoryTmuxDiscoveryPaths(
     }.distinct()
 }
 
+internal fun tmuxScanButtonLabel(isScanning: Boolean): String =
+    if (isScanning) "Scanning..." else "Scan tmux"
+
+internal fun canScanTmux(isScanning: Boolean, discoveryPaths: List<String>?): Boolean =
+    !isScanning && !discoveryPaths.isNullOrEmpty()
+
 internal fun repositoryWorkspaceTabsUseScrollableStrip(tabs: List<RepositoryWorkspaceTab>): Boolean =
     tabs.size > CompactWorkspaceTabLimit
 
@@ -876,6 +882,7 @@ fun RepositoryWorkspaceScreen(
     var terminalDeleteTarget by remember(repository.id) { mutableStateOf<TerminalDeleteTarget?>(null) }
     var closeTmuxSessionOnDelete by remember(repository.id) { mutableStateOf(false) }
     var terminalDeletePending by remember(repository.id) { mutableStateOf(false) }
+    var tmuxDiscoveryPending by remember(repository.id) { mutableStateOf(false) }
     var actionError by remember(repository.id) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val workspaceTabs = remember(repository.id, repository.remotePath, repository.kind) {
@@ -1064,6 +1071,21 @@ fun RepositoryWorkspaceScreen(
         closeTmuxSessionOnDelete = false
     }
 
+    suspend fun discoverTmuxTerminals(paths: List<String>) {
+        if (tmuxDiscoveryPending) return
+        actionError = null
+        tmuxDiscoveryPending = true
+        try {
+            runCatching {
+                withContext(Dispatchers.IO) { onDiscoverTmuxTerminals(paths) }
+            }.onFailure {
+                actionError = it.message ?: "Tmux terminal discovery failed"
+            }
+        } finally {
+            tmuxDiscoveryPending = false
+        }
+    }
+
     LaunchedEffect(repository.id) {
         if (shouldLoadRepositorySnapshot(repository)) refreshSnapshot()
     }
@@ -1076,11 +1098,7 @@ fun RepositoryWorkspaceScreen(
         if (selectedTab != RepositoryWorkspaceTab.Terminal || tmuxDiscoveryPaths == null) {
             return@LaunchedEffect
         }
-        runCatching {
-            withContext(Dispatchers.IO) { onDiscoverTmuxTerminals(tmuxDiscoveryPaths) }
-        }.onFailure {
-            actionError = it.message ?: "Tmux terminal discovery failed"
-        }
+        discoverTmuxTerminals(tmuxDiscoveryPaths)
     }
 
     BackHandler { onBack() }
@@ -1211,6 +1229,13 @@ fun RepositoryWorkspaceScreen(
                     path = selectedTerminalWorkspacePath,
                     workspaceOptions = terminalWorkspaceOptions,
                     sessions = terminalSessions,
+                    tmuxScanPending = tmuxDiscoveryPending,
+                    tmuxScanEnabled = canScanTmux(tmuxDiscoveryPending, tmuxDiscoveryPaths),
+                    onScanTmux = {
+                        tmuxDiscoveryPaths?.let { paths ->
+                            scope.launch { discoverTmuxTerminals(paths) }
+                        }
+                    },
                     onSelectWorkspace = ::selectTerminalWorkspace,
                     onCreateTerminalAtPath = ::createTerminal,
                     onOpenExternalTermuxAtPath = ::openExternalTermux,
@@ -1781,6 +1806,9 @@ private fun RepositoryTerminalPanel(
     path: String,
     workspaceOptions: List<TerminalWorkspaceOption>,
     sessions: List<TerminalSessionRecord>,
+    tmuxScanPending: Boolean,
+    tmuxScanEnabled: Boolean,
+    onScanTmux: () -> Unit,
     onSelectWorkspace: (String) -> Unit,
     onCreateTerminalAtPath: (String, TerminalLaunchMode) -> Unit,
     onOpenExternalTermuxAtPath: (String, (ExternalTermuxLaunchResult) -> Unit) -> Unit,
@@ -1825,6 +1853,9 @@ private fun RepositoryTerminalPanel(
                 workspaceSessions = workspaceSessions,
                 openedOrderLabels = openedOrderLabels,
                 activeWorktreeCount = activeWorktreeCount,
+                tmuxScanPending = tmuxScanPending,
+                tmuxScanEnabled = tmuxScanEnabled,
+                onScanTmux = onScanTmux,
                 workspaceMenuExpanded = workspaceMenuExpanded,
                 onWorkspaceMenuExpandedChange = { workspaceMenuExpanded = it },
                 onSelectWorkspace = onSelectWorkspace,
@@ -1944,6 +1975,9 @@ private fun RemoteSshTerminalPanelContent(
     workspaceSessions: List<TerminalSessionRecord>,
     openedOrderLabels: Map<String, String>,
     activeWorktreeCount: Int,
+    tmuxScanPending: Boolean,
+    tmuxScanEnabled: Boolean,
+    onScanTmux: () -> Unit,
     workspaceMenuExpanded: Boolean,
     onWorkspaceMenuExpandedChange: (Boolean) -> Unit,
     onSelectWorkspace: (String) -> Unit,
@@ -2015,6 +2049,17 @@ private fun RemoteSshTerminalPanelContent(
                 },
             ) {
                 Text(tmuxCreationAction.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            OutlinedButton(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onScanTmux,
+                enabled = tmuxScanEnabled,
+            ) {
+                Text(
+                    tmuxScanButtonLabel(tmuxScanPending),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
             DropdownMenu(
                 expanded = workspaceMenuExpanded,
