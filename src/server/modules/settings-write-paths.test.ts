@@ -173,6 +173,7 @@ describe('settings write paths', () => {
       bellEnabled: true,
       outputCompletionEnabled: true,
       includeTerminalOutput: true,
+      outputTailLength: 1024,
     }
     mocks.updateServerTelegramNotificationSettings.mockResolvedValue(telegramNotifications)
     const { applyServerTelegramNotificationSettingsWrite } = await import('#/server/modules/settings-write-paths.ts')
@@ -185,6 +186,7 @@ describe('settings write paths', () => {
         bellEnabled: true,
         outputCompletionEnabled: true,
         includeTerminalOutput: true,
+        outputTailLength: 1024,
       }),
     ).resolves.toEqual({ ok: true, telegramNotifications })
     expect(mocks.updateServerTelegramNotificationSettings).toHaveBeenCalledWith({
@@ -194,6 +196,7 @@ describe('settings write paths', () => {
       bellEnabled: true,
       outputCompletionEnabled: true,
       includeTerminalOutput: true,
+      outputTailLength: 1024,
     })
     expect(mocks.publishSettingsInvalidation).toHaveBeenCalledWith(['settings-snapshot'])
   })

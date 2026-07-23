@@ -79,6 +79,7 @@ const appDataClientMocks = vi.hoisted(() => ({
     bellEnabled: input.bellEnabled,
     outputCompletionEnabled: input.outputCompletionEnabled,
     includeTerminalOutput: input.includeTerminalOutput,
+    outputTailLength: input.outputTailLength,
   })),
 }))
 
@@ -209,6 +210,7 @@ describe('settings write paths', () => {
       bellEnabled: input.bellEnabled,
       outputCompletionEnabled: input.outputCompletionEnabled,
       includeTerminalOutput: input.includeTerminalOutput,
+      outputTailLength: input.outputTailLength,
     }))
   })
 
@@ -358,6 +360,7 @@ describe('settings write paths', () => {
       bellEnabled: true,
       outputCompletionEnabled: true,
       includeTerminalOutput: true,
+      outputTailLength: 400,
     }
     const { saveTelegramNotificationSettingsPreference } = await import('#/web/settings-write-paths.ts')
 
@@ -368,6 +371,7 @@ describe('settings write paths', () => {
       bellEnabled: true,
       outputCompletionEnabled: true,
       includeTerminalOutput: true,
+      outputTailLength: 400,
     })
     const snapshot = mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())
     expect(snapshot).toMatchObject({
@@ -378,6 +382,7 @@ describe('settings write paths', () => {
         bellEnabled: true,
         outputCompletionEnabled: true,
         includeTerminalOutput: true,
+        outputTailLength: 400,
       },
     })
     expect(JSON.stringify(snapshot)).not.toContain('test-token')

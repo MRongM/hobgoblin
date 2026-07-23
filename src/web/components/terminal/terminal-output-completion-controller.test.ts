@@ -52,6 +52,7 @@ describe('terminal output completion controller', () => {
       bellEnabled: true,
       outputCompletionEnabled: true,
       includeTerminalOutput: true,
+      outputTailLength: 400,
     })
   })
 
@@ -77,5 +78,29 @@ describe('terminal output completion controller', () => {
     notifyTerminalOutputCompletion(intent)
     await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(1))
     expect(mocks.send.mock.calls[0]?.[0]).not.toHaveProperty('outputTail')
+  })
+
+  test('sends only the configured terminal output suffix', async () => {
+    mocks.context.mockReturnValue({
+      terminalKey: 'terminal-key',
+      project: 'api',
+      contextKind: 'directory',
+      context: 'api',
+      directory: '/repo',
+      terminalIndex: 1,
+      outputTail: 'abc🙂de',
+    })
+    mocks.getTelegramSettings.mockReturnValue({
+      ...mocks.getTelegramSettings(),
+      outputTailLength: 3,
+    })
+    const { notifyTerminalOutputCompletion } = await import(
+      '#/web/components/terminal/terminal-output-completion-controller.ts'
+    )
+
+    notifyTerminalOutputCompletion(intent)
+
+    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(1))
+    expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({ outputTail: '🙂de' }))
   })
 })

@@ -1056,7 +1056,10 @@ export const ko: Record<DictKey, string> = {
     '터미널 활동 표시가 실행 중에서 유휴 상태로 바뀔 때마다 전송합니다.',
   'settings.telegram.include-terminal-output': '터미널 출력 포함',
   'settings.telegram.include-terminal-output-hint':
-    '마지막으로 표시된 200자를 추가합니다. 터미널 출력에는 민감한 정보가 포함될 수 있습니다.',
+    '마지막으로 표시된 터미널 출력을 추가합니다. 민감한 정보가 포함될 수 있습니다.',
+  'settings.telegram.output-tail-length': '터미널 출력 문자 수',
+  'settings.telegram.output-tail-length-hint':
+    '1~4096자(기본값 400). 연속된 공백, 탭, 줄바꿈은 공백 하나로 계산하며 Telegram 전체 메시지 제한에 따라 실제 내용은 더 짧아질 수 있습니다.',
   'settings.telegram.bot-token': 'Bot Token',
   'settings.telegram.bot-token-hint-configured': 'Bot Token이 설정되어 있습니다. 비워 두면 유지됩니다.',
   'settings.telegram.bot-token-hint-new': 'BotFather에서 Bot을 만들고 Token을 붙여 넣으세요.',

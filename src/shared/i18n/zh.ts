@@ -1013,7 +1013,10 @@ export const zh: Record<DictKey, string> = {
   'settings.telegram.output-completion-enabled': '终端运行结束',
   'settings.telegram.output-completion-enabled-hint': '终端活动呼吸灯从运行变为空闲时发送 Telegram。',
   'settings.telegram.include-terminal-output': '包含终端输出',
-  'settings.telegram.include-terminal-output-hint': '附加最后 200 个可见字符；终端输出可能包含敏感信息。',
+  'settings.telegram.include-terminal-output-hint': '附加终端末尾的可见输出；终端输出可能包含敏感信息。',
+  'settings.telegram.output-tail-length': '终端输出字符数',
+  'settings.telegram.output-tail-length-hint':
+    '范围 1–4096，默认 400；连续空格、Tab 和换行按一个空格计算，受 Telegram 整条消息上限影响，实际片段可能更短。',
   'settings.telegram.bot-token': 'Bot Token',
   'settings.telegram.bot-token-hint-configured': 'Bot Token 已配置；留空可保留当前 Token。',
   'settings.telegram.bot-token-hint-new': '通过 BotFather 创建 Bot，然后粘贴 Token。',

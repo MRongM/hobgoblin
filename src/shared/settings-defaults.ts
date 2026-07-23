@@ -41,6 +41,7 @@ import {
   DEFAULT_FILE_TREE_PANE_SIZES,
   DEFAULT_WORKSPACE_LAYOUT,
 } from '#/shared/workspace-layout.ts'
+import { TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH } from '#/shared/telegram-notifications.ts'
 
 export const DEFAULT_FETCH_INTERVAL_SEC = 120
 export const DEFAULT_GIT_NETWORK_PROXY_ENABLED = false
@@ -137,6 +138,7 @@ export function defaultSettingsSnapshot(overrides: Partial<SettingsSnapshot> = {
       bellEnabled: true,
       outputCompletionEnabled: false,
       includeTerminalOutput: false,
+      outputTailLength: TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH,
     },
   }
 }

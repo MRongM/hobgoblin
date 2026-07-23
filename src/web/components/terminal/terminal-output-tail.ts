@@ -1,3 +1,5 @@
+import { TELEGRAM_OUTPUT_TAIL_MAX_LENGTH } from '#/shared/telegram-notifications.ts'
+
 export interface TerminalOutputTail {
   push(data: string): void
   value(): string
@@ -6,14 +8,20 @@ export interface TerminalOutputTail {
 
 type ParserState = 'plain' | 'escape' | 'csi' | 'osc' | 'osc-escape'
 
-export function createTerminalOutputTail(maxCharacters = 200): TerminalOutputTail {
+export function createTerminalOutputTail(maxCharacters = TELEGRAM_OUTPUT_TAIL_MAX_LENGTH): TerminalOutputTail {
   let state: ParserState = 'plain'
   let characters: string[] = []
   let previousWasCarriageReturn = false
+  let whitespacePending = false
 
   function append(character: string): void {
+    if (character === ' ' || character === '\t' || character === '\n' || character === '\r') {
+      whitespacePending = characters.length > 0
+      return
+    }
+    if (whitespacePending) characters.push(' ')
     characters.push(character)
-    if (characters.length > maxCharacters) characters = characters.slice(-maxCharacters)
+    whitespacePending = false
   }
 
   function push(data: string): void {
@@ -53,7 +61,11 @@ export function createTerminalOutputTail(maxCharacters = 200): TerminalOutputTai
       }
       previousWasCarriageReturn = false
       const codePoint = character.codePointAt(0) ?? 0
-      if (character === '\n' || codePoint >= 0x20) append(character)
+      if (character === '\n' || character === '\t' || codePoint >= 0x20) append(character)
+    }
+    if (characters.length > maxCharacters) {
+      characters = characters.slice(-maxCharacters)
+      if (characters[0] === ' ') characters.shift()
     }
   }
 
@@ -64,6 +76,7 @@ export function createTerminalOutputTail(maxCharacters = 200): TerminalOutputTai
       state = 'plain'
       characters = []
       previousWasCarriageReturn = false
+      whitespacePending = false
     },
   }
 }

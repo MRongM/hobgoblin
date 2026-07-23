@@ -1074,7 +1074,10 @@ export const ja: Record<DictKey, string> = {
     'ターミナルのアクティビティ表示が実行中からアイドルに変わるたびに送信します。',
   'settings.telegram.include-terminal-output': 'ターミナル出力を含める',
   'settings.telegram.include-terminal-output-hint':
-    '最後の表示可能な 200 文字を追加します。ターミナル出力には機密情報が含まれる場合があります。',
+    '末尾の表示可能なターミナル出力を追加します。機密情報が含まれる場合があります。',
+  'settings.telegram.output-tail-length': 'ターミナル出力の文字数',
+  'settings.telegram.output-tail-length-hint':
+    '1～4096 文字（既定値 400）。連続する空白、タブ、改行は 1 つの空白として数えます。Telegram のメッセージ全体の上限により短くなる場合があります。',
   'settings.telegram.bot-token': 'Bot Token',
   'settings.telegram.bot-token-hint-configured': 'Bot Token は設定済みです。空欄のままにすると保持されます。',
   'settings.telegram.bot-token-hint-new': 'BotFather で Bot を作成し、Token を貼り付けてください。',

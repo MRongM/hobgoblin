@@ -33,7 +33,7 @@ A best-effort external attention delivery caused by an eligible unread terminal 
 _Avoid_: Unread state, queued notification, terminal bell event
 
 **Terminal output excerpt**:
-An optional, ephemeral Telegram-only excerpt of at most 200 sanitized visible characters from the same internal terminal at the time of an eligible unread terminal bell. It is disabled by default, never persisted, and may still contain sensitive shell content when explicitly enabled.
+An optional, ephemeral Telegram-only excerpt from the same internal terminal at the time of an eligible notification. Consecutive spaces, tabs, and line breaks are collapsed to one space before its characters are counted. Its configured maximum is 1–4096 sanitized visible characters, defaults to 400, may be shortened to keep the complete Telegram message within 4096 characters, is disabled by default, is never persisted, and may still contain sensitive shell content when explicitly enabled.
 _Avoid_: Terminal transcript, command result, durable output history
 
 **Terminal output activity**:

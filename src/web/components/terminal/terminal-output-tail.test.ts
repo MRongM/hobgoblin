@@ -1,7 +1,28 @@
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import { createTerminalOutputTail } from '#/web/components/terminal/terminal-output-tail.ts'
 
 describe('terminal output tail', () => {
+  test('keeps at most 4096 Unicode code points by default', () => {
+    const tail = createTerminalOutputTail()
+    tail.push(`${'a'.repeat(4096)}🙂end`)
+    expect(Array.from(tail.value())).toHaveLength(4096)
+    expect(tail.value()).toMatch(/🙂end$/u)
+  })
+
+  test('trims one large output chunk only once after parsing', () => {
+    const slice = vi.spyOn(Array.prototype, 'slice')
+    try {
+      const tail = createTerminalOutputTail()
+
+      tail.push('a'.repeat(10_000))
+
+      expect(slice).toHaveBeenCalledTimes(1)
+      expect(tail.value()).toHaveLength(4096)
+    } finally {
+      slice.mockRestore()
+    }
+  })
+
   test('keeps only the final Unicode code points', () => {
     const tail = createTerminalOutputTail(5)
     tail.push('a🙂bcde')
@@ -16,10 +37,17 @@ describe('terminal output tail', () => {
     expect(tail.value()).toBe('redplain')
   })
 
+  test('collapses whitespace across chunks before applying the character limit', () => {
+    const tail = createTerminalOutputTail(8)
+    tail.push(`one${' '.repeat(5_000)}\t\r\n`)
+    tail.push('  two')
+    expect(tail.value()).toBe('one two')
+  })
+
   test('normalizes carriage returns and removes non-display controls', () => {
     const tail = createTerminalOutputTail()
-    tail.push('one\r\ntwo\rthree\u0000\u0007')
-    expect(tail.value()).toBe('one\ntwo\nthree')
+    tail.push('one\r\ntwo\rthree\t four\u0000\u0007')
+    expect(tail.value()).toBe('one two three four')
   })
 
   test('resets text and parser state', () => {

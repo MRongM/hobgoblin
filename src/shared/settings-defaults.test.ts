@@ -74,6 +74,7 @@ describe('settings defaults', () => {
       bellEnabled: true,
       outputCompletionEnabled: false,
       includeTerminalOutput: false,
+      outputTailLength: 400,
     })
   })
 

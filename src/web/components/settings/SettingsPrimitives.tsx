@@ -166,7 +166,7 @@ export function SettingsNumberInput({
 
   function commitIfValid(input: HTMLInputElement) {
     const next = input.valueAsNumber
-    if (Number.isFinite(next) && next >= min && next <= max) onChange(next)
+    if (input.validity.valid && Number.isFinite(next) && next >= min && next <= max) onChange(next)
   }
 
   return (
@@ -185,7 +185,9 @@ export function SettingsNumberInput({
       onBlur={(event) => {
         setFocused(false)
         const next = event.currentTarget.valueAsNumber
-        if (!Number.isFinite(next) || next < min || next > max) setDraftValue(String(value))
+        if (!event.currentTarget.validity.valid || !Number.isFinite(next) || next < min || next > max) {
+          setDraftValue(String(value))
+        }
       }}
       onChange={(event) => {
         setDraftValue(event.currentTarget.value)

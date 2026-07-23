@@ -6,7 +6,10 @@ import { resolvePreferredLang } from '#/shared/i18n/resolve-lang.ts'
 import type { Lang, SettingsPrefs } from '#/shared/rpc.ts'
 import {
   TELEGRAM_CONTEXT_TEXT_MAX_LENGTH,
+  TELEGRAM_MESSAGE_MAX_LENGTH,
   TELEGRAM_OUTPUT_TAIL_MAX_LENGTH,
+  normalizeTelegramOutput,
+  truncateTelegramOutputTail,
   type TelegramBellNotificationContext,
   type TelegramNotificationResult,
   type TelegramOutputCompletionNotificationContext,
@@ -27,6 +30,7 @@ type TelegramConfig = {
   bellEnabled: boolean
   outputCompletionEnabled: boolean
   includeTerminalOutput: boolean
+  outputTailLength: number
 }
 type SendMessage = typeof sendTelegramMessage
 
@@ -72,13 +76,29 @@ function formatTelegramTerminalMessage(
   if (context.terminalTitle) {
     lines.push(line(dict['telegram.notification.message.terminal-title'], context.terminalTitle, lang))
   }
-  if (context.outputTail) lines.push('', dict['telegram.notification.message.output-tail'], context.outputTail)
-  return lines.join('\n')
+  const prefix = lines.join('\n')
+  if (!context.outputTail) return prefix
+  const outputPrefix = `\n\n${dict['telegram.notification.message.output-tail']}\n`
+  const remainingCharacters = TELEGRAM_MESSAGE_MAX_LENGTH - Array.from(prefix + outputPrefix).length
+  const outputTail = truncateTelegramOutputTail(context.outputTail, remainingCharacters)
+  return outputTail ? `${prefix}${outputPrefix}${outputTail}` : prefix
+}
+
+function configuredDeliveryContext(
+  context: TelegramBellNotificationContext,
+  config: TelegramConfig,
+): TelegramBellNotificationContext {
+  return {
+    ...context,
+    outputTail: config.includeTerminalOutput
+      ? truncateTelegramOutputTail(context.outputTail, config.outputTailLength)
+      : undefined,
+  }
 }
 
 function validatedOutputTail(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
-  const normalized = value.replace(/\r\n?|\n/gu, '\n').replace(/^\n+|\n+$/gu, '')
+  const normalized = normalizeTelegramOutput(value)
   if (!normalized || Array.from(normalized).length > TELEGRAM_OUTPUT_TAIL_MAX_LENGTH) return undefined
   return /[\u0000-\u0009\u000b-\u001f\u007f]/u.test(normalized) ? undefined : normalized
 }
@@ -120,8 +140,8 @@ function validatedContext(value: TelegramBellNotificationContext): TelegramBellN
     value.terminalIndex < 1 ||
     value.terminalIndex > 9_999 ||
     (value.branch !== undefined && !branch) ||
-    (value.terminalTitle !== undefined && !terminalTitle)
-    || (value.outputTail !== undefined && !outputTail)
+    (value.terminalTitle !== undefined && !terminalTitle) ||
+    (value.outputTail !== undefined && !outputTail)
   ) {
     return null
   }
@@ -205,7 +225,7 @@ export async function sendConfiguredTelegramBellNotification(
   }
 
   const lang = resolvePreferredLang(prefs.lang, options.acceptLanguage)
-  const deliveryContext = config.includeTerminalOutput ? safeContext : { ...safeContext, outputTail: undefined }
+  const deliveryContext = configuredDeliveryContext(safeContext, config)
   return await sendConfiguredMessage(formatTelegramBellMessage(deliveryContext, lang), prefs, config, options)
 }
 
@@ -236,7 +256,7 @@ export async function sendConfiguredTelegramOutputCompletionNotification(
   }
 
   const lang = resolvePreferredLang(prefs.lang, options.acceptLanguage)
-  const deliveryContext = config.includeTerminalOutput ? safeContext : { ...safeContext, outputTail: undefined }
+  const deliveryContext = configuredDeliveryContext(safeContext, config)
   return await sendConfiguredMessage(formatTelegramOutputCompletionMessage(deliveryContext, lang), prefs, config, options)
 }
 

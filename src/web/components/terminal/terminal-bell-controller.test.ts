@@ -117,6 +117,7 @@ describe('terminal bell controller', () => {
           bellEnabled: true,
           outputCompletionEnabled: false,
           includeTerminalOutput: false,
+          outputTailLength: 400,
         },
       }),
     )
@@ -139,6 +140,43 @@ describe('terminal bell controller', () => {
       terminalIndex: 1,
       terminalTitle: 'bun run test',
     })
+
+    vi.unstubAllGlobals()
+    hasFocus.mockRestore()
+  })
+
+  test('sends only the configured terminal output suffix to Telegram', async () => {
+    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true }) }))
+    vi.stubGlobal('fetch', fetchMock)
+    mainWindowQueryClient.setQueryData(
+      settingsSnapshotQueryKey(),
+      defaultSettingsSnapshot({
+        terminalNotificationsEnabled: true,
+        telegramNotifications: {
+          enabled: true,
+          botTokenConfigured: true,
+          chatId: '-100123',
+          bellEnabled: true,
+          outputCompletionEnabled: false,
+          includeTerminalOutput: true,
+          outputTailLength: 3,
+        },
+      }),
+    )
+    const controller = createTerminalBellController(vi.fn(), vi.fn())
+
+    controller.handleBell(descriptor, { processName: 'bun', visible: false, outputTail: 'abc🙂de' })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const telegramCall = fetchMock.mock.calls.find((call) => {
+      const [url] = call as unknown as [unknown, RequestInit | undefined]
+      return new URL(String(url)).pathname.endsWith('/bell')
+    })
+    expect(telegramCall).toBeDefined()
+    const [, request] = telegramCall as unknown as [unknown, RequestInit]
+    expect(JSON.parse(String(request.body))).toMatchObject({ outputTail: '🙂de' })
 
     vi.unstubAllGlobals()
     hasFocus.mockRestore()
@@ -197,6 +235,7 @@ describe('terminal bell controller', () => {
           bellEnabled: true,
           outputCompletionEnabled: false,
           includeTerminalOutput: false,
+          outputTailLength: 400,
         },
       }),
     )

@@ -1067,7 +1067,10 @@ export const en = {
     'Send Telegram whenever the terminal activity indicator changes from active to idle.',
   'settings.telegram.include-terminal-output': 'Include terminal output',
   'settings.telegram.include-terminal-output-hint':
-    'Append the last 200 visible characters. Terminal output may contain sensitive information.',
+    'Append trailing visible terminal output. Terminal output may contain sensitive information.',
+  'settings.telegram.output-tail-length': 'Terminal output characters',
+  'settings.telegram.output-tail-length-hint':
+    "Use 1–4096 characters (default 400). Consecutive spaces, tabs, and line breaks count as one space; Telegram's whole-message limit may shorten the excerpt.",
   'settings.telegram.bot-token': 'Bot Token',
   'settings.telegram.bot-token-hint-configured': 'A Bot Token is configured. Leave blank to keep it.',
   'settings.telegram.bot-token-hint-new': 'Create a bot with BotFather and paste its Token.',

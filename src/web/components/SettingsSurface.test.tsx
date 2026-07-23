@@ -66,6 +66,7 @@ function defaultRpcResult(path: string, input?: unknown) {
         bellEnabled: true,
         outputCompletionEnabled: false,
         includeTerminalOutput: false,
+        outputTailLength: 400,
       },
     }
   }
@@ -171,6 +172,7 @@ const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
       bellEnabled?: boolean
       outputCompletionEnabled?: boolean
       includeTerminalOutput?: boolean
+      outputTailLength?: number
     }
     result = {
       ok: true,
@@ -181,6 +183,7 @@ const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
         bellEnabled: body.bellEnabled === true,
         outputCompletionEnabled: body.outputCompletionEnabled === true,
         includeTerminalOutput: body.includeTerminalOutput === true,
+        outputTailLength: body.outputTailLength ?? 400,
       },
     }
   } else if (url.pathname === '/api/telegram-notifications/test') {
@@ -357,14 +360,22 @@ describe('SettingsSurface', () => {
 
     const tokenInput = document.getElementById('settings-telegram-bot-token')
     const chatIdInput = document.getElementById('settings-telegram-chat-id')
+    const outputTailLengthInput = document.getElementById('settings-telegram-output-tail-length')
     if (!(tokenInput instanceof HTMLInputElement)) throw new Error('Missing Telegram Bot Token input')
     if (!(chatIdInput instanceof HTMLInputElement)) throw new Error('Missing Telegram Chat ID input')
+    if (!(outputTailLengthInput instanceof HTMLInputElement)) {
+      throw new Error('Missing Telegram output tail length input')
+    }
     expect(tokenInput.type).toBe('password')
     expect(tokenInput.value).toBe('')
     expect(document.body.textContent).toContain('settings.telegram.master-off-hint')
     expect(switchById('settings-telegram-bell-enabled').getAttribute('data-state')).toBe('checked')
     expect(switchById('settings-telegram-output-completion-enabled').getAttribute('data-state')).toBe('unchecked')
     expect(switchById('settings-telegram-include-terminal-output').getAttribute('data-state')).toBe('unchecked')
+    expect(outputTailLengthInput.value).toBe('400')
+    expect(outputTailLengthInput.min).toBe('1')
+    expect(outputTailLengthInput.max).toBe('4096')
+    expect(document.body.textContent).toContain('settings.telegram.output-tail-length')
 
     await act(async () => {
       switchById('settings-telegram-enabled').click()
@@ -372,6 +383,7 @@ describe('SettingsSurface', () => {
       switchById('settings-telegram-include-terminal-output').click()
       setInputValue(tokenInput, '123456:test-token')
       setInputValue(chatIdInput, '-100123')
+      setInputValue(outputTailLengthInput, '1024')
       await Promise.resolve()
     })
     await act(async () => {
@@ -393,6 +405,7 @@ describe('SettingsSurface', () => {
       bellEnabled: true,
       outputCompletionEnabled: true,
       includeTerminalOutput: true,
+      outputTailLength: 1024,
     })
     expect((document.getElementById('settings-telegram-bot-token') as HTMLInputElement).value).toBe('')
 
