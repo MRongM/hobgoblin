@@ -48,7 +48,8 @@ class SshTerminalStartupCommandTest {
                     "\\; set-option -t '=${identity.sessionName}' @hobgoblin_terminal_number '2'",
             ),
         )
-        assertTrue(output.contains("exec \"\${SHELL:-/bin/sh}\" -l"))
+        assertTrue(output.contains("else\n  exec \"\${SHELL:-/bin/sh}\" -l\nfi"))
+        assertFalse(output.contains("fi\nexec \"\${SHELL:-/bin/sh}\" -l"))
         assertFalse(output.contains("session_id"))
         assertTrue(output.endsWith("\r"))
     }

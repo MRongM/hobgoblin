@@ -163,6 +163,20 @@ class RepositorySetupStateTest {
     }
 
     @Test
+    fun `tmux scan action exposes stable ready and pending labels`() {
+        assertEquals("Scan tmux", tmuxScanButtonLabel(isScanning = false))
+        assertEquals("Scanning...", tmuxScanButtonLabel(isScanning = true))
+    }
+
+    @Test
+    fun `tmux scan action requires paths and rejects reentry`() {
+        assertFalse(canScanTmux(isScanning = false, discoveryPaths = null))
+        assertFalse(canScanTmux(isScanning = false, discoveryPaths = emptyList()))
+        assertTrue(canScanTmux(isScanning = false, discoveryPaths = listOf("/srv/app")))
+        assertFalse(canScanTmux(isScanning = true, discoveryPaths = listOf("/srv/app")))
+    }
+
+    @Test
     fun `validated discoveries map to path scoped recovery candidates`() {
         val host = host(id = "host-1", identityRefId = "identity-1")
         val repository = repository(id = "repo-1", remotePath = "/srv/app")

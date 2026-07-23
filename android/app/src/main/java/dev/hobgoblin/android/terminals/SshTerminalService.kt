@@ -96,6 +96,7 @@ internal object SshTerminalStartupCommand {
         }
 
         val tmuxIdentity = startupContext.tmuxIdentity
+        val loginShellCommand = "exec \"${'$'}{SHELL:-/bin/sh}\" -l"
         val lines = buildList {
             add("cd ${shellQuote(normalizedPath)} || exit")
             if (tmuxIdentity != null) {
@@ -104,9 +105,12 @@ internal object SshTerminalStartupCommand {
                 ) { "Tmux terminal number must be positive" }
                 add("if command -v tmux >/dev/null 2>&1; then")
                 add("  $tmuxCommand")
+                add("else")
+                add("  $loginShellCommand")
                 add("fi")
+            } else {
+                add(loginShellCommand)
             }
-            add("exec \"${'$'}{SHELL:-/bin/sh}\" -l")
         }
         return lines.joinToString("\n") + "\r"
     }
