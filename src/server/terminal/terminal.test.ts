@@ -366,6 +366,8 @@ describe('server terminal sessions', () => {
     })
 
     expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.sessions.find((session) => session.sessionId === result.sessionId)?.tmuxBacked).toBe(false)
     expect(spawn).toHaveBeenCalledWith(
       'ssh',
       [
@@ -456,6 +458,8 @@ describe('server terminal sessions', () => {
     })
 
     expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.sessions.find((session) => session.sessionId === result.sessionId)?.tmuxBacked).toBe(true)
     expect(spawn).toHaveBeenCalledWith(
       'ssh',
       [
@@ -499,6 +503,8 @@ describe('server terminal sessions', () => {
     })
 
     expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.sessions.find((session) => session.sessionId === result.sessionId)?.tmuxBacked).toBe(true)
     const expectedName = buildTmuxSessionName({
       projectRoot: '/repo',
       workingDirectory: '/repo-linked',
@@ -508,6 +514,98 @@ describe('server terminal sessions', () => {
       '/bin/zsh',
       ['-lc', expect.stringContaining(`tmux new-session -A -s '${expectedName}' -c '/repo-linked'`)],
       expect.objectContaining({ cwd: '/repo-linked', cols: 100, rows: 30 }),
+    )
+  })
+
+  test('closes a checked terminal through its private exact tmux identity', async () => {
+    settingsSourceMocks.getServerSettingsPrefs.mockResolvedValue({
+      localTerminalTmuxEnabled: true,
+      remoteTerminalTmuxEnabled: false,
+    })
+    const created = await createServerTerminal('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+      kind: 'primary',
+    })
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+    const closeTmuxSession = vi.fn(async () => ({ ok: true as const, status: 'closed' as const }))
+
+    await expect(
+      closeServerTerminal('client_1', { sessionId: created.sessionId, closeTmuxSession: true }, { closeTmuxSession }),
+    ).resolves.toEqual({ ok: true })
+    expect(closeTmuxSession).toHaveBeenCalledWith({
+      projectRoot: '/repo',
+      itemPath: '/repo-linked',
+      sessionName: buildTmuxSessionName({
+        projectRoot: '/repo',
+        workingDirectory: '/repo-linked',
+        terminalNumber: 1,
+      }),
+    })
+    await expect(listServerTerminalSessions('client_1', '/repo')).resolves.toEqual([])
+  })
+
+  test('keeps the internal terminal when checked tmux close fails', async () => {
+    settingsSourceMocks.getServerSettingsPrefs.mockResolvedValue({
+      localTerminalTmuxEnabled: true,
+      remoteTerminalTmuxEnabled: false,
+    })
+    const created = await createServerTerminal('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+      kind: 'primary',
+    })
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+
+    await expect(
+      closeServerTerminal(
+        'client_1',
+        { sessionId: created.sessionId, closeTmuxSession: true },
+        { closeTmuxSession: vi.fn(async () => ({ ok: false as const, message: 'permission denied' })) },
+      ),
+    ).resolves.toEqual({ ok: false, message: 'permission denied' })
+    await expect(listServerTerminalSessions('client_1', '/repo')).resolves.toContainEqual(
+      expect.objectContaining({ sessionId: created.sessionId }),
+    )
+  })
+
+  test('does not probe tmux for unchecked close and rejects checked close without tmux identity', async () => {
+    const plain = await createServerTerminal('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+      kind: 'primary',
+    })
+    expect(plain.ok).toBe(true)
+    if (!plain.ok) return
+    const closeTmuxSession = vi.fn()
+
+    await expect(
+      closeServerTerminal('client_1', { sessionId: plain.sessionId }, { closeTmuxSession }),
+    ).resolves.toEqual({ ok: true })
+    expect(closeTmuxSession).not.toHaveBeenCalled()
+
+    const anotherPlain = await createServerTerminal('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+      kind: 'primary',
+    })
+    expect(anotherPlain.ok).toBe(true)
+    if (!anotherPlain.ok) return
+    await expect(
+      closeServerTerminal(
+        'client_1',
+        { sessionId: anotherPlain.sessionId, closeTmuxSession: true },
+        { closeTmuxSession },
+      ),
+    ).resolves.toEqual({ ok: false, message: 'error.terminal-tmux-unavailable' })
+    await expect(listServerTerminalSessions('client_1', '/repo')).resolves.toContainEqual(
+      expect.objectContaining({ sessionId: anotherPlain.sessionId }),
     )
   })
 
@@ -569,7 +667,7 @@ describe('server terminal sessions', () => {
     if (!second.ok) return
     expect(second.key).toBe('/repo\u0000/repo-linked\u0000terminal-2')
 
-    expect(closeServerTerminal('client_1', { sessionId: firstSession.sessionId })).toBe(true)
+    await expect(closeServerTerminal('client_1', { sessionId: firstSession.sessionId })).resolves.toEqual({ ok: true })
 
     const reopened = await createServerTerminal('client_1', {
       repoRoot: '/repo',

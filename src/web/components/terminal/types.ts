@@ -1,4 +1,9 @@
-import type { TerminalAttachmentRole, TerminalControllerStatus, TerminalSessionPhase } from '#/shared/terminal.ts'
+import type {
+  TerminalAttachmentRole,
+  TerminalCloseResult,
+  TerminalControllerStatus,
+  TerminalSessionPhase,
+} from '#/shared/terminal.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
 export type TerminalPhase = TerminalSessionPhase
 
@@ -12,6 +17,7 @@ export interface TerminalDescriptor {
   worktreePath: string
   targetKind?: 'branch-workspace'
   branchWorkspaceId?: string
+  tmuxBacked?: boolean
 }
 
 export interface TerminalProgressState {
@@ -109,6 +115,11 @@ export interface TerminalSessionSummary {
   isOutputActive?: boolean
   selected: boolean
   hasBell: boolean
+  tmuxBacked?: boolean
+}
+
+export interface TerminalCloseOptions {
+  closeTmuxSession?: boolean
 }
 
 export interface WorktreeTerminalSnapshot {
@@ -125,7 +136,11 @@ export interface TerminalSessionContextValue {
   focusTerminal: (key: string) => void
   scrollLines: (key: string, amount: number) => void
   clearBell: (key: string) => boolean
-  closeTerminalAndDismissDetailIfLast: (key: string, scope: TerminalWorktreeScope) => void
+  closeTerminalAndDismissDetailIfLast: (
+    key: string,
+    scope: TerminalWorktreeScope,
+    options?: TerminalCloseOptions,
+  ) => void | Promise<TerminalCloseResult>
   registerWorktreeHost: (worktreeTerminalKey: string, host: HTMLElement | null) => void
   attach: (descriptor: TerminalDescriptor, host: HTMLElement, handlers?: TerminalSessionAttachHandlers) => void
   detach: (key: string, host: HTMLElement) => void

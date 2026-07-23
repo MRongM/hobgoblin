@@ -15,6 +15,7 @@ export interface RemoteTerminalInvocation {
   args: string[]
   script: string
   shellCommand: string
+  tmuxSessionName: string | null
 }
 
 export interface RemoteTerminalInvocationOptions {
@@ -29,11 +30,12 @@ export function buildManagedRemoteTerminalInvocation(
   const descriptor = normalizeTmuxSessionDescriptor(target)
   if (!isSafeRemoteAlias(target.alias) || !descriptor) return null
 
-  const script =
-    options.useTmux === true
-      ? buildTmuxRemoteLoginShellScript(descriptor)
-      : buildPlainRemoteLoginShellScript(descriptor.workingDirectory)
-  return buildSshInvocation(target.alias, script, options)
+  const tmuxSessionName = options.useTmux === true ? buildTmuxSessionName(descriptor) : null
+  if (options.useTmux === true && !tmuxSessionName) return null
+  const script = tmuxSessionName
+    ? buildTmuxRemoteLoginShellScript(descriptor, tmuxSessionName)
+    : buildPlainRemoteLoginShellScript(descriptor.workingDirectory)
+  return buildSshInvocation(target.alias, script, tmuxSessionName, options)
 }
 
 export function buildExternalRemoteTerminalInvocation(
@@ -47,9 +49,7 @@ function buildPlainRemoteLoginShellScript(worktreePath: string): string {
   return [`cd ${shellQuote(worktreePath)} || exit`, 'exec "${SHELL:-/bin/sh}" -l'].join('\n')
 }
 
-function buildTmuxRemoteLoginShellScript(target: TmuxSessionDescriptor): string {
-  const sessionName = buildTmuxSessionName(target)
-  if (!sessionName) throw new Error('Invalid tmux session descriptor')
+function buildTmuxRemoteLoginShellScript(target: TmuxSessionDescriptor, sessionName: string): string {
   return [
     `cd ${shellQuote(target.workingDirectory)} || exit`,
     'if command -v tmux >/dev/null 2>&1; then',
@@ -62,6 +62,7 @@ function buildTmuxRemoteLoginShellScript(target: TmuxSessionDescriptor): string 
 function buildSshInvocation(
   alias: string,
   script: string,
+  tmuxSessionName: string | null,
   options: RemoteTerminalInvocationOptions,
 ): RemoteTerminalInvocation {
   const remoteCommand = `sh -lc ${shellQuote(script)}`
@@ -71,6 +72,7 @@ function buildSshInvocation(
     args,
     script,
     shellCommand: ['ssh', ...args].map(shellQuote).join(' '),
+    tmuxSessionName,
   }
 }
 

@@ -91,4 +91,12 @@ tmux new-session -A -s 'hobgoblin-v1-aebf050981ac829e36100020' -c '/srv/projects
 
 Do not add a forced-detach option. Hobgoblin and external tmux clients intentionally have concurrent shared control.
 
+## Runtime association and exact close
+
+When Hobgoblin launches an internal terminal through this protocol, it records the calculated session name and normalized working directory on the server-side terminal record. This association is fixed for that terminal's lifetime; changing the tmux preference later does not reclassify an existing terminal.
+
+The renderer may receive a boolean indicating that an internal terminal is tmux-backed, but it does not receive the session name. If the user explicitly chooses to close the associated tmux session while closing one internal terminal, the server validates the stored name against the current `hobgoblin-v1-` protocol and requires the stored path to exactly match the terminal worktree path before issuing `kill-session` locally or over SSH.
+
+Closing the associated tmux session is fail-closed: Hobgoblin keeps the internal terminal open when validation or the tmux command fails. A session that disappeared after confirmation is treated as already closed. Bulk terminal-close actions never close tmux sessions.
+
 Version 1 does not discover, migrate, attach to, rename, or delete legacy `goblin-*` sessions.

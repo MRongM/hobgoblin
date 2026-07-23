@@ -681,6 +681,10 @@ export const en = {
   'terminal.close-confirm-title': 'Close terminal?',
   'terminal.close-confirm-body': 'This will close {name} and end its running shell session.',
   'terminal.close-confirm-confirm': 'Close terminal',
+  'terminal.close-tmux-session': 'Also close the tmux session',
+  'terminal.close-tmux-session-hint':
+    'This ends its running processes and disconnects other clients attached to this session.',
+  'terminal.close-tmux-session-failed': 'Could not close the tmux session',
   'terminal.close-all': 'Close all terminals',
   'terminal.close-all-confirm-title': 'Close all terminals?',
   'terminal.close-all-confirm-body': 'This will close {count} terminals and end their running shell sessions.',
@@ -957,6 +961,7 @@ export const en = {
   'error.tmux-unavailable': 'tmux is not installed or unavailable.',
   'error.tmux-invalid-output': 'tmux returned an unsupported session list.',
   'error.tmux-command-failed': 'The tmux command failed.',
+  'error.terminal-tmux-unavailable': 'This terminal has no verified tmux session identity.',
   'error.invalid-host': 'Invalid host',
   'error.invalid-port': 'Invalid port',
   'error.port-forward-start-failed': 'Could not start port forwarding',
@@ -1187,8 +1192,7 @@ export const en = {
   'settings.terminal-tmux.title': 'Tmux sessions',
   'settings.terminal-tmux.hint': 'Control whether local and remote terminal launches use tmux.',
   'settings.terminal-tmux.local': 'Use tmux for local terminals',
-  'settings.terminal-tmux.local-hint':
-    'Applies to in-app terminals and supported external terminals on this computer.',
+  'settings.terminal-tmux.local-hint': 'Applies to in-app terminals and supported external terminals on this computer.',
   'settings.terminal-tmux.remote': 'Use tmux for remote terminals',
   'settings.terminal-tmux.remote-hint':
     'Applies to in-app terminals and supported external terminals opened through SSH.',

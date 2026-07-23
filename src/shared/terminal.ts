@@ -120,7 +120,10 @@ export type TerminalTakeoverInput = TerminalResizeInput
 
 export interface TerminalSessionInput {
   sessionId: string
+  closeTmuxSession?: boolean
 }
+
+export type TerminalCloseResult = { ok: true } | { ok: false; message: string }
 
 export interface TerminalCloseSessionsInput {
   sessionIds: string[]
@@ -163,6 +166,7 @@ export interface TerminalSessionSummary {
   phase: TerminalSessionPhase
   message: string | null
   windowsPty?: TerminalWindowsPty
+  tmuxBacked?: boolean
 }
 
 export interface TerminalSessionSnapshotInput {
@@ -229,7 +233,7 @@ export interface TerminalSocketResponseOutputs {
   write: TerminalMutationResult
   resize: TerminalMutationResult
   takeover: TerminalTakeoverResult
-  close: TerminalMutationResult
+  close: TerminalCloseResult
   'list-sessions': TerminalSessionSummary[]
   create: TerminalCatalogMutationResult
   prune: { pruned: number; remaining: number }
@@ -336,6 +340,7 @@ const TerminalWriteInputSchema = v.object({
 const TerminalResizeInputSchema = TerminalAttachInputSchema
 const TerminalSessionInputSchema = v.object({
   sessionId: TerminalSessionIdSchema,
+  closeTmuxSession: v.optional(v.boolean()),
 })
 const TerminalListSessionsInputSchema = v.object({
   repoRoot: v.string(),
@@ -375,6 +380,7 @@ const TerminalSessionSummarySchema = v.object({
   phase: TerminalSessionPhaseSchema,
   message: v.nullable(v.string()),
   windowsPty: v.optional(TerminalWindowsPtySchema),
+  tmuxBacked: v.optional(v.boolean()),
 })
 const TerminalSessionSnapshotSchema = v.object({
   sessionId: v.string(),

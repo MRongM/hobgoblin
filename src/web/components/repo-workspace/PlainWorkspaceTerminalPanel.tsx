@@ -76,8 +76,8 @@ export function PlainWorkspaceTerminalPanel({
   )
 
   const handleCloseTerminal = useCallback(
-    (key: string) => {
-      closeTerminalAndDismissDetailIfLast(key, terminalBase)
+    (key: string, options?: Parameters<typeof closeTerminalAndDismissDetailIfLast>[2]) => {
+      return closeTerminalAndDismissDetailIfLast(key, terminalBase, options)
     },
     [closeTerminalAndDismissDetailIfLast, terminalBase],
   )

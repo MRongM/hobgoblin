@@ -8,6 +8,7 @@ import {
 } from '#/shared/file-tree.ts'
 import { BRANCH_WORKSPACE_DIRECTORY_PREFIXES } from '#/shared/branch-workspaces.ts'
 import { isValidTmuxSessionId } from '#/shared/tmux-cleanup.ts'
+import { isHobgoblinTmuxSessionName } from '#/system/tmux-session.ts'
 import { FIELD_SEP } from '#/system/git/parsers.ts'
 import { buildManagedRemoteTerminalInvocation } from '#/system/remote-terminal.ts'
 import { TMUX_SESSION_LIST_FORMAT } from '#/system/tmux-cleanup.ts'
@@ -34,6 +35,7 @@ export type RemoteCommandKind =
   | { type: 'checkGit' }
   | { type: 'tmuxListSessions' }
   | { type: 'tmuxKillSession'; sessionId: string }
+  | { type: 'tmuxKillSessionByName'; sessionName: string }
   | { type: 'testDirectory'; path: string }
   | { type: 'listDirectories'; path: string; limit?: number }
   | { type: 'listWorkspaceGitDirectories'; rootPath: string }
@@ -130,6 +132,7 @@ export interface RemoteCommandInvocation {
   command: 'ssh'
   args: string[]
   script: string
+  tmuxSessionName?: string | null
 }
 
 export interface RemoteCommandOptions {
@@ -180,6 +183,7 @@ export function buildRemoteTerminalInvocation(
     command: invocation.command,
     args: invocation.args,
     script: invocation.script,
+    tmuxSessionName: invocation.tmuxSessionName,
   }
 }
 
@@ -231,6 +235,12 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return [
         'command -v tmux >/dev/null 2>&1 || exit 127',
         `tmux kill-session -t ${shellQuote(command.sessionId)}`,
+      ].join('\n')
+    case 'tmuxKillSessionByName':
+      if (!isHobgoblinTmuxSessionName(command.sessionName)) throw new TypeError('error.invalid-arguments')
+      return [
+        'command -v tmux >/dev/null 2>&1 || exit 127',
+        `tmux kill-session -t ${shellQuote(command.sessionName)}`,
       ].join('\n')
     case 'testDirectory':
       return `test -d ${shellQuote(command.path)}`

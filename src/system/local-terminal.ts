@@ -9,6 +9,7 @@ export interface LocalTerminalInvocation {
   args: string[]
   script: string
   shellCommand: string
+  tmuxSessionName: string
 }
 
 export interface LocalTerminalInvocationOptions {
@@ -42,6 +43,7 @@ export function buildManagedLocalTerminalInvocation(
     args: ['-lc', script],
     script,
     shellCommand: [fallbackShell, '-lc', script].map(shellQuote).join(' '),
+    tmuxSessionName: sessionName,
   }
 }
 

@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from 'vitest'
 import {
   cleanupAssociatedTmuxSessions,
+  closeAssociatedTmuxSessionByName,
   previewAssociatedTmuxSessions,
   type TmuxCleanupDependencies,
 } from '#/server/modules/tmux-cleanup.ts'
@@ -19,6 +20,106 @@ const REMOTE_TARGET = {
 }
 
 describe('associated tmux cleanup', () => {
+  test('closes only the exact current-protocol name at the normalized local path', async () => {
+    const listLocal = vi.fn(async () => ({
+      ok: true as const,
+      sessions: [
+        { sessionId: '$1', sessionName: FIRST_NAME, sessionPath: '/work/feature/' },
+        { sessionId: '$2', sessionName: SECOND_NAME, sessionPath: '/work/feature' },
+      ],
+    }))
+    const killLocalByName = vi.fn(async () => ({ ok: true, message: '' }))
+
+    await expect(
+      closeAssociatedTmuxSessionByName(
+        { projectRoot: '/work/repo', itemPath: '/work/feature/.', sessionName: FIRST_NAME },
+        { platform: 'linux', listLocal, killLocalByName },
+      ),
+    ).resolves.toEqual({ ok: true, status: 'closed' })
+    expect(killLocalByName).toHaveBeenCalledWith(FIRST_NAME, { signal: undefined })
+  })
+
+  test('does not close an exact name reported at a different path', async () => {
+    const listLocal = vi.fn(async () => ({
+      ok: true as const,
+      sessions: [{ sessionId: '$1', sessionName: FIRST_NAME, sessionPath: '/work/other' }],
+    }))
+    const killLocalByName = vi.fn()
+
+    await expect(
+      closeAssociatedTmuxSessionByName(
+        { projectRoot: '/work/repo', itemPath: '/work/feature', sessionName: FIRST_NAME },
+        { platform: 'linux', listLocal, killLocalByName },
+      ),
+    ).resolves.toEqual({ ok: true, status: 'missing' })
+    expect(killLocalByName).not.toHaveBeenCalled()
+  })
+
+  test('treats an absent or concurrently disappeared exact session as missing', async () => {
+    const listLocal = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, sessions: [] })
+      .mockResolvedValueOnce({
+        ok: true,
+        sessions: [{ sessionId: '$1', sessionName: FIRST_NAME, sessionPath: '/work/feature' }],
+      })
+    const killLocalByName = vi.fn(async () => ({ ok: false, message: `can't find session: ${FIRST_NAME}` }))
+    const dependenciesWithExactKill = { platform: 'linux' as const, listLocal, killLocalByName }
+    const input = { projectRoot: '/work/repo', itemPath: '/work/feature', sessionName: FIRST_NAME }
+
+    await expect(closeAssociatedTmuxSessionByName(input, dependenciesWithExactKill)).resolves.toEqual({
+      ok: true,
+      status: 'missing',
+    })
+    await expect(closeAssociatedTmuxSessionByName(input, dependenciesWithExactKill)).resolves.toEqual({
+      ok: true,
+      status: 'missing',
+    })
+  })
+
+  test('closes the exact session through the resolved SSH target', async () => {
+    const resolveRemote = vi.fn(async () => REMOTE_TARGET)
+    const runRemote = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, stdout: `${FIRST_NAME}\t$7\t/srv/feature`, stderr: '' })
+      .mockResolvedValueOnce({ ok: true, stdout: '', stderr: '' })
+
+    await expect(
+      closeAssociatedTmuxSessionByName(
+        { projectRoot: REMOTE_REPO, itemPath: '/srv/feature', sessionName: FIRST_NAME },
+        dependencies({ resolveRemote, runRemote }),
+      ),
+    ).resolves.toEqual({ ok: true, status: 'closed' })
+    expect(runRemote).toHaveBeenNthCalledWith(
+      2,
+      REMOTE_TARGET,
+      { type: 'tmuxKillSessionByName', sessionName: FIRST_NAME },
+      { signal: undefined },
+    )
+  })
+
+  test('rejects non-protocol names and preserves exact-close command failures', async () => {
+    const listLocal = vi.fn(async () => ({
+      ok: true as const,
+      sessions: [{ sessionId: '$1', sessionName: FIRST_NAME, sessionPath: '/work/feature' }],
+    }))
+    const killLocalByName = vi.fn(async () => ({ ok: false, message: 'permission denied' }))
+
+    await expect(
+      closeAssociatedTmuxSessionByName(
+        { projectRoot: '/work/repo', itemPath: '/work/feature', sessionName: 'goblin-feature' },
+        { platform: 'linux', listLocal, killLocalByName },
+      ),
+    ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+    await expect(
+      closeAssociatedTmuxSessionByName(
+        { projectRoot: '/work/repo', itemPath: '/work/feature', sessionName: FIRST_NAME },
+        { platform: 'linux', listLocal, killLocalByName },
+      ),
+    ).resolves.toEqual({ ok: false, message: 'permission denied' })
+    expect(killLocalByName).toHaveBeenCalledTimes(1)
+  })
+
   test('previews only current-protocol sessions whose normalized path is an exact match', async () => {
     const listLocal = vi.fn(async () => ({
       ok: true as const,

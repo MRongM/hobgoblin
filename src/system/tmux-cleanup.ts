@@ -1,9 +1,11 @@
 import { execa } from 'execa'
 import { isValidTmuxSessionId, type TmuxSessionRecord } from '#/shared/tmux-cleanup.ts'
-import { normalizeTmuxSessionPath } from '#/system/tmux-session.ts'
+import { isHobgoblinTmuxSessionName, normalizeTmuxSessionPath } from '#/system/tmux-session.ts'
 
 const TMUX_COMMAND_TIMEOUT_MS = 15_000
 const NO_TMUX_SERVER_RE = /(?:no server running|failed to connect to server|no sessions)/iu
+const MISSING_TMUX_SESSION_RE =
+  /(?:no server running|failed to connect to server|no sessions|can't find session|session not found)/iu
 
 export const TMUX_SESSION_LIST_FORMAT = '#{session_name}\t#{session_id}\t#{session_path}'
 
@@ -67,6 +69,19 @@ export async function killLocalTmuxSession(
   if (!isValidTmuxSessionId(sessionId)) return { ok: false, message: 'error.invalid-arguments' }
   const result = await (options.run ?? runLocalTmuxCommand)(['kill-session', '-t', sessionId], options.signal)
   return result.ok ? { ok: true, message: result.stderr } : { ok: false, message: result.message }
+}
+
+export async function killLocalTmuxSessionByName(
+  sessionName: string,
+  options: LocalTmuxCommandOptions = {},
+): Promise<TmuxCommandResult> {
+  if (!isHobgoblinTmuxSessionName(sessionName)) return { ok: false, message: 'error.invalid-arguments' }
+  const result = await (options.run ?? runLocalTmuxCommand)(['kill-session', '-t', sessionName], options.signal)
+  return result.ok ? { ok: true, message: result.stderr } : { ok: false, message: result.message }
+}
+
+export function isTmuxSessionMissingMessage(message: string): boolean {
+  return MISSING_TMUX_SESSION_RE.test(message)
 }
 
 async function runLocalTmuxCommand(args: string[], signal?: AbortSignal): Promise<TmuxProcessResult> {

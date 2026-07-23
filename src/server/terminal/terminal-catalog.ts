@@ -263,6 +263,9 @@ class TerminalCatalog {
       forceNew: context.action === 'created',
       command: invocation.command,
       args: invocation.args,
+      ...(invocation.tmuxSessionName
+        ? { tmuxSessionName: invocation.tmuxSessionName, tmuxWorkingDirectory: input.worktreePath }
+        : {}),
     })
     if (!result.ok) return { ok: false, message: result.message }
     this.options.broadcastSessionsChanged(input.repoRoot)
@@ -345,6 +348,9 @@ class TerminalCatalog {
       forceNew: context.action === 'created',
       command: invocation?.command,
       args: invocation?.args,
+      ...(invocation
+        ? { tmuxSessionName: invocation.tmuxSessionName, tmuxWorkingDirectory: context.worktreePath }
+        : {}),
     })
     if (!result.ok) return { ok: false, message: result.message }
     this.options.broadcastSessionsChanged(input.repoRoot)

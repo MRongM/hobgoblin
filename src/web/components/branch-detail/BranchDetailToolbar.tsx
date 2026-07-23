@@ -119,9 +119,9 @@ export function BranchDetailToolbar({
   )
 
   const handleCloseTerminal = useCallback(
-    (key: string) => {
+    (key: string, options?: Parameters<typeof closeTerminalAndDismissDetailIfLast>[2]) => {
       if (!terminalBase) return
-      closeTerminalAndDismissDetailIfLast(key, terminalBase)
+      return closeTerminalAndDismissDetailIfLast(key, terminalBase, options)
     },
     [closeTerminalAndDismissDetailIfLast, terminalBase],
   )

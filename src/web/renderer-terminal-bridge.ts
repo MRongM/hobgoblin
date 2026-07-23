@@ -11,6 +11,7 @@ import type {
   TerminalAttachInput,
   TerminalAttachResult,
   TerminalCatalogMutationResult,
+  TerminalCloseResult,
   TerminalCreateInput,
   TerminalExitEvent,
   TerminalMutationResult,
@@ -55,9 +56,7 @@ export function createServerTerminalBridge(options: {
   const outputSubscribers = new Set<(event: TerminalOutputEvent) => void>()
   const titleSubscribers = new Set<(event: TerminalTitleEvent) => void>()
   const exitSubscribers = new Set<(event: TerminalExitEvent) => void>()
-  const ownershipSubscribers = new Set<
-    (event: TerminalOwnershipViewModel) => void
-  >()
+  const ownershipSubscribers = new Set<(event: TerminalOwnershipViewModel) => void>()
   const sessionsChangedSubscribers = new Set<(repoRoot: string) => void>()
   const attachmentId = options.getAttachmentId()
   let socket: WebSocket | null = null
@@ -311,18 +310,9 @@ export function createServerTerminalBridge(options: {
     closeSocketIfIdle()
   }
 
-  async function requestOverSocket(
-    action: 'attach',
-    input: TerminalAttachInput,
-  ): Promise<TerminalAttachResult>
-  async function requestOverSocket(
-    action: 'restart',
-    input: TerminalRestartInput,
-  ): Promise<TerminalAttachResult>
-  async function requestOverSocket(
-    action: 'create',
-    input: TerminalCreateInput,
-  ): Promise<TerminalCatalogMutationResult>
+  async function requestOverSocket(action: 'attach', input: TerminalAttachInput): Promise<TerminalAttachResult>
+  async function requestOverSocket(action: 'restart', input: TerminalRestartInput): Promise<TerminalAttachResult>
+  async function requestOverSocket(action: 'create', input: TerminalCreateInput): Promise<TerminalCatalogMutationResult>
   async function requestOverSocket(
     action: 'prune',
     input: { repoRoot: string },
@@ -350,7 +340,7 @@ export function createServerTerminalBridge(options: {
   async function requestOverSocket(
     action: 'close',
     input: TerminalSocketRequestInputs['close'],
-  ): Promise<TerminalMutationResult>
+  ): Promise<TerminalCloseResult>
   async function requestOverSocket(
     action: 'reorder',
     input: TerminalSocketRequestInputs['reorder'],
@@ -369,9 +359,10 @@ export function createServerTerminalBridge(options: {
       })
       try {
         ws.send(
-          encodeClientMessage(
-            { type: 'request', requestId, action, input } as Extract<TerminalClientMessage, { action: TAction }>,
-          ),
+          encodeClientMessage({ type: 'request', requestId, action, input } as Extract<
+            TerminalClientMessage,
+            { action: TAction }
+          >),
         )
       } catch (error) {
         pendingSocketRequests.delete(requestId)
@@ -407,7 +398,12 @@ export function createServerTerminalBridge(options: {
   }
 }
 
-export function createTerminalWebSocketUrl(baseUrl: string, secret: string, clientId: string, attachmentId: string): string {
+export function createTerminalWebSocketUrl(
+  baseUrl: string,
+  secret: string,
+  clientId: string,
+  attachmentId: string,
+): string {
   const httpUrl = new URL('/ws/terminal', baseUrl)
   httpUrl.protocol = resolveWebSocketProtocol()
   httpUrl.searchParams.set('token', secret)

@@ -9,6 +9,7 @@ import { stripBranchWorktreeMetadata, worktreeStatesFromBranches } from '#/web/s
 import type {
   TerminalAttachResult,
   TerminalCatalogMutationResult,
+  TerminalCloseResult,
   TerminalMutationResult,
   TerminalSessionSnapshot,
   TerminalSessionSummary,
@@ -33,7 +34,7 @@ interface TerminalBridgeTestOutputs {
   'terminal.write': TerminalMutationResult
   'terminal.resize': TerminalMutationResult
   'terminal.takeover': TerminalTakeoverResult
-  'terminal.close': TerminalMutationResult
+  'terminal.close': TerminalCloseResult
   'terminal.create': TerminalCatalogMutationResult
   'terminal.prune': { pruned: number; remaining: number }
   'terminal.listSessions': TerminalSessionSummary[]
@@ -235,10 +236,11 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
           return { ok: false, message: `unhandled ${name}` }
         case 'terminal.write':
         case 'terminal.resize':
-        case 'terminal.close':
         case 'terminal.reorder':
         case 'terminal.notifyBell':
           return true satisfies TerminalMutationResult
+        case 'terminal.close':
+          return { ok: true } satisfies TerminalCloseResult
         case 'terminal.takeover':
           return {
             ok: true as const,

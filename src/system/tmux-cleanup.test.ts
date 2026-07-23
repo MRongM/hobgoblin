@@ -1,7 +1,9 @@
 import { describe, expect, test, vi } from 'vitest'
 import { isValidTmuxSessionId } from '#/shared/tmux-cleanup.ts'
 import {
+  isTmuxSessionMissingMessage,
   killLocalTmuxSession,
+  killLocalTmuxSessionByName,
   listLocalTmuxSessions,
   parseTmuxSessionList,
   TMUX_SESSION_LIST_FORMAT,
@@ -106,5 +108,25 @@ describe('local tmux commands', () => {
       message: 'error.invalid-arguments',
     })
     expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  test('kills an exact current-protocol session name and rejects other names', async () => {
+    const run = vi.fn<TmuxProcessRunner>(async () => ({ ok: true, stdout: '', stderr: '' }))
+    const sessionName = 'hobgoblin-v1-aebf050981ac829e36100020'
+
+    await expect(killLocalTmuxSessionByName(sessionName, { run })).resolves.toEqual({ ok: true, message: '' })
+    expect(run).toHaveBeenCalledWith(['kill-session', '-t', sessionName], undefined)
+
+    await expect(killLocalTmuxSessionByName('goblin-feature', { run })).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  test('recognizes tmux responses that mean an exact session is already missing', () => {
+    expect(isTmuxSessionMissingMessage("can't find session: hobgoblin-v1-example")).toBe(true)
+    expect(isTmuxSessionMissingMessage('no server running on /tmp/tmux-501/default')).toBe(true)
+    expect(isTmuxSessionMissingMessage('permission denied')).toBe(false)
   })
 })

@@ -141,7 +141,7 @@ describe('renderer bootstrap', () => {
             restart: async () => ({ ok: false, message: 'unavailable' }),
             write: async () => false,
             resize: async () => false,
-            close: async () => false,
+            close: async () => ({ ok: true }),
             create: async () => ({ ok: false, message: 'unavailable' }),
             pruneTerminals: async () => ({ pruned: 0, remaining: 0 }),
             notifyBell: async () => false,
@@ -191,7 +191,7 @@ describe('renderer bootstrap', () => {
         write: async () => false,
         resize: async () => false,
         takeover: async () => ({ ok: false as const, message: 'error.invalid-arguments' }),
-        close: async () => false,
+        close: async () => ({ ok: true }),
         create: async (input?: { kind?: string }) =>
           input?.kind === 'primary'
             ? {

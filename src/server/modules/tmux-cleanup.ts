@@ -11,7 +11,9 @@ import { isRemoteRepoId, type RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import { resolveRemoteRepoTarget } from '#/server/modules/repo-backend.ts'
 import { runRemoteCommand, type RemoteCommandResult } from '#/system/ssh/commands.ts'
 import {
+  isTmuxSessionMissingMessage,
   killLocalTmuxSession,
+  killLocalTmuxSessionByName,
   listLocalTmuxSessions,
   tmuxListResultFromProcessResult,
   type TmuxCommandResult,
@@ -25,6 +27,7 @@ export interface TmuxCleanupDependencies {
   platform?: NodeJS.Platform
   listLocal?: typeof listLocalTmuxSessions
   killLocal?: typeof killLocalTmuxSession
+  killLocalByName?: typeof killLocalTmuxSessionByName
   resolveRemote?: (repoId: string) => Promise<RemoteRepoTarget>
   runRemote?: typeof runRemoteCommand
 }
@@ -33,9 +36,43 @@ interface TmuxRuntime {
   targetPath: string
   list: () => Promise<TmuxListResult>
   kill: (sessionId: string) => Promise<TmuxCommandResult>
+  killName: (sessionName: string) => Promise<TmuxCommandResult>
 }
 
 type RuntimeResult = { ok: true; runtime: TmuxRuntime } | { ok: false; message: string }
+
+export interface AssociatedTmuxSessionNameInput extends AssociatedTmuxTargetInput {
+  sessionName: string
+}
+
+export type TerminalTmuxCloseResult = { ok: true; status: 'closed' | 'missing' } | { ok: false; message: string }
+
+export async function closeAssociatedTmuxSessionByName(
+  input: AssociatedTmuxSessionNameInput,
+  dependencies: TmuxCleanupDependencies = {},
+  signal?: AbortSignal,
+): Promise<TerminalTmuxCloseResult> {
+  if (!isHobgoblinTmuxSessionName(input?.sessionName)) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  const resolved = await resolveTmuxRuntime(input, dependencies, signal)
+  if (!resolved.ok) return resolved
+  const listed = await safelyList(resolved.runtime)
+  if (!listed.ok) return listed
+  const session = associatedSessions(listed.sessions, resolved.runtime.targetPath).find(
+    (candidate) => candidate.sessionName === input.sessionName,
+  )
+  if (!session) return { ok: true, status: 'missing' }
+  try {
+    const killed = await resolved.runtime.killName(input.sessionName)
+    if (killed.ok) return { ok: true, status: 'closed' }
+    return isTmuxSessionMissingMessage(killed.message)
+      ? { ok: true, status: 'missing' }
+      : { ok: false, message: killed.message }
+  } catch (error) {
+    return { ok: false, message: errorMessage(error) }
+  }
+}
 
 export async function previewAssociatedTmuxSessions(
   input: AssociatedTmuxTargetInput,
@@ -106,12 +143,14 @@ async function resolveTmuxRuntime(
   if (!remote) {
     const listLocal = dependencies.listLocal ?? listLocalTmuxSessions
     const killLocal = dependencies.killLocal ?? killLocalTmuxSession
+    const killLocalByName = dependencies.killLocalByName ?? killLocalTmuxSessionByName
     return {
       ok: true,
       runtime: {
         targetPath,
         list: async () => await listLocal({ signal }),
         kill: async (sessionId) => await killLocal(sessionId, { signal }),
+        killName: async (sessionName) => await killLocalByName(sessionName, { signal }),
       },
     }
   }
@@ -126,6 +165,10 @@ async function resolveTmuxRuntime(
         list: async () => remoteListResult(await runRemote(target, { type: 'tmuxListSessions' }, { signal })),
         kill: async (sessionId) => {
           const result = await runRemote(target, { type: 'tmuxKillSession', sessionId }, { signal })
+          return { ok: result.ok, message: result.ok ? result.stderr : result.message || result.stderr || 'unknown' }
+        },
+        killName: async (sessionName) => {
+          const result = await runRemote(target, { type: 'tmuxKillSessionByName', sessionName }, { signal })
           return { ok: result.ok, message: result.ok ? result.stderr : result.message || result.stderr || 'unknown' }
         },
       },

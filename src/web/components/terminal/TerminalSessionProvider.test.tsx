@@ -29,6 +29,7 @@ import type {
 } from '#/web/components/terminal/types.ts'
 import type {
   TerminalCatalogMutationResult,
+  TerminalCloseResult,
   TerminalCreateInput,
   TerminalExitEvent,
   TerminalAttachResult,
@@ -292,7 +293,7 @@ const listSessionsMock = vi.fn<(...args: Array<{ repoRoot: string }>) => Promise
 const getSessionSnapshotMock = vi.fn<
   (...args: Array<{ sessionId: string }>) => Promise<TerminalSessionSnapshot | null>
 >(async () => null)
-const closeMock = vi.fn(async () => true)
+const closeMock = vi.fn(async (): Promise<TerminalCloseResult> => ({ ok: true }))
 const createTerminalMock = vi.fn<(input: TerminalCreateInput) => Promise<TerminalCatalogMutationResult>>()
 let managedServerSessions: TerminalSessionSummary[] = []
 
@@ -331,7 +332,7 @@ beforeEach(() => {
   getSessionSnapshotMock.mockReset()
   getSessionSnapshotMock.mockResolvedValue(null)
   closeMock.mockReset()
-  closeMock.mockResolvedValue(true)
+  closeMock.mockResolvedValue({ ok: true })
   createTerminalMock.mockReset()
   branchWorkspaceMocks.readBranchWorkspaces.mockReset()
   branchWorkspaceMocks.readBranchWorkspaces.mockResolvedValue({

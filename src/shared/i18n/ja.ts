@@ -682,6 +682,10 @@ export const ja: Record<DictKey, string> = {
   'terminal.close-confirm-title': 'ターミナルを閉じますか？',
   'terminal.close-confirm-body': '{name} を閉じて、実行中のシェルセッションを終了します。',
   'terminal.close-confirm-confirm': 'ターミナルを閉じる',
+  'terminal.close-tmux-session': 'tmux セッションも閉じる',
+  'terminal.close-tmux-session-hint':
+    '実行中のプロセスを終了し、このセッションに接続している他のクライアントを切断します。',
+  'terminal.close-tmux-session-failed': 'tmux セッションを閉じられませんでした',
   'terminal.close-all': 'すべてのターミナルを閉じる',
   'terminal.close-all-confirm-title': 'すべてのターミナルを閉じますか？',
   'terminal.close-all-confirm-body': '{count} 個のターミナルを閉じ、実行中のシェルセッションを終了します。',
@@ -961,6 +965,7 @@ export const ja: Record<DictKey, string> = {
   'error.tmux-unavailable': 'tmux がインストールされていないか、利用できません。',
   'error.tmux-invalid-output': 'tmux が未対応のセッション一覧を返しました。',
   'error.tmux-command-failed': 'tmux コマンドに失敗しました。',
+  'error.terminal-tmux-unavailable': 'このターミナルには確認済みの tmux セッション ID がありません。',
   'error.invalid-host': '無効なホスト',
   'error.invalid-port': '無効なポート',
   'error.port-forward-start-failed': 'ポート転送を開始できませんでした',
@@ -1195,11 +1200,9 @@ export const ja: Record<DictKey, string> = {
   'settings.terminal-tmux.title': 'Tmux セッション',
   'settings.terminal-tmux.hint': 'ローカルとリモートのターミナルで tmux を使用するか個別に設定します。',
   'settings.terminal-tmux.local': 'ローカルターミナルで tmux を使用',
-  'settings.terminal-tmux.local-hint':
-    'このコンピューターのアプリ内ターミナルと対応する外部ターミナルに適用します。',
+  'settings.terminal-tmux.local-hint': 'このコンピューターのアプリ内ターミナルと対応する外部ターミナルに適用します。',
   'settings.terminal-tmux.remote': 'リモートターミナルで tmux を使用',
-  'settings.terminal-tmux.remote-hint':
-    'SSH 経由で開くアプリ内ターミナルと対応する外部ターミナルに適用します。',
+  'settings.terminal-tmux.remote-hint': 'SSH 経由で開くアプリ内ターミナルと対応する外部ターミナルに適用します。',
   'settings.terminal-custom-buttons.title': 'カスタムターミナルボタン',
   'settings.terminal-custom-buttons.hint':
     'ターミナル下部のボタンバーを表示します。ボタンはすぐ実行するか、編集できるようターミナル入力行へ入力できます。',

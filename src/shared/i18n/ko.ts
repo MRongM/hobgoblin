@@ -668,6 +668,10 @@ export const ko: Record<DictKey, string> = {
   'terminal.close-confirm-title': '터미널을 닫을까요?',
   'terminal.close-confirm-body': '{name} 터미널을 닫고 실행 중인 셸 세션을 종료합니다.',
   'terminal.close-confirm-confirm': '터미널 닫기',
+  'terminal.close-tmux-session': 'tmux 세션도 닫기',
+  'terminal.close-tmux-session-hint':
+    '실행 중인 프로세스를 종료하고 이 세션에 연결된 다른 클라이언트의 연결을 끊습니다.',
+  'terminal.close-tmux-session-failed': 'tmux 세션을 닫지 못했습니다',
   'terminal.close-all': '모든 터미널 닫기',
   'terminal.close-all-confirm-title': '모든 터미널을 닫을까요?',
   'terminal.close-all-confirm-body': '{count}개 터미널을 닫고 실행 중인 셸 세션을 종료합니다.',
@@ -945,6 +949,7 @@ export const ko: Record<DictKey, string> = {
   'error.tmux-unavailable': 'tmux가 설치되어 있지 않거나 사용할 수 없습니다.',
   'error.tmux-invalid-output': 'tmux가 지원되지 않는 세션 목록을 반환했습니다.',
   'error.tmux-command-failed': 'tmux 명령이 실패했습니다.',
+  'error.terminal-tmux-unavailable': '이 터미널에는 확인된 tmux 세션 ID가 없습니다.',
   'error.invalid-host': '호스트가 올바르지 않습니다',
   'error.invalid-port': '포트가 올바르지 않습니다',
   'error.port-forward-start-failed': '포트 전달을 시작할 수 없습니다',
@@ -1177,11 +1182,9 @@ export const ko: Record<DictKey, string> = {
   'settings.terminal-tmux.title': 'Tmux 세션',
   'settings.terminal-tmux.hint': '로컬 및 원격 터미널의 tmux 사용 여부를 각각 설정합니다.',
   'settings.terminal-tmux.local': '로컬 터미널에서 tmux 사용',
-  'settings.terminal-tmux.local-hint':
-    '이 컴퓨터의 앱 내 터미널과 지원되는 외부 터미널에 적용됩니다.',
+  'settings.terminal-tmux.local-hint': '이 컴퓨터의 앱 내 터미널과 지원되는 외부 터미널에 적용됩니다.',
   'settings.terminal-tmux.remote': '원격 터미널에서 tmux 사용',
-  'settings.terminal-tmux.remote-hint':
-    'SSH를 통해 여는 앱 내 터미널과 지원되는 외부 터미널에 적용됩니다.',
+  'settings.terminal-tmux.remote-hint': 'SSH를 통해 여는 앱 내 터미널과 지원되는 외부 터미널에 적용됩니다.',
   'settings.terminal-custom-buttons.title': '사용자 지정 터미널 버튼',
   'settings.terminal-custom-buttons.hint':
     '터미널 하단 버튼 막대를 표시합니다. 버튼은 즉시 실행하거나 편집할 수 있도록 터미널 입력 줄에 채울 수 있습니다.',

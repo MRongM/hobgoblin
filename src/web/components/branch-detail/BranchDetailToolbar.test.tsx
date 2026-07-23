@@ -624,7 +624,7 @@ function renderToolbar(options: {
     focusTerminal,
     scrollLines: vi.fn(),
     clearBell: vi.fn(() => false),
-    closeTerminalAndDismissDetailIfLast: vi.fn(() => []),
+    closeTerminalAndDismissDetailIfLast: vi.fn(),
     registerWorktreeHost: vi.fn(),
     attach: vi.fn(),
     detach: vi.fn(),

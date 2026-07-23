@@ -4,10 +4,11 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { TerminalSessionRegistry } from '#/web/components/terminal/TerminalSessionRegistry.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import type { TerminalDescriptor, TerminalRepoIndex } from '#/web/components/terminal/types.ts'
+import type { TerminalCloseResult } from '#/shared/terminal.ts'
 
 const bridgeMocks = vi.hoisted(() => ({
   create: vi.fn(),
-  close: vi.fn(async () => true),
+  close: vi.fn(async (): Promise<TerminalCloseResult> => ({ ok: true })),
   reorder: vi.fn(async () => true),
   setBadge: vi.fn(),
   takeover: vi.fn(async () => ({ ok: false as const, message: 'error.unavailable' })),
@@ -62,6 +63,7 @@ function makeServerSession(
     displayOrder: number
     phase: 'opening' | 'restarting' | 'open' | 'error' | 'closed'
     message: string | null
+    tmuxBacked: boolean
   }> = {},
 ) {
   return {
@@ -76,6 +78,7 @@ function makeServerSession(
     displayOrder: overrides.displayOrder ?? 1,
     phase: overrides.phase ?? 'open',
     message: overrides.message ?? null,
+    tmuxBacked: overrides.tmuxBacked ?? false,
   }
 }
 
@@ -88,7 +91,8 @@ describe('TerminalSessionRegistry', () => {
     selectedChanges = []
     outputCompletions = []
     bridgeMocks.create.mockReset()
-    bridgeMocks.close.mockClear()
+    bridgeMocks.close.mockReset()
+    bridgeMocks.close.mockResolvedValue({ ok: true })
     bridgeMocks.reorder.mockClear()
     bridgeMocks.setBadge.mockClear()
     bridgeMocks.takeover.mockClear()
@@ -276,7 +280,11 @@ describe('TerminalSessionRegistry', () => {
         vi.advanceTimersByTime(1)
         expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]?.isOutputActive).toBe(false)
         expect(outputCompletions).toEqual([
-          expect.objectContaining({ sessionId: 'session-a', finalOutputSeq: 1_000, outputTail: 'tickticktickticktickticktickticktickticktick' }),
+          expect.objectContaining({
+            sessionId: 'session-a',
+            finalOutputSeq: 1_000,
+            outputTail: 'tickticktickticktickticktickticktickticktick',
+          }),
         ])
       } finally {
         vi.useRealTimers()
@@ -555,6 +563,58 @@ describe('TerminalSessionRegistry', () => {
       ;(registry as any).removeSession(activeKey, { dispose: false, closeSession: false })
 
       expect(registry.worktreeSnapshot(WORKTREE_KEY).selectedDescriptor?.terminalId).toBe('terminal-1')
+    })
+
+    test('projects tmux eligibility and closes a checked terminal without a duplicate request', async () => {
+      registry.setRepoIndex(makeRepoIndex())
+      registry.reconcileServerSessions(
+        REPO_ROOT,
+        [makeServerSession('session-1', 'terminal-1', { tmuxBacked: true })],
+        'attachment_local',
+        new Map(),
+      )
+      const summary = registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]
+      expect(summary?.tmuxBacked).toBe(true)
+      if (!summary) return
+
+      await expect(
+        registry.closeTerminalAndDismissDetailIfLast(
+          summary.key,
+          {
+            repoRoot: REPO_ROOT,
+            worktreePath: WORKTREE_PATH,
+          },
+          { closeTmuxSession: true },
+        ),
+      ).resolves.toEqual({ ok: true })
+      expect(bridgeMocks.close).toHaveBeenCalledTimes(1)
+      expect(bridgeMocks.close).toHaveBeenCalledWith({ sessionId: 'session-1', closeTmuxSession: true })
+      expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions).toEqual([])
+    })
+
+    test('retains a checked terminal when the tmux close request fails', async () => {
+      bridgeMocks.close.mockResolvedValueOnce({ ok: false, message: 'error.tmux-command-failed' })
+      registry.setRepoIndex(makeRepoIndex())
+      registry.reconcileServerSessions(
+        REPO_ROOT,
+        [makeServerSession('session-1', 'terminal-1', { tmuxBacked: true })],
+        'attachment_local',
+        new Map(),
+      )
+      const summary = registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]
+      if (!summary) return
+
+      await expect(
+        registry.closeTerminalAndDismissDetailIfLast(
+          summary.key,
+          {
+            repoRoot: REPO_ROOT,
+            worktreePath: WORKTREE_PATH,
+          },
+          { closeTmuxSession: true },
+        ),
+      ).resolves.toEqual({ ok: false, message: 'error.tmux-command-failed' })
+      expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions).toHaveLength(1)
     })
   })
 
