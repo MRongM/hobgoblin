@@ -6,16 +6,28 @@ import { resolvePreferredLang } from '#/shared/i18n/resolve-lang.ts'
 import type { Lang, SettingsPrefs } from '#/shared/rpc.ts'
 import {
   TELEGRAM_CONTEXT_TEXT_MAX_LENGTH,
+  TELEGRAM_OUTPUT_TAIL_MAX_LENGTH,
   type TelegramBellNotificationContext,
   type TelegramNotificationResult,
+  type TelegramOutputCompletionNotificationContext,
 } from '#/shared/telegram-notifications.ts'
 
 const TELEGRAM_BELL_DEBOUNCE_MS = 5_000
 const TELEGRAM_TERMINAL_KEY_MAX_LENGTH = 1_024
 const telegramNotificationLogger = serverLogger.child({ module: 'telegram-notifications' })
 const lastBellAtByTerminal = new Map<string, number>()
+const completionAtByCycle = new Map<string, number>()
+const TELEGRAM_COMPLETION_CACHE_MAX_ENTRIES = 1_000
+const TELEGRAM_COMPLETION_CACHE_TTL_MS = 24 * 60 * 60 * 1_000
 
-type TelegramConfig = { enabled: boolean; botToken: string; chatId: string }
+type TelegramConfig = {
+  enabled: boolean
+  botToken: string
+  chatId: string
+  bellEnabled: boolean
+  outputCompletionEnabled: boolean
+  includeTerminalOutput: boolean
+}
 type SendMessage = typeof sendTelegramMessage
 
 export interface TelegramNotificationWriteOptions {
@@ -32,10 +44,25 @@ function line(label: string, value: string, lang: Lang): string {
 }
 
 export function formatTelegramBellMessage(context: TelegramBellNotificationContext, lang: Lang = 'zh'): string {
+  return formatTelegramTerminalMessage(context, lang, 'telegram.notification.message.title')
+}
+
+export function formatTelegramOutputCompletionMessage(
+  context: TelegramBellNotificationContext,
+  lang: Lang = 'zh',
+): string {
+  return formatTelegramTerminalMessage(context, lang, 'telegram.notification.message.output-completion-title')
+}
+
+function formatTelegramTerminalMessage(
+  context: TelegramBellNotificationContext,
+  lang: Lang,
+  titleKey: 'telegram.notification.message.title' | 'telegram.notification.message.output-completion-title',
+): string {
   const dict = DICTS[lang]
   const contextKind = dict[`telegram.notification.message.context.${context.contextKind}`]
   const lines = [
-    dict['telegram.notification.message.title'],
+    dict[titleKey],
     line(dict['telegram.notification.message.project'], context.project, lang),
     line(dict['telegram.notification.message.context'], `${contextKind} ${context.context}`, lang),
     line(dict['telegram.notification.message.directory'], context.directory, lang),
@@ -45,7 +72,15 @@ export function formatTelegramBellMessage(context: TelegramBellNotificationConte
   if (context.terminalTitle) {
     lines.push(line(dict['telegram.notification.message.terminal-title'], context.terminalTitle, lang))
   }
+  if (context.outputTail) lines.push('', dict['telegram.notification.message.output-tail'], context.outputTail)
   return lines.join('\n')
+}
+
+function validatedOutputTail(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const normalized = value.replace(/\r\n?|\n/gu, '\n').replace(/^\n+|\n+$/gu, '')
+  if (!normalized || Array.from(normalized).length > TELEGRAM_OUTPUT_TAIL_MAX_LENGTH) return undefined
+  return /[\u0000-\u0009\u000b-\u001f\u007f]/u.test(normalized) ? undefined : normalized
 }
 
 function validatedField(value: unknown, required = true): string | undefined {
@@ -69,6 +104,7 @@ function validatedContext(value: TelegramBellNotificationContext): TelegramBellN
   const directory = validatedField(value.directory)
   const branch = value.branch === undefined ? undefined : validatedField(value.branch, false)
   const terminalTitle = value.terminalTitle === undefined ? undefined : validatedField(value.terminalTitle, false)
+  const outputTail = value.outputTail === undefined ? undefined : validatedOutputTail(value.outputTail)
   const contextKindValid =
     value.contextKind === 'worktree' ||
     value.contextKind === 'workspace' ||
@@ -85,6 +121,7 @@ function validatedContext(value: TelegramBellNotificationContext): TelegramBellN
     value.terminalIndex > 9_999 ||
     (value.branch !== undefined && !branch) ||
     (value.terminalTitle !== undefined && !terminalTitle)
+    || (value.outputTail !== undefined && !outputTail)
   ) {
     return null
   }
@@ -97,6 +134,7 @@ function validatedContext(value: TelegramBellNotificationContext): TelegramBellN
     ...(branch ? { branch } : {}),
     terminalIndex: value.terminalIndex,
     ...(terminalTitle ? { terminalTitle } : {}),
+    ...(outputTail ? { outputTail } : {}),
   }
 }
 
@@ -150,7 +188,7 @@ export async function sendConfiguredTelegramBellNotification(
 ): Promise<TelegramNotificationResult> {
   const dependencies = writeDependencies(options)
   const [prefs, config] = await Promise.all([dependencies.getSettingsPrefs(), dependencies.getTelegramConfig()])
-  if (!prefs.terminalNotificationsEnabled || !config.enabled) return { ok: true }
+  if (!prefs.terminalNotificationsEnabled || !config.enabled || !config.bellEnabled) return { ok: true }
 
   const safeContext = validatedContext(context)
   if (!safeContext) return { ok: false, error: { code: 'invalid-input' } }
@@ -167,9 +205,42 @@ export async function sendConfiguredTelegramBellNotification(
   }
 
   const lang = resolvePreferredLang(prefs.lang, options.acceptLanguage)
-  return await sendConfiguredMessage(formatTelegramBellMessage(safeContext, lang), prefs, config, options)
+  const deliveryContext = config.includeTerminalOutput ? safeContext : { ...safeContext, outputTail: undefined }
+  return await sendConfiguredMessage(formatTelegramBellMessage(deliveryContext, lang), prefs, config, options)
+}
+
+export async function sendConfiguredTelegramOutputCompletionNotification(
+  context: TelegramOutputCompletionNotificationContext,
+  options: TelegramNotificationWriteOptions = {},
+): Promise<TelegramNotificationResult> {
+  const dependencies = writeDependencies(options)
+  const [prefs, config] = await Promise.all([dependencies.getSettingsPrefs(), dependencies.getTelegramConfig()])
+  if (!prefs.terminalNotificationsEnabled || !config.enabled || !config.outputCompletionEnabled) return { ok: true }
+
+  const safeContext = validatedContext(context)
+  const sessionId = validatedTerminalKey(context?.sessionId)
+  const finalOutputSeq = context?.finalOutputSeq
+  if (!safeContext || !sessionId || !Number.isSafeInteger(finalOutputSeq) || finalOutputSeq < 0) {
+    return { ok: false, error: { code: 'invalid-input' } }
+  }
+  if (!config.botToken || !config.chatId) return { ok: false, error: { code: 'configuration-incomplete' } }
+
+  const now = dependencies.now()
+  const completionKey = `${sessionId}\0${finalOutputSeq}`
+  if (completionAtByCycle.has(completionKey)) return { ok: true }
+  completionAtByCycle.set(completionKey, now)
+  if (completionAtByCycle.size > TELEGRAM_COMPLETION_CACHE_MAX_ENTRIES) {
+    for (const [key, timestamp] of completionAtByCycle) {
+      if (now - timestamp >= TELEGRAM_COMPLETION_CACHE_TTL_MS) completionAtByCycle.delete(key)
+    }
+  }
+
+  const lang = resolvePreferredLang(prefs.lang, options.acceptLanguage)
+  const deliveryContext = config.includeTerminalOutput ? safeContext : { ...safeContext, outputTail: undefined }
+  return await sendConfiguredMessage(formatTelegramOutputCompletionMessage(deliveryContext, lang), prefs, config, options)
 }
 
 export function resetTelegramNotificationWritePathsForTests(): void {
   lastBellAtByTerminal.clear()
+  completionAtByCycle.clear()
 }

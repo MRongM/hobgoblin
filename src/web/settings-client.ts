@@ -27,6 +27,7 @@ import type {
   TelegramNotificationResult,
   TelegramNotificationSettingsSnapshot,
   TelegramNotificationSettingsUpdateInput,
+  TelegramOutputCompletionNotificationContext,
 } from '#/shared/rpc.ts'
 import type { ColorTheme } from '#/shared/color-theme.ts'
 import type { RepoSettingsEntry } from '#/shared/repo-settings.ts'
@@ -71,6 +72,15 @@ export async function sendTelegramBellNotification(
 ): Promise<TelegramNotificationResult> {
   return await postServerJson<TelegramBellNotificationContext, TelegramNotificationResult>(
     '/api/telegram-notifications/bell',
+    context,
+  )
+}
+
+export async function sendTelegramOutputCompletionNotification(
+  context: TelegramOutputCompletionNotificationContext,
+): Promise<TelegramNotificationResult> {
+  return await postServerJson<TelegramOutputCompletionNotificationContext, TelegramNotificationResult>(
+    '/api/telegram-notifications/output-completion',
     context,
   )
 }

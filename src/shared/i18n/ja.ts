@@ -1030,6 +1030,8 @@ export const ja: Record<DictKey, string> = {
   'settings.terminal-notifications-test-failed-hint':
     'システム設定 → 通知 → Hobgoblin を開き、通知が許可されているか確認してください。',
   'telegram.notification.message.title': '🔔 Hobgoblin 未読ターミナルベル',
+  'telegram.notification.message.output-completion-title': '✅ Hobgoblin ターミナル実行終了',
+  'telegram.notification.message.output-tail': 'ターミナル出力',
   'telegram.notification.message.project': 'プロジェクト',
   'telegram.notification.message.context': 'コンテキスト',
   'telegram.notification.message.directory': 'ディレクトリ',
@@ -1046,6 +1048,14 @@ export const ja: Record<DictKey, string> = {
   'settings.telegram.hint': '未読のターミナルベルに追加の Telegram メッセージを送信します。',
   'settings.telegram.enabled': 'Telegram 通知',
   'settings.telegram.enabled-hint': 'ターミナルベル通知が有効な場合、保存済みの Bot と Chat を使用します。',
+  'settings.telegram.bell-enabled': '未読ベル',
+  'settings.telegram.bell-enabled-hint': 'バックグラウンドのターミナルベルが未読になったときに送信します。',
+  'settings.telegram.output-completion-enabled': 'ターミナル実行終了',
+  'settings.telegram.output-completion-enabled-hint':
+    'ターミナルのアクティビティ表示が実行中からアイドルに変わるたびに送信します。',
+  'settings.telegram.include-terminal-output': 'ターミナル出力を含める',
+  'settings.telegram.include-terminal-output-hint':
+    '最後の表示可能な 200 文字を追加します。ターミナル出力には機密情報が含まれる場合があります。',
   'settings.telegram.bot-token': 'Bot Token',
   'settings.telegram.bot-token-hint-configured': 'Bot Token は設定済みです。空欄のままにすると保持されます。',
   'settings.telegram.bot-token-hint-new': 'BotFather で Bot を作成し、Token を貼り付けてください。',

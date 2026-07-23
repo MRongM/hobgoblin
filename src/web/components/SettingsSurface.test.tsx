@@ -59,7 +59,14 @@ function defaultRpcResult(path: string, input?: unknown) {
       },
       recentRepos: [],
       webAccess: { enabled: false, username: '', passwordConfigured: false },
-      telegramNotifications: { enabled: false, botTokenConfigured: false, chatId: '' },
+      telegramNotifications: {
+        enabled: false,
+        botTokenConfigured: false,
+        chatId: '',
+        bellEnabled: true,
+        outputCompletionEnabled: false,
+        includeTerminalOutput: false,
+      },
     }
   }
   if (path === 'externalApps.get' || path === 'externalApps.refresh') {
@@ -157,13 +164,23 @@ const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
       },
     }
   } else if (url.pathname === '/api/settings/telegram') {
-    const body = JSON.parse(String(init?.body ?? '{}')) as { enabled?: boolean; botToken?: string; chatId?: string }
+    const body = JSON.parse(String(init?.body ?? '{}')) as {
+      enabled?: boolean
+      botToken?: string
+      chatId?: string
+      bellEnabled?: boolean
+      outputCompletionEnabled?: boolean
+      includeTerminalOutput?: boolean
+    }
     result = {
       ok: true,
       telegramNotifications: {
         enabled: body.enabled === true,
         botTokenConfigured: Boolean(body.botToken),
         chatId: body.chatId?.trim() ?? '',
+        bellEnabled: body.bellEnabled === true,
+        outputCompletionEnabled: body.outputCompletionEnabled === true,
+        includeTerminalOutput: body.includeTerminalOutput === true,
       },
     }
   } else if (url.pathname === '/api/telegram-notifications/test') {
@@ -345,9 +362,14 @@ describe('SettingsSurface', () => {
     expect(tokenInput.type).toBe('password')
     expect(tokenInput.value).toBe('')
     expect(document.body.textContent).toContain('settings.telegram.master-off-hint')
+    expect(switchById('settings-telegram-bell-enabled').getAttribute('data-state')).toBe('checked')
+    expect(switchById('settings-telegram-output-completion-enabled').getAttribute('data-state')).toBe('unchecked')
+    expect(switchById('settings-telegram-include-terminal-output').getAttribute('data-state')).toBe('unchecked')
 
     await act(async () => {
       switchById('settings-telegram-enabled').click()
+      switchById('settings-telegram-output-completion-enabled').click()
+      switchById('settings-telegram-include-terminal-output').click()
       setInputValue(tokenInput, '123456:test-token')
       setInputValue(chatIdInput, '-100123')
       await Promise.resolve()
@@ -368,6 +390,9 @@ describe('SettingsSurface', () => {
       enabled: true,
       botToken: '123456:test-token',
       chatId: '-100123',
+      bellEnabled: true,
+      outputCompletionEnabled: true,
+      includeTerminalOutput: true,
     })
     expect((document.getElementById('settings-telegram-bot-token') as HTMLInputElement).value).toBe('')
 

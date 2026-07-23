@@ -1013,6 +1013,8 @@ export const ko: Record<DictKey, string> = {
   'settings.terminal-notifications-test-failed-hint':
     '시스템 설정 → 알림 → Hobgoblin으로 이동하여 알림이 허용되어 있는지 확인하세요.',
   'telegram.notification.message.title': '🔔 Hobgoblin 읽지 않은 터미널 벨',
+  'telegram.notification.message.output-completion-title': '✅ Hobgoblin 터미널 실행 종료',
+  'telegram.notification.message.output-tail': '터미널 출력',
   'telegram.notification.message.project': '프로젝트',
   'telegram.notification.message.context': '컨텍스트',
   'telegram.notification.message.directory': '디렉터리',
@@ -1029,6 +1031,14 @@ export const ko: Record<DictKey, string> = {
   'settings.telegram.hint': '읽지 않은 터미널 벨에 Telegram 메시지를 추가로 보냅니다.',
   'settings.telegram.enabled': 'Telegram 알림',
   'settings.telegram.enabled-hint': '터미널 벨 알림이 켜져 있을 때 저장된 Bot과 Chat을 사용합니다.',
+  'settings.telegram.bell-enabled': '읽지 않은 벨',
+  'settings.telegram.bell-enabled-hint': '백그라운드 터미널 벨이 읽지 않은 상태가 되면 전송합니다.',
+  'settings.telegram.output-completion-enabled': '터미널 실행 종료',
+  'settings.telegram.output-completion-enabled-hint':
+    '터미널 활동 표시가 실행 중에서 유휴 상태로 바뀔 때마다 전송합니다.',
+  'settings.telegram.include-terminal-output': '터미널 출력 포함',
+  'settings.telegram.include-terminal-output-hint':
+    '마지막으로 표시된 200자를 추가합니다. 터미널 출력에는 민감한 정보가 포함될 수 있습니다.',
   'settings.telegram.bot-token': 'Bot Token',
   'settings.telegram.bot-token-hint-configured': 'Bot Token이 설정되어 있습니다. 비워 두면 유지됩니다.',
   'settings.telegram.bot-token-hint-new': 'BotFather에서 Bot을 만들고 Token을 붙여 넣으세요.',

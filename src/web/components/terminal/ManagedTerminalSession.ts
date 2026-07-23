@@ -14,6 +14,7 @@ import { terminalBridge } from '#/web/terminal.ts'
 import { setTerminalFocused } from '#/web/terminal-focus.ts'
 import { openExternalUrl } from '#/web/app-shell-client.ts'
 import { createTerminalBellScanner } from '#/web/components/terminal/terminal-bell-scan.ts'
+import { createTerminalOutputTail } from '#/web/components/terminal/terminal-output-tail.ts'
 import { TerminalSessionRuntime } from '#/web/components/terminal/terminal-session-runtime.ts'
 import { writeWithTerminalAuthority } from '#/web/components/terminal/authority-gate.ts'
 import { isMobileDevice } from '#/web/components/terminal/mobile-detection.ts'
@@ -46,6 +47,7 @@ export class ManagedTerminalSession {
   private readonly runtime = new TerminalSessionRuntime()
   private readonly view: TerminalSessionView
   private readonly backgroundBellScanner = createTerminalBellScanner()
+  private readonly terminalOutputTail = createTerminalOutputTail()
   private startToken = 0
   private resizeFlushTimer: number | null = null
   private outputFlushFrame: number | null = null
@@ -256,7 +258,10 @@ export class ManagedTerminalSession {
     })
     const isController = this.runtime.canResize()
     if (wasController !== isController) this.syncViewAfterOwnershipChange(wasController)
-    if (previousSessionId !== input.sessionId) this.backgroundBellScanner.reset()
+    if (previousSessionId !== input.sessionId) {
+      this.backgroundBellScanner.reset()
+      this.terminalOutputTail.reset()
+    }
     if (previousSessionId && previousSessionId !== input.sessionId) this.applyHydratedSnapshotToActiveView()
     if (changed) this.notify()
   }
@@ -265,6 +270,7 @@ export class ManagedTerminalSession {
     const result = this.runtime.handleOutput(event)
     if (result.changed) this.notify()
     if (!result.output) return
+    this.terminalOutputTail.push(result.output)
     if (this.view.currentTerminal()) {
       this.queueOutput(result.output)
       return
@@ -284,6 +290,10 @@ export class ManagedTerminalSession {
     if (changed || pendingCleared) {
       this.notify()
     }
+  }
+
+  outputTail(): string {
+    return this.terminalOutputTail.value()
   }
 
   handleServerTitle(canonicalTitle: string | null): void {
@@ -649,10 +659,12 @@ export class ManagedTerminalSession {
   }
 
   private handleBell(): void {
+    const outputTail = this.terminalOutputTail.value()
     this.onBell?.(this.descriptor, {
       processName: this.runtime.processName(),
       canonicalTitle: this.runtime.canonicalTitle(),
       visible: this.view.isVisible(),
+      ...(outputTail ? { outputTail } : {}),
     })
   }
 

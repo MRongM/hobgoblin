@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { defaultSettingsPrefs } from '#/shared/settings-defaults.ts'
-import type { TelegramBellNotificationContext } from '#/shared/telegram-notifications.ts'
+import type {
+  TelegramBellNotificationContext,
+  TelegramOutputCompletionNotificationContext,
+} from '#/shared/telegram-notifications.ts'
 import {
   formatTelegramBellMessage,
   resetTelegramNotificationWritePathsForTests,
   sendConfiguredTelegramBellNotification,
+  sendConfiguredTelegramOutputCompletionNotification,
   sendConfiguredTelegramTestNotification,
 } from '#/server/modules/telegram-notification-write-paths.ts'
 
@@ -35,6 +39,9 @@ function dependencies(overrides: Record<string, unknown> = {}) {
       enabled: true,
       botToken: '123456:test-token',
       chatId: '-100123',
+      bellEnabled: true,
+      outputCompletionEnabled: true,
+      includeTerminalOutput: true,
     })),
     sendMessage: vi.fn(async () => ({ ok: true as const })),
     warn: vi.fn(),
@@ -119,6 +126,26 @@ describe('Telegram notification write paths', () => {
     await sendConfiguredTelegramBellNotification(context(), deps)
 
     expect(deps.sendMessage).toHaveBeenCalledTimes(2)
+  })
+
+  test('deduplicates concurrent completion delivery by server session and final sequence', async () => {
+    const deps = dependencies()
+    const completion: TelegramOutputCompletionNotificationContext = {
+      ...context({ outputTail: 'tests passed' }),
+      sessionId: 'session-1',
+      finalOutputSeq: 42,
+    }
+
+    await Promise.all([
+      sendConfiguredTelegramOutputCompletionNotification(completion, deps),
+      sendConfiguredTelegramOutputCompletionNotification(completion, deps),
+    ])
+    await sendConfiguredTelegramOutputCompletionNotification({ ...completion, finalOutputSeq: 43 }, deps)
+
+    expect(deps.sendMessage).toHaveBeenCalledTimes(2)
+    expect(deps.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ text: expect.stringContaining('终端运行结束') }),
+    )
   })
 
   test('accepts the NUL-delimited terminal keys used by live terminal sessions', async () => {

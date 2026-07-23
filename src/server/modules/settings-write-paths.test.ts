@@ -166,7 +166,14 @@ describe('settings write paths', () => {
   })
 
   test('updates the masked Telegram projection and publishes settings invalidation', async () => {
-    const telegramNotifications = { enabled: true, botTokenConfigured: true, chatId: '-100123' }
+    const telegramNotifications = {
+      enabled: true,
+      botTokenConfigured: true,
+      chatId: '-100123',
+      bellEnabled: true,
+      outputCompletionEnabled: true,
+      includeTerminalOutput: true,
+    }
     mocks.updateServerTelegramNotificationSettings.mockResolvedValue(telegramNotifications)
     const { applyServerTelegramNotificationSettingsWrite } = await import('#/server/modules/settings-write-paths.ts')
 
@@ -175,12 +182,18 @@ describe('settings write paths', () => {
         enabled: true,
         botToken: '123456:test-token',
         chatId: '-100123',
+        bellEnabled: true,
+        outputCompletionEnabled: true,
+        includeTerminalOutput: true,
       }),
     ).resolves.toEqual({ ok: true, telegramNotifications })
     expect(mocks.updateServerTelegramNotificationSettings).toHaveBeenCalledWith({
       enabled: true,
       botToken: '123456:test-token',
       chatId: '-100123',
+      bellEnabled: true,
+      outputCompletionEnabled: true,
+      includeTerminalOutput: true,
     })
     expect(mocks.publishSettingsInvalidation).toHaveBeenCalledWith(['settings-snapshot'])
   })

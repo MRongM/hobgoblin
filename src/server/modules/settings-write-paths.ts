@@ -65,11 +65,21 @@ export async function applyServerWebAccessSettingsWrite(
 export async function applyServerTelegramNotificationSettingsWrite(
   body: unknown,
 ): Promise<{ ok: true; telegramNotifications: TelegramNotificationSettingsSnapshot }> {
-  const input = body as { enabled?: unknown; botToken?: unknown; chatId?: unknown } | null
+  const input = body as {
+    enabled?: unknown
+    botToken?: unknown
+    chatId?: unknown
+    bellEnabled?: unknown
+    outputCompletionEnabled?: unknown
+    includeTerminalOutput?: unknown
+  } | null
   const telegramNotifications = await updateServerTelegramNotificationSettings({
     enabled: input?.enabled === true,
     ...(typeof input?.botToken === 'string' ? { botToken: input.botToken } : {}),
     chatId: typeof input?.chatId === 'string' ? input.chatId : '',
+    bellEnabled: input?.bellEnabled === true,
+    outputCompletionEnabled: input?.outputCompletionEnabled === true,
+    includeTerminalOutput: input?.includeTerminalOutput === true,
   })
   publishSettingsInvalidation(['settings-snapshot'])
   return { ok: true, telegramNotifications }

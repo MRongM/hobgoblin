@@ -71,6 +71,9 @@ describe('settings defaults', () => {
       enabled: false,
       botTokenConfigured: false,
       chatId: '',
+      bellEnabled: true,
+      outputCompletionEnabled: false,
+      includeTerminalOutput: false,
     })
   })
 

@@ -127,7 +127,14 @@ describe('settings snapshot partitions', () => {
       recentRepos: [{ kind: 'local', id: '/tmp/repo-b' }],
       repoSettings: [],
       webAccess: { enabled: false, username: '', passwordConfigured: false },
-      telegramNotifications: { enabled: false, botTokenConfigured: false, chatId: '' },
+      telegramNotifications: {
+        enabled: false,
+        botTokenConfigured: false,
+        chatId: '',
+        bellEnabled: true,
+        outputCompletionEnabled: false,
+        includeTerminalOutput: false,
+      },
       session: {
         openRepos: [{ kind: 'local', id: '/tmp/repo-b' }],
         activeRepo: '/tmp/repo-b',
@@ -192,7 +199,14 @@ describe('settings snapshot partitions', () => {
       recentRepos: [],
       repoSettings,
       webAccess: { enabled: false, username: '', passwordConfigured: false },
-      telegramNotifications: { enabled: false, botTokenConfigured: false, chatId: '' },
+      telegramNotifications: {
+        enabled: false,
+        botTokenConfigured: false,
+        chatId: '',
+        bellEnabled: true,
+        outputCompletionEnabled: false,
+        includeTerminalOutput: false,
+      },
     })
 
     expect(snapshot.repoSettings).toEqual(repoSettings)
@@ -207,11 +221,25 @@ describe('settings snapshot partitions', () => {
       recentRepos: [],
       repoSettings: [],
       webAccess: { enabled: true, username: 'operator', passwordConfigured: true },
-      telegramNotifications: { enabled: true, botTokenConfigured: true, chatId: '-100123' },
+      telegramNotifications: {
+        enabled: true,
+        botTokenConfigured: true,
+        chatId: '-100123',
+        bellEnabled: true,
+        outputCompletionEnabled: true,
+        includeTerminalOutput: true,
+      },
     })
 
     expect(snapshot.webAccess).toEqual({ enabled: true, username: 'operator', passwordConfigured: true })
-    expect(snapshot.telegramNotifications).toEqual({ enabled: true, botTokenConfigured: true, chatId: '-100123' })
+    expect(snapshot.telegramNotifications).toEqual({
+      enabled: true,
+      botTokenConfigured: true,
+      chatId: '-100123',
+      bellEnabled: true,
+      outputCompletionEnabled: true,
+      includeTerminalOutput: true,
+    })
     expect(JSON.stringify(snapshot)).not.toContain('passwordHash')
   })
 })
