@@ -34,4 +34,19 @@ describe('invalidation broker', () => {
 
     expect(socket.send).toHaveBeenCalledWith(JSON.stringify({ type: 'workspace-invalidated', rootId: '/workspace' }))
   })
+
+  test('preserves a valid workspace mutation source token', () => {
+    const socket = { send: vi.fn(), close: vi.fn() }
+    registerInvalidationSocket(socket)
+
+    publishWorkspaceInvalidation('/workspace', 'workspace_create_1')
+
+    expect(socket.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: 'workspace-invalidated',
+        rootId: '/workspace',
+        sourceToken: 'workspace_create_1',
+      }),
+    )
+  })
 })

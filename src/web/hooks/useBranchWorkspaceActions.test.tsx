@@ -46,6 +46,19 @@ const plan = {
   terminalSessionIds: [],
 } satisfies BranchWorkspacePlan
 
+const readySnapshot = {
+  id: 'branch-1',
+  rootId: '/workspace',
+  branch: 'feature/auth',
+  directoryName: 'goblin-feature-auth',
+  path: '/workspace/goblin-feature-auth',
+  state: { kind: 'ready' as const },
+  available: true,
+  issues: [],
+  repositories: [],
+  auxiliaryEntries: [],
+}
+
 let container: HTMLDivElement | null = null
 let root: Root | null = null
 let queryClient: QueryClient
@@ -69,6 +82,47 @@ afterEach(() => {
 })
 
 describe('useBranchWorkspaceActions', () => {
+  test('writes a successful creation snapshot into cache without refetching', async () => {
+    mocks.plan.mockResolvedValue({ ok: true, plan })
+    mocks.execute.mockResolvedValue({ ok: true, branchWorkspaceId: 'branch-1', snapshot: readySnapshot })
+    queryClient.setQueryData(branchWorkspaceQueryKey('/workspace'), {
+      ok: true,
+      rootId: '/workspace',
+      items: [],
+      auxiliaryCandidates: [],
+    })
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    let state: ReturnType<typeof useBranchWorkspaceActions> | null = null
+    await act(async () =>
+      root!.render(
+        <QueryClientProvider client={queryClient}>
+          <Harness onReady={(value) => (state = value)} />
+        </QueryClientProvider>,
+      ),
+    )
+
+    await act(async () =>
+      state!.requestPlan({
+        operation: 'create',
+        branch: 'feature/auth',
+        repositories: [{ repositoryName: 'api', baseBranch: 'main' }],
+        auxiliaryEntries: [],
+      }),
+    )
+    await act(async () => state!.confirm(['worktree-bootstrap']))
+
+    expect(mocks.execute).toHaveBeenCalledWith('/workspace', {
+      planToken: plan.token,
+      approvals: ['worktree-bootstrap'],
+      sourceToken: expect.stringMatching(/^repo_workspace_/),
+    })
+    expect(queryClient.getQueryData(branchWorkspaceQueryKey('/workspace'))).toMatchObject({
+      ok: true,
+      items: [readySnapshot],
+    })
+    expect(invalidate).not.toHaveBeenCalled()
+  })
+
   test('keeps dialog plan/result state and invalidates the exact root after settlement', async () => {
     mocks.plan.mockResolvedValue({ ok: true, plan })
     mocks.execute.mockResolvedValue({ ok: true, branchWorkspaceId: 'branch-1' })
@@ -96,6 +150,7 @@ describe('useBranchWorkspaceActions', () => {
     expect(mocks.execute).toHaveBeenCalledWith('/workspace', {
       planToken: plan.token,
       approvals: ['worktree-bootstrap'],
+      sourceToken: expect.stringMatching(/^repo_workspace_/),
     })
     expect(invalidate).toHaveBeenCalledWith({ queryKey: branchWorkspaceQueryKey('/workspace'), exact: true })
     await act(async () => state!.cancel())

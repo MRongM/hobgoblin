@@ -367,7 +367,7 @@ function BranchWorkspaceRow({
           onSelect: () => onRemove(item),
         },
       ]
-    : recoveryAction === 'continue-reduce' || creationInterrupted
+    : recoveryAction === 'continue-reduce' || recoveryAction === 'repair'
       ? [
           {
             label: 'workspace.branch-workspace.inspect',
@@ -375,8 +375,16 @@ function BranchWorkspaceRow({
             disabled,
             onSelect: () => onInspect(item),
           },
+          {
+            label: 'workspace.branch-workspace.delete',
+            icon: <Trash2 aria-hidden="true" />,
+            disabled,
+            destructive: true,
+            separated: true,
+            onSelect: () => onRemove(item),
+          },
         ]
-      : recoveryAction === 'repair'
+      : recoveryAction === 'continue-delete'
         ? [
             {
               label: 'workspace.branch-workspace.inspect',
@@ -384,25 +392,8 @@ function BranchWorkspaceRow({
               disabled,
               onSelect: () => onInspect(item),
             },
-            {
-              label: 'workspace.branch-workspace.delete',
-              icon: <Trash2 aria-hidden="true" />,
-              disabled,
-              destructive: true,
-              separated: true,
-              onSelect: () => onRemove(item),
-            },
           ]
-        : recoveryAction === 'continue-delete'
-          ? [
-              {
-                label: 'workspace.branch-workspace.inspect',
-                icon: <Eye aria-hidden="true" />,
-                disabled,
-                onSelect: () => onInspect(item),
-              },
-            ]
-          : []
+        : []
   const rowMenuActions = [
     ...readyOpenMenuActions,
     ...readyMembershipActions,

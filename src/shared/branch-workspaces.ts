@@ -286,12 +286,13 @@ export type BranchWorkspacePlanResult =
   | { ok: false; message: string; detail?: string }
 
 export type BranchWorkspaceExecuteResult =
-  | { ok: true; branchWorkspaceId: string }
+  | { ok: true; branchWorkspaceId: string; snapshot?: BranchWorkspaceSnapshot }
   | { ok: false; message: string; detail?: string; branchWorkspaceId?: string }
 
 export interface BranchWorkspaceExecuteInput {
   planToken: string
   approvals: BranchWorkspaceApproval[]
+  sourceToken?: string
 }
 
 export type BranchWorkspaceReorderResult = { ok: true } | { ok: false; message: string }

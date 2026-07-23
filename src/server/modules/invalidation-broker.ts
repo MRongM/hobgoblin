@@ -53,8 +53,14 @@ export function publishSettingsInvalidation(scopes: SettingsInvalidationScope[])
   )
 }
 
-export function publishWorkspaceInvalidation(rootId: string): void {
+export function publishWorkspaceInvalidation(rootId: string, sourceToken?: string): void {
+  const normalizedSourceToken =
+    typeof sourceToken === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(sourceToken) ? sourceToken : undefined
   publishInvalidationPayload(
-    JSON.stringify({ type: 'workspace-invalidated', rootId } satisfies WorkspaceInvalidationEvent),
+    JSON.stringify({
+      type: 'workspace-invalidated',
+      rootId,
+      ...(normalizedSourceToken ? { sourceToken: normalizedSourceToken } : {}),
+    } satisfies WorkspaceInvalidationEvent),
   )
 }

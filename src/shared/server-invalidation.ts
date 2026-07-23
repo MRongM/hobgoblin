@@ -12,6 +12,7 @@ export interface SettingsInvalidationEvent {
 export interface WorkspaceInvalidationEvent {
   type: 'workspace-invalidated'
   rootId: string
+  sourceToken?: string
 }
 
 export type ServerInvalidationEvent =
@@ -42,7 +43,8 @@ export function isWorkspaceInvalidationEvent(value: unknown): value is Workspace
     event.rootId.length > 0 &&
     event.rootId.trim() === event.rootId &&
     !event.rootId.includes('\0') &&
-    !/[\x00-\x1f\x7f]/.test(event.rootId)
+    !/[\x00-\x1f\x7f]/.test(event.rootId) &&
+    (event.sourceToken === undefined || typeof event.sourceToken === 'string')
   )
 }
 
