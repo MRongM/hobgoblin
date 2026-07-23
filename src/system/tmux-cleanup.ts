@@ -48,11 +48,14 @@ export function parseTmuxSessionList(output: string): TmuxSessionRecord[] | null
 }
 
 export async function listLocalTmuxSessions(options: LocalTmuxCommandOptions = {}): Promise<TmuxListResult> {
-  const result = await (options.run ?? runLocalTmuxCommand)(
-    ['list-sessions', '-F', TMUX_SESSION_LIST_FORMAT],
-    options.signal,
-  )
-  return tmuxListResultFromProcessResult(result)
+  const args = ['list-sessions', '-F', TMUX_SESSION_LIST_FORMAT]
+  const run = options.run ?? runLocalTmuxCommand
+  const result = tmuxListResultFromProcessResult(await run(args, options.signal))
+  if (options.run || result.ok || result.message !== 'error.tmux-invalid-output') return result
+
+  const refreshed = await refreshLocalTmuxExecutable(options.signal)
+  if (!refreshed.ok) return refreshed
+  return tmuxListResultFromProcessResult(await runLocalTmuxCommand(args, options.signal))
 }
 
 export function tmuxListResultFromProcessResult(result: TmuxProcessResult): TmuxListResult {
@@ -92,9 +95,8 @@ async function runLocalTmuxCommand(args: string[], signal?: AbortSignal): Promis
   try {
     let result = await runLocalTmuxExecutable(localTmuxExecutable, args, signal)
     if (isExecutableMissing(result)) {
-      const resolved = await resolveTmuxFromLoginShell(signal)
-      if (!resolved.ok) return { ...resolved, stdout: '', stderr: '' }
-      localTmuxExecutable = resolved.executable
+      const refreshed = await refreshLocalTmuxExecutable(signal)
+      if (!refreshed.ok) return { ...refreshed, stdout: '', stderr: '' }
       result = await runLocalTmuxExecutable(localTmuxExecutable, args, signal)
     }
     const stdout = result.stdout.trimEnd()
@@ -130,6 +132,15 @@ async function runLocalTmuxExecutable(executable: string, args: string[], signal
     forceKillAfterDelay: 500,
     reject: false,
   })
+}
+
+async function refreshLocalTmuxExecutable(
+  signal?: AbortSignal,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const resolved = await resolveTmuxFromLoginShell(signal)
+  if (!resolved.ok) return resolved
+  localTmuxExecutable = resolved.executable
+  return { ok: true }
 }
 
 async function resolveTmuxFromLoginShell(
