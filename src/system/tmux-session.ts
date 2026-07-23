@@ -36,6 +36,24 @@ export function buildTmuxSessionName(input: TmuxSessionDescriptor): string | nul
   return `${TMUX_SESSION_PREFIX}${digest}`
 }
 
+export function buildTmuxAttachShellCommand(
+  input: TmuxSessionDescriptor,
+): { sessionName: string; command: string } | null {
+  const descriptor = normalizeTmuxSessionDescriptor(input)
+  const sessionName = descriptor ? buildTmuxSessionName(descriptor) : null
+  if (!descriptor || !sessionName) return null
+  const sessionTarget = `=${sessionName}`
+  return {
+    sessionName,
+    command: [
+      `exec tmux new-session -A -s ${shellQuote(sessionName)} -c ${shellQuote(descriptor.workingDirectory)}`,
+      `set-option -t ${shellQuote(`${sessionTarget}:`)} mouse on`,
+      `set-option -t ${shellQuote(sessionTarget)} ${TMUX_INIT_PATH_OPTION} ${shellQuote(descriptor.workingDirectory)}`,
+      `set-option -t ${shellQuote(sessionTarget)} ${TMUX_TERMINAL_NUMBER_OPTION} ${shellQuote(String(descriptor.terminalNumber))}`,
+    ].join(' \\; '),
+  }
+}
+
 export function normalizeTmuxSessionPath(value: string): string | null {
   if (
     typeof value !== 'string' ||
@@ -79,4 +97,8 @@ export function resolveTmuxSessionTerminalNumbers(
 
 function isSafeTerminalNumber(value: number): boolean {
   return Number.isSafeInteger(value) && value >= 1
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`
 }

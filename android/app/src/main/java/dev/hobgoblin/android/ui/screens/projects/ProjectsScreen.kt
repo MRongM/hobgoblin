@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import dev.hobgoblin.android.domain.ResourceState
+import dev.hobgoblin.android.domain.ssh.RemoteProjectKind
 import dev.hobgoblin.android.domain.ssh.RemoteRepositoryProfile
 import dev.hobgoblin.android.domain.ssh.SshHostProfile
 import dev.hobgoblin.android.ui.theme.HobgoblinSpacing
@@ -79,7 +80,12 @@ internal fun projectTerminalTarget(repository: RemoteRepositoryProfile): Project
 internal fun projectActionLabels(): List<String> = listOf("Open", "Terminals", "Delete")
 
 internal fun emptyProjectsDescription(): String =
-    "Add a remote Git project to open its workspace and terminal."
+    "Add a remote Git repository or Plain workspace to open its terminal."
+
+internal fun projectKindLabel(project: RemoteRepositoryProfile): String = when (project.kind) {
+    RemoteProjectKind.GitRepository -> "Git repository"
+    RemoteProjectKind.PlainWorkspace -> "Plain workspace"
+}
 
 @Composable
 private fun ProjectList(
@@ -185,6 +191,11 @@ private fun ProjectRow(
             verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
         ) {
             Text("${repository.title}: ${repository.remotePath}", style = MaterialTheme.typography.bodySmall)
+            Text(
+                projectKindLabel(repository),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             rootAddress?.let { address ->
                 Text(address, style = MaterialTheme.typography.labelMedium)
             }

@@ -3,6 +3,7 @@ package dev.hobgoblin.android.data
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import dev.hobgoblin.android.domain.ssh.RemoteProjectKind
 import dev.hobgoblin.android.domain.ssh.RemoteRepositoryProfile
 import java.nio.charset.StandardCharsets
 import java.util.Base64
@@ -66,6 +67,7 @@ object RemoteRepositoryCodec {
                 repository.hostProfileId,
                 repository.alias.orEmpty(),
                 repository.remotePath,
+                repository.kind.storageValue,
             ).joinToString(FieldSeparator) { it.encodeField() }
         }
 
@@ -79,13 +81,19 @@ object RemoteRepositoryCodec {
 
     private fun decodeRepository(line: String): RemoteRepositoryProfile? {
         val fields = line.split(FieldSeparator).map { it.decodeField() }
-        if (fields.size != 4) return null
+        if (fields.size !in 4..5) return null
+        val kind = if (fields.size == 4) {
+            RemoteProjectKind.GitRepository
+        } else {
+            RemoteProjectKind.fromStorageValue(fields[4]) ?: return null
+        }
         return runCatching {
             RemoteRepositoryProfile(
                 id = fields[0],
                 hostProfileId = fields[1],
                 alias = fields[2].takeIf { it.isNotBlank() },
                 remotePath = fields[3],
+                kind = kind,
             )
         }.getOrNull()
     }

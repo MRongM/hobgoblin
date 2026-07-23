@@ -14,6 +14,79 @@ import org.junit.Test
 
 class RemoteTmuxSessionServiceTest {
     @Test
+    fun `trusted discovery returns only descriptor verified sessions`() {
+        val discoveryIdentity = requireNotNull(
+            TmuxSessionProtocol.identity(
+                TmuxSessionDescriptor(ProjectRoot, FeaturePath, terminalNumber = 1),
+            ),
+        )
+        val client = FakeSshClient(
+            SshCommandResult(
+                ok = true,
+                stdout = listOf(
+                    "${discoveryIdentity.sessionName}\t$FeaturePath\t1",
+                    "user-session\t$FeaturePath\t1",
+                ).joinToString("\n"),
+            ),
+        )
+
+        val result = service(client).discoverAssociatedSessions(
+            target = target(),
+            projectRoot = ProjectRoot,
+            allowedInitialPaths = setOf(FeaturePath),
+        )
+
+        assertEquals(
+            RemoteTmuxDiscoveryResult.Found(
+                listOf(DiscoveredTmuxSession(discoveryIdentity, terminalNumber = 1)),
+            ),
+            result,
+        )
+        assertEquals(listOf(TmuxSessionProtocol.listDiscoverableSessionsScript()), client.scripts)
+        assertTrue(client.secrets.all { it.acceptedHostFingerprint == "SHA256:trusted" })
+    }
+
+    @Test
+    fun `missing tmux and no server are empty discovery results`() {
+        listOf(
+            SshCommandResult(ok = false, stderr = "no server running on /tmp/tmux-1000/default"),
+            SshCommandResult(ok = false, message = "exit 127"),
+        ).forEach { commandResult ->
+            val result = service(FakeSshClient(commandResult)).discoverAssociatedSessions(
+                target = target(),
+                projectRoot = ProjectRoot,
+                allowedInitialPaths = setOf(FeaturePath),
+            )
+
+            assertEquals(RemoteTmuxDiscoveryResult.Found(emptyList()), result)
+        }
+    }
+
+    @Test
+    fun `discovery command failure and invalid scope fail without recovering sessions`() {
+        val failed = service(FakeSshClient(SshCommandResult(ok = false, stderr = "permission denied")))
+            .discoverAssociatedSessions(target(), ProjectRoot, setOf(FeaturePath))
+        val invalidScopeClient = FakeSshClient()
+        val invalidScope = service(invalidScopeClient)
+            .discoverAssociatedSessions(target(), "relative/project", setOf(FeaturePath))
+
+        assertEquals(RemoteTmuxDiscoveryResult.Failed("permission denied"), failed)
+        assertTrue(invalidScope is RemoteTmuxDiscoveryResult.Failed)
+        assertEquals(emptyList<String>(), invalidScopeClient.scripts)
+    }
+
+    @Test
+    fun `untrusted host fails discovery before tmux commands run`() {
+        val client = FakeSshClient()
+        val service = RemoteTmuxSessionService(client, FakeHostKeyTrustStore(trusted = false))
+
+        val result = service.discoverAssociatedSessions(target(), ProjectRoot, setOf(FeaturePath))
+
+        assertTrue(result is RemoteTmuxDiscoveryResult.Failed)
+        assertEquals(emptyList<String>(), client.scripts)
+    }
+
+    @Test
     fun `exact live name and path are listed before the session is killed`() {
         val client = FakeSshClient(
             SshCommandResult(ok = true, stdout = "$SessionName\t/srv/feature"),
@@ -176,5 +249,7 @@ class RemoteTmuxSessionServiceTest {
 
     private companion object {
         const val SessionName = "hobgoblin-v1-aebf050981ac829e36100020"
+        const val ProjectRoot = "/srv/projects/example"
+        const val FeaturePath = "/srv/projects/example/worktrees/feature"
     }
 }

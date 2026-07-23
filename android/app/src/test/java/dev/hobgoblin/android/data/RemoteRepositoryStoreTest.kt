@@ -1,6 +1,9 @@
 package dev.hobgoblin.android.data
 
 import dev.hobgoblin.android.domain.ssh.RemoteRepositoryProfile
+import dev.hobgoblin.android.domain.ssh.RemoteProjectKind
+import java.nio.charset.StandardCharsets
+import java.util.Base64
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
@@ -42,6 +45,38 @@ class RemoteRepositoryStoreTest {
     }
 
     @Test
+    fun `plain workspaces preserve their kind through serialized storage`() {
+        val workspace = RemoteRepositoryProfile.create(
+            hostProfileId = "host-1",
+            alias = "Scripts",
+            remotePath = "/srv/scripts",
+            kind = RemoteProjectKind.PlainWorkspace,
+        )
+
+        val decoded = RemoteRepositoryCodec.decode(RemoteRepositoryCodec.encode(listOf(workspace)))
+
+        assertFalse(workspace.isGitRepository)
+        assertEquals(listOf(workspace), decoded)
+    }
+
+    @Test
+    fun `legacy four field project records remain git repositories`() {
+        val legacyPayload = encodedRecord("project-1", "host-1", "App", "/srv/app")
+
+        val decoded = RemoteRepositoryCodec.decode(legacyPayload)
+
+        assertEquals(RemoteProjectKind.GitRepository, decoded.single().kind)
+        assertTrue(decoded.single().isGitRepository)
+    }
+
+    @Test
+    fun `unknown persisted project kinds are ignored`() {
+        val payload = encodedRecord("project-1", "host-1", "App", "/srv/app", "future-kind")
+
+        assertTrue(RemoteRepositoryCodec.decode(payload).isEmpty())
+    }
+
+    @Test
     fun `remote repository delete removes only the local record`() {
         val first = RemoteRepositoryProfile.create(hostProfileId = "host-1", alias = "App", remotePath = "/srv/app")
         val second = RemoteRepositoryProfile.create(hostProfileId = "host-1", alias = "API", remotePath = "/srv/api")
@@ -77,5 +112,11 @@ class RemoteRepositoryStoreTest {
         assertFalse(payload.contains("socket", ignoreCase = true))
         assertFalse(payload.contains("tunnel", ignoreCase = true))
         assertTrue(payload.isNotBlank())
+    }
+
+    private fun encodedRecord(vararg fields: String): String = fields.joinToString(".") { field ->
+        Base64.getUrlEncoder()
+            .withoutPadding()
+            .encodeToString(field.toByteArray(StandardCharsets.UTF_8))
     }
 }

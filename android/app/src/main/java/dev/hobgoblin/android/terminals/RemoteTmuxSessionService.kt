@@ -15,10 +15,52 @@ sealed interface RemoteTmuxCloseResult {
     data class Failed(val message: String) : RemoteTmuxCloseResult
 }
 
+sealed interface RemoteTmuxDiscoveryResult {
+    data class Found(val sessions: List<DiscoveredTmuxSession>) : RemoteTmuxDiscoveryResult
+
+    data class Failed(val message: String) : RemoteTmuxDiscoveryResult
+}
+
 class RemoteTmuxSessionService(
     private val client: SshClientFacade,
     private val hostKeyStore: HostKeyTrustStore,
 ) {
+    fun discoverAssociatedSessions(
+        target: RemoteTarget,
+        projectRoot: String,
+        allowedInitialPaths: Set<String>,
+    ): RemoteTmuxDiscoveryResult = try {
+        if (TmuxSessionProtocol.normalizePath(projectRoot) == null) {
+            return RemoteTmuxDiscoveryResult.Failed("Invalid tmux discovery project root")
+        }
+        val fingerprint = client.fetchHostFingerprint(target)
+        require(hostKeyStore.evaluate(target, fingerprint) is HostKeyTrust.Trusted) {
+            "Trust this host key before discovering tmux sessions."
+        }
+        val secrets = SshConnectionSecrets(acceptedHostFingerprint = fingerprint)
+        val listed = client.runCommand(
+            target = target,
+            script = TmuxSessionProtocol.listDiscoverableSessionsScript(),
+            secrets = secrets,
+        )
+        if (!listed.ok) {
+            val message = listed.failureMessage()
+            return if (isEmptyDiscoveryMessage(message)) {
+                RemoteTmuxDiscoveryResult.Found(emptyList())
+            } else {
+                RemoteTmuxDiscoveryResult.Failed(message)
+            }
+        }
+        val sessions = TmuxSessionProtocol.parseDiscoverableSessions(
+            output = listed.stdout,
+            projectRoot = projectRoot,
+            allowedInitialPaths = allowedInitialPaths,
+        ) ?: return RemoteTmuxDiscoveryResult.Failed("Invalid tmux discovery scope")
+        RemoteTmuxDiscoveryResult.Found(sessions)
+    } catch (error: Throwable) {
+        RemoteTmuxDiscoveryResult.Failed(error.message?.takeIf { it.isNotBlank() } ?: error::class.java.simpleName)
+    }
+
     fun closeAssociatedSession(
         target: RemoteTarget,
         identity: TmuxSessionIdentity,
@@ -76,6 +118,9 @@ class RemoteTmuxSessionService(
             ?: "tmux command failed"
 
     private fun isMissingTmuxMessage(message: String): Boolean = MissingTmuxPattern.containsMatchIn(message)
+
+    private fun isEmptyDiscoveryMessage(message: String): Boolean =
+        message.trim() == "exit 127" || isMissingTmuxMessage(message)
 
     private companion object {
         val MissingTmuxPattern = Regex(

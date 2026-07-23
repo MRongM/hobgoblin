@@ -83,6 +83,7 @@ describe('buildManagedLocalTerminalInvocation', () => {
     )
 
     expect(invocation?.script).toContain("-c '/srv/user'\\''s feature'")
+    expect(invocation?.script).toContain("@hobgoblin_init_path '/srv/user'\\''s feature'")
     expect(invocation?.script).toContain("exec '/opt/user'\\''s shell' -l")
   })
 

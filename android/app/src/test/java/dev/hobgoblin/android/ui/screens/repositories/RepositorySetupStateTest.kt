@@ -1,10 +1,12 @@
 package dev.hobgoblin.android.ui.screens.repositories
 
+import dev.hobgoblin.android.tmuxRecoveryCandidates
 import dev.hobgoblin.android.domain.ResourceState
 import dev.hobgoblin.android.domain.ssh.RemoteDirectoryEntry
+import dev.hobgoblin.android.domain.ssh.RemoteProjectInspection
+import dev.hobgoblin.android.domain.ssh.RemoteProjectKind
 import dev.hobgoblin.android.domain.ssh.RemoteRepositoryBranch
 import dev.hobgoblin.android.domain.ssh.RemoteRepositoryProfile
-import dev.hobgoblin.android.domain.ssh.RemoteRepositoryInspection
 import dev.hobgoblin.android.domain.ssh.RemoteRepositorySnapshot
 import dev.hobgoblin.android.domain.ssh.RemoteRepositoryWorktree
 import dev.hobgoblin.android.domain.ssh.SshHostProfile
@@ -12,7 +14,10 @@ import dev.hobgoblin.android.terminals.TerminalDisconnectedReason
 import dev.hobgoblin.android.terminals.TerminalLaunchMode
 import dev.hobgoblin.android.terminals.TerminalSessionRecord
 import dev.hobgoblin.android.terminals.TerminalSessionStatus
+import dev.hobgoblin.android.terminals.DiscoveredTmuxSession
+import dev.hobgoblin.android.terminals.TmuxSessionDescriptor
 import dev.hobgoblin.android.terminals.TmuxSessionIdentity
+import dev.hobgoblin.android.terminals.TmuxSessionProtocol
 import dev.hobgoblin.android.termux.ExternalTermuxLaunchResult
 import dev.hobgoblin.android.ui.screens.placeholders.localTerminalPlaceholderText
 import org.junit.Assert.assertEquals
@@ -83,6 +88,106 @@ class RepositorySetupStateTest {
             repositoryWorkspaceTabs(repository),
         )
         assertEquals("/srv/app", repositoryTerminalPath(repository))
+    }
+
+    @Test
+    fun `plain workspace exposes only its root terminal capability`() {
+        val workspace = repository(
+            id = "project-1",
+            remotePath = "/srv/scripts",
+            kind = RemoteProjectKind.PlainWorkspace,
+        )
+
+        assertEquals(listOf(RepositoryWorkspaceTab.Terminal), repositoryWorkspaceTabs(workspace))
+        assertEquals(
+            RepositoryWorkspaceTab.Terminal,
+            initialRepositoryWorkspaceTab(workspace, initialTerminalWorkspacePath = null),
+        )
+        assertFalse(shouldLoadRepositorySnapshot(workspace))
+    }
+
+    @Test
+    fun `git project keeps git tabs and snapshot capability`() {
+        val repository = repository(id = "repo-1", remotePath = "/srv/app")
+
+        assertEquals(RepositoryWorkspaceTab.Branches, initialRepositoryWorkspaceTab(repository, null))
+        assertTrue(shouldLoadRepositorySnapshot(repository))
+    }
+
+    @Test
+    fun `plain workspace tmux discovery uses its root without a git snapshot`() {
+        val workspace = repository(
+            id = "project-1",
+            remotePath = "/srv//scripts/./",
+            kind = RemoteProjectKind.PlainWorkspace,
+        )
+
+        assertEquals(
+            listOf("/srv/scripts"),
+            repositoryTmuxDiscoveryPaths(workspace, ResourceState.Idle),
+        )
+    }
+
+    @Test
+    fun `git tmux discovery waits for a usable repository snapshot`() {
+        val repository = repository(id = "repo-1", remotePath = "/srv/app")
+
+        assertNull(repositoryTmuxDiscoveryPaths(repository, ResourceState.Idle))
+        assertNull(repositoryTmuxDiscoveryPaths(repository, ResourceState.Loading))
+        assertNull(repositoryTmuxDiscoveryPaths(repository, ResourceState.Error("git failed")))
+    }
+
+    @Test
+    fun `git tmux discovery includes normalized root and non missing worktrees`() {
+        val repository = repository(id = "repo-1", remotePath = "/srv/app/")
+        val usableSnapshot = snapshot().copy(
+            worktrees = listOf(
+                worktree(path = "/srv/app"),
+                worktree(path = "/srv//app-feature/./"),
+                worktree(path = "/srv/app-missing", isMissing = true),
+            ),
+        )
+        val expected = listOf("/srv/app", "/srv/app-feature")
+
+        assertEquals(
+            expected,
+            repositoryTmuxDiscoveryPaths(repository, ResourceState.Loaded(usableSnapshot)),
+        )
+        assertEquals(
+            expected,
+            repositoryTmuxDiscoveryPaths(
+                repository,
+                ResourceState.Stale(usableSnapshot, loadedAtMillis = 1L, reason = "offline"),
+            ),
+        )
+    }
+
+    @Test
+    fun `validated discoveries map to path scoped recovery candidates`() {
+        val host = host(id = "host-1", identityRefId = "identity-1")
+        val repository = repository(id = "repo-1", remotePath = "/srv/app")
+        val identity = requireNotNull(
+            TmuxSessionProtocol.identity(
+                TmuxSessionDescriptor(
+                    projectRoot = repository.remotePath,
+                    workingDirectory = "/srv/app-feature",
+                    terminalNumber = 3,
+                ),
+            ),
+        )
+
+        val candidates = tmuxRecoveryCandidates(
+            host = host,
+            repository = repository,
+            discoveries = listOf(DiscoveredTmuxSession(identity, terminalNumber = 3)),
+        )
+
+        assertEquals(1, candidates.size)
+        assertEquals("root@example.com:22/srv/app-feature", candidates.single().target.id)
+        assertEquals("repo-1", candidates.single().repositoryId)
+        assertEquals("/srv/app", candidates.single().repositoryRemotePath)
+        assertEquals("/srv/app - /srv/app-feature", candidates.single().targetLabel)
+        assertEquals(identity, candidates.single().discovery.identity)
     }
 
     @Test
@@ -472,20 +577,39 @@ class RepositorySetupStateTest {
     }
 
     @Test
-    fun `validated repository uses inspected top level before local save`() {
+    fun `validated git project uses inspected top level before local save`() {
         val host = host(id = "host-1", identityRefId = "identity-1")
-        val inspection = RemoteRepositoryInspection(
+        val inspection = RemoteProjectInspection(
             requestedPath = "/srv/app/subdir",
-            topLevel = "/srv/app",
+            resolvedPath = "/srv/app",
+            kind = RemoteProjectKind.GitRepository,
             currentRef = "feature/android",
             defaultBranch = "main",
         )
 
-        val repository = createRepositoryFromInspection(host, "App", inspection)
+        val repository = createProjectFromInspection(host, "App", inspection)
 
         assertEquals("host-1", repository.hostProfileId)
         assertEquals("App", repository.alias)
         assertEquals("/srv/app", repository.remotePath)
+        assertEquals(RemoteProjectKind.GitRepository, repository.kind)
+    }
+
+    @Test
+    fun `validated plain workspace keeps its resolved directory before local save`() {
+        val host = host(id = "host-1", identityRefId = "identity-1")
+        val inspection = RemoteProjectInspection(
+            requestedPath = "/srv/scripts",
+            resolvedPath = "/srv/scripts",
+            kind = RemoteProjectKind.PlainWorkspace,
+            currentRef = null,
+            defaultBranch = null,
+        )
+
+        val workspace = createProjectFromInspection(host, "Scripts", inspection)
+
+        assertEquals("/srv/scripts", workspace.remotePath)
+        assertEquals(RemoteProjectKind.PlainWorkspace, workspace.kind)
     }
 
     @Test
@@ -541,11 +665,16 @@ class RepositorySetupStateTest {
             identityRefId = identityRefId,
         ).copy(id = id)
 
-    private fun repository(id: String, remotePath: String): RemoteRepositoryProfile =
+    private fun repository(
+        id: String,
+        remotePath: String,
+        kind: RemoteProjectKind = RemoteProjectKind.GitRepository,
+    ): RemoteRepositoryProfile =
         RemoteRepositoryProfile.create(
             hostProfileId = "host-1",
             alias = null,
             remotePath = remotePath,
+            kind = kind,
         ).copy(id = id)
 
     private fun terminalSession(
@@ -597,5 +726,20 @@ class RepositorySetupStateTest {
         branches = emptyList(),
         commits = emptyList(),
         worktrees = emptyList(),
+    )
+
+    private fun worktree(
+        path: String,
+        isMissing: Boolean = false,
+    ): RemoteRepositoryWorktree = RemoteRepositoryWorktree(
+        path = path,
+        branch = "feature/android",
+        isPrimary = false,
+        isLinked = true,
+        isBare = false,
+        isLocked = false,
+        isMissing = isMissing,
+        isDirty = false,
+        changeCount = 0,
     )
 }

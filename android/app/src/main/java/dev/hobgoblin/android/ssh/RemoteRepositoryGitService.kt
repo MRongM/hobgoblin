@@ -3,9 +3,10 @@ package dev.hobgoblin.android.ssh
 import dev.hobgoblin.android.data.ssh.HostKeyTrustStore
 import dev.hobgoblin.android.domain.ssh.HostKeyTrust
 import dev.hobgoblin.android.domain.ssh.RemoteDirectoryEntry
+import dev.hobgoblin.android.domain.ssh.RemoteProjectInspection
+import dev.hobgoblin.android.domain.ssh.RemoteProjectKind
 import dev.hobgoblin.android.domain.ssh.RemoteRepositoryBranch
 import dev.hobgoblin.android.domain.ssh.RemoteRepositoryCommit
-import dev.hobgoblin.android.domain.ssh.RemoteRepositoryInspection
 import dev.hobgoblin.android.domain.ssh.RemoteRepositorySnapshot
 import dev.hobgoblin.android.domain.ssh.RemoteRepositoryWorktree
 import dev.hobgoblin.android.domain.ssh.RemoteTarget
@@ -25,15 +26,15 @@ class RemoteRepositoryGitService(
         return parseRemoteDirectoryEntries(result.stdout)
     }
 
-    fun inspectRepository(target: RemoteTarget): RemoteRepositoryInspection {
+    fun inspectProject(target: RemoteTarget): RemoteProjectInspection {
         val fingerprint = trustedFingerprint(target)
         val result = client.runCommand(
             target = target,
-            script = repositoryInspectionScript(target.remotePath),
+            script = projectInspectionScript(target.remotePath),
             secrets = SshConnectionSecrets(acceptedHostFingerprint = fingerprint),
         )
-        require(result.ok) { result.message.ifBlank { result.stderr.ifBlank { "Repository validation failed" } } }
-        return parseRemoteRepositoryInspection(target.remotePath, result.stdout)
+        require(result.ok) { result.message.ifBlank { result.stderr.ifBlank { "Project validation failed" } } }
+        return parseRemoteProjectInspection(target.remotePath, result.stdout)
     }
 
     fun loadSnapshot(target: RemoteTarget): RemoteRepositorySnapshot {
@@ -76,15 +77,20 @@ private fun normalizeRemoteDirectoryPath(path: String): String {
     return normalized.ifBlank { "/" }
 }
 
-internal fun parseRemoteRepositoryInspection(requestedPath: String, output: String): RemoteRepositoryInspection {
-    val sections = parseMarkedSections(output, InspectMarkers)
-    val topLevel = sections[InspectTopMarker].orEmpty().firstOrNull { it.isNotBlank() }.orEmpty()
-    require(topLevel.isNotBlank()) { "Remote path is not a Git repository." }
-    return RemoteRepositoryInspection(
+internal fun parseRemoteProjectInspection(requestedPath: String, output: String): RemoteProjectInspection {
+    val sections = parseMarkedSections(output, ProjectInspectMarkers)
+    val kindValue = sections[ProjectKindMarker].orEmpty().firstOrNull { it.isNotBlank() }.orEmpty()
+    val kind = requireNotNull(RemoteProjectKind.fromStorageValue(kindValue)) {
+        "Remote project kind is missing or unsupported."
+    }
+    val resolvedPath = sections[ProjectPathMarker].orEmpty().firstOrNull { it.isNotBlank() }.orEmpty()
+    require(resolvedPath.startsWith("/")) { "Remote project path is invalid." }
+    return RemoteProjectInspection(
         requestedPath = requestedPath,
-        topLevel = topLevel,
-        currentRef = sections[InspectCurrentMarker].orEmpty().firstOrNull { it.isNotBlank() },
-        defaultBranch = sections[InspectDefaultMarker].orEmpty().firstOrNull { it.isNotBlank() },
+        resolvedPath = resolvedPath,
+        kind = kind,
+        currentRef = sections[ProjectCurrentMarker].orEmpty().firstOrNull { it.isNotBlank() },
+        defaultBranch = sections[ProjectDefaultMarker].orEmpty().firstOrNull { it.isNotBlank() },
     )
 }
 
@@ -154,17 +160,24 @@ private fun browseDirectoriesScript(remotePath: String): String {
     """.trimIndent()
 }
 
-private fun repositoryInspectionScript(remotePath: String): String {
-    val repo = shellQuote(remotePath)
-    return listOf(
-        "top=\$(git -C $repo rev-parse --show-toplevel) || exit 21",
-        "printf '%s\\n' ${shellQuote(InspectTopMarker)}",
-        "printf '%s\\n' \"\$top\"",
-        "printf '%s\\n' ${shellQuote(InspectCurrentMarker)}",
-        "git -C $repo symbolic-ref --short HEAD 2>/dev/null || git -C $repo rev-parse --short HEAD 2>/dev/null || true",
-        "printf '%s\\n' ${shellQuote(InspectDefaultMarker)}",
-        "git -C $repo symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##' || true",
-    ).joinToString("\n")
+private fun projectInspectionScript(remotePath: String): String {
+    val requestedPath = shellQuote(remotePath)
+    return """
+        requested=$requestedPath
+        [ -d "${'$'}requested" ] || { printf '%s\n' 'Remote path is not a directory' >&2; exit 20; }
+        [ -r "${'$'}requested" ] || { printf '%s\n' 'Remote path is not readable' >&2; exit 20; }
+        resolved=${'$'}(cd "${'$'}requested" 2>/dev/null && pwd -P) || { printf '%s\n' 'Remote path is not readable' >&2; exit 20; }
+        top=${'$'}(git -C "${'$'}resolved" rev-parse --show-toplevel 2>/dev/null || true)
+        if [ -n "${'$'}top" ]; then kind=git; resolved=${'$'}top; else kind=plain; fi
+        printf '%s\n' ${shellQuote(ProjectKindMarker)}
+        printf '%s\n' "${'$'}kind"
+        printf '%s\n' ${shellQuote(ProjectPathMarker)}
+        printf '%s\n' "${'$'}resolved"
+        printf '%s\n' ${shellQuote(ProjectCurrentMarker)}
+        if [ "${'$'}kind" = git ]; then git -C "${'$'}resolved" symbolic-ref --short HEAD 2>/dev/null || git -C "${'$'}resolved" rev-parse --short HEAD 2>/dev/null || true; fi
+        printf '%s\n' ${shellQuote(ProjectDefaultMarker)}
+        if [ "${'$'}kind" = git ]; then git -C "${'$'}resolved" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##' || true; fi
+    """.trimIndent()
 }
 
 private fun snapshotScript(remotePath: String): String {
@@ -268,9 +281,10 @@ private const val CommitsMarker = "__HOBGOBLIN_ANDROID_COMMITS__"
 private const val BranchesMarker = "__HOBGOBLIN_ANDROID_BRANCHES__"
 private const val WorktreesMarker = "__HOBGOBLIN_ANDROID_WORKTREES__"
 private const val WorktreeStatusMarker = "__HOBGOBLIN_ANDROID_WORKTREE_STATUS__"
-private const val InspectTopMarker = "__HOBGOBLIN_ANDROID_INSPECT_TOP__"
-private const val InspectCurrentMarker = "__HOBGOBLIN_ANDROID_INSPECT_CURRENT__"
-private const val InspectDefaultMarker = "__HOBGOBLIN_ANDROID_INSPECT_DEFAULT__"
+private const val ProjectKindMarker = "__HOBGOBLIN_ANDROID_PROJECT_KIND__"
+private const val ProjectPathMarker = "__HOBGOBLIN_ANDROID_PROJECT_PATH__"
+private const val ProjectCurrentMarker = "__HOBGOBLIN_ANDROID_PROJECT_CURRENT__"
+private const val ProjectDefaultMarker = "__HOBGOBLIN_ANDROID_PROJECT_DEFAULT__"
 private const val DirectoryFieldSeparator = '\t'
 private const val BranchFieldSeparator = '\u0000'
 
@@ -283,4 +297,9 @@ private val SnapshotMarkers = setOf(
     WorktreesMarker,
     WorktreeStatusMarker,
 )
-private val InspectMarkers = setOf(InspectTopMarker, InspectCurrentMarker, InspectDefaultMarker)
+private val ProjectInspectMarkers = setOf(
+    ProjectKindMarker,
+    ProjectPathMarker,
+    ProjectCurrentMarker,
+    ProjectDefaultMarker,
+)

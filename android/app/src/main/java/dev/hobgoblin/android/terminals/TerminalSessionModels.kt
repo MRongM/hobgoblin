@@ -1,5 +1,7 @@
 package dev.hobgoblin.android.terminals
 
+import dev.hobgoblin.android.domain.ssh.RemoteTarget
+
 data class TerminalSessionRecord(
     val id: String,
     val hostId: String,
@@ -51,6 +53,14 @@ data class TerminalSessionRecord(
         const val MaxDisconnectedMessageChars = 1_000
     }
 }
+
+data class TmuxTerminalRecoveryCandidate(
+    val target: RemoteTarget,
+    val repositoryId: String,
+    val repositoryRemotePath: String,
+    val targetLabel: String,
+    val discovery: DiscoveredTmuxSession,
+)
 
 enum class TerminalSessionStatus {
     Starting,

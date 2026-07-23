@@ -64,6 +64,14 @@ _Avoid_: Terminal session ID, terminal ID, PTY session ID
 The session-owned `@hobgoblin_init_path` and `@hobgoblin_terminal_number` tmux user options written when Hobgoblin creates a tmux session. Discovery recognizes the session only when the normalized initial path, positive terminal number, and recomputed deterministic session name all agree for the current project root. Missing or mismatched metadata is never inferred from the name alone.
 _Avoid_: Application persistence map, current pane path, name-only ownership
 
+**Discoverable Hobgoblin tmux session**:
+A current-protocol tmux session whose fixed initial-path and positive terminal-number metadata reproduce its exact tmux session name and associate it with a recognized project terminal path. It is eligible for Android recovery but is not authenticated by that metadata.
+_Avoid_: Any Hobgoblin-prefixed session, arbitrary tmux session, authenticated tmux session
+
+**Recovered Android tmux terminal**:
+A retained, disconnected Android project-terminal record reconstructed from a discoverable Hobgoblin tmux session while preserving its terminal slot. It attaches only when the user opens or reconnects it.
+_Avoid_: Connected terminal, imported shell, automatically attached terminal
+
 **Internal terminal launch mode**:
 The per-launch choice between the native login shell and tmux-if-available for one new local or SSH internal terminal. Ordinary terminal actions use the native login shell. Explicit tmux actions create or attach to the deterministic tmux session when tmux is available on the target host and otherwise fall back to the native login shell. The choice is not a persisted preference and does not change an existing terminal.
 _Avoid_: Tmux setting, terminal preference, external terminal mode

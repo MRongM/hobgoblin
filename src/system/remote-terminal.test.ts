@@ -93,6 +93,7 @@ describe('buildManagedRemoteTerminalInvocation', () => {
     expect(invocation).not.toBeNull()
     expect(invocation?.script).toContain("cd '/srv/repo'\\''s-feature' || exit")
     expect(invocation?.script).toContain("-c '/srv/repo'\\''s-feature'")
+    expect(invocation?.script).toContain("@hobgoblin_init_path '/srv/repo'\\''s-feature'")
   })
 
   test('keeps non-ascii paths as quoted shell data', () => {

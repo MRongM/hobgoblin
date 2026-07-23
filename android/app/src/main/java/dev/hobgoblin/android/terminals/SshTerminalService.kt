@@ -99,12 +99,11 @@ internal object SshTerminalStartupCommand {
         val lines = buildList {
             add("cd ${shellQuote(normalizedPath)} || exit")
             if (tmuxIdentity != null) {
+                val tmuxCommand = requireNotNull(
+                    TmuxSessionProtocol.attachOrCreateCommand(tmuxIdentity, startupContext.terminalId),
+                ) { "Tmux terminal number must be positive" }
                 add("if command -v tmux >/dev/null 2>&1; then")
-                add(
-                    "  exec tmux new-session -A -s ${shellQuote(tmuxIdentity.sessionName)} " +
-                        "-c ${shellQuote(tmuxIdentity.initialPath)} \\; " +
-                        "set-option -t ${shellQuote("=${tmuxIdentity.sessionName}:")} mouse on",
-                )
+                add("  $tmuxCommand")
                 add("fi")
             }
             add("exec \"${'$'}{SHELL:-/bin/sh}\" -l")

@@ -117,6 +117,86 @@ class TerminalSessionManagerTest {
     }
 
     @Test
+    fun `discovered tmux session is recovered once as a stable disconnected project terminal`() {
+        val service = FakeTerminalSessionFactory()
+        val store = RecordingTerminalSessionStore()
+        val manager = terminalSessionManager(service = service, store = store, now = { 500L })
+        val observed = mutableListOf<List<TerminalSessionRecord>>()
+        manager.observeSessions { observed += it }
+        val candidate = recoveryCandidate()
+
+        val recovered = manager.recoverTmuxSessions(listOf(candidate))
+        val repeated = manager.recoverTmuxSessions(listOf(candidate))
+
+        assertEquals(1, recovered.size)
+        assertEquals(emptyList<TerminalSessionRecord>(), repeated)
+        assertEquals(1, manager.sessions().size)
+        assertEquals(recovered.single().id, manager.sessions().single().id)
+        assertTrue(recovered.single().id.matches(Regex("^[a-f0-9-]{36}$")))
+        assertEquals(candidate.target.id, recovered.single().hostId)
+        assertEquals("repo-1", recovered.single().repositoryId)
+        assertEquals("/srv/repo", recovered.single().repositoryRemotePath)
+        assertEquals(FeaturePath, recovered.single().remotePath)
+        assertEquals("terminal-1", recovered.single().displayName)
+        assertEquals(1, recovered.single().terminalId)
+        assertEquals(candidate.discovery.identity, recovered.single().tmuxIdentity)
+        assertEquals(TerminalSessionStatus.Disconnected, recovered.single().status)
+        assertNull(recovered.single().disconnectedReason)
+        assertNull(recovered.single().disconnectedMessage)
+        assertEquals("", recovered.single().lastOutputSnapshot)
+        assertEquals(0, service.openCount)
+        assertEquals(1, store.saveCount)
+        assertEquals(manager.sessions(), store.loadSessions())
+        assertEquals(2, observed.size)
+    }
+
+    @Test
+    fun `tmux recovery does not overwrite an existing native or exact tmux slot`() {
+        val service = FakeTerminalSessionFactory()
+        val manager = terminalSessionManager(service = service, ids = terminalIds())
+        val candidate = recoveryCandidate()
+        val native = manager.createNew(
+            target = candidate.target,
+            repositoryId = candidate.repositoryId,
+            repositoryRemotePath = candidate.repositoryRemotePath,
+            targetLabel = candidate.targetLabel,
+        )
+
+        assertEquals(emptyList<TerminalSessionRecord>(), manager.recoverTmuxSessions(listOf(candidate)))
+        assertEquals(native, manager.sessions().single())
+        assertNull(manager.sessions().single().tmuxIdentity)
+
+        manager.removeSession(native.id)
+        val exactTmux = manager.createNew(
+            target = candidate.target,
+            repositoryId = candidate.repositoryId,
+            repositoryRemotePath = candidate.repositoryRemotePath,
+            targetLabel = candidate.targetLabel,
+            launchMode = TerminalLaunchMode.TmuxIfAvailable,
+        )
+
+        assertEquals(candidate.discovery.identity, exactTmux.tmuxIdentity)
+        assertEquals(emptyList<TerminalSessionRecord>(), manager.recoverTmuxSessions(listOf(candidate)))
+        assertEquals(listOf(exactTmux.id), manager.sessions().map { it.id })
+    }
+
+    @Test
+    fun `tmux recovery batches valid sessions and scopes stable ids by host authority`() {
+        val store = RecordingTerminalSessionStore()
+        val manager = terminalSessionManager(service = FakeTerminalSessionFactory(), store = store)
+        val firstHost = recoveryCandidate()
+        val secondHost = recoveryCandidate(host = "other.example.com")
+        val invalidDescriptor = firstHost.copy(repositoryRemotePath = "/srv/other-repo")
+
+        val recovered = manager.recoverTmuxSessions(listOf(firstHost, secondHost, invalidDescriptor))
+
+        assertEquals(2, recovered.size)
+        assertNotEquals(recovered[0].id, recovered[1].id)
+        assertEquals(setOf("example.com", "other.example.com"), recovered.map { it.targetHost() }.toSet())
+        assertEquals(1, store.saveCount)
+    }
+
+    @Test
     fun `temporary terminal ignores tmux launch intent`() {
         val service = FakeTerminalSessionFactory()
         val manager = terminalSessionManager(service, ids = terminalIds())
@@ -832,6 +912,38 @@ class TerminalSessionManagerTest {
         identityRefId = null,
     )
 
+    private fun recoveryCandidate(
+        host: String = "example.com",
+        terminalNumber: Int = 1,
+    ): TmuxTerminalRecoveryCandidate {
+        val identity = requireNotNull(
+            TmuxSessionProtocol.identity(
+                TmuxSessionDescriptor(
+                    projectRoot = "/srv/repo",
+                    workingDirectory = FeaturePath,
+                    terminalNumber = terminalNumber,
+                ),
+            ),
+        )
+        return TmuxTerminalRecoveryCandidate(
+            target = RemoteTarget(
+                id = "lee@$host:22$FeaturePath",
+                alias = "Dev",
+                host = host,
+                user = "lee",
+                port = 22,
+                remotePath = FeaturePath,
+                identityRefId = null,
+            ),
+            repositoryId = "repo-1",
+            repositoryRemotePath = "/srv/repo",
+            targetLabel = "App - $FeaturePath",
+            discovery = DiscoveredTmuxSession(identity = identity, terminalNumber = terminalNumber),
+        )
+    }
+
+    private fun TerminalSessionRecord.targetHost(): String = hostId.substringAfter('@').substringBefore(':')
+
     private class FakeTerminalSessionFactory : TerminalSessionFactory {
         val sessions = mutableListOf<FakeTerminalSession>()
         val session: FakeTerminalSession
@@ -913,10 +1025,12 @@ class TerminalSessionManagerTest {
         initial: List<TerminalSessionRecord> = emptyList(),
     ) : TerminalSessionSnapshotStore {
         private var records = initial
+        var saveCount = 0
 
         override fun loadSessions(): List<TerminalSessionRecord> = records
 
         override fun saveSessions(sessions: List<TerminalSessionRecord>) {
+            saveCount += 1
             records = sessions
         }
     }
@@ -943,6 +1057,10 @@ class TerminalSessionManagerTest {
         override fun execute(command: Runnable) {
             command.run()
         }
+    }
+
+    private companion object {
+        const val FeaturePath = "/srv/repo-feature"
     }
 
     private class RecordingExecutor : Executor {
