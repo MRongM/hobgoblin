@@ -37,7 +37,7 @@ describe('tmux cleanup routes', () => {
       ok: true,
       targetPath: '/work/repo',
       deleted: [],
-      missingSessionIds: [],
+      missingSessionNames: [],
       failed: [],
     })
     const { createTmuxCleanupRoutes } = await import('#/server/routes/tmux-cleanup.ts')
@@ -46,11 +46,19 @@ describe('tmux cleanup routes', () => {
     await app.request('http://localhost/execute', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ projectRoot: '/work/repo', itemPath: '/work/repo', approvedSessionIds: ['$1'] }),
+      body: JSON.stringify({
+        projectRoot: '/work/repo',
+        itemPath: '/work/repo',
+        approvedSessionNames: ['hobgoblin-v1-0123456789abcdef01234567'],
+      }),
     })
 
     expect(mocks.cleanupAssociatedTmuxSessions).toHaveBeenCalledWith(
-      { projectRoot: '/work/repo', itemPath: '/work/repo', approvedSessionIds: ['$1'] },
+      {
+        projectRoot: '/work/repo',
+        itemPath: '/work/repo',
+        approvedSessionNames: ['hobgoblin-v1-0123456789abcdef01234567'],
+      },
       undefined,
       expect.any(AbortSignal),
     )

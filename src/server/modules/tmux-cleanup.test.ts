@@ -8,6 +8,7 @@ import {
 
 const FIRST_NAME = 'hobgoblin-v1-0123456789abcdef01234567'
 const SECOND_NAME = 'hobgoblin-v1-89abcdef0123456789abcdef'
+const MISSING_NAME = 'hobgoblin-v1-fedcba9876543210fedcba98'
 const REMOTE_REPO = 'ssh-config://prod/srv/repo'
 const REMOTE_TARGET = {
   id: REMOTE_REPO,
@@ -24,8 +25,8 @@ describe('associated tmux cleanup', () => {
     const listLocal = vi.fn(async () => ({
       ok: true as const,
       sessions: [
-        { sessionId: '$1', sessionName: FIRST_NAME, sessionPath: '/work/feature/' },
-        { sessionId: '$2', sessionName: SECOND_NAME, sessionPath: '/work/feature' },
+        { sessionName: FIRST_NAME, sessionPath: '/work/feature/' },
+        { sessionName: SECOND_NAME, sessionPath: '/work/feature' },
       ],
     }))
     const killLocalByName = vi.fn(async () => ({ ok: true, message: '' }))
@@ -42,7 +43,7 @@ describe('associated tmux cleanup', () => {
   test('does not close an exact name reported at a different path', async () => {
     const listLocal = vi.fn(async () => ({
       ok: true as const,
-      sessions: [{ sessionId: '$1', sessionName: FIRST_NAME, sessionPath: '/work/other' }],
+      sessions: [{ sessionName: FIRST_NAME, sessionPath: '/work/other' }],
     }))
     const killLocalByName = vi.fn()
 
@@ -61,7 +62,7 @@ describe('associated tmux cleanup', () => {
       .mockResolvedValueOnce({ ok: true, sessions: [] })
       .mockResolvedValueOnce({
         ok: true,
-        sessions: [{ sessionId: '$1', sessionName: FIRST_NAME, sessionPath: '/work/feature' }],
+        sessions: [{ sessionName: FIRST_NAME, sessionPath: '/work/feature' }],
       })
     const killLocalByName = vi.fn(async () => ({ ok: false, message: `can't find session: ${FIRST_NAME}` }))
     const dependenciesWithExactKill = { platform: 'linux' as const, listLocal, killLocalByName }
@@ -81,7 +82,7 @@ describe('associated tmux cleanup', () => {
     const resolveRemote = vi.fn(async () => REMOTE_TARGET)
     const runRemote = vi
       .fn()
-      .mockResolvedValueOnce({ ok: true, stdout: `${FIRST_NAME}\t$7\t/srv/feature`, stderr: '' })
+      .mockResolvedValueOnce({ ok: true, stdout: `${FIRST_NAME}\t/srv/feature`, stderr: '' })
       .mockResolvedValueOnce({ ok: true, stdout: '', stderr: '' })
 
     await expect(
@@ -101,7 +102,7 @@ describe('associated tmux cleanup', () => {
   test('rejects non-protocol names and preserves exact-close command failures', async () => {
     const listLocal = vi.fn(async () => ({
       ok: true as const,
-      sessions: [{ sessionId: '$1', sessionName: FIRST_NAME, sessionPath: '/work/feature' }],
+      sessions: [{ sessionName: FIRST_NAME, sessionPath: '/work/feature' }],
     }))
     const killLocalByName = vi.fn(async () => ({ ok: false, message: 'permission denied' }))
 
@@ -124,9 +125,9 @@ describe('associated tmux cleanup', () => {
     const listLocal = vi.fn(async () => ({
       ok: true as const,
       sessions: [
-        { sessionId: '$1', sessionName: FIRST_NAME, sessionPath: '/work/feature/' },
-        { sessionId: '$2', sessionName: SECOND_NAME, sessionPath: '/work/feature/nested' },
-        { sessionId: '$3', sessionName: 'goblin-feature', sessionPath: '/work/feature' },
+        { sessionName: FIRST_NAME, sessionPath: '/work/feature/' },
+        { sessionName: SECOND_NAME, sessionPath: '/work/feature/nested' },
+        { sessionName: 'goblin-feature', sessionPath: '/work/feature' },
       ],
     }))
 
@@ -138,7 +139,7 @@ describe('associated tmux cleanup', () => {
     ).resolves.toEqual({
       ok: true,
       targetPath: '/work/feature',
-      sessions: [{ sessionId: '$1', sessionName: FIRST_NAME, sessionPath: '/work/feature' }],
+      sessions: [{ sessionName: FIRST_NAME, sessionPath: '/work/feature' }],
     })
   })
 
@@ -158,7 +159,7 @@ describe('associated tmux cleanup', () => {
     const resolveRemote = vi.fn(async () => REMOTE_TARGET)
     const runRemote = vi.fn(async () => ({
       ok: true,
-      stdout: `${FIRST_NAME}\t$7\t/srv/feature`,
+      stdout: `${FIRST_NAME}\t/srv/feature`,
       stderr: '',
     }))
 
@@ -170,7 +171,7 @@ describe('associated tmux cleanup', () => {
     ).resolves.toEqual({
       ok: true,
       targetPath: '/srv/feature',
-      sessions: [{ sessionId: '$7', sessionName: FIRST_NAME, sessionPath: '/srv/feature' }],
+      sessions: [{ sessionName: FIRST_NAME, sessionPath: '/srv/feature' }],
     })
     expect(runRemote).toHaveBeenCalledWith(REMOTE_TARGET, { type: 'tmuxListSessions' }, { signal: undefined })
   })
@@ -179,37 +180,37 @@ describe('associated tmux cleanup', () => {
     const listLocal = vi.fn(async () => ({
       ok: true as const,
       sessions: [
-        { sessionId: '$1', sessionName: FIRST_NAME, sessionPath: '/work/feature' },
-        { sessionId: '$2', sessionName: SECOND_NAME, sessionPath: '/work/feature' },
+        { sessionName: FIRST_NAME, sessionPath: '/work/feature' },
+        { sessionName: SECOND_NAME, sessionPath: '/work/feature' },
       ],
     }))
-    const killLocal = vi.fn(async () => ({ ok: true, message: '' }))
+    const killLocalByName = vi.fn(async () => ({ ok: true, message: '' }))
 
     await expect(
       cleanupAssociatedTmuxSessions(
-        { projectRoot: '/work/repo', itemPath: '/work/feature', approvedSessionIds: ['$1'] },
-        { platform: 'linux', listLocal, killLocal },
+        { projectRoot: '/work/repo', itemPath: '/work/feature', approvedSessionNames: [FIRST_NAME] },
+        { platform: 'linux', listLocal, killLocalByName },
       ),
     ).resolves.toEqual({
       ok: true,
       targetPath: '/work/feature',
-      deleted: [{ sessionId: '$1', sessionName: FIRST_NAME, sessionPath: '/work/feature' }],
-      missingSessionIds: [],
+      deleted: [{ sessionName: FIRST_NAME, sessionPath: '/work/feature' }],
+      missingSessionNames: [],
       failed: [],
     })
-    expect(killLocal).toHaveBeenCalledTimes(1)
-    expect(killLocal).toHaveBeenCalledWith('$1', { signal: undefined })
+    expect(killLocalByName).toHaveBeenCalledTimes(1)
+    expect(killLocalByName).toHaveBeenCalledWith(FIRST_NAME, { signal: undefined })
   })
 
   test('reports disappeared and failed sessions without rolling back successful deletions', async () => {
     const listLocal = vi.fn(async () => ({
       ok: true as const,
       sessions: [
-        { sessionId: '$1', sessionName: FIRST_NAME, sessionPath: '/work/feature' },
-        { sessionId: '$3', sessionName: SECOND_NAME, sessionPath: '/work/feature' },
+        { sessionName: FIRST_NAME, sessionPath: '/work/feature' },
+        { sessionName: SECOND_NAME, sessionPath: '/work/feature' },
       ],
     }))
-    const killLocal = vi
+    const killLocalByName = vi
       .fn()
       .mockResolvedValueOnce({ ok: true, message: '' })
       .mockResolvedValueOnce({ ok: false, message: 'permission denied' })
@@ -219,37 +220,37 @@ describe('associated tmux cleanup', () => {
         {
           projectRoot: '/work/repo',
           itemPath: '/work/feature',
-          approvedSessionIds: ['$1', '$2', '$3'],
+          approvedSessionNames: [FIRST_NAME, MISSING_NAME, SECOND_NAME],
         },
-        { platform: 'linux', listLocal, killLocal },
+        { platform: 'linux', listLocal, killLocalByName },
       ),
     ).resolves.toEqual({
       ok: true,
       targetPath: '/work/feature',
-      deleted: [{ sessionId: '$1', sessionName: FIRST_NAME, sessionPath: '/work/feature' }],
-      missingSessionIds: ['$2'],
-      failed: [{ sessionId: '$3', sessionName: SECOND_NAME, message: 'permission denied' }],
+      deleted: [{ sessionName: FIRST_NAME, sessionPath: '/work/feature' }],
+      missingSessionNames: [MISSING_NAME],
+      failed: [{ sessionName: SECOND_NAME, message: 'permission denied' }],
     })
   })
 
-  test('rejects malformed targets and session ids before invoking dependencies', async () => {
+  test('rejects malformed targets and session names before invoking dependencies', async () => {
     const listLocal = vi.fn()
-    const killLocal = vi.fn()
+    const killLocalByName = vi.fn()
 
     await expect(
       cleanupAssociatedTmuxSessions(
-        { projectRoot: '/work/repo', itemPath: 'relative', approvedSessionIds: ['$1'] },
-        { platform: 'linux', listLocal, killLocal },
+        { projectRoot: '/work/repo', itemPath: 'relative', approvedSessionNames: [FIRST_NAME] },
+        { platform: 'linux', listLocal, killLocalByName },
       ),
     ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
     await expect(
       cleanupAssociatedTmuxSessions(
-        { projectRoot: '/work/repo', itemPath: '/work/feature', approvedSessionIds: ['$1; echo unsafe'] },
-        { platform: 'linux', listLocal, killLocal },
+        { projectRoot: '/work/repo', itemPath: '/work/feature', approvedSessionNames: ['goblin-feature'] },
+        { platform: 'linux', listLocal, killLocalByName },
       ),
     ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
     expect(listLocal).not.toHaveBeenCalled()
-    expect(killLocal).not.toHaveBeenCalled()
+    expect(killLocalByName).not.toHaveBeenCalled()
   })
 })
 
@@ -257,7 +258,7 @@ function dependencies(overrides: Partial<TmuxCleanupDependencies> = {}): TmuxCle
   return {
     platform: 'linux',
     listLocal: vi.fn(),
-    killLocal: vi.fn(),
+    killLocalByName: vi.fn(),
     resolveRemote: vi.fn(),
     runRemote: vi.fn(),
     ...overrides,

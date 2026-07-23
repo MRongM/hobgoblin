@@ -1,5 +1,4 @@
 export interface TmuxSessionRecord {
-  sessionId: string
   sessionName: string
   sessionPath: string
 }
@@ -10,7 +9,7 @@ export interface AssociatedTmuxTargetInput {
 }
 
 export interface AssociatedTmuxCleanupInput extends AssociatedTmuxTargetInput {
-  approvedSessionIds: string[]
+  approvedSessionNames: string[]
 }
 
 export type TmuxCleanupPreviewResult =
@@ -18,7 +17,6 @@ export type TmuxCleanupPreviewResult =
   | { ok: false; message: string }
 
 export interface TmuxCleanupFailure {
-  sessionId: string
   sessionName: string
   message: string
 }
@@ -28,11 +26,7 @@ export type TmuxCleanupResult =
       ok: true
       targetPath: string
       deleted: TmuxSessionRecord[]
-      missingSessionIds: string[]
+      missingSessionNames: string[]
       failed: TmuxCleanupFailure[]
     }
   | { ok: false; message: string }
-
-export function isValidTmuxSessionId(value: unknown): value is string {
-  return typeof value === 'string' && /^\$[0-9]+$/u.test(value)
-}

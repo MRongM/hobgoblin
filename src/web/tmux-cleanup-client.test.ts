@@ -15,7 +15,11 @@ describe('tmux cleanup client', () => {
 
     await previewAssociatedTmuxSessions({ projectRoot: '/work/repo', itemPath: '/work/feature' }, controller.signal)
     await cleanupAssociatedTmuxSessions(
-      { projectRoot: '/work/repo', itemPath: '/work/feature', approvedSessionIds: ['$1'] },
+      {
+        projectRoot: '/work/repo',
+        itemPath: '/work/feature',
+        approvedSessionNames: ['hobgoblin-v1-0123456789abcdef01234567'],
+      },
       controller.signal,
     )
 
@@ -28,7 +32,11 @@ describe('tmux cleanup client', () => {
     expect(mocks.postServerJson).toHaveBeenNthCalledWith(
       2,
       '/api/tmux-cleanup/execute',
-      { projectRoot: '/work/repo', itemPath: '/work/feature', approvedSessionIds: ['$1'] },
+      {
+        projectRoot: '/work/repo',
+        itemPath: '/work/feature',
+        approvedSessionNames: ['hobgoblin-v1-0123456789abcdef01234567'],
+      },
       { signal: controller.signal },
     )
   })

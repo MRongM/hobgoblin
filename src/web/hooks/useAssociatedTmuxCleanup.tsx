@@ -59,7 +59,7 @@ export function useAssociatedTmuxCleanup({
       const result = await cleanupAssociatedTmuxSessions({
         projectRoot,
         itemPath,
-        approvedSessionIds: preview.sessions.map((session) => session.sessionId),
+        approvedSessionNames: preview.sessions.map((session) => session.sessionName),
       })
       if (!result.ok) {
         toast.error(t('tmux.cleanup.execute-failed'), { description: t(result.message) })
@@ -71,16 +71,16 @@ export function useAssociatedTmuxCleanup({
           t('tmux.cleanup.partial', {
             deleted: result.deleted.length,
             failed: result.failed.length,
-            missing: result.missingSessionIds.length,
+            missing: result.missingSessionNames.length,
           }),
           { description: result.failed.map((failure) => `${failure.sessionName}: ${failure.message}`).join('\n') },
         )
         return
       }
       const successMessage = t('tmux.cleanup.success', { count: result.deleted.length })
-      if (result.missingSessionIds.length > 0) {
+      if (result.missingSessionNames.length > 0) {
         toast.success(successMessage, {
-          description: t('tmux.cleanup.missing', { count: result.missingSessionIds.length }),
+          description: t('tmux.cleanup.missing', { count: result.missingSessionNames.length }),
         })
       } else {
         toast.success(successMessage)
@@ -128,7 +128,7 @@ export function useAssociatedTmuxCleanup({
               <p>{t('tmux.cleanup.confirm-summary', { count: preview.sessions.length, path: preview.targetPath })}</p>
               <ul className="max-h-40 list-disc space-y-1 overflow-auto pl-5">
                 {preview.sessions.map((session) => (
-                  <li key={session.sessionId}>
+                  <li key={session.sessionName}>
                     <code className="break-all text-xs">{session.sessionName}</code>
                   </li>
                 ))}

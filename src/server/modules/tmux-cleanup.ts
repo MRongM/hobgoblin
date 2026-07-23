@@ -1,5 +1,4 @@
 import {
-  isValidTmuxSessionId,
   type AssociatedTmuxCleanupInput,
   type AssociatedTmuxTargetInput,
   type TmuxCleanupPreviewResult,
@@ -12,7 +11,6 @@ import { resolveRemoteRepoTarget } from '#/server/modules/repo-backend.ts'
 import { runRemoteCommand, type RemoteCommandResult } from '#/system/ssh/commands.ts'
 import {
   isTmuxSessionMissingMessage,
-  killLocalTmuxSession,
   killLocalTmuxSessionByName,
   listLocalTmuxSessions,
   tmuxListResultFromProcessResult,
@@ -21,12 +19,11 @@ import {
 } from '#/system/tmux-cleanup.ts'
 import { isHobgoblinTmuxSessionName, normalizeTmuxSessionPath } from '#/system/tmux-session.ts'
 
-const MAX_APPROVED_SESSION_IDS = 256
+const MAX_APPROVED_SESSION_NAMES = 256
 
 export interface TmuxCleanupDependencies {
   platform?: NodeJS.Platform
   listLocal?: typeof listLocalTmuxSessions
-  killLocal?: typeof killLocalTmuxSession
   killLocalByName?: typeof killLocalTmuxSessionByName
   resolveRemote?: (repoId: string) => Promise<RemoteRepoTarget>
   runRemote?: typeof runRemoteCommand
@@ -35,7 +32,6 @@ export interface TmuxCleanupDependencies {
 interface TmuxRuntime {
   targetPath: string
   list: () => Promise<TmuxListResult>
-  kill: (sessionId: string) => Promise<TmuxCommandResult>
   killName: (sessionName: string) => Promise<TmuxCommandResult>
 }
 
@@ -95,31 +91,31 @@ export async function cleanupAssociatedTmuxSessions(
   dependencies: TmuxCleanupDependencies = {},
   signal?: AbortSignal,
 ): Promise<TmuxCleanupResult> {
-  const approvedSessionIds = normalizeApprovedSessionIds(input.approvedSessionIds)
-  if (!approvedSessionIds) return { ok: false, message: 'error.invalid-arguments' }
+  const approvedSessionNames = normalizeApprovedSessionNames(input.approvedSessionNames)
+  if (!approvedSessionNames) return { ok: false, message: 'error.invalid-arguments' }
   const resolved = await resolveTmuxRuntime(input, dependencies, signal)
   if (!resolved.ok) return resolved
   const listed = await safelyList(resolved.runtime)
   if (!listed.ok) return listed
 
-  const sessionsById = new Map(
-    associatedSessions(listed.sessions, resolved.runtime.targetPath).map((session) => [session.sessionId, session]),
+  const sessionsByName = new Map(
+    associatedSessions(listed.sessions, resolved.runtime.targetPath).map((session) => [session.sessionName, session]),
   )
-  const missingSessionIds = approvedSessionIds.filter((sessionId) => !sessionsById.has(sessionId))
+  const missingSessionNames = approvedSessionNames.filter((sessionName) => !sessionsByName.has(sessionName))
   const deleted: TmuxSessionRecord[] = []
   const failed: Extract<TmuxCleanupResult, { ok: true }>['failed'] = []
-  for (const sessionId of approvedSessionIds) {
-    const session = sessionsById.get(sessionId)
+  for (const sessionName of approvedSessionNames) {
+    const session = sessionsByName.get(sessionName)
     if (!session) continue
     try {
-      const result = await resolved.runtime.kill(sessionId)
+      const result = await resolved.runtime.killName(sessionName)
       if (result.ok) deleted.push(session)
-      else failed.push({ sessionId, sessionName: session.sessionName, message: result.message })
+      else failed.push({ sessionName, message: result.message })
     } catch (error) {
-      failed.push({ sessionId, sessionName: session.sessionName, message: errorMessage(error) })
+      failed.push({ sessionName, message: errorMessage(error) })
     }
   }
-  return { ok: true, targetPath: resolved.runtime.targetPath, deleted, missingSessionIds, failed }
+  return { ok: true, targetPath: resolved.runtime.targetPath, deleted, missingSessionNames, failed }
 }
 
 async function resolveTmuxRuntime(
@@ -142,14 +138,12 @@ async function resolveTmuxRuntime(
 
   if (!remote) {
     const listLocal = dependencies.listLocal ?? listLocalTmuxSessions
-    const killLocal = dependencies.killLocal ?? killLocalTmuxSession
     const killLocalByName = dependencies.killLocalByName ?? killLocalTmuxSessionByName
     return {
       ok: true,
       runtime: {
         targetPath,
         list: async () => await listLocal({ signal }),
-        kill: async (sessionId) => await killLocal(sessionId, { signal }),
         killName: async (sessionName) => await killLocalByName(sessionName, { signal }),
       },
     }
@@ -163,10 +157,6 @@ async function resolveTmuxRuntime(
       runtime: {
         targetPath,
         list: async () => remoteListResult(await runRemote(target, { type: 'tmuxListSessions' }, { signal })),
-        kill: async (sessionId) => {
-          const result = await runRemote(target, { type: 'tmuxKillSession', sessionId }, { signal })
-          return { ok: result.ok, message: result.ok ? result.stderr : result.message || result.stderr || 'unknown' }
-        },
         killName: async (sessionName) => {
           const result = await runRemote(target, { type: 'tmuxKillSessionByName', sessionName }, { signal })
           return { ok: result.ok, message: result.ok ? result.stderr : result.message || result.stderr || 'unknown' }
@@ -208,10 +198,10 @@ function associatedSessions(sessions: readonly TmuxSessionRecord[], targetPath: 
   })
 }
 
-function normalizeApprovedSessionIds(value: unknown): string[] | null {
-  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_APPROVED_SESSION_IDS) return null
+function normalizeApprovedSessionNames(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_APPROVED_SESSION_NAMES) return null
   const unique = [...new Set(value)]
-  return unique.every(isValidTmuxSessionId) ? unique : null
+  return unique.every(isHobgoblinTmuxSessionName) ? unique : null
 }
 
 function errorMessage(error: unknown): string {

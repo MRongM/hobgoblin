@@ -13,10 +13,10 @@ export function createTmuxCleanupRoutes(): Hono {
   app.post('/execute', async (c) => {
     const body = await c.req.json().catch(() => null)
     const target = targetInput(body)
-    const approvedSessionIds = Array.isArray(body?.approvedSessionIds) ? body.approvedSessionIds : []
+    const approvedSessionNames = Array.isArray(body?.approvedSessionNames) ? body.approvedSessionNames : []
     return c.json(
       await jsonOr(
-        () => cleanupAssociatedTmuxSessions({ ...target, approvedSessionIds }, undefined, c.req.raw.signal),
+        () => cleanupAssociatedTmuxSessions({ ...target, approvedSessionNames }, undefined, c.req.raw.signal),
         'execute',
       ),
     )
