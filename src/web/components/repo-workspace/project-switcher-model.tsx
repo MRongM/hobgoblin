@@ -33,6 +33,7 @@ export interface ProjectSummary {
   name: string
   unavailable: boolean
   isGitRepo: boolean
+  changeCount: number
   terminalWorktreeKeys: string[]
   branchWorkspaceRootId: string | null
 }
@@ -44,6 +45,7 @@ interface ProjectTerminalRepo {
   data: {
     branches: Array<{ worktree?: { path?: string } }>
     worktreesByPath: Record<string, unknown>
+    status: Array<{ entries: readonly unknown[] }>
   }
 }
 
@@ -64,6 +66,16 @@ function stringArraysEqual(a: string[], b: string[]): boolean {
   return a === b || (a.length === b.length && a.every((item, index) => item === b[index]))
 }
 
+function projectChangeCount(repos: readonly ProjectTerminalRepo[]): number {
+  return repos.reduce(
+    (projectTotal, repo) =>
+      repo.isGitRepo === false
+        ? projectTotal
+        : projectTotal + repo.data.status.reduce((repoTotal, status) => repoTotal + status.entries.length, 0),
+    0,
+  )
+}
+
 function projectSummariesEqual(a: ProjectSummary[], b: ProjectSummary[]): boolean {
   if (a === b) return true
   if (a.length !== b.length) return false
@@ -73,6 +85,7 @@ function projectSummariesEqual(a: ProjectSummary[], b: ProjectSummary[]): boolea
       item.name === b[index]!.name &&
       item.unavailable === b[index]!.unavailable &&
       item.isGitRepo === b[index]!.isGitRepo &&
+      item.changeCount === b[index]!.changeCount &&
       item.branchWorkspaceRootId === b[index]!.branchWorkspaceRootId &&
       stringArraysEqual(item.terminalWorktreeKeys, b[index]!.terminalWorktreeKeys),
   )
@@ -96,6 +109,7 @@ export function useProjectSummaries(): ProjectSummary[] {
                 name: repo.name,
                 unavailable: repo.availability.phase === 'unavailable',
                 isGitRepo: repo.isGitRepo !== false,
+                changeCount: projectChangeCount([repo, ...memberRepos]),
                 terminalWorktreeKeys: projectTerminalWorktreeKeys(repo, memberRepos),
                 branchWorkspaceRootId: s.workspaceProjects[id]?.configured ? id : null,
               }

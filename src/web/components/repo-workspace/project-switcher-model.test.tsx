@@ -112,7 +112,71 @@ describe('project terminal switcher model', () => {
 
     expect(JSON.parse(container!.querySelector('output')?.textContent ?? '{}')).toEqual({
       branchWorkspaceRootId: '/workspace-root',
+      changeCount: 0,
       terminalWorktreeKeys: ['/workspace-root\0/workspace-root', '/workspace-root/repo-a\0/worktrees/feature-a'],
+    })
+  })
+
+  test('accumulates project changes across member repositories and worktrees', () => {
+    const rootRepo = replaceRepo(emptyRepo('/workspace-root', 'workspace'), (repo) => {
+      repo.isGitRepo = false
+    })
+    const repoA = replaceRepo(emptyRepo('/workspace-root/repo-a', 'repo-a'), (repo) => {
+      repo.workspaceRootId = rootRepo.id
+      repo.data.status = [
+        {
+          path: '/workspace-root/repo-a',
+          isMain: true,
+          entries: [
+            { x: ' ', y: 'M', path: 'src/a.ts' },
+            { x: '?', y: '?', path: 'src/b.ts' },
+          ],
+        },
+        {
+          path: '/worktrees/feature-a',
+          branch: 'feature/a',
+          isMain: false,
+          entries: [{ x: 'A', y: ' ', path: 'src/c.ts' }],
+        },
+      ]
+    })
+    const repoB = replaceRepo(emptyRepo('/workspace-root/repo-b', 'repo-b'), (repo) => {
+      repo.workspaceRootId = rootRepo.id
+      repo.data.status = [
+        {
+          path: '/workspace-root/repo-b',
+          isMain: true,
+          entries: [
+            { x: ' ', y: 'M', path: 'src/d.ts' },
+            { x: 'D', y: ' ', path: 'src/e.ts' },
+          ],
+        },
+      ]
+    })
+    useReposStore.setState({
+      repos: { [rootRepo.id]: rootRepo, [repoA.id]: repoA, [repoB.id]: repoB },
+      order: [rootRepo.id],
+      activeId: rootRepo.id,
+      workspaceProjects: {
+        [rootRepo.id]: {
+          rootId: rootRepo.id,
+          repositoryIds: [repoA.id, repoB.id],
+          candidates: [],
+          configured: true,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+    })
+
+    act(() => root!.render(<ProjectSummariesProbe />))
+
+    expect(JSON.parse(container!.querySelector('output')?.textContent ?? '{}')).toEqual({
+      branchWorkspaceRootId: '/workspace-root',
+      changeCount: 5,
+      terminalWorktreeKeys: ['/workspace-root\0/workspace-root'],
     })
   })
 
@@ -210,6 +274,7 @@ function ProjectSummariesProbe() {
     <output>
       {JSON.stringify({
         branchWorkspaceRootId: project?.branchWorkspaceRootId,
+        changeCount: project?.changeCount,
         terminalWorktreeKeys: project?.terminalWorktreeKeys ?? [],
       })}
     </output>
@@ -230,6 +295,7 @@ function terminalRepo(
     data: {
       branches: branchPaths.map((path) => ({ worktree: { path } })),
       worktreesByPath: Object.fromEntries(worktreePaths.map((path) => [path, {}])),
+      status: [],
     },
   }
 }
