@@ -1042,7 +1042,7 @@ export const en = {
   'settings.terminal-notifications-test-failed-hint':
     'Go to System Settings → Notifications → Hobgoblin and make sure notifications are allowed.',
   'telegram.notification.message.title': '🔔 Hobgoblin unread terminal bell',
-  'telegram.notification.message.output-completion-title': '✅ Hobgoblin terminal run completed',
+  'telegram.notification.message.output-completion-title': '✅ Hobgoblin terminal has no new output',
   'telegram.notification.message.output-tail': 'Terminal output',
   'telegram.notification.message.project': 'Project',
   'telegram.notification.message.context': 'Context',

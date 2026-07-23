@@ -44,6 +44,13 @@ describe('terminal output tail', () => {
     expect(tail.value()).toBe('one two')
   })
 
+  test('compacts a long horizontal rule across chunks before applying the character limit', () => {
+    const tail = createTerminalOutputTail(20)
+    tail.push(`before ${'─'.repeat(5_000)}`)
+    tail.push(`${'─'.repeat(5_000)} after`)
+    expect(tail.value()).toBe('before ─── after')
+  })
+
   test('normalizes carriage returns and removes non-display controls', () => {
     const tail = createTerminalOutputTail()
     tail.push('one\r\ntwo\rthree\t four\u0000\u0007')

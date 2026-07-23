@@ -1031,7 +1031,7 @@ export const ko: Record<DictKey, string> = {
   'settings.terminal-notifications-test-failed-hint':
     '시스템 설정 → 알림 → Hobgoblin으로 이동하여 알림이 허용되어 있는지 확인하세요.',
   'telegram.notification.message.title': '🔔 Hobgoblin 읽지 않은 터미널 벨',
-  'telegram.notification.message.output-completion-title': '✅ Hobgoblin 터미널 실행 종료',
+  'telegram.notification.message.output-completion-title': '✅ Hobgoblin 터미널 새 출력 없음',
   'telegram.notification.message.output-tail': '터미널 출력',
   'telegram.notification.message.project': '프로젝트',
   'telegram.notification.message.context': '컨텍스트',

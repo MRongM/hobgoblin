@@ -43,10 +43,6 @@ export interface TelegramNotificationWriteOptions {
   warn?: (code: string) => void
 }
 
-function line(label: string, value: string, lang: Lang): string {
-  return lang === 'zh' || lang === 'ja' ? `${label}：${value}` : `${label}: ${value}`
-}
-
 export function formatTelegramBellMessage(context: TelegramBellNotificationContext, lang: Lang = 'zh'): string {
   return formatTelegramTerminalMessage(context, lang, 'telegram.notification.message.title')
 }
@@ -67,18 +63,15 @@ function formatTelegramTerminalMessage(
   const contextKind = dict[`telegram.notification.message.context.${context.contextKind}`]
   const lines = [
     dict[titleKey],
-    line(dict['telegram.notification.message.project'], context.project, lang),
-    line(dict['telegram.notification.message.context'], `${contextKind} ${context.context}`, lang),
-    line(dict['telegram.notification.message.directory'], context.directory, lang),
+    '',
+    [context.project, `${contextKind} ${context.context}`, `#${context.terminalIndex}`].join(' · '),
   ]
-  if (context.branch) lines.push(line(dict['telegram.notification.message.branch'], context.branch, lang))
-  lines.push(line(dict['telegram.notification.message.terminal'], `#${context.terminalIndex}`, lang))
-  if (context.terminalTitle) {
-    lines.push(line(dict['telegram.notification.message.terminal-title'], context.terminalTitle, lang))
-  }
+  if (context.terminalTitle) lines.push(`🖥 ${context.terminalTitle}`)
+  lines.push(`📁 ${context.directory}`)
+  if (context.branch && context.branch.trim() !== context.context.trim()) lines.push(`🌿 ${context.branch}`)
   const prefix = lines.join('\n')
   if (!context.outputTail) return prefix
-  const outputPrefix = `\n\n${dict['telegram.notification.message.output-tail']}\n`
+  const outputPrefix = `\n\n── ${dict['telegram.notification.message.output-tail']} ──\n`
   const remainingCharacters = TELEGRAM_MESSAGE_MAX_LENGTH - Array.from(prefix + outputPrefix).length
   const outputTail = truncateTelegramOutputTail(context.outputTail, remainingCharacters)
   return outputTail ? `${prefix}${outputPrefix}${outputTail}` : prefix

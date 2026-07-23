@@ -8,7 +8,7 @@ export const TELEGRAM_MESSAGE_MAX_LENGTH = 4096
 
 export function normalizeTelegramOutput(value: string | undefined): string | undefined {
   if (!value) return undefined
-  const normalized = value.replace(/[ \t\r\n]+/gu, ' ').trim()
+  const normalized = value.replace(/[ \t\r\n]+/gu, ' ').replace(/─{4,}/gu, '───').trim()
   return normalized || undefined
 }
 

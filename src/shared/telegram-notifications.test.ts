@@ -13,4 +13,11 @@ describe('Telegram terminal output', () => {
   test('omits output containing only whitespace', () => {
     expect(normalizeTelegramOutput(' \t\r\n  ')).toBeUndefined()
   })
+
+  test('compacts only long box-drawing horizontal rules', () => {
+    expect(normalizeTelegramOutput('before ─── after --flag')).toBe('before ─── after --flag')
+    expect(normalizeTelegramOutput(`before ${'─'.repeat(100)} after --flag`)).toBe(
+      'before ─── after --flag',
+    )
+  })
 })
