@@ -53,7 +53,7 @@ function buildTmuxRemoteLoginShellScript(target: TmuxSessionDescriptor): string 
   return [
     `cd ${shellQuote(target.workingDirectory)} || exit`,
     'if command -v tmux >/dev/null 2>&1; then',
-    `  exec tmux new-session -A -s ${shellQuote(sessionName)} -c ${shellQuote(target.workingDirectory)}`,
+    `  exec tmux new-session -A -s ${shellQuote(sessionName)} -c ${shellQuote(target.workingDirectory)} \\; set-option -t ${shellQuote(`=${sessionName}:`)} mouse on`,
     'fi',
     'exec "${SHELL:-/bin/sh}" -l',
   ].join('\n')

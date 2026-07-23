@@ -518,8 +518,6 @@ beforeEach(() => {
     gitNetworkTimeoutSec: 240,
     terminalApp: 'auto',
     editorApp: 'auto',
-      localTerminalTmuxEnabled: false,
-      remoteTerminalTmuxEnabled: false,
   })
   mocks.openInPreferredTerminal.mockResolvedValue({ ok: true, message: '/tmp/repo-worktree' })
   mocks.getRepoName.mockResolvedValue('repo')
@@ -2395,11 +2393,9 @@ describe('repo mutation invalidation publishing', () => {
     })
   })
 
-  test('opens local terminal-1 with project identity and the local tmux preference', async () => {
+  test('opens local external terminal-1 with the native login shell', async () => {
     mocks.getServerSettingsPrefs.mockResolvedValue({
       terminalApp: 'ghostty',
-      localTerminalTmuxEnabled: true,
-      remoteTerminalTmuxEnabled: false,
     })
     const { openRepositoryTerminal } = await import('#/server/modules/repo-write-paths.ts')
 
@@ -2414,7 +2410,6 @@ describe('repo mutation invalidation publishing', () => {
         terminalNumber: 1,
       },
       'ghostty',
-      { useTmux: true },
     )
   })
 })

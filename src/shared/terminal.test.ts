@@ -1,11 +1,39 @@
 import { describe, expect, test } from 'vitest'
 import {
+  normalizeTerminalLaunchMode,
   normalizeTerminalClientMessage,
   normalizeTerminalRealtimeMessage,
   normalizeTerminalSessionSummaryList,
 } from '#/shared/terminal.ts'
 
 describe('terminal protocol normalization', () => {
+  test('normalizes terminal launch mode to native unless tmux is explicitly requested', () => {
+    expect(normalizeTerminalLaunchMode(undefined)).toBe('native')
+    expect(normalizeTerminalLaunchMode('invalid')).toBe('native')
+    expect(normalizeTerminalLaunchMode('native')).toBe('native')
+    expect(normalizeTerminalLaunchMode('tmux-if-available')).toBe('tmux-if-available')
+  })
+
+  test('normalizes invalid terminal create launch modes at the protocol boundary', () => {
+    expect(
+      normalizeTerminalClientMessage({
+        type: 'request',
+        requestId: 'request_launch_mode',
+        action: 'create',
+        input: {
+          repoRoot: '/repo',
+          branch: 'main',
+          worktreePath: '/repo',
+          kind: 'primary',
+          launchMode: 'invalid',
+        },
+      }),
+    ).toMatchObject({
+      action: 'create',
+      input: { launchMode: 'native' },
+    })
+  })
+
   test('preserves phase and message on session summaries', () => {
     const summaries = normalizeTerminalSessionSummaryList([
       {

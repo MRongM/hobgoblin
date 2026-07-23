@@ -50,6 +50,7 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
           worktreePath: '/workspace/goblin-feature-auth/api',
         })
       }),
+      branchAction('terminalTmux'),
       branchAction('externalTerminal', actionState.externalTerminal),
       branchAction('remote', actionState.remote),
     ],
@@ -160,6 +161,7 @@ describe('BranchWorkspaceMemberRow', () => {
 
     const menuItems = await openMenu()
     expect(menuItems.map((entry) => entry.getAttribute('data-action'))).toEqual([
+      'terminalTmux',
       'externalTerminal',
       'remote',
       'pull',
@@ -226,6 +228,7 @@ describe('BranchWorkspaceMemberRow', () => {
     )
     const menuItems = await openMenu()
     expect(menuItems.map((entry) => entry.getAttribute('data-action'))).toEqual([
+      'terminalTmux',
       'externalTerminal',
       'remote',
       'pull',
@@ -276,6 +279,7 @@ describe('BranchWorkspaceMemberRow', () => {
       'worktrees.open-in-editor-label',
       'terminal.external',
       'terminal.internal',
+      'terminal.new-with-tmux',
       'terminal.close-all',
     ])
 

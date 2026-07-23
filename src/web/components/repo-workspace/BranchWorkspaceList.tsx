@@ -35,6 +35,7 @@ import {
   X,
 } from 'lucide-react'
 import type { BranchWorkspaceGitActionKind } from '#/shared/branch-workspace-git-actions.ts'
+import type { TerminalLaunchMode } from '#/shared/terminal.ts'
 import type { BranchWorkspaceRepositorySnapshot, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
 import { Tip } from '#/web/components/Tip.tsx'
@@ -97,7 +98,7 @@ export interface BranchWorkspaceListProps {
   onOpenRepositoryMemberTerminal?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
   onOpenEditor?: (item: BranchWorkspaceSnapshot) => void | Promise<void>
   onOpenExternalTerminal?: (item: BranchWorkspaceSnapshot) => void | Promise<void>
-  onOpenInternalTerminal?: (item: BranchWorkspaceSnapshot) => void | Promise<void>
+  onOpenInternalTerminal?: (item: BranchWorkspaceSnapshot, launchMode?: TerminalLaunchMode) => void | Promise<void>
   gitActionsDisabled?: boolean
   onGitAction?: (item: BranchWorkspaceSnapshot, kind: BranchWorkspaceGitActionKind) => void
   gitActionPanel?: { itemId: string; content: ReactNode } | null
@@ -257,15 +258,19 @@ function BranchWorkspaceRow({
     if (!folderAvailable || busy) return
     if (!rootSelected) onActivate(item.id)
   }
-  const openInternal = async () => {
-    if (onOpenInternalTerminal) return await onOpenInternalTerminal(item)
+  const openInternal = async (launchMode: TerminalLaunchMode = 'native') => {
+    if (onOpenInternalTerminal) return await onOpenInternalTerminal(item, launchMode)
     if (!terminalContext || !terminalReadContext) return
-    await openBranchWorkspaceInternalTerminal(context, {
-      worktreeSnapshot: terminalReadContext.worktreeSnapshot,
-      selectTerminal: terminalContext.selectTerminal,
-      createTerminal: terminalContext.createTerminal,
-      activate,
-    })
+    await openBranchWorkspaceInternalTerminal(
+      context,
+      {
+        worktreeSnapshot: terminalReadContext.worktreeSnapshot,
+        selectTerminal: terminalContext.selectTerminal,
+        createTerminal: terminalContext.createTerminal,
+        activate,
+      },
+      launchMode,
+    )
   }
   const openActionsDisabled = disabled || !interactiveReady || !folderAvailable
   const memberListId = `branch-workspace-members-${item.id}`
@@ -285,11 +290,17 @@ function BranchWorkspaceRow({
         label: t('terminal.internal'),
         icon: <Terminal aria-hidden="true" />,
         disabled: openActionsDisabled,
-        onSelect: openInternal,
+        onSelect: () => openInternal('native'),
       }
     : undefined
   const readyOpenMenuActions: BranchWorkspaceItemAction[] = interactiveReady
     ? [
+        {
+          label: 'terminal.new-with-tmux',
+          icon: <Terminal aria-hidden="true" />,
+          disabled: openActionsDisabled,
+          onSelect: () => openInternal('tmux-if-available'),
+        },
         {
           label: 'terminal.external',
           icon: <TerminalAppIcon pref={externalActions.externalTerminal.iconPref} />,
@@ -498,7 +509,12 @@ function BranchWorkspaceRow({
       internalTerminal={{
         disabled: openActionsDisabled,
         icon: <Terminal aria-hidden="true" />,
-        onSelect: openInternal,
+        onSelect: () => openInternal('native'),
+      }}
+      tmuxTerminal={{
+        disabled: openActionsDisabled,
+        icon: <Terminal aria-hidden="true" />,
+        onSelect: () => openInternal('tmux-if-available'),
       }}
       worktreeTerminalKeys={terminalKeys}
       additionalActions={lowFrequencyActions}

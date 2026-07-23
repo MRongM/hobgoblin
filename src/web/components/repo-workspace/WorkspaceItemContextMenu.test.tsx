@@ -43,22 +43,26 @@ describe('WorkspaceItemContextMenu', () => {
     const editor = vi.fn()
     const externalTerminal = vi.fn()
     const internalTerminal = vi.fn()
-    renderMenu({ editor, externalTerminal, internalTerminal })
+    const tmuxTerminal = vi.fn()
+    renderMenu({ editor, externalTerminal, internalTerminal, tmuxTerminal })
 
     expect((await openContextMenu()).map((item) => item.textContent?.trim())).toEqual([
       'worktrees.open-in-editor-label',
       'terminal.external',
       'terminal.internal',
+      'terminal.new-with-tmux',
       'terminal.close-all',
     ])
 
     await clickContextMenuItem('worktrees.open-in-editor-label')
     await clickContextMenuItem('terminal.external')
     await clickContextMenuItem('terminal.internal')
+    await clickContextMenuItem('terminal.new-with-tmux')
 
     expect(editor).toHaveBeenCalledTimes(1)
     expect(externalTerminal).toHaveBeenCalledTimes(1)
     expect(internalTerminal).toHaveBeenCalledTimes(1)
+    expect(tmuxTerminal).toHaveBeenCalledTimes(1)
   })
 
   test('keeps unavailable and busy open actions visible but disabled', async () => {
@@ -108,6 +112,7 @@ function renderMenu(
     editor?: () => void
     externalTerminal?: () => void
     internalTerminal?: () => void
+    tmuxTerminal?: () => void
     editorDisabled?: boolean
     externalTerminalBusy?: boolean
     internalTerminalDisabled?: boolean
@@ -138,6 +143,11 @@ function renderMenu(
               disabled: fixture.internalTerminalDisabled ?? false,
               icon: <span data-testid="internal-terminal-icon" />,
               onSelect: fixture.internalTerminal ?? vi.fn(),
+            }}
+            tmuxTerminal={{
+              disabled: fixture.internalTerminalDisabled ?? false,
+              icon: <span data-testid="tmux-terminal-icon" />,
+              onSelect: fixture.tmuxTerminal ?? vi.fn(),
             }}
             worktreeTerminalKeys={fixture.worktreeTerminalKeys ?? []}
           >

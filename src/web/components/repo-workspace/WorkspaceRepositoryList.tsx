@@ -150,6 +150,14 @@ function SortableWorkspaceRepositoryRow({
     visible: externalActions.visible,
     onSelect: externalActions.externalTerminal.onSelect,
   }
+  const tmuxTerminalAction: WorkspaceListItemAction = {
+    id: 'terminalTmux',
+    label: t('terminal.new-with-tmux'),
+    icon: <Terminal aria-hidden="true" />,
+    disabled: internalTerminalAction.disabled,
+    busy: internalTerminalAction.busy,
+    onSelect: () => internalTerminalAction.onSelect('tmux-if-available'),
+  }
 
   return (
     <WorkspaceItemContextMenu
@@ -159,6 +167,11 @@ function SortableWorkspaceRepositoryRow({
         icon: <TerminalAppIcon pref={externalActions.externalTerminal.iconPref} />,
       }}
       internalTerminal={{ ...internalTerminalAction, icon: <Terminal aria-hidden="true" /> }}
+      tmuxTerminal={{
+        ...internalTerminalAction,
+        icon: <Terminal aria-hidden="true" />,
+        onSelect: () => internalTerminalAction.onSelect('tmux-if-available'),
+      }}
       worktreeTerminalKeys={terminalWorktreeKeys}
     >
       <WorkspaceListItemFrame
@@ -201,7 +214,9 @@ function SortableWorkspaceRepositoryRow({
           <WorkspaceListItemActionDock
             editor={editorAction}
             internalTerminal={internalAction}
-            moreMenu={<WorkspaceListItemMenu label={t('action.menu')} groups={[[externalTerminalAction]]} />}
+            moreMenu={
+              <WorkspaceListItemMenu label={t('action.menu')} groups={[[tmuxTerminalAction, externalTerminalAction]]} />
+            }
           />
         }
       >

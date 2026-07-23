@@ -18,17 +18,14 @@ export interface WorktreeListItemActionProjection {
     editor: WorkspaceItemOpenAction
     externalTerminal: WorkspaceItemOpenAction
     internalTerminal: WorkspaceItemOpenAction
+    tmuxTerminal: WorkspaceItemOpenAction
   }
 }
 
 const ordinaryMainExclusions = new Set(['checkout', 'createWorktree', 'sync'])
 const memberMainExclusions = new Set([...ordinaryMainExclusions, 'checkoutTo'])
 const ordinaryDestructiveExclusions = new Set(['deleteBranch'])
-const memberDestructiveExclusions = new Set([
-  ...ordinaryDestructiveExclusions,
-  'removeWorktree',
-  'cleanupWorktree',
-])
+const memberDestructiveExclusions = new Set([...ordinaryDestructiveExclusions, 'removeWorktree', 'cleanupWorktree'])
 
 export function projectWorktreeListItemActions(
   groups: BranchActionItemGroups,
@@ -64,6 +61,10 @@ export function projectWorktreeListItemActions(
       ),
       internalTerminal: branchContextMenuAction(
         groups.externalItems.find((item) => item.id === 'terminal'),
+        forceDisabled,
+      ),
+      tmuxTerminal: branchContextMenuAction(
+        groups.externalItems.find((item) => item.id === 'terminalTmux'),
         forceDisabled,
       ),
     },

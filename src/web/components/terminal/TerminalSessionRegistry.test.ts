@@ -190,6 +190,7 @@ describe('TerminalSessionRegistry', () => {
         attachmentId: 'attachment_local',
         cols: 95,
         rows: 28,
+        launchMode: 'native',
       })
       expect(key).toBe(`${REPO_ROOT}\0${WORKTREE_PATH}\0terminal-1`)
       expect(registry.snapshot(key)).toMatchObject({

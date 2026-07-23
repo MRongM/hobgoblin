@@ -259,8 +259,6 @@ vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
 vi.mock('#/web/runtime-settings-terminal-buttons.ts', () => ({
   useRuntimeTerminalSettings: () => ({
     fontFamily: runtimeTerminalSettingsMock.fontFamily,
-    localTerminalTmuxEnabled: false,
-    remoteTerminalTmuxEnabled: false,
     terminalCustomButtonsVisible: true,
     terminalCustomButtons: [],
     terminalFontSize: 14,
@@ -611,7 +609,7 @@ describe('TerminalSessionProvider', () => {
       const base = { repoRoot: REPO_ID, branch: 'feature/worktree', worktreePath: WORKTREE_PATH }
       await act(async () => {
         await getContext().createTerminal(base)
-        await getContext().createTerminal(base)
+        await getContext().createTerminal(base, 'tmux-if-available')
       })
 
       expect(createTerminalMock).toHaveBeenCalledTimes(2)
@@ -621,6 +619,7 @@ describe('TerminalSessionProvider', () => {
         attachmentId: 'attachment_local',
         cols: 80,
         rows: 24,
+        launchMode: 'native',
       })
       expect(createTerminalMock).toHaveBeenNthCalledWith(2, {
         ...base,
@@ -628,6 +627,7 @@ describe('TerminalSessionProvider', () => {
         attachmentId: 'attachment_local',
         cols: 80,
         rows: 24,
+        launchMode: 'tmux-if-available',
       })
       expect(getProbe().summaries.map((session) => [session.terminalId, session.selected, session.hasBell])).toEqual([
         ['terminal-1', false, false],

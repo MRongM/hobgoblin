@@ -41,6 +41,7 @@ import { toolbarTabButtonClassName, toolbarTabChromeClassName } from '#/web/comp
 import { useFocusRegistry, type FocusRegistry } from '#/web/components/tab-strip/useFocusRegistry.ts'
 import { useSortableTab } from '#/web/components/tab-strip/useSortableTab.ts'
 import { ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '#/web/components/ui/context-menu.tsx'
+import type { TerminalLaunchMode } from '#/shared/terminal.ts'
 
 interface TerminalTabsProps {
   worktreeTerminalKey: string
@@ -51,7 +52,7 @@ interface TerminalTabsProps {
   focusMode?: boolean
   focusRegistry?: FocusRegistry<string, HTMLButtonElement>
   emptyFocusKey?: string
-  onNew: () => void
+  onNew: (launchMode: TerminalLaunchMode) => void
   onSelect: (worktreeTerminalKey: string, key: string) => void
   onScrollToBottom: (key: string) => void
   onFocusTerminal?: (key: string) => void
@@ -252,7 +253,7 @@ export function TerminalTabs({
         size="icon-sm"
         className="h-7 border border-separator"
         id={`${detailId}-terminal-tab`}
-        onClick={onNew}
+        onClick={() => onNew('native')}
         aria-label={t('terminal.new')}
         title={t('terminal.new')}
       >
@@ -279,6 +280,7 @@ export function TerminalTabs({
               buttonWrapper={(button) => <DropdownMenuTrigger asChild>{button}</DropdownMenuTrigger>}
               onSelect={handleSelect}
               onClose={handleClose}
+              onNew={onNew}
               onRequestClose={requestContextClose}
               onKeyDown={handleTabKeyDown}
               t={t}
@@ -316,9 +318,13 @@ export function TerminalTabs({
               ))}
             </ScrollArea>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="gap-2" onSelect={onNew}>
+            <DropdownMenuItem className="gap-2" onSelect={() => onNew('native')}>
               <Plus size={14} />
               {t('terminal.new')}
+            </DropdownMenuItem>
+            <DropdownMenuItem className="gap-2" onSelect={() => onNew('tmux-if-available')}>
+              <Terminal size={14} />
+              {t('terminal.new-with-tmux')}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -364,6 +370,7 @@ export function TerminalTabs({
                   focusRegistry={focusRegistry}
                   onSelect={handleSelect}
                   onClose={handleClose}
+                  onNew={onNew}
                   onRequestClose={requestContextClose}
                   onKeyDown={handleTabKeyDown}
                   t={t}
@@ -377,7 +384,7 @@ export function TerminalTabs({
             variant="ghost"
             size="icon"
             className="h-7 w-7 shrink-0"
-            onClick={onNew}
+            onClick={() => onNew('native')}
             aria-label={t('terminal.new')}
             title={t('terminal.new')}
           >
@@ -438,6 +445,7 @@ interface TerminalTabProps {
   focusRegistry: FocusRegistry<string, HTMLButtonElement>
   onSelect: (key: string) => void
   onClose: (event: React.MouseEvent, key: string) => void
+  onNew: (launchMode: TerminalLaunchMode) => void
   onRequestClose: (scope: TerminalCloseScope, key: string) => void
   onKeyDown: (e: React.KeyboardEvent<HTMLButtonElement>, sessionKey: string) => void
   t: (key: string, params?: Record<string, string | number>) => string
@@ -459,6 +467,7 @@ interface TerminalTabChromeProps {
   buttonWrapper?: (button: ReactElement) => ReactNode
   onSelect: (key: string) => void
   onClose: (event: React.MouseEvent, key: string) => void
+  onNew: (launchMode: TerminalLaunchMode) => void
   onRequestClose: (scope: TerminalCloseScope, key: string) => void
   onKeyDown: (e: React.KeyboardEvent<HTMLButtonElement>, sessionKey: string) => void
   t: (key: string, params?: Record<string, string | number>) => string
@@ -480,6 +489,7 @@ function TerminalTabChrome({
   buttonWrapper,
   onSelect,
   onClose,
+  onNew,
   onRequestClose,
   onKeyDown,
   t,
@@ -512,6 +522,7 @@ function TerminalTabChrome({
         <TerminalTabContextMenu
           sessionKey={session.key}
           sessionCount={contextSessionCount ?? total ?? 1}
+          onNew={onNew}
           onRequestClose={onRequestClose}
           t={t}
         />
@@ -561,6 +572,7 @@ function TerminalTab({
   focusRegistry,
   onSelect,
   onClose,
+  onNew,
   onRequestClose,
   onKeyDown,
   t,
@@ -577,6 +589,7 @@ function TerminalTab({
       buttonRef={focusRegistry.setRef(session.key)}
       onSelect={onSelect}
       onClose={onClose}
+      onNew={onNew}
       onRequestClose={onRequestClose}
       onKeyDown={onKeyDown}
       t={t}
@@ -595,6 +608,7 @@ function SortableTerminalTab({
   focusRegistry,
   onSelect,
   onClose,
+  onNew,
   onRequestClose,
   onKeyDown,
   t,
@@ -621,6 +635,7 @@ function SortableTerminalTab({
         buttonProps={{ ...sortable.attributes, ...sortable.sortableListeners }}
         onSelect={onSelect}
         onClose={onClose}
+        onNew={onNew}
         onRequestClose={onRequestClose}
         onKeyDown={(e) => {
           sortable.sortableOnKeyDown?.(e)
@@ -636,16 +651,27 @@ function SortableTerminalTab({
 function TerminalTabContextMenu({
   sessionKey,
   sessionCount,
+  onNew,
   onRequestClose,
   t,
 }: {
   sessionKey: string
   sessionCount: number
+  onNew: (launchMode: TerminalLaunchMode) => void
   onRequestClose: (scope: TerminalCloseScope, key: string) => void
   t: (key: string, params?: Record<string, string | number>) => string
 }) {
   return (
     <ContextMenuContent>
+      <ContextMenuItem onSelect={() => onNew('native')}>
+        <Plus />
+        {t('terminal.new')}
+      </ContextMenuItem>
+      <ContextMenuItem onSelect={() => onNew('tmux-if-available')}>
+        <Terminal />
+        {t('terminal.new-with-tmux')}
+      </ContextMenuItem>
+      <ContextMenuSeparator />
       <ContextMenuItem variant="destructive" onSelect={() => onRequestClose('current', sessionKey)}>
         <X />
         {t('terminal.close-current')}

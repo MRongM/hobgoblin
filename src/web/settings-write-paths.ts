@@ -33,8 +33,6 @@ import {
   setPreferredEditorApp,
   setPreferredTerminalApp,
   setProjectColorTheme,
-  setLocalTerminalTmuxEnabled,
-  setRemoteTerminalTmuxEnabled,
   setSettingsFetchInterval,
   setShortcutsDisabled,
   setSwapCloseShortcuts,
@@ -214,22 +212,6 @@ export async function setProjectColorThemePreference(
   updateSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
     ...current,
     repoSettings,
-  }))
-}
-
-export async function setLocalTerminalTmuxEnabledPreference(enabled: boolean): Promise<void> {
-  await setLocalTerminalTmuxEnabled(enabled)
-  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
-    ...current,
-    localTerminalTmuxEnabled: enabled,
-  }))
-}
-
-export async function setRemoteTerminalTmuxEnabledPreference(enabled: boolean): Promise<void> {
-  await setRemoteTerminalTmuxEnabled(enabled)
-  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
-    ...current,
-    remoteTerminalTmuxEnabled: enabled,
   }))
 }
 

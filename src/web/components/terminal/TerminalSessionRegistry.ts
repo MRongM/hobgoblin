@@ -9,6 +9,7 @@ import { readOrCreateWebTerminalAttachmentId } from '#/web/renderer-terminal-bri
 import { parseTerminalIdIndex, resolveTerminalOwnership } from '#/shared/terminal.ts'
 import type {
   TerminalCatalogMutationResult,
+  TerminalLaunchMode,
   TerminalSessionSnapshot,
   TerminalSessionSummary as ServerTerminalSessionSummary,
 } from '#/shared/terminal.ts'
@@ -310,7 +311,7 @@ export class TerminalSessionRegistry {
     }
   }
 
-  createTerminal = async (base: TerminalSessionBase): Promise<string> => {
+  createTerminal = async (base: TerminalSessionBase, launchMode: TerminalLaunchMode = 'native'): Promise<string> => {
     const attachmentId = readOrCreateWebTerminalAttachmentId()
     const terminalWorktreeKey = worktreeTerminalKey(base.repoRoot, base.worktreePath)
     const geometry = this.measureCreateGeometry(terminalWorktreeKey)
@@ -324,6 +325,7 @@ export class TerminalSessionRegistry {
       attachmentId,
       cols: geometry.cols,
       rows: geometry.rows,
+      launchMode,
     })
     if (!result.ok) {
       throw new Error(result.message)

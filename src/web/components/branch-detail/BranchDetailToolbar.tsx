@@ -14,6 +14,7 @@ import { useTerminalSessionContext } from '#/web/components/terminal/terminal-se
 import { EMPTY_TERMINAL_TAB_FOCUS_KEY, TerminalTabs } from '#/web/components/terminal/TerminalTabs.tsx'
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import type { TerminalSessionBase } from '#/web/components/terminal/types.ts'
+import type { TerminalLaunchMode } from '#/shared/terminal.ts'
 import type { BranchDetailRepo, SelectedBranchDetailPresentation } from '#/web/components/branch-detail/model.ts'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { useFocusRegistry } from '#/web/components/tab-strip/useFocusRegistry.ts'
@@ -93,12 +94,15 @@ export function BranchDetailToolbar({
     [repo.id, detail.branch],
   )
 
-  const handleNewTerminal = useCallback(() => {
-    if (!terminalBase) return
-    showTerminal()
-    setDetailCollapsed(false)
-    void createTerminal(terminalBase)
-  }, [createTerminal, terminalBase, setDetailCollapsed, showTerminal])
+  const handleNewTerminal = useCallback(
+    (launchMode: TerminalLaunchMode = 'native') => {
+      if (!terminalBase) return
+      showTerminal()
+      setDetailCollapsed(false)
+      void createTerminal(terminalBase, launchMode)
+    },
+    [createTerminal, terminalBase, setDetailCollapsed, showTerminal],
+  )
 
   const handleSelectTerminal = useCallback(
     (worktreeKey: string, key: string) => {

@@ -148,6 +148,7 @@ export function BranchRow({
       editor={actionProjection.contextMenu.editor}
       externalTerminal={actionProjection.contextMenu.externalTerminal}
       internalTerminal={actionProjection.contextMenu.internalTerminal}
+      tmuxTerminal={actionProjection.contextMenu.tmuxTerminal}
       worktreeTerminalKeys={terminalWorktreeKeys}
     >
       {row}

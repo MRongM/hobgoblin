@@ -20,6 +20,10 @@ describe('buildManagedLocalTerminalInvocation', () => {
     expect(invocation?.script).toContain(
       "exec tmux new-session -A -s 'hobgoblin-v1-aebf050981ac829e36100020' -c '/srv/projects/example/worktrees/feature'",
     )
+    expect(invocation?.script).toContain(
+      "exec tmux new-session -A -s 'hobgoblin-v1-aebf050981ac829e36100020' -c '/srv/projects/example/worktrees/feature' \\; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' mouse on",
+    )
+    expect(invocation?.script).not.toContain('set-option -g')
     expect(invocation?.script).toContain("exec '/bin/zsh' -l")
     expect(invocation?.shellCommand).toContain("'/bin/zsh' '-lc'")
     expect(invocation?.script).not.toContain("-s 'goblin-")

@@ -670,6 +670,7 @@ export const en = {
   'terminal.sessions': 'Terminals',
   'terminal.label': 'Terminal',
   'terminal.new': 'New terminal',
+  'terminal.new-with-tmux': 'New terminal with tmux',
   'terminal.internal': 'Internal terminal',
   'terminal.external': 'External terminal',
   'terminal.focus': 'Maximize terminal',
@@ -1169,14 +1170,6 @@ export const en = {
   'settings.terminal-font.title': 'Font',
   'settings.terminal-font-size': 'Font size',
   'settings.terminal-font-size-hint': 'Controls the in-app terminal font size.',
-  'settings.terminal-tmux.title': 'Tmux sessions',
-  'settings.terminal-tmux.hint': 'Control whether local and remote terminal launches use tmux.',
-  'settings.terminal-tmux.local': 'Use tmux for local terminals',
-  'settings.terminal-tmux.local-hint':
-    'Applies to in-app terminals and supported external terminals on this computer.',
-  'settings.terminal-tmux.remote': 'Use tmux for remote terminals',
-  'settings.terminal-tmux.remote-hint':
-    'Applies to in-app terminals and supported external terminals opened through SSH.',
   'settings.terminal-custom-buttons.title': 'Custom terminal buttons',
   'settings.terminal-custom-buttons.hint':
     'Show a terminal bottom button bar. Buttons can run immediately or fill the terminal input line for editing.',

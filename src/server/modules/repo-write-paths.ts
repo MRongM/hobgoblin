@@ -673,9 +673,7 @@ export async function openRepositoryTerminal(input: {
     return { ok: false, message: 'error.invalid-arguments' }
   }
   const prefs = await getServerSettingsPrefs()
-  return await openInPreferredTerminal({ ...input, terminalNumber: 1 }, prefs.terminalApp, {
-    useTmux: prefs.localTerminalTmuxEnabled,
-  })
+  return await openInPreferredTerminal({ ...input, terminalNumber: 1 }, prefs.terminalApp)
 }
 
 export async function openRepositoryEditor(target: EditorOpenTarget): Promise<ExecResult> {

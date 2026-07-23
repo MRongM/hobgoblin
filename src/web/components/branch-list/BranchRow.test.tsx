@@ -718,6 +718,7 @@ describe('BranchRow', () => {
       'worktrees.open-in-editor-label',
       'terminal.external',
       'terminal.internal',
+      'terminal.new-with-tmux',
       'terminal.close-all',
     ])
 

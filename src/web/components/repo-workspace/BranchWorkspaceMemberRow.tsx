@@ -139,6 +139,10 @@ function BranchWorkspaceMemberRowFrame({
     ...actionProjection.contextMenu.internalTerminal,
     disabled: actionProjection.contextMenu.internalTerminal.disabled || !onOpenInternalTerminal,
   }
+  const tmuxTerminalContextAction = {
+    ...actionProjection.contextMenu.tmuxTerminal,
+    disabled: actionProjection.contextMenu.tmuxTerminal.disabled || !onOpenInternalTerminal,
+  }
   const row = (
     <WorkspaceListItemFrame
       size="member"
@@ -216,6 +220,7 @@ function BranchWorkspaceMemberRowFrame({
       editor={actionProjection.contextMenu.editor}
       externalTerminal={actionProjection.contextMenu.externalTerminal}
       internalTerminal={internalTerminalContextAction}
+      tmuxTerminal={tmuxTerminalContextAction}
       worktreeTerminalKeys={forceDisabled ? [] : terminalKeys}
     >
       {row}
@@ -235,6 +240,7 @@ function disabledMemberActionGroups(t: ReturnType<typeof useT>): BranchActionIte
     externalItems: [
       disabledAction('editor', 'worktrees.open-in-editor-label', <EditorAppIcon pref="auto" />),
       disabledAction('terminal', 'terminal.internal', <Terminal aria-hidden="true" />),
+      disabledAction('terminalTmux', 'terminal.new-with-tmux', <Terminal aria-hidden="true" />, { menuOnly: true }),
       disabledAction('externalTerminal', 'terminal.external', <TerminalAppIcon pref="auto" />),
       disabledAction('remote', 'action.remote', <ExternalLink aria-hidden="true" />),
     ],
@@ -263,6 +269,7 @@ function createDisabledAction(
   id:
     | 'editor'
     | 'terminal'
+    | 'terminalTmux'
     | 'externalTerminal'
     | 'remote'
     | 'pull'

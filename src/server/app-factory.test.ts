@@ -29,8 +29,6 @@ const mocks = vi.hoisted(() => ({
     editorApp: 'auto',
     fileTreeFontSize: 12,
     terminalFontSize: 14,
-    localTerminalTmuxEnabled: false,
-    remoteTerminalTmuxEnabled: false,
     terminalCustomButtonsVisible: true,
     terminalCustomButtonSize: 'medium',
     terminalCustomButtons: [],

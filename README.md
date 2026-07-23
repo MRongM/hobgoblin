@@ -49,7 +49,7 @@ Hobgoblin started from [Goblin](https://nano-props.github.io/goblin/), a small, 
 - **Terminal tab jump:** Double-click the active terminal tab to scroll that terminal to the bottom.
 - **Terminal-to-file-tree navigation:** Click detected repository-relative paths in terminal output to reveal them in the file tree.
 - **Terminal path editor jump:** Double-click detected repository-relative paths in terminal output, including `path:line` and `path:line:column`, to open the configured editor at that file position.
-- **Deterministic tmux session reuse:** When the corresponding local or remote option is enabled and tmux is available, local and SSH internal terminals use stable `hobgoblin-v1-*` names. Built-in external-terminal actions follow the same scoped option and attach to the workspace's `terminal-1`; if tmux is absent, they fall back to the native shell. Legacy `goblin-*` sessions are not migrated.
+- **Explicit tmux session reuse:** Internal terminals use the native login shell by default. Choose **New terminal with tmux** from terminal or item menus to create or attach to a stable local or SSH `hobgoblin-v1-*` session; if tmux is unavailable on the target, Hobgoblin falls back to the native login shell. External-terminal actions stay native, and legacy `goblin-*` sessions are not migrated.
 - **Browser project access:** Run server mode and open the project workspace from a web browser.
 - **Mobile terminal takeover:** Use browser-accessible mode from a phone browser to take over terminal sessions when you need to continue from mobile.
 

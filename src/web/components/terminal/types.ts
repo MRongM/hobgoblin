@@ -1,4 +1,9 @@
-import type { TerminalAttachmentRole, TerminalControllerStatus, TerminalSessionPhase } from '#/shared/terminal.ts'
+import type {
+  TerminalAttachmentRole,
+  TerminalControllerStatus,
+  TerminalLaunchMode,
+  TerminalSessionPhase,
+} from '#/shared/terminal.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
 export type TerminalPhase = TerminalSessionPhase
 
@@ -119,7 +124,7 @@ export interface WorktreeTerminalSnapshot {
 }
 
 export interface TerminalSessionContextValue {
-  createTerminal: (base: TerminalSessionBase) => Promise<string>
+  createTerminal: (base: TerminalSessionBase, launchMode?: TerminalLaunchMode) => Promise<string>
   selectTerminal: (worktreeTerminalKey: string, key: string) => void
   scrollToBottom: (key: string) => void
   focusTerminal: (key: string) => void

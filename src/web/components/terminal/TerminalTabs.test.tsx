@@ -158,6 +158,31 @@ describe('TerminalTabs', () => {
     expect(onSelect).toHaveBeenCalledWith(String.raw`/repo\0/repo/worktree`, 't1')
   })
 
+  test('keeps direct creation native and exposes explicit tmux creation in terminal menus', async () => {
+    const onNew = vi.fn()
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        responsiveCompact
+        sessions={[session()]}
+        onNew={onNew}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    await openCompactTerminalDropdown()
+    clickElementByText('terminal.new-with-tmux')
+    expect(onNew).toHaveBeenCalledWith('tmux-if-available')
+
+    onNew.mockClear()
+    await clickTabContextMenuItem('t1', 'terminal.new')
+    expect(onNew).toHaveBeenCalledWith('native')
+  })
+
   test('keeps the compact close action outside the terminal dropdown trigger', () => {
     render(
       <TerminalTabs

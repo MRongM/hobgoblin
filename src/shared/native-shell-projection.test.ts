@@ -58,8 +58,6 @@ describe('native shell projection helpers', () => {
         fileTreeTopbarFontSize: 13,
         fileTreeClipboardMaxBytesMb: 30,
         terminalFontSize: 14,
-        localTerminalTmuxEnabled: false,
-        remoteTerminalTmuxEnabled: false,
         terminalCustomButtonsVisible: true,
         terminalCustomButtonSize: 'medium',
         terminalCustomButtons: [],
