@@ -1,4 +1,7 @@
-import type { TelegramOutputCompletionNotificationContext } from '#/shared/telegram-notifications.ts'
+import {
+  truncateTelegramOutputTail,
+  type TelegramOutputCompletionNotificationContext,
+} from '#/shared/telegram-notifications.ts'
 import { terminalNotificationContext } from '#/web/components/terminal/terminal-notification-context.ts'
 import type { TerminalOutputCompletionIntent } from '#/web/components/terminal/types.ts'
 import { getRuntimeFetchSettings } from '#/web/runtime-settings-fetch.ts'
@@ -20,5 +23,6 @@ export function notifyTerminalOutputCompletion(intent: TerminalOutputCompletionI
     finalOutputSeq: intent.finalOutputSeq,
   }
   if (!telegram.includeTerminalOutput) delete context.outputTail
+  else context.outputTail = truncateTelegramOutputTail(context.outputTail, telegram.outputTailLength)
   void sendTelegramOutputCompletionNotification(context).catch(() => {})
 }

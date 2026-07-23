@@ -50,6 +50,32 @@ describe('SettingsNumberInput', () => {
     expect(onChange).toHaveBeenCalledTimes(1)
     expect(onChange).toHaveBeenCalledWith(16)
   })
+
+  test('rejects a draft that does not match the configured step', async () => {
+    const onChange = vi.fn()
+    await render(
+      <SettingsNumberInput id="output-length" value={400} min={1} max={4096} step={1} onChange={onChange} />,
+    )
+    const input = document.getElementById('output-length')
+    if (!(input instanceof HTMLInputElement)) throw new Error('Missing number input')
+
+    await act(async () => {
+      input.focus()
+      setInputValue(input, '1.5')
+      await Promise.resolve()
+    })
+
+    expect(input.value).toBe('1.5')
+    expect(input.validity.stepMismatch).toBe(true)
+    expect(onChange).not.toHaveBeenCalled()
+
+    await act(async () => {
+      input.blur()
+      await Promise.resolve()
+    })
+
+    expect(input.value).toBe('400')
+  })
 })
 
 async function render(element: React.ReactNode) {

@@ -42,8 +42,11 @@ function dependencies(overrides: Record<string, unknown> = {}) {
       bellEnabled: true,
       outputCompletionEnabled: true,
       includeTerminalOutput: true,
+      outputTailLength: 400,
     })),
-    sendMessage: vi.fn(async () => ({ ok: true as const })),
+    sendMessage: vi.fn(
+      async (_input: { botToken: string; chatId: string; text: string; proxyUrl?: string }) => ({ ok: true as const }),
+    ),
     warn: vi.fn(),
     now: vi.fn(() => 10_000),
     ...overrides,
@@ -146,6 +149,98 @@ describe('Telegram notification write paths', () => {
     expect(deps.sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({ text: expect.stringContaining('终端运行结束') }),
     )
+  })
+
+  test('applies the authoritative output length and rejects payloads above the transport maximum', async () => {
+    const deps = dependencies({
+      getTelegramConfig: vi.fn(async () => ({
+        enabled: true,
+        botToken: '123456:test-token',
+        chatId: '-100123',
+        bellEnabled: true,
+        outputCompletionEnabled: true,
+        includeTerminalOutput: true,
+        outputTailLength: 3,
+      })),
+    })
+
+    await expect(
+      sendConfiguredTelegramBellNotification(context({ outputTail: 'abc🙂de' }), deps),
+    ).resolves.toEqual({ ok: true })
+    expect(deps.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ text: expect.stringMatching(/🙂de$/u) }),
+    )
+    expect(deps.sendMessage.mock.calls[0]?.[0].text).not.toContain('abc🙂de')
+
+    await expect(
+      sendConfiguredTelegramOutputCompletionNotification(
+        {
+          ...context({ outputTail: 'abc🙂de' }),
+          sessionId: 'session-authoritative-limit',
+          finalOutputSeq: 1,
+        },
+        deps,
+      ),
+    ).resolves.toEqual({ ok: true })
+    expect(deps.sendMessage.mock.calls[1]?.[0].text).toMatch(/🙂de$/u)
+    expect(deps.sendMessage.mock.calls[1]?.[0].text).not.toContain('abc🙂de')
+
+    await expect(
+      sendConfiguredTelegramBellNotification(context({ terminalKey: 'another', outputTail: 'x'.repeat(4097) }), deps),
+    ).resolves.toEqual({ ok: false, error: { code: 'invalid-input' } })
+  })
+
+  test('normalizes consecutive terminal whitespace before enforcing the configured length', async () => {
+    const deps = dependencies({
+      getTelegramConfig: vi.fn(async () => ({
+        enabled: true,
+        botToken: '123456:test-token',
+        chatId: '-100123',
+        bellEnabled: true,
+        outputCompletionEnabled: true,
+        includeTerminalOutput: true,
+        outputTailLength: 7,
+      })),
+    })
+
+    await expect(
+      sendConfiguredTelegramBellNotification(
+        context({ outputTail: `old${' '.repeat(4_096)}\t\r\n new end` }),
+        deps,
+      ),
+    ).resolves.toEqual({ ok: true })
+
+    expect(deps.sendMessage.mock.calls[0]?.[0].text).toMatch(/new end$/u)
+  })
+
+  test('fits terminal output into the complete 4096-character Telegram message budget', async () => {
+    const deps = dependencies({
+      getTelegramConfig: vi.fn(async () => ({
+        enabled: true,
+        botToken: '123456:test-token',
+        chatId: '-100123',
+        bellEnabled: true,
+        outputCompletionEnabled: true,
+        includeTerminalOutput: true,
+        outputTailLength: 4096,
+      })),
+    })
+
+    await sendConfiguredTelegramBellNotification(
+      context({
+        project: 'p'.repeat(300),
+        context: 'c'.repeat(300),
+        directory: 'd'.repeat(300),
+        branch: 'b'.repeat(300),
+        terminalTitle: 't'.repeat(300),
+        outputTail: 'z'.repeat(4096),
+      }),
+      deps,
+    )
+
+    const text = deps.sendMessage.mock.calls[0]?.[0].text
+    expect(Array.from(text)).toHaveLength(4096)
+    expect(text).toMatch(/z+$/u)
   })
 
   test('accepts the NUL-delimited terminal keys used by live terminal sessions', async () => {

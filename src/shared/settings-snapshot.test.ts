@@ -134,6 +134,7 @@ describe('settings snapshot partitions', () => {
         bellEnabled: true,
         outputCompletionEnabled: false,
         includeTerminalOutput: false,
+        outputTailLength: 200,
       },
       session: {
         openRepos: [{ kind: 'local', id: '/tmp/repo-b' }],
@@ -206,6 +207,7 @@ describe('settings snapshot partitions', () => {
         bellEnabled: true,
         outputCompletionEnabled: false,
         includeTerminalOutput: false,
+        outputTailLength: 200,
       },
     })
 
@@ -228,6 +230,7 @@ describe('settings snapshot partitions', () => {
         bellEnabled: true,
         outputCompletionEnabled: true,
         includeTerminalOutput: true,
+        outputTailLength: 1024,
       },
     })
 
@@ -239,6 +242,7 @@ describe('settings snapshot partitions', () => {
       bellEnabled: true,
       outputCompletionEnabled: true,
       includeTerminalOutput: true,
+      outputTailLength: 1024,
     })
     expect(JSON.stringify(snapshot)).not.toContain('passwordHash')
   })

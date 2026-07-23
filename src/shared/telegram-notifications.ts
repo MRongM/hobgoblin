@@ -1,7 +1,27 @@
 export const TELEGRAM_BOT_TOKEN_MAX_LENGTH = 256
 export const TELEGRAM_CHAT_ID_MAX_LENGTH = 128
 export const TELEGRAM_CONTEXT_TEXT_MAX_LENGTH = 300
-export const TELEGRAM_OUTPUT_TAIL_MAX_LENGTH = 200
+export const TELEGRAM_OUTPUT_TAIL_MIN_LENGTH = 1
+export const TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH = 400
+export const TELEGRAM_OUTPUT_TAIL_MAX_LENGTH = 4096
+export const TELEGRAM_MESSAGE_MAX_LENGTH = 4096
+
+export function normalizeTelegramOutput(value: string | undefined): string | undefined {
+  if (!value) return undefined
+  const normalized = value.replace(/[ \t\r\n]+/gu, ' ').trim()
+  return normalized || undefined
+}
+
+export function truncateTelegramOutputTail(value: string | undefined, maxCharacters: number): string | undefined {
+  if (maxCharacters < 1) return undefined
+  const normalized = normalizeTelegramOutput(value)
+  if (!normalized) return undefined
+  const characters = Array.from(normalized)
+  if (characters.length <= maxCharacters) return normalized
+  const suffix = characters.slice(-maxCharacters)
+  if (suffix[0] === ' ') suffix.shift()
+  return suffix.join('') || undefined
+}
 
 export type TelegramNotificationContextKind = 'worktree' | 'workspace' | 'branch-workspace' | 'directory'
 
@@ -12,6 +32,7 @@ export interface TelegramNotificationSettingsSnapshot {
   bellEnabled: boolean
   outputCompletionEnabled: boolean
   includeTerminalOutput: boolean
+  outputTailLength: number
 }
 
 export interface TelegramNotificationSettingsUpdateInput {
@@ -21,6 +42,7 @@ export interface TelegramNotificationSettingsUpdateInput {
   bellEnabled: boolean
   outputCompletionEnabled: boolean
   includeTerminalOutput: boolean
+  outputTailLength: number
 }
 
 export interface TelegramBellNotificationContext {

@@ -72,6 +72,7 @@ export async function applyServerTelegramNotificationSettingsWrite(
     bellEnabled?: unknown
     outputCompletionEnabled?: unknown
     includeTerminalOutput?: unknown
+    outputTailLength?: unknown
   } | null
   const telegramNotifications = await updateServerTelegramNotificationSettings({
     enabled: input?.enabled === true,
@@ -80,6 +81,7 @@ export async function applyServerTelegramNotificationSettingsWrite(
     bellEnabled: input?.bellEnabled === true,
     outputCompletionEnabled: input?.outputCompletionEnabled === true,
     includeTerminalOutput: input?.includeTerminalOutput === true,
+    outputTailLength: typeof input?.outputTailLength === 'number' ? input.outputTailLength : Number.NaN,
   })
   publishSettingsInvalidation(['settings-snapshot'])
   return { ok: true, telegramNotifications }

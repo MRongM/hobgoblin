@@ -7,6 +7,7 @@ import {
   SettingsCard,
   SettingsGroup,
   SettingsList,
+  SettingsNumberInput,
   SettingsRow,
 } from '#/web/components/settings/SettingsPrimitives.tsx'
 import { useFetchSettingsController, useRuntimeFetchSettings } from '#/web/runtime-settings-fetch.ts'
@@ -16,6 +17,10 @@ import {
 } from '#/web/runtime-settings-telegram-notifications.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { terminalBridge } from '#/web/terminal.ts'
+import {
+  TELEGRAM_OUTPUT_TAIL_MAX_LENGTH,
+  TELEGRAM_OUTPUT_TAIL_MIN_LENGTH,
+} from '#/shared/telegram-notifications.ts'
 
 export function NotificationSettings() {
   const t = useT()
@@ -32,6 +37,7 @@ export function NotificationSettings() {
   const [telegramIncludeTerminalOutput, setTelegramIncludeTerminalOutput] = useState(
     telegramSettings.includeTerminalOutput,
   )
+  const [telegramOutputTailLength, setTelegramOutputTailLength] = useState(telegramSettings.outputTailLength)
   const [botTokenConfigured, setBotTokenConfigured] = useState(telegramSettings.botTokenConfigured)
   const [botToken, setBotToken] = useState('')
   const [chatId, setChatId] = useState(telegramSettings.chatId)
@@ -44,6 +50,7 @@ export function NotificationSettings() {
     setTelegramBellEnabled(telegramSettings.bellEnabled)
     setTelegramOutputCompletionEnabled(telegramSettings.outputCompletionEnabled)
     setTelegramIncludeTerminalOutput(telegramSettings.includeTerminalOutput)
+    setTelegramOutputTailLength(telegramSettings.outputTailLength)
     setBotTokenConfigured(telegramSettings.botTokenConfigured)
     setBotToken('')
     setChatId(telegramSettings.chatId)
@@ -55,6 +62,7 @@ export function NotificationSettings() {
     telegramSettings.enabled,
     telegramSettings.includeTerminalOutput,
     telegramSettings.outputCompletionEnabled,
+    telegramSettings.outputTailLength,
   ])
 
   const normalizedChatId = chatId.trim()
@@ -64,6 +72,7 @@ export function NotificationSettings() {
     telegramBellEnabled !== telegramSettings.bellEnabled ||
     telegramOutputCompletionEnabled !== telegramSettings.outputCompletionEnabled ||
     telegramIncludeTerminalOutput !== telegramSettings.includeTerminalOutput ||
+    telegramOutputTailLength !== telegramSettings.outputTailLength ||
     normalizedChatId !== telegramSettings.chatId ||
     Boolean(botToken.trim())
   const telegramConfigurationError = telegramEnabled && !configurationComplete
@@ -104,6 +113,7 @@ export function NotificationSettings() {
       bellEnabled: telegramBellEnabled,
       outputCompletionEnabled: telegramOutputCompletionEnabled,
       includeTerminalOutput: telegramIncludeTerminalOutput,
+      outputTailLength: telegramOutputTailLength,
     })
     setSavingTelegram(false)
     if (!saved) {
@@ -115,6 +125,7 @@ export function NotificationSettings() {
     setTelegramBellEnabled(saved.bellEnabled)
     setTelegramOutputCompletionEnabled(saved.outputCompletionEnabled)
     setTelegramIncludeTerminalOutput(saved.includeTerminalOutput)
+    setTelegramOutputTailLength(saved.outputTailLength)
     setBotTokenConfigured(saved.botTokenConfigured)
     setChatId(saved.chatId)
     toast.success(t('settings.telegram.saved'))
@@ -222,6 +233,20 @@ export function NotificationSettings() {
                 checked={telegramIncludeTerminalOutput}
                 onCheckedChange={setTelegramIncludeTerminalOutput}
                 aria-label={t('settings.telegram.include-terminal-output')}
+              />
+            }
+          />
+          <SettingsRow
+            controlId="settings-telegram-output-tail-length"
+            label={t('settings.telegram.output-tail-length')}
+            hint={t('settings.telegram.output-tail-length-hint')}
+            control={
+              <SettingsNumberInput
+                id="settings-telegram-output-tail-length"
+                min={TELEGRAM_OUTPUT_TAIL_MIN_LENGTH}
+                max={TELEGRAM_OUTPUT_TAIL_MAX_LENGTH}
+                value={telegramOutputTailLength}
+                onChange={setTelegramOutputTailLength}
               />
             }
           />

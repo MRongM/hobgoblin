@@ -5,6 +5,7 @@ import { getRuntimeFetchSettings } from '#/web/runtime-settings-fetch.ts'
 import { getRuntimeTelegramNotificationSettings } from '#/web/runtime-settings-telegram-notifications.ts'
 import { sendTelegramBellNotification } from '#/web/settings-client.ts'
 import { terminalNotificationContext } from '#/web/components/terminal/terminal-notification-context.ts'
+import { truncateTelegramOutputTail } from '#/shared/telegram-notifications.ts'
 const BELL_NOTIFICATION_DEBOUNCE_MS = 5000
 
 export interface TerminalBellController {
@@ -71,6 +72,7 @@ export function createTerminalBellController(
       if (telegram.enabled && telegram.bellEnabled && telegram.botTokenConfigured && telegram.chatId) {
         const context = terminalNotificationContext(descriptor, event)
         if (!telegram.includeTerminalOutput) delete context.outputTail
+        else context.outputTail = truncateTelegramOutputTail(context.outputTail, telegram.outputTailLength)
         void sendTelegramBellNotification(context).catch(() => {})
       }
     },

@@ -80,6 +80,9 @@ import { DEFAULT_TOPBAR_HEIGHT_PX, DEFAULT_TOOLBAR_HEIGHT_PX, normalizeChromeHei
 import {
   TELEGRAM_BOT_TOKEN_MAX_LENGTH,
   TELEGRAM_CHAT_ID_MAX_LENGTH,
+  TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH,
+  TELEGRAM_OUTPUT_TAIL_MAX_LENGTH,
+  TELEGRAM_OUTPUT_TAIL_MIN_LENGTH,
   type TelegramNotificationErrorCode,
   type TelegramNotificationSettingsSnapshot,
   type TelegramNotificationSettingsUpdateInput,
@@ -123,6 +126,7 @@ interface ServerSettingsData {
   telegramBellNotificationsEnabled: boolean
   telegramOutputCompletionNotificationsEnabled: boolean
   telegramIncludeTerminalOutput: boolean
+  telegramOutputTailLength: number
   telegramBotToken: string
   telegramChatId: string
   session: SessionState
@@ -330,6 +334,14 @@ function normalizeTelegramChatId(value: unknown): string {
   return /^-?\d+$/u.test(chatId) || /^@[A-Za-z][A-Za-z0-9_]{4,31}$/u.test(chatId) ? chatId : ''
 }
 
+function normalizeTelegramOutputTailLength(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH
+  return Math.max(
+    TELEGRAM_OUTPUT_TAIL_MIN_LENGTH,
+    Math.min(TELEGRAM_OUTPUT_TAIL_MAX_LENGTH, Math.round(value)),
+  )
+}
+
 function telegramNotificationSettingsFromData(data: ServerSettingsData): TelegramNotificationSettingsSnapshot {
   const botTokenConfigured = Boolean(data.telegramBotToken)
   return {
@@ -339,6 +351,7 @@ function telegramNotificationSettingsFromData(data: ServerSettingsData): Telegra
     bellEnabled: data.telegramBellNotificationsEnabled,
     outputCompletionEnabled: data.telegramOutputCompletionNotificationsEnabled,
     includeTerminalOutput: data.telegramIncludeTerminalOutput,
+    outputTailLength: data.telegramOutputTailLength,
   }
 }
 
@@ -649,6 +662,7 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       telegramOutputCompletionNotificationsEnabled:
         parsed.telegramOutputCompletionNotificationsEnabled === true,
       telegramIncludeTerminalOutput: parsed.telegramIncludeTerminalOutput === true,
+      telegramOutputTailLength: normalizeTelegramOutputTailLength(parsed.telegramOutputTailLength),
       telegramBotToken,
       telegramChatId,
       session: normalizeSession(parsed.session),
@@ -678,6 +692,7 @@ async function loadServerSettings(): Promise<ServerSettingsData> {
       telegramBellNotificationsEnabled: true,
       telegramOutputCompletionNotificationsEnabled: false,
       telegramIncludeTerminalOutput: false,
+      telegramOutputTailLength: TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH,
       telegramBotToken: '',
       telegramChatId: '',
       session: defaultSession(),
@@ -737,11 +752,19 @@ export async function updateServerTelegramNotificationSettings(
   if (input.enabled && (!botToken || !chatId)) {
     throw new TelegramNotificationSettingsError('configuration-incomplete')
   }
+  if (
+    !Number.isInteger(input.outputTailLength) ||
+    input.outputTailLength < TELEGRAM_OUTPUT_TAIL_MIN_LENGTH ||
+    input.outputTailLength > TELEGRAM_OUTPUT_TAIL_MAX_LENGTH
+  ) {
+    throw new TelegramNotificationSettingsError('invalid-input')
+  }
 
   data.telegramNotificationsEnabled = input.enabled === true
   data.telegramBellNotificationsEnabled = input.bellEnabled === true
   data.telegramOutputCompletionNotificationsEnabled = input.outputCompletionEnabled === true
   data.telegramIncludeTerminalOutput = input.includeTerminalOutput === true
+  data.telegramOutputTailLength = input.outputTailLength
   data.telegramBotToken = botToken
   data.telegramChatId = chatId
   await writeServerSettingsFile(data)

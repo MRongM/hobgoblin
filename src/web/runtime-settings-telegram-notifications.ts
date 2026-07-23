@@ -7,6 +7,7 @@ import { sendTelegramTestNotification } from '#/web/settings-client.ts'
 import { currentSettingsSnapshot } from '#/web/settings-read-projection.ts'
 import { useSettingsSnapshotQuery } from '#/web/settings-queries.ts'
 import { runSettingsControllerAction, saveTelegramNotificationSettingsPreference } from '#/web/settings-write-paths.ts'
+import { TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH } from '#/shared/telegram-notifications.ts'
 
 const DEFAULT_TELEGRAM_SETTINGS: TelegramNotificationSettingsSnapshot = {
   enabled: false,
@@ -15,6 +16,7 @@ const DEFAULT_TELEGRAM_SETTINGS: TelegramNotificationSettingsSnapshot = {
   bellEnabled: true,
   outputCompletionEnabled: false,
   includeTerminalOutput: false,
+  outputTailLength: TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH,
 }
 
 export function getRuntimeTelegramNotificationSettings(): TelegramNotificationSettingsSnapshot {
