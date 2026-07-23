@@ -165,6 +165,7 @@ describe('BranchWorkspaceList', () => {
       'workspace.branch-workspace.git-action.push',
       'workspace.branch-workspace.git-action.merge-back',
       'workspace.branch-workspace.delete',
+      'tmux.cleanup.action',
     ])
     const addMembersItem = menuItems.find(
       (entry) => entry.textContent?.trim() === 'workspace.branch-workspace.add-members',
@@ -671,7 +672,7 @@ describe('BranchWorkspaceList', () => {
     expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).toBeNull()
   })
 
-  test('keeps a non-navigable repository member visible but disabled', () => {
+  test('keeps a non-navigable repository member disabled while retaining tmux cleanup', async () => {
     const member = repositoryMember({ ready: false })
     act(() =>
       root.render(
@@ -680,7 +681,13 @@ describe('BranchWorkspaceList', () => {
             rootId="/workspace"
             items={[{ ...workspace('needs-repair'), repositories: [member] }]}
             activeId="branch-1"
-            getMemberPresentation={() => ({ dirty: false, changeCount: null, navigable: false })}
+            getMemberPresentation={() => ({
+              dirty: false,
+              changeCount: null,
+              navigable: false,
+              repositoryId: '/workspace/api',
+              worktreePath: member.worktreePath,
+            })}
             onOpenRepositoryMember={() => {}}
             onActivate={() => {}}
             onReorder={() => {}}
@@ -697,18 +704,38 @@ describe('BranchWorkspaceList', () => {
     expect(container.querySelector<HTMLButtonElement>('[data-testid="branch-workspace-member-api"]')?.disabled).toBe(
       true,
     )
+    const memberRow = container
+      .querySelector('[data-testid="branch-workspace-member-api"]')
+      ?.closest<HTMLElement>('[data-workspace-list-item]')
+    if (!memberRow) throw new Error('missing unavailable member row')
+    const cleanupItem = (await openContextMenu(memberRow)).find(
+      (entry) => entry.textContent?.trim() === 'tmux.cleanup.action',
+    )
+    expect(cleanupItem?.hasAttribute('data-disabled')).toBe(false)
   })
 
   test.each([
-    ['active', ['workspace.branch-workspace.cancel'], []],
-    ['creation-interrupted', ['workspace.branch-workspace.retry'], ['workspace.branch-workspace.inspect']],
-    ['reduce-incomplete', ['workspace.branch-workspace.continue-reduce'], ['workspace.branch-workspace.inspect']],
+    ['active', ['workspace.branch-workspace.cancel'], ['tmux.cleanup.action']],
+    [
+      'creation-interrupted',
+      ['workspace.branch-workspace.retry'],
+      ['workspace.branch-workspace.inspect', 'tmux.cleanup.action'],
+    ],
+    [
+      'reduce-incomplete',
+      ['workspace.branch-workspace.continue-reduce'],
+      ['workspace.branch-workspace.inspect', 'tmux.cleanup.action'],
+    ],
     [
       'needs-repair',
       ['workspace.branch-workspace.repair'],
-      ['workspace.branch-workspace.inspect', 'workspace.branch-workspace.delete'],
+      ['workspace.branch-workspace.inspect', 'workspace.branch-workspace.delete', 'tmux.cleanup.action'],
     ],
-    ['delete-incomplete', ['workspace.branch-workspace.continue-delete'], ['workspace.branch-workspace.inspect']],
+    [
+      'delete-incomplete',
+      ['workspace.branch-workspace.continue-delete'],
+      ['workspace.branch-workspace.inspect', 'tmux.cleanup.action'],
+    ],
   ] as const)('exposes the exact %s state actions', async (stateName, directLabels, menuLabels) => {
     const onRemove = vi.fn()
     const onReduce = vi.fn()
@@ -741,6 +768,12 @@ describe('BranchWorkspaceList', () => {
     ]
     expect(possibleDirectLabels.filter((label) => row?.querySelector(`[aria-label="${label}"]`))).toEqual(directLabels)
     expect(await openMenuLabels(row)).toEqual(menuLabels)
+    if (stateName === 'active') {
+      const cleanupItem = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+        (entry) => entry.textContent?.trim() === 'tmux.cleanup.action',
+      )
+      expect(cleanupItem?.hasAttribute('data-disabled')).toBe(true)
+    }
     if (stateName === 'reduce-incomplete') {
       act(() =>
         row?.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.continue-reduce"]')?.click(),
@@ -778,6 +811,7 @@ describe('BranchWorkspaceList', () => {
     expect(menuItems.map((item) => item.textContent?.trim())).toEqual([
       'terminal.external',
       'workspace.branch-workspace.delete',
+      'tmux.cleanup.action',
     ])
     expect(menuItems.every((item) => item.hasAttribute('data-disabled'))).toBe(true)
   })
@@ -819,6 +853,7 @@ describe('BranchWorkspaceList', () => {
       'terminal.internal',
       'terminal.close-all',
       'workspace.branch-workspace.delete',
+      'tmux.cleanup.action',
     ])
 
     await clickContextMenuItem(row, 'worktrees.open-in-editor-label')

@@ -38,6 +38,7 @@ import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { useT } from '#/web/stores/i18n.ts'
+import { useAssociatedTmuxCleanup } from '#/web/hooks/useAssociatedTmuxCleanup.tsx'
 
 export interface BranchWorkspaceMemberActionTarget {
   repo: BranchActionRepo
@@ -124,6 +125,13 @@ function BranchWorkspaceMemberRowFrame({
     : null
   const unavailableLabel = presentation.reason ? t(presentation.reason) : null
   const forceDisabled = disabled || !presentation.navigable
+  const tmuxCleanup = useAssociatedTmuxCleanup({
+    projectRoot: presentation.repositoryId,
+    itemPath: presentation.worktreePath ?? member.worktreePath,
+    disabled:
+      disabled ||
+      (presentation.actionTarget ? presentation.actionTarget.repo.operations.branchAction.phase !== 'idle' : false),
+  })
   const actionProjection = projectWorktreeListItemActions(actions, {
     policy: 'branch-workspace-member',
     hasWorktree: true,
@@ -163,7 +171,16 @@ function BranchWorkspaceMemberRowFrame({
         <WorkspaceListItemActionDock
           editor={actionProjection.editor}
           internalTerminal={internalTerminalAction}
-          moreMenu={<WorkspaceListItemMenu label={t('action.menu')} groups={actionProjection.menuGroups} />}
+          moreMenu={
+            <WorkspaceListItemMenu
+              label={t('action.menu')}
+              groups={
+                tmuxCleanup.visible
+                  ? [...actionProjection.menuGroups, [tmuxCleanup.action]]
+                  : actionProjection.menuGroups
+              }
+            />
+          }
         />
       }
       expandedContent={
@@ -174,6 +191,7 @@ function BranchWorkspaceMemberRowFrame({
             </div>
           ) : null}
           {actions.dialogs}
+          {tmuxCleanup.dialog}
         </>
       }
     >
@@ -217,6 +235,7 @@ function BranchWorkspaceMemberRowFrame({
       externalTerminal={actionProjection.contextMenu.externalTerminal}
       internalTerminal={internalTerminalContextAction}
       worktreeTerminalKeys={forceDisabled ? [] : terminalKeys}
+      additionalActions={tmuxCleanup.visible ? [tmuxCleanup.contextAction] : []}
     >
       {row}
     </WorkspaceItemContextMenu>

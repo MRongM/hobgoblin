@@ -34,6 +34,7 @@ function defaultBootstrap(): RendererBootstrapPayload {
       capabilities: [...ELECTRON_RENDERER_CAPABILITIES],
     },
     homeDir: '/home/test',
+    hostPlatform: 'linux',
     i18n: { lang: 'en', pref: 'ja', dict: { hello: 'world' } },
     settings: {
       fetchIntervalSec: 120,
@@ -131,6 +132,7 @@ describe('preload goblinNative bridge', () => {
       capabilities: [...ELECTRON_RENDERER_CAPABILITIES],
     })
     expect(goblinNative.homeDir).toBe('/home/test')
+    expect(goblinNative.hostPlatform).toBe('linux')
     expect(goblinNative.initialI18n).toEqual({ lang: 'en', pref: 'ja', dict: { hello: 'world' } })
     expect(goblinNative.initialSettings).toMatchObject({
       fetchIntervalSec: 120,
@@ -156,6 +158,7 @@ describe('preload goblinNative bridge', () => {
       capabilities: [...ELECTRON_RENDERER_CAPABILITIES],
     })
     expect(goblinNative.homeDir).toBe('/home/test')
+    expect(goblinNative.hostPlatform).toBe('linux')
     expect(goblinNative.initialI18n).toEqual({ lang: 'en', pref: 'ja', dict: { hello: 'world' } })
     expect(goblinNative.initialSettings).toMatchObject({
       fetchIntervalSec: 120,

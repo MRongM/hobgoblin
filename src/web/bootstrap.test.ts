@@ -70,17 +70,21 @@ describe('renderer bootstrap', () => {
       lanEnabled: false,
       serverPort: 32200,
     }
-    const bootstrap: RendererBootstrapSnapshot = electronBootstrap({
-      initialI18n: { lang: 'ko', pref: 'ko', dict: { hello: '안녕' } },
-      initialSettings,
-      initialServer: null,
-    })
+    const bootstrap = {
+      ...electronBootstrap({
+        initialI18n: { lang: 'ko', pref: 'ko', dict: { hello: '안녕' } },
+        initialSettings,
+        initialServer: null,
+      }),
+      hostPlatform: 'win32' as const,
+    }
     Object.defineProperty(globalThis, 'window', {
       configurable: true,
       value: {
         goblinNative: {
           runtime: bootstrap.runtime,
           homeDir: bootstrap.homeDir,
+          hostPlatform: bootstrap.hostPlatform,
           initialI18n: bootstrap.initialI18n,
           initialSettings: bootstrap.initialSettings,
           initialServer: bootstrap.initialServer,

@@ -88,6 +88,7 @@ export interface RendererRuntimeSnapshot {
 export interface RendererBootstrapPayload {
   runtime: RendererRuntimeSnapshot
   homeDir: string
+  hostPlatform?: NodeJS.Platform
   i18n: I18nSnapshot
   settings: InitialSettingsSnapshot
   server: InitialServerSnapshot | null
@@ -97,6 +98,8 @@ export interface RendererBootstrapPayload {
 export interface RendererBootstrapSnapshot {
   runtime: RendererRuntimeSnapshot
   homeDir: string
+  /** Host running repository and tmux commands; absent only in legacy or test bootstraps. */
+  hostPlatform?: NodeJS.Platform
   initialI18n: I18nSnapshot | null
   initialSettings: InitialSettingsSnapshot | null
   initialServer: InitialServerSnapshot | null

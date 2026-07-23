@@ -29,6 +29,7 @@ import type {
 interface GoblinNativeBridge {
   runtime: RendererRuntimeSnapshot
   homeDir: string
+  hostPlatform?: NodeJS.Platform
   initialI18n: I18nSnapshot | null
   initialSettings: InitialSettingsSnapshot | null
   initialServer: InitialServerSnapshot | null
