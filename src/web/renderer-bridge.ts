@@ -89,6 +89,9 @@ function electronBridge(): RendererBridge {
       return {
         runtime,
         homeDir: typeof bridge?.homeDir === 'string' ? bridge.homeDir : bootstrap.homeDir,
+        ...(bridge?.hostPlatform || bootstrap.hostPlatform
+          ? { hostPlatform: bridge?.hostPlatform ?? bootstrap.hostPlatform }
+          : {}),
         initialI18n: bridge?.initialI18n ?? bootstrap.initialI18n ?? null,
         initialSettings: bridge?.initialSettings ?? bootstrap.initialSettings ?? null,
         initialServer: bridge?.initialServer ?? bootstrap.initialServer ?? null,

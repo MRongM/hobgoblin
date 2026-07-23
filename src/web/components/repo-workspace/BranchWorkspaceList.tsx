@@ -72,6 +72,7 @@ import {
   BranchWorkspaceMemberRow,
   type BranchWorkspaceMemberPresentation,
 } from '#/web/components/repo-workspace/BranchWorkspaceMemberRow.tsx'
+import { useAssociatedTmuxCleanup } from '#/web/hooks/useAssociatedTmuxCleanup.tsx'
 
 const restrictToVerticalBranchWorkspaceList: Modifier = ({ transform }) => ({ ...transform, x: 0 })
 
@@ -249,6 +250,7 @@ function BranchWorkspaceRow({
   const changeCount = changeCountById?.[item.id] ?? 0
   const hasTerminalBell = useWorktreeTerminalHasBell(terminalKey)
   const hasTerminalOutputActivity = useWorktreeTerminalHasOutputActivity(terminalKey)
+  const tmuxCleanup = useAssociatedTmuxCleanup({ projectRoot: rootId, itemPath: item.path, disabled: disabled || busy })
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
     disabled: disabled || !interactiveReady,
@@ -419,6 +421,7 @@ function BranchWorkspaceRow({
     ...readyMembershipActions,
     ...readyGitActions,
     ...lowFrequencyActions,
+    ...(tmuxCleanup.visible ? [tmuxCleanup.contextAction] : []),
   ]
   const moreMenu = rowMenuActions.length > 0 ? <BranchWorkspaceItemMenu actions={rowMenuActions} /> : undefined
   const stateAction = busy ? (
@@ -517,7 +520,7 @@ function BranchWorkspaceRow({
         onSelect: () => openInternal('tmux-if-available'),
       }}
       worktreeTerminalKeys={terminalKeys}
-      additionalActions={lowFrequencyActions}
+      additionalActions={[...lowFrequencyActions, ...(tmuxCleanup.visible ? [tmuxCleanup.contextAction] : [])]}
     >
       <WorkspaceListItemFrame
         itemRef={setNodeRef}
@@ -561,6 +564,7 @@ function BranchWorkspaceRow({
           <>
             {memberList}
             {gitActionPanel?.itemId === item.id ? gitActionPanel.content : null}
+            {tmuxCleanup.dialog}
           </>
         }
       >

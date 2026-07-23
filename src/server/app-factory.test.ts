@@ -115,6 +115,7 @@ describe('server app html bootstrap', () => {
     expect(webCapabilityFromHtml(html)).not.toBe('secret')
     expect(webCapabilityFromHtml(html)).toMatch(/^[0-9a-f]{64}$/u)
     expect(html).toContain('"lang":"zh"')
+    expect(html).toContain(`"hostPlatform":"${process.platform}"`)
     expect(html).toContain('打开本地仓库')
   }, 10_000)
 
@@ -288,6 +289,21 @@ describe('server app html bootstrap', () => {
     })
 
     const response = await app.request('http://127.0.0.1:32100/api/telegram-notifications/test', {
+      method: 'POST',
+    })
+    expect(response.status).toBe(401)
+  })
+
+  test('protects tmux cleanup endpoints with the server capability', async () => {
+    const { createApp } = await import('#/server/app-factory.ts')
+    const app = createApp({
+      version: '0.1.0',
+      startedAt: Date.now(),
+      internalSecret: 'secret',
+      terminalHost: terminalHostStub,
+    })
+
+    const response = await app.request('http://127.0.0.1:32100/api/tmux-cleanup/preview', {
       method: 'POST',
     })
     expect(response.status).toBe(401)

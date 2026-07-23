@@ -174,6 +174,7 @@ describe('BranchWorkspaceMemberRow', () => {
       'createTag',
       'closeAllTerminals',
       'resetHard',
+      'cleanupTmuxSessions',
     ])
     expect(menuItems.find((entry) => entry.getAttribute('data-action') === 'pull')?.hasAttribute('data-disabled')).toBe(
       true,
@@ -281,6 +282,7 @@ describe('BranchWorkspaceMemberRow', () => {
       'terminal.internal',
       'terminal.new-with-tmux',
       'terminal.close-all',
+      'tmux.cleanup.action',
     ])
 
     await act(async () => {

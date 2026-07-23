@@ -68,6 +68,18 @@ _Avoid_: Canonical size, remote size
 An operating-system terminal application opened outside Hobgoblin at the selected worktree path.
 _Avoid_: Native terminal, system terminal
 
+**Associated Hobgoblin tmux session**:
+A Hobgoblin-protocol tmux session whose initial session path exactly matches one worktree, branch workspace root, or branch workspace member path after the protocol's lexical path normalization. Association never includes arbitrary user-created tmux sessions or descendant paths.
+_Avoid_: Current terminal, child-directory session, any tmux session in the directory
+
+**Associated tmux session cleanup**:
+An explicit destructive action that discovers associated Hobgoblin tmux sessions for one item, previews the exact matches, and ends only the approved sessions that still satisfy the association at execution time. It is independent of deleting the item and of whether tmux is currently enabled for new terminals.
+_Avoid_: Terminal close, worktree cleanup, automatic tmux pruning
+
+**Tmux-backed internal terminal**:
+An internal terminal assigned a current-protocol Hobgoblin tmux identity when launched. It remains classified this way if the tmux preference later changes or its tmux session subsequently disappears.
+_Avoid_: Tmux status, currently enabled terminal, associated tmux cleanup
+
 **Settings dialog**:
 The modal surface for changing application preferences while keeping the current workspace visible underneath.
 _Avoid_: Settings screen, full-page settings

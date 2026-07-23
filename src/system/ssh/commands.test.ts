@@ -38,6 +38,41 @@ function testPosix(name: string, fn: () => Promise<void> | void): void {
 }
 
 describe('remote command scripts', () => {
+  test('builds typed tmux list and kill commands', () => {
+    const list = buildRemoteCommandInvocation(TARGET, { type: 'tmuxListSessions' })
+    const kill = buildRemoteCommandInvocation(TARGET, {
+      type: 'tmuxKillSession',
+      sessionId: '$3',
+    })
+    const killByName = buildRemoteCommandInvocation(TARGET, {
+      type: 'tmuxKillSessionByName',
+      sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+    })
+
+    expect(list.script).toBe(
+      "command -v tmux >/dev/null 2>&1 || exit 127\ntmux list-sessions -F '#{session_name}\t#{session_id}\t#{session_path}'",
+    )
+    expect(kill.script).toBe("command -v tmux >/dev/null 2>&1 || exit 127\ntmux kill-session -t '$3'")
+    expect(killByName.script).toBe(
+      "command -v tmux >/dev/null 2>&1 || exit 127\ntmux kill-session -t 'hobgoblin-v1-aebf050981ac829e36100020'",
+    )
+  })
+
+  test('rejects invalid tmux session ids before building an SSH invocation', () => {
+    expect(() =>
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'tmuxKillSession',
+        sessionId: '$3; touch /tmp/example',
+      }),
+    ).toThrow('error.invalid-arguments')
+    expect(() =>
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'tmuxKillSessionByName',
+        sessionName: 'hobgoblin-v1-bad; touch /tmp/example',
+      }),
+    ).toThrow('error.invalid-arguments')
+  })
+
   test('requests immediate expiry annotations when listing worktrees', () => {
     const invocation = buildRemoteCommandInvocation(TARGET, {
       type: 'gitWorktreeList',

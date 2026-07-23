@@ -48,11 +48,12 @@ describe('terminal protocol normalization', () => {
         displayOrder: 0,
         phase: 'open',
         message: null,
+        tmuxBacked: true,
       },
     ])
 
     expect(summaries).not.toBeNull()
-    expect(summaries?.[0]).toMatchObject({ phase: 'open', message: null })
+    expect(summaries?.[0]).toMatchObject({ phase: 'open', message: null, tmuxBacked: true })
   })
 
   test('rejects invalid session phases', () => {
@@ -130,5 +131,28 @@ describe('terminal protocol normalization', () => {
         },
       }),
     ).toMatchObject({ action: 'create' })
+  })
+
+  test('accepts only a boolean tmux close intent', () => {
+    const base = {
+      type: 'request' as const,
+      requestId: 'request_close',
+      action: 'close' as const,
+      input: { sessionId: 'term_abcdefghijklmnop' },
+    }
+
+    expect(normalizeTerminalClientMessage(base)).toMatchObject({ action: 'close', input: base.input })
+    expect(
+      normalizeTerminalClientMessage({
+        ...base,
+        input: { ...base.input, closeTmuxSession: true },
+      }),
+    ).toMatchObject({ action: 'close', input: { closeTmuxSession: true } })
+    expect(
+      normalizeTerminalClientMessage({
+        ...base,
+        input: { ...base.input, closeTmuxSession: 'true' },
+      }),
+    ).toBeNull()
   })
 })

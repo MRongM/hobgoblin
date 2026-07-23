@@ -10,6 +10,7 @@ import { isTerminalFocused } from '#/web/terminal-focus.ts'
 import { setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
 import type {
   TerminalMutationResult,
+  TerminalCloseResult,
   TerminalNotifyBellInput,
   TerminalAttachInput,
   TerminalAttachResult,
@@ -553,7 +554,7 @@ const terminalCalls = {
   write: vi.fn<(input: TerminalWriteInput) => Promise<TerminalMutationResult>>(),
   resize: vi.fn<(input: TerminalResizeInput) => Promise<TerminalMutationResult>>(),
   takeover: vi.fn<(input: TerminalTakeoverInput) => Promise<TerminalTakeoverResult>>(),
-  close: vi.fn<(input: TerminalSessionInput) => Promise<TerminalMutationResult>>(),
+  close: vi.fn<(input: TerminalSessionInput) => Promise<TerminalCloseResult>>(),
   notifyBell: vi.fn<(input: TerminalNotifyBellInput) => Promise<TerminalMutationResult>>(),
   setBadge: vi.fn<Window['goblinNative']['terminal']['setBadge']>(),
 }
@@ -645,7 +646,7 @@ beforeEach(() => {
         write: terminalCalls.write.mockResolvedValue(true),
         resize: terminalCalls.resize.mockResolvedValue(true),
         takeover: terminalCalls.takeover.mockResolvedValue(takeoverResult('session-1')),
-        close: terminalCalls.close.mockResolvedValue(true),
+        close: terminalCalls.close.mockResolvedValue({ ok: true }),
         notifyBell: terminalCalls.notifyBell.mockResolvedValue(true),
         reorder: vi.fn(),
         create: vi.fn(),
@@ -692,7 +693,7 @@ beforeEach(() => {
       write: terminalCalls.write.mockResolvedValue(true),
       resize: terminalCalls.resize.mockResolvedValue(true),
       takeover: terminalCalls.takeover.mockResolvedValue(takeoverResult('session-1')),
-      close: terminalCalls.close.mockResolvedValue(true),
+      close: terminalCalls.close.mockResolvedValue({ ok: true }),
       create: vi.fn(async (input?: { kind?: string }) =>
         input?.kind === 'primary'
           ? {

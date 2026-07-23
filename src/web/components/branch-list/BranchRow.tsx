@@ -15,6 +15,7 @@ import {
   type WorkspaceListItemDragHandle,
 } from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
 import { projectWorktreeListItemActions } from '#/web/components/branch-list/worktree-list-item-actions.ts'
+import { useAssociatedTmuxCleanup } from '#/web/hooks/useAssociatedTmuxCleanup.tsx'
 import { useT } from '#/web/stores/i18n.ts'
 
 interface BranchRowSortable {
@@ -61,6 +62,11 @@ export function BranchRow({
     [repo.id, worktreePath],
   )
   const actions = useBranchActionItems(repo, branch)
+  const tmuxCleanup = useAssociatedTmuxCleanup({
+    projectRoot: repo.id,
+    itemPath: worktreePath,
+    disabled: repo.operations.branchAction.phase !== 'idle',
+  })
   const actionProjection = projectWorktreeListItemActions(actions, {
     policy: 'ordinary-worktree',
     hasWorktree: !!worktreePath,
@@ -112,7 +118,11 @@ export function BranchRow({
             moreMenu={
               <WorkspaceListItemMenu
                 label={t('action.menu')}
-                groups={actionProjection.menuGroups}
+                groups={
+                  tmuxCleanup.visible
+                    ? [...actionProjection.menuGroups, [tmuxCleanup.action]]
+                    : actionProjection.menuGroups
+                }
                 open={actionMenuOpen}
                 onOpenChange={onActionMenuOpenChange}
               />
@@ -121,16 +131,19 @@ export function BranchRow({
         ) : undefined
       }
       expandedContent={
-        showActions ? (
-          <>
-            {actions.inlinePanel ? (
-              <div onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
-                {actions.inlinePanel}
-              </div>
-            ) : null}
-            {actions.dialogs}
-          </>
-        ) : undefined
+        <>
+          {showActions ? (
+            <>
+              {actions.inlinePanel ? (
+                <div onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
+                  {actions.inlinePanel}
+                </div>
+              ) : null}
+              {actions.dialogs}
+            </>
+          ) : null}
+          {tmuxCleanup.dialog}
+        </>
       }
     >
       <BranchSummaryInline
@@ -150,6 +163,7 @@ export function BranchRow({
       internalTerminal={actionProjection.contextMenu.internalTerminal}
       tmuxTerminal={actionProjection.contextMenu.tmuxTerminal}
       worktreeTerminalKeys={terminalWorktreeKeys}
+      additionalActions={tmuxCleanup.visible ? [tmuxCleanup.contextAction] : []}
     >
       {row}
     </WorkspaceItemContextMenu>

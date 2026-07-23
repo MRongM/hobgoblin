@@ -68,7 +68,8 @@ export function BranchWorkspaceTerminalPanel({
     [selectTerminal, terminalWorktreeKey],
   )
   const handleCloseTerminal = useCallback(
-    (key: string) => closeTerminalAndDismissDetailIfLast(key, terminalBase),
+    (key: string, options?: Parameters<typeof closeTerminalAndDismissDetailIfLast>[2]) =>
+      closeTerminalAndDismissDetailIfLast(key, terminalBase, options),
     [closeTerminalAndDismissDetailIfLast, terminalBase],
   )
   const handleReorderTerminals = useCallback(

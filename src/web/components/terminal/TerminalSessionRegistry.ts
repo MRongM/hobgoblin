@@ -9,6 +9,7 @@ import { readOrCreateWebTerminalAttachmentId } from '#/web/renderer-terminal-bri
 import { parseTerminalIdIndex, resolveTerminalOwnership } from '#/shared/terminal.ts'
 import type {
   TerminalCatalogMutationResult,
+  TerminalCloseResult,
   TerminalLaunchMode,
   TerminalSessionSnapshot,
   TerminalSessionSummary as ServerTerminalSessionSummary,
@@ -27,6 +28,7 @@ import type {
   TerminalSnapshot,
   TerminalWorktreeScope,
   TerminalOutputCompletionIntent,
+  TerminalCloseOptions,
 } from '#/web/components/terminal/types.ts'
 
 const EMPTY_TERMINAL_SNAPSHOT: TerminalSnapshot = {
@@ -238,11 +240,14 @@ export class TerminalSessionRegistry {
       if (!branch) continue
       const terminalWorktreeKey = worktreeTerminalKey(parsed.repoRoot, parsed.worktreePath)
       touchedWorktrees.add(terminalWorktreeKey)
-      const descriptor = terminalDescriptor(
-        { repoRoot: parsed.repoRoot, branch, worktreePath: parsed.worktreePath },
-        parsed.terminalId,
-        parseTerminalIdIndex(parsed.terminalId) ?? 1,
-      )
+      const descriptor = {
+        ...terminalDescriptor(
+          { repoRoot: parsed.repoRoot, branch, worktreePath: parsed.worktreePath },
+          parsed.terminalId,
+          parseTerminalIdIndex(parsed.terminalId) ?? 1,
+        ),
+        tmuxBacked: serverSession.tmuxBacked === true,
+      }
       if (!this.sessions.has(descriptor.key)) {
         missingLocalCount += 1
         this.ensureSession(descriptor)
@@ -412,6 +417,7 @@ export class TerminalSessionRegistry {
         isOutputActive: this.outputActiveKeys.has(session.descriptor.key),
         selected: session.descriptor.key === selectedKey,
         hasBell: this.bellController.hasBell(session.descriptor.key),
+        tmuxBacked: session.descriptor.tmuxBacked === true,
       }
     })
   }
@@ -466,10 +472,15 @@ export class TerminalSessionRegistry {
     this.sessions.get(key)?.scrollLines(amount)
   }
 
-  closeTerminalAndDismissDetailIfLast = (key: string, scope: TerminalWorktreeScope): void => {
+  closeTerminalAndDismissDetailIfLast = (
+    key: string,
+    scope: TerminalWorktreeScope,
+    options: TerminalCloseOptions = {},
+  ): void | Promise<TerminalCloseResult> => {
     const session = this.sessions.get(key)
     if (!session || session.descriptor.worktreeTerminalKey !== worktreeTerminalKey(scope.repoRoot, scope.worktreePath))
       return
+    if (options.closeTmuxSession === true) return this.closeTmuxBackedTerminal(key, session.currentSessionId())
     this.closeTerminal(key)
   }
 
@@ -747,6 +758,22 @@ export class TerminalSessionRegistry {
 
   private closeTerminal(key: string): void {
     this.removeSession(key, { dispose: true, closeSession: true })
+  }
+
+  private async closeTmuxBackedTerminal(key: string, sessionId: string | null): Promise<TerminalCloseResult> {
+    if (!sessionId) {
+      this.removeSession(key, { dispose: true, closeSession: false })
+      return { ok: true }
+    }
+    let result: TerminalCloseResult
+    try {
+      result = await terminalBridge.close({ sessionId, closeTmuxSession: true })
+    } catch {
+      return { ok: false, message: 'error.tmux-command-failed' }
+    }
+    if (!result.ok) return result
+    this.removeSession(key, { dispose: true, closeSession: false })
+    return result
   }
 
   private discardLocalSessionAndDismissDetailIfLast(key: string, base: TerminalSessionBase): void {

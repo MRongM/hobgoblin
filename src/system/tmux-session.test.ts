@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest'
-import { buildTmuxSessionName, normalizeTmuxSessionDescriptor } from '#/system/tmux-session.ts'
+import {
+  buildTmuxSessionName,
+  isHobgoblinTmuxSessionName,
+  normalizeTmuxSessionDescriptor,
+  normalizeTmuxSessionPath,
+} from '#/system/tmux-session.ts'
 
 const REFERENCE_DESCRIPTOR = {
   projectRoot: '/srv/projects/example',
@@ -82,5 +87,21 @@ describe('normalizeTmuxSessionDescriptor', () => {
       workingDirectory: '/srv/projects/example/worktrees/feature',
       terminalNumber: 7,
     })
+  })
+})
+
+describe('tmux cleanup protocol helpers', () => {
+  test('accepts only current Hobgoblin v1 session names', () => {
+    expect(isHobgoblinTmuxSessionName('hobgoblin-v1-aebf050981ac829e36100020')).toBe(true)
+    expect(isHobgoblinTmuxSessionName('hobgoblin-v1-AEBF050981AC829E36100020')).toBe(false)
+    expect(isHobgoblinTmuxSessionName('hobgoblin-aebf050981ac829e36100020')).toBe(false)
+    expect(isHobgoblinTmuxSessionName('goblin-aebf050981ac829e36100020')).toBe(false)
+  })
+
+  test('exposes the protocol lexical path normalizer', () => {
+    expect(normalizeTmuxSessionPath('/srv//repo/./feature/')).toBe('/srv/repo/feature')
+    expect(normalizeTmuxSessionPath('/srv/repo/feature/../other')).toBe('/srv/repo/other')
+    expect(normalizeTmuxSessionPath('srv/repo')).toBeNull()
+    expect(normalizeTmuxSessionPath('/srv/repo\nfeature')).toBeNull()
   })
 })

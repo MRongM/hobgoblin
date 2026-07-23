@@ -4,6 +4,7 @@ import type {
   TerminalCatalogMutationResult,
   TerminalCloseSessionsInput,
   TerminalCloseSessionsResult,
+  TerminalCloseResult,
   TerminalCreateInput,
   TerminalMutationResult,
   TerminalNotifyBellInput,
@@ -41,7 +42,7 @@ export interface TerminalWorkerResponseOutputs {
   write: TerminalMutationResult
   resize: TerminalMutationResult
   takeover: TerminalTakeoverResult
-  close: TerminalMutationResult
+  close: TerminalCloseResult
   'close-sessions': TerminalCloseSessionsResult
   'notify-bell': TerminalMutationResult
   'list-sessions': TerminalSessionSummary[]
