@@ -90,7 +90,7 @@ describe('local tmux commands', () => {
     expect(mocks.execa).toHaveBeenNthCalledWith(
       6,
       '/opt/tools/tmux-v2',
-      ['list-sessions', '-F', TMUX_SESSION_LIST_FORMAT],
+      ['-u', 'list-sessions', '-F', TMUX_SESSION_LIST_FORMAT],
       expect.objectContaining({ reject: false }),
     )
   })
@@ -133,7 +133,7 @@ describe('local tmux commands', () => {
     expect(mocks.execa).toHaveBeenNthCalledWith(
       3,
       '/opt/homebrew/bin/tmux',
-      ['list-sessions', '-F', TMUX_SESSION_LIST_FORMAT],
+      ['-u', 'list-sessions', '-F', TMUX_SESSION_LIST_FORMAT],
       expect.objectContaining({ reject: false }),
     )
     await expect(killLocalTmuxSessionByName('hobgoblin-v1-aebf050981ac829e36100020')).resolves.toEqual({
@@ -148,7 +148,7 @@ describe('local tmux commands', () => {
     )
   })
 
-  test('lists sessions with the protocol format', async () => {
+  test('forces UTF-8 when listing sessions so the protocol delimiter survives a missing locale', async () => {
     const run = vi.fn<TmuxProcessRunner>(async () => ({
       ok: true,
       stdout: 'hobgoblin-v1-aebf050981ac829e36100020\t/srv/repo',
@@ -164,7 +164,7 @@ describe('local tmux commands', () => {
         },
       ],
     })
-    expect(run).toHaveBeenCalledWith(['list-sessions', '-F', TMUX_SESSION_LIST_FORMAT], undefined)
+    expect(run).toHaveBeenCalledWith(['-u', 'list-sessions', '-F', TMUX_SESSION_LIST_FORMAT], undefined)
   })
 
   test('treats an installed tmux with no server as an empty list', async () => {
