@@ -75,6 +75,24 @@ describe('projectWorktreeListItemActions', () => {
     expect(projection.contextMenu.tmuxTerminal.disabled).toBe(false)
   })
 
+  test('overrides only the directory-scoped tmux menu copy', () => {
+    const projection = projectWorktreeListItemActions(actionGroups(), {
+      policy: 'ordinary-worktree',
+      hasWorktree: true,
+      tmuxTerminalLabel: 'terminal.restore-directory-tmux',
+    })
+
+    const tmuxTerminal = projection.menuGroups.flat().find((item) => item.id === 'terminalTmux')
+    const externalTerminal = projection.menuGroups.flat().find((item) => item.id === 'externalTerminal')
+
+    expect(tmuxTerminal).toMatchObject({
+      label: 'terminal.restore-directory-tmux',
+      title: 'terminal.restore-directory-tmux',
+      ariaLabel: 'terminal.restore-directory-tmux',
+    })
+    expect(externalTerminal?.label).toBe('externalTerminal')
+  })
+
   test('retains the ordinary non-worktree branch projection', () => {
     const projection = projectWorktreeListItemActions(actionGroups(), {
       policy: 'ordinary-worktree',

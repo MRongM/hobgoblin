@@ -658,6 +658,7 @@ export const ko: Record<DictKey, string> = {
   'terminal.label': '터미널',
   'terminal.new': '새 터미널',
   'terminal.new-with-tmux': 'tmux 터미널',
+  'terminal.restore-directory-tmux': '폴더의 tmux 세션 복원',
   'terminal.internal': '내부 터미널',
   'terminal.external': '외부 터미널',
   'terminal.focus': '터미널 최대화',

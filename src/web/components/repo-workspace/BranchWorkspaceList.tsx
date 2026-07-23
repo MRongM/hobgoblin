@@ -298,7 +298,7 @@ function BranchWorkspaceRow({
   const readyOpenMenuActions: BranchWorkspaceItemAction[] = interactiveReady
     ? [
         {
-          label: 'terminal.new-with-tmux',
+          label: 'terminal.restore-directory-tmux',
           icon: <Terminal aria-hidden="true" />,
           disabled: openActionsDisabled,
           onSelect: () => openInternal('tmux-if-available'),
@@ -510,6 +510,7 @@ function BranchWorkspaceRow({
         icon: <Terminal aria-hidden="true" />,
         onSelect: () => openInternal('tmux-if-available'),
       }}
+      tmuxTerminalLabel={t('terminal.restore-directory-tmux')}
       worktreeTerminalKeys={terminalKeys}
       additionalActions={[...lowFrequencyActions, ...(tmuxCleanup.visible ? [tmuxCleanup.contextAction] : [])]}
     >

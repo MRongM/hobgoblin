@@ -157,7 +157,7 @@ describe('BranchWorkspaceList', () => {
     expect(branchWorkspaceRow?.querySelector('.lucide-folder-tree')).toBeNull()
     const menuItems = await openMenuItems(branchWorkspaceItem)
     expect(menuItems.map((entry) => entry.textContent?.trim())).toEqual([
-      'terminal.new-with-tmux',
+      'terminal.restore-directory-tmux',
       'terminal.external',
       'workspace.branch-workspace.add-members',
       'workspace.branch-workspace.remove-members',
@@ -810,7 +810,7 @@ describe('BranchWorkspaceList', () => {
 
     const menuItems = await openMenuItems(row)
     expect(menuItems.map((item) => item.textContent?.trim())).toEqual([
-      'terminal.new-with-tmux',
+      'terminal.restore-directory-tmux',
       'terminal.external',
       'workspace.branch-workspace.delete',
       'tmux.cleanup.action',
@@ -853,7 +853,7 @@ describe('BranchWorkspaceList', () => {
       'worktrees.open-in-editor-label',
       'terminal.external',
       'terminal.internal',
-      'terminal.new-with-tmux',
+      'terminal.restore-directory-tmux',
       'terminal.close-all',
       'workspace.branch-workspace.delete',
       'tmux.cleanup.action',

@@ -672,6 +672,7 @@ export const ja: Record<DictKey, string> = {
   'terminal.label': 'ターミナル',
   'terminal.new': '新しいターミナル',
   'terminal.new-with-tmux': 'tmux ターミナル',
+  'terminal.restore-directory-tmux': 'フォルダー内の tmux セッションを復元',
   'terminal.internal': '内部ターミナル',
   'terminal.external': '外部ターミナル',
   'terminal.focus': 'ターミナルを最大化',

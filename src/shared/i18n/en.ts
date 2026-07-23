@@ -671,6 +671,7 @@ export const en = {
   'terminal.label': 'Terminal',
   'terminal.new': 'New terminal',
   'terminal.new-with-tmux': 'tmux terminal',
+  'terminal.restore-directory-tmux': 'Restore tmux sessions in folder',
   'terminal.internal': 'Internal terminal',
   'terminal.external': 'External terminal',
   'terminal.focus': 'Maximize terminal',

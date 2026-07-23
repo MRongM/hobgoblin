@@ -18,6 +18,7 @@ const branchActionState = vi.hoisted(() => ({
   editorOnSelect: vi.fn(),
   externalTerminalOnSelect: vi.fn(),
   internalTerminalOnSelect: vi.fn(),
+  tmuxTerminalOnSelect: vi.fn(),
   pullDisabled: false,
 }))
 
@@ -133,6 +134,18 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
         onSelect: branchActionState.internalTerminalOnSelect,
       },
       {
+        id: 'terminalTmux',
+        label: 'terminal.new-with-tmux',
+        title: 'terminal.new-with-tmux',
+        ariaLabel: 'terminal.new-with-tmux',
+        icon: <span data-testid="tmux-terminal-icon" />,
+        disabled: false,
+        busy: false,
+        visible: true,
+        menuOnly: true,
+        onSelect: branchActionState.tmuxTerminalOnSelect,
+      },
+      {
         id: 'externalTerminal',
         label: 'open-external-terminal',
         title: 'open-external-terminal',
@@ -192,6 +205,7 @@ beforeEach(() => {
   branchActionState.editorOnSelect.mockReset()
   branchActionState.externalTerminalOnSelect.mockReset()
   branchActionState.internalTerminalOnSelect.mockReset()
+  branchActionState.tmuxTerminalOnSelect.mockReset()
   branchActionState.pullDisabled = false
 })
 
@@ -701,7 +715,7 @@ describe('BranchRow', () => {
       'worktrees.open-in-editor-label',
       'terminal.external',
       'terminal.internal',
-      'terminal.new-with-tmux',
+      'terminal.restore-directory-tmux',
       'terminal.close-all',
       'tmux.cleanup.action',
     ])
@@ -709,10 +723,12 @@ describe('BranchRow', () => {
     await clickContextMenuItem(row, 'worktrees.open-in-editor-label')
     await clickContextMenuItem(row, 'terminal.external')
     await clickContextMenuItem(row, 'terminal.internal')
+    await clickContextMenuItem(row, 'terminal.restore-directory-tmux')
 
     expect(branchActionState.editorOnSelect).toHaveBeenCalledTimes(1)
     expect(branchActionState.externalTerminalOnSelect).toHaveBeenCalledTimes(1)
     expect(branchActionState.internalTerminalOnSelect).toHaveBeenCalledTimes(1)
+    expect(branchActionState.tmuxTerminalOnSelect).toHaveBeenCalledTimes(1)
   })
 
   test('does not attach the item context menu to a branch without a worktree', async () => {
@@ -1001,6 +1017,7 @@ describe('BranchRow', () => {
     const items = await openRowMenu()
     const labels = items.map((item) => item.textContent?.trim())
     expect(labels).toEqual([
+      'terminal.restore-directory-tmux',
       'open-external-terminal',
       'action.pull',
       'action.push',

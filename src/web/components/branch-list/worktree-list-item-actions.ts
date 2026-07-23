@@ -8,6 +8,7 @@ interface WorktreeListItemActionProjectionOptions {
   policy: WorktreeListItemActionPolicy
   hasWorktree: boolean
   forceDisabled?: boolean
+  tmuxTerminalLabel?: string
 }
 
 export interface WorktreeListItemActionProjection {
@@ -29,7 +30,7 @@ const memberDestructiveExclusions = new Set([...ordinaryDestructiveExclusions, '
 
 export function projectWorktreeListItemActions(
   groups: BranchActionItemGroups,
-  { policy, hasWorktree, forceDisabled = false }: WorktreeListItemActionProjectionOptions,
+  { policy, hasWorktree, forceDisabled = false, tmuxTerminalLabel }: WorktreeListItemActionProjectionOptions,
 ): WorktreeListItemActionProjection {
   const editorItem = hasWorktree ? groups.externalItems.find((item) => item.id === 'editor') : undefined
   const terminalItem = hasWorktree ? groups.externalItems.find((item) => item.id === 'terminal') : undefined
@@ -48,7 +49,9 @@ export function projectWorktreeListItemActions(
     editor: editorItem ? branchListItemAction(editorItem, forceDisabled) : undefined,
     internalTerminal: terminalItem ? branchListItemAction(terminalItem, forceDisabled) : undefined,
     menuGroups: [externalItems, mainItems, groups.patchItems, destructiveItems].map((items) =>
-      items.map((item) => branchListItemAction(item, forceDisabled)),
+      items.map((item) =>
+        branchListItemAction(item, forceDisabled, item.id === 'terminalTmux' ? tmuxTerminalLabel : undefined),
+      ),
     ),
     contextMenu: {
       editor: branchContextMenuAction(
@@ -71,12 +74,16 @@ export function projectWorktreeListItemActions(
   }
 }
 
-export function branchListItemAction(item: BranchActionItem, forceDisabled = false): WorkspaceListItemAction {
+export function branchListItemAction(
+  item: BranchActionItem,
+  forceDisabled = false,
+  labelOverride?: string,
+): WorkspaceListItemAction {
   return {
     id: item.id,
-    label: item.label,
-    title: item.title,
-    ariaLabel: item.ariaLabel,
+    label: labelOverride ?? item.label,
+    title: labelOverride ?? item.title,
+    ariaLabel: labelOverride ?? item.ariaLabel,
     icon: item.icon,
     disabled: forceDisabled || item.disabled,
     busy: item.busy,

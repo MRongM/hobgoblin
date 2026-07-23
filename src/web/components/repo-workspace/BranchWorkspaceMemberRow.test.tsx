@@ -176,6 +176,7 @@ describe('BranchWorkspaceMemberRow', () => {
       'resetHard',
       'cleanupTmuxSessions',
     ])
+    expect(menuItems[0]?.textContent?.trim()).toBe('terminal.restore-directory-tmux')
     expect(menuItems.find((entry) => entry.getAttribute('data-action') === 'pull')?.hasAttribute('data-disabled')).toBe(
       true,
     )
@@ -280,7 +281,7 @@ describe('BranchWorkspaceMemberRow', () => {
       'worktrees.open-in-editor-label',
       'terminal.external',
       'terminal.internal',
-      'terminal.new-with-tmux',
+      'terminal.restore-directory-tmux',
       'terminal.close-all',
       'tmux.cleanup.action',
     ])

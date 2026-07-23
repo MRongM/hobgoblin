@@ -136,6 +136,7 @@ function BranchWorkspaceMemberRowFrame({
     policy: 'branch-workspace-member',
     hasWorktree: true,
     forceDisabled,
+    tmuxTerminalLabel: t('terminal.restore-directory-tmux'),
   })
   const internalTerminalAction = actionProjection.internalTerminal
     ? {
@@ -239,6 +240,7 @@ function BranchWorkspaceMemberRowFrame({
       externalTerminal={actionProjection.contextMenu.externalTerminal}
       internalTerminal={internalTerminalContextAction}
       tmuxTerminal={tmuxTerminalContextAction}
+      tmuxTerminalLabel={t('terminal.restore-directory-tmux')}
       worktreeTerminalKeys={forceDisabled ? [] : terminalKeys}
       additionalActions={tmuxCleanup.visible ? [tmuxCleanup.contextAction] : []}
     >

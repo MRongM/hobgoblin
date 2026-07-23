@@ -76,6 +76,18 @@ describe('WorkspaceItemContextMenu', () => {
     expect(itemByText(items, 'terminal.close-all').hasAttribute('data-disabled')).toBe(true)
   })
 
+  test('uses a directory-scoped tmux label without changing its action', async () => {
+    const tmuxTerminal = vi.fn()
+    renderMenu({ tmuxTerminal, tmuxTerminalLabel: 'terminal.restore-directory-tmux' })
+
+    expect((await openContextMenu()).map((item) => item.textContent?.trim())).toContain(
+      'terminal.restore-directory-tmux',
+    )
+    await clickContextMenuItem('terminal.restore-directory-tmux')
+
+    expect(tmuxTerminal).toHaveBeenCalledTimes(1)
+  })
+
   test('confirms the live aggregate count before closing every current scoped session', async () => {
     const rootKey = '/workspace\0/workspace'
     const memberKey = '/workspace/api\0/worktrees/api-feature'
@@ -113,6 +125,7 @@ function renderMenu(
     externalTerminal?: () => void
     internalTerminal?: () => void
     tmuxTerminal?: () => void
+    tmuxTerminalLabel?: string
     editorDisabled?: boolean
     externalTerminalBusy?: boolean
     internalTerminalDisabled?: boolean
@@ -149,6 +162,7 @@ function renderMenu(
               icon: <span data-testid="tmux-terminal-icon" />,
               onSelect: fixture.tmuxTerminal ?? vi.fn(),
             }}
+            tmuxTerminalLabel={fixture.tmuxTerminalLabel}
             worktreeTerminalKeys={fixture.worktreeTerminalKeys ?? []}
           >
             <button type="button">item trigger</button>
