@@ -27,6 +27,32 @@ function context(overrides: Partial<TelegramBellNotificationContext> = {}): Tele
   }
 }
 
+function completionContext(
+  overrides: Partial<TelegramOutputCompletionNotificationContext> = {},
+): TelegramOutputCompletionNotificationContext {
+  return {
+    ...context(),
+    sessionId: 'session-1',
+    finalOutputSeq: 42,
+    activityDurationMs: 10_000,
+    ...overrides,
+  }
+}
+
+function telegramConfig(overrides: Record<string, unknown> = {}) {
+  return {
+    enabled: true,
+    botToken: '123456:test-token',
+    chatId: '-100123',
+    bellEnabled: true,
+    outputCompletionEnabled: true,
+    outputCompletionMinimumActivitySeconds: 10,
+    includeTerminalOutput: true,
+    outputTailLength: 400,
+    ...overrides,
+  }
+}
+
 function dependencies(overrides: Record<string, unknown> = {}) {
   return {
     getSettingsPrefs: vi.fn(async () => ({
@@ -36,18 +62,10 @@ function dependencies(overrides: Record<string, unknown> = {}) {
       gitNetworkProxyEnabled: true,
       gitNetworkProxyUrl: 'socks5://127.0.0.1:1080',
     })),
-    getTelegramConfig: vi.fn(async () => ({
-      enabled: true,
-      botToken: '123456:test-token',
-      chatId: '-100123',
-      bellEnabled: true,
-      outputCompletionEnabled: true,
-      includeTerminalOutput: true,
-      outputTailLength: 400,
+    getTelegramConfig: vi.fn(async () => telegramConfig()),
+    sendMessage: vi.fn(async (_input: { botToken: string; chatId: string; text: string; proxyUrl?: string }) => ({
+      ok: true as const,
     })),
-    sendMessage: vi.fn(
-      async (_input: { botToken: string; chatId: string; text: string; proxyUrl?: string }) => ({ ok: true as const }),
-    ),
     warn: vi.fn(),
     now: vi.fn(() => 10_000),
     ...overrides,
@@ -83,7 +101,10 @@ describe('Telegram notification write paths', () => {
   test('keeps a distinct branch and separates terminal output', () => {
     expect(
       formatTelegramBellMessage(
-        context({ context: 'api-feature-login', branch: 'feature/login', outputTail: 'tests passed' }),
+        {
+          ...context({ context: 'api-feature-login', branch: 'feature/login' }),
+          outputTail: 'tests passed',
+        },
         'zh',
       ),
     ).toBe(
@@ -102,9 +123,7 @@ describe('Telegram notification write paths', () => {
   })
 
   test('describes idle terminal output without claiming that the process completed', () => {
-    expect(formatTelegramOutputCompletionMessage(context(), 'zh').split('\n')[0]).toBe(
-      '✅ Hobgoblin 终端暂无新输出',
-    )
+    expect(formatTelegramOutputCompletionMessage(context(), 'zh').split('\n')[0]).toBe('✅ Hobgoblin 终端暂无新输出')
     expect(formatTelegramOutputCompletionMessage(context(), 'en').split('\n')[0]).toBe(
       '✅ Hobgoblin terminal has no new output',
     )
@@ -168,9 +187,10 @@ describe('Telegram notification write paths', () => {
   test('deduplicates concurrent completion delivery by server session and final sequence', async () => {
     const deps = dependencies()
     const completion: TelegramOutputCompletionNotificationContext = {
-      ...context({ outputTail: 'tests passed' }),
+      ...context(),
       sessionId: 'session-1',
       finalOutputSeq: 42,
+      activityDurationMs: 10_000,
     }
 
     await Promise.all([
@@ -185,33 +205,139 @@ describe('Telegram notification write paths', () => {
     )
   })
 
-  test('applies the authoritative output length and rejects payloads above the transport maximum', async () => {
+  test('gates completion duration before claiming the idempotency key', async () => {
+    const deps = dependencies()
+
+    await expect(
+      sendConfiguredTelegramOutputCompletionNotification(completionContext({ activityDurationMs: 9_999 }), deps),
+    ).resolves.toEqual({ ok: true })
+    expect(deps.sendMessage).not.toHaveBeenCalled()
+
+    await expect(
+      sendConfiguredTelegramOutputCompletionNotification(completionContext({ activityDurationMs: 10_000 }), deps),
+    ).resolves.toEqual({ ok: true })
+    expect(deps.sendMessage).toHaveBeenCalledTimes(1)
+  })
+
+  test.each([-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])(
+    'rejects invalid activity duration %p',
+    async (activityDurationMs) => {
+      const deps = dependencies()
+      await expect(
+        sendConfiguredTelegramOutputCompletionNotification(completionContext({ activityDurationMs }), deps),
+      ).resolves.toEqual({ ok: false, error: { code: 'invalid-input' } })
+      expect(deps.sendMessage).not.toHaveBeenCalled()
+    },
+  )
+
+  test('does not apply the completion duration threshold to Telegram bells', async () => {
     const deps = dependencies({
+      getTelegramConfig: vi.fn(async () => telegramConfig({ outputCompletionMinimumActivitySeconds: 3_600 })),
+    })
+
+    await sendConfiguredTelegramBellNotification(context({ terminalKey: 'bell-not-duration-gated' }), deps)
+
+    expect(deps.sendMessage).toHaveBeenCalledTimes(1)
+  })
+
+  test('uses the canonical server screen for bell and completion excerpts', async () => {
+    const readTerminalOutputExcerpt = vi.fn(async ({ sessionId }: { sessionId: string }) => ({
+      sessionId,
+      output: 'build passed [hobgoblin0:node* "done workspace"]',
+      sequence: 42,
+    }))
+    const deps = dependencies({ readTerminalOutputExcerpt })
+    const maliciousBell = {
+      ...context({ terminalKey: 'bell-with-screen' }),
+      sessionId: 'session-bell',
+      outputTail: 'renderer supplied text',
+    } as unknown as TelegramBellNotificationContext
+
+    await sendConfiguredTelegramBellNotification(maliciousBell, deps)
+    await sendConfiguredTelegramOutputCompletionNotification(
+      completionContext({ terminalKey: 'completion-with-screen', sessionId: 'session-completion' }),
+      deps,
+    )
+
+    expect(readTerminalOutputExcerpt).toHaveBeenNthCalledWith(1, {
+      sessionId: 'session-bell',
+      maxCharacters: 400,
+    })
+    expect(readTerminalOutputExcerpt).toHaveBeenNthCalledWith(2, {
+      sessionId: 'session-completion',
+      maxCharacters: 400,
+    })
+    for (const call of deps.sendMessage.mock.calls) {
+      expect(call[0].text).toContain('build passed [hobgoblin0:node* "done workspace"]')
+      expect(call[0].text).not.toContain('renderer supplied text')
+    }
+  })
+
+  test('does not read terminal text when output inclusion is disabled', async () => {
+    const readTerminalOutputExcerpt = vi.fn()
+    const deps = dependencies({
+      readTerminalOutputExcerpt,
+      getTelegramConfig: vi.fn(async () => telegramConfig({ includeTerminalOutput: false })),
+    })
+
+    await sendConfiguredTelegramBellNotification(
+      {
+        ...context({ terminalKey: 'bell-without-output' }),
+        sessionId: 'session-bell',
+      } as TelegramBellNotificationContext,
+      deps,
+    )
+
+    expect(readTerminalOutputExcerpt).not.toHaveBeenCalled()
+    expect(deps.sendMessage.mock.calls[0]?.[0].text).not.toContain('── 终端输出 ──')
+  })
+
+  test('falls back to metadata when the terminal screen is unavailable', async () => {
+    const readTerminalOutputExcerpt = vi.fn(async () => null)
+    const deps = dependencies({ readTerminalOutputExcerpt })
+
+    await sendConfiguredTelegramOutputCompletionNotification(
+      completionContext({ terminalKey: 'completion-missing-screen', sessionId: 'missing-session' }),
+      deps,
+    )
+
+    expect(readTerminalOutputExcerpt).toHaveBeenCalledTimes(1)
+    expect(deps.sendMessage).toHaveBeenCalledTimes(1)
+    expect(deps.sendMessage.mock.calls[0]?.[0].text).not.toContain('── 终端输出 ──')
+  })
+
+  test('applies the authoritative output length and ignores legacy Renderer output payloads', async () => {
+    const deps = dependencies({
+      readTerminalOutputExcerpt: vi.fn(async ({ sessionId }: { sessionId: string }) => ({
+        sessionId,
+        output: 'abc🙂de',
+        sequence: 1,
+      })),
       getTelegramConfig: vi.fn(async () => ({
         enabled: true,
         botToken: '123456:test-token',
         chatId: '-100123',
         bellEnabled: true,
         outputCompletionEnabled: true,
+        outputCompletionMinimumActivitySeconds: 10,
         includeTerminalOutput: true,
         outputTailLength: 3,
       })),
     })
 
     await expect(
-      sendConfiguredTelegramBellNotification(context({ outputTail: 'abc🙂de' }), deps),
+      sendConfiguredTelegramBellNotification(context({ sessionId: 'session-bell-limit' }), deps),
     ).resolves.toEqual({ ok: true })
-    expect(deps.sendMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ text: expect.stringMatching(/🙂de$/u) }),
-    )
+    expect(deps.sendMessage).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringMatching(/🙂de$/u) }))
     expect(deps.sendMessage.mock.calls[0]?.[0].text).not.toContain('abc🙂de')
 
     await expect(
       sendConfiguredTelegramOutputCompletionNotification(
         {
-          ...context({ outputTail: 'abc🙂de' }),
+          ...context(),
           sessionId: 'session-authoritative-limit',
           finalOutputSeq: 1,
+          activityDurationMs: 10_000,
         },
         deps,
       ),
@@ -220,39 +346,57 @@ describe('Telegram notification write paths', () => {
     expect(deps.sendMessage.mock.calls[1]?.[0].text).not.toContain('abc🙂de')
 
     await expect(
-      sendConfiguredTelegramBellNotification(context({ terminalKey: 'another', outputTail: 'x'.repeat(4097) }), deps),
-    ).resolves.toEqual({ ok: false, error: { code: 'invalid-input' } })
+      sendConfiguredTelegramBellNotification(
+        {
+          ...context({ terminalKey: 'another' }),
+          outputTail: 'x'.repeat(4097),
+        } as unknown as TelegramBellNotificationContext,
+        deps,
+      ),
+    ).resolves.toEqual({ ok: true })
   })
 
   test('normalizes consecutive terminal whitespace before enforcing the configured length', async () => {
     const deps = dependencies({
+      readTerminalOutputExcerpt: vi.fn(async ({ sessionId }: { sessionId: string }) => ({
+        sessionId,
+        output: `old${' '.repeat(4_096)}\t\r\n new end`,
+        sequence: 1,
+      })),
       getTelegramConfig: vi.fn(async () => ({
         enabled: true,
         botToken: '123456:test-token',
         chatId: '-100123',
         bellEnabled: true,
         outputCompletionEnabled: true,
+        outputCompletionMinimumActivitySeconds: 10,
         includeTerminalOutput: true,
         outputTailLength: 7,
       })),
     })
 
     await expect(
-      sendConfiguredTelegramBellNotification(
-        context({ outputTail: `old${' '.repeat(4_096)}\t\r\n new end` }),
-        deps,
-      ),
+      sendConfiguredTelegramBellNotification(context({ sessionId: 'session-whitespace' }), deps),
     ).resolves.toEqual({ ok: true })
 
     expect(deps.sendMessage.mock.calls[0]?.[0].text).toMatch(/new end$/u)
   })
 
   test('preserves native visible terminal text without redaction', async () => {
-    const deps = dependencies()
     const outputTail = 'token=example-token\turl=https://example.test/path\nuser@example.test <raw>&value'
+    const deps = dependencies({
+      readTerminalOutputExcerpt: vi.fn(async ({ sessionId }: { sessionId: string }) => ({
+        sessionId,
+        output: outputTail,
+        sequence: 1,
+      })),
+    })
 
     await expect(
-      sendConfiguredTelegramBellNotification(context({ terminalKey: 'native-text', outputTail }), deps),
+      sendConfiguredTelegramBellNotification(
+        context({ terminalKey: 'native-text', sessionId: 'session-native-text' }),
+        deps,
+      ),
     ).resolves.toEqual({ ok: true })
 
     expect(deps.sendMessage.mock.calls[0]?.[0].text).toContain(
@@ -262,12 +406,18 @@ describe('Telegram notification write paths', () => {
 
   test('fits terminal output into the complete 4096-character Telegram message budget', async () => {
     const deps = dependencies({
+      readTerminalOutputExcerpt: vi.fn(async ({ sessionId }: { sessionId: string }) => ({
+        sessionId,
+        output: 'z'.repeat(4096),
+        sequence: 1,
+      })),
       getTelegramConfig: vi.fn(async () => ({
         enabled: true,
         botToken: '123456:test-token',
         chatId: '-100123',
         bellEnabled: true,
         outputCompletionEnabled: true,
+        outputCompletionMinimumActivitySeconds: 10,
         includeTerminalOutput: true,
         outputTailLength: 4096,
       })),
@@ -280,7 +430,7 @@ describe('Telegram notification write paths', () => {
         directory: 'd'.repeat(300),
         branch: 'b'.repeat(300),
         terminalTitle: 't'.repeat(300),
-        outputTail: 'z'.repeat(4096),
+        sessionId: 'session-message-budget',
       }),
       deps,
     )

@@ -41,8 +41,12 @@ A renderer-observed state attached to one internal terminal after its output has
 _Avoid_: Running process, command execution state, terminal busy state
 
 **Terminal output completion notification delivery**:
-A best-effort Telegram delivery caused when an observed terminal output activity period becomes idle. It is independent of terminal visibility and focus, and one observed activity period produces at most one delivery across clients. A quiet interval may therefore complete one activity period even when the underlying command has not exited.
+A best-effort Telegram delivery caused when an eligible observed terminal output activity period becomes idle. Eligibility requires the period to meet the configured Telegram completion minimum activity duration; delivery is independent of terminal visibility and focus, and one eligible period produces at most one delivery across clients. A quiet interval may therefore complete one activity period even when the underlying command has not exited.
 _Avoid_: Process exit notification, command completion proof, unread terminal bell
+
+**Telegram completion minimum activity duration**:
+The minimum observed terminal output activity duration required for a terminal output completion notification delivery. It affects only Telegram completion eligibility, not terminal output activity indicators or unread terminal bell delivery.
+_Avoid_: Running-state detection time, process completion delay, breathing-indicator threshold
 
 **Tmux session descriptor**:
 The normalized project root path, terminal working-directory path, and positive terminal slot number that together identify one tmux-backed internal terminal independently of whether Hobgoblin or an external terminal application creates it first. It excludes transport endpoint, display, branch, and ephemeral PTY identity, preserves logical path identity without resolving symbolic links, and is the public input for deterministic tmux session naming.

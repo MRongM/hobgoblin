@@ -5,6 +5,7 @@ import {
   createEmptyTerminalRenderState,
   createTerminalRenderModel,
   queueTerminalRenderWrite,
+  readTerminalRenderOutputExcerpt,
   snapshotTerminalRenderState,
 } from '#/server/terminal/terminal-render-state.ts'
 
@@ -39,10 +40,7 @@ describe('terminal-render-state', () => {
       const state = createEmptyTerminalRenderState()
       state.model = createTerminalRenderModel(40, 6)
       try {
-        queueTerminalRenderWrite(
-          state,
-          'old-1\r\nold-2\r\nold-3\r\nold-4\r\n' + '\x1b[2J\x1b[H' + 'new-1\r\nnew-2\r\n',
-        )
+        queueTerminalRenderWrite(state, 'old-1\r\nold-2\r\nold-3\r\nold-4\r\n' + '\x1b[2J\x1b[H' + 'new-1\r\nnew-2\r\n')
         await state.model.chain
 
         const buffer = (state.model.term as unknown as HeadlessTerminalWithBuffer)._core._bufferService.buffer
@@ -156,6 +154,82 @@ describe('terminal-render-state', () => {
       // \x1b[0m is 4 chars
       const afterReset = state.buffer.slice(4)
       expect(afterReset.startsWith('second-line')).toBe(true)
+    })
+  })
+
+  describe('readTerminalRenderOutputExcerpt', () => {
+    test('returns final screen text without tmux redraw frames or SCS residue', async () => {
+      const state = createEmptyTerminalRenderState()
+      state.model = createTerminalRenderModel(60, 6)
+      try {
+        queueTerminalRenderWrite(state, 'build complete\r\n')
+        queueTerminalRenderWrite(state, '\x1b[6;1H\x1b[2K\x1b(B[hobgoblin0:node* "⠴ workspace"]')
+        queueTerminalRenderWrite(state, '\x1b[6;1H\x1b[2K\x1b(B[hobgoblin0:node* "done workspace"]')
+
+        const excerpt = await readTerminalRenderOutputExcerpt('term_1234567890123456', state, 400)
+
+        expect(excerpt).toMatchObject({ sessionId: 'term_1234567890123456' })
+        expect(excerpt?.output).toContain('build complete')
+        expect(excerpt?.output).toContain('[hobgoblin0:node* "done workspace"]')
+        expect(excerpt?.output).not.toContain('⠴')
+        expect(excerpt?.output).not.toContain('B[')
+      } finally {
+        state.model.term.dispose()
+      }
+    })
+
+    test('joins wrapped screen lines before truncating', async () => {
+      const state = createEmptyTerminalRenderState()
+      state.model = createTerminalRenderModel(5, 3)
+      try {
+        queueTerminalRenderWrite(state, 'abcdefghij')
+        await expect(readTerminalRenderOutputExcerpt('term_1234567890123456', state, 20)).resolves.toMatchObject({
+          output: 'abcdefghij',
+        })
+      } finally {
+        state.model.term.dispose()
+      }
+    })
+
+    test('reads the active alternate screen and applies Unicode-safe bounds', async () => {
+      const state = createEmptyTerminalRenderState()
+      state.model = createTerminalRenderModel(20, 3)
+      try {
+        queueTerminalRenderWrite(state, 'normal screen\x1b[?1049halt ab🙂de')
+        await expect(readTerminalRenderOutputExcerpt('term_1234567890123456', state, 3)).resolves.toMatchObject({
+          output: '🙂de',
+        })
+        await expect(readTerminalRenderOutputExcerpt('term_1234567890123456', state, 1)).resolves.toMatchObject({
+          output: 'e',
+        })
+      } finally {
+        state.model.term.dispose()
+      }
+    })
+
+    test('returns an empty excerpt for an empty screen', async () => {
+      const state = createEmptyTerminalRenderState()
+      state.model = createTerminalRenderModel(20, 3)
+      try {
+        await expect(readTerminalRenderOutputExcerpt('term_1234567890123456', state, 400)).resolves.toMatchObject({
+          output: '',
+        })
+      } finally {
+        state.model.term.dispose()
+      }
+    })
+
+    test('includes retained normal-buffer scrollback', async () => {
+      const state = createEmptyTerminalRenderState()
+      state.model = createTerminalRenderModel(20, 2)
+      try {
+        queueTerminalRenderWrite(state, 'one\r\ntwo\r\nthree')
+        await expect(readTerminalRenderOutputExcerpt('term_1234567890123456', state, 400)).resolves.toMatchObject({
+          output: 'one two three',
+        })
+      } finally {
+        state.model.term.dispose()
+      }
     })
   })
 })

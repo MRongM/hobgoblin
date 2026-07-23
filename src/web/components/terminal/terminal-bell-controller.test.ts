@@ -116,6 +116,7 @@ describe('terminal bell controller', () => {
           chatId: '-100123',
           bellEnabled: true,
           outputCompletionEnabled: false,
+          outputCompletionMinimumActivitySeconds: 10,
           includeTerminalOutput: false,
           outputTailLength: 400,
         },
@@ -123,7 +124,12 @@ describe('terminal bell controller', () => {
     )
     const controller = createTerminalBellController(vi.fn(), vi.fn())
 
-    controller.handleBell(descriptor, { processName: 'bun', canonicalTitle: 'bun run test', visible: false })
+    controller.handleBell(descriptor, {
+      sessionId: 'session-1',
+      processName: 'bun',
+      canonicalTitle: 'bun run test',
+      visible: false,
+    })
     await Promise.resolve()
     await Promise.resolve()
 
@@ -139,13 +145,14 @@ describe('terminal bell controller', () => {
       branch: 'feature/test',
       terminalIndex: 1,
       terminalTitle: 'bun run test',
+      sessionId: 'session-1',
     })
 
     vi.unstubAllGlobals()
     hasFocus.mockRestore()
   })
 
-  test('sends only the configured terminal output suffix to Telegram', async () => {
+  test('sends session identity without renderer output to Telegram', async () => {
     const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(false)
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true }) }))
     vi.stubGlobal('fetch', fetchMock)
@@ -159,6 +166,7 @@ describe('terminal bell controller', () => {
           chatId: '-100123',
           bellEnabled: true,
           outputCompletionEnabled: false,
+          outputCompletionMinimumActivitySeconds: 10,
           includeTerminalOutput: true,
           outputTailLength: 3,
         },
@@ -166,7 +174,7 @@ describe('terminal bell controller', () => {
     )
     const controller = createTerminalBellController(vi.fn(), vi.fn())
 
-    controller.handleBell(descriptor, { processName: 'bun', visible: false, outputTail: 'abc🙂de' })
+    controller.handleBell(descriptor, { sessionId: 'session-1', processName: 'bun', visible: false })
     await Promise.resolve()
     await Promise.resolve()
 
@@ -176,7 +184,9 @@ describe('terminal bell controller', () => {
     })
     expect(telegramCall).toBeDefined()
     const [, request] = telegramCall as unknown as [unknown, RequestInit]
-    expect(JSON.parse(String(request.body))).toMatchObject({ outputTail: '🙂de' })
+    const body = JSON.parse(String(request.body)) as Record<string, unknown>
+    expect(body).toMatchObject({ sessionId: 'session-1' })
+    expect(body).not.toHaveProperty('outputTail')
 
     vi.unstubAllGlobals()
     hasFocus.mockRestore()
@@ -234,6 +244,7 @@ describe('terminal bell controller', () => {
           chatId: '-100123',
           bellEnabled: true,
           outputCompletionEnabled: false,
+          outputCompletionMinimumActivitySeconds: 10,
           includeTerminalOutput: false,
           outputTailLength: 400,
         },

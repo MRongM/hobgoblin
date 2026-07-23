@@ -6,6 +6,8 @@ import type {
   TerminalCreateInput,
   TerminalMutationResult,
   TerminalNotifyBellInput,
+  TerminalOutputExcerpt,
+  TerminalOutputExcerptInput,
   TerminalResizeInput,
   TerminalRestartInput,
   TerminalSessionInput,
@@ -70,6 +72,7 @@ export interface ServerTerminalHost {
     clientId: string,
     input: TerminalSessionSnapshotInput,
   ): MaybePromise<TerminalSessionSnapshot | null>
+  getOutputExcerpt(input: TerminalOutputExcerptInput): MaybePromise<TerminalOutputExcerpt | null>
   /** Handle an incoming realtime message from a client socket. */
   handleRealtimeMessage(clientId: string, attachmentId: string, socket: ServerTerminalSocket, message: string): void
   shutdown(): void

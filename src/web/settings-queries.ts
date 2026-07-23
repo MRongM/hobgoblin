@@ -13,7 +13,10 @@ import {
 } from '#/shared/workspace-layout.ts'
 import { qrCodeDataUrls } from '#/web/lib/qr-code-images.ts'
 import { DEFAULT_PROJECT_LIST_EXPANDED } from '#/shared/settings-defaults.ts'
-import { TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH } from '#/shared/telegram-notifications.ts'
+import {
+  TELEGRAM_OUTPUT_COMPLETION_DEFAULT_ACTIVITY_SECONDS,
+  TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH,
+} from '#/shared/telegram-notifications.ts'
 
 function initialSettingsSnapshot(): SettingsSnapshot | undefined {
   const initialSettings = getInitialBootstrap().initialSettings
@@ -43,6 +46,7 @@ function initialSettingsSnapshot(): SettingsSnapshot | undefined {
       chatId: '',
       bellEnabled: true,
       outputCompletionEnabled: false,
+      outputCompletionMinimumActivitySeconds: TELEGRAM_OUTPUT_COMPLETION_DEFAULT_ACTIVITY_SECONDS,
       includeTerminalOutput: false,
       outputTailLength: TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH,
     },

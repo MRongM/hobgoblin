@@ -61,6 +61,7 @@ describe('server settings snapshot runtime state', () => {
       chatId: '',
       bellEnabled: true,
       outputCompletionEnabled: false,
+      outputCompletionMinimumActivitySeconds: 10,
       includeTerminalOutput: false,
     })
 

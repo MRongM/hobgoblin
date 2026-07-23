@@ -7,6 +7,8 @@ import type {
   TerminalCreateInput,
   TerminalMutationResult,
   TerminalNotifyBellInput,
+  TerminalOutputExcerpt,
+  TerminalOutputExcerptInput,
   TerminalReorderInput,
   TerminalResizeInput,
   TerminalRestartInput,
@@ -32,6 +34,7 @@ export interface TerminalWorkerRequestInputs {
   create: TerminalCreateInput
   prune: { repoRoot: string }
   'session-snapshot': TerminalSessionSnapshotInput
+  'output-excerpt': TerminalOutputExcerptInput
   reorder: TerminalReorderInput
 }
 
@@ -48,6 +51,7 @@ export interface TerminalWorkerResponseOutputs {
   create: TerminalCatalogMutationResult
   prune: { pruned: number; remaining: number }
   'session-snapshot': TerminalSessionSnapshot | null
+  'output-excerpt': TerminalOutputExcerpt | null
   reorder: TerminalMutationResult
 }
 

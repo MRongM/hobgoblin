@@ -185,10 +185,6 @@ vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
       return this.sessionId
     }
 
-    outputTail(): string {
-      return ''
-    }
-
     hydrate(input: {
       sessionId: string
       processName: string

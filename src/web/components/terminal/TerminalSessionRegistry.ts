@@ -627,16 +627,19 @@ export class TerminalSessionRegistry {
       if (!latestSession) return
       this.notifyWorktree(latestSession.descriptor.worktreeTerminalKey)
       const finalOutputSeq = this.outputBurstLastSeq.get(key)
+      const burstStartAt = this.outputBurstStartAt.get(key)
+      const lastOutputAt = this.outputBurstLastAt.get(key)
+      const activityDurationMs =
+        burstStartAt !== undefined && lastOutputAt !== undefined ? Math.max(0, lastOutputAt - burstStartAt) : 0
       const snapshot = latestSession.snapshot()
       if (sessionId && latestSession.currentSessionId() === sessionId && finalOutputSeq !== undefined) {
-        const outputTail = latestSession.outputTail()
         this.onOutputCompletion({
           descriptor: latestSession.descriptor,
           sessionId,
           finalOutputSeq,
+          activityDurationMs,
           processName: snapshot.processName,
           canonicalTitle: snapshot.canonicalTitle,
-          ...(outputTail ? { outputTail } : {}),
         })
       }
     }, TERMINAL_OUTPUT_ACTIVE_IDLE_MS)

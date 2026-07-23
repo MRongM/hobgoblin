@@ -3,13 +3,18 @@ import {
   sendConfiguredTelegramBellNotification,
   sendConfiguredTelegramOutputCompletionNotification,
   sendConfiguredTelegramTestNotification,
+  type TelegramNotificationWriteOptions,
 } from '#/server/modules/telegram-notification-write-paths.ts'
 import type {
   TelegramBellNotificationContext,
   TelegramOutputCompletionNotificationContext,
 } from '#/shared/telegram-notifications.ts'
 
-export function createTelegramNotificationRoutes() {
+export interface TelegramNotificationRouteOptions {
+  readTerminalOutputExcerpt?: TelegramNotificationWriteOptions['readTerminalOutputExcerpt']
+}
+
+export function createTelegramNotificationRoutes(options: TelegramNotificationRouteOptions = {}) {
   const app = new Hono()
   app.post('/test', async (c) =>
     c.json(
@@ -23,6 +28,7 @@ export function createTelegramNotificationRoutes() {
     return c.json(
       await sendConfiguredTelegramBellNotification(context as TelegramBellNotificationContext, {
         acceptLanguage: c.req.header('accept-language'),
+        readTerminalOutputExcerpt: options.readTerminalOutputExcerpt,
       }),
     )
   })
@@ -31,6 +37,7 @@ export function createTelegramNotificationRoutes() {
     return c.json(
       await sendConfiguredTelegramOutputCompletionNotification(context as TelegramOutputCompletionNotificationContext, {
         acceptLanguage: c.req.header('accept-language'),
+        readTerminalOutputExcerpt: options.readTerminalOutputExcerpt,
       }),
     )
   })

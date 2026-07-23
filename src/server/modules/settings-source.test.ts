@@ -20,6 +20,20 @@ function writeSettingsFile(partial: Record<string, unknown>): void {
   writeFileSync(path.join(tmp, 'server-settings.json'), JSON.stringify(partial), 'utf-8')
 }
 
+function telegramSettingsUpdate(overrides: Record<string, unknown> = {}) {
+  return {
+    enabled: false,
+    botToken: '',
+    chatId: '',
+    bellEnabled: true,
+    outputCompletionEnabled: false,
+    outputCompletionMinimumActivitySeconds: 10,
+    includeTerminalOutput: false,
+    outputTailLength: 400,
+    ...overrides,
+  }
+}
+
 afterEach(async () => {
   const mod = await import('#/server/modules/settings-source.ts')
   mod.resetServerSettingsSourceForTests()
@@ -99,6 +113,53 @@ test('defaults a missing terminal notification preference on and preserves expli
   })
 })
 
+test('defaults missing Telegram completion activity duration to ten seconds', async () => {
+  useTempServerSettingsDir()
+  writeSettingsFile({})
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(mod.getServerTelegramNotificationSettings()).resolves.toMatchObject({
+    outputCompletionMinimumActivitySeconds: 10,
+  })
+})
+
+test.each([0, 3_601, 1.5, Number.NaN, '10', null])(
+  'normalizes corrupt persisted Telegram completion activity duration %p to ten seconds',
+  async (persisted) => {
+    useTempServerSettingsDir()
+    writeSettingsFile({ telegramOutputCompletionMinimumActivitySeconds: persisted })
+    const mod = await import('#/server/modules/settings-source.ts')
+
+    await expect(mod.getServerTelegramNotificationSettings()).resolves.toMatchObject({
+      outputCompletionMinimumActivitySeconds: 10,
+    })
+  },
+)
+
+test.each([1, 10, 30, 3_600])('persists valid Telegram completion activity duration %i', async (seconds) => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await mod.updateServerTelegramNotificationSettings(
+    telegramSettingsUpdate({ outputCompletionMinimumActivitySeconds: seconds }),
+  )
+
+  await expect(mod.getServerTelegramNotificationSettings()).resolves.toMatchObject({
+    outputCompletionMinimumActivitySeconds: seconds,
+  })
+})
+
+test.each([0, 3_601, 1.5, Number.NaN])('rejects invalid Telegram completion activity duration %p', async (seconds) => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(
+    mod.updateServerTelegramNotificationSettings(
+      telegramSettingsUpdate({ outputCompletionMinimumActivitySeconds: seconds }),
+    ),
+  ).rejects.toMatchObject({ code: 'invalid-input' })
+})
+
 test('keeps Telegram Bot Token server-only and retains it on a blank update', async () => {
   useTempServerSettingsDir()
   const mod = await import('#/server/modules/settings-source.ts')
@@ -110,6 +171,7 @@ test('keeps Telegram Bot Token server-only and retains it on a blank update', as
       chatId: '-1001234567890',
       bellEnabled: false,
       outputCompletionEnabled: true,
+      outputCompletionMinimumActivitySeconds: 30,
       includeTerminalOutput: true,
       outputTailLength: 4096,
     }),
@@ -119,6 +181,7 @@ test('keeps Telegram Bot Token server-only and retains it on a blank update', as
     chatId: '-1001234567890',
     bellEnabled: false,
     outputCompletionEnabled: true,
+    outputCompletionMinimumActivitySeconds: 30,
     includeTerminalOutput: true,
     outputTailLength: 4096,
   })
@@ -131,6 +194,7 @@ test('keeps Telegram Bot Token server-only and retains it on a blank update', as
     chatId: '-1001234567890',
     bellEnabled: true,
     outputCompletionEnabled: false,
+    outputCompletionMinimumActivitySeconds: 10,
     includeTerminalOutput: false,
     outputTailLength: 200,
   })
@@ -148,6 +212,7 @@ test('does not enable Telegram notifications without a Bot Token and Chat ID', a
       chatId: '',
       bellEnabled: true,
       outputCompletionEnabled: false,
+      outputCompletionMinimumActivitySeconds: 10,
       includeTerminalOutput: false,
       outputTailLength: 400,
     }),
@@ -159,6 +224,7 @@ test('does not enable Telegram notifications without a Bot Token and Chat ID', a
     chatId: '',
     bellEnabled: true,
     outputCompletionEnabled: false,
+    outputCompletionMinimumActivitySeconds: 10,
     includeTerminalOutput: false,
     outputTailLength: 400,
   })
@@ -176,6 +242,7 @@ test('normalizes persisted Telegram output length and rejects invalid writes', a
       chatId: '',
       bellEnabled: true,
       outputCompletionEnabled: false,
+      outputCompletionMinimumActivitySeconds: 10,
       includeTerminalOutput: false,
       outputTailLength: 0,
     }),
@@ -186,6 +253,7 @@ test('normalizes persisted Telegram output length and rejects invalid writes', a
       chatId: '',
       bellEnabled: true,
       outputCompletionEnabled: false,
+      outputCompletionMinimumActivitySeconds: 10,
       includeTerminalOutput: false,
       outputTailLength: 1.5,
     }),
@@ -197,6 +265,7 @@ test('normalizes persisted Telegram output length and rejects invalid writes', a
       chatId: '',
       bellEnabled: true,
       outputCompletionEnabled: false,
+      outputCompletionMinimumActivitySeconds: 10,
       includeTerminalOutput: false,
       outputTailLength: 1,
     }),
@@ -219,6 +288,7 @@ test('tracks a saved Bot Token independently from the Chat ID while disabled', a
       chatId: '',
       bellEnabled: true,
       outputCompletionEnabled: false,
+      outputCompletionMinimumActivitySeconds: 10,
       includeTerminalOutput: false,
       outputTailLength: 200,
     }),
@@ -228,6 +298,7 @@ test('tracks a saved Bot Token independently from the Chat ID while disabled', a
     chatId: '',
     bellEnabled: true,
     outputCompletionEnabled: false,
+    outputCompletionMinimumActivitySeconds: 10,
     includeTerminalOutput: false,
     outputTailLength: 200,
   })
@@ -245,6 +316,7 @@ test('rejects malformed Telegram channel usernames', async () => {
       chatId: '@1starts_with_digit',
       bellEnabled: true,
       outputCompletionEnabled: false,
+      outputCompletionMinimumActivitySeconds: 10,
       includeTerminalOutput: false,
       outputTailLength: 200,
     }),
@@ -267,6 +339,7 @@ test('normalizes missing and invalid persisted Telegram notification settings', 
     chatId: '',
     bellEnabled: true,
     outputCompletionEnabled: false,
+    outputCompletionMinimumActivitySeconds: 10,
     includeTerminalOutput: false,
     outputTailLength: 400,
   })
@@ -288,6 +361,7 @@ test('migrates legacy Telegram settings to bell-only delivery', async () => {
     chatId: '-100123',
     bellEnabled: true,
     outputCompletionEnabled: false,
+    outputCompletionMinimumActivitySeconds: 10,
     includeTerminalOutput: false,
     outputTailLength: 400,
   })

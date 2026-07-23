@@ -8,6 +8,7 @@ import {
   type TerminalController,
   type TerminalExitEvent,
   type TerminalOwnershipEvent,
+  type TerminalOutputExcerpt,
   type TerminalOutputEvent,
   type TerminalSessionPhase,
   type TerminalSessionSnapshot,
@@ -35,6 +36,7 @@ import {
   queueTerminalRenderResize,
   queueTerminalRenderWrite,
   resetTerminalRenderState,
+  readTerminalRenderOutputExcerpt,
   snapshotTerminalRenderState,
   type TerminalRenderState,
 } from '#/server/terminal/terminal-render-state.ts'
@@ -340,6 +342,12 @@ export class TerminalSessionManager<TOwner extends string | number> {
     const session = this.sessionsById.get(sessionId)
     if (!session) return null
     return await snapshotTerminalRenderState(sessionId, session.render)
+  }
+
+  async outputExcerpt(sessionId: string, maxCharacters: number): Promise<TerminalOutputExcerpt | null> {
+    const session = this.sessionsById.get(sessionId)
+    if (!session) return null
+    return await readTerminalRenderOutputExcerpt(sessionId, session.render, maxCharacters)
   }
 
   async listSessions(scope: string): Promise<TerminalSessionSummary[]> {

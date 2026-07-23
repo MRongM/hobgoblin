@@ -4,31 +4,10 @@ export const TELEGRAM_CONTEXT_TEXT_MAX_LENGTH = 300
 export const TELEGRAM_OUTPUT_TAIL_MIN_LENGTH = 1
 export const TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH = 400
 export const TELEGRAM_OUTPUT_TAIL_MAX_LENGTH = 4096
+export const TELEGRAM_OUTPUT_COMPLETION_MIN_ACTIVITY_SECONDS = 1
+export const TELEGRAM_OUTPUT_COMPLETION_DEFAULT_ACTIVITY_SECONDS = 10
+export const TELEGRAM_OUTPUT_COMPLETION_MAX_ACTIVITY_SECONDS = 3_600
 export const TELEGRAM_MESSAGE_MAX_LENGTH = 4096
-export const TELEGRAM_OUTPUT_FRAME_CHARACTERS = '╭╮╰╯│┌┐└┘├┤┬┴┼'
-
-const TELEGRAM_OUTPUT_FRAME_RUN = new RegExp(`[${TELEGRAM_OUTPUT_FRAME_CHARACTERS}]+`, 'gu')
-
-export function normalizeTelegramOutput(value: string | undefined): string | undefined {
-  if (!value) return undefined
-  const normalized = value
-    .replace(TELEGRAM_OUTPUT_FRAME_RUN, ' ')
-    .replace(/[ \t\r\n]+/gu, ' ')
-    .replace(/─{4,}/gu, '───')
-    .trim()
-  return normalized || undefined
-}
-
-export function truncateTelegramOutputTail(value: string | undefined, maxCharacters: number): string | undefined {
-  if (maxCharacters < 1) return undefined
-  const normalized = normalizeTelegramOutput(value)
-  if (!normalized) return undefined
-  const characters = Array.from(normalized)
-  if (characters.length <= maxCharacters) return normalized
-  const suffix = characters.slice(-maxCharacters)
-  if (suffix[0] === ' ') suffix.shift()
-  return suffix.join('') || undefined
-}
 
 export type TelegramNotificationContextKind = 'worktree' | 'workspace' | 'branch-workspace' | 'directory'
 
@@ -38,6 +17,7 @@ export interface TelegramNotificationSettingsSnapshot {
   chatId: string
   bellEnabled: boolean
   outputCompletionEnabled: boolean
+  outputCompletionMinimumActivitySeconds: number
   includeTerminalOutput: boolean
   outputTailLength: number
 }
@@ -48,6 +28,7 @@ export interface TelegramNotificationSettingsUpdateInput {
   chatId: string
   bellEnabled: boolean
   outputCompletionEnabled: boolean
+  outputCompletionMinimumActivitySeconds: number
   includeTerminalOutput: boolean
   outputTailLength: number
 }
@@ -61,12 +42,13 @@ export interface TelegramBellNotificationContext {
   branch?: string
   terminalIndex: number
   terminalTitle?: string
-  outputTail?: string
+  sessionId?: string
 }
 
 export interface TelegramOutputCompletionNotificationContext extends TelegramBellNotificationContext {
   sessionId: string
   finalOutputSeq: number
+  activityDurationMs: number
 }
 
 export type TelegramNotificationErrorCode =

@@ -1,6 +1,17 @@
 import * as v from 'valibot'
 
 export const TERMINAL_SCROLLBACK_LINES = 50_000
+
+export interface TerminalOutputExcerptInput {
+  sessionId: string
+  maxCharacters: number
+}
+
+export interface TerminalOutputExcerpt {
+  sessionId: string
+  output: string
+  sequence: number
+}
 export const TERMINAL_SIZE_LIMITS = {
   minCols: 1,
   maxCols: 500,

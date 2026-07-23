@@ -5,6 +5,7 @@ import {
   closeServerTerminalSessions,
   createServerTerminal,
   getServerTerminalSessionSnapshot,
+  getServerTerminalOutputExcerpt,
   handleRealtimeServerMessage,
   listServerTerminalSessions,
   notifyServerTerminalBell,
@@ -75,6 +76,9 @@ export interface TerminalFacade {
     clientId: string,
     input: TerminalWorkerRequestInputs['session-snapshot'],
   ): MaybePromise<TerminalWorkerResponseOutputs['session-snapshot']>
+  getOutputExcerpt(
+    input: TerminalWorkerRequestInputs['output-excerpt'],
+  ): MaybePromise<TerminalWorkerResponseOutputs['output-excerpt']>
   reorder(
     clientId: string,
     input: TerminalWorkerRequestInputs['reorder'],
@@ -105,6 +109,7 @@ export function createTerminalFacade(): TerminalFacade {
       return pruneServerTerminals(clientId, input.repoRoot)
     },
     getSessionSnapshot: getServerTerminalSessionSnapshot,
+    getOutputExcerpt: getServerTerminalOutputExcerpt,
     reorder: reorderServerTerminals,
     handleRealtimeMessage: handleRealtimeServerMessage,
     shutdown: closeAllServerTerminalSessions,
