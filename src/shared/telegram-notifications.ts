@@ -5,10 +5,17 @@ export const TELEGRAM_OUTPUT_TAIL_MIN_LENGTH = 1
 export const TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH = 400
 export const TELEGRAM_OUTPUT_TAIL_MAX_LENGTH = 4096
 export const TELEGRAM_MESSAGE_MAX_LENGTH = 4096
+export const TELEGRAM_OUTPUT_FRAME_CHARACTERS = '╭╮╰╯│┌┐└┘├┤┬┴┼'
+
+const TELEGRAM_OUTPUT_FRAME_RUN = new RegExp(`[${TELEGRAM_OUTPUT_FRAME_CHARACTERS}]+`, 'gu')
 
 export function normalizeTelegramOutput(value: string | undefined): string | undefined {
   if (!value) return undefined
-  const normalized = value.replace(/[ \t\r\n]+/gu, ' ').replace(/─{4,}/gu, '───').trim()
+  const normalized = value
+    .replace(TELEGRAM_OUTPUT_FRAME_RUN, ' ')
+    .replace(/[ \t\r\n]+/gu, ' ')
+    .replace(/─{4,}/gu, '───')
+    .trim()
   return normalized || undefined
 }
 
