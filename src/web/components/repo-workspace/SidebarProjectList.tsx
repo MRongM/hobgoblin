@@ -25,6 +25,7 @@ import { useT } from '#/web/stores/i18n.ts'
 import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
 import { useProjectExternalOpenActions } from '#/web/hooks/useProjectExternalOpenActions.ts'
 import { useProjectInternalTerminalAction } from '#/web/hooks/useProjectInternalTerminalAction.ts'
+import { useAssociatedTmuxCleanup } from '#/web/hooks/useAssociatedTmuxCleanup.tsx'
 import { WorkspaceItemContextMenu } from '#/web/components/repo-workspace/WorkspaceItemContextMenu.tsx'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import {
@@ -33,6 +34,7 @@ import {
   WorkspaceListItemMenu,
   type WorkspaceListItemAction,
 } from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
+import { parseRemoteRepoId } from '#/shared/remote-repo.ts'
 
 const restrictToVerticalProjectList: Modifier = ({ transform }) => ({ ...transform, x: 0 })
 
@@ -103,17 +105,26 @@ function SortableProjectRow({
     id: project.id,
   })
   const location = projectLocation(project.id)
+  const remote = parseRemoteRepoId(project.id)
+  const remotePrefix = remote ? `${remote.alias}:` : null
+  const displayName =
+    remotePrefix && !project.name.startsWith(remotePrefix) ? `${remotePrefix}${project.name}` : project.name
   const projectKind = project.isGitRepo ? 'git' : 'plain'
   const ProjectIcon = project.isGitRepo ? FolderGit2 : Folder
   const projectExternalActions = useProjectExternalOpenActions(project.id)
   const projectInternalTerminalAction = useProjectInternalTerminalAction(project.id)
+  const tmuxCleanup = useAssociatedTmuxCleanup({
+    projectRoot: project.id,
+    itemPath: remote?.remotePath ?? project.id,
+    disabled: false,
+  })
   const changeCountLabel =
     project.changeCount > 0 ? t('branch-status.worktree-dirty', { n: project.changeCount }) : null
   const editorAction: WorkspaceListItemAction | undefined = projectExternalActions.visible
     ? {
         id: 'editor',
         label: t('worktrees.open-in-editor-label'),
-        ariaLabel: `${t('worktrees.open-in-editor-label')} ${project.name}`,
+        ariaLabel: `${t('worktrees.open-in-editor-label')} ${displayName}`,
         icon: <EditorAppIcon pref={projectExternalActions.editor.iconPref} />,
         disabled: projectExternalActions.editor.disabled,
         busy: projectExternalActions.editor.busy,
@@ -147,87 +158,95 @@ function SortableProjectRow({
   }
   const closeAction: WorkspaceListItemAction = {
     id: 'closeProject',
-    label: t('repo-tabs.close-named', { name: project.name }),
+    label: t('repo-tabs.close-named', { name: displayName }),
     icon: <X aria-hidden="true" />,
     disabled: false,
     onSelect: () => onClose(project.id),
   }
 
   return (
-    <WorkspaceItemContextMenu
-      editor={{
-        ...projectExternalActions.editor,
-        icon: <EditorAppIcon pref={projectExternalActions.editor.iconPref} />,
-      }}
-      externalTerminal={{
-        ...projectExternalActions.externalTerminal,
-        icon: <TerminalAppIcon pref={projectExternalActions.externalTerminal.iconPref} />,
-      }}
-      internalTerminal={{ ...projectInternalTerminalAction, icon: <Terminal aria-hidden="true" /> }}
-      tmuxTerminal={{
-        ...projectInternalTerminalAction,
-        icon: <Terminal aria-hidden="true" />,
-        onSelect: () => projectInternalTerminalAction.onSelect('tmux-if-available'),
-      }}
-      worktreeTerminalKeys={project.terminalWorktreeKeys}
-    >
-      <WorkspaceListItemFrame
-        size="project"
-        itemRef={setNodeRef}
-        itemStyle={{ transform: CSS.Transform.toString(transform), transition }}
-        selected={active}
-        unavailable={project.unavailable}
-        dragging={isDragging}
-        leadingIcon={
-          <ProjectIcon
-            className={active ? 'size-4 text-selected-muted-foreground' : 'size-4 text-muted-foreground'}
-            aria-hidden="true"
-          />
-        }
-        dragHandle={{
-          label: t('workspace.repository-reorder'),
-          setActivatorNodeRef,
-          props: { ...attributes, ...listeners },
+    <>
+      <WorkspaceItemContextMenu
+        editor={{
+          ...projectExternalActions.editor,
+          icon: <EditorAppIcon pref={projectExternalActions.editor.iconPref} />,
         }}
-        buttonProps={{
-          onClick: () => onActivate(project.id),
-          'data-project-kind': projectKind,
-          'aria-current': active ? 'page' : undefined,
-          title: project.unavailable ? t('repo-unavailable.title') : location,
+        externalTerminal={{
+          ...projectExternalActions.externalTerminal,
+          icon: <TerminalAppIcon pref={projectExternalActions.externalTerminal.iconPref} />,
         }}
-        actions={
-          <WorkspaceListItemActionDock
-            editor={editorAction}
-            internalTerminal={internalTerminalAction}
-            moreMenu={
-              <WorkspaceListItemMenu
-                label={t('action.menu')}
-                groups={[[tmuxTerminalAction, externalTerminalAction], [closeAction]]}
-              />
-            }
-          />
-        }
+        internalTerminal={{ ...projectInternalTerminalAction, icon: <Terminal aria-hidden="true" /> }}
+        tmuxTerminal={{
+          ...projectInternalTerminalAction,
+          icon: <Terminal aria-hidden="true" />,
+          onSelect: () => projectInternalTerminalAction.onSelect('tmux-if-available'),
+        }}
+        worktreeTerminalKeys={project.terminalWorktreeKeys}
+        additionalActions={tmuxCleanup.visible ? [tmuxCleanup.contextAction] : []}
       >
-        <span className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="min-w-0 truncate text-sm font-medium leading-4">{project.name}</span>
-          {project.changeCount > 0 ? (
-            <Badge
-              data-testid="project-change-count-badge"
-              aria-label={changeCountLabel ?? undefined}
-              title={changeCountLabel ?? undefined}
-              variant="attention"
-              className="h-4 shrink-0 gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums"
-            >
-              <GitCompareArrows size={10} aria-hidden="true" />
-              {project.changeCount}
-            </Badge>
-          ) : null}
-          <ProjectTerminalStatus
-            terminalWorktreeKeys={project.terminalWorktreeKeys}
-            branchWorkspaceRootId={project.branchWorkspaceRootId}
-          />
-        </span>
-      </WorkspaceListItemFrame>
-    </WorkspaceItemContextMenu>
+        <WorkspaceListItemFrame
+          size="project"
+          itemRef={setNodeRef}
+          itemStyle={{ transform: CSS.Transform.toString(transform), transition }}
+          selected={active}
+          unavailable={project.unavailable}
+          dragging={isDragging}
+          leadingIcon={
+            <ProjectIcon
+              className={active ? 'size-4 text-selected-muted-foreground' : 'size-4 text-muted-foreground'}
+              aria-hidden="true"
+            />
+          }
+          dragHandle={{
+            label: t('workspace.repository-reorder'),
+            setActivatorNodeRef,
+            props: { ...attributes, ...listeners },
+          }}
+          buttonProps={{
+            onClick: () => onActivate(project.id),
+            'data-project-kind': projectKind,
+            'aria-current': active ? 'page' : undefined,
+            title: project.unavailable ? t('repo-unavailable.title') : location,
+          }}
+          actions={
+            <WorkspaceListItemActionDock
+              editor={editorAction}
+              internalTerminal={internalTerminalAction}
+              moreMenu={
+                <WorkspaceListItemMenu
+                  label={t('action.menu')}
+                  groups={[
+                    [tmuxTerminalAction, externalTerminalAction],
+                    [closeAction],
+                    ...(tmuxCleanup.visible ? [[tmuxCleanup.action]] : []),
+                  ]}
+                />
+              }
+            />
+          }
+        >
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="min-w-0 truncate text-sm font-medium leading-4">{displayName}</span>
+            {project.changeCount > 0 ? (
+              <Badge
+                data-testid="project-change-count-badge"
+                aria-label={changeCountLabel ?? undefined}
+                title={changeCountLabel ?? undefined}
+                variant="attention"
+                className="h-4 shrink-0 gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums"
+              >
+                <GitCompareArrows size={10} aria-hidden="true" />
+                {project.changeCount}
+              </Badge>
+            ) : null}
+            <ProjectTerminalStatus
+              terminalWorktreeKeys={project.terminalWorktreeKeys}
+              branchWorkspaceRootId={project.branchWorkspaceRootId}
+            />
+          </span>
+        </WorkspaceListItemFrame>
+      </WorkspaceItemContextMenu>
+      {tmuxCleanup.dialog}
+    </>
   )
 }
