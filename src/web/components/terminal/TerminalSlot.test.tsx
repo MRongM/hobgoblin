@@ -253,7 +253,7 @@ describe('TerminalSlot', () => {
     document.body.appendChild(container)
     const root: Root = createRoot(container)
     const attach = vi.fn()
-    const { descriptor, worktreeSnapshot, snapshot } = controllerFixture()
+    const { worktreeSnapshot, snapshot } = controllerFixture()
     const context = terminalContext({ attach })
     const readContext: TerminalSessionReadContextValue = {
       worktreeSnapshot: () => worktreeSnapshot,

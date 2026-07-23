@@ -431,7 +431,12 @@ export function TerminalTabs({
         message={
           <div className="flex flex-col gap-3">
             <p>{t('terminal.close-confirm-body', { name: pendingCloseSession?.title ?? '' })}</p>
-            {pendingCloseSession?.tmuxBacked === true && (
+            {pendingCloseSession?.tmuxBacked === true && pendingCloseSession.tmuxCloseSupported === false && (
+              <p className="text-xs text-muted-foreground">
+                {t('terminal.close-tmux-session-exit-required')}
+              </p>
+            )}
+            {pendingCloseSession?.tmuxBacked === true && pendingCloseSession.tmuxCloseSupported !== false && (
               <ConfirmCheckbox checked={closeTmuxSession} onCheckedChange={setCloseTmuxSession} destructive>
                 <span className="flex flex-col gap-1">
                   <span>{t('terminal.close-tmux-session')}</span>
@@ -595,42 +600,6 @@ function TerminalTabChrome({
       {session.hasBell && <TerminalBellDot label={t('terminal.bell-unread')} pingClassName="opacity-100" />}
       {compactSwitcher && <ChevronDown className="size-3.5 shrink-0" aria-hidden="true" />}
     </ToolbarClosableTab>
-  )
-}
-
-function TerminalTab({
-  session,
-  isActive,
-  isSelected,
-  index,
-  total,
-  contextSessionCount,
-  tabId,
-  focusRegistry,
-  onSelect,
-  onClose,
-  onNew,
-  onRequestClose,
-  onKeyDown,
-  t,
-}: TerminalTabProps) {
-  return (
-    <TerminalTabChrome
-      session={session}
-      isActive={isActive}
-      isSelected={isSelected}
-      index={index}
-      total={total}
-      contextSessionCount={contextSessionCount}
-      tabId={tabId}
-      buttonRef={focusRegistry.setRef(session.key)}
-      onSelect={onSelect}
-      onClose={onClose}
-      onNew={onNew}
-      onRequestClose={onRequestClose}
-      onKeyDown={onKeyDown}
-      t={t}
-    />
   )
 }
 

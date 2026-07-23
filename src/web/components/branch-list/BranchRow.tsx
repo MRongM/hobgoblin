@@ -1,4 +1,4 @@
-import { type ComponentProps, type CSSProperties, type RefObject, useCallback, useMemo } from 'react'
+import { type CSSProperties, type RefObject, useCallback, useMemo } from 'react'
 import { Trash2 } from 'lucide-react'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import { BranchSummaryInline } from '#/web/components/repo-workspace/BranchSummaryInline.tsx'
@@ -32,7 +32,6 @@ interface BranchRowProps {
   workspaceRemoveAction?: { label: string; onSelect: () => void }
   selected: string | null
   onSelectBranch: (branch: string) => void
-  onOpenBranchStatus: (branch: string) => void
   selectedRef: RefObject<HTMLLIElement | null>
   showActions?: boolean
   actionMenuOpen?: boolean
@@ -47,7 +46,6 @@ export function BranchRow({
   workspaceRemoveAction,
   selected,
   onSelectBranch,
-  onOpenBranchStatus,
   selectedRef,
   showActions = true,
   actionMenuOpen,
@@ -107,7 +105,6 @@ export function BranchRow({
             ? 'pr-[5.75rem]'
             : undefined,
         onClick: () => onSelectBranch(branch.name),
-        onDoubleClick: () => onOpenBranchStatus(branch.name),
       }}
       auxiliaryActions={workspaceRemoveAction ? <WorkspaceRemoveButton action={workspaceRemoveAction} /> : undefined}
       actions={

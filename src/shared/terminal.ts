@@ -90,6 +90,17 @@ export interface TerminalCreateInput {
   attachmentId?: string
 }
 
+export interface TerminalOpenTmuxSessionsInput {
+  repoRoot: string
+  branch: string
+  worktreePath: string
+  targetKind?: 'branch-workspace'
+  branchWorkspaceId?: string
+  cols?: number
+  rows?: number
+  attachmentId?: string
+}
+
 export interface TerminalRestartInput {
   sessionId: string
   cols: number
@@ -194,6 +205,8 @@ export interface TerminalSessionSummary {
   message: string | null
   windowsPty?: TerminalWindowsPty
   tmuxBacked?: boolean
+  tmuxSessionName?: string
+  tmuxCloseSupported?: boolean
 }
 
 export interface TerminalSessionSnapshotInput {
@@ -249,6 +262,7 @@ export interface TerminalSocketRequestInputs {
   close: TerminalSessionInput
   'list-sessions': TerminalListSessionsInput
   create: TerminalCreateInput
+  'open-tmux-sessions': TerminalOpenTmuxSessionsInput
   prune: { repoRoot: string }
   'session-snapshot': TerminalSessionSnapshotInput
   reorder: TerminalReorderInput
@@ -263,6 +277,7 @@ export interface TerminalSocketResponseOutputs {
   close: TerminalCloseResult
   'list-sessions': TerminalSessionSummary[]
   create: TerminalCatalogMutationResult
+  'open-tmux-sessions': TerminalCatalogMutationResult
   prune: { pruned: number; remaining: number }
   'session-snapshot': TerminalSessionSnapshot | null
   reorder: TerminalMutationResult
@@ -317,6 +332,7 @@ const TERMINAL_SOCKET_ACTIONS = [
   'close',
   'list-sessions',
   'create',
+  'open-tmux-sessions',
   'prune',
   'session-snapshot',
   'reorder',
@@ -384,6 +400,16 @@ const TerminalCreateInputSchema = v.object({
   rows: v.optional(TerminalRowsSchema),
   attachmentId: TerminalOptionalAttachmentIdSchema,
 })
+const TerminalOpenTmuxSessionsInputSchema = v.object({
+  repoRoot: v.string(),
+  branch: v.string(),
+  worktreePath: v.string(),
+  targetKind: v.optional(v.literal('branch-workspace')),
+  branchWorkspaceId: v.optional(v.string()),
+  cols: v.optional(TerminalColsSchema),
+  rows: v.optional(TerminalRowsSchema),
+  attachmentId: TerminalOptionalAttachmentIdSchema,
+})
 const TerminalPruneInputSchema = v.object({
   repoRoot: v.string(),
 })
@@ -409,6 +435,8 @@ const TerminalSessionSummarySchema = v.object({
   message: v.nullable(v.string()),
   windowsPty: v.optional(TerminalWindowsPtySchema),
   tmuxBacked: v.optional(v.boolean()),
+  tmuxSessionName: v.optional(v.string()),
+  tmuxCloseSupported: v.optional(v.boolean()),
 })
 const TerminalSessionSnapshotSchema = v.object({
   sessionId: v.string(),
@@ -509,6 +537,12 @@ const TerminalClientMessageSchema = v.variant('type', [
     requestId: TerminalRequestIdSchema,
     action: v.literal('create'),
     input: TerminalCreateInputSchema,
+  }),
+  v.object({
+    type: v.literal('request'),
+    requestId: TerminalRequestIdSchema,
+    action: v.literal('open-tmux-sessions'),
+    input: TerminalOpenTmuxSessionsInputSchema,
   }),
   v.object({
     type: v.literal('request'),

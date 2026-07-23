@@ -60,6 +60,10 @@ _Avoid_: Terminal session ID, tmux connection settings, SSH terminal identity
 The deterministic `hobgoblin-v1-<digest>` identifier derived from a tmux session descriptor and used by internal and external terminal applications to create or attach to the same tmux session. It is distinct from a `terminal-N` slot, a server terminal key, and an ephemeral `term_<UUID>` PTY session ID.
 _Avoid_: Terminal session ID, terminal ID, PTY session ID
 
+**Tmux session identity metadata**:
+The session-owned `@hobgoblin_init_path` and `@hobgoblin_terminal_number` tmux user options written when Hobgoblin creates a tmux session. Discovery recognizes the session only when the normalized initial path, positive terminal number, and recomputed deterministic session name all agree for the current project root. Missing or mismatched metadata is never inferred from the name alone.
+_Avoid_: Application persistence map, current pane path, name-only ownership
+
 **Internal terminal launch mode**:
 The per-launch choice between the native login shell and tmux-if-available for one new local or SSH internal terminal. Ordinary terminal actions use the native login shell. Explicit tmux actions create or attach to the deterministic tmux session when tmux is available on the target host and otherwise fall back to the native login shell. The choice is not a persisted preference and does not change an existing terminal.
 _Avoid_: Tmux setting, terminal preference, external terminal mode
@@ -77,7 +81,7 @@ An operating-system terminal application opened outside Hobgoblin at the selecte
 _Avoid_: Native terminal, system terminal
 
 **Associated Hobgoblin tmux session**:
-A Hobgoblin-protocol tmux session whose initial session path exactly matches one worktree, branch workspace root, or branch workspace member path after the protocol's lexical path normalization. Association never includes arbitrary user-created tmux sessions or descendant paths.
+A tmux session whose `@hobgoblin_init_path` exactly matches one worktree, branch workspace root, or branch workspace member path after lexical normalization, whose `@hobgoblin_terminal_number` is valid, and whose name equals the v1 hash recomputed from that metadata and the current project root. Association never includes name-only, arbitrary user-created, or descendant-path sessions.
 _Avoid_: Current terminal, child-directory session, any tmux session in the directory
 
 **Associated tmux session cleanup**:

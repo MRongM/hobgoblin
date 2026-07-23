@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { getRepoActivity, isRepoPrimaryRefreshBusy } from '#/web/components/repo-activity/model.ts'
+import { isRepoPrimaryRefreshBusy } from '#/web/components/repo-activity/model.ts'
 import { seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { resetReposStore } from '#/web/stores/repos/test-utils.ts'

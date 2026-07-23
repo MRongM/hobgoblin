@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
-import { markRepoOperationTargets, repoOperation } from '#/web/stores/repos/runtime.ts'
+import { repoOperation } from '#/web/stores/repos/runtime.ts'
 import { branch, REPO_ID, resetRefreshTest, rpcHandlers, seedRepo } from '#/web/stores/repos/refresh-test-utils.ts'
 import { seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { canStartRemoteFetch } from '#/web/stores/repos/sync-state.ts'

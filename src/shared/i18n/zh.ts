@@ -643,6 +643,8 @@ export const zh: Record<DictKey, string> = {
   'terminal.close-confirm-confirm': '关闭终端',
   'terminal.close-tmux-session': '同时关闭 tmux 会话',
   'terminal.close-tmux-session-hint': '这会结束其中运行的进程，并断开连接到该会话的其他客户端。',
+  'terminal.close-tmux-session-exit-required':
+    '此 tmux 会话与当前终端序号不匹配，Hobgoblin 无法安全关闭。请在 tmux 终端内执行 exit 关闭会话。',
   'terminal.close-tmux-session-failed': '无法关闭 tmux 会话',
   'terminal.close-all': '关闭全部终端',
   'terminal.close-all-confirm-title': '关闭全部终端？',

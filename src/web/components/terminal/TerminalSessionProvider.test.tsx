@@ -31,6 +31,7 @@ import type {
   TerminalCatalogMutationResult,
   TerminalCloseResult,
   TerminalCreateInput,
+  TerminalOpenTmuxSessionsInput,
   TerminalExitEvent,
   TerminalAttachResult,
   TerminalOutputEvent,
@@ -289,6 +290,9 @@ const getSessionSnapshotMock = vi.fn<
 >(async () => null)
 const closeMock = vi.fn(async (): Promise<TerminalCloseResult> => ({ ok: true }))
 const createTerminalMock = vi.fn<(input: TerminalCreateInput) => Promise<TerminalCatalogMutationResult>>()
+const openTmuxSessionsMock = vi.fn<
+  (input: TerminalOpenTmuxSessionsInput) => Promise<TerminalCatalogMutationResult>
+>()
 let managedServerSessions: TerminalSessionSummary[] = []
 
 function attachResult(): TerminalAttachResult {
@@ -328,6 +332,7 @@ beforeEach(() => {
   closeMock.mockReset()
   closeMock.mockResolvedValue({ ok: true })
   createTerminalMock.mockReset()
+  openTmuxSessionsMock.mockReset()
   branchWorkspaceMocks.readBranchWorkspaces.mockReset()
   branchWorkspaceMocks.readBranchWorkspaces.mockResolvedValue({
     ok: true,
@@ -407,6 +412,9 @@ beforeEach(() => {
       sessions: managedServerSessions,
     }
   })
+  openTmuxSessionsMock.mockImplementation(async (input) =>
+    await createTerminalMock({ ...input, kind: 'additional', launchMode: 'tmux-if-available' }),
+  )
   resetReposStore()
   window.sessionStorage.setItem('goblin:web-terminal-attachment-id', 'attachment_local')
   mainWindowQueryClient.clear()
@@ -547,6 +555,7 @@ beforeEach(() => {
       })),
       close: closeMock,
       create: createTerminalMock,
+      openTmuxSessions: openTmuxSessionsMock,
       pruneTerminals: vi.fn(async () => ({ pruned: 0, remaining: 0 })),
       listSessions: listSessionsMock,
       getSessionSnapshot: getSessionSnapshotMock,
@@ -625,6 +634,12 @@ describe('TerminalSessionProvider', () => {
         cols: 80,
         rows: 24,
         launchMode: 'tmux-if-available',
+      })
+      expect(openTmuxSessionsMock).toHaveBeenCalledWith({
+        ...base,
+        attachmentId: 'attachment_local',
+        cols: 80,
+        rows: 24,
       })
       expect(getProbe().summaries.map((session) => [session.terminalId, session.selected, session.hasBell])).toEqual([
         ['terminal-1', false, false],
@@ -727,7 +742,7 @@ describe('TerminalSessionProvider', () => {
       detailTab: 'terminal',
     })
     const terminalWorktreeKey = worktreeTerminalKey(REPO_ID, WORKTREE_PATH)
-    const { getContext, getProbe, unmount } = await renderProviderWithProbe(terminalWorktreeKey)
+    const { getContext, unmount } = await renderProviderWithProbe(terminalWorktreeKey)
 
     try {
       const base = { repoRoot: REPO_ID, branch: 'feature/worktree', worktreePath: WORKTREE_PATH }
@@ -980,7 +995,7 @@ describe('TerminalSessionProvider', () => {
       snapshotSeq: 5,
     })
     const terminalWorktreeKey = worktreeTerminalKey(REPO_ID, WORKTREE_PATH)
-    const { getContext, getProbe, unmount } = await renderProviderWithProbe(terminalWorktreeKey)
+    const { getProbe, unmount } = await renderProviderWithProbe(terminalWorktreeKey)
 
     try {
       await act(async () => {
@@ -1791,7 +1806,7 @@ describe('TerminalSessionProvider', () => {
       snapshotSeq: 7,
     })
     const terminalWorktreeKey = worktreeTerminalKey(REPO_ID, WORKTREE_PATH)
-    const { getContext, getProbe, unmount } = await renderProviderWithProbe(terminalWorktreeKey)
+    const { getProbe, unmount } = await renderProviderWithProbe(terminalWorktreeKey)
 
     try {
       await act(async () => {

@@ -685,6 +685,8 @@ export const en = {
   'terminal.close-tmux-session': 'Also close the tmux session',
   'terminal.close-tmux-session-hint':
     'This ends its running processes and disconnects other clients attached to this session.',
+  'terminal.close-tmux-session-exit-required':
+    'This tmux session does not match its terminal number, so Hobgoblin cannot close it safely. Run exit inside the tmux terminal to close it.',
   'terminal.close-tmux-session-failed': 'Could not close the tmux session',
   'terminal.close-all': 'Close all terminals',
   'terminal.close-all-confirm-title': 'Close all terminals?',

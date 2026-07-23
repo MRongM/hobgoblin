@@ -479,7 +479,6 @@ describe('ProjectChangesPanel', () => {
     })
 
     const actionBar = container?.querySelector('[data-testid="project-changes-action-bar"]')
-    const toggle = changeSelectionToggle()
     expect(actionBar?.querySelector<HTMLButtonElement>('button[aria-label="action.commit-title"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="changes.select-file:src/app.ts"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="changes.select-folder:src"]')).toBeNull()

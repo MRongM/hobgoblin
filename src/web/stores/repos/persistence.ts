@@ -38,31 +38,6 @@ const BranchSchema = v.object({
   mergedToDefault: v.optional(v.boolean()),
 })
 
-const StatusEntrySchema = v.object({
-  x: v.string(),
-  y: v.string(),
-  path: v.string(),
-})
-
-const WorktreeStatusSchema = v.object({
-  path: v.string(),
-  branch: v.optional(v.string()),
-  head: v.optional(v.string()),
-  isMain: v.boolean(),
-  entries: v.array(StatusEntrySchema),
-})
-
-const WorktreeStateSchema = v.object({
-  path: v.string(),
-  branch: v.optional(v.string()),
-  head: v.optional(v.string()),
-  isDetached: v.optional(v.boolean()),
-  isMain: v.boolean(),
-  isDirty: v.optional(v.boolean()),
-  changeCount: v.optional(FiniteNumber),
-  isLocked: v.optional(v.boolean()),
-})
-
 const RepoEventActionSchema = v.union([
   v.object({ kind: v.literal('checkout'), branch: v.string(), worktreePath: v.optional(v.string()) }),
   v.object({ kind: v.literal('pull'), branch: v.string(), worktreePath: v.string() }),

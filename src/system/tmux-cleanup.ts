@@ -1,7 +1,12 @@
 import path from 'node:path'
 import { execa } from 'execa'
 import type { TmuxSessionRecord } from '#/shared/tmux-cleanup.ts'
-import { isHobgoblinTmuxSessionName, normalizeTmuxSessionPath } from '#/system/tmux-session.ts'
+import {
+  isHobgoblinTmuxSessionName,
+  normalizeTmuxSessionPath,
+  TMUX_INIT_PATH_OPTION,
+  TMUX_TERMINAL_NUMBER_OPTION,
+} from '#/system/tmux-session.ts'
 
 const TMUX_COMMAND_TIMEOUT_MS = 15_000
 const TMUX_COMMAND = 'tmux'
@@ -10,7 +15,7 @@ const MISSING_TMUX_SESSION_RE =
   /(?:no server running|failed to connect to server|no sessions|can't find session|session not found)/iu
 let localTmuxExecutable = TMUX_COMMAND
 
-export const TMUX_SESSION_LIST_FORMAT = '#{session_name}\t#{session_path}'
+export const TMUX_SESSION_LIST_FORMAT = `#{${TMUX_INIT_PATH_OPTION}}\t#{${TMUX_TERMINAL_NUMBER_OPTION}}\t#{session_name}`
 
 export type TmuxProcessResult =
   | { ok: true; stdout: string; stderr: string }
@@ -37,14 +42,20 @@ export function parseTmuxSessionList(output: string): TmuxSessionRecord[] | null
     const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
     if (!line) continue
     const fields = line.split('\t')
-    if (fields.length !== 2) return null
-    const [sessionName, sessionPath] = fields
-    if (!sessionName || !sessionPath || !normalizeTmuxSessionPath(sessionPath)) {
-      return null
-    }
-    sessions.push({ sessionName, sessionPath })
+    if (fields.length !== 3) return null
+    const [rawInitialPath, rawTerminalNumber, sessionName] = fields
+    const initialPath = normalizeTmuxSessionPath(rawInitialPath ?? '')
+    const terminalNumber = parseRecordedTerminalNumber(rawTerminalNumber)
+    if (!sessionName || !initialPath || terminalNumber === null) continue
+    sessions.push({ sessionName, initialPath, terminalNumber })
   }
   return sessions
+}
+
+function parseRecordedTerminalNumber(value: string | undefined): number | null {
+  if (!value || !/^\d+$/u.test(value)) return null
+  const terminalNumber = Number.parseInt(value, 10)
+  return Number.isSafeInteger(terminalNumber) && terminalNumber > 0 ? terminalNumber : null
 }
 
 export async function listLocalTmuxSessions(options: LocalTmuxCommandOptions = {}): Promise<TmuxListResult> {

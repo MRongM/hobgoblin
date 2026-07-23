@@ -63,8 +63,6 @@ export function SettingsLayout({
       Icon: SETTINGS_PAGE_ICONS[pageKey],
     }
   })
-  const active = pages.find((item) => item.page === page) ?? pages[0]
-
   return (
     <div className="relative flex h-full min-h-0 bg-app">
       {topInset > 0 ? (

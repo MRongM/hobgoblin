@@ -1,5 +1,5 @@
 import { DEFAULT_GLOBAL_SHORTCUT } from '#/shared/accelerator.ts'
-import { DEFAULT_COLOR_THEME, type ColorTheme } from '#/shared/color-theme.ts'
+import { DEFAULT_COLOR_THEME } from '#/shared/color-theme.ts'
 import type { InitialSettingsSnapshot } from '#/shared/bootstrap.ts'
 import type {
   EditorPref,

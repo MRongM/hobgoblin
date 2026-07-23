@@ -1,6 +1,7 @@
 import { isValidRepoLocator } from '#/shared/input-validation.ts'
 import {
   closeAssociatedTmuxSessionByName,
+  previewAssociatedTmuxSessions,
   type AssociatedTmuxSessionNameInput,
   type TerminalTmuxCloseResult,
 } from '#/server/modules/tmux-cleanup.ts'
@@ -18,6 +19,7 @@ import {
   type TerminalCloseResult,
   type TerminalCloseSessionsResult,
   type TerminalCreateInput,
+  type TerminalOpenTmuxSessionsInput,
 } from '#/shared/terminal.ts'
 import {
   TERMINAL_SIZE_LIMITS,
@@ -114,6 +116,7 @@ const catalog = createTerminalCatalog({
     broker.broadcastGlobal({ type: 'sessions-changed', repoRoot })
   },
   withSessionSnapshot,
+  previewAssociatedTmuxSessions,
 })
 const brokerSocketByRawSocket = new WeakMap<TerminalRealtimeSocket, BufferedTerminalSocket>()
 type MaybePromise<T> = T | Promise<T>
@@ -153,6 +156,9 @@ const realtimeRequestHandlers = {
   },
   create(clientId, attachmentId, input) {
     return createServerTerminal(clientId, { ...input, attachmentId })
+  },
+  'open-tmux-sessions'(clientId, attachmentId, input) {
+    return openServerTmuxSessions(clientId, { ...input, attachmentId })
   },
   prune(clientId, _attachmentId, input) {
     return pruneServerTerminals(clientId, input.repoRoot)
@@ -239,6 +245,13 @@ export async function createServerTerminal(
   return await catalog.create(clientId, input)
 }
 
+export async function openServerTmuxSessions(
+  clientId: string,
+  input: TerminalOpenTmuxSessionsInput,
+): Promise<TerminalCatalogMutationResult> {
+  return await catalog.openTmuxSessions(clientId, input)
+}
+
 export async function pruneServerTerminals(
   clientId: string,
   repoRoot: string,
@@ -298,6 +311,9 @@ export async function closeServerTerminal(
   if (input.closeTmuxSession === true) {
     if (!session.tmuxSessionName || !session.tmuxWorkingDirectory) {
       return { ok: false, message: 'error.terminal-tmux-unavailable' }
+    }
+    if (!session.tmuxCloseSupported) {
+      return { ok: false, message: 'terminal.close-tmux-session-exit-required' }
     }
     const result = await (dependencies.closeTmuxSession ?? closeAssociatedTmuxSessionByName)({
       projectRoot: session.scope,
@@ -516,7 +532,7 @@ async function dispatchRealtimeRequestForAction<TAction extends TerminalSocketRe
 }
 
 function shouldPauseRealtimeRequest(action: TerminalSocketRequestAction): boolean {
-  return action === 'attach' || action === 'restart' || action === 'create'
+  return action === 'attach' || action === 'restart' || action === 'create' || action === 'open-tmux-sessions'
 }
 
 class BufferedTerminalSocket implements TerminalRealtimeSocket {

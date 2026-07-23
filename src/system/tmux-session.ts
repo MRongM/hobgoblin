@@ -7,6 +7,9 @@ const HOBGOBLIN_TMUX_SESSION_NAME_RE = /^hobgoblin-v1-[a-f0-9]{24}$/u
 const MAX_TMUX_SESSION_PATH_CHARS = 4096
 const UNSAFE_PATH_CHARS_RE = /[\0-\x1f\x7f]/
 
+export const TMUX_TERMINAL_NUMBER_OPTION = '@hobgoblin_terminal_number'
+export const TMUX_INIT_PATH_OPTION = '@hobgoblin_init_path'
+
 export interface TmuxSessionDescriptor {
   projectRoot: string
   workingDirectory: string
@@ -49,6 +52,29 @@ export function normalizeTmuxSessionPath(value: string): string | null {
 
 export function isHobgoblinTmuxSessionName(value: unknown): value is string {
   return typeof value === 'string' && HOBGOBLIN_TMUX_SESSION_NAME_RE.test(value)
+}
+
+export function resolveTmuxSessionTerminalNumbers(
+  projectRootInput: string,
+  sessions: ReadonlyArray<{ sessionName: string; initialPath: string; terminalNumber: number }>,
+): Map<string, number> {
+  const projectRoot = normalizeTmuxSessionPath(projectRootInput)
+  if (!projectRoot) return new Map()
+
+  const resolved = new Map<string, number>()
+  for (const session of sessions) {
+    const workingDirectory = normalizeTmuxSessionPath(session.initialPath)
+    const terminalNumber = session.terminalNumber
+    if (
+      workingDirectory &&
+      isHobgoblinTmuxSessionName(session.sessionName) &&
+      isSafeTerminalNumber(terminalNumber) &&
+      buildTmuxSessionName({ projectRoot, workingDirectory, terminalNumber }) === session.sessionName
+    ) {
+      resolved.set(session.sessionName, terminalNumber)
+    }
+  }
+  return resolved
 }
 
 function isSafeTerminalNumber(value: number): boolean {

@@ -1,8 +1,6 @@
 import type { FitAddon as XTermFitAddon } from '@xterm/addon-fit'
 import { FitAddon } from '@xterm/addon-fit'
-import type { ImageAddon as XTermImageAddon } from '@xterm/addon-image'
 import { ImageAddon } from '@xterm/addon-image'
-import type { ProgressAddon as XTermProgressAddon } from '@xterm/addon-progress'
 import { ProgressAddon } from '@xterm/addon-progress'
 import type { SearchAddon as XTermSearchAddon, ISearchOptions, ISearchResultChangeEvent } from '@xterm/addon-search'
 import { SearchAddon } from '@xterm/addon-search'
@@ -42,8 +40,6 @@ import {
 } from '#/web/components/terminal/terminal-input.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
 import type { TerminalWindowsPty } from '#/shared/terminal.ts'
-const DEFAULT_PARKING_WIDTH = 800
-const DEFAULT_PARKING_HEIGHT = 400
 const RESIZE_DEBOUNCE_MS = 80
 const FONT_REMEASURE_DEBOUNCE_MS = 80
 
@@ -55,8 +51,6 @@ export class TerminalSessionView {
   private fitAddon: XTermFitAddon | null = null
   private searchAddon: XTermSearchAddon | null = null
   private serializeAddon: XTermSerializeAddon | null = null
-  private imageAddon: XTermImageAddon | null = null
-  private progressAddon: XTermProgressAddon | null = null
   private resizeObserver: ResizeObserver | null = null
   private disposables: Array<{ dispose: () => void }> = []
   private disposeThemeObserver: (() => void) | null = null
@@ -311,8 +305,6 @@ export class TerminalSessionView {
     this.fitAddon = null
     this.searchAddon = null
     this.serializeAddon = null
-    this.imageAddon = null
-    this.progressAddon = null
     this.term?.dispose()
     this.term = null
     this.xtermHost.replaceChildren()
@@ -494,7 +486,6 @@ export class TerminalSessionView {
     try {
       const imageAddon = new ImageAddon()
       term.loadAddon(imageAddon)
-      this.imageAddon = imageAddon
     } catch (err) {
       console.warn('[terminal] failed to load image addon', err)
     }
@@ -505,7 +496,6 @@ export class TerminalSessionView {
       const progressAddon = new ProgressAddon()
       term.loadAddon(progressAddon)
       this.disposables.push(progressAddon.onChange(({ state, value }) => this.handlers.onProgress(state, value)))
-      this.progressAddon = progressAddon
     } catch (err) {
       console.warn('[terminal] failed to load progress addon', err)
     }

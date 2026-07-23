@@ -34,7 +34,7 @@ describe('terminal protocol normalization', () => {
     })
   })
 
-  test('preserves phase and message on session summaries', () => {
+  test('preserves phase, message, and tmux close capability on session summaries', () => {
     const summaries = normalizeTerminalSessionSummaryList([
       {
         sessionId: 'term_abcdefghijklmnop',
@@ -49,11 +49,17 @@ describe('terminal protocol normalization', () => {
         phase: 'open',
         message: null,
         tmuxBacked: true,
+        tmuxCloseSupported: false,
       },
     ])
 
     expect(summaries).not.toBeNull()
-    expect(summaries?.[0]).toMatchObject({ phase: 'open', message: null, tmuxBacked: true })
+    expect(summaries?.[0]).toMatchObject({
+      phase: 'open',
+      message: null,
+      tmuxBacked: true,
+      tmuxCloseSupported: false,
+    })
   })
 
   test('rejects invalid session phases', () => {
@@ -131,6 +137,24 @@ describe('terminal protocol normalization', () => {
         },
       }),
     ).toMatchObject({ action: 'create' })
+  })
+
+  test('accepts a measured batch tmux-open request', () => {
+    expect(
+      normalizeTerminalClientMessage({
+        type: 'request',
+        requestId: 'request_tmux_open',
+        action: 'open-tmux-sessions',
+        input: {
+          repoRoot: '/repo',
+          branch: 'main',
+          worktreePath: '/repo',
+          cols: 132,
+          rows: 41,
+          attachmentId: 'attachment_a',
+        },
+      }),
+    ).toMatchObject({ action: 'open-tmux-sessions' })
   })
 
   test('accepts only a boolean tmux close intent', () => {

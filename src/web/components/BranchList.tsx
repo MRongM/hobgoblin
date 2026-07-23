@@ -40,7 +40,6 @@ import type { RepoBranchState, RepoWorktreeState } from '#/web/stores/repos/type
 import { formatWorktreeListPath } from '#/web/lib/paths.ts'
 import { cn } from '#/web/lib/cn.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
-import { detailPanelStoreActionsEqual, detailPanelStoreActionsFromStore } from '#/web/stores/repos/selector-actions.ts'
 
 interface Props {
   repoId: string
@@ -89,11 +88,6 @@ function branchListRepoEqual(a: BranchListRepo | undefined, b: BranchListRepo | 
 
 export function BranchList({ repoId, showActions = true, onBranchSelected }: Props) {
   const t = useT()
-  const { setDetailCollapsed } = useStoreWithEqualityFn(
-    useReposStore,
-    detailPanelStoreActionsFromStore,
-    detailPanelStoreActionsEqual,
-  )
   const reorderWorktrees = useReposStore((s) => s.reorderWorktrees)
   const navigation = useMainWindowNavigation()
   const selectedRef = useRef<HTMLLIElement | null>(null)
@@ -108,14 +102,6 @@ export function BranchList({ repoId, showActions = true, onBranchSelected }: Pro
       onBranchSelected?.()
     },
     [navigation, onBranchSelected, repoId],
-  )
-  const handleOpenBranchStatus = useCallback(
-    (branch: string) => {
-      handleSelectBranch(branch)
-      navigation.showRepoDetailTab(repoId, 'status')
-      setDetailCollapsed(false)
-    },
-    [repoId, handleSelectBranch, navigation, setDetailCollapsed],
   )
   const repo = useStoreWithEqualityFn(
     useReposStore,
@@ -164,7 +150,6 @@ export function BranchList({ repoId, showActions = true, onBranchSelected }: Pro
       branch,
       selected: repo.ui.selectedBranch,
       onSelectBranch: handleSelectBranch,
-      onOpenBranchStatus: handleOpenBranchStatus,
       selectedRef,
       showActions,
       actionMenuOpen: openActionMenu?.repoId === repoId && openActionMenu.branch === branch.name,

@@ -86,7 +86,6 @@ export function TerminalSessionProvider({
   const registryRef = useRef<TerminalSessionRegistry | null>(null)
   if (!registryRef.current) {
     registryRef.current = new TerminalSessionRegistry(
-      () => currentRepoIdRef.current,
       setSelectedTerminal,
       (repoRoot, worktreePath) => dismissExitedTerminalDetail(repoRoot, worktreePath),
       notifyTerminalOutputCompletion,

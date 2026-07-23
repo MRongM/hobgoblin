@@ -13,6 +13,7 @@ import type {
   TerminalCatalogMutationResult,
   TerminalCloseResult,
   TerminalCreateInput,
+  TerminalOpenTmuxSessionsInput,
   TerminalExitEvent,
   TerminalMutationResult,
   TerminalNotifyBellInput,
@@ -221,6 +222,9 @@ export function createServerTerminalBridge(options: {
     create(input) {
       return requestOverSocket('create', input satisfies TerminalCreateInput)
     },
+    openTmuxSessions(input) {
+      return requestOverSocket('open-tmux-sessions', input satisfies TerminalOpenTmuxSessionsInput)
+    },
     pruneTerminals(repoRoot) {
       return requestOverSocket('prune', { repoRoot })
     },
@@ -313,6 +317,10 @@ export function createServerTerminalBridge(options: {
   async function requestOverSocket(action: 'attach', input: TerminalAttachInput): Promise<TerminalAttachResult>
   async function requestOverSocket(action: 'restart', input: TerminalRestartInput): Promise<TerminalAttachResult>
   async function requestOverSocket(action: 'create', input: TerminalCreateInput): Promise<TerminalCatalogMutationResult>
+  async function requestOverSocket(
+    action: 'open-tmux-sessions',
+    input: TerminalOpenTmuxSessionsInput,
+  ): Promise<TerminalCatalogMutationResult>
   async function requestOverSocket(
     action: 'prune',
     input: { repoRoot: string },

@@ -97,7 +97,8 @@ describe('useAssociatedTmuxCleanup', () => {
       sessions: [
         {
           sessionName: 'hobgoblin-v1-0123456789abcdef01234567',
-          sessionPath: '/work/feature',
+          initialPath: '/work/feature',
+          terminalNumber: 1,
         },
       ],
     })
@@ -107,7 +108,8 @@ describe('useAssociatedTmuxCleanup', () => {
       deleted: [
         {
           sessionName: 'hobgoblin-v1-0123456789abcdef01234567',
-          sessionPath: '/work/feature',
+          initialPath: '/work/feature',
+          terminalNumber: 1,
         },
       ],
       missingSessionNames: [],
@@ -133,14 +135,16 @@ describe('useAssociatedTmuxCleanup', () => {
       ok: true,
       targetPath: '/work/feature',
       sessions: [
-        { sessionName: 'hobgoblin-v1-0123456789abcdef01234567', sessionPath: '/work/feature' },
-        { sessionName: 'hobgoblin-v1-89abcdef0123456789abcdef', sessionPath: '/work/feature' },
+        { sessionName: 'hobgoblin-v1-0123456789abcdef01234567', initialPath: '/work/feature', terminalNumber: 1 },
+        { sessionName: 'hobgoblin-v1-89abcdef0123456789abcdef', initialPath: '/work/feature', terminalNumber: 2 },
       ],
     })
     mocks.cleanup.mockResolvedValue({
       ok: true,
       targetPath: '/work/feature',
-      deleted: [{ sessionName: 'hobgoblin-v1-0123456789abcdef01234567', sessionPath: '/work/feature' }],
+      deleted: [
+        { sessionName: 'hobgoblin-v1-0123456789abcdef01234567', initialPath: '/work/feature', terminalNumber: 1 },
+      ],
       missingSessionNames: [],
       failed: [{ sessionName: 'hobgoblin-v1-89abcdef0123456789abcdef', message: 'denied' }],
     })
