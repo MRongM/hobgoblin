@@ -2,7 +2,8 @@ import type { TerminalCustomButton, TerminalCustomButtonSize } from '#/shared/rp
 import { readRuntimeTerminalSettings, useRuntimeSettingsSnapshot } from '#/web/settings-read-projection.ts'
 import {
   runSettingsControllerAction,
-  setInternalTerminalTmuxEnabledPreference,
+  setLocalTerminalTmuxEnabledPreference,
+  setRemoteTerminalTmuxEnabledPreference,
   setTerminalCustomButtonsPreference,
   setTerminalCustomButtonSizePreference,
   setTerminalCustomButtonsVisiblePreference,
@@ -14,9 +15,14 @@ export function useRuntimeTerminalSettings() {
 
 export function useTerminalCustomButtonsController() {
   return {
-    async setInternalTerminalTmuxEnabled(enabled: boolean): Promise<void> {
-      await runSettingsControllerAction('internal terminal tmux update', async () => {
-        await setInternalTerminalTmuxEnabledPreference(enabled)
+    async setLocalTerminalTmuxEnabled(enabled: boolean): Promise<void> {
+      await runSettingsControllerAction('local terminal tmux update', async () => {
+        await setLocalTerminalTmuxEnabledPreference(enabled)
+      })
+    },
+    async setRemoteTerminalTmuxEnabled(enabled: boolean): Promise<void> {
+      await runSettingsControllerAction('remote terminal tmux update', async () => {
+        await setRemoteTerminalTmuxEnabledPreference(enabled)
       })
     },
     async setTerminalCustomButtonsVisible(visible: boolean): Promise<void> {

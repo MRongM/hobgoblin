@@ -259,7 +259,8 @@ vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
 vi.mock('#/web/runtime-settings-terminal-buttons.ts', () => ({
   useRuntimeTerminalSettings: () => ({
     fontFamily: runtimeTerminalSettingsMock.fontFamily,
-    internalTerminalTmuxEnabled: false,
+    localTerminalTmuxEnabled: false,
+    remoteTerminalTmuxEnabled: false,
     terminalCustomButtonsVisible: true,
     terminalCustomButtons: [],
     terminalFontSize: 14,

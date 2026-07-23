@@ -674,7 +674,7 @@ export async function openRepositoryTerminal(input: {
   }
   const prefs = await getServerSettingsPrefs()
   return await openInPreferredTerminal({ ...input, terminalNumber: 1 }, prefs.terminalApp, {
-    useTmux: prefs.internalTerminalTmuxEnabled,
+    useTmux: prefs.localTerminalTmuxEnabled,
   })
 }
 

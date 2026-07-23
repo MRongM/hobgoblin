@@ -184,6 +184,6 @@ export async function openServerRemoteTerminal(
       terminalNumber: 1,
     },
     prefs.terminalApp,
-    { useTmux: prefs.internalTerminalTmuxEnabled },
+    { useTmux: prefs.remoteTerminalTmuxEnabled },
   )
 }

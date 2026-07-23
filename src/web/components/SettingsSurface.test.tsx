@@ -44,7 +44,8 @@ function defaultRpcResult(path: string, input?: unknown) {
       fileTreeFontSize: 12,
       fileTreeTopbarFontSize: 13,
       terminalFontSize: 14,
-      internalTerminalTmuxEnabled: false,
+      localTerminalTmuxEnabled: false,
+      remoteTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
       terminalCustomButtonSize: 'medium',
       terminalCustomButtons: [],
@@ -232,7 +233,8 @@ beforeEach(() => {
       fileTreeFontSize: 12,
       fileTreeTopbarFontSize: 13,
       terminalFontSize: 14,
-      internalTerminalTmuxEnabled: false,
+      localTerminalTmuxEnabled: false,
+      remoteTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
       terminalCustomButtonSize: 'medium',
       terminalCustomButtons: [],
@@ -263,7 +265,8 @@ beforeEach(() => {
       fileTreeFontSize: 12,
       fileTreeTopbarFontSize: 13,
       terminalFontSize: 14,
-      internalTerminalTmuxEnabled: false,
+      localTerminalTmuxEnabled: false,
+      remoteTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
       terminalCustomButtonSize: 'medium',
       terminalCustomButtons: [],
@@ -893,15 +896,17 @@ describe('SettingsSurface', () => {
     expect(trigger?.textContent).toContain('settings.terminal-custom-buttons.size-medium')
   })
 
-  test('toggles remote tmux and custom button visibility from settings', async () => {
+  test('toggles local tmux, remote tmux, and custom button visibility independently', async () => {
     await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
 
     const removedSwitchId = ['settings', 'terminal', 'external', 'input'].join('-')
     expect(document.getElementById(removedSwitchId)).toBeNull()
-    const remoteTmuxSwitch = switchById('settings-terminal-tmux')
+    const localTmuxSwitch = switchById('settings-terminal-tmux-local')
+    const remoteTmuxSwitch = switchById('settings-terminal-tmux-remote')
     const buttonsVisibleSwitch = switchById('settings-terminal-custom-buttons-visible')
 
     await act(async () => {
+      localTmuxSwitch.click()
       remoteTmuxSwitch.click()
       buttonsVisibleSwitch.click()
       await Promise.resolve()
@@ -916,7 +921,13 @@ describe('SettingsSurface', () => {
     expect(
       fetchMock.mock.calls.some((call) => {
         const [, options] = call as unknown as [unknown, RequestInit | undefined]
-        return String(options?.body ?? '').includes('internalTerminalTmuxEnabled')
+        return String(options?.body ?? '').includes('localTerminalTmuxEnabled')
+      }),
+    ).toBe(true)
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [, options] = call as unknown as [unknown, RequestInit | undefined]
+        return String(options?.body ?? '').includes('remoteTerminalTmuxEnabled')
       }),
     ).toBe(true)
     expect(

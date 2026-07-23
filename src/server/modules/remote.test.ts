@@ -40,7 +40,8 @@ beforeEach(() => {
     editorApp: 'vscode',
     fileTreeFontSize: 12,
     terminalFontSize: 14,
-    internalTerminalTmuxEnabled: false,
+    localTerminalTmuxEnabled: false,
+    remoteTerminalTmuxEnabled: false,
     terminalCustomButtonsVisible: true,
     terminalCustomButtons: [],
     lanEnabled: false,
@@ -114,10 +115,11 @@ describe('openServerRemoteEditor', () => {
 })
 
 describe('openServerRemoteTerminal', () => {
-  test('resolves project identity and opens terminal-1 with the global tmux preference', async () => {
+  test('resolves project identity and opens terminal-1 with the remote tmux preference', async () => {
     mocks.getServerSettingsPrefs.mockResolvedValue({
       terminalApp: 'auto',
-      internalTerminalTmuxEnabled: true,
+      localTerminalTmuxEnabled: false,
+      remoteTerminalTmuxEnabled: true,
     })
     const { openServerRemoteTerminal } = await import('#/server/modules/remote.ts')
 
