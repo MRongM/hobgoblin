@@ -4,6 +4,8 @@ import { SerializeAddon } from '@xterm/addon-serialize'
 import {
   TERMINAL_SCROLLBACK_LINES,
   type TerminalOutputExcerpt,
+  type TerminalScreenSnapshot,
+  type TerminalScreenSnapshotInput,
   type TerminalSessionSnapshot,
   type TerminalWindowsPty,
 } from '#/shared/terminal.ts'
@@ -18,11 +20,14 @@ interface HeadlessBufferLineLike {
 
 interface HeadlessBufferLike {
   readonly length: number
+  readonly viewportY: number
   getLine(y: number): HeadlessBufferLineLike | undefined
 }
 
 export interface HeadlessTerminalLike {
   readonly buffer: { readonly active: HeadlessBufferLike }
+  readonly cols: number
+  readonly rows: number
   write(data: string | Uint8Array, callback?: () => void): void
   resize(cols: number, rows: number): void
   loadAddon(addon: XTermSerializeAddon): void
@@ -189,6 +194,43 @@ export async function readTerminalRenderOutputExcerpt(
   }
 
   return { sessionId, output: output ?? '', sequence }
+}
+
+export async function readTerminalRenderScreenSnapshot(
+  sessionId: string,
+  state: TerminalRenderState,
+  input: TerminalScreenSnapshotInput,
+): Promise<TerminalScreenSnapshot | null> {
+  const model = state.model
+  if (
+    !model ||
+    input.sessionId !== sessionId ||
+    !Number.isInteger(input.maxColumns) ||
+    input.maxColumns < 1 ||
+    !Number.isInteger(input.maxRows) ||
+    input.maxRows < 1
+  ) {
+    return null
+  }
+  const sequence = state.sequence
+  try {
+    await model.chain
+  } catch {}
+  if (state.model !== model) return null
+
+  const buffer = model.term.buffer.active
+  const columns = Math.min(model.term.cols, input.maxColumns)
+  const rows = Math.min(model.term.rows, input.maxRows)
+  const viewportStart = Math.max(0, buffer.viewportY)
+  const viewportEnd = Math.min(buffer.length, viewportStart + model.term.rows)
+  const firstRow = Math.max(viewportStart, viewportEnd - rows)
+  const lines: string[] = []
+  for (let index = firstRow; index < viewportEnd; index += 1) {
+    lines.push(buffer.getLine(index)?.translateToString(true, 0, columns) ?? '')
+  }
+  while (lines.length < rows) lines.push('')
+
+  return { sessionId, lines, columns, rows, sequence }
 }
 
 export function resetTerminalRenderState(state: TerminalRenderState): void {

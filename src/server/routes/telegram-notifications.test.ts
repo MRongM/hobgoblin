@@ -53,7 +53,8 @@ describe('Telegram notification routes', () => {
     mocks.sendCompletion.mockResolvedValue({ ok: true })
     const { createTelegramNotificationRoutes } = await import('#/server/routes/telegram-notifications.ts')
     const readTerminalOutputExcerpt = vi.fn()
-    const app = createTelegramNotificationRoutes({ readTerminalOutputExcerpt })
+    const readTerminalScreenSnapshot = vi.fn()
+    const app = createTelegramNotificationRoutes({ readTerminalOutputExcerpt, readTerminalScreenSnapshot })
     const context = {
       terminalKey: 'terminal-1',
       project: 'api',
@@ -76,6 +77,7 @@ describe('Telegram notification routes', () => {
     expect(mocks.sendCompletion).toHaveBeenCalledWith(context, {
       acceptLanguage: 'zh-CN',
       readTerminalOutputExcerpt,
+      readTerminalScreenSnapshot,
     })
   })
 })

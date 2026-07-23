@@ -53,6 +53,7 @@ function createTerminalFacadeStub(): TerminalFacade {
     prune: vi.fn(async () => ({ pruned: 1, remaining: 0 })),
     getSessionSnapshot: vi.fn(async () => null),
     getOutputExcerpt: vi.fn(async () => null),
+    getScreenSnapshot: vi.fn(async () => null),
     reorder: vi.fn(() => true),
     handleRealtimeMessage: vi.fn(),
     shutdown: vi.fn(),

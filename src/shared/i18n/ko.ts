@@ -1084,7 +1084,7 @@ export const ko: Record<DictKey, string> = {
   'settings.telegram.output-completion-min-activity-unit': '초',
   'settings.telegram.include-terminal-output': '터미널 출력 포함',
   'settings.telegram.include-terminal-output-hint':
-    '마지막으로 표시된 터미널 출력을 추가합니다. 민감한 정보가 포함될 수 있습니다.',
+    '완료 알림은 저품질 터미널 화면 이미지를 우선 전송하고, 생성할 수 없으면 마지막 텍스트로 대체합니다. 터미널 내용에 민감한 정보가 포함될 수 있습니다.',
   'settings.telegram.output-tail-length': '터미널 출력 문자 수',
   'settings.telegram.output-tail-length-hint':
     '1~4096자(기본값 400). 연속된 공백, 탭, 줄바꿈은 공백 하나로 계산하며 Telegram 전체 메시지 제한에 따라 실제 내용은 더 짧아질 수 있습니다.',

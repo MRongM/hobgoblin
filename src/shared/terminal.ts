@@ -12,6 +12,20 @@ export interface TerminalOutputExcerpt {
   output: string
   sequence: number
 }
+
+export interface TerminalScreenSnapshotInput {
+  sessionId: string
+  maxColumns: number
+  maxRows: number
+}
+
+export interface TerminalScreenSnapshot {
+  sessionId: string
+  lines: string[]
+  columns: number
+  rows: number
+  sequence: number
+}
 export const TERMINAL_SIZE_LIMITS = {
   minCols: 1,
   maxCols: 500,

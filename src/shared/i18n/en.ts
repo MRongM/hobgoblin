@@ -1095,7 +1095,7 @@ export const en = {
   'settings.telegram.output-completion-min-activity-unit': 'seconds',
   'settings.telegram.include-terminal-output': 'Include terminal output',
   'settings.telegram.include-terminal-output-hint':
-    'Append trailing visible terminal output. Terminal output may contain sensitive information.',
+    'Completion notifications prefer a low-quality terminal screen image and fall back to trailing text. Terminal content may contain sensitive information.',
   'settings.telegram.output-tail-length': 'Terminal output characters',
   'settings.telegram.output-tail-length-hint':
     "Use 1–4096 characters (default 400). Consecutive spaces, tabs, and line breaks count as one space; Telegram's whole-message limit may shorten the excerpt.",

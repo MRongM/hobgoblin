@@ -119,4 +119,41 @@ describe('terminal session manager output excerpts', () => {
     })
     await expect(manager.outputExcerpt('term_missing_1234', 400)).resolves.toBeNull()
   })
+
+  test('reads a bounded terminal screen snapshot for an existing session', async () => {
+    const manager = new TerminalSessionManager<string>({ onOutput: vi.fn(), onExit: vi.fn() })
+    const result = manager.ensureSession({
+      ownerId: 'client_a',
+      scope: '/workspace',
+      key: '/workspace\0/workspace/goblin-feature\0terminal-1',
+      cwd: '/workspace/goblin-feature',
+      cols: 10,
+      rows: 3,
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    ptys[0]?.emitData('first\r\nsecond')
+
+    await expect(
+      manager.screenSnapshot(result.sessionId, {
+        sessionId: result.sessionId,
+        maxColumns: 6,
+        maxRows: 2,
+      }),
+    ).resolves.toEqual({
+      sessionId: result.sessionId,
+      lines: ['second', ''],
+      columns: 6,
+      rows: 2,
+      sequence: 1,
+    })
+    await expect(
+      manager.screenSnapshot('term_missing_1234', {
+        sessionId: 'term_missing_1234',
+        maxColumns: 6,
+        maxRows: 2,
+      }),
+    ).resolves.toBeNull()
+  })
 })

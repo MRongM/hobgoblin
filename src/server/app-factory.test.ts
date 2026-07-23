@@ -47,6 +47,7 @@ const mocks = vi.hoisted(() => ({
     outputTailLength: 400,
   })),
   sendTelegramMessage: vi.fn(async () => ({ ok: true as const })),
+  sendTelegramPhoto: vi.fn(async () => ({ ok: true as const })),
   telegramProxyUrlFromPrefs: vi.fn(() => undefined),
 }))
 
@@ -83,6 +84,7 @@ const terminalHostStub = {
   create: vi.fn(),
   prune: vi.fn(),
   getSessionSnapshot: vi.fn(),
+  getScreenSnapshot: vi.fn(async () => null),
   getOutputExcerpt: vi.fn(async ({ sessionId }) => ({
     sessionId,
     output: 'server screen output',
@@ -105,6 +107,7 @@ vi.mock('#/server/modules/settings-source.ts', () => ({
 
 vi.mock('#/server/modules/telegram-notification-source.ts', () => ({
   sendTelegramMessage: mocks.sendTelegramMessage,
+  sendTelegramPhoto: mocks.sendTelegramPhoto,
   telegramProxyUrlFromPrefs: mocks.telegramProxyUrlFromPrefs,
 }))
 
@@ -318,7 +321,7 @@ describe('server app html bootstrap', () => {
     expect(response.status).toBe(401)
   })
 
-  test('reads Telegram output excerpts through the worker-backed terminal host', async () => {
+  test('reads Telegram terminal screens through the worker-backed host and falls back to text', async () => {
     const currentPrefs = await mocks.getServerSettingsPrefs()
     mocks.getServerSettingsPrefs.mockResolvedValueOnce({
       ...currentPrefs,
@@ -326,6 +329,7 @@ describe('server app html bootstrap', () => {
       terminalNotificationsEnabled: true,
     })
     terminalHostStub.getOutputExcerpt.mockClear()
+    terminalHostStub.getScreenSnapshot.mockClear()
     const { createApp } = await import('#/server/app-factory.ts')
     const app = createApp({
       version: '0.1.0',
@@ -354,6 +358,11 @@ describe('server app html bootstrap', () => {
     })
 
     expect(response.status).toBe(200)
+    expect(terminalHostStub.getScreenSnapshot).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      maxColumns: 140,
+      maxRows: 40,
+    })
     expect(terminalHostStub.getOutputExcerpt).toHaveBeenCalledWith({
       sessionId: 'session-1',
       maxCharacters: 400,

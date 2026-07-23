@@ -6,6 +6,7 @@ import {
   createTerminalRenderModel,
   queueTerminalRenderWrite,
   readTerminalRenderOutputExcerpt,
+  readTerminalRenderScreenSnapshot,
   snapshotTerminalRenderState,
 } from '#/server/terminal/terminal-render-state.ts'
 
@@ -226,6 +227,57 @@ describe('terminal-render-state', () => {
         queueTerminalRenderWrite(state, 'one\r\ntwo\r\nthree')
         await expect(readTerminalRenderOutputExcerpt('term_1234567890123456', state, 400)).resolves.toMatchObject({
           output: 'one two three',
+        })
+      } finally {
+        state.model.term.dispose()
+      }
+    })
+  })
+
+  describe('readTerminalRenderScreenSnapshot', () => {
+    test('waits for parsing and returns the bounded tail of the active viewport', async () => {
+      const state = createEmptyTerminalRenderState()
+      state.model = createTerminalRenderModel(8, 3)
+      try {
+        appendTerminalReplayData(state, 'one\r\ntwo\r\nthree\r\nfour')
+        queueTerminalRenderWrite(state, 'one\r\ntwo\r\nthree\r\nfour')
+
+        await expect(
+          readTerminalRenderScreenSnapshot('term_1234567890123456', state, {
+            sessionId: 'term_1234567890123456',
+            maxColumns: 4,
+            maxRows: 2,
+          }),
+        ).resolves.toEqual({
+          sessionId: 'term_1234567890123456',
+          lines: ['thre', 'four'],
+          columns: 4,
+          rows: 2,
+          sequence: 1,
+        })
+      } finally {
+        state.model.term.dispose()
+      }
+    })
+
+    test('preserves blank viewport rows without reading retained scrollback', async () => {
+      const state = createEmptyTerminalRenderState()
+      state.model = createTerminalRenderModel(12, 4)
+      try {
+        queueTerminalRenderWrite(state, 'visible')
+
+        await expect(
+          readTerminalRenderScreenSnapshot('term_1234567890123456', state, {
+            sessionId: 'term_1234567890123456',
+            maxColumns: 12,
+            maxRows: 4,
+          }),
+        ).resolves.toEqual({
+          sessionId: 'term_1234567890123456',
+          lines: ['visible', '', '', ''],
+          columns: 12,
+          rows: 4,
+          sequence: 0,
         })
       } finally {
         state.model.term.dispose()

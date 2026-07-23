@@ -3,12 +3,17 @@ import type { ClientRequest, IncomingMessage, RequestOptions } from 'node:http'
 import { PassThrough } from 'node:stream'
 import { describe, expect, test } from 'vitest'
 import { ProxyAgent } from 'proxy-agent'
-import { sendTelegramMessage, telegramProxyUrlFromPrefs } from '#/server/modules/telegram-notification-source.ts'
+import {
+  sendTelegramMessage,
+  sendTelegramPhoto,
+  telegramProxyUrlFromPrefs,
+} from '#/server/modules/telegram-notification-source.ts'
 
 interface RequestFixture {
   request: (options: RequestOptions, callback: (response: IncomingMessage) => void) => ClientRequest
   options?: RequestOptions
   body: string
+  chunks: Buffer[]
   timeoutMs?: number
   destroyed: boolean
 }
@@ -23,12 +28,15 @@ function createRequestFixture(
 ): RequestFixture {
   const fixture: RequestFixture = {
     body: '',
+    chunks: [],
     destroyed: false,
     request(options, callback) {
       fixture.options = options
       const request = new EventEmitter() as ClientRequest
       request.write = ((chunk: string | Uint8Array) => {
-        fixture.body += chunk.toString()
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+        fixture.chunks.push(buffer)
+        fixture.body += buffer.toString()
         return true
       }) as ClientRequest['write']
       request.end = (() => {
@@ -120,6 +128,65 @@ describe('sendTelegramMessage', () => {
       agent.destroy()
     },
   )
+})
+
+describe('sendTelegramPhoto', () => {
+  test('uploads one in-memory JPEG as multipart data with a caption', async () => {
+    const fixture = createRequestFixture()
+    const photo = Buffer.from([0xff, 0xd8, 0xff, 0xdb, 0x00, 0x01])
+
+    await expect(
+      sendTelegramPhoto(
+        { botToken: '123456:test-token', chatId: '-100123', caption: 'terminal idle', photo },
+        { request: fixture.request },
+      ),
+    ).resolves.toEqual({ ok: true })
+
+    expect(fixture.options).toMatchObject({
+      hostname: 'api.telegram.org',
+      method: 'POST',
+      path: '/bot123456:test-token/sendPhoto',
+    })
+    expect(fixture.options?.headers).toMatchObject({
+      'content-type': expect.stringMatching(/^multipart\/form-data; boundary=/u),
+      'content-length': Buffer.concat(fixture.chunks).byteLength,
+    })
+    const body = Buffer.concat(fixture.chunks)
+    expect(body.toString()).toContain('name="chat_id"\r\n\r\n-100123')
+    expect(body.toString()).toContain('name="caption"\r\n\r\nterminal idle')
+    expect(body.toString()).toContain('name="photo"; filename="terminal.jpg"')
+    expect(body.toString()).toContain('Content-Type: image/jpeg')
+    expect(body.indexOf(photo)).toBeGreaterThan(0)
+    expect(fixture.timeoutMs).toBe(15_000)
+  })
+
+  test.each([
+    { label: 'oversized caption', invalid: { caption: 'x'.repeat(1_025), photo: Buffer.from([1]) } },
+    { label: 'empty photo', invalid: { caption: 'caption', photo: Buffer.alloc(0) } },
+    { label: 'oversized photo', invalid: { caption: 'caption', photo: Buffer.alloc(2 * 1024 * 1024 + 1) } },
+  ])('rejects $label', async ({ invalid }) => {
+    const fixture = createRequestFixture()
+
+    await expect(
+      sendTelegramPhoto(
+        { botToken: 'token', chatId: '1', caption: invalid.caption, photo: invalid.photo },
+        { request: fixture.request },
+      ),
+    ).resolves.toEqual({ ok: false, error: { code: 'invalid-input' } })
+    expect(fixture.options).toBeUndefined()
+  })
+
+  test('maps failed photo transport through the shared error lifecycle', async () => {
+    const fixture = createRequestFixture({ timeout: true })
+
+    await expect(
+      sendTelegramPhoto(
+        { botToken: 'token', chatId: '1', caption: 'caption', photo: Buffer.from([1, 2, 3]) },
+        { request: fixture.request },
+      ),
+    ).resolves.toEqual({ ok: false, error: { code: 'network-failed' } })
+    expect(fixture.destroyed).toBe(true)
+  })
 })
 
 describe('telegramProxyUrlFromPrefs', () => {

@@ -1,9 +1,15 @@
 import https from 'node:https'
+import { randomUUID } from 'node:crypto'
 import type { ClientRequest, IncomingMessage, RequestOptions } from 'node:http'
 import { Buffer } from 'node:buffer'
 import { ProxyAgent } from 'proxy-agent'
 import type { SettingsPrefs } from '#/shared/rpc.ts'
-import type { TelegramNotificationErrorCode, TelegramNotificationResult } from '#/shared/telegram-notifications.ts'
+import {
+  TELEGRAM_PHOTO_CAPTION_MAX_LENGTH,
+  TELEGRAM_PHOTO_MAX_BYTES,
+  type TelegramNotificationErrorCode,
+  type TelegramNotificationResult,
+} from '#/shared/telegram-notifications.ts'
 
 const TELEGRAM_HOST = 'api.telegram.org'
 const TELEGRAM_REQUEST_TIMEOUT_MS = 15_000
@@ -40,6 +46,66 @@ export async function sendTelegramMessage(
   dependencies: { request?: HttpsRequest } = {},
 ): Promise<TelegramNotificationResult> {
   const body = JSON.stringify({ chat_id: input.chatId, text: input.text })
+  return await sendTelegramRequest(
+    {
+      botToken: input.botToken,
+      method: 'sendMessage',
+      contentType: 'application/json',
+      chunks: [Buffer.from(body)],
+      proxyUrl: input.proxyUrl,
+    },
+    dependencies,
+  )
+}
+
+export async function sendTelegramPhoto(
+  input: { botToken: string; chatId: string; caption: string; photo: Buffer; proxyUrl?: string },
+  dependencies: { request?: HttpsRequest } = {},
+): Promise<TelegramNotificationResult> {
+  if (
+    Array.from(input.caption).length > TELEGRAM_PHOTO_CAPTION_MAX_LENGTH ||
+    input.photo.byteLength < 1 ||
+    input.photo.byteLength > TELEGRAM_PHOTO_MAX_BYTES
+  ) {
+    return failure('invalid-input')
+  }
+  const boundary = `hobgoblin-${randomUUID()}`
+  const chunks = [
+    multipartField(boundary, 'chat_id', input.chatId),
+    multipartField(boundary, 'caption', input.caption),
+    Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="photo"; filename="terminal.jpg"\r\n` +
+        'Content-Type: image/jpeg\r\n\r\n',
+    ),
+    input.photo,
+    Buffer.from(`\r\n--${boundary}--\r\n`),
+  ]
+  return await sendTelegramRequest(
+    {
+      botToken: input.botToken,
+      method: 'sendPhoto',
+      contentType: `multipart/form-data; boundary=${boundary}`,
+      chunks,
+      proxyUrl: input.proxyUrl,
+    },
+    dependencies,
+  )
+}
+
+function multipartField(boundary: string, name: string, value: string): Buffer {
+  return Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`)
+}
+
+async function sendTelegramRequest(
+  input: {
+    botToken: string
+    method: 'sendMessage' | 'sendPhoto'
+    contentType: string
+    chunks: Buffer[]
+    proxyUrl?: string
+  },
+  dependencies: { request?: HttpsRequest },
+): Promise<TelegramNotificationResult> {
   const proxyAgent = input.proxyUrl
     ? new ProxyAgent({
         getProxyForUrl: () => input.proxyUrl ?? '',
@@ -61,11 +127,11 @@ export async function sendTelegramMessage(
         hostname: TELEGRAM_HOST,
         port: 443,
         method: 'POST',
-        path: `/bot${input.botToken}/sendMessage`,
+        path: `/bot${input.botToken}/${input.method}`,
         agent: proxyAgent,
         headers: {
-          'content-type': 'application/json',
-          'content-length': Buffer.byteLength(body),
+          'content-type': input.contentType,
+          'content-length': input.chunks.reduce((total, chunk) => total + chunk.byteLength, 0),
         },
       },
       (response) => {
@@ -107,7 +173,7 @@ export async function sendTelegramMessage(
       request.destroy()
       finish(failure('network-failed'))
     })
-    request.write(body)
+    for (const chunk of input.chunks) request.write(chunk)
     request.end()
   })
 }

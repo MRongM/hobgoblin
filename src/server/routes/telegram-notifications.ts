@@ -12,6 +12,7 @@ import type {
 
 export interface TelegramNotificationRouteOptions {
   readTerminalOutputExcerpt?: TelegramNotificationWriteOptions['readTerminalOutputExcerpt']
+  readTerminalScreenSnapshot?: TelegramNotificationWriteOptions['readTerminalScreenSnapshot']
 }
 
 export function createTelegramNotificationRoutes(options: TelegramNotificationRouteOptions = {}) {
@@ -38,6 +39,7 @@ export function createTelegramNotificationRoutes(options: TelegramNotificationRo
       await sendConfiguredTelegramOutputCompletionNotification(context as TelegramOutputCompletionNotificationContext, {
         acceptLanguage: c.req.header('accept-language'),
         readTerminalOutputExcerpt: options.readTerminalOutputExcerpt,
+        readTerminalScreenSnapshot: options.readTerminalScreenSnapshot,
       }),
     )
   })
