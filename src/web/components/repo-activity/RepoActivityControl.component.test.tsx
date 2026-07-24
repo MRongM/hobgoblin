@@ -61,10 +61,12 @@ describe('RepoActivityControl component', () => {
     render(<RepoActivityControl repoId={REPO_ID} />)
 
     expect(button().disabled).toBe(false)
+    expect(button().getAttribute('aria-label')).toBe('action.refresh')
+    expect(button().querySelector('.lucide-refresh-cw')).not.toBeNull()
     expect(document.body.textContent).not.toContain('tab.local-only')
   })
 
-  test('renders the primary refresh button for plain workspaces', () => {
+  test('uses the Git repository detection icon for plain workspaces without changing the refresh label', () => {
     seedRepoState({
       id: REPO_ID,
       isGitRepo: false,
@@ -77,6 +79,34 @@ describe('RepoActivityControl component', () => {
 
     expect(button().disabled).toBe(false)
     expect(button().getAttribute('aria-label')).toBe('action.refresh')
+    expect(button().querySelector('.lucide-folder-git-2')).not.toBeNull()
+    expect(button().querySelector('.lucide-refresh-cw')).toBeNull()
+  })
+
+  test('switches from the Git detection icon to refresh when a plain workspace becomes a repository', () => {
+    const repo = seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+
+    render(<RepoActivityControl repoId={REPO_ID} />)
+    expect(button().getAttribute('aria-label')).toBe('action.refresh')
+    expect(button().querySelector('.lucide-folder-git-2')).not.toBeNull()
+
+    act(() => {
+      useReposStore.setState({
+        repos: {
+          [REPO_ID]: { ...repo, isGitRepo: true },
+        },
+      })
+    })
+
+    expect(button().getAttribute('aria-label')).toBe('action.refresh')
+    expect(button().querySelector('.lucide-folder-git-2')).toBeNull()
+    expect(button().querySelector('.lucide-refresh-cw')).not.toBeNull()
   })
 
   test('allows topbar hosts to override cached projection muted color', () => {

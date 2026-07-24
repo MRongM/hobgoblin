@@ -98,7 +98,7 @@ export function PlainWorkspacePane({
 
   const branchPane = (
     <RepoWorkspacePane>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="project-file-area-tone flex min-h-0 min-w-0 flex-1 flex-col bg-topbar">
         <SidebarProjectHeader repoId={repoId} onMaximizeTerminal={onMaximizeTerminal} />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {desktopWorkspaceOverview ? (
