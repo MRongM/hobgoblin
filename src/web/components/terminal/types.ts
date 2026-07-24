@@ -130,6 +130,8 @@ export interface WorktreeTerminalSnapshot {
   selectedDescriptor: TerminalDescriptor | null
   sessions: TerminalSessionSummary[]
   count: number
+  /** Renderer-local new-terminal request state. Omitted projections are treated as idle. */
+  creating?: boolean
 }
 
 export interface TerminalSessionContextValue {

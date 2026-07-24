@@ -141,6 +141,65 @@ describe('TerminalSessionRegistry', () => {
       expect(() => registerWorktreeHost(WORKTREE_KEY, null)).not.toThrow()
     })
 
+    test('publishes creation pending state until the create request succeeds', async () => {
+      registry.setRepoIndex(makeRepoIndex())
+      let resolveCreate: (value: unknown) => void = () => {}
+      bridgeMocks.create.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveCreate = resolve
+        }),
+      )
+
+      const creation = registry.createTerminal({
+        repoRoot: REPO_ROOT,
+        branch: BRANCH,
+        worktreePath: WORKTREE_PATH,
+      })
+
+      expect(registry.worktreeSnapshot(WORKTREE_KEY).creating).toBe(true)
+
+      resolveCreate({
+        ok: true,
+        action: 'created',
+        key: `${REPO_ROOT}\0${WORKTREE_PATH}\0terminal-1`,
+        sessionId: 'session-created',
+        processName: 'zsh',
+        canonicalTitle: null,
+        snapshot: 'first-frame',
+        snapshotSeq: 1,
+        controller: { attachmentId: 'attachment_local', status: 'connected' },
+        canonicalCols: 80,
+        canonicalRows: 24,
+        phase: 'open',
+        message: null,
+        sessions: [makeServerSession('session-created', 'terminal-1')],
+      })
+
+      await creation
+      expect(registry.worktreeSnapshot(WORKTREE_KEY).creating).toBe(false)
+    })
+
+    test('clears creation pending state when the create request fails', async () => {
+      registry.setRepoIndex(makeRepoIndex())
+      let rejectCreate: (reason: Error) => void = () => {}
+      bridgeMocks.create.mockReturnValueOnce(
+        new Promise((_, reject) => {
+          rejectCreate = reject
+        }),
+      )
+
+      const creation = registry.createTerminal({
+        repoRoot: REPO_ROOT,
+        branch: BRANCH,
+        worktreePath: WORKTREE_PATH,
+      })
+
+      expect(registry.worktreeSnapshot(WORKTREE_KEY).creating).toBe(true)
+      rejectCreate(new Error('create failed'))
+      await expect(creation).rejects.toThrow('create failed')
+      expect(registry.worktreeSnapshot(WORKTREE_KEY).creating).toBe(false)
+    })
+
     test('sends measured geometry and hydrates the created session first frame', async () => {
       registry.setRepoIndex(makeRepoIndex())
       const host = document.createElement('div')

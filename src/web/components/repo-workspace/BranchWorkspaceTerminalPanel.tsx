@@ -121,7 +121,7 @@ export function BranchWorkspaceTerminalPanel({
         <div aria-hidden="true" className="min-w-2 flex-1 self-stretch" />
       </Toolbar>
       <div className="flex min-h-0 flex-1 flex-col">
-        {snapshot.selectedDescriptor ? (
+        {snapshot.selectedDescriptor || snapshot.creating === true ? (
           <TerminalSlot repoRoot={context.rootId} branch={context.branch} worktreePath={context.path} />
         ) : null}
       </div>

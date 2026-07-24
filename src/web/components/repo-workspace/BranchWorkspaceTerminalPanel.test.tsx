@@ -137,6 +137,19 @@ describe('BranchWorkspaceTerminalPanel', () => {
     })
   })
 
+  test('mounts the terminal slot while the first terminal creation is pending', async () => {
+    snapshot = { ...snapshot, creating: true }
+
+    await renderPanel()
+
+    const slot = container.querySelector<HTMLElement>('[data-testid="terminal-slot"]')
+    expect(JSON.parse(slot?.dataset.props ?? '{}')).toEqual({
+      repoRoot: ROOT,
+      branch: 'feature/auth',
+      worktreePath: PATH,
+    })
+  })
+
   test('leaves the terminal content empty when no session is selected', async () => {
     await renderPanel()
 

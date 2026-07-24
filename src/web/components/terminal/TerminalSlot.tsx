@@ -36,6 +36,7 @@ import { useTerminalSessionContext } from '#/web/components/terminal/terminal-se
 import {
   useWorktreeTerminalSelectedDescriptor,
   useWorktreeTerminalCount,
+  useWorktreeTerminalCreationPending,
   useTerminalSnapshot,
 } from '#/web/components/terminal/terminal-session-store.ts'
 import { MobileTerminalToolbar } from '#/web/components/terminal/mobile-terminal-toolbar.tsx'
@@ -82,6 +83,7 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
   const key = descriptor?.key ?? null
   const snapshot = useTerminalSnapshot(key)
   const hasSessions = useWorktreeTerminalCount(terminalWorktreeKey) > 0
+  const creationPending = useWorktreeTerminalCreationPending(terminalWorktreeKey)
   const {
     temporaryFilesDirectory,
     terminalFontSize,
@@ -479,7 +481,7 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
           takeoverPending={snapshot.takeoverPending}
         />
       )}
-      {hasSessions && snapshot.phase === 'opening' && (
+      {(creationPending || (hasSessions && snapshot.phase === 'opening')) && (
         <div
           className="goblin-terminal-slot__status-overlay"
           role="status"
