@@ -32,6 +32,7 @@ interface BranchRowProps {
   workspaceRemoveAction?: { label: string; onSelect: () => void }
   selected: string | null
   onSelectBranch: (branch: string) => void
+  onWorktreeDoubleClick?: () => void
   selectedRef: RefObject<HTMLLIElement | null>
   showActions?: boolean
   actionMenuOpen?: boolean
@@ -46,6 +47,7 @@ export function BranchRow({
   workspaceRemoveAction,
   selected,
   onSelectBranch,
+  onWorktreeDoubleClick,
   selectedRef,
   showActions = true,
   actionMenuOpen,
@@ -106,6 +108,7 @@ export function BranchRow({
             ? 'pr-[5.75rem]'
             : undefined,
         onClick: () => onSelectBranch(branch.name),
+        onDoubleClick: worktreePath ? onWorktreeDoubleClick : undefined,
       }}
       auxiliaryActions={workspaceRemoveAction ? <WorkspaceRemoveButton action={workspaceRemoveAction} /> : undefined}
       actions={

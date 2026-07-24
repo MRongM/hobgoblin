@@ -47,10 +47,12 @@ vi.mock('#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx', () => ({
   WorkspaceRepositoryRail: ({
     workspaceRootId,
     onOpenFileArea,
+    onToggleFileArea,
     onOpenDetailArea,
   }: {
     workspaceRootId: string
     onOpenFileArea?: () => void
+    onToggleFileArea?: () => void
     onOpenDetailArea?: () => void
   }) => (
     <div data-testid="rail">
@@ -58,6 +60,11 @@ vi.mock('#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx', () => ({
       {onOpenFileArea ? (
         <button type="button" data-testid="rail-files" onClick={onOpenFileArea}>
           member files
+        </button>
+      ) : null}
+      {onToggleFileArea ? (
+        <button type="button" data-testid="rail-toggle-files" onDoubleClick={onToggleFileArea}>
+          toggle files
         </button>
       ) : null}
       {onOpenDetailArea ? (
@@ -416,6 +423,19 @@ describe('BranchWorkspacePane', () => {
 
     expect(splitPane?.getAttribute('data-after-collapsed')).toBe('false')
     expect(statusBar?.getAttribute('data-file-area-collapsed')).toBe('false')
+  })
+
+  test('toggles the desktop file area when a branch workspace item is double-clicked', () => {
+    act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={workspace()} layout="left-right" />))
+
+    const toggle = container.querySelector<HTMLButtonElement>('[data-testid="rail-toggle-files"]')
+    expect(fileAreaSplitPane()?.getAttribute('data-after-collapsed')).toBe('true')
+
+    act(() => toggle?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 })))
+    expect(fileAreaSplitPane()?.getAttribute('data-after-collapsed')).toBe('false')
+
+    act(() => toggle?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 })))
+    expect(fileAreaSplitPane()?.getAttribute('data-after-collapsed')).toBe('true')
   })
 
   test('resets the desktop file area to collapsed when the active branch workspace changes', () => {

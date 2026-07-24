@@ -229,6 +229,7 @@ function renderList(
     countsByWorktreeKey?: Map<string, number>
     outputActiveWorktreeKeys?: string[]
     onBranchSelected?: () => void
+    onWorktreeDoubleClick?: () => void
     showActions?: boolean
   } = {},
 ) {
@@ -245,6 +246,7 @@ function renderList(
             repoId={REPO_ID}
             showActions={fixture.showActions ?? false}
             onBranchSelected={fixture.onBranchSelected}
+            onWorktreeDoubleClick={fixture.onWorktreeDoubleClick}
           />
         </TerminalSessionReadContext.Provider>
       </TerminalSessionContext.Provider>,
@@ -294,9 +296,10 @@ describe('BranchList worktree drag ordering', () => {
     )
   })
 
-  test('keeps worktree double clicks on branch selection without opening status', () => {
+  test('notifies the file area after worktree double clicks without opening status', () => {
     seedWorktreeRepo()
-    renderList()
+    const onWorktreeDoubleClick = vi.fn()
+    renderList({ onWorktreeDoubleClick })
     const featureButton = Array.from(container?.querySelectorAll('li') ?? [])
       .find((row) => row.textContent?.includes('feature/a'))
       ?.querySelector<HTMLButtonElement>('[data-workspace-list-item-main]')
@@ -308,6 +311,7 @@ describe('BranchList worktree drag ordering', () => {
     })
 
     expect(navigationState.selectRepoBranch).toHaveBeenCalledWith(REPO_ID, 'feature/a')
+    expect(onWorktreeDoubleClick).toHaveBeenCalledTimes(1)
     expect(navigationState.showRepoDetailTab).not.toHaveBeenCalled()
   })
 

@@ -10,7 +10,11 @@ import {
   TerminalSessionContext,
   TerminalSessionReadContext,
 } from '#/web/components/terminal/terminal-session-context.ts'
-import type { TerminalSessionContextValue, TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
+import type {
+  TerminalSessionContextValue,
+  TerminalSessionReadContextValue,
+  TerminalSnapshot,
+} from '#/web/components/terminal/types.ts'
 
 vi.mock('#/web/stores/i18n.ts', () => ({
   useT: () => (key: string) => key,
@@ -88,6 +92,45 @@ afterEach(() => {
 const REMOTE_REPO_ID = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/repo' })
 
 describe('TerminalSlot', () => {
+  test('shows a loading status while the terminal opens and removes it when ready', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const { worktreeSnapshot, snapshot } = controllerFixture()
+    let currentSnapshot: TerminalSnapshot = { ...snapshot, phase: 'opening', attachment: null }
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => currentSnapshot,
+      subscribeSnapshot: () => () => {},
+    }
+    const context = terminalContext()
+    const renderSlot = () =>
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+
+    await act(async () => renderSlot())
+    const loadingStatus = container.querySelector('.goblin-terminal-slot__status-overlay')
+    expect(loadingStatus?.getAttribute('role')).toBe('status')
+    expect(loadingStatus?.textContent).toContain('terminal.opening')
+    expect(loadingStatus?.querySelector('.animate-spin')).not.toBeNull()
+
+    currentSnapshot = snapshot
+    await act(async () => renderSlot())
+    expect(container.querySelector('.goblin-terminal-slot__status-overlay')).toBeNull()
+
+    await act(async () => root.unmount())
+    container.remove()
+  })
+
   test('keeps the terminal host mounted when progress appears and clears', async () => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const container = document.createElement('div')

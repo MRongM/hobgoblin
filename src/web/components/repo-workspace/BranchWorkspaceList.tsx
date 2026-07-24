@@ -84,6 +84,7 @@ export interface BranchWorkspaceListProps {
   disabled?: boolean
   changeCountById?: Readonly<Record<string, number>>
   onActivate: (id: string) => void
+  onToggleFileArea?: (item: BranchWorkspaceSnapshot) => void
   onReorder: (orderedIds: string[]) => void | Promise<void>
   onInspect: (item: BranchWorkspaceSnapshot) => void
   onRepair: (item: BranchWorkspaceSnapshot) => void
@@ -113,6 +114,7 @@ export function BranchWorkspaceList({
   disabled = false,
   changeCountById = {},
   onActivate,
+  onToggleFileArea,
   onReorder,
   onInspect,
   onRepair,
@@ -176,6 +178,7 @@ export function BranchWorkspaceList({
               disabled={disabled}
               changeCountById={changeCountById}
               onActivate={selectRoot}
+              onToggleFileArea={onToggleFileArea}
               onToggleExpanded={() => toggleExpanded(item.id)}
               onInspect={onInspect}
               onRepair={onRepair}
@@ -209,6 +212,7 @@ function BranchWorkspaceRow({
   disabled,
   changeCountById,
   onActivate,
+  onToggleFileArea,
   onToggleExpanded,
   onInspect,
   onRepair,
@@ -542,7 +546,7 @@ function BranchWorkspaceRow({
           title: item.branch,
           className: 'pr-[7.25rem]',
           onClick: activate,
-          onDoubleClick: item.repositories.length > 0 ? onToggleExpanded : undefined,
+          onDoubleClick: onToggleFileArea ? () => onToggleFileArea(item) : undefined,
         }}
         auxiliaryActions={branchWorkspaceAuxiliaryActions}
         actions={

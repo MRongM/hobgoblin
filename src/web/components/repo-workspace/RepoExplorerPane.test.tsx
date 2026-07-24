@@ -102,13 +102,22 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
 }))
 
 vi.mock('#/web/components/BranchList.tsx', () => ({
-  BranchList: ({ onBranchSelected }: { onBranchSelected?: () => void }) => (
+  BranchList: ({
+    onBranchSelected,
+    onWorktreeDoubleClick,
+  }: {
+    onBranchSelected?: () => void
+    onWorktreeDoubleClick?: () => void
+  }) => (
     <div data-testid="branch-list">
       {onBranchSelected && (
         <button type="button" data-testid="mock-select-branch" onClick={onBranchSelected}>
           select branch
         </button>
       )}
+      <button type="button" data-testid="mock-double-click-worktree" onDoubleClick={onWorktreeDoubleClick}>
+        worktree
+      </button>
     </div>
   ),
 }))
@@ -1302,6 +1311,64 @@ describe('RepoExplorerPane', () => {
     await act(async () => {
       container.querySelector<HTMLButtonElement>('[data-testid="statusbar-file-area-toggle"]')?.click()
     })
+    expect(onToggleFileArea).toHaveBeenCalledTimes(1)
+    await act(async () => root.unmount())
+  })
+
+  test('opens a collapsed worktree file area on the Files tab when its item is double-clicked', async () => {
+    const onToggleFileArea = vi.fn()
+    useReposStore.getState().setExplorerTab(REPO_ID, 'changes')
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <RepoExplorerPane
+          repoId={REPO_ID}
+          layout="left-right"
+          showActions
+          fileAreaCollapsed
+          onToggleFileArea={onToggleFileArea}
+        />,
+      )
+    })
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="mock-double-click-worktree"]')
+        ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 }))
+    })
+
+    expect(explorerTabForRepo(useReposStore.getState().repos[REPO_ID]!)).toBe('files')
+    expect(onToggleFileArea).toHaveBeenCalledTimes(1)
+    await act(async () => root.unmount())
+  })
+
+  test('closes an expanded worktree file area without changing its selected tab on double-click', async () => {
+    const onToggleFileArea = vi.fn()
+    useReposStore.getState().setExplorerTab(REPO_ID, 'changes')
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <RepoExplorerPane
+          repoId={REPO_ID}
+          layout="left-right"
+          showActions
+          fileAreaCollapsed={false}
+          onToggleFileArea={onToggleFileArea}
+        />,
+      )
+    })
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="mock-double-click-worktree"]')
+        ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 }))
+    })
+
+    expect(explorerTabForRepo(useReposStore.getState().repos[REPO_ID]!)).toBe('changes')
     expect(onToggleFileArea).toHaveBeenCalledTimes(1)
     await act(async () => root.unmount())
   })

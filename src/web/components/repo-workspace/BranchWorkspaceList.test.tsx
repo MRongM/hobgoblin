@@ -577,9 +577,10 @@ describe('BranchWorkspaceList', () => {
     expect(onActivate).not.toHaveBeenCalled()
   })
 
-  test('toggles member worktrees by double-clicking the branch workspace item', () => {
+  test('requests a file area toggle without expanding members when the branch workspace item is double-clicked', () => {
     const activeWorkspace = { ...workspace('ready'), repositories: [repositoryMember()] }
     const onActivate = vi.fn()
+    const onToggleFileArea = vi.fn()
     act(() =>
       root.render(
         withTerminalContexts(
@@ -588,6 +589,7 @@ describe('BranchWorkspaceList', () => {
             items={[activeWorkspace]}
             activeId={activeWorkspace.id}
             onActivate={onActivate}
+            onToggleFileArea={onToggleFileArea}
             onReorder={() => {}}
             onInspect={() => {}}
             onRepair={() => {}}
@@ -602,17 +604,20 @@ describe('BranchWorkspaceList', () => {
     expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).toBeNull()
 
     act(() => itemButton?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 })))
-    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).toBeNull()
+    expect(onToggleFileArea).toHaveBeenCalledWith(activeWorkspace)
     expect(onActivate).not.toHaveBeenCalled()
 
     act(() => itemButton?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 })))
     expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).toBeNull()
+    expect(onToggleFileArea).toHaveBeenCalledTimes(2)
     expect(onActivate).not.toHaveBeenCalled()
   })
 
-  test('selects an inactive item and expands its member worktrees through the double-click sequence', () => {
+  test('selects an inactive item and requests its file area through the double-click sequence', () => {
     const item = { ...workspace('ready'), repositories: [repositoryMember()] }
     const onActivate = vi.fn()
+    const onToggleFileArea = vi.fn()
     const renderList = (activeId: string | null) =>
       root.render(
         withTerminalContexts(
@@ -621,6 +626,7 @@ describe('BranchWorkspaceList', () => {
             items={[item]}
             activeId={activeId}
             onActivate={onActivate}
+            onToggleFileArea={onToggleFileArea}
             onReorder={() => {}}
             onInspect={() => {}}
             onRepair={() => {}}
@@ -640,37 +646,8 @@ describe('BranchWorkspaceList', () => {
         .querySelector<HTMLButtonElement>('[data-testid="branch-workspace-root-branch-1"]')
         ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 })),
     )
-    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).not.toBeNull()
-  })
-
-  test('does not retain hidden expansion state when double-clicking an item without member worktrees', () => {
-    const emptyItem = workspace('ready')
-    const renderList = (item: BranchWorkspaceSnapshot) =>
-      root.render(
-        withTerminalContexts(
-          <BranchWorkspaceList
-            rootId="/workspace"
-            items={[item]}
-            activeId={null}
-            onActivate={() => {}}
-            onReorder={() => {}}
-            onInspect={() => {}}
-            onRepair={() => {}}
-            onRemove={() => {}}
-            onCancel={() => {}}
-          />,
-        ),
-      )
-
-    act(() => renderList(emptyItem))
-    act(() =>
-      container
-        .querySelector<HTMLButtonElement>('[data-testid="branch-workspace-root-branch-1"]')
-        ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 })),
-    )
-    act(() => renderList({ ...emptyItem, repositories: [repositoryMember()] }))
-
     expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).toBeNull()
+    expect(onToggleFileArea).toHaveBeenCalledWith(item)
   })
 
   test('keeps a non-navigable repository member disabled while retaining tmux cleanup', async () => {

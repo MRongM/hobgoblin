@@ -49,6 +49,7 @@ interface Props {
   currentRepoId: string
   fill?: boolean
   onOpenFileArea?: () => void
+  onToggleFileArea?: () => void
   onOpenDetailArea?: () => void
 }
 
@@ -57,6 +58,7 @@ export function WorkspaceRepositoryRail({
   currentRepoId,
   fill = false,
   onOpenFileArea,
+  onToggleFileArea,
   onOpenDetailArea,
 }: Props) {
   const t = useT()
@@ -526,6 +528,7 @@ export function WorkspaceRepositoryRail({
                 gitActionPanel={gitActionPanel}
                 changeCountById={branchWorkspaceChangeCountById}
                 onActivate={(id) => activateBranchWorkspace(workspaceRootId, id)}
+                onToggleFileArea={onToggleFileArea ? () => onToggleFileArea() : undefined}
                 onReorder={(orderedIds) => void branchActions.reorder(orderedIds)}
                 onInspect={(item) =>
                   openBranchDialog(

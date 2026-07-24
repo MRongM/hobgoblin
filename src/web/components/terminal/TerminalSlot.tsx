@@ -11,6 +11,7 @@ import {
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
+import { LoaderCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '#/web/components/ui/button.tsx'
 import {
@@ -479,7 +480,13 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
         />
       )}
       {hasSessions && snapshot.phase === 'opening' && (
-        <div className="goblin-terminal-slot__status-overlay">
+        <div
+          className="goblin-terminal-slot__status-overlay"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
           <span>{t('terminal.opening')}</span>
         </div>
       )}
