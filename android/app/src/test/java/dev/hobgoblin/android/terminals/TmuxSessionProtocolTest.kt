@@ -8,6 +8,15 @@ import org.junit.Test
 
 class TmuxSessionProtocolTest {
     @Test
+    fun `project server name matches the desktop reference vector`() {
+        assertEquals(
+            "hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0",
+            TmuxSessionProtocol.serverName("/srv//projects/example/./"),
+        )
+        assertNull(TmuxSessionProtocol.serverName("srv/projects/example"))
+    }
+
+    @Test
     fun `identity matches the public desktop reference vector`() {
         val identity = TmuxSessionProtocol.identity(
             TmuxSessionDescriptor(
@@ -60,17 +69,28 @@ class TmuxSessionProtocolTest {
     @Test
     fun `attach command writes fixed metadata on the exact session`() {
         val identity = requireNotNull(TmuxSessionProtocol.identity(descriptor()))
+        val command = TmuxSessionProtocol.attachOrCreateCommand(identity, 1, "/srv/projects/example").orEmpty()
 
-        assertEquals(
-            "exec tmux new-session -A -s '${identity.sessionName}' " +
-                "-c '/srv/projects/example/worktrees/feature' " +
-                "\\; set-option -t '=${identity.sessionName}:' mouse on " +
-                "\\; set-option -t '=${identity.sessionName}:' " +
-                "@hobgoblin_init_path '/srv/projects/example/worktrees/feature' " +
-                "\\; set-option -t '=${identity.sessionName}:' @hobgoblin_terminal_number '1'",
-            TmuxSessionProtocol.attachOrCreateCommand(identity, terminalNumber = 1),
+        assertTrue(command.contains("set-option -t '=${identity.sessionName}:' mouse on"))
+        assertTrue(
+            command.contains(
+                "set-option -t '=${identity.sessionName}:' " +
+                    "@hobgoblin_init_path '/srv/projects/example/worktrees/feature'",
+            ),
         )
-        assertNull(TmuxSessionProtocol.attachOrCreateCommand(identity, terminalNumber = 0))
+        assertTrue(command.contains("@hobgoblin_terminal_number '1'"))
+        assertNull(TmuxSessionProtocol.attachOrCreateCommand(identity, 0, "/srv/projects/example"))
+    }
+
+    @Test
+    fun `attach command prefers the project server and falls back to an existing legacy session`() {
+        val identity = requireNotNull(TmuxSessionProtocol.identity(descriptor()))
+        val command = TmuxSessionProtocol.attachOrCreateCommand(identity, 1, "/srv/projects/example")
+        val serverName = "hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0"
+        assertTrue(command.orEmpty().contains("tmux -L '$serverName' has-session -t '=${identity.sessionName}'"))
+        assertTrue(command.orEmpty().contains("! tmux has-session -t '=${identity.sessionName}'"))
+        assertTrue(command.orEmpty().contains("exec tmux -L '$serverName' new-session -A"))
+        assertTrue(command.orEmpty().contains("else\n  exec tmux new-session -A"))
     }
 
     @Test
@@ -101,6 +121,24 @@ class TmuxSessionProtocolTest {
     }
 
     @Test
+    fun `combined session list retains a validated project server origin`() {
+        val serverName = "hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0"
+
+        val sessions = TmuxSessionProtocol.parseSessionList(
+            "hobgoblin-v1-aebf050981ac829e36100020\t/srv/repo/feature\t$serverName",
+            "/srv/projects/example",
+        )
+        assertEquals(serverName, sessions?.singleOrNull()?.serverName)
+        assertNull(
+            TmuxSessionProtocol.parseSessionList(
+                "hobgoblin-v1-aebf050981ac829e36100020\t/srv/repo/feature\t" +
+                    "hobgoblin-project-v1-0123456789abcdef01234567",
+                "/srv/projects/example",
+            ),
+        )
+    }
+
+    @Test
     fun `discoverable session parser verifies metadata allowed path and exact descriptor hash`() {
         val secondIdentity = requireNotNull(
             TmuxSessionProtocol.identity(
@@ -111,9 +149,10 @@ class TmuxSessionProtocolTest {
                 ),
             ),
         )
+        val serverName = "hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0"
         val output = listOf(
-            "${secondIdentity.sessionName}\t/srv/projects/example\t2",
-            "hobgoblin-v1-aebf050981ac829e36100020\t/srv/projects/example/worktrees/feature\t1",
+            "${secondIdentity.sessionName}\t/srv/projects/example\t2\t$serverName",
+            "hobgoblin-v1-aebf050981ac829e36100020\t/srv/projects/example/worktrees/feature\t1\tlegacy-default",
             "hobgoblin-v1-aebf050981ac829e36100020\t/srv/projects/example/worktrees/feature\t1",
             "user-session\t/srv/projects/example/worktrees/feature\t1",
             "hobgoblin-v1-aebf050981ac829e36100020\t/srv/projects/example/worktrees/./feature\t1",
@@ -169,13 +208,11 @@ class TmuxSessionProtocolTest {
     }
 
     @Test
-    fun `discoverable session list command separates fixed Hobgoblin metadata with real tabs`() {
-        assertEquals(
-            "command -v tmux >/dev/null 2>&1 || exit 127\n" +
-                "tmux list-sessions -F '#{session_name}\t#{@hobgoblin_init_path}\t" +
-                "#{@hobgoblin_terminal_number}'",
-            TmuxSessionProtocol.listDiscoverableSessionsScript(),
-        )
+    fun `discoverable session list command separates fixed metadata and server origin`() {
+        val script = TmuxSessionProtocol.listDiscoverableSessionsScript("/srv/projects/example")
+
+        assertTrue(script.contains("#{session_name}\\t#{@hobgoblin_init_path}\\t"))
+        assertTrue(script.contains("#{@hobgoblin_terminal_number}\\thobgoblin-project-v1-"))
     }
 
     @Test
@@ -203,18 +240,42 @@ class TmuxSessionProtocolTest {
     }
 
     @Test
-    fun `tmux administration scripts use exact protocol targets`() {
+    fun `tmux administration scripts reject non protocol targets`() {
         val sessionName = "hobgoblin-v1-aebf050981ac829e36100020"
 
-        assertEquals(
-            "command -v tmux >/dev/null 2>&1 || exit 127\ntmux list-sessions -F '#{session_name}\\t#{session_path}'",
-            TmuxSessionProtocol.listSessionsScript(),
+        assertNull(TmuxSessionProtocol.killSessionScript("/srv/projects/example", "user-session", null))
+        assertNull(
+            TmuxSessionProtocol.killSessionScript(
+                "/srv/projects/example",
+                sessionName,
+                "hobgoblin-project-v1-0123456789abcdef01234567",
+            ),
         )
-        assertEquals(
-            "command -v tmux >/dev/null 2>&1 || exit 127\ntmux kill-session -t '=$sessionName'",
-            TmuxSessionProtocol.killSessionScript(sessionName),
+    }
+
+    @Test
+    fun `tmux administration scripts address project and legacy servers explicitly`() {
+        val serverName = "hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0"
+        val listScript = TmuxSessionProtocol.listSessionsScript("/srv/projects/example")
+        val discoveryScript = TmuxSessionProtocol.listDiscoverableSessionsScript("/srv/projects/example")
+        val killScript = TmuxSessionProtocol.killSessionScript(
+            "/srv/projects/example",
+            "hobgoblin-v1-aebf050981ac829e36100020",
+            serverName,
         )
-        assertNull(TmuxSessionProtocol.killSessionScript("user-session"))
+
+        assertTrue(listScript.orEmpty().contains("tmux -L '$serverName' list-sessions"))
+        assertTrue(listScript.orEmpty().contains("#{session_path}\\t$serverName"))
+        assertTrue(listScript.orEmpty().contains("#{session_path}\\tlegacy-default"))
+        assertTrue(listScript.orEmpty().contains("run_tmux_list tmux -L '$serverName' list-sessions"))
+        assertTrue(listScript.orEmpty().contains("run_tmux_list tmux list-sessions"))
+        assertTrue(discoveryScript.orEmpty().contains("tmux -L '$serverName' list-sessions"))
+        assertTrue(discoveryScript.orEmpty().contains("#{@hobgoblin_terminal_number}\\t$serverName"))
+        assertEquals(
+            "command -v tmux >/dev/null 2>&1 || exit 127\n" +
+                "tmux -L '$serverName' kill-session -t '=hobgoblin-v1-aebf050981ac829e36100020'",
+            killScript,
+        )
     }
 
     private fun descriptor(terminalNumber: Int = 1): TmuxSessionDescriptor =

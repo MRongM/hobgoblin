@@ -97,10 +97,7 @@ interface TerminalCatalogOptions {
   withSessionSnapshot(
     result: Extract<TerminalAttachResult, { ok: true }>,
   ): Promise<Extract<TerminalAttachResult, { ok: true }>>
-  previewAssociatedTmuxSessions(input: {
-    projectRoot: string
-    itemPath: string
-  }): Promise<TmuxCleanupPreviewResult>
+  previewAssociatedTmuxSessions(input: { projectRoot: string; itemPath: string }): Promise<TmuxCleanupPreviewResult>
 }
 
 class TerminalCatalog {
@@ -304,6 +301,7 @@ class TerminalCatalog {
       terminalNumber,
       useTmux,
       existingTmuxSessionName: input.existingTmuxSession?.sessionName,
+      existingTmuxServerName: input.existingTmuxSession?.serverName,
     })
     const result = this.options.manager.ensureSession({
       ownerId: clientId,
@@ -396,6 +394,7 @@ class TerminalCatalog {
         useTmux,
         fallbackShell: process.env.SHELL,
         existingTmuxSessionName: input.existingTmuxSession?.sessionName,
+        existingTmuxServerName: input.existingTmuxSession?.serverName,
       },
     )
     const result = this.options.manager.ensureSession({

@@ -31,6 +31,7 @@ data class TmuxSessionIdentity(
 data class RemoteTmuxSession(
     val sessionName: String,
     val sessionPath: String,
+    val serverName: String? = null,
 )
 
 data class DiscoveredTmuxSession(
@@ -39,17 +40,47 @@ data class DiscoveredTmuxSession(
 )
 
 object TmuxSessionProtocol {
-    fun attachOrCreateCommand(identity: TmuxSessionIdentity, terminalNumber: Int): String? {
+    fun serverName(projectRoot: String): String? {
+        val normalizedProjectRoot = normalizePath(projectRoot) ?: return null
+        val digest = digestPrefix(listOf(ServerProtocol, normalizedProjectRoot))
+        return "$ServerNamePrefix$digest"
+    }
+
+    fun attachOrCreateCommand(
+        identity: TmuxSessionIdentity,
+        terminalNumber: Int,
+        projectRoot: String,
+    ): String? {
         if (terminalNumber < 1) return null
-        val target = "=${identity.sessionName}:"
+        val serverName = serverName(projectRoot) ?: return null
+        val sessionTarget = "=${identity.sessionName}"
+        val paneTarget = "$sessionTarget:"
+        val projectTmux = "tmux -L ${shellQuote(serverName)}"
+        val projectCommand = attachOrCreateCommandForTmux(projectTmux, identity, terminalNumber, paneTarget)
+        val legacyCommand = attachOrCreateCommandForTmux("tmux", identity, terminalNumber, paneTarget)
         return listOf(
-            "exec tmux new-session -A -s ${shellQuote(identity.sessionName)} " +
+            "if $projectTmux has-session -t ${shellQuote(sessionTarget)} 2>/dev/null || " +
+                "! tmux has-session -t ${shellQuote(sessionTarget)} 2>/dev/null; then",
+            "  $projectCommand",
+            "else",
+            "  $legacyCommand",
+            "fi",
+        ).joinToString("\n")
+    }
+
+    private fun attachOrCreateCommandForTmux(
+        tmuxCommand: String,
+        identity: TmuxSessionIdentity,
+        terminalNumber: Int,
+        target: String,
+    ): String =
+        listOf(
+            "exec $tmuxCommand new-session -A -s ${shellQuote(identity.sessionName)} " +
                 "-c ${shellQuote(identity.initialPath)}",
             "set-option -t ${shellQuote(target)} mouse on",
             "set-option -t ${shellQuote(target)} $InitPathOption ${shellQuote(identity.initialPath)}",
             "set-option -t ${shellQuote(target)} $TerminalNumberOption ${shellQuote(terminalNumber.toString())}",
         ).joinToString(" \\; ")
-    }
 
     fun normalizePath(value: String): String? {
         if (
@@ -76,39 +107,55 @@ object TmuxSessionProtocol {
         val projectRoot = normalizePath(descriptor.projectRoot) ?: return null
         val workingDirectory = normalizePath(descriptor.workingDirectory) ?: return null
         if (descriptor.terminalNumber < 1) return null
-        val serialized = listOf(
-            SessionProtocol,
-            projectRoot,
-            workingDirectory,
-            descriptor.terminalNumber.toString(),
-        ).joinToString("\u0000")
-        val digest = MessageDigest.getInstance("SHA-256")
-            .digest(serialized.toByteArray(StandardCharsets.UTF_8))
-            .joinToString("") { byte ->
-                val value = byte.toInt() and 0xff
-                "${HexChars[value ushr 4]}${HexChars[value and 0x0f]}"
-            }
-            .take(HashHexChars)
+        val digest = digestPrefix(
+            listOf(
+                SessionProtocol,
+                projectRoot,
+                workingDirectory,
+                descriptor.terminalNumber.toString(),
+            ),
+        )
         return TmuxSessionIdentity(
             sessionName = "$SessionNamePrefix$digest",
             initialPath = workingDirectory,
         )
     }
 
+    private fun digestPrefix(fields: List<String>): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(fields.joinToString("\u0000").toByteArray(StandardCharsets.UTF_8))
+            .joinToString("") { byte ->
+                val value = byte.toInt() and 0xff
+                "${HexChars[value ushr 4]}${HexChars[value and 0x0f]}"
+            }
+            .take(HashHexChars)
+
     fun isCurrentSessionName(value: String): Boolean = CurrentSessionNamePattern.matches(value)
 
-    fun parseSessionList(output: String): List<RemoteTmuxSession>? {
+    fun parseSessionList(output: String, projectRoot: String? = null): List<RemoteTmuxSession>? {
         if (output.isEmpty()) return emptyList()
+        val expectedServerName = projectRoot?.let(::serverName)
+        if (projectRoot != null && expectedServerName == null) return null
         val sessions = mutableListOf<RemoteTmuxSession>()
         output.split('\n').forEach { rawLine ->
             val line = rawLine.removeSuffix("\r")
             if (line.isEmpty()) return@forEach
             val fields = line.split('\t')
-            if (fields.size != 2) return null
+            if (fields.size !in 2..3) return null
             val sessionName = fields[0]
             val sessionPath = normalizePath(fields[1]) ?: return null
+            val serverMarker = fields.getOrNull(2)
+            val serverName = when (serverMarker) {
+                null, LegacyDefaultServerMarker -> null
+                expectedServerName -> expectedServerName
+                else -> return null
+            }
             if (sessionName.isEmpty()) return null
-            sessions += RemoteTmuxSession(sessionName = sessionName, sessionPath = sessionPath)
+            sessions += RemoteTmuxSession(
+                sessionName = sessionName,
+                sessionPath = sessionPath,
+                serverName = serverName,
+            )
         }
         return sessions
     }
@@ -119,13 +166,18 @@ object TmuxSessionProtocol {
         allowedInitialPaths: Set<String>,
     ): List<DiscoveredTmuxSession>? {
         val normalizedProjectRoot = normalizePath(projectRoot) ?: return null
+        val expectedServerName = serverName(normalizedProjectRoot) ?: return null
         val normalizedAllowedPaths = allowedInitialPaths.mapNotNull(::normalizePath).toSet()
         val sessionsByName = linkedMapOf<String, DiscoveredTmuxSession>()
         output.lineSequence().forEach { rawLine ->
             val line = rawLine.removeSuffix("\r")
             if (line.isEmpty()) return@forEach
             val fields = line.split('\t')
-            if (fields.size != 3) return@forEach
+            if (fields.size !in 3..4) return@forEach
+            val serverMarker = fields.getOrNull(3)
+            if (serverMarker != null && serverMarker != expectedServerName && serverMarker != LegacyDefaultServerMarker) {
+                return@forEach
+            }
             val sessionName = fields[0]
             if (!isCurrentSessionName(sessionName)) return@forEach
             val initialPath = fields[1]
@@ -157,21 +209,48 @@ object TmuxSessionProtocol {
             session.sessionName == identity.sessionName &&
             normalizePath(session.sessionPath) == identity.initialPath
 
-    fun listSessionsScript(): String = listOf(
-        "command -v tmux >/dev/null 2>&1 || exit 127",
-        "tmux list-sessions -F '#{session_name}\\t#{session_path}'",
-    ).joinToString("\n")
+    fun listSessionsScript(projectRoot: String): String = combinedListScript(
+        projectRoot = projectRoot,
+        format = "#{session_name}\\t#{session_path}",
+    )
 
-    fun listDiscoverableSessionsScript(): String = listOf(
-        "command -v tmux >/dev/null 2>&1 || exit 127",
-        "tmux list-sessions -F '#{session_name}\t#{${InitPathOption}}\t#{${TerminalNumberOption}}'",
-    ).joinToString("\n")
+    fun listDiscoverableSessionsScript(projectRoot: String): String = combinedListScript(
+        projectRoot = projectRoot,
+        format = "#{session_name}\\t#{${InitPathOption}}\\t#{${TerminalNumberOption}}",
+    )
 
-    fun killSessionScript(sessionName: String): String? {
+    fun killSessionScript(projectRoot: String, sessionName: String, serverName: String?): String? {
         if (!isCurrentSessionName(sessionName)) return null
+        val expectedServerName = serverName(projectRoot) ?: return null
+        if (serverName != null && serverName != expectedServerName) return null
         return listOf(
             "command -v tmux >/dev/null 2>&1 || exit 127",
-            "tmux kill-session -t ${shellQuote("=$sessionName")}",
+            "tmux${serverName?.let { " -L ${shellQuote(it)}" }.orEmpty()} " +
+                "kill-session -t ${shellQuote("=$sessionName")}",
+        ).joinToString("\n")
+    }
+
+    private fun combinedListScript(projectRoot: String, format: String): String {
+        val serverName = requireNotNull(serverName(projectRoot)) { "Normalized absolute tmux project root is required" }
+        return listOf(
+            "command -v tmux >/dev/null 2>&1 || exit 127",
+            "run_tmux_list() {",
+            "  tmux_output=${'$'}(\"${'$'}@\" 2>&1)",
+            "  tmux_status=${'$'}?",
+            "  if [ \"${'$'}tmux_status\" -eq 0 ]; then",
+            "    [ -z \"${'$'}tmux_output\" ] || printf '%s\\n' \"${'$'}tmux_output\"",
+            "    return 0",
+            "  fi",
+            "  case \"${'$'}tmux_output\" in",
+            "    *\"no server running\"*|*\"failed to connect to server\"*|*\"no sessions\"*) return 0 ;;",
+            "  esac",
+            "  printf '%s\\n' \"${'$'}tmux_output\" >&2",
+            "  return \"${'$'}tmux_status\"",
+            "}",
+            "run_tmux_list tmux -L ${shellQuote(serverName)} list-sessions " +
+                "-F ${shellQuote("$format\\t$serverName")} || exit ${'$'}?",
+            "run_tmux_list tmux list-sessions " +
+                "-F ${shellQuote("$format\\t$LegacyDefaultServerMarker")} || exit ${'$'}?",
         ).joinToString("\n")
     }
 
@@ -179,6 +258,9 @@ object TmuxSessionProtocol {
 
     private const val SessionProtocol = "hobgoblin-terminal-session-v1"
     private const val SessionNamePrefix = "hobgoblin-v1-"
+    private const val ServerProtocol = "hobgoblin-tmux-server-v1"
+    private const val ServerNamePrefix = "hobgoblin-project-v1-"
+    private const val LegacyDefaultServerMarker = "legacy-default"
     private const val InitPathOption = "@hobgoblin_init_path"
     private const val TerminalNumberOption = "@hobgoblin_terminal_number"
     private const val HashHexChars = 24

@@ -29,6 +29,29 @@ Normalize both paths lexically using POSIX rules:
 
 Serialize `terminalNumber` as base-10 ASCII without leading zeroes. Reject zero, negative, fractional, and unsafe integer values.
 
+## Project-scoped server
+
+Every descriptor selects one tmux server from its normalized `projectRoot`. UTF-8 encode and join these fields with one NUL byte:
+
+```text
+hobgoblin-tmux-server-v1
+<normalized projectRoot>
+```
+
+The server name is `hobgoblin-project-v1-` followed by the first 24 lowercase hexadecimal characters of the SHA-256 digest. It matches:
+
+```text
+^hobgoblin-project-v1-[a-f0-9]{24}$
+```
+
+For `/srv/projects/example`, the server name is:
+
+```text
+hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0
+```
+
+All root and worktree terminals with the same descriptor project root share this server. Different project roots do not share a tmux server, and new Hobgoblin sessions do not use the user's default server. The server name is deterministic transport placement rather than another session-identity field, so it is recomputed instead of persisted.
+
 ## Name calculation
 
 UTF-8 encode these four fields and join them with exactly one NUL byte (`0x00`):
@@ -94,10 +117,10 @@ Each displayed `<NUL>` is one byte with value `0x00`, not source text or a strin
 
 ## Attach or create
 
-After computing the name, an external application may create or attach idempotently:
+After computing the session and server names, an external application may create or attach idempotently:
 
 ```sh
-tmux new-session -A \
+tmux -L 'hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0' new-session -A \
   -s 'hobgoblin-v1-aebf050981ac829e36100020' \
   -c '/srv/projects/example/worktrees/feature' \
   \; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' mouse on \
@@ -107,12 +130,14 @@ tmux new-session -A \
        @hobgoblin_terminal_number '1'
 ```
 
-All three `set-option` commands use the exact target-pane form `=<session>:`. The trailing colon is required: using `=<session>` fails on tmux 3.6a and leaves the identity options unset even though the session itself was created.
+All three `set-option` commands run in the selected project server and use the exact target-pane form `=<session>:`. The trailing colon is required: using `=<session>` fails on tmux 3.6a and leaves the identity options unset even though the session itself was created.
+
+For upgrade compatibility, attach-or-create checks the project server first. If it does not contain the exact deterministic name but the legacy default server does, Hobgoblin attaches there and repairs its metadata. If neither server contains the name, Hobgoblin creates it in the project server. This fallback never creates a new session in the default server.
 
 Inspect the live metadata with:
 
 ```sh
-tmux -u list-sessions \
+tmux -L 'hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0' -u list-sessions \
   -F 'name=#{session_name} init_path=#{@hobgoblin_init_path} terminal=#{@hobgoblin_terminal_number} attached=#{session_attached}'
 ```
 
@@ -127,20 +152,22 @@ The worktree and branch-workspace item menus keep tmux creation and recovery as 
 - **New tmux terminal** creates one internal terminal through the normal `tmux-if-available` launch path. It does not scan the directory.
 - **Restore tmux terminals** scans the selected directory and batch-opens only existing detached Hobgoblin sessions. It never creates a replacement session when no match exists.
 
-Local and SSH recovery use the same strict list format:
+Local and SSH recovery list both the project server and the legacy default server. Each row retains its validated origin internally; conceptually the format is:
 
 ```sh
-tmux list-sessions -F '#{@hobgoblin_init_path}\t#{@hobgoblin_terminal_number}\t#{session_attached}\t#{session_name}'
+#{@hobgoblin_init_path}\t#{@hobgoblin_terminal_number}\t#{session_attached}\t#{session_name}\t<server-origin>
 ```
 
-A row is eligible only when the path, terminal number, and recomputed v1 name pass the association rules described below and `session_attached` is the canonical non-negative integer `0`. Rows with attached clients, malformed attachment counts, legacy names, mismatched paths, or mismatched hashes are ignored. An empty eligible set is a successful no-op and leaves the terminal catalog unchanged.
+A row is eligible only when the server origin is the derived project server or the explicit `legacy-default` marker, and the path, terminal number, and recomputed v1 name pass the association rules described below. Recovery additionally requires `session_attached` to be the canonical integer `0`. Rows with attached clients, malformed attachment counts, unknown origins, legacy names, mismatched paths, or mismatched hashes are ignored. If the same valid session exists in both servers, the project-scoped copy wins. An empty eligible set is a successful no-op and leaves the terminal catalog unchanged.
+
+A missing project or legacy server contributes an empty result. Any other list failure aborts recovery instead of being hidden by a missing-server response from the other origin.
 
 ## Android discovery and recovery
 
-When an Android project Terminals surface opens, it may list live sessions with:
+When an Android project Terminals surface opens, it lists the derived project server and the legacy default server with the same origin markers:
 
 ```sh
-tmux list-sessions -F '#{session_name}\t#{@hobgoblin_init_path}\t#{@hobgoblin_terminal_number}'
+#{session_name}\t#{@hobgoblin_init_path}\t#{@hobgoblin_terminal_number}\t<server-origin>
 ```
 
 Android accepts one row only when:
@@ -150,7 +177,7 @@ Android accepts one row only when:
 - the session name matches the v1 name pattern; and
 - hashing the project root, initial path, and terminal number reproduces that exact session name.
 
-Invalid rows, ordinary user sessions, legacy names, and v1 sessions without both options are ignored independently. An accepted session missing from Android's retained records becomes a disconnected `terminal-N` record. Discovery does not open an SSH shell; opening that record uses the ordinary reconnect path to attach to the verified session.
+Invalid rows, unknown server origins, ordinary user sessions, legacy names, and v1 sessions without both options are ignored independently. Project-server rows are emitted first and win same-name deduplication. An accepted session missing from Android's retained records becomes a disconnected `terminal-N` record. Discovery does not open an SSH shell; opening that record uses the ordinary reconnect path, which checks the project server before the legacy default server. Android recomputes the server name from its retained repository remote path, so its terminal-session persistence format does not gain a socket field.
 
 Removing only the Android record leaves tmux alive, so a later scan may recover it again. Closing the associated tmux session through the explicit checked close action prevents later recovery.
 
@@ -158,7 +185,7 @@ Removing only the Android record leaves tmux alive, so a later scan may recover 
 
 When Hobgoblin launches an internal terminal through this protocol, it records the calculated session name and normalized working directory on the server-side terminal record. This association is fixed for that terminal's lifetime; changing the tmux preference later does not reclassify an existing terminal.
 
-The renderer may receive a boolean indicating that an internal terminal is tmux-backed, but it does not receive the session name. If the user explicitly chooses to close the associated tmux session while closing one internal terminal, the server validates the stored name against the current `hobgoblin-v1-` protocol and requires the stored path to exactly match the terminal worktree path before issuing `kill-session` locally or over SSH.
+The renderer may receive a boolean indicating that an internal terminal is tmux-backed, but it does not receive the session name or server origin. If the user explicitly chooses to close the associated tmux session while closing one internal terminal, the server re-lists both eligible servers, validates the stored name against the current `hobgoblin-v1-` protocol, requires the stored path to exactly match the terminal worktree path, and issues `kill-session` only against the validated origin locally or over SSH.
 
 Closing the associated tmux session is fail-closed: Hobgoblin keeps the internal terminal open when validation or the tmux command fails. A session that disappeared after confirmation is treated as already closed. Bulk terminal-close actions never close tmux sessions.
 

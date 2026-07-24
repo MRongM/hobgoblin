@@ -1,5 +1,6 @@
 import {
   buildTmuxAttachShellCommand,
+  buildTmuxServerName,
   isHobgoblinTmuxSessionName,
   normalizeTmuxSessionDescriptor,
   type TmuxSessionDescriptor,
@@ -23,6 +24,7 @@ export interface RemoteTerminalInvocationOptions {
   sshOptions?: readonly string[]
   useTmux?: boolean
   existingTmuxSessionName?: string
+  existingTmuxServerName?: string
 }
 
 export function buildManagedRemoteTerminalInvocation(
@@ -33,13 +35,20 @@ export function buildManagedRemoteTerminalInvocation(
   if (!isSafeRemoteAlias(target.alias) || !descriptor) return null
 
   const existingSessionName = options.existingTmuxSessionName
+  const existingServerName = options.existingTmuxServerName
   if (existingSessionName !== undefined && !isHobgoblinTmuxSessionName(existingSessionName)) return null
+  if (
+    existingServerName !== undefined &&
+    (!existingSessionName || existingServerName !== buildTmuxServerName(descriptor.projectRoot))
+  ) {
+    return null
+  }
   const tmuxInvocation =
     options.useTmux === true
       ? existingSessionName
         ? {
             sessionName: existingSessionName,
-            command: `exec tmux attach-session -t ${shellQuote(`=${existingSessionName}`)}`,
+            command: `exec tmux${existingServerName ? ` -L ${shellQuote(existingServerName)}` : ''} attach-session -t ${shellQuote(`=${existingSessionName}`)}`,
           }
         : buildTmuxAttachShellCommand(descriptor)
       : null

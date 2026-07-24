@@ -40,7 +40,7 @@ class RemoteTmuxSessionService(
         val secrets = SshConnectionSecrets(acceptedHostFingerprint = fingerprint)
         val listed = client.runCommand(
             target = target,
-            script = TmuxSessionProtocol.listDiscoverableSessionsScript(),
+            script = TmuxSessionProtocol.listDiscoverableSessionsScript(projectRoot),
             secrets = secrets,
         )
         if (!listed.ok) {
@@ -64,12 +64,16 @@ class RemoteTmuxSessionService(
     fun closeAssociatedSession(
         target: RemoteTarget,
         identity: TmuxSessionIdentity,
+        projectRoot: String,
     ): RemoteTmuxCloseResult = try {
         require(TmuxSessionProtocol.isCurrentSessionName(identity.sessionName)) {
             "Invalid Hobgoblin tmux session name"
         }
         require(TmuxSessionProtocol.normalizePath(identity.initialPath) == identity.initialPath) {
             "Invalid Hobgoblin tmux initial path"
+        }
+        require(TmuxSessionProtocol.normalizePath(projectRoot) == projectRoot) {
+            "Invalid Hobgoblin tmux project root"
         }
         val fingerprint = client.fetchHostFingerprint(target)
         require(hostKeyStore.evaluate(target, fingerprint) is HostKeyTrust.Trusted) {
@@ -78,7 +82,7 @@ class RemoteTmuxSessionService(
         val secrets = SshConnectionSecrets(acceptedHostFingerprint = fingerprint)
         val listed = client.runCommand(
             target = target,
-            script = TmuxSessionProtocol.listSessionsScript(),
+            script = TmuxSessionProtocol.listSessionsScript(projectRoot),
             secrets = secrets,
         )
         if (!listed.ok) {
@@ -89,13 +93,14 @@ class RemoteTmuxSessionService(
                 RemoteTmuxCloseResult.Failed(message)
             }
         }
-        val sessions = TmuxSessionProtocol.parseSessionList(listed.stdout)
+        val sessions = TmuxSessionProtocol.parseSessionList(listed.stdout, projectRoot)
             ?: return RemoteTmuxCloseResult.Failed("tmux returned an invalid session list")
-        if (sessions.none { session -> TmuxSessionProtocol.matches(identity, session) }) {
+        val matchedSession = sessions.firstOrNull { session -> TmuxSessionProtocol.matches(identity, session) }
+        if (matchedSession == null) {
             return RemoteTmuxCloseResult.Missing
         }
 
-        val killScript = TmuxSessionProtocol.killSessionScript(identity.sessionName)
+        val killScript = TmuxSessionProtocol.killSessionScript(projectRoot, identity.sessionName, matchedSession.serverName)
             ?: return RemoteTmuxCloseResult.Failed("Invalid Hobgoblin tmux session name")
         val killed = client.runCommand(target = target, script = killScript, secrets = secrets)
         if (killed.ok) {

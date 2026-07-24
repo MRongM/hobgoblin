@@ -473,6 +473,9 @@ fun HobgoblinAndroidApp(
                                 val result = remoteTmuxSessionService.closeAssociatedSession(
                                     target = RemoteTarget.fromHostProfile(host, session.remotePath),
                                     identity = identity,
+                                    projectRoot = requireNotNull(session.repositoryRemotePath) {
+                                        "This tmux terminal has no repository project root."
+                                    },
                                 )
                             ) {
                                 RemoteTmuxCloseResult.Closed,

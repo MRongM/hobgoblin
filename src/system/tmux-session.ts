@@ -3,6 +3,8 @@ import path from 'node:path'
 
 const TMUX_SESSION_PROTOCOL = 'hobgoblin-terminal-session-v1'
 const TMUX_SESSION_PREFIX = 'hobgoblin-v1-'
+const TMUX_SERVER_PROTOCOL = 'hobgoblin-tmux-server-v1'
+const TMUX_SERVER_PREFIX = 'hobgoblin-project-v1-'
 const HOBGOBLIN_TMUX_SESSION_NAME_RE = /^hobgoblin-v1-[a-f0-9]{24}$/u
 const MAX_TMUX_SESSION_PATH_CHARS = 4096
 const UNSAFE_PATH_CHARS_RE = /[\0-\x1f\x7f]/
@@ -14,6 +16,16 @@ export interface TmuxSessionDescriptor {
   projectRoot: string
   workingDirectory: string
   terminalNumber: number
+}
+
+export function buildTmuxServerName(projectRootInput: string): string | null {
+  const projectRoot = normalizeTmuxSessionPath(projectRootInput)
+  if (!projectRoot) return null
+  const digest = createHash('sha256')
+    .update(`${TMUX_SERVER_PROTOCOL}\0${projectRoot}`, 'utf8')
+    .digest('hex')
+    .slice(0, 24)
+  return `${TMUX_SERVER_PREFIX}${digest}`
 }
 
 export function normalizeTmuxSessionDescriptor(input: TmuxSessionDescriptor): TmuxSessionDescriptor | null {
@@ -41,17 +53,37 @@ export function buildTmuxAttachShellCommand(
 ): { sessionName: string; command: string } | null {
   const descriptor = normalizeTmuxSessionDescriptor(input)
   const sessionName = descriptor ? buildTmuxSessionName(descriptor) : null
-  if (!descriptor || !sessionName) return null
+  const serverName = descriptor ? buildTmuxServerName(descriptor.projectRoot) : null
+  if (!descriptor || !sessionName || !serverName) return null
   const paneTarget = `=${sessionName}:`
+  const sessionTarget = `=${sessionName}`
+  const projectTmux = `tmux -L ${shellQuote(serverName)}`
+  const projectCommand = buildAttachOrCreateCommand(projectTmux, descriptor, sessionName, paneTarget)
+  const legacyCommand = buildAttachOrCreateCommand('tmux', descriptor, sessionName, paneTarget)
   return {
     sessionName,
     command: [
-      `exec tmux new-session -A -s ${shellQuote(sessionName)} -c ${shellQuote(descriptor.workingDirectory)}`,
-      `set-option -t ${shellQuote(paneTarget)} mouse on`,
-      `set-option -t ${shellQuote(paneTarget)} ${TMUX_INIT_PATH_OPTION} ${shellQuote(descriptor.workingDirectory)}`,
-      `set-option -t ${shellQuote(paneTarget)} ${TMUX_TERMINAL_NUMBER_OPTION} ${shellQuote(String(descriptor.terminalNumber))}`,
-    ].join(' \\; '),
+      `if ${projectTmux} has-session -t ${shellQuote(sessionTarget)} 2>/dev/null || ! tmux has-session -t ${shellQuote(sessionTarget)} 2>/dev/null; then`,
+      `  ${projectCommand}`,
+      'else',
+      `  ${legacyCommand}`,
+      'fi',
+    ].join('\n'),
   }
+}
+
+function buildAttachOrCreateCommand(
+  tmuxCommand: string,
+  descriptor: TmuxSessionDescriptor,
+  sessionName: string,
+  paneTarget: string,
+): string {
+  return [
+    `exec ${tmuxCommand} new-session -A -s ${shellQuote(sessionName)} -c ${shellQuote(descriptor.workingDirectory)}`,
+    `set-option -t ${shellQuote(paneTarget)} mouse on`,
+    `set-option -t ${shellQuote(paneTarget)} ${TMUX_INIT_PATH_OPTION} ${shellQuote(descriptor.workingDirectory)}`,
+    `set-option -t ${shellQuote(paneTarget)} ${TMUX_TERMINAL_NUMBER_OPTION} ${shellQuote(String(descriptor.terminalNumber))}`,
+  ].join(' \\; ')
 }
 
 export function normalizeTmuxSessionPath(value: string): string | null {

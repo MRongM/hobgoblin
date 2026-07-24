@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { spawn } from 'node-pty'
 import { getWorktrees } from '#/system/git/worktrees.ts'
 import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
-import { buildTmuxSessionName } from '#/system/tmux-session.ts'
+import { buildTmuxServerName, buildTmuxSessionName } from '#/system/tmux-session.ts'
 import {
   closeAllServerTerminalSessions,
   closeServerTerminalSessions,
@@ -160,6 +160,7 @@ async function createTerminalSession(
 
 describe('server terminal sessions', () => {
   test('opens only detached associated tmux sessions in original terminal-number order with one discovery', async () => {
+    const serverName = buildTmuxServerName('/repo')!
     const terminalOne = buildTmuxSessionName({
       projectRoot: '/repo',
       workingDirectory: '/repo-linked',
@@ -179,9 +180,9 @@ describe('server terminal sessions', () => {
       ok: true,
       targetPath: '/repo-linked',
       sessions: [
-        { sessionName: terminalTwo, initialPath: '/repo-linked', terminalNumber: 2, attachedClients: 0 },
+        { sessionName: terminalTwo, initialPath: '/repo-linked', terminalNumber: 2, attachedClients: 0, serverName },
         { sessionName: terminalThree, initialPath: '/repo-linked', terminalNumber: 3, attachedClients: 1 },
-        { sessionName: terminalOne, initialPath: '/repo-linked', terminalNumber: 1, attachedClients: 0 },
+        { sessionName: terminalOne, initialPath: '/repo-linked', terminalNumber: 1, attachedClients: 0, serverName },
       ],
     })
     const result = await openServerTmuxSessions('client_1', {
@@ -210,8 +211,8 @@ describe('server terminal sessions', () => {
     expect(tmuxCleanupMocks.previewAssociatedTmuxSessions).toHaveBeenCalledTimes(1)
     expect(spawn).toHaveBeenCalledTimes(2)
     expect(vi.mocked(spawn).mock.calls.map((call) => (call[1] as string[]).at(-1))).toEqual([
-      expect.stringContaining(`tmux attach-session -t '=${terminalOne}'`),
-      expect.stringContaining(`tmux attach-session -t '=${terminalTwo}'`),
+      expect.stringContaining(`tmux -L '${serverName}' attach-session -t '=${terminalOne}'`),
+      expect.stringContaining(`tmux -L '${serverName}' attach-session -t '=${terminalTwo}'`),
     ])
   })
 

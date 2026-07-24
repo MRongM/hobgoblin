@@ -68,6 +68,10 @@ _Avoid_: Running-state detection time, process completion delay, breathing-indic
 The normalized project root path, terminal working-directory path, and positive terminal slot number that together identify one tmux-backed internal terminal independently of whether Hobgoblin or an external terminal application creates it first. It excludes transport endpoint, display, branch, and ephemeral PTY identity, preserves logical path identity without resolving symbolic links, and is the public input for deterministic tmux session naming.
 _Avoid_: Terminal session ID, tmux connection settings, SSH terminal identity
 
+**Project-scoped tmux server**:
+The deterministic tmux server selected from a tmux session descriptor's normalized project root, shared by that project's root and worktree terminals while remaining isolated from other project roots and the user's default tmux server. The default tmux server is consulted only to retain compatibility with sessions created before project-scoped servers were introduced.
+_Avoid_: Tmux session, global tmux server, per-terminal tmux server
+
 **Tmux session name**:
 The deterministic `hobgoblin-v1-<digest>` identifier derived from a tmux session descriptor and used by internal and external terminal applications to create or attach to the same tmux session. It is distinct from a `terminal-N` slot, a server terminal key, and an ephemeral `term_<UUID>` PTY session ID.
 _Avoid_: Terminal session ID, terminal ID, PTY session ID

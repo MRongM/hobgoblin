@@ -37,7 +37,7 @@ interface TmuxRuntime {
   projectRoot: string
   targetPath: string
   list: () => Promise<TmuxListResult>
-  killName: (sessionName: string) => Promise<TmuxCommandResult>
+  kill: (session: TmuxSessionRecord) => Promise<TmuxCommandResult>
 }
 
 type RuntimeResult = { ok: true; runtime: TmuxRuntime } | { ok: false; message: string }
@@ -60,16 +60,12 @@ export async function closeAssociatedTmuxSessionByName(
   if (!resolved.ok) return resolved
   const listed = await safelyList(resolved.runtime)
   if (!listed.ok) return listed
-  const session = associatedSessions(
-    listed.sessions,
-    resolved.runtime.projectRoot,
-    resolved.runtime.targetPath,
-  ).find(
+  const session = associatedSessions(listed.sessions, resolved.runtime.projectRoot, resolved.runtime.targetPath).find(
     (candidate) => candidate.sessionName === input.sessionName,
   )
   if (!session) return { ok: true, status: 'missing' }
   try {
-    const killed = await resolved.runtime.killName(input.sessionName)
+    const killed = await resolved.runtime.kill(session)
     if (killed.ok) return { ok: true, status: 'closed' }
     return isTmuxSessionMissingMessage(killed.message)
       ? { ok: true, status: 'missing' }
@@ -120,7 +116,7 @@ export async function cleanupAssociatedTmuxSessions(
     const session = sessionsByName.get(sessionName)
     if (!session) continue
     try {
-      const result = await resolved.runtime.killName(sessionName)
+      const result = await resolved.runtime.kill(session)
       if (result.ok) deleted.push(session)
       else failed.push({ sessionName, message: result.message })
     } catch (error) {
@@ -156,8 +152,13 @@ async function resolveTmuxRuntime(
       runtime: {
         projectRoot: normalizeTmuxSessionPath(input.projectRoot) ?? input.projectRoot,
         targetPath,
-        list: async () => await listLocal({ signal }),
-        killName: async (sessionName) => await killLocalByName(sessionName, { signal }),
+        list: async () => await listLocal({ projectRoot: input.projectRoot, signal }),
+        kill: async (session) =>
+          await killLocalByName(session.sessionName, {
+            projectRoot: input.projectRoot,
+            serverName: session.serverName,
+            signal,
+          }),
       },
     }
   }
@@ -170,9 +171,22 @@ async function resolveTmuxRuntime(
       runtime: {
         projectRoot: target.remotePath,
         targetPath,
-        list: async () => remoteListResult(await runRemote(target, { type: 'tmuxListSessions' }, { signal })),
-        killName: async (sessionName) => {
-          const result = await runRemote(target, { type: 'tmuxKillSessionByName', sessionName }, { signal })
+        list: async () =>
+          remoteListResult(
+            await runRemote(target, { type: 'tmuxListSessions', projectRoot: target.remotePath }, { signal }),
+            target.remotePath,
+          ),
+        kill: async (session) => {
+          const result = await runRemote(
+            target,
+            {
+              type: 'tmuxKillSessionByName',
+              projectRoot: target.remotePath,
+              sessionName: session.sessionName,
+              serverName: session.serverName,
+            },
+            { signal },
+          )
           return { ok: result.ok, message: result.ok ? result.stderr : result.message || result.stderr || 'unknown' }
         },
       },
@@ -190,7 +204,7 @@ async function safelyList(runtime: TmuxRuntime): Promise<TmuxListResult> {
   }
 }
 
-function remoteListResult(result: RemoteCommandResult): TmuxListResult {
+function remoteListResult(result: RemoteCommandResult, projectRoot: string): TmuxListResult {
   return tmuxListResultFromProcessResult(
     result.ok
       ? { ok: true, stdout: result.stdout, stderr: result.stderr }
@@ -200,6 +214,8 @@ function remoteListResult(result: RemoteCommandResult): TmuxListResult {
           stderr: result.stderr,
           message: result.message || result.stderr || 'unknown',
         },
+    undefined,
+    projectRoot,
   )
 }
 
@@ -213,7 +229,13 @@ function associatedSessions(
     return initialPath === targetPath ? [{ ...session, initialPath }] : []
   })
   const terminalNumbers = resolveTmuxSessionTerminalNumbers(projectRoot, pathMatches)
-  return pathMatches.filter((session) => terminalNumbers.get(session.sessionName) === session.terminalNumber)
+  const preferredByName = new Map<string, TmuxSessionRecord>()
+  for (const session of pathMatches) {
+    if (terminalNumbers.get(session.sessionName) !== session.terminalNumber) continue
+    const existing = preferredByName.get(session.sessionName)
+    if (!existing || (!existing.serverName && session.serverName)) preferredByName.set(session.sessionName, session)
+  }
+  return [...preferredByName.values()]
 }
 
 function normalizeApprovedSessionNames(value: unknown): string[] | null {
