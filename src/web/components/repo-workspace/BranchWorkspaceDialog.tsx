@@ -165,13 +165,14 @@ export function BranchWorkspaceDialog({
     setApprovals([])
   }, [mode, plan?.token])
 
-  const refreshAuxiliaryCandidates = async () => {
+  const refreshAuxiliaryCandidates = async (closeOnSuccess = false) => {
     if (auxiliaryRefreshPending) return
     setAuxiliaryRefreshPending(true)
     setAuxiliaryRefreshError(null)
     try {
       const response = await onRefreshAuxiliaryCandidates()
       if (!response.ok) setAuxiliaryRefreshError(response.message)
+      else if (closeOnSuccess) onOpenChange(false)
     } catch {
       setAuxiliaryRefreshError('workspace.branch-workspace.read-failed')
     } finally {
@@ -458,6 +459,12 @@ export function BranchWorkspaceDialog({
           </div>
         ) : null}
 
+        {mode === 'repair' && auxiliaryRefreshError ? (
+          <p className="text-xs text-danger" role="alert">
+            {t(auxiliaryRefreshError)}
+          </p>
+        ) : null}
+
         {!plan && mode === 'reduce' && workspace ? (
           <div className="grid gap-3">
             <p className="rounded-md border border-warning/40 bg-warning/5 p-3 text-xs text-muted-foreground">
@@ -614,6 +621,18 @@ export function BranchWorkspaceDialog({
         ) : null}
 
         <DialogFooter>
+          {mode === 'repair' ? (
+            <Button
+              type="button"
+              variant="outline"
+              data-action="clear-cache"
+              disabled={pending || auxiliaryRefreshPending}
+              onClick={() => void refreshAuxiliaryCandidates(true)}
+            >
+              <RefreshCw className={cn(auxiliaryRefreshPending && 'animate-spin')} aria-hidden="true" />
+              {t('error.clear-cache')}
+            </Button>
+          ) : null}
           <Button type="button" variant="outline" onClick={close}>
             {t('dialog.cancel')}
           </Button>

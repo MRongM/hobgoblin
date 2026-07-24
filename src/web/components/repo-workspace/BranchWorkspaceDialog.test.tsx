@@ -459,6 +459,31 @@ describe('BranchWorkspaceDialog', () => {
     expect(directory?.className).not.toContain('font-semibold')
   })
 
+  test('refreshes the branch workspace query cache from the repair dialog and closes it', async () => {
+    const onOpenChange = vi.fn()
+    const onRefreshAuxiliaryCandidates = vi.fn(async () => ({
+      ok: true as const,
+      rootId: '/workspace',
+      items: [existingWorkspace()],
+      auxiliaryCandidates: [],
+    }))
+    renderDialog({
+      mode: 'repair',
+      workspace: {
+        ...existingWorkspace(),
+        state: { kind: 'needs-action', action: 'repair', reason: 'drift' },
+      },
+      error: 'workspace.branch-workspace.nothing-to-repair',
+      onOpenChange,
+      onRefreshAuxiliaryCandidates,
+    })
+
+    await clickAction('clear-cache')
+
+    expect(onRefreshAuxiliaryCandidates).toHaveBeenCalledTimes(1)
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
   test('previews branch workspace removal without a force-worktree option', async () => {
     const onPreview = vi.fn(async () => true)
     renderDialog({ mode: 'remove', workspace: existingWorkspace(), onPreview })
