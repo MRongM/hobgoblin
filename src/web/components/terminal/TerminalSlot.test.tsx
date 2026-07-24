@@ -126,6 +126,7 @@ describe('TerminalSlot', () => {
     expect(loadingStatus?.getAttribute('role')).toBe('status')
     expect(loadingStatus?.textContent).toContain('terminal.opening')
     expect(loadingStatus?.querySelector('.animate-spin')).not.toBeNull()
+    expect(loadingStatus?.classList.contains('goblin-terminal-slot__status-overlay--initial')).toBe(true)
 
     worktreeSnapshot = { ...worktreeSnapshot, creating: false }
     await act(async () => renderSlot())
@@ -141,9 +142,10 @@ describe('TerminalSlot', () => {
     document.body.appendChild(container)
     const root: Root = createRoot(container)
     const { worktreeSnapshot, snapshot } = controllerFixture()
+    let currentWorktreeSnapshot = { ...worktreeSnapshot, creating: false }
     let currentSnapshot: TerminalSnapshot = { ...snapshot, phase: 'opening', attachment: null }
     const readContext: TerminalSessionReadContextValue = {
-      worktreeSnapshot: () => worktreeSnapshot,
+      worktreeSnapshot: () => currentWorktreeSnapshot,
       subscribeWorktree: () => () => {},
       repoSyncReady: () => true,
       subscribeRepoSync: () => () => {},
@@ -165,10 +167,70 @@ describe('TerminalSlot', () => {
     expect(loadingStatus?.getAttribute('role')).toBe('status')
     expect(loadingStatus?.textContent).toContain('terminal.opening')
     expect(loadingStatus?.querySelector('.animate-spin')).not.toBeNull()
+    expect(loadingStatus?.classList.contains('goblin-terminal-slot__status-overlay--initial')).toBe(true)
 
     currentSnapshot = snapshot
     await act(async () => renderSlot())
     expect(container.querySelector('.goblin-terminal-slot__status-overlay')).toBeNull()
+
+    currentWorktreeSnapshot = { ...currentWorktreeSnapshot, creating: true }
+    await act(async () => renderSlot())
+    expect(
+      container
+        .querySelector('.goblin-terminal-slot__status-overlay')
+        ?.classList.contains('goblin-terminal-slot__status-overlay--initial'),
+    ).toBe(false)
+
+    await act(async () => root.unmount())
+    container.remove()
+  })
+
+  test('keeps loading visible, defers desktop autofocus until ready, and avoids mobile autofocus', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const { worktreeSnapshot, snapshot } = controllerFixture()
+    let currentSnapshot: TerminalSnapshot = { ...snapshot, renderPending: true }
+    const attach = vi.fn((_descriptor: Parameters<TerminalSessionContextValue['attach']>[0], host: HTMLElement) => {
+      if (!host.querySelector('textarea')) host.appendChild(document.createElement('textarea'))
+    })
+    const context = terminalContext({ attach })
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => currentSnapshot,
+      subscribeSnapshot: () => () => {},
+    }
+    const renderSlot = () =>
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+
+    await act(async () => renderSlot())
+    const textarea = container.querySelector('textarea')
+    expect(textarea).not.toBeNull()
+    expect(container.querySelector('.goblin-terminal-slot__status-overlay')).not.toBeNull()
+    expect(document.activeElement).not.toBe(textarea)
+
+    currentSnapshot = snapshot
+    await act(async () => renderSlot())
+    expect(container.querySelector('.goblin-terminal-slot__status-overlay')).toBeNull()
+    expect(document.activeElement).toBe(textarea)
+
+    mobileDetectionMocks.isMobileDevice = true
+    ;(textarea as HTMLTextAreaElement).blur()
+    currentSnapshot = { ...snapshot, renderPending: true }
+    await act(async () => renderSlot())
+    currentSnapshot = snapshot
+    await act(async () => renderSlot())
+    expect(document.activeElement).not.toBe(textarea)
 
     await act(async () => root.unmount())
     container.remove()

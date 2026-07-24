@@ -747,6 +747,22 @@ beforeEach(() => {
 })
 
 describe('ManagedTerminalSession', () => {
+  test('keeps render pending until the attached terminal has settled a paint opportunity', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+
+    expect(session.snapshot().renderPending).toBe(true)
+
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().renderPending !== true)
+
+    expect(session.snapshot().phase).toBe('open')
+    expect(session.snapshot().renderPending).toBeUndefined()
+  })
+
   test('opens xterm and attaches the primary terminal session with fitted dimensions', async () => {
     const host = document.createElement('div')
     document.body.appendChild(host)

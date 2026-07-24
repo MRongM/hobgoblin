@@ -68,6 +68,8 @@ export interface TerminalSnapshot {
   phase: TerminalPhase
   message: string | null
   processName: string
+  /** Renderer-local readiness; true until xterm has attached, replayed, and reached a paint opportunity. */
+  renderPending?: boolean
   /** Server-canonical terminal title from attach hydration or realtime title events. */
   canonicalTitle?: string | null
   attachment?: TerminalAttachmentSnapshot | null
