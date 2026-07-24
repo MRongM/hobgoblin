@@ -92,6 +92,49 @@ afterEach(() => {
 const REMOTE_REPO_ID = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/repo' })
 
 describe('TerminalSlot', () => {
+  test('shows a loading status while terminal creation is pending without a registered session', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    let worktreeSnapshot = {
+      worktreeTerminalKey: '/repo\0/worktree',
+      selectedDescriptor: null,
+      sessions: [],
+      count: 0,
+      creating: true,
+    }
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => ({ phase: 'opening', message: null, processName: 'terminal' }),
+      subscribeSnapshot: () => () => {},
+    }
+    const renderSlot = () =>
+      root.render(
+        <TerminalSessionContext.Provider value={terminalContext()}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+
+    await act(async () => renderSlot())
+    const loadingStatus = container.querySelector('.goblin-terminal-slot__status-overlay')
+    expect(loadingStatus?.getAttribute('role')).toBe('status')
+    expect(loadingStatus?.textContent).toContain('terminal.opening')
+    expect(loadingStatus?.querySelector('.animate-spin')).not.toBeNull()
+
+    worktreeSnapshot = { ...worktreeSnapshot, creating: false }
+    await act(async () => renderSlot())
+    expect(container.querySelector('.goblin-terminal-slot__status-overlay')).toBeNull()
+
+    await act(async () => root.unmount())
+    container.remove()
+  })
+
   test('shows a loading status while the terminal opens and removes it when ready', async () => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const container = document.createElement('div')

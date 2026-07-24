@@ -16,8 +16,16 @@ const focusTerminal = vi.fn()
 const closeTerminalAndDismissDetailIfLast = vi.fn()
 const reorderSessions = vi.fn()
 const terminalTabsProps: Array<Record<string, unknown>> = []
+const terminalSlotProps: Array<Record<string, unknown>> = []
 const REMOTE_REPO_ID = 'ssh-config://prod/srv/plain'
 let compactUi = false
+let terminalSnapshot = {
+  worktreeTerminalKey: '/repo\0/repo',
+  sessions: [],
+  selectedDescriptor: null,
+  count: 0,
+  creating: false,
+}
 
 vi.mock('#/web/hooks/useResponsiveUiMode.tsx', () => ({
   useIsCompactUi: () => compactUi,
@@ -39,10 +47,17 @@ vi.mock('#/web/components/terminal/terminal-session-context.ts', () => ({
 }))
 
 vi.mock('#/web/components/terminal/terminal-session-store.ts', () => ({
-  useWorktreeTerminalSnapshot: () => ({ sessions: [], selectedDescriptor: null }),
+  useWorktreeTerminalSnapshot: () => terminalSnapshot,
   useRepoTerminalCount: () => 0,
   useRepoTerminalHasBell: () => false,
   useRepoTerminalHasOutputActivity: () => false,
+}))
+
+vi.mock('#/web/components/terminal/TerminalSlot.tsx', () => ({
+  TerminalSlot: (props: Record<string, unknown>) => {
+    terminalSlotProps.push(props)
+    return <div data-testid="terminal-slot" />
+  },
 }))
 
 vi.mock('#/web/components/terminal/TerminalTabs.tsx', () => ({
@@ -85,7 +100,15 @@ beforeEach(() => {
   closeTerminalAndDismissDetailIfLast.mockClear()
   reorderSessions.mockClear()
   terminalTabsProps.length = 0
+  terminalSlotProps.length = 0
   compactUi = false
+  terminalSnapshot = {
+    worktreeTerminalKey: '/repo\0/repo',
+    sessions: [],
+    selectedDescriptor: null,
+    count: 0,
+    creating: false,
+  }
   resetReposStore()
 })
 
@@ -100,6 +123,18 @@ afterEach(() => {
 })
 
 describe('PlainWorkspaceTerminalPanel', () => {
+  test('mounts the terminal slot while the first terminal creation is pending', () => {
+    terminalSnapshot = { ...terminalSnapshot, creating: true }
+
+    render(<PlainWorkspaceTerminalPanel repoId="/repo" layout="left-right" />)
+
+    expect(terminalSlotProps).toContainEqual({
+      repoRoot: '/repo',
+      branch: NON_GIT_WORKSPACE_TERMINAL_BRANCH,
+      worktreePath: '/repo',
+    })
+  })
+
   test('does not show an empty-state prompt when no plain-workspace terminal exists', () => {
     render(<PlainWorkspaceTerminalPanel repoId="/repo" layout="left-right" />)
 

@@ -81,6 +81,7 @@ export class TerminalSessionRegistry {
   private readonly snapshotCache = new Map<string, TerminalSnapshot>()
   private readonly reattachSnapshotCache = new Map<string, ReattachSnapshotCacheEntry>()
   private readonly worktreeSnapshotCache = new Map<string, WorktreeTerminalSnapshot>()
+  private readonly pendingCreationsByWorktree = new Map<string, number>()
   private readonly outputActiveKeys = new Set<string>()
   private readonly outputActiveIdleTimers = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly lastTerminalInputAt = new Map<string, number>()
@@ -151,6 +152,7 @@ export class TerminalSessionRegistry {
     this.snapshotCache.clear()
     this.reattachSnapshotCache.clear()
     this.worktreeSnapshotCache.clear()
+    this.pendingCreationsByWorktree.clear()
     this.outputActiveKeys.clear()
     for (const timer of this.outputActiveIdleTimers.values()) clearTimeout(timer)
     this.outputActiveIdleTimers.clear()
@@ -330,27 +332,32 @@ export class TerminalSessionRegistry {
       cols: geometry.cols,
       rows: geometry.rows,
     }
-    const result = await terminalBridge.create({
-      ...requestInput,
-      kind: this.sessionSummaries(terminalWorktreeKey).length === 0 ? 'primary' : 'additional',
-      launchMode,
-    })
-    if (!result.ok) {
-      throw new Error(result.message)
+    this.beginTerminalCreation(terminalWorktreeKey)
+    try {
+      const result = await terminalBridge.create({
+        ...requestInput,
+        kind: this.sessionSummaries(terminalWorktreeKey).length === 0 ? 'primary' : 'additional',
+        launchMode,
+      })
+      if (!result.ok) {
+        throw new Error(result.message)
+      }
+      if (!isValidCreateFirstFrame(result)) {
+        throw new Error('error.terminal-create-failed')
+      }
+      this.setPreferredSelectedTerminalKey(terminalWorktreeKey, result.key)
+      this.reconcileServerSessions(
+        base.repoRoot,
+        result.sessions,
+        attachmentId,
+        new Map<string, TerminalSessionSnapshot>([
+          [result.sessionId, { sessionId: result.sessionId, snapshot: result.snapshot, snapshotSeq: result.snapshotSeq }],
+        ]),
+      )
+      return result.key
+    } finally {
+      this.endTerminalCreation(terminalWorktreeKey)
     }
-    if (!isValidCreateFirstFrame(result)) {
-      throw new Error('error.terminal-create-failed')
-    }
-    this.setPreferredSelectedTerminalKey(terminalWorktreeKey, result.key)
-    this.reconcileServerSessions(
-      base.repoRoot,
-      result.sessions,
-      attachmentId,
-      new Map<string, TerminalSessionSnapshot>([
-        [result.sessionId, { sessionId: result.sessionId, snapshot: result.snapshot, snapshotSeq: result.snapshotSeq }],
-      ]),
-    )
-    return result.key
   }
 
   restoreTmuxSessions = async (base: TerminalSessionBase): Promise<number> => {
@@ -431,6 +438,7 @@ export class TerminalSessionRegistry {
       selectedDescriptor: this.selectedDescriptor(worktreeTerminalKey),
       sessions,
       count: sessions.length,
+      creating: (this.pendingCreationsByWorktree.get(worktreeTerminalKey) ?? 0) > 0,
     }
     this.worktreeSnapshotCache.set(worktreeTerminalKey, snapshot)
     return snapshot
@@ -626,6 +634,19 @@ export class TerminalSessionRegistry {
     const listeners = this.worktreeListeners.get(worktreeTerminalKey)
     if (!listeners) return
     for (const listener of Array.from(listeners)) listener()
+  }
+
+  private beginTerminalCreation(worktreeTerminalKey: string): void {
+    const pending = this.pendingCreationsByWorktree.get(worktreeTerminalKey) ?? 0
+    this.pendingCreationsByWorktree.set(worktreeTerminalKey, pending + 1)
+    this.notifyWorktree(worktreeTerminalKey)
+  }
+
+  private endTerminalCreation(worktreeTerminalKey: string): void {
+    const pending = this.pendingCreationsByWorktree.get(worktreeTerminalKey) ?? 0
+    if (pending <= 1) this.pendingCreationsByWorktree.delete(worktreeTerminalKey)
+    else this.pendingCreationsByWorktree.set(worktreeTerminalKey, pending - 1)
+    this.notifyWorktree(worktreeTerminalKey)
   }
 
   private notifySnapshot(key: string): void {

@@ -109,6 +109,19 @@ export function useWorktreeTerminalCount(worktreeTerminalKey: string | null): nu
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
 
+export function useWorktreeTerminalCreationPending(worktreeTerminalKey: string | null): boolean {
+  const { worktreeSnapshot, subscribeWorktree } = useTerminalSessionReadContext()
+  const subscribe = useCallback(
+    (listener: () => void) => (worktreeTerminalKey ? subscribeWorktree(worktreeTerminalKey, listener) : () => {}),
+    [worktreeTerminalKey, subscribeWorktree],
+  )
+  const getSnapshot = useCallback(
+    () => (worktreeTerminalKey ? worktreeSnapshot(worktreeTerminalKey).creating === true : false),
+    [worktreeTerminalKey, worktreeSnapshot],
+  )
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+}
+
 export function useWorktreeTerminalSelectedDescriptor(worktreeTerminalKey: string | null): TerminalDescriptor | null {
   const { worktreeSnapshot, subscribeWorktree } = useTerminalSessionReadContext()
   const subscribe = useCallback(
