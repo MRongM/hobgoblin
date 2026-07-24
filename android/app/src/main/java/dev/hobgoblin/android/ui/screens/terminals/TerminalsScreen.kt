@@ -115,6 +115,7 @@ private fun TerminalOverviewRow(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            TerminalSessionIdentityDetails(session = session)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,

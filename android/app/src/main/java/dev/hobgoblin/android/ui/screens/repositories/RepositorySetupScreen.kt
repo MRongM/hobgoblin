@@ -76,6 +76,7 @@ import dev.hobgoblin.android.terminals.TerminalSessionRecord
 import dev.hobgoblin.android.terminals.TerminalSessionStatus
 import dev.hobgoblin.android.terminals.TmuxSessionProtocol
 import dev.hobgoblin.android.termux.ExternalTermuxLaunchResult
+import dev.hobgoblin.android.ui.screens.terminals.TerminalSessionIdentityDetails
 import dev.hobgoblin.android.ui.screens.terminals.terminalSessionRemotePath
 import dev.hobgoblin.android.ui.screens.terminals.terminalSessionDisplayName
 import dev.hobgoblin.android.ui.screens.terminals.terminalWorkspaceSessionCountsByPath
@@ -2209,6 +2210,7 @@ private fun TerminalSessionRow(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            TerminalSessionIdentityDetails(session = session)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,

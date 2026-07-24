@@ -164,7 +164,7 @@ object TmuxSessionProtocol {
 
     fun listDiscoverableSessionsScript(): String = listOf(
         "command -v tmux >/dev/null 2>&1 || exit 127",
-        "tmux list-sessions -F '#{session_name}\\t#{${InitPathOption}}\\t#{${TerminalNumberOption}}'",
+        "tmux list-sessions -F '#{session_name}\t#{${InitPathOption}}\t#{${TerminalNumberOption}}'",
     ).joinToString("\n")
 
     fun killSessionScript(sessionName: String): String? {
