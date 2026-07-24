@@ -24,7 +24,6 @@ export function BranchWorkspaceFileTree({
     branch: context.branch,
     isGitRepo: false,
     status: [],
-    protectedRootNames: context.managedRootNames,
   }
   return <ProjectFileTree repoId={context.rootId} folderContext={folderContext} toolbarLeading={toolbarLeading} />
 }

@@ -30,7 +30,7 @@ afterEach(() => {
 })
 
 describe('BranchWorkspaceFileTree', () => {
-  test('adapts a branch workspace into one non-Git protected folder context', async () => {
+  test('adapts a branch workspace into one ordinary non-Git folder context', async () => {
     await act(async () => {
       root!.render(
         <BranchWorkspaceFileTree
@@ -56,7 +56,6 @@ describe('BranchWorkspaceFileTree', () => {
           branch: 'feature/auth',
           isGitRepo: false,
           status: [],
-          protectedRootNames: ['api'],
         },
       }),
       undefined,
