@@ -39,6 +39,7 @@ export function FileAreaSplitPane({
       afterMinSize={fileAreaMinSize}
       afterMaxSize={fileAreaMaxSize}
       afterCollapsed={fileAreaCollapsed}
+      afterClassName="project-file-area-tone"
       className={className}
       disabled={disabled}
     />

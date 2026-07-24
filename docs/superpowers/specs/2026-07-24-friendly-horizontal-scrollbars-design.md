@@ -18,7 +18,7 @@
 
 ### A：共享区域作用域（采用）
 
-把现有仅用于文件树的横向 scrollbar 几何提升到 `.project-navigation-tone` 与 `.project-file-area-tone` 的原生 scrollbar 作用域。历史面板和其他现有或未来的横向滚动容器自动获得一致样式。
+把现有仅用于文件树的横向 scrollbar 几何提升到 `.project-navigation-tone` 与 `.project-file-area-tone` 的原生 scrollbar 作用域。`FileAreaSplitPane` 再将文件区 tone 传给 `SplitPane` 的 `afterClassName`，使 `ResizablePanel` 生成的真实滚动容器进入该作用域。历史面板和其他文件区内容继续复用同一套样式。
 
 优点：与现有主题架构一致、无需业务组件感知、避免逐组件重复。缺点：作用域内所有原生横向滚动条都会统一变化，这是本需求期望的行为。
 
@@ -38,8 +38,9 @@
 2. 现有区域选择器继续负责原生纵向和横向 scrollbar 的基础样式。
 3. 新的共享横向规则覆盖 scrollbar 高度与 thumb 透明边框，使默认可见高度为 4px，hover/active 为 6px。
 4. 删除文件树专用的同等规则，避免重复。
+5. `FileAreaSplitPane` 通过 `afterClassName="project-file-area-tone"` 标记 `SplitPane` 的文件区内容容器；该容器保留 `overflow: auto`，只是获得主题作用域。
 
-业务组件不增加 scrollbar class，不改变布局或数据流。
+业务内容面板不增加专用 scrollbar class，不改变布局、滚动行为或数据流。布局适配器只复用已有的语义 tone class 标记真实滚动所有者。
 
 ## 非目标
 
@@ -54,12 +55,13 @@
 - 主题契约测试锁定共享区域原生横向 scrollbar 的 8px 高度。
 - 测试锁定 thumb 默认 2px 透明边框，以及 hover/active 的 1px 边框。
 - 测试确认规则不再依赖 `.project-file-tree-scroll` 专用选择器。
+- `FileAreaSplitPane` 测试确认文件区的 `ResizablePanel` 内容容器接收 `.project-file-area-tone`。
 - 历史面板保留原有布局，不添加用于消除横向溢出的 `min-w-0` 约束。
 - 运行针对性测试、`bun run typecheck`、`bun run test`、`bun run check:architecture`、Prettier 与 `git diff --check`。
 
 ## 工程原则
 
-- KISS：只调整共享 CSS 几何，不改滚动组件或布局。
+- KISS：只调整共享 CSS 几何，并在布局适配器上复用现有 tone 标记。
 - DRY：把文件树专用规则提升为区域共享规则。
 - YAGNI：不引入专用 React 组件或用户配置。
 - SOLID：主题 contract 继续单独负责视觉语义，业务面板保持业务职责。

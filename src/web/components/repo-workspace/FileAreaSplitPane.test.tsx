@@ -16,6 +16,7 @@ interface SplitPaneMockProps {
   afterMaxSize?: number | string
   beforeCollapsed?: boolean
   afterCollapsed?: boolean
+  afterClassName?: string
 }
 
 const splitPaneMock = vi.hoisted(() => ({ props: null as SplitPaneMockProps | null }))
@@ -105,6 +106,12 @@ describe('FileAreaSplitPane', () => {
     act(() => container.querySelector<HTMLButtonElement>('[data-testid="resize"]')?.click())
 
     expect(onFileAreaSizeChange).toHaveBeenCalledWith(25)
+  })
+
+  test('marks the resizable file area scroll owner with the file area tone', () => {
+    render('horizontal', vi.fn(), false)
+
+    expect(splitPaneMock.props?.afterClassName).toBe('project-file-area-tone')
   })
 })
 
