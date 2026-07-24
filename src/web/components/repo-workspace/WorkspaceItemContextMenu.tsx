@@ -23,7 +23,7 @@ interface WorkspaceItemContextMenuProps {
   externalTerminal: WorkspaceItemOpenAction
   internalTerminal: WorkspaceItemOpenAction
   tmuxTerminal: WorkspaceItemOpenAction
-  tmuxTerminalLabel?: string
+  restoreTmuxTerminals?: WorkspaceItemOpenAction
   worktreeTerminalKeys: readonly string[]
   additionalActions?: readonly BranchWorkspaceItemAction[]
   children: ReactElement
@@ -34,7 +34,7 @@ export function WorkspaceItemContextMenu({
   externalTerminal,
   internalTerminal,
   tmuxTerminal,
-  tmuxTerminalLabel,
+  restoreTmuxTerminals,
   worktreeTerminalKeys,
   additionalActions = [],
   children,
@@ -50,7 +50,10 @@ export function WorkspaceItemContextMenu({
           <OpenActionItem action={editor}>{t('worktrees.open-in-editor-label')}</OpenActionItem>
           <OpenActionItem action={externalTerminal}>{t('terminal.external')}</OpenActionItem>
           <OpenActionItem action={internalTerminal}>{t('terminal.internal')}</OpenActionItem>
-          <OpenActionItem action={tmuxTerminal}>{tmuxTerminalLabel ?? t('terminal.new-with-tmux')}</OpenActionItem>
+          <OpenActionItem action={tmuxTerminal}>{t('terminal.new-with-tmux')}</OpenActionItem>
+          {restoreTmuxTerminals ? (
+            <OpenActionItem action={restoreTmuxTerminals}>{t('terminal.restore-directory-tmux')}</OpenActionItem>
+          ) : null}
           <ContextMenuSeparator />
           <ContextMenuItem variant="destructive" disabled={closeScope.disabled} onSelect={closeScope.requestClose}>
             <X aria-hidden="true" />

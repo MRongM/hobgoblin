@@ -136,7 +136,6 @@ function BranchWorkspaceMemberRowFrame({
     policy: 'branch-workspace-member',
     hasWorktree: true,
     forceDisabled,
-    tmuxTerminalLabel: t('terminal.restore-directory-tmux'),
   })
   const internalTerminalAction = actionProjection.internalTerminal
     ? {
@@ -151,6 +150,10 @@ function BranchWorkspaceMemberRowFrame({
   const tmuxTerminalContextAction = {
     ...actionProjection.contextMenu.tmuxTerminal,
     disabled: actionProjection.contextMenu.tmuxTerminal.disabled || !onOpenInternalTerminal,
+  }
+  const restoreTmuxTerminalsContextAction = {
+    ...actionProjection.contextMenu.restoreTmuxTerminals,
+    disabled: actionProjection.contextMenu.restoreTmuxTerminals.disabled || !onOpenInternalTerminal,
   }
   const row = (
     <WorkspaceListItemFrame
@@ -240,7 +243,7 @@ function BranchWorkspaceMemberRowFrame({
       externalTerminal={actionProjection.contextMenu.externalTerminal}
       internalTerminal={internalTerminalContextAction}
       tmuxTerminal={tmuxTerminalContextAction}
-      tmuxTerminalLabel={t('terminal.restore-directory-tmux')}
+      restoreTmuxTerminals={restoreTmuxTerminalsContextAction}
       worktreeTerminalKeys={forceDisabled ? [] : terminalKeys}
       additionalActions={tmuxCleanup.visible ? [tmuxCleanup.contextAction] : []}
     >
@@ -262,6 +265,9 @@ function disabledMemberActionGroups(t: ReturnType<typeof useT>): BranchActionIte
       disabledAction('editor', 'worktrees.open-in-editor-label', <EditorAppIcon pref="auto" />),
       disabledAction('terminal', 'terminal.internal', <Terminal aria-hidden="true" />),
       disabledAction('terminalTmux', 'terminal.new-with-tmux', <Terminal aria-hidden="true" />, { menuOnly: true }),
+      disabledAction('restoreTmuxTerminals', 'terminal.restore-directory-tmux', <Terminal aria-hidden="true" />, {
+        menuOnly: true,
+      }),
       disabledAction('externalTerminal', 'terminal.external', <TerminalAppIcon pref="auto" />),
       disabledAction('remote', 'action.remote', <ExternalLink aria-hidden="true" />),
     ],
@@ -291,6 +297,7 @@ function createDisabledAction(
     | 'editor'
     | 'terminal'
     | 'terminalTmux'
+    | 'restoreTmuxTerminals'
     | 'externalTerminal'
     | 'remote'
     | 'pull'

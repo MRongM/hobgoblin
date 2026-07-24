@@ -134,6 +134,7 @@ export interface WorktreeTerminalSnapshot {
 
 export interface TerminalSessionContextValue {
   createTerminal: (base: TerminalSessionBase, launchMode?: TerminalLaunchMode) => Promise<string>
+  restoreTmuxSessions: (base: TerminalSessionBase) => Promise<number>
   selectTerminal: (worktreeTerminalKey: string, key: string) => void
   scrollToBottom: (key: string) => void
   focusTerminal: (key: string) => void

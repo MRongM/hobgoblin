@@ -230,6 +230,7 @@ export function TerminalSessionProvider({
   const commandValue = useMemo<TerminalSessionContextValue>(
     () => ({
       createTerminal: registry.createTerminal,
+      restoreTmuxSessions: registry.restoreTmuxSessions,
       selectTerminal: registry.selectTerminal,
       scrollToBottom: registry.scrollToBottom,
       focusTerminal: registry.focusTerminal,

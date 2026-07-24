@@ -174,6 +174,7 @@ function renderConsumer(options: {
   }
   const commandContext: TerminalSessionContextValue = {
     createTerminal: vi.fn(async () => 'session-key-1'),
+    restoreTmuxSessions: vi.fn(async () => 0),
     selectTerminal: options.selectTerminal,
     scrollToBottom: vi.fn(),
     focusTerminal: vi.fn(),

@@ -46,7 +46,7 @@ describe('remote command scripts', () => {
     })
 
     expect(list.script).toBe(
-      "command -v tmux >/dev/null 2>&1 || exit 127\ntmux -u list-sessions -F '#{@hobgoblin_init_path}\t#{@hobgoblin_terminal_number}\t#{session_name}'",
+      "command -v tmux >/dev/null 2>&1 || exit 127\ntmux -u list-sessions -F '#{@hobgoblin_init_path}\t#{@hobgoblin_terminal_number}\t#{session_attached}\t#{session_name}'",
     )
     expect(killByName.script).toBe(
       "command -v tmux >/dev/null 2>&1 || exit 127\ntmux kill-session -t '=hobgoblin-v1-aebf050981ac829e36100020'",

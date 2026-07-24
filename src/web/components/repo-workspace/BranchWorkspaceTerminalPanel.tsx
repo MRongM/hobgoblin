@@ -154,7 +154,7 @@ export async function openBranchWorkspaceInternalTerminal(
   return true
 }
 
-function branchWorkspaceTerminalBase(context: BranchWorkspaceFolderContext): TerminalSessionBase {
+export function branchWorkspaceTerminalBase(context: BranchWorkspaceFolderContext): TerminalSessionBase {
   return {
     repoRoot: context.rootId,
     branch: context.branch,

@@ -100,6 +100,14 @@ _Avoid_: Native terminal, system terminal
 A tmux session whose `@hobgoblin_init_path` exactly matches one worktree, branch workspace root, or branch workspace member path after lexical normalization, whose `@hobgoblin_terminal_number` is valid, and whose name equals the v1 hash recomputed from that metadata and the current project root. Association never includes name-only, arbitrary user-created, or descendant-path sessions.
 _Avoid_: Current terminal, child-directory session, any tmux session in the directory
 
+**Detached associated Hobgoblin tmux session**:
+An associated Hobgoblin tmux session whose tmux `session_attached` client count is exactly zero when explicitly scanned for directory recovery. It may be batch-opened into internal terminals without creating any new tmux session; attached associated sessions are left unchanged.
+_Avoid_: Disconnected internal terminal, exited terminal, every associated tmux session
+
+**Directory tmux recovery**:
+An explicit item-menu action that scans one worktree, branch workspace root, or branch workspace member path for detached associated Hobgoblin tmux sessions and batch-opens only those existing sessions. An empty scan is a successful no-op and never creates a tmux session.
+_Avoid_: Tmux terminal creation, automatic session restore, associated tmux cleanup
+
 **Associated tmux session cleanup**:
 An explicit destructive action that discovers associated Hobgoblin tmux sessions for one item, previews the exact matches, and ends only the approved sessions that still satisfy the association at execution time. It is independent of deleting the item and of whether tmux is currently enabled for new terminals.
 _Avoid_: Terminal close, worktree cleanup, automatic tmux pruning

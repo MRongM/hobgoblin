@@ -22,6 +22,7 @@ function actionGroups(): BranchActionItemGroups {
       action('editor'),
       action('terminal'),
       action('terminalTmux', { menuOnly: true }),
+      action('restoreTmuxTerminals', { menuOnly: true }),
       action('externalTerminal'),
       action('remote'),
     ],
@@ -64,7 +65,7 @@ describe('projectWorktreeListItemActions', () => {
     expect(projection.editor?.id).toBe('editor')
     expect(projection.internalTerminal?.id).toBe('terminal')
     expect(ids(projection.menuGroups)).toEqual([
-      ['terminalTmux', 'externalTerminal', 'remote'],
+      ['terminalTmux', 'restoreTmuxTerminals', 'externalTerminal', 'remote'],
       ['pull', 'push', 'createBranch', 'pullRemoteBranch', 'checkoutTo', 'merge', 'commit', 'copyPatch'],
       ['createTag'],
       ['closeAllTerminals', 'removeWorktree', 'cleanupWorktree', 'resetHard'],
@@ -73,23 +74,21 @@ describe('projectWorktreeListItemActions', () => {
     expect(projection.contextMenu.editor.disabled).toBe(false)
     expect(projection.contextMenu.internalTerminal.disabled).toBe(false)
     expect(projection.contextMenu.tmuxTerminal.disabled).toBe(false)
+    expect(projection.contextMenu.restoreTmuxTerminals.disabled).toBe(false)
   })
 
-  test('overrides only the directory-scoped tmux menu copy', () => {
+  test('keeps tmux creation and detached recovery as distinct actions', () => {
     const projection = projectWorktreeListItemActions(actionGroups(), {
       policy: 'ordinary-worktree',
       hasWorktree: true,
-      tmuxTerminalLabel: 'terminal.restore-directory-tmux',
     })
 
     const tmuxTerminal = projection.menuGroups.flat().find((item) => item.id === 'terminalTmux')
+    const restoreTmuxTerminals = projection.menuGroups.flat().find((item) => item.id === 'restoreTmuxTerminals')
     const externalTerminal = projection.menuGroups.flat().find((item) => item.id === 'externalTerminal')
 
-    expect(tmuxTerminal).toMatchObject({
-      label: 'terminal.restore-directory-tmux',
-      title: 'terminal.restore-directory-tmux',
-      ariaLabel: 'terminal.restore-directory-tmux',
-    })
+    expect(tmuxTerminal?.label).toBe('terminalTmux')
+    expect(restoreTmuxTerminals?.label).toBe('restoreTmuxTerminals')
     expect(externalTerminal?.label).toBe('externalTerminal')
   })
 
@@ -102,7 +101,7 @@ describe('projectWorktreeListItemActions', () => {
     expect(projection.editor).toBeUndefined()
     expect(projection.internalTerminal).toBeUndefined()
     expect(ids(projection.menuGroups)).toEqual([
-      ['editor', 'terminal', 'terminalTmux', 'externalTerminal', 'remote'],
+      ['editor', 'terminal', 'terminalTmux', 'restoreTmuxTerminals', 'externalTerminal', 'remote'],
       [
         'checkout',
         'pull',
@@ -128,7 +127,7 @@ describe('projectWorktreeListItemActions', () => {
     })
 
     expect(ids(projection.menuGroups)).toEqual([
-      ['terminalTmux', 'externalTerminal', 'remote'],
+      ['terminalTmux', 'restoreTmuxTerminals', 'externalTerminal', 'remote'],
       ['pull', 'push', 'createBranch', 'pullRemoteBranch', 'merge', 'commit', 'copyPatch'],
       ['createTag'],
       ['closeAllTerminals', 'resetHard'],

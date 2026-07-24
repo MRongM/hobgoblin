@@ -17,12 +17,12 @@ vi.mock('execa', () => ({
 }))
 
 describe('parseTmuxSessionList', () => {
-  test('parses the Hobgoblin initial-path and terminal-number options', () => {
+  test('parses identity metadata and the attached-client count', () => {
     expect(
       parseTmuxSessionList(
         [
-          '/srv/repo,feature\t1\thobgoblin-v1-aebf050981ac829e36100020',
-          '\t\tuser-session',
+          '/srv/repo,feature\t1\t0\thobgoblin-v1-aebf050981ac829e36100020',
+          '\t\t1\tuser-session',
         ].join('\n'),
       ),
     ).toEqual([
@@ -30,6 +30,7 @@ describe('parseTmuxSessionList', () => {
         sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
         initialPath: '/srv/repo,feature',
         terminalNumber: 1,
+        attachedClients: 0,
       },
     ])
   })
@@ -38,9 +39,11 @@ describe('parseTmuxSessionList', () => {
     expect(
       parseTmuxSessionList(
         [
-          '\t\thobgoblin-v1-aebf050981ac829e36100020',
-          '/srv/repo\tnot-a-number\thobgoblin-v1-0123456789abcdef01234567',
-          '/srv/repo\t0\thobgoblin-v1-89abcdef0123456789abcdef',
+          '\t\t0\thobgoblin-v1-aebf050981ac829e36100020',
+          '/srv/repo\tnot-a-number\t0\thobgoblin-v1-0123456789abcdef01234567',
+          '/srv/repo\t0\t0\thobgoblin-v1-89abcdef0123456789abcdef',
+          '/srv/repo\t1\tnot-a-number\thobgoblin-v1-aebf050981ac829e36100020',
+          '/srv/repo\t1\t-1\thobgoblin-v1-aebf050981ac829e36100020',
         ].join('\n'),
       ),
     ).toEqual([])
@@ -48,8 +51,8 @@ describe('parseTmuxSessionList', () => {
 
   test('returns null instead of guessing malformed field boundaries', () => {
     expect(parseTmuxSessionList('missing-fields')).toBeNull()
-    expect(parseTmuxSessionList('/srv/repo\t1\tname\textra')).toBeNull()
-    expect(parseTmuxSessionList('relative/path\t1\tname')).toEqual([])
+    expect(parseTmuxSessionList('/srv/repo\t1\t0\tname\textra')).toBeNull()
+    expect(parseTmuxSessionList('relative/path\t1\t0\tname')).toEqual([])
   })
 
   test('accepts empty output as an empty session list', () => {
@@ -66,14 +69,14 @@ describe('local tmux commands', () => {
       .mockResolvedValueOnce({ exitCode: 0, stdout: '/opt/tools/tmux-v1\n', stderr: '' })
       .mockResolvedValueOnce({
         exitCode: 0,
-        stdout: '/srv/repo\t1\thobgoblin-v1-aebf050981ac829e36100020',
+        stdout: '/srv/repo\t1\t0\thobgoblin-v1-aebf050981ac829e36100020',
         stderr: '',
       })
       .mockResolvedValueOnce({ exitCode: 0, stdout: 'unsupported output', stderr: '' })
       .mockResolvedValueOnce({ exitCode: 0, stdout: '/opt/tools/tmux-v2\n', stderr: '' })
       .mockResolvedValueOnce({
         exitCode: 0,
-        stdout: '/srv/repo\t1\thobgoblin-v1-aebf050981ac829e36100020',
+        stdout: '/srv/repo\t1\t0\thobgoblin-v1-aebf050981ac829e36100020',
         stderr: '',
       })
     const { listLocalTmuxSessions: listSessions } = await import('#/system/tmux-cleanup.ts')
@@ -85,6 +88,7 @@ describe('local tmux commands', () => {
           sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
           initialPath: '/srv/repo',
           terminalNumber: 1,
+          attachedClients: 0,
         },
       ],
     })
@@ -95,6 +99,7 @@ describe('local tmux commands', () => {
           sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
           initialPath: '/srv/repo',
           terminalNumber: 1,
+          attachedClients: 0,
         },
       ],
     })
@@ -127,7 +132,7 @@ describe('local tmux commands', () => {
       })
       .mockResolvedValueOnce({
         exitCode: 0,
-        stdout: '/srv/repo\t1\thobgoblin-v1-aebf050981ac829e36100020',
+        stdout: '/srv/repo\t1\t0\thobgoblin-v1-aebf050981ac829e36100020',
         stderr: '',
       })
       .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })
@@ -139,6 +144,7 @@ describe('local tmux commands', () => {
           sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
           initialPath: '/srv/repo',
           terminalNumber: 1,
+          attachedClients: 0,
         },
       ],
     })
@@ -169,7 +175,7 @@ describe('local tmux commands', () => {
   test('forces UTF-8 when listing sessions so the protocol delimiter survives a missing locale', async () => {
     const run = vi.fn<TmuxProcessRunner>(async () => ({
       ok: true,
-      stdout: '/srv/repo\t1\thobgoblin-v1-aebf050981ac829e36100020',
+      stdout: '/srv/repo\t1\t0\thobgoblin-v1-aebf050981ac829e36100020',
       stderr: '',
     }))
 
@@ -180,6 +186,7 @@ describe('local tmux commands', () => {
           sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
           initialPath: '/srv/repo',
           terminalNumber: 1,
+          attachedClients: 0,
         },
       ],
     })

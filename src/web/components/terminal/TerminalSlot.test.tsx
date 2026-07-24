@@ -237,6 +237,7 @@ describe('TerminalSlot', () => {
     const snapshot = { phase: 'open' as const, message: null, processName: 'zsh' }
     const context: TerminalSessionContextValue = {
       createTerminal: vi.fn(async () => 'terminal-1'),
+      restoreTmuxSessions: vi.fn(async () => 0),
       selectTerminal: vi.fn(),
       scrollToBottom: vi.fn(),
       focusTerminal: vi.fn(),
@@ -383,6 +384,7 @@ describe('TerminalSlot', () => {
     }
     const context: TerminalSessionContextValue = {
       createTerminal: async () => 'terminal-1',
+      restoreTmuxSessions: vi.fn(async () => 0),
       selectTerminal: vi.fn(),
       scrollToBottom: vi.fn(),
       focusTerminal: vi.fn(),
@@ -529,6 +531,7 @@ describe('TerminalSlot', () => {
     const emptySnapshot = { phase: 'opening' as const, message: null, processName: 'terminal' }
     const context: TerminalSessionContextValue = {
       createTerminal: vi.fn(async () => 'terminal-2'),
+      restoreTmuxSessions: vi.fn(async () => 0),
       selectTerminal: vi.fn(),
       scrollToBottom: vi.fn(),
       focusTerminal: vi.fn(),
@@ -643,6 +646,7 @@ describe('TerminalSlot', () => {
     }
     const context: TerminalSessionContextValue = {
       createTerminal: vi.fn(async () => 'terminal-1'),
+      restoreTmuxSessions: vi.fn(async () => 0),
       selectTerminal: vi.fn(),
       scrollToBottom: vi.fn(),
       focusTerminal: vi.fn(),
@@ -1252,6 +1256,7 @@ function terminalContext(overrides: Partial<TerminalSessionContextValue> = {}): 
     reorderSessions: vi.fn(async () => true),
     serialize: vi.fn(() => ''),
     ...overrides,
+    restoreTmuxSessions: overrides.restoreTmuxSessions ?? vi.fn(async () => 0),
   }
 }
 

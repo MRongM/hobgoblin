@@ -10,6 +10,7 @@ export type BranchActionItemId =
   | 'remote'
   | 'terminal'
   | 'terminalTmux'
+  | 'restoreTmuxTerminals'
   | 'externalTerminal'
   | 'closeAllTerminals'
   | 'editor'

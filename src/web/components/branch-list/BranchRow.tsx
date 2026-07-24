@@ -70,7 +70,6 @@ export function BranchRow({
   const actionProjection = projectWorktreeListItemActions(actions, {
     policy: 'ordinary-worktree',
     hasWorktree: !!worktreePath,
-    tmuxTerminalLabel: t('terminal.restore-directory-tmux'),
   })
   const setItemRef = useCallback(
     (node: HTMLLIElement | null) => {
@@ -163,7 +162,7 @@ export function BranchRow({
       externalTerminal={actionProjection.contextMenu.externalTerminal}
       internalTerminal={actionProjection.contextMenu.internalTerminal}
       tmuxTerminal={actionProjection.contextMenu.tmuxTerminal}
-      tmuxTerminalLabel={t('terminal.restore-directory-tmux')}
+      restoreTmuxTerminals={actionProjection.contextMenu.restoreTmuxTerminals}
       worktreeTerminalKeys={terminalWorktreeKeys}
       additionalActions={tmuxCleanup.visible ? [tmuxCleanup.contextAction] : []}
     >

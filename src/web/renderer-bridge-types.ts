@@ -19,6 +19,7 @@ import type {
   TerminalAttachResult,
   TerminalCreateInput,
   TerminalOpenTmuxSessionsInput,
+  TerminalOpenTmuxSessionsResult,
   TerminalExitEvent,
   TerminalMutationResult,
   TerminalNotifyBellInput,
@@ -46,7 +47,7 @@ export interface RendererTerminalBridge {
   takeover: (input: TerminalTakeoverInput) => Promise<TerminalTakeoverResult>
   close: (input: TerminalSessionInput) => Promise<TerminalCloseResult>
   create: (input: TerminalCreateInput) => Promise<TerminalCatalogMutationResult>
-  openTmuxSessions: (input: TerminalOpenTmuxSessionsInput) => Promise<TerminalCatalogMutationResult>
+  openTmuxSessions: (input: TerminalOpenTmuxSessionsInput) => Promise<TerminalOpenTmuxSessionsResult>
   pruneTerminals: (repoRoot: string) => Promise<{ pruned: number; remaining: number }>
   listSessions: (input: { repoRoot: string }) => Promise<TerminalSessionSummary[]>
   getSessionSnapshot: (input: TerminalSessionSnapshotInput) => Promise<TerminalSessionSnapshot | null>
