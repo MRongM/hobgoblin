@@ -66,9 +66,13 @@ const Toaster = ({ toastOptions, className, style, richColors = true, ...props }
           ...classNames,
           loading: [LOADING_TOAST_CLASS, classNames?.loading].filter(Boolean).join(' '),
           toast: ['max-w-[calc(100vw-2rem)]', classNames?.toast].filter(Boolean).join(' '),
-          content: ['min-w-0 max-w-full overflow-hidden', classNames?.content].filter(Boolean).join(' '),
-          title: ['min-w-0 max-w-full', classNames?.title].filter(Boolean).join(' '),
-          description: ['min-w-0 max-w-full overflow-hidden', classNames?.description].filter(Boolean).join(' '),
+          content: ['min-w-0 max-w-full overflow-hidden select-text cursor-text', classNames?.content]
+            .filter(Boolean)
+            .join(' '),
+          title: ['min-w-0 max-w-full select-text cursor-text', classNames?.title].filter(Boolean).join(' '),
+          description: ['min-w-0 max-w-full overflow-hidden select-text cursor-text', classNames?.description]
+            .filter(Boolean)
+            .join(' '),
         },
       }}
     />

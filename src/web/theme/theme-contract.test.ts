@@ -4,6 +4,7 @@ import { describe, expect, test } from 'vitest'
 
 const THEME_ROOT = new URL('./', import.meta.url)
 const THEMES_ROOT = new URL('./themes/', import.meta.url)
+const SCROLL_AREA_SOURCE = new URL('../components/ui/scroll-area.tsx', import.meta.url)
 
 const CONTRACT_TOKENS = [
   '--color-app-region:',
@@ -27,6 +28,9 @@ const CONTRACT_TOKENS = [
   '--color-topbar-control-hover:',
   '--color-topbar-control-border:',
   '--color-topbar-control-foreground:',
+  '--color-scrollbar-thumb:',
+  '--color-scrollbar-thumb-hover:',
+  '--color-scrollbar-thumb-active:',
 ]
 
 const CLASSIC_TERMINAL_TOKENS = [
@@ -105,6 +109,35 @@ describe('web theme contract', () => {
     expect(fileArea).toContain('--color-sidebar: var(--color-topbar);')
     expect(fileArea).toContain('--color-pane: var(--color-topbar);')
     expect(fileArea).toContain('--color-toolbar: var(--color-topbar);')
+  })
+
+  test('themes native and Radix scrollbars inside navigation and file areas', () => {
+    const contract = readText(new URL('contract.css', THEME_ROOT))
+    const scrollAreaSource = readText(SCROLL_AREA_SOURCE)
+    const toneSelector = ':is(.project-navigation-tone, .project-file-area-tone)'
+    const nativeScrollbarSelector = `:is(
+  .project-navigation-tone,
+  .project-file-area-tone,
+  .project-navigation-tone *,
+  .project-file-area-tone *
+)`
+    const toneRule = cssRule(contract, toneSelector)
+    const normalizedContract = contract.replace(/\s+/g, ' ')
+    const normalizedNativeScrollbarSelector = nativeScrollbarSelector.replace(/\s+/g, ' ')
+
+    expect(contract).toContain('@supports not selector(::-webkit-scrollbar)')
+    expect(toneRule).toContain('scrollbar-color: var(--color-scrollbar-thumb) transparent;')
+    expect(toneRule).toContain('scrollbar-width: thin;')
+    expect(normalizedContract).toContain(`${normalizedNativeScrollbarSelector}::-webkit-scrollbar {`)
+    expect(normalizedContract).toContain(`${normalizedNativeScrollbarSelector}::-webkit-scrollbar-track,`)
+    expect(normalizedContract).toContain(`${normalizedNativeScrollbarSelector}::-webkit-scrollbar-corner {`)
+    expect(normalizedContract).toContain(`${normalizedNativeScrollbarSelector}::-webkit-scrollbar-thumb {`)
+    expect(normalizedContract).toContain(`${normalizedNativeScrollbarSelector}::-webkit-scrollbar-thumb:hover {`)
+    expect(normalizedContract).toContain(`${normalizedNativeScrollbarSelector}::-webkit-scrollbar-thumb:active {`)
+    expect(contract).toContain(`${toneSelector} [data-slot='scroll-area-thumb'] {`)
+    expect(contract).toContain(`${toneSelector} [data-slot='scroll-area-thumb']:hover {`)
+    expect(contract).toContain(`${toneSelector} [data-slot='scroll-area-thumb']:active {`)
+    expect(scrollAreaSource).toContain('data-slot="scroll-area-thumb"')
   })
 
   test('defines classic terminal tokens for every color theme preset', () => {

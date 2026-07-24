@@ -77,6 +77,7 @@ const ScrollBar = forwardRef<ComponentRef<typeof ScrollAreaPrimitive.ScrollAreaS
         {...props}
       >
         <ScrollAreaPrimitive.Thumb
+          data-slot="scroll-area-thumb"
           className={cn(
             'relative flex-1 rounded-full bg-muted-foreground/40 transition-[background-color,width,height] duration-150 ease-out hover:bg-muted-foreground/70 active:bg-muted-foreground/80',
             orientation === 'vertical' && 'mx-auto w-1 hover:w-1.5',
