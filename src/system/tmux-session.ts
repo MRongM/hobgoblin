@@ -42,12 +42,12 @@ export function buildTmuxAttachShellCommand(
   const descriptor = normalizeTmuxSessionDescriptor(input)
   const sessionName = descriptor ? buildTmuxSessionName(descriptor) : null
   if (!descriptor || !sessionName) return null
-  const sessionTarget = `=${sessionName}:`
+  const sessionTarget = `=${sessionName}`
   return {
     sessionName,
     command: [
       `exec tmux new-session -A -s ${shellQuote(sessionName)} -c ${shellQuote(descriptor.workingDirectory)}`,
-      `set-option -t ${shellQuote(sessionTarget)} mouse on`,
+      `set-option -t ${shellQuote(`${sessionTarget}:`)} mouse on`,
       `set-option -t ${shellQuote(sessionTarget)} ${HOBGOBLIN_TMUX_INIT_PATH_OPTION} ${shellQuote(descriptor.workingDirectory)}`,
       `set-option -t ${shellQuote(sessionTarget)} ${HOBGOBLIN_TMUX_TERMINAL_NUMBER_OPTION} ${shellQuote(String(descriptor.terminalNumber))}`,
     ].join(' \\; '),
