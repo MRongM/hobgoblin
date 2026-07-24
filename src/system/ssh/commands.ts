@@ -7,7 +7,7 @@ import {
   FILE_TREE_TEXT_FILE_MAX_BYTES,
 } from '#/shared/file-tree.ts'
 import { BRANCH_WORKSPACE_DIRECTORY_PREFIXES } from '#/shared/branch-workspaces.ts'
-import { isHobgoblinTmuxSessionName } from '#/system/tmux-session.ts'
+import { buildTmuxServerName, isHobgoblinTmuxSessionName } from '#/system/tmux-session.ts'
 import { FIELD_SEP } from '#/system/git/parsers.ts'
 import { buildManagedRemoteTerminalInvocation } from '#/system/remote-terminal.ts'
 import { TMUX_SESSION_LIST_FORMAT } from '#/system/tmux-cleanup.ts'
@@ -32,8 +32,8 @@ export type RemoteCommandKind =
   | { type: 'printHome' }
   | { type: 'checkShell' }
   | { type: 'checkGit' }
-  | { type: 'tmuxListSessions' }
-  | { type: 'tmuxKillSessionByName'; sessionName: string }
+  | { type: 'tmuxListSessions'; projectRoot: string }
+  | { type: 'tmuxKillSessionByName'; projectRoot: string; sessionName: string; serverName?: string }
   | { type: 'testDirectory'; path: string }
   | { type: 'listDirectories'; path: string; limit?: number }
   | { type: 'listWorkspaceGitDirectories'; rootPath: string }
@@ -168,6 +168,7 @@ export function buildRemoteTerminalInvocation(
     terminalNumber: number
     useTmux?: boolean
     existingTmuxSessionName?: string
+    existingTmuxServerName?: string
   },
 ): RemoteCommandInvocation {
   const invocation = buildManagedRemoteTerminalInvocation(
@@ -181,6 +182,7 @@ export function buildRemoteTerminalInvocation(
       sshOptions: ['-o', 'StrictHostKeyChecking=yes', '-o', `ConnectTimeout=${SSH_CONNECT_TIMEOUT_SEC}`],
       useTmux: options.useTmux === true,
       existingTmuxSessionName: options.existingTmuxSessionName,
+      existingTmuxServerName: options.existingTmuxServerName,
     },
   )
   if (!invocation) throw new Error('Invalid remote terminal invocation')
@@ -231,16 +233,21 @@ function scriptForCommand(command: RemoteCommandKind): string {
     case 'checkGit':
       return 'command -v git'
     case 'tmuxListSessions':
+      return tmuxListSessionsScript(command.projectRoot)
+    case 'tmuxKillSessionByName': {
+      const serverName = buildTmuxServerName(command.projectRoot)
+      if (
+        !serverName ||
+        !isHobgoblinTmuxSessionName(command.sessionName) ||
+        (command.serverName !== undefined && command.serverName !== serverName)
+      ) {
+        throw new TypeError('error.invalid-arguments')
+      }
       return [
         'command -v tmux >/dev/null 2>&1 || exit 127',
-        `tmux -u list-sessions -F ${shellQuote(TMUX_SESSION_LIST_FORMAT)}`,
+        `tmux${command.serverName ? ` -L ${shellQuote(command.serverName)}` : ''} kill-session -t ${shellQuote(`=${command.sessionName}`)}`,
       ].join('\n')
-    case 'tmuxKillSessionByName':
-      if (!isHobgoblinTmuxSessionName(command.sessionName)) throw new TypeError('error.invalid-arguments')
-      return [
-        'command -v tmux >/dev/null 2>&1 || exit 127',
-        `tmux kill-session -t ${shellQuote(`=${command.sessionName}`)}`,
-      ].join('\n')
+    }
     case 'testDirectory':
       return `test -d ${shellQuote(command.path)}`
     case 'listDirectories': {
@@ -523,6 +530,29 @@ function scriptForCommand(command: RemoteCommandKind): string {
   }
   const exhaustive: never = command
   return exhaustive
+}
+
+function tmuxListSessionsScript(projectRoot: string): string {
+  const serverName = buildTmuxServerName(projectRoot)
+  if (!serverName) throw new TypeError('error.invalid-arguments')
+  return [
+    'command -v tmux >/dev/null 2>&1 || exit 127',
+    'run_tmux_list() {',
+    '  tmux_output=$("$@" 2>&1)',
+    '  tmux_status=$?',
+    '  if [ "$tmux_status" -eq 0 ]; then',
+    '    [ -z "$tmux_output" ] || printf \'%s\\n\' "$tmux_output"',
+    '    return 0',
+    '  fi',
+    '  case "$tmux_output" in',
+    '    *"no server running"*|*"failed to connect to server"*|*"no sessions"*) return 0 ;;',
+    '  esac',
+    '  printf \'%s\\n\' "$tmux_output" >&2',
+    '  return "$tmux_status"',
+    '}',
+    `run_tmux_list tmux -L ${shellQuote(serverName)} -u list-sessions -F ${shellQuote(`${TMUX_SESSION_LIST_FORMAT}\t${serverName}`)} || exit $?`,
+    `run_tmux_list tmux -u list-sessions -F ${shellQuote(`${TMUX_SESSION_LIST_FORMAT}\tlegacy-default`)} || exit $?`,
+  ].join('\n')
 }
 
 type RemoteBranchWorkspaceCommand = Extract<

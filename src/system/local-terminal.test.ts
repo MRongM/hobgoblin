@@ -76,6 +76,28 @@ describe('buildManagedLocalTerminalInvocation', () => {
     expect(invocation?.script).not.toContain(TMUX_TERMINAL_NUMBER_OPTION)
   })
 
+  test('attaches a recovered session through its validated project server', () => {
+    const sessionName = 'hobgoblin-v1-aebf050981ac829e36100020'
+    const serverName = 'hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0'
+    const invocation = buildManagedLocalTerminalInvocation(TARGET, {
+      useTmux: true,
+      existingTmuxSessionName: sessionName,
+      existingTmuxServerName: serverName,
+      platform: 'darwin',
+      fallbackShell: '/bin/zsh',
+    })
+
+    expect(invocation?.script).toContain(`exec tmux -L '${serverName}' attach-session -t '=${sessionName}'`)
+    expect(
+      buildManagedLocalTerminalInvocation(TARGET, {
+        useTmux: true,
+        existingTmuxSessionName: sessionName,
+        existingTmuxServerName: 'hobgoblin-project-v1-0123456789abcdef01234567',
+        platform: 'darwin',
+      }),
+    ).toBeNull()
+  })
+
   test('quotes apostrophes in working directories and fallback shells', () => {
     const invocation = buildManagedLocalTerminalInvocation(
       { ...TARGET, workingDirectory: "/srv/user's feature" },

@@ -39,25 +39,76 @@ function testPosix(name: string, fn: () => Promise<void> | void): void {
 
 describe('remote command scripts', () => {
   test('builds tmux list and kill commands without session ids', () => {
-    const list = buildRemoteCommandInvocation(TARGET, { type: 'tmuxListSessions' })
+    const serverName = 'hobgoblin-project-v1-44159cd9e973adba7b472e6f'
+    const list = buildRemoteCommandInvocation(TARGET, { type: 'tmuxListSessions', projectRoot: '/srv/repo' })
     const killByName = buildRemoteCommandInvocation(TARGET, {
       type: 'tmuxKillSessionByName',
+      projectRoot: '/srv/repo',
       sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+      serverName,
     })
 
-    expect(list.script).toBe(
-      "command -v tmux >/dev/null 2>&1 || exit 127\ntmux -u list-sessions -F '#{@hobgoblin_init_path}\t#{@hobgoblin_terminal_number}\t#{session_attached}\t#{session_name}'",
-    )
+    expect(list.script).toContain(`tmux -L '${serverName}' -u list-sessions`)
+    expect(list.script).toContain(`#{session_name}\t${serverName}`)
+    expect(list.script).toContain('tmux -u list-sessions')
+    expect(list.script).toContain('#{session_name}\tlegacy-default')
     expect(killByName.script).toBe(
-      "command -v tmux >/dev/null 2>&1 || exit 127\ntmux kill-session -t '=hobgoblin-v1-aebf050981ac829e36100020'",
+      "command -v tmux >/dev/null 2>&1 || exit 127\ntmux -L 'hobgoblin-project-v1-44159cd9e973adba7b472e6f' kill-session -t '=hobgoblin-v1-aebf050981ac829e36100020'",
     )
+  })
+
+  testPosix('treats absent tmux servers as empty without masking project server failures', async () => {
+    const directory = path.join(os.tmpdir(), `hobgoblin-tmux-list-${Date.now()}-${process.pid}`)
+    const fakeBin = path.join(directory, 'bin')
+    tempDirs.push(directory)
+    mkdirSync(fakeBin, { recursive: true })
+    const tmuxPath = path.join(fakeBin, 'tmux')
+    writeFileSync(
+      tmuxPath,
+      [
+        '#!/bin/sh',
+        'if [ "$1" = "-L" ]; then',
+        '  printf \'%s\\n\' "${FAKE_PROJECT_MESSAGE:-no server running}" >&2',
+        '  exit "${FAKE_PROJECT_STATUS:-1}"',
+        'fi',
+        'printf \'%s\\n\' "${FAKE_LEGACY_MESSAGE:-no server running}" >&2',
+        'exit "${FAKE_LEGACY_STATUS:-1}"',
+      ].join('\n'),
+    )
+    chmodSync(tmuxPath, 0o755)
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'tmuxListSessions',
+      projectRoot: '/srv/repo',
+    })
+    const environment = { ...process.env, PATH: `${fakeBin}:${process.env.PATH ?? ''}` }
+
+    const absent = await execa('sh', ['-c', invocation.script], { env: environment, reject: false })
+    const failed = await execa('sh', ['-c', invocation.script], {
+      env: { ...environment, FAKE_PROJECT_MESSAGE: 'permission denied', FAKE_PROJECT_STATUS: '2' },
+      reject: false,
+    })
+
+    expect(absent.exitCode).toBe(0)
+    expect(absent.stdout).toBe('')
+    expect(absent.stderr).toBe('')
+    expect(failed.exitCode).toBe(2)
+    expect(failed.stderr).toBe('permission denied')
   })
 
   test('rejects invalid tmux session names before building an SSH invocation', () => {
     expect(() =>
       buildRemoteCommandInvocation(TARGET, {
         type: 'tmuxKillSessionByName',
+        projectRoot: '/srv/repo',
         sessionName: 'hobgoblin-v1-bad; touch /tmp/example',
+      }),
+    ).toThrow('error.invalid-arguments')
+    expect(() =>
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'tmuxKillSessionByName',
+        projectRoot: '/srv/repo',
+        sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+        serverName: 'hobgoblin-project-v1-0123456789abcdef01234567',
       }),
     ).toThrow('error.invalid-arguments')
   })

@@ -101,7 +101,11 @@ internal object SshTerminalStartupCommand {
             add("cd ${shellQuote(normalizedPath)} || exit")
             if (tmuxIdentity != null) {
                 val tmuxCommand = requireNotNull(
-                    TmuxSessionProtocol.attachOrCreateCommand(tmuxIdentity, startupContext.terminalId),
+                    TmuxSessionProtocol.attachOrCreateCommand(
+                        tmuxIdentity,
+                        startupContext.terminalId,
+                        startupContext.repositoryRemotePath,
+                    ),
                 ) { "Tmux terminal number must be positive" }
                 add("if command -v tmux >/dev/null 2>&1; then")
                 add("  $tmuxCommand")

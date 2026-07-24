@@ -2,6 +2,7 @@ import path from 'node:path'
 import { execa } from 'execa'
 import type { TmuxSessionRecord } from '#/shared/tmux-cleanup.ts'
 import {
+  buildTmuxServerName,
   isHobgoblinTmuxSessionName,
   normalizeTmuxSessionPath,
   TMUX_INIT_PATH_OPTION,
@@ -30,25 +31,41 @@ export interface TmuxCommandResult {
   message: string
 }
 
-interface LocalTmuxCommandOptions {
+interface LocalTmuxExecutionOptions {
   run?: TmuxProcessRunner
   signal?: AbortSignal
 }
 
-export function parseTmuxSessionList(output: string): TmuxSessionRecord[] | null {
+export interface LocalTmuxListOptions extends LocalTmuxExecutionOptions {
+  projectRoot: string
+}
+
+export interface LocalTmuxKillOptions extends LocalTmuxExecutionOptions {
+  projectRoot: string
+  serverName?: string
+}
+
+export function parseTmuxSessionList(output: string, projectRoot?: string): TmuxSessionRecord[] | null {
   if (output.length === 0) return []
+  const expectedServerName = projectRoot === undefined ? undefined : buildTmuxServerName(projectRoot)
   const sessions: TmuxSessionRecord[] = []
   for (const rawLine of output.split('\n')) {
     const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
     if (!line) continue
     const fields = line.split('\t')
-    if (fields.length !== 4) return null
-    const [rawInitialPath, rawTerminalNumber, rawAttachedClients, sessionName] = fields
+    if (fields.length !== 4 && fields.length !== 5) return null
+    const [rawInitialPath, rawTerminalNumber, rawAttachedClients, sessionName, rawServerName] = fields
+    let serverName: string | undefined
+    if (rawServerName !== undefined) {
+      if (!expectedServerName) return null
+      if (rawServerName === expectedServerName) serverName = expectedServerName
+      else if (rawServerName !== 'legacy-default') return null
+    }
     const initialPath = normalizeTmuxSessionPath(rawInitialPath ?? '')
     const terminalNumber = parseRecordedTerminalNumber(rawTerminalNumber)
     const attachedClients = parseAttachedClientCount(rawAttachedClients)
     if (!sessionName || !initialPath || terminalNumber === null || attachedClients === null) continue
-    sessions.push({ sessionName, initialPath, terminalNumber, attachedClients })
+    sessions.push({ sessionName, initialPath, terminalNumber, attachedClients, ...(serverName ? { serverName } : {}) })
   }
   return sessions
 }
@@ -65,33 +82,61 @@ function parseAttachedClientCount(value: string | undefined): number | null {
   return Number.isSafeInteger(attachedClients) && attachedClients >= 0 ? attachedClients : null
 }
 
-export async function listLocalTmuxSessions(options: LocalTmuxCommandOptions = {}): Promise<TmuxListResult> {
-  const args = ['-u', 'list-sessions', '-F', TMUX_SESSION_LIST_FORMAT]
+export async function listLocalTmuxSessions(options: LocalTmuxListOptions): Promise<TmuxListResult> {
+  const serverName = buildTmuxServerName(options.projectRoot)
+  if (!serverName) return { ok: false, message: 'error.invalid-arguments' }
+  const project = await listLocalTmuxServer(
+    ['-L', serverName, '-u', 'list-sessions', '-F', TMUX_SESSION_LIST_FORMAT],
+    options,
+    serverName,
+  )
+  if (!project.ok) return project
+  const legacy = await listLocalTmuxServer(['-u', 'list-sessions', '-F', TMUX_SESSION_LIST_FORMAT], options)
+  if (!legacy.ok) return legacy
+  return { ok: true, sessions: [...project.sessions, ...legacy.sessions] }
+}
+
+async function listLocalTmuxServer(
+  args: string[],
+  options: LocalTmuxExecutionOptions,
+  serverName?: string,
+): Promise<TmuxListResult> {
   const run = options.run ?? runLocalTmuxCommand
-  const result = tmuxListResultFromProcessResult(await run(args, options.signal))
+  const result = tmuxListResultFromProcessResult(await run(args, options.signal), serverName)
   if (options.run || result.ok || result.message !== 'error.tmux-invalid-output') return result
 
   const refreshed = await refreshLocalTmuxExecutable(options.signal)
   if (!refreshed.ok) return refreshed
-  return tmuxListResultFromProcessResult(await runLocalTmuxCommand(args, options.signal))
+  return tmuxListResultFromProcessResult(await runLocalTmuxCommand(args, options.signal), serverName)
 }
 
-export function tmuxListResultFromProcessResult(result: TmuxProcessResult): TmuxListResult {
+export function tmuxListResultFromProcessResult(
+  result: TmuxProcessResult,
+  serverName?: string,
+  projectRoot?: string,
+): TmuxListResult {
   if (!result.ok) {
     return NO_TMUX_SERVER_RE.test(`${result.stderr}\n${result.message}`)
       ? { ok: true, sessions: [] }
       : { ok: false, message: result.message }
   }
-  const sessions = parseTmuxSessionList(result.stdout)
-  return sessions ? { ok: true, sessions } : { ok: false, message: 'error.tmux-invalid-output' }
+  const sessions = parseTmuxSessionList(result.stdout, projectRoot)
+  return sessions
+    ? { ok: true, sessions: serverName ? sessions.map((session) => ({ ...session, serverName })) : sessions }
+    : { ok: false, message: 'error.tmux-invalid-output' }
 }
 
 export async function killLocalTmuxSessionByName(
   sessionName: string,
-  options: LocalTmuxCommandOptions = {},
+  options: LocalTmuxKillOptions,
 ): Promise<TmuxCommandResult> {
   if (!isHobgoblinTmuxSessionName(sessionName)) return { ok: false, message: 'error.invalid-arguments' }
-  const result = await (options.run ?? runLocalTmuxCommand)(['kill-session', '-t', `=${sessionName}`], options.signal)
+  const expectedServerName = buildTmuxServerName(options.projectRoot)
+  if (!expectedServerName || (options.serverName !== undefined && options.serverName !== expectedServerName)) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  const args = [...(options.serverName ? ['-L', options.serverName] : []), 'kill-session', '-t', `=${sessionName}`]
+  const result = await (options.run ?? runLocalTmuxCommand)(args, options.signal)
   return result.ok ? { ok: true, message: result.stderr } : { ok: false, message: result.message }
 }
 

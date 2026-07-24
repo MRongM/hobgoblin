@@ -18,6 +18,19 @@ const REFERENCE_DESCRIPTOR = {
 }
 const testWithTmux = process.platform !== 'win32' && spawnSync('tmux', ['-V']).status === 0 ? test : test.skip
 
+describe('buildTmuxServerName', () => {
+  test('derives a stable project-scoped server name from the normalized project root', () => {
+    const buildServerName = (
+      tmuxSession as typeof tmuxSession & { buildTmuxServerName?: (projectRoot: string) => string | null }
+    ).buildTmuxServerName
+
+    expect(buildServerName).toBeTypeOf('function')
+    expect(buildServerName?.('/srv/projects/example')).toBe('hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0')
+    expect(buildServerName?.('/srv//projects/example/./')).toBe('hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0')
+    expect(buildServerName?.('srv/projects/example')).toBeNull()
+  })
+})
+
 describe('buildTmuxSessionName', () => {
   test('matches the public v1 reference vector', () => {
     expect(buildTmuxSessionName(REFERENCE_DESCRIPTOR)).toBe('hobgoblin-v1-aebf050981ac829e36100020')
@@ -98,14 +111,26 @@ describe('normalizeTmuxSessionDescriptor', () => {
 
 describe('buildTmuxAttachShellCommand', () => {
   test('writes fixed Hobgoblin identity metadata on the exact session', () => {
-    expect(buildTmuxAttachShellCommand(REFERENCE_DESCRIPTOR)).toEqual({
-      sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
-      command:
-        "exec tmux new-session -A -s 'hobgoblin-v1-aebf050981ac829e36100020' -c '/srv/projects/example/worktrees/feature'" +
-        " \\; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' mouse on" +
-        " \\; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' @hobgoblin_init_path '/srv/projects/example/worktrees/feature'" +
-        " \\; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' @hobgoblin_terminal_number '1'",
-    })
+    const invocation = buildTmuxAttachShellCommand(REFERENCE_DESCRIPTOR)
+
+    expect(invocation?.sessionName).toBe('hobgoblin-v1-aebf050981ac829e36100020')
+    expect(invocation?.command).toContain(
+      "set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' @hobgoblin_init_path '/srv/projects/example/worktrees/feature'",
+    )
+    expect(invocation?.command).toContain(
+      "set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' @hobgoblin_terminal_number '1'",
+    )
+  })
+
+  test('prefers the project server and falls back only to an existing legacy default session', () => {
+    const invocation = buildTmuxAttachShellCommand(REFERENCE_DESCRIPTOR)
+    const serverName = 'hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0'
+    const target = '=hobgoblin-v1-aebf050981ac829e36100020'
+
+    expect(invocation?.command).toContain(`tmux -L '${serverName}' has-session -t '${target}'`)
+    expect(invocation?.command).toContain(`! tmux has-session -t '${target}'`)
+    expect(invocation?.command).toContain(`exec tmux -L '${serverName}' new-session -A`)
+    expect(invocation?.command).toContain('else\n  exec tmux new-session -A')
   })
 
   test('quotes normalized path metadata and rejects invalid descriptors', () => {
@@ -127,14 +152,19 @@ describe('buildTmuxAttachShellCommand', () => {
       terminalNumber: 1,
     })
     if (!invocation) throw new Error('expected a valid tmux invocation')
+    const serverName = buildServerNameForTest(testRoot)
 
     try {
-      const detachedCommand = invocation.command
-        .replace('exec tmux new-session -A ', 'exec tmux -f /dev/null new-session -Ad ')
+      const detachedCommand = invocation.command.replace(
+        `exec tmux -L '${serverName}' new-session -A `,
+        `exec tmux -L '${serverName}' -f /dev/null new-session -Ad `,
+      )
       execFileSync('/bin/sh', ['-lc', detachedCommand], { env: environment, stdio: 'pipe' })
       const listed = execFileSync(
         'tmux',
         [
+          '-L',
+          serverName,
           '-f',
           '/dev/null',
           '-u',
@@ -147,7 +177,7 @@ describe('buildTmuxAttachShellCommand', () => {
 
       expect(listed).toBe(`${invocation.sessionName}\t${testRoot}\t1\t0`)
     } finally {
-      spawnSync('tmux', ['-f', '/dev/null', 'kill-server'], { env: environment, stdio: 'ignore' })
+      spawnSync('tmux', ['-L', serverName, '-f', '/dev/null', 'kill-server'], { env: environment, stdio: 'ignore' })
       rmSync(testRoot, { force: true, recursive: true })
     }
   })
@@ -181,36 +211,33 @@ describe('tmux cleanup protocol helpers', () => {
 
     const terminalSevenName = buildTmuxSessionName({ ...REFERENCE_DESCRIPTOR, terminalNumber: 7 })!
     const unknownName = 'hobgoblin-v1-0123456789abcdef01234567'
-    const resolved = resolveTerminalNumbers!(
-      REFERENCE_DESCRIPTOR.projectRoot,
-      [
-        {
-          sessionName: REFERENCE_DESCRIPTOR_NAME,
-          initialPath: REFERENCE_DESCRIPTOR.workingDirectory,
-          terminalNumber: 1,
-        },
-        {
-          sessionName: terminalSevenName,
-          initialPath: REFERENCE_DESCRIPTOR.workingDirectory,
-          terminalNumber: 7,
-        },
-        {
-          sessionName: terminalSevenName,
-          initialPath: '/srv/projects/example/worktrees/other',
-          terminalNumber: 7,
-        },
-        {
-          sessionName: terminalSevenName,
-          initialPath: REFERENCE_DESCRIPTOR.workingDirectory,
-          terminalNumber: 8,
-        },
-        {
-          sessionName: unknownName,
-          initialPath: REFERENCE_DESCRIPTOR.workingDirectory,
-          terminalNumber: 3,
-        },
-      ],
-    )
+    const resolved = resolveTerminalNumbers!(REFERENCE_DESCRIPTOR.projectRoot, [
+      {
+        sessionName: REFERENCE_DESCRIPTOR_NAME,
+        initialPath: REFERENCE_DESCRIPTOR.workingDirectory,
+        terminalNumber: 1,
+      },
+      {
+        sessionName: terminalSevenName,
+        initialPath: REFERENCE_DESCRIPTOR.workingDirectory,
+        terminalNumber: 7,
+      },
+      {
+        sessionName: terminalSevenName,
+        initialPath: '/srv/projects/example/worktrees/other',
+        terminalNumber: 7,
+      },
+      {
+        sessionName: terminalSevenName,
+        initialPath: REFERENCE_DESCRIPTOR.workingDirectory,
+        terminalNumber: 8,
+      },
+      {
+        sessionName: unknownName,
+        initialPath: REFERENCE_DESCRIPTOR.workingDirectory,
+        terminalNumber: 3,
+      },
+    ])
 
     expect([...resolved]).toEqual([
       [REFERENCE_DESCRIPTOR_NAME, 1],
@@ -220,3 +247,11 @@ describe('tmux cleanup protocol helpers', () => {
 })
 
 const REFERENCE_DESCRIPTOR_NAME = 'hobgoblin-v1-aebf050981ac829e36100020'
+
+function buildServerNameForTest(projectRoot: string): string {
+  const serverName = (
+    tmuxSession as typeof tmuxSession & { buildTmuxServerName?: (projectRoot: string) => string | null }
+  ).buildTmuxServerName?.(projectRoot)
+  if (!serverName) throw new Error('expected a valid tmux server name')
+  return serverName
+}

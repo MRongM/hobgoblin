@@ -24,8 +24,8 @@ class RemoteTmuxSessionServiceTest {
             SshCommandResult(
                 ok = true,
                 stdout = listOf(
-                    "${discoveryIdentity.sessionName}\t$FeaturePath\t1",
-                    "user-session\t$FeaturePath\t1",
+                    "${discoveryIdentity.sessionName}\t$FeaturePath\t1\t$ProjectServerName",
+                    "user-session\t$FeaturePath\t1\tlegacy-default",
                 ).joinToString("\n"),
             ),
         )
@@ -42,7 +42,7 @@ class RemoteTmuxSessionServiceTest {
             ),
             result,
         )
-        assertEquals(listOf(TmuxSessionProtocol.listDiscoverableSessionsScript()), client.scripts)
+        assertEquals(listOf(TmuxSessionProtocol.listDiscoverableSessionsScript(ProjectRoot)), client.scripts)
         assertTrue(client.secrets.all { it.acceptedHostFingerprint == "SHA256:trusted" })
     }
 
@@ -89,18 +89,22 @@ class RemoteTmuxSessionServiceTest {
     @Test
     fun `exact live name and path are listed before the session is killed`() {
         val client = FakeSshClient(
-            SshCommandResult(ok = true, stdout = "$SessionName\t/srv/feature"),
+            SshCommandResult(ok = true, stdout = "$SessionName\t/srv/feature\t$ProjectServerName"),
             SshCommandResult(ok = true),
         )
         val service = service(client)
+        val method = service.javaClass.methods.firstOrNull { candidate ->
+            candidate.name == "closeAssociatedSession" && candidate.parameterCount == 3
+        }
 
-        val result = service.closeAssociatedSession(target(), identity())
+        assertTrue("Expected project-root-aware tmux close", method != null)
+        val result = method?.invoke(service, target(), identity(), ProjectRoot)
 
         assertEquals(RemoteTmuxCloseResult.Closed, result)
         assertEquals(
             listOf(
-                TmuxSessionProtocol.listSessionsScript(),
-                TmuxSessionProtocol.killSessionScript(SessionName),
+                TmuxSessionProtocol.listSessionsScript(ProjectRoot),
+                TmuxSessionProtocol.killSessionScript(ProjectRoot, SessionName, ProjectServerName),
             ),
             client.scripts,
         )
@@ -113,10 +117,10 @@ class RemoteTmuxSessionServiceTest {
             SshCommandResult(ok = true, stdout = "$SessionName\t/srv/other"),
         )
 
-        val result = service(client).closeAssociatedSession(target(), identity())
+        val result = service(client).closeAssociatedSession(target(), identity(), ProjectRoot)
 
         assertEquals(RemoteTmuxCloseResult.Missing, result)
-        assertEquals(listOf(TmuxSessionProtocol.listSessionsScript()), client.scripts)
+        assertEquals(listOf(TmuxSessionProtocol.listSessionsScript(ProjectRoot)), client.scripts)
     }
 
     @Test
@@ -125,7 +129,7 @@ class RemoteTmuxSessionServiceTest {
             SshCommandResult(ok = true, stdout = "hobgoblin-v1-0123456789abcdef01234567\t/srv/feature"),
         )
 
-        val result = service(client).closeAssociatedSession(target(), identity())
+        val result = service(client).closeAssociatedSession(target(), identity(), ProjectRoot)
 
         assertEquals(RemoteTmuxCloseResult.Missing, result)
         assertEquals(1, client.scripts.size)
@@ -137,14 +141,17 @@ class RemoteTmuxSessionServiceTest {
             SshCommandResult(ok = false, stderr = "no server running on /tmp/tmux-1000/default"),
         )
 
-        assertEquals(RemoteTmuxCloseResult.Missing, service(client).closeAssociatedSession(target(), identity()))
+        assertEquals(
+            RemoteTmuxCloseResult.Missing,
+            service(client).closeAssociatedSession(target(), identity(), ProjectRoot),
+        )
     }
 
     @Test
     fun `malformed list output fails closed`() {
         val client = FakeSshClient(SshCommandResult(ok = true, stdout = "malformed"))
 
-        val result = service(client).closeAssociatedSession(target(), identity())
+        val result = service(client).closeAssociatedSession(target(), identity(), ProjectRoot)
 
         assertEquals(RemoteTmuxCloseResult.Failed("tmux returned an invalid session list"), result)
         assertEquals(1, client.scripts.size)
@@ -156,7 +163,7 @@ class RemoteTmuxSessionServiceTest {
 
         assertEquals(
             RemoteTmuxCloseResult.Failed("exit 127"),
-            service(client).closeAssociatedSession(target(), identity()),
+            service(client).closeAssociatedSession(target(), identity(), ProjectRoot),
         )
     }
 
@@ -167,7 +174,10 @@ class RemoteTmuxSessionServiceTest {
             SshCommandResult(ok = false, stderr = "can't find session: $SessionName"),
         )
 
-        assertEquals(RemoteTmuxCloseResult.Missing, service(client).closeAssociatedSession(target(), identity()))
+        assertEquals(
+            RemoteTmuxCloseResult.Missing,
+            service(client).closeAssociatedSession(target(), identity(), ProjectRoot),
+        )
     }
 
     @Test
@@ -179,7 +189,7 @@ class RemoteTmuxSessionServiceTest {
 
         assertEquals(
             RemoteTmuxCloseResult.Failed("permission denied"),
-            service(client).closeAssociatedSession(target(), identity()),
+            service(client).closeAssociatedSession(target(), identity(), ProjectRoot),
         )
     }
 
@@ -188,7 +198,7 @@ class RemoteTmuxSessionServiceTest {
         val client = FakeSshClient()
         val service = RemoteTmuxSessionService(client, FakeHostKeyTrustStore(trusted = false))
 
-        val result = service.closeAssociatedSession(target(), identity())
+        val result = service.closeAssociatedSession(target(), identity(), ProjectRoot)
 
         assertTrue(result is RemoteTmuxCloseResult.Failed)
         assertEquals(emptyList<String>(), client.scripts)
@@ -250,6 +260,7 @@ class RemoteTmuxSessionServiceTest {
     private companion object {
         const val SessionName = "hobgoblin-v1-aebf050981ac829e36100020"
         const val ProjectRoot = "/srv/projects/example"
+        const val ProjectServerName = "hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0"
         const val FeaturePath = "/srv/projects/example/worktrees/feature"
     }
 }

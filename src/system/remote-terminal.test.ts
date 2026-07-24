@@ -81,6 +81,25 @@ describe('buildManagedRemoteTerminalInvocation', () => {
     expect(invocation?.script).not.toContain(TMUX_TERMINAL_NUMBER_OPTION)
   })
 
+  test('attaches a recovered remote session through its validated project server', () => {
+    const sessionName = 'hobgoblin-v1-aebf050981ac829e36100020'
+    const serverName = 'hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0'
+    const invocation = buildManagedRemoteTerminalInvocation(BASE_MANAGED_TARGET, {
+      useTmux: true,
+      existingTmuxSessionName: sessionName,
+      existingTmuxServerName: serverName,
+    })
+
+    expect(invocation?.script).toContain(`exec tmux -L '${serverName}' attach-session -t '=${sessionName}'`)
+    expect(
+      buildManagedRemoteTerminalInvocation(BASE_MANAGED_TARGET, {
+        useTmux: true,
+        existingTmuxSessionName: sessionName,
+        existingTmuxServerName: 'hobgoblin-project-v1-0123456789abcdef01234567',
+      }),
+    ).toBeNull()
+  })
+
   test('shell-quotes remote paths that contain single quotes', () => {
     const invocation = buildManagedRemoteTerminalInvocation(
       {

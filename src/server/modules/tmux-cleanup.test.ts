@@ -5,9 +5,10 @@ import {
   previewAssociatedTmuxSessions,
   type TmuxCleanupDependencies,
 } from '#/server/modules/tmux-cleanup.ts'
-import { buildTmuxSessionName } from '#/system/tmux-session.ts'
+import { buildTmuxServerName, buildTmuxSessionName } from '#/system/tmux-session.ts'
 
 const LOCAL_PROJECT_ROOT = '/work/repo'
+const LOCAL_SERVER_NAME = buildTmuxServerName(LOCAL_PROJECT_ROOT)!
 const LOCAL_PATH = '/work/feature'
 const FIRST_NAME = buildTmuxSessionName({
   projectRoot: LOCAL_PROJECT_ROOT,
@@ -34,6 +35,7 @@ const REMOTE_TARGET = {
   remotePath: '/srv/repo',
   displayName: 'prod:repo',
 }
+const REMOTE_SERVER_NAME = buildTmuxServerName(REMOTE_TARGET.remotePath)!
 const REMOTE_FIRST_NAME = buildTmuxSessionName({
   projectRoot: REMOTE_TARGET.remotePath,
   workingDirectory: '/srv/feature',
@@ -45,7 +47,13 @@ describe('associated tmux cleanup', () => {
     const listLocal = vi.fn(async () => ({
       ok: true as const,
       sessions: [
-        { sessionName: FIRST_NAME, initialPath: '/work/feature/', terminalNumber: 1, attachedClients: 0 },
+        {
+          sessionName: FIRST_NAME,
+          initialPath: '/work/feature/',
+          terminalNumber: 1,
+          attachedClients: 0,
+          serverName: LOCAL_SERVER_NAME,
+        },
         { sessionName: SECOND_NAME, initialPath: '/work/feature', terminalNumber: 2, attachedClients: 0 },
       ],
     }))
@@ -57,7 +65,12 @@ describe('associated tmux cleanup', () => {
         { platform: 'linux', listLocal, killLocalByName },
       ),
     ).resolves.toEqual({ ok: true, status: 'closed' })
-    expect(killLocalByName).toHaveBeenCalledWith(FIRST_NAME, { signal: undefined })
+    expect(listLocal).toHaveBeenCalledWith({ projectRoot: LOCAL_PROJECT_ROOT, signal: undefined })
+    expect(killLocalByName).toHaveBeenCalledWith(FIRST_NAME, {
+      projectRoot: LOCAL_PROJECT_ROOT,
+      serverName: LOCAL_SERVER_NAME,
+      signal: undefined,
+    })
   })
 
   test('does not close an exact name reported at a different path', async () => {
@@ -82,9 +95,7 @@ describe('associated tmux cleanup', () => {
       .mockResolvedValueOnce({ ok: true, sessions: [] })
       .mockResolvedValueOnce({
         ok: true,
-        sessions: [
-          { sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 1, attachedClients: 0 },
-        ],
+        sessions: [{ sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 1, attachedClients: 0 }],
       })
     const killLocalByName = vi.fn(async () => ({ ok: false, message: `can't find session: ${FIRST_NAME}` }))
     const dependenciesWithExactKill = { platform: 'linux' as const, listLocal, killLocalByName }
@@ -104,7 +115,11 @@ describe('associated tmux cleanup', () => {
     const resolveRemote = vi.fn(async () => REMOTE_TARGET)
     const runRemote = vi
       .fn()
-      .mockResolvedValueOnce({ ok: true, stdout: `/srv/feature\t1\t0\t${REMOTE_FIRST_NAME}`, stderr: '' })
+      .mockResolvedValueOnce({
+        ok: true,
+        stdout: `/srv/feature\t1\t0\t${REMOTE_FIRST_NAME}\t${REMOTE_SERVER_NAME}`,
+        stderr: '',
+      })
       .mockResolvedValueOnce({ ok: true, stdout: '', stderr: '' })
 
     await expect(
@@ -116,7 +131,12 @@ describe('associated tmux cleanup', () => {
     expect(runRemote).toHaveBeenNthCalledWith(
       2,
       REMOTE_TARGET,
-      { type: 'tmuxKillSessionByName', sessionName: REMOTE_FIRST_NAME },
+      {
+        type: 'tmuxKillSessionByName',
+        projectRoot: REMOTE_TARGET.remotePath,
+        sessionName: REMOTE_FIRST_NAME,
+        serverName: REMOTE_SERVER_NAME,
+      },
       { signal: undefined },
     )
   })
@@ -124,9 +144,7 @@ describe('associated tmux cleanup', () => {
   test('rejects non-protocol names and preserves exact-close command failures', async () => {
     const listLocal = vi.fn(async () => ({
       ok: true as const,
-      sessions: [
-        { sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 1, attachedClients: 0 },
-      ],
+      sessions: [{ sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 1, attachedClients: 0 }],
     }))
     const killLocalByName = vi.fn(async () => ({ ok: false, message: 'permission denied' }))
 
@@ -175,8 +193,41 @@ describe('associated tmux cleanup', () => {
     ).resolves.toEqual({
       ok: true,
       targetPath: '/work/feature',
+      sessions: [{ sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 1, attachedClients: 0 }],
+    })
+  })
+
+  test('prefers a valid project-scoped session over a same-named legacy session', async () => {
+    const listLocal = vi.fn(async () => ({
+      ok: true as const,
       sessions: [
-        { sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 1, attachedClients: 0 },
+        {
+          sessionName: FIRST_NAME,
+          initialPath: LOCAL_PATH,
+          terminalNumber: 1,
+          attachedClients: 0,
+          serverName: LOCAL_SERVER_NAME,
+        },
+        { sessionName: FIRST_NAME, initialPath: LOCAL_PATH, terminalNumber: 1, attachedClients: 0 },
+      ],
+    }))
+
+    await expect(
+      previewAssociatedTmuxSessions(
+        { projectRoot: LOCAL_PROJECT_ROOT, itemPath: LOCAL_PATH },
+        { platform: 'linux', listLocal },
+      ),
+    ).resolves.toEqual({
+      ok: true,
+      targetPath: LOCAL_PATH,
+      sessions: [
+        {
+          sessionName: FIRST_NAME,
+          initialPath: LOCAL_PATH,
+          terminalNumber: 1,
+          attachedClients: 0,
+          serverName: LOCAL_SERVER_NAME,
+        },
       ],
     })
   })
@@ -197,7 +248,7 @@ describe('associated tmux cleanup', () => {
     const resolveRemote = vi.fn(async () => REMOTE_TARGET)
     const runRemote = vi.fn(async () => ({
       ok: true,
-      stdout: `/srv/feature\t1\t0\t${REMOTE_FIRST_NAME}`,
+      stdout: `/srv/feature\t1\t0\t${REMOTE_FIRST_NAME}\t${REMOTE_SERVER_NAME}`,
       stderr: '',
     }))
 
@@ -210,10 +261,20 @@ describe('associated tmux cleanup', () => {
       ok: true,
       targetPath: '/srv/feature',
       sessions: [
-        { sessionName: REMOTE_FIRST_NAME, initialPath: '/srv/feature', terminalNumber: 1, attachedClients: 0 },
+        {
+          sessionName: REMOTE_FIRST_NAME,
+          initialPath: '/srv/feature',
+          terminalNumber: 1,
+          attachedClients: 0,
+          serverName: REMOTE_SERVER_NAME,
+        },
       ],
     })
-    expect(runRemote).toHaveBeenCalledWith(REMOTE_TARGET, { type: 'tmuxListSessions' }, { signal: undefined })
+    expect(runRemote).toHaveBeenCalledWith(
+      REMOTE_TARGET,
+      { type: 'tmuxListSessions', projectRoot: REMOTE_TARGET.remotePath },
+      { signal: undefined },
+    )
   })
 
   test('re-lists and deletes only approved sessions, ignoring sessions created after preview', async () => {
@@ -234,14 +295,16 @@ describe('associated tmux cleanup', () => {
     ).resolves.toEqual({
       ok: true,
       targetPath: '/work/feature',
-      deleted: [
-        { sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 1, attachedClients: 0 },
-      ],
+      deleted: [{ sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 1, attachedClients: 0 }],
       missingSessionNames: [],
       failed: [],
     })
     expect(killLocalByName).toHaveBeenCalledTimes(1)
-    expect(killLocalByName).toHaveBeenCalledWith(FIRST_NAME, { signal: undefined })
+    expect(killLocalByName).toHaveBeenCalledWith(FIRST_NAME, {
+      projectRoot: LOCAL_PROJECT_ROOT,
+      serverName: undefined,
+      signal: undefined,
+    })
   })
 
   test('reports disappeared and failed sessions without rolling back successful deletions', async () => {
@@ -269,9 +332,7 @@ describe('associated tmux cleanup', () => {
     ).resolves.toEqual({
       ok: true,
       targetPath: '/work/feature',
-      deleted: [
-        { sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 1, attachedClients: 0 },
-      ],
+      deleted: [{ sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 1, attachedClients: 0 }],
       missingSessionNames: [MISSING_NAME],
       failed: [{ sessionName: SECOND_NAME, message: 'permission denied' }],
     })

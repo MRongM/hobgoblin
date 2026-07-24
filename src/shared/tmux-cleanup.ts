@@ -3,6 +3,8 @@ export interface TmuxSessionRecord {
   initialPath: string
   terminalNumber: number
   attachedClients: number
+  /** Undefined identifies a session retained on the legacy default tmux server. */
+  serverName?: string
 }
 
 export interface AssociatedTmuxTargetInput {
