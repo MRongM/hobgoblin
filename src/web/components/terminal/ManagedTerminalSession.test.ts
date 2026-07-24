@@ -779,6 +779,31 @@ describe('ManagedTerminalSession', () => {
     expect(session.snapshot().phase).toBe('open')
   })
 
+  test('keeps an initially hydrated session opening until its first visible frame is replayed', async () => {
+    const attachRequest = deferred<TerminalAttachResult>()
+    terminalCalls.attach.mockReturnValueOnce(attachRequest.promise)
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+
+    session.attach(host)
+
+    expect(session.snapshot().phase).toBe('opening')
+    await flushUntil(() => terminalCalls.attach.mock.calls.length === 1)
+    expect(session.snapshot().phase).toBe('opening')
+
+    attachRequest.resolve(
+      attachResult('session-1', {
+        snapshot: 'ready in /worktree',
+        snapshotSeq: 1,
+      }),
+    )
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    expect(xtermMocks.terminals[0]!.write).toHaveBeenCalledWith('ready in /worktree', expect.any(Function))
+  })
+
   test('uses the full fitted width while an alternate-screen TUI is active', async () => {
     const host = document.createElement('div')
     document.body.appendChild(host)
