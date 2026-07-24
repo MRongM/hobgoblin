@@ -28,6 +28,8 @@ const TELEGRAM_ACTIVITY_DURATION_PRESETS = [
   { seconds: 30, label: 'settings.telegram.output-completion-min-activity-high' },
 ] as const
 
+const IN_APP_NOTIFICATION_STYLES = ['success', 'info', 'warning', 'error'] as const
+
 export function NotificationSettings() {
   const t = useT()
   const { terminalNotificationsEnabled } = useRuntimeFetchSettings()
@@ -88,6 +90,12 @@ export function NotificationSettings() {
     normalizedChatId !== telegramSettings.chatId ||
     Boolean(botToken.trim())
   const telegramConfigurationError = telegramEnabled && !configurationComplete
+
+  const testInAppNotification = (style: (typeof IN_APP_NOTIFICATION_STYLES)[number]) => {
+    toast[style](t(`settings.in-app-notifications-test-title.${style}`), {
+      description: t('settings.in-app-notifications-test-body'),
+    })
+  }
 
   const testTerminalNotification = () => {
     if (testingTerminalNotification) return
@@ -163,6 +171,28 @@ export function NotificationSettings() {
     <>
       <SettingsGroup label={t('settings.nav.notifications')}>
         <SettingsList>
+          <SettingsRow
+            controlId="settings-in-app-notifications-test-success"
+            label={t('settings.in-app-notifications-test')}
+            hint={t('settings.in-app-notifications-test-hint')}
+            control={
+              <div className="flex flex-wrap items-center justify-end gap-1.5">
+                {IN_APP_NOTIFICATION_STYLES.map((style) => (
+                  <Button
+                    key={style}
+                    id={`settings-in-app-notifications-test-${style}`}
+                    type="button"
+                    data-interactive
+                    size="sm"
+                    variant="outline"
+                    onClick={() => testInAppNotification(style)}
+                  >
+                    {t(`settings.in-app-notifications-test-button.${style}`)}
+                  </Button>
+                ))}
+              </div>
+            }
+          />
           <SettingsRow
             controlId="settings-terminal-notifications"
             label={t('settings.terminal-notifications')}

@@ -12,6 +12,8 @@ import { resetReposStore } from '#/web/stores/repos/test-utils.ts'
 
 const toastMocks = vi.hoisted(() => ({
   success: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
   error: vi.fn(),
 }))
 
@@ -96,6 +98,8 @@ function defaultRpcResult(path: string, input?: unknown) {
 vi.mock('sonner', () => ({
   toast: {
     success: toastMocks.success,
+    info: toastMocks.info,
+    warning: toastMocks.warning,
     error: toastMocks.error,
   },
 }))
@@ -207,6 +211,8 @@ beforeEach(() => {
   dndState.lastDragEnd = null
   sendTestNotification.mockClear()
   toastMocks.success.mockClear()
+  toastMocks.info.mockClear()
+  toastMocks.warning.mockClear()
   toastMocks.error.mockClear()
   invokeRpc.mockClear()
   invokeRpc.mockImplementation(async ({ path, input }: { path: string; input?: unknown }) =>
@@ -310,6 +316,28 @@ afterEach(() => {
 })
 
 describe('SettingsSurface', () => {
+  test('can preview every in-app notification style from settings', async () => {
+    await render(<SettingsSurface page="notifications" onPageChange={() => {}} />)
+
+    const cases = [
+      ['success', toastMocks.success],
+      ['info', toastMocks.info],
+      ['warning', toastMocks.warning],
+      ['error', toastMocks.error],
+    ] as const
+
+    for (const [style, showToast] of cases) {
+      await act(async () => {
+        buttonByText(`settings.in-app-notifications-test-button.${style}`).click()
+        await Promise.resolve()
+      })
+
+      expect(showToast).toHaveBeenCalledWith(`settings.in-app-notifications-test-title.${style}`, {
+        description: 'settings.in-app-notifications-test-body',
+      })
+    }
+  })
+
   test('can trigger a test terminal notification from settings', async () => {
     await render(<SettingsSurface page="notifications" onPageChange={() => {}} />)
 
