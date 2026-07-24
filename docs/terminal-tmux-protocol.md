@@ -101,13 +101,18 @@ tmux new-session -A \
   -s 'hobgoblin-v1-aebf050981ac829e36100020' \
   -c '/srv/projects/example/worktrees/feature' \
   \; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' mouse on \
-  \; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020' \
+  \; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' \
        @hobgoblin_init_path '/srv/projects/example/worktrees/feature' \
-  \; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020' \
+  \; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' \
        @hobgoblin_terminal_number '1'
 ```
 
 Do not supply a tmux `session_id` or add a forced-detach option. Tmux allocates the session ID, while Hobgoblin and external tmux clients intentionally have concurrent shared control. The exact session-name target enables mouse support only on the selected session.
+
+All three `set-option -t` commands use tmux target-pane syntax with the exact
+`=<session-name>:` target. The trailing colon is required; without it, tmux
+3.6a rejects the metadata writes with `no such session` even though the session
+was created successfully.
 
 All current Hobgoblin launch adapters set the two options after creating or attaching. Reattaching through a known descriptor therefore adds or repairs missing metadata idempotently. A third-party creator that wants Android discovery must write the same options.
 

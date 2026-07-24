@@ -41,11 +41,11 @@ data class DiscoveredTmuxSession(
 object TmuxSessionProtocol {
     fun attachOrCreateCommand(identity: TmuxSessionIdentity, terminalNumber: Int): String? {
         if (terminalNumber < 1) return null
-        val target = "=${identity.sessionName}"
+        val target = "=${identity.sessionName}:"
         return listOf(
             "exec tmux new-session -A -s ${shellQuote(identity.sessionName)} " +
                 "-c ${shellQuote(identity.initialPath)}",
-            "set-option -t ${shellQuote("$target:")} mouse on",
+            "set-option -t ${shellQuote(target)} mouse on",
             "set-option -t ${shellQuote(target)} $InitPathOption ${shellQuote(identity.initialPath)}",
             "set-option -t ${shellQuote(target)} $TerminalNumberOption ${shellQuote(terminalNumber.toString())}",
         ).joinToString(" \\; ")

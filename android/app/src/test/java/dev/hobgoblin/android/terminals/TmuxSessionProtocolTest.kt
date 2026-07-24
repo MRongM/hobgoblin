@@ -65,9 +65,9 @@ class TmuxSessionProtocolTest {
             "exec tmux new-session -A -s '${identity.sessionName}' " +
                 "-c '/srv/projects/example/worktrees/feature' " +
                 "\\; set-option -t '=${identity.sessionName}:' mouse on " +
-                "\\; set-option -t '=${identity.sessionName}' " +
+                "\\; set-option -t '=${identity.sessionName}:' " +
                 "@hobgoblin_init_path '/srv/projects/example/worktrees/feature' " +
-                "\\; set-option -t '=${identity.sessionName}' @hobgoblin_terminal_number '1'",
+                "\\; set-option -t '=${identity.sessionName}:' @hobgoblin_terminal_number '1'",
             TmuxSessionProtocol.attachOrCreateCommand(identity, terminalNumber = 1),
         )
         assertNull(TmuxSessionProtocol.attachOrCreateCommand(identity, terminalNumber = 0))

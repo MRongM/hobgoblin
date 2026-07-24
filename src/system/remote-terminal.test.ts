@@ -40,10 +40,10 @@ describe('buildManagedRemoteTerminalInvocation', () => {
       "exec tmux new-session -A -s 'hobgoblin-v1-aebf050981ac829e36100020' -c '/srv/projects/example/worktrees/feature' \\; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' mouse on",
     )
     expect(invocation?.script).toContain(
-      "set-option -t '=hobgoblin-v1-aebf050981ac829e36100020' @hobgoblin_init_path '/srv/projects/example/worktrees/feature'",
+      "set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' @hobgoblin_init_path '/srv/projects/example/worktrees/feature'",
     )
     expect(invocation?.script).toContain(
-      "set-option -t '=hobgoblin-v1-aebf050981ac829e36100020' @hobgoblin_terminal_number '1'",
+      "set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' @hobgoblin_terminal_number '1'",
     )
     expect(invocation?.script).not.toContain('set-option -g')
     expect(invocation?.script).toContain('exec "${SHELL:-/bin/sh}" -l')
