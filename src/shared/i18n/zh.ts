@@ -826,7 +826,7 @@ export const zh: Record<DictKey, string> = {
   'action.pull-no-upstream': '未设置上游',
   'action.push-title': '推送 {branch}',
   'action.fetch-title': '同步远端和状态',
-  'action.fetch-local-title': '同步本地分支和状态',
+  'action.fetch-local-title': '检测分支和状态',
   'action.remote-title': '在浏览器中打开仓库',
   'action.result-ok': '成功',
   'action.result-error': '错误',

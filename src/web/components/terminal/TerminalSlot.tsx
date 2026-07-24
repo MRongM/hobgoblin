@@ -11,7 +11,6 @@ import {
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
-import { LoaderCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '#/web/components/ui/button.tsx'
 import {
@@ -36,7 +35,6 @@ import { useTerminalSessionContext } from '#/web/components/terminal/terminal-se
 import {
   useWorktreeTerminalSelectedDescriptor,
   useWorktreeTerminalCount,
-  useWorktreeTerminalCreationPending,
   useTerminalSnapshot,
 } from '#/web/components/terminal/terminal-session-store.ts'
 import { MobileTerminalToolbar } from '#/web/components/terminal/mobile-terminal-toolbar.tsx'
@@ -84,11 +82,7 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
   const snapshot = useTerminalSnapshot(key)
   const terminalCount = useWorktreeTerminalCount(terminalWorktreeKey)
   const hasSessions = terminalCount > 0
-  const creationPending = useWorktreeTerminalCreationPending(terminalWorktreeKey)
   const renderPending = hasSessions && snapshot.renderPending === true
-  const opening = creationPending || (hasSessions && snapshot.phase === 'opening') || renderPending
-  const initialOpening =
-    (creationPending && !hasSessions) || (terminalCount === 1 && (snapshot.phase === 'opening' || renderPending))
   const {
     temporaryFilesDirectory,
     terminalFontSize,
@@ -482,20 +476,6 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
           onTakeover={takeover}
           takeoverPending={snapshot.takeoverPending}
         />
-      )}
-      {opening && (
-        <div
-          className={cn(
-            'goblin-terminal-slot__status-overlay',
-            initialOpening && 'goblin-terminal-slot__status-overlay--initial',
-          )}
-          role="status"
-          aria-live="polite"
-          aria-atomic="true"
-        >
-          <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
-          <span>{t('terminal.opening')}</span>
-        </div>
       )}
       {hasSessions && snapshot.phase === 'error' && snapshot.message !== 'terminal.empty' && (
         <div className="goblin-terminal-slot__status-overlay goblin-terminal-slot__status-overlay--error">

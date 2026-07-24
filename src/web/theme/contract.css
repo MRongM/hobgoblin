@@ -232,16 +232,36 @@
   background-color: var(--color-scrollbar-thumb-active);
 }
 
-.project-file-tree-scroll::-webkit-scrollbar:horizontal {
+:is(
+    .project-navigation-tone,
+    .project-file-area-tone,
+    .project-navigation-tone *,
+    .project-file-area-tone *
+  )::-webkit-scrollbar:horizontal {
   height: 8px;
 }
 
-.project-file-tree-scroll::-webkit-scrollbar-thumb:horizontal {
+:is(
+    .project-navigation-tone,
+    .project-file-area-tone,
+    .project-navigation-tone *,
+    .project-file-area-tone *
+  )::-webkit-scrollbar-thumb:horizontal {
   border: 2px solid transparent;
 }
 
-.project-file-tree-scroll::-webkit-scrollbar-thumb:horizontal:hover,
-.project-file-tree-scroll::-webkit-scrollbar-thumb:horizontal:active {
+:is(
+    .project-navigation-tone,
+    .project-file-area-tone,
+    .project-navigation-tone *,
+    .project-file-area-tone *
+  )::-webkit-scrollbar-thumb:horizontal:hover,
+:is(
+    .project-navigation-tone,
+    .project-file-area-tone,
+    .project-navigation-tone *,
+    .project-file-area-tone *
+  )::-webkit-scrollbar-thumb:horizontal:active {
   border-width: 1px;
 }
 

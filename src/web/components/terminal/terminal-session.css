@@ -221,23 +221,6 @@
   box-shadow: var(--shadow-sm);
 }
 
-.goblin-terminal-slot__status-overlay--initial {
-  top: 50%;
-  right: auto;
-  bottom: auto;
-  left: 50%;
-  min-width: 160px;
-  justify-content: center;
-  transform: translate(-50%, -50%);
-  border-color: var(--color-brand-border);
-  background: var(--color-toolbar);
-  padding: 10px 14px;
-  color: var(--color-foreground);
-  font-size: 13px;
-  font-weight: 500;
-  box-shadow: var(--shadow-md);
-}
-
 .goblin-terminal-slot__drop-overlay {
   position: absolute;
   inset: var(--goblin-terminal-surface-inset);

@@ -75,6 +75,10 @@ describe('i18n dictionaries', () => {
     expect(zh['action.merge-and-push-confirm']).toBe('拉合推')
   })
 
+  test('uses detection copy for local branch and status refreshes', () => {
+    expect(zh['action.fetch-local-title']).toBe('检测分支和状态')
+  })
+
   test('distinguishes Chinese destructive branch actions', () => {
     expect(zh['action.remove-worktree']).toBe('删除工作树')
     expect(zh['action.delete-branch']).toBe('删除分支')

@@ -5,6 +5,12 @@ import { describe, expect, test } from 'vitest'
 const THEME_ROOT = new URL('./', import.meta.url)
 const THEMES_ROOT = new URL('./themes/', import.meta.url)
 const SCROLL_AREA_SOURCE = new URL('../components/ui/scroll-area.tsx', import.meta.url)
+const PROJECT_AREA_NATIVE_SCROLLBAR_SELECTOR = `:is(
+  .project-navigation-tone,
+  .project-file-area-tone,
+  .project-navigation-tone *,
+  .project-file-area-tone *
+)`
 
 const CONTRACT_TOKENS = [
   '--color-app-region:',
@@ -115,15 +121,9 @@ describe('web theme contract', () => {
     const contract = readText(new URL('contract.css', THEME_ROOT))
     const scrollAreaSource = readText(SCROLL_AREA_SOURCE)
     const toneSelector = ':is(.project-navigation-tone, .project-file-area-tone)'
-    const nativeScrollbarSelector = `:is(
-  .project-navigation-tone,
-  .project-file-area-tone,
-  .project-navigation-tone *,
-  .project-file-area-tone *
-)`
     const toneRule = cssRule(contract, toneSelector)
     const normalizedContract = contract.replace(/\s+/g, ' ')
-    const normalizedNativeScrollbarSelector = nativeScrollbarSelector.replace(/\s+/g, ' ')
+    const normalizedNativeScrollbarSelector = PROJECT_AREA_NATIVE_SCROLLBAR_SELECTOR.replace(/\s+/g, ' ')
 
     expect(contract).toContain('@supports not selector(::-webkit-scrollbar)')
     expect(toneRule).toContain('scrollbar-color: var(--color-scrollbar-thumb) transparent;')
@@ -140,17 +140,20 @@ describe('web theme contract', () => {
     expect(scrollAreaSource).toContain('data-slot="scroll-area-thumb"')
   })
 
-  test('matches the file-tree horizontal scrollbar shape to the shared thin scrollbar', () => {
+  test('uses a thin, hover-enhanced horizontal scrollbar across project navigation and file areas', () => {
     const contract = readText(new URL('contract.css', THEME_ROOT))
-    const track = cssRule(contract, '.project-file-tree-scroll::-webkit-scrollbar:horizontal')
-    const thumb = cssRule(contract, '.project-file-tree-scroll::-webkit-scrollbar-thumb:horizontal')
-    const thumbHover = cssRule(contract, '.project-file-tree-scroll::-webkit-scrollbar-thumb:horizontal:hover')
-    const thumbActive = cssRule(contract, '.project-file-tree-scroll::-webkit-scrollbar-thumb:horizontal:active')
+    const normalizedContract = contract.replace(/\s+/g, ' ')
+    const normalizedSelector = PROJECT_AREA_NATIVE_SCROLLBAR_SELECTOR.replace(/\s+/g, ' ')
+    const track = cssRule(normalizedContract, `${normalizedSelector}::-webkit-scrollbar:horizontal`)
+    const thumb = cssRule(normalizedContract, `${normalizedSelector}::-webkit-scrollbar-thumb:horizontal`)
+    const thumbHover = cssRule(normalizedContract, `${normalizedSelector}::-webkit-scrollbar-thumb:horizontal:hover`)
+    const thumbActive = cssRule(normalizedContract, `${normalizedSelector}::-webkit-scrollbar-thumb:horizontal:active`)
 
     expect(track).toContain('height: 8px;')
     expect(thumb).toContain('border: 2px solid transparent;')
     expect(thumbHover).toContain('border-width: 1px;')
     expect(thumbActive).toContain('border-width: 1px;')
+    expect(contract).not.toContain('.project-file-tree-scroll::-webkit-scrollbar')
   })
 
   test('defines classic terminal tokens for every color theme preset', () => {

@@ -92,7 +92,7 @@ afterEach(() => {
 const REMOTE_REPO_ID = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/repo' })
 
 describe('TerminalSlot', () => {
-  test('shows a loading status while terminal creation is pending without a registered session', async () => {
+  test('does not show a loading status while terminal creation is pending without a registered session', async () => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const container = document.createElement('div')
     document.body.appendChild(container)
@@ -122,11 +122,7 @@ describe('TerminalSlot', () => {
       )
 
     await act(async () => renderSlot())
-    const loadingStatus = container.querySelector('.goblin-terminal-slot__status-overlay')
-    expect(loadingStatus?.getAttribute('role')).toBe('status')
-    expect(loadingStatus?.textContent).toContain('terminal.opening')
-    expect(loadingStatus?.querySelector('.animate-spin')).not.toBeNull()
-    expect(loadingStatus?.classList.contains('goblin-terminal-slot__status-overlay--initial')).toBe(true)
+    expect(container.querySelector('.goblin-terminal-slot__status-overlay')).toBeNull()
 
     worktreeSnapshot = { ...worktreeSnapshot, creating: false }
     await act(async () => renderSlot())
@@ -136,7 +132,7 @@ describe('TerminalSlot', () => {
     container.remove()
   })
 
-  test('shows a loading status while the terminal opens and removes it when ready', async () => {
+  test('does not show a loading status while the terminal opens', async () => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const container = document.createElement('div')
     document.body.appendChild(container)
@@ -163,11 +159,7 @@ describe('TerminalSlot', () => {
       )
 
     await act(async () => renderSlot())
-    const loadingStatus = container.querySelector('.goblin-terminal-slot__status-overlay')
-    expect(loadingStatus?.getAttribute('role')).toBe('status')
-    expect(loadingStatus?.textContent).toContain('terminal.opening')
-    expect(loadingStatus?.querySelector('.animate-spin')).not.toBeNull()
-    expect(loadingStatus?.classList.contains('goblin-terminal-slot__status-overlay--initial')).toBe(true)
+    expect(container.querySelector('.goblin-terminal-slot__status-overlay')).toBeNull()
 
     currentSnapshot = snapshot
     await act(async () => renderSlot())
@@ -175,17 +167,13 @@ describe('TerminalSlot', () => {
 
     currentWorktreeSnapshot = { ...currentWorktreeSnapshot, creating: true }
     await act(async () => renderSlot())
-    expect(
-      container
-        .querySelector('.goblin-terminal-slot__status-overlay')
-        ?.classList.contains('goblin-terminal-slot__status-overlay--initial'),
-    ).toBe(false)
+    expect(container.querySelector('.goblin-terminal-slot__status-overlay')).toBeNull()
 
     await act(async () => root.unmount())
     container.remove()
   })
 
-  test('keeps loading visible, defers desktop autofocus until ready, and avoids mobile autofocus', async () => {
+  test('defers desktop autofocus until ready without showing loading, and avoids mobile autofocus', async () => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const container = document.createElement('div')
     document.body.appendChild(container)
@@ -216,7 +204,7 @@ describe('TerminalSlot', () => {
     await act(async () => renderSlot())
     const textarea = container.querySelector('textarea')
     expect(textarea).not.toBeNull()
-    expect(container.querySelector('.goblin-terminal-slot__status-overlay')).not.toBeNull()
+    expect(container.querySelector('.goblin-terminal-slot__status-overlay')).toBeNull()
     expect(document.activeElement).not.toBe(textarea)
 
     currentSnapshot = snapshot
