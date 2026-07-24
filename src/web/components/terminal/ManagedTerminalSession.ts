@@ -331,7 +331,9 @@ export class ManagedTerminalSession {
   private start(): void {
     if (this.disposed || this.view.currentTerminal() || !this.view.isConnected()) return
     const token = (this.startToken += 1)
-    if (!this.runtime.currentSessionId() && this.runtime.startAttaching()) this.notify()
+    if ((!this.runtime.currentSessionId() || this.runtime.phase() === 'open') && this.runtime.startAttaching()) {
+      this.notify()
+    }
     void this.startAsync(token)
   }
 
