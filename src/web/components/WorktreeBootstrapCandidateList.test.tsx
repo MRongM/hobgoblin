@@ -31,6 +31,22 @@ afterEach(() => {
 })
 
 describe('WorktreeBootstrapCandidateList', () => {
+  test('applies a bulk choice to every candidate when none are selected', () => {
+    renderList([
+      { path: 'node_modules', kind: 'directory' },
+      { path: '.env', kind: 'file' },
+    ])
+
+    const copyButton = document.querySelector<HTMLButtonElement>('[data-materialization-bulk-choice="copy"]')
+    expect(copyButton?.disabled).toBe(false)
+    click('[data-materialization-bulk-choice="copy"]')
+
+    expect(choice('node_modules')).toBe('copy')
+    expect(choice('.env')).toBe('copy')
+    expect(selected('node_modules')).toBe(false)
+    expect(selected('.env')).toBe(false)
+  })
+
   test('applies a bulk choice only to selected candidates and preserves the target selection', () => {
     renderList([
       { path: 'node_modules', kind: 'directory' },

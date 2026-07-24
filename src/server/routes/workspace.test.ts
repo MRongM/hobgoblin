@@ -9,11 +9,16 @@ const mocks = vi.hoisted(() => ({
   readBranchWorkspaceSnapshot: vi.fn(),
   cleanupBranchWorkspaceRegistryRecords: vi.fn(),
   createBranchWorkspaceWriteService: vi.fn(),
+  createBranchWorkspaceDependencyWriteService: vi.fn(),
   createBranchWorkspaceGitActionWriteService: vi.fn(),
   planBranchWorkspace: vi.fn(),
   executeBranchWorkspace: vi.fn(),
   abortBranchWorkspace: vi.fn(),
   reorderBranchWorkspaces: vi.fn(),
+  readBranchWorkspaceDependencies: vi.fn(),
+  planBranchWorkspaceDependencies: vi.fn(),
+  executeBranchWorkspaceDependencies: vi.fn(),
+  abortBranchWorkspaceDependencies: vi.fn(),
   planBranchWorkspaceGitAction: vi.fn(),
   executeBranchWorkspaceGitAction: vi.fn(),
   abortBranchWorkspaceGitAction: vi.fn(),
@@ -44,6 +49,10 @@ vi.mock('#/server/modules/branch-workspace-write-paths.ts', () => ({
   createBranchWorkspaceWriteService: mocks.createBranchWorkspaceWriteService,
 }))
 
+vi.mock('#/server/modules/branch-workspace-dependency-write-paths.ts', () => ({
+  createBranchWorkspaceDependencyWriteService: mocks.createBranchWorkspaceDependencyWriteService,
+}))
+
 vi.mock('#/server/modules/branch-workspace-git-action-write-paths.ts', () => ({
   createBranchWorkspaceGitActionWriteService: mocks.createBranchWorkspaceGitActionWriteService,
 }))
@@ -72,6 +81,14 @@ describe('workspace routes', () => {
       abort: mocks.abortBranchWorkspaceGitAction,
       activeOperation: mocks.activeBranchWorkspaceGitAction,
     })
+    mocks.createBranchWorkspaceDependencyWriteService.mockReset()
+    mocks.createBranchWorkspaceDependencyWriteService.mockReturnValue({
+      read: mocks.readBranchWorkspaceDependencies,
+      plan: mocks.planBranchWorkspaceDependencies,
+      execute: mocks.executeBranchWorkspaceDependencies,
+      abort: mocks.abortBranchWorkspaceDependencies,
+      isActive: vi.fn(() => false),
+    })
     mocks.discoverWorkspaceRepositories.mockReset()
     mocks.restoreWorkspaceRepositories.mockReset()
     mocks.saveWorkspaceConfig.mockReset()
@@ -81,6 +98,10 @@ describe('workspace routes', () => {
     mocks.executeBranchWorkspace.mockReset()
     mocks.abortBranchWorkspace.mockReset()
     mocks.reorderBranchWorkspaces.mockReset()
+    mocks.readBranchWorkspaceDependencies.mockReset()
+    mocks.planBranchWorkspaceDependencies.mockReset()
+    mocks.executeBranchWorkspaceDependencies.mockReset()
+    mocks.abortBranchWorkspaceDependencies.mockReset()
     mocks.planBranchWorkspaceGitAction.mockReset()
     mocks.executeBranchWorkspaceGitAction.mockReset()
     mocks.abortBranchWorkspaceGitAction.mockReset()
@@ -310,6 +331,71 @@ describe('workspace routes', () => {
 
     await expect(response.json()).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
     expect(mocks.executeBranchWorkspace).not.toHaveBeenCalled()
+  })
+
+  test('normalizes branch workspace dependency read, plan, execute, and abort boundaries', async () => {
+    mocks.readBranchWorkspaceDependencies.mockResolvedValue({ ok: true, candidates: [] })
+    mocks.planBranchWorkspaceDependencies.mockResolvedValue({ ok: false, message: 'planned' })
+    mocks.executeBranchWorkspaceDependencies.mockResolvedValue({ ok: false, message: 'executed' })
+    mocks.abortBranchWorkspaceDependencies.mockReturnValue(true)
+    const app = new Hono().route('/api/workspace', createWorkspaceRoutes())
+
+    await app.request('/api/workspace/branch-workspaces/dependencies/read', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ rootId: '/workspace', branchWorkspaceId: ' branch-1 ' }),
+    })
+    await app.request('/api/workspace/branch-workspaces/dependencies/plan', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        rootId: '/workspace',
+        request: {
+          operation: 'add',
+          branchWorkspaceId: ' branch-1 ',
+          entries: [{ name: ' .env ', mode: 'copy' }],
+        },
+      }),
+    })
+    await app.request('/api/workspace/branch-workspaces/dependencies/execute', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        rootId: '/workspace',
+        input: {
+          planToken: ' sha256:plan ',
+          approvals: ['outside-root-source'],
+          sourceToken: ' renderer-1 ',
+        },
+      }),
+    })
+    const abortResponse = await app.request('/api/workspace/branch-workspaces/dependencies/abort', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ rootId: '/workspace' }),
+    })
+
+    expect(mocks.readBranchWorkspaceDependencies).toHaveBeenCalledWith(
+      '/workspace',
+      'branch-1',
+      expect.any(AbortSignal),
+    )
+    expect(mocks.planBranchWorkspaceDependencies).toHaveBeenCalledWith(
+      '/workspace',
+      {
+        operation: 'add',
+        branchWorkspaceId: 'branch-1',
+        entries: [{ name: '.env', mode: 'copy' }],
+      },
+      expect.any(AbortSignal),
+    )
+    expect(mocks.executeBranchWorkspaceDependencies).toHaveBeenCalledWith('/workspace', {
+      planToken: 'sha256:plan',
+      approvals: ['outside-root-source'],
+      sourceToken: 'renderer-1',
+    })
+    expect(mocks.abortBranchWorkspaceDependencies).toHaveBeenCalledWith('/workspace')
+    await expect(abortResponse.json()).resolves.toEqual({ ok: true })
   })
 
   test('normalizes branch workspace Git-action plan, execute, and abort boundaries', async () => {

@@ -14,6 +14,13 @@ import type {
   BranchWorkspaceGitActionPlanResult,
   BranchWorkspaceGitActionResult,
 } from '#/shared/branch-workspace-git-actions.ts'
+import type {
+  BranchWorkspaceDependencyExecuteInput,
+  BranchWorkspaceDependencyExecuteResult,
+  BranchWorkspaceDependencyPlanRequest,
+  BranchWorkspaceDependencyPlanResult,
+  BranchWorkspaceDependencyReadResult,
+} from '#/shared/branch-workspace-dependencies.ts'
 import { postServerJson } from '#/web/lib/server-fetch.ts'
 import type {
   WorkspacePullExecuteInput,
@@ -66,6 +73,36 @@ export async function reorderBranchWorkspaces(
   orderedIds: string[],
 ): Promise<BranchWorkspaceReorderResult> {
   return await postServerJson('/api/workspace/branch-workspaces/reorder', { rootId, orderedIds })
+}
+
+export async function readBranchWorkspaceDependencies(
+  rootId: string,
+  branchWorkspaceId: string,
+  signal?: AbortSignal,
+): Promise<BranchWorkspaceDependencyReadResult> {
+  return await postServerJson(
+    '/api/workspace/branch-workspaces/dependencies/read',
+    { rootId, branchWorkspaceId },
+    { signal },
+  )
+}
+
+export async function planBranchWorkspaceDependencies(
+  rootId: string,
+  request: BranchWorkspaceDependencyPlanRequest,
+): Promise<BranchWorkspaceDependencyPlanResult> {
+  return await postServerJson('/api/workspace/branch-workspaces/dependencies/plan', { rootId, request })
+}
+
+export async function executeBranchWorkspaceDependencies(
+  rootId: string,
+  input: BranchWorkspaceDependencyExecuteInput,
+): Promise<BranchWorkspaceDependencyExecuteResult> {
+  return await postServerJson('/api/workspace/branch-workspaces/dependencies/execute', { rootId, input })
+}
+
+export async function abortBranchWorkspaceDependencies(rootId: string): Promise<{ ok: boolean }> {
+  return await postServerJson('/api/workspace/branch-workspaces/dependencies/abort', { rootId })
 }
 
 export async function planBranchWorkspaceGitAction(

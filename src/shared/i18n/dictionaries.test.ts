@@ -180,6 +180,46 @@ describe('i18n dictionaries', () => {
     }
   })
 
+  test('includes branch workspace dependency maintenance copy in every locale', () => {
+    const keys = [
+      'workspace.branch-workspace.dependency.add.action',
+      'workspace.branch-workspace.dependency.remove.action',
+      'workspace.branch-workspace.dependency.add.title',
+      'workspace.branch-workspace.dependency.add.description',
+      'workspace.branch-workspace.dependency.add.available',
+      'workspace.branch-workspace.dependency.add.available-description',
+      'workspace.branch-workspace.dependency.add.empty',
+      'workspace.branch-workspace.dependency.add.confirm',
+      'workspace.branch-workspace.dependency.remove.title',
+      'workspace.branch-workspace.dependency.remove.description',
+      'workspace.branch-workspace.dependency.remove.available',
+      'workspace.branch-workspace.dependency.remove.available-description',
+      'workspace.branch-workspace.dependency.remove.empty',
+      'workspace.branch-workspace.dependency.remove.confirm',
+      'workspace.branch-workspace.dependency.preview-title',
+      'workspace.branch-workspace.dependency.operation.add',
+      'workspace.branch-workspace.dependency.operation.remove',
+      'workspace.branch-workspace.dependency.approval.outside-root-source',
+      'workspace.branch-workspace.dependency.planning',
+      'workspace.branch-workspace.dependency.not-ready',
+      'workspace.branch-workspace.dependency.read-failed',
+      'workspace.branch-workspace.dependency.target-exists',
+      'workspace.branch-workspace.dependency.target-missing',
+      'workspace.branch-workspace.dependency.unavailable',
+      'workspace.branch-workspace.dependency.operation-in-progress',
+      'workspace.branch-workspace.dependency.approval-required',
+      'workspace.branch-workspace.dependency.plan-stale',
+      'workspace.branch-workspace.dependency.plan-failed',
+      'workspace.branch-workspace.dependency.execute-failed',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['workspace.branch-workspace.dependency.add.action']).toBe('添加依赖项')
+    expect(zh['workspace.branch-workspace.dependency.remove.action']).toBe('移除依赖项')
+  })
+
   test('includes repository dependency replacement approval copy in every locale', () => {
     const keys = [
       'workspace.branch-workspace.approval.replace-repository-dependencies',

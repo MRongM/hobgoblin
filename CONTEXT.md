@@ -213,6 +213,10 @@ A selected non-repository direct child of the workspace root that is materialize
 In user-facing language, these entries are grouped as **Branch workspace dependencies**.
 _Avoid_: Workspace member, shared file, bootstrap file, repository dependency candidate
 
+**Branch workspace dependency maintenance**:
+An explicit ready-item action that compares current workspace auxiliary candidates with same-named direct children of one branch workspace. A missing target may be added by copy or symbolic link; a present target may be removed after previewing and confirming its exact path. Maintenance is filesystem-derived and does not make successfully materialized dependencies durable manifest members, create dependency drift, or cause repair to recreate them. Removal never follows a symbolic link and never targets repository members or entries without a current workspace-root counterpart.
+_Avoid_: Dependency synchronization, dependency registry, member lifecycle action, repair
+
 **Repository-only worktree**:
 A linked branch worktree that is not a member of a workspace worktree. It is changed only through that repository's ordinary worktree actions.
 _Avoid_: Orphan worktree, detached worktree

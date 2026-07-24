@@ -108,6 +108,8 @@ describe('BranchWorkspaceList', () => {
     const onGitAction = vi.fn()
     const onExtend = vi.fn()
     const onReduce = vi.fn()
+    const onAddDependencies = vi.fn()
+    const onRemoveDependencies = vi.fn()
     const item = { ...workspace('ready'), repositories: [repositoryMember()] }
     act(() =>
       root.render(
@@ -120,6 +122,8 @@ describe('BranchWorkspaceList', () => {
             onGitAction={onGitAction}
             onExtend={onExtend}
             onReduce={onReduce}
+            onAddDependencies={onAddDependencies}
+            onRemoveDependencies={onRemoveDependencies}
             gitActionPanel={{ itemId: item.id, content: <div data-testid="mock-branch-git-panel" /> }}
             onReorder={() => {}}
             onInspect={() => {}}
@@ -162,6 +166,8 @@ describe('BranchWorkspaceList', () => {
       'terminal.external',
       'workspace.branch-workspace.add-members',
       'workspace.branch-workspace.remove-members',
+      'workspace.branch-workspace.dependency.add.action',
+      'workspace.branch-workspace.dependency.remove.action',
       'workspace.branch-workspace.git-action.batch-commit',
       'workspace.branch-workspace.git-action.pull',
       'workspace.branch-workspace.git-action.push',
@@ -186,6 +192,23 @@ describe('BranchWorkspaceList', () => {
       await Promise.resolve()
     })
     expect(onReduce).toHaveBeenCalledWith(item)
+    const addDependenciesItem = (await openMenuItems(branchWorkspaceItem)).find(
+      (entry) => entry.textContent?.trim() === 'workspace.branch-workspace.dependency.add.action',
+    )
+    await act(async () => {
+      addDependenciesItem?.click()
+      await Promise.resolve()
+    })
+    expect(onAddDependencies).toHaveBeenCalledWith(item)
+    const removeDependenciesItem = (await openMenuItems(branchWorkspaceItem)).find(
+      (entry) => entry.textContent?.trim() === 'workspace.branch-workspace.dependency.remove.action',
+    )
+    expect(removeDependenciesItem?.getAttribute('data-variant')).toBe('destructive')
+    await act(async () => {
+      removeDependenciesItem?.click()
+      await Promise.resolve()
+    })
+    expect(onRemoveDependencies).toHaveBeenCalledWith(item)
     const reopenedMenuItems = await openMenuItems(branchWorkspaceItem)
     const batchCommitItem = reopenedMenuItems.find(
       (entry) => entry.textContent?.trim() === 'workspace.branch-workspace.git-action.batch-commit',

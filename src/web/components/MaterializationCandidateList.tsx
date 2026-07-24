@@ -52,7 +52,7 @@ export function MaterializationCandidateList({
   const selectedCount = selectableItems.reduce((count, item) => count + Number(selectedIds.has(item.id)), 0)
   const allSelected = selectableItems.length > 0 && selectedCount === selectableItems.length
   const selectAllState = selectedCount === 0 ? false : allSelected ? true : 'indeterminate'
-  const bulkDisabled = disabled || selectedCount === 0
+  const bulkDisabled = disabled || selectableItems.length === 0
 
   useEffect(() => {
     setSelectedIds((current) => {
@@ -76,8 +76,9 @@ export function MaterializationCandidateList({
   }
 
   const applyBulkChoice = (choice: MaterializationCandidateChoice) => {
+    const applyToAll = selectedIds.size === 0
     for (const item of selectableItems) {
-      if (selectedIds.has(item.id)) onChoiceChange(item.id, choice)
+      if (applyToAll || selectedIds.has(item.id)) onChoiceChange(item.id, choice)
     }
   }
 
@@ -180,7 +181,7 @@ export function MaterializationCandidateList({
                         value={option.value}
                         data-materialization-choice={option.value}
                         aria-label={`${item.label}: ${t(option.labelKey)}`}
-                        className="h-7 px-2 text-[11px]"
+                        className="h-7 px-2 text-[11px] data-[state=on]:border-primary data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:shadow-sm data-[state=on]:hover:bg-primary/90 data-[state=on]:hover:text-primary-foreground"
                       >
                         {t(option.labelKey)}
                       </ToggleGroupItem>

@@ -23,6 +23,8 @@ import {
   ChevronDown,
   ChevronRight,
   Eye,
+  FileMinus2,
+  FilePlus2,
   FolderMinus,
   FolderKanban,
   FolderPlus,
@@ -94,6 +96,8 @@ export interface BranchWorkspaceListProps {
   onRemove: (item: BranchWorkspaceSnapshot) => void
   onExtend?: (item: BranchWorkspaceSnapshot) => void
   onReduce?: (item: BranchWorkspaceSnapshot, resume?: boolean) => void
+  onAddDependencies?: (item: BranchWorkspaceSnapshot) => void
+  onRemoveDependencies?: (item: BranchWorkspaceSnapshot) => void
   onCancel: (item: BranchWorkspaceSnapshot) => void | Promise<void>
   getMemberPresentation?: (
     item: BranchWorkspaceSnapshot,
@@ -124,6 +128,8 @@ export function BranchWorkspaceList({
   onRemove,
   onExtend,
   onReduce,
+  onAddDependencies,
+  onRemoveDependencies,
   onCancel,
   getMemberPresentation,
   onOpenRepositoryMember,
@@ -188,6 +194,8 @@ export function BranchWorkspaceList({
               onRemove={onRemove}
               onExtend={onExtend}
               onReduce={onReduce}
+              onAddDependencies={onAddDependencies}
+              onRemoveDependencies={onRemoveDependencies}
               onCancel={onCancel}
               getMemberPresentation={getMemberPresentation}
               onOpenRepositoryMember={onOpenRepositoryMember}
@@ -222,6 +230,8 @@ function BranchWorkspaceRow({
   onRemove,
   onExtend,
   onReduce,
+  onAddDependencies,
+  onRemoveDependencies,
   onCancel,
   getMemberPresentation,
   onOpenRepositoryMember,
@@ -387,6 +397,32 @@ function BranchWorkspaceRow({
           : []),
       ]
     : []
+  const readyDependencyActions: BranchWorkspaceItemAction[] = interactiveReady
+    ? [
+        ...(onAddDependencies
+          ? [
+              {
+                label: 'workspace.branch-workspace.dependency.add.action',
+                icon: <FilePlus2 aria-hidden="true" />,
+                disabled,
+                separated: true,
+                onSelect: () => onAddDependencies(item),
+              },
+            ]
+          : []),
+        ...(onRemoveDependencies
+          ? [
+              {
+                label: 'workspace.branch-workspace.dependency.remove.action',
+                icon: <FileMinus2 aria-hidden="true" />,
+                disabled,
+                destructive: true,
+                onSelect: () => onRemoveDependencies(item),
+              },
+            ]
+          : []),
+      ]
+    : []
   const lowFrequencyActions: BranchWorkspaceItemAction[] = interactiveReady
     ? [
         {
@@ -428,6 +464,7 @@ function BranchWorkspaceRow({
   const rowMenuActions = [
     ...readyOpenMenuActions,
     ...readyMembershipActions,
+    ...readyDependencyActions,
     ...readyGitActions,
     ...lowFrequencyActions,
     ...(tmuxCleanup.visible ? [tmuxCleanup.contextAction] : []),

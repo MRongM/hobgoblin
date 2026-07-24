@@ -24,6 +24,10 @@ import {
   planBranchWorkspaceGitAction,
   executeBranchWorkspaceGitAction,
   abortBranchWorkspaceGitAction,
+  readBranchWorkspaceDependencies,
+  planBranchWorkspaceDependencies,
+  executeBranchWorkspaceDependencies,
+  abortBranchWorkspaceDependencies,
 } from '#/web/workspace-client.ts'
 
 describe('workspace client', () => {
@@ -170,6 +174,44 @@ describe('workspace client', () => {
       input,
     })
     expect(mocks.postServerJson).toHaveBeenNthCalledWith(3, '/api/workspace/branch-workspaces/git-actions/abort', {
+      rootId: '/workspace',
+    })
+  })
+
+  test('posts branch workspace dependency read, plan, execute, and abort requests', async () => {
+    mocks.postServerJson.mockResolvedValue({ ok: true })
+    const controller = new AbortController()
+    const request = {
+      operation: 'remove' as const,
+      branchWorkspaceId: 'branch-1',
+      names: ['.env'],
+    }
+    const input = {
+      planToken: 'sha256:dependencies',
+      approvals: [],
+      sourceToken: 'renderer-1',
+    }
+
+    await readBranchWorkspaceDependencies('/workspace', 'branch-1', controller.signal)
+    await planBranchWorkspaceDependencies('/workspace', request)
+    await executeBranchWorkspaceDependencies('/workspace', input)
+    await abortBranchWorkspaceDependencies('/workspace')
+
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(
+      1,
+      '/api/workspace/branch-workspaces/dependencies/read',
+      { rootId: '/workspace', branchWorkspaceId: 'branch-1' },
+      { signal: controller.signal },
+    )
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(2, '/api/workspace/branch-workspaces/dependencies/plan', {
+      rootId: '/workspace',
+      request,
+    })
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(3, '/api/workspace/branch-workspaces/dependencies/execute', {
+      rootId: '/workspace',
+      input,
+    })
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(4, '/api/workspace/branch-workspaces/dependencies/abort', {
       rootId: '/workspace',
     })
   })

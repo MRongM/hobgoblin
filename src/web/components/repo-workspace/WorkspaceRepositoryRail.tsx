@@ -11,6 +11,7 @@ import { Badge } from '#/web/components/ui/badge.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import { BranchWorkspaceDialog } from '#/web/components/repo-workspace/BranchWorkspaceDialog.tsx'
+import { BranchWorkspaceDependencyDialog } from '#/web/components/repo-workspace/BranchWorkspaceDependencyDialog.tsx'
 import { BranchWorkspaceGitActionPanel } from '#/web/components/repo-workspace/BranchWorkspaceGitActionDialog.tsx'
 import { BranchWorkspaceList } from '#/web/components/repo-workspace/BranchWorkspaceList.tsx'
 import type { BranchWorkspaceMemberPresentation } from '#/web/components/repo-workspace/BranchWorkspaceMemberRow.tsx'
@@ -31,6 +32,7 @@ import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-
 import { useBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
 import { cleanupBranchWorkspaceRegistry } from '#/web/workspace-client.ts'
 import { useBranchWorkspaceActions } from '#/web/hooks/useBranchWorkspaceActions.ts'
+import { useBranchWorkspaceDependencyActions } from '#/web/hooks/useBranchWorkspaceDependencyActions.ts'
 import { useBranchWorkspaceGitActions } from '#/web/hooks/useBranchWorkspaceGitActions.ts'
 import { useWorkspacePullActions } from '#/web/hooks/useWorkspacePullActions.ts'
 import { cn } from '#/web/lib/cn.ts'
@@ -89,6 +91,7 @@ export function WorkspaceRepositoryRail({
   const branchItems = branchQuery.data?.ok ? branchQuery.data.items : []
   const auxiliaryCandidates = branchQuery.data?.ok ? branchQuery.data.auxiliaryCandidates : []
   const branchActions = useBranchWorkspaceActions(workspaceRootId)
+  const branchDependencyActions = useBranchWorkspaceDependencyActions(workspaceRootId)
   const branchGitActions = useBranchWorkspaceGitActions(workspaceRootId)
   const [configurationOpen, setConfigurationOpen] = useState(false)
   const [branchDialogOpen, setBranchDialogOpen] = useState(false)
@@ -96,6 +99,9 @@ export function WorkspaceRepositoryRail({
     'create',
   )
   const [dialogWorkspace, setDialogWorkspace] = useState<BranchWorkspaceSnapshot | null>(null)
+  const [dependencyDialogOpen, setDependencyDialogOpen] = useState(false)
+  const [dependencyDialogMode, setDependencyDialogMode] = useState<'add' | 'remove'>('add')
+  const [dependencyBranchWorkspaceId, setDependencyBranchWorkspaceId] = useState('')
   const [pullOpen, setPullOpen] = useState(false)
   const [optimisticRepositoryIds, setOptimisticRepositoryIds] = useState<string[] | null>(null)
   const [reorderPending, setReorderPending] = useState(false)
@@ -400,6 +406,13 @@ export function WorkspaceRepositoryRail({
     setPullOpen(true)
     void pullActions.requestPlan()
   }
+  const openDependencyDialog = (mode: 'add' | 'remove', item: BranchWorkspaceSnapshot) => {
+    branchDependencyActions.reset()
+    setDependencyDialogMode(mode)
+    setDependencyBranchWorkspaceId(item.id)
+    setDependencyDialogOpen(true)
+    void branchDependencyActions.read(item.id)
+  }
   const headerActions = (
     <>
       <Button
@@ -522,7 +535,7 @@ export function WorkspaceRepositoryRail({
                 items={branchItems}
                 activeId={selectedBranchWorkspaceId}
                 activeMemberRepositoryName={selectedBranchWorkspaceMemberName}
-                disabled={branchActions.pending}
+                disabled={branchActions.pending || branchDependencyActions.pending}
                 gitActionsDisabled={branchGitActions.pending}
                 onGitAction={openGitAction}
                 gitActionPanel={gitActionPanel}
@@ -542,6 +555,8 @@ export function WorkspaceRepositoryRail({
                 }
                 onExtend={(item) => openBranchDialog('extend', item)}
                 onReduce={(item, resume = false) => openBranchDialog('reduce', item, resume)}
+                onAddDependencies={(item) => openDependencyDialog('add', item)}
+                onRemoveDependencies={(item) => openDependencyDialog('remove', item)}
                 onRepair={(item) => openBranchDialog('repair', item, true)}
                 onRemove={(item) =>
                   openBranchDialog(
@@ -601,6 +616,23 @@ export function WorkspaceRepositoryRail({
         onConfirm={branchActions.confirm}
         onRetry={branchActions.retry}
         onCancel={branchActions.cancel}
+      />
+      <BranchWorkspaceDependencyDialog
+        open={dependencyDialogOpen}
+        mode={dependencyDialogMode}
+        branchWorkspaceId={dependencyBranchWorkspaceId}
+        candidates={branchDependencyActions.candidates}
+        plan={branchDependencyActions.plan}
+        result={branchDependencyActions.result}
+        pending={branchDependencyActions.pending}
+        error={branchDependencyActions.error}
+        onOpenChange={(open) => {
+          setDependencyDialogOpen(open)
+          if (!open && !branchDependencyActions.pending) branchDependencyActions.reset()
+        }}
+        onPreview={branchDependencyActions.requestPlan}
+        onConfirm={branchDependencyActions.confirm}
+        onCancel={branchDependencyActions.cancel}
       />
       <WorkspacePullDialog
         open={pullOpen}

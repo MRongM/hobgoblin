@@ -143,6 +143,27 @@ const branchGitPanelState = vi.hoisted(() => ({
   },
 }))
 
+const branchDependencyState = vi.hoisted(() => ({
+  candidates: [],
+  plan: null,
+  result: null,
+  pending: false,
+  error: null as string | null,
+  read: vi.fn(async () => ({ ok: true, candidates: [] })),
+  requestPlan: vi.fn(async () => true),
+  confirm: vi.fn(async () => null),
+  cancel: vi.fn(async () => undefined),
+  reset: vi.fn(),
+}))
+
+const branchDependencyDialogState = vi.hoisted(() => ({
+  props: null as null | {
+    open: boolean
+    mode: 'add' | 'remove'
+    branchWorkspaceId: string
+  },
+}))
+
 const branchWorkspaceListState = vi.hoisted(() => ({
   props: null as null | {
     items: BranchWorkspaceSnapshot[]
@@ -176,6 +197,8 @@ const branchWorkspaceListState = vi.hoisted(() => ({
     onCancel?: (item: BranchWorkspaceSnapshot) => void | Promise<void>
     onExtend?: (item: BranchWorkspaceSnapshot) => void
     onReduce?: (item: BranchWorkspaceSnapshot, resume?: boolean) => void
+    onAddDependencies?: (item: BranchWorkspaceSnapshot) => void
+    onRemoveDependencies?: (item: BranchWorkspaceSnapshot) => void
   },
 }))
 
@@ -215,6 +238,10 @@ vi.mock('#/web/hooks/useBranchWorkspaceGitActions.ts', () => ({
   useBranchWorkspaceGitActions: () => branchGitActionState,
 }))
 
+vi.mock('#/web/hooks/useBranchWorkspaceDependencyActions.ts', () => ({
+  useBranchWorkspaceDependencyActions: () => branchDependencyState,
+}))
+
 vi.mock('#/web/components/repo-workspace/BranchWorkspaceGitActionDialog.tsx', () => ({
   BranchWorkspaceGitActionPanel: (props: NonNullable<typeof branchGitPanelState.props>) => {
     branchGitPanelState.props = props
@@ -252,6 +279,13 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspaceDialog.tsx', () => ({
   }) => {
     branchWorkspaceState.dialogProps = { open, mode, workspace }
     branchWorkspaceState.dialogRefresh = onRefreshAuxiliaryCandidates ?? null
+    return null
+  },
+}))
+
+vi.mock('#/web/components/repo-workspace/BranchWorkspaceDependencyDialog.tsx', () => ({
+  BranchWorkspaceDependencyDialog: (props: NonNullable<typeof branchDependencyDialogState.props>) => {
+    branchDependencyDialogState.props = props
     return null
   },
 }))
@@ -366,6 +400,17 @@ beforeEach(() => {
   branchGitActionState.pending = false
   branchGitActionState.error = null
   branchGitPanelState.props = null
+  branchDependencyState.read.mockReset()
+  branchDependencyState.read.mockResolvedValue({ ok: true, candidates: [] })
+  branchDependencyState.requestPlan.mockReset()
+  branchDependencyState.requestPlan.mockResolvedValue(true)
+  branchDependencyState.confirm.mockReset()
+  branchDependencyState.cancel.mockReset()
+  branchDependencyState.cancel.mockResolvedValue(undefined)
+  branchDependencyState.reset.mockReset()
+  branchDependencyState.pending = false
+  branchDependencyState.error = null
+  branchDependencyDialogState.props = null
   branchWorkspaceListState.props = null
   configureWorkspace.mockReset()
   configureWorkspace.mockResolvedValue({ ok: true })
@@ -913,6 +958,35 @@ describe('WorkspaceRepositoryRail', () => {
       operation: 'reduce',
       branchWorkspaceId: interrupted.id,
       repositories: ['api', 'web'],
+    })
+  })
+
+  test('opens directional dependency dialogs after reading the clicked branch workspace', async () => {
+    renderRail({ currentRepoId: ROOT })
+    const item = branchWorkspaceState.items[0]!
+
+    await act(async () => {
+      branchWorkspaceListState.props?.onAddDependencies?.(item)
+      await Promise.resolve()
+    })
+    expect(branchDependencyState.reset).toHaveBeenCalledTimes(1)
+    expect(branchDependencyState.read).toHaveBeenCalledWith(item.id)
+    expect(branchDependencyDialogState.props).toMatchObject({
+      open: true,
+      mode: 'add',
+      branchWorkspaceId: item.id,
+    })
+
+    await act(async () => {
+      branchWorkspaceListState.props?.onRemoveDependencies?.(item)
+      await Promise.resolve()
+    })
+    expect(branchDependencyState.reset).toHaveBeenCalledTimes(2)
+    expect(branchDependencyState.read).toHaveBeenLastCalledWith(item.id)
+    expect(branchDependencyDialogState.props).toMatchObject({
+      open: true,
+      mode: 'remove',
+      branchWorkspaceId: item.id,
     })
   })
 
