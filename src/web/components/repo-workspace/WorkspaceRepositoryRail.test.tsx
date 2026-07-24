@@ -148,6 +148,7 @@ const branchWorkspaceListState = vi.hoisted(() => ({
     items: BranchWorkspaceSnapshot[]
     activeId: string | null
     activeMemberRepositoryName?: string | null
+    onToggleFileArea?: (item: BranchWorkspaceSnapshot) => void
     changeCountById?: Readonly<Record<string, number>>
     getMemberPresentation?: (
       item: BranchWorkspaceSnapshot,
@@ -857,6 +858,16 @@ describe('WorkspaceRepositoryRail', () => {
     expect(useReposStore.getState().activeId).toBe(ROOT)
   })
 
+  test('forwards branch workspace item file area toggles to the owning pane', () => {
+    const onToggleFileArea = vi.fn()
+    renderRail({ currentRepoId: ROOT, onToggleFileArea })
+
+    const item = branchWorkspaceState.items[0]!
+    act(() => branchWorkspaceListState.props?.onToggleFileArea?.(item))
+
+    expect(onToggleFileArea).toHaveBeenCalledTimes(1)
+  })
+
   test('plans a Git action for the clicked branch workspace and mounts its panel below that item', async () => {
     renderRail({ currentRepoId: ROOT })
     const item = branchWorkspaceState.items[1]!
@@ -1246,6 +1257,7 @@ function renderRail({
   terminalStateByPath = {},
   currentRepoId = API,
   onOpenFileArea,
+  onToggleFileArea,
 }: {
   terminalCount?: number
   outputActive?: boolean
@@ -1253,6 +1265,7 @@ function renderRail({
   terminalStateByPath?: Record<string, { count: number; outputActive?: boolean; hasBell?: boolean }>
   currentRepoId?: string
   onOpenFileArea?: () => void
+  onToggleFileArea?: () => void
 } = {}) {
   const rootTerminalKey = `${ROOT}\0${ROOT}`
   const readContext: TerminalSessionReadContextValue = {
@@ -1287,7 +1300,12 @@ function renderRail({
   act(() => {
     root!.render(
       <TerminalSessionReadContext.Provider value={readContext}>
-        <WorkspaceRepositoryRail workspaceRootId={ROOT} currentRepoId={currentRepoId} onOpenFileArea={onOpenFileArea} />
+        <WorkspaceRepositoryRail
+          workspaceRootId={ROOT}
+          currentRepoId={currentRepoId}
+          onOpenFileArea={onOpenFileArea}
+          onToggleFileArea={onToggleFileArea}
+        />
       </TerminalSessionReadContext.Provider>,
     )
   })

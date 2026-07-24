@@ -111,6 +111,13 @@ export function BranchWorkspacePane({
     setFileAreaCollapsed(false)
     onOpenFileArea?.()
   }
+  const toggleFileAreaFromWorkspaceItem = () => {
+    if (compact) {
+      showCompactSurface('files')
+      return
+    }
+    setFileAreaCollapsed((collapsed) => !collapsed)
+  }
   const maximizeTerminalFromExplorer = () => {
     if (memberTarget) setDetailTab(memberTarget.repositoryId, 'terminal')
     setTerminalFocusMode(true)
@@ -199,6 +206,7 @@ export function BranchWorkspacePane({
                 currentRepoId={rootId}
                 fill
                 onOpenFileArea={openFileArea}
+                onToggleFileArea={toggleFileAreaFromWorkspaceItem}
               />
             </div>
           }
@@ -257,6 +265,7 @@ export function BranchWorkspacePane({
             currentRepoId={rootId}
             fill
             onOpenFileArea={() => showCompactSurface('files')}
+            onToggleFileArea={toggleFileAreaFromWorkspaceItem}
             onOpenDetailArea={() => showCompactSurface('detail')}
           />
           <StatusBar repoId={memberTarget?.repositoryId ?? rootId} />

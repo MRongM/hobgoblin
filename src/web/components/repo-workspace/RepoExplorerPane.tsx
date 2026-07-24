@@ -104,6 +104,16 @@ export function RepoExplorerPane({
 
   const compact = useIsCompactUi()
   const desktopFileAreaCollapsed = !compact && fileAreaCollapsed
+  const handleWorktreeDoubleClick = useCallback(() => {
+    if (compact) {
+      handleTabChange('files')
+      onShowCompactFiles?.()
+      return
+    }
+    if (!onToggleFileArea) return
+    if (desktopFileAreaCollapsed) handleTabChange('files')
+    onToggleFileArea()
+  }, [compact, desktopFileAreaCollapsed, handleTabChange, onShowCompactFiles, onToggleFileArea])
 
   if (isPlainWorkspace) {
     return (
@@ -142,7 +152,12 @@ export function RepoExplorerPane({
         />
         {surface === 'scope' ? (
           <div className="project-navigation-tone flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
-            <BranchArea repoId={repoId} showActions={showActions} onBranchSelected={onBranchSelected} />
+            <BranchArea
+              repoId={repoId}
+              showActions={showActions}
+              onBranchSelected={onBranchSelected}
+              onWorktreeDoubleClick={handleWorktreeDoubleClick}
+            />
           </div>
         ) : (
           <RepoWorktreeExplorer
@@ -174,7 +189,12 @@ export function RepoExplorerPane({
               />
             )}
             <BranchSectionLabel repoId={repoId} />
-            <BranchArea repoId={repoId} showActions={showActions} onBranchSelected={onBranchSelected} />
+            <BranchArea
+              repoId={repoId}
+              showActions={showActions}
+              onBranchSelected={onBranchSelected}
+              onWorktreeDoubleClick={handleWorktreeDoubleClick}
+            />
           </div>
         }
         fileArea={
@@ -293,14 +313,21 @@ function BranchArea({
   repoId,
   showActions,
   onBranchSelected,
+  onWorktreeDoubleClick,
 }: {
   repoId: string
   showActions: boolean
   onBranchSelected?: () => void
+  onWorktreeDoubleClick?: () => void
 }) {
   return (
     <section className="flex min-h-0 flex-1 flex-col">
-      <BranchList repoId={repoId} showActions={showActions} onBranchSelected={onBranchSelected} />
+      <BranchList
+        repoId={repoId}
+        showActions={showActions}
+        onBranchSelected={onBranchSelected}
+        onWorktreeDoubleClick={onWorktreeDoubleClick}
+      />
     </section>
   )
 }

@@ -45,6 +45,7 @@ interface Props {
   repoId: string
   showActions?: boolean
   onBranchSelected?: () => void
+  onWorktreeDoubleClick?: () => void
 }
 
 type OpenActionMenu = { repoId: string; branch: string }
@@ -86,7 +87,7 @@ function branchListRepoEqual(a: BranchListRepo | undefined, b: BranchListRepo | 
   )
 }
 
-export function BranchList({ repoId, showActions = true, onBranchSelected }: Props) {
+export function BranchList({ repoId, showActions = true, onBranchSelected, onWorktreeDoubleClick }: Props) {
   const t = useT()
   const reorderWorktrees = useReposStore((s) => s.reorderWorktrees)
   const navigation = useMainWindowNavigation()
@@ -150,6 +151,7 @@ export function BranchList({ repoId, showActions = true, onBranchSelected }: Pro
       branch,
       selected: repo.ui.selectedBranch,
       onSelectBranch: handleSelectBranch,
+      onWorktreeDoubleClick,
       selectedRef,
       showActions,
       actionMenuOpen: openActionMenu?.repoId === repoId && openActionMenu.branch === branch.name,
