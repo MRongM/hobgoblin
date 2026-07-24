@@ -36,6 +36,10 @@ _Avoid_: Telegram message, system notification, terminal output activity
 A best-effort external attention delivery caused by an eligible unread terminal bell. One delivery may use the system notification channel and, when configured, an additional Telegram channel; delivery failure does not change unread terminal bell state.
 _Avoid_: Unread state, queued notification, terminal bell event
 
+**In-app notification**:
+A transient message shown by Hobgoblin's shared notification surface in the current renderer, with success, info, warning, or error emphasis. It is distinct from system and Telegram notification delivery and is neither persisted nor synchronized across windows.
+_Avoid_: App global notification, system notification, desktop notification, Telegram notification
+
 **Shared proxy URL**:
 The application-level HTTP, HTTPS, or SOCKS5 proxy endpoint available to features such as Git network operations and Telegram notification delivery. Each feature independently decides whether to use it; no feature owns or enables it for another feature.
 _Avoid_: Git proxy URL, Telegram proxy URL, globally enabled proxy
