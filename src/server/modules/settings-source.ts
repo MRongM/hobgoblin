@@ -126,6 +126,7 @@ interface ServerSettingsData {
   webAccessUsername: string
   webAccessPasswordHash: string
   telegramNotificationsEnabled: boolean
+  telegramProxyEnabled: boolean
   telegramBellNotificationsEnabled: boolean
   telegramOutputCompletionNotificationsEnabled: boolean
   telegramOutputCompletionMinimumActivitySeconds: number
@@ -357,6 +358,7 @@ function telegramNotificationSettingsFromData(data: ServerSettingsData): Telegra
     enabled: data.telegramNotificationsEnabled && botTokenConfigured && Boolean(data.telegramChatId),
     botTokenConfigured,
     chatId: data.telegramChatId,
+    proxyEnabled: data.telegramProxyEnabled,
     bellEnabled: data.telegramBellNotificationsEnabled,
     outputCompletionEnabled: data.telegramOutputCompletionNotificationsEnabled,
     outputCompletionMinimumActivitySeconds: data.telegramOutputCompletionMinimumActivitySeconds,
@@ -711,6 +713,7 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
           : '',
       telegramNotificationsEnabled:
         parsed.telegramNotificationsEnabled === true && Boolean(telegramBotToken && telegramChatId),
+      telegramProxyEnabled: parsed.telegramProxyEnabled !== false,
       telegramBellNotificationsEnabled: parsed.telegramBellNotificationsEnabled !== false,
       telegramOutputCompletionNotificationsEnabled: parsed.telegramOutputCompletionNotificationsEnabled === true,
       telegramOutputCompletionMinimumActivitySeconds: normalizeTelegramOutputCompletionMinimumActivitySeconds(
@@ -744,6 +747,7 @@ async function loadServerSettings(): Promise<ServerSettingsData> {
       webAccessUsername: '',
       webAccessPasswordHash: '',
       telegramNotificationsEnabled: false,
+      telegramProxyEnabled: true,
       telegramBellNotificationsEnabled: true,
       telegramOutputCompletionNotificationsEnabled: false,
       telegramOutputCompletionMinimumActivitySeconds: TELEGRAM_OUTPUT_COMPLETION_DEFAULT_ACTIVITY_SECONDS,
@@ -820,6 +824,7 @@ export async function updateServerTelegramNotificationSettings(
   }
 
   data.telegramNotificationsEnabled = input.enabled === true
+  data.telegramProxyEnabled = input.proxyEnabled !== false
   data.telegramBellNotificationsEnabled = input.bellEnabled === true
   data.telegramOutputCompletionNotificationsEnabled = input.outputCompletionEnabled === true
   data.telegramOutputCompletionMinimumActivitySeconds = input.outputCompletionMinimumActivitySeconds

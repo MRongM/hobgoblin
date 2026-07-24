@@ -190,13 +190,13 @@ describe('sendTelegramPhoto', () => {
 })
 
 describe('telegramProxyUrlFromPrefs', () => {
-  test('only returns a configured and enabled supported proxy URL', () => {
+  test('returns the shared supported proxy URL independently of the Git proxy switch', () => {
     expect(
-      telegramProxyUrlFromPrefs({ gitNetworkProxyEnabled: false, gitNetworkProxyUrl: 'http://proxy:7890' }),
-    ).toBeUndefined()
-    expect(telegramProxyUrlFromPrefs({ gitNetworkProxyEnabled: true, gitNetworkProxyUrl: '' })).toBeUndefined()
+      telegramProxyUrlFromPrefs({ gitNetworkProxyUrl: 'http://proxy:7890' }),
+    ).toBe('http://proxy:7890')
+    expect(telegramProxyUrlFromPrefs({ gitNetworkProxyUrl: '' })).toBeUndefined()
     expect(
-      telegramProxyUrlFromPrefs({ gitNetworkProxyEnabled: true, gitNetworkProxyUrl: 'socks5://127.0.0.1:1080' }),
+      telegramProxyUrlFromPrefs({ gitNetworkProxyUrl: 'socks5://127.0.0.1:1080' }),
     ).toBe('socks5://127.0.0.1:1080')
   })
 })

@@ -19,6 +19,7 @@ export interface TelegramNotificationSettingsSnapshot {
   enabled: boolean
   botTokenConfigured: boolean
   chatId: string
+  proxyEnabled: boolean
   bellEnabled: boolean
   outputCompletionEnabled: boolean
   outputCompletionMinimumActivitySeconds: number
@@ -30,6 +31,7 @@ export interface TelegramNotificationSettingsUpdateInput {
   enabled: boolean
   botToken?: string
   chatId: string
+  proxyEnabled?: boolean
   bellEnabled: boolean
   outputCompletionEnabled: boolean
   outputCompletionMinimumActivitySeconds: number

@@ -57,6 +57,7 @@ describe('server settings snapshot runtime state', () => {
       enabled: false,
       botTokenConfigured: false,
       chatId: '',
+      proxyEnabled: true,
       bellEnabled: true,
       outputCompletionEnabled: false,
       outputCompletionMinimumActivitySeconds: 10,

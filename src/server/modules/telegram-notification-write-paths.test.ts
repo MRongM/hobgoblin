@@ -46,6 +46,7 @@ function telegramConfig(overrides: Record<string, unknown> = {}) {
     enabled: true,
     botToken: '123456:test-token',
     chatId: '-100123',
+    proxyEnabled: true,
     bellEnabled: true,
     outputCompletionEnabled: true,
     outputCompletionMinimumActivitySeconds: 10,
@@ -385,6 +386,19 @@ describe('Telegram notification write paths', () => {
     })
     expect(deps.warn).toHaveBeenCalledWith('network-failed')
     expect(JSON.stringify(deps.warn.mock.calls)).not.toContain('test-token')
+  })
+
+  test('connects directly when the Telegram proxy preference is off', async () => {
+    const deps = dependencies({
+      getTelegramConfig: vi.fn(async () => telegramConfig({ proxyEnabled: false })),
+    })
+
+    await expect(sendConfiguredTelegramBellNotification(context(), deps)).resolves.toEqual({ ok: true })
+    expect(deps.sendMessage).toHaveBeenCalledWith({
+      botToken: '123456:test-token',
+      chatId: '-100123',
+      text: expect.stringContaining('项目：api'),
+    })
   })
 
   test('deduplicates the same terminal across renderers for five seconds', async () => {

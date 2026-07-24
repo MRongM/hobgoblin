@@ -40,6 +40,7 @@ const mocks = vi.hoisted(() => ({
     botTokenConfigured: true,
     botToken: '123456:test-token',
     chatId: '-100123',
+    proxyEnabled: true,
     bellEnabled: true,
     outputCompletionEnabled: true,
     outputCompletionMinimumActivitySeconds: 10,

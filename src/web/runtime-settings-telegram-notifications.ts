@@ -16,6 +16,7 @@ const DEFAULT_TELEGRAM_SETTINGS: TelegramNotificationSettingsSnapshot = {
   enabled: false,
   botTokenConfigured: false,
   chatId: '',
+  proxyEnabled: true,
   bellEnabled: true,
   outputCompletionEnabled: false,
   outputCompletionMinimumActivitySeconds: TELEGRAM_OUTPUT_COMPLETION_DEFAULT_ACTIVITY_SECONDS,

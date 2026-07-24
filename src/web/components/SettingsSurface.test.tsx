@@ -62,6 +62,7 @@ function defaultRpcResult(path: string, input?: unknown) {
         enabled: false,
         botTokenConfigured: false,
         chatId: '',
+        proxyEnabled: true,
         bellEnabled: true,
         outputCompletionEnabled: false,
         outputCompletionMinimumActivitySeconds: 10,
@@ -169,6 +170,7 @@ const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
       enabled?: boolean
       botToken?: string
       chatId?: string
+      proxyEnabled?: boolean
       bellEnabled?: boolean
       outputCompletionEnabled?: boolean
       includeTerminalOutput?: boolean
@@ -181,6 +183,7 @@ const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
         enabled: body.enabled === true,
         botTokenConfigured: Boolean(body.botToken),
         chatId: body.chatId?.trim() ?? '',
+        proxyEnabled: body.proxyEnabled === true,
         bellEnabled: body.bellEnabled === true,
         outputCompletionEnabled: body.outputCompletionEnabled === true,
         outputCompletionMinimumActivitySeconds: body.outputCompletionMinimumActivitySeconds ?? 10,
@@ -415,6 +418,7 @@ describe('SettingsSurface', () => {
     expect(tokenInput.type).toBe('password')
     expect(tokenInput.value).toBe('')
     expect(document.body.textContent).toContain('settings.telegram.master-off-hint')
+    expect(switchById('settings-telegram-proxy-enabled').getAttribute('data-state')).toBe('checked')
     expect(switchById('settings-telegram-bell-enabled').getAttribute('data-state')).toBe('checked')
     expect(switchById('settings-telegram-output-completion-enabled').getAttribute('data-state')).toBe('unchecked')
     expect(switchById('settings-telegram-include-terminal-screen-image').getAttribute('data-state')).toBe('unchecked')
@@ -423,6 +427,7 @@ describe('SettingsSurface', () => {
 
     await act(async () => {
       switchById('settings-telegram-enabled').click()
+      switchById('settings-telegram-proxy-enabled').click()
       switchById('settings-telegram-output-completion-enabled').click()
       switchById('settings-telegram-include-terminal-screen-image').click()
       setInputValue(tokenInput, '123456:test-token')
@@ -445,6 +450,7 @@ describe('SettingsSurface', () => {
       enabled: true,
       botToken: '123456:test-token',
       chatId: '-100123',
+      proxyEnabled: false,
       bellEnabled: true,
       outputCompletionEnabled: true,
       outputCompletionMinimumActivitySeconds: 10,
@@ -472,10 +478,15 @@ describe('SettingsSurface', () => {
   test('renders the proxy settings page', async () => {
     await render(<SettingsSurface page="proxy" onPageChange={() => {}} />)
 
+    const proxyUrlInput = document.getElementById('settings-proxy-url')
+    const gitProxySwitch = switchById('settings-git-network-proxy-enabled')
+    if (!(proxyUrlInput instanceof HTMLInputElement)) throw new Error('Missing shared proxy URL input')
     expect(document.body.textContent).toContain('settings.nav.proxy')
+    expect(document.body.textContent).toContain('settings.proxy.url')
     expect(document.body.textContent).toContain('settings.proxy.git-proxy')
     expect(document.body.textContent).toContain('settings.proxy.git-timeout')
     expect(document.body.textContent).toContain('settings.proxy.ssh-note')
+    expect(proxyUrlInput.compareDocumentPosition(gitProxySwitch) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
   })
 
   test('configures protected Web access without echoing password fields', async () => {
@@ -522,9 +533,9 @@ describe('SettingsSurface', () => {
     await render(<SettingsSurface page="proxy" onPageChange={() => {}} />)
 
     const enabledSwitch = switchById('settings-git-network-proxy-enabled')
-    const urlInput = document.getElementById('settings-git-network-proxy-url')
+    const urlInput = document.getElementById('settings-proxy-url')
     const timeoutInput = document.getElementById('settings-git-network-timeout-sec')
-    if (!(urlInput instanceof HTMLInputElement)) throw new Error('Missing git network proxy url input')
+    if (!(urlInput instanceof HTMLInputElement)) throw new Error('Missing shared proxy URL input')
     if (!(timeoutInput instanceof HTMLInputElement)) throw new Error('Missing git network timeout input')
 
     await act(async () => {
@@ -565,8 +576,8 @@ describe('SettingsSurface', () => {
   test('keeps an incomplete proxy URL editable and persists it after editing finishes', async () => {
     await render(<SettingsSurface page="proxy" onPageChange={() => {}} />)
 
-    const urlInput = document.getElementById('settings-git-network-proxy-url')
-    if (!(urlInput instanceof HTMLInputElement)) throw new Error('Missing git network proxy url input')
+    const urlInput = document.getElementById('settings-proxy-url')
+    if (!(urlInput instanceof HTMLInputElement)) throw new Error('Missing shared proxy URL input')
 
     await act(async () => {
       urlInput.focus()

@@ -48,6 +48,7 @@ describe('terminal output completion controller', () => {
       enabled: true,
       botTokenConfigured: true,
       chatId: '-100123',
+      proxyEnabled: true,
       bellEnabled: true,
       outputCompletionEnabled: true,
       outputCompletionMinimumActivitySeconds: 10,

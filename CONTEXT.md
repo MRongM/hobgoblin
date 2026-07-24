@@ -36,6 +36,14 @@ _Avoid_: Telegram message, system notification, terminal output activity
 A best-effort external attention delivery caused by an eligible unread terminal bell. One delivery may use the system notification channel and, when configured, an additional Telegram channel; delivery failure does not change unread terminal bell state.
 _Avoid_: Unread state, queued notification, terminal bell event
 
+**Shared proxy URL**:
+The application-level HTTP, HTTPS, or SOCKS5 proxy endpoint available to features such as Git network operations and Telegram notification delivery. Each feature independently decides whether to use it; no feature owns or enables it for another feature.
+_Avoid_: Git proxy URL, Telegram proxy URL, globally enabled proxy
+
+**Telegram notification proxy preference**:
+An opt-out preference that allows Telegram notification delivery to use the shared proxy URL independently of the Git network proxy preference. It defaults on to preserve existing delivery behavior; when it is off or no eligible URL is available, Telegram connects directly.
+_Avoid_: Telegram proxy configuration, global proxy switch, Git proxy preference
+
 **Terminal screen image**:
 An optional, ephemeral Telegram-only JPEG rendering of the server-owned headless terminal's active viewport for an eligible unread bell or terminal output completion notification. It is a bounded visual projection of terminal screen text rather than a screenshot of the Hobgoblin application window, uses reduced image quality and dimensions for delivery, is enabled by the explicit terminal-screen-image inclusion preference, stays in memory only, and is discarded after the delivery attempt. Telegram never appends terminal output characters to notification text; if the image cannot be produced, delivery falls back to metadata only.
 _Avoid_: Application screenshot, terminal transcript, terminal output excerpt, persisted screenshot

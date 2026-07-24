@@ -34,6 +34,7 @@ type TelegramConfig = {
   enabled: boolean
   botToken: string
   chatId: string
+  proxyEnabled: boolean
   bellEnabled: boolean
   outputCompletionEnabled: boolean
   outputCompletionMinimumActivitySeconds: number
@@ -192,7 +193,7 @@ async function sendConfiguredMessage(
 ): Promise<TelegramNotificationResult> {
   if (!config.botToken || !config.chatId) return { ok: false, error: { code: 'configuration-incomplete' } }
   const dependencies = writeDependencies(options)
-  const proxyUrl = telegramProxyUrlFromPrefs(prefs)
+  const proxyUrl = telegramProxyUrlFromPrefs(prefs, config.proxyEnabled)
   const result = await dependencies.sendMessage({
     botToken: config.botToken,
     chatId: config.chatId,
@@ -212,7 +213,7 @@ async function sendConfiguredPhoto(
 ): Promise<TelegramNotificationResult> {
   if (!config.botToken || !config.chatId) return { ok: false, error: { code: 'configuration-incomplete' } }
   const dependencies = writeDependencies(options)
-  const proxyUrl = telegramProxyUrlFromPrefs(prefs)
+  const proxyUrl = telegramProxyUrlFromPrefs(prefs, config.proxyEnabled)
   const result = await dependencies.sendPhoto({
     botToken: config.botToken,
     chatId: config.chatId,

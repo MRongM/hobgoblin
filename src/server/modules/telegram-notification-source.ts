@@ -28,9 +28,10 @@ function errorCodeForHttpStatus(statusCode: number): TelegramNotificationErrorCo
 }
 
 export function telegramProxyUrlFromPrefs(
-  prefs: Pick<SettingsPrefs, 'gitNetworkProxyEnabled' | 'gitNetworkProxyUrl'>,
+  prefs: Pick<SettingsPrefs, 'gitNetworkProxyUrl'>,
+  proxyEnabled = true,
 ): string | undefined {
-  if (!prefs.gitNetworkProxyEnabled) return undefined
+  if (!proxyEnabled) return undefined
   const proxyUrl = prefs.gitNetworkProxyUrl.trim()
   if (!proxyUrl) return undefined
   try {

@@ -72,6 +72,7 @@ describe('settings defaults', () => {
       enabled: false,
       botTokenConfigured: false,
       chatId: '',
+      proxyEnabled: true,
       bellEnabled: true,
       outputCompletionEnabled: false,
       outputCompletionMinimumActivitySeconds: 10,

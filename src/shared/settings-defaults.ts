@@ -138,6 +138,7 @@ export function defaultSettingsSnapshot(overrides: Partial<SettingsSnapshot> = {
       enabled: false,
       botTokenConfigured: false,
       chatId: '',
+      proxyEnabled: true,
       bellEnabled: true,
       outputCompletionEnabled: false,
       outputCompletionMinimumActivitySeconds: TELEGRAM_OUTPUT_COMPLETION_DEFAULT_ACTIVITY_SECONDS,

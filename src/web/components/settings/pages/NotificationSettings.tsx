@@ -36,6 +36,7 @@ export function NotificationSettings() {
   const telegramController = useTelegramNotificationSettingsController()
   const [testingTerminalNotification, setTestingTerminalNotification] = useState(false)
   const [telegramEnabled, setTelegramEnabled] = useState(telegramSettings.enabled)
+  const [telegramProxyEnabled, setTelegramProxyEnabled] = useState(telegramSettings.proxyEnabled)
   const [telegramBellEnabled, setTelegramBellEnabled] = useState(telegramSettings.bellEnabled)
   const [telegramOutputCompletionEnabled, setTelegramOutputCompletionEnabled] = useState(
     telegramSettings.outputCompletionEnabled,
@@ -55,6 +56,7 @@ export function NotificationSettings() {
 
   useEffect(() => {
     setTelegramEnabled(telegramSettings.enabled)
+    setTelegramProxyEnabled(telegramSettings.proxyEnabled)
     setTelegramBellEnabled(telegramSettings.bellEnabled)
     setTelegramOutputCompletionEnabled(telegramSettings.outputCompletionEnabled)
     setTelegramOutputCompletionMinimumActivitySeconds(telegramSettings.outputCompletionMinimumActivitySeconds)
@@ -71,12 +73,14 @@ export function NotificationSettings() {
     telegramSettings.includeTerminalOutput,
     telegramSettings.outputCompletionEnabled,
     telegramSettings.outputCompletionMinimumActivitySeconds,
+    telegramSettings.proxyEnabled,
   ])
 
   const normalizedChatId = chatId.trim()
   const configurationComplete = Boolean((botTokenConfigured || botToken.trim()) && normalizedChatId)
   const telegramChanged =
     telegramEnabled !== telegramSettings.enabled ||
+    telegramProxyEnabled !== telegramSettings.proxyEnabled ||
     telegramBellEnabled !== telegramSettings.bellEnabled ||
     telegramOutputCompletionEnabled !== telegramSettings.outputCompletionEnabled ||
     telegramOutputCompletionMinimumActivitySeconds !== telegramSettings.outputCompletionMinimumActivitySeconds ||
@@ -118,6 +122,7 @@ export function NotificationSettings() {
       enabled: telegramEnabled,
       ...(botToken.trim() ? { botToken: botToken.trim() } : {}),
       chatId: normalizedChatId,
+      proxyEnabled: telegramProxyEnabled,
       bellEnabled: telegramBellEnabled,
       outputCompletionEnabled: telegramOutputCompletionEnabled,
       outputCompletionMinimumActivitySeconds: telegramOutputCompletionMinimumActivitySeconds,
@@ -131,6 +136,7 @@ export function NotificationSettings() {
     }
     setBotToken('')
     setTelegramEnabled(saved.enabled)
+    setTelegramProxyEnabled(saved.proxyEnabled)
     setTelegramBellEnabled(saved.bellEnabled)
     setTelegramOutputCompletionEnabled(saved.outputCompletionEnabled)
     setTelegramOutputCompletionMinimumActivitySeconds(saved.outputCompletionMinimumActivitySeconds)
@@ -203,6 +209,19 @@ export function NotificationSettings() {
                 checked={telegramEnabled}
                 onCheckedChange={setTelegramEnabled}
                 aria-label={t('settings.telegram.enabled')}
+              />
+            }
+          />
+          <SettingsRow
+            controlId="settings-telegram-proxy-enabled"
+            label={t('settings.telegram.proxy-enabled')}
+            hint={t('settings.telegram.proxy-enabled-hint')}
+            control={
+              <Switch
+                id="settings-telegram-proxy-enabled"
+                checked={telegramProxyEnabled}
+                onCheckedChange={setTelegramProxyEnabled}
+                aria-label={t('settings.telegram.proxy-enabled')}
               />
             }
           />

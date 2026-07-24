@@ -25,6 +25,7 @@ function telegramSettingsUpdate(overrides: Record<string, unknown> = {}) {
     enabled: false,
     botToken: '',
     chatId: '',
+    proxyEnabled: true,
     bellEnabled: true,
     outputCompletionEnabled: false,
     outputCompletionMinimumActivitySeconds: 10,
@@ -121,6 +122,22 @@ test('defaults missing Telegram completion activity duration to ten seconds', as
   })
 })
 
+test('defaults a missing Telegram proxy preference on and persists explicit opt-out', async () => {
+  useTempServerSettingsDir()
+  writeSettingsFile({})
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(mod.getServerTelegramNotificationSettings()).resolves.toMatchObject({ proxyEnabled: true })
+
+  await mod.updateServerTelegramNotificationSettings(telegramSettingsUpdate({ proxyEnabled: false }))
+  await expect(mod.getServerTelegramNotificationSettings()).resolves.toMatchObject({ proxyEnabled: false })
+
+  mod.resetServerSettingsSourceForTests()
+  vi.resetModules()
+  const reloaded = await import('#/server/modules/settings-source.ts')
+  await expect(reloaded.getServerTelegramNotificationSettings()).resolves.toMatchObject({ proxyEnabled: false })
+})
+
 test.each([0, 3_601, 1.5, Number.NaN, '10', null])(
   'normalizes corrupt persisted Telegram completion activity duration %p to ten seconds',
   async (persisted) => {
@@ -177,6 +194,7 @@ test('keeps Telegram Bot Token server-only and retains it on a blank update', as
     enabled: true,
     botTokenConfigured: true,
     chatId: '-1001234567890',
+    proxyEnabled: true,
     bellEnabled: false,
     outputCompletionEnabled: true,
     outputCompletionMinimumActivitySeconds: 30,
@@ -220,6 +238,7 @@ test('does not enable Telegram notifications without a Bot Token and Chat ID', a
     enabled: false,
     botTokenConfigured: false,
     chatId: '',
+    proxyEnabled: true,
     bellEnabled: true,
     outputCompletionEnabled: false,
     outputCompletionMinimumActivitySeconds: 10,
@@ -294,6 +313,7 @@ test('tracks a saved Bot Token independently from the Chat ID while disabled', a
     enabled: false,
     botTokenConfigured: true,
     chatId: '',
+    proxyEnabled: true,
     bellEnabled: true,
     outputCompletionEnabled: false,
     outputCompletionMinimumActivitySeconds: 10,
@@ -335,6 +355,7 @@ test('normalizes missing and invalid persisted Telegram notification settings', 
     enabled: false,
     botTokenConfigured: false,
     chatId: '',
+    proxyEnabled: true,
     bellEnabled: true,
     outputCompletionEnabled: false,
     outputCompletionMinimumActivitySeconds: 10,
@@ -357,6 +378,7 @@ test('migrates legacy Telegram settings to bell-only delivery', async () => {
     enabled: true,
     botTokenConfigured: true,
     chatId: '-100123',
+    proxyEnabled: true,
     bellEnabled: true,
     outputCompletionEnabled: false,
     outputCompletionMinimumActivitySeconds: 10,
