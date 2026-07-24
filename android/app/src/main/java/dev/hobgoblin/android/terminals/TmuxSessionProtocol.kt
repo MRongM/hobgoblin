@@ -211,12 +211,12 @@ object TmuxSessionProtocol {
 
     fun listSessionsScript(projectRoot: String): String = combinedListScript(
         projectRoot = projectRoot,
-        format = "#{session_name}\\t#{session_path}",
+        format = "#{session_name}\t#{session_path}",
     )
 
     fun listDiscoverableSessionsScript(projectRoot: String): String = combinedListScript(
         projectRoot = projectRoot,
-        format = "#{session_name}\\t#{${InitPathOption}}\\t#{${TerminalNumberOption}}",
+        format = "#{session_name}\t#{${InitPathOption}}\t#{${TerminalNumberOption}}",
     )
 
     fun killSessionScript(projectRoot: String, sessionName: String, serverName: String?): String? {
@@ -248,9 +248,9 @@ object TmuxSessionProtocol {
             "  return \"${'$'}tmux_status\"",
             "}",
             "run_tmux_list tmux -L ${shellQuote(serverName)} list-sessions " +
-                "-F ${shellQuote("$format\\t$serverName")} || exit ${'$'}?",
+                "-F ${shellQuote("$format\t$serverName")} || exit ${'$'}?",
             "run_tmux_list tmux list-sessions " +
-                "-F ${shellQuote("$format\\t$LegacyDefaultServerMarker")} || exit ${'$'}?",
+                "-F ${shellQuote("$format\t$LegacyDefaultServerMarker")} || exit ${'$'}?",
         ).joinToString("\n")
     }
 

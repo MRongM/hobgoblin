@@ -208,11 +208,12 @@ class TmuxSessionProtocolTest {
     }
 
     @Test
-    fun `discoverable session list command separates fixed metadata and server origin`() {
+    fun `discoverable session list command emits parser compatible tab delimited fields`() {
         val script = TmuxSessionProtocol.listDiscoverableSessionsScript("/srv/projects/example")
 
-        assertTrue(script.contains("#{session_name}\\t#{@hobgoblin_init_path}\\t"))
-        assertTrue(script.contains("#{@hobgoblin_terminal_number}\\thobgoblin-project-v1-"))
+        assertTrue(script.contains("#{session_name}\t#{@hobgoblin_init_path}\t"))
+        assertTrue(script.contains("#{@hobgoblin_terminal_number}\thobgoblin-project-v1-"))
+        assertFalse(script.contains("\\t"))
     }
 
     @Test
@@ -265,12 +266,12 @@ class TmuxSessionProtocolTest {
         )
 
         assertTrue(listScript.orEmpty().contains("tmux -L '$serverName' list-sessions"))
-        assertTrue(listScript.orEmpty().contains("#{session_path}\\t$serverName"))
-        assertTrue(listScript.orEmpty().contains("#{session_path}\\tlegacy-default"))
+        assertTrue(listScript.orEmpty().contains("#{session_path}\t$serverName"))
+        assertTrue(listScript.orEmpty().contains("#{session_path}\tlegacy-default"))
         assertTrue(listScript.orEmpty().contains("run_tmux_list tmux -L '$serverName' list-sessions"))
         assertTrue(listScript.orEmpty().contains("run_tmux_list tmux list-sessions"))
         assertTrue(discoveryScript.orEmpty().contains("tmux -L '$serverName' list-sessions"))
-        assertTrue(discoveryScript.orEmpty().contains("#{@hobgoblin_terminal_number}\\t$serverName"))
+        assertTrue(discoveryScript.orEmpty().contains("#{@hobgoblin_terminal_number}\t$serverName"))
         assertEquals(
             "command -v tmux >/dev/null 2>&1 || exit 127\n" +
                 "tmux -L '$serverName' kill-session -t '=hobgoblin-v1-aebf050981ac829e36100020'",
