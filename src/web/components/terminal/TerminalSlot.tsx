@@ -82,8 +82,13 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
   const descriptor = useWorktreeTerminalSelectedDescriptor(terminalWorktreeKey)
   const key = descriptor?.key ?? null
   const snapshot = useTerminalSnapshot(key)
-  const hasSessions = useWorktreeTerminalCount(terminalWorktreeKey) > 0
+  const terminalCount = useWorktreeTerminalCount(terminalWorktreeKey)
+  const hasSessions = terminalCount > 0
   const creationPending = useWorktreeTerminalCreationPending(terminalWorktreeKey)
+  const renderPending = hasSessions && snapshot.renderPending === true
+  const opening = creationPending || (hasSessions && snapshot.phase === 'opening') || renderPending
+  const initialOpening =
+    (creationPending && !hasSessions) || (terminalCount === 1 && (snapshot.phase === 'opening' || renderPending))
   const {
     temporaryFilesDirectory,
     terminalFontSize,
@@ -149,7 +154,7 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
   // goblin behaviour where focus was triggered exactly once per session key.
   const focusedKeyRef = useRef<string | null>(null)
   useLayoutEffect(() => {
-    if (!isController || !key || searchOpen) {
+    if (isMobile || !isController || !key || searchOpen || renderPending) {
       if (focusedKeyRef.current === key) focusedKeyRef.current = null
       return
     }
@@ -160,7 +165,7 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
     if (!isBody) return
     const textarea = hostRef.current?.querySelector('textarea')
     textarea?.focus()
-  }, [isController, key, searchOpen])
+  }, [isController, isMobile, key, renderPending, searchOpen])
 
   const openPathInEditorRef = useRef<(target: FilePathTarget) => void>(() => {})
   openPathInEditorRef.current = (target: FilePathTarget) => {
@@ -400,10 +405,7 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
       )}
       <div
         ref={hostRef}
-        className={cn(
-          'goblin-terminal-slot__host',
-          isMobileReadonly && 'goblin-terminal-slot__host--touch-scroll',
-        )}
+        className={cn('goblin-terminal-slot__host', isMobileReadonly && 'goblin-terminal-slot__host--touch-scroll')}
         aria-readonly={(!isController && hasSessions) || undefined}
         onPointerDown={isMobileReadonly ? handleTouchScrollStart : undefined}
         onPointerMove={isMobileReadonly ? handleTouchScrollMove : undefined}
@@ -481,9 +483,12 @@ export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: T
           takeoverPending={snapshot.takeoverPending}
         />
       )}
-      {(creationPending || (hasSessions && snapshot.phase === 'opening')) && (
+      {opening && (
         <div
-          className="goblin-terminal-slot__status-overlay"
+          className={cn(
+            'goblin-terminal-slot__status-overlay',
+            initialOpening && 'goblin-terminal-slot__status-overlay--initial',
+          )}
           role="status"
           aria-live="polite"
           aria-atomic="true"

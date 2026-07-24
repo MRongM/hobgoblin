@@ -2,6 +2,11 @@
 
 Date: 2026-07-24
 
+> Follow-up: `2026-07-24-terminal-creation-interactive-readiness-design.md`
+> supersedes the request-settlement endpoint below. Loading now remains visible
+> until the selected renderer terminal has completed attach, replay, and its
+> first paint opportunity.
+
 ## Goal
 
 Show the existing bottom-right terminal loading status for the entire time a

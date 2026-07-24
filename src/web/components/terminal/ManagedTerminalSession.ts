@@ -49,6 +49,7 @@ export class ManagedTerminalSession {
   private resizeFlushTimer: number | null = null
   private outputFlushFrame: number | null = null
   private pendingFocus = false
+  private renderPending = true
 
   private pendingResize: { cols: number; rows: number } | null = null
   private pendingOutput: string[] = []
@@ -152,7 +153,11 @@ export class ManagedTerminalSession {
   }
 
   snapshot() {
-    return this.runtime.snapshot()
+    const snapshot = this.runtime.snapshot()
+    if (this.renderPending && !this.disposed && snapshot.phase !== 'error' && snapshot.phase !== 'closed') {
+      return { ...snapshot, renderPending: true }
+    }
+    return snapshot
   }
 
   isTerminalFocusTarget(target: EventTarget | null): boolean {
@@ -331,7 +336,10 @@ export class ManagedTerminalSession {
   private start(): void {
     if (this.disposed || this.view.currentTerminal() || !this.view.isConnected()) return
     const token = (this.startToken += 1)
-    if (!this.runtime.currentSessionId() && this.runtime.startAttaching()) this.notify()
+    const renderPendingChanged = !this.renderPending
+    this.renderPending = true
+    const phaseChanged = !this.runtime.currentSessionId() && this.runtime.startAttaching()
+    if (renderPendingChanged || phaseChanged) this.notify()
     void this.startAsync(token)
   }
 
@@ -347,7 +355,7 @@ export class ManagedTerminalSession {
       const { term, preloaded } = await this.openPhase(token)
       const result = await this.rpcPhase(token, term)
       await this.replayPhase(token, term, result, preloaded)
-      this.finalizePhase(token, term)
+      await this.finalizePhase(token, term)
     } catch (err) {
       if (err instanceof StartCancelledError) return
       this.closeReplacingPtySession()
@@ -436,11 +444,15 @@ export class ManagedTerminalSession {
     this.guardStart(token, term)
   }
 
-  private finalizePhase(token: number, term: XTermTerminal): void {
+  private async finalizePhase(token: number, term: XTermTerminal): Promise<void> {
     this.guardStart(token, term)
     const changed = this.runtime.markAttached()
-    if (changed) this.notify()
+    await waitForTerminalLayout()
+    this.guardStart(token, term)
+    const renderPendingChanged = this.renderPending
+    this.renderPending = false
     this.flushPendingFocus()
+    if (changed || renderPendingChanged) this.notify()
   }
 
   private guardStart(token: number, term: XTermTerminal): void {
