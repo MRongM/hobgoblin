@@ -169,10 +169,10 @@ class TmuxSessionProtocolTest {
     }
 
     @Test
-    fun `discoverable session list command reads fixed Hobgoblin metadata`() {
+    fun `discoverable session list command separates fixed Hobgoblin metadata with real tabs`() {
         assertEquals(
             "command -v tmux >/dev/null 2>&1 || exit 127\n" +
-                "tmux list-sessions -F '#{session_name}\\t#{@hobgoblin_init_path}\\t" +
+                "tmux list-sessions -F '#{session_name}\t#{@hobgoblin_init_path}\t" +
                 "#{@hobgoblin_terminal_number}'",
             TmuxSessionProtocol.listDiscoverableSessionsScript(),
         )

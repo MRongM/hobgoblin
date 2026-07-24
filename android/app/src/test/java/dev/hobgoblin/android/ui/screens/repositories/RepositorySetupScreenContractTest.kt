@@ -6,6 +6,13 @@ import org.junit.Test
 
 class RepositorySetupScreenContractTest {
     @Test
+    fun `project terminal rows render shared terminal identity details`() {
+        val source = repositorySetupScreenSource()
+
+        assertTrue(source.contains("TerminalSessionIdentityDetails(session = session)"))
+    }
+
+    @Test
     fun `remote ssh terminal panel exposes guarded tmux scan action`() {
         val source = repositorySetupScreenSource()
 
