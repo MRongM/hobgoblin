@@ -17,6 +17,8 @@ const actionState = vi.hoisted(() => ({
   editor: vi.fn(),
   terminal: vi.fn(),
   externalTerminal: vi.fn(),
+  tmuxTerminal: vi.fn(),
+  restoreTmuxTerminals: vi.fn(),
   remote: vi.fn(),
 }))
 
@@ -50,7 +52,10 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
           worktreePath: '/workspace/goblin-feature-auth/api',
         })
       }),
-      branchAction('terminalTmux'),
+      branchAction('terminalTmux', actionState.tmuxTerminal, false, { label: 'terminal.new-with-tmux' }),
+      branchAction('restoreTmuxTerminals', actionState.restoreTmuxTerminals, false, {
+        label: 'terminal.restore-directory-tmux',
+      }),
       branchAction('externalTerminal', actionState.externalTerminal),
       branchAction('remote', actionState.remote),
     ],
@@ -162,6 +167,7 @@ describe('BranchWorkspaceMemberRow', () => {
     const menuItems = await openMenu()
     expect(menuItems.map((entry) => entry.getAttribute('data-action'))).toEqual([
       'terminalTmux',
+      'restoreTmuxTerminals',
       'externalTerminal',
       'remote',
       'pull',
@@ -176,7 +182,8 @@ describe('BranchWorkspaceMemberRow', () => {
       'resetHard',
       'cleanupTmuxSessions',
     ])
-    expect(menuItems[0]?.textContent?.trim()).toBe('terminal.restore-directory-tmux')
+    expect(menuItems[0]?.textContent?.trim()).toBe('terminal.new-with-tmux')
+    expect(menuItems[1]?.textContent?.trim()).toBe('terminal.restore-directory-tmux')
     expect(menuItems.find((entry) => entry.getAttribute('data-action') === 'pull')?.hasAttribute('data-disabled')).toBe(
       true,
     )
@@ -231,6 +238,7 @@ describe('BranchWorkspaceMemberRow', () => {
     const menuItems = await openMenu()
     expect(menuItems.map((entry) => entry.getAttribute('data-action'))).toEqual([
       'terminalTmux',
+      'restoreTmuxTerminals',
       'externalTerminal',
       'remote',
       'pull',
@@ -281,6 +289,7 @@ describe('BranchWorkspaceMemberRow', () => {
       'worktrees.open-in-editor-label',
       'terminal.external',
       'terminal.internal',
+      'terminal.new-with-tmux',
       'terminal.restore-directory-tmux',
       'terminal.close-all',
       'tmux.cleanup.action',
@@ -292,6 +301,20 @@ describe('BranchWorkspaceMemberRow', () => {
     })
     expect(actionState.editor).toHaveBeenCalledTimes(1)
     expect(onOpenRepositoryMember).not.toHaveBeenCalled()
+
+    const tmuxContextItems = await openContextMenu(itemRow)
+    await act(async () => {
+      tmuxContextItems[3]?.click()
+      await Promise.resolve()
+    })
+    expect(actionState.tmuxTerminal).toHaveBeenCalledTimes(1)
+
+    const reopenedContextItems = await openContextMenu(itemRow)
+    await act(async () => {
+      reopenedContextItems[4]?.click()
+      await Promise.resolve()
+    })
+    expect(actionState.restoreTmuxTerminals).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -339,6 +362,7 @@ function terminalReadContext(): TerminalSessionReadContextValue {
 function terminalCommandContext(): TerminalSessionContextValue {
   return {
     createTerminal: vi.fn(async () => ''),
+    restoreTmuxSessions: vi.fn(async () => 0),
     selectTerminal: vi.fn(),
     scrollToBottom: vi.fn(),
     focusTerminal: vi.fn(),

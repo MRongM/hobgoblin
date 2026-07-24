@@ -1,3 +1,6 @@
+import { execFileSync, spawnSync } from 'node:child_process'
+import { mkdtempSync, rmSync } from 'node:fs'
+import path from 'node:path'
 import { describe, expect, test } from 'vitest'
 import * as tmuxSession from '#/system/tmux-session.ts'
 import {
@@ -13,6 +16,7 @@ const REFERENCE_DESCRIPTOR = {
   workingDirectory: '/srv/projects/example/worktrees/feature',
   terminalNumber: 1,
 }
+const testWithTmux = process.platform !== 'win32' && spawnSync('tmux', ['-V']).status === 0 ? test : test.skip
 
 describe('buildTmuxSessionName', () => {
   test('matches the public v1 reference vector', () => {
@@ -99,8 +103,8 @@ describe('buildTmuxAttachShellCommand', () => {
       command:
         "exec tmux new-session -A -s 'hobgoblin-v1-aebf050981ac829e36100020' -c '/srv/projects/example/worktrees/feature'" +
         " \\; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' mouse on" +
-        " \\; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020' @hobgoblin_init_path '/srv/projects/example/worktrees/feature'" +
-        " \\; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020' @hobgoblin_terminal_number '1'",
+        " \\; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' @hobgoblin_init_path '/srv/projects/example/worktrees/feature'" +
+        " \\; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' @hobgoblin_terminal_number '1'",
     })
   })
 
@@ -112,6 +116,40 @@ describe('buildTmuxAttachShellCommand', () => {
 
     expect(invocation?.command).toContain("@hobgoblin_init_path '/srv/user'\\''s feature'")
     expect(buildTmuxAttachShellCommand({ ...REFERENCE_DESCRIPTOR, terminalNumber: 0 })).toBeNull()
+  })
+
+  testWithTmux('persists identity metadata in an isolated real tmux server', () => {
+    const testRoot = mkdtempSync(path.join('/tmp', 'hobgoblin-tmux-metadata-'))
+    const environment = { ...process.env, TERM: 'xterm-256color', TMUX_TMPDIR: testRoot }
+    const invocation = buildTmuxAttachShellCommand({
+      projectRoot: testRoot,
+      workingDirectory: testRoot,
+      terminalNumber: 1,
+    })
+    if (!invocation) throw new Error('expected a valid tmux invocation')
+
+    try {
+      const detachedCommand = invocation.command
+        .replace('exec tmux new-session -A ', 'exec tmux -f /dev/null new-session -Ad ')
+      execFileSync('/bin/sh', ['-lc', detachedCommand], { env: environment, stdio: 'pipe' })
+      const listed = execFileSync(
+        'tmux',
+        [
+          '-f',
+          '/dev/null',
+          '-u',
+          'list-sessions',
+          '-F',
+          '#{session_name}\t#{@hobgoblin_init_path}\t#{@hobgoblin_terminal_number}\t#{session_attached}',
+        ],
+        { encoding: 'utf8', env: environment },
+      ).trim()
+
+      expect(listed).toBe(`${invocation.sessionName}\t${testRoot}\t1\t0`)
+    } finally {
+      spawnSync('tmux', ['-f', '/dev/null', 'kill-server'], { env: environment, stdio: 'ignore' })
+      rmSync(testRoot, { force: true, recursive: true })
+    }
   })
 })
 

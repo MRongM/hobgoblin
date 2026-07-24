@@ -8,7 +8,6 @@ interface WorktreeListItemActionProjectionOptions {
   policy: WorktreeListItemActionPolicy
   hasWorktree: boolean
   forceDisabled?: boolean
-  tmuxTerminalLabel?: string
 }
 
 export interface WorktreeListItemActionProjection {
@@ -20,6 +19,7 @@ export interface WorktreeListItemActionProjection {
     externalTerminal: WorkspaceItemOpenAction
     internalTerminal: WorkspaceItemOpenAction
     tmuxTerminal: WorkspaceItemOpenAction
+    restoreTmuxTerminals: WorkspaceItemOpenAction
   }
 }
 
@@ -30,7 +30,7 @@ const memberDestructiveExclusions = new Set([...ordinaryDestructiveExclusions, '
 
 export function projectWorktreeListItemActions(
   groups: BranchActionItemGroups,
-  { policy, hasWorktree, forceDisabled = false, tmuxTerminalLabel }: WorktreeListItemActionProjectionOptions,
+  { policy, hasWorktree, forceDisabled = false }: WorktreeListItemActionProjectionOptions,
 ): WorktreeListItemActionProjection {
   const editorItem = hasWorktree ? groups.externalItems.find((item) => item.id === 'editor') : undefined
   const terminalItem = hasWorktree ? groups.externalItems.find((item) => item.id === 'terminal') : undefined
@@ -49,9 +49,7 @@ export function projectWorktreeListItemActions(
     editor: editorItem ? branchListItemAction(editorItem, forceDisabled) : undefined,
     internalTerminal: terminalItem ? branchListItemAction(terminalItem, forceDisabled) : undefined,
     menuGroups: [externalItems, mainItems, groups.patchItems, destructiveItems].map((items) =>
-      items.map((item) =>
-        branchListItemAction(item, forceDisabled, item.id === 'terminalTmux' ? tmuxTerminalLabel : undefined),
-      ),
+      items.map((item) => branchListItemAction(item, forceDisabled)),
     ),
     contextMenu: {
       editor: branchContextMenuAction(
@@ -70,6 +68,10 @@ export function projectWorktreeListItemActions(
         groups.externalItems.find((item) => item.id === 'terminalTmux'),
         forceDisabled,
       ),
+      restoreTmuxTerminals: branchContextMenuAction(
+        groups.externalItems.find((item) => item.id === 'restoreTmuxTerminals'),
+        forceDisabled,
+      ),
     },
   }
 }
@@ -77,13 +79,12 @@ export function projectWorktreeListItemActions(
 export function branchListItemAction(
   item: BranchActionItem,
   forceDisabled = false,
-  labelOverride?: string,
 ): WorkspaceListItemAction {
   return {
     id: item.id,
-    label: labelOverride ?? item.label,
-    title: labelOverride ?? item.title,
-    ariaLabel: labelOverride ?? item.ariaLabel,
+    label: item.label,
+    title: item.title,
+    ariaLabel: item.ariaLabel,
     icon: item.icon,
     disabled: forceDisabled || item.disabled,
     busy: item.busy,

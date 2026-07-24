@@ -157,6 +157,7 @@ describe('BranchWorkspaceList', () => {
     expect(branchWorkspaceRow?.querySelector('.lucide-folder-tree')).toBeNull()
     const menuItems = await openMenuItems(branchWorkspaceItem)
     expect(menuItems.map((entry) => entry.textContent?.trim())).toEqual([
+      'terminal.new-with-tmux',
       'terminal.restore-directory-tmux',
       'terminal.external',
       'workspace.branch-workspace.add-members',
@@ -810,6 +811,7 @@ describe('BranchWorkspaceList', () => {
 
     const menuItems = await openMenuItems(row)
     expect(menuItems.map((item) => item.textContent?.trim())).toEqual([
+      'terminal.new-with-tmux',
       'terminal.restore-directory-tmux',
       'terminal.external',
       'workspace.branch-workspace.delete',
@@ -825,6 +827,7 @@ describe('BranchWorkspaceList', () => {
     const onActivate = vi.fn()
     const selectTerminal = vi.fn<TerminalSessionContextValue['selectTerminal']>()
     const createTerminal = vi.fn<TerminalSessionContextValue['createTerminal']>(async () => 'new-terminal')
+    const restoreTmuxSessions = vi.fn<TerminalSessionContextValue['restoreTmuxSessions']>(async () => 2)
     const closeTerminal = vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>()
     terminalState.count = 1
     act(() =>
@@ -842,7 +845,7 @@ describe('BranchWorkspaceList', () => {
             onCancel={() => {}}
           />,
           new Map([[terminalKey, worktreeSnapshot(terminalKey, [session])]]),
-          { selectTerminal, createTerminal, closeTerminal },
+          { selectTerminal, createTerminal, restoreTmuxSessions, closeTerminal },
         ),
       ),
     )
@@ -853,6 +856,7 @@ describe('BranchWorkspaceList', () => {
       'worktrees.open-in-editor-label',
       'terminal.external',
       'terminal.internal',
+      'terminal.new-with-tmux',
       'terminal.restore-directory-tmux',
       'terminal.close-all',
       'workspace.branch-workspace.delete',
@@ -868,6 +872,17 @@ describe('BranchWorkspaceList', () => {
     expect(onActivate).toHaveBeenCalledWith(item.id)
     expect(selectTerminal).toHaveBeenCalledWith(terminalKey, session.key)
     expect(createTerminal).not.toHaveBeenCalled()
+
+    await clickContextMenuItem(row, 'terminal.new-with-tmux')
+    expect(createTerminal).toHaveBeenCalledWith(
+      expect.objectContaining({ worktreePath: item.path }),
+      'tmux-if-available',
+    )
+
+    await clickContextMenuItem(row, 'terminal.restore-directory-tmux')
+    expect(restoreTmuxSessions).toHaveBeenCalledWith(
+      expect.objectContaining({ worktreePath: item.path }),
+    )
 
     await requestCloseAllFromContextMenu(row)
     expect(closeTerminal).not.toHaveBeenCalled()
@@ -927,6 +942,7 @@ function withTerminalContexts(
   overrides: {
     selectTerminal?: TerminalSessionContextValue['selectTerminal']
     createTerminal?: TerminalSessionContextValue['createTerminal']
+    restoreTmuxSessions?: TerminalSessionContextValue['restoreTmuxSessions']
     closeTerminal?: TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']
   } = {},
 ): ReactNode {
@@ -956,10 +972,12 @@ function terminalReadContext(
 function terminalCommandContext(overrides: {
   selectTerminal?: TerminalSessionContextValue['selectTerminal']
   createTerminal?: TerminalSessionContextValue['createTerminal']
+  restoreTmuxSessions?: TerminalSessionContextValue['restoreTmuxSessions']
   closeTerminal?: TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']
 }): TerminalSessionContextValue {
   return {
     createTerminal: overrides.createTerminal ?? vi.fn(async () => ''),
+    restoreTmuxSessions: overrides.restoreTmuxSessions ?? vi.fn(async () => 0),
     selectTerminal: overrides.selectTerminal ?? vi.fn(),
     scrollToBottom: vi.fn(),
     focusTerminal: vi.fn(),

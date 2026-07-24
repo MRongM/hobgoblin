@@ -247,6 +247,7 @@ function terminalCommandContext(
 ): TerminalSessionContextValue {
   return {
     createTerminal,
+    restoreTmuxSessions: vi.fn(async () => 0),
     selectTerminal: vi.fn(),
     scrollToBottom: vi.fn(),
     focusTerminal: vi.fn(),

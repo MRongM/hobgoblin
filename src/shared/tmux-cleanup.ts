@@ -2,6 +2,7 @@ export interface TmuxSessionRecord {
   sessionName: string
   initialPath: string
   terminalNumber: number
+  attachedClients: number
 }
 
 export interface AssociatedTmuxTargetInput {

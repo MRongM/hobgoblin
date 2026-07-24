@@ -53,7 +53,10 @@ import {
   useWorktreeTerminalHasBell,
   useWorktreeTerminalHasOutputActivity,
 } from '#/web/components/terminal/terminal-session-store.ts'
-import { openBranchWorkspaceInternalTerminal } from '#/web/components/repo-workspace/BranchWorkspaceTerminalPanel.tsx'
+import {
+  branchWorkspaceTerminalBase,
+  openBranchWorkspaceInternalTerminal,
+} from '#/web/components/repo-workspace/BranchWorkspaceTerminalPanel.tsx'
 import type { BranchWorkspaceFolderContext } from '#/web/components/repo-workspace/BranchWorkspaceFileTree.tsx'
 import { useFolderExternalOpenActions } from '#/web/hooks/useFolderExternalOpenActions.ts'
 import { lastPathSegment } from '#/web/lib/paths.ts'
@@ -275,6 +278,11 @@ function BranchWorkspaceRow({
     )
   }
   const openActionsDisabled = disabled || !interactiveReady || !folderAvailable
+  const restoreTmuxTerminals = async () => {
+    if (openActionsDisabled || !terminalContext) return
+    activate()
+    await terminalContext.restoreTmuxSessions(branchWorkspaceTerminalBase(context))
+  }
   const memberListId = `branch-workspace-members-${item.id}`
   const editorAction: WorkspaceListItemAction | undefined = interactiveReady
     ? {
@@ -298,10 +306,16 @@ function BranchWorkspaceRow({
   const readyOpenMenuActions: BranchWorkspaceItemAction[] = interactiveReady
     ? [
         {
-          label: 'terminal.restore-directory-tmux',
+          label: 'terminal.new-with-tmux',
           icon: <Terminal aria-hidden="true" />,
           disabled: openActionsDisabled,
           onSelect: () => openInternal('tmux-if-available'),
+        },
+        {
+          label: 'terminal.restore-directory-tmux',
+          icon: <Terminal aria-hidden="true" />,
+          disabled: openActionsDisabled,
+          onSelect: restoreTmuxTerminals,
         },
         {
           label: 'terminal.external',
@@ -510,7 +524,11 @@ function BranchWorkspaceRow({
         icon: <Terminal aria-hidden="true" />,
         onSelect: () => openInternal('tmux-if-available'),
       }}
-      tmuxTerminalLabel={t('terminal.restore-directory-tmux')}
+      restoreTmuxTerminals={{
+        disabled: openActionsDisabled,
+        icon: <Terminal aria-hidden="true" />,
+        onSelect: restoreTmuxTerminals,
+      }}
       worktreeTerminalKeys={terminalKeys}
       additionalActions={[...lowFrequencyActions, ...(tmuxCleanup.visible ? [tmuxCleanup.contextAction] : [])]}
     >

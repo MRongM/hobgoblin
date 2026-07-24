@@ -145,6 +145,7 @@ function terminalReadContext(
 function terminalCommandContext(closeTerminal: CloseTerminalMock): TerminalSessionContextValue {
   return {
     createTerminal: vi.fn(async () => ''),
+    restoreTmuxSessions: vi.fn(async () => 0),
     selectTerminal: vi.fn(),
     scrollToBottom: vi.fn(),
     focusTerminal: vi.fn(),

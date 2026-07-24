@@ -141,6 +141,17 @@ export type TerminalCatalogMutationResult =
     })
   | { ok: false; message: string }
 
+export type TerminalOpenTmuxSessionsResult =
+  | (TerminalFirstFrame & {
+      ok: true
+      restored: number
+      action: TerminalCatalogAction
+      key: string
+      sessions: TerminalSessionSummary[]
+    })
+  | { ok: true; restored: 0; sessions: TerminalSessionSummary[] }
+  | { ok: false; message: string }
+
 export interface TerminalWriteInput {
   sessionId: string
   data: string
@@ -277,7 +288,7 @@ export interface TerminalSocketResponseOutputs {
   close: TerminalCloseResult
   'list-sessions': TerminalSessionSummary[]
   create: TerminalCatalogMutationResult
-  'open-tmux-sessions': TerminalCatalogMutationResult
+  'open-tmux-sessions': TerminalOpenTmuxSessionsResult
   prune: { pruned: number; remaining: number }
   'session-snapshot': TerminalSessionSnapshot | null
   reorder: TerminalMutationResult

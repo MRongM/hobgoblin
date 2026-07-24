@@ -22,6 +22,7 @@ import {
   type TerminalControllerStatus,
   type TerminalCreateInput,
   type TerminalOpenTmuxSessionsInput,
+  type TerminalOpenTmuxSessionsResult,
   type TerminalSessionSummary,
   type TerminalWindowsPty,
   normalizeTerminalLaunchMode,
@@ -163,7 +164,7 @@ class TerminalCatalog {
   async openTmuxSessions(
     clientId: string,
     input: TerminalOpenTmuxSessionsInput,
-  ): Promise<TerminalCatalogMutationResult> {
+  ): Promise<TerminalOpenTmuxSessionsResult> {
     if (!this.options.isValidClientId(clientId)) return { ok: false, message: 'error.invalid-arguments' }
     if (!isValidRepoLocator(input.repoRoot) || !isValidBranch(input.branch) || !isValidCwd(input.worktreePath)) {
       return { ok: false, message: 'error.invalid-arguments' }
@@ -180,28 +181,15 @@ class TerminalCatalog {
       projectRoot: canonicalInput.repoRoot,
       itemPath: canonicalInput.worktreePath,
     })
-    if (!preview.ok) {
-      if (preview.message === 'error.tmux-unavailable' || preview.message === 'error.tmux-unsupported') {
-        return await this.create(clientId, {
-          ...canonicalInput,
-          kind: 'additional',
-          launchMode: 'tmux-if-available',
-        })
-      }
-      return preview
-    }
-    if (preview.sessions.length === 0) {
-      return await this.create(clientId, {
-        ...canonicalInput,
-        kind: 'additional',
-        launchMode: 'tmux-if-available',
-      })
-    }
+    if (!preview.ok) return preview
 
     const scope = terminalSessionScope(canonicalInput.repoRoot)
     const existingSessions = await this.options.manager.listSessions(scope)
     const usedKeys = new Set(existingSessions.map((session) => session.key))
-    const sessions = [...preview.sessions].sort(compareRecoveredTmuxSessions)
+    const sessions = preview.sessions
+      .filter((session) => session.attachedClients === 0)
+      .sort(compareRecoveredTmuxSessions)
+    if (sessions.length === 0) return { ok: true, restored: 0, sessions: existingSessions }
     let selectedResult: Extract<EnsureTerminalCatalogResult, { ok: true }> | null = null
     for (const tmuxSession of sessions) {
       const existing = existingSessions.find((session) => session.tmuxSessionName === tmuxSession.sessionName)
@@ -226,7 +214,10 @@ class TerminalCatalog {
       selectedResult ??= result
     }
     if (!selectedResult) return { ok: false, message: 'error.terminal-create-failed' }
-    return toCatalogMutationResult(selectedResult, await this.options.manager.listSessions(scope))
+    return {
+      ...toCatalogMutationResult(selectedResult, await this.options.manager.listSessions(scope)),
+      restored: sessions.length,
+    }
   }
 
   async prune(clientId: string, repoRoot: string): Promise<{ pruned: number; remaining: number }> {

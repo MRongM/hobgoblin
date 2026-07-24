@@ -62,7 +62,7 @@
 Assert that the public reference descriptor produces one exact command containing:
 
 ```text
-exec tmux new-session -A -s 'hobgoblin-v1-aebf050981ac829e36100020' -c '/srv/projects/example/worktrees/feature' \\; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' mouse on \\; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020' @hobgoblin_init_path '/srv/projects/example/worktrees/feature' \\; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020' @hobgoblin_terminal_number '1'
+exec tmux new-session -A -s 'hobgoblin-v1-aebf050981ac829e36100020' -c '/srv/projects/example/worktrees/feature' \\; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' mouse on \\; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' @hobgoblin_init_path '/srv/projects/example/worktrees/feature' \\; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' @hobgoblin_terminal_number '1'
 ```
 
 Also assert local and remote builders contain both options and preserve quotes in paths through the existing shell-quoting rules.
@@ -91,14 +91,14 @@ export function buildTmuxAttachShellCommand(
   const descriptor = normalizeTmuxSessionDescriptor(input)
   const sessionName = descriptor ? buildTmuxSessionName(descriptor) : null
   if (!descriptor || !sessionName) return null
-  const sessionTarget = `=${sessionName}`
+  const paneTarget = `=${sessionName}:`
   return {
     sessionName,
     command: [
       `exec tmux new-session -A -s ${shellQuote(sessionName)} -c ${shellQuote(descriptor.workingDirectory)}`,
-      `set-option -t ${shellQuote(`${sessionTarget}:`)} mouse on`,
-      `set-option -t ${shellQuote(sessionTarget)} ${HOBGOBLIN_TMUX_INIT_PATH_OPTION} ${shellQuote(descriptor.workingDirectory)}`,
-      `set-option -t ${shellQuote(sessionTarget)} ${HOBGOBLIN_TMUX_TERMINAL_NUMBER_OPTION} ${shellQuote(String(descriptor.terminalNumber))}`,
+      `set-option -t ${shellQuote(paneTarget)} mouse on`,
+      `set-option -t ${shellQuote(paneTarget)} ${HOBGOBLIN_TMUX_INIT_PATH_OPTION} ${shellQuote(descriptor.workingDirectory)}`,
+      `set-option -t ${shellQuote(paneTarget)} ${HOBGOBLIN_TMUX_TERMINAL_NUMBER_OPTION} ${shellQuote(String(descriptor.terminalNumber))}`,
     ].join(' \\; '),
   }
 }

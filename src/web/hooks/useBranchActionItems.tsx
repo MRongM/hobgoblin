@@ -117,7 +117,7 @@ export function useBranchActionItems(
   })
   const createWorktreeDialog = useRetainedDialogState<string>()
   const createTagDialog = useRetainedDialogState<string>()
-  const { createTerminal } = useTerminalSessionContext()
+  const { createTerminal, restoreTmuxSessions } = useTerminalSessionContext()
   const disabled = blocked
   const busy = (id: BranchActionItemId) => busyAction === id
   const phase = branchActionDisplayPhase(repo, branch.name)
@@ -169,6 +169,14 @@ export function useBranchActionItems(
     else navigation.showRepoBranchDetailTab(repo.id, branch.name, 'terminal')
     setDetailCollapsed(false)
     await createTerminal(terminalBase, launchMode)
+  }
+
+  async function handleRestoreTmuxTerminals(): Promise<void> {
+    if (!terminalBase) return
+    if (options.onNavigateToInternalTerminal) await options.onNavigateToInternalTerminal(terminalBase)
+    else navigation.showRepoBranchDetailTab(repo.id, branch.name, 'terminal')
+    setDetailCollapsed(false)
+    await restoreTmuxSessions(terminalBase)
   }
 
   async function handleSync(): Promise<void> {
@@ -287,6 +295,17 @@ export function useBranchActionItems(
       menuOnly: true,
       icon: createElement(Terminal),
       onSelect: () => handleNewTerminal('tmux-if-available'),
+    },
+    {
+      id: 'restoreTmuxTerminals',
+      label: t('terminal.restore-directory-tmux'),
+      title: t('terminal.restore-directory-tmux'),
+      ariaLabel: t('terminal.restore-directory-tmux'),
+      disabled: disabled || !terminalBase,
+      visible: true,
+      menuOnly: true,
+      icon: createElement(Terminal),
+      onSelect: handleRestoreTmuxTerminals,
     },
     {
       id: 'externalTerminal',

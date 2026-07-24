@@ -330,14 +330,11 @@ export class TerminalSessionRegistry {
       cols: geometry.cols,
       rows: geometry.rows,
     }
-    const result =
-      launchMode === 'tmux-if-available'
-        ? await terminalBridge.openTmuxSessions(requestInput)
-        : await terminalBridge.create({
-            ...requestInput,
-            kind: this.sessionSummaries(terminalWorktreeKey).length === 0 ? 'primary' : 'additional',
-            launchMode,
-          })
+    const result = await terminalBridge.create({
+      ...requestInput,
+      kind: this.sessionSummaries(terminalWorktreeKey).length === 0 ? 'primary' : 'additional',
+      launchMode,
+    })
     if (!result.ok) {
       throw new Error(result.message)
     }
@@ -354,6 +351,40 @@ export class TerminalSessionRegistry {
       ]),
     )
     return result.key
+  }
+
+  restoreTmuxSessions = async (base: TerminalSessionBase): Promise<number> => {
+    const attachmentId = readOrCreateWebTerminalAttachmentId()
+    const terminalWorktreeKey = worktreeTerminalKey(base.repoRoot, base.worktreePath)
+    const geometry = this.measureCreateGeometry(terminalWorktreeKey)
+    const result = await terminalBridge.openTmuxSessions({
+      repoRoot: base.repoRoot,
+      branch: base.branch,
+      worktreePath: base.worktreePath,
+      ...(base.targetKind ? { targetKind: base.targetKind } : {}),
+      ...(base.branchWorkspaceId ? { branchWorkspaceId: base.branchWorkspaceId } : {}),
+      attachmentId,
+      cols: geometry.cols,
+      rows: geometry.rows,
+    })
+    if (!result.ok) throw new Error(result.message)
+    if (result.restored === 0) {
+      this.reconcileServerSessions(base.repoRoot, result.sessions, attachmentId, new Map())
+      return 0
+    }
+    if (!('sessionId' in result) || !isValidCreateFirstFrame(result)) {
+      throw new Error('error.terminal-create-failed')
+    }
+    this.setPreferredSelectedTerminalKey(terminalWorktreeKey, result.key)
+    this.reconcileServerSessions(
+      base.repoRoot,
+      result.sessions,
+      attachmentId,
+      new Map<string, TerminalSessionSnapshot>([
+        [result.sessionId, { sessionId: result.sessionId, snapshot: result.snapshot, snapshotSeq: result.snapshotSeq }],
+      ]),
+    )
+    return result.restored
   }
 
   private measureCreateGeometry(worktreeTerminalKey: string): { cols: number; rows: number } {

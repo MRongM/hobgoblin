@@ -1,33 +1,39 @@
-# Directory tmux Restore Menu Copy Design
+# Detached Directory tmux Restore Menu Design
 
 ## Goal
 
-Make the existing directory-scoped tmux recovery action discoverable from worktree, member-worktree, and branch-workspace item menus and context menus by labeling it as “Restore tmux sessions in folder”.
+Keep the existing `tmux terminal` action unchanged and add a separate `Restore tmux terminals` action to worktree, member-worktree, and branch-workspace item menus and context menus. The new action scans the selected directory and batch-opens only existing detached associated Hobgoblin tmux sessions.
 
 ## Decision
 
-The existing `tmux terminal` action already calls the server-owned `open-tmux-sessions` operation. That operation restores every verified Hobgoblin tmux session whose initial path exactly matches the selected item directory, and creates one tmux-backed terminal only when no associated session exists.
+The two actions have distinct intents:
 
-Use a new localized label for this existing action on directory item surfaces. Keep the generic `tmux terminal` copy in the terminal topbar, where the action is presented as a terminal creation choice rather than a directory operation.
+- `tmux terminal` creates one internal terminal with `launchMode: 'tmux-if-available'`. It uses the ordinary terminal creation request and preserves the existing shell fallback when tmux is unavailable.
+- `Restore tmux terminals` runs the explicit `open-tmux-sessions` batch request. It never creates a tmux session and returns a successful zero-count result when no eligible session exists.
+
+The tmux session list includes `session_attached`. A recovery candidate must satisfy all existing v1 identity checks, have an initial path exactly equal to the selected item directory after lexical normalization, and report an attached-client count of exactly zero. Attached associated sessions, arbitrary tmux sessions, legacy sessions, descendant paths, and malformed rows are ignored.
+
+Recovery also depends on attach-or-create persisting the two v1 identity options. Every generated `set-option` command therefore uses the exact target-pane syntax `=<session>:`. Omitting the trailing colon fails on tmux 3.6a after session creation and makes the otherwise live session undiscoverable.
 
 Rejected alternatives:
 
-- Change `terminal.new-with-tmux` globally: this would alter terminal-topbar copy outside the requested surfaces.
-- Add a second menu action with the same callback: duplicate entries would claim different behavior while invoking the same batch operation.
-- Add a renderer or server recovery path: recovery already has one authoritative server-owned path.
+- Keep routing `tmux terminal` through batch recovery: this changes creation semantics and cannot represent an empty successful scan.
+- Filter attached sessions only in the renderer: tmux discovery and directory association are server-owned security boundaries.
+- Treat attached count as advisory after opening: the eligibility decision must be based on the explicit scan; the server still attaches by exact validated session name.
 
 ## UI projection
 
-- `projectWorktreeListItemActions` accepts an optional localized label override for its tmux menu-only action. Ordinary worktree and member-worktree callers provide the directory-restore label.
-- `WorkspaceItemContextMenu` accepts an optional localized tmux label. Targeted directory item callers provide the override; unrelated project/repository callers retain the current default.
-- The branch-workspace root item uses the new translation key in its More menu and the localized override in its context menu.
+- The terminal registry exposes separate `createTerminal` and `restoreTmuxSessions` commands. Restore reconciles the full server catalog and reports the number of tmux sessions opened.
+- The ordinary branch action model contains both menu-only actions, allowing ordinary and member worktree projections to share labels, disabled state, navigation, and callbacks.
+- `WorkspaceItemContextMenu` renders both actions in stable order: internal terminal, tmux terminal, restore tmux terminals, then close actions.
+- The branch-workspace root item directly supplies both actions and reuses the same terminal registry commands.
 
-The action icon, enabled/busy state, callback, item selection behavior, terminal reconciliation, and error handling remain unchanged.
+When recovery finds zero candidates, the UI remains stable and no terminal is created. Existing terminal selection and native/tmux creation behavior remain unchanged.
 
 ## Localization and testing
 
-Add the key in English, Simplified Chinese, Japanese, and Korean. Component tests assert the new label on both More and context menus and continue to verify that selection reaches the existing `tmux-if-available` launch path. Translation dictionary parity remains enforced by the existing dictionary test.
+Add the restore key in English, Simplified Chinese, Japanese, and Korean while leaving `terminal.new-with-tmux` unchanged. Tests cover four-field tmux parsing, attached-session exclusion, detached-only server batch opening, empty-scan no-op, ordinary tmux creation, renderer reconciliation, and both menu entries on all requested directory item surfaces. A real isolated tmux-server test verifies that generated attach-or-create commands actually persist the identity options instead of checking only command text.
 
 ## Scope check
 
-No protocol, persistence, state ownership, domain terminology, or architecture boundary changes are required. No ADR or `CONTEXT.md` update is warranted.
+This changes the realtime result shape and tmux discovery metadata but adds no persistence, settings, dependencies, background scan, or new transport channel. The server remains authoritative, so no ADR is warranted; `CONTEXT.md` records the new detached recovery terminology.

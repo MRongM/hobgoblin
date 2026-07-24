@@ -46,6 +46,7 @@ let closeTerminalAndDismissDetailIfLast: ReturnType<
   typeof vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>
 >
 let createTerminal: ReturnType<typeof vi.fn<TerminalSessionContextValue['createTerminal']>>
+let restoreTmuxSessions: ReturnType<typeof vi.fn<TerminalSessionContextValue['restoreTmuxSessions']>>
 let openExternalTerminal: ReturnType<typeof vi.fn>
 
 class MockResizeObserver implements ResizeObserver {
@@ -142,6 +143,7 @@ describe('useBranchActionItems', () => {
     })
     terminalSnapshotsByWorktree = new Map()
     createTerminal = vi.fn<TerminalSessionContextValue['createTerminal']>(async () => 't1')
+    restoreTmuxSessions = vi.fn<TerminalSessionContextValue['restoreTmuxSessions']>(async () => 0)
     closeTerminalAndDismissDetailIfLast = vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>()
   })
 
@@ -250,8 +252,10 @@ describe('useBranchActionItems', () => {
     const groups = await renderItemGroups(useItems, repo, targetBranch)
     const terminal = groups.externalItems.find((item) => item.id === 'terminal')
     const tmuxTerminal = groups.externalItems.find((item) => item.id === 'terminalTmux')
+    const restoreTmuxTerminals = groups.externalItems.find((item) => item.id === 'restoreTmuxTerminals')
     if (!terminal) throw new Error('missing terminal action')
     if (!tmuxTerminal) throw new Error('missing tmux terminal action')
+    if (!restoreTmuxTerminals) throw new Error('missing restore tmux terminals action')
 
     expect(terminal.disabled).toBe(false)
     expect(terminal.label).toBe('terminal.internal')
@@ -290,6 +294,17 @@ describe('useBranchActionItems', () => {
       },
       'tmux-if-available',
     )
+
+    createTerminal.mockClear()
+    await act(async () => {
+      await restoreTmuxTerminals.onSelect()
+    })
+    expect(restoreTmuxSessions).toHaveBeenCalledWith({
+      repoRoot: '/tmp/repo',
+      branch: 'feature/internal',
+      worktreePath: '/tmp/repo-feature',
+    })
+    expect(createTerminal).not.toHaveBeenCalled()
     expect(useReposStore.getState().repos['/tmp/repo']?.ui.selectedBranch).toBe('feature/internal')
     expect(openExternalTerminal).not.toHaveBeenCalled()
   })
@@ -422,6 +437,7 @@ describe('useBranchActionItems', () => {
       'editor',
       'terminal',
       'terminalTmux',
+      'restoreTmuxTerminals',
       'externalTerminal',
       'remote',
     ])
@@ -509,6 +525,7 @@ describe('useBranchActionItems', () => {
       'editor',
       'terminal',
       'terminalTmux',
+      'restoreTmuxTerminals',
       'externalTerminal',
       'remote',
     ])
@@ -530,6 +547,8 @@ describe('useBranchActionItems', () => {
     expect(disabledById.get('merge')).toBe(true)
     expect(disabledById.get('commit')).toBe(true)
     expect(disabledById.get('terminal')).toBe(true)
+    expect(disabledById.get('terminalTmux')).toBe(true)
+    expect(disabledById.get('restoreTmuxTerminals')).toBe(true)
     expect(disabledById.get('externalTerminal')).toBe(true)
     expect(disabledById.get('editor')).toBe(true)
     expect(disabledById.get('remote')).toBe(true)
@@ -1151,6 +1170,7 @@ function terminalReadContextValue(): TerminalSessionReadContextValue {
 function terminalContextValue(): TerminalSessionContextValue {
   return {
     createTerminal,
+    restoreTmuxSessions,
     selectTerminal: vi.fn(),
     scrollToBottom: vi.fn(),
     focusTerminal: vi.fn(),

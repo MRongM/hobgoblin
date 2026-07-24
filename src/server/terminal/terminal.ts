@@ -20,6 +20,7 @@ import {
   type TerminalCloseSessionsResult,
   type TerminalCreateInput,
   type TerminalOpenTmuxSessionsInput,
+  type TerminalOpenTmuxSessionsResult,
 } from '#/shared/terminal.ts'
 import {
   TERMINAL_SIZE_LIMITS,
@@ -248,7 +249,7 @@ export async function createServerTerminal(
 export async function openServerTmuxSessions(
   clientId: string,
   input: TerminalOpenTmuxSessionsInput,
-): Promise<TerminalCatalogMutationResult> {
+): Promise<TerminalOpenTmuxSessionsResult> {
   return await catalog.openTmuxSessions(clientId, input)
 }
 

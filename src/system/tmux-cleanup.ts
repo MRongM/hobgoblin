@@ -15,7 +15,7 @@ const MISSING_TMUX_SESSION_RE =
   /(?:no server running|failed to connect to server|no sessions|can't find session|session not found)/iu
 let localTmuxExecutable = TMUX_COMMAND
 
-export const TMUX_SESSION_LIST_FORMAT = `#{${TMUX_INIT_PATH_OPTION}}\t#{${TMUX_TERMINAL_NUMBER_OPTION}}\t#{session_name}`
+export const TMUX_SESSION_LIST_FORMAT = `#{${TMUX_INIT_PATH_OPTION}}\t#{${TMUX_TERMINAL_NUMBER_OPTION}}\t#{session_attached}\t#{session_name}`
 
 export type TmuxProcessResult =
   | { ok: true; stdout: string; stderr: string }
@@ -42,12 +42,13 @@ export function parseTmuxSessionList(output: string): TmuxSessionRecord[] | null
     const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
     if (!line) continue
     const fields = line.split('\t')
-    if (fields.length !== 3) return null
-    const [rawInitialPath, rawTerminalNumber, sessionName] = fields
+    if (fields.length !== 4) return null
+    const [rawInitialPath, rawTerminalNumber, rawAttachedClients, sessionName] = fields
     const initialPath = normalizeTmuxSessionPath(rawInitialPath ?? '')
     const terminalNumber = parseRecordedTerminalNumber(rawTerminalNumber)
-    if (!sessionName || !initialPath || terminalNumber === null) continue
-    sessions.push({ sessionName, initialPath, terminalNumber })
+    const attachedClients = parseAttachedClientCount(rawAttachedClients)
+    if (!sessionName || !initialPath || terminalNumber === null || attachedClients === null) continue
+    sessions.push({ sessionName, initialPath, terminalNumber, attachedClients })
   }
   return sessions
 }
@@ -56,6 +57,12 @@ function parseRecordedTerminalNumber(value: string | undefined): number | null {
   if (!value || !/^\d+$/u.test(value)) return null
   const terminalNumber = Number.parseInt(value, 10)
   return Number.isSafeInteger(terminalNumber) && terminalNumber > 0 ? terminalNumber : null
+}
+
+function parseAttachedClientCount(value: string | undefined): number | null {
+  if (!value || !/^\d+$/u.test(value)) return null
+  const attachedClients = Number.parseInt(value, 10)
+  return Number.isSafeInteger(attachedClients) && attachedClients >= 0 ? attachedClients : null
 }
 
 export async function listLocalTmuxSessions(options: LocalTmuxCommandOptions = {}): Promise<TmuxListResult> {

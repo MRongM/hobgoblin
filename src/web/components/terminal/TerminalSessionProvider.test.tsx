@@ -31,6 +31,7 @@ import type {
   TerminalCatalogMutationResult,
   TerminalCloseResult,
   TerminalCreateInput,
+  TerminalOpenTmuxSessionsResult,
   TerminalOpenTmuxSessionsInput,
   TerminalExitEvent,
   TerminalAttachResult,
@@ -291,7 +292,7 @@ const getSessionSnapshotMock = vi.fn<
 const closeMock = vi.fn(async (): Promise<TerminalCloseResult> => ({ ok: true }))
 const createTerminalMock = vi.fn<(input: TerminalCreateInput) => Promise<TerminalCatalogMutationResult>>()
 const openTmuxSessionsMock = vi.fn<
-  (input: TerminalOpenTmuxSessionsInput) => Promise<TerminalCatalogMutationResult>
+  (input: TerminalOpenTmuxSessionsInput) => Promise<TerminalOpenTmuxSessionsResult>
 >()
 let managedServerSessions: TerminalSessionSummary[] = []
 
@@ -412,9 +413,7 @@ beforeEach(() => {
       sessions: managedServerSessions,
     }
   })
-  openTmuxSessionsMock.mockImplementation(async (input) =>
-    await createTerminalMock({ ...input, kind: 'additional', launchMode: 'tmux-if-available' }),
-  )
+  openTmuxSessionsMock.mockImplementation(async () => ({ ok: true, restored: 0, sessions: managedServerSessions }))
   resetReposStore()
   window.sessionStorage.setItem('goblin:web-terminal-attachment-id', 'attachment_local')
   mainWindowQueryClient.clear()
@@ -634,6 +633,11 @@ describe('TerminalSessionProvider', () => {
         cols: 80,
         rows: 24,
         launchMode: 'tmux-if-available',
+      })
+      expect(openTmuxSessionsMock).not.toHaveBeenCalled()
+
+      await act(async () => {
+        await getContext().restoreTmuxSessions(base)
       })
       expect(openTmuxSessionsMock).toHaveBeenCalledWith({
         ...base,

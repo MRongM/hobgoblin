@@ -3,7 +3,6 @@ import { spawn } from 'node-pty'
 import { getWorktrees } from '#/system/git/worktrees.ts'
 import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
 import { buildTmuxSessionName } from '#/system/tmux-session.ts'
-import * as terminalServer from '#/server/terminal/terminal.ts'
 import {
   closeAllServerTerminalSessions,
   closeServerTerminalSessions,
@@ -13,6 +12,7 @@ import {
   getServerTerminalSessionSnapshot,
   handleRealtimeServerMessage,
   listServerTerminalSessions,
+  openServerTmuxSessions,
   pruneServerTerminals,
   reorderServerTerminals,
   attachServerTerminal,
@@ -159,7 +159,7 @@ async function createTerminalSession(
 }
 
 describe('server terminal sessions', () => {
-  test('opens every associated tmux session in original terminal-number order with one discovery', async () => {
+  test('opens only detached associated tmux sessions in original terminal-number order with one discovery', async () => {
     const terminalOne = buildTmuxSessionName({
       projectRoot: '/repo',
       workingDirectory: '/repo-linked',
@@ -170,32 +170,21 @@ describe('server terminal sessions', () => {
       workingDirectory: '/repo-linked',
       terminalNumber: 2,
     })!
+    const terminalThree = buildTmuxSessionName({
+      projectRoot: '/repo',
+      workingDirectory: '/repo-linked',
+      terminalNumber: 3,
+    })!
     tmuxCleanupMocks.previewAssociatedTmuxSessions.mockResolvedValueOnce({
       ok: true,
       targetPath: '/repo-linked',
       sessions: [
-        { sessionName: terminalTwo, initialPath: '/repo-linked', terminalNumber: 2 },
-        { sessionName: terminalOne, initialPath: '/repo-linked', terminalNumber: 1 },
+        { sessionName: terminalTwo, initialPath: '/repo-linked', terminalNumber: 2, attachedClients: 0 },
+        { sessionName: terminalThree, initialPath: '/repo-linked', terminalNumber: 3, attachedClients: 1 },
+        { sessionName: terminalOne, initialPath: '/repo-linked', terminalNumber: 1, attachedClients: 0 },
       ],
     })
-    const openTmuxSessions = (
-      terminalServer as typeof terminalServer & {
-        openServerTmuxSessions?: (
-          clientId: string,
-          input: {
-            repoRoot: string
-            branch: string
-            worktreePath: string
-            attachmentId?: string
-            cols?: number
-            rows?: number
-          },
-        ) => Promise<Awaited<ReturnType<typeof createServerTerminal>>>
-      }
-    ).openServerTmuxSessions
-    expect(openTmuxSessions).toBeTypeOf('function')
-
-    const result = await openTmuxSessions!('client_1', {
+    const result = await openServerTmuxSessions('client_1', {
       repoRoot: '/repo',
       branch: 'feature',
       worktreePath: '/repo-linked',
@@ -204,8 +193,8 @@ describe('server terminal sessions', () => {
       rows: 30,
     })
 
-    expect(result).toMatchObject({ ok: true, key: '/repo\0/repo-linked\0terminal-1' })
-    if (!result.ok) return
+    expect(result).toMatchObject({ ok: true, restored: 2, key: '/repo\0/repo-linked\0terminal-1' })
+    if (!result.ok || !('key' in result)) throw new Error('expected detached tmux sessions to be restored')
     expect(result.sessions).toEqual([
       expect.objectContaining({
         key: '/repo\0/repo-linked\0terminal-1',
@@ -242,26 +231,16 @@ describe('server terminal sessions', () => {
     tmuxCleanupMocks.previewAssociatedTmuxSessions.mockResolvedValueOnce({
       ok: true,
       targetPath: '/repo-linked',
-      sessions: [{ sessionName: terminalOne, initialPath: '/repo-linked', terminalNumber: 1 }],
+      sessions: [{ sessionName: terminalOne, initialPath: '/repo-linked', terminalNumber: 1, attachedClients: 0 }],
     })
-    const openTmuxSessions = (
-      terminalServer as typeof terminalServer & {
-        openServerTmuxSessions?: (
-          clientId: string,
-          input: { repoRoot: string; branch: string; worktreePath: string },
-        ) => Promise<Awaited<ReturnType<typeof createServerTerminal>>>
-      }
-    ).openServerTmuxSessions
-    expect(openTmuxSessions).toBeTypeOf('function')
-
-    const result = await openTmuxSessions!('client_1', {
+    const result = await openServerTmuxSessions('client_1', {
       repoRoot: '/repo',
       branch: 'feature',
       worktreePath: '/repo-linked',
     })
 
-    expect(result).toMatchObject({ ok: true, key: '/repo\0/repo-linked\0terminal-2' })
-    if (!result.ok) return
+    expect(result).toMatchObject({ ok: true, restored: 1, key: '/repo\0/repo-linked\0terminal-2' })
+    if (!result.ok || !('key' in result)) throw new Error('expected a detached tmux session to be restored')
     expect(result.sessions.find((session) => session.key === result.key)).toMatchObject({
       tmuxSessionName: terminalOne,
       tmuxCloseSupported: false,
@@ -273,26 +252,30 @@ describe('server terminal sessions', () => {
     expect(closeTmuxSession).not.toHaveBeenCalled()
   })
 
-  test('creates one tmux terminal when the current directory has no associated sessions', async () => {
-    const openTmuxSessions = (
-      terminalServer as typeof terminalServer & {
-        openServerTmuxSessions?: (
-          clientId: string,
-          input: { repoRoot: string; branch: string; worktreePath: string },
-        ) => Promise<Awaited<ReturnType<typeof createServerTerminal>>>
-      }
-    ).openServerTmuxSessions
-    expect(openTmuxSessions).toBeTypeOf('function')
-
-    const result = await openTmuxSessions!('client_1', {
+  test('returns a successful no-op when the current directory has no detached associated sessions', async () => {
+    const result = await openServerTmuxSessions('client_1', {
       repoRoot: '/repo',
       branch: 'feature',
       worktreePath: '/repo-linked',
     })
 
+    expect(result).toEqual({ ok: true, restored: 0, sessions: [] })
+    expect(spawn).not.toHaveBeenCalled()
+  })
+
+  test('creates one tmux terminal through the ordinary create request without scanning the directory', async () => {
+    const result = await createServerTerminal('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+      kind: 'additional',
+      launchMode: 'tmux-if-available',
+    })
+
     expect(result).toMatchObject({ ok: true, key: '/repo\0/repo-linked\0terminal-1' })
     if (!result.ok) return
     expect(result.sessions[0]).toMatchObject({ tmuxBacked: true, tmuxCloseSupported: true })
+    expect(tmuxCleanupMocks.previewAssociatedTmuxSessions).not.toHaveBeenCalled()
     expect(spawn).toHaveBeenCalledWith(
       expect.any(String),
       ['-lc', expect.stringContaining('tmux new-session -A')],

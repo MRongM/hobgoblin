@@ -618,6 +618,7 @@ function renderToolbar(options: {
   const showRepoDetailTab = vi.fn(options.navigation.showRepoDetailTab)
   const commandContext: TerminalSessionContextValue = {
     createTerminal,
+    restoreTmuxSessions: vi.fn(async () => 0),
     selectTerminal,
     scrollToBottom,
     focusTerminal,

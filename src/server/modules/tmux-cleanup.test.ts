@@ -45,8 +45,8 @@ describe('associated tmux cleanup', () => {
     const listLocal = vi.fn(async () => ({
       ok: true as const,
       sessions: [
-        { sessionName: FIRST_NAME, initialPath: '/work/feature/', terminalNumber: 1 },
-        { sessionName: SECOND_NAME, initialPath: '/work/feature', terminalNumber: 2 },
+        { sessionName: FIRST_NAME, initialPath: '/work/feature/', terminalNumber: 1, attachedClients: 0 },
+        { sessionName: SECOND_NAME, initialPath: '/work/feature', terminalNumber: 2, attachedClients: 0 },
       ],
     }))
     const killLocalByName = vi.fn(async () => ({ ok: true, message: '' }))
@@ -63,7 +63,7 @@ describe('associated tmux cleanup', () => {
   test('does not close an exact name reported at a different path', async () => {
     const listLocal = vi.fn(async () => ({
       ok: true as const,
-      sessions: [{ sessionName: FIRST_NAME, initialPath: '/work/other', terminalNumber: 1 }],
+      sessions: [{ sessionName: FIRST_NAME, initialPath: '/work/other', terminalNumber: 1, attachedClients: 0 }],
     }))
     const killLocalByName = vi.fn()
 
@@ -82,7 +82,9 @@ describe('associated tmux cleanup', () => {
       .mockResolvedValueOnce({ ok: true, sessions: [] })
       .mockResolvedValueOnce({
         ok: true,
-        sessions: [{ sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 1 }],
+        sessions: [
+          { sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 1, attachedClients: 0 },
+        ],
       })
     const killLocalByName = vi.fn(async () => ({ ok: false, message: `can't find session: ${FIRST_NAME}` }))
     const dependenciesWithExactKill = { platform: 'linux' as const, listLocal, killLocalByName }
@@ -102,7 +104,7 @@ describe('associated tmux cleanup', () => {
     const resolveRemote = vi.fn(async () => REMOTE_TARGET)
     const runRemote = vi
       .fn()
-      .mockResolvedValueOnce({ ok: true, stdout: `/srv/feature\t1\t${REMOTE_FIRST_NAME}`, stderr: '' })
+      .mockResolvedValueOnce({ ok: true, stdout: `/srv/feature\t1\t0\t${REMOTE_FIRST_NAME}`, stderr: '' })
       .mockResolvedValueOnce({ ok: true, stdout: '', stderr: '' })
 
     await expect(
@@ -122,7 +124,9 @@ describe('associated tmux cleanup', () => {
   test('rejects non-protocol names and preserves exact-close command failures', async () => {
     const listLocal = vi.fn(async () => ({
       ok: true as const,
-      sessions: [{ sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 1 }],
+      sessions: [
+        { sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 1, attachedClients: 0 },
+      ],
     }))
     const killLocalByName = vi.fn(async () => ({ ok: false, message: 'permission denied' }))
 
@@ -145,11 +149,21 @@ describe('associated tmux cleanup', () => {
     const listLocal = vi.fn(async () => ({
       ok: true as const,
       sessions: [
-        { sessionName: FIRST_NAME, initialPath: '/work/feature/', terminalNumber: 1 },
-        { sessionName: SECOND_NAME, initialPath: '/work/feature/nested', terminalNumber: 2 },
-        { sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 2 },
-        { sessionName: 'hobgoblin-v1-0123456789abcdef01234567', initialPath: '/work/feature', terminalNumber: 1 },
-        { sessionName: 'goblin-feature', initialPath: '/work/feature', terminalNumber: 1 },
+        { sessionName: FIRST_NAME, initialPath: '/work/feature/', terminalNumber: 1, attachedClients: 0 },
+        {
+          sessionName: SECOND_NAME,
+          initialPath: '/work/feature/nested',
+          terminalNumber: 2,
+          attachedClients: 0,
+        },
+        { sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 2, attachedClients: 0 },
+        {
+          sessionName: 'hobgoblin-v1-0123456789abcdef01234567',
+          initialPath: '/work/feature',
+          terminalNumber: 1,
+          attachedClients: 0,
+        },
+        { sessionName: 'goblin-feature', initialPath: '/work/feature', terminalNumber: 1, attachedClients: 0 },
       ],
     }))
 
@@ -161,7 +175,9 @@ describe('associated tmux cleanup', () => {
     ).resolves.toEqual({
       ok: true,
       targetPath: '/work/feature',
-      sessions: [{ sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 1 }],
+      sessions: [
+        { sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 1, attachedClients: 0 },
+      ],
     })
   })
 
@@ -181,7 +197,7 @@ describe('associated tmux cleanup', () => {
     const resolveRemote = vi.fn(async () => REMOTE_TARGET)
     const runRemote = vi.fn(async () => ({
       ok: true,
-      stdout: `/srv/feature\t1\t${REMOTE_FIRST_NAME}`,
+      stdout: `/srv/feature\t1\t0\t${REMOTE_FIRST_NAME}`,
       stderr: '',
     }))
 
@@ -193,7 +209,9 @@ describe('associated tmux cleanup', () => {
     ).resolves.toEqual({
       ok: true,
       targetPath: '/srv/feature',
-      sessions: [{ sessionName: REMOTE_FIRST_NAME, initialPath: '/srv/feature', terminalNumber: 1 }],
+      sessions: [
+        { sessionName: REMOTE_FIRST_NAME, initialPath: '/srv/feature', terminalNumber: 1, attachedClients: 0 },
+      ],
     })
     expect(runRemote).toHaveBeenCalledWith(REMOTE_TARGET, { type: 'tmuxListSessions' }, { signal: undefined })
   })
@@ -202,8 +220,8 @@ describe('associated tmux cleanup', () => {
     const listLocal = vi.fn(async () => ({
       ok: true as const,
       sessions: [
-        { sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 1 },
-        { sessionName: SECOND_NAME, initialPath: '/work/feature', terminalNumber: 2 },
+        { sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 1, attachedClients: 0 },
+        { sessionName: SECOND_NAME, initialPath: '/work/feature', terminalNumber: 2, attachedClients: 0 },
       ],
     }))
     const killLocalByName = vi.fn(async () => ({ ok: true, message: '' }))
@@ -216,7 +234,9 @@ describe('associated tmux cleanup', () => {
     ).resolves.toEqual({
       ok: true,
       targetPath: '/work/feature',
-      deleted: [{ sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 1 }],
+      deleted: [
+        { sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 1, attachedClients: 0 },
+      ],
       missingSessionNames: [],
       failed: [],
     })
@@ -228,8 +248,8 @@ describe('associated tmux cleanup', () => {
     const listLocal = vi.fn(async () => ({
       ok: true as const,
       sessions: [
-        { sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 1 },
-        { sessionName: SECOND_NAME, initialPath: '/work/feature', terminalNumber: 2 },
+        { sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 1, attachedClients: 0 },
+        { sessionName: SECOND_NAME, initialPath: '/work/feature', terminalNumber: 2, attachedClients: 0 },
       ],
     }))
     const killLocalByName = vi
@@ -249,7 +269,9 @@ describe('associated tmux cleanup', () => {
     ).resolves.toEqual({
       ok: true,
       targetPath: '/work/feature',
-      deleted: [{ sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 1 }],
+      deleted: [
+        { sessionName: FIRST_NAME, initialPath: '/work/feature', terminalNumber: 1, attachedClients: 0 },
+      ],
       missingSessionNames: [MISSING_NAME],
       failed: [{ sessionName: SECOND_NAME, message: 'permission denied' }],
     })

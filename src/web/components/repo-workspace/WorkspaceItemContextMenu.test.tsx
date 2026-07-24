@@ -44,13 +44,15 @@ describe('WorkspaceItemContextMenu', () => {
     const externalTerminal = vi.fn()
     const internalTerminal = vi.fn()
     const tmuxTerminal = vi.fn()
-    renderMenu({ editor, externalTerminal, internalTerminal, tmuxTerminal })
+    const restoreTmuxTerminals = vi.fn()
+    renderMenu({ editor, externalTerminal, internalTerminal, tmuxTerminal, restoreTmuxTerminals })
 
     expect((await openContextMenu()).map((item) => item.textContent?.trim())).toEqual([
       'worktrees.open-in-editor-label',
       'terminal.external',
       'terminal.internal',
       'terminal.new-with-tmux',
+      'terminal.restore-directory-tmux',
       'terminal.close-all',
     ])
 
@@ -58,11 +60,13 @@ describe('WorkspaceItemContextMenu', () => {
     await clickContextMenuItem('terminal.external')
     await clickContextMenuItem('terminal.internal')
     await clickContextMenuItem('terminal.new-with-tmux')
+    await clickContextMenuItem('terminal.restore-directory-tmux')
 
     expect(editor).toHaveBeenCalledTimes(1)
     expect(externalTerminal).toHaveBeenCalledTimes(1)
     expect(internalTerminal).toHaveBeenCalledTimes(1)
     expect(tmuxTerminal).toHaveBeenCalledTimes(1)
+    expect(restoreTmuxTerminals).toHaveBeenCalledTimes(1)
   })
 
   test('keeps unavailable and busy open actions visible but disabled', async () => {
@@ -76,16 +80,13 @@ describe('WorkspaceItemContextMenu', () => {
     expect(itemByText(items, 'terminal.close-all').hasAttribute('data-disabled')).toBe(true)
   })
 
-  test('uses a directory-scoped tmux label without changing its action', async () => {
-    const tmuxTerminal = vi.fn()
-    renderMenu({ tmuxTerminal, tmuxTerminalLabel: 'terminal.restore-directory-tmux' })
+  test('keeps detached recovery visible but independently disabled', async () => {
+    renderMenu({ restoreTmuxDisabled: true })
 
-    expect((await openContextMenu()).map((item) => item.textContent?.trim())).toContain(
-      'terminal.restore-directory-tmux',
-    )
-    await clickContextMenuItem('terminal.restore-directory-tmux')
+    const items = await openContextMenu()
 
-    expect(tmuxTerminal).toHaveBeenCalledTimes(1)
+    expect(itemByText(items, 'terminal.new-with-tmux').hasAttribute('data-disabled')).toBe(false)
+    expect(itemByText(items, 'terminal.restore-directory-tmux').hasAttribute('data-disabled')).toBe(true)
   })
 
   test('confirms the live aggregate count before closing every current scoped session', async () => {
@@ -125,7 +126,8 @@ function renderMenu(
     externalTerminal?: () => void
     internalTerminal?: () => void
     tmuxTerminal?: () => void
-    tmuxTerminalLabel?: string
+    restoreTmuxTerminals?: () => void
+    restoreTmuxDisabled?: boolean
     editorDisabled?: boolean
     externalTerminalBusy?: boolean
     internalTerminalDisabled?: boolean
@@ -162,7 +164,11 @@ function renderMenu(
               icon: <span data-testid="tmux-terminal-icon" />,
               onSelect: fixture.tmuxTerminal ?? vi.fn(),
             }}
-            tmuxTerminalLabel={fixture.tmuxTerminalLabel}
+            restoreTmuxTerminals={{
+              disabled: fixture.restoreTmuxDisabled ?? false,
+              icon: <span data-testid="restore-tmux-terminals-icon" />,
+              onSelect: fixture.restoreTmuxTerminals ?? vi.fn(),
+            }}
             worktreeTerminalKeys={fixture.worktreeTerminalKeys ?? []}
           >
             <button type="button">item trigger</button>
@@ -224,6 +230,7 @@ function terminalCommandContext(
 ): TerminalSessionContextValue {
   return {
     createTerminal: vi.fn(async () => ''),
+    restoreTmuxSessions: vi.fn(async () => 0),
     selectTerminal: vi.fn(),
     scrollToBottom: vi.fn(),
     focusTerminal: vi.fn(),
