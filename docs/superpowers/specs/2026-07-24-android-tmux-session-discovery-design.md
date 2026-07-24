@@ -39,7 +39,7 @@ Each current-protocol tmux launch sets two session-scoped tmux user options:
 
 The values are protocol metadata, not display labels or authentication claims. Hobgoblin writes the initial path as the fixed identity path even when a shell later changes directory. Tmux clients remain able to mutate user options; a later mismatch makes the session undiscoverable. The terminal number has no sign or leading zeroes.
 
-The attach-or-create command continues to derive the session name from the public descriptor and enable mouse support. It additionally sets both options on the exact session target. This is applied by the shared TypeScript local and SSH invocation builders and by the Android SSH startup command so desktop, Web/server, external terminal actions, and Android create compatible sessions.
+The attach-or-create command continues to derive the session name from the public descriptor and enable mouse support. It additionally sets both options on the exact tmux target-pane `=<session-name>:`. The trailing colon is required for `set-option -t`; omitting it can create the session while failing both metadata writes. This is applied by the shared TypeScript local and SSH invocation builders and by the Android SSH startup command so desktop, Web/server, external terminal actions, and Android create compatible sessions.
 
 Existing sessions that are attached through a known descriptor receive the metadata idempotently. Existing sessions that are never launched again and lack either option remain undiscoverable; they are not guessed or migrated.
 
@@ -123,6 +123,7 @@ No new realtime channel, polling loop, database, package, or generic service lay
 Use test-first red-green-refactor cycles for:
 
 - Exact metadata command fragments in TypeScript local and remote invocation tests.
+- Metadata persistence against an isolated real tmux server when tmux is available.
 - Exact Android startup metadata commands, including shell quoting.
 - Strict metadata parsing, canonical terminal numbers, path checks, and fixed hash verification.
 - Remote discovery behavior for valid rows, unrelated rows, malformed rows, no server, missing tmux, untrusted hosts, and SSH failures.

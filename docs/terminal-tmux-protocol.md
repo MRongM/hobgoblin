@@ -118,7 +118,7 @@ tmux -u list-sessions \
 
 Do not supply a tmux `session_id` or add a forced-detach option. Tmux allocates the session ID, while Hobgoblin and external tmux clients intentionally have concurrent shared control. The exact target enables mouse support and identity metadata only on the selected session.
 
-The desktop attach-or-create adapter sets the two options after creating or attaching. Reattaching through a known descriptor therefore adds or repairs missing metadata idempotently. Android and third-party creators that want discovery must write the same options with the same exact target-pane syntax.
+All current Hobgoblin launch adapters set the two options after creating or attaching. Reattaching through a known descriptor therefore adds or repairs missing metadata idempotently. A third-party creator that wants discovery must write the same options with the same exact target-pane syntax.
 
 ## Desktop directory recovery
 
