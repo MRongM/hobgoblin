@@ -294,6 +294,14 @@ describe('ProjectFileTree', () => {
     expect(fileTreeRoot().style.getPropertyValue('--goblin-file-tree-font-size')).toBe('15px')
   })
 
+  test('exposes the themed file-tree content scroller hook', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    expect(fileTreeRoot().querySelector('.project-file-tree-scroll')).not.toBeNull()
+  })
+
   test('loads an explicit folder context without RepoState and protects only managed roots', async () => {
     getRepositoryFileTree
       .mockImplementationOnce(async (_repoId, worktreePath, dirPath) => ({

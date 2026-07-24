@@ -1281,7 +1281,7 @@ export function ProjectFileTree({
             initializingBootstrapConfig={initializingBootstrapConfig}
             onInitializeBootstrapConfig={() => void initializeBootstrapConfig()}
           />
-          <div className="min-h-0 flex-1 overflow-auto py-1">
+          <div className="project-file-tree-scroll min-h-0 flex-1 overflow-auto py-1">
             {rootState?.loading && !rootState.entries ? (
               <FileTreeMessage>{t('file-tree.loading')}</FileTreeMessage>
             ) : rootState?.error && !rootState.entries ? (

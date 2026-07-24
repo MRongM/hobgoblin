@@ -232,6 +232,19 @@
   background-color: var(--color-scrollbar-thumb-active);
 }
 
+.project-file-tree-scroll::-webkit-scrollbar:horizontal {
+  height: 8px;
+}
+
+.project-file-tree-scroll::-webkit-scrollbar-thumb:horizontal {
+  border: 2px solid transparent;
+}
+
+.project-file-tree-scroll::-webkit-scrollbar-thumb:horizontal:hover,
+.project-file-tree-scroll::-webkit-scrollbar-thumb:horizontal:active {
+  border-width: 1px;
+}
+
 :is(.project-navigation-tone, .project-file-area-tone) [data-slot='scroll-area-thumb'] {
   background-color: var(--color-scrollbar-thumb);
 }

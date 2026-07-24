@@ -575,8 +575,11 @@ describe('RepoExplorerPane', () => {
     const split = container.querySelector('[data-testid="split-pane"]')
     const before = container.querySelector('[data-testid="split-pane-before"]')
     const after = container.querySelector('[data-testid="split-pane-after"]')
+    const plainWorkspaceSidebar = before?.querySelector('[data-testid="sidebar-project-header"]')?.parentElement
 
     expect(split?.getAttribute('data-orientation')).toBe('horizontal')
+    expect(plainWorkspaceSidebar?.className).toContain('project-file-area-tone')
+    expect(plainWorkspaceSidebar?.className).toContain('bg-topbar')
     expect(before?.querySelector('[data-testid="sidebar-project-header"]')).toBeTruthy()
     expect(before?.querySelector('[data-testid="project-file-tree"]')).toBeTruthy()
     expect(before?.querySelector('[data-testid="statusbar"]')).toBeTruthy()

@@ -140,6 +140,19 @@ describe('web theme contract', () => {
     expect(scrollAreaSource).toContain('data-slot="scroll-area-thumb"')
   })
 
+  test('matches the file-tree horizontal scrollbar shape to the shared thin scrollbar', () => {
+    const contract = readText(new URL('contract.css', THEME_ROOT))
+    const track = cssRule(contract, '.project-file-tree-scroll::-webkit-scrollbar:horizontal')
+    const thumb = cssRule(contract, '.project-file-tree-scroll::-webkit-scrollbar-thumb:horizontal')
+    const thumbHover = cssRule(contract, '.project-file-tree-scroll::-webkit-scrollbar-thumb:horizontal:hover')
+    const thumbActive = cssRule(contract, '.project-file-tree-scroll::-webkit-scrollbar-thumb:horizontal:active')
+
+    expect(track).toContain('height: 8px;')
+    expect(thumb).toContain('border: 2px solid transparent;')
+    expect(thumbHover).toContain('border-width: 1px;')
+    expect(thumbActive).toContain('border-width: 1px;')
+  })
+
   test('defines classic terminal tokens for every color theme preset', () => {
     const themeFiles = readdirSync(THEMES_ROOT)
       .filter((file) => file.endsWith('.css'))
