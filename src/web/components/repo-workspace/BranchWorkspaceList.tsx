@@ -61,6 +61,7 @@ import {
 } from '#/web/components/repo-workspace/BranchWorkspaceTerminalPanel.tsx'
 import type { BranchWorkspaceFolderContext } from '#/web/components/repo-workspace/BranchWorkspaceFileTree.tsx'
 import { useFolderExternalOpenActions } from '#/web/hooks/useFolderExternalOpenActions.ts'
+import { cn } from '#/web/lib/cn.ts'
 import { lastPathSegment } from '#/web/lib/paths.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { WorkspaceItemContextMenu } from '#/web/components/repo-workspace/WorkspaceItemContextMenu.tsx'
@@ -250,13 +251,13 @@ function BranchWorkspaceRow({
   onToggleExpanded: () => void
 }) {
   const t = useT()
-  const ready = item.state.kind === 'ready'
   const busy = item.activeOperation !== undefined
-  const interactiveReady = ready && !busy
+  const folderAvailable = item.available
+  const completeReady = item.state.kind === 'ready' && !busy
+  const rootUsable = (item.state.kind === 'ready' || isRepairableDrift(item)) && folderAvailable && !busy
   const recoveryAction = item.state.kind === 'needs-action' ? item.state.action : null
   const creationInterrupted =
     item.state.kind === 'needs-action' && item.state.action === 'repair' && item.state.reason === 'creation-interrupted'
-  const folderAvailable = item.available
   const context = branchWorkspaceFolderContext(rootId, item)
   const externalActions = useFolderExternalOpenActions({ repoId: rootId, path: item.path, available: folderAvailable })
   const terminalContext = useContext(TerminalSessionContext)
@@ -270,7 +271,7 @@ function BranchWorkspaceRow({
   const tmuxCleanup = useAssociatedTmuxCleanup({ projectRoot: rootId, itemPath: item.path, disabled: disabled || busy })
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
-    disabled: disabled || !interactiveReady,
+    disabled: disabled || !rootUsable,
   })
   const rootSelected = scopeActive && !activeMemberRepositoryName
   const activate = () => {
@@ -291,14 +292,14 @@ function BranchWorkspaceRow({
       launchMode,
     )
   }
-  const openActionsDisabled = disabled || !interactiveReady || !folderAvailable
+  const openActionsDisabled = disabled || !rootUsable
   const restoreTmuxTerminals = async () => {
     if (openActionsDisabled || !terminalContext) return
     activate()
     await terminalContext.restoreTmuxSessions(branchWorkspaceTerminalBase(context))
   }
   const memberListId = `branch-workspace-members-${item.id}`
-  const editorAction: WorkspaceListItemAction | undefined = interactiveReady
+  const editorAction: WorkspaceListItemAction | undefined = rootUsable
     ? {
         id: 'editor',
         label: t('worktrees.open-in-editor-label'),
@@ -308,7 +309,7 @@ function BranchWorkspaceRow({
         onSelect: () => (onOpenEditor ? onOpenEditor(item) : externalActions.editor.onSelect()),
       }
     : undefined
-  const internalTerminalAction: WorkspaceListItemAction | undefined = interactiveReady
+  const internalTerminalAction: WorkspaceListItemAction | undefined = rootUsable
     ? {
         id: 'terminal',
         label: t('terminal.internal'),
@@ -317,7 +318,7 @@ function BranchWorkspaceRow({
         onSelect: () => openInternal('native'),
       }
     : undefined
-  const readyOpenMenuActions: BranchWorkspaceItemAction[] = interactiveReady
+  const rootOpenMenuActions: BranchWorkspaceItemAction[] = rootUsable
     ? [
         {
           label: 'terminal.new-with-tmux',
@@ -342,7 +343,7 @@ function BranchWorkspaceRow({
       ]
     : []
   const readyGitActions: BranchWorkspaceItemAction[] =
-    interactiveReady && onGitAction
+    completeReady && onGitAction
       ? [
           {
             label: 'workspace.branch-workspace.git-action.batch-commit',
@@ -371,7 +372,7 @@ function BranchWorkspaceRow({
           },
         ]
       : []
-  const readyMembershipActions: BranchWorkspaceItemAction[] = interactiveReady
+  const readyMembershipActions: BranchWorkspaceItemAction[] = completeReady
     ? [
         ...(onExtend
           ? [
@@ -397,7 +398,7 @@ function BranchWorkspaceRow({
           : []),
       ]
     : []
-  const readyDependencyActions: BranchWorkspaceItemAction[] = interactiveReady
+  const readyDependencyActions: BranchWorkspaceItemAction[] = completeReady
     ? [
         ...(onAddDependencies
           ? [
@@ -423,7 +424,7 @@ function BranchWorkspaceRow({
           : []),
       ]
     : []
-  const lowFrequencyActions: BranchWorkspaceItemAction[] = interactiveReady
+  const lowFrequencyActions: BranchWorkspaceItemAction[] = completeReady
     ? [
         {
           label: 'workspace.branch-workspace.delete',
@@ -462,7 +463,7 @@ function BranchWorkspaceRow({
           ]
         : []
   const rowMenuActions = [
-    ...readyOpenMenuActions,
+    ...rootOpenMenuActions,
     ...readyMembershipActions,
     ...readyDependencyActions,
     ...readyGitActions,
@@ -586,7 +587,7 @@ function BranchWorkspaceRow({
         busy={busy}
         leadingIcon={<FolderKanban className="size-3.5" aria-hidden="true" />}
         dragHandle={
-          interactiveReady && !disabled
+          rootUsable && !disabled
             ? {
                 label: t('workspace.branch-workspace.reorder'),
                 setActivatorNodeRef,
@@ -672,10 +673,17 @@ function StateSummary({ item }: { item: BranchWorkspaceSnapshot }) {
   }
   if (item.state.kind === 'ready') return null
   return (
-    <span className="ml-auto shrink-0 text-[9px] text-warning">
+    <span
+      data-testid="branch-workspace-state-summary"
+      className={cn('ml-auto shrink-0 text-[9px]', isRepairableDrift(item) ? 'text-muted-foreground' : 'text-warning')}
+    >
       {t(`workspace.branch-workspace.lifecycle.${branchWorkspaceStateName(item)}`)}
     </span>
   )
+}
+
+function isRepairableDrift(item: BranchWorkspaceSnapshot): boolean {
+  return item.state.kind === 'needs-action' && item.state.action === 'repair' && item.state.reason === 'drift'
 }
 
 function RowAction({

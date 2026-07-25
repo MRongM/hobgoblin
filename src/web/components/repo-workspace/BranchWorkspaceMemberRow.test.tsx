@@ -120,6 +120,47 @@ afterEach(() => {
 })
 
 describe('BranchWorkspaceMemberRow', () => {
+  test('shows only a non-empty abbreviated commit hash after the member name', () => {
+    const item = workspace()
+    const member = repositoryMember()
+    const repo = emptyRepo('/workspace/api', 'api')
+    const renderHash = (lastCommitHash: string) => {
+      const branch = createRepoBranch(member.targetBranch, {
+        lastCommitHash,
+        worktree: { path: member.worktreePath },
+      })
+      repo.data.branches = [branch]
+      render(
+        <BranchWorkspaceMemberRow
+          item={item}
+          member={member}
+          selected
+          disabled={false}
+          presentation={{
+            dirty: false,
+            changeCount: null,
+            navigable: true,
+            repositoryId: repo.id,
+            worktreePath: member.worktreePath,
+            actionTarget: { repo, branch },
+          }}
+          onOpenRepositoryMember={vi.fn()}
+          onOpenInternalTerminal={vi.fn()}
+        />,
+      )
+    }
+
+    renderHash('abc123456789')
+    const hashTag = container.querySelector<HTMLElement>('[data-testid="branch-workspace-member-hash-tag"]')
+    expect(hashTag?.textContent).toBe('#abc1234')
+    expect(hashTag?.className).toContain('font-mono')
+    expect(hashTag?.className).toContain('text-selected-muted-foreground')
+    expect(hashTag?.hasAttribute('title')).toBe(false)
+
+    renderHash('  ')
+    expect(container.querySelector('[data-testid="branch-workspace-member-hash-tag"]')).toBeNull()
+  })
+
   test('renders a compact actionable member row without independent-worktree lifecycle actions', async () => {
     const item = workspace()
     const member = repositoryMember()

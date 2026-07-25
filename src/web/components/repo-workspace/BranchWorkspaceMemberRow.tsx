@@ -37,6 +37,7 @@ import { useBranchActionItems, type BranchActionItemGroups } from '#/web/hooks/u
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import { cn } from '#/web/lib/cn.ts'
+import { formatShortCommitHashTag } from '#/web/lib/commit-hash.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useAssociatedTmuxCleanup } from '#/web/hooks/useAssociatedTmuxCleanup.tsx'
 
@@ -124,6 +125,7 @@ function BranchWorkspaceMemberRowFrame({
       : t('branch-status.worktree-dirty', { n: presentation.changeCount })
     : null
   const unavailableLabel = presentation.reason ? t(presentation.reason) : null
+  const commitHashTag = formatShortCommitHashTag(presentation.actionTarget?.branch.lastCommitHash ?? '')
   const forceDisabled = disabled || !presentation.navigable
   const tmuxCleanup = useAssociatedTmuxCleanup({
     projectRoot: presentation.repositoryId,
@@ -205,6 +207,17 @@ function BranchWorkspaceMemberRowFrame({
     >
       <span data-branch-workspace-member-summary className="inline-flex min-w-0 flex-1 items-center gap-1.5">
         <span className="min-w-0 truncate">{member.repositoryName}</span>
+        {commitHashTag ? (
+          <span
+            data-testid="branch-workspace-member-hash-tag"
+            className={cn(
+              'shrink-0 font-mono text-[11px] font-medium tabular-nums',
+              selected ? 'text-selected-muted-foreground' : 'text-muted-foreground',
+            )}
+          >
+            {commitHashTag}
+          </span>
+        ) : null}
         {terminalCount > 0 ? (
           <Badge
             data-testid="branch-workspace-member-terminal-count-badge"

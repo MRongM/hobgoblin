@@ -3,6 +3,7 @@ import { useT } from '#/web/stores/i18n.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { cn } from '#/web/lib/cn.ts'
+import { formatShortCommitHashTag } from '#/web/lib/commit-hash.ts'
 import { formatWorktreeListPath, lastPathSegment } from '#/web/lib/paths.ts'
 import { getBranchWorktreeState, type BranchWorktreeRepo } from '#/web/stores/repos/worktree-state.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
@@ -47,11 +48,6 @@ function Delta({ direction, count, label }: { direction: 'ahead' | 'behind'; cou
   )
 }
 
-function shortHashTag(hash: string): string | null {
-  const trimmed = hash.trim()
-  return trimmed ? `#${trimmed.slice(0, 7)}` : null
-}
-
 export function BranchSummaryInline({
   repo,
   branch,
@@ -80,7 +76,7 @@ export function BranchSummaryInline({
   const terminalCountLabel = terminalCount > 0 ? t('terminal.open-count', { count: terminalCount }) : null
   const terminalBellLabel = t('terminal.bell-unread')
   const terminalOutputActiveLabel = t('terminal.output-active')
-  const commitHashTag = shortHashTag(branch.lastCommitHash)
+  const commitHashTag = formatShortCommitHashTag(branch.lastCommitHash)
   const title = [
     displayName ?? branch.name,
     commitHashTag,
