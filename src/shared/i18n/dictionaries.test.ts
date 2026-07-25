@@ -144,6 +144,13 @@ describe('i18n dictionaries', () => {
     expect(zh['workspace.branch-workspace.member.open-worktree']).toBe('打开此成员工作树')
   })
 
+  test('uses concise branch workspace member badge copy in every locale', () => {
+    expect(en['workspace.branch-workspace.member-badge']).toBe('branch workspace')
+    expect(zh['workspace.branch-workspace.member-badge']).toBe('子工作区')
+    expect(ja['workspace.branch-workspace.member-badge']).toBe('ブランチワークスペース')
+    expect(ko['workspace.branch-workspace.member-badge']).toBe('브랜치 워크스페이스')
+  })
+
   test('describes branch workspace registry cleanup without claiming filesystem deletion', () => {
     const keys = [
       'workspace.branch-workspace.cleanup',

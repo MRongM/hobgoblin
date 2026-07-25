@@ -11,6 +11,7 @@ import {
 import type { TerminalSessionContextValue, TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
+import type { BranchWorkspaceReadResult } from '#/shared/branch-workspaces.ts'
 
 type TestDragEndEvent = { active: { id: string }; over: { id: string } | null }
 
@@ -27,6 +28,10 @@ const navigationState = vi.hoisted(() => ({
   selectRepoBranch: vi.fn(),
   showRepoDetailTab: vi.fn(),
 }))
+const branchWorkspaceQueryState = vi.hoisted(() => ({
+  data: undefined as BranchWorkspaceReadResult | undefined,
+  rootId: '',
+}))
 
 vi.mock('#/web/stores/i18n.ts', () => ({
   useI18nStore: (selector: (state: { lang: string }) => string) => selector({ lang: 'zh' }),
@@ -40,7 +45,15 @@ vi.mock('#/web/stores/i18n.ts', () => ({
     if (key === 'branches.default') return '默认'
     if (key === 'branches.gone') return '已失联'
     if (key === 'branch-status.current') return '当前'
+    if (key === 'workspace.branch-workspace.member-badge') return '子工作区'
     return key
+  },
+}))
+
+vi.mock('#/web/branch-workspace-queries.ts', () => ({
+  useBranchWorkspaceQuery: (rootId: string) => {
+    branchWorkspaceQueryState.rootId = rootId
+    return { data: branchWorkspaceQueryState.data }
   },
 }))
 
@@ -132,6 +145,8 @@ beforeEach(() => {
   dndState.sensorCount = 0
   navigationState.selectRepoBranch.mockReset()
   navigationState.showRepoDetailTab.mockReset()
+  branchWorkspaceQueryState.data = undefined
+  branchWorkspaceQueryState.rootId = ''
   resetReposStore()
 })
 
@@ -255,7 +270,106 @@ function renderList(
   })
 }
 
+const WORKSPACE_ROOT_ID = '/tmp/workspace'
+const MEMBER_WORKTREE_PATH = '/tmp/workspace/hobgoblin-feature/member-repo'
+
+function successfulBranchWorkspaceRead(
+  progress: 'complete' | 'removed' = 'complete',
+): Extract<BranchWorkspaceReadResult, { ok: true }> {
+  return {
+    ok: true,
+    rootId: WORKSPACE_ROOT_ID,
+    auxiliaryCandidates: [],
+    items: [
+      {
+        id: 'branch-1',
+        rootId: WORKSPACE_ROOT_ID,
+        branch: 'feature/member',
+        directoryName: 'hobgoblin-feature',
+        path: '/tmp/workspace/hobgoblin-feature',
+        state: progress === 'removed' ? { kind: 'needs-action', action: 'continue-reduce' } : { kind: 'ready' },
+        available: true,
+        issues: [],
+        repositories: [
+          {
+            repositoryName: 'member-repo',
+            targetBranch: 'feature/member',
+            baseBranch: 'main',
+            branchOrigin: 'created',
+            worktreePath: MEMBER_WORKTREE_PATH,
+            progress,
+            ready: progress === 'complete',
+          },
+        ],
+        auxiliaryEntries: [],
+      },
+    ],
+  }
+}
+
+function seedWorkspaceMembershipFixture(activeProjectId: string, progress: 'complete' | 'removed' = 'complete') {
+  const repo = seedRepoState({
+    id: REPO_ID,
+    branches: [
+      createRepoBranch('feature/member', { worktree: { path: MEMBER_WORKTREE_PATH } }),
+      createRepoBranch('feature/other', { worktree: { path: '/tmp/other-worktree' } }),
+    ],
+    currentBranch: 'main',
+    selectedBranch: 'feature/member',
+  })
+  repo.workspaceRootId = WORKSPACE_ROOT_ID
+  useReposStore.setState({
+    repos: { [REPO_ID]: repo },
+    activeId: REPO_ID,
+    activeProjectId,
+    workspaceProjects: {
+      [WORKSPACE_ROOT_ID]: {
+        rootId: WORKSPACE_ROOT_ID,
+        repositoryIds: [REPO_ID],
+        candidates: [{ id: REPO_ID, name: 'member-repo', selected: true, available: true }],
+        configured: true,
+        configurationError: null,
+        phase: 'ready',
+        skipped: [],
+        error: null,
+      },
+    },
+  })
+  branchWorkspaceQueryState.data = successfulBranchWorkspaceRead(progress)
+}
+
 describe('BranchList worktree drag ordering', () => {
+  test('marks only exact current branch workspace member worktrees', () => {
+    seedWorkspaceMembershipFixture(WORKSPACE_ROOT_ID)
+
+    renderList()
+
+    const rows = Array.from(container?.querySelectorAll('li') ?? [])
+    const memberRow = rows.find((row) => row.textContent?.includes('feature/member'))
+    const otherRow = rows.find((row) => row.textContent?.includes('feature/other'))
+    expect(branchWorkspaceQueryState.rootId).toBe(WORKSPACE_ROOT_ID)
+    expect(memberRow?.querySelector('[data-testid="branch-workspace-member-badge"]')?.textContent).toBe('子工作区')
+    expect(otherRow?.querySelector('[data-testid="branch-workspace-member-badge"]')).toBeNull()
+  })
+
+  test('does not mark removed branch workspace members', () => {
+    seedWorkspaceMembershipFixture(WORKSPACE_ROOT_ID, 'removed')
+
+    renderList()
+
+    expect(branchWorkspaceQueryState.rootId).toBe(WORKSPACE_ROOT_ID)
+    expect(container?.querySelector('[data-testid="branch-workspace-member-badge"]')).toBeNull()
+  })
+
+  test('does not mark workspace members when the repository is active standalone', () => {
+    seedWorkspaceMembershipFixture(REPO_ID)
+
+    renderList()
+
+    expect(branchWorkspaceQueryState.rootId).toBe('')
+    expect(container?.querySelector('[data-testid="branch-workspace-member-badge"]')).toBeNull()
+  })
+
   test('renders only the visible repository worktrees with ordinary repository actions', () => {
     seedRepoState({
       id: REPO_ID,

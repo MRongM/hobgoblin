@@ -25,6 +25,7 @@ interface BranchSummaryInlineProps {
   repo: BranchSummaryInlineRepo
   branch: RepoBranchState
   displayName?: string
+  branchWorkspaceMember?: boolean
   selected?: boolean
   className?: string
 }
@@ -56,12 +57,15 @@ export function BranchSummaryInline({
   repo,
   branch,
   displayName,
+  branchWorkspaceMember,
   selected = false,
   className,
 }: BranchSummaryInlineProps) {
   const t = useT()
   const isCurrent = branch.name === repo.data.currentBranch
   const hasWorktree = !!branch.worktree?.path
+  const branchWorkspaceMemberLabel =
+    hasWorktree && branchWorkspaceMember === true ? t('workspace.branch-workspace.member-badge') : null
   const worktreeState = getBranchWorktreeState(repo, branch)
   const worktreeDirty = worktreeState?.dirty ?? false
   const worktreeChangeCount =
@@ -87,6 +91,7 @@ export function BranchSummaryInline({
     isCurrent ? t('branch-status.current') : null,
     branch.isDefault ? t('branches.default') : null,
     hasWorktree ? (worktreeDirty ? worktreeDirtyLabel : t('branches.worktree')) : null,
+    branchWorkspaceMemberLabel,
     terminalCountLabel,
     hasTerminalBell ? terminalBellLabel : null,
     hasTerminalOutputActivity ? terminalOutputActiveLabel : null,
@@ -128,6 +133,15 @@ export function BranchSummaryInline({
               {commitHashTag}
             </span>
           )}
+          {branchWorkspaceMemberLabel ? (
+            <Badge
+              data-testid="branch-workspace-member-badge"
+              variant="outline"
+              className="h-4 px-1 text-[10px] font-normal text-muted-foreground"
+            >
+              {branchWorkspaceMemberLabel}
+            </Badge>
+          ) : null}
           {terminalCount > 0 && (
             <Badge
               data-testid="terminal-count-badge"

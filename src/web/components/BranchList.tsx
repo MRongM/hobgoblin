@@ -7,7 +7,7 @@
 // name. We avoid tinting the whole row so selection, hover, and status
 // semantics don't compete for background colour.
 
-import { type ComponentProps, useCallback, useEffect, useRef, useState } from 'react'
+import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   DndContext,
   KeyboardSensor,
@@ -40,6 +40,8 @@ import type { RepoBranchState, RepoWorktreeState } from '#/web/stores/repos/type
 import { formatWorktreeListPath } from '#/web/lib/paths.ts'
 import { cn } from '#/web/lib/cn.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
+import { useBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
+import { activeWorkspaceRootId } from '#/web/stores/repos/workspace-projects.ts'
 
 interface Props {
   repoId: string
@@ -109,6 +111,26 @@ export function BranchList({ repoId, showActions = true, onBranchSelected, onWor
     (s) => branchListRepoFromState(s.repos[repoId]),
     branchListRepoEqual,
   )
+  const workspaceRootId = useReposStore(activeWorkspaceRootId)
+  const workspaceRepositoryName = useReposStore((state) => {
+    if (!workspaceRootId) return null
+    const workspace = state.workspaceProjects[workspaceRootId]
+    if (!workspace?.repositoryIds.includes(repoId)) return null
+    return workspace.candidates.find((candidate) => candidate.id === repoId && candidate.selected)?.name ?? null
+  })
+  const branchWorkspaceQuery = useBranchWorkspaceQuery(workspaceRootId ?? '')
+  const branchWorkspaceMemberPaths = useMemo(() => {
+    const paths = new Set<string>()
+    if (!workspaceRepositoryName || !branchWorkspaceQuery.data?.ok) return paths
+    for (const item of branchWorkspaceQuery.data.items) {
+      for (const member of item.repositories) {
+        if (member.repositoryName === workspaceRepositoryName && member.progress !== 'removed') {
+          paths.add(member.worktreePath)
+        }
+      }
+    }
+    return paths
+  }, [branchWorkspaceQuery.data, workspaceRepositoryName])
   // Keep the selected row in view as the user navigates with j/k.
   useEffect(() => {
     const selectedEl = selectedRef.current
@@ -149,6 +171,7 @@ export function BranchList({ repoId, showActions = true, onBranchSelected, onWor
     const rowProps = {
       repo,
       branch,
+      branchWorkspaceMember: branch.worktree?.path ? branchWorkspaceMemberPaths.has(branch.worktree.path) : false,
       selected: repo.ui.selectedBranch,
       onSelectBranch: handleSelectBranch,
       onWorktreeDoubleClick,

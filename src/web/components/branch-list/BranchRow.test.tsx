@@ -39,6 +39,8 @@ vi.mock('#/web/stores/i18n.ts', () => ({
         return '已失联'
       case 'branch-status.current':
         return '当前'
+      case 'workspace.branch-workspace.member-badge':
+        return '子工作区'
       case 'branch-status.worktree-dirty':
         return `${params?.n ?? 0} 个改动`
       case 'branch-status.sync.ahead':
@@ -495,6 +497,32 @@ describe('BranchRow', () => {
     // worktree 路径不再作为独立 aria-label / 文本内容显示（已移入整行的 title 悬停）
     expect(document.body.querySelector('[aria-label="worktree-a"]')).toBeNull()
     expect(document.body.textContent).not.toContain('工作树')
+  })
+
+  test('shows a neutral branch workspace badge for a flagged member worktree', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/member', {
+      worktree: { path: '/tmp/member-worktree' },
+    })
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          branchWorkspaceMember
+          selected={null}
+          onSelectBranch={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+    )
+
+    const badge = document.querySelector('[data-testid="branch-workspace-member-badge"]')
+    expect(badge?.textContent).toBe('子工作区')
+    expect(badge?.getAttribute('data-variant')).toBe('outline')
+    expect(document.querySelector('[title*="子工作区"]')).not.toBeNull()
   })
 
   test('uses the worktree icon for the current branch when it has a worktree', () => {

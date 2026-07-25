@@ -104,6 +104,7 @@ export const en = {
   'workspace.repositories.hide': 'Hide workspace repositories',
   'workspace.repositories.show': 'Show workspace repositories',
   'workspace.branch-workspace.list': 'Branch workspaces',
+  'workspace.branch-workspace.member-badge': 'branch workspace',
   'workspace.branch-workspace.create': 'New branch workspace',
   'workspace.branch-workspace.add-members': 'Add member worktrees',
   'workspace.branch-workspace.remove-members': 'Remove member worktrees',

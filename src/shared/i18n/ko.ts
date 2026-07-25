@@ -97,6 +97,7 @@ export const ko: Record<DictKey, string> = {
   'workspace.repositories.hide': '워크스페이스 저장소 숨기기',
   'workspace.repositories.show': '워크스페이스 저장소 표시',
   'workspace.branch-workspace.list': '브랜치 워크스페이스',
+  'workspace.branch-workspace.member-badge': '브랜치 워크스페이스',
   'workspace.branch-workspace.create': '브랜치 워크스페이스 추가',
   'workspace.branch-workspace.add-members': '구성원 작업 트리 추가',
   'workspace.branch-workspace.remove-members': '구성원 작업 트리 제거',

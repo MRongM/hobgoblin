@@ -96,6 +96,7 @@ export const zh: Record<DictKey, string> = {
   'workspace.repositories.hide': '隐藏工作区仓库',
   'workspace.repositories.show': '显示工作区仓库',
   'workspace.branch-workspace.list': '子工作区',
+  'workspace.branch-workspace.member-badge': '子工作区',
   'workspace.branch-workspace.create': '新增子工作区',
   'workspace.branch-workspace.add-members': '增加成员工作树',
   'workspace.branch-workspace.remove-members': '移除成员工作树',

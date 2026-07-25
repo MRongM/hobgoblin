@@ -29,6 +29,7 @@ interface BranchRowProps {
   repo: BranchActionRepo
   branch: RepoBranchState
   displayName?: string
+  branchWorkspaceMember?: boolean
   workspaceRemoveAction?: { label: string; onSelect: () => void }
   selected: string | null
   onSelectBranch: (branch: string) => void
@@ -44,6 +45,7 @@ export function BranchRow({
   repo,
   branch,
   displayName,
+  branchWorkspaceMember,
   workspaceRemoveAction,
   selected,
   onSelectBranch,
@@ -150,6 +152,7 @@ export function BranchRow({
         repo={repo}
         branch={branch}
         displayName={displayName}
+        branchWorkspaceMember={branchWorkspaceMember}
         selected={isSelected}
         className="w-full"
       />

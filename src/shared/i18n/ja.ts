@@ -104,6 +104,7 @@ export const ja: Record<DictKey, string> = {
   'workspace.repositories.hide': 'ワークスペースリポジトリを非表示',
   'workspace.repositories.show': 'ワークスペースリポジトリを表示',
   'workspace.branch-workspace.list': 'ブランチワークスペース',
+  'workspace.branch-workspace.member-badge': 'ブランチワークスペース',
   'workspace.branch-workspace.create': 'ブランチワークスペースを追加',
   'workspace.branch-workspace.add-members': 'メンバー worktree を追加',
   'workspace.branch-workspace.remove-members': 'メンバー worktree を削除',
