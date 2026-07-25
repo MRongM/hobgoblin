@@ -1,5 +1,7 @@
 package dev.hobgoblin.android.ui.screens.terminals
 
+import dev.hobgoblin.android.domain.ssh.RemoteRepositoryProfile
+import dev.hobgoblin.android.domain.ssh.SshHostProfile
 import dev.hobgoblin.android.terminals.TerminalSessionRecord
 import dev.hobgoblin.android.terminals.TerminalSessionStatus
 import dev.hobgoblin.android.terminals.TmuxSessionIdentity
@@ -24,19 +26,58 @@ class TerminalsScreenStateTest {
     }
 
     @Test
-    fun `terminal overview context uses the retained target label`() {
-        assertEquals(
-            "Example - /srv/example",
-            terminalOverviewContext(record(targetLabel = "Example - /srv/example")),
-        )
-    }
-
-    @Test
     fun `terminal overview status stays compact`() {
         assertEquals(
             "disconnected",
             terminalOverviewStatus(record(status = TerminalSessionStatus.Disconnected)),
         )
+    }
+
+    @Test
+    fun `project terminal source resolves host project and branch directory`() {
+        val source = terminalOverviewSource(
+            session = record(
+                hostId = "developer@example.com:2222/srv/example-feature",
+                remotePath = "/srv/example-feature",
+                repositoryRemotePath = "/srv/example",
+            ),
+            hosts = listOf(host()),
+            repositories = listOf(repository()),
+        )
+
+        assertEquals("Build host · Example", source.contextLabel)
+        assertEquals("Branch directory", source.locationLabel)
+        assertEquals("/srv/example-feature", source.path)
+    }
+
+    @Test
+    fun `project terminal source identifies the project root`() {
+        val source = terminalOverviewSource(
+            session = record(remotePath = "/srv/example/", repositoryRemotePath = "/srv/example"),
+            hosts = listOf(host()),
+            repositories = listOf(repository()),
+        )
+
+        assertEquals("Build host · Example", source.contextLabel)
+        assertEquals("Project root", source.locationLabel)
+        assertEquals("/srv/example", source.path)
+    }
+
+    @Test
+    fun `temporary terminal source identifies its host directory`() {
+        val source = terminalOverviewSource(
+            session = record(
+                terminalId = null,
+                hostId = "developer@example.com:2222/var/log",
+                remotePath = "/var/log",
+            ),
+            hosts = listOf(host()),
+            repositories = listOf(repository()),
+        )
+
+        assertEquals("Build host · Host terminal", source.contextLabel)
+        assertEquals("Host directory", source.locationLabel)
+        assertEquals("/var/log", source.path)
     }
 
     @Test
@@ -71,23 +112,40 @@ class TerminalsScreenStateTest {
 
     private fun record(
         id: String = "session-1",
+        hostId: String = "host-1",
         displayName: String = "",
         terminalId: Int? = 1,
-        targetLabel: String = "Example - /srv/example",
+        remotePath: String = if (terminalId == null) "/" else "/srv/example",
+        repositoryRemotePath: String? = terminalId?.let { "/srv/example" },
         status: TerminalSessionStatus = TerminalSessionStatus.Running,
         tmuxIdentity: TmuxSessionIdentity? = null,
     ): TerminalSessionRecord = TerminalSessionRecord(
         id = id,
-        hostId = "host-1",
+        hostId = hostId,
         repositoryId = terminalId?.let { "repo-1" },
-        remotePath = if (terminalId == null) "/" else "/srv/example",
-        targetLabel = targetLabel,
+        remotePath = remotePath,
+        targetLabel = "Example - $remotePath",
         displayName = displayName,
         terminalId = terminalId,
-        repositoryRemotePath = terminalId?.let { "/srv/example" },
+        repositoryRemotePath = repositoryRemotePath,
         tmuxIdentity = tmuxIdentity,
         status = status,
         openedAt = 100L,
+    )
+
+    private fun host(): SshHostProfile = SshHostProfile(
+        id = "host-1",
+        alias = "Build host",
+        host = "example.com",
+        user = "developer",
+        port = 2222,
+    )
+
+    private fun repository(): RemoteRepositoryProfile = RemoteRepositoryProfile(
+        id = "repo-1",
+        hostProfileId = "host-1",
+        alias = "Example",
+        remotePath = "/srv/example",
     )
 
     private fun tmuxIdentity(): TmuxSessionIdentity = TmuxSessionIdentity(

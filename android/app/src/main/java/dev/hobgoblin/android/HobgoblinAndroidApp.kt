@@ -281,6 +281,8 @@ fun HobgoblinAndroidApp(
                 terminalsContent = {
                     TerminalsScreen(
                         sessions = terminalSessions,
+                        hosts = currentHosts(),
+                        repositories = currentRepositories(),
                         onOpenTerminalSession = { session ->
                             val current = terminalSessionManager.session(session.id)
                             if (current != null) {
