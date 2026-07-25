@@ -106,6 +106,41 @@ describe('branch workspace read model', () => {
     expect(deps.listCandidates).toHaveBeenCalledWith(ROOT, new Set(['api', 'web']), undefined)
   })
 
+  test('reads only referenced repositories once with lightweight snapshot options', async () => {
+    const manifests = [manifest('feature/first'), manifest('feature/second')]
+    const deps = dependencies(manifests)
+
+    const result = await readBranchWorkspaceSnapshot(ROOT, undefined, deps)
+
+    expect(result.ok).toBe(true)
+    expect(deps.readRepositorySnapshot).toHaveBeenCalledTimes(1)
+    expect(deps.readRepositorySnapshot).toHaveBeenCalledWith(path.join(ROOT, 'api'), undefined, {
+      includeWorktreeStatus: false,
+      includeRemote: false,
+    })
+  })
+
+  test('does not read an unconfigured repository referenced by a stale manifest', async () => {
+    const current = manifest()
+    current.repositories[0] = {
+      ...current.repositories[0]!,
+      repositoryName: 'legacy',
+      worktreePath: path.join(current.path, 'legacy'),
+    }
+    const deps = dependencies([current])
+
+    await expect(readBranchWorkspaceSnapshot(ROOT, undefined, deps)).resolves.toMatchObject({
+      ok: true,
+      items: [
+        {
+          state: { kind: 'needs-action', action: 'repair', reason: 'drift' },
+          issues: [{ kind: 'repository-unavailable', repositoryName: 'legacy' }],
+        },
+      ],
+    })
+    expect(deps.readRepositorySnapshot).not.toHaveBeenCalled()
+  })
+
   test('keeps a missing materialized workspace as needs-repair', async () => {
     const current = manifest()
     const deps = dependencies([current])

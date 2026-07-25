@@ -512,6 +512,86 @@ describe('branch workspace create planner', () => {
 })
 
 describe('branch workspace repair planner', () => {
+  test('plans member repairs concurrently from lightweight snapshots while preserving manifest order', async () => {
+    const current = existingManifest()
+    current.operation = { kind: 'repair' }
+    current.repositories.push({
+      ...current.repositories[0]!,
+      repositoryName: 'web',
+      worktreePath: path.join(current.path, 'web'),
+    })
+    const repoSnapshots: Record<string, RepoSnapshot> = {
+      [path.join(ROOT, 'api')]: snapshot(branch('main'), branch(BRANCH, current.repositories[0]!.worktreePath)),
+      [path.join(ROOT, 'web')]: snapshot(branch('main'), branch(BRANCH, current.repositories[1]!.worktreePath)),
+    }
+    const deps = dependencies(repoSnapshots)
+    deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+    deps.inspectPath.mockImplementation(async (_rootId, candidatePath) => ({
+      ...missing(candidatePath),
+      exists: true,
+      kind: 'directory',
+      resolvedPath: candidatePath,
+    }))
+    let activeSnapshots = 0
+    let maxActiveSnapshots = 0
+    deps.getSnapshot.mockImplementation(async (repoId: string) => {
+      activeSnapshots += 1
+      maxActiveSnapshots = Math.max(maxActiveSnapshots, activeSnapshots)
+      await new Promise((resolve) => setTimeout(resolve, repoId.endsWith('api') ? 20 : 5))
+      activeSnapshots -= 1
+      return repoSnapshots[repoId] ?? null
+    })
+
+    const result = await buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, deps)
+
+    if (!result.ok) throw new Error('Expected a repair plan')
+    expect(maxActiveSnapshots).toBe(2)
+    expect(deps.getSnapshot).toHaveBeenCalledWith(path.join(ROOT, 'api'), undefined, {
+      includeWorktreeStatus: false,
+      includeRemote: false,
+    })
+    expect(deps.getSnapshot).toHaveBeenCalledWith(path.join(ROOT, 'web'), undefined, {
+      includeWorktreeStatus: false,
+      includeRemote: false,
+    })
+    expect(result.plan.repositories.map((repository) => repository.repositoryName)).toEqual(['api', 'web'])
+  })
+
+  test('preserves an earlier structured repair error when a later concurrent check throws', async () => {
+    const current = existingManifest()
+    current.operation = { kind: 'repair' }
+    current.repositories.push({
+      ...current.repositories[0]!,
+      repositoryName: 'web',
+      worktreePath: path.join(current.path, 'web'),
+    })
+    const deps = dependencies({})
+    deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+    deps.getSnapshot.mockImplementation(async (repoId) => (repoId.endsWith('api') ? null : snapshot(branch('main'))))
+    deps.inspectPath.mockImplementation(async (_rootId, candidatePath) =>
+      candidatePath === current.path
+        ? { ...missing(candidatePath), exists: true, kind: 'directory', resolvedPath: candidatePath }
+        : missing(candidatePath),
+    )
+    deps.getBootstrapPreview.mockRejectedValue(new Error('preview failed'))
+
+    await expect(
+      buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, deps),
+    ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.repository-unavailable' })
+  })
+
+  test('rethrows repair cancellation after concurrent checks settle', async () => {
+    const current = existingManifest()
+    current.operation = { kind: 'repair' }
+    const deps = repairDependencies(current)
+    const controller = new AbortController()
+    controller.abort()
+
+    await expect(
+      buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, deps, controller.signal),
+    ).rejects.toThrow()
+  })
+
   test('does not recreate released auxiliary content during repair', async () => {
     const current = existingManifest()
     const deps = repairDependencies(current)

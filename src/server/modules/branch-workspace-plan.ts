@@ -457,23 +457,35 @@ async function buildRepairPlan(
     return { ok: false, message: 'workspace.branch-workspace.target-exists' }
   }
 
+  const repositoryChecks = Promise.allSettled(
+    manifest.repositories.map(async (member) => {
+      signal?.throwIfAborted()
+      if (!configuredRepositories.includes(member.repositoryName)) {
+        return { ok: false as const, message: 'workspace.branch-workspace.repository-unavailable' }
+      }
+      return await planRepairRepository(manifest, member, dependencies, signal)
+    }),
+  )
+  const auxiliaryChecks = Promise.allSettled(
+    manifest.auxiliaryEntries.map(async (entry) => {
+      signal?.throwIfAborted()
+      return await planRepairAuxiliary(manifest, entry, dependencies, signal)
+    }),
+  )
+  const [plannedRepositories, plannedAuxiliaryEntries] = await Promise.all([repositoryChecks, auxiliaryChecks])
   const repositories: BranchWorkspaceRepositoryPlan[] = []
-  for (const member of manifest.repositories) {
-    signal?.throwIfAborted()
-    if (!configuredRepositories.includes(member.repositoryName)) {
-      return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
-    }
-    const repository = await planRepairRepository(manifest, member, dependencies, signal)
-    if (!repository.ok) return repository
-    repositories.push(repository.repository)
+  for (const settled of plannedRepositories) {
+    if (settled.status === 'rejected') throw settled.reason
+    const planned = settled.value
+    if (!planned.ok) return planned
+    repositories.push(planned.repository)
   }
-
   const auxiliaryEntries: BranchWorkspaceAuxiliaryPlan[] = []
-  for (const entry of manifest.auxiliaryEntries) {
-    signal?.throwIfAborted()
-    const auxiliary = await planRepairAuxiliary(manifest, entry, dependencies, signal)
-    if (!auxiliary.ok) return auxiliary
-    auxiliaryEntries.push(auxiliary.entry)
+  for (const settled of plannedAuxiliaryEntries) {
+    if (settled.status === 'rejected') throw settled.reason
+    const planned = settled.value
+    if (!planned.ok) return planned
+    auxiliaryEntries.push(planned.entry)
   }
 
   const requiredApprovals: BranchWorkspaceApproval[] = []
@@ -582,7 +594,10 @@ async function planRepairRepository(
 ): Promise<{ ok: true; repository: BranchWorkspaceRepositoryPlan } | { ok: false; message: string }> {
   const repoId = workspaceRepositoryId(manifest.rootId, member.repositoryName)
   if (!repoId) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
-  const snapshot = await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal).catch(() => null)
+  const snapshot = await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal, {
+    includeWorktreeStatus: false,
+    includeRemote: false,
+  }).catch(() => null)
   if (!snapshot) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
   const branch = snapshot.branches.find((candidate) => candidate.name === member.targetBranch)
   if (branch?.worktree) {

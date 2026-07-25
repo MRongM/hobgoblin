@@ -46,17 +46,26 @@ export async function readBranchWorkspaceSnapshot(
     if (configSnapshot.kind === 'invalid') return { ok: false, message: configSnapshot.message }
     if (configSnapshot.kind === 'missing') return { ok: false, message: 'workspace.config.missing' }
 
+    const manifests = manifestSnapshot.kind === 'ready' ? manifestSnapshot.manifests : []
     const repositoryNames = new Set(configSnapshot.config.repo)
+    const referencedRepositoryNames = Array.from(
+      new Set(
+        manifests.flatMap((manifest) =>
+          manifest.repositories
+            .map((member) => member.repositoryName)
+            .filter((repositoryName) => repositoryNames.has(repositoryName)),
+        ),
+      ),
+    )
+    const repositorySnapshots = repositorySnapshotCache(
+      rootId,
+      referencedRepositoryNames,
+      dependencies.readRepositorySnapshot ?? getRepositorySnapshot,
+      signal,
+    )
     const auxiliaryCandidates = await (dependencies.listCandidates ?? listBranchWorkspaceAuxiliaryCandidates)(
       rootId,
       repositoryNames,
-      signal,
-    )
-    const manifests = manifestSnapshot.kind === 'ready' ? manifestSnapshot.manifests : []
-    const repositorySnapshots = repositorySnapshotCache(
-      rootId,
-      configSnapshot.config.repo,
-      dependencies.readRepositorySnapshot ?? getRepositorySnapshot,
       signal,
     )
     const items = await Promise.all(
@@ -81,7 +90,10 @@ function repositorySnapshotCache(
     repositoryNames.map((repositoryName) => {
       const repoId = workspaceRepositoryId(rootId, repositoryName)
       const snapshot = repoId
-        ? readRepositorySnapshot(repoId, signal).catch(() => null)
+        ? readRepositorySnapshot(repoId, signal, {
+            includeWorktreeStatus: false,
+            includeRemote: false,
+          }).catch(() => null)
         : Promise.resolve<RepoSnapshot | null>(null)
       return [repositoryName, snapshot]
     }),
