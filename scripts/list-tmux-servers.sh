@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly SESSION_FORMAT=$'name=#{session_name}\twindows=#{session_windows}\tattached=#{session_attached}'
+readonly SESSION_FORMAT=$'name=#{session_name}\twindows=#{session_windows}\tattached=#{session_attached}\tmouse=#{mouse}\tinit_path=#{@hobgoblin_init_path}\tterminal_number=#{@hobgoblin_terminal_number}'
 
 usage() {
   printf '%s\n' \
