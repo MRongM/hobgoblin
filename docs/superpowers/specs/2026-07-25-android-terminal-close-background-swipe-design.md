@@ -1,24 +1,29 @@
-# Android Terminal Close and Background Swipe Design
+# Android Terminal Close, Delete, and Background Swipe Design
 
 ## Goal
 
-Allow users to close retained terminal sessions directly from the Android terminals tab and move an open terminal into the retained background with a rightward swipe.
+Give Android terminal lists distinct Close and Delete lifecycle actions, and move an open terminal into the retained background with a rightward swipe.
 
 ## Product behavior
 
-### Close from a terminal item
+### Close without deleting
 
-Every item in the Android terminals tab shows `Close` and `Open` actions, with `Open` remaining the rightmost primary action. `Close` uses the error color and opens a confirmation dialog rather than changing state immediately.
+Every item in the Android terminals tab and every terminal item inside a Project shows an explicit `Close` action. Close opens a confirmation dialog because it may stop a running shell.
 
-Confirmation explains that the Android terminal connection will stop and the item will be removed. For tmux-backed terminals it also states that the remote tmux session will continue running. Confirming performs an Android retained terminal close:
+Confirmation explains that the Android terminal connection will stop while its retained record and list item remain available for reconnection. For tmux-backed terminals it also states that the remote tmux session continues running. Confirming performs an Android retained terminal close:
 
 - stop an active Android terminal controller;
-- detach its emulator projection;
-- remove its retained device-local session record;
-- remove its id from the persisted Android terminal manual order;
+- mark the retained record as user-closed/exited;
+- preserve the retained device-local record, list item, and manual order;
 - synchronize the terminal foreground service notification state.
 
-Cancel leaves the session and list unchanged. The action is available for running and inactive retained sessions.
+Cancel leaves the session unchanged. Close is idempotent for an already user-closed terminal.
+
+### Delete from terminal lists
+
+Every item in the Android terminals tab also shows `Delete`. Delete requires confirmation, stops the Android controller when active, removes the retained device-local session record, and removes only that id from the persisted terminal manual order. A tmux-backed Terminals-tab deletion leaves the remote tmux session running.
+
+The Project terminal list keeps its existing Delete action and optional exact tmux-session cleanup. Adding Close does not alter its swipe-to-delete behavior, confirmation flow, or tmux checkbox.
 
 ### Rightward background swipe
 
@@ -30,24 +35,25 @@ The edge-only gesture avoids taking horizontal terminal scrolling and text-selec
 
 ## Architecture
 
-- `TerminalsScreen.kt` owns confirmation presentation and manual-order cleanup, and emits an explicit close callback after confirmation.
-- `HobgoblinAndroidApp.kt` executes the close through `TerminalSessionManager.removeSession`, synchronizes `TerminalForegroundBridge`, and routes background navigation to `AppRoute.Terminals`.
+- `TerminalsScreen.kt` owns separate Close and Delete confirmation presentation. Only Delete changes manual order.
+- `RepositorySetupScreen.kt` owns the Project terminal Close confirmation alongside its existing Delete flow.
+- `HobgoblinAndroidApp.kt` executes Close through `TerminalSessionManager.close`, Delete through `TerminalSessionManager.removeSession`, synchronizes `TerminalForegroundBridge`, and routes background navigation to `AppRoute.Terminals`.
 - `TerminalScreen.kt` owns the transient swipe distance and invokes a separate `onBackground` callback. It does not reuse `onBack`.
 - `TerminalInteractionState.kt` exposes a pure swipe-threshold decision for unit testing.
 - No SSH protocol, tmux cleanup, session persistence format, dependency, desktop, web, or server changes are required.
 
 ## Error and safety handling
 
-- Close requires explicit confirmation because an ordinary native terminal shell may be terminated.
-- The close callback resolves the current session by id; an item that disappeared before confirmation becomes a safe no-op.
-- Manual order removes only the confirmed session id and preserves the relative order of every other retained terminal.
+- Close and Delete require explicit confirmation because an ordinary native terminal shell may be terminated.
+- Callbacks resolve current session ids through the manager; a session that disappeared becomes a safe no-op.
+- Close never changes manual order. Delete removes only the confirmed session id and preserves every other relative position.
 - A short, leftward, or cancelled swipe does nothing.
 - Closing a tmux-backed Android item never invokes remote tmux cleanup.
+- Terminals-tab Delete never invokes remote tmux cleanup; Project Delete retains its existing explicit opt-in cleanup.
 
 ## Verification
 
-- Unit tests cover confirmation copy, tmux-specific copy, manual-order cleanup, and right-swipe direction/threshold behavior.
-- Contract tests verify the list item exposes confirmed Close and the terminal page uses a separate background callback.
+- Unit tests cover Close-versus-Delete copy, Delete-only order cleanup, Project Close exposure, and right-swipe direction/threshold behavior.
+- Contract tests verify both list surfaces expose Close, the Terminals tab exposes Delete, callbacks remain distinct, and the terminal page uses a separate background callback.
 - Run `./gradlew :app:testDebugUnitTest` from `android/`.
 - Run `bun run typecheck`, `bun run test`, and `bun run check:architecture` from the repository root.
-

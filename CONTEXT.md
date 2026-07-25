@@ -9,12 +9,20 @@ Core model: **multi-project × multi-worktree/branch × multi-terminal**. Users 
 ## Language
 
 **Android terminals tab**:
-The Android main-navigation destination that lists every retained Host temporary terminal and Project terminal so an existing session can be reopened quickly. It is distinct from the terminal tabs inside the desktop/web terminal topbar, does not create sessions, and may explicitly close one retained terminal after confirmation.
+The Android main-navigation destination that lists every retained Host temporary terminal and Project terminal so an existing session can be reopened quickly. It is distinct from the terminal tabs inside the desktop/web terminal topbar, does not create sessions, and may explicitly close or delete one retained terminal after confirmation.
 _Avoid_: Terminal manager, terminal creator, internal terminal tab
 
 **Android retained terminal close**:
-An explicit, confirmed Android terminals-tab item action that stops the Android terminal controller, removes its retained device-local session record, and removes the item from the Android terminals tab. For a tmux-backed terminal it detaches the Android client without ending the remote tmux session, which remains eligible for later recovery. It is distinct from leaving a terminal screen, closing an associated tmux session, or deleting a Host or Project.
-_Avoid_: Terminal backgrounding, tmux session cleanup, Project terminal deletion
+An explicit, confirmed Android terminal action that stops its active Android controller while retaining the device-local session record and list item for later reconnection. For a tmux-backed terminal it detaches the Android client without ending the remote tmux session. It is distinct from terminal backgrounding, retained terminal deletion, associated tmux session cleanup, or deleting a Host or Project.
+_Avoid_: Terminal backgrounding, terminal deletion, tmux session cleanup
+
+**Android retained terminal delete**:
+An explicit, confirmed Android terminal-list action that stops an active Android controller, removes its retained device-local session record, and removes the item from the list and its manual order. A Terminals-tab delete never ends a remote tmux session; the Project terminal list may separately offer its existing opt-in exact tmux-session cleanup during deletion.
+_Avoid_: Terminal close, terminal backgrounding, automatic tmux cleanup
+
+**Android retained terminal reconnect**:
+A direct Android terminal-item action that restarts an inactive retained terminal in place while preserving its session identity, list position, and terminal slot. It is visible on every terminal item, enabled only when the session is exited, failed, or disconnected, and reattaches an eligible tmux-backed terminal to its exact retained tmux identity.
+_Avoid_: New terminal, open terminal, automatic retry
 
 **Android terminal background navigation**:
 A non-destructive navigation from an Android terminal screen to the Android terminals tab that leaves its retained session running or reconnectable. A rightward terminal-page swipe uses this path even for a Host temporary terminal, while the existing Back path retains its own destination-specific behavior.

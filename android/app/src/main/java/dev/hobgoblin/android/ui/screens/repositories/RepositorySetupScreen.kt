@@ -81,6 +81,7 @@ import dev.hobgoblin.android.termux.ExternalTermuxLaunchResult
 import dev.hobgoblin.android.ui.screens.terminals.TerminalSessionIdentityDetails
 import dev.hobgoblin.android.ui.screens.terminals.terminalSessionRemotePath
 import dev.hobgoblin.android.ui.screens.terminals.terminalSessionDisplayName
+import dev.hobgoblin.android.ui.screens.terminals.terminalSessionReconnectAvailable
 import dev.hobgoblin.android.ui.screens.terminals.terminalWorkspaceSessionCountsByPath
 import dev.hobgoblin.android.ui.screens.terminals.terminalWorkspaceCreatedSessions
 import dev.hobgoblin.android.ui.screens.terminals.terminalWorkspaceOrderedSessions
@@ -427,6 +428,18 @@ internal fun terminalDeleteConfirmationText(label: String, session: TerminalSess
         "$label at ${session.remotePath} will be removed from the terminal list."
     }
 
+internal fun repositoryTerminalCloseConfirmationText(
+    label: String,
+    session: TerminalSessionRecord,
+): String {
+    return if (session.tmuxIdentity != null) {
+        "This closes the Android connection for $label at ${session.remotePath} but keeps it in the terminal list " +
+            "so you can reconnect later. The remote tmux session keeps running."
+    } else {
+        "This stops $label at ${session.remotePath} but keeps it in the terminal list so you can reconnect later."
+    }
+}
+
 internal data class RepositoryTerminalCreationAction(
     val label: String,
     val launchMode: TerminalLaunchMode,
@@ -452,7 +465,7 @@ internal fun canCloseTerminalTmuxSession(session: TerminalSessionRecord): Boolea
 internal fun terminalTmuxCloseWarning(): String =
     "Also close the tmux session. This ends its running processes and disconnects other clients."
 
-private data class TerminalDeleteTarget(
+private data class TerminalActionTarget(
     val session: TerminalSessionRecord,
     val label: String,
 )
@@ -888,6 +901,8 @@ fun RepositoryWorkspaceScreen(
     },
     onCopyExternalTermuxCommandAtPath: (RemoteTarget) -> Boolean = { false },
     onOpenTerminalSession: (TerminalSessionRecord) -> Unit = {},
+    onReconnectTerminalSession: (TerminalSessionRecord) -> Unit = {},
+    onCloseTerminalSession: (String) -> Unit = {},
     onDeleteTerminalSession: (String, Boolean) -> Unit = { _, _ -> },
     onDeleteRepository: () -> Unit,
     onCreateWorktree: (WorktreeCreationSource, String) -> Unit = { _, _ -> },
@@ -906,7 +921,9 @@ fun RepositoryWorkspaceScreen(
     }
     var confirmDelete by remember(repository.id) { mutableStateOf(false) }
     var removeTarget by remember(repository.id) { mutableStateOf<RemoteRepositoryWorktree?>(null) }
-    var terminalDeleteTarget by remember(repository.id) { mutableStateOf<TerminalDeleteTarget?>(null) }
+    var terminalCloseTarget by remember(repository.id) { mutableStateOf<TerminalActionTarget?>(null) }
+    var terminalDeleteTarget by remember(repository.id) { mutableStateOf<TerminalActionTarget?>(null) }
+    var terminalClosePending by remember(repository.id) { mutableStateOf(false) }
     var closeTmuxSessionOnDelete by remember(repository.id) { mutableStateOf(false) }
     var terminalDeletePending by remember(repository.id) { mutableStateOf(false) }
     var tmuxDiscoveryPending by remember(repository.id) { mutableStateOf(false) }
@@ -1058,9 +1075,34 @@ fun RepositoryWorkspaceScreen(
         }
     }
 
+    fun closeTerminalSession(session: TerminalSessionRecord) {
+        if (terminalClosePending) return
+        actionError = null
+        terminalClosePending = true
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) { onCloseTerminalSession(session.id) }
+            }.onSuccess {
+                terminalCloseTarget = null
+            }.onFailure {
+                actionError = it.message ?: "Terminal close failed"
+            }
+            terminalClosePending = false
+        }
+    }
+
+    fun requestCloseTerminalSession(session: TerminalSessionRecord, label: String) {
+        terminalCloseTarget = TerminalActionTarget(session = session, label = label)
+    }
+
+    fun dismissTerminalClose() {
+        if (terminalClosePending) return
+        terminalCloseTarget = null
+    }
+
     fun requestDeleteTerminalSession(session: TerminalSessionRecord, label: String) {
         closeTmuxSessionOnDelete = false
-        terminalDeleteTarget = TerminalDeleteTarget(session = session, label = label)
+        terminalDeleteTarget = TerminalActionTarget(session = session, label = label)
     }
 
     fun dismissTerminalDelete() {
@@ -1238,6 +1280,8 @@ fun RepositoryWorkspaceScreen(
                     onOpenExternalTermuxAtPath = ::openExternalTermux,
                     onCopyExternalTermuxCommandAtPath = ::copyExternalTermuxCommand,
                     onOpenTerminalSession = onOpenTerminalSession,
+                    onReconnectTerminalSession = onReconnectTerminalSession,
+                    onCloseTerminalSession = ::requestCloseTerminalSession,
                     onDeleteTerminalSession = ::requestDeleteTerminalSession,
                 )
             }
@@ -1267,6 +1311,27 @@ fun RepositoryWorkspaceScreen(
             },
             dismissButton = {
                 TextButton(onClick = { removeTarget = null }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    terminalCloseTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = ::dismissTerminalClose,
+            title = { Text("Close terminal?") },
+            text = { Text(repositoryTerminalCloseConfirmationText(target.label, target.session)) },
+            confirmButton = {
+                TextButton(
+                    onClick = { closeTerminalSession(target.session) },
+                    enabled = !terminalClosePending,
+                ) {
+                    Text("Close terminal")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = ::dismissTerminalClose, enabled = !terminalClosePending) {
                     Text("Cancel")
                 }
             },
@@ -1672,6 +1737,8 @@ private fun RepositoryTerminalPanel(
     onOpenExternalTermuxAtPath: (String, (ExternalTermuxLaunchResult) -> Unit) -> Unit,
     onCopyExternalTermuxCommandAtPath: (String, (Boolean) -> Unit) -> Unit,
     onOpenTerminalSession: (TerminalSessionRecord) -> Unit,
+    onReconnectTerminalSession: (TerminalSessionRecord) -> Unit,
+    onCloseTerminalSession: (TerminalSessionRecord, String) -> Unit,
     onDeleteTerminalSession: (TerminalSessionRecord, String) -> Unit,
 ) {
     val selectedPath = terminalSessionRemotePath(path)
@@ -1719,6 +1786,8 @@ private fun RepositoryTerminalPanel(
                 onSelectWorkspace = onSelectWorkspace,
                 onCreateTerminalAtPath = onCreateTerminalAtPath,
                 onOpenTerminalSession = onOpenTerminalSession,
+                onReconnectTerminalSession = onReconnectTerminalSession,
+                onCloseTerminalSession = onCloseTerminalSession,
                 onDeleteTerminalSession = onDeleteTerminalSession,
             )
             RepositoryTerminalMode.ExternalTermux -> ExternalTermuxPanel(
@@ -1841,6 +1910,8 @@ private fun RemoteSshTerminalPanelContent(
     onSelectWorkspace: (String) -> Unit,
     onCreateTerminalAtPath: (String, TerminalLaunchMode) -> Unit,
     onOpenTerminalSession: (TerminalSessionRecord) -> Unit,
+    onReconnectTerminalSession: (TerminalSessionRecord) -> Unit,
+    onCloseTerminalSession: (TerminalSessionRecord, String) -> Unit,
     onDeleteTerminalSession: (TerminalSessionRecord, String) -> Unit,
 ) {
     val creationActions = repositoryTerminalCreationActions()
@@ -1964,6 +2035,8 @@ private fun RemoteSshTerminalPanelContent(
                         session = session,
                         label = label,
                         onOpenTerminalSession = onOpenTerminalSession,
+                        onReconnectTerminalSession = onReconnectTerminalSession,
+                        onCloseTerminalSession = onCloseTerminalSession,
                         onDeleteTerminalSession = onDeleteTerminalSession,
                     )
                 }
@@ -2033,6 +2106,8 @@ private fun TerminalSessionRow(
     session: TerminalSessionRecord,
     label: String,
     onOpenTerminalSession: (TerminalSessionRecord) -> Unit,
+    onReconnectTerminalSession: (TerminalSessionRecord) -> Unit,
+    onCloseTerminalSession: (TerminalSessionRecord, String) -> Unit,
     onDeleteTerminalSession: (TerminalSessionRecord, String) -> Unit,
 ) {
     Card(
@@ -2073,6 +2148,15 @@ private fun TerminalSessionRow(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                TextButton(
+                    enabled = terminalSessionReconnectAvailable(session),
+                    onClick = { onReconnectTerminalSession(session) },
+                ) {
+                    Text("Reconnect")
+                }
+                TextButton(onClick = { onCloseTerminalSession(session, label) }) {
+                    Text("Close")
+                }
                 TextButton(onClick = { onOpenTerminalSession(session) }) {
                     Text("Open")
                 }

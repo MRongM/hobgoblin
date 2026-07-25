@@ -1,17 +1,19 @@
-# Android Terminal Close and Background Swipe Implementation Plan
+# Android Terminal Close/Delete Semantics Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a confirmed Close action to every Android terminal-list item and background an open terminal through a rightward terminal-page swipe.
+**Goal:** Separate retained-terminal Close from Delete and expose Close inside Project terminal lists while preserving rightward background navigation.
 
-**Architecture:** `TerminalsScreen` owns destructive confirmation and presentation-order cleanup, while `HobgoblinAndroidApp` performs session removal and foreground synchronization. `TerminalScreen` recognizes an edge swipe through a pure threshold policy and emits a distinct background-navigation callback.
+**Architecture:** `TerminalsScreen` emits distinct confirmed Close and Delete callbacks, changing manual order only for Delete. `RepositoryWorkspaceScreen` adds confirmed Close beside its existing Delete flow, while `HobgoblinAndroidApp` maps Close to `TerminalSessionManager.close` and Delete to `removeSession`.
 
 **Tech Stack:** Kotlin 2, Jetpack Compose Material 3, JUnit 4, Gradle.
 
 ## Global Constraints
 
-- Close always requires confirmation and removes only the selected retained Android session.
+- Close always requires confirmation, stops the selected Android controller, and retains its record and order.
+- Delete always requires confirmation and removes the selected retained Android session.
 - Closing a tmux-backed item never ends the remote tmux session.
+- Terminals-tab Delete never ends the remote tmux session; Project Delete keeps its existing opt-in tmux cleanup.
 - Rightward swipe backgrounds the terminal to the Terminals tab and never uses the existing Back callback.
 - The gesture is limited to the left content edge to preserve terminal scrolling and selection.
 - Existing Open, reorder, Back, focus, SSH, persistence-format, desktop, web, and server behavior remains unchanged.
@@ -19,7 +21,7 @@
 
 ---
 
-### Task 1: Confirm and close a retained terminal item
+### Task 1: Split Close and Delete in the Terminals tab
 
 **Files:**
 - Modify: `android/app/src/main/java/dev/hobgoblin/android/ui/screens/terminals/TerminalsScreen.kt`
@@ -28,24 +30,26 @@
 
 **Interfaces:**
 - Produces: `terminalOverviewCloseConfirmationText(session: TerminalSessionRecord): String`.
-- Produces: `terminalOverviewOrderAfterClose(orderedIds: List<String>, closedId: String): List<String>`.
-- Adds: `TerminalsScreen(..., onCloseTerminalSession: (String) -> Unit, ...)`.
-- Consumes: `TerminalSessionManager.removeSession(sessionId)` and `TerminalForegroundBridge.sync()`.
+- Produces: `terminalOverviewDeleteConfirmationText(session: TerminalSessionRecord): String`.
+- Produces: `terminalOverviewOrderAfterDelete(orderedIds: List<String>, deletedId: String): List<String>`.
+- Adds: `TerminalsScreen(..., onCloseTerminalSession: (String) -> Unit, onDeleteTerminalSession: (String) -> Unit, ...)`.
+- Consumes: `TerminalSessionManager.close(sessionId)`, `TerminalSessionManager.removeSession(sessionId)`, and `TerminalForegroundBridge.sync()`.
 
-- [x] **Step 1: Write failing close-copy and order tests**
+- [x] **Step 1: Write failing lifecycle-copy, ordering, and callback contract tests**
 
-Add tests that assert native copy includes the terminal title, stop, and removal; tmux copy states that the remote tmux session keeps running; and order cleanup preserves the remaining ids:
+Assert Close copy says the record stays available, Delete copy says it is removed, and only the Delete helper changes order:
 
 ```kotlin
-assertEquals(listOf("session-1", "session-3"), terminalOverviewOrderAfterClose(
+assertEquals(listOf("session-1", "session-3"), terminalOverviewOrderAfterDelete(
     orderedIds = listOf("session-1", "session-2", "session-3"),
-    closedId = "session-2",
+    deletedId = "session-2",
 ))
-assertTrue(terminalOverviewCloseConfirmationText(record(displayName = "release shell")).contains("release shell"))
-assertTrue(terminalOverviewCloseConfirmationText(record(tmuxIdentity = tmuxIdentity())).contains("keeps running"))
+assertTrue(terminalOverviewCloseConfirmationText(record()).contains("reconnect"))
+assertFalse(terminalOverviewCloseConfirmationText(record()).contains("removes"))
+assertTrue(terminalOverviewDeleteConfirmationText(record()).contains("removes"))
 ```
 
-Add a source contract that requires `Close`, `AlertDialog`, and `onCloseTerminalSession` in `TerminalsScreen.kt`.
+Require `Close`, `Delete`, `onCloseTerminalSession`, and `onDeleteTerminalSession` in `TerminalsScreen.kt`, plus manager `close` and `removeSession` wiring in `HobgoblinAndroidApp.kt`.
 
 - [x] **Step 2: Run the focused test and verify RED**
 
@@ -55,26 +59,30 @@ From `android/` run:
 ./gradlew :app:testDebugUnitTest --tests "dev.hobgoblin.android.ui.screens.terminals.TerminalsScreenStateTest"
 ```
 
-Expected: compilation fails because the close helpers do not exist.
+Expected: compilation or assertions fail because Close still removes and Delete is not exposed separately.
 
-- [x] **Step 3: Implement close confirmation and item action**
+- [x] **Step 3: Implement separate Close and Delete dialogs/actions**
 
-Store only the pending session id in `TerminalsScreen`. Render an error-colored `Close` button before `Open`. Resolve the current session before showing or confirming the dialog. On confirmation, compute and persist the remaining manual order, clear the pending id, and invoke `onCloseTerminalSession(session.id)`.
+Store a pending action plus session id in `TerminalsScreen`. Close invokes `onCloseTerminalSession` without changing order. Delete computes and persists remaining order, then invokes `onDeleteTerminalSession`. Keep Open behavior unchanged.
 
-Use `AlertDialog` with `Close terminal?`, a `Close terminal` confirm button, and `Cancel`. Keep Card and Open click behavior unchanged.
+Use distinct `Close terminal?` and `Delete terminal?` dialogs so the lifecycle outcome is explicit.
 
-- [x] **Step 4: Wire session removal at the app boundary**
+- [x] **Step 4: Wire distinct manager lifecycle operations**
 
 Pass this callback from `HobgoblinAndroidApp`:
 
 ```kotlin
 onCloseTerminalSession = { sessionId ->
+    terminalSessionManager.close(sessionId)
+    terminalForegroundBridge.sync()
+}
+onDeleteTerminalSession = { sessionId ->
     terminalSessionManager.removeSession(sessionId)
     terminalForegroundBridge.sync()
 }
 ```
 
-Do not call remote tmux cleanup or navigate away from the Terminals tab.
+Neither callback calls remote tmux cleanup or navigates away from the Terminals tab.
 
 - [x] **Step 5: Run the focused test and verify GREEN**
 
@@ -82,68 +90,48 @@ Run the focused Gradle command from Step 2.
 
 Expected: every `TerminalsScreenStateTest` test passes.
 
-### Task 2: Add rightward background navigation
+### Task 2: Add Close to Project terminal items
 
 **Files:**
-- Modify: `android/app/src/main/java/dev/hobgoblin/android/ui/screens/terminals/TerminalInteractionState.kt`
-- Modify: `android/app/src/main/java/dev/hobgoblin/android/ui/screens/terminals/TerminalScreen.kt`
-- Modify: `android/app/src/main/java/dev/hobgoblin/android/navigation/AppRoute.kt`
+- Modify: `android/app/src/main/java/dev/hobgoblin/android/ui/screens/repositories/RepositorySetupScreen.kt`
 - Modify: `android/app/src/main/java/dev/hobgoblin/android/HobgoblinAndroidApp.kt`
-- Test: `android/app/src/test/java/dev/hobgoblin/android/ui/screens/terminals/TerminalInteractionStateTest.kt`
-- Test: `android/app/src/test/java/dev/hobgoblin/android/navigation/AppRouteTest.kt`
+- Test: `android/app/src/test/java/dev/hobgoblin/android/ui/screens/repositories/RepositorySetupStateTest.kt`
 
 **Interfaces:**
-- Produces: `terminalBackgroundSwipeTriggered(horizontalDistancePx: Float, thresholdPx: Float): Boolean`.
-- Produces: `terminalBackgroundRoute(): AppRoute`, returning `AppRoute.Terminals`.
-- Adds: `TerminalScreen(..., onBackground: () -> Unit, ...)`.
+- Produces: Project terminal Close confirmation state and action.
+- Adds: `RepositoryWorkspaceScreen(..., onCloseTerminalSession: (String) -> Unit, ...)`.
+- Preserves: existing `onDeleteTerminalSession: (String, Boolean) -> Unit` and tmux cleanup flow.
 
-- [x] **Step 1: Write failing gesture and route tests**
+- [x] **Step 1: Write a failing Project Close source contract**
 
-```kotlin
-assertTrue(terminalBackgroundSwipeTriggered(horizontalDistancePx = 96f, thresholdPx = 72f))
-assertFalse(terminalBackgroundSwipeTriggered(horizontalDistancePx = 40f, thresholdPx = 72f))
-assertFalse(terminalBackgroundSwipeTriggered(horizontalDistancePx = -96f, thresholdPx = 72f))
-assertEquals(AppRoute.Terminals, terminalBackgroundRoute())
-```
-
-Extend the terminal source contract to require `TerminalBackgroundSwipeEdge(onBackground)` while retaining `BackHandler { navigateBack() }`.
+Read `RepositorySetupScreen.kt` and assert it contains `onCloseTerminalSession`, `Text("Close")`, and a `Close terminal?` dialog while retaining `onDeleteTerminalSession`.
 
 - [x] **Step 2: Run focused tests and verify RED**
 
 From `android/` run:
 
 ```bash
-./gradlew :app:testDebugUnitTest --tests "dev.hobgoblin.android.ui.screens.terminals.TerminalInteractionStateTest" --tests "dev.hobgoblin.android.navigation.AppRouteTest"
+./gradlew :app:testDebugUnitTest --tests "dev.hobgoblin.android.ui.screens.repositories.RepositorySetupStateTest"
 ```
 
-Expected: compilation fails because the swipe and background-route helpers do not exist.
+Expected: the source contract fails because Project items do not expose Close.
 
-- [x] **Step 3: Implement the pure policies**
+- [x] **Step 3: Implement Project Close confirmation**
 
-Add a positive-distance threshold comparison in `TerminalInteractionState.kt` and return `AppRoute.Terminals` from `terminalBackgroundRoute()` in `AppRoute.kt`. Keep both functions free of Compose and session-manager dependencies.
+Add a separate pending Close target, confirmation dialog, and Close button to `TerminalSessionRow`. Do not route Close through Delete or change swipe-to-delete.
 
-- [x] **Step 4: Render the edge swipe recognizer**
-
-Add a private `TerminalBackgroundSwipeEdge` composable to `TerminalScreen.kt`. Use a `48.dp` left-edge hit region, a `72.dp` rightward threshold, and `detectHorizontalDragGestures`. Reset accumulated distance on start, cancellation, and completion; call `onBackground` once only when the threshold passes.
-
-Render the edge after the terminal content so it remains available in focus mode. Do not call `navigateBack`, change focus state, or close the active session.
-
-- [x] **Step 5: Wire background navigation**
-
-Pass this callback from `HobgoblinAndroidApp`:
+- [x] **Step 4: Wire Project Close to the manager**
 
 ```kotlin
-onBackground = {
+onCloseTerminalSession = { sessionId ->
+    terminalSessionManager.close(sessionId)
     terminalForegroundBridge.sync()
-    route = terminalBackgroundRoute()
 }
 ```
 
-- [x] **Step 6: Run focused tests and verify GREEN**
+- [x] **Step 5: Run focused tests and verify GREEN**
 
-Run the focused Gradle command from Step 2.
-
-Expected: every selected test passes.
+Expected: every `RepositorySetupStateTest` test passes.
 
 ### Task 3: Full verification
 
@@ -178,4 +166,4 @@ Expected: every command exits successfully.
 
 - [x] **Step 3: Review documentation and diff**
 
-Run `git diff --check`; confirm `CONTEXT.md` matches the implementation, remote tmux cleanup is untouched, and the diff is limited to Android terminal UI/navigation/tests plus design and plan documents.
+Run `git diff --check`; confirm Close retains records/order, Terminals-tab Delete removes them, Project Delete and remote tmux cleanup are unchanged, and the diff remains Android-scoped plus docs.

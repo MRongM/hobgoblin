@@ -294,6 +294,16 @@ internal fun terminalReconnectAvailable(state: TerminalSessionState): Boolean = 
     -> false
 }
 
+internal fun terminalSessionReconnectAvailable(session: TerminalSessionRecord): Boolean = when (session.status) {
+    TerminalSessionStatus.Exited,
+    TerminalSessionStatus.Failed,
+    TerminalSessionStatus.Disconnected,
+    -> true
+    TerminalSessionStatus.Starting,
+    TerminalSessionStatus.Running,
+    -> false
+}
+
 internal data class TerminalDetailInlineActions(
     val reconnectEnabled: Boolean,
     val closeEnabled: Boolean,

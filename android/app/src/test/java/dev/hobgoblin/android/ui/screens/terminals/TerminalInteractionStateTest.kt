@@ -38,6 +38,25 @@ class TerminalInteractionStateTest {
     }
 
     @Test
+    fun `retained terminal item reconnect is available only for inactive records`() {
+        val record = TerminalSessionRecord(
+            id = "session-1",
+            hostId = "host-1",
+            repositoryId = "repo-1",
+            remotePath = "/srv/app",
+            targetLabel = "App - /srv/app",
+            status = TerminalSessionStatus.Starting,
+            openedAt = 100L,
+        )
+
+        assertFalse(terminalSessionReconnectAvailable(record))
+        assertFalse(terminalSessionReconnectAvailable(record.copy(status = TerminalSessionStatus.Running)))
+        assertTrue(terminalSessionReconnectAvailable(record.copy(status = TerminalSessionStatus.Exited)))
+        assertTrue(terminalSessionReconnectAvailable(record.copy(status = TerminalSessionStatus.Failed)))
+        assertTrue(terminalSessionReconnectAvailable(record.copy(status = TerminalSessionStatus.Disconnected)))
+    }
+
+    @Test
     fun `terminal detail inline actions keep close visible and enable reconnect only when available`() {
         assertEquals(
             TerminalDetailInlineActions(reconnectEnabled = true, closeEnabled = true),
