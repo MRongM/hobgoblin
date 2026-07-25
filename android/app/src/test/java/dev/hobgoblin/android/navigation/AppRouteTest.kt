@@ -12,6 +12,11 @@ class AppRouteTest {
     }
 
     @Test
+    fun `backgrounding a terminal opens the terminals tab`() {
+        assertEquals(AppRoute.Terminals, terminalBackgroundRoute())
+    }
+
+    @Test
     fun `terminal route carries session identity from record`() {
         val record = TerminalSessionRecord(
             id = "session-1",

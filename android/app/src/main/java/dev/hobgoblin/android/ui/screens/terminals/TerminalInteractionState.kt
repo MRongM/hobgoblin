@@ -19,6 +19,11 @@ internal const val TerminalQuickCancelInput = "NO"
 internal const val TerminalDefaultFocusMode = false
 internal const val TerminalStickToBottomThresholdPx = 48
 
+internal fun terminalBackgroundSwipeTriggered(
+    horizontalDistancePx: Float,
+    thresholdPx: Float,
+): Boolean = thresholdPx > 0f && horizontalDistancePx >= thresholdPx
+
 internal enum class TerminalExtraKey {
     Escape,
     Slash,

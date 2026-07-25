@@ -9,8 +9,16 @@ Core model: **multi-project × multi-worktree/branch × multi-terminal**. Users 
 ## Language
 
 **Android terminals tab**:
-The Android main-navigation destination that lists every retained Host temporary terminal and Project terminal so an existing session can be reopened quickly. It is distinct from the terminal tabs inside the desktop/web terminal topbar and does not create or delete sessions.
+The Android main-navigation destination that lists every retained Host temporary terminal and Project terminal so an existing session can be reopened quickly. It is distinct from the terminal tabs inside the desktop/web terminal topbar, does not create sessions, and may explicitly close one retained terminal after confirmation.
 _Avoid_: Terminal manager, terminal creator, internal terminal tab
+
+**Android retained terminal close**:
+An explicit, confirmed Android terminals-tab item action that stops the Android terminal controller, removes its retained device-local session record, and removes the item from the Android terminals tab. For a tmux-backed terminal it detaches the Android client without ending the remote tmux session, which remains eligible for later recovery. It is distinct from leaving a terminal screen, closing an associated tmux session, or deleting a Host or Project.
+_Avoid_: Terminal backgrounding, tmux session cleanup, Project terminal deletion
+
+**Android terminal background navigation**:
+A non-destructive navigation from an Android terminal screen to the Android terminals tab that leaves its retained session running or reconnectable. A rightward terminal-page swipe uses this path even for a Host temporary terminal, while the existing Back path retains its own destination-specific behavior.
+_Avoid_: Application backgrounding, terminal close, terminal disconnect
 
 **Android manual item order**:
 The restorable, device-local order chosen by dragging Android Host, Project, Terminal, or Project Worktree items from their dedicated drag handles. Host, Project, and Terminal orders are global to their respective lists; Worktree order is scoped to one Project. It changes only Android presentation, never Git worktree enumeration or remote repository state, and newly discovered items append after retained ordered items.

@@ -5,8 +5,10 @@ import dev.hobgoblin.android.domain.ssh.SshHostProfile
 import dev.hobgoblin.android.terminals.TerminalSessionRecord
 import dev.hobgoblin.android.terminals.TerminalSessionStatus
 import dev.hobgoblin.android.terminals.TmuxSessionIdentity
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TerminalsScreenStateTest {
@@ -108,6 +110,47 @@ class TerminalsScreenStateTest {
 
         assertEquals(identity.sessionName, terminalSessionTmuxSessionName(record(tmuxIdentity = identity)))
         assertNull(terminalSessionTmuxSessionName(record()))
+    }
+
+    @Test
+    fun `native terminal close confirmation explains stop and removal`() {
+        val text = terminalOverviewCloseConfirmationText(record(displayName = "release shell"))
+
+        assertTrue(text.contains("release shell"))
+        assertTrue(text.contains("stops"))
+        assertTrue(text.contains("removes"))
+    }
+
+    @Test
+    fun `tmux terminal close confirmation keeps the remote tmux session`() {
+        val text = terminalOverviewCloseConfirmationText(record(tmuxIdentity = tmuxIdentity()))
+
+        assertTrue(text.contains("removes"))
+        assertTrue(text.contains("remote tmux session keeps running"))
+    }
+
+    @Test
+    fun `closing a terminal removes only its id from manual order`() {
+        assertEquals(
+            listOf("session-1", "session-3"),
+            terminalOverviewOrderAfterClose(
+                orderedIds = listOf("session-1", "session-2", "session-3"),
+                closedId = "session-2",
+            ),
+        )
+    }
+
+    @Test
+    fun `terminal overview exposes a confirmed close action`() {
+        val source = listOf(
+            File("src/main/java/dev/hobgoblin/android/ui/screens/terminals/TerminalsScreen.kt"),
+            File("app/src/main/java/dev/hobgoblin/android/ui/screens/terminals/TerminalsScreen.kt"),
+            File("android/app/src/main/java/dev/hobgoblin/android/ui/screens/terminals/TerminalsScreen.kt"),
+        ).firstOrNull(File::isFile)?.readText() ?: error("TerminalsScreen.kt not found")
+
+        assertTrue(source.contains("onCloseTerminalSession"))
+        assertTrue(source.contains("Text(\"Close\")"))
+        assertTrue(source.contains("AlertDialog("))
     }
 
     private fun record(

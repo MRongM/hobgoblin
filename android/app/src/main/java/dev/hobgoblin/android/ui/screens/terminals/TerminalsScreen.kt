@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -39,6 +41,21 @@ internal fun terminalOverviewTitle(session: TerminalSessionRecord): String =
     }
 
 internal fun terminalOverviewStatus(session: TerminalSessionRecord): String = session.status.name.lowercase()
+
+internal fun terminalOverviewCloseConfirmationText(session: TerminalSessionRecord): String {
+    val title = terminalOverviewTitle(session)
+    return if (session.tmuxIdentity != null) {
+        "This closes the Android terminal connection for $title and removes it from the terminal list. " +
+            "The remote tmux session keeps running."
+    } else {
+        "This stops $title and removes it from the terminal list."
+    }
+}
+
+internal fun terminalOverviewOrderAfterClose(
+    orderedIds: List<String>,
+    closedId: String,
+): List<String> = orderedIds.filterNot { it == closedId }
 
 internal data class TerminalOverviewSource(
     val contextLabel: String,
@@ -86,10 +103,12 @@ fun TerminalsScreen(
     hosts: List<SshHostProfile>,
     repositories: List<RemoteRepositoryProfile>,
     onOpenTerminalSession: (TerminalSessionRecord) -> Unit,
+    onCloseTerminalSession: (String) -> Unit,
     initialManualOrder: List<String> = emptyList(),
     onSaveManualOrder: (List<String>) -> Unit = {},
 ) {
     var manualOrder by remember(initialManualOrder) { mutableStateOf(initialManualOrder) }
+    var pendingCloseSessionId by remember { mutableStateOf<String?>(null) }
     val defaultOrderedSessions = terminalOverviewOrderedSessions(sessions)
     val orderedSessions = ManualItemOrderPolicy.apply(
         defaultOrderedSessions,
@@ -141,8 +160,42 @@ fun TerminalsScreen(
                 source = terminalOverviewSource(session, hosts, repositories),
                 reorderState = reorderState,
                 onOpen = { onOpenTerminalSession(session) },
+                onRequestClose = { pendingCloseSessionId = session.id },
             )
         }
+    }
+
+    val pendingCloseSession = orderedSessions.firstOrNull { it.id == pendingCloseSessionId }
+    if (pendingCloseSession != null) {
+        AlertDialog(
+            onDismissRequest = { pendingCloseSessionId = null },
+            title = { Text("Close terminal?") },
+            text = { Text(terminalOverviewCloseConfirmationText(pendingCloseSession)) },
+            confirmButton = {
+                TextButton(
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                    onClick = {
+                        val nextOrder = terminalOverviewOrderAfterClose(
+                            orderedIds = orderedSessions.map(TerminalSessionRecord::id),
+                            closedId = pendingCloseSession.id,
+                        )
+                        manualOrder = nextOrder
+                        onSaveManualOrder(nextOrder)
+                        pendingCloseSessionId = null
+                        onCloseTerminalSession(pendingCloseSession.id)
+                    },
+                ) {
+                    Text("Close terminal")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingCloseSessionId = null }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }
 
@@ -153,6 +206,7 @@ private fun TerminalOverviewRow(
     source: TerminalOverviewSource,
     reorderState: ManualReorderState,
     onOpen: () -> Unit,
+    onRequestClose: () -> Unit,
 ) {
     Card(
         modifier = modifier
@@ -222,6 +276,14 @@ private fun TerminalOverviewRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
             ) {
+                TextButton(
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                    onClick = onRequestClose,
+                ) {
+                    Text("Close")
+                }
                 TextButton(onClick = onOpen) {
                     Text("Open")
                 }

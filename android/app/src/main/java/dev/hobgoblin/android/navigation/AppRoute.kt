@@ -40,6 +40,8 @@ sealed interface AppRoute {
 
 internal fun initialMainRoute(): AppRoute = AppRoute.Hosts
 
+internal fun terminalBackgroundRoute(): AppRoute = AppRoute.Terminals
+
 internal fun terminalReturnRoute(
     route: AppRoute.Terminal,
     resolvedHostId: String,

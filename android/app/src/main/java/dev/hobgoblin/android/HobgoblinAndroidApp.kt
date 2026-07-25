@@ -21,6 +21,7 @@ import dev.hobgoblin.android.domain.ssh.RemoteTarget
 import dev.hobgoblin.android.domain.ssh.SshHostProfile
 import dev.hobgoblin.android.navigation.AppRoute
 import dev.hobgoblin.android.navigation.initialMainRoute
+import dev.hobgoblin.android.navigation.terminalBackgroundRoute
 import dev.hobgoblin.android.navigation.terminalReturnRoute
 import dev.hobgoblin.android.ssh.HostPortForwardManager
 import dev.hobgoblin.android.ssh.HostPortForwardStatus
@@ -290,6 +291,10 @@ fun HobgoblinAndroidApp(
                                 terminalSessionManager.touchSession(current.id)
                                 route = AppRoute.terminal(current, returnToTerminals = true)
                             }
+                        },
+                        onCloseTerminalSession = { sessionId ->
+                            terminalSessionManager.removeSession(sessionId)
+                            terminalForegroundBridge.sync()
                         },
                         initialManualOrder = manualItemOrderStore.load(ManualItemOrderScope.Terminals),
                         onSaveManualOrder = { ids ->
@@ -570,6 +575,10 @@ fun HobgoblinAndroidApp(
                     },
                     terminalSessionManager = terminalSessionManager,
                     terminalForegroundBridge = terminalForegroundBridge,
+                    onBackground = {
+                        terminalForegroundBridge.sync()
+                        route = terminalBackgroundRoute()
+                    },
                     onBack = { activeSessionId ->
                         val temporary = isHostTemporaryTerminal(currentRoute.remotePath, currentRoute.repositoryId)
                         if (temporary) {

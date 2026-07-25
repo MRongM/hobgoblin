@@ -369,6 +369,14 @@ class TerminalInteractionStateTest {
     }
 
     @Test
+    fun `background swipe requires a sufficiently long rightward drag`() {
+        assertTrue(terminalBackgroundSwipeTriggered(horizontalDistancePx = 72f, thresholdPx = 72f))
+        assertFalse(terminalBackgroundSwipeTriggered(horizontalDistancePx = 71f, thresholdPx = 72f))
+        assertFalse(terminalBackgroundSwipeTriggered(horizontalDistancePx = -96f, thresholdPx = 72f))
+        assertFalse(terminalBackgroundSwipeTriggered(horizontalDistancePx = 96f, thresholdPx = 0f))
+    }
+
+    @Test
     fun `terminal screen groups ordinary controls into a command deck`() {
         val source = listOf(
             File("src/main/java/dev/hobgoblin/android/ui/screens/terminals/TerminalScreen.kt"),
@@ -393,6 +401,18 @@ class TerminalInteractionStateTest {
         assertTrue(source.contains("TerminalTermuxExtraKeyRows.forEach"))
         assertTrue(source.contains("TerminalHobgoblinPrimaryActions.forEach"))
         assertFalse(source.contains("if (reconnectEnabled)"))
+    }
+
+    @Test
+    fun `terminal screen keeps background swipe separate from back navigation`() {
+        val source = listOf(
+            File("src/main/java/dev/hobgoblin/android/ui/screens/terminals/TerminalScreen.kt"),
+            File("app/src/main/java/dev/hobgoblin/android/ui/screens/terminals/TerminalScreen.kt"),
+            File("android/app/src/main/java/dev/hobgoblin/android/ui/screens/terminals/TerminalScreen.kt"),
+        ).firstOrNull(File::isFile)?.readText() ?: error("TerminalScreen.kt not found")
+
+        assertTrue(source.contains("TerminalBackgroundSwipeEdge(onBackground)"))
+        assertTrue(source.contains("BackHandler {\n        navigateBack()"))
     }
 
     @Test
