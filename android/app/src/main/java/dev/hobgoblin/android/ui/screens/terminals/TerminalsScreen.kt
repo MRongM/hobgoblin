@@ -14,11 +14,20 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import dev.hobgoblin.android.data.ManualItemOrderPolicy
 import dev.hobgoblin.android.terminals.TerminalSessionRecord
+import dev.hobgoblin.android.ui.components.ManualReorderHandle
+import dev.hobgoblin.android.ui.components.ManualReorderState
+import dev.hobgoblin.android.ui.components.manualReorderItem
+import dev.hobgoblin.android.ui.components.rememberManualReorderState
 import dev.hobgoblin.android.ui.theme.HobgoblinSpacing
 
 internal fun terminalOverviewTitle(session: TerminalSessionRecord): String =
@@ -34,8 +43,26 @@ internal fun terminalOverviewStatus(session: TerminalSessionRecord): String = se
 fun TerminalsScreen(
     sessions: List<TerminalSessionRecord>,
     onOpenTerminalSession: (TerminalSessionRecord) -> Unit,
+    initialManualOrder: List<String> = emptyList(),
+    onSaveManualOrder: (List<String>) -> Unit = {},
 ) {
-    val orderedSessions = terminalOverviewOrderedSessions(sessions)
+    var manualOrder by remember(initialManualOrder) { mutableStateOf(initialManualOrder) }
+    val defaultOrderedSessions = terminalOverviewOrderedSessions(sessions)
+    val orderedSessions = ManualItemOrderPolicy.apply(
+        defaultOrderedSessions,
+        manualOrder,
+        TerminalSessionRecord::id,
+    )
+    val reorderState = rememberManualReorderState(
+        onMove = { draggedId, targetId ->
+            manualOrder = ManualItemOrderPolicy.move(
+                orderedSessions.map(TerminalSessionRecord::id),
+                draggedId,
+                targetId,
+            )
+        },
+        onFinished = { onSaveManualOrder(manualOrder) },
+    )
     if (orderedSessions.isEmpty()) {
         Column(
             modifier = Modifier
@@ -66,7 +93,9 @@ fun TerminalsScreen(
     ) {
         items(orderedSessions, key = { it.id }) { session ->
             TerminalOverviewRow(
+                modifier = Modifier.manualReorderItem(reorderState, session.id),
                 session = session,
+                reorderState = reorderState,
                 onOpen = { onOpenTerminalSession(session) },
             )
         }
@@ -75,11 +104,13 @@ fun TerminalsScreen(
 
 @Composable
 private fun TerminalOverviewRow(
+    modifier: Modifier,
     session: TerminalSessionRecord,
+    reorderState: ManualReorderState,
     onOpen: () -> Unit,
 ) {
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onOpen),
     ) {
@@ -105,6 +136,11 @@ private fun TerminalOverviewRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                )
+                ManualReorderHandle(
+                    state = reorderState,
+                    itemKey = session.id,
+                    itemLabel = terminalOverviewTitle(session),
                 )
             }
             Text(

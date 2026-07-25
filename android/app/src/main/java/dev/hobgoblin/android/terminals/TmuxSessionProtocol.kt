@@ -55,12 +55,17 @@ object TmuxSessionProtocol {
         val serverName = serverName(projectRoot) ?: return null
         val sessionTarget = "=${identity.sessionName}"
         val paneTarget = "$sessionTarget:"
-        val projectTmux = "tmux -L ${shellQuote(serverName)}"
+        val projectTmux = "$TmuxExecutableReference -L ${shellQuote(serverName)}"
         val projectCommand = attachOrCreateCommandForTmux(projectTmux, identity, terminalNumber, paneTarget)
-        val legacyCommand = attachOrCreateCommandForTmux("tmux", identity, terminalNumber, paneTarget)
+        val legacyCommand = attachOrCreateCommandForTmux(
+            TmuxExecutableReference,
+            identity,
+            terminalNumber,
+            paneTarget,
+        )
         return listOf(
             "if $projectTmux has-session -t ${shellQuote(sessionTarget)} 2>/dev/null || " +
-                "! tmux has-session -t ${shellQuote(sessionTarget)} 2>/dev/null; then",
+                "! $TmuxExecutableReference has-session -t ${shellQuote(sessionTarget)} 2>/dev/null; then",
             "  $projectCommand",
             "else",
             "  $legacyCommand",
@@ -219,13 +224,32 @@ object TmuxSessionProtocol {
         format = "#{session_name}\t#{${InitPathOption}}\t#{${TerminalNumberOption}}",
     )
 
+    internal fun tmuxExecutableResolverScript(): String = listOf(
+        "$TmuxResolverFunction() {",
+        "  hobgoblin_tmux_bin=${'$'}(command -v tmux 2>/dev/null || true)",
+        "  if [ -z \"${'$'}hobgoblin_tmux_bin\" ]; then",
+        "    hobgoblin_login_shell=${'$'}{SHELL:-/bin/sh}",
+        "    [ -x \"${'$'}hobgoblin_login_shell\" ] || hobgoblin_login_shell=/bin/sh",
+        "    hobgoblin_tmux_bin=${'$'}(\"${'$'}hobgoblin_login_shell\" -lc 'command -v tmux' " +
+            "2>/dev/null | tail -n 1)",
+        "  fi",
+        "  case \"${'$'}hobgoblin_tmux_bin\" in",
+        "    /*) [ -x \"${'$'}hobgoblin_tmux_bin\" ] ;;",
+        "    *) return 1 ;;",
+        "  esac",
+        "}",
+    ).joinToString("\n")
+
+    internal fun tmuxExecutableResolverInvocation(): String = TmuxResolverFunction
+
     fun killSessionScript(projectRoot: String, sessionName: String, serverName: String?): String? {
         if (!isCurrentSessionName(sessionName)) return null
         val expectedServerName = serverName(projectRoot) ?: return null
         if (serverName != null && serverName != expectedServerName) return null
         return listOf(
-            "command -v tmux >/dev/null 2>&1 || exit 127",
-            "tmux${serverName?.let { " -L ${shellQuote(it)}" }.orEmpty()} " +
+            tmuxExecutableResolverScript(),
+            "$TmuxResolverFunction || exit 127",
+            "$TmuxExecutableReference${serverName?.let { " -L ${shellQuote(it)}" }.orEmpty()} " +
                 "kill-session -t ${shellQuote("=$sessionName")}",
         ).joinToString("\n")
     }
@@ -233,7 +257,8 @@ object TmuxSessionProtocol {
     private fun combinedListScript(projectRoot: String, format: String): String {
         val serverName = requireNotNull(serverName(projectRoot)) { "Normalized absolute tmux project root is required" }
         return listOf(
-            "command -v tmux >/dev/null 2>&1 || exit 127",
+            tmuxExecutableResolverScript(),
+            "$TmuxResolverFunction || exit 127",
             "run_tmux_list() {",
             "  tmux_output=${'$'}(\"${'$'}@\" 2>&1)",
             "  tmux_status=${'$'}?",
@@ -247,9 +272,9 @@ object TmuxSessionProtocol {
             "  printf '%s\\n' \"${'$'}tmux_output\" >&2",
             "  return \"${'$'}tmux_status\"",
             "}",
-            "run_tmux_list tmux -L ${shellQuote(serverName)} list-sessions " +
+            "run_tmux_list $TmuxExecutableReference -L ${shellQuote(serverName)} list-sessions " +
                 "-F ${shellQuote("$format\t$serverName")} || exit ${'$'}?",
-            "run_tmux_list tmux list-sessions " +
+            "run_tmux_list $TmuxExecutableReference list-sessions " +
                 "-F ${shellQuote("$format\t$LegacyDefaultServerMarker")} || exit ${'$'}?",
         ).joinToString("\n")
     }
@@ -261,6 +286,8 @@ object TmuxSessionProtocol {
     private const val ServerProtocol = "hobgoblin-tmux-server-v1"
     private const val ServerNamePrefix = "hobgoblin-project-v1-"
     private const val LegacyDefaultServerMarker = "legacy-default"
+    private const val TmuxResolverFunction = "resolve_hobgoblin_tmux"
+    private const val TmuxExecutableReference = "\"${'$'}hobgoblin_tmux_bin\""
     private const val InitPathOption = "@hobgoblin_init_path"
     private const val TerminalNumberOption = "@hobgoblin_terminal_number"
     private const val HashHexChars = 24

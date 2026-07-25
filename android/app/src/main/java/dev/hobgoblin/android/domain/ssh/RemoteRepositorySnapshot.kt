@@ -22,6 +22,7 @@ data class RemoteRepositorySnapshot(
     val branches: List<RemoteRepositoryBranch>,
     val commits: List<RemoteRepositoryCommit>,
     val worktrees: List<RemoteRepositoryWorktree>,
+    val remoteBranches: List<String> = emptyList(),
 )
 
 data class RemoteRepositoryBranch(

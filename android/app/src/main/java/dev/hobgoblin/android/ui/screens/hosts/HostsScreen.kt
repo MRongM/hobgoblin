@@ -31,9 +31,14 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.hobgoblin.android.data.ManualItemOrderPolicy
 import dev.hobgoblin.android.domain.ResourceState
 import dev.hobgoblin.android.domain.ssh.SshHostProfile
 import dev.hobgoblin.android.navigation.AppRoute
+import dev.hobgoblin.android.ui.components.ManualReorderHandle
+import dev.hobgoblin.android.ui.components.ManualReorderState
+import dev.hobgoblin.android.ui.components.manualReorderItem
+import dev.hobgoblin.android.ui.components.rememberManualReorderState
 import dev.hobgoblin.android.ui.theme.HobgoblinSpacing
 
 internal const val HOST_TEMPORARY_TERMINAL_REMOTE_PATH = "/"
@@ -77,6 +82,8 @@ fun HostsScreen(
     onOpenDiagnostics: (String) -> Unit,
     onOpenTerminal: (String) -> Unit,
     onOpenPorts: (String) -> Unit,
+    initialManualOrder: List<String> = emptyList(),
+    onSaveManualOrder: (List<String>) -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -96,6 +103,8 @@ fun HostsScreen(
                 onOpenDiagnostics = onOpenDiagnostics,
                 onOpenTerminal = onOpenTerminal,
                 onOpenPorts = onOpenPorts,
+                initialManualOrder = initialManualOrder,
+                onSaveManualOrder = onSaveManualOrder,
             )
             is ResourceState.Loaded -> HostList(
                 hosts = hostsState.value,
@@ -104,6 +113,8 @@ fun HostsScreen(
                 onOpenDiagnostics = onOpenDiagnostics,
                 onOpenTerminal = onOpenTerminal,
                 onOpenPorts = onOpenPorts,
+                initialManualOrder = initialManualOrder,
+                onSaveManualOrder = onSaveManualOrder,
             )
         }
     }
@@ -133,8 +144,18 @@ private fun HostList(
     onOpenDiagnostics: (String) -> Unit,
     onOpenTerminal: (String) -> Unit,
     onOpenPorts: (String) -> Unit,
+    initialManualOrder: List<String>,
+    onSaveManualOrder: (List<String>) -> Unit,
 ) {
     var deleteTarget by remember { mutableStateOf<SshHostProfile?>(null) }
+    var manualOrder by remember(initialManualOrder) { mutableStateOf(initialManualOrder) }
+    val orderedHosts = ManualItemOrderPolicy.apply(hosts, manualOrder, SshHostProfile::id)
+    val reorderState = rememberManualReorderState(
+        onMove = { draggedId, targetId ->
+            manualOrder = ManualItemOrderPolicy.move(orderedHosts.map(SshHostProfile::id), draggedId, targetId)
+        },
+        onFinished = { onSaveManualOrder(manualOrder) },
+    )
 
     if (hosts.isEmpty()) {
         Column(
@@ -153,10 +174,12 @@ private fun HostList(
     Text("Saved hosts", style = MaterialTheme.typography.titleMedium)
     Spacer(Modifier.height(HobgoblinSpacing.Md))
     LazyColumn(verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm)) {
-        items(hosts, key = { it.id }) { host ->
+        items(orderedHosts, key = { it.id }) { host ->
             val health = hostHealth(host)
             HostRow(
+                modifier = Modifier.manualReorderItem(reorderState, host.id),
                 host = host,
+                reorderState = reorderState,
                 canOpenTerminal = health == HostHealth.Online,
                 onOpenDiagnostics = { onOpenDiagnostics(host.id) },
                 onOpenTerminal = { onOpenTerminal(host.id) },
@@ -193,7 +216,9 @@ private fun HostList(
 
 @Composable
 private fun HostRow(
+    modifier: Modifier,
     host: SshHostProfile,
+    reorderState: ManualReorderState,
     canOpenTerminal: Boolean,
     onOpenDiagnostics: () -> Unit,
     onOpenTerminal: () -> Unit,
@@ -203,14 +228,25 @@ private fun HostRow(
 ) {
     val health = hostHealth(host)
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         onClick = onOpenDiagnostics,
     ) {
         Column(
             modifier = Modifier.padding(HobgoblinSpacing.Md),
             verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
         ) {
-            Text(host.title, style = MaterialTheme.typography.titleMedium)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(host.title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                ManualReorderHandle(
+                    state = reorderState,
+                    itemKey = host.id,
+                    itemLabel = host.title,
+                )
+            }
             Text(host.subtitle, style = MaterialTheme.typography.bodyMedium)
             HostStatusIndicator(health)
             Row(horizontalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm)) {

@@ -52,6 +52,8 @@ hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0
 
 All root and worktree terminals with the same descriptor project root share this server. Different project roots do not share a tmux server, and new Hobgoblin sessions do not use the user's default server. The server name is deterministic transport placement rather than another session-identity field, so it is recomputed instead of persisted.
 
+For a Git repository with linked worktrees, `projectRoot` is the main worktree path (the first `worktree` entry from `git worktree list --porcelain`). A linked worktree path remains the terminal `workingDirectory`; it must not replace `projectRoot`, otherwise the same repository produces a different server and session hash. Android canonicalizes newly added linked-worktree projects to the main worktree and repairs older saved project records after loading their worktree snapshot.
+
 ## Name calculation
 
 UTF-8 encode these four fields and join them with exactly one NUL byte (`0x00`):
@@ -134,6 +136,8 @@ All three `set-option` commands run in the selected project server and use the e
 
 For upgrade compatibility, attach-or-create checks the project server first. If it does not contain the exact deterministic name but the legacy default server does, Hobgoblin attaches there and repairs its metadata. If neither server contains the name, Hobgoblin creates it in the project server. This fallback never creates a new session in the default server.
 
+Remote adapters resolve the tmux executable once before attach, list, or kill. They first inspect the non-login command `PATH`, then fall back to `${SHELL:-/bin/sh} -lc 'command -v tmux'`, validate an executable absolute path, and invoke that quoted path for every subsequent tmux command. This supports installations such as Homebrew tmux that are only added by login-shell startup files. Failure to resolve tmux is an explicit command failure, not an empty discovery result.
+
 Inspect the live metadata with:
 
 ```sh
@@ -177,7 +181,7 @@ Android accepts one row only when:
 - the session name matches the v1 name pattern; and
 - hashing the project root, initial path, and terminal number reproduces that exact session name.
 
-Invalid rows, unknown server origins, ordinary user sessions, legacy names, and v1 sessions without both options are ignored independently. Project-server rows are emitted first and win same-name deduplication. An accepted session missing from Android's retained records becomes a disconnected `terminal-N` record. Discovery does not open an SSH shell; opening that record uses the ordinary reconnect path, which checks the project server before the legacy default server. Android recomputes the server name from its retained repository remote path, so its terminal-session persistence format does not gain a socket field.
+Invalid rows, unknown server origins, ordinary user sessions, legacy names, and v1 sessions without both options are ignored independently. Project-server rows are emitted first and win same-name deduplication. An accepted session missing from Android's retained records becomes a disconnected `terminal-N` record. Discovery does not open an SSH shell; opening that record uses the ordinary reconnect path, which checks the project server before the legacy default server. Android recomputes the server name from the canonical main-worktree project root retained by the terminal record, so its terminal-session persistence format does not gain a socket field.
 
 Removing only the Android record leaves tmux alive, so a later scan may recover it again. Closing the associated tmux session through the explicit checked close action prevents later recovery.
 

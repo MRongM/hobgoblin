@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.mutableStateOf
 import dev.hobgoblin.android.data.HostProfileStore
+import dev.hobgoblin.android.data.ManualItemOrderStore
 import dev.hobgoblin.android.data.TerminalSettingsStore
 import dev.hobgoblin.android.data.RemoteRepositoryStore
 import dev.hobgoblin.android.data.TerminalSessionStore
@@ -16,7 +17,6 @@ import dev.hobgoblin.android.ssh.SshInitializationService
 import dev.hobgoblin.android.ssh.SshLocalPortForwardService
 import dev.hobgoblin.android.ssh.SshjInitializationClient
 import dev.hobgoblin.android.ssh.SshjClientFacade
-import dev.hobgoblin.android.ssh.RemoteBranchService
 import dev.hobgoblin.android.ssh.RemoteRepositoryGitService
 import dev.hobgoblin.android.ssh.RemoteWorktreeService
 import dev.hobgoblin.android.terminals.AndroidTerminalForegroundOwner
@@ -37,6 +37,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         deliverTerminalNavigationIntent(intent)
         val hostProfileStore = HostProfileStore.create(this)
+        val manualItemOrderStore = ManualItemOrderStore.create(this)
         val remoteRepositoryStore = RemoteRepositoryStore.create(this)
         val terminalSessionStore = TerminalSessionStore.create(this)
         val terminalSettingsStore = TerminalSettingsStore.create(this)
@@ -53,10 +54,6 @@ class MainActivity : ComponentActivity() {
             hostKeyStore = hostKeyStore,
         )
         val remoteRepositoryGitService = RemoteRepositoryGitService(
-            client = SshjClientFacade(identityStore = secureIdentityStore),
-            hostKeyStore = hostKeyStore,
-        )
-        val remoteBranchService = RemoteBranchService(
             client = SshjClientFacade(identityStore = secureIdentityStore),
             hostKeyStore = hostKeyStore,
         )
@@ -95,11 +92,11 @@ class MainActivity : ComponentActivity() {
             HobgoblinTheme {
                 HobgoblinAndroidApp(
                     hostProfileStore = hostProfileStore,
+                    manualItemOrderStore = manualItemOrderStore,
                     remoteRepositoryStore = remoteRepositoryStore,
                     secureIdentityStore = secureIdentityStore,
                     diagnosticsService = diagnosticsService,
                     remoteRepositoryGitService = remoteRepositoryGitService,
-                    remoteBranchService = remoteBranchService,
                     remoteWorktreeService = remoteWorktreeService,
                     terminalSettingsStore = terminalSettingsStore,
                     initializationService = initializationService,

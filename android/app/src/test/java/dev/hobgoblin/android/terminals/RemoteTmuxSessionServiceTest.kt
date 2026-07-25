@@ -47,19 +47,28 @@ class RemoteTmuxSessionServiceTest {
     }
 
     @Test
-    fun `missing tmux and no server are empty discovery results`() {
-        listOf(
-            SshCommandResult(ok = false, stderr = "no server running on /tmp/tmux-1000/default"),
-            SshCommandResult(ok = false, message = "exit 127"),
-        ).forEach { commandResult ->
-            val result = service(FakeSshClient(commandResult)).discoverAssociatedSessions(
+    fun `no tmux server is an empty discovery result`() {
+        val result = service(
+            FakeSshClient(SshCommandResult(ok = false, stderr = "no server running on /tmp/tmux-1000/default")),
+        ).discoverAssociatedSessions(
+            target = target(),
+            projectRoot = ProjectRoot,
+            allowedInitialPaths = setOf(FeaturePath),
+        )
+
+        assertEquals(RemoteTmuxDiscoveryResult.Found(emptyList()), result)
+    }
+
+    @Test
+    fun `missing tmux is an explicit discovery failure`() {
+        val result = service(FakeSshClient(SshCommandResult(ok = false, message = "exit 127")))
+            .discoverAssociatedSessions(
                 target = target(),
                 projectRoot = ProjectRoot,
                 allowedInitialPaths = setOf(FeaturePath),
             )
 
-            assertEquals(RemoteTmuxDiscoveryResult.Found(emptyList()), result)
-        }
+        assertEquals(RemoteTmuxDiscoveryResult.Failed("exit 127"), result)
     }
 
     @Test

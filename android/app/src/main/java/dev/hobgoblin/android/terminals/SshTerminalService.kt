@@ -107,7 +107,8 @@ internal object SshTerminalStartupCommand {
                         startupContext.repositoryRemotePath,
                     ),
                 ) { "Tmux terminal number must be positive" }
-                add("if command -v tmux >/dev/null 2>&1; then")
+                add(TmuxSessionProtocol.tmuxExecutableResolverScript())
+                add("if ${TmuxSessionProtocol.tmuxExecutableResolverInvocation()}; then")
                 add("  $tmuxCommand")
                 add("else")
                 add("  $loginShellCommand")

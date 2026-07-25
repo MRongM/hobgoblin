@@ -9,11 +9,21 @@ class RemoteWorktreeService(
     private val client: SshClientFacade,
     private val hostKeyStore: HostKeyTrustStore,
 ) {
-    fun createWorktree(target: RemoteTarget, branch: String, worktreePath: String) {
+    fun createWorktree(
+        target: RemoteTarget,
+        source: WorktreeCreationSource,
+        worktreePath: String,
+    ) {
         val fingerprint = trustedFingerprint(target)
+        val createArguments = when (source) {
+            is WorktreeCreationSource.ExistingLocal ->
+                "-- ${shellQuote(worktreePath)} ${shellQuote(source.branch)}"
+            is WorktreeCreationSource.TrackRemote ->
+                "-b ${shellQuote(source.localBranch)} --track -- ${shellQuote(worktreePath)} ${shellQuote(source.remoteRef)}"
+        }
         val result = client.runCommand(
             target = target,
-            script = "git -C ${shellQuote(target.remotePath)} worktree add ${shellQuote(worktreePath)} ${shellQuote(branch)}",
+            script = "git -C ${shellQuote(target.remotePath)} worktree add $createArguments",
             secrets = SshConnectionSecrets(acceptedHostFingerprint = fingerprint),
         )
         require(result.ok) { result.message.ifBlank { result.stderr.ifBlank { "Remote worktree create failed" } } }
@@ -38,6 +48,14 @@ class RemoteWorktreeService(
         }
         return fingerprint
     }
+}
+
+sealed interface WorktreeCreationSource {
+    data class ExistingLocal(val branch: String) : WorktreeCreationSource
+    data class TrackRemote(
+        val remoteRef: String,
+        val localBranch: String,
+    ) : WorktreeCreationSource
 }
 
 data class WorktreeRemovalSafety(

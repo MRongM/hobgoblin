@@ -12,6 +12,10 @@ Core model: **multi-project × multi-worktree/branch × multi-terminal**. Users 
 The Android main-navigation destination that lists every retained Host temporary terminal and Project terminal so an existing session can be reopened quickly. It is distinct from the terminal tabs inside the desktop/web terminal topbar and does not create or delete sessions.
 _Avoid_: Terminal manager, terminal creator, internal terminal tab
 
+**Android manual item order**:
+The restorable, device-local order chosen by dragging Android Host, Project, Terminal, or Project Worktree items from their dedicated drag handles. Host, Project, and Terminal orders are global to their respective lists; Worktree order is scoped to one Project. It changes only Android presentation, never Git worktree enumeration or remote repository state, and newly discovered items append after retained ordered items.
+_Avoid_: Git worktree order, remote sort order, synchronized order
+
 **Terminal topbar**:
 The top row of the terminal area, containing terminal tabs and terminal-level actions.
 _Avoid_: Terminal toolbar, detail toolbar

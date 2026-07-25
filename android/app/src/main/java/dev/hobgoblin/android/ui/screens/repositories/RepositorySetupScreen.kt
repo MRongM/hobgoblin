@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextOverflow
 import dev.hobgoblin.android.domain.ResourceState
+import dev.hobgoblin.android.data.ManualItemOrderPolicy
 import dev.hobgoblin.android.domain.ssh.RemoteDirectoryEntry
 import dev.hobgoblin.android.domain.ssh.RemoteProjectInspection
 import dev.hobgoblin.android.domain.ssh.RemoteProjectKind
@@ -70,6 +71,7 @@ import dev.hobgoblin.android.domain.ssh.SshHostProfile
 import dev.hobgoblin.android.domain.ssh.RemoteTarget
 import dev.hobgoblin.android.ssh.evaluateWorktreeRemoval
 import dev.hobgoblin.android.ssh.worktreeRemovalConfirmationText
+import dev.hobgoblin.android.ssh.WorktreeCreationSource
 import dev.hobgoblin.android.terminals.TerminalDisconnectedReason
 import dev.hobgoblin.android.terminals.TerminalLaunchMode
 import dev.hobgoblin.android.terminals.TerminalSessionRecord
@@ -82,6 +84,10 @@ import dev.hobgoblin.android.ui.screens.terminals.terminalSessionDisplayName
 import dev.hobgoblin.android.ui.screens.terminals.terminalWorkspaceSessionCountsByPath
 import dev.hobgoblin.android.ui.screens.terminals.terminalWorkspaceCreatedSessions
 import dev.hobgoblin.android.ui.screens.terminals.terminalWorkspaceOrderedSessions
+import dev.hobgoblin.android.ui.components.ManualReorderHandle
+import dev.hobgoblin.android.ui.components.ManualReorderState
+import dev.hobgoblin.android.ui.components.manualReorderItem
+import dev.hobgoblin.android.ui.components.rememberManualReorderState
 import dev.hobgoblin.android.ui.theme.HobgoblinSpacing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -90,7 +96,6 @@ import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
 
 internal enum class RepositoryWorkspaceTab(val label: String) {
-    Branches("Branches"),
     Worktrees("Worktrees"),
     Commits("Commits"),
     Terminal("Terminals"),
@@ -166,7 +171,6 @@ internal fun shouldLoadDirectoryPage(state: ResourceState<List<RemoteDirectoryEn
 internal fun repositoryWorkspaceTabs(repository: RemoteRepositoryProfile): List<RepositoryWorkspaceTab> =
     if (repository.isGitRepository) {
         listOf(
-            RepositoryWorkspaceTab.Branches,
             RepositoryWorkspaceTab.Worktrees,
             RepositoryWorkspaceTab.Terminal,
         )
@@ -180,18 +184,25 @@ internal fun initialRepositoryWorkspaceTab(
 ): RepositoryWorkspaceTab = if (initialTerminalWorkspacePath != null || !repository.isGitRepository) {
     RepositoryWorkspaceTab.Terminal
 } else {
-    RepositoryWorkspaceTab.Branches
+    RepositoryWorkspaceTab.Worktrees
 }
 
 internal fun shouldLoadRepositorySnapshot(repository: RemoteRepositoryProfile): Boolean =
     repository.isGitRepository
 
-internal fun repositoryTmuxDiscoveryPaths(
+data class RepositoryTmuxScope(
+    val projectRoot: String,
+    val allowedInitialPaths: List<String>,
+)
+
+internal fun repositoryTmuxScope(
     repository: RemoteRepositoryProfile,
     snapshotState: ResourceState<RemoteRepositorySnapshot>,
-): List<String>? {
-    val rootPath = TmuxSessionProtocol.normalizePath(repository.remotePath) ?: return null
-    if (!repository.isGitRepository) return listOf(rootPath)
+): RepositoryTmuxScope? {
+    val configuredRoot = TmuxSessionProtocol.normalizePath(repository.remotePath) ?: return null
+    if (!repository.isGitRepository) {
+        return RepositoryTmuxScope(projectRoot = configuredRoot, allowedInitialPaths = listOf(configuredRoot))
+    }
     val worktrees = when (snapshotState) {
         is ResourceState.Loaded -> snapshotState.value.worktrees
         is ResourceState.Stale -> snapshotState.value.worktrees
@@ -200,14 +211,26 @@ internal fun repositoryTmuxDiscoveryPaths(
         is ResourceState.Error,
         -> return null
     }
-    return buildList {
-        add(rootPath)
+    val projectRoot = worktrees
+        .firstOrNull { it.isPrimary && !it.isMissing && !it.isBare }
+        ?.path
+        ?.let(TmuxSessionProtocol::normalizePath)
+        ?: configuredRoot
+    val allowedInitialPaths = buildList {
+        add(projectRoot)
+        add(configuredRoot)
         worktrees.asSequence()
             .filterNot { it.isMissing }
             .mapNotNull { TmuxSessionProtocol.normalizePath(it.path) }
             .forEach(::add)
     }.distinct()
+    return RepositoryTmuxScope(projectRoot = projectRoot, allowedInitialPaths = allowedInitialPaths)
 }
+
+internal fun repositoryTmuxDiscoveryPaths(
+    repository: RemoteRepositoryProfile,
+    snapshotState: ResourceState<RemoteRepositorySnapshot>,
+): List<String>? = repositoryTmuxScope(repository, snapshotState)?.allowedInitialPaths
 
 internal fun tmuxScanButtonLabel(isScanning: Boolean): String =
     if (isScanning) "Scanning..." else "Scan tmux"
@@ -221,7 +244,7 @@ internal fun repositoryWorkspaceTabsUseScrollableStrip(tabs: List<RepositoryWork
 internal fun repositoryWorkspaceTabIndex(
     tabs: List<RepositoryWorkspaceTab>,
     selectedTab: RepositoryWorkspaceTab,
-    fallback: RepositoryWorkspaceTab = RepositoryWorkspaceTab.Branches,
+    fallback: RepositoryWorkspaceTab = RepositoryWorkspaceTab.Worktrees,
 ): Int {
     val selectedIndex = tabs.indexOf(selectedTab)
     if (selectedIndex >= 0) return selectedIndex
@@ -246,44 +269,41 @@ internal fun suggestedWorktreePath(repositoryPath: String, branch: String): Stri
 internal fun canCreateWorktree(branch: String, worktreePath: String): Boolean =
     branch.isNotBlank() && worktreePath.trim().startsWith("/")
 
-internal fun suggestedBranchName(baseBranch: String, existingBranchNames: Set<String>): String {
-    val base = baseBranch.trim().ifBlank { "new-branch" }
-    val candidate = "$base-new"
-    if (candidate !in existingBranchNames) return candidate
-    var suffix = 2
-    while ("$candidate-$suffix" in existingBranchNames) {
-        suffix += 1
+internal data class WorktreeBranchCandidate(
+    val ref: String,
+    val kindLabel: String,
+)
+
+internal fun worktreeBranchCandidates(
+    localBranches: List<RemoteRepositoryBranch>,
+    remoteBranches: List<String>,
+): List<WorktreeBranchCandidate> =
+    localBranches.map { WorktreeBranchCandidate(ref = it.name, kindLabel = "local") } +
+        remoteBranches.distinct().map { WorktreeBranchCandidate(ref = it, kindLabel = "remote") }
+
+internal fun worktreePathBranchName(
+    selectedRef: String,
+    remoteBranchNames: Set<String>,
+): String = if (selectedRef in remoteBranchNames) {
+    selectedRef.substringAfter('/').ifBlank { selectedRef }
+} else {
+    selectedRef
+}
+
+internal fun worktreeCreationSource(
+    selectedRef: String,
+    localBranchNames: Set<String>,
+    remoteBranchNames: Set<String>,
+): WorktreeCreationSource {
+    val normalizedRef = selectedRef.trim()
+    if (normalizedRef !in remoteBranchNames) return WorktreeCreationSource.ExistingLocal(normalizedRef)
+    val localBranch = worktreePathBranchName(normalizedRef, remoteBranchNames)
+    return if (localBranch in localBranchNames) {
+        WorktreeCreationSource.ExistingLocal(localBranch)
+    } else {
+        WorktreeCreationSource.TrackRemote(remoteRef = normalizedRef, localBranch = localBranch)
     }
-    return "$candidate-$suffix"
 }
-
-internal fun canCreateBranch(
-    baseBranch: String,
-    newBranch: String,
-    existingBranchNames: Set<String>,
-): Boolean {
-    val base = baseBranch.trim()
-    val next = newBranch.trim()
-    return base.isNotBlank() && next.isNotBlank() && next !in existingBranchNames
-}
-
-internal fun branchDeleteBlockedReason(branch: RemoteRepositoryBranch): String? = when {
-    branch.isCurrent -> "Current branch cannot be deleted."
-    branch.isDefault -> "Default branch cannot be deleted."
-    branch.worktreePath != null -> "Branch with a worktree cannot be deleted."
-    else -> null
-}
-
-internal fun canDeleteBranch(branch: RemoteRepositoryBranch): Boolean =
-    branchDeleteBlockedReason(branch) == null
-
-internal fun branchDeleteConfirmationText(branch: RemoteRepositoryBranch): String =
-    "Delete remote branch ${branch.name}? This does not delete worktrees."
-
-internal fun canCheckoutBranch(branch: RemoteRepositoryBranch): Boolean = !branch.isCurrent
-
-internal fun branchCheckoutConfirmationText(branch: RemoteRepositoryBranch): String =
-    "Checkout remote branch ${branch.name}? This changes the repository working tree."
 
 internal fun repositoriesAfterLocalDelete(
     repositories: List<RemoteRepositoryProfile>,
@@ -850,8 +870,9 @@ fun RepositoryWorkspaceScreen(
     onLoadSnapshot: () -> RemoteRepositorySnapshot,
     initialTerminalWorkspacePath: String? = null,
     terminalSessions: List<TerminalSessionRecord> = emptyList(),
-    onDiscoverTmuxTerminals: (List<String>) -> Unit = {},
-    onCreateTerminalAtPath: (String, TerminalLaunchMode) -> TerminalSessionRecord = { _, _ ->
+    onProjectRootResolved: (String) -> Unit = {},
+    onDiscoverTmuxTerminals: (RepositoryTmuxScope) -> Unit = {},
+    onCreateTerminalAtPath: (String, String, TerminalLaunchMode) -> TerminalSessionRecord = { _, _, _ ->
         throw UnsupportedOperationException("Terminal sessions are not available")
     },
     onOpenExternalTermuxAtPath: (RemoteTarget) -> ExternalTermuxLaunchResult = {
@@ -861,11 +882,10 @@ fun RepositoryWorkspaceScreen(
     onOpenTerminalSession: (TerminalSessionRecord) -> Unit = {},
     onDeleteTerminalSession: (String, Boolean) -> Unit = { _, _ -> },
     onDeleteRepository: () -> Unit,
-    onCreateBranch: (String, String) -> Unit = { _, _ -> },
-    onCheckoutBranch: (RemoteRepositoryBranch) -> Unit = {},
-    onDeleteBranch: (RemoteRepositoryBranch) -> Unit = {},
-    onCreateWorktree: (String, String) -> Unit = { _, _ -> },
+    onCreateWorktree: (WorktreeCreationSource, String) -> Unit = { _, _ -> },
     onRemoveWorktree: (RemoteRepositoryWorktree) -> Unit = {},
+    initialWorktreeOrder: List<String> = emptyList(),
+    onSaveWorktreeOrder: (List<String>) -> Unit = {},
 ) {
     var selectedTab by remember(repository.id) {
         mutableStateOf(initialRepositoryWorkspaceTab(repository, initialTerminalWorkspacePath))
@@ -877,8 +897,6 @@ fun RepositoryWorkspaceScreen(
         mutableStateOf(ResourceState.Idle)
     }
     var confirmDelete by remember(repository.id) { mutableStateOf(false) }
-    var branchCheckoutTarget by remember(repository.id) { mutableStateOf<RemoteRepositoryBranch?>(null) }
-    var branchDeleteTarget by remember(repository.id) { mutableStateOf<RemoteRepositoryBranch?>(null) }
     var removeTarget by remember(repository.id) { mutableStateOf<RemoteRepositoryWorktree?>(null) }
     var terminalDeleteTarget by remember(repository.id) { mutableStateOf<TerminalDeleteTarget?>(null) }
     var closeTmuxSessionOnDelete by remember(repository.id) { mutableStateOf(false) }
@@ -892,8 +910,8 @@ fun RepositoryWorkspaceScreen(
     val terminalWorkspaceOptions = remember(repository, snapshotState) {
         repositoryTerminalWorkspaceOptions(repository = repository, snapshotState = snapshotState)
     }
-    val tmuxDiscoveryPaths = remember(repository, snapshotState) {
-        repositoryTmuxDiscoveryPaths(repository = repository, snapshotState = snapshotState)
+    val tmuxScope = remember(repository, snapshotState) {
+        repositoryTmuxScope(repository = repository, snapshotState = snapshotState)
     }
 
     fun refreshSnapshot() {
@@ -904,7 +922,14 @@ fun RepositoryWorkspaceScreen(
             snapshotState = runCatching {
                 withContext(Dispatchers.IO) { onLoadSnapshot() }
             }.fold(
-                onSuccess = { ResourceState.Loaded(it) },
+                onSuccess = { snapshot ->
+                    val loaded = ResourceState.Loaded(snapshot)
+                    repositoryTmuxScope(repository, loaded)
+                        ?.projectRoot
+                        ?.takeIf { it != TmuxSessionProtocol.normalizePath(repository.remotePath) }
+                        ?.let(onProjectRootResolved)
+                    loaded
+                },
                 onFailure = {
                     repositorySnapshotStateAfterRefreshFailure(
                         previous = previous,
@@ -916,56 +941,15 @@ fun RepositoryWorkspaceScreen(
         }
     }
 
-    fun createWorktree(branch: String, worktreePath: String) {
+    fun createWorktree(source: WorktreeCreationSource, worktreePath: String) {
         actionError = null
         scope.launch {
             runCatching {
-                withContext(Dispatchers.IO) { onCreateWorktree(branch, worktreePath) }
+                withContext(Dispatchers.IO) { onCreateWorktree(source, worktreePath) }
             }.onSuccess {
                 refreshSnapshot()
             }.onFailure {
                 actionError = it.message ?: "Remote worktree create failed"
-            }
-        }
-    }
-
-    fun createBranch(baseBranch: String, newBranch: String) {
-        actionError = null
-        scope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) { onCreateBranch(baseBranch, newBranch) }
-            }.onSuccess {
-                refreshSnapshot()
-            }.onFailure {
-                actionError = it.message ?: "Remote branch create failed"
-            }
-        }
-    }
-
-    fun deleteBranch(branch: RemoteRepositoryBranch) {
-        actionError = null
-        scope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) { onDeleteBranch(branch) }
-            }.onSuccess {
-                branchDeleteTarget = null
-                refreshSnapshot()
-            }.onFailure {
-                actionError = it.message ?: "Remote branch delete failed"
-            }
-        }
-    }
-
-    fun checkoutBranch(branch: RemoteRepositoryBranch) {
-        actionError = null
-        scope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) { onCheckoutBranch(branch) }
-            }.onSuccess {
-                branchCheckoutTarget = null
-                refreshSnapshot()
-            }.onFailure {
-                actionError = it.message ?: "Remote branch checkout failed"
             }
         }
     }
@@ -993,7 +977,11 @@ fun RepositoryWorkspaceScreen(
         actionError = null
         scope.launch {
             runCatching {
-                withContext(Dispatchers.IO) { onCreateTerminalAtPath(path, launchMode) }
+                val projectRoot = tmuxScope?.projectRoot
+                    ?: requireNotNull(TmuxSessionProtocol.normalizePath(repository.remotePath)) {
+                        "Terminal project root is invalid"
+                    }
+                withContext(Dispatchers.IO) { onCreateTerminalAtPath(path, projectRoot, launchMode) }
             }.onSuccess { session ->
                 onOpenTerminalSession(session)
             }.onFailure {
@@ -1072,13 +1060,13 @@ fun RepositoryWorkspaceScreen(
         closeTmuxSessionOnDelete = false
     }
 
-    suspend fun discoverTmuxTerminals(paths: List<String>) {
+    suspend fun discoverTmuxTerminals(discoveryScope: RepositoryTmuxScope) {
         if (tmuxDiscoveryPending) return
         actionError = null
         tmuxDiscoveryPending = true
         try {
             runCatching {
-                withContext(Dispatchers.IO) { onDiscoverTmuxTerminals(paths) }
+                withContext(Dispatchers.IO) { onDiscoverTmuxTerminals(discoveryScope) }
             }.onFailure {
                 actionError = it.message ?: "Tmux terminal discovery failed"
             }
@@ -1095,11 +1083,11 @@ fun RepositoryWorkspaceScreen(
         initialTerminalWorkspacePath?.let { selectTerminalWorkspace(it) }
     }
 
-    LaunchedEffect(repository.id, selectedTab, tmuxDiscoveryPaths) {
-        if (selectedTab != RepositoryWorkspaceTab.Terminal || tmuxDiscoveryPaths == null) {
+    LaunchedEffect(repository.id, selectedTab, tmuxScope) {
+        if (selectedTab != RepositoryWorkspaceTab.Terminal || tmuxScope == null) {
             return@LaunchedEffect
         }
-        discoverTmuxTerminals(tmuxDiscoveryPaths)
+        discoverTmuxTerminals(tmuxScope)
     }
 
     BackHandler { onBack() }
@@ -1205,15 +1193,6 @@ fun RepositoryWorkspaceScreen(
                 },
             )
             when (selectedTab) {
-                RepositoryWorkspaceTab.Branches -> RepositoryBranchesPanel(
-                    snapshotState = snapshotState,
-                    onRefresh = { refreshSnapshot() },
-                    onSelectTerminalWorkspace = ::selectTerminalWorkspace,
-                    onCreateBranch = ::createBranch,
-                    onCheckoutBranch = { branchCheckoutTarget = it },
-                    onDeleteBranch = { branchDeleteTarget = it },
-                )
-
                 RepositoryWorkspaceTab.Worktrees -> RepositoryWorktreesPanel(
                     repository = repository,
                     snapshotState = snapshotState,
@@ -1221,6 +1200,8 @@ fun RepositoryWorkspaceScreen(
                     onSelectTerminalWorkspace = ::selectTerminalWorkspace,
                     onCreateWorktree = ::createWorktree,
                     onRemoveWorktree = { removeTarget = it },
+                    initialManualOrder = initialWorktreeOrder,
+                    onSaveManualOrder = onSaveWorktreeOrder,
                 )
                 RepositoryWorkspaceTab.Commits -> Unit
                 RepositoryWorkspaceTab.Terminal -> RepositoryTerminalPanel(
@@ -1231,10 +1212,10 @@ fun RepositoryWorkspaceScreen(
                     workspaceOptions = terminalWorkspaceOptions,
                     sessions = terminalSessions,
                     tmuxScanPending = tmuxDiscoveryPending,
-                    tmuxScanEnabled = canScanTmux(tmuxDiscoveryPending, tmuxDiscoveryPaths),
+                    tmuxScanEnabled = canScanTmux(tmuxDiscoveryPending, tmuxScope?.allowedInitialPaths),
                     onScanTmux = {
-                        tmuxDiscoveryPaths?.let { paths ->
-                            scope.launch { discoverTmuxTerminals(paths) }
+                        tmuxScope?.let { discoveryScope ->
+                            scope.launch { discoverTmuxTerminals(discoveryScope) }
                         }
                     },
                     onSelectWorkspace = ::selectTerminalWorkspace,
@@ -1256,42 +1237,6 @@ fun RepositoryWorkspaceScreen(
                 confirmDelete = false
             },
             onDismiss = { confirmDelete = false },
-        )
-    }
-
-    branchCheckoutTarget?.let { target ->
-        AlertDialog(
-            onDismissRequest = { branchCheckoutTarget = null },
-            title = { Text("Checkout remote branch?") },
-            text = { Text(branchCheckoutConfirmationText(target)) },
-            confirmButton = {
-                TextButton(onClick = { checkoutBranch(target) }) {
-                    Text("Checkout")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { branchCheckoutTarget = null }) {
-                    Text("Cancel")
-                }
-            },
-        )
-    }
-
-    branchDeleteTarget?.let { target ->
-        AlertDialog(
-            onDismissRequest = { branchDeleteTarget = null },
-            title = { Text("Delete remote branch?") },
-            text = { Text(branchDeleteConfirmationText(target)) },
-            confirmButton = {
-                TextButton(onClick = { deleteBranch(target) }) {
-                    Text("Delete")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { branchDeleteTarget = null }) {
-                    Text("Cancel")
-                }
-            },
         )
     }
 
@@ -1450,178 +1395,24 @@ private fun DeleteRepositoryDialog(
 }
 
 @Composable
-private fun RepositoryBranchesPanel(
-    snapshotState: ResourceState<RemoteRepositorySnapshot>,
-    onRefresh: () -> Unit,
-    onSelectTerminalWorkspace: (String) -> Unit,
-    onCreateBranch: (String, String) -> Unit,
-    onCheckoutBranch: (RemoteRepositoryBranch) -> Unit,
-    onDeleteBranch: (RemoteRepositoryBranch) -> Unit,
-) {
-    SnapshotContent(snapshotState = snapshotState, onRefresh = onRefresh) { snapshot ->
-        val branchNames = snapshot.branches.map { it.name }
-        val existingBranchNames = branchNames.toSet()
-        val initialBaseBranch = snapshot.branches.firstOrNull { it.isCurrent }?.name
-            ?: snapshot.branches.firstOrNull { it.isDefault }?.name
-            ?: branchNames.firstOrNull()
-            ?: ""
-        var baseBranch by remember(snapshot.branches) { mutableStateOf(initialBaseBranch) }
-        var newBranch by remember(snapshot.branches) {
-            mutableStateOf(suggestedBranchName(initialBaseBranch, existingBranchNames))
-        }
-        var branchMenuExpanded by remember(snapshot.branches) { mutableStateOf(false) }
-
-        fun updateBaseBranch(value: String) {
-            baseBranch = value
-            newBranch = suggestedBranchName(value, existingBranchNames)
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm)) {
-            if (snapshot.branches.isEmpty()) {
-                Text("No branches found.")
-            } else {
-                Card(Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier.padding(HobgoblinSpacing.Md),
-                        verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm),
-                    ) {
-                        Text("Create branch", style = MaterialTheme.typography.titleMedium)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            OutlinedTextField(
-                                modifier = Modifier.weight(1f),
-                                value = baseBranch,
-                                onValueChange = ::updateBaseBranch,
-                                label = { Text("Base branch") },
-                                singleLine = true,
-                            )
-                            TextButton(onClick = { branchMenuExpanded = true }) {
-                                Text("Select")
-                            }
-                            DropdownMenu(
-                                expanded = branchMenuExpanded,
-                                onDismissRequest = { branchMenuExpanded = false },
-                            ) {
-                                branchNames.forEach { branchName ->
-                                    DropdownMenuItem(
-                                        text = { Text(branchName) },
-                                        onClick = {
-                                            updateBaseBranch(branchName)
-                                            branchMenuExpanded = false
-                                        },
-                                    )
-                                }
-                            }
-                        }
-                        OutlinedTextField(
-                            modifier = Modifier.fillMaxWidth(),
-                            value = newBranch,
-                            onValueChange = { newBranch = it },
-                            label = { Text("New branch") },
-                            singleLine = true,
-                        )
-                        Button(
-                            enabled = canCreateBranch(baseBranch, newBranch, existingBranchNames),
-                            onClick = { onCreateBranch(baseBranch.trim(), newBranch.trim()) },
-                        ) {
-                            Text("Create branch")
-                        }
-                    }
-                }
-                snapshot.branches.forEach { branch ->
-                    BranchRow(
-                        branch = branch,
-                        onSelectTerminalWorkspace = onSelectTerminalWorkspace,
-                        onCheckoutBranch = onCheckoutBranch,
-                        onDeleteBranch = onDeleteBranch,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun BranchRow(
-    branch: RemoteRepositoryBranch,
-    onSelectTerminalWorkspace: (String) -> Unit,
-    onCheckoutBranch: (RemoteRepositoryBranch) -> Unit,
-    onDeleteBranch: (RemoteRepositoryBranch) -> Unit,
-) {
-    val deleteBlockedReason = branchDeleteBlockedReason(branch)
-    Card(Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(HobgoblinSpacing.Md),
-            verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
-        ) {
-            Text(
-                branch.name,
-                style = MaterialTheme.typography.titleSmall,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                branch.worktreePath ?: "no worktree",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs)) {
-                if (branch.isCurrent) Text("current", style = MaterialTheme.typography.labelMedium)
-                if (branch.isDefault) Text("default", style = MaterialTheme.typography.labelMedium)
-            }
-            deleteBlockedReason?.let {
-                Text(it, style = MaterialTheme.typography.labelSmall)
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                branch.worktreePath?.let { path ->
-                    TextButton(onClick = { onSelectTerminalWorkspace(path) }) {
-                        Text("Terminals")
-                    }
-                }
-                TextButton(
-                    enabled = canCheckoutBranch(branch),
-                    onClick = { onCheckoutBranch(branch) },
-                ) {
-                    Text("Checkout")
-                }
-                TextButton(
-                    enabled = deleteBlockedReason == null,
-                    onClick = { onDeleteBranch(branch) },
-                ) {
-                    Text("Delete")
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun RepositoryWorktreesPanel(
     repository: RemoteRepositoryProfile,
     snapshotState: ResourceState<RemoteRepositorySnapshot>,
     onRefresh: () -> Unit,
     onSelectTerminalWorkspace: (String) -> Unit,
-    onCreateWorktree: (String, String) -> Unit,
+    onCreateWorktree: (WorktreeCreationSource, String) -> Unit,
     onRemoveWorktree: (RemoteRepositoryWorktree) -> Unit,
+    initialManualOrder: List<String>,
+    onSaveManualOrder: (List<String>) -> Unit,
 ) {
     var branch by remember(repository.id) { mutableStateOf("") }
     var branchMenuExpanded by remember(repository.id) { mutableStateOf(false) }
     var worktreePath by remember(repository.id) { mutableStateOf("") }
+    var manualOrder by remember(repository.id, initialManualOrder) { mutableStateOf(initialManualOrder) }
 
-    fun updateBranch(value: String) {
+    fun updateBranch(value: String, pathBranchName: String = value) {
         branch = value
-        worktreePath = suggestedWorktreePath(repository.remotePath, value)
+        worktreePath = suggestedWorktreePath(repository.remotePath, pathBranchName)
     }
 
     val branches = when (snapshotState) {
@@ -1638,6 +1429,24 @@ private fun RepositoryWorktreesPanel(
     }
 
     SnapshotContent(snapshotState = snapshotState, onRefresh = onRefresh) { snapshot ->
+        val localBranchNames = snapshot.branches.map(RemoteRepositoryBranch::name).toSet()
+        val remoteBranchNames = snapshot.remoteBranches.toSet()
+        val branchCandidates = worktreeBranchCandidates(snapshot.branches, snapshot.remoteBranches)
+        val orderedWorktrees = ManualItemOrderPolicy.apply(
+            snapshot.worktrees,
+            manualOrder,
+            RemoteRepositoryWorktree::path,
+        )
+        val reorderState = rememberManualReorderState(
+            onMove = { draggedPath, targetPath ->
+                manualOrder = ManualItemOrderPolicy.move(
+                    orderedWorktrees.map(RemoteRepositoryWorktree::path),
+                    draggedPath,
+                    targetPath,
+                )
+            },
+            onFinished = { onSaveManualOrder(manualOrder) },
+        )
         Column(verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm)) {
             Card(Modifier.fillMaxWidth()) {
                 Column(
@@ -1657,7 +1466,7 @@ private fun RepositoryWorktreesPanel(
                             label = { Text("Base branch") },
                             singleLine = true,
                         )
-                        if (branches.isNotEmpty()) {
+                        if (branchCandidates.isNotEmpty()) {
                             TextButton(onClick = { branchMenuExpanded = true }) {
                                 Text("Select branch")
                             }
@@ -1665,11 +1474,23 @@ private fun RepositoryWorktreesPanel(
                                 expanded = branchMenuExpanded,
                                 onDismissRequest = { branchMenuExpanded = false },
                             ) {
-                                branches.forEach { branchEntry ->
+                                branchCandidates.forEach { candidate ->
                                     DropdownMenuItem(
-                                        text = { Text(branchEntry.name) },
+                                        text = {
+                                            Column {
+                                                Text(candidate.ref)
+                                                Text(
+                                                    candidate.kindLabel,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            }
+                                        },
                                         onClick = {
-                                            updateBranch(branchEntry.name)
+                                            updateBranch(
+                                                value = candidate.ref,
+                                                pathBranchName = worktreePathBranchName(candidate.ref, remoteBranchNames),
+                                            )
                                             branchMenuExpanded = false
                                         },
                                     )
@@ -1686,18 +1507,25 @@ private fun RepositoryWorktreesPanel(
                     )
                     Button(
                         enabled = canCreateWorktree(branch, worktreePath),
-                        onClick = { onCreateWorktree(branch, worktreePath) },
+                        onClick = {
+                            onCreateWorktree(
+                                worktreeCreationSource(branch, localBranchNames, remoteBranchNames),
+                                worktreePath,
+                            )
+                        },
                     ) {
                         Text("Create worktree")
                     }
                 }
             }
-            if (snapshot.worktrees.isEmpty()) {
+            if (orderedWorktrees.isEmpty()) {
                 Text("No worktrees found.")
             } else {
-                snapshot.worktrees.forEach { worktree ->
+                orderedWorktrees.forEach { worktree ->
                     WorktreeRow(
+                        modifier = Modifier.manualReorderItem(reorderState, worktree.path),
                         worktree = worktree,
+                        reorderState = reorderState,
                         onSelectTerminalWorkspace = onSelectTerminalWorkspace,
                         onRemoveWorktree = onRemoveWorktree,
                     )
@@ -1709,7 +1537,9 @@ private fun RepositoryWorktreesPanel(
 
 @Composable
 private fun WorktreeRow(
+    modifier: Modifier,
     worktree: RemoteRepositoryWorktree,
+    reorderState: ManualReorderState,
     onSelectTerminalWorkspace: (String) -> Unit,
     onRemoveWorktree: (RemoteRepositoryWorktree) -> Unit,
 ) {
@@ -1731,18 +1561,30 @@ private fun WorktreeRow(
     }
     val actionButtonPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
 
-    Card(Modifier.fillMaxWidth()) {
+    Card(modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(HobgoblinSpacing.Md),
             verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
         ) {
-            Text(
-                worktreeTitle,
-                style = MaterialTheme.typography.titleSmall,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    worktreeTitle,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                ManualReorderHandle(
+                    state = reorderState,
+                    itemKey = worktree.path,
+                    itemLabel = worktreeTitle,
+                )
+            }
             if (workspaceSummary.isNotBlank()) {
                 Text(
                     workspaceSummary,

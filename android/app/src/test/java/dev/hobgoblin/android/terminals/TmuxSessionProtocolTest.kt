@@ -87,10 +87,14 @@ class TmuxSessionProtocolTest {
         val identity = requireNotNull(TmuxSessionProtocol.identity(descriptor()))
         val command = TmuxSessionProtocol.attachOrCreateCommand(identity, 1, "/srv/projects/example")
         val serverName = "hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0"
-        assertTrue(command.orEmpty().contains("tmux -L '$serverName' has-session -t '=${identity.sessionName}'"))
-        assertTrue(command.orEmpty().contains("! tmux has-session -t '=${identity.sessionName}'"))
-        assertTrue(command.orEmpty().contains("exec tmux -L '$serverName' new-session -A"))
-        assertTrue(command.orEmpty().contains("else\n  exec tmux new-session -A"))
+        assertTrue(
+            command.orEmpty().contains(
+                "\"\$hobgoblin_tmux_bin\" -L '$serverName' has-session -t '=${identity.sessionName}'",
+            ),
+        )
+        assertTrue(command.orEmpty().contains("! \"\$hobgoblin_tmux_bin\" has-session -t '=${identity.sessionName}'"))
+        assertTrue(command.orEmpty().contains("exec \"\$hobgoblin_tmux_bin\" -L '$serverName' new-session -A"))
+        assertTrue(command.orEmpty().contains("else\n  exec \"\$hobgoblin_tmux_bin\" new-session -A"))
     }
 
     @Test
@@ -265,17 +269,24 @@ class TmuxSessionProtocolTest {
             serverName,
         )
 
-        assertTrue(listScript.orEmpty().contains("tmux -L '$serverName' list-sessions"))
+        assertTrue(listScript.orEmpty().contains("\"\$hobgoblin_login_shell\" -lc 'command -v tmux'"))
+        assertTrue(listScript.orEmpty().contains("\"\$hobgoblin_tmux_bin\" -L '$serverName' list-sessions"))
         assertTrue(listScript.orEmpty().contains("#{session_path}\t$serverName"))
         assertTrue(listScript.orEmpty().contains("#{session_path}\tlegacy-default"))
-        assertTrue(listScript.orEmpty().contains("run_tmux_list tmux -L '$serverName' list-sessions"))
-        assertTrue(listScript.orEmpty().contains("run_tmux_list tmux list-sessions"))
-        assertTrue(discoveryScript.orEmpty().contains("tmux -L '$serverName' list-sessions"))
+        assertTrue(
+            listScript.orEmpty().contains(
+                "run_tmux_list \"\$hobgoblin_tmux_bin\" -L '$serverName' list-sessions",
+            ),
+        )
+        assertTrue(listScript.orEmpty().contains("run_tmux_list \"\$hobgoblin_tmux_bin\" list-sessions"))
+        assertTrue(discoveryScript.orEmpty().contains("\"\$hobgoblin_tmux_bin\" -L '$serverName' list-sessions"))
         assertTrue(discoveryScript.orEmpty().contains("#{@hobgoblin_terminal_number}\t$serverName"))
-        assertEquals(
-            "command -v tmux >/dev/null 2>&1 || exit 127\n" +
-                "tmux -L '$serverName' kill-session -t '=hobgoblin-v1-aebf050981ac829e36100020'",
-            killScript,
+        assertTrue(killScript.orEmpty().contains("resolve_hobgoblin_tmux || exit 127"))
+        assertTrue(
+            killScript.orEmpty().endsWith(
+                "\"\$hobgoblin_tmux_bin\" -L '$serverName' " +
+                    "kill-session -t '=hobgoblin-v1-aebf050981ac829e36100020'",
+            ),
         )
     }
 

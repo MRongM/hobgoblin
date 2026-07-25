@@ -38,12 +38,18 @@ class SshTerminalStartupCommandTest {
         val output = command.orEmpty()
 
         assertTrue(output.contains("cd '/srv/repo-feature' || exit"))
-        assertTrue(output.contains("command -v tmux >/dev/null 2>&1"))
+        assertTrue(output.contains("\"\$hobgoblin_login_shell\" -lc 'command -v tmux'"))
+        assertTrue(output.contains("if resolve_hobgoblin_tmux; then"))
         val serverName = "hobgoblin-project-v1-44159cd9e973adba7b472e6f"
-        assertTrue(output.contains("tmux -L '$serverName' has-session -t '=${identity.sessionName}'"))
         assertTrue(
             output.contains(
-                "exec tmux -L '$serverName' new-session -A -s '${identity.sessionName}' -c '/srv/repo-feature' " +
+                "\"\$hobgoblin_tmux_bin\" -L '$serverName' has-session -t '=${identity.sessionName}'",
+            ),
+        )
+        assertTrue(
+            output.contains(
+                "exec \"\$hobgoblin_tmux_bin\" -L '$serverName' new-session -A " +
+                    "-s '${identity.sessionName}' -c '/srv/repo-feature' " +
                     "\\; set-option -t '=${identity.sessionName}:' mouse on " +
                     "\\; set-option -t '=${identity.sessionName}:' " +
                     "@hobgoblin_init_path '/srv/repo-feature' " +

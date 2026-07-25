@@ -23,10 +23,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import dev.hobgoblin.android.data.ManualItemOrderPolicy
 import dev.hobgoblin.android.domain.ResourceState
 import dev.hobgoblin.android.domain.ssh.RemoteProjectKind
 import dev.hobgoblin.android.domain.ssh.RemoteRepositoryProfile
 import dev.hobgoblin.android.domain.ssh.SshHostProfile
+import dev.hobgoblin.android.ui.components.ManualReorderHandle
+import dev.hobgoblin.android.ui.components.ManualReorderState
+import dev.hobgoblin.android.ui.components.manualReorderItem
+import dev.hobgoblin.android.ui.components.rememberManualReorderState
 import dev.hobgoblin.android.ui.theme.HobgoblinSpacing
 
 @Composable
@@ -36,6 +41,8 @@ fun ProjectsScreen(
     onOpenProject: (String) -> Unit,
     onOpenProjectTerminals: (String, String) -> Unit,
     onDeleteProject: (String) -> Unit,
+    initialManualOrder: List<String> = emptyList(),
+    onSaveManualOrder: (List<String>) -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -54,6 +61,8 @@ fun ProjectsScreen(
                 onOpenProject = onOpenProject,
                 onOpenProjectTerminals = onOpenProjectTerminals,
                 onDeleteProject = onDeleteProject,
+                initialManualOrder = initialManualOrder,
+                onSaveManualOrder = onSaveManualOrder,
             )
             is ResourceState.Loaded -> ProjectList(
                 repositories = repositoriesState.value,
@@ -61,6 +70,8 @@ fun ProjectsScreen(
                 onOpenProject = onOpenProject,
                 onOpenProjectTerminals = onOpenProjectTerminals,
                 onDeleteProject = onDeleteProject,
+                initialManualOrder = initialManualOrder,
+                onSaveManualOrder = onSaveManualOrder,
             )
         }
     }
@@ -94,9 +105,23 @@ private fun ProjectList(
     onOpenProject: (String) -> Unit,
     onOpenProjectTerminals: (String, String) -> Unit,
     onDeleteProject: (String) -> Unit,
+    initialManualOrder: List<String>,
+    onSaveManualOrder: (List<String>) -> Unit,
 ) {
     var deleteTarget by remember { mutableStateOf<RemoteRepositoryProfile?>(null) }
+    var manualOrder by remember(initialManualOrder) { mutableStateOf(initialManualOrder) }
     val hostById = remember(hosts) { hosts.associateBy { it.id } }
+    val orderedRepositories = ManualItemOrderPolicy.apply(repositories, manualOrder, RemoteRepositoryProfile::id)
+    val reorderState = rememberManualReorderState(
+        onMove = { draggedId, targetId ->
+            manualOrder = ManualItemOrderPolicy.move(
+                orderedRepositories.map(RemoteRepositoryProfile::id),
+                draggedId,
+                targetId,
+            )
+        },
+        onFinished = { onSaveManualOrder(manualOrder) },
+    )
 
     if (repositories.isEmpty()) {
         Column(
@@ -115,18 +140,20 @@ private fun ProjectList(
     Text("Saved projects", style = MaterialTheme.typography.titleMedium)
     Spacer(Modifier.height(HobgoblinSpacing.Md))
     LazyColumn(verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm)) {
-            items(repositories, key = { it.id }) { repository ->
-                ProjectRow(
-                    repository = repository,
-                    host = hostById[repository.hostProfileId],
-                    onOpenProject = { onOpenProject(repository.id) },
-                    onOpenProjectTerminals = {
-                        val target = projectTerminalTarget(repository)
-                        onOpenProjectTerminals(target.repositoryId, target.terminalWorkspacePath)
-                    },
-                    onDeleteProject = { deleteTarget = repository },
-                )
-            }
+        items(orderedRepositories, key = { it.id }) { repository ->
+            ProjectRow(
+                modifier = Modifier.manualReorderItem(reorderState, repository.id),
+                repository = repository,
+                reorderState = reorderState,
+                host = hostById[repository.hostProfileId],
+                onOpenProject = { onOpenProject(repository.id) },
+                onOpenProjectTerminals = {
+                    val target = projectTerminalTarget(repository)
+                    onOpenProjectTerminals(target.repositoryId, target.terminalWorkspacePath)
+                },
+                onDeleteProject = { deleteTarget = repository },
+            )
+        }
     }
 
     deleteTarget?.let { target ->
@@ -171,7 +198,9 @@ private fun ErrorProjects(message: String) {
 
 @Composable
 private fun ProjectRow(
+    modifier: Modifier,
     repository: RemoteRepositoryProfile,
+    reorderState: ManualReorderState,
     host: SshHostProfile?,
     onOpenProject: () -> Unit,
     onOpenProjectTerminals: () -> Unit,
@@ -183,14 +212,29 @@ private fun ProjectRow(
     val actionLabels = projectActionLabels()
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         onClick = onOpenProject,
     ) {
         Column(
             modifier = Modifier.padding(HobgoblinSpacing.Md),
             verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
         ) {
-            Text("${repository.title}: ${repository.remotePath}", style = MaterialTheme.typography.bodySmall)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "${repository.title}: ${repository.remotePath}",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                ManualReorderHandle(
+                    state = reorderState,
+                    itemKey = repository.id,
+                    itemLabel = repository.title,
+                )
+            }
             Text(
                 projectKindLabel(repository),
                 style = MaterialTheme.typography.labelMedium,

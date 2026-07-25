@@ -19,7 +19,11 @@ class RemoteWorktreeServiceTest {
         )
 
         val error = assertThrows(IllegalArgumentException::class.java) {
-            service.createWorktree(target(), branch = "feature/android", worktreePath = "/srv/app-feature")
+            service.createWorktree(
+                target(),
+                source = WorktreeCreationSource.ExistingLocal("feature/android"),
+                worktreePath = "/srv/app-feature",
+            )
         }
 
         assertEquals("Trust this host key before changing remote worktrees.", error.message)
@@ -33,9 +37,37 @@ class RemoteWorktreeServiceTest {
             hostKeyStore = FakeHostKeyTrustStore("SHA256:test"),
         )
 
-        service.createWorktree(target(), branch = "feature/android", worktreePath = "/srv/app-feature")
+        service.createWorktree(
+            target(),
+            source = WorktreeCreationSource.ExistingLocal("feature/android"),
+            worktreePath = "/srv/app-feature",
+        )
 
-        assertTrue(client.lastScript.contains("git -C '/srv/app' worktree add '/srv/app-feature' 'feature/android'"))
+        assertTrue(client.lastScript.contains("git -C '/srv/app' worktree add -- '/srv/app-feature' 'feature/android'"))
+    }
+
+    @Test
+    fun `create worktree from remote ref creates a local tracking branch`() {
+        val client = FakeSshClient()
+        val service = RemoteWorktreeService(
+            client = client,
+            hostKeyStore = FakeHostKeyTrustStore("SHA256:test"),
+        )
+
+        service.createWorktree(
+            target(),
+            source = WorktreeCreationSource.TrackRemote(
+                remoteRef = "origin/feature/android",
+                localBranch = "feature/android",
+            ),
+            worktreePath = "/srv/app-feature",
+        )
+
+        assertTrue(
+            client.lastScript.contains(
+                "git -C '/srv/app' worktree add -b 'feature/android' --track -- '/srv/app-feature' 'origin/feature/android'",
+            ),
+        )
     }
 
     @Test
