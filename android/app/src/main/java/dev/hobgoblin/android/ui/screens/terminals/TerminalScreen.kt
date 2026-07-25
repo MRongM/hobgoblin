@@ -111,6 +111,7 @@ fun TerminalScreen(
     }
     var terminalSessions by remember { mutableStateOf(terminalSessionManager.sessions()) }
     var ctrlModifierActive by remember { mutableStateOf(false) }
+    var altModifierActive by remember { mutableStateOf(false) }
     var focusMode by remember(host.id, remotePath, repositoryId, terminalSessionId) {
         mutableStateOf(TerminalDefaultFocusMode)
     }
@@ -322,6 +323,33 @@ fun TerminalScreen(
             inputNotice = if (sent) null else "Terminal is not connected."
         }
         ctrlModifierActive = false
+        altModifierActive = false
+    }
+
+    fun sendExtraKey(key: TerminalExtraKey) {
+        when (key) {
+            TerminalExtraKey.Control -> {
+                ctrlModifierActive = !ctrlModifierActive
+                return
+            }
+            TerminalExtraKey.Alt -> {
+                altModifierActive = !altModifierActive
+                return
+            }
+            else -> Unit
+        }
+
+        val activeController = activeSessionId?.let(terminalSessionManager::emulatorController)
+        val input = terminalExtraKeyBytes(
+            key = key,
+            ctrlPressed = ctrlModifierActive,
+            altPressed = altModifierActive,
+            cursorKeysApplicationMode = activeController?.emulator?.isCursorKeysApplicationMode ?: false,
+            keypadApplicationMode = activeController?.emulator?.isKeypadApplicationMode ?: false,
+        )?.toString(Charsets.UTF_8) ?: return
+        sendTerminalInputLocked(input, false, { _ -> })
+        ctrlModifierActive = false
+        altModifierActive = false
     }
 
     fun switchToSession(targetSessionId: String) {
@@ -369,6 +397,11 @@ fun TerminalScreen(
                 observer.close()
             }
         }
+    }
+
+    LaunchedEffect(activeSessionId) {
+        ctrlModifierActive = false
+        altModifierActive = false
     }
 
     DisposableEffect(terminalSessionManager) {
@@ -601,6 +634,12 @@ fun TerminalScreen(
                             fitToScreen = fitToScreen,
                             fontSizeSp = terminalFontSizeSp,
                             appearance = appearance,
+                            ctrlModifierActive = ctrlModifierActive,
+                            altModifierActive = altModifierActive,
+                            onStickyModifiersConsumed = {
+                                ctrlModifierActive = false
+                                altModifierActive = false
+                            },
                             notice = inputNotice,
                             onOpenUrl = { openTerminalUrl(it) },
                             onCopyText = ::copyTerminalSelection,
@@ -610,14 +649,12 @@ fun TerminalScreen(
                             TerminalCommandDeck(
                                 inputAvailable = inputAvailable,
                                 ctrlModifierActive = ctrlModifierActive,
-                                onCtrlToggle = { ctrlModifierActive = !ctrlModifierActive },
+                                altModifierActive = altModifierActive,
+                                onExtraKey = ::sendExtraKey,
                                 onCtrlC = { sendControlInput("\u0003") },
                                 onCtrlL = { sendControlInput(terminalControlCharacter('L') ?: "\u000C") },
                                 onEnter = { sendTerminalInputLocked("\r", false, { _ -> }) },
                                 onBackspace = { sendTerminalInputLocked("\u007F", false, { _ -> }) },
-                                onEsc = { sendTerminalInputLocked("\u001b", false, { _ -> }) },
-                                onTab = { sendTerminalInputLocked("\t", false, { _ -> }) },
-                                onArrow = { code -> sendTerminalInputLocked(code, false, { _ -> }) },
                                 onPaste = {
                                     val unavailable = terminalInputUnavailableMessage(terminalState)
                                     if (unavailable != null) {
@@ -714,14 +751,12 @@ private fun terminalStatusLine(
 private fun TerminalCommandDeck(
     inputAvailable: Boolean,
     ctrlModifierActive: Boolean,
-    onCtrlToggle: () -> Unit,
+    altModifierActive: Boolean,
+    onExtraKey: (TerminalExtraKey) -> Unit,
     onCtrlC: () -> Unit,
     onCtrlL: () -> Unit,
     onEnter: () -> Unit,
     onBackspace: () -> Unit,
-    onEsc: () -> Unit,
-    onTab: () -> Unit,
-    onArrow: (String) -> Unit,
     onPaste: () -> Unit,
     commandInputVisible: Boolean,
     commandInput: String,
@@ -752,46 +787,38 @@ private fun TerminalCommandDeck(
             .padding(horizontal = HobgoblinSpacing.Sm, vertical = HobgoblinSpacing.Xs),
         verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
     ) {
-        HelperKeyRow(
+        TermuxExtraKeyRows(
             enabled = inputAvailable,
             ctrlModifierActive = ctrlModifierActive,
-            onCtrlToggle = onCtrlToggle,
-            onCtrlC = onCtrlC,
-            onCtrlL = onCtrlL,
-            onEnter = onEnter,
-            onBackspace = onBackspace,
-            onEsc = onEsc,
-            onTab = onTab,
-            onArrow = onArrow,
-            onPaste = onPaste,
+            altModifierActive = altModifierActive,
+            onKey = onExtraKey,
         )
-        if (commandInputVisible) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CompactCommandInput(
-                    modifier = Modifier.weight(1f),
-                    value = commandInput,
-                    onValueChange = onCommandInputChange,
-                    enabled = commandInputEnabled,
-                    placeholder = commandInputPlaceholder,
-                    onSend = onSendCommand,
-                )
-                TerminalTextButton(
-                    text = "Send",
-                    enabled = commandInputEnabled && commandInput.isNotEmpty(),
-                    onClick = onSendCommand,
-                )
-            }
-        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
         ) {
+            TerminalHobgoblinPrimaryActions.forEach { action ->
+                val actionEnabled = when (action) {
+                    TerminalHobgoblinAction.Reconnect -> reconnectEnabled
+                    else -> inputAvailable
+                }
+                TerminalTextButton(
+                    text = terminalHobgoblinActionLabel(action),
+                    enabled = actionEnabled,
+                    onClick = {
+                        when (action) {
+                            TerminalHobgoblinAction.Reconnect -> onReconnect()
+                            TerminalHobgoblinAction.Enter -> onEnter()
+                            TerminalHobgoblinAction.Backspace -> onBackspace()
+                            TerminalHobgoblinAction.ControlC -> onCtrlC()
+                            TerminalHobgoblinAction.ControlL -> onCtrlL()
+                            TerminalHobgoblinAction.Paste -> onPaste()
+                        }
+                    },
+                )
+            }
             if (hasGlobalSwitchTargets) {
                 TerminalSwitchArrowButton(text = "⇈", onClick = { onCycleGlobalTerminal(-1) })
                 TerminalSwitchArrowButton(text = "⇊", onClick = { onCycleGlobalTerminal(1) })
@@ -812,10 +839,28 @@ private fun TerminalCommandDeck(
                 text = terminalAppearanceToggleLabel(appearance),
                 onClick = { onAppearanceChange(nextTerminalAppearance(appearance)) },
             )
-            if (reconnectEnabled) {
-                TerminalTextButton(text = "Reconnect", onClick = onReconnect)
-            }
             TerminalTextButton(text = "Focus", onClick = onEnterFocus)
+        }
+        if (commandInputVisible) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CompactCommandInput(
+                    modifier = Modifier.weight(1f),
+                    value = commandInput,
+                    onValueChange = onCommandInputChange,
+                    enabled = commandInputEnabled,
+                    placeholder = commandInputPlaceholder,
+                    onSend = onSendCommand,
+                )
+                TerminalTextButton(
+                    text = "Send",
+                    enabled = commandInputEnabled && commandInput.isNotEmpty(),
+                    onClick = onSendCommand,
+                )
+            }
         }
     }
 }
@@ -926,45 +971,26 @@ private fun TerminalSwitchArrowButton(
 }
 
 @Composable
-private fun HelperKeyRow(
+private fun TermuxExtraKeyRows(
     enabled: Boolean,
     ctrlModifierActive: Boolean,
-    onCtrlToggle: () -> Unit,
-    onCtrlC: () -> Unit,
-    onCtrlL: () -> Unit,
-    onEnter: () -> Unit,
-    onBackspace: () -> Unit,
-    onEsc: () -> Unit,
-    onTab: () -> Unit,
-    onArrow: (String) -> Unit,
-    onPaste: () -> Unit,
+    altModifierActive: Boolean,
+    onKey: (TerminalExtraKey) -> Unit,
 ) {
-    val labels = terminalHelperKeyLabels(ctrlModifierActive)
-    val actions = listOf<() -> Unit>(
-        onEnter,
-        onBackspace,
-        onCtrlC,
-        onCtrlL,
-        onTab,
-        onEsc,
-        onCtrlToggle,
-        { onArrow("\u001b[A") },
-        { onArrow("\u001b[B") },
-        { onArrow("\u001b[D") },
-        { onArrow("\u001b[C") },
-        onPaste,
-    )
     Column(
         verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
     ) {
-        terminalHelperKeyRows(ctrlModifierActive).forEachIndexed { rowIndex, rowLabels ->
+        TerminalTermuxExtraKeyRows.forEach { row ->
             Row(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
             ) {
-                rowLabels.forEachIndexed { columnIndex, label ->
-                    val actionIndex = rowIndex * TerminalHelperButtonsPerRow + columnIndex
-                    TerminalTextButton(text = label, enabled = enabled, onClick = actions[actionIndex])
+                row.forEach { key ->
+                    TerminalTextButton(
+                        text = terminalExtraKeyLabel(key, ctrlModifierActive, altModifierActive),
+                        enabled = enabled,
+                        onClick = { onKey(key) },
+                    )
                 }
             }
         }

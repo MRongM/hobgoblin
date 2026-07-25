@@ -272,26 +272,47 @@ class TerminalInteractionStateTest {
     }
 
     @Test
-    fun `helper key labels hide quick yes and no inputs`() {
-        val labels = terminalHelperKeyLabels(ctrlModifierActive = false)
-
-        assertFalse(labels.contains("YES"))
-        assertFalse(labels.contains("NO"))
-        assertEquals("ENTER", labels[0])
-        assertEquals("⌫", labels[1])
-        assertEquals("CTRL+C", labels[2])
-        assertEquals("CTRL+L", labels[3])
-        assertEquals("Tab", labels[4])
-        assertEquals("Esc", labels[5])
+    fun `termux extra keys keep the requested two row layout`() {
+        assertEquals(
+            listOf("ESC", "/", "-", "HOME", "↑", "END", "PGUP"),
+            TerminalTermuxExtraKeyRows[0].map {
+                terminalExtraKeyLabel(it, ctrlModifierActive = false, altModifierActive = false)
+            },
+        )
+        assertEquals(
+            listOf("TAB", "CTRL", "ALT", "←", "↓", "→", "PGDN"),
+            TerminalTermuxExtraKeyRows[1].map {
+                terminalExtraKeyLabel(it, ctrlModifierActive = false, altModifierActive = false)
+            },
+        )
     }
 
     @Test
-    fun `helper key labels render in two rows`() {
-        val rows = terminalHelperKeyRows(ctrlModifierActive = false)
+    fun `termux modifier labels expose one shot state`() {
+        assertEquals(
+            "CTRL on",
+            terminalExtraKeyLabel(
+                TerminalExtraKey.Control,
+                ctrlModifierActive = true,
+                altModifierActive = false,
+            ),
+        )
+        assertEquals(
+            "ALT on",
+            terminalExtraKeyLabel(
+                TerminalExtraKey.Alt,
+                ctrlModifierActive = false,
+                altModifierActive = true,
+            ),
+        )
+    }
 
-        assertEquals(2, rows.size)
-        assertEquals(listOf("ENTER", "⌫", "CTRL+C", "CTRL+L", "Tab", "Esc"), rows[0])
-        assertEquals(listOf("Ctrl", "Up", "Down", "Left", "Right", "Paste"), rows[1])
+    @Test
+    fun `hobgoblin action row prioritizes reconnect and retains input shortcuts`() {
+        assertEquals(
+            listOf("Reconnect", "ENTER", "⌫", "CTRL+C", "CTRL+L", "Paste"),
+            TerminalHobgoblinPrimaryActions.map(::terminalHobgoblinActionLabel),
+        )
     }
 
     @Test
@@ -359,6 +380,19 @@ class TerminalInteractionStateTest {
         assertTrue(source.contains("terminalChromeVisible(focusMode)"))
         assertTrue(source.contains("terminalFocusExitHandleVisible(focusMode)"))
         assertTrue(source.contains("text = \"Exit focus\""))
+    }
+
+    @Test
+    fun `terminal screen renders termux rows before a stable hobgoblin action row`() {
+        val source = listOf(
+            File("src/main/java/dev/hobgoblin/android/ui/screens/terminals/TerminalScreen.kt"),
+            File("app/src/main/java/dev/hobgoblin/android/ui/screens/terminals/TerminalScreen.kt"),
+            File("android/app/src/main/java/dev/hobgoblin/android/ui/screens/terminals/TerminalScreen.kt"),
+        ).firstOrNull(File::isFile)?.readText() ?: error("TerminalScreen.kt not found")
+
+        assertTrue(source.contains("TerminalTermuxExtraKeyRows.forEach"))
+        assertTrue(source.contains("TerminalHobgoblinPrimaryActions.forEach"))
+        assertFalse(source.contains("if (reconnectEnabled)"))
     }
 
     @Test

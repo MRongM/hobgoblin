@@ -7,6 +7,11 @@ import org.junit.Test
 
 class AppRouteTest {
     @Test
+    fun `ordinary launch starts on hosts`() {
+        assertEquals(AppRoute.Hosts, initialMainRoute())
+    }
+
+    @Test
     fun `terminal route carries session identity from record`() {
         val record = TerminalSessionRecord(
             id = "session-1",

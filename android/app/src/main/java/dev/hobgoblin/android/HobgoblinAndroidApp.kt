@@ -20,6 +20,7 @@ import dev.hobgoblin.android.domain.ssh.RemoteRepositoryProfile
 import dev.hobgoblin.android.domain.ssh.RemoteTarget
 import dev.hobgoblin.android.domain.ssh.SshHostProfile
 import dev.hobgoblin.android.navigation.AppRoute
+import dev.hobgoblin.android.navigation.initialMainRoute
 import dev.hobgoblin.android.navigation.terminalReturnRoute
 import dev.hobgoblin.android.ssh.HostPortForwardManager
 import dev.hobgoblin.android.ssh.HostPortForwardStatus
@@ -97,8 +98,8 @@ fun HobgoblinAndroidApp(
         remoteRepositoryStore.loadRepositories()
     }
 
-    var route: AppRoute by remember(initialRepositories) {
-        mutableStateOf(if (initialRepositories.isNotEmpty()) AppRoute.Projects else AppRoute.Hosts)
+    var route: AppRoute by remember {
+        mutableStateOf(initialMainRoute())
     }
     var projectHostFilterId: String? by remember { mutableStateOf(null) }
 

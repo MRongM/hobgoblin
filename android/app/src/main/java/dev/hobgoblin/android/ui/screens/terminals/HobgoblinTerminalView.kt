@@ -126,6 +126,9 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
     private var onOpenUrl: (String) -> Unit = {}
     private var onCopyText: (String) -> Boolean = { false }
     private var onOpenSelectedText: (String) -> Boolean = { false }
+    private var stickyCtrlModifierActive = false
+    private var stickyAltModifierActive = false
+    private var onStickyModifiersConsumed: () -> Unit = {}
     private var velocityTracker: VelocityTracker? = null
     private var inertiaVelocity = TerminalInertiaVelocity.Zero
     private var inertiaFramePosted = false
@@ -206,6 +209,16 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
         this.onOpenUrl = onOpenUrl
         this.onCopyText = onCopyText
         this.onOpenSelectedText = onOpenSelectedText
+    }
+
+    fun setStickyModifiers(
+        ctrlModifierActive: Boolean,
+        altModifierActive: Boolean,
+        onConsumed: () -> Unit,
+    ) {
+        stickyCtrlModifierActive = ctrlModifierActive
+        stickyAltModifierActive = altModifierActive
+        onStickyModifiersConsumed = onConsumed
     }
 
     private fun applyTerminalAppearance() {
@@ -410,7 +423,14 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
         outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN
         return object : BaseInputConnection(this, true) {
             override fun commitText(text: CharSequence, newCursorPosition: Int): Boolean {
-                sendBytes(terminalTextBytes(text))
+                sendBytes(
+                    terminalTextBytes(
+                        text = text,
+                        ctrlPressed = stickyCtrlModifierActive,
+                        altPressed = stickyAltModifierActive,
+                    ),
+                )
+                consumeStickyModifiers()
                 getEditable()?.clear()
                 return true
             }
@@ -699,6 +719,13 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
 
     private fun sendBytes(bytes: ByteArray) {
         controller?.output?.write(bytes, 0, bytes.size)
+    }
+
+    private fun consumeStickyModifiers() {
+        if (!stickyCtrlModifierActive && !stickyAltModifierActive) return
+        stickyCtrlModifierActive = false
+        stickyAltModifierActive = false
+        onStickyModifiersConsumed()
     }
 
     private fun Int.spToPx(): Int =
