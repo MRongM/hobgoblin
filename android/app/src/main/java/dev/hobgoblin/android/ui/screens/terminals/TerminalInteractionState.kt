@@ -7,7 +7,7 @@ import dev.hobgoblin.android.terminals.TerminalSessionState
 import dev.hobgoblin.android.terminals.TerminalSessionStatus
 import java.net.URI
 
-internal const val TerminalDisconnectedMessage = "Terminal disconnected. Reconnect or return to diagnostics."
+internal const val TerminalDisconnectedMessage = "Terminal disconnected. Reconnect or edit the host."
 
 internal const val TerminalBackKeepsSessionHint = "Back leaves the session running in the background."
 
@@ -16,7 +16,7 @@ internal const val TerminalBackClosesSessionHint = "Back stops this temporary te
 internal const val TerminalQuickConfirmInput = "YES"
 internal const val TerminalQuickCancelInput = "NO"
 
-internal const val TerminalDefaultMaximized = true
+internal const val TerminalDefaultFocusMode = false
 internal const val TerminalStickToBottomThresholdPx = 48
 internal const val TerminalHelperButtonsPerRow = 6
 
@@ -39,12 +39,14 @@ internal fun terminalHelperKeyLabels(ctrlModifierActive: Boolean): List<String> 
 internal fun terminalHelperKeyRows(ctrlModifierActive: Boolean): List<List<String>> =
     terminalHelperKeyLabels(ctrlModifierActive).chunked(TerminalHelperButtonsPerRow)
 
-internal fun terminalTopBarVisible(terminalMaximized: Boolean): Boolean = !terminalMaximized
+internal fun terminalChromeVisible(focusMode: Boolean): Boolean = !focusMode
 
-internal fun terminalMaximizeActionLabel(terminalMaximized: Boolean): String =
-    if (terminalMaximized) "Restore" else "Maximize"
+internal fun terminalFocusActionLabel(focusMode: Boolean): String =
+    if (focusMode) "Exit focus" else "Focus"
 
-internal fun terminalRestoreInlineActionVisible(terminalMaximized: Boolean): Boolean = terminalMaximized
+internal fun terminalFocusExitHandleVisible(focusMode: Boolean): Boolean = focusMode
+
+internal fun terminalBackExitsFocus(focusMode: Boolean): Boolean = focusMode
 
 internal fun terminalSessionRemotePath(remotePath: String): String =
     remotePath.ifBlank { "/" }.trimEnd('/').ifEmpty { "/" }
@@ -349,7 +351,7 @@ internal fun terminalDisplayText(state: TerminalSessionState): String {
 }
 
 private fun terminalDisconnectedMessage(reason: TerminalDisconnectedReason, detail: String? = null): String =
-    "Terminal disconnected: ${terminalReasonWithDetail(reason, detail)}. Reconnect or return to diagnostics."
+    "Terminal disconnected: ${terminalReasonWithDetail(reason, detail)}. Reconnect or edit the host."
 
 private fun terminalReasonWithDetail(reason: TerminalDisconnectedReason, detail: String? = null): String {
     val cleanDetail = detail

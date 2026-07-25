@@ -84,33 +84,53 @@ fun DiagnosticsScreen(
         ) {
             Text(host.title, style = MaterialTheme.typography.titleLarge)
             Text(host.subtitle, style = MaterialTheme.typography.bodyMedium)
-            Button(onClick = { runDiagnostics() }) {
-                Text("Run diagnostics")
-            }
-            when (val state = diagnosticsState) {
-                ResourceState.Idle -> DiagnosticStageList(stages = pendingStages())
-                ResourceState.Loading -> DiagnosticStageList(stages = pendingStages(running = DiagnosticStage.SSH))
-                is ResourceState.Error -> {
-                    Text("failed", color = MaterialTheme.colorScheme.error)
-                    Text(state.message)
-                    DiagnosticStageList(stages = pendingStages())
-                }
-
-                is ResourceState.Stale -> DiagnosticResultContent(
-                    result = state.value,
-                    onTrustHostKey = onTrustHostKey,
-                    onRunDiagnostics = { runDiagnostics() },
-                    onOpenTerminal = onOpenTerminal,
-                )
-
-                is ResourceState.Loaded -> DiagnosticResultContent(
-                    result = state.value,
-                    onTrustHostKey = onTrustHostKey,
-                    onRunDiagnostics = { runDiagnostics() },
-                    onOpenTerminal = onOpenTerminal,
-                )
-            }
+            HostDiagnosticsContent(
+                state = diagnosticsState,
+                onRunDiagnostics = { runDiagnostics() },
+                onTrustHostKey = onTrustHostKey,
+                onOpenTerminal = onOpenTerminal,
+            )
         }
+    }
+}
+
+@Composable
+internal fun HostDiagnosticsContent(
+    state: ResourceState<DiagnosticsResult>,
+    onRunDiagnostics: () -> Unit,
+    onTrustHostKey: (String) -> Unit,
+    onOpenTerminal: (() -> Unit)? = null,
+) {
+    Button(
+        enabled = state !is ResourceState.Loading,
+        onClick = onRunDiagnostics,
+    ) {
+        Text(if (state is ResourceState.Loading) "Running diagnostics…" else "Run diagnostics")
+    }
+    when (state) {
+        ResourceState.Idle -> DiagnosticStageList(stages = pendingDiagnosticStages())
+        ResourceState.Loading -> DiagnosticStageList(
+            stages = pendingDiagnosticStages(running = DiagnosticStage.SSH),
+        )
+        is ResourceState.Error -> {
+            Text("failed", color = MaterialTheme.colorScheme.error)
+            Text(state.message)
+            DiagnosticStageList(stages = pendingDiagnosticStages())
+        }
+
+        is ResourceState.Stale -> DiagnosticResultContent(
+            result = state.value,
+            onTrustHostKey = onTrustHostKey,
+            onRunDiagnostics = onRunDiagnostics,
+            onOpenTerminal = onOpenTerminal,
+        )
+
+        is ResourceState.Loaded -> DiagnosticResultContent(
+            result = state.value,
+            onTrustHostKey = onTrustHostKey,
+            onRunDiagnostics = onRunDiagnostics,
+            onOpenTerminal = onOpenTerminal,
+        )
     }
 }
 
@@ -119,7 +139,7 @@ private fun DiagnosticResultContent(
     result: DiagnosticsResult,
     onTrustHostKey: (String) -> Unit,
     onRunDiagnostics: () -> Unit,
-    onOpenTerminal: () -> Unit,
+    onOpenTerminal: (() -> Unit)?,
 ) {
     DiagnosticStageList(stages = result.stages)
     if (result.category == DiagnosticCategory.HostKey && result.hostKeyFingerprint != null) {
@@ -146,7 +166,7 @@ private fun DiagnosticResultContent(
             }
         }
     }
-    if (result.ok) {
+    if (result.ok && onOpenTerminal != null) {
         Button(onClick = onOpenTerminal) {
             Text("Open terminal")
         }
@@ -185,7 +205,7 @@ private fun DiagnosticStageList(stages: List<DiagnosticStageResult>) {
     }
 }
 
-private fun pendingStages(running: DiagnosticStage? = null): List<DiagnosticStageResult> =
+internal fun pendingDiagnosticStages(running: DiagnosticStage? = null): List<DiagnosticStageResult> =
     listOf(
         DiagnosticStage.SSH,
         DiagnosticStage.Shell,

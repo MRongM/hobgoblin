@@ -10,7 +10,6 @@ sealed interface AppRoute {
     data object AddRepository : AppRoute
     data object Settings : AppRoute
     data class EditHost(val hostId: String) : AppRoute
-    data class Diagnostics(val hostId: String) : AppRoute
     data class HostPorts(val hostId: String) : AppRoute
     data class Repository(
         val repositoryId: String,
@@ -50,5 +49,5 @@ internal fun terminalReturnRoute(
         repositoryId = route.repositoryId,
         terminalWorkspacePath = route.remotePath,
     )
-    else -> AppRoute.Diagnostics(resolvedHostId)
+    else -> AppRoute.EditHost(resolvedHostId)
 }

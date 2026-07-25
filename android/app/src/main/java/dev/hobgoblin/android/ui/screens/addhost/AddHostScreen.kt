@@ -45,6 +45,7 @@ import dev.hobgoblin.android.domain.ssh.SshIdentityRef
 import dev.hobgoblin.android.domain.ssh.SshHostProfile
 import dev.hobgoblin.android.domain.ssh.withDiagnosticResult
 import dev.hobgoblin.android.ssh.SshInitializationCheck
+import dev.hobgoblin.android.ui.screens.diagnostics.HostDiagnosticsContent
 import dev.hobgoblin.android.ui.theme.HobgoblinColors
 import dev.hobgoblin.android.ui.theme.HobgoblinSpacing
 import kotlinx.coroutines.Dispatchers
@@ -55,6 +56,8 @@ internal fun canOfferSshInitialization(host: String, user: String, port: String)
     host.isNotBlank() && user.isNotBlank() && runCatching { SshHostProfile.parsePort(port) }.isSuccess
 
 internal fun initialHostUser(initialHost: SshHostProfile?): String = initialHost?.user ?: DefaultSshUser
+
+internal fun shouldShowSavedHostDiagnostics(initialHost: SshHostProfile?): Boolean = initialHost != null
 
 internal fun shouldShowSshInitializationPasswordInput(
     enabled: Boolean,
@@ -241,7 +244,7 @@ fun AddHostScreen(
         }
     }
 
-    fun testConnection() {
+    fun testConnection(trustFingerprint: String? = null) {
         val profile = runCatching { currentDraftProfile() }.getOrElse {
             connectionTestState = ResourceState.Error(it.message ?: "Validation error", it)
             lastDiagnosticStatus = HOST_DIAGNOSTIC_STATUS_UNHEALTHY
@@ -252,7 +255,12 @@ fun AddHostScreen(
         connectionTestState = ResourceState.Loading
         scope.launch {
             val result = runCatching {
-                withContext(Dispatchers.IO) { onRunDiagnostics(profile) }
+                withContext(Dispatchers.IO) {
+                    if (trustFingerprint != null) {
+                        onTrustHostKey(profile, trustFingerprint)
+                    }
+                    onRunDiagnostics(profile)
+                }
             }
             if (!isLatestConnectionTest(requestGeneration, connectionTestGeneration)) {
                 return@launch
@@ -389,6 +397,31 @@ fun AddHostScreen(
                 onTestConnection = { testConnection() },
                 onReset = { clearInitializationState() },
             )
+            if (shouldShowSavedHostDiagnostics(initialHost)) {
+                OutlinedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.outlinedCardColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(HobgoblinSpacing.Md),
+                        verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Md),
+                    ) {
+                        Text("Host diagnostics", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Check SSH access and the remote shell using the current host fields.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        HostDiagnosticsContent(
+                            state = connectionTestState,
+                            onRunDiagnostics = { testConnection() },
+                            onTrustHostKey = { fingerprint -> testConnection(fingerprint) },
+                        )
+                    }
+                }
+            }
             if (error != null) {
                 Text(error.orEmpty(), color = MaterialTheme.colorScheme.error)
             }

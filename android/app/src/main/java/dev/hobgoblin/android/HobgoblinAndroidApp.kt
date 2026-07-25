@@ -13,12 +13,12 @@ import dev.hobgoblin.android.data.ManualItemOrderScope
 import dev.hobgoblin.android.data.ManualItemOrderStore
 import dev.hobgoblin.android.data.RemoteRepositoryStore
 import dev.hobgoblin.android.data.TerminalSettingsStore
+import dev.hobgoblin.android.data.TerminalAppearance
 import dev.hobgoblin.android.data.ssh.SecureIdentityStore
 import dev.hobgoblin.android.domain.ResourceState
 import dev.hobgoblin.android.domain.ssh.RemoteRepositoryProfile
 import dev.hobgoblin.android.domain.ssh.RemoteTarget
 import dev.hobgoblin.android.domain.ssh.SshHostProfile
-import dev.hobgoblin.android.domain.ssh.withDiagnosticResult
 import dev.hobgoblin.android.navigation.AppRoute
 import dev.hobgoblin.android.navigation.terminalReturnRoute
 import dev.hobgoblin.android.ssh.HostPortForwardManager
@@ -40,7 +40,6 @@ import dev.hobgoblin.android.terminals.TmuxTerminalRecoveryCandidate
 import dev.hobgoblin.android.termux.ExternalTermuxLauncher
 import dev.hobgoblin.android.termux.externalTermuxLaunchRequest
 import dev.hobgoblin.android.ui.screens.addhost.AddHostScreen
-import dev.hobgoblin.android.ui.screens.diagnostics.DiagnosticsScreen
 import dev.hobgoblin.android.ui.navigation.MainTab
 import dev.hobgoblin.android.ui.navigation.MainTabShell
 import dev.hobgoblin.android.ui.screens.hosts.HostsScreen
@@ -101,6 +100,7 @@ fun HobgoblinAndroidApp(
     var route: AppRoute by remember(initialRepositories) {
         mutableStateOf(if (initialRepositories.isNotEmpty()) AppRoute.Projects else AppRoute.Hosts)
     }
+    var projectHostFilterId: String? by remember { mutableStateOf(null) }
 
     LaunchedEffect(terminalNavigationRequest?.sequence) {
         val request = terminalNavigationRequest ?: return@LaunchedEffect
@@ -118,6 +118,9 @@ fun HobgoblinAndroidApp(
     }
     var terminalFitToScreen by remember {
         mutableStateOf(terminalSettingsStore.loadTerminalFitToScreen())
+    }
+    var terminalAppearance: TerminalAppearance by remember {
+        mutableStateOf(terminalSettingsStore.loadTerminalAppearance())
     }
     var portForwardStatuses: Map<String, HostPortForwardStatus> by remember {
         mutableStateOf(hostPortForwardManager.statuses())
@@ -187,6 +190,9 @@ fun HobgoblinAndroidApp(
     }
 
     fun selectMainTab(tab: MainTab) {
+        if (tab == MainTab.Projects) {
+            projectHostFilterId = null
+        }
         route = when (tab) {
             MainTab.Hosts -> AppRoute.Hosts
             MainTab.Projects -> AppRoute.Projects
@@ -227,6 +233,10 @@ fun HobgoblinAndroidApp(
                 hostsContent = {
                     HostsScreen(
                         hostsState = hostsState,
+                        onOpenProjects = { hostId ->
+                            projectHostFilterId = hostId
+                            route = AppRoute.Projects
+                        },
                         onEditHost = { hostId -> route = AppRoute.EditHost(hostId) },
                         onDeleteHost = { hostId ->
                             currentRepositories()
@@ -238,7 +248,6 @@ fun HobgoblinAndroidApp(
                             reloadHosts()
                             reloadRepositories()
                         },
-                        onOpenDiagnostics = { hostId -> route = AppRoute.Diagnostics(hostId) },
                         onOpenTerminal = ::openHostTemporaryTerminal,
                         onOpenPorts = { hostId -> route = AppRoute.HostPorts(hostId) },
                         initialManualOrder = manualItemOrderStore.load(ManualItemOrderScope.Hosts),
@@ -261,6 +270,8 @@ fun HobgoblinAndroidApp(
                         onDeleteProject = { repositoryId ->
                             deleteRepositoryRecord(repositoryId)
                         },
+                        hostFilterId = projectHostFilterId,
+                        onClearHostFilter = { projectHostFilterId = null },
                         initialManualOrder = manualItemOrderStore.load(ManualItemOrderScope.Projects),
                         onSaveManualOrder = { ids ->
                             manualItemOrderStore.save(ManualItemOrderScope.Projects, ids)
@@ -291,7 +302,9 @@ fun HobgoblinAndroidApp(
             onBack = { route = AppRoute.Hosts },
             onImportPrivateKey = { displayName, bytes -> secureIdentityStore.importPrivateKey(displayName, bytes) },
             onCheckSshInitialization = { input -> initializationService.check(input) },
-            onTrustHostKey = { input, fingerprint -> initializationService.trustHostKey(input, fingerprint) },
+            onTrustHostKey = { input, fingerprint ->
+                initializationService.trustHostKey(input, fingerprint)
+            },
             onInitializeSshAccess = { input, password ->
                 val result = initializationService.initialize(input, password)
                 result.profile
@@ -316,7 +329,9 @@ fun HobgoblinAndroidApp(
                     onBack = { route = AppRoute.Hosts },
                     onImportPrivateKey = { displayName, bytes -> secureIdentityStore.importPrivateKey(displayName, bytes) },
                     onCheckSshInitialization = { input -> initializationService.check(input) },
-                    onTrustHostKey = { input, fingerprint -> initializationService.trustHostKey(input, fingerprint) },
+                    onTrustHostKey = { input, fingerprint ->
+                        initializationService.trustHostKey(input, fingerprint)
+                    },
                     onInitializeSshAccess = { input, password ->
                         val result = initializationService.initialize(input, password)
                         result.profile
@@ -355,32 +370,6 @@ fun HobgoblinAndroidApp(
                     },
                     onStop = { rule ->
                         hostPortForwardManager.stop(rule.id)
-                    },
-                )
-            }
-        }
-
-        is AppRoute.Diagnostics -> {
-            val host = currentHosts().firstOrNull { it.id == currentRoute.hostId }
-            if (host == null) {
-                route = AppRoute.Hosts
-            } else {
-                fun routeHost(): SshHostProfile =
-                    currentHosts().firstOrNull { it.id == currentRoute.hostId } ?: host
-
-                DiagnosticsScreen(
-                    host = host,
-                    onBack = { route = AppRoute.Hosts },
-                    onOpenTerminal = { route = AppRoute.Terminal(currentRoute.hostId) },
-                    onRunDiagnostics = {
-                        val currentHost = routeHost()
-                        val result = diagnosticsService.runDiagnostics(RemoteTarget.fromHostProfile(currentHost))
-                        hostProfileStore.saveHost(currentHost.withDiagnosticResult(result))
-                        reloadHosts()
-                        result
-                    },
-                    onTrustHostKey = { fingerprint ->
-                        initializationService.trustHostKey(routeHost(), fingerprint)
                     },
                 )
             }
@@ -558,6 +547,11 @@ fun HobgoblinAndroidApp(
                     onFitToScreenChange = { fitToScreen ->
                         terminalFitToScreen = fitToScreen
                         terminalSettingsStore.setTerminalFitToScreen(fitToScreen)
+                    },
+                    appearance = terminalAppearance,
+                    onAppearanceChange = { appearance ->
+                        terminalAppearance = appearance
+                        terminalSettingsStore.setTerminalAppearance(appearance)
                     },
                     onSwitchGlobalTerminal = { session ->
                         terminalSessionManager.touchSession(session.id)

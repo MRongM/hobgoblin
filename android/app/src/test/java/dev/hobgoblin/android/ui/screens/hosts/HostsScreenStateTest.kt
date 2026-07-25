@@ -2,6 +2,7 @@ package dev.hobgoblin.android.ui.screens.hosts
 
 import androidx.compose.ui.graphics.Color
 import dev.hobgoblin.android.domain.ssh.SshHostProfile
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -55,6 +56,18 @@ class HostsScreenStateTest {
     @Test
     fun `host ports are available only for saved hosts`() {
         assertTrue(canOpenHostPorts(host(lastDiagnosticStatus = null)))
+    }
+
+    @Test
+    fun `host card primary action opens filtered projects`() {
+        val source = listOf(
+            File("src/main/java/dev/hobgoblin/android/ui/screens/hosts/HostsScreen.kt"),
+            File("app/src/main/java/dev/hobgoblin/android/ui/screens/hosts/HostsScreen.kt"),
+            File("android/app/src/main/java/dev/hobgoblin/android/ui/screens/hosts/HostsScreen.kt"),
+        ).firstOrNull(File::isFile)?.readText() ?: error("HostsScreen.kt not found")
+
+        assertTrue(source.contains("onOpenProjects: (String) -> Unit"))
+        assertTrue(source.contains("onClick = onOpenProjects"))
     }
 
     private fun host(lastDiagnosticStatus: String?): SshHostProfile =

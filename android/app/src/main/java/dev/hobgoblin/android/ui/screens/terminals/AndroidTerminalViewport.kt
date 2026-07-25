@@ -14,14 +14,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import dev.hobgoblin.android.data.TerminalAppearance
 import dev.hobgoblin.android.terminals.TerminalSessionState
 import dev.hobgoblin.android.terminals.emulator.RemoteTerminalEmulatorController
-import dev.hobgoblin.android.ui.theme.HobgoblinColors
 import dev.hobgoblin.android.ui.theme.HobgoblinSpacing
 
 internal val TerminalOriginalViewportWidth = 720.dp
@@ -36,16 +37,21 @@ internal fun AndroidTerminalViewport(
     emulatorController: RemoteTerminalEmulatorController?,
     fitToScreen: Boolean,
     fontSizeSp: Int,
+    appearance: TerminalAppearance,
     notice: String? = null,
     onOpenUrl: (String) -> Unit,
     onCopyText: (String) -> Boolean,
     onOpenSelectedText: (String) -> Boolean,
 ) {
     val banner = terminalViewportBannerMessage(state, notice)
+    val palette = terminalPalette(appearance)
+    val background = Color(palette.backgroundArgb)
+    val foreground = Color(palette.foregroundArgb)
+    val surface = Color(palette.surfaceArgb)
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
-            .background(HobgoblinColors.TerminalBackground),
+            .background(background),
     ) {
         val horizontalViewportWidthPx = with(LocalDensity.current) { maxWidth.roundToPx() }
         val viewportWidth = terminalViewportWidth(maxWidth, fitToScreen)
@@ -70,7 +76,7 @@ internal fun AndroidTerminalViewport(
                     modifier = viewportContentModifier
                         .padding(HobgoblinSpacing.Sm),
                     text = terminalDisplayText(state),
-                    color = HobgoblinColors.TerminalForeground,
+                    color = foreground,
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = fontSizeSp.sp),
                 )
             }
@@ -84,6 +90,7 @@ internal fun AndroidTerminalViewport(
                             setHorizontalViewportWidthPx(horizontalViewportWidthPx)
                             setFitToScreen(fitToScreen)
                             setFontSizeSp(fontSizeSp)
+                            setTerminalAppearance(appearance)
                             setExternalInteractions(
                                 onOpenUrl = onOpenUrl,
                                 onCopyText = onCopyText,
@@ -97,6 +104,7 @@ internal fun AndroidTerminalViewport(
                         view.setHorizontalViewportWidthPx(horizontalViewportWidthPx)
                         view.setFitToScreen(fitToScreen)
                         view.setFontSizeSp(fontSizeSp)
+                        view.setTerminalAppearance(appearance)
                         view.setExternalInteractions(
                             onOpenUrl = onOpenUrl,
                             onCopyText = onCopyText,
@@ -112,10 +120,10 @@ internal fun AndroidTerminalViewport(
             Text(
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .background(HobgoblinColors.TerminalOverlayBackground)
+                    .background(surface)
                     .padding(HobgoblinSpacing.Sm),
                 text = message,
-                color = HobgoblinColors.TerminalOverlayForeground,
+                color = foreground,
                 style = MaterialTheme.typography.labelMedium,
             )
         }

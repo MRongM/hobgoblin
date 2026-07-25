@@ -32,6 +32,18 @@ class AddHostConnectionTestContractTest {
         )
     }
 
+    @Test
+    fun `saved host diagnostics are rendered inside edit host`() {
+        val source = sourceFile(
+            "src/main/java/dev/hobgoblin/android/ui/screens/addhost/AddHostScreen.kt",
+            "app/src/main/java/dev/hobgoblin/android/ui/screens/addhost/AddHostScreen.kt",
+            "android/app/src/main/java/dev/hobgoblin/android/ui/screens/addhost/AddHostScreen.kt",
+        )
+
+        assertTrue(source.contains("shouldShowSavedHostDiagnostics(initialHost)"))
+        assertTrue(source.contains("HostDiagnosticsContent("))
+    }
+
     private fun sourceFile(vararg paths: String): String {
         val source = paths.map(::File).firstOrNull { it.isFile }
             ?: error("Source file not found from ${File(".").absolutePath}: ${paths.joinToString()}")

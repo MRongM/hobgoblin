@@ -77,9 +77,9 @@ internal fun canOpenHostPorts(host: SshHostProfile): Boolean = host.id.isNotBlan
 @Composable
 fun HostsScreen(
     hostsState: ResourceState<List<SshHostProfile>>,
+    onOpenProjects: (String) -> Unit,
     onEditHost: (String) -> Unit,
     onDeleteHost: (String) -> Unit,
-    onOpenDiagnostics: (String) -> Unit,
     onOpenTerminal: (String) -> Unit,
     onOpenPorts: (String) -> Unit,
     initialManualOrder: List<String> = emptyList(),
@@ -98,9 +98,9 @@ fun HostsScreen(
             is ResourceState.Error -> ErrorHosts(message = hostsState.message)
             is ResourceState.Stale -> HostList(
                 hosts = hostsState.value,
+                onOpenProjects = onOpenProjects,
                 onEditHost = onEditHost,
                 onDeleteHost = onDeleteHost,
-                onOpenDiagnostics = onOpenDiagnostics,
                 onOpenTerminal = onOpenTerminal,
                 onOpenPorts = onOpenPorts,
                 initialManualOrder = initialManualOrder,
@@ -108,9 +108,9 @@ fun HostsScreen(
             )
             is ResourceState.Loaded -> HostList(
                 hosts = hostsState.value,
+                onOpenProjects = onOpenProjects,
                 onEditHost = onEditHost,
                 onDeleteHost = onDeleteHost,
-                onOpenDiagnostics = onOpenDiagnostics,
                 onOpenTerminal = onOpenTerminal,
                 onOpenPorts = onOpenPorts,
                 initialManualOrder = initialManualOrder,
@@ -139,9 +139,9 @@ private fun ErrorHosts(message: String) {
 @Composable
 private fun HostList(
     hosts: List<SshHostProfile>,
+    onOpenProjects: (String) -> Unit,
     onEditHost: (String) -> Unit,
     onDeleteHost: (String) -> Unit,
-    onOpenDiagnostics: (String) -> Unit,
     onOpenTerminal: (String) -> Unit,
     onOpenPorts: (String) -> Unit,
     initialManualOrder: List<String>,
@@ -181,7 +181,7 @@ private fun HostList(
                 host = host,
                 reorderState = reorderState,
                 canOpenTerminal = health == HostHealth.Online,
-                onOpenDiagnostics = { onOpenDiagnostics(host.id) },
+                onOpenProjects = { onOpenProjects(host.id) },
                 onOpenTerminal = { onOpenTerminal(host.id) },
                 onOpenPorts = { onOpenPorts(host.id) },
                 onEditHost = { onEditHost(host.id) },
@@ -220,7 +220,7 @@ private fun HostRow(
     host: SshHostProfile,
     reorderState: ManualReorderState,
     canOpenTerminal: Boolean,
-    onOpenDiagnostics: () -> Unit,
+    onOpenProjects: () -> Unit,
     onOpenTerminal: () -> Unit,
     onOpenPorts: () -> Unit,
     onEditHost: () -> Unit,
@@ -229,7 +229,7 @@ private fun HostRow(
     val health = hostHealth(host)
     Card(
         modifier = modifier.fillMaxWidth(),
-        onClick = onOpenDiagnostics,
+        onClick = onOpenProjects,
     ) {
         Column(
             modifier = Modifier.padding(HobgoblinSpacing.Md),

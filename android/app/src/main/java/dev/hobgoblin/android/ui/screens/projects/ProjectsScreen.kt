@@ -41,6 +41,8 @@ fun ProjectsScreen(
     onOpenProject: (String) -> Unit,
     onOpenProjectTerminals: (String, String) -> Unit,
     onDeleteProject: (String) -> Unit,
+    hostFilterId: String? = null,
+    onClearHostFilter: () -> Unit = {},
     initialManualOrder: List<String> = emptyList(),
     onSaveManualOrder: (List<String>) -> Unit = {},
 ) {
@@ -61,6 +63,8 @@ fun ProjectsScreen(
                 onOpenProject = onOpenProject,
                 onOpenProjectTerminals = onOpenProjectTerminals,
                 onDeleteProject = onDeleteProject,
+                hostFilterId = hostFilterId,
+                onClearHostFilter = onClearHostFilter,
                 initialManualOrder = initialManualOrder,
                 onSaveManualOrder = onSaveManualOrder,
             )
@@ -70,6 +74,8 @@ fun ProjectsScreen(
                 onOpenProject = onOpenProject,
                 onOpenProjectTerminals = onOpenProjectTerminals,
                 onDeleteProject = onDeleteProject,
+                hostFilterId = hostFilterId,
+                onClearHostFilter = onClearHostFilter,
                 initialManualOrder = initialManualOrder,
                 onSaveManualOrder = onSaveManualOrder,
             )
@@ -93,6 +99,20 @@ internal fun projectActionLabels(): List<String> = listOf("Open", "Terminals", "
 internal fun emptyProjectsDescription(): String =
     "Add a remote Git repository or Plain workspace to open its terminal."
 
+internal fun projectsForHost(
+    repositories: List<RemoteRepositoryProfile>,
+    hostId: String?,
+): List<RemoteRepositoryProfile> = if (hostId == null) {
+    repositories
+} else {
+    repositories.filter { it.hostProfileId == hostId }
+}
+
+internal fun filteredProjectsDescription(hostTitle: String): String =
+    "No projects are saved on $hostTitle."
+
+internal fun projectReorderAvailable(hostFilterId: String?): Boolean = hostFilterId == null
+
 internal fun projectKindLabel(project: RemoteRepositoryProfile): String = when (project.kind) {
     RemoteProjectKind.GitRepository -> "Git repository"
     RemoteProjectKind.PlainWorkspace -> "Plain workspace"
@@ -105,17 +125,24 @@ private fun ProjectList(
     onOpenProject: (String) -> Unit,
     onOpenProjectTerminals: (String, String) -> Unit,
     onDeleteProject: (String) -> Unit,
+    hostFilterId: String?,
+    onClearHostFilter: () -> Unit,
     initialManualOrder: List<String>,
     onSaveManualOrder: (List<String>) -> Unit,
 ) {
     var deleteTarget by remember { mutableStateOf<RemoteRepositoryProfile?>(null) }
     var manualOrder by remember(initialManualOrder) { mutableStateOf(initialManualOrder) }
     val hostById = remember(hosts) { hosts.associateBy { it.id } }
-    val orderedRepositories = ManualItemOrderPolicy.apply(repositories, manualOrder, RemoteRepositoryProfile::id)
+    val filteredHostTitle = hostFilterId
+        ?.let(hostById::get)
+        ?.title
+        ?: "Selected host"
+    val allOrderedRepositories = ManualItemOrderPolicy.apply(repositories, manualOrder, RemoteRepositoryProfile::id)
+    val orderedRepositories = projectsForHost(allOrderedRepositories, hostFilterId)
     val reorderState = rememberManualReorderState(
         onMove = { draggedId, targetId ->
             manualOrder = ManualItemOrderPolicy.move(
-                orderedRepositories.map(RemoteRepositoryProfile::id),
+                allOrderedRepositories.map(RemoteRepositoryProfile::id),
                 draggedId,
                 targetId,
             )
@@ -123,28 +150,63 @@ private fun ProjectList(
         onFinished = { onSaveManualOrder(manualOrder) },
     )
 
-    if (repositories.isEmpty()) {
+    if (orderedRepositories.isEmpty()) {
         Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.Start,
             verticalArrangement = Arrangement.Center,
         ) {
-            Text("No projects", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+            Text(
+                if (hostFilterId == null) "No projects" else "No projects on $filteredHostTitle",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
             Spacer(Modifier.height(HobgoblinSpacing.Sm))
-            Text(emptyProjectsDescription())
+            Text(
+                if (hostFilterId == null) {
+                    emptyProjectsDescription()
+                } else {
+                    filteredProjectsDescription(filteredHostTitle)
+                },
+            )
+            if (hostFilterId != null) {
+                Spacer(Modifier.height(HobgoblinSpacing.Sm))
+                TextButton(onClick = onClearHostFilter) {
+                    Text("Show all projects")
+                }
+            }
             Spacer(Modifier.height(HobgoblinSpacing.Lg))
         }
         return
     }
 
-    Text("Saved projects", style = MaterialTheme.typography.titleMedium)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            if (hostFilterId == null) "Saved projects" else "Projects on $filteredHostTitle",
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.titleMedium,
+        )
+        if (hostFilterId != null) {
+            TextButton(onClick = onClearHostFilter) {
+                Text("Show all")
+            }
+        }
+    }
     Spacer(Modifier.height(HobgoblinSpacing.Md))
     LazyColumn(verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm)) {
         items(orderedRepositories, key = { it.id }) { repository ->
+            val reorderAvailable = projectReorderAvailable(hostFilterId)
             ProjectRow(
-                modifier = Modifier.manualReorderItem(reorderState, repository.id),
+                modifier = if (reorderAvailable) {
+                    Modifier.manualReorderItem(reorderState, repository.id)
+                } else {
+                    Modifier
+                },
                 repository = repository,
-                reorderState = reorderState,
+                reorderState = reorderState.takeIf { reorderAvailable },
                 host = hostById[repository.hostProfileId],
                 onOpenProject = { onOpenProject(repository.id) },
                 onOpenProjectTerminals = {
@@ -200,7 +262,7 @@ private fun ErrorProjects(message: String) {
 private fun ProjectRow(
     modifier: Modifier,
     repository: RemoteRepositoryProfile,
-    reorderState: ManualReorderState,
+    reorderState: ManualReorderState?,
     host: SshHostProfile?,
     onOpenProject: () -> Unit,
     onOpenProjectTerminals: () -> Unit,
@@ -229,11 +291,13 @@ private fun ProjectRow(
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.bodySmall,
                 )
-                ManualReorderHandle(
-                    state = reorderState,
-                    itemKey = repository.id,
-                    itemLabel = repository.title,
-                )
+                reorderState?.let { state ->
+                    ManualReorderHandle(
+                        state = state,
+                        itemKey = repository.id,
+                        itemLabel = repository.title,
+                    )
+                }
             }
             Text(
                 projectKindLabel(repository),
