@@ -9,7 +9,7 @@ const TARGET = {
 }
 
 describe('buildManagedLocalTerminalInvocation', () => {
-  test('builds a tmux-first local shell invocation when enabled on POSIX', () => {
+  test('builds a strict tmux local shell invocation when enabled on POSIX', () => {
     const invocation = buildManagedLocalTerminalInvocation(TARGET, {
       useTmux: true,
       platform: 'darwin',
@@ -20,7 +20,7 @@ describe('buildManagedLocalTerminalInvocation', () => {
     expect(invocation?.tmuxSessionName).toBe('hobgoblin-v1-aebf050981ac829e36100020')
     expect(invocation?.script).toContain('command -v tmux >/dev/null 2>&1')
     expect(invocation?.script).toContain(
-      "exec tmux new-session -A -s 'hobgoblin-v1-aebf050981ac829e36100020' -c '/srv/projects/example/worktrees/feature'",
+      "new-session -d -s 'hobgoblin-v1-aebf050981ac829e36100020' -c '/srv/projects/example/worktrees/feature'",
     )
     expect(invocation?.script).toContain(
       "set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' @hobgoblin_terminal_number '1'",
@@ -30,7 +30,11 @@ describe('buildManagedLocalTerminalInvocation', () => {
     )
     expect(invocation?.script).toContain("set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' mouse on")
     expect(invocation?.script).not.toContain('set-option -g')
-    expect(invocation?.script).toContain("exec '/bin/zsh' -l")
+    expect(invocation?.script).toContain('Use New terminal (Native).')
+    expect(invocation?.script).toContain('exit 127')
+    expect(invocation?.script).toContain('exit "$tmux_status"')
+    expect(invocation?.script).not.toContain("exec '/bin/zsh' -l")
+    expect(invocation?.script).not.toContain('\\;')
     expect(invocation?.shellCommand).toContain("'/bin/zsh' '-lc'")
     expect(invocation?.script).not.toContain("-s 'goblin-")
   })
@@ -46,7 +50,7 @@ describe('buildManagedLocalTerminalInvocation', () => {
       })
 
       expect(invocation).toMatchObject({ command: '/bin/zsh', args: ['-lc', expect.any(String)] })
-      expect(invocation?.script).toContain("exec '/bin/zsh' -l")
+      expect(invocation?.script).not.toContain("exec '/bin/zsh' -l")
     } finally {
       if (previousShell === undefined) delete process.env.SHELL
       else process.env.SHELL = previousShell
@@ -71,7 +75,7 @@ describe('buildManagedLocalTerminalInvocation', () => {
     )
 
     expect(invocation?.tmuxSessionName).toBe(sessionName)
-    expect(invocation?.script).toContain(`exec tmux attach-session -t '=${sessionName}'`)
+    expect(invocation?.script).toContain(`tmux attach-session -t '=${sessionName}'`)
     expect(invocation?.script).not.toContain('tmux new-session')
     expect(invocation?.script).not.toContain(TMUX_TERMINAL_NUMBER_OPTION)
   })
@@ -87,7 +91,7 @@ describe('buildManagedLocalTerminalInvocation', () => {
       fallbackShell: '/bin/zsh',
     })
 
-    expect(invocation?.script).toContain(`exec tmux -L '${serverName}' attach-session -t '=${sessionName}'`)
+    expect(invocation?.script).toContain(`tmux -L '${serverName}' attach-session -t '=${sessionName}'`)
     expect(
       buildManagedLocalTerminalInvocation(TARGET, {
         useTmux: true,
@@ -106,7 +110,7 @@ describe('buildManagedLocalTerminalInvocation', () => {
 
     expect(invocation?.script).toContain("-c '/srv/user'\\''s feature'")
     expect(invocation?.script).toContain("@hobgoblin_init_path '/srv/user'\\''s feature'")
-    expect(invocation?.script).toContain("exec '/opt/user'\\''s shell' -l")
+    expect(invocation?.script).not.toContain("exec '/opt/user'\\''s shell' -l")
   })
 
   test('rejects an invalid tmux descriptor', () => {

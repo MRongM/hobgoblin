@@ -12,6 +12,9 @@ const UNSAFE_PATH_CHARS_RE = /[\0-\x1f\x7f]/
 export const TMUX_TERMINAL_NUMBER_OPTION = '@hobgoblin_terminal_number'
 export const TMUX_INIT_PATH_OPTION = '@hobgoblin_init_path'
 
+const TMUX_UNAVAILABLE_MESSAGE = 'Tmux is unavailable. Use New terminal (Native).'
+const TMUX_START_FAILED_MESSAGE = 'Tmux failed to start. Use New terminal (Native).'
+
 export interface TmuxSessionDescriptor {
   projectRoot: string
   workingDirectory: string
@@ -58,32 +61,84 @@ export function buildTmuxAttachShellCommand(
   const paneTarget = `=${sessionName}:`
   const sessionTarget = `=${sessionName}`
   const projectTmux = `tmux -L ${shellQuote(serverName)}`
-  const projectCommand = buildAttachOrCreateCommand(projectTmux, descriptor, sessionName, paneTarget)
-  const legacyCommand = buildAttachOrCreateCommand('tmux', descriptor, sessionName, paneTarget)
+  const projectCreateCommand = buildCreateAndAttachCommand(
+    projectTmux,
+    descriptor,
+    sessionName,
+    sessionTarget,
+    paneTarget,
+  )
+  const projectAttachCommand = buildConfigureAndAttachCommand(
+    projectTmux,
+    descriptor,
+    sessionTarget,
+    paneTarget,
+  )
+  const legacyAttachCommand = buildConfigureAndAttachCommand('tmux', descriptor, sessionTarget, paneTarget)
   return {
     sessionName,
     command: [
-      `if ${projectTmux} has-session -t ${shellQuote(sessionTarget)} 2>/dev/null || ! tmux has-session -t ${shellQuote(sessionTarget)} 2>/dev/null; then`,
-      `  ${projectCommand}`,
+      `if ${projectTmux} has-session -t ${shellQuote(sessionTarget)} 2>/dev/null; then`,
+      indentShellCommand(projectAttachCommand),
+      `elif tmux has-session -t ${shellQuote(sessionTarget)} 2>/dev/null; then`,
+      indentShellCommand(legacyAttachCommand),
       'else',
-      `  ${legacyCommand}`,
+      indentShellCommand(projectCreateCommand),
       'fi',
     ].join('\n'),
   }
 }
 
-function buildAttachOrCreateCommand(
+export function buildRequiredTmuxShellScript(workingDirectoryInput: string, tmuxCommand: string): string | null {
+  const workingDirectory = normalizeTmuxSessionPath(workingDirectoryInput)
+  if (!workingDirectory || tmuxCommand.length === 0) return null
+  return [
+    `cd ${shellQuote(workingDirectory)} || exit`,
+    'if ! command -v tmux >/dev/null 2>&1; then',
+    `  printf '%s\\n' ${shellQuote(TMUX_UNAVAILABLE_MESSAGE)} >&2`,
+    '  exit 127',
+    'fi',
+    tmuxCommand,
+    'tmux_status=$?',
+    'if [ "$tmux_status" -ne 0 ]; then',
+    `  printf '%s\\n' ${shellQuote(TMUX_START_FAILED_MESSAGE)} >&2`,
+    'fi',
+    'exit "$tmux_status"',
+  ].join('\n')
+}
+
+function buildCreateAndAttachCommand(
   tmuxCommand: string,
   descriptor: TmuxSessionDescriptor,
   sessionName: string,
+  sessionTarget: string,
   paneTarget: string,
 ): string {
   return [
-    `exec ${tmuxCommand} new-session -A -s ${shellQuote(sessionName)} -c ${shellQuote(descriptor.workingDirectory)}`,
-    `set-option -t ${shellQuote(paneTarget)} mouse on`,
-    `set-option -t ${shellQuote(paneTarget)} ${TMUX_INIT_PATH_OPTION} ${shellQuote(descriptor.workingDirectory)}`,
-    `set-option -t ${shellQuote(paneTarget)} ${TMUX_TERMINAL_NUMBER_OPTION} ${shellQuote(String(descriptor.terminalNumber))}`,
-  ].join(' \\; ')
+    `${tmuxCommand} new-session -d -s ${shellQuote(sessionName)} -c ${shellQuote(descriptor.workingDirectory)}`,
+    buildConfigureAndAttachCommand(tmuxCommand, descriptor, sessionTarget, paneTarget),
+  ].join(' &&\n')
+}
+
+function buildConfigureAndAttachCommand(
+  tmuxCommand: string,
+  descriptor: TmuxSessionDescriptor,
+  sessionTarget: string,
+  paneTarget: string,
+): string {
+  return [
+    `${tmuxCommand} set-option -t ${shellQuote(paneTarget)} mouse on`,
+    `${tmuxCommand} set-option -t ${shellQuote(paneTarget)} ${TMUX_INIT_PATH_OPTION} ${shellQuote(descriptor.workingDirectory)}`,
+    `${tmuxCommand} set-option -t ${shellQuote(paneTarget)} ${TMUX_TERMINAL_NUMBER_OPTION} ${shellQuote(String(descriptor.terminalNumber))}`,
+    `${tmuxCommand} attach-session -t ${shellQuote(sessionTarget)}`,
+  ].join(' &&\n')
+}
+
+function indentShellCommand(command: string): string {
+  return command
+    .split('\n')
+    .map((line) => `  ${line}`)
+    .join('\n')
 }
 
 export function normalizeTmuxSessionPath(value: string): string | null {

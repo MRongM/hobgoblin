@@ -93,7 +93,7 @@ A retained, disconnected Android project-terminal record reconstructed from a di
 _Avoid_: Connected terminal, imported shell, automatically attached terminal
 
 **Internal terminal launch mode**:
-The per-launch choice between the native login shell and tmux-if-available for one new local or SSH internal terminal. Ordinary terminal actions use the native login shell. Explicit tmux actions create or attach to the deterministic tmux session when tmux is available on the target host and otherwise fall back to the native login shell. The choice is not a persisted preference and does not change an existing terminal.
+The per-launch choice between the native login shell and the compatibility-named `tmux-if-available` mode for one new local or SSH internal terminal. Ordinary terminal actions use the native login shell. Explicit tmux actions require tmux and create or attach to the deterministic tmux session; an unavailable or failed tmux command exits with an actionable instruction to choose Native and never starts a native shell implicitly. The choice is not a persisted preference and does not change an existing terminal.
 _Avoid_: Tmux setting, terminal preference, external terminal mode
 
 **Canonical terminal geometry**:

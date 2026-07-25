@@ -1,5 +1,6 @@
 import {
   buildTmuxAttachShellCommand,
+  buildRequiredTmuxShellScript,
   buildTmuxServerName,
   isHobgoblinTmuxSessionName,
   normalizeTmuxSessionDescriptor,
@@ -41,7 +42,7 @@ export function buildManagedLocalTerminalInvocation(
   const tmuxInvocation = existingSessionName
     ? {
         sessionName: existingSessionName,
-        command: `exec tmux${existingServerName ? ` -L ${shellQuote(existingServerName)}` : ''} attach-session -t ${shellQuote(`=${existingSessionName}`)}`,
+        command: `tmux${existingServerName ? ` -L ${shellQuote(existingServerName)}` : ''} attach-session -t ${shellQuote(`=${existingSessionName}`)}`,
       }
     : descriptor
       ? buildTmuxAttachShellCommand(descriptor)
@@ -51,13 +52,8 @@ export function buildManagedLocalTerminalInvocation(
     safeAbsoluteCommand(options.fallbackShell) ??
     safeAbsoluteCommand(process.env.SHELL) ??
     (platform === 'darwin' ? '/bin/zsh' : '/bin/sh')
-  const script = [
-    `cd ${shellQuote(descriptor.workingDirectory)} || exit`,
-    'if command -v tmux >/dev/null 2>&1; then',
-    `  ${tmuxInvocation.command}`,
-    'fi',
-    `exec ${shellQuote(fallbackShell)} -l`,
-  ].join('\n')
+  const script = buildRequiredTmuxShellScript(descriptor.workingDirectory, tmuxInvocation.command)
+  if (!script) return null
   return {
     command: fallbackShell,
     args: ['-lc', script],

@@ -119,24 +119,33 @@ Each displayed `<NUL>` is one byte with value `0x00`, not source text or a strin
 
 ## Attach or create
 
-After computing the session and server names, an external application may create or attach idempotently:
+After computing the session and server names, an external application creates a missing session detached, configures it with separate fail-fast commands, and then attaches:
 
 ```sh
-tmux -L 'hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0' new-session -A \
+tmux -L 'hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0' new-session -d \
   -s 'hobgoblin-v1-aebf050981ac829e36100020' \
-  -c '/srv/projects/example/worktrees/feature' \
-  \; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' mouse on \
-  \; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' \
-       @hobgoblin_init_path '/srv/projects/example/worktrees/feature' \
-  \; set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' \
-       @hobgoblin_terminal_number '1'
+  -c '/srv/projects/example/worktrees/feature' &&
+tmux -L 'hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0' \
+  set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' mouse on &&
+tmux -L 'hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0' \
+  set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' \
+  @hobgoblin_init_path '/srv/projects/example/worktrees/feature' &&
+tmux -L 'hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0' \
+  set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' \
+  @hobgoblin_terminal_number '1' &&
+tmux -L 'hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0' \
+  attach-session -t '=hobgoblin-v1-aebf050981ac829e36100020'
 ```
 
-All three `set-option` commands run in the selected project server and use the exact target-pane form `=<session>:`. The trailing colon is required: using `=<session>` fails on tmux 3.6a and leaves the identity options unset even though the session itself was created.
+All three `set-option` commands run separately in the selected project server and use the exact target-pane form `=<session>:`. The trailing colon is required: using `=<session>` fails on tmux 3.6a and leaves the identity options unset even though the session itself was created. Separate commands avoid shell-to-tmux command-list parsing differences and preserve the precise failing exit status.
 
 For upgrade compatibility, attach-or-create checks the project server first. If it does not contain the exact deterministic name but the legacy default server does, Hobgoblin attaches there and repairs its metadata. If neither server contains the name, Hobgoblin creates it in the project server. This fallback never creates a new session in the default server.
 
 Remote adapters resolve the tmux executable once before attach, list, or kill. They first inspect the non-login command `PATH`, then fall back to `${SHELL:-/bin/sh} -lc 'command -v tmux'`, validate an executable absolute path, and invoke that quoted path for every subsequent tmux command. This supports installations such as Homebrew tmux that are only added by login-shell startup files. Failure to resolve tmux is an explicit command failure, not an empty discovery result.
+
+Explicit tmux launch is fail-closed on Android and desktop. If tmux is unavailable or any create, metadata, or attach command fails, Hobgoblin exits that terminal startup and tells the user to choose **New terminal (Native)**. It never silently replaces an explicitly requested tmux terminal with a native login shell.
+
+Android allocates the interactive SSH PTY first and starts each project terminal with an SSH `exec` request carrying `exec /bin/sh -lc '<startup-script>'`. The startup command therefore bypasses the remote login shell's interactive input buffer while the resulting native shell or tmux client still owns the same PTY for input and resize. This avoids both zsh continuation/ZLE processing and macOS PTY canonical-line limits. The nested script executes `new-session`, each `set-option`, and `attach-session` as separate fail-fast commands. The same transport and POSIX command work on Linux without changing tmux names, servers, metadata, or login-shell executable resolution.
 
 Inspect the live metadata with:
 
@@ -182,6 +191,8 @@ Android accepts one row only when:
 - hashing the project root, initial path, and terminal number reproduces that exact session name.
 
 Invalid rows, unknown server origins, ordinary user sessions, legacy names, and v1 sessions without both options are ignored independently. Project-server rows are emitted first and win same-name deduplication. An accepted session missing from Android's retained records becomes a disconnected `terminal-N` record. Discovery does not open an SSH shell; opening that record uses the ordinary reconnect path, which checks the project server before the legacy default server. Android recomputes the server name from the canonical main-worktree project root retained by the terminal record, so its terminal-session persistence format does not gain a socket field.
+
+For macOS SSH environments, Android also resolves the remote Unix UID with `id -u` and checks the canonical `/tmp/tmux-<uid>/<server>` socket explicitly after the standard `tmux -L` query. The UID belongs to the authenticated remote account (for example, a macOS account may be UID 501), not the Android application. Discovery never hard-codes a UID and cannot cross Unix-user socket ownership boundaries. An empty scan reports the SSH user so the user can verify that scanning and session creation use the same remote account.
 
 Removing only the Android record leaves tmux alive, so a later scan may recover it again. Closing the associated tmux session through the explicit checked close action prevents later recovery.
 

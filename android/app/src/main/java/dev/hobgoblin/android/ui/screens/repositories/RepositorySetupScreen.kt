@@ -235,6 +235,14 @@ internal fun repositoryTmuxDiscoveryPaths(
 internal fun tmuxScanButtonLabel(isScanning: Boolean): String =
     if (isScanning) "Scanning..." else "Scan tmux"
 
+internal fun tmuxScanResultMessage(foundCount: Int, sshUser: String): String =
+    if (foundCount == 0) {
+        "No tmux sessions found for SSH user $sshUser. " +
+            "Use the same SSH user that created the tmux session."
+    } else {
+        "Found $foundCount tmux ${if (foundCount == 1) "session" else "sessions"} for SSH user $sshUser."
+    }
+
 internal fun canScanTmux(isScanning: Boolean, discoveryPaths: List<String>?): Boolean =
     !isScanning && !discoveryPaths.isNullOrEmpty()
 
@@ -871,7 +879,7 @@ fun RepositoryWorkspaceScreen(
     initialTerminalWorkspacePath: String? = null,
     terminalSessions: List<TerminalSessionRecord> = emptyList(),
     onProjectRootResolved: (String) -> Unit = {},
-    onDiscoverTmuxTerminals: (RepositoryTmuxScope) -> Unit = {},
+    onDiscoverTmuxTerminals: (RepositoryTmuxScope) -> Int = { 0 },
     onCreateTerminalAtPath: (String, String, TerminalLaunchMode) -> TerminalSessionRecord = { _, _, _ ->
         throw UnsupportedOperationException("Terminal sessions are not available")
     },
@@ -903,6 +911,7 @@ fun RepositoryWorkspaceScreen(
     var terminalDeletePending by remember(repository.id) { mutableStateOf(false) }
     var tmuxDiscoveryPending by remember(repository.id) { mutableStateOf(false) }
     var actionError by remember(repository.id) { mutableStateOf<String?>(null) }
+    var actionMessage by remember(repository.id) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val workspaceTabs = remember(repository.id, repository.remotePath, repository.kind) {
         repositoryWorkspaceTabs(repository)
@@ -1063,10 +1072,13 @@ fun RepositoryWorkspaceScreen(
     suspend fun discoverTmuxTerminals(discoveryScope: RepositoryTmuxScope) {
         if (tmuxDiscoveryPending) return
         actionError = null
+        actionMessage = null
         tmuxDiscoveryPending = true
         try {
             runCatching {
                 withContext(Dispatchers.IO) { onDiscoverTmuxTerminals(discoveryScope) }
+            }.onSuccess { foundCount ->
+                actionMessage = tmuxScanResultMessage(foundCount = foundCount, sshUser = host.user)
             }.onFailure {
                 actionError = it.message ?: "Tmux terminal discovery failed"
             }
@@ -1172,6 +1184,9 @@ fun RepositoryWorkspaceScreen(
         ) {
                 actionError?.let {
                     Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+                actionMessage?.let {
+                    Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
                 }
             RepositoryWorkspaceTabStrip(
                 tabs = workspaceTabs,

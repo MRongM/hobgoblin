@@ -40,7 +40,8 @@ describe('Apple Terminal integration', () => {
     ).resolves.toEqual({ ok: true, message: '/srv/projects/example/worktrees/feature' })
 
     const command = mocks.execa.mock.calls[0]![1][2]
-    expect(command).toContain('tmux new-session -A')
+    expect(command).toContain('new-session -d')
+    expect(command).toContain('Use New terminal (Native).')
     expect(command).toContain('hobgoblin-v1-aebf050981ac829e36100020')
     expect(command).not.toContain("-s 'goblin-")
   })
@@ -72,7 +73,8 @@ describe('Apple Terminal integration', () => {
     })
 
     const command = mocks.execa.mock.calls[0]![1][2]
-    expect(command).toContain('tmux new-session -A')
+    expect(command).toContain('new-session -d')
+    expect(command).toContain('Use New terminal (Native).')
     expect(command).toContain(buildTmuxSessionName(REMOTE_TARGET)!)
     expect(command).not.toContain('detach')
     expect(command).not.toContain('alice@example.com')

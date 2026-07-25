@@ -687,10 +687,11 @@ describe('remote command scripts', () => {
     })
 
     expect(invocation.script).toContain('command -v tmux >/dev/null 2>&1')
-    expect(invocation.script).toContain("exec tmux new-session -A -s 'hobgoblin-v1-")
+    expect(invocation.script).toContain("new-session -d -s 'hobgoblin-v1-")
     expect(invocation.script).not.toContain("-s 'goblin-")
     expect(invocation.script).toContain("-c '/srv/repo-feature'")
-    expect(invocation.script).toContain('exec "${SHELL:-/bin/sh}" -l')
+    expect(invocation.script).toContain('Use New terminal (Native).')
+    expect(invocation.script).not.toContain('exec "${SHELL:-/bin/sh}" -l')
   })
 
   test('keeps non-interactive remote command scripts out of tmux', () => {

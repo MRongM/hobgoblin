@@ -128,9 +128,10 @@ describe('buildTmuxAttachShellCommand', () => {
     const target = '=hobgoblin-v1-aebf050981ac829e36100020'
 
     expect(invocation?.command).toContain(`tmux -L '${serverName}' has-session -t '${target}'`)
-    expect(invocation?.command).toContain(`! tmux has-session -t '${target}'`)
-    expect(invocation?.command).toContain(`exec tmux -L '${serverName}' new-session -A`)
-    expect(invocation?.command).toContain('else\n  exec tmux new-session -A')
+    expect(invocation?.command).toContain(`elif tmux has-session -t '${target}'`)
+    expect(invocation?.command).toContain(`else\n  tmux -L '${serverName}' new-session -d`)
+    expect(invocation?.command).toContain(`tmux -L '${serverName}' attach-session -t '${target}'`)
+    expect(invocation?.command).not.toContain('\\;')
   })
 
   test('quotes normalized path metadata and rejects invalid descriptors', () => {
@@ -155,10 +156,14 @@ describe('buildTmuxAttachShellCommand', () => {
     const serverName = buildServerNameForTest(testRoot)
 
     try {
-      const detachedCommand = invocation.command.replace(
-        `exec tmux -L '${serverName}' new-session -A `,
-        `exec tmux -L '${serverName}' -f /dev/null new-session -Ad `,
-      )
+      const projectTmux = `tmux -L '${serverName}'`
+      const configuredProjectTmux = `${projectTmux} -f /dev/null`
+      const detachedCommand = invocation.command
+        .replaceAll(projectTmux, configuredProjectTmux)
+        .replaceAll(
+          `${configuredProjectTmux} attach-session -t '=${invocation.sessionName}'`,
+          'true',
+        )
       execFileSync('/bin/sh', ['-lc', detachedCommand], { env: environment, stdio: 'pipe' })
       const listed = execFileSync(
         'tmux',

@@ -198,6 +198,18 @@ class RepositorySetupStateTest {
     }
 
     @Test
+    fun `tmux scan result explains empty same-user requirement and successful count`() {
+        assertEquals(
+            "No tmux sessions found for SSH user dev. Use the same SSH user that created the tmux session.",
+            tmuxScanResultMessage(foundCount = 0, sshUser = "dev"),
+        )
+        assertEquals(
+            "Found 2 tmux sessions for SSH user dev.",
+            tmuxScanResultMessage(foundCount = 2, sshUser = "dev"),
+        )
+    }
+
+    @Test
     fun `validated discoveries map to path scoped recovery candidates`() {
         val host = host(id = "host-1", identityRefId = "identity-1")
         val repository = repository(id = "repo-1", remotePath = "/srv/app")

@@ -56,36 +56,67 @@ object TmuxSessionProtocol {
         val sessionTarget = "=${identity.sessionName}"
         val paneTarget = "$sessionTarget:"
         val projectTmux = "$TmuxExecutableReference -L ${shellQuote(serverName)}"
-        val projectCommand = attachOrCreateCommandForTmux(projectTmux, identity, terminalNumber, paneTarget)
-        val legacyCommand = attachOrCreateCommandForTmux(
+        val projectCreateCommand = createAndAttachCommandForTmux(
+            projectTmux,
+            identity,
+            terminalNumber,
+            sessionTarget,
+            paneTarget,
+        )
+        val projectAttachCommand = configureAndAttachCommandForTmux(
+            projectTmux,
+            identity,
+            terminalNumber,
+            sessionTarget,
+            paneTarget,
+        )
+        val legacyAttachCommand = configureAndAttachCommandForTmux(
             TmuxExecutableReference,
             identity,
             terminalNumber,
+            sessionTarget,
             paneTarget,
         )
-        return listOf(
-            "if $projectTmux has-session -t ${shellQuote(sessionTarget)} 2>/dev/null || " +
-                "! $TmuxExecutableReference has-session -t ${shellQuote(sessionTarget)} 2>/dev/null; then",
-            "  $projectCommand",
-            "else",
-            "  $legacyCommand",
-            "fi",
-        ).joinToString("\n")
+        return "if $projectTmux has-session -t ${shellQuote(sessionTarget)} 2>/dev/null; then " +
+            "$projectAttachCommand; " +
+            "elif $TmuxExecutableReference has-session -t ${shellQuote(sessionTarget)} 2>/dev/null; then " +
+            "$legacyAttachCommand; " +
+            "else $projectCreateCommand; fi"
     }
 
-    private fun attachOrCreateCommandForTmux(
+    private fun createAndAttachCommandForTmux(
         tmuxCommand: String,
         identity: TmuxSessionIdentity,
         terminalNumber: Int,
+        sessionTarget: String,
         target: String,
     ): String =
         listOf(
-            "exec $tmuxCommand new-session -A -s ${shellQuote(identity.sessionName)} " +
+            "$tmuxCommand new-session -d -s ${shellQuote(identity.sessionName)} " +
                 "-c ${shellQuote(identity.initialPath)}",
-            "set-option -t ${shellQuote(target)} mouse on",
-            "set-option -t ${shellQuote(target)} $InitPathOption ${shellQuote(identity.initialPath)}",
-            "set-option -t ${shellQuote(target)} $TerminalNumberOption ${shellQuote(terminalNumber.toString())}",
-        ).joinToString(" \\; ")
+            configureAndAttachCommandForTmux(
+                tmuxCommand,
+                identity,
+                terminalNumber,
+                sessionTarget,
+                target,
+            ),
+        ).joinToString(" && ")
+
+    private fun configureAndAttachCommandForTmux(
+        tmuxCommand: String,
+        identity: TmuxSessionIdentity,
+        terminalNumber: Int,
+        sessionTarget: String,
+        target: String,
+    ): String =
+        listOf(
+            "$tmuxCommand set-option -t ${shellQuote(target)} mouse on",
+            "$tmuxCommand set-option -t ${shellQuote(target)} $InitPathOption ${shellQuote(identity.initialPath)}",
+            "$tmuxCommand set-option -t ${shellQuote(target)} $TerminalNumberOption " +
+                shellQuote(terminalNumber.toString()),
+            "$tmuxCommand attach-session -t ${shellQuote(sessionTarget)}",
+        ).joinToString(" && ")
 
     fun normalizePath(value: String): String? {
         if (
@@ -226,19 +257,19 @@ object TmuxSessionProtocol {
 
     internal fun tmuxExecutableResolverScript(): String = listOf(
         "$TmuxResolverFunction() {",
-        "  hobgoblin_tmux_bin=${'$'}(command -v tmux 2>/dev/null || true)",
-        "  if [ -z \"${'$'}hobgoblin_tmux_bin\" ]; then",
-        "    hobgoblin_login_shell=${'$'}{SHELL:-/bin/sh}",
-        "    [ -x \"${'$'}hobgoblin_login_shell\" ] || hobgoblin_login_shell=/bin/sh",
-        "    hobgoblin_tmux_bin=${'$'}(\"${'$'}hobgoblin_login_shell\" -lc 'command -v tmux' " +
-            "2>/dev/null | tail -n 1)",
-        "  fi",
-        "  case \"${'$'}hobgoblin_tmux_bin\" in",
-        "    /*) [ -x \"${'$'}hobgoblin_tmux_bin\" ] ;;",
-        "    *) return 1 ;;",
-        "  esac",
+        "hobgoblin_tmux_bin=${'$'}(command -v tmux 2>/dev/null || true);",
+        "if [ -z \"${'$'}hobgoblin_tmux_bin\" ]; then",
+        "hobgoblin_login_shell=${'$'}{SHELL:-/bin/sh};",
+        "[ -x \"${'$'}hobgoblin_login_shell\" ] || hobgoblin_login_shell=/bin/sh;",
+        "hobgoblin_tmux_bin=${'$'}(\"${'$'}hobgoblin_login_shell\" -lc 'command -v tmux' " +
+            "2>/dev/null | tail -n 1);",
+        "fi;",
+        "case \"${'$'}hobgoblin_tmux_bin\" in",
+        "/*) [ -x \"${'$'}hobgoblin_tmux_bin\" ] ;;",
+        "*) return 1 ;;",
+        "esac;",
         "}",
-    ).joinToString("\n")
+    ).joinToString(" ")
 
     internal fun tmuxExecutableResolverInvocation(): String = TmuxResolverFunction
 
@@ -259,6 +290,11 @@ object TmuxSessionProtocol {
         return listOf(
             tmuxExecutableResolverScript(),
             "$TmuxResolverFunction || exit 127",
+            "hobgoblin_remote_uid=${'$'}(id -u 2>/dev/null) || exit ${'$'}?",
+            "case \"${'$'}hobgoblin_remote_uid\" in ''|*[!0-9]*) " +
+                "printf '%s\\n' 'Unable to resolve remote uid for tmux discovery' >&2; exit 1 ;; esac",
+            "hobgoblin_project_socket=\"/tmp/tmux-${'$'}hobgoblin_remote_uid/$serverName\"",
+            "hobgoblin_legacy_socket=\"/tmp/tmux-${'$'}hobgoblin_remote_uid/default\"",
             "run_tmux_list() {",
             "  tmux_output=${'$'}(\"${'$'}@\" 2>&1)",
             "  tmux_status=${'$'}?",
@@ -272,10 +308,18 @@ object TmuxSessionProtocol {
             "  printf '%s\\n' \"${'$'}tmux_output\" >&2",
             "  return \"${'$'}tmux_status\"",
             "}",
-            "run_tmux_list $TmuxExecutableReference -L ${shellQuote(serverName)} list-sessions " +
+            "run_tmux_list $TmuxExecutableReference -u -L ${shellQuote(serverName)} list-sessions " +
                 "-F ${shellQuote("$format\t$serverName")} || exit ${'$'}?",
-            "run_tmux_list $TmuxExecutableReference list-sessions " +
+            "if [ -S \"${'$'}hobgoblin_project_socket\" ]; then",
+            "  run_tmux_list $TmuxExecutableReference -u -S \"${'$'}hobgoblin_project_socket\" list-sessions " +
+                "-F ${shellQuote("$format\t$serverName")} || exit ${'$'}?",
+            "fi",
+            "run_tmux_list $TmuxExecutableReference -u list-sessions " +
                 "-F ${shellQuote("$format\t$LegacyDefaultServerMarker")} || exit ${'$'}?",
+            "if [ -S \"${'$'}hobgoblin_legacy_socket\" ]; then",
+            "  run_tmux_list $TmuxExecutableReference -u -S \"${'$'}hobgoblin_legacy_socket\" list-sessions " +
+                "-F ${shellQuote("$format\t$LegacyDefaultServerMarker")} || exit ${'$'}?",
+            "fi",
         ).joinToString("\n")
     }
 

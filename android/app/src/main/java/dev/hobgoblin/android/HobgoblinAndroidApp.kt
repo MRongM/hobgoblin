@@ -444,6 +444,7 @@ fun HobgoblinAndroidApp(
                                         projectRoot = tmuxScope.projectRoot,
                                     ),
                                 )
+                                result.sessions.size
                             }
                             is RemoteTmuxDiscoveryResult.Failed -> error(result.message)
                         }
