@@ -1,5 +1,6 @@
 import {
   buildTmuxAttachShellCommand,
+  buildRequiredTmuxShellScript,
   buildTmuxServerName,
   isHobgoblinTmuxSessionName,
   normalizeTmuxSessionDescriptor,
@@ -48,7 +49,7 @@ export function buildManagedRemoteTerminalInvocation(
       ? existingSessionName
         ? {
             sessionName: existingSessionName,
-            command: `exec tmux${existingServerName ? ` -L ${shellQuote(existingServerName)}` : ''} attach-session -t ${shellQuote(`=${existingSessionName}`)}`,
+            command: `tmux${existingServerName ? ` -L ${shellQuote(existingServerName)}` : ''} attach-session -t ${shellQuote(`=${existingSessionName}`)}`,
           }
         : buildTmuxAttachShellCommand(descriptor)
       : null
@@ -71,13 +72,13 @@ function buildPlainRemoteLoginShellScript(worktreePath: string): string {
 }
 
 function buildTmuxRemoteLoginShellScript(target: TmuxSessionDescriptor, tmuxCommand: string): string {
-  return [
-    `cd ${shellQuote(target.workingDirectory)} || exit`,
-    'if command -v tmux >/dev/null 2>&1; then',
-    `  ${tmuxCommand}`,
-    'fi',
-    'exec "${SHELL:-/bin/sh}" -l',
-  ].join('\n')
+  return requireTmuxShellScript(target.workingDirectory, tmuxCommand)
+}
+
+function requireTmuxShellScript(workingDirectory: string, tmuxCommand: string): string {
+  const script = buildRequiredTmuxShellScript(workingDirectory, tmuxCommand)
+  if (!script) throw new Error('Invalid tmux terminal invocation')
+  return script
 }
 
 function buildSshInvocation(

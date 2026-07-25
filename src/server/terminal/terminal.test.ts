@@ -279,7 +279,7 @@ describe('server terminal sessions', () => {
     expect(tmuxCleanupMocks.previewAssociatedTmuxSessions).not.toHaveBeenCalled()
     expect(spawn).toHaveBeenCalledWith(
       expect.any(String),
-      ['-lc', expect.stringContaining('tmux new-session -A')],
+      ['-lc', expect.stringContaining('new-session -d')],
       expect.any(Object),
     )
   })
@@ -607,7 +607,7 @@ describe('server terminal sessions', () => {
         'ConnectTimeout=10',
         '--',
         'prod',
-        expect.stringContaining('tmux new-session -A'),
+        expect.stringContaining('new-session -d'),
       ],
       expect.objectContaining({
         cwd: process.cwd(),
@@ -617,7 +617,8 @@ describe('server terminal sessions', () => {
     )
     const args = vi.mocked(spawn).mock.calls[0]![1] as string[]
     expect(args[7]).toContain('/srv/repo-feature')
-    expect(args[7]).toContain('tmux new-session -A')
+    expect(args[7]).toContain('new-session -d')
+    expect(args[7]).toContain('Use New terminal (Native).')
     expect(args[7]).toContain('hobgoblin-v1-')
     expect(args[7]).not.toContain("-s 'goblin-")
     expect(args[7]).not.toContain('alice@example.com')
@@ -663,7 +664,7 @@ describe('server terminal sessions', () => {
     })
     expect(spawn).toHaveBeenCalledWith(
       '/bin/zsh',
-      ['-lc', expect.stringContaining(`tmux new-session -A -s '${expectedName}' -c '/repo-linked'`)],
+      ['-lc', expect.stringContaining(`new-session -d -s '${expectedName}' -c '/repo-linked'`)],
       expect.objectContaining({ cwd: '/repo-linked', cols: 100, rows: 30 }),
     )
   })

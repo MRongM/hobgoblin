@@ -147,6 +147,33 @@ class RemoteRepositoryGitServiceTest {
     }
 
     @Test
+    fun `project inspection canonicalizes linked worktrees to the primary worktree`() {
+        val output = """
+            __HOBGOBLIN_ANDROID_PROJECT_KIND__
+            git
+            __HOBGOBLIN_ANDROID_PROJECT_PATH__
+            /srv/app
+            __HOBGOBLIN_ANDROID_PROJECT_CURRENT__
+            main
+            __HOBGOBLIN_ANDROID_PROJECT_DEFAULT__
+            main
+        """.trimIndent()
+        val client = FakeSshClient(commandResults = listOf(SshCommandResult(ok = true, stdout = output)))
+        val service = RemoteRepositoryGitService(
+            client = client,
+            hostKeyStore = FakeHostKeyTrustStore("SHA256:test"),
+        )
+
+        val inspection = service.inspectProject(target("/srv/app-feature"))
+        val script = client.scripts.single()
+
+        assertEquals("/srv/app", inspection.resolvedPath)
+        assertTrue(script.contains("worktree list --porcelain"))
+        assertTrue(script.contains("primary_worktree="))
+        assertTrue(script.contains("resolved=\$primary_worktree"))
+    }
+
+    @Test
     fun `directory browse is blocked until host key is trusted`() {
         val service = RemoteRepositoryGitService(
             client = FakeSshClient(),
@@ -175,6 +202,10 @@ class RemoteRepositoryGitServiceTest {
             __HOBGOBLIN_ANDROID_BRANCHES__
             main${'\u0000'}*
             feature/android${'\u0000'} 
+            __HOBGOBLIN_ANDROID_REMOTE_BRANCHES__
+            origin/main${'\u0000'}
+            origin/feature/android${'\u0000'}
+            origin/HEAD${'\u0000'}refs/remotes/origin/main
             __HOBGOBLIN_ANDROID_WORKTREES__
             worktree /srv/app
             HEAD abc123
@@ -207,12 +238,29 @@ class RemoteRepositoryGitServiceTest {
         assertTrue(snapshot.branches.first { it.name == "main" }.isCurrent)
         assertTrue(snapshot.branches.first { it.name == "main" }.isDefault)
         assertEquals("/srv/app-feature-android", snapshot.branches.first { it.name == "feature/android" }.worktreePath)
+        assertEquals(listOf("origin/main", "origin/feature/android"), snapshot.remoteBranches)
         assertFalse(snapshot.worktrees.last().isPrimary)
         assertTrue(snapshot.worktrees.first { it.path == "/srv/app" }.isDirty)
         assertEquals(2, snapshot.worktrees.first { it.path == "/srv/app" }.changeCount)
         assertTrue(snapshot.worktrees.first { it.path == "/srv/app-feature-android" }.isLinked)
         assertTrue(snapshot.worktrees.first { it.path == "/srv/app-feature-android" }.isLocked)
         assertTrue(snapshot.worktrees.first { it.path == "/srv/app-missing" }.isMissing)
+    }
+
+    @Test
+    fun `snapshot script reads existing remote refs without fetching`() {
+        val client = FakeSshClient(commandResults = listOf(SshCommandResult(ok = true, stdout = "")))
+        val service = RemoteRepositoryGitService(
+            client = client,
+            hostKeyStore = FakeHostKeyTrustStore("SHA256:test"),
+        )
+
+        service.loadSnapshot(target("/srv/app"))
+
+        val script = client.scripts.single()
+        assertTrue(script.contains("refs/remotes/"))
+        assertTrue(script.contains("%(symref)"))
+        assertFalse(script.contains(" fetch "))
     }
 
     @Test

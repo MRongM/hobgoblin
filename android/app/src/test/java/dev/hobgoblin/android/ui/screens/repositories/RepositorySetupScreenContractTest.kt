@@ -1,6 +1,7 @@
 package dev.hobgoblin.android.ui.screens.repositories
 
 import java.io.File
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -19,6 +20,13 @@ class RepositorySetupScreenContractTest {
         assertTrue(source.contains("onClick = onScanTmux"))
         assertTrue(source.contains("enabled = tmuxScanEnabled"))
         assertTrue(source.contains("tmuxScanButtonLabel(tmuxScanPending)"))
+    }
+
+    @Test
+    fun `repository workspace no longer composes the branches panel`() {
+        val source = repositorySetupScreenSource()
+
+        assertFalse(source.contains("RepositoryBranchesPanel("))
     }
 
     private fun repositorySetupScreenSource(): String {

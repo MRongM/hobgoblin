@@ -19,6 +19,7 @@ import dev.hobgoblin.android.terminals.TmuxSessionDescriptor
 import dev.hobgoblin.android.terminals.TmuxSessionIdentity
 import dev.hobgoblin.android.terminals.TmuxSessionProtocol
 import dev.hobgoblin.android.termux.ExternalTermuxLaunchResult
+import dev.hobgoblin.android.ssh.WorktreeCreationSource
 import dev.hobgoblin.android.ui.screens.placeholders.localTerminalPlaceholderText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -81,7 +82,6 @@ class RepositorySetupStateTest {
 
         assertEquals(
             listOf(
-                RepositoryWorkspaceTab.Branches,
                 RepositoryWorkspaceTab.Worktrees,
                 RepositoryWorkspaceTab.Terminal,
             ),
@@ -110,7 +110,7 @@ class RepositorySetupStateTest {
     fun `git project keeps git tabs and snapshot capability`() {
         val repository = repository(id = "repo-1", remotePath = "/srv/app")
 
-        assertEquals(RepositoryWorkspaceTab.Branches, initialRepositoryWorkspaceTab(repository, null))
+        assertEquals(RepositoryWorkspaceTab.Worktrees, initialRepositoryWorkspaceTab(repository, null))
         assertTrue(shouldLoadRepositorySnapshot(repository))
     }
 
@@ -163,6 +163,27 @@ class RepositorySetupStateTest {
     }
 
     @Test
+    fun `linked worktree project uses the primary worktree as tmux project root`() {
+        val repository = repository(id = "repo-1", remotePath = "/srv/app-feature")
+        val usableSnapshot = snapshot().copy(
+            worktrees = listOf(
+                worktree(path = "/srv/app", isPrimary = true),
+                worktree(path = "/srv/app-feature"),
+                worktree(path = "/srv/app-missing", isMissing = true),
+            ),
+        )
+
+        assertEquals(
+            listOf("/srv/app", "/srv/app-feature"),
+            repositoryTmuxDiscoveryPaths(repository, ResourceState.Loaded(usableSnapshot)),
+        )
+        assertEquals(
+            "/srv/app",
+            repositoryTmuxScope(repository, ResourceState.Loaded(usableSnapshot))?.projectRoot,
+        )
+    }
+
+    @Test
     fun `tmux scan action exposes stable ready and pending labels`() {
         assertEquals("Scan tmux", tmuxScanButtonLabel(isScanning = false))
         assertEquals("Scanning...", tmuxScanButtonLabel(isScanning = true))
@@ -174,6 +195,18 @@ class RepositorySetupStateTest {
         assertFalse(canScanTmux(isScanning = false, discoveryPaths = emptyList()))
         assertTrue(canScanTmux(isScanning = false, discoveryPaths = listOf("/srv/app")))
         assertFalse(canScanTmux(isScanning = true, discoveryPaths = listOf("/srv/app")))
+    }
+
+    @Test
+    fun `tmux scan result explains empty same-user requirement and successful count`() {
+        assertEquals(
+            "No tmux sessions found for SSH user dev. Use the same SSH user that created the tmux session.",
+            tmuxScanResultMessage(foundCount = 0, sshUser = "dev"),
+        )
+        assertEquals(
+            "Found 2 tmux sessions for SSH user dev.",
+            tmuxScanResultMessage(foundCount = 2, sshUser = "dev"),
+        )
     }
 
     @Test
@@ -205,6 +238,31 @@ class RepositorySetupStateTest {
     }
 
     @Test
+    fun `linked project recovery retains the canonical primary project root`() {
+        val host = host(id = "host-1", identityRefId = "identity-1")
+        val repository = repository(id = "repo-1", remotePath = "/srv/app-feature")
+        val identity = requireNotNull(
+            TmuxSessionProtocol.identity(
+                TmuxSessionDescriptor(
+                    projectRoot = "/srv/app",
+                    workingDirectory = "/srv/app-feature",
+                    terminalNumber = 1,
+                ),
+            ),
+        )
+
+        val candidate = tmuxRecoveryCandidates(
+            host = host,
+            repository = repository,
+            discoveries = listOf(DiscoveredTmuxSession(identity, terminalNumber = 1)),
+            projectRoot = "/srv/app",
+        ).single()
+
+        assertEquals("/srv/app", candidate.repositoryRemotePath)
+        assertEquals("/srv/app-feature", candidate.target.remotePath)
+    }
+
+    @Test
     fun `workspace detail tabs exclude commits`() {
         val repository = repository(id = "repo-1", remotePath = "/srv/app")
 
@@ -216,13 +274,13 @@ class RepositorySetupStateTest {
         val tabs = repositoryWorkspaceTabs(repository(id = "repo-1", remotePath = "/srv/app"))
 
         assertFalse(repositoryWorkspaceTabsUseScrollableStrip(tabs))
-        assertEquals(0, repositoryWorkspaceTabIndex(tabs, RepositoryWorkspaceTab.Branches))
+        assertEquals(0, repositoryWorkspaceTabIndex(tabs, RepositoryWorkspaceTab.Worktrees))
         assertEquals(
             0,
             repositoryWorkspaceTabIndex(
-                tabs = listOf(RepositoryWorkspaceTab.Branches),
+                tabs = listOf(RepositoryWorkspaceTab.Worktrees),
                 selectedTab = RepositoryWorkspaceTab.Commits,
-                fallback = RepositoryWorkspaceTab.Branches,
+                fallback = RepositoryWorkspaceTab.Worktrees,
             ),
         )
     }
@@ -520,65 +578,48 @@ class RepositorySetupStateTest {
     }
 
     @Test
-    fun `new branch name is recommended from base branch and avoids conflicts`() {
-        assertEquals(
-            "main-new",
-            suggestedBranchName(baseBranch = "main", existingBranchNames = emptySet()),
+    fun `worktree branch candidates list local branches before remote branches`() {
+        val candidates = worktreeBranchCandidates(
+            localBranches = listOf(branch(name = "main"), branch(name = "feature/local")),
+            remoteBranches = listOf("origin/main", "origin/feature/remote"),
         )
+
         assertEquals(
-            "feature/android-new-2",
-            suggestedBranchName(
-                baseBranch = "feature/android",
-                existingBranchNames = setOf("feature/android-new"),
+            listOf("main", "feature/local", "origin/main", "origin/feature/remote"),
+            candidates.map { it.ref },
+        )
+        assertEquals(listOf("local", "local", "remote", "remote"), candidates.map { it.kindLabel })
+    }
+
+    @Test
+    fun `remote worktree selection tracks a derived local branch`() {
+        assertEquals(
+            WorktreeCreationSource.TrackRemote(
+                remoteRef = "origin/feature/android",
+                localBranch = "feature/android",
+            ),
+            worktreeCreationSource(
+                selectedRef = "origin/feature/android",
+                localBranchNames = setOf("main"),
+                remoteBranchNames = setOf("origin/feature/android"),
             ),
         )
-    }
-
-    @Test
-    fun `branch create requires base branch and unique editable new branch`() {
-        val existing = setOf("main", "main-new")
-
-        assertFalse(canCreateBranch(baseBranch = "", newBranch = "main-new-2", existingBranchNames = existing))
-        assertFalse(canCreateBranch(baseBranch = "main", newBranch = "", existingBranchNames = existing))
-        assertFalse(canCreateBranch(baseBranch = "main", newBranch = "main-new", existingBranchNames = existing))
-        assertTrue(canCreateBranch(baseBranch = "main", newBranch = "main-new-2", existingBranchNames = existing))
-    }
-
-    @Test
-    fun `branch delete safety blocks current default and worktree branches`() {
-        assertEquals("Current branch cannot be deleted.", branchDeleteBlockedReason(branch(isCurrent = true)))
-        assertEquals("Default branch cannot be deleted.", branchDeleteBlockedReason(branch(isDefault = true)))
         assertEquals(
-            "Branch with a worktree cannot be deleted.",
-            branchDeleteBlockedReason(branch(worktreePath = "/srv/app-feature")),
+            "feature/android",
+            worktreePathBranchName("origin/feature/android", setOf("origin/feature/android")),
         )
-        assertNull(branchDeleteBlockedReason(branch()))
-        assertFalse(canDeleteBranch(branch(isCurrent = true)))
-        assertTrue(canDeleteBranch(branch()))
     }
 
     @Test
-    fun `branch delete confirmation names remote branch`() {
-        val text = branchDeleteConfirmationText(branch(name = "feature/android"))
-
-        assertTrue(text.contains("feature/android"))
-        assertTrue(text.contains("remote branch"))
-        assertTrue(text.contains("not delete worktrees"))
-    }
-
-    @Test
-    fun `branch checkout is available only for non current branches`() {
-        assertFalse(canCheckoutBranch(branch(isCurrent = true)))
-        assertTrue(canCheckoutBranch(branch(isCurrent = false)))
-    }
-
-    @Test
-    fun `branch checkout confirmation names target branch`() {
-        val text = branchCheckoutConfirmationText(branch(name = "feature/android"))
-
-        assertTrue(text.contains("feature/android"))
-        assertTrue(text.contains("remote branch"))
-        assertTrue(text.contains("working tree"))
+    fun `remote worktree selection reuses an existing derived local branch`() {
+        assertEquals(
+            WorktreeCreationSource.ExistingLocal("feature/android"),
+            worktreeCreationSource(
+                selectedRef = "origin/feature/android",
+                localBranchNames = setOf("feature/android"),
+                remoteBranchNames = setOf("origin/feature/android"),
+            ),
+        )
     }
 
     @Test
@@ -745,11 +786,12 @@ class RepositorySetupStateTest {
     private fun worktree(
         path: String,
         isMissing: Boolean = false,
+        isPrimary: Boolean = false,
     ): RemoteRepositoryWorktree = RemoteRepositoryWorktree(
         path = path,
         branch = "feature/android",
-        isPrimary = false,
-        isLinked = true,
+        isPrimary = isPrimary,
+        isLinked = !isPrimary,
         isBare = false,
         isLocked = false,
         isMissing = isMissing,

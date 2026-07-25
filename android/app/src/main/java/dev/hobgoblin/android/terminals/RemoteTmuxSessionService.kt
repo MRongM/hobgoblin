@@ -125,7 +125,7 @@ class RemoteTmuxSessionService(
     private fun isMissingTmuxMessage(message: String): Boolean = MissingTmuxPattern.containsMatchIn(message)
 
     private fun isEmptyDiscoveryMessage(message: String): Boolean =
-        message.trim() == "exit 127" || isMissingTmuxMessage(message)
+        isMissingTmuxMessage(message)
 
     private companion object {
         val MissingTmuxPattern = Regex(

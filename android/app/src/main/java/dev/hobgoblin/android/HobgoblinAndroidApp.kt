@@ -9,6 +9,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import dev.hobgoblin.android.data.HostProfileStore
+import dev.hobgoblin.android.data.ManualItemOrderScope
+import dev.hobgoblin.android.data.ManualItemOrderStore
 import dev.hobgoblin.android.data.RemoteRepositoryStore
 import dev.hobgoblin.android.data.TerminalSettingsStore
 import dev.hobgoblin.android.data.ssh.SecureIdentityStore
@@ -21,7 +23,6 @@ import dev.hobgoblin.android.navigation.AppRoute
 import dev.hobgoblin.android.navigation.terminalReturnRoute
 import dev.hobgoblin.android.ssh.HostPortForwardManager
 import dev.hobgoblin.android.ssh.HostPortForwardStatus
-import dev.hobgoblin.android.ssh.RemoteBranchService
 import dev.hobgoblin.android.ssh.RemoteRepositoryGitService
 import dev.hobgoblin.android.ssh.RemoteWorktreeService
 import dev.hobgoblin.android.ssh.SshDiagnosticsService
@@ -63,12 +64,13 @@ internal fun tmuxRecoveryCandidates(
     host: SshHostProfile,
     repository: RemoteRepositoryProfile,
     discoveries: List<DiscoveredTmuxSession>,
+    projectRoot: String = repository.remotePath,
 ): List<TmuxTerminalRecoveryCandidate> = discoveries.map { discovery ->
     val remotePath = discovery.identity.initialPath
     TmuxTerminalRecoveryCandidate(
         target = RemoteTarget.fromHostProfile(host, remotePath),
         repositoryId = repository.id,
-        repositoryRemotePath = repository.remotePath,
+        repositoryRemotePath = projectRoot,
         targetLabel = terminalTargetLabel(repository.title, remotePath),
         discovery = discovery,
     )
@@ -77,11 +79,11 @@ internal fun tmuxRecoveryCandidates(
 @Composable
 fun HobgoblinAndroidApp(
     hostProfileStore: HostProfileStore,
+    manualItemOrderStore: ManualItemOrderStore,
     remoteRepositoryStore: RemoteRepositoryStore,
     secureIdentityStore: SecureIdentityStore,
     diagnosticsService: SshDiagnosticsService,
     remoteRepositoryGitService: RemoteRepositoryGitService,
-    remoteBranchService: RemoteBranchService,
     remoteWorktreeService: RemoteWorktreeService,
     initializationService: SshInitializationService,
     terminalSettingsStore: TerminalSettingsStore,
@@ -239,6 +241,10 @@ fun HobgoblinAndroidApp(
                         onOpenDiagnostics = { hostId -> route = AppRoute.Diagnostics(hostId) },
                         onOpenTerminal = ::openHostTemporaryTerminal,
                         onOpenPorts = { hostId -> route = AppRoute.HostPorts(hostId) },
+                        initialManualOrder = manualItemOrderStore.load(ManualItemOrderScope.Hosts),
+                        onSaveManualOrder = { ids ->
+                            manualItemOrderStore.save(ManualItemOrderScope.Hosts, ids)
+                        },
                     )
                 },
                 projectsContent = {
@@ -255,6 +261,10 @@ fun HobgoblinAndroidApp(
                         onDeleteProject = { repositoryId ->
                             deleteRepositoryRecord(repositoryId)
                         },
+                        initialManualOrder = manualItemOrderStore.load(ManualItemOrderScope.Projects),
+                        onSaveManualOrder = { ids ->
+                            manualItemOrderStore.save(ManualItemOrderScope.Projects, ids)
+                        },
                     )
                 },
                 terminalsContent = {
@@ -266,6 +276,10 @@ fun HobgoblinAndroidApp(
                                 terminalSessionManager.touchSession(current.id)
                                 route = AppRoute.terminal(current, returnToTerminals = true)
                             }
+                        },
+                        initialManualOrder = manualItemOrderStore.load(ManualItemOrderScope.Terminals),
+                        onSaveManualOrder = { ids ->
+                            manualItemOrderStore.save(ManualItemOrderScope.Terminals, ids)
                         },
                     )
                 },
@@ -409,12 +423,16 @@ fun HobgoblinAndroidApp(
                     },
                     initialTerminalWorkspacePath = currentRoute.terminalWorkspacePath,
                     terminalSessions = terminalSessions,
-                    onDiscoverTmuxTerminals = { allowedPaths ->
+                    onProjectRootResolved = { projectRoot ->
+                        remoteRepositoryStore.saveRepository(repository.copy(remotePath = projectRoot))
+                        reloadRepositories()
+                    },
+                    onDiscoverTmuxTerminals = { tmuxScope ->
                         when (
                             val result = remoteTmuxSessionService.discoverAssociatedSessions(
-                                target = RemoteTarget.fromHostProfile(host, repository.remotePath),
-                                projectRoot = repository.remotePath,
-                                allowedInitialPaths = allowedPaths.toSet(),
+                                target = RemoteTarget.fromHostProfile(host, tmuxScope.projectRoot),
+                                projectRoot = tmuxScope.projectRoot,
+                                allowedInitialPaths = tmuxScope.allowedInitialPaths.toSet(),
                             )
                         ) {
                             is RemoteTmuxDiscoveryResult.Found -> {
@@ -423,17 +441,19 @@ fun HobgoblinAndroidApp(
                                         host = host,
                                         repository = repository,
                                         discoveries = result.sessions,
+                                        projectRoot = tmuxScope.projectRoot,
                                     ),
                                 )
+                                result.sessions.size
                             }
                             is RemoteTmuxDiscoveryResult.Failed -> error(result.message)
                         }
                     },
-                    onCreateTerminalAtPath = { remotePath, launchMode ->
+                    onCreateTerminalAtPath = { remotePath, projectRoot, launchMode ->
                         val session = terminalSessionManager.createNew(
                             target = RemoteTarget.fromHostProfile(host, remotePath),
                             repositoryId = repository.id,
-                            repositoryRemotePath = repository.remotePath,
+                            repositoryRemotePath = projectRoot,
                             targetLabel = terminalTargetLabel(repository.title, remotePath),
                             launchMode = launchMode,
                         )
@@ -491,29 +511,10 @@ fun HobgoblinAndroidApp(
                         deleteRepositoryRecord(repository.id)
                         route = AppRoute.Projects
                     },
-                    onCreateBranch = { baseBranch, newBranch ->
-                        remoteBranchService.createAndCheckoutBranch(
-                            target = RemoteTarget.fromHostProfile(host, repository.remotePath),
-                            baseBranch = baseBranch,
-                            newBranch = newBranch,
-                        )
-                    },
-                    onCheckoutBranch = { branch ->
-                        remoteBranchService.checkoutBranch(
-                            target = RemoteTarget.fromHostProfile(host, repository.remotePath),
-                            branch = branch.name,
-                        )
-                    },
-                    onDeleteBranch = { branch ->
-                        remoteBranchService.deleteBranch(
-                            target = RemoteTarget.fromHostProfile(host, repository.remotePath),
-                            branch = branch.name,
-                        )
-                    },
-                    onCreateWorktree = { branch, worktreePath ->
+                    onCreateWorktree = { source, worktreePath ->
                         remoteWorktreeService.createWorktree(
                             target = RemoteTarget.fromHostProfile(host, repository.remotePath),
-                            branch = branch,
+                            source = source,
                             worktreePath = worktreePath,
                         )
                     },
@@ -524,6 +525,12 @@ fun HobgoblinAndroidApp(
                         )
                         terminalSessionManager.removeWorkspaceSessions(repository.id, worktree.path)
                         terminalForegroundBridge.sync()
+                    },
+                    initialWorktreeOrder = manualItemOrderStore.load(
+                        ManualItemOrderScope.Worktrees(repository.id),
+                    ),
+                    onSaveWorktreeOrder = { ids ->
+                        manualItemOrderStore.save(ManualItemOrderScope.Worktrees(repository.id), ids)
                     },
                 )
             }
@@ -537,11 +544,14 @@ fun HobgoblinAndroidApp(
                 val repository = currentRoute.repositoryId?.let { repositoryId ->
                     currentRepositories().firstOrNull { it.id == repositoryId }
                 }
+                val retainedProjectRoot = currentRoute.terminalSessionId
+                    ?.let(terminalSessionManager::session)
+                    ?.repositoryRemotePath
                 TerminalScreen(
                     host = host,
                     remotePath = currentRoute.remotePath,
                     repositoryId = currentRoute.repositoryId,
-                    repositoryRemotePath = repository?.remotePath,
+                    repositoryRemotePath = retainedProjectRoot ?: repository?.remotePath,
                     targetLabel = terminalTargetLabel(repository?.title ?: host.title, currentRoute.remotePath),
                     terminalSessionId = currentRoute.terminalSessionId,
                     fitToScreen = terminalFitToScreen,

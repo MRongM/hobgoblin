@@ -3,25 +3,23 @@ package dev.hobgoblin.android.terminals
 import dev.hobgoblin.android.domain.ssh.RemoteTarget
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SshTerminalStartupCommandTest {
     @Test
-    fun `project workspace shell defaults to native without probing tmux`() {
-        val target = target(remotePath = "/srv/repo-feature")
-        val context = startupContext(terminalId = 2)
-        val command = SshTerminalStartupCommand.initialInputForTarget(target, context)
-        val output = command.orEmpty()
+    fun `project startup is not injected through interactive terminal input`() {
+        val input = SshTerminalStartupCommand.initialInputForTarget(
+            target(remotePath = "/srv/repo-feature"),
+            startupContext(terminalId = 2),
+        )
 
-        assertTrue(output.contains("cd '/srv/repo-feature' || exit"))
-        assertTrue(output.contains("exec \"\${SHELL:-/bin/sh}\" -l"))
-        assertFalse(output.contains("tmux"))
-        assertTrue(output.endsWith("\r"))
+        assertNull(input)
     }
 
     @Test
-    fun `explicit tmux launch matches current attach create and mouse command`() {
+    fun `project startup is submitted as one non-interactive shell command`() {
         val identity = requireNotNull(
             TmuxSessionProtocol.identity(
                 TmuxSessionDescriptor(
@@ -31,38 +29,74 @@ class SshTerminalStartupCommandTest {
                 ),
             ),
         )
-        val command = SshTerminalStartupCommand.initialInputForTarget(
+        val command = SshTerminalStartupCommand.remoteCommandForTarget(
             target(remotePath = "/srv/repo-feature"),
             startupContext(terminalId = 2, tmuxIdentity = identity),
-        )
-        val output = command.orEmpty()
+        ).orEmpty()
+
+        assertTrue(command.startsWith("exec /bin/sh -lc '"))
+        assertFalse(command.contains('\n'))
+        assertFalse(command.endsWith("\r"))
+    }
+
+    @Test
+    fun `project workspace shell defaults to native without probing tmux`() {
+        val target = target(remotePath = "/srv/repo-feature")
+        val context = startupContext(terminalId = 2)
+        val command = SshTerminalStartupCommand.remoteCommandForTarget(target, context).orEmpty()
+        val output = unwrapProjectStartupScript(command)
 
         assertTrue(output.contains("cd '/srv/repo-feature' || exit"))
-        assertTrue(output.contains("command -v tmux >/dev/null 2>&1"))
-        val serverName = "hobgoblin-project-v1-44159cd9e973adba7b472e6f"
-        assertTrue(output.contains("tmux -L '$serverName' has-session -t '=${identity.sessionName}'"))
-        assertTrue(
-            output.contains(
-                "exec tmux -L '$serverName' new-session -A -s '${identity.sessionName}' -c '/srv/repo-feature' " +
-                    "\\; set-option -t '=${identity.sessionName}:' mouse on " +
-                    "\\; set-option -t '=${identity.sessionName}:' " +
-                    "@hobgoblin_init_path '/srv/repo-feature' " +
-                    "\\; set-option -t '=${identity.sessionName}:' @hobgoblin_terminal_number '2'",
+        assertTrue(output.contains("exec \"\${SHELL:-/bin/sh}\" -l"))
+        assertFalse(output.contains("tmux"))
+        assertFalse(command.endsWith("\r"))
+    }
+
+    @Test
+    fun `explicit tmux launch is strict and suggests native when tmux cannot start`() {
+        val identity = requireNotNull(
+            TmuxSessionProtocol.identity(
+                TmuxSessionDescriptor(
+                    projectRoot = "/srv/repo",
+                    workingDirectory = "/srv/repo-feature",
+                    terminalNumber = 2,
+                ),
             ),
         )
-        assertTrue(output.contains("else\n  exec \"\${SHELL:-/bin/sh}\" -l\nfi"))
-        assertFalse(output.contains("fi\nexec \"\${SHELL:-/bin/sh}\" -l"))
+        val command = SshTerminalStartupCommand.remoteCommandForTarget(
+            target(remotePath = "/srv/repo-feature"),
+            startupContext(terminalId = 2, tmuxIdentity = identity),
+        ).orEmpty()
+        val output = unwrapProjectStartupScript(command)
+
+        assertTrue(output.contains("cd '/srv/repo-feature' || exit"))
+        assertTrue(output.contains("\"\$hobgoblin_login_shell\" -lc 'command -v tmux'"))
+        assertTrue(output.contains("if ! resolve_hobgoblin_tmux; then"))
+        val serverName = "hobgoblin-project-v1-44159cd9e973adba7b472e6f"
+        assertTrue(
+            output.contains(
+                "\"\$hobgoblin_tmux_bin\" -L '$serverName' has-session -t '=${identity.sessionName}'",
+            ),
+        )
+        assertTrue(output.contains("\"\$hobgoblin_tmux_bin\" -L '$serverName' new-session -d"))
+        assertTrue(output.contains("set-option -t '=${identity.sessionName}:' mouse on"))
+        assertTrue(output.contains("tmux_status=\$?"))
+        assertTrue(output.contains("Use New terminal (Native)."))
+        assertTrue(output.contains("exit 127"))
+        assertTrue(output.contains("exit \"\$tmux_status\""))
+        assertFalse(output.contains("exec \"\${SHELL:-/bin/sh}\" -l"))
+        assertFalse(output.contains("\\;"))
         assertFalse(output.contains("session_id"))
-        assertTrue(output.endsWith("\r"))
+        assertFalse(command.endsWith("\r"))
     }
 
     @Test
     fun `workspace shell quotes paths with spaces and single quotes`() {
-        val command = SshTerminalStartupCommand.initialInputForTarget(
+        val command = SshTerminalStartupCommand.remoteCommandForTarget(
             target(remotePath = "/srv/app's worktree"),
             startupContext(terminalId = 1, worktreeRemotePath = "/srv/app's worktree"),
-        )
-        val output = command.orEmpty()
+        ).orEmpty()
+        val output = unwrapProjectStartupScript(command)
 
         assertTrue(output.contains("cd '/srv/app'\"'\"'s worktree' || exit"))
         assertFalse(output.contains("cd '/srv/app's worktree'"))
@@ -70,11 +104,11 @@ class SshTerminalStartupCommandTest {
 
     @Test
     fun `root project path starts native shell when tmux is not requested`() {
-        val command = SshTerminalStartupCommand.initialInputForTarget(
+        val command = SshTerminalStartupCommand.remoteCommandForTarget(
             target(remotePath = "/"),
             startupContext(terminalId = 1, worktreeRemotePath = "/"),
-        )
-        val output = command.orEmpty()
+        ).orEmpty()
+        val output = unwrapProjectStartupScript(command)
 
         assertTrue(output.contains("cd '/' || exit"))
         assertFalse(output.contains("tmux"))
@@ -98,6 +132,14 @@ class SshTerminalStartupCommandTest {
 
         assertTrue(output.contains("Startup cd failed"))
         assertTrue(output.contains("BlankMessageException"))
+    }
+
+    private fun unwrapProjectStartupScript(command: String): String {
+        val prefix = "exec /bin/sh -lc "
+        require(command.startsWith(prefix))
+        val quotedScript = command.removePrefix(prefix)
+        require(quotedScript.startsWith("'") && quotedScript.endsWith("'"))
+        return quotedScript.substring(1, quotedScript.lastIndex).replace("'\"'\"'", "'")
     }
 
     private fun startupContext(

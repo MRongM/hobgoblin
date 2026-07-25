@@ -117,6 +117,16 @@ internal fun parseRemoteRepositorySnapshot(output: String): RemoteRepositorySnap
         }
         .filter { it.name.isNotBlank() }
     val statusLines = sections[StatusMarker].orEmpty().filter { it.isNotBlank() }
+    val remoteBranches = sections[RemoteBranchesMarker].orEmpty()
+        .mapNotNull { line ->
+            val fields = line.split(BranchFieldSeparator, limit = 2)
+            val name = fields.firstOrNull().orEmpty()
+            val symbolicTarget = fields.getOrNull(1).orEmpty()
+            name.takeIf {
+                it.isNotBlank() && symbolicTarget.isBlank() && !it.endsWith("/HEAD")
+            }
+        }
+        .distinct()
 
     return RemoteRepositorySnapshot(
         currentRef = sections[CurrentMarker].orEmpty().firstOrNull { it.isNotBlank() },
@@ -126,6 +136,7 @@ internal fun parseRemoteRepositorySnapshot(output: String): RemoteRepositorySnap
         branches = branches,
         commits = parseCommits(sections[CommitsMarker].orEmpty()),
         worktrees = worktrees,
+        remoteBranches = remoteBranches,
     )
 }
 
@@ -168,7 +179,13 @@ private fun projectInspectionScript(remotePath: String): String {
         [ -r "${'$'}requested" ] || { printf '%s\n' 'Remote path is not readable' >&2; exit 20; }
         resolved=${'$'}(cd "${'$'}requested" 2>/dev/null && pwd -P) || { printf '%s\n' 'Remote path is not readable' >&2; exit 20; }
         top=${'$'}(git -C "${'$'}resolved" rev-parse --show-toplevel 2>/dev/null || true)
-        if [ -n "${'$'}top" ]; then kind=git; resolved=${'$'}top; else kind=plain; fi
+        if [ -n "${'$'}top" ]; then
+          kind=git
+          primary_worktree=${'$'}(git -C "${'$'}top" worktree list --porcelain 2>/dev/null | awk '/^worktree / { print substr(${'$'}0, 10); exit }')
+          if [ -n "${'$'}primary_worktree" ]; then resolved=${'$'}primary_worktree; else resolved=${'$'}top; fi
+        else
+          kind=plain
+        fi
         printf '%s\n' ${shellQuote(ProjectKindMarker)}
         printf '%s\n' "${'$'}kind"
         printf '%s\n' ${shellQuote(ProjectPathMarker)}
@@ -194,6 +211,8 @@ private fun snapshotScript(remotePath: String): String {
         "git -C $repo log -n 20 --format='%h%x00%s%x00%an%x00%cr' 2>/dev/null || true",
         "printf '%s\\n' ${shellQuote(BranchesMarker)}",
         "git -C $repo for-each-ref --format='%(refname:short)%00%(HEAD)' refs/heads/",
+        "printf '%s\\n' ${shellQuote(RemoteBranchesMarker)}",
+        "git -C $repo for-each-ref --format='%(refname:short)%00%(symref)' refs/remotes/",
         "printf '%s\\n' ${shellQuote(WorktreesMarker)}",
         "git -C $repo worktree list --porcelain",
         "printf '%s\\n' ${shellQuote(WorktreeStatusMarker)}",
@@ -279,6 +298,7 @@ private const val DefaultMarker = "__HOBGOBLIN_ANDROID_DEFAULT__"
 private const val StatusMarker = "__HOBGOBLIN_ANDROID_STATUS__"
 private const val CommitsMarker = "__HOBGOBLIN_ANDROID_COMMITS__"
 private const val BranchesMarker = "__HOBGOBLIN_ANDROID_BRANCHES__"
+private const val RemoteBranchesMarker = "__HOBGOBLIN_ANDROID_REMOTE_BRANCHES__"
 private const val WorktreesMarker = "__HOBGOBLIN_ANDROID_WORKTREES__"
 private const val WorktreeStatusMarker = "__HOBGOBLIN_ANDROID_WORKTREE_STATUS__"
 private const val ProjectKindMarker = "__HOBGOBLIN_ANDROID_PROJECT_KIND__"
@@ -294,6 +314,7 @@ private val SnapshotMarkers = setOf(
     StatusMarker,
     CommitsMarker,
     BranchesMarker,
+    RemoteBranchesMarker,
     WorktreesMarker,
     WorktreeStatusMarker,
 )

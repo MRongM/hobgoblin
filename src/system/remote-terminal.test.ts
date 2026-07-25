@@ -26,7 +26,7 @@ describe('buildManagedRemoteTerminalInvocation', () => {
     expect(invocation?.tmuxSessionName).toBeNull()
   })
 
-  test('builds a tmux-first ssh invocation with native shell fallback when enabled', () => {
+  test('builds a strict tmux ssh invocation without native fallback when enabled', () => {
     const invocation = buildManagedRemoteTerminalInvocation(BASE_MANAGED_TARGET, { useTmux: true })
 
     expect(invocation).not.toBeNull()
@@ -35,7 +35,7 @@ describe('buildManagedRemoteTerminalInvocation', () => {
     expect(invocation?.script).toContain("cd '/srv/projects/example/worktrees/feature' || exit")
     expect(invocation?.script).toContain('command -v tmux >/dev/null 2>&1')
     expect(invocation?.script).toContain(
-      "exec tmux new-session -A -s 'hobgoblin-v1-aebf050981ac829e36100020' -c '/srv/projects/example/worktrees/feature'",
+      "new-session -d -s 'hobgoblin-v1-aebf050981ac829e36100020' -c '/srv/projects/example/worktrees/feature'",
     )
     expect(invocation?.script).toContain(
       "set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' @hobgoblin_terminal_number '1'",
@@ -45,7 +45,11 @@ describe('buildManagedRemoteTerminalInvocation', () => {
     )
     expect(invocation?.script).toContain("set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' mouse on")
     expect(invocation?.script).not.toContain('set-option -g')
-    expect(invocation?.script).toContain('exec "${SHELL:-/bin/sh}" -l')
+    expect(invocation?.script).toContain('Use New terminal (Native).')
+    expect(invocation?.script).toContain('exit 127')
+    expect(invocation?.script).toContain('exit "$tmux_status"')
+    expect(invocation?.script).not.toContain('exec "${SHELL:-/bin/sh}" -l')
+    expect(invocation?.script).not.toContain('\\;')
     expect(invocation?.shellCommand).toContain('ssh')
     expect(invocation?.shellCommand).toContain('prod')
     expect(invocation?.shellCommand).toContain('tmux')
@@ -76,7 +80,7 @@ describe('buildManagedRemoteTerminalInvocation', () => {
     )
 
     expect(invocation?.tmuxSessionName).toBe(sessionName)
-    expect(invocation?.script).toContain(`exec tmux attach-session -t '=${sessionName}'`)
+    expect(invocation?.script).toContain(`tmux attach-session -t '=${sessionName}'`)
     expect(invocation?.script).not.toContain('tmux new-session')
     expect(invocation?.script).not.toContain(TMUX_TERMINAL_NUMBER_OPTION)
   })
@@ -90,7 +94,7 @@ describe('buildManagedRemoteTerminalInvocation', () => {
       existingTmuxServerName: serverName,
     })
 
-    expect(invocation?.script).toContain(`exec tmux -L '${serverName}' attach-session -t '=${sessionName}'`)
+    expect(invocation?.script).toContain(`tmux -L '${serverName}' attach-session -t '=${sessionName}'`)
     expect(
       buildManagedRemoteTerminalInvocation(BASE_MANAGED_TARGET, {
         useTmux: true,
@@ -155,7 +159,7 @@ describe('buildExternalRemoteTerminalInvocation', () => {
     expect(invocation?.args).toEqual(['-tt', '--', 'prod', expect.stringContaining('sh -lc')])
     expect(invocation?.script).toContain("cd '/srv/projects/example/worktrees/feature' || exit")
     expect(invocation?.script).toContain("-s 'hobgoblin-v1-aebf050981ac829e36100020'")
-    expect(invocation?.script).toContain('exec "${SHELL:-/bin/sh}" -l')
+    expect(invocation?.script).not.toContain('exec "${SHELL:-/bin/sh}" -l')
     expect(invocation?.script).toContain('tmux')
     expect(invocation?.shellCommand).toContain('tmux')
   })

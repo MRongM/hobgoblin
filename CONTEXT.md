@@ -12,6 +12,10 @@ Core model: **multi-project × multi-worktree/branch × multi-terminal**. Users 
 The Android main-navigation destination that lists every retained Host temporary terminal and Project terminal so an existing session can be reopened quickly. It is distinct from the terminal tabs inside the desktop/web terminal topbar and does not create or delete sessions.
 _Avoid_: Terminal manager, terminal creator, internal terminal tab
 
+**Android manual item order**:
+The restorable, device-local order chosen by dragging Android Host, Project, Terminal, or Project Worktree items from their dedicated drag handles. Host, Project, and Terminal orders are global to their respective lists; Worktree order is scoped to one Project. It changes only Android presentation, never Git worktree enumeration or remote repository state, and newly discovered items append after retained ordered items.
+_Avoid_: Git worktree order, remote sort order, synchronized order
+
 **Terminal topbar**:
 The top row of the terminal area, containing terminal tabs and terminal-level actions.
 _Avoid_: Terminal toolbar, detail toolbar
@@ -89,7 +93,7 @@ A retained, disconnected Android project-terminal record reconstructed from a di
 _Avoid_: Connected terminal, imported shell, automatically attached terminal
 
 **Internal terminal launch mode**:
-The per-launch choice between the native login shell and tmux-if-available for one new local or SSH internal terminal. Ordinary terminal actions use the native login shell. Explicit tmux actions create or attach to the deterministic tmux session when tmux is available on the target host and otherwise fall back to the native login shell. The choice is not a persisted preference and does not change an existing terminal.
+The per-launch choice between the native login shell and the compatibility-named `tmux-if-available` mode for one new local or SSH internal terminal. Ordinary terminal actions use the native login shell. Explicit tmux actions require tmux and create or attach to the deterministic tmux session; an unavailable or failed tmux command exits with an actionable instruction to choose Native and never starts a native shell implicitly. The choice is not a persisted preference and does not change an existing terminal.
 _Avoid_: Tmux setting, terminal preference, external terminal mode
 
 **Canonical terminal geometry**:

@@ -13,6 +13,7 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 import net.schmizz.sshj.SSHClient
+import net.schmizz.sshj.connection.channel.Channel
 import net.schmizz.sshj.connection.channel.direct.PTYMode
 import net.schmizz.sshj.connection.channel.direct.Session
 import net.schmizz.sshj.transport.verification.HostKeyVerifier
@@ -48,12 +49,21 @@ class SshTerminalService(
 
         val sshSession = client.startSession()
         sshSession.allocatePTY("xterm-256color", cols, rows, 0, 0, emptyMap<PTYMode, Int>())
-        val shell = sshSession.startShell()
+        val resizeChannel = requireNotNull(sshSession as? Session.Shell) {
+            "SSH session channel does not support PTY resize"
+        }
+        val remoteCommand = SshTerminalStartupCommand.remoteCommandForTarget(target, startupContext)
+        val terminalChannel: Channel = if (remoteCommand == null) {
+            sshSession.startShell()
+        } else {
+            sshSession.exec(remoteCommand)
+        }
         val terminalSession = SshTerminalSession(
             id = UUID.randomUUID().toString(),
             client = client,
             sshSession = sshSession,
-            shell = shell,
+            terminalChannel = terminalChannel,
+            resizeChannel = resizeChannel,
             onExit = onExit,
             onFailure = onFailure,
         )
@@ -89,34 +99,44 @@ internal object SshTerminalStartupCommand {
         target: RemoteTarget,
         startupContext: TerminalStartupContext?,
     ): String? {
+        if (startupContext != null) return null
         val normalizedPath = normalizeRemotePath(target.remotePath)
-        if (startupContext == null) {
-            if (normalizedPath == "/") return null
-            return "cd ${shellQuote(normalizedPath)} && pwd\r"
-        }
+        if (normalizedPath == "/") return null
+        return "cd ${shellQuote(normalizedPath)} && pwd\r"
+    }
+
+    fun remoteCommandForTarget(
+        target: RemoteTarget,
+        startupContext: TerminalStartupContext?,
+    ): String? {
+        if (startupContext == null) return null
+        val normalizedPath = normalizeRemotePath(target.remotePath)
 
         val tmuxIdentity = startupContext.tmuxIdentity
         val loginShellCommand = "exec \"${'$'}{SHELL:-/bin/sh}\" -l"
-        val lines = buildList {
-            add("cd ${shellQuote(normalizedPath)} || exit")
-            if (tmuxIdentity != null) {
-                val tmuxCommand = requireNotNull(
-                    TmuxSessionProtocol.attachOrCreateCommand(
-                        tmuxIdentity,
-                        startupContext.terminalId,
-                        startupContext.repositoryRemotePath,
-                    ),
-                ) { "Tmux terminal number must be positive" }
-                add("if command -v tmux >/dev/null 2>&1; then")
-                add("  $tmuxCommand")
-                add("else")
-                add("  $loginShellCommand")
-                add("fi")
-            } else {
-                add(loginShellCommand)
-            }
+        val script = if (tmuxIdentity != null) {
+            val tmuxCommand = requireNotNull(
+                TmuxSessionProtocol.attachOrCreateCommand(
+                    tmuxIdentity,
+                    startupContext.terminalId,
+                    startupContext.repositoryRemotePath,
+                ),
+            ) { "Tmux terminal number must be positive" }
+            listOf(
+                "cd ${shellQuote(normalizedPath)} || exit",
+                TmuxSessionProtocol.tmuxExecutableResolverScript(),
+                "if ! ${TmuxSessionProtocol.tmuxExecutableResolverInvocation()}; then " +
+                    "printf '%s\\n' 'Tmux is unavailable. Use New terminal (Native).' >&2; exit 127; fi",
+                tmuxCommand,
+                "tmux_status=${'$'}?",
+                "if [ \"${'$'}tmux_status\" -ne 0 ]; then " +
+                    "printf '%s\\n' 'Tmux failed to start. Use New terminal (Native).' >&2; fi",
+                "exit \"${'$'}tmux_status\"",
+            ).joinToString("; ")
+        } else {
+            "cd ${shellQuote(normalizedPath)} || exit; $loginShellCommand"
         }
-        return lines.joinToString("\n") + "\r"
+        return "exec /bin/sh -lc ${shellQuote(script)}"
     }
 
     fun startupInputFailureOutput(error: Throwable): String =
@@ -156,14 +176,15 @@ private class SshTerminalSession(
     override val id: String,
     private val client: SSHClient,
     private val sshSession: Session,
-    private val shell: Session.Shell,
+    private val terminalChannel: Channel,
+    private val resizeChannel: Session.Shell,
     private val onExit: () -> Unit,
     private val onFailure: (Throwable) -> Unit,
 ) : TerminalSession {
     private val open = AtomicBoolean(true)
 
     override fun isConnected(): Boolean = runCatching {
-        open.get() && client.isConnected && sshSession.isOpen && shell.isOpen
+        open.get() && client.isConnected && sshSession.isOpen && terminalChannel.isOpen
     }.getOrDefault(false)
 
     fun startReader(onOutput: (ByteArray) -> Unit) {
@@ -171,7 +192,7 @@ private class SshTerminalSession(
             runCatching {
                 val buffer = ByteArray(4096)
                 while (open.get()) {
-                    val count = shell.inputStream.read(buffer)
+                    val count = terminalChannel.inputStream.read(buffer)
                     if (count < 0) break
                     if (count > 0) onOutput(buffer.copyOf(count))
                 }
@@ -198,17 +219,17 @@ private class SshTerminalSession(
     }
 
     override fun sendInputBytes(value: ByteArray) {
-        shell.outputStream.write(value)
-        shell.outputStream.flush()
+        terminalChannel.outputStream.write(value)
+        terminalChannel.outputStream.flush()
     }
 
     override fun resize(cols: Int, rows: Int) {
-        shell.changeWindowDimensions(cols, rows, 0, 0)
+        resizeChannel.changeWindowDimensions(cols, rows, 0, 0)
     }
 
     override fun close() {
         if (!open.getAndSet(false)) return
-        runCatching { shell.close() }
+        runCatching { terminalChannel.close() }
         runCatching { sshSession.close() }
         runCatching { client.close() }
     }
