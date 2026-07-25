@@ -50,19 +50,19 @@ afterEach(() => {
 })
 
 describe('BranchWorkspaceDependencyDialog', () => {
-  test('previews copy or symlink choices only for missing targets', async () => {
+  test('previews copy or symlink choices for missing and occupied targets', async () => {
     const onPreview = vi.fn(async () => true)
     renderDialog({ mode: 'add', onPreview })
 
     expect(document.querySelector('[data-materialization-item=".env"]')).not.toBeNull()
-    expect(document.querySelector('[data-materialization-item="config"]')).toBeNull()
-    click('[data-materialization-item=".env"] [data-materialization-choice="copy"]')
+    expect(document.querySelector('[data-materialization-item="config"]')).not.toBeNull()
+    click('[data-materialization-item="config"] [data-materialization-choice="symlink"]')
     await clickAction('preview')
 
     expect(onPreview).toHaveBeenCalledWith({
       operation: 'add',
       branchWorkspaceId: 'branch-1',
-      entries: [{ name: '.env', mode: 'copy' }],
+      entries: [{ name: 'config', mode: 'symlink' }],
     })
   })
 
@@ -120,6 +120,15 @@ describe('BranchWorkspaceDependencyDialog', () => {
     rerender({ mode: 'remove', plan: removePlan(), error: 'remove failed', onConfirm, onOpenChange })
     expect(document.querySelector('[role="alert"]')?.textContent).toBe('remove failed')
   })
+
+  test('labels replacement previews and uses destructive confirmation', () => {
+    renderDialog({ mode: 'add', plan: replacementAddPlan() })
+
+    const confirm = document.querySelector<HTMLButtonElement>('[data-action="confirm"]')
+    expect(confirm?.dataset.variant).toBe('destructive')
+    expect(document.body.textContent).toContain('workspace.branch-workspace.dependency.operation.replace')
+    expect(confirm?.textContent).toBe('workspace.branch-workspace.dependency.add.replace-confirm')
+  })
 })
 
 function renderDialog(
@@ -161,7 +170,30 @@ function addPlan(): BranchWorkspaceDependencyPlan {
         sourcePath: '/workspace/.env',
         sourceKind: 'file',
         targetPath: '/workspace/hobgoblin-feature/.env',
+        targetKind: 'missing',
         outsideRoot: true,
+      },
+    ],
+  }
+}
+
+function replacementAddPlan(): BranchWorkspaceDependencyPlan {
+  return {
+    token: 'sha256:replace',
+    rootId: '/workspace',
+    operation: 'add',
+    branchWorkspaceId: 'branch-1',
+    requiredApprovals: [],
+    entries: [
+      {
+        name: 'config',
+        mode: 'symlink',
+        sourcePath: '/workspace/config',
+        sourceKind: 'directory',
+        targetPath: '/workspace/hobgoblin-feature/config',
+        targetKind: 'directory',
+        targetFingerprint: 'fingerprint:config',
+        outsideRoot: false,
       },
     ],
   }

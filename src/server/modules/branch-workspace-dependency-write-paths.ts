@@ -91,8 +91,15 @@ export function createBranchWorkspaceDependencyWriteService(
       const controller = new AbortController()
       activeByRoot.set(rootId, controller)
       const completedNames: string[] = []
+      let changed = false
       try {
-        const rebuilt = await buildPlan(rootId, pending.request, dependencies.planDependencies, controller.signal)
+        const rebuilt = await buildPlan(
+          rootId,
+          pending.request,
+          dependencies.planDependencies,
+          controller.signal,
+          plan,
+        )
         if (!rebuilt.ok || rebuilt.plan.token !== plan.token) {
           return failure(plan, 'workspace.branch-workspace.dependency.plan-stale', completedNames)
         }
@@ -100,22 +107,28 @@ export function createBranchWorkspaceDependencyWriteService(
         if (plan.operation === 'add') {
           for (const entry of plan.entries) {
             controller.signal.throwIfAborted()
+            if (entry.targetKind !== 'missing') {
+              await removeEntry(rootId, entry.targetPath, controller.signal)
+              changed = true
+            }
             if (entry.mode === 'copy') {
               await copyEntry(rootId, entry.sourcePath, entry.targetPath, controller.signal)
             } else {
               await materializeSymlink(rootId, entry.sourcePath, entry.targetPath, controller.signal)
             }
+            changed = true
             completedNames.push(entry.name)
           }
         } else {
           for (const entry of plan.entries) {
             controller.signal.throwIfAborted()
             await removeEntry(rootId, entry.targetPath, controller.signal)
+            changed = true
             completedNames.push(entry.name)
           }
         }
         pendingByRoot.delete(rootId)
-        if (completedNames.length > 0) publishChange(publishInvalidation, rootId, input.sourceToken)
+        if (changed) publishChange(publishInvalidation, rootId, input.sourceToken)
         return {
           ok: true,
           operation: plan.operation,
@@ -123,7 +136,7 @@ export function createBranchWorkspaceDependencyWriteService(
           completedNames,
         }
       } catch (error) {
-        if (completedNames.length > 0) publishChange(publishInvalidation, rootId, input.sourceToken)
+        if (changed) publishChange(publishInvalidation, rootId, input.sourceToken)
         return failure(plan, isAbortError(error) ? 'cancelled' : operationMessage(error), completedNames)
       } finally {
         if (activeByRoot.get(rootId) === controller) activeByRoot.delete(rootId)

@@ -146,12 +146,14 @@ export const en = {
   'workspace.branch-workspace.auxiliary-empty': 'No branch workspace dependencies are available.',
   'workspace.branch-workspace.dependency.add.title': 'Add branch workspace dependencies',
   'workspace.branch-workspace.dependency.add.description':
-    'Copy or link missing workspace-root entries into this branch workspace.',
+    'Copy or link workspace-root entries into this branch workspace. Same-named content is replaced after confirmation.',
   'workspace.branch-workspace.dependency.add.available': 'Available dependencies',
   'workspace.branch-workspace.dependency.add.available-description':
-    'Choose how to place each dependency whose target is currently missing.',
-  'workspace.branch-workspace.dependency.add.empty': 'No missing dependencies are available to add.',
+    'Choose how to place each dependency. Existing same-named targets will be replaced.',
+  'workspace.branch-workspace.dependency.add.empty': 'No dependencies are available to add.',
   'workspace.branch-workspace.dependency.add.confirm': 'Add dependencies',
+  'workspace.branch-workspace.dependency.add.replaces-target': 'Replaces existing content',
+  'workspace.branch-workspace.dependency.add.replace-confirm': 'Replace and add',
   'workspace.branch-workspace.dependency.remove.title': 'Remove branch workspace dependencies',
   'workspace.branch-workspace.dependency.remove.description':
     'Delete selected same-named entries from this branch workspace without changing their workspace-root sources.',
@@ -162,6 +164,7 @@ export const en = {
   'workspace.branch-workspace.dependency.remove.confirm': 'Remove dependencies',
   'workspace.branch-workspace.dependency.preview-title': 'Reviewed dependency changes',
   'workspace.branch-workspace.dependency.operation.add': 'Add',
+  'workspace.branch-workspace.dependency.operation.replace': 'Replace',
   'workspace.branch-workspace.dependency.operation.remove': 'Remove',
   'workspace.branch-workspace.dependency.approval.outside-root-source':
     'Allow selected sources that resolve outside the workspace',

@@ -67,6 +67,7 @@ export async function buildBranchWorkspaceDependencyPlan(
   request: BranchWorkspaceDependencyPlanRequest,
   dependencies: BranchWorkspaceDependencyPlanDependencies = {},
   signal?: AbortSignal,
+  pendingPlan?: BranchWorkspaceDependencyPlan,
 ): Promise<BranchWorkspaceDependencyPlanResult> {
   const read = await readBranchWorkspaceDependencyCandidates(
     rootId,
@@ -80,10 +81,36 @@ export async function buildBranchWorkspaceDependencyPlan(
   if (request.operation === 'add') {
     const entries: BranchWorkspaceDependencyAddPlan['entries'] = []
     for (const selection of [...request.entries].sort(compareName)) {
-      const candidate = byName.get(selection.name)
+      signal?.throwIfAborted()
+      let candidate = byName.get(selection.name)
+      if (!candidate) {
+        try {
+          candidate =
+            (await retainedSymlinkCandidate(read, selection, pendingPlan, dependencies, signal)) ?? undefined
+        } catch (error) {
+          if (isAbortError(error)) throw error
+          return {
+            ok: false,
+            message: operationMessage(error, 'workspace.branch-workspace.dependency.read-failed'),
+          }
+        }
+      }
       if (!candidate) return { ok: false, message: 'workspace.branch-workspace.dependency.unavailable' }
+      let targetFingerprint: string | undefined
       if (candidate.targetKind !== 'missing') {
-        return { ok: false, message: 'workspace.branch-workspace.dependency.target-exists' }
+        try {
+          targetFingerprint = await (dependencies.fingerprintEntry ?? fingerprintBranchWorkspaceEntry)(
+            read.rootId,
+            candidate.targetPath,
+            signal,
+          )
+        } catch (error) {
+          if (isAbortError(error)) throw error
+          return {
+            ok: false,
+            message: operationMessage(error, 'workspace.branch-workspace.dependency.read-failed'),
+          }
+        }
       }
       entries.push({
         name: candidate.name,
@@ -91,6 +118,8 @@ export async function buildBranchWorkspaceDependencyPlan(
         sourcePath: candidate.sourcePath,
         sourceKind: candidate.sourceKind,
         targetPath: candidate.targetPath,
+        targetKind: candidate.targetKind,
+        ...(targetFingerprint ? { targetFingerprint } : {}),
         outsideRoot: candidate.outsideRoot,
       })
     }
@@ -99,7 +128,9 @@ export async function buildBranchWorkspaceDependencyPlan(
       operation: 'add',
       branchWorkspaceId: request.branchWorkspaceId,
       entries,
-      requiredApprovals: entries.some((entry) => entry.outsideRoot) ? ['outside-root-source'] : [],
+      requiredApprovals: entries.some((entry) => entry.mode === 'copy' && entry.outsideRoot)
+        ? ['outside-root-source']
+        : [],
     })
     return { ok: true, plan }
   }
@@ -134,6 +165,40 @@ export async function buildBranchWorkspaceDependencyPlan(
     requiredApprovals: [],
   })
   return { ok: true, plan }
+}
+
+async function retainedSymlinkCandidate(
+  read: Extract<BranchWorkspaceDependencyReadResult, { ok: true }>,
+  selection: Extract<BranchWorkspaceDependencyPlanRequest, { operation: 'add' }>['entries'][number],
+  pendingPlan: BranchWorkspaceDependencyPlan | undefined,
+  dependencies: BranchWorkspaceDependencyPlanDependencies,
+  signal?: AbortSignal,
+): Promise<BranchWorkspaceDependencyCandidate | null> {
+  if (
+    selection.mode !== 'symlink' ||
+    pendingPlan?.operation !== 'add' ||
+    pendingPlan.rootId !== read.rootId ||
+    pendingPlan.branchWorkspaceId !== read.branchWorkspaceId
+  ) {
+    return null
+  }
+  const pendingEntry = pendingPlan.entries.find(
+    (entry) => entry.name === selection.name && entry.mode === 'symlink',
+  )
+  if (!pendingEntry) return null
+  const target = await (dependencies.inspectPath ?? inspectBranchWorkspacePath)(
+    read.rootId,
+    pendingEntry.targetPath,
+    signal,
+  )
+  return {
+    name: pendingEntry.name,
+    sourcePath: pendingEntry.sourcePath,
+    sourceKind: pendingEntry.sourceKind,
+    targetPath: pendingEntry.targetPath,
+    targetKind: target.exists ? target.kind : 'missing',
+    outsideRoot: pendingEntry.outsideRoot,
+  }
 }
 
 function withoutToken(plan: Omit<BranchWorkspaceDependencyPlan, 'token'>): BranchWorkspaceDependencyPlan {

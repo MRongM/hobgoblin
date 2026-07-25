@@ -291,6 +291,19 @@ describe('remote command scripts', () => {
     ])
     expect(existsSync(managedLink)).toBe(false)
     expect(readFileSync(sourceFile, 'utf8')).toBe('keep')
+
+    const missingSource = path.join(root, 'missing.env')
+    const danglingLink = path.join(branchRoot, 'missing.env')
+    await execa('sh', [
+      '-c',
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'materializeBranchWorkspaceSymlink',
+        rootPath: root,
+        sourcePath: missingSource,
+        targetPath: danglingLink,
+      }).script,
+    ])
+    expect(readlinkSync(danglingLink)).toBe(missingSource)
   })
 
   test('builds depth-one workspace marker discovery and path existence commands', () => {

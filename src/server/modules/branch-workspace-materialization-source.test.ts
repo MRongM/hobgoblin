@@ -185,6 +185,18 @@ describe('branch workspace local materialization source', () => {
     await expect(lstat(branchRoot)).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
+  test('creates a dangling symbolic link without requiring the source to exist', async () => {
+    const { root, branchRoot } = await createFixture()
+    const source = path.join(root, 'missing.env')
+    const target = path.join(branchRoot, 'missing.env')
+
+    await createBranchWorkspaceDirectory(root, branchRoot)
+    await materializeBranchWorkspaceSymlink(root, source, target)
+
+    await expect(readlink(target)).resolves.toBe(source)
+    await expect(lstat(target)).resolves.toMatchObject({})
+  })
+
   test('creates directories with the current managed prefix', async () => {
     const { root } = await createFixture()
     const branchRoot = path.join(root, 'hobgoblin-feature-auth')

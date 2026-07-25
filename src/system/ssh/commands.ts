@@ -648,8 +648,6 @@ function remoteBranchWorkspaceScript(command: RemoteBranchWorkspaceCommand): str
         `target_path = checked_path(${pythonString(command.targetPath)}, False)`,
         'if os.path.dirname(source_path) != root_path:',
         '    fail("workspace.branch-workspace.invalid-source")',
-        'if not os.path.lexists(source_path):',
-        '    fail("workspace.branch-workspace.source-missing")',
         'ensure_safe_parents(target_path)',
         'os.symlink(source_path, target_path)',
         'print(json.dumps({"ok": True}))',

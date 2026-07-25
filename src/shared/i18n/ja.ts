@@ -146,11 +146,13 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.auxiliary-empty': '選択できるブランチワークスペース依存項目はありません。',
   'workspace.branch-workspace.dependency.add.title': 'ブランチワークスペース依存項目を追加',
   'workspace.branch-workspace.dependency.add.description':
-    'ワークスペース直下の不足項目をコピーまたはシンボリックリンクで追加します。',
+    'ワークスペース直下の項目をコピーまたはシンボリックリンクで追加します。同名の既存内容は確認後に置き換えます。',
   'workspace.branch-workspace.dependency.add.available': '追加可能な依存項目',
-  'workspace.branch-workspace.dependency.add.available-description': '現在の配置先がない依存項目の配置方法を選びます。',
-  'workspace.branch-workspace.dependency.add.empty': '追加できる不足依存項目はありません。',
+  'workspace.branch-workspace.dependency.add.available-description': '依存項目の配置方法を選びます。同名の対象は置き換えます。',
+  'workspace.branch-workspace.dependency.add.empty': '追加できる依存項目はありません。',
   'workspace.branch-workspace.dependency.add.confirm': '依存項目を追加',
+  'workspace.branch-workspace.dependency.add.replaces-target': '既存内容を置換',
+  'workspace.branch-workspace.dependency.add.replace-confirm': '置換して追加',
   'workspace.branch-workspace.dependency.remove.title': 'ブランチワークスペース依存項目を削除',
   'workspace.branch-workspace.dependency.remove.description':
     'ワークスペース直下の元項目を変更せず、このブランチワークスペースの選択項目を削除します。',
@@ -161,6 +163,7 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.dependency.remove.confirm': '依存項目を削除',
   'workspace.branch-workspace.dependency.preview-title': '確認済みの依存項目変更',
   'workspace.branch-workspace.dependency.operation.add': '追加',
+  'workspace.branch-workspace.dependency.operation.replace': '置換',
   'workspace.branch-workspace.dependency.operation.remove': '削除',
   'workspace.branch-workspace.dependency.approval.outside-root-source':
     'ワークスペース外を参照する選択元を許可する',

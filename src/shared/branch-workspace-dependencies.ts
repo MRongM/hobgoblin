@@ -56,6 +56,8 @@ export interface BranchWorkspaceDependencyAddPlanEntry {
   sourcePath: string
   sourceKind: Exclude<BranchWorkspacePathKind, 'missing'>
   targetPath: string
+  targetKind: BranchWorkspacePathKind
+  targetFingerprint?: string
   outsideRoot: boolean
 }
 

@@ -57,7 +57,7 @@ export function BranchWorkspaceDependencyDialog({
   const [choices, setChoices] = useState<Record<string, MaterializationCandidateChoice>>({})
   const [removeNames, setRemoveNames] = useState<Set<string>>(() => new Set())
   const [approvals, setApprovals] = useState<BranchWorkspaceDependencyApproval[]>([])
-  const addable = useMemo(() => candidates.filter((candidate) => candidate.targetKind === 'missing'), [candidates])
+  const addable = candidates
   const removable = useMemo(() => candidates.filter((candidate) => candidate.targetKind !== 'missing'), [candidates])
 
   useEffect(() => {
@@ -85,6 +85,8 @@ export function BranchWorkspaceDependencyDialog({
   const nextRequest = request()
   const requiredApprovalsSatisfied =
     !plan || plan.requiredApprovals.every((approval) => approvals.includes(approval))
+  const replacesTargets =
+    plan?.operation === 'add' && plan.entries.some((entry) => entry.targetKind !== 'missing')
   const close = () => {
     if (pending) void onCancel()
     onOpenChange(false)
@@ -109,11 +111,19 @@ export function BranchWorkspaceDependencyDialog({
                 id: candidate.name,
                 label: candidate.name,
                 kind: candidate.sourceKind === 'directory' ? 'directory' : 'file',
-                annotation: candidate.outsideRoot ? (
-                  <span className="shrink-0 text-[10px] text-warning">
-                    {t('workspace.branch-workspace.outside-root')}
-                  </span>
-                ) : undefined,
+                annotation:
+                  candidate.targetKind !== 'missing' || candidate.outsideRoot ? (
+                    <span className="flex shrink-0 items-center gap-1 text-[10px]">
+                      {candidate.targetKind !== 'missing' ? (
+                        <span className="text-destructive">
+                          {t('workspace.branch-workspace.dependency.add.replaces-target')}
+                        </span>
+                      ) : null}
+                      {candidate.outsideRoot ? (
+                        <span className="text-warning">{t('workspace.branch-workspace.outside-root')}</span>
+                      ) : null}
+                    </span>
+                  ) : undefined,
               }))}
               choices={choices}
               onChoiceChange={(name, choice) => setChoices((current) => ({ ...current, [name]: choice }))}
@@ -153,7 +163,11 @@ export function BranchWorkspaceDependencyDialog({
                     {entry.name}
                   </span>
                   <span className="shrink-0 text-[10px] text-muted-foreground">
-                    {t(`workspace.branch-workspace.dependency.operation.${plan.operation}`)}
+                    {t(
+                      `workspace.branch-workspace.dependency.operation.${
+                        plan.operation === 'add' && entry.targetKind !== 'missing' ? 'replace' : plan.operation
+                      }`,
+                    )}
                   </span>
                 </div>
               ))}
@@ -207,11 +221,15 @@ export function BranchWorkspaceDependencyDialog({
             <Button
               type="button"
               data-action="confirm"
-              variant={plan.operation === 'remove' ? 'destructive' : 'default'}
+              variant={plan.operation === 'remove' || replacesTargets ? 'destructive' : 'default'}
               disabled={pending || !requiredApprovalsSatisfied}
               onClick={() => void confirm()}
             >
-              {t(`workspace.branch-workspace.dependency.${plan.operation}.confirm`)}
+              {t(
+                replacesTargets
+                  ? 'workspace.branch-workspace.dependency.add.replace-confirm'
+                  : `workspace.branch-workspace.dependency.${plan.operation}.confirm`,
+              )}
             </Button>
           )}
         </DialogFooter>

@@ -466,13 +466,7 @@ async function buildRepairPlan(
       return await planRepairRepository(manifest, member, dependencies, signal)
     }),
   )
-  const auxiliaryChecks = Promise.allSettled(
-    manifest.auxiliaryEntries.map(async (entry) => {
-      signal?.throwIfAborted()
-      return await planRepairAuxiliary(manifest, entry, dependencies, signal)
-    }),
-  )
-  const [plannedRepositories, plannedAuxiliaryEntries] = await Promise.all([repositoryChecks, auxiliaryChecks])
+  const plannedRepositories = await repositoryChecks
   const repositories: BranchWorkspaceRepositoryPlan[] = []
   for (const settled of plannedRepositories) {
     if (settled.status === 'rejected') throw settled.reason
@@ -481,17 +475,8 @@ async function buildRepairPlan(
     repositories.push(planned.repository)
   }
   const auxiliaryEntries: BranchWorkspaceAuxiliaryPlan[] = []
-  for (const settled of plannedAuxiliaryEntries) {
-    if (settled.status === 'rejected') throw settled.reason
-    const planned = settled.value
-    if (!planned.ok) return planned
-    auxiliaryEntries.push(planned.entry)
-  }
 
   const requiredApprovals: BranchWorkspaceApproval[] = []
-  if (auxiliaryEntries.some((entry) => !entry.satisfied && entry.outsideRoot)) {
-    requiredApprovals.push('outside-root-source')
-  }
   if (repositories.some((repository) => !repository.satisfied && repository.confirmationRequired)) {
     requiredApprovals.push('worktree-bootstrap')
   }
@@ -499,7 +484,6 @@ async function buildRepairPlan(
     requiredApprovals.push('replace-repository-dependencies')
   }
   const repositoryByName = new Map(repositories.map((repository) => [repository.repositoryName, repository]))
-  const auxiliaryByName = new Map(auxiliaryEntries.map((entry) => [entry.name, entry]))
   const repairedManifest: BranchWorkspaceManifest = {
     ...manifest,
     repositories: manifest.repositories.map((member) => ({
@@ -517,11 +501,7 @@ async function buildRepairPlan(
           }
         : {}),
     })),
-    auxiliaryEntries: manifest.auxiliaryEntries.map((entry) => ({
-      ...entry,
-      progress: auxiliaryByName.get(entry.name)?.satisfied ? 'complete' : 'pending',
-      lastError: undefined,
-    })),
+    auxiliaryEntries: [],
   }
   const steps: BranchWorkspacePlan['steps'] = [
     ...(!root.exists ? [{ id: 'directory', kind: 'create-directory' as const, label: manifest.directoryName }] : []),
@@ -545,28 +525,8 @@ async function buildRepairPlan(
         },
       ]
     }),
-    ...auxiliaryEntries.flatMap((entry) => {
-      if (entry.satisfied) return []
-      const createStep = {
-        id: `auxiliary:${entry.name}`,
-        kind: entry.mode === 'symlink' ? ('symlink-entry' as const) : ('copy-entry' as const),
-        label: entry.name,
-        entryName: entry.name,
-      }
-      return entry.action === 'replace-symlink'
-        ? [
-            {
-              id: `auxiliary-remove:${entry.name}`,
-              kind: 'remove-entry' as const,
-              label: entry.name,
-              entryName: entry.name,
-            },
-            createStep,
-          ]
-        : [createStep]
-    }),
   ]
-  if (steps.length === 0 && !manifest.operation) {
+  if (steps.length === 0 && !manifest.operation && manifest.auxiliaryEntries.length === 0) {
     return { ok: false, message: 'workspace.branch-workspace.nothing-to-repair' }
   }
   const planWithoutToken: Omit<BranchWorkspacePlan, 'token'> = {
@@ -695,58 +655,6 @@ function repairRepositoryPlan(
     confirmationRequired: false,
     satisfied,
     action: satisfied ? 'satisfied' : 'create-worktree',
-  }
-}
-
-async function planRepairAuxiliary(
-  manifest: BranchWorkspaceManifest,
-  entry: BranchWorkspaceManifest['auxiliaryEntries'][number],
-  dependencies: BranchWorkspacePlanDependencies,
-  signal?: AbortSignal,
-): Promise<{ ok: true; entry: BranchWorkspaceAuxiliaryPlan } | { ok: false; message: string }> {
-  const inspect = dependencies.inspectPath ?? inspectBranchWorkspacePath
-  const [source, target] = await Promise.all([
-    inspect(manifest.rootId, entry.sourcePath, signal).catch(() => null),
-    inspect(manifest.rootId, entry.targetPath, signal).catch(() => null),
-  ])
-  if (!target) return { ok: false, message: 'workspace.branch-workspace.read-failed' }
-  if (entry.mode === 'copy' && target.exists) {
-    if (target.kind === 'symlink') return { ok: false, message: 'workspace.branch-workspace.target-exists' }
-    if (entry.progress !== 'complete') {
-      return { ok: false, message: 'workspace.branch-workspace.target-exists' }
-    }
-    return { ok: true, entry: repairAuxiliaryPlan(entry, target, true, 'satisfied') }
-  }
-  if (entry.mode === 'symlink' && target.exists) {
-    if (target.kind !== 'symlink') return { ok: false, message: 'workspace.branch-workspace.target-exists' }
-    if (target.linkTarget && sameHostPath(manifest.rootId, target.linkTarget, entry.sourcePath)) {
-      return { ok: true, entry: repairAuxiliaryPlan(entry, source, true, 'satisfied') }
-    }
-  }
-  if (!source?.exists || !source.directChild) {
-    return { ok: false, message: 'workspace.branch-workspace.source-unavailable' }
-  }
-  return {
-    ok: true,
-    entry: repairAuxiliaryPlan(entry, source, false, target.exists ? 'replace-symlink' : 'materialize'),
-  }
-}
-
-function repairAuxiliaryPlan(
-  entry: BranchWorkspaceManifest['auxiliaryEntries'][number],
-  inspection: Awaited<ReturnType<typeof inspectBranchWorkspacePath>> | null,
-  satisfied: boolean,
-  action: NonNullable<BranchWorkspaceAuxiliaryPlan['action']>,
-): BranchWorkspaceAuxiliaryPlan {
-  return {
-    name: entry.name,
-    mode: entry.mode,
-    sourcePath: entry.sourcePath,
-    targetPath: entry.targetPath,
-    ...(inspection?.resolvedPath ? { resolvedSourcePath: inspection.resolvedPath } : {}),
-    outsideRoot: inspection?.outsideRoot ?? false,
-    satisfied,
-    action,
   }
 }
 

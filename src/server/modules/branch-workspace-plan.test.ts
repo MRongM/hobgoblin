@@ -615,6 +615,30 @@ describe('branch workspace repair planner', () => {
     })
   })
 
+  test('releases retained auxiliary intent without inspecting dependency paths', async () => {
+    const current = manifestWithAuxiliaryEntries()
+    current.auxiliaryEntries = [
+      { ...current.auxiliaryEntries[0]!, progress: 'pending' },
+      { ...current.auxiliaryEntries[1]!, progress: 'failed', lastError: 'copy failed' },
+    ]
+    const deps = repairDependencies(current)
+
+    await expect(
+      buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, deps),
+    ).resolves.toMatchObject({
+      ok: true,
+      plan: {
+        operation: 'repair',
+        auxiliaryEntries: [],
+        manifest: { auxiliaryEntries: [] },
+        requiredApprovals: [],
+        steps: [],
+      },
+    })
+    expect(deps.inspectPath).toHaveBeenCalledTimes(1)
+    expect(deps.inspectPath).toHaveBeenCalledWith(ROOT, current.path, undefined)
+  })
+
   test('plans exact approved replacement for persisted repository dependency conflicts', async () => {
     const current = existingManifest()
     current.repositories[0] = {
@@ -741,7 +765,7 @@ describe('branch workspace repair planner', () => {
     expect(first.ok && second.ok && first.plan.token).not.toBe(second.ok && second.plan.token)
   })
 
-  test('repairs only missing roots, worktrees, links, and copies at their recorded paths', async () => {
+  test('repairs only missing roots and repository worktrees while releasing auxiliary intent', async () => {
     const current = manifestWithAuxiliaryEntries()
     const deps = dependencies({
       [path.join(ROOT, 'api')]: snapshot(branch('main'), branch(BRANCH)),
@@ -768,17 +792,21 @@ describe('branch workspace repair planner', () => {
       plan: {
         operation: 'repair',
         requiredApprovals: [],
+        auxiliaryEntries: [],
+        manifest: { auxiliaryEntries: [] },
         steps: [
           { kind: 'create-directory', label: 'goblin-feature-auth' },
           { kind: 'create-worktree', repositoryName: 'api' },
-          { kind: 'symlink-entry', entryName: '.env' },
-          { kind: 'copy-entry', entryName: 'README.md' },
         ],
       },
     })
+    expect(deps.inspectPath).not.toHaveBeenCalledWith(ROOT, path.join(ROOT, '.env'), undefined)
+    expect(deps.inspectPath).not.toHaveBeenCalledWith(ROOT, path.join(ROOT, 'README.md'), undefined)
+    expect(deps.inspectPath).not.toHaveBeenCalledWith(ROOT, path.join(current.path, '.env'), undefined)
+    expect(deps.inspectPath).not.toHaveBeenCalledWith(ROOT, path.join(current.path, 'README.md'), undefined)
   })
 
-  test('refuses to overwrite a copied target or claim a worktree checked out elsewhere', async () => {
+  test('ignores occupied auxiliary targets but refuses to claim a worktree checked out elsewhere', async () => {
     const current = manifestWithAuxiliaryEntries()
     current.auxiliaryEntries[1] = { ...current.auxiliaryEntries[1]!, progress: 'failed' }
     const occupied = dependencies({
@@ -806,7 +834,10 @@ describe('branch workspace repair planner', () => {
     })
     await expect(
       buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, occupied),
-    ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.target-exists' })
+    ).resolves.toMatchObject({
+      ok: true,
+      plan: { auxiliaryEntries: [], manifest: { auxiliaryEntries: [] }, steps: [{ kind: 'create-worktree' }] },
+    })
 
     const elsewhere = dependencies({
       [path.join(ROOT, 'api')]: snapshot(branch('main'), branch(BRANCH, path.join(ROOT, 'elsewhere'))),

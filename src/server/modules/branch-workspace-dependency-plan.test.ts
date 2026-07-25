@@ -2,7 +2,6 @@ import { describe, expect, test, vi } from 'vitest'
 import {
   buildBranchWorkspaceDependencyPlan,
   readBranchWorkspaceDependencyCandidates,
-  type BranchWorkspaceDependencyPlanDependencies,
 } from '#/server/modules/branch-workspace-dependency-plan.ts'
 import type { BranchWorkspaceReadResult, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 
@@ -50,7 +49,7 @@ describe('branch workspace dependency plans', () => {
     })
   })
 
-  test('builds an add plan only for missing targets and requires outside-root approval', async () => {
+  test('builds an add plan for a missing target and requires outside-root approval only for copy', async () => {
     const dependencies = planDependencies()
     const result = await buildBranchWorkspaceDependencyPlan(
       ROOT,
@@ -77,6 +76,7 @@ describe('branch workspace dependency plans', () => {
             sourcePath: '/workspace/.env',
             sourceKind: 'file',
             targetPath: `${TARGET_ROOT}/.env`,
+            targetKind: 'missing',
             outsideRoot: true,
           },
         ],
@@ -85,18 +85,121 @@ describe('branch workspace dependency plans', () => {
     expect(dependencies.fingerprintEntry).not.toHaveBeenCalled()
   })
 
-  test('rejects adding an occupied target', async () => {
+  test('builds a fingerprint-bound replacement plan for an occupied target', async () => {
+    const dependencies = planDependencies()
+    const result = await buildBranchWorkspaceDependencyPlan(
+      ROOT,
+      {
+        operation: 'add',
+        branchWorkspaceId: 'branch-1',
+        entries: [{ name: 'config', mode: 'symlink' }],
+      },
+      dependencies,
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        token: expect.stringMatching(/^sha256:/),
+        operation: 'add',
+        requiredApprovals: [],
+        entries: [
+          {
+            name: 'config',
+            mode: 'symlink',
+            sourcePath: '/workspace/config',
+            sourceKind: 'directory',
+            targetPath: `${TARGET_ROOT}/config`,
+            targetKind: 'directory',
+            targetFingerprint: 'fingerprint:config',
+            outsideRoot: false,
+          },
+        ],
+      },
+    })
+    expect(dependencies.fingerprintEntry).toHaveBeenCalledWith(ROOT, `${TARGET_ROOT}/config`, undefined)
+  })
+
+  test('does not require outside-root approval for symbolic-link mode', async () => {
+    const result = await buildBranchWorkspaceDependencyPlan(
+      ROOT,
+      {
+        operation: 'add',
+        branchWorkspaceId: 'branch-1',
+        entries: [{ name: '.env', mode: 'symlink' }],
+      },
+      planDependencies(),
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        requiredApprovals: [],
+        entries: [{ name: '.env', mode: 'symlink', targetKind: 'missing', outsideRoot: true }],
+      },
+    })
+  })
+
+  test('revalidates a disappeared symbolic-link source only from the pending server plan', async () => {
+    const request = {
+      operation: 'add' as const,
+      branchWorkspaceId: 'branch-1',
+      entries: [{ name: 'config', mode: 'symlink' as const }],
+    }
+    const dependencies = planDependencies()
+    const initial = await buildBranchWorkspaceDependencyPlan(ROOT, request, dependencies)
+    if (!initial.ok) throw new Error('Expected the initial plan to succeed')
+    dependencies.readSnapshot.mockResolvedValue({
+      ok: true,
+      rootId: ROOT,
+      items: [workspace()],
+      auxiliaryCandidates: [],
+    })
+
     await expect(
-      buildBranchWorkspaceDependencyPlan(
-        ROOT,
-        {
-          operation: 'add',
-          branchWorkspaceId: 'branch-1',
-          entries: [{ name: 'config', mode: 'symlink' }],
-        },
-        planDependencies(),
-      ),
-    ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.dependency.target-exists' })
+      buildBranchWorkspaceDependencyPlan(ROOT, request, dependencies, undefined, initial.plan),
+    ).resolves.toEqual(initial)
+
+    const copyDependencies = planDependencies()
+    const copyRequest = {
+      operation: 'add' as const,
+      branchWorkspaceId: 'branch-1',
+      entries: [{ name: '.env', mode: 'copy' as const }],
+    }
+    const copyInitial = await buildBranchWorkspaceDependencyPlan(ROOT, copyRequest, copyDependencies)
+    if (!copyInitial.ok) throw new Error('Expected the initial copy plan to succeed')
+    copyDependencies.readSnapshot.mockResolvedValue({
+      ok: true,
+      rootId: ROOT,
+      items: [workspace()],
+      auxiliaryCandidates: [],
+    })
+
+    await expect(
+      buildBranchWorkspaceDependencyPlan(ROOT, copyRequest, copyDependencies, undefined, copyInitial.plan),
+    ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.dependency.unavailable' })
+  })
+
+  test('reports a retained symbolic-link target inspection failure through the plan result', async () => {
+    const request = {
+      operation: 'add' as const,
+      branchWorkspaceId: 'branch-1',
+      entries: [{ name: '.env', mode: 'symlink' as const }],
+    }
+    const dependencies = planDependencies()
+    const initial = await buildBranchWorkspaceDependencyPlan(ROOT, request, dependencies)
+    if (!initial.ok) throw new Error('Expected the initial plan to succeed')
+    dependencies.readSnapshot.mockResolvedValue({
+      ok: true,
+      rootId: ROOT,
+      items: [workspace()],
+      auxiliaryCandidates: [],
+    })
+    dependencies.inspectPath.mockRejectedValue(new Error('workspace.branch-workspace.dependency.read-failed'))
+
+    await expect(
+      buildBranchWorkspaceDependencyPlan(ROOT, request, dependencies, undefined, initial.plan),
+    ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.dependency.read-failed' })
   })
 
   test('builds a remove plan with a fingerprint bound to each present target', async () => {
@@ -148,7 +251,7 @@ describe('branch workspace dependency plans', () => {
   })
 })
 
-function planDependencies(item: BranchWorkspaceSnapshot = workspace()): Required<BranchWorkspaceDependencyPlanDependencies> {
+function planDependencies(item: BranchWorkspaceSnapshot = workspace()) {
   const readSnapshot = vi.fn(async (): Promise<BranchWorkspaceReadResult> => ({
     ok: true,
     rootId: ROOT,

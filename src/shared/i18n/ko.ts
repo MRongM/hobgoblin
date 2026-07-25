@@ -139,11 +139,13 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.auxiliary-empty': '선택할 수 있는 브랜치 작업공간 의존 항목이 없습니다.',
   'workspace.branch-workspace.dependency.add.title': '브랜치 작업공간 의존 항목 추가',
   'workspace.branch-workspace.dependency.add.description':
-    '작업공간 루트의 누락된 항목을 복사하거나 심볼릭 링크로 추가합니다.',
+    '작업공간 루트의 항목을 복사하거나 심볼릭 링크로 추가합니다. 같은 이름의 기존 내용은 확인 후 대체합니다.',
   'workspace.branch-workspace.dependency.add.available': '추가 가능한 의존 항목',
-  'workspace.branch-workspace.dependency.add.available-description': '대상이 없는 의존 항목의 배치 방식을 선택하세요.',
-  'workspace.branch-workspace.dependency.add.empty': '추가할 수 있는 누락 의존 항목이 없습니다.',
+  'workspace.branch-workspace.dependency.add.available-description': '의존 항목의 배치 방식을 선택하세요. 같은 이름의 대상은 대체됩니다.',
+  'workspace.branch-workspace.dependency.add.empty': '추가할 수 있는 의존 항목이 없습니다.',
   'workspace.branch-workspace.dependency.add.confirm': '의존 항목 추가',
+  'workspace.branch-workspace.dependency.add.replaces-target': '기존 내용 대체',
+  'workspace.branch-workspace.dependency.add.replace-confirm': '대체 후 추가',
   'workspace.branch-workspace.dependency.remove.title': '브랜치 작업공간 의존 항목 제거',
   'workspace.branch-workspace.dependency.remove.description':
     '작업공간 루트의 원본은 변경하지 않고 이 브랜치 작업공간의 선택 항목을 삭제합니다.',
@@ -154,6 +156,7 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.dependency.remove.confirm': '의존 항목 제거',
   'workspace.branch-workspace.dependency.preview-title': '검토한 의존 항목 변경',
   'workspace.branch-workspace.dependency.operation.add': '추가',
+  'workspace.branch-workspace.dependency.operation.replace': '대체',
   'workspace.branch-workspace.dependency.operation.remove': '제거',
   'workspace.branch-workspace.dependency.approval.outside-root-source':
     '작업공간 외부를 가리키는 선택 원본 허용',

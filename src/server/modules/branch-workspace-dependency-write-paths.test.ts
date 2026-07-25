@@ -28,11 +28,13 @@ describe('branch workspace dependency write service', () => {
     const plan = addPlan()
     const buildPlan = vi.fn(async () => ({ ok: true as const, plan }))
     const copyEntry = vi.fn(async () => void events.push('copy:.env'))
+    const removeEntry = vi.fn(async () => void events.push('remove:config'))
     const materializeSymlink = vi.fn(async () => void events.push('symlink:config'))
     const publishInvalidation = vi.fn()
     const service = createBranchWorkspaceDependencyWriteService({
       buildPlan,
       copyEntry,
+      removeEntry,
       materializeSymlink,
       publishInvalidation,
     })
@@ -47,7 +49,7 @@ describe('branch workspace dependency write service', () => {
       completedNames: ['.env', 'config'],
     })
 
-    expect(events).toEqual(['copy:.env', 'symlink:config'])
+    expect(events).toEqual(['copy:.env', 'remove:config', 'symlink:config'])
     expect(copyEntry).toHaveBeenCalledWith(ROOT, '/workspace/.env', `${TARGET_ROOT}/.env`, expect.any(AbortSignal))
     expect(materializeSymlink).toHaveBeenCalledWith(
       ROOT,
@@ -55,6 +57,7 @@ describe('branch workspace dependency write service', () => {
       `${TARGET_ROOT}/config`,
       expect.any(AbortSignal),
     )
+    expect(buildPlan).toHaveBeenNthCalledWith(2, ROOT, addRequest, undefined, expect.any(AbortSignal), plan)
     expect(publishInvalidation).toHaveBeenCalledWith(ROOT, 'renderer-1')
   })
 
@@ -118,6 +121,7 @@ describe('branch workspace dependency write service', () => {
   test('stops on the first failure, reports partial completion, and still invalidates', async () => {
     const plan = addPlan()
     const copyEntry = vi.fn(async () => undefined)
+    const removeEntry = vi.fn(async () => undefined)
     const materializeSymlink = vi.fn(async () => {
       throw new Error('link failed')
     })
@@ -125,6 +129,7 @@ describe('branch workspace dependency write service', () => {
     const service = createBranchWorkspaceDependencyWriteService({
       buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
       copyEntry,
+      removeEntry,
       materializeSymlink,
       publishInvalidation,
     })
@@ -137,6 +142,39 @@ describe('branch workspace dependency write service', () => {
       branchWorkspaceId: 'branch-1',
       completedNames: ['.env'],
     })
+    expect(publishInvalidation).toHaveBeenCalledWith(ROOT)
+  })
+
+  test('invalidates a replacement removal when materialization fails before completion', async () => {
+    const plan = addPlan({ entries: [addPlan().entries[1]!] })
+    const request: BranchWorkspaceDependencyPlanRequest = {
+      operation: 'add',
+      branchWorkspaceId: 'branch-1',
+      entries: [{ name: 'config', mode: 'symlink' }],
+    }
+    const events: string[] = []
+    const removeEntry = vi.fn(async () => void events.push('remove:config'))
+    const materializeSymlink = vi.fn(async () => {
+      events.push('symlink:config')
+      throw new Error('link failed')
+    })
+    const publishInvalidation = vi.fn()
+    const service = createBranchWorkspaceDependencyWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      removeEntry,
+      materializeSymlink,
+      publishInvalidation,
+    })
+    await service.plan(ROOT, request)
+
+    await expect(service.execute(ROOT, { planToken: plan.token, approvals: [] })).resolves.toEqual({
+      ok: false,
+      message: 'link failed',
+      operation: 'add',
+      branchWorkspaceId: 'branch-1',
+      completedNames: [],
+    })
+    expect(events).toEqual(['remove:config', 'symlink:config'])
     expect(publishInvalidation).toHaveBeenCalledWith(ROOT)
   })
 
@@ -187,6 +225,7 @@ function addPlan(overrides: Partial<BranchWorkspaceDependencyAddPlan> = {}): Bra
         sourcePath: '/workspace/.env',
         sourceKind: 'file',
         targetPath: `${TARGET_ROOT}/.env`,
+        targetKind: 'missing',
         outsideRoot: false,
       },
       {
@@ -195,6 +234,8 @@ function addPlan(overrides: Partial<BranchWorkspaceDependencyAddPlan> = {}): Bra
         sourcePath: '/workspace/config',
         sourceKind: 'directory',
         targetPath: `${TARGET_ROOT}/config`,
+        targetKind: 'directory',
+        targetFingerprint: 'fingerprint:config',
         outsideRoot: false,
       },
     ],
