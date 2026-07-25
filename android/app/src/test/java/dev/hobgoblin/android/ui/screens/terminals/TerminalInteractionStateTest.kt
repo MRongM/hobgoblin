@@ -5,6 +5,7 @@ import dev.hobgoblin.android.terminals.TerminalSessionRecord
 import dev.hobgoblin.android.terminals.TerminalSessionState
 import dev.hobgoblin.android.terminals.TerminalSessionStatus
 import dev.hobgoblin.android.terminals.TerminalDisconnectedReason
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -61,11 +62,11 @@ class TerminalInteractionStateTest {
     fun `unavailable input state explains why send is disabled`() {
         assertEquals("Connecting to terminal...", terminalInputUnavailableMessage(TerminalSessionState.Connecting))
         assertEquals(
-            "Terminal disconnected. Reconnect or return to diagnostics.",
+            "Terminal disconnected. Reconnect or edit the host.",
             terminalInputUnavailableMessage(TerminalSessionState.Exited("session-1")),
         )
         assertEquals(
-            "Terminal disconnected: Android service stopped. Reconnect or return to diagnostics.",
+            "Terminal disconnected: Android service stopped. Reconnect or edit the host.",
             terminalInputUnavailableMessage(
                 TerminalSessionState.Disconnected(
                     sessionId = "session-1",
@@ -74,7 +75,7 @@ class TerminalInteractionStateTest {
             ),
         )
         assertEquals(
-            "Terminal disconnected: SSH disconnected - connection lost. Reconnect or return to diagnostics.",
+            "Terminal disconnected: SSH disconnected - connection lost. Reconnect or edit the host.",
             terminalInputUnavailableMessage(
                 TerminalSessionState.Disconnected(
                     sessionId = "session-1",
@@ -96,7 +97,7 @@ class TerminalInteractionStateTest {
 
         assertEquals("last output", terminalViewportText(disconnected))
         assertEquals(
-            "Terminal disconnected: Android service stopped. Reconnect or return to diagnostics.",
+            "Terminal disconnected: Android service stopped. Reconnect or edit the host.",
             terminalSessionBannerMessage(disconnected),
         )
     }
@@ -141,7 +142,7 @@ class TerminalInteractionStateTest {
         )
 
         assertEquals(
-            "Copy failed.\nTerminal disconnected: Android service stopped. Reconnect or return to diagnostics.",
+            "Copy failed.\nTerminal disconnected: Android service stopped. Reconnect or edit the host.",
             terminalViewportBannerMessage(
                 state = disconnected,
                 notice = "Copy failed.",
@@ -210,7 +211,7 @@ class TerminalInteractionStateTest {
             terminalCommandInputPlaceholder(TerminalSessionState.Connected("session-1", "", 80, 24)),
         )
         assertEquals(
-            "Terminal disconnected: SSH disconnected. Reconnect or return to diagnostics.",
+            "Terminal disconnected: SSH disconnected. Reconnect or edit the host.",
             terminalCommandInputPlaceholder(
                 TerminalSessionState.Disconnected(
                     sessionId = "session-1",
@@ -334,14 +335,30 @@ class TerminalInteractionStateTest {
     }
 
     @Test
-    fun `top bar is hidden while terminal is maximized`() {
-        assertTrue(TerminalDefaultMaximized)
-        assertTrue(terminalTopBarVisible(terminalMaximized = false))
-        assertFalse(terminalTopBarVisible(terminalMaximized = true))
-        assertEquals("Maximize", terminalMaximizeActionLabel(terminalMaximized = false))
-        assertEquals("Restore", terminalMaximizeActionLabel(terminalMaximized = true))
-        assertTrue(terminalRestoreInlineActionVisible(terminalMaximized = true))
-        assertFalse(terminalRestoreInlineActionVisible(terminalMaximized = false))
+    fun `focus mode is explicit temporary presentation state`() {
+        assertFalse(TerminalDefaultFocusMode)
+        assertTrue(terminalChromeVisible(focusMode = false))
+        assertFalse(terminalChromeVisible(focusMode = true))
+        assertEquals("Focus", terminalFocusActionLabel(focusMode = false))
+        assertEquals("Exit focus", terminalFocusActionLabel(focusMode = true))
+        assertFalse(terminalFocusExitHandleVisible(focusMode = false))
+        assertTrue(terminalFocusExitHandleVisible(focusMode = true))
+        assertFalse(terminalBackExitsFocus(focusMode = false))
+        assertTrue(terminalBackExitsFocus(focusMode = true))
+    }
+
+    @Test
+    fun `terminal screen groups ordinary controls into a command deck`() {
+        val source = listOf(
+            File("src/main/java/dev/hobgoblin/android/ui/screens/terminals/TerminalScreen.kt"),
+            File("app/src/main/java/dev/hobgoblin/android/ui/screens/terminals/TerminalScreen.kt"),
+            File("android/app/src/main/java/dev/hobgoblin/android/ui/screens/terminals/TerminalScreen.kt"),
+        ).firstOrNull(File::isFile)?.readText() ?: error("TerminalScreen.kt not found")
+
+        assertTrue(source.contains("private fun TerminalCommandDeck("))
+        assertTrue(source.contains("terminalChromeVisible(focusMode)"))
+        assertTrue(source.contains("terminalFocusExitHandleVisible(focusMode)"))
+        assertTrue(source.contains("text = \"Exit focus\""))
     }
 
     @Test

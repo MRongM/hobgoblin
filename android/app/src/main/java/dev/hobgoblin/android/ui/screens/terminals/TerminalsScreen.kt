@@ -20,9 +20,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import dev.hobgoblin.android.data.ManualItemOrderPolicy
+import dev.hobgoblin.android.domain.ssh.RemoteRepositoryProfile
+import dev.hobgoblin.android.domain.ssh.SshHostProfile
 import dev.hobgoblin.android.terminals.TerminalSessionRecord
 import dev.hobgoblin.android.ui.components.ManualReorderHandle
 import dev.hobgoblin.android.ui.components.ManualReorderState
@@ -35,13 +38,53 @@ internal fun terminalOverviewTitle(session: TerminalSessionRecord): String =
         session.terminalId?.let { "terminal-$it" } ?: "Host terminal"
     }
 
-internal fun terminalOverviewContext(session: TerminalSessionRecord): String = session.targetLabel
-
 internal fun terminalOverviewStatus(session: TerminalSessionRecord): String = session.status.name.lowercase()
+
+internal data class TerminalOverviewSource(
+    val contextLabel: String,
+    val locationLabel: String,
+    val path: String,
+)
+
+internal fun terminalOverviewSource(
+    session: TerminalSessionRecord,
+    hosts: List<SshHostProfile>,
+    repositories: List<RemoteRepositoryProfile>,
+): TerminalOverviewSource {
+    val hostReference = session.hostId.trim().substringBefore("/")
+    val host = hosts.firstOrNull { candidate ->
+        candidate.id == session.hostId || candidate.subtitle == hostReference
+    }
+    val repository = session.repositoryId?.let { repositoryId ->
+        repositories.firstOrNull { it.id == repositoryId }
+    }
+    val path = terminalSessionRemotePath(session.remotePath)
+    val projectRoot = session.repositoryRemotePath
+        ?.let(::terminalSessionRemotePath)
+        ?: repository?.remotePath?.let(::terminalSessionRemotePath)
+    val projectLabel = when {
+        session.repositoryId == null -> "Host terminal"
+        repository != null -> repository.title
+        else -> "Project unavailable"
+    }
+    val locationLabel = when {
+        session.repositoryId == null -> "Host directory"
+        projectRoot == path -> "Project root"
+        repository?.isGitRepository == true -> "Branch directory"
+        else -> "Workspace directory"
+    }
+    return TerminalOverviewSource(
+        contextLabel = "${host?.title ?: hostReference.ifBlank { "Host unavailable" }} · $projectLabel",
+        locationLabel = locationLabel,
+        path = path,
+    )
+}
 
 @Composable
 fun TerminalsScreen(
     sessions: List<TerminalSessionRecord>,
+    hosts: List<SshHostProfile>,
+    repositories: List<RemoteRepositoryProfile>,
     onOpenTerminalSession: (TerminalSessionRecord) -> Unit,
     initialManualOrder: List<String> = emptyList(),
     onSaveManualOrder: (List<String>) -> Unit = {},
@@ -95,6 +138,7 @@ fun TerminalsScreen(
             TerminalOverviewRow(
                 modifier = Modifier.manualReorderItem(reorderState, session.id),
                 session = session,
+                source = terminalOverviewSource(session, hosts, repositories),
                 reorderState = reorderState,
                 onOpen = { onOpenTerminalSession(session) },
             )
@@ -106,6 +150,7 @@ fun TerminalsScreen(
 private fun TerminalOverviewRow(
     modifier: Modifier,
     session: TerminalSessionRecord,
+    source: TerminalOverviewSource,
     reorderState: ManualReorderState,
     onOpen: () -> Unit,
 ) {
@@ -144,13 +189,34 @@ private fun TerminalOverviewRow(
                 )
             }
             Text(
-                terminalOverviewContext(session),
+                source.contextLabel,
                 modifier = Modifier.fillMaxWidth(),
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "${source.locationLabel} ·",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                )
+                Text(
+                    source.path,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontFamily = FontFamily.Monospace,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             TerminalSessionIdentityDetails(session = session)
             Row(
                 modifier = Modifier.fillMaxWidth(),

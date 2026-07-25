@@ -9,6 +9,13 @@ import dev.hobgoblin.android.domain.ssh.SshHostProfile
 
 class AddHostScreenStateTest {
     @Test
+    fun `saved host edit always exposes connectivity diagnostics`() {
+        assertFalse(shouldShowSavedHostDiagnostics(initialHost = null))
+        assertTrue(shouldShowSavedHostDiagnostics(host(identityRefId = null)))
+        assertTrue(shouldShowSavedHostDiagnostics(host(identityRefId = "identity-1")))
+    }
+
+    @Test
     fun `new hosts default to root user while edited hosts keep existing user`() {
         assertEquals("root", initialHostUser(null))
         assertEquals(
@@ -78,4 +85,12 @@ class AddHostScreenStateTest {
         assertTrue(isLatestConnectionTest(requestGeneration = 3, currentGeneration = 3))
         assertFalse(isLatestConnectionTest(requestGeneration = 2, currentGeneration = 3))
     }
+
+    private fun host(identityRefId: String?): SshHostProfile =
+        SshHostProfile.create(
+            alias = "Dev",
+            host = "example.test",
+            user = "dev",
+            identityRefId = identityRefId,
+        )
 }

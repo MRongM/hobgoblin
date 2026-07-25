@@ -69,7 +69,7 @@ class AppRouteTest {
             remotePath = "/srv/app-feature",
             repositoryId = "repo-1",
         )
-        val diagnostic = AppRoute.Terminal(hostId = "host-1", remotePath = "/srv")
+        val hostTerminal = AppRoute.Terminal(hostId = "host-1", remotePath = "/srv")
 
         assertEquals(AppRoute.Hosts, terminalReturnRoute(temporary, resolvedHostId = "host-1", temporary = true))
         assertEquals(
@@ -77,8 +77,8 @@ class AppRouteTest {
             terminalReturnRoute(project, resolvedHostId = "host-1", temporary = false),
         )
         assertEquals(
-            AppRoute.Diagnostics("host-1"),
-            terminalReturnRoute(diagnostic, resolvedHostId = "host-1", temporary = false),
+            AppRoute.EditHost("host-1"),
+            terminalReturnRoute(hostTerminal, resolvedHostId = "host-1", temporary = false),
         )
     }
 

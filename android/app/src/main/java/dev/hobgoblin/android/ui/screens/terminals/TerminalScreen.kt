@@ -40,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,9 +48,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextRange
@@ -62,6 +65,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import dev.hobgoblin.android.domain.ssh.RemoteTarget
 import dev.hobgoblin.android.domain.ssh.SshHostProfile
+import dev.hobgoblin.android.data.TerminalAppearance
 import dev.hobgoblin.android.notifications.NotificationPermissionPolicy
 import dev.hobgoblin.android.terminals.TerminalForegroundBridge
 import dev.hobgoblin.android.terminals.TerminalSessionManager
@@ -70,7 +74,6 @@ import dev.hobgoblin.android.terminals.TerminalSessionState
 import dev.hobgoblin.android.terminals.TerminalSessionStatus
 import dev.hobgoblin.android.ui.screens.terminals.terminalWorkspaceCreatedSessions
 import dev.hobgoblin.android.terminals.toTerminalSessionState
-import dev.hobgoblin.android.ui.theme.HobgoblinColors
 import dev.hobgoblin.android.ui.theme.HobgoblinSpacing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -81,6 +84,7 @@ internal val TerminalActionButtonHeight = 36.dp
 private val TerminalSwitchArrowButtonMinWidth = 38.dp
 private val TerminalSwitchArrowFontSize = 18.sp
 private val TerminalCommandInputShape = RoundedCornerShape(6.dp)
+private val LocalTerminalPalette = staticCompositionLocalOf { terminalPalette(TerminalAppearance.Dark) }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -96,6 +100,8 @@ fun TerminalScreen(
     terminalForegroundBridge: TerminalForegroundBridge,
     fitToScreen: Boolean,
     onFitToScreenChange: (Boolean) -> Unit,
+    appearance: TerminalAppearance,
+    onAppearanceChange: (TerminalAppearance) -> Unit,
     onSwitchGlobalTerminal: (TerminalSessionRecord) -> Unit,
     onBack: (String?) -> Unit,
 ) {
@@ -105,7 +111,9 @@ fun TerminalScreen(
     }
     var terminalSessions by remember { mutableStateOf(terminalSessionManager.sessions()) }
     var ctrlModifierActive by remember { mutableStateOf(false) }
-    var terminalMaximized by remember { mutableStateOf(TerminalDefaultMaximized) }
+    var focusMode by remember(host.id, remotePath, repositoryId, terminalSessionId) {
+        mutableStateOf(TerminalDefaultFocusMode)
+    }
     var terminalFontSizeSp by remember { mutableStateOf(TerminalDefaultFontSizeSp) }
     var commandInputVisible by remember { mutableStateOf(TerminalCommandInputDefaultVisible) }
     var isSendingCommandInput by remember { mutableStateOf(false) }
@@ -426,10 +434,11 @@ fun TerminalScreen(
     val topBarInfo = terminalStatusLine(host = host, remotePath = remotePath, state = terminalState)
     val emulatorController = activeSessionId?.let { terminalSessionManager.emulatorController(it) }
     val commandInputEnabled = terminalCommandInputEnabled(terminalState) && !isSendingCommandInput
+    val palette = terminalPalette(appearance)
 
     val navigateBack = {
-        if (terminalMaximized) {
-            terminalMaximized = false
+        if (terminalBackExitsFocus(focusMode)) {
+            focusMode = false
         } else {
             onBack(activeSessionId)
         }
@@ -441,7 +450,7 @@ fun TerminalScreen(
 
     Scaffold(
         topBar = {
-            if (terminalTopBarVisible(terminalMaximized)) TopAppBar(
+            if (terminalChromeVisible(focusMode)) TopAppBar(
                 modifier = Modifier.height(56.dp),
                 title = {
                     Column {
@@ -462,7 +471,7 @@ fun TerminalScreen(
                 },
                 navigationIcon = {
                     TextButton(onClick = { navigateBack() }) {
-                        Text("BACK")
+                        Text("Back")
                     }
                 },
                 actions = {
@@ -486,9 +495,18 @@ fun TerminalScreen(
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text(terminalMaximizeActionLabel(terminalMaximized)) },
+                                text = {
+                                    Text("Use ${terminalAppearanceToggleLabel(appearance).lowercase()} appearance")
+                                },
                                 onClick = {
-                                    terminalMaximized = !terminalMaximized
+                                    onAppearanceChange(nextTerminalAppearance(appearance))
+                                    terminalActionMenuExpanded = false
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(terminalFocusActionLabel(focusMode)) },
+                                onClick = {
+                                    focusMode = !focusMode
                                     terminalActionMenuExpanded = false
                                 },
                             )
@@ -563,108 +581,97 @@ fun TerminalScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(HobgoblinColors.TerminalBackground)
-                    .imePadding()
-                    .padding(HobgoblinSpacing.Md),
-                verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm),
-            ) {
-                AndroidTerminalViewport(
-                    modifier = Modifier.weight(1f),
-                    state = terminalState,
-                    emulatorController = emulatorController,
-                    fitToScreen = fitToScreen,
-                    fontSizeSp = terminalFontSizeSp,
-                    notice = inputNotice,
-                    onOpenUrl = { openTerminalUrl(it) },
-                    onCopyText = ::copyTerminalSelection,
-                    onOpenSelectedText = ::openSelectedTerminalText,
-                )
-                HelperKeyRow(
-                    enabled = inputAvailable,
-                    ctrlModifierActive = ctrlModifierActive,
-                    onCtrlToggle = { ctrlModifierActive = !ctrlModifierActive },
-                    onCtrlC = { sendControlInput("\u0003") },
-                    onCtrlL = { sendControlInput(terminalControlCharacter('L') ?: "\u000C") },
-                    onEnter = { sendTerminalInputLocked("\r", false, { _ -> }) },
-                    onBackspace = { sendTerminalInputLocked("\u007F", false, { _ -> }) },
-                    onEsc = { sendTerminalInputLocked("\u001b", false, { _ -> }) },
-                    onTab = { sendTerminalInputLocked("\t", false, { _ -> }) },
-                    onArrow = { code -> sendTerminalInputLocked(code, false, { _ -> }) },
-                    onPaste = {
-                        val unavailable = terminalInputUnavailableMessage(terminalState)
-                        if (unavailable != null) {
-                            inputNotice = unavailable
-                            return@HelperKeyRow
-                        }
-                        scope.launch {
-                            val text = clipboard.getClipEntry()
-                                ?.clipData
-                                ?.getItemAt(0)
-                                ?.coerceToText(context)
-                                ?.toString()
-                                .orEmpty()
-                            val pasted = withContext(Dispatchers.IO) {
-                                activeSessionId?.let { terminalSessionManager.paste(it, text) } ?: false
-                            }
-                            syncTerminalForeground()
-                            inputNotice = if (pasted) null else "Terminal is not connected."
-                        }
-                    },
-                )
-                if (commandInputVisible) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        CompactCommandInput(
-                            modifier = Modifier.weight(1f),
-                            value = commandInput,
-                            onValueChange = { commandInput = it },
-                            enabled = commandInputEnabled,
-                            placeholder = terminalCommandInputPlaceholder(terminalState),
-                            onSend = { sendCommandInput() },
-                        )
-                        TerminalTextButton(
-                            text = "Send",
-                            enabled = commandInputEnabled && commandInput.isNotEmpty(),
-                            onClick = { sendCommandInput() },
-                        )
-                    }
-                }
-                Row(
+            CompositionLocalProvider(LocalTerminalPalette provides palette) {
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
+                        .fillMaxSize()
+                        .background(Color(palette.backgroundArgb)),
                 ) {
-                    if (hasGlobalSwitchTargets) {
-                        TerminalSwitchArrowButton(text = "⇈", onClick = { cycleGlobalProjectTerminal(-1) })
-                        TerminalSwitchArrowButton(text = "⇊", onClick = { cycleGlobalProjectTerminal(1) })
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .imePadding()
+                            .padding(if (focusMode) 0.dp else HobgoblinSpacing.Sm),
+                        verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm),
+                    ) {
+                        AndroidTerminalViewport(
+                            modifier = Modifier.weight(1f),
+                            state = terminalState,
+                            emulatorController = emulatorController,
+                            fitToScreen = fitToScreen,
+                            fontSizeSp = terminalFontSizeSp,
+                            appearance = appearance,
+                            notice = inputNotice,
+                            onOpenUrl = { openTerminalUrl(it) },
+                            onCopyText = ::copyTerminalSelection,
+                            onOpenSelectedText = ::openSelectedTerminalText,
+                        )
+                        if (terminalChromeVisible(focusMode)) {
+                            TerminalCommandDeck(
+                                inputAvailable = inputAvailable,
+                                ctrlModifierActive = ctrlModifierActive,
+                                onCtrlToggle = { ctrlModifierActive = !ctrlModifierActive },
+                                onCtrlC = { sendControlInput("\u0003") },
+                                onCtrlL = { sendControlInput(terminalControlCharacter('L') ?: "\u000C") },
+                                onEnter = { sendTerminalInputLocked("\r", false, { _ -> }) },
+                                onBackspace = { sendTerminalInputLocked("\u007F", false, { _ -> }) },
+                                onEsc = { sendTerminalInputLocked("\u001b", false, { _ -> }) },
+                                onTab = { sendTerminalInputLocked("\t", false, { _ -> }) },
+                                onArrow = { code -> sendTerminalInputLocked(code, false, { _ -> }) },
+                                onPaste = {
+                                    val unavailable = terminalInputUnavailableMessage(terminalState)
+                                    if (unavailable != null) {
+                                        inputNotice = unavailable
+                                    } else {
+                                        scope.launch {
+                                            val text = clipboard.getClipEntry()
+                                                ?.clipData
+                                                ?.getItemAt(0)
+                                                ?.coerceToText(context)
+                                                ?.toString()
+                                                .orEmpty()
+                                            val pasted = withContext(Dispatchers.IO) {
+                                                activeSessionId?.let { terminalSessionManager.paste(it, text) } ?: false
+                                            }
+                                            syncTerminalForeground()
+                                            inputNotice = if (pasted) null else "Terminal is not connected."
+                                        }
+                                    }
+                                },
+                                commandInputVisible = commandInputVisible,
+                                commandInput = commandInput,
+                                onCommandInputChange = { commandInput = it },
+                                commandInputEnabled = commandInputEnabled,
+                                commandInputPlaceholder = terminalCommandInputPlaceholder(terminalState),
+                                onSendCommand = { sendCommandInput() },
+                                fitToScreen = fitToScreen,
+                                onFitToScreenChange = onFitToScreenChange,
+                                appearance = appearance,
+                                onAppearanceChange = onAppearanceChange,
+                                hasGlobalSwitchTargets = hasGlobalSwitchTargets,
+                                onCycleGlobalTerminal = ::cycleGlobalProjectTerminal,
+                                hasWorkspaceSwitchTargets = hasWorkspaceSwitchTargets,
+                                onCycleWorkspaceTerminal = ::cycleWorkspaceTerminal,
+                                reconnectEnabled = inlineActions.reconnectEnabled,
+                                onReconnect = { connect() },
+                                onToggleCommandInput = { commandInputVisible = !commandInputVisible },
+                                onEnterFocus = { focusMode = true },
+                            )
+                        }
                     }
-                    if (hasWorkspaceSwitchTargets) {
-                        TerminalSwitchArrowButton(text = "↑", onClick = { cycleWorkspaceTerminal(-1) })
-                        TerminalSwitchArrowButton(text = "↓", onClick = { cycleWorkspaceTerminal(1) })
-                    }
-                    if (terminalRestoreInlineActionVisible(terminalMaximized)) {
+                    if (terminalFocusExitHandleVisible(focusMode)) {
                         TerminalTextButton(
-                            text = "Restore",
-                            onClick = { terminalMaximized = false },
+                            text = "Exit focus",
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(HobgoblinSpacing.Sm)
+                                .background(
+                                    Color(palette.surfaceArgb).copy(alpha = 0.92f),
+                                    RoundedCornerShape(18.dp),
+                                ),
+                            onClick = { focusMode = false },
                         )
                     }
-                    TerminalTextButton(
-                        text = "Reconnect",
-                        enabled = inlineActions.reconnectEnabled,
-                        onClick = { connect() },
-                    )
-                    TerminalTextButton(
-                        text = "Close",
-                        enabled = inlineActions.closeEnabled,
-                        onClick = { requestCloseTerminal() },
-                    )
                 }
             }
         }
@@ -704,6 +711,116 @@ private fun terminalStatusLine(
 }
 
 @Composable
+private fun TerminalCommandDeck(
+    inputAvailable: Boolean,
+    ctrlModifierActive: Boolean,
+    onCtrlToggle: () -> Unit,
+    onCtrlC: () -> Unit,
+    onCtrlL: () -> Unit,
+    onEnter: () -> Unit,
+    onBackspace: () -> Unit,
+    onEsc: () -> Unit,
+    onTab: () -> Unit,
+    onArrow: (String) -> Unit,
+    onPaste: () -> Unit,
+    commandInputVisible: Boolean,
+    commandInput: String,
+    onCommandInputChange: (String) -> Unit,
+    commandInputEnabled: Boolean,
+    commandInputPlaceholder: String,
+    onSendCommand: () -> Unit,
+    fitToScreen: Boolean,
+    onFitToScreenChange: (Boolean) -> Unit,
+    appearance: TerminalAppearance,
+    onAppearanceChange: (TerminalAppearance) -> Unit,
+    hasGlobalSwitchTargets: Boolean,
+    onCycleGlobalTerminal: (Int) -> Unit,
+    hasWorkspaceSwitchTargets: Boolean,
+    onCycleWorkspaceTerminal: (Int) -> Unit,
+    reconnectEnabled: Boolean,
+    onReconnect: () -> Unit,
+    onToggleCommandInput: () -> Unit,
+    onEnterFocus: () -> Unit,
+) {
+    val palette = LocalTerminalPalette.current
+    val shape = RoundedCornerShape(12.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(palette.surfaceArgb), shape)
+            .border(1.dp, Color(palette.dividerArgb), shape)
+            .padding(horizontal = HobgoblinSpacing.Sm, vertical = HobgoblinSpacing.Xs),
+        verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
+    ) {
+        HelperKeyRow(
+            enabled = inputAvailable,
+            ctrlModifierActive = ctrlModifierActive,
+            onCtrlToggle = onCtrlToggle,
+            onCtrlC = onCtrlC,
+            onCtrlL = onCtrlL,
+            onEnter = onEnter,
+            onBackspace = onBackspace,
+            onEsc = onEsc,
+            onTab = onTab,
+            onArrow = onArrow,
+            onPaste = onPaste,
+        )
+        if (commandInputVisible) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CompactCommandInput(
+                    modifier = Modifier.weight(1f),
+                    value = commandInput,
+                    onValueChange = onCommandInputChange,
+                    enabled = commandInputEnabled,
+                    placeholder = commandInputPlaceholder,
+                    onSend = onSendCommand,
+                )
+                TerminalTextButton(
+                    text = "Send",
+                    enabled = commandInputEnabled && commandInput.isNotEmpty(),
+                    onClick = onSendCommand,
+                )
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
+        ) {
+            if (hasGlobalSwitchTargets) {
+                TerminalSwitchArrowButton(text = "⇈", onClick = { onCycleGlobalTerminal(-1) })
+                TerminalSwitchArrowButton(text = "⇊", onClick = { onCycleGlobalTerminal(1) })
+            }
+            if (hasWorkspaceSwitchTargets) {
+                TerminalSwitchArrowButton(text = "↑", onClick = { onCycleWorkspaceTerminal(-1) })
+                TerminalSwitchArrowButton(text = "↓", onClick = { onCycleWorkspaceTerminal(1) })
+            }
+            TerminalTextButton(
+                text = if (commandInputVisible) "Hide command" else "Command",
+                onClick = onToggleCommandInput,
+            )
+            TerminalTextButton(
+                text = if (fitToScreen) "Original width" else "Fit width",
+                onClick = { onFitToScreenChange(!fitToScreen) },
+            )
+            TerminalTextButton(
+                text = terminalAppearanceToggleLabel(appearance),
+                onClick = { onAppearanceChange(nextTerminalAppearance(appearance)) },
+            )
+            if (reconnectEnabled) {
+                TerminalTextButton(text = "Reconnect", onClick = onReconnect)
+            }
+            TerminalTextButton(text = "Focus", onClick = onEnterFocus)
+        }
+    }
+}
+
+@Composable
 private fun CompactCommandInput(
     value: String,
     onValueChange: (String) -> Unit,
@@ -712,10 +829,11 @@ private fun CompactCommandInput(
     onSend: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val palette = LocalTerminalPalette.current
     val textColor = if (enabled) {
-        HobgoblinColors.TerminalInputForeground
+        Color(palette.foregroundArgb)
     } else {
-        HobgoblinColors.TerminalDisabledForeground
+        Color(palette.mutedArgb)
     }
     var fieldValue by remember {
         mutableStateOf(TextFieldValue(text = value, selection = TextRange(value.length)))
@@ -736,13 +854,13 @@ private fun CompactCommandInput(
         enabled = enabled,
         singleLine = true,
         textStyle = MaterialTheme.typography.bodySmall.copy(color = textColor),
-        cursorBrush = SolidColor(HobgoblinColors.TerminalActionForeground),
+        cursorBrush = SolidColor(Color(palette.actionArgb)),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
         keyboardActions = KeyboardActions(onSend = { onSend() }),
         modifier = modifier
             .height(TerminalCommandInputHeight)
-            .background(HobgoblinColors.TerminalInputBackground, TerminalCommandInputShape)
-            .border(1.dp, HobgoblinColors.TerminalInputBorder, TerminalCommandInputShape),
+            .background(Color(palette.surfaceArgb), TerminalCommandInputShape)
+            .border(1.dp, Color(palette.dividerArgb), TerminalCommandInputShape),
         decorationBox = { innerTextField ->
             Box(
                 modifier = Modifier
@@ -753,7 +871,7 @@ private fun CompactCommandInput(
                 if (fieldValue.text.isEmpty()) {
                     Text(
                         text = placeholder,
-                        color = HobgoblinColors.TerminalInputPlaceholder,
+                        color = Color(palette.mutedArgb),
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -773,13 +891,14 @@ private fun TerminalTextButton(
     modifier: Modifier = Modifier,
     textStyle: TextStyle = MaterialTheme.typography.labelMedium,
 ) {
+    val palette = LocalTerminalPalette.current
     TextButton(
         modifier = modifier.height(TerminalActionButtonHeight),
         enabled = enabled,
         onClick = onClick,
         colors = ButtonDefaults.textButtonColors(
-            contentColor = HobgoblinColors.TerminalActionForeground,
-            disabledContentColor = HobgoblinColors.TerminalDisabledForeground,
+            contentColor = Color(palette.actionArgb),
+            disabledContentColor = Color(palette.mutedArgb),
         ),
     ) {
         Text(

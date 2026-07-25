@@ -21,6 +21,8 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
 import com.termux.view.TerminalRenderer
+import com.termux.terminal.TextStyle
+import dev.hobgoblin.android.data.TerminalAppearance
 import dev.hobgoblin.android.terminals.emulator.RemoteTerminalEmulatorController
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -105,6 +107,7 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
     private var controller: RemoteTerminalEmulatorController? = null
     private var observer: AutoCloseable? = null
     private var currentFontSizeSp = TerminalDefaultFontSizeSp
+    private var terminalAppearance = TerminalAppearance.Dark
     private var fitToScreen = true
     private val terminalTypeface = TerminalTypefaceProvider.terminalTypeface(context)
     private var renderer = TerminalRenderer(currentFontSizeSp.spToPx(), terminalTypeface)
@@ -155,6 +158,7 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
         touchScrolled = false
         if (nextController != null) {
             observer = nextController.observe { onTerminalScreenUpdated() }
+            applyTerminalAppearance()
             updateGrid(width, height)
         }
         invalidate()
@@ -187,6 +191,13 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
         invalidate()
     }
 
+    fun setTerminalAppearance(nextAppearance: TerminalAppearance) {
+        if (terminalAppearance == nextAppearance) return
+        terminalAppearance = nextAppearance
+        applyTerminalAppearance()
+        invalidate()
+    }
+
     fun setExternalInteractions(
         onOpenUrl: (String) -> Unit,
         onCopyText: (String) -> Boolean,
@@ -195,6 +206,19 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
         this.onOpenUrl = onOpenUrl
         this.onCopyText = onCopyText
         this.onOpenSelectedText = onOpenSelectedText
+    }
+
+    private fun applyTerminalAppearance() {
+        val palette = terminalPalette(terminalAppearance)
+        setBackgroundColor(palette.backgroundArgb)
+        selectionPaint.color = palette.selectionArgb
+        val colors = controller?.emulator?.mColors?.mCurrentColors ?: return
+        palette.ansiArgb.forEachIndexed { index, color ->
+            colors[index] = color
+        }
+        colors[TextStyle.COLOR_INDEX_FOREGROUND] = palette.foregroundArgb
+        colors[TextStyle.COLOR_INDEX_BACKGROUND] = palette.backgroundArgb
+        colors[TextStyle.COLOR_INDEX_CURSOR] = palette.actionArgb
     }
 
     override fun onDetachedFromWindow() {

@@ -3,6 +3,7 @@ package dev.hobgoblin.android.ui.screens.projects
 import dev.hobgoblin.android.domain.ssh.RemoteProjectKind
 import dev.hobgoblin.android.domain.ssh.RemoteRepositoryProfile
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProjectsScreenStateTest {
@@ -49,4 +50,38 @@ class ProjectsScreenStateTest {
         assertEquals("Git repository", projectKindLabel(git))
         assertEquals("Plain workspace", projectKindLabel(plain))
     }
+
+    @Test
+    fun `host filter keeps only projects assigned to the selected host`() {
+        val hostOne = project(id = "repo-1", hostId = "host-1")
+        val hostTwo = project(id = "repo-2", hostId = "host-2")
+
+        assertEquals(
+            listOf("repo-1"),
+            projectsForHost(listOf(hostOne, hostTwo), hostId = "host-1").map { it.id },
+        )
+        assertEquals(listOf(hostOne, hostTwo), projectsForHost(listOf(hostOne, hostTwo), hostId = null))
+        assertTrue(projectsForHost(listOf(hostOne, hostTwo), hostId = "missing").isEmpty())
+    }
+
+    @Test
+    fun `filtered empty copy names the selected host`() {
+        assertEquals(
+            "No projects are saved on Build server.",
+            filteredProjectsDescription("Build server"),
+        )
+    }
+
+    @Test
+    fun `filtered projects cannot reorder hidden global items`() {
+        assertTrue(projectReorderAvailable(hostFilterId = null))
+        assertEquals(false, projectReorderAvailable(hostFilterId = "host-1"))
+    }
+
+    private fun project(id: String, hostId: String): RemoteRepositoryProfile =
+        RemoteRepositoryProfile.create(
+            hostProfileId = hostId,
+            alias = id,
+            remotePath = "/srv/$id",
+        ).copy(id = id)
 }

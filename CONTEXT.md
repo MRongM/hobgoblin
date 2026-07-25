@@ -16,6 +16,10 @@ _Avoid_: Terminal manager, terminal creator, internal terminal tab
 The restorable, device-local order chosen by dragging Android Host, Project, Terminal, or Project Worktree items from their dedicated drag handles. Host, Project, and Terminal orders are global to their respective lists; Worktree order is scoped to one Project. It changes only Android presentation, never Git worktree enumeration or remote repository state, and newly discovered items append after retained ordered items.
 _Avoid_: Git worktree order, remote sort order, synchronized order
 
+**Android terminal focus mode**:
+A temporary Android presentation that gives the selected retained terminal session the full terminal surface by hiding the terminal top bar and command deck until the user exits focus. It is device-local, never persisted, exits before Back navigates away, and is distinct from desktop Terminal focus mode.
+_Avoid_: Terminal maximization, fullscreen terminal, persisted terminal layout
+
 **Terminal topbar**:
 The top row of the terminal area, containing terminal tabs and terminal-level actions.
 _Avoid_: Terminal toolbar, detail toolbar
