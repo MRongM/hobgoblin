@@ -20,6 +20,8 @@ import dev.hobgoblin.android.domain.ssh.RemoteRepositoryProfile
 import dev.hobgoblin.android.domain.ssh.RemoteTarget
 import dev.hobgoblin.android.domain.ssh.SshHostProfile
 import dev.hobgoblin.android.navigation.AppRoute
+import dev.hobgoblin.android.navigation.initialMainRoute
+import dev.hobgoblin.android.navigation.terminalBackgroundRoute
 import dev.hobgoblin.android.navigation.terminalReturnRoute
 import dev.hobgoblin.android.ssh.HostPortForwardManager
 import dev.hobgoblin.android.ssh.HostPortForwardStatus
@@ -54,6 +56,7 @@ import dev.hobgoblin.android.ui.screens.terminals.TerminalBackClosesSessionHint
 import dev.hobgoblin.android.ui.screens.terminals.TerminalBackKeepsSessionHint
 import dev.hobgoblin.android.ui.screens.terminals.TerminalScreen
 import dev.hobgoblin.android.ui.screens.terminals.TerminalsScreen
+import dev.hobgoblin.android.ui.screens.terminals.terminalSessionReconnectAvailable
 import dev.hobgoblin.android.ui.screens.terminals.terminalTargetLabel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -97,8 +100,8 @@ fun HobgoblinAndroidApp(
         remoteRepositoryStore.loadRepositories()
     }
 
-    var route: AppRoute by remember(initialRepositories) {
-        mutableStateOf(if (initialRepositories.isNotEmpty()) AppRoute.Projects else AppRoute.Hosts)
+    var route: AppRoute by remember {
+        mutableStateOf(initialMainRoute())
     }
     var projectHostFilterId: String? by remember { mutableStateOf(null) }
 
@@ -212,6 +215,35 @@ fun HobgoblinAndroidApp(
         route = hostTemporaryTerminalRoute(hostId)
     }
 
+    fun reconnectRetainedTerminal(session: TerminalSessionRecord) {
+        val current = terminalSessionManager.session(session.id) ?: return
+        if (!terminalSessionReconnectAvailable(current)) return
+        val host = resolveHostForTerminalRoute(current.hostId) ?: return
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                val retained = terminalSessionManager.session(current.id) ?: return@withContext
+                terminalSessionManager.reconnect(
+                    sessionId = retained.id,
+                    target = RemoteTarget.fromHostProfile(host, retained.remotePath),
+                    repositoryId = retained.repositoryId,
+                    repositoryRemotePath = retained.repositoryRemotePath,
+                    targetLabel = retained.targetLabel,
+                )
+            }
+            terminalForegroundBridge.sync()
+        }
+    }
+
+    fun closeRetainedTerminal(sessionId: String) {
+        terminalSessionManager.close(sessionId)
+        terminalForegroundBridge.sync()
+    }
+
+    fun deleteRetainedTerminal(sessionId: String) {
+        terminalSessionManager.removeSession(sessionId)
+        terminalForegroundBridge.sync()
+    }
+
     fun closeHostTemporaryTerminal(sessionId: String?) {
         sessionId?.let { terminalSessionManager.removeSession(it) }
         terminalForegroundBridge.sync()
@@ -290,6 +322,9 @@ fun HobgoblinAndroidApp(
                                 route = AppRoute.terminal(current, returnToTerminals = true)
                             }
                         },
+                        onReconnectTerminalSession = ::reconnectRetainedTerminal,
+                        onCloseTerminalSession = ::closeRetainedTerminal,
+                        onDeleteTerminalSession = ::deleteRetainedTerminal,
                         initialManualOrder = manualItemOrderStore.load(ManualItemOrderScope.Terminals),
                         onSaveManualOrder = { ids ->
                             manualItemOrderStore.save(ManualItemOrderScope.Terminals, ids)
@@ -474,6 +509,8 @@ fun HobgoblinAndroidApp(
                             terminalSessionId = session.id,
                         )
                     },
+                    onReconnectTerminalSession = ::reconnectRetainedTerminal,
+                    onCloseTerminalSession = ::closeRetainedTerminal,
                     onDeleteTerminalSession = { sessionId, closeTmuxSession ->
                         val session = terminalSessionManager.session(sessionId)
                         if (closeTmuxSession) {
@@ -495,8 +532,7 @@ fun HobgoblinAndroidApp(
                                 is RemoteTmuxCloseResult.Failed -> error(result.message)
                             }
                         }
-                        terminalSessionManager.removeSession(sessionId)
-                        terminalForegroundBridge.sync()
+                        deleteRetainedTerminal(sessionId)
                     },
                     onDeleteRepository = {
                         deleteRepositoryRecord(repository.id)
@@ -569,6 +605,10 @@ fun HobgoblinAndroidApp(
                     },
                     terminalSessionManager = terminalSessionManager,
                     terminalForegroundBridge = terminalForegroundBridge,
+                    onBackground = {
+                        terminalForegroundBridge.sync()
+                        route = terminalBackgroundRoute()
+                    },
                     onBack = { activeSessionId ->
                         val temporary = isHostTemporaryTerminal(currentRoute.remotePath, currentRoute.repositoryId)
                         if (temporary) {

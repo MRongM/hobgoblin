@@ -21,6 +21,7 @@ import dev.hobgoblin.android.terminals.TmuxSessionProtocol
 import dev.hobgoblin.android.termux.ExternalTermuxLaunchResult
 import dev.hobgoblin.android.ssh.WorktreeCreationSource
 import dev.hobgoblin.android.ui.screens.placeholders.localTerminalPlaceholderText
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -560,6 +561,45 @@ class RepositorySetupStateTest {
         assertTrue(text.contains("/srv/app-feature"))
         assertTrue(text.contains("stop"))
         assertTrue(text.contains("remove"))
+    }
+
+    @Test
+    fun `project terminal item exposes close without replacing delete`() {
+        val source = listOf(
+            File("src/main/java/dev/hobgoblin/android/ui/screens/repositories/RepositorySetupScreen.kt"),
+            File("app/src/main/java/dev/hobgoblin/android/ui/screens/repositories/RepositorySetupScreen.kt"),
+            File("android/app/src/main/java/dev/hobgoblin/android/ui/screens/repositories/RepositorySetupScreen.kt"),
+        ).firstOrNull(File::isFile)?.readText() ?: error("RepositorySetupScreen.kt not found")
+
+        assertTrue(source.contains("onReconnectTerminalSession"))
+        assertTrue(source.contains("Text(\"Reconnect\")"))
+        assertTrue(source.contains("enabled = terminalSessionReconnectAvailable(session)"))
+        assertTrue(source.contains("onCloseTerminalSession"))
+        assertTrue(source.contains("Text(\"Close\")"))
+        assertTrue(source.contains("title = { Text(\"Close terminal?\") }"))
+        assertTrue(source.contains("Text(\"Delete\")"))
+        assertTrue(source.contains("SwipeDeleteTerminalSessionRow("))
+    }
+
+    @Test
+    fun `project terminal close confirmation retains the record and remote tmux session`() {
+        val session = terminalSession(
+            remotePath = "/srv/app-feature",
+            terminalId = 2,
+            repositoryRemotePath = "/srv/app",
+            tmuxIdentity = TmuxSessionIdentity(
+                sessionName = "hobgoblin-v1-aebf050981ac829e36100020",
+                initialPath = "/srv/app-feature",
+            ),
+        )
+
+        val text = repositoryTerminalCloseConfirmationText("Terminal 2", session)
+
+        assertTrue(text.contains("Terminal 2"))
+        assertTrue(text.contains("/srv/app-feature"))
+        assertTrue(text.contains("reconnect"))
+        assertTrue(text.contains("remote tmux session keeps running"))
+        assertFalse(text.contains("remove"))
     }
 
     @Test

@@ -16,6 +16,14 @@ class TerminalInputTranslatorTest {
     }
 
     @Test
+    fun `sticky modifiers translate the next software text input`() {
+        assertEquals("\u0003", terminalTextBytes("c", ctrlPressed = true).asText())
+        assertEquals("\u0003d", terminalTextBytes("cd", ctrlPressed = true).asText())
+        assertEquals("\u001Bx", terminalTextBytes("x", altPressed = true).asText())
+        assertEquals("\u001B\u000C", terminalTextBytes("l", ctrlPressed = true, altPressed = true).asText())
+    }
+
+    @Test
     fun `key code input maps terminal navigation keys`() {
         assertEquals("\u001B[A", terminalKeyBytes(KeyEvent.KEYCODE_DPAD_UP).asText())
         assertEquals("\u001B[B", terminalKeyBytes(KeyEvent.KEYCODE_DPAD_DOWN).asText())
@@ -24,6 +32,24 @@ class TerminalInputTranslatorTest {
         assertEquals("\u001B", terminalKeyBytes(KeyEvent.KEYCODE_ESCAPE).asText())
         assertEquals("\t", terminalKeyBytes(KeyEvent.KEYCODE_TAB).asText())
         assertEquals("\r", terminalKeyBytes(KeyEvent.KEYCODE_ENTER).asText())
+    }
+
+    @Test
+    fun `termux extra keys use terminal key sequences and modifiers`() {
+        assertEquals("\u001B[H", terminalExtraKeyBytes(TerminalExtraKey.Home).asText())
+        assertEquals("\u001B[6~", terminalExtraKeyBytes(TerminalExtraKey.PageDown).asText())
+        assertEquals(
+            "\u001B[1;5A",
+            terminalExtraKeyBytes(TerminalExtraKey.ArrowUp, ctrlPressed = true).asText(),
+        )
+        assertEquals(
+            "\u001B[1;3C",
+            terminalExtraKeyBytes(TerminalExtraKey.ArrowRight, altPressed = true).asText(),
+        )
+        assertEquals("\u001F", terminalExtraKeyBytes(TerminalExtraKey.Slash, ctrlPressed = true).asText())
+        assertEquals("\u001B-", terminalExtraKeyBytes(TerminalExtraKey.Minus, altPressed = true).asText())
+        assertNull(terminalExtraKeyBytes(TerminalExtraKey.Control))
+        assertNull(terminalExtraKeyBytes(TerminalExtraKey.Alt))
     }
 
     @Test

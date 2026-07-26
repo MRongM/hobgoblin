@@ -18,26 +18,97 @@ internal const val TerminalQuickCancelInput = "NO"
 
 internal const val TerminalDefaultFocusMode = false
 internal const val TerminalStickToBottomThresholdPx = 48
-internal const val TerminalHelperButtonsPerRow = 6
 
-internal fun terminalHelperKeyLabels(ctrlModifierActive: Boolean): List<String> =
+internal fun terminalBackgroundSwipeTriggered(
+    horizontalDistancePx: Float,
+    thresholdPx: Float,
+): Boolean = thresholdPx > 0f && horizontalDistancePx >= thresholdPx
+
+internal enum class TerminalExtraKey {
+    Escape,
+    Slash,
+    Minus,
+    Home,
+    ArrowUp,
+    End,
+    PageUp,
+    Tab,
+    Control,
+    Alt,
+    ArrowLeft,
+    ArrowDown,
+    ArrowRight,
+    PageDown,
+}
+
+internal val TerminalTermuxExtraKeyRows = listOf(
     listOf(
-        "ENTER",
-        "⌫",
-        "CTRL+C",
-        "CTRL+L",
-        "Tab",
-        "Esc",
-        if (ctrlModifierActive) "Ctrl on" else "Ctrl",
-        "Up",
-        "Down",
-        "Left",
-        "Right",
-        "Paste",
-    )
+        TerminalExtraKey.Escape,
+        TerminalExtraKey.Slash,
+        TerminalExtraKey.Minus,
+        TerminalExtraKey.Home,
+        TerminalExtraKey.ArrowUp,
+        TerminalExtraKey.End,
+        TerminalExtraKey.PageUp,
+    ),
+    listOf(
+        TerminalExtraKey.Tab,
+        TerminalExtraKey.Control,
+        TerminalExtraKey.Alt,
+        TerminalExtraKey.ArrowLeft,
+        TerminalExtraKey.ArrowDown,
+        TerminalExtraKey.ArrowRight,
+        TerminalExtraKey.PageDown,
+    ),
+)
 
-internal fun terminalHelperKeyRows(ctrlModifierActive: Boolean): List<List<String>> =
-    terminalHelperKeyLabels(ctrlModifierActive).chunked(TerminalHelperButtonsPerRow)
+internal fun terminalExtraKeyLabel(
+    key: TerminalExtraKey,
+    ctrlModifierActive: Boolean,
+    altModifierActive: Boolean,
+): String = when (key) {
+    TerminalExtraKey.Escape -> "ESC"
+    TerminalExtraKey.Slash -> "/"
+    TerminalExtraKey.Minus -> "-"
+    TerminalExtraKey.Home -> "HOME"
+    TerminalExtraKey.ArrowUp -> "↑"
+    TerminalExtraKey.End -> "END"
+    TerminalExtraKey.PageUp -> "PGUP"
+    TerminalExtraKey.Tab -> "TAB"
+    TerminalExtraKey.Control -> if (ctrlModifierActive) "CTRL on" else "CTRL"
+    TerminalExtraKey.Alt -> if (altModifierActive) "ALT on" else "ALT"
+    TerminalExtraKey.ArrowLeft -> "←"
+    TerminalExtraKey.ArrowDown -> "↓"
+    TerminalExtraKey.ArrowRight -> "→"
+    TerminalExtraKey.PageDown -> "PGDN"
+}
+
+internal enum class TerminalHobgoblinAction {
+    Reconnect,
+    Enter,
+    Backspace,
+    ControlC,
+    ControlL,
+    Paste,
+}
+
+internal val TerminalHobgoblinPrimaryActions = listOf(
+    TerminalHobgoblinAction.Reconnect,
+    TerminalHobgoblinAction.Enter,
+    TerminalHobgoblinAction.Backspace,
+    TerminalHobgoblinAction.ControlC,
+    TerminalHobgoblinAction.ControlL,
+    TerminalHobgoblinAction.Paste,
+)
+
+internal fun terminalHobgoblinActionLabel(action: TerminalHobgoblinAction): String = when (action) {
+    TerminalHobgoblinAction.Reconnect -> "Reconnect"
+    TerminalHobgoblinAction.Enter -> "ENTER"
+    TerminalHobgoblinAction.Backspace -> "⌫"
+    TerminalHobgoblinAction.ControlC -> "CTRL+C"
+    TerminalHobgoblinAction.ControlL -> "CTRL+L"
+    TerminalHobgoblinAction.Paste -> "Paste"
+}
 
 internal fun terminalChromeVisible(focusMode: Boolean): Boolean = !focusMode
 
@@ -220,6 +291,16 @@ internal fun terminalReconnectAvailable(state: TerminalSessionState): Boolean = 
     TerminalSessionState.Connecting,
     is TerminalSessionState.Connected,
     is TerminalSessionState.Resizing,
+    -> false
+}
+
+internal fun terminalSessionReconnectAvailable(session: TerminalSessionRecord): Boolean = when (session.status) {
+    TerminalSessionStatus.Exited,
+    TerminalSessionStatus.Failed,
+    TerminalSessionStatus.Disconnected,
+    -> true
+    TerminalSessionStatus.Starting,
+    TerminalSessionStatus.Running,
     -> false
 }
 

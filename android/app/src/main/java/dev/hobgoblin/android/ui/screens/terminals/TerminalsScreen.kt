@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -39,6 +41,29 @@ internal fun terminalOverviewTitle(session: TerminalSessionRecord): String =
     }
 
 internal fun terminalOverviewStatus(session: TerminalSessionRecord): String = session.status.name.lowercase()
+
+internal fun terminalOverviewCloseConfirmationText(session: TerminalSessionRecord): String {
+    val title = terminalOverviewTitle(session)
+    return if (session.tmuxIdentity != null) {
+        "This closes the Android connection for $title but keeps it in the terminal list so you can reconnect later. " +
+            "The remote tmux session keeps running."
+    } else {
+        "This stops $title but keeps it in the terminal list so you can reconnect later."
+    }
+}
+
+internal fun terminalOverviewDeleteConfirmationText(session: TerminalSessionRecord): String {
+    val title = terminalOverviewTitle(session)
+    val message = "This removes $title from the terminal list and stops its Android connection if active."
+    return if (session.tmuxIdentity != null) {
+        "$message The remote tmux session keeps running."
+    } else message
+}
+
+internal fun terminalOverviewOrderAfterDelete(
+    orderedIds: List<String>,
+    deletedId: String,
+): List<String> = orderedIds.filterNot { it == deletedId }
 
 internal data class TerminalOverviewSource(
     val contextLabel: String,
@@ -86,10 +111,15 @@ fun TerminalsScreen(
     hosts: List<SshHostProfile>,
     repositories: List<RemoteRepositoryProfile>,
     onOpenTerminalSession: (TerminalSessionRecord) -> Unit,
+    onReconnectTerminalSession: (TerminalSessionRecord) -> Unit,
+    onCloseTerminalSession: (String) -> Unit,
+    onDeleteTerminalSession: (String) -> Unit,
     initialManualOrder: List<String> = emptyList(),
     onSaveManualOrder: (List<String>) -> Unit = {},
 ) {
     var manualOrder by remember(initialManualOrder) { mutableStateOf(initialManualOrder) }
+    var pendingCloseSessionId by remember { mutableStateOf<String?>(null) }
+    var pendingDeleteSessionId by remember { mutableStateOf<String?>(null) }
     val defaultOrderedSessions = terminalOverviewOrderedSessions(sessions)
     val orderedSessions = ManualItemOrderPolicy.apply(
         defaultOrderedSessions,
@@ -141,8 +171,71 @@ fun TerminalsScreen(
                 source = terminalOverviewSource(session, hosts, repositories),
                 reorderState = reorderState,
                 onOpen = { onOpenTerminalSession(session) },
+                onReconnect = { onReconnectTerminalSession(session) },
+                onRequestClose = { pendingCloseSessionId = session.id },
+                onRequestDelete = { pendingDeleteSessionId = session.id },
             )
         }
+    }
+
+    val pendingCloseSession = orderedSessions.firstOrNull { it.id == pendingCloseSessionId }
+    if (pendingCloseSession != null) {
+        AlertDialog(
+            onDismissRequest = { pendingCloseSessionId = null },
+            title = { Text("Close terminal?") },
+            text = { Text(terminalOverviewCloseConfirmationText(pendingCloseSession)) },
+            confirmButton = {
+                TextButton(
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                    onClick = {
+                        pendingCloseSessionId = null
+                        onCloseTerminalSession(pendingCloseSession.id)
+                    },
+                ) {
+                    Text("Close terminal")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingCloseSessionId = null }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    val pendingDeleteSession = orderedSessions.firstOrNull { it.id == pendingDeleteSessionId }
+    if (pendingDeleteSession != null) {
+        AlertDialog(
+            onDismissRequest = { pendingDeleteSessionId = null },
+            title = { Text("Delete terminal?") },
+            text = { Text(terminalOverviewDeleteConfirmationText(pendingDeleteSession)) },
+            confirmButton = {
+                TextButton(
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                    onClick = {
+                        val nextOrder = terminalOverviewOrderAfterDelete(
+                            orderedIds = orderedSessions.map(TerminalSessionRecord::id),
+                            deletedId = pendingDeleteSession.id,
+                        )
+                        manualOrder = nextOrder
+                        onSaveManualOrder(nextOrder)
+                        pendingDeleteSessionId = null
+                        onDeleteTerminalSession(pendingDeleteSession.id)
+                    },
+                ) {
+                    Text("Delete terminal")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteSessionId = null }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }
 
@@ -153,6 +246,9 @@ private fun TerminalOverviewRow(
     source: TerminalOverviewSource,
     reorderState: ManualReorderState,
     onOpen: () -> Unit,
+    onReconnect: () -> Unit,
+    onRequestClose: () -> Unit,
+    onRequestDelete: () -> Unit,
 ) {
     Card(
         modifier = modifier
@@ -222,6 +318,28 @@ private fun TerminalOverviewRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
             ) {
+                TextButton(
+                    enabled = terminalSessionReconnectAvailable(session),
+                    onClick = onReconnect,
+                ) {
+                    Text("Reconnect")
+                }
+                TextButton(
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                    onClick = onRequestClose,
+                ) {
+                    Text("Close")
+                }
+                TextButton(
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                    onClick = onRequestDelete,
+                ) {
+                    Text("Delete")
+                }
                 TextButton(onClick = onOpen) {
                     Text("Open")
                 }

@@ -38,6 +38,9 @@ internal fun AndroidTerminalViewport(
     fitToScreen: Boolean,
     fontSizeSp: Int,
     appearance: TerminalAppearance,
+    ctrlModifierActive: Boolean,
+    altModifierActive: Boolean,
+    onStickyModifiersConsumed: () -> Unit,
     notice: String? = null,
     onOpenUrl: (String) -> Unit,
     onCopyText: (String) -> Boolean,
@@ -91,6 +94,11 @@ internal fun AndroidTerminalViewport(
                             setFitToScreen(fitToScreen)
                             setFontSizeSp(fontSizeSp)
                             setTerminalAppearance(appearance)
+                            setStickyModifiers(
+                                ctrlModifierActive = ctrlModifierActive,
+                                altModifierActive = altModifierActive,
+                                onConsumed = onStickyModifiersConsumed,
+                            )
                             setExternalInteractions(
                                 onOpenUrl = onOpenUrl,
                                 onCopyText = onCopyText,
@@ -105,6 +113,11 @@ internal fun AndroidTerminalViewport(
                         view.setFitToScreen(fitToScreen)
                         view.setFontSizeSp(fontSizeSp)
                         view.setTerminalAppearance(appearance)
+                        view.setStickyModifiers(
+                            ctrlModifierActive = ctrlModifierActive,
+                            altModifierActive = altModifierActive,
+                            onConsumed = onStickyModifiersConsumed,
+                        )
                         view.setExternalInteractions(
                             onOpenUrl = onOpenUrl,
                             onCopyText = onCopyText,
