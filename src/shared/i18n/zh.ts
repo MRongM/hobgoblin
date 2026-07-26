@@ -662,7 +662,7 @@ export const zh: Record<DictKey, string> = {
   'terminal.label': '终端',
   'terminal.new': '新终端',
   'terminal.new-with-tmux': 'tmux终端',
-  'terminal.restore-directory-tmux': '恢复 tmux 终端',
+  'terminal.restore-directory-tmux': '恢复关联的tmux会话',
   'terminal.internal': '内部终端',
   'terminal.external': '外部终端',
   'terminal.focus': '最大化终端',
