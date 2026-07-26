@@ -71,6 +71,23 @@ describe('WorktreeBootstrapCandidateList', () => {
     expect(selected('.env')).toBe(true)
   })
 
+  test('defaults checked skipped candidates to symlink without overriding an existing choice', () => {
+    renderList([
+      { path: 'node_modules', kind: 'directory' },
+      { path: '.env', kind: 'file' },
+    ])
+
+    click('[data-materialization-item=".env"] [data-materialization-choice="copy"]')
+    click('[data-materialization-select="node_modules"]')
+    click('[data-materialization-select=".env"]')
+
+    expect(choice('node_modules')).toBe('symlink')
+    expect(choice('.env')).toBe('copy')
+
+    click('[data-materialization-select="node_modules"]')
+    expect(choice('node_modules')).toBe('symlink')
+  })
+
   test('selects every candidate, exposes indeterminate state, and clears all', () => {
     renderList([
       { path: 'node_modules', kind: 'directory' },
@@ -83,6 +100,8 @@ describe('WorktreeBootstrapCandidateList', () => {
     click('[data-materialization-select-all]')
     expect(selected('node_modules')).toBe(true)
     expect(selected('.env')).toBe(true)
+    expect(choice('node_modules')).toBe('symlink')
+    expect(choice('.env')).toBe('symlink')
 
     click('[data-materialization-select-all]')
     expect(selected('node_modules')).toBe(false)

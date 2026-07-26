@@ -63,6 +63,7 @@ export function MaterializationCandidateList({
 
   const setItemSelected = (id: string, checked: boolean) => {
     if (!selectableIds.has(id)) return
+    if (checked && (choices[id] ?? 'skip') === 'skip') onChoiceChange(id, 'symlink')
     setSelectedIds((current) => {
       const next = new Set(current)
       if (checked) next.add(id)
@@ -72,6 +73,11 @@ export function MaterializationCandidateList({
   }
 
   const setAllSelected = (checked: boolean) => {
+    if (checked) {
+      for (const item of selectableItems) {
+        if ((choices[item.id] ?? 'skip') === 'skip') onChoiceChange(item.id, 'symlink')
+      }
+    }
     setSelectedIds(checked ? new Set(selectableItems.map((item) => item.id)) : new Set())
   }
 
