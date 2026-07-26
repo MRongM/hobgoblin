@@ -112,6 +112,26 @@ function dependencies(overrides: Record<string, unknown> = {}) {
 }
 
 describe('buildBranchWorkspaceGitActionPlan', () => {
+  test('ignores legacy repository dependency recovery fields when checking readiness', async () => {
+    const current = manifest()
+    Object.assign(current.repositories[0]!, {
+      worktreeBootstrap: {
+        kind: 'materialize',
+        candidateScope: 'ignored-only',
+        selections: [{ path: 'node_modules', mode: 'symlink' }],
+      },
+      bootstrapProgress: 'failed',
+      bootstrapLastError: 'link failed',
+    })
+    const deps = dependencies({
+      readManifests: vi.fn(async () => ({ kind: 'ready' as const, manifests: [current] })),
+    })
+
+    await expect(
+      buildBranchWorkspaceGitActionPlan(ROOT, { kind: 'batch-commit', branchWorkspaceId: WORKSPACE_ID }, deps),
+    ).resolves.toMatchObject({ ok: true })
+  })
+
   test('preserves manifest order and marks clean batch-commit members satisfied', async () => {
     const result = await buildBranchWorkspaceGitActionPlan(
       ROOT,

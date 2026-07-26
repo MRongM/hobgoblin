@@ -15,7 +15,12 @@ import {
 } from '#/system/commit-message-ai.ts'
 import { readLocalFileTreeTextFile } from '#/system/file-tree/local.ts'
 import { readLocalFileTreeBinaryFile } from '#/system/file-tree/local.ts'
-import { readRemoteFileTreeBinaryFile, readRemoteFileTreeTextFile } from '#/system/ssh/git.ts'
+import { getLocalWorktreeBootstrapPreflight } from '#/system/git/worktree-bootstrap-candidates.ts'
+import {
+  getRemoteWorktreeBootstrapPreflight,
+  readRemoteFileTreeBinaryFile,
+  readRemoteFileTreeTextFile,
+} from '#/system/ssh/git.ts'
 import {
   isCommitMessageProvider,
   type CommitMessageGenerationResult,
@@ -32,9 +37,7 @@ import { isRemoteRepoId, type ProbeResult, type RepoSnapshot } from '#/shared/rp
 import { isValidRepoLocator } from '#/shared/input-validation.ts'
 import type {
   WorktreeBootstrapCandidateScope,
-  WorktreeBootstrapDecision,
   WorktreeBootstrapPreflightResult,
-  WorktreeBootstrapTargetPreflightResult,
 } from '#/shared/worktree-bootstrap-summary.ts'
 
 export async function probeRepository(cwd: string): Promise<ProbeResult> {
@@ -99,26 +102,28 @@ export async function getRepositoryWorktreeBootstrapPreflight(
   cwd: string,
   signal?: AbortSignal,
   candidateScope?: WorktreeBootstrapCandidateScope,
+  sourceWorktreePath?: string,
 ): Promise<WorktreeBootstrapPreflightResult> {
   if (!isValidRepoLocator(cwd)) return { ok: false, message: 'error.invalid-arguments' }
-  return await runWithRepoBackend(
-    cwd,
-    async (backend) => await backend.getWorktreeBootstrapPreflight(signal, candidateScope),
-  )
-}
-
-export async function getRepositoryWorktreeBootstrapTargetPreflight(
-  cwd: string,
-  worktreePath: string,
-  decision: Exclude<WorktreeBootstrapDecision, { kind: 'skip' }>,
-  signal?: AbortSignal,
-): Promise<WorktreeBootstrapTargetPreflightResult> {
-  if (!isValidRepoLocator(cwd) || !isValidRepositoryWorktreePath(cwd, worktreePath)) {
-    return { ok: false, message: 'error.invalid-arguments' }
+  if (sourceWorktreePath !== undefined) {
+    if (!isValidRepositoryWorktreePath(cwd, sourceWorktreePath)) {
+      return { ok: false, message: 'error.invalid-arguments' }
+    }
+    if (isRemoteRepoId(cwd)) {
+      const target = await resolveRemoteRepoTarget(cwd)
+      return await getRemoteWorktreeBootstrapPreflight(
+        { ...target, remotePath: sourceWorktreePath },
+        { signal, ...(candidateScope ? { candidateScope } : {}) },
+      )
+    }
+    return await getLocalWorktreeBootstrapPreflight(sourceWorktreePath, {
+      signal,
+      ...(candidateScope ? { candidateScope } : {}),
+    })
   }
   return await runWithRepoBackend(
     cwd,
-    async (backend) => await backend.getWorktreeBootstrapTargetPreflight(worktreePath, decision, signal),
+    async (backend) => await backend.getWorktreeBootstrapPreflight(signal, candidateScope),
   )
 }
 

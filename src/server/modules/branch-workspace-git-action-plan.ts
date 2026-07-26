@@ -104,9 +104,6 @@ function validateManifest(manifest: BranchWorkspaceManifest | undefined): { ok: 
   if (manifest.operation || manifest.repositories.some((member) => member.progress !== 'complete')) {
     return { ok: false, message: 'workspace.branch-workspace.git-action.not-ready' }
   }
-  if (manifest.repositories.some((member) => member.bootstrapProgress && member.bootstrapProgress !== 'complete')) {
-    return { ok: false, message: 'workspace.branch-workspace.git-action.not-ready' }
-  }
   if (manifest.repositories.length === 0) {
     return { ok: false, message: 'workspace.branch-workspace.git-action.no-repositories' }
   }

@@ -436,6 +436,51 @@ describe('repo routes', () => {
     )
   })
 
+  test('routes worktree bootstrap preflight to an explicit source worktree', async () => {
+    mocks.getRepositoryWorktreeBootstrapPreflight.mockResolvedValueOnce({
+      ok: true,
+      preflight: { kind: 'candidates', candidates: [{ path: '.env.local', kind: 'file' }] },
+    })
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/worktree-bootstrap-preflight', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        cwd: '/tmp/repo',
+        candidateScope: 'all-untracked',
+        sourceWorktreePath: '/tmp/repo-feature',
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenCalledWith(
+      '/tmp/repo',
+      expect.any(AbortSignal),
+      'all-untracked',
+      '/tmp/repo-feature',
+    )
+  })
+
+  test('rejects a malformed worktree bootstrap source path', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/worktree-bootstrap-preflight', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        cwd: '/tmp/repo',
+        candidateScope: 'all-untracked',
+        sourceWorktreePath: 'relative/source',
+      }),
+    })
+
+    await expect(response.json()).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+    expect(mocks.getRepositoryWorktreeBootstrapPreflight).not.toHaveBeenCalled()
+  })
+
   test('serves worktree bootstrap preview for an explicit worktree path', async () => {
     const { createRepoRoutes } = await import('#/server/routes/repo.ts')
     const app = createRepoRoutes()
@@ -484,6 +529,7 @@ describe('repo routes', () => {
       kind: 'run',
       configHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       configTrusted: true,
+      sourceWorktreePath: '/tmp/repo-source',
     }
 
     const response = await app.request('http://localhost/create-worktree', {
@@ -505,6 +551,32 @@ describe('repo routes', () => {
       worktreeBootstrap,
       expect.any(AbortSignal),
       'repo_branch_test',
+    )
+  })
+
+  test('removes source authority from a skip bootstrap decision', async () => {
+    const { createRepositoryWorktree } = await import('#/server/modules/repo-write-paths.ts')
+    vi.mocked(createRepositoryWorktree).mockResolvedValueOnce({ ok: true, message: 'ok' })
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    await app.request('http://localhost/create-worktree', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        cwd: '/tmp/repo',
+        worktreePath: '/tmp/repo-feature',
+        mode: { kind: 'existingBranch', branch: 'feature/a' },
+        worktreeBootstrap: { kind: 'skip', sourceWorktreePath: '/tmp/not-used' },
+      }),
+    })
+
+    expect(createRepositoryWorktree).toHaveBeenCalledWith(
+      '/tmp/repo',
+      { worktreePath: '/tmp/repo-feature', mode: { kind: 'existingBranch', branch: 'feature/a' } },
+      { kind: 'skip' },
+      expect.any(AbortSignal),
+      undefined,
     )
   })
 

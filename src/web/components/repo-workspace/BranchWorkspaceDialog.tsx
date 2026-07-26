@@ -39,6 +39,7 @@ export interface BranchWorkspaceRepositoryOption {
   available: boolean
   branches: string[]
   defaultBranch: string
+  sourceWorktreeByBranch?: Record<string, string>
 }
 
 type RepositoryBootstrapState =
@@ -180,13 +181,21 @@ export function BranchWorkspaceDialog({
     }
   }
 
-  const loadRepositoryBootstrap = async (repository: BranchWorkspaceRepositoryOption) => {
+  const loadRepositoryBootstrap = async (
+    repository: BranchWorkspaceRepositoryOption,
+    baseBranch = baseBranches[repository.name] || repository.defaultBranch,
+  ) => {
     bootstrapControllers.current[repository.name]?.abort()
     const controller = new AbortController()
     bootstrapControllers.current[repository.name] = controller
     setRepositoryBootstraps((current) => ({ ...current, [repository.name]: { status: 'loading' } }))
     try {
-      const result = await getRepositoryWorktreeBootstrapPreflight(repository.id, controller.signal, 'ignored-only')
+      const result = await getRepositoryWorktreeBootstrapPreflight(
+        repository.id,
+        controller.signal,
+        'all-untracked',
+        repository.sourceWorktreeByBranch?.[baseBranch],
+      )
       if (controller.signal.aborted) return
       setRepositoryBootstraps((current) => ({
         ...current,
@@ -232,7 +241,7 @@ export function BranchWorkspaceDialog({
         ? {
             worktreeBootstrap: {
               kind: 'materialize' as const,
-              candidateScope: 'ignored-only' as const,
+              candidateScope: 'all-untracked' as const,
               selections,
             },
           }
@@ -275,10 +284,7 @@ export function BranchWorkspaceDialog({
     if (response?.ok) onOpenChange(false)
   }
   const requiredApprovalsSatisfied = !plan || plan.requiredApprovals.every((approval) => approvals.includes(approval))
-  const destructiveConfirm =
-    mode === 'reduce' ||
-    mode === 'remove' ||
-    plan?.requiredApprovals.includes('replace-repository-dependencies') === true
+  const destructiveConfirm = mode === 'reduce' || mode === 'remove'
   const repositoryBootstrapPending = repositories.some(
     (repository) =>
       selectedRepositories[repository.name] &&
@@ -343,9 +349,15 @@ export function BranchWorkspaceDialog({
                           value={baseBranches[repository.name] ?? ''}
                           disabled={pending || fixed || !selectedRepositories[repository.name]}
                           className="h-8 rounded-md border border-input bg-background px-2 font-mono text-xs"
-                          onChange={(event) =>
-                            setBaseBranches((current) => ({ ...current, [repository.name]: event.target.value }))
-                          }
+                          onChange={(event) => {
+                            const baseBranch = event.target.value
+                            setBaseBranches((current) => ({ ...current, [repository.name]: baseBranch }))
+                            setRepositoryBootstrapChoices((current) => ({
+                              ...current,
+                              [repository.name]: {},
+                            }))
+                            void loadRepositoryBootstrap(repository, baseBranch)
+                          }}
                         >
                           {repository.branches.map((candidate) => (
                             <option key={candidate} value={candidate}>

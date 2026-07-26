@@ -60,7 +60,6 @@ import { isRepoWorktreeBootstrapConfigTrusted } from '#/shared/repo-settings.ts'
 import type {
   WorktreeBootstrapDecision,
   WorktreeBootstrapPreviewResult,
-  WorktreeBootstrapTargetEntry,
 } from '#/shared/worktree-bootstrap-summary.ts'
 import {
   DEFAULT_WORKTREE_BOOTSTRAP_CONFIG,
@@ -348,24 +347,6 @@ export async function createRepositoryWorktree(
       ? publishSnapshotInvalidationAfterGitAttempt(cwd, result, sourceToken)
       : result
   })
-}
-
-export async function bootstrapRepositoryWorktree(
-  cwd: string,
-  worktreePath: string,
-  worktreeBootstrap: WorktreeBootstrapDecision,
-  replaceExisting: readonly WorktreeBootstrapTargetEntry[] = [],
-  signal?: AbortSignal,
-  sourceToken?: string,
-): Promise<ExecResult> {
-  if (!isValidRepoLocator(cwd) || !isValidRepositoryWorktreePath(cwd, worktreePath)) {
-    return { ok: false, message: 'error.invalid-arguments' }
-  }
-  const result = await runWithRepoBackend(cwd, async (backend) => {
-    const bootstrapResult = await backend.bootstrapWorktree(worktreePath, worktreeBootstrap, replaceExisting, signal)
-    return await syncWorktreeBootstrapTrustAfterSuccessfulRun(cwd, worktreeBootstrap, bootstrapResult)
-  })
-  return result.ok ? publishSnapshotInvalidationAfterGitAttempt(cwd, result, sourceToken) : result
 }
 
 export async function getRepositoryWorktreeBootstrapPreview(

@@ -22,11 +22,15 @@ export type WorktreeBootstrapDecision =
       configHash: string
       /** Desired trust state for this exact config hash after a successful bootstrap run. */
       configTrusted: boolean
+      /** Worktree whose files and goblin.toml produced this decision. */
+      sourceWorktreePath?: string
     }
   | {
       kind: 'materialize'
       selections: WorktreeBootstrapSelection[]
       candidateScope?: WorktreeBootstrapCandidateScope
+      /** Worktree whose untracked files produced these selections. */
+      sourceWorktreePath?: string
     }
 
 export type WorktreeBootstrapCandidateKind = 'file' | 'directory'
@@ -94,6 +98,18 @@ interface WorktreeBootstrapConfigLike {
 }
 
 export const WORKTREE_BOOTSTRAP_SUMMARY_PATH_LIMIT = 8
+
+export function normalizeWorktreeBootstrapSourcePath(value: unknown): string | null {
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value.length > MAX_IPC_PATH_LENGTH ||
+    /[\0-\x1f\x7f]/.test(value)
+  ) {
+    return null
+  }
+  return value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value) ? value : null
+}
 
 export function isWorktreeBootstrapCandidatePath(value: unknown): value is string {
   return (

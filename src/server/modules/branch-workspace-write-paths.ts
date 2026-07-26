@@ -17,7 +17,6 @@ import {
 } from '#/server/modules/branch-workspace-source.ts'
 import { readBranchWorkspaceSnapshot } from '#/server/modules/branch-workspace-read.ts'
 import {
-  bootstrapRepositoryWorktree,
   createRepositoryWorktree,
   deleteRepositoryBranch,
   deleteRepositoryRemoteBranch,
@@ -26,6 +25,7 @@ import {
 import type {
   BranchWorkspaceExecuteInput,
   BranchWorkspaceExecuteResult,
+  BranchWorkspaceExecutionWarning,
   BranchWorkspaceManifest,
   BranchWorkspacePlan,
   BranchWorkspacePlanRequest,
@@ -52,7 +52,6 @@ export interface BranchWorkspaceWriteDependencies {
   updateManifests?: typeof updateBranchWorkspaceManifests
   createDirectory?: typeof createBranchWorkspaceDirectory
   createWorktree?: typeof createRepositoryWorktree
-  bootstrapWorktree?: typeof bootstrapRepositoryWorktree
   materializeSymlink?: typeof materializeBranchWorkspaceSymlink
   copyEntry?: typeof copyBranchWorkspaceEntry
   fingerprintEntry?: typeof fingerprintBranchWorkspaceEntry
@@ -82,7 +81,6 @@ export function createBranchWorkspaceWriteService(
   const updateManifests = dependencies.updateManifests ?? updateBranchWorkspaceManifests
   const createDirectory = dependencies.createDirectory ?? createBranchWorkspaceDirectory
   const createWorktree = dependencies.createWorktree ?? createRepositoryWorktree
-  const bootstrapWorktree = dependencies.bootstrapWorktree ?? bootstrapRepositoryWorktree
   const materializeSymlink = dependencies.materializeSymlink ?? materializeBranchWorkspaceSymlink
   const copyEntry = dependencies.copyEntry ?? copyBranchWorkspaceEntry
   const fingerprintEntry = dependencies.fingerprintEntry ?? fingerprintBranchWorkspaceEntry
@@ -162,6 +160,7 @@ export function createBranchWorkspaceWriteService(
       const controller = new AbortController()
       activeByRoot.set(rootId, controller)
       const { plan } = pending
+      const warnings: BranchWorkspaceExecutionWarning[] = []
       const persistExecution = (
         targetRootId: string,
         mutate: (manifest: BranchWorkspaceManifest) => BranchWorkspaceManifest,
@@ -451,8 +450,7 @@ export function createBranchWorkspaceWriteService(
           const member = current.repositories.find(
             (candidate) => candidate.repositoryName === repository.repositoryName,
           )
-          const bootstrapOnly = repository.action === 'bootstrap-worktree'
-          if (member?.progress === 'removed' || (member?.progress === 'complete' && !bootstrapOnly)) {
+          if (member?.progress === 'removed' || member?.progress === 'complete') {
             continue
           }
           if (controller.signal.aborted) {
@@ -460,43 +458,39 @@ export function createBranchWorkspaceWriteService(
           }
           let result
           try {
-            result = bootstrapOnly
-              ? await bootstrapWorktree(
-                  repository.repoId,
-                  repository.worktreePath,
-                  repository.worktreeBootstrap,
-                  repository.bootstrapReplacements ?? [],
-                  controller.signal,
-                )
-              : await createWorktree(
-                  repository.repoId,
-                  { worktreePath: repository.worktreePath, mode: repository.mode },
-                  repository.worktreeBootstrap,
-                  controller.signal,
-                )
+            result = await createWorktree(
+              repository.repoId,
+              { worktreePath: repository.worktreePath, mode: repository.mode },
+              repository.worktreeBootstrap,
+              controller.signal,
+            )
           } catch (error) {
             result = { ok: false, message: operationMessage(error) }
           }
           if (!result.ok) {
-            if ((bootstrapOnly || result.repoChanged) && member?.worktreeBootstrap) {
-              await persistMemberBootstrapProgress(
-                persistExecution,
-                rootId,
-                plan.branchWorkspaceId,
-                repository.repositoryName,
-                'failed',
-                result.message,
-              )
-            } else {
+            if (result.repoChanged && repository.worktreeBootstrap.kind !== 'skip') {
               await persistMemberProgress(
                 persistExecution,
                 rootId,
                 plan.branchWorkspaceId,
                 repository.repositoryName,
-                'failed',
-                result.message,
+                'complete',
               )
+              warnings.push({
+                kind: 'repository-dependency-failed',
+                repositoryName: repository.repositoryName,
+                message: result.message,
+              })
+              continue
             }
+            await persistMemberProgress(
+              persistExecution,
+              rootId,
+              plan.branchWorkspaceId,
+              repository.repositoryName,
+              'failed',
+              result.message,
+            )
             return failOperation(plan.branchWorkspaceId, result.message)
           }
           await persistMemberProgress(
@@ -506,15 +500,6 @@ export function createBranchWorkspaceWriteService(
             repository.repositoryName,
             'complete',
           )
-          if (member?.worktreeBootstrap) {
-            await persistMemberBootstrapProgress(
-              persistExecution,
-              rootId,
-              plan.branchWorkspaceId,
-              repository.repositoryName,
-              'complete',
-            )
-          }
         }
 
         for (const entry of plan.auxiliaryEntries) {
@@ -577,9 +562,18 @@ export function createBranchWorkspaceWriteService(
           if (!snapshot || snapshot.state.kind !== 'ready') {
             return failOperation(plan.branchWorkspaceId, 'workspace.branch-workspace.needs-repair')
           }
-          return { ok: true, branchWorkspaceId: plan.branchWorkspaceId, snapshot }
+          return {
+            ok: true,
+            branchWorkspaceId: plan.branchWorkspaceId,
+            snapshot,
+            ...(warnings.length > 0 ? { warnings } : {}),
+          }
         }
-        return { ok: true, branchWorkspaceId: plan.branchWorkspaceId }
+        return {
+          ok: true,
+          branchWorkspaceId: plan.branchWorkspaceId,
+          ...(warnings.length > 0 ? { warnings } : {}),
+        }
       } catch (error) {
         return failOperation(plan.branchWorkspaceId, operationMessage(error))
       } finally {
@@ -684,38 +678,6 @@ async function persistRepositoryCleanup(
               ...member,
               [field]: progress,
               ...(lastError ? { lastError } : { lastError: undefined }),
-            }
-          : member,
-      ),
-    }),
-    branchWorkspaceId,
-  )
-}
-
-async function persistMemberBootstrapProgress(
-  persist: (
-    rootId: string,
-    mutate: (manifest: BranchWorkspaceManifest) => BranchWorkspaceManifest,
-    branchWorkspaceId: string,
-  ) => Promise<void>,
-  rootId: string,
-  branchWorkspaceId: string,
-  repositoryName: string,
-  progress: 'complete' | 'failed',
-  lastError?: string,
-): Promise<void> {
-  await persist(
-    rootId,
-    (manifest) => ({
-      ...manifest,
-      repositories: manifest.repositories.map((member) =>
-        member.repositoryName === repositoryName
-          ? {
-              ...member,
-              progress: 'complete',
-              lastError: undefined,
-              bootstrapProgress: progress,
-              ...(lastError ? { bootstrapLastError: lastError } : { bootstrapLastError: undefined }),
             }
           : member,
       ),

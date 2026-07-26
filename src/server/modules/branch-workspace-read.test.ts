@@ -203,10 +203,9 @@ describe('branch workspace read model', () => {
     })
   })
 
-  test('projects failed repository dependency bootstrap as repairable state', async () => {
+  test('ignores legacy repository dependency recovery fields when projecting readiness', async () => {
     const current = manifest()
-    current.repositories[0] = {
-      ...current.repositories[0]!,
+    Object.assign(current.repositories[0]!, {
       worktreeBootstrap: {
         kind: 'materialize',
         candidateScope: 'ignored-only',
@@ -214,7 +213,7 @@ describe('branch workspace read model', () => {
       },
       bootstrapProgress: 'failed',
       bootstrapLastError: 'link failed',
-    }
+    })
     const deps = dependencies([current])
 
     await expect(readBranchWorkspaceSnapshot(ROOT, undefined, deps)).resolves.toMatchObject({
@@ -222,15 +221,9 @@ describe('branch workspace read model', () => {
       items: [
         {
           id: current.id,
-          state: { kind: 'needs-action', action: 'repair', reason: 'creation-interrupted' },
-          issues: [
-            {
-              kind: 'repository-bootstrap-failed',
-              repositoryName: 'api',
-              message: 'link failed',
-            },
-          ],
-          repositories: [{ repositoryName: 'api', ready: false }],
+          state: { kind: 'ready' },
+          issues: [],
+          repositories: [{ repositoryName: 'api', ready: true }],
         },
       ],
     })

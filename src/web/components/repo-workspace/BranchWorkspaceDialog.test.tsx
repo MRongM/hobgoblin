@@ -63,6 +63,7 @@ describe('BranchWorkspaceDialog', () => {
     click('workspace.branch-workspace.repository-named')
     await flushAsyncWork()
     changeSelect('workspace.branch-workspace.base-named', 'develop')
+    await flushAsyncWork()
     clickSelector('[data-materialization-item="docs"] [data-materialization-choice="copy"]')
     await clickAction('preview')
 
@@ -74,7 +75,7 @@ describe('BranchWorkspaceDialog', () => {
     })
   })
 
-  test('loads and submits ignored repository dependencies for each selected repository', async () => {
+  test('loads and submits untracked repository dependencies from the selected base worktree', async () => {
     mocks.getRepositoryWorktreeBootstrapPreflight.mockResolvedValueOnce({
       ok: true,
       preflight: {
@@ -91,7 +92,8 @@ describe('BranchWorkspaceDialog', () => {
     expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenCalledWith(
       '/workspace/api',
       expect.any(AbortSignal),
-      'ignored-only',
+      'all-untracked',
+      '/workspace/api-main',
     )
     clickSelector('[data-materialization-item="node_modules"] [data-materialization-choice="symlink"]')
     await clickAction('preview')
@@ -105,13 +107,34 @@ describe('BranchWorkspaceDialog', () => {
           baseBranch: 'main',
           worktreeBootstrap: {
             kind: 'materialize',
-            candidateScope: 'ignored-only',
+            candidateScope: 'all-untracked',
             selections: [{ path: 'node_modules', mode: 'symlink' }],
           },
         },
       ],
       auxiliaryEntries: [],
     })
+  })
+
+  test('reloads repository dependencies when the selected base worktree changes', async () => {
+    renderDialog({})
+    click('workspace.branch-workspace.repository-named')
+    await flushAsyncWork()
+    expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenLastCalledWith(
+      '/workspace/api',
+      expect.any(AbortSignal),
+      'all-untracked',
+      '/workspace/api-main',
+    )
+
+    changeSelect('workspace.branch-workspace.base-named', 'develop')
+    await flushAsyncWork()
+    expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenLastCalledWith(
+      '/workspace/api',
+      expect.any(AbortSignal),
+      'all-untracked',
+      '/workspace/api-develop',
+    )
   })
 
   test('applies bulk choices independently to repository dependencies and auxiliary entries', async () => {
@@ -154,7 +177,7 @@ describe('BranchWorkspaceDialog', () => {
           baseBranch: 'main',
           worktreeBootstrap: {
             kind: 'materialize',
-            candidateScope: 'ignored-only',
+            candidateScope: 'all-untracked',
             selections: [
               { path: 'node_modules', mode: 'copy' },
               { path: '.env', mode: 'copy' },
@@ -326,44 +349,6 @@ describe('BranchWorkspaceDialog', () => {
     renderDialog({ mode: 'remove', workspace: existingWorkspace(), plan: removalPlan() })
 
     expect(checked('workspace.branch-workspace.approval.modified-copy')).toBe(true)
-  })
-
-  test('requires explicit destructive approval for exact repository dependency replacements', () => {
-    const plan: BranchWorkspacePlan = {
-      ...approvalPlan(),
-      operation: 'repair',
-      requiredApprovals: ['replace-repository-dependencies'],
-      steps: [
-        {
-          id: 'repository-replacement:api:.env',
-          kind: 'replace-repository-dependency',
-          label: 'api/.env',
-          repositoryName: 'api',
-          entryName: '.env',
-        },
-        {
-          id: 'repository-replacement:api:node_modules',
-          kind: 'replace-repository-dependency',
-          label: 'api/node_modules',
-          repositoryName: 'api',
-          entryName: 'node_modules',
-        },
-      ],
-    }
-    renderDialog({ mode: 'repair', workspace: existingWorkspace(), plan })
-
-    expect(document.body.textContent).toContain('api/.env')
-    expect(document.body.textContent).toContain('api/node_modules')
-    const approval = document.querySelector<HTMLInputElement>(
-      '[aria-label="workspace.branch-workspace.approval.replace-repository-dependencies"]',
-    )
-    const confirm = document.querySelector<HTMLButtonElement>('[data-action="confirm"]')
-    expect(approval?.checked).toBe(false)
-    expect(confirm?.disabled).toBe(true)
-    expect(confirm?.dataset.variant).toBe('destructive')
-
-    act(() => approval?.click())
-    expect(confirm?.disabled).toBe(false)
   })
 
   test('groups local and upstream branch cleanup by repository before removal', () => {
@@ -583,7 +568,17 @@ function renderDialog(overrides: Partial<React.ComponentProps<typeof BranchWorks
         open
         mode="create"
         repositories={[
-          { id: '/workspace/api', name: 'api', available: true, branches: ['main', 'develop'], defaultBranch: 'main' },
+          {
+            id: '/workspace/api',
+            name: 'api',
+            available: true,
+            branches: ['main', 'develop'],
+            defaultBranch: 'main',
+            sourceWorktreeByBranch: {
+              main: '/workspace/api-main',
+              develop: '/workspace/api-develop',
+            },
+          },
           { id: '/workspace/web', name: 'web', available: true, branches: ['trunk'], defaultBranch: 'trunk' },
         ]}
         auxiliaryCandidates={[{ name: 'docs', path: '/workspace/docs', kind: 'directory', outsideRoot: false }]}

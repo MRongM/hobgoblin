@@ -2,8 +2,8 @@ import { describe, expect, test } from 'vitest'
 import { isBranchWorkspaceApproval, normalizeBranchWorkspacePlanRequest } from '#/shared/branch-workspaces.ts'
 
 describe('branch workspace contracts', () => {
-  test('recognizes repository dependency replacement approval without accepting broader overwrite intent', () => {
-    expect(isBranchWorkspaceApproval('replace-repository-dependencies')).toBe(true)
+  test('rejects retired dependency recovery approvals without accepting broader overwrite intent', () => {
+    expect(isBranchWorkspaceApproval('replace-repository-dependencies')).toBe(false)
     expect(isBranchWorkspaceApproval('discard-member-changes')).toBe(true)
     expect(isBranchWorkspaceApproval('replace-everything')).toBe(false)
   })
@@ -39,7 +39,7 @@ describe('branch workspace contracts', () => {
     })
   })
 
-  test('normalizes repository dependency selections to ignored-only materialization', () => {
+  test('normalizes repository dependency selections to server-derived all-untracked materialization', () => {
     expect(
       normalizeBranchWorkspacePlanRequest({
         operation: 'create',
@@ -50,6 +50,7 @@ describe('branch workspace contracts', () => {
             baseBranch: 'main',
             worktreeBootstrap: {
               kind: 'materialize',
+              sourceWorktreePath: '/untrusted/client/path',
               selections: [{ path: 'node_modules', mode: 'symlink' }],
             },
           },
@@ -67,7 +68,7 @@ describe('branch workspace contracts', () => {
             baseBranch: 'main',
             worktreeBootstrap: {
               kind: 'materialize',
-              candidateScope: 'ignored-only',
+              candidateScope: 'all-untracked',
               selections: [{ path: 'node_modules', mode: 'symlink' }],
             },
           },

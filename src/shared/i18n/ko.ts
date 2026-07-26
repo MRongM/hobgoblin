@@ -125,13 +125,14 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.base-named': '{name}의 기준 브랜치',
   'workspace.branch-workspace.repository-dependencies': '저장소 의존 항목',
   'workspace.branch-workspace.repository-dependencies-description':
-    '원본 저장소에서 새 작업 트리로 가져올 Git 무시 항목을 복사 또는 링크 방식으로 선택합니다.',
+    '선택한 기준 브랜치 작업 트리에서 새 작업 트리로 복사하거나 링크할 추적되지 않은 항목을 선택합니다.',
   'workspace.branch-workspace.repository-dependencies-loading': '저장소 의존 항목 불러오는 중…',
   'workspace.branch-workspace.repository-dependencies-error':
     '저장소 의존 항목을 불러오지 못했습니다. 이 저장소를 선택 해제한 후 다시 선택하세요.',
-  'workspace.branch-workspace.repository-dependencies-empty': '선택할 수 있는 Git 무시 항목이 없습니다.',
+  'workspace.branch-workspace.repository-dependencies-empty':
+    '선택한 기준 브랜치 작업 트리에 선택할 수 있는 추적되지 않은 항목이 없습니다.',
   'workspace.branch-workspace.repository-dependencies-configured':
-    'goblin.toml의 작업 트리 bootstrap 설정을 사용합니다.',
+    '선택한 기준 브랜치 작업 트리의 goblin.toml을 사용합니다.',
   'workspace.branch-workspace.auxiliary': '브랜치 작업공간 의존 항목',
   'workspace.branch-workspace.auxiliary-refresh': '브랜치 작업공간 의존 항목 새로 고침',
   'workspace.branch-workspace.auxiliary-named': '브랜치 작업공간 의존 항목 {name} 포함',
@@ -182,8 +183,6 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.approvals': '필수 확인',
   'workspace.branch-workspace.approval.outside-root-source': '워크스페이스 외부 소스 허용',
   'workspace.branch-workspace.approval.worktree-bootstrap': '검토한 bootstrap 작업 실행',
-  'workspace.branch-workspace.approval.replace-repository-dependencies':
-    '목록의 리포지토리 의존성을 삭제하고 다시 생성',
   'workspace.branch-workspace.approval.modified-copy': '수정된 복사 콘텐츠 삭제',
   'workspace.branch-workspace.approval.unmanaged-content': '관리되지 않은 콘텐츠 삭제',
   'workspace.branch-workspace.approval.discard-member-changes':
@@ -263,7 +262,6 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.delete-upstream-branch': '대상 업스트림 브랜치도 삭제',
   'workspace.branch-workspace.step.delete-local-branch': '{repository}의 로컬 브랜치 삭제:',
   'workspace.branch-workspace.step.delete-upstream-branch': '{repository}의 업스트림 브랜치 삭제:',
-  'workspace.branch-workspace.step.replace-repository-dependency': '리포지토리 의존성 교체',
   'workspace.branch-workspace.step.local-branch': '로컬 브랜치',
   'workspace.branch-workspace.step.upstream-branch': '업스트림 브랜치',
   'workspace.branch-workspace.dialog.create.title': '브랜치 워크스페이스 추가',
@@ -292,8 +290,6 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.issue.repository-unavailable': '저장소를 사용할 수 없습니다.',
   'workspace.branch-workspace.issue.repository-pending': '저장소 작업 트리가 대기 중입니다.',
   'workspace.branch-workspace.issue.repository-failed': '저장소 작업 트리가 실패했습니다.',
-  'workspace.branch-workspace.issue.repository-bootstrap-pending': '저장소 의존 항목 초기화가 대기 중입니다.',
-  'workspace.branch-workspace.issue.repository-bootstrap-failed': '저장소 의존 항목 초기화에 실패했습니다.',
   'workspace.branch-workspace.issue.worktree-missing': '관리 작업 트리가 없습니다.',
   'workspace.branch-workspace.issue.worktree-path-mismatch': '작업 트리가 다른 경로에 있습니다.',
   'workspace.branch-workspace.issue.auxiliary-missing': '추가 항목이 없습니다.',
@@ -320,9 +316,9 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.plan-failed': '계획을 만들 수 없습니다.',
   'workspace.branch-workspace.plan-stale': '상태가 변경되었습니다. 새 계획을 검토하세요.',
   'workspace.branch-workspace.execute-failed': '작업을 완료할 수 없습니다.',
+  'workspace.branch-workspace.repository-dependency-warning':
+    '{count}개 저장소 의존성을 준비하지 못했지만 작업 트리는 생성되었습니다.',
   'workspace.branch-workspace.approval-required': '필요한 확인을 모두 완료하세요.',
-  'workspace.branch-workspace.repository-dependency-conflict-changed':
-    '리포지토리 의존성 충돌이 변경되었습니다. 업데이트된 교체 목록을 확인하세요.',
   'workspace.branch-workspace.read-failed': '브랜치 워크스페이스를 읽을 수 없습니다.',
   'workspace.branch-workspace.cleanup': '레코드 정리',
   'workspace.branch-workspace.cleanup-title': '브랜치 워크스페이스 레코드를 정리할까요?',

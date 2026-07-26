@@ -108,10 +108,9 @@ function existingManifest(): BranchWorkspaceManifest {
   }
 }
 
-function failedBootstrapManifest(): BranchWorkspaceManifest {
+function legacyBootstrapManifest(): BranchWorkspaceManifest {
   const manifest = existingManifest()
-  manifest.repositories[0] = {
-    ...manifest.repositories[0]!,
+  Object.assign(manifest.repositories[0]!, {
     worktreeBootstrap: {
       kind: 'materialize',
       candidateScope: 'ignored-only',
@@ -119,7 +118,7 @@ function failedBootstrapManifest(): BranchWorkspaceManifest {
     },
     bootstrapProgress: 'failed',
     bootstrapLastError: 'link failed',
-  }
+  })
   return manifest
 }
 
@@ -369,7 +368,8 @@ describe('branch workspace create planner', () => {
   })
 
   test('requires independent outside-root and worktree-bootstrap approvals with a deterministic token', async () => {
-    const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch('main')) })
+    const sourceWorktreePath = path.join(ROOT, 'api-main')
+    const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch('main', sourceWorktreePath)) })
     deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
     deps.getBootstrapPreflight.mockResolvedValue({
       ok: true,
@@ -414,6 +414,14 @@ describe('branch workspace create planner', () => {
       ok: true,
       plan: {
         requiredApprovals: ['outside-root-source', 'worktree-bootstrap'],
+        repositories: [
+          {
+            worktreeBootstrap: {
+              kind: 'run',
+              sourceWorktreePath,
+            },
+          },
+        ],
         auxiliaryEntries: [
           {
             name: 'README.md',
@@ -427,8 +435,9 @@ describe('branch workspace create planner', () => {
     if (first.ok && second.ok) expect(second.plan.token).toBe(first.plan.token)
   })
 
-  test('plans selected ignored repository dependencies independently', async () => {
-    const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch('main')) })
+  test('plans selected untracked repository dependencies from the base branch worktree', async () => {
+    const sourceWorktreePath = path.join(ROOT, 'api-main')
+    const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch('main', sourceWorktreePath)) })
     deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
     deps.getBootstrapPreflight.mockResolvedValue({
       ok: true,
@@ -452,8 +461,9 @@ describe('branch workspace create planner', () => {
             baseBranch: 'main',
             worktreeBootstrap: {
               kind: 'materialize',
-              candidateScope: 'ignored-only',
+              candidateScope: 'all-untracked',
               selections: [{ path: 'node_modules', mode: 'symlink' }],
+              sourceWorktreePath,
             },
           },
         ],
@@ -470,8 +480,9 @@ describe('branch workspace create planner', () => {
             repositoryName: 'api',
             worktreeBootstrap: {
               kind: 'materialize',
-              candidateScope: 'ignored-only',
+              candidateScope: 'all-untracked',
               selections: [{ path: 'node_modules', mode: 'symlink' }],
+              sourceWorktreePath,
             },
             confirmationRequired: false,
           },
@@ -479,10 +490,15 @@ describe('branch workspace create planner', () => {
         requiredApprovals: [],
       },
     })
-    expect(deps.getBootstrapPreflight).toHaveBeenCalledWith(path.join(ROOT, 'api'), undefined, 'ignored-only')
+    expect(deps.getBootstrapPreflight).toHaveBeenCalledWith(
+      path.join(ROOT, 'api'),
+      undefined,
+      'all-untracked',
+      sourceWorktreePath,
+    )
   })
 
-  test('rejects a repository dependency that is no longer ignored', async () => {
+  test('rejects a repository dependency that is no longer untracked', async () => {
     const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch('main')) })
     deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
 
@@ -498,7 +514,7 @@ describe('branch workspace create planner', () => {
               baseBranch: 'main',
               worktreeBootstrap: {
                 kind: 'materialize',
-                candidateScope: 'ignored-only',
+                candidateScope: 'all-untracked',
                 selections: [{ path: '.env', mode: 'copy' }],
               },
             },
@@ -639,18 +655,8 @@ describe('branch workspace repair planner', () => {
     expect(deps.inspectPath).toHaveBeenCalledWith(ROOT, current.path, undefined)
   })
 
-  test('plans exact approved replacement for persisted repository dependency conflicts', async () => {
-    const current = existingManifest()
-    current.repositories[0] = {
-      ...current.repositories[0]!,
-      worktreeBootstrap: {
-        kind: 'materialize',
-        candidateScope: 'ignored-only',
-        selections: [{ path: 'node_modules', mode: 'symlink' }],
-      },
-      bootstrapProgress: 'failed',
-      bootstrapLastError: 'link failed',
-    }
+  test('ignores legacy dependency recovery fields for an existing member worktree', async () => {
+    const current = legacyBootstrapManifest()
     const deps = dependencies({
       [path.join(ROOT, 'api')]: snapshot(branch('main'), branch(BRANCH, current.repositories[0]!.worktreePath)),
     })
@@ -662,107 +668,38 @@ describe('branch workspace repair planner', () => {
       kind: 'directory',
       resolvedPath: candidatePath,
     }))
-    deps.getBootstrapTargetPreflight.mockResolvedValue({
-      ok: true,
-      preflight: {
-        pending: [],
-        satisfied: [],
-        conflicts: [{ path: '.env', mode: 'copy' }],
-        hasSetup: false,
-      },
-    })
-
-    const result = await buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, deps)
-
-    expect(result).toMatchObject({
-      ok: true,
-      plan: {
-        repositories: [
-          {
-            repositoryName: 'api',
-            action: 'bootstrap-worktree',
-            worktreeBootstrap: current.repositories[0]!.worktreeBootstrap,
-            bootstrapReplacements: [{ path: '.env', mode: 'copy' }],
-          },
-        ],
-        requiredApprovals: ['replace-repository-dependencies'],
-        steps: [
-          {
-            id: 'repository-replacement:api:.env',
-            kind: 'replace-repository-dependency',
-            label: 'api/.env',
-            repositoryName: 'api',
-            entryName: '.env',
-          },
-          { kind: 'bootstrap-worktree', repositoryName: 'api' },
-        ],
-      },
-    })
-  })
-
-  test('treats exact satisfied dependencies as repaired without rerunning bootstrap', async () => {
-    const current = failedBootstrapManifest()
-    const deps = repairDependencies(current)
-    deps.getBootstrapTargetPreflight.mockResolvedValue({
-      ok: true,
-      preflight: {
-        pending: [],
-        satisfied: [{ path: 'node_modules', mode: 'symlink' }],
-        conflicts: [],
-        hasSetup: false,
-      },
-    })
 
     await expect(
       buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, deps),
     ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.nothing-to-repair' })
+    expect(deps.getBootstrapTargetPreflight).not.toHaveBeenCalled()
+    expect(deps.getBootstrapPreview).not.toHaveBeenCalled()
   })
 
-  test('reruns bootstrap for pending dependencies and setup-only plans without replacement approval', async () => {
-    const current = failedBootstrapManifest()
-    const pendingDeps = repairDependencies(current)
-    pendingDeps.getBootstrapTargetPreflight.mockResolvedValue({
+  test('recreates a missing legacy member worktree without dependency bootstrap', async () => {
+    const current = legacyBootstrapManifest()
+    current.operation = { kind: 'create' }
+    const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch('main')) })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
+    deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+    deps.inspectPath.mockImplementation(async (_rootId, candidatePath) =>
+      candidatePath === current.path
+        ? { ...missing(candidatePath), exists: true, kind: 'directory', resolvedPath: candidatePath }
+        : missing(candidatePath),
+    )
+
+    await expect(
+      buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, deps),
+    ).resolves.toMatchObject({
       ok: true,
-      preflight: {
-        pending: [{ path: 'node_modules', mode: 'symlink' }],
-        satisfied: [],
-        conflicts: [],
-        hasSetup: false,
+      plan: {
+        requiredApprovals: [],
+        repositories: [{ action: 'create-worktree', worktreeBootstrap: { kind: 'skip' } }],
+        steps: [{ kind: 'create-worktree', repositoryName: 'api' }],
       },
     })
-    const setupDeps = repairDependencies(current)
-    setupDeps.getBootstrapTargetPreflight.mockResolvedValue({
-      ok: true,
-      preflight: { pending: [], satisfied: [], conflicts: [], hasSetup: true },
-    })
-
-    for (const deps of [pendingDeps, setupDeps]) {
-      const result = await buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, deps)
-      expect(result).toMatchObject({
-        ok: true,
-        plan: {
-          requiredApprovals: [],
-          repositories: [{ action: 'bootstrap-worktree' }],
-        },
-      })
-    }
-  })
-
-  test('changes the plan token when the exact dependency conflict set changes', async () => {
-    const current = failedBootstrapManifest()
-    const deps = repairDependencies(current)
-    deps.getBootstrapTargetPreflight.mockResolvedValueOnce({
-      ok: true,
-      preflight: { pending: [], satisfied: [], conflicts: [{ path: '.env', mode: 'copy' }], hasSetup: false },
-    })
-    const first = await buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, deps)
-    deps.getBootstrapTargetPreflight.mockResolvedValueOnce({
-      ok: true,
-      preflight: { pending: [], satisfied: [], conflicts: [{ path: 'cache', mode: 'copy' }], hasSetup: false },
-    })
-    const second = await buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, deps)
-
-    expect(first.ok && second.ok && first.plan.token).not.toBe(second.ok && second.plan.token)
+    expect(deps.getBootstrapTargetPreflight).not.toHaveBeenCalled()
+    expect(deps.getBootstrapPreview).not.toHaveBeenCalled()
   })
 
   test('repairs only missing roots and repository worktrees while releasing auxiliary intent', async () => {

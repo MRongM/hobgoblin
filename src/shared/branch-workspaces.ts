@@ -8,7 +8,6 @@ import {
   normalizeWorktreeBootstrapSelections,
   type WorktreeBootstrapDecision,
   type WorktreeBootstrapPreview,
-  type WorktreeBootstrapTargetEntry,
 } from '#/shared/worktree-bootstrap-summary.ts'
 
 export const BRANCH_WORKSPACE_DIRECTORY_PREFIX = 'hobgoblin-'
@@ -25,7 +24,6 @@ export function isManagedBranchWorkspaceEntryName(value: string): boolean {
 }
 
 export type BranchWorkspaceProgress = 'pending' | 'complete' | 'removed' | 'failed'
-export type BranchWorkspaceBootstrapProgress = Exclude<BranchWorkspaceProgress, 'removed'>
 export type BranchWorkspaceOperationKind = 'create' | 'extend' | 'reduce' | 'repair' | 'remove'
 export type BranchWorkspaceBranchOrigin = 'created' | 'pre-existing'
 export type BranchWorkspaceAuxiliaryMode = 'symlink' | 'copy'
@@ -56,9 +54,6 @@ export interface BranchWorkspaceRepositoryMember {
   branchOrigin: BranchWorkspaceBranchOrigin
   worktreePath: string
   progress: BranchWorkspaceProgress
-  worktreeBootstrap?: Exclude<WorktreeBootstrapDecision, { kind: 'skip' }>
-  bootstrapProgress?: BranchWorkspaceBootstrapProgress
-  bootstrapLastError?: string
   branchCleanupProgress?: BranchWorkspaceProgress
   upstreamCleanupProgress?: BranchWorkspaceProgress
   lastError?: string
@@ -114,8 +109,6 @@ export type BranchWorkspaceIssueKind =
   | 'repository-unavailable'
   | 'repository-pending'
   | 'repository-failed'
-  | 'repository-bootstrap-pending'
-  | 'repository-bootstrap-failed'
   | 'worktree-missing'
   | 'worktree-path-mismatch'
   | 'auxiliary-missing'
@@ -188,7 +181,6 @@ export type BranchWorkspacePlanRequest =
 export type BranchWorkspaceApproval =
   | 'outside-root-source'
   | 'worktree-bootstrap'
-  | 'replace-repository-dependencies'
   | 'discard-member-changes'
   | 'modified-copy'
   | 'unmanaged-content'
@@ -198,7 +190,6 @@ export function isBranchWorkspaceApproval(value: unknown): value is BranchWorksp
   return (
     value === 'outside-root-source' ||
     value === 'worktree-bootstrap' ||
-    value === 'replace-repository-dependencies' ||
     value === 'discard-member-changes' ||
     value === 'modified-copy' ||
     value === 'unmanaged-content' ||
@@ -209,8 +200,6 @@ export function isBranchWorkspaceApproval(value: unknown): value is BranchWorksp
 export type BranchWorkspacePlanStepKind =
   | 'create-directory'
   | 'create-worktree'
-  | 'bootstrap-worktree'
-  | 'replace-repository-dependency'
   | 'symlink-entry'
   | 'copy-entry'
   | 'remove-worktree'
@@ -237,10 +226,9 @@ export interface BranchWorkspaceRepositoryPlan {
   mode: CreateWorktreeMode
   worktreeBootstrap: WorktreeBootstrapDecision
   bootstrapPreview?: WorktreeBootstrapPreview
-  bootstrapReplacements?: WorktreeBootstrapTargetEntry[]
   confirmationRequired: boolean
   satisfied: boolean
-  action?: 'create-worktree' | 'bootstrap-worktree' | 'remove-worktree' | 'delete-branch' | 'satisfied'
+  action?: 'create-worktree' | 'remove-worktree' | 'delete-branch' | 'satisfied'
   worktreePresent?: boolean
   deleteBranch?: boolean
   deleteUpstream?: boolean
@@ -285,8 +273,19 @@ export type BranchWorkspacePlanResult =
   | { ok: true; plan: BranchWorkspacePlan }
   | { ok: false; message: string; detail?: string }
 
+export interface BranchWorkspaceExecutionWarning {
+  kind: 'repository-dependency-failed'
+  repositoryName: string
+  message: string
+}
+
 export type BranchWorkspaceExecuteResult =
-  | { ok: true; branchWorkspaceId: string; snapshot?: BranchWorkspaceSnapshot }
+  | {
+      ok: true
+      branchWorkspaceId: string
+      snapshot?: BranchWorkspaceSnapshot
+      warnings?: BranchWorkspaceExecutionWarning[]
+    }
   | { ok: false; message: string; detail?: string; branchWorkspaceId?: string }
 
 export interface BranchWorkspaceExecuteInput {
@@ -421,7 +420,7 @@ function normalizeRepositoryWorktreeBootstrap(value: unknown): WorktreeBootstrap
   if (decision.kind === 'skip') return { kind: 'skip' }
   if (decision.kind !== 'materialize') return null
   const selections = normalizeWorktreeBootstrapSelections(decision.selections)
-  return selections ? { kind: 'materialize', selections, candidateScope: 'ignored-only' } : null
+  return selections ? { kind: 'materialize', selections, candidateScope: 'all-untracked' } : null
 }
 
 function invalidRequest(): BranchWorkspacePlanRequestResult {

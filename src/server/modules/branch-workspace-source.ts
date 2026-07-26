@@ -6,19 +6,13 @@ import { branchWorkspacePath, workspaceRepositoryPath, workspaceRootId } from '#
 import {
   isBranchWorkspaceDirectoryName,
   type BranchWorkspaceAuxiliaryEntry,
-  type BranchWorkspaceBootstrapProgress,
   type BranchWorkspaceManifest,
   type BranchWorkspaceOperationSnapshot,
   type BranchWorkspaceRegistryCleanupResult,
   type BranchWorkspaceRepositoryMember,
 } from '#/shared/branch-workspaces.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
-import { isWorktreeBootstrapConfigHash } from '#/shared/repo-settings.ts'
 import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
-import {
-  normalizeWorktreeBootstrapSelections,
-  type WorktreeBootstrapDecision,
-} from '#/shared/worktree-bootstrap-summary.ts'
 
 const registryFileName = 'branch-workspaces.json'
 const invalidRegistryMessage = 'workspace.branch-workspace.invalid-registry'
@@ -341,11 +335,6 @@ function normalizeRepositoryMember(
     throw new Error(invalidRegistryMessage)
   }
   const lastError = optionalText(member.lastError)
-  const worktreeBootstrap = normalizePersistedWorktreeBootstrap(member.worktreeBootstrap)
-  const bootstrapProgress = optionalBootstrapProgress(member.bootstrapProgress)
-  const bootstrapLastError = optionalText(member.bootstrapLastError)
-  if (worktreeBootstrap && !bootstrapProgress) throw new Error(invalidRegistryMessage)
-  if (!worktreeBootstrap && (bootstrapProgress || bootstrapLastError)) throw new Error(invalidRegistryMessage)
   const branchCleanupProgress = optionalProgress(member.branchCleanupProgress)
   const upstreamCleanupProgress = optionalProgress(member.upstreamCleanupProgress)
   return {
@@ -355,33 +344,10 @@ function normalizeRepositoryMember(
     branchOrigin: member.branchOrigin,
     worktreePath,
     progress: member.progress,
-    ...(worktreeBootstrap ? { worktreeBootstrap } : {}),
-    ...(bootstrapProgress ? { bootstrapProgress } : {}),
-    ...(bootstrapLastError ? { bootstrapLastError } : {}),
     ...(branchCleanupProgress ? { branchCleanupProgress } : {}),
     ...(upstreamCleanupProgress ? { upstreamCleanupProgress } : {}),
     ...(lastError ? { lastError } : {}),
   }
-}
-
-function normalizePersistedWorktreeBootstrap(
-  value: unknown,
-): Exclude<WorktreeBootstrapDecision, { kind: 'skip' }> | undefined {
-  if (value === undefined) return undefined
-  const decision = asRecord(value)
-  if (!decision) throw new Error(invalidRegistryMessage)
-  if (
-    decision.kind === 'run' &&
-    isWorktreeBootstrapConfigHash(decision.configHash) &&
-    typeof decision.configTrusted === 'boolean'
-  ) {
-    return { kind: 'run', configHash: decision.configHash, configTrusted: decision.configTrusted }
-  }
-  if (decision.kind === 'materialize' && decision.candidateScope === 'ignored-only') {
-    const selections = normalizeWorktreeBootstrapSelections(decision.selections)
-    if (selections) return { kind: 'materialize', candidateScope: 'ignored-only', selections }
-  }
-  throw new Error(invalidRegistryMessage)
 }
 
 function normalizeAuxiliaryEntry(
@@ -432,14 +398,6 @@ function optionalProgress(value: unknown): BranchWorkspaceRepositoryMember['prog
   return value
 }
 
-function optionalBootstrapProgress(value: unknown): BranchWorkspaceBootstrapProgress | undefined {
-  if (value === undefined) return undefined
-  if (value !== 'pending' && value !== 'complete' && value !== 'failed') {
-    throw new Error(invalidRegistryMessage)
-  }
-  return value
-}
-
 async function writeRegistry(dataFile: string, registry: BranchWorkspaceRegistry, randomId: string): Promise<void> {
   await mkdir(path.dirname(dataFile), { recursive: true })
   const temporaryFile = path.join(path.dirname(dataFile), `.${path.basename(dataFile)}.${randomId}.tmp`)
@@ -469,17 +427,7 @@ async function enqueueWrite(dataFile: string, write: () => Promise<void>): Promi
 function cloneManifests(manifests: BranchWorkspaceManifest[]): BranchWorkspaceManifest[] {
   return manifests.map((manifest) => ({
     ...manifest,
-    repositories: manifest.repositories.map((member) => ({
-      ...member,
-      ...(member.worktreeBootstrap?.kind === 'materialize'
-        ? {
-            worktreeBootstrap: {
-              ...member.worktreeBootstrap,
-              selections: member.worktreeBootstrap.selections.map((selection) => ({ ...selection })),
-            },
-          }
-        : {}),
-    })),
+    repositories: manifest.repositories.map((member) => ({ ...member })),
     auxiliaryEntries: manifest.auxiliaryEntries.map((entry) => ({ ...entry })),
     ...(manifest.operation ? { operation: { ...manifest.operation } } : {}),
   }))

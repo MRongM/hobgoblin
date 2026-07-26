@@ -144,17 +144,17 @@ _Avoid_: AI command, automatic AI action
 A repository-configured process that prepares a newly created worktree from its source worktree before normal development begins.
 _Avoid_: Worktree setup script, post-create hook
 
+**Worktree bootstrap source**:
+The existing repository worktree whose current files and repository-owned `goblin.toml` define one worktree bootstrap decision. It is the worktree attached to the selected branch context or base branch when available, with the repository primary worktree as the fallback when that branch has no worktree, and remains fixed from preview through the corresponding create execution.
+_Avoid_: Source branch, repository root, bootstrap template
+
 **Worktree bootstrap candidate**:
-An immediate child file or directory of a repository root that Git does not track, including ignored and ordinary untracked entries. A wholly untracked directory is one candidate, and `.git` is never a candidate.
+An immediate child file or directory of a worktree bootstrap source that Git does not track, including ignored and ordinary untracked entries. A wholly untracked directory is one candidate, and `.git` is never a candidate.
 _Avoid_: Bootstrap file, untracked path
 
 **Repository dependency candidate**:
-An existing immediate child file or directory of a repository root that Git currently ignores. It may be selected for one newly materialized branch-workspace repository member, while a repository-owned `goblin.toml` takes precedence over manual dependency selection.
+An existing worktree bootstrap candidate that may be selected for one newly materialized branch-workspace repository member. A `goblin.toml` in the same worktree bootstrap source takes precedence over manual dependency selection.
 _Avoid_: `.gitignore` rule, workspace auxiliary entry, generic untracked file
-
-**Repository dependency replacement**:
-A repair-time deletion and rematerialization of an existing repository dependency target, limited to the exact paths in an explicitly approved branch workspace plan.
-_Avoid_: Overwrite, directory merge, automatic conflict resolution
 
 **Selected branch context**:
 The branch whose explorer and detail surfaces the user is currently viewing. Changing this context is navigation; it is distinct from checking out a Git branch and from targeting a branch action.

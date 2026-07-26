@@ -19,9 +19,7 @@ import {
 import {
   getRepositorySnapshot,
   getRepositoryWorktreeBootstrapPreflight,
-  getRepositoryWorktreeBootstrapTargetPreflight,
 } from '#/server/modules/repo-read-paths.ts'
-import { getRepositoryWorktreeBootstrapPreview } from '#/server/modules/repo-write-paths.ts'
 import {
   normalizeBranchWorkspacePlanRequest,
   type BranchWorkspaceApproval,
@@ -43,26 +41,18 @@ import type {
   WorktreeBootstrapCandidateScope,
   WorktreeBootstrapDecision,
   WorktreeBootstrapPreflightResult,
-  WorktreeBootstrapPreviewResult,
-  WorktreeBootstrapTargetPreflightResult,
 } from '#/shared/worktree-bootstrap-summary.ts'
 
 export interface BranchWorkspacePlanDependencies {
   readConfig?: (rootId: string) => Promise<WorkspaceConfigSnapshot>
   readManifests?: typeof readBranchWorkspaceManifests
   getSnapshot?: (repoId: string, signal?: AbortSignal, options?: RepoSnapshotOptions) => Promise<RepoSnapshot | null>
-  getBootstrapPreview?: (repoId: string, signal?: AbortSignal) => Promise<WorktreeBootstrapPreviewResult>
   getBootstrapPreflight?: (
     repoId: string,
     signal?: AbortSignal,
     candidateScope?: WorktreeBootstrapCandidateScope,
+    sourceWorktreePath?: string,
   ) => Promise<WorktreeBootstrapPreflightResult>
-  getBootstrapTargetPreflight?: (
-    repoId: string,
-    worktreePath: string,
-    decision: Exclude<WorktreeBootstrapDecision, { kind: 'skip' }>,
-    signal?: AbortSignal,
-  ) => Promise<WorktreeBootstrapTargetPreflightResult>
   inspectPath?: typeof inspectBranchWorkspacePath
   pathExists?: (repoId: string, candidatePath: string) => Promise<boolean>
   fingerprintEntry?: typeof fingerprintBranchWorkspaceEntry
@@ -196,12 +186,6 @@ export async function buildBranchWorkspacePlan(
         branchOrigin: member.branchOrigin,
         worktreePath: member.worktreePath,
         progress: member.satisfied ? ('complete' as const) : ('pending' as const),
-        ...(member.worktreeBootstrap.kind !== 'skip'
-          ? {
-              worktreeBootstrap: cloneBootstrapDecision(member.worktreeBootstrap),
-              bootstrapProgress: member.satisfied ? ('complete' as const) : ('pending' as const),
-            }
-          : {}),
       })),
     ],
     auxiliaryEntries: [
@@ -286,11 +270,7 @@ async function buildReducePlan(
       return { ok: false, message: 'workspace.branch-workspace.operation-incomplete' }
     }
   } else if (
-    manifest.repositories.some(
-      (member) =>
-        member.progress !== 'complete' ||
-        (member.worktreeBootstrap !== undefined && member.bootstrapProgress !== 'complete'),
-    ) ||
+    manifest.repositories.some((member) => member.progress !== 'complete') ||
     manifest.auxiliaryEntries.some((entry) => entry.progress !== 'complete')
   ) {
     return { ok: false, message: 'workspace.branch-workspace.needs-repair' }
@@ -477,29 +457,13 @@ async function buildRepairPlan(
   const auxiliaryEntries: BranchWorkspaceAuxiliaryPlan[] = []
 
   const requiredApprovals: BranchWorkspaceApproval[] = []
-  if (repositories.some((repository) => !repository.satisfied && repository.confirmationRequired)) {
-    requiredApprovals.push('worktree-bootstrap')
-  }
-  if (repositories.some((repository) => (repository.bootstrapReplacements?.length ?? 0) > 0)) {
-    requiredApprovals.push('replace-repository-dependencies')
-  }
   const repositoryByName = new Map(repositories.map((repository) => [repository.repositoryName, repository]))
   const repairedManifest: BranchWorkspaceManifest = {
     ...manifest,
     repositories: manifest.repositories.map((member) => ({
       ...member,
-      progress:
-        repositoryByName.get(member.repositoryName)?.action === 'bootstrap-worktree' ||
-        repositoryByName.get(member.repositoryName)?.satisfied
-          ? 'complete'
-          : 'pending',
+      progress: repositoryByName.get(member.repositoryName)?.satisfied ? 'complete' : 'pending',
       lastError: undefined,
-      ...(member.worktreeBootstrap
-        ? {
-            bootstrapProgress: repositoryByName.get(member.repositoryName)?.satisfied ? 'complete' : 'pending',
-            bootstrapLastError: undefined,
-          }
-        : {}),
     })),
     auxiliaryEntries: [],
   }
@@ -507,19 +471,10 @@ async function buildRepairPlan(
     ...(!root.exists ? [{ id: 'directory', kind: 'create-directory' as const, label: manifest.directoryName }] : []),
     ...repositories.flatMap((repository) => {
       if (repository.satisfied) return []
-      const replacementSteps = (repository.bootstrapReplacements ?? []).map((entry) => ({
-        id: `repository-replacement:${repository.repositoryName}:${entry.path}`,
-        kind: 'replace-repository-dependency' as const,
-        label: `${repository.repositoryName}/${entry.path}`,
-        repositoryName: repository.repositoryName,
-        entryName: entry.path,
-      }))
       return [
-        ...replacementSteps,
         {
           id: `repository:${repository.repositoryName}`,
-          kind:
-            repository.action === 'bootstrap-worktree' ? ('bootstrap-worktree' as const) : ('create-worktree' as const),
+          kind: 'create-worktree' as const,
           label: repository.repositoryName,
           repositoryName: repository.repositoryName,
         },
@@ -564,33 +519,6 @@ async function planRepairRepository(
     if (!sameHostPath(manifest.rootId, branch.worktree.path, member.worktreePath)) {
       return { ok: false, message: 'workspace.branch-workspace.worktree-elsewhere' }
     }
-    const bootstrapPending = !!member.worktreeBootstrap && member.bootstrapProgress !== 'complete'
-    if (bootstrapPending) {
-      const preflight = await (
-        dependencies.getBootstrapTargetPreflight ?? getRepositoryWorktreeBootstrapTargetPreflight
-      )(repoId, member.worktreePath, member.worktreeBootstrap!, signal)
-      if (!preflight.ok) return preflight
-      const satisfied =
-        preflight.preflight.pending.length === 0 &&
-        preflight.preflight.conflicts.length === 0 &&
-        !preflight.preflight.hasSetup
-      return {
-        ok: true,
-        repository: {
-          ...repairRepositoryPlan(member, repoId, { kind: 'existingBranch', branch: member.targetBranch }, satisfied),
-          ...(!satisfied
-            ? {
-                worktreeBootstrap: cloneBootstrapDecision(member.worktreeBootstrap!),
-                action: 'bootstrap-worktree' as const,
-                confirmationRequired: false,
-                ...(preflight.preflight.conflicts.length > 0
-                  ? { bootstrapReplacements: preflight.preflight.conflicts }
-                  : {}),
-              }
-            : {}),
-        },
-      }
-    }
     return {
       ok: true,
       repository: {
@@ -611,29 +539,9 @@ async function planRepairRepository(
   const mode = branch
     ? ({ kind: 'existingBranch', branch: member.targetBranch } as const)
     : ({ kind: 'newBranch', newBranch: member.targetBranch, baseRef: member.baseBranch } as const)
-  if (member.worktreeBootstrap) {
-    return {
-      ok: true,
-      repository: {
-        ...repairRepositoryPlan(member, repoId, mode, false),
-        worktreeBootstrap: cloneBootstrapDecision(member.worktreeBootstrap),
-        confirmationRequired: false,
-      },
-    }
-  }
-  const bootstrap = await (dependencies.getBootstrapPreview ?? getRepositoryWorktreeBootstrapPreview)(repoId, signal)
-  if (!bootstrap.ok) return bootstrap
-  const confirmationRequired = bootstrap.preview.hasOperations && !!bootstrap.preview.configHash
   return {
     ok: true,
-    repository: {
-      ...repairRepositoryPlan(member, repoId, mode, false),
-      worktreeBootstrap: confirmationRequired
-        ? { kind: 'run', configHash: bootstrap.preview.configHash!, configTrusted: false }
-        : { kind: 'skip' },
-      bootstrapPreview: bootstrap.preview,
-      confirmationRequired,
-    },
+    repository: repairRepositoryPlan(member, repoId, mode, false),
   }
 }
 
@@ -1110,10 +1018,13 @@ async function planRepository(
     return { ok: false, message: safePlanMessage(error, 'workspace.branch-workspace.repository-unavailable') }
   }
 
+  const sourceWorktreePath = snapshot.branches.find((candidate) => candidate.name === baseBranch)?.worktree?.path
+
   const bootstrap = await (dependencies.getBootstrapPreflight ?? getRepositoryWorktreeBootstrapPreflight)(
     repoId,
     signal,
-    'ignored-only',
+    'all-untracked',
+    sourceWorktreePath,
   )
   if (!bootstrap.ok) return bootstrap
   if (bootstrap.preflight.kind === 'candidates') {
@@ -1136,7 +1047,14 @@ async function planRepository(
         worktreePath,
         mode,
         worktreeBootstrap:
-          decision.kind === 'materialize' ? { ...decision, candidateScope: 'ignored-only' } : { kind: 'skip' },
+          decision.kind === 'materialize'
+            ? {
+                kind: 'materialize',
+                candidateScope: 'all-untracked',
+                selections: decision.selections.map((selection) => ({ ...selection })),
+                ...(sourceWorktreePath ? { sourceWorktreePath } : {}),
+              }
+            : { kind: 'skip' },
         confirmationRequired: false,
         satisfied: false,
       },
@@ -1155,7 +1073,12 @@ async function planRepository(
       worktreePath,
       mode,
       worktreeBootstrap: confirmationRequired
-        ? { kind: 'run', configHash: preview.configHash!, configTrusted: false }
+        ? {
+            kind: 'run',
+            configHash: preview.configHash!,
+            configTrusted: false,
+            ...(sourceWorktreePath ? { sourceWorktreePath } : {}),
+          }
         : { kind: 'skip' },
       bootstrapPreview: preview,
       confirmationRequired,
@@ -1246,14 +1169,4 @@ function safePlanMessage(error: unknown, fallback: string): string {
   return message === 'cancelled' || message.startsWith('workspace.') || message.startsWith('error.')
     ? message
     : fallback
-}
-
-function cloneBootstrapDecision(
-  decision: Exclude<WorktreeBootstrapDecision, { kind: 'skip' }>,
-): Exclude<WorktreeBootstrapDecision, { kind: 'skip' }>
-function cloneBootstrapDecision(decision: WorktreeBootstrapDecision): WorktreeBootstrapDecision
-function cloneBootstrapDecision(decision: WorktreeBootstrapDecision): WorktreeBootstrapDecision {
-  return decision.kind === 'materialize'
-    ? { ...decision, selections: decision.selections.map((selection) => ({ ...selection })) }
-    : { ...decision }
 }

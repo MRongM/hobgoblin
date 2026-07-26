@@ -143,8 +143,13 @@ export async function getRepositoryWorktreeBootstrapPreflight(
   cwd: string,
   signal?: AbortSignal,
   candidateScope?: WorktreeBootstrapCandidateScope,
+  sourceWorktreePath?: string,
 ): Promise<WorktreeBootstrapPreflightResult> {
-  return await postServerJson('/api/repo/worktree-bootstrap-preflight', { cwd, candidateScope }, { signal })
+  return await postServerJson(
+    '/api/repo/worktree-bootstrap-preflight',
+    { cwd, candidateScope, sourceWorktreePath },
+    { signal },
+  )
 }
 
 export async function initializeRepositoryWorktreeBootstrapConfig(

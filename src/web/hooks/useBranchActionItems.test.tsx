@@ -927,7 +927,7 @@ describe('useBranchActionItems', () => {
     const submitBranchAction = vi.fn()
     useReposStore.setState({ submitBranchAction })
     const current = createRepoBranch('main', { isCurrent: true })
-    const branch = createRepoBranch('feature/base')
+    const branch = createRepoBranch('feature/base', { worktree: { path: '/tmp/repo-base' } })
     const repo = seedRepoState({
       id: '/tmp/repo',
       branches: [current, branch],
@@ -968,7 +968,7 @@ describe('useBranchActionItems', () => {
     const submitBranchAction = vi.fn()
     useReposStore.setState({ submitBranchAction })
     const current = createRepoBranch('main', { isCurrent: true })
-    const branch = createRepoBranch('feature/base')
+    const branch = createRepoBranch('feature/base', { worktree: { path: '/tmp/repo-base' } })
     const repo = seedRepoState({
       id: '/tmp/repo',
       branches: [current, branch],
@@ -987,6 +987,12 @@ describe('useBranchActionItems', () => {
     await waitForAssertion(() => {
       expect(document.querySelector('[data-materialization-item=".env"]')).not.toBeNull()
     })
+    expect(repoClientMocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenCalledWith(
+      '/tmp/repo',
+      expect.any(AbortSignal),
+      undefined,
+      '/tmp/repo-base',
+    )
     clickButton('[data-materialization-item=".env"] [data-materialization-choice="copy"]')
     setInputValue('#cwt-branch', 'feature/new')
     clickButton('button[type="submit"]')
@@ -999,7 +1005,11 @@ describe('useBranchActionItems', () => {
           worktreePath: '/tmp/repo-feature-new',
           mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'feature/base' },
         },
-        worktreeBootstrap: { kind: 'materialize', selections: [{ path: '.env', mode: 'copy' }] },
+        worktreeBootstrap: {
+          kind: 'materialize',
+          selections: [{ path: '.env', mode: 'copy' }],
+          sourceWorktreePath: '/tmp/repo-base',
+        },
       },
       { token: repo.instanceToken, refreshOnError: false },
     )

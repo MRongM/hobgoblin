@@ -440,6 +440,8 @@ function CreateWorktreeDialogConnected({
   const [bootstrapPreflightLoading, setBootstrapPreflightLoading] = useState(false)
   const [configTrustChoice, setConfigTrustChoice] = useState<boolean | null>(null)
   const settingsQuery = useSettingsSnapshotQuery()
+  const sourceBranch = defaultBranch ?? repo?.data.currentBranch
+  const sourceWorktreePath = repo?.data.branches.find((branch) => branch.name === sourceBranch)?.worktree?.path
 
   useEffect(() => {
     if (!open) {
@@ -454,7 +456,7 @@ function CreateWorktreeDialogConnected({
     setBootstrapPreflightError(false)
     setBootstrapPreflightLoading(true)
     setConfigTrustChoice(null)
-    void getRepositoryWorktreeBootstrapPreflight(repoId, controller.signal)
+    void getRepositoryWorktreeBootstrapPreflight(repoId, controller.signal, undefined, sourceWorktreePath)
       .then((result) => {
         if (controller.signal.aborted) return
         setBootstrapPreflight(result.ok ? result.preflight : null)
@@ -467,20 +469,31 @@ function CreateWorktreeDialogConnected({
         if (!controller.signal.aborted) setBootstrapPreflightLoading(false)
       })
     return () => controller.abort()
-  }, [open, repoId])
+  }, [open, repoId, sourceWorktreePath])
 
   if (!repo) return null
 
   function resolveWorktreeBootstrapDecision(request: CreateWorktreeRequest): WorktreeBootstrapDecision {
     if (bootstrapPreflight?.kind === 'candidates') {
-      return request.selections.length > 0 ? { kind: 'materialize', selections: request.selections } : { kind: 'skip' }
+      return request.selections.length > 0
+        ? {
+            kind: 'materialize',
+            selections: request.selections,
+            ...(sourceWorktreePath ? { sourceWorktreePath } : {}),
+          }
+        : { kind: 'skip' }
     }
     const preview = bootstrapPreflight?.kind === 'configured' ? bootstrapPreflight.preview : null
     const configHash = preview?.hasOperations ? preview.configHash : null
     if (!configHash) return { kind: 'skip' }
     const repoSettings = settingsQuery.data?.repoSettings ?? []
     const trusted = configTrustChoice ?? isRepoWorktreeBootstrapConfigTrusted(repoSettings, repoId, configHash)
-    return { kind: 'run', configHash, configTrusted: trusted }
+    return {
+      kind: 'run',
+      configHash,
+      configTrusted: trusted,
+      ...(sourceWorktreePath ? { sourceWorktreePath } : {}),
+    }
   }
 
   function handleCreate(request: CreateWorktreeRequest) {

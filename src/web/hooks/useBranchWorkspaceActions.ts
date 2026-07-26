@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import type {
   BranchWorkspaceApproval,
   BranchWorkspaceExecuteResult,
@@ -15,8 +16,10 @@ import {
   reorderBranchWorkspaces,
 } from '#/web/workspace-client.ts'
 import { runWithRepoInvalidationSource } from '#/web/stores/repos/invalidation-sources.ts'
+import { useT } from '#/web/stores/i18n.ts'
 
 export function useBranchWorkspaceActions(rootId: string | null) {
+  const t = useT()
   const queryClient = useQueryClient()
   const [plan, setPlan] = useState<BranchWorkspacePlan | null>(null)
   const [request, setRequest] = useState<BranchWorkspacePlanRequest | null>(null)
@@ -71,6 +74,13 @@ export function useBranchWorkspaceActions(rootId: string | null) {
       }
       setResult(response)
       if (!response.ok) setError(response.message)
+      if (response.ok && response.warnings?.length) {
+        toast.warning(t('workspace.branch-workspace.repository-dependency-warning', { count: response.warnings.length }), {
+          description: response.warnings
+            .map((warning) => `${warning.repositoryName}: ${t(warning.message)}`)
+            .join('\n'),
+        })
+      }
       if (response.ok && response.snapshot) {
         const snapshot = response.snapshot
         queryClient.setQueryData<BranchWorkspaceReadResult>(branchWorkspaceQueryKey(rootId), (current) => {
@@ -92,7 +102,7 @@ export function useBranchWorkspaceActions(rootId: string | null) {
       }
       return response
     },
-    [invalidate, plan, queryClient, request, requestPlan, rootId],
+    [invalidate, plan, queryClient, request, requestPlan, rootId, t],
   )
 
   const cancel = useCallback(async () => {

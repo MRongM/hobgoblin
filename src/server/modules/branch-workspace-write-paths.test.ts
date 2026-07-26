@@ -292,7 +292,7 @@ describe('branch workspace write service', () => {
     ])
   })
 
-  test('records a created worktree separately when repository dependency bootstrap fails', async () => {
+  test('continues creation with a transient warning when dependency bootstrap fails after Git creation', async () => {
     const plan = planned()
     const dependency = {
       kind: 'materialize' as const,
@@ -300,18 +300,24 @@ describe('branch workspace write service', () => {
       selections: [{ path: 'node_modules', mode: 'symlink' as const }],
     }
     plan.repositories[0] = { ...plan.repositories[0]!, worktreeBootstrap: dependency }
-    plan.manifest.repositories[0] = {
-      ...plan.manifest.repositories[0]!,
-      worktreeBootstrap: dependency,
-      bootstrapProgress: 'pending',
-    }
     const source = inMemorySource()
+    const snapshot = readySnapshot(plan)
+    const createWorktree = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, message: 'link failed', repoChanged: true })
+      .mockResolvedValueOnce({ ok: true, message: 'created' })
     const service = createBranchWorkspaceWriteService({
       buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
       readManifests: source.readManifests,
       updateManifests: source.updateManifests,
       createDirectory: vi.fn(async () => undefined),
-      createWorktree: vi.fn(async () => ({ ok: false, message: 'link failed', repoChanged: true })),
+      createWorktree,
+      readSnapshot: vi.fn(async () => ({
+        ok: true as const,
+        rootId: ROOT,
+        items: [snapshot],
+        auxiliaryCandidates: [],
+      })),
     })
     await service.plan(ROOT, {
       operation: 'create',
@@ -320,16 +326,59 @@ describe('branch workspace write service', () => {
       auxiliaryEntries: [],
     })
 
+    await expect(service.execute(ROOT, { planToken: plan.token, approvals: [] })).resolves.toEqual({
+      ok: true,
+      branchWorkspaceId: plan.branchWorkspaceId,
+      snapshot,
+      warnings: [
+        {
+          kind: 'repository-dependency-failed',
+          repositoryName: 'api',
+          message: 'link failed',
+        },
+      ],
+    })
+    expect(createWorktree.mock.calls.map(([repoId]) => repoId)).toEqual(['/workspace/api', '/workspace/web'])
+    expect(source.manifests[0]?.repositories).toEqual([
+      expect.objectContaining({ repositoryName: 'api', progress: 'complete' }),
+      expect.objectContaining({ repositoryName: 'web', progress: 'complete' }),
+    ])
+    expect(source.manifests[0]?.repositories[0]).not.toHaveProperty('worktreeBootstrap')
+    expect(source.manifests[0]?.repositories[0]).not.toHaveProperty('bootstrapProgress')
+    expect(source.manifests[0]?.repositories[0]).not.toHaveProperty('bootstrapLastError')
+  })
+
+  test('keeps a pre-creation worktree failure fatal', async () => {
+    const plan = planned()
+    plan.repositories[0] = {
+      ...plan.repositories[0]!,
+      worktreeBootstrap: {
+        kind: 'materialize',
+        selections: [{ path: 'node_modules', mode: 'symlink' }],
+      },
+    }
+    const source = inMemorySource()
+    const createWorktree = vi.fn(async () => ({ ok: false, message: 'git failed' }))
+    const service = createBranchWorkspaceWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      readManifests: source.readManifests,
+      updateManifests: source.updateManifests,
+      createDirectory: vi.fn(async () => undefined),
+      createWorktree,
+    })
+    await service.plan(ROOT, {
+      operation: 'create',
+      branch: 'feature/auth',
+      repositories: [{ repositoryName: 'api', baseBranch: 'main' }],
+      auxiliaryEntries: [],
+    })
+
     await expect(service.execute(ROOT, { planToken: plan.token, approvals: [] })).resolves.toMatchObject({
       ok: false,
-      message: 'link failed',
+      message: 'git failed',
     })
-    expect(source.manifests[0]?.repositories[0]).toMatchObject({
-      progress: 'complete',
-      worktreeBootstrap: dependency,
-      bootstrapProgress: 'failed',
-      bootstrapLastError: 'link failed',
-    })
+    expect(createWorktree).toHaveBeenCalledTimes(1)
+    expect(source.manifests[0]?.repositories.map((member) => member.progress)).toEqual(['failed', 'pending'])
   })
 
   test('requires every plan approval before persisting intent', async () => {
@@ -486,133 +535,6 @@ describe('branch workspace write service', () => {
     expect(source.manifests[0]?.auxiliaryEntries).toEqual([
       expect.objectContaining({ name: 'README.md', progress: 'failed' }),
     ])
-  })
-
-  test('repairs only repository dependencies when the worktree already exists', async () => {
-    const plan = repairPlanned()
-    const dependency = {
-      kind: 'materialize' as const,
-      candidateScope: 'ignored-only' as const,
-      selections: [{ path: 'node_modules', mode: 'symlink' as const }],
-    }
-    plan.repositories = [
-      {
-        ...plan.repositories[0]!,
-        action: 'bootstrap-worktree',
-        worktreeBootstrap: dependency,
-      },
-    ]
-    plan.manifest.repositories[0] = {
-      ...plan.manifest.repositories[0]!,
-      progress: 'complete',
-      worktreeBootstrap: dependency,
-      bootstrapProgress: 'pending',
-    }
-    plan.steps = [
-      {
-        id: 'repository:api',
-        kind: 'bootstrap-worktree',
-        label: 'api',
-        repositoryName: 'api',
-      },
-    ]
-    plan.auxiliaryEntries = []
-    plan.manifest.auxiliaryEntries = []
-    const source = inMemorySource([plan.manifest])
-    const createWorktree = vi.fn()
-    const bootstrapWorktree = vi.fn(async () => ({ ok: true, message: 'linked' }))
-    const service = createBranchWorkspaceWriteService({
-      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
-      readManifests: source.readManifests,
-      updateManifests: source.updateManifests,
-      createWorktree,
-      bootstrapWorktree,
-    })
-    await service.plan(ROOT, { operation: 'repair', branchWorkspaceId: plan.branchWorkspaceId })
-
-    await expect(service.execute(ROOT, { planToken: plan.token, approvals: [] })).resolves.toEqual({
-      ok: true,
-      branchWorkspaceId: plan.branchWorkspaceId,
-    })
-    expect(createWorktree).not.toHaveBeenCalled()
-    expect(bootstrapWorktree).toHaveBeenCalledWith(
-      '/workspace/api',
-      '/workspace/goblin-feature-auth/api',
-      dependency,
-      [],
-      expect.any(AbortSignal),
-    )
-    expect(source.manifests[0]?.repositories[0]).toMatchObject({
-      progress: 'complete',
-      bootstrapProgress: 'complete',
-    })
-  })
-
-  test('requires replacement approval before mutation and forwards only planned dependency conflicts', async () => {
-    const plan = repairPlanned()
-    const dependency = {
-      kind: 'materialize' as const,
-      candidateScope: 'ignored-only' as const,
-      selections: [{ path: 'node_modules', mode: 'symlink' as const }],
-    }
-    const replacements = [{ path: '.env', mode: 'copy' as const }]
-    plan.requiredApprovals = ['replace-repository-dependencies']
-    plan.repositories = [
-      {
-        ...plan.repositories[0]!,
-        action: 'bootstrap-worktree',
-        worktreeBootstrap: dependency,
-        bootstrapReplacements: replacements,
-      },
-    ]
-    plan.manifest.repositories[0] = {
-      ...plan.manifest.repositories[0]!,
-      progress: 'complete',
-      worktreeBootstrap: dependency,
-      bootstrapProgress: 'pending',
-    }
-    plan.steps = [
-      {
-        id: 'repository-replacement:api:.env',
-        kind: 'replace-repository-dependency',
-        label: 'api/.env',
-        repositoryName: 'api',
-        entryName: '.env',
-      },
-      { id: 'repository:api', kind: 'bootstrap-worktree', label: 'api', repositoryName: 'api' },
-    ]
-    plan.auxiliaryEntries = []
-    plan.manifest.auxiliaryEntries = []
-    const source = inMemorySource([plan.manifest])
-    const bootstrapWorktree = vi.fn(async () => ({ ok: true, message: 'copied' }))
-    const service = createBranchWorkspaceWriteService({
-      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
-      readManifests: source.readManifests,
-      updateManifests: source.updateManifests,
-      bootstrapWorktree,
-    })
-    await service.plan(ROOT, { operation: 'repair', branchWorkspaceId: plan.branchWorkspaceId })
-
-    await expect(service.execute(ROOT, { planToken: plan.token, approvals: [] })).resolves.toMatchObject({
-      ok: false,
-      message: 'workspace.branch-workspace.approval-required',
-    })
-    expect(bootstrapWorktree).not.toHaveBeenCalled()
-    expect(source.updateManifests).not.toHaveBeenCalled()
-
-    await expect(
-      service.execute(ROOT, {
-        planToken: plan.token,
-        approvals: ['replace-repository-dependencies'],
-      }),
-    ).resolves.toEqual({ ok: true, branchWorkspaceId: plan.branchWorkspaceId })
-    expect(bootstrapWorktree).toHaveBeenCalledWith(
-      '/workspace/api',
-      '/workspace/goblin-feature-auth/api',
-      dependency,
-      replacements,
-      expect.any(AbortSignal),
-    )
   })
 
   test('aborts remove before manifest and filesystem mutation when an approved terminal cannot close', async () => {

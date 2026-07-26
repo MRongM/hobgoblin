@@ -13,6 +13,14 @@ const mocks = vi.hoisted(() => ({
   execute: vi.fn(),
   abort: vi.fn(),
   reorder: vi.fn(),
+  warning: vi.fn(),
+}))
+
+vi.mock('sonner', () => ({ toast: { warning: mocks.warning } }))
+
+vi.mock('#/web/stores/i18n.ts', () => ({
+  useT: () => (key: string, params?: Record<string, unknown>) =>
+    params?.count === undefined ? key : `${key}:${params.count}`,
 }))
 
 vi.mock('#/web/workspace-client.ts', () => ({
@@ -82,6 +90,45 @@ afterEach(() => {
 })
 
 describe('useBranchWorkspaceActions', () => {
+  test('shows successful repository dependency warnings without changing settlement behavior', async () => {
+    mocks.plan.mockResolvedValue({ ok: true, plan })
+    mocks.execute.mockResolvedValue({
+      ok: true,
+      branchWorkspaceId: 'branch-1',
+      snapshot: readySnapshot,
+      warnings: [
+        {
+          kind: 'repository-dependency-failed',
+          repositoryName: 'api',
+          message: 'link failed',
+        },
+      ],
+    })
+    let state: ReturnType<typeof useBranchWorkspaceActions> | null = null
+    await act(async () =>
+      root!.render(
+        <QueryClientProvider client={queryClient}>
+          <Harness onReady={(value) => (state = value)} />
+        </QueryClientProvider>,
+      ),
+    )
+
+    await act(async () =>
+      state!.requestPlan({
+        operation: 'create',
+        branch: 'feature/auth',
+        repositories: [{ repositoryName: 'api', baseBranch: 'main' }],
+        auxiliaryEntries: [],
+      }),
+    )
+    await act(async () => state!.confirm(['worktree-bootstrap']))
+
+    expect(mocks.warning).toHaveBeenCalledWith('workspace.branch-workspace.repository-dependency-warning:1', {
+      description: 'api: link failed',
+    })
+    expect(state!.result).toMatchObject({ ok: true, warnings: [{ repositoryName: 'api' }] })
+  })
+
   test('writes a successful creation snapshot into cache without refetching', async () => {
     mocks.plan.mockResolvedValue({ ok: true, plan })
     mocks.execute.mockResolvedValue({ ok: true, branchWorkspaceId: 'branch-1', snapshot: readySnapshot })

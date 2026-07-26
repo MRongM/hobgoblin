@@ -62,6 +62,7 @@ import { getServerFetchIntervalSec } from '#/server/modules/settings-source.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
 import { isWorktreeBootstrapConfigHash } from '#/shared/repo-settings.ts'
 import {
+  normalizeWorktreeBootstrapSourcePath,
   normalizeWorktreeBootstrapSelections,
   type WorktreeBootstrapDecision,
 } from '#/shared/worktree-bootstrap-summary.ts'
@@ -103,12 +104,22 @@ export function createRepoRoutes() {
     if (!value || typeof value !== 'object') return null
     const raw = value as Record<string, unknown>
     if (raw.kind === 'skip') return { kind: 'skip' }
+    const sourceWorktreePath =
+      raw.sourceWorktreePath === undefined ? undefined : normalizeWorktreeBootstrapSourcePath(raw.sourceWorktreePath)
+    if (raw.sourceWorktreePath !== undefined && !sourceWorktreePath) return null
     if (raw.kind === 'run' && isWorktreeBootstrapConfigHash(raw.configHash) && typeof raw.configTrusted === 'boolean') {
-      return { kind: 'run', configHash: raw.configHash, configTrusted: raw.configTrusted }
+      return {
+        kind: 'run',
+        configHash: raw.configHash,
+        configTrusted: raw.configTrusted,
+        ...(sourceWorktreePath ? { sourceWorktreePath } : {}),
+      }
     }
     if (raw.kind === 'materialize') {
       const selections = normalizeWorktreeBootstrapSelections(raw.selections)
-      return selections ? { kind: 'materialize', selections } : null
+      return selections
+        ? { kind: 'materialize', selections, ...(sourceWorktreePath ? { sourceWorktreePath } : {}) }
+        : null
     }
     return null
   }
@@ -182,13 +193,27 @@ export function createRepoRoutes() {
       body?.candidateScope === 'all-untracked' || body?.candidateScope === 'ignored-only'
         ? body.candidateScope
         : undefined
+    const sourceWorktreePath =
+      body?.sourceWorktreePath === undefined
+        ? undefined
+        : normalizeWorktreeBootstrapSourcePath(body.sourceWorktreePath)
     if (body?.candidateScope !== undefined && candidateScope === undefined) {
+      return c.json({ ok: false, message: 'error.invalid-arguments' })
+    }
+    if (body?.sourceWorktreePath !== undefined && sourceWorktreePath === null) {
       return c.json({ ok: false, message: 'error.invalid-arguments' })
     }
     return c.json(
       await jsonOr(
         () =>
-          candidateScope
+          sourceWorktreePath
+            ? getRepositoryWorktreeBootstrapPreflight(
+                cwd,
+                c.req.raw.signal,
+                candidateScope,
+                sourceWorktreePath,
+              )
+            : candidateScope
             ? getRepositoryWorktreeBootstrapPreflight(cwd, c.req.raw.signal, candidateScope)
             : getRepositoryWorktreeBootstrapPreflight(cwd, c.req.raw.signal),
         { ok: false, message: 'error.failed-read-repo' },

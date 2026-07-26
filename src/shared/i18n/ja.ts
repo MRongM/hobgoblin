@@ -132,13 +132,14 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.base-named': '{name} のベースブランチ',
   'workspace.branch-workspace.repository-dependencies': 'リポジトリ依存項目',
   'workspace.branch-workspace.repository-dependencies-description':
-    '元のリポジトリから新しい worktree に持ち込む Git 無視項目を、コピーまたはリンクで選択します。',
+    '選択したベースブランチの worktree から新しい worktree にコピーまたはリンクする未追跡項目を選択します。',
   'workspace.branch-workspace.repository-dependencies-loading': 'リポジトリ依存項目を読み込み中…',
   'workspace.branch-workspace.repository-dependencies-error':
     'リポジトリ依存項目を読み込めませんでした。このリポジトリを選択解除して再選択してください。',
-  'workspace.branch-workspace.repository-dependencies-empty': '選択できる Git 無視項目はありません。',
+  'workspace.branch-workspace.repository-dependencies-empty':
+    '選択したベースブランチの worktree に選択可能な未追跡項目はありません。',
   'workspace.branch-workspace.repository-dependencies-configured':
-    'goblin.toml の worktree bootstrap 設定を使用します。',
+    '選択したベースブランチの worktree にある goblin.toml を使用します。',
   'workspace.branch-workspace.auxiliary': 'ブランチワークスペースの依存項目',
   'workspace.branch-workspace.auxiliary-refresh': 'ブランチワークスペースの依存項目を更新',
   'workspace.branch-workspace.auxiliary-named': 'ブランチワークスペース依存項目 {name} を含める',
@@ -189,7 +190,6 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.approvals': '必要な確認',
   'workspace.branch-workspace.approval.outside-root-source': 'ワークスペース外のソースを許可',
   'workspace.branch-workspace.approval.worktree-bootstrap': '確認済みの bootstrap 操作を実行',
-  'workspace.branch-workspace.approval.replace-repository-dependencies': '一覧のリポジトリ依存関係を削除して再作成',
   'workspace.branch-workspace.approval.modified-copy': '変更されたコピー内容を削除',
   'workspace.branch-workspace.approval.unmanaged-content': '未管理の内容を削除',
   'workspace.branch-workspace.approval.discard-member-changes':
@@ -274,7 +274,6 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.delete-upstream-branch': '対象の upstream ブランチも削除',
   'workspace.branch-workspace.step.delete-local-branch': '{repository} のローカルブランチを削除：',
   'workspace.branch-workspace.step.delete-upstream-branch': '{repository} の upstream ブランチを削除：',
-  'workspace.branch-workspace.step.replace-repository-dependency': 'リポジトリ依存関係を置換',
   'workspace.branch-workspace.step.local-branch': 'ローカルブランチ',
   'workspace.branch-workspace.step.upstream-branch': 'upstream ブランチ',
   'workspace.branch-workspace.dialog.create.title': 'ブランチワークスペースを追加',
@@ -303,8 +302,6 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.issue.repository-unavailable': 'リポジトリを利用できません。',
   'workspace.branch-workspace.issue.repository-pending': 'リポジトリ worktree は保留中です。',
   'workspace.branch-workspace.issue.repository-failed': 'リポジトリ worktree が失敗しました。',
-  'workspace.branch-workspace.issue.repository-bootstrap-pending': 'リポジトリ依存項目の初期化が保留中です。',
-  'workspace.branch-workspace.issue.repository-bootstrap-failed': 'リポジトリ依存項目の初期化に失敗しました。',
   'workspace.branch-workspace.issue.worktree-missing': '管理対象 worktree がありません。',
   'workspace.branch-workspace.issue.worktree-path-mismatch': 'worktree は別のパスにあります。',
   'workspace.branch-workspace.issue.auxiliary-missing': '追加項目がありません。',
@@ -331,9 +328,9 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.plan-failed': '計画を作成できませんでした。',
   'workspace.branch-workspace.plan-stale': '状態が変わりました。更新された計画を確認してください。',
   'workspace.branch-workspace.execute-failed': '操作を完了できませんでした。',
+  'workspace.branch-workspace.repository-dependency-warning':
+    '{count} 件のリポジトリ依存関係を準備できませんでしたが、worktree は作成されました。',
   'workspace.branch-workspace.approval-required': '必要な確認をすべて完了してください。',
-  'workspace.branch-workspace.repository-dependency-conflict-changed':
-    'リポジトリ依存関係の競合が変更されました。更新された置換一覧を確認してください。',
   'workspace.branch-workspace.read-failed': 'ブランチワークスペースを読み取れませんでした。',
   'workspace.branch-workspace.cleanup': 'レコードをクリーンアップ',
   'workspace.branch-workspace.cleanup-title': 'ブランチワークスペースのレコードをクリーンアップしますか？',

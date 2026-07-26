@@ -114,21 +114,33 @@ describe('branch workspace source', () => {
     })
   })
 
-  test('round-trips repository bootstrap intent and progress', async () => {
+  test('discards legacy repository bootstrap recovery fields while reading manifests', async () => {
     const { dataFile, root } = await createFixture()
     const item = manifest(root, 'feature/dependencies')
-    item.repositories[0] = {
+    const legacyMember = {
       ...item.repositories[0]!,
       worktreeBootstrap: {
         kind: 'materialize',
-        candidateScope: 'ignored-only',
-        selections: [{ path: 'node_modules', mode: 'symlink' }],
+        candidateScope: 'all-untracked',
+        sourceWorktreePath: path.join(root, 'api-main'),
+        selections: [{ path: '.env.local', mode: 'copy' }],
       },
       bootstrapProgress: 'failed',
       bootstrapLastError: 'link failed',
     }
-
-    await replaceBranchWorkspaceManifests(root, [item], { dataFile })
+    await mkdir(path.dirname(dataFile), { recursive: true })
+    await writeFile(
+      dataFile,
+      JSON.stringify({
+        version: 1,
+        workspaces: [
+          {
+            rootId: path.resolve(root),
+            branchWorkspaces: [{ ...item, repositories: [legacyMember] }],
+          },
+        ],
+      }),
+    )
 
     await expect(readBranchWorkspaceManifests(root, { dataFile })).resolves.toEqual({
       kind: 'ready',

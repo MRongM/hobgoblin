@@ -198,18 +198,6 @@ async function reconcileRepositoryMember(
     issues.push({ kind: 'worktree-path-mismatch', repositoryName: member.repositoryName })
     return { ...member, ready: false }
   }
-  if (member.bootstrapProgress === 'pending') {
-    issues.push({ kind: 'repository-bootstrap-pending', repositoryName: member.repositoryName })
-    return { ...member, ready: false }
-  }
-  if (member.bootstrapProgress === 'failed') {
-    issues.push({
-      kind: 'repository-bootstrap-failed',
-      repositoryName: member.repositoryName,
-      ...(member.bootstrapLastError ? { message: member.bootstrapLastError } : {}),
-    })
-    return { ...member, ready: false }
-  }
   return { ...member, ready: true }
 }
 
@@ -277,8 +265,6 @@ function projectState(
     (issue) =>
       issue.kind === 'repository-pending' ||
       issue.kind === 'repository-failed' ||
-      issue.kind === 'repository-bootstrap-pending' ||
-      issue.kind === 'repository-bootstrap-failed' ||
       issue.kind === 'auxiliary-pending' ||
       issue.kind === 'auxiliary-failed',
   )

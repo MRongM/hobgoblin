@@ -132,13 +132,14 @@ export const en = {
   'workspace.branch-workspace.base-named': 'Base branch for {name}',
   'workspace.branch-workspace.repository-dependencies': 'Repository dependencies',
   'workspace.branch-workspace.repository-dependencies-description':
-    'Choose Git-ignored entries to bring from the source repository into the new worktree by copying or linking them.',
+    'Choose untracked entries to copy or link from the selected base branch worktree into the new worktree.',
   'workspace.branch-workspace.repository-dependencies-loading': 'Loading repository dependencies…',
   'workspace.branch-workspace.repository-dependencies-error':
     'Repository dependencies could not be loaded; deselect and select this repository to retry.',
-  'workspace.branch-workspace.repository-dependencies-empty': 'This repository has no selectable Git-ignored entries.',
+  'workspace.branch-workspace.repository-dependencies-empty':
+    'The selected base branch worktree has no selectable untracked entries.',
   'workspace.branch-workspace.repository-dependencies-configured':
-    'This repository will use the worktree bootstrap configuration in goblin.toml.',
+    'This repository will use goblin.toml from the selected base branch worktree.',
   'workspace.branch-workspace.auxiliary': 'Branch workspace dependencies',
   'workspace.branch-workspace.auxiliary-refresh': 'Refresh branch workspace dependencies',
   'workspace.branch-workspace.auxiliary-named': 'Include branch workspace dependency {name}',
@@ -191,8 +192,6 @@ export const en = {
   'workspace.branch-workspace.approvals': 'Required confirmations',
   'workspace.branch-workspace.approval.outside-root-source': 'Allow this outside-workspace source',
   'workspace.branch-workspace.approval.worktree-bootstrap': 'Run the reviewed worktree bootstrap operations',
-  'workspace.branch-workspace.approval.replace-repository-dependencies':
-    'Delete and rematerialize the listed repository dependencies',
   'workspace.branch-workspace.approval.modified-copy': 'Delete modified copied content',
   'workspace.branch-workspace.approval.unmanaged-content': 'Delete unmanaged folder content',
   'workspace.branch-workspace.approval.discard-member-changes':
@@ -275,7 +274,6 @@ export const en = {
   'workspace.branch-workspace.delete-upstream-branch': 'Also delete eligible upstream branches',
   'workspace.branch-workspace.step.delete-local-branch': 'Delete local branch in {repository}:',
   'workspace.branch-workspace.step.delete-upstream-branch': 'Delete upstream branch in {repository}:',
-  'workspace.branch-workspace.step.replace-repository-dependency': 'Replace repository dependency',
   'workspace.branch-workspace.step.local-branch': 'Local branch',
   'workspace.branch-workspace.step.upstream-branch': 'Upstream branch',
   'workspace.branch-workspace.dialog.create.title': 'New branch workspace',
@@ -305,8 +303,6 @@ export const en = {
   'workspace.branch-workspace.issue.repository-unavailable': 'A repository is unavailable.',
   'workspace.branch-workspace.issue.repository-pending': 'A repository worktree is pending.',
   'workspace.branch-workspace.issue.repository-failed': 'A repository worktree failed.',
-  'workspace.branch-workspace.issue.repository-bootstrap-pending': 'Repository dependency bootstrap is pending.',
-  'workspace.branch-workspace.issue.repository-bootstrap-failed': 'Repository dependency bootstrap failed.',
   'workspace.branch-workspace.issue.worktree-missing': 'A managed worktree is missing.',
   'workspace.branch-workspace.issue.worktree-path-mismatch': 'A worktree is checked out at another path.',
   'workspace.branch-workspace.issue.auxiliary-missing': 'An additional entry is missing.',
@@ -333,9 +329,9 @@ export const en = {
   'workspace.branch-workspace.plan-failed': 'Could not create a branch workspace plan.',
   'workspace.branch-workspace.plan-stale': 'Workspace state changed. Review the refreshed plan.',
   'workspace.branch-workspace.execute-failed': 'Could not complete the branch workspace operation.',
+  'workspace.branch-workspace.repository-dependency-warning':
+    '{count} repository dependencies could not be prepared. The worktrees were still created.',
   'workspace.branch-workspace.approval-required': 'Complete every required confirmation.',
-  'workspace.branch-workspace.repository-dependency-conflict-changed':
-    'Repository dependency conflicts changed. Review the updated replacement list.',
   'workspace.branch-workspace.read-failed': 'Could not read branch workspaces.',
   'workspace.branch-workspace.cleanup': 'Clean up records',
   'workspace.branch-workspace.cleanup-title': 'Clean up branch workspace records?',
