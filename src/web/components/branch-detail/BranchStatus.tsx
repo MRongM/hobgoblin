@@ -7,7 +7,7 @@ import {
   FolderOpen,
   FolderTree,
   GitBranch,
-  GitMerge,
+  GitFork,
   Hash,
   MessageSquare,
   RadioTower,
@@ -109,10 +109,8 @@ function syncClipboardValue(branch: NonNullable<SelectedBranchDetail['branch']>,
   return parts.length > 0 ? parts.join(', ') : t('branch-status.sync.up-to-date')
 }
 
-function mergeClipboardValue(branch: NonNullable<SelectedBranchDetail['branch']>, t: TFn): string {
-  if (branch.isDefault) return ''
-  if (branch.mergedToDefault === undefined) return t('branch-status.merge-unknown')
-  return branch.mergedToDefault ? t('branch-status.merged') : t('branch-status.not-merged')
+function createdFromClipboardValue(branch: NonNullable<SelectedBranchDetail['branch']>, t: TFn): string {
+  return branch.createdFrom ?? t('branch-status.created-from-unknown')
 }
 
 function emptyClipboardValue(value: string): string {
@@ -138,7 +136,9 @@ export function branchStatusClipboardText(detail: SelectedBranchDetail, repoName
     [t('branch-status.signal.commit-time'), branch.lastCommitDate],
   ]
 
-  if (!branch.isDefault) rows.push([t('branch-status.signal.merge'), mergeClipboardValue(branch, t)])
+  if (!branch.isDefault) {
+    rows.push([t('branch-status.signal.created-from'), createdFromClipboardValue(branch, t)])
+  }
   return rows.map(([label, value]) => `${label}: ${emptyClipboardValue(value)}`).join('\n')
 }
 
@@ -187,15 +187,8 @@ export function BranchStatus({ detail, repoName, repoId }: Props) {
   const worktreeChangeCount = detail.worktreeState?.changeCount ?? statusCount
   const hasRole = branch.isCurrent || branch.isDefault || protectedBranch
   const hasWorktreeChanges = !!branch.worktree?.path && (detail.worktreeState?.dirty || worktreeChangeCount > 0)
-  const mergeKnown = branch.isDefault || branch.mergedToDefault !== undefined
-  const showMerged = !branch.isDefault
+  const showCreatedFrom = !branch.isDefault
   const commitTime = formatCommitTime(branch.lastCommitDate)
-  const mergeLabel = !mergeKnown
-    ? t('branch-status.merge-unknown')
-    : branch.mergedToDefault || branch.isDefault
-      ? t('branch-status.merged')
-      : t('branch-status.not-merged')
-  const mergeTone: Tone = !mergeKnown ? 'neutral' : branch.mergedToDefault ? 'success' : 'attention'
   const upstreamTone: Tone = branch.trackingGone || !branch.tracking ? 'attention' : 'brand'
   const syncTone: Tone = !branch.tracking ? 'attention' : branch.behind > 0 ? 'attention' : 'success'
   const worktreeLocked = detail.worktreeState?.isLocked ?? false
@@ -359,18 +352,21 @@ export function BranchStatus({ detail, repoName, repoId }: Props) {
         }
         valueLayout="fill"
       />
-      {showMerged && (
+      {showCreatedFrom && (
         <StatusRow
-          icon={<GitMerge size={14} />}
-          label={t('branch-status.signal.merge')}
+          icon={<GitFork size={14} />}
+          label={t('branch-status.signal.created-from')}
           value={
-            <StatusChip tone={mergeTone}>
-              {mergeKnown && branch.mergedToDefault && <Check size={11} />}
-              {mergeLabel}
-            </StatusChip>
+            branch.createdFrom ? (
+              <MonoValue title={branch.createdFrom} truncate>
+                {branch.createdFrom}
+              </MonoValue>
+            ) : (
+              <StatusChip>{t('branch-status.created-from-unknown')}</StatusChip>
+            )
           }
-          valueLayout="chips"
-          tone={mergeTone}
+          valueLayout="inline"
+          tone="neutral"
         />
       )}
     </StatusRows>

@@ -563,9 +563,7 @@ export const ja: Record<DictKey, string> = {
 
   // ---- Branch status -----------------------------------------------------
   'branch-status.worktree-dirty': '{n} 件の変更',
-  'branch-status.merged': '含まれています',
-  'branch-status.not-merged': '固有コミットあり',
-  'branch-status.merge-unknown': '不明',
+  'branch-status.created-from-unknown': '不明',
   'branch-status.copy-branch-name': 'ブランチ名をコピー',
   'branch-status.copy-commit-author': 'コミット作成者をコピー',
   'branch-status.copy-commit-hash': 'コミット hash をコピー',
@@ -588,7 +586,7 @@ export const ja: Record<DictKey, string> = {
   'branch-status.signal.commit-hash': 'コミット hash',
   'branch-status.signal.commit-message': 'コミット内容',
   'branch-status.signal.commit-time': 'コミット時刻',
-  'branch-status.signal.merge': 'ベースライン',
+  'branch-status.signal.created-from': '作成元ブランチ',
   'branch-status.signal.worktree': 'ワークツリー',
   'branch-status.sync.up-to-date': '最新',
   'branch-status.worktree.none': 'ワークツリーなし',

@@ -17,7 +17,12 @@ import {
   parseStatus,
   parseWorktrees,
 } from '#/system/git/parsers.ts'
-import { markDefaultBranch, prioritizeDefaultBranch } from '#/system/git/branches.ts'
+import {
+  markBranchCreatedFrom,
+  markDefaultBranch,
+  parseBranchCreatedFromConfig,
+  prioritizeDefaultBranch,
+} from '#/system/git/branches.ts'
 import { resolvePrunableWorktree } from '#/shared/worktree-guards.ts'
 import { isProtectedRemoteBranchRef, parseRemoteBranchInput } from '#/shared/remote-branches.ts'
 import { parseRemoteTagInput, remoteTagRefsFromLsRemote, remoteTagSortKey } from '#/shared/remote-tags.ts'
@@ -40,6 +45,7 @@ import {
   REMOTE_PATH_EXISTS_MARKER,
   REMOTE_PATH_MISSING_MARKER,
   REMOTE_SNAPSHOT_BRANCHES_MARKER,
+  REMOTE_SNAPSHOT_CREATED_FROM_MARKER,
   REMOTE_SNAPSHOT_CURRENT_MARKER,
   REMOTE_SNAPSHOT_DEFAULT_MARKER,
   runRemoteCommand,
@@ -118,6 +124,7 @@ interface SnapshotSections {
   current: string[]
   defaultBranch: string[]
   branches: string[]
+  createdFrom: string[]
 }
 
 interface RemoteFileTreeJson {
@@ -1599,7 +1606,10 @@ export function parseRemoteSnapshot(output: string, worktrees: WorktreeInfo[] = 
   const current = firstLine(sections.current)
   const defaultBranch = firstLine(sections.defaultBranch)
   const branchOutput = sections.branches.join('\n')
-  const branches = parseBranches(branchOutput, current, worktrees)
+  const branches = markBranchCreatedFrom(
+    parseBranches(branchOutput, current, worktrees),
+    parseBranchCreatedFromConfig(sections.createdFrom.join('\n')),
+  )
   const markedBranches = markDefaultBranch(branches, defaultBranch)
   return {
     branches: prioritizeDefaultBranch(markedBranches, defaultBranch),
@@ -1639,7 +1649,7 @@ async function getRemoteWorktrees(
 }
 
 function splitSnapshotSections(output: string): SnapshotSections | null {
-  const sections: SnapshotSections = { current: [], defaultBranch: [], branches: [] }
+  const sections: SnapshotSections = { current: [], defaultBranch: [], branches: [], createdFrom: [] }
   let active: keyof SnapshotSections | null = null
   for (const line of output.split('\n')) {
     if (line === REMOTE_SNAPSHOT_CURRENT_MARKER) {
@@ -1652,6 +1662,10 @@ function splitSnapshotSections(output: string): SnapshotSections | null {
     }
     if (line === REMOTE_SNAPSHOT_BRANCHES_MARKER) {
       active = 'branches'
+      continue
+    }
+    if (line === REMOTE_SNAPSHOT_CREATED_FROM_MARKER) {
+      active = 'createdFrom'
       continue
     }
     if (active) sections[active].push(line)

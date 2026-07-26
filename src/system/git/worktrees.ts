@@ -1,6 +1,7 @@
 import { git, gitResultWithOptions } from '#/system/git/helper.ts'
 import { parseStatus, parseWorktrees } from '#/system/git/parsers.ts'
 import { mapWithConcurrency } from '#/system/git/concurrency.ts'
+import { recordBranchCreatedFrom } from '#/system/git/branches.ts'
 import type { ExecResult, WorktreeInfo } from '#/shared/git-types.ts'
 import type { CreateWorktreeInput } from '#/shared/worktree-create.ts'
 
@@ -92,13 +93,20 @@ export async function createWorktree(
   input: CreateWorktreeInput,
   signal?: AbortSignal,
 ): Promise<ExecResult> {
-  return gitResultWithOptions(
+  const created = await gitResultWithOptions(
     cwd,
     { timeoutMs: WORKTREE_OP_TIMEOUT_MS, signal },
     'worktree',
     'add',
     ...createWorktreeArgs(input),
   )
+  if (created.ok && input.mode.kind === 'newBranch') {
+    await recordBranchCreatedFrom(cwd, input.mode.newBranch, input.mode.baseRef, signal)
+  }
+  if (created.ok && input.mode.kind === 'trackRemoteBranch') {
+    await recordBranchCreatedFrom(cwd, input.mode.localBranch, input.mode.remoteRef, signal)
+  }
+  return created
 }
 
 function createWorktreeArgs(input: CreateWorktreeInput): string[] {

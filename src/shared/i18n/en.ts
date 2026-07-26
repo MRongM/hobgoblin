@@ -564,9 +564,7 @@ export const en = {
 
   // ---- Branch status ------------------------------------------------------
   'branch-status.worktree-dirty': '{n} change(s)',
-  'branch-status.merged': 'included',
-  'branch-status.not-merged': 'unique commits',
-  'branch-status.merge-unknown': 'unknown',
+  'branch-status.created-from-unknown': 'unknown',
   'branch-status.copy-branch-name': 'Copy branch name',
   'branch-status.copy-commit-author': 'Copy commit author',
   'branch-status.copy-commit-hash': 'Copy commit hash',
@@ -589,7 +587,7 @@ export const en = {
   'branch-status.signal.commit-hash': 'Commit hash',
   'branch-status.signal.commit-message': 'Commit message',
   'branch-status.signal.commit-time': 'Commit time',
-  'branch-status.signal.merge': 'Baseline',
+  'branch-status.signal.created-from': 'Created from',
   'branch-status.signal.worktree': 'Worktree',
   'branch-status.sync.up-to-date': 'up to date',
   'branch-status.worktree.none': 'no worktree',

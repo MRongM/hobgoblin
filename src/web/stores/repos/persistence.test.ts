@@ -88,6 +88,24 @@ describe('normalizeRestorableRepoCache', () => {
     expect(normalized.repo?.data.branches[0]?.worktree).toEqual({ path: '/tmp/worktree-a' })
   })
 
+  test('preserves branch creation sources and discards legacy merge status', () => {
+    const now = Date.now()
+    const raw = cachedRepo(now)
+    raw.data.branches = [
+      {
+        ...createRepoBranch('feature/a'),
+        createdFrom: 'main',
+        mergedToDefault: true,
+      } as any,
+    ]
+
+    const normalized = normalizeRestorableRepoCache({ repo: raw })
+    const branch = normalized.repo?.data.branches[0]
+
+    expect(branch).toMatchObject({ name: 'feature/a', createdFrom: 'main' })
+    expect(branch).not.toHaveProperty('mergedToDefault')
+  })
+
   test('normalizes missing and invalid worktree path order to an empty array', () => {
     const now = Date.now()
     const missing = cachedRepo(now) as any

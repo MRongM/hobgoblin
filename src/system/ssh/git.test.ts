@@ -161,6 +161,43 @@ describe('remote git helpers', () => {
     expect(run.mock.calls.map(([command]) => command.type).sort()).toEqual(['gitSnapshot', 'gitWorktreeList'])
   })
 
+  test('projects recorded creation sources from remote snapshots', async () => {
+    const run = vi.fn(async (command: { type: string }) => {
+      switch (command.type) {
+        case 'gitSnapshot':
+          return okRemoteResult(
+            [
+              '__GOBLIN_REMOTE_CURRENT__',
+              'feature/a',
+              '__GOBLIN_REMOTE_DEFAULT__',
+              'main',
+              '__GOBLIN_REMOTE_BRANCHES__',
+              'main\x1ff00ba4\x1fInitial commit\x1f2024-01-01T00:00:00Z\x1fAlice\x1forigin/main\x1f',
+              'feature/a\x1fabc1234\x1fFeature\x1f2024-01-02T00:00:00Z\x1fAlice\x1f\x1f',
+              '__HOBGOBLIN_REMOTE_BRANCH_CREATED_FROM__',
+              'branch.feature/a.hobgoblin-created-from main',
+              'branch.-bad.hobgoblin-created-from main',
+            ].join('\n'),
+          )
+        case 'gitWorktreeList':
+          return okRemoteResult('worktree /srv/repo\nHEAD abc1234\nbranch refs/heads/feature/a\n')
+        default:
+          return okRemoteResult('')
+      }
+    })
+
+    const snapshot = await getRemoteSnapshot(TARGET, {
+      run: run as any,
+      includeWorktreeStatus: false,
+      includeRemote: false,
+    })
+
+    expect(snapshot?.branches).toMatchObject([
+      { name: 'main' },
+      { name: 'feature/a', createdFrom: 'main' },
+    ])
+  })
+
   test('reads structured remote history', async () => {
     const run = vi.fn(async () =>
       okRemoteResult('abc123456789\x1fabc1234\x1ffeat: remote history\x1fAlice\x1f2026-06-15T09:00:00+08:00\x1fdef456'),

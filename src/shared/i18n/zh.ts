@@ -524,9 +524,7 @@ export const zh: Record<DictKey, string> = {
 
   // ---- Branch status -----------------------------------------------------
   'branch-status.worktree-dirty': '{n} 个改动',
-  'branch-status.merged': '已包含',
-  'branch-status.not-merged': '有独有提交',
-  'branch-status.merge-unknown': '未知',
+  'branch-status.created-from-unknown': '未知',
   'branch-status.copy-branch-name': '复制分支名',
   'branch-status.copy-commit-author': '复制提交人',
   'branch-status.copy-commit-hash': '复制提交 hash',
@@ -549,7 +547,7 @@ export const zh: Record<DictKey, string> = {
   'branch-status.signal.commit-hash': '提交 hash',
   'branch-status.signal.commit-message': '提交内容',
   'branch-status.signal.commit-time': '提交时间',
-  'branch-status.signal.merge': '基线',
+  'branch-status.signal.created-from': '创建来源分支',
   'branch-status.signal.worktree': '工作树',
   'branch-status.sync.up-to-date': '已同步',
   'branch-status.worktree.none': '没有工作树',

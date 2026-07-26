@@ -176,6 +176,10 @@ _Avoid_: `.gitignore` rule, workspace auxiliary entry, generic untracked file
 The branch whose explorer and detail surfaces the user is currently viewing. Changing this context is navigation; it is distinct from checking out a Git branch and from targeting a branch action.
 _Avoid_: Active branch, current branch
 
+**Branch creation source**:
+The exact local or remote branch ref selected when Hobgoblin creates a local branch. It is immutable creation provenance recorded beside that local branch, may be unknown for branches created outside Hobgoblin or before provenance recording existed, and is distinct from current commit ancestry, upstream tracking, the repository default branch, and a branch workspace base branch.
+_Avoid_: Baseline, inferred parent branch, merge destination
+
 **File area**:
 The explorer surface for the selected project or branch context. In a repository worktree context, it contains the file area tab bar and the selected explorer panel; in a plain workspace, it contains the file browser without repository explorer tabs. It is distinct from the navigation area and the detail pane.
 _Avoid_: Detail area, file tab area

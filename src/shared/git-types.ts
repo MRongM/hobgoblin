@@ -18,7 +18,7 @@ export interface BranchSnapshotInfo {
   lastCommitDate: string
   lastCommitAuthor: string
   worktree?: BranchWorktreeSnapshot
-  mergedToDefault?: boolean
+  createdFrom?: string
 }
 
 export interface BranchWorktreeSnapshot {

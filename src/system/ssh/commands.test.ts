@@ -122,6 +122,18 @@ describe('remote command scripts', () => {
     expect(invocation.script).toBe("git -C '/srv/repo' worktree list --porcelain --expire now")
   })
 
+  test('includes branch creation sources in remote Git snapshots', () => {
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'gitSnapshot',
+      path: '/srv/repo',
+    })
+
+    expect(invocation.script).toContain('__HOBGOBLIN_REMOTE_BRANCH_CREATED_FROM__')
+    expect(invocation.script).toContain("config --local --get-regexp '^branch\\..*\\.hobgoblin-created-from$'")
+    expect(invocation.script).toContain('|| true')
+    expect(invocation.script.trimEnd()).toMatch(/for-each-ref .* refs\/heads\/$/)
+  })
+
   test('prunes immediately expired remote worktree records', () => {
     let invocation: ReturnType<typeof buildRemoteCommandInvocation> | undefined
     expect(() => {
@@ -718,32 +730,43 @@ describe('remote command scripts', () => {
   })
 
   test('renders all worktree add modes', () => {
-    expect(
-      buildRemoteCommandInvocation(TARGET, {
-        type: 'gitWorktreeAdd',
-        path: '/srv/repo',
-        input: { worktreePath: '/srv/repo-feature', mode: { kind: 'existingBranch', branch: 'feature/a' } },
-      }).script,
-    ).toContain("worktree add -- '/srv/repo-feature' 'feature/a'")
+    const existing = buildRemoteCommandInvocation(TARGET, {
+      type: 'gitWorktreeAdd',
+      path: '/srv/repo',
+      input: { worktreePath: '/srv/repo-feature', mode: { kind: 'existingBranch', branch: 'feature/a' } },
+    }).script
+    expect(existing).toContain("worktree add -- '/srv/repo-feature' 'feature/a'")
+    expect(existing).not.toContain('hobgoblin-created-from')
 
-    expect(
-      buildRemoteCommandInvocation(TARGET, {
-        type: 'gitWorktreeAdd',
-        path: '/srv/repo',
-        input: {
-          worktreePath: '/srv/repo-feature',
-          mode: { kind: 'trackRemoteBranch', remoteRef: 'origin/feature/a', localBranch: 'feature/a' },
-        },
-      }).script,
-    ).toContain("worktree add -b 'feature/a' --track -- '/srv/repo-feature' 'origin/feature/a'")
+    const tracked = buildRemoteCommandInvocation(TARGET, {
+      type: 'gitWorktreeAdd',
+      path: '/srv/repo',
+      input: {
+        worktreePath: '/srv/repo-feature',
+        mode: { kind: 'trackRemoteBranch', remoteRef: 'origin/feature/a', localBranch: 'feature/a' },
+      },
+    }).script
+    expect(tracked).toContain("worktree add -b 'feature/a' --track -- '/srv/repo-feature' 'origin/feature/a'")
+    expect(tracked).toContain("config --local 'branch.feature/a.hobgoblin-created-from' 'origin/feature/a'")
 
-    expect(
-      buildRemoteCommandInvocation(TARGET, {
-        type: 'gitWorktreeAdd',
-        path: '/srv/repo',
-        input: { worktreePath: '/srv/repo-detached', mode: { kind: 'detached', ref: 'origin/feature/a' } },
-      }).script,
-    ).toContain("worktree add --detach -- '/srv/repo-detached' 'origin/feature/a'")
+    const created = buildRemoteCommandInvocation(TARGET, {
+      type: 'gitWorktreeAdd',
+      path: '/srv/repo',
+      input: {
+        worktreePath: '/srv/repo-feature',
+        mode: { kind: 'newBranch', newBranch: 'feature/a', baseRef: 'main' },
+      },
+    }).script
+    expect(created).toContain("worktree add -b 'feature/a' -- '/srv/repo-feature' 'main'")
+    expect(created).toContain("config --local 'branch.feature/a.hobgoblin-created-from' 'main'")
+
+    const detached = buildRemoteCommandInvocation(TARGET, {
+      type: 'gitWorktreeAdd',
+      path: '/srv/repo',
+      input: { worktreePath: '/srv/repo-detached', mode: { kind: 'detached', ref: 'origin/feature/a' } },
+    }).script
+    expect(detached).toContain("worktree add --detach -- '/srv/repo-detached' 'origin/feature/a'")
+    expect(detached).not.toContain('hobgoblin-created-from')
   })
 
   test('remote bootstrap script handles space paths and excludes copied tree children', async () => {
@@ -1135,7 +1158,9 @@ describe('remote command scripts', () => {
         branch: "feature/user's-work",
         baseBranch: 'main',
       }).script,
-    ).toBe("git -C '/srv/repo' branch -- 'feature/user'\\''s-work' 'main'")
+    ).toBe(
+      "git -C '/srv/repo' branch -- 'feature/user'\\''s-work' 'main' && { git -C '/srv/repo' config --local 'branch.feature/user'\\''s-work.hobgoblin-created-from' 'main' || true; }",
+    )
 
     expect(
       buildRemoteCommandInvocation(TARGET, {
@@ -1144,7 +1169,9 @@ describe('remote command scripts', () => {
         localBranch: 'feature/new',
         remoteRef: 'origin/feature/new',
       }).script,
-    ).toBe("git -C '/srv/repo' branch --track -- 'feature/new' 'origin/feature/new'")
+    ).toBe(
+      "git -C '/srv/repo' branch --track -- 'feature/new' 'origin/feature/new' && { git -C '/srv/repo' config --local 'branch.feature/new.hobgoblin-created-from' 'origin/feature/new' || true; }",
+    )
   })
 
   test('builds structured git history command', () => {

@@ -92,6 +92,59 @@ describe('worktree git operations', () => {
     },
   )
 
+  test.each([
+    [
+      'new branch',
+      {
+        worktreePath: '/tmp/repo-feature',
+        mode: { kind: 'newBranch' as const, newBranch: 'feature/branch', baseRef: 'main' },
+      },
+      'feature/branch',
+      'main',
+    ],
+    [
+      'remote-tracking branch',
+      {
+        worktreePath: '/tmp/repo-feature',
+        mode: {
+          kind: 'trackRemoteBranch' as const,
+          remoteRef: 'origin/feature/branch',
+          localBranch: 'feature/branch',
+        },
+      },
+      'feature/branch',
+      'origin/feature/branch',
+    ],
+  ])('records the selected source after creating a %s worktree', async (_name, input, branch, createdFrom) => {
+    const signal = new AbortController().signal
+    gitResultWithOptionsMock.mockResolvedValueOnce({ ok: true, message: 'created' })
+
+    await expect(createWorktree('/tmp/repo', input, signal)).resolves.toEqual({ ok: true, message: 'created' })
+
+    expect(gitMock).toHaveBeenCalledWith(
+      '/tmp/repo',
+      ['config', '--local', `branch.${branch}.hobgoblin-created-from`, createdFrom],
+      { signal },
+    )
+  })
+
+  test.each([
+    {
+      worktreePath: '/tmp/repo-feature',
+      mode: { kind: 'existingBranch' as const, branch: 'feature/branch' },
+    },
+    {
+      worktreePath: '/tmp/repo-detached',
+      mode: { kind: 'detached' as const, ref: 'origin/feature/branch' },
+    },
+  ])('does not record a source when worktree creation does not create a branch', async (input) => {
+    gitResultWithOptionsMock.mockResolvedValueOnce({ ok: true, message: 'created' })
+
+    await createWorktree('/tmp/repo', input)
+
+    expect(gitMock).not.toHaveBeenCalled()
+  })
+
   test('delegates removeWorktree to git worktree remove with the shared timeout and signal', async () => {
     const signal = new AbortController().signal
 

@@ -68,6 +68,7 @@ describe('ProjectStatusPanel', () => {
           lastCommitMessage: 'feat: expose commit metadata',
           lastCommitAuthor: 'Test Author',
           lastCommitDate: '2026-06-26T09:30:00.000Z',
+          createdFrom: 'develop',
           worktree: { path: WORKTREE_PATH },
         }),
       ],
@@ -93,6 +94,8 @@ describe('ProjectStatusPanel', () => {
     expect(container?.textContent).toContain('branch-status.signal.commit-author')
     expect(container?.textContent).toContain('Test Author')
     expect(container?.textContent).toContain('branch-status.signal.commit-time')
+    expect(container?.textContent).toContain('branch-status.signal.created-from')
+    expect(container?.textContent).toContain('develop')
     expect(container?.textContent).toContain('2026')
     const statusRows = container?.querySelector<HTMLElement>('[role="list"]')
     const statusToolbar = container?.querySelector<HTMLElement>('[data-testid="project-status-toolbar"]')
@@ -136,8 +139,41 @@ describe('ProjectStatusPanel', () => {
         'branch-status.signal.commit-message: feat: expose commit metadata',
         'branch-status.signal.commit-author: Test Author',
         'branch-status.signal.commit-time: 2026-06-26T09:30:00.000Z',
-        'branch-status.signal.merge: branch-status.merge-unknown',
+        'branch-status.signal.created-from: develop',
       ].join('\n'),
     )
+  })
+
+  test('renders unknown when a non-default branch has no recorded creation source', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      name: 'Status Project',
+      branches: [createRepoBranch('feature/legacy')],
+      selectedBranch: 'feature/legacy',
+      statusLoaded: true,
+    })
+
+    await act(async () => {
+      root!.render(<ProjectStatusPanel repoId={REPO_ID} />)
+    })
+
+    expect(container?.textContent).toContain('branch-status.signal.created-from')
+    expect(container?.textContent).toContain('branch-status.created-from-unknown')
+  })
+
+  test('omits the creation source row for the default branch', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      name: 'Status Project',
+      branches: [createRepoBranch('main', { isDefault: true, createdFrom: 'develop' })],
+      selectedBranch: 'main',
+      statusLoaded: true,
+    })
+
+    await act(async () => {
+      root!.render(<ProjectStatusPanel repoId={REPO_ID} />)
+    })
+
+    expect(container?.textContent).not.toContain('branch-status.signal.created-from')
   })
 })

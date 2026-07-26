@@ -549,9 +549,7 @@ export const ko: Record<DictKey, string> = {
 
   // ---- Branch status -----------------------------------------------------
   'branch-status.worktree-dirty': '{n} 개 변경',
-  'branch-status.merged': '포함됨',
-  'branch-status.not-merged': '고유 커밋 있음',
-  'branch-status.merge-unknown': '알 수 없음',
+  'branch-status.created-from-unknown': '알 수 없음',
   'branch-status.copy-branch-name': '브랜치 이름 복사',
   'branch-status.copy-commit-author': '커밋 작성자 복사',
   'branch-status.copy-commit-hash': '커밋 hash 복사',
@@ -574,7 +572,7 @@ export const ko: Record<DictKey, string> = {
   'branch-status.signal.commit-hash': '커밋 hash',
   'branch-status.signal.commit-message': '커밋 내용',
   'branch-status.signal.commit-time': '커밋 시간',
-  'branch-status.signal.merge': '기준선',
+  'branch-status.signal.created-from': '생성 원본 브랜치',
   'branch-status.signal.worktree': '워크트리',
   'branch-status.sync.up-to-date': '최신',
   'branch-status.worktree.none': '워크트리 없음',

@@ -35,7 +35,7 @@ const BranchSchema = v.object({
       path: v.string(),
     }),
   ),
-  mergedToDefault: v.optional(v.boolean()),
+  createdFrom: v.optional(v.string()),
 })
 
 const RepoEventActionSchema = v.union([

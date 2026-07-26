@@ -9,6 +9,10 @@ import {
 import { BRANCH_WORKSPACE_DIRECTORY_PREFIXES } from '#/shared/branch-workspaces.ts'
 import { buildTmuxServerName, isHobgoblinTmuxSessionName } from '#/system/tmux-session.ts'
 import { FIELD_SEP } from '#/system/git/parsers.ts'
+import {
+  BRANCH_CREATED_FROM_CONFIG_PATTERN,
+  branchCreatedFromConfigKey,
+} from '#/system/git/branches.ts'
 import { buildManagedRemoteTerminalInvocation } from '#/system/remote-terminal.ts'
 import { TMUX_SESSION_LIST_FORMAT } from '#/system/tmux-cleanup.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
@@ -24,6 +28,7 @@ const SSH_CONNECT_TIMEOUT_SEC = 10
 export const REMOTE_SNAPSHOT_CURRENT_MARKER = '__GOBLIN_REMOTE_CURRENT__'
 export const REMOTE_SNAPSHOT_DEFAULT_MARKER = '__GOBLIN_REMOTE_DEFAULT__'
 export const REMOTE_SNAPSHOT_BRANCHES_MARKER = '__GOBLIN_REMOTE_BRANCHES__'
+export const REMOTE_SNAPSHOT_CREATED_FROM_MARKER = '__HOBGOBLIN_REMOTE_BRANCH_CREATED_FROM__'
 export const REMOTE_PATH_EXISTS_MARKER = '__HOBGOBLIN_PATH_EXISTS__'
 export const REMOTE_PATH_MISSING_MARKER = '__HOBGOBLIN_PATH_MISSING__'
 export const REMOTE_WORKSPACE_LINKED_WORKTREE_MARKER = '__HOBGOBLIN_WORKSPACE_LINKED_WORKTREE__'
@@ -411,6 +416,8 @@ function scriptForCommand(command: RemoteCommandKind): string {
         `git -C ${repo} symbolic-ref --short HEAD 2>/dev/null || true`,
         `printf '%s\\n' ${shellQuote(REMOTE_SNAPSHOT_DEFAULT_MARKER)}`,
         `git -C ${repo} symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##'`,
+        `printf '%s\\n' ${shellQuote(REMOTE_SNAPSHOT_CREATED_FROM_MARKER)}`,
+        `git -C ${repo} config --local --get-regexp ${shellQuote(BRANCH_CREATED_FROM_CONFIG_PATTERN)} 2>/dev/null || true`,
         `printf '%s\\n' ${shellQuote(REMOTE_SNAPSHOT_BRANCHES_MARKER)}`,
         `git -C ${repo} for-each-ref --format=${shellQuote(branchFormat)} refs/heads/`,
       ].join('\n')
@@ -472,9 +479,19 @@ function scriptForCommand(command: RemoteCommandKind): string {
     case 'gitDiscardChanges':
       return remoteDiscardChangesScript(command)
     case 'gitBranchCreate':
-      return `git -C ${shellQuote(command.path)} branch -- ${shellQuote(command.branch)} ${shellQuote(command.baseBranch)}`
+      return remoteBranchCreationScript(
+        `git -C ${shellQuote(command.path)} branch -- ${shellQuote(command.branch)} ${shellQuote(command.baseBranch)}`,
+        command.path,
+        command.branch,
+        command.baseBranch,
+      )
     case 'gitBranchTrackRemote':
-      return `git -C ${shellQuote(command.path)} branch --track -- ${shellQuote(command.localBranch)} ${shellQuote(command.remoteRef)}`
+      return remoteBranchCreationScript(
+        `git -C ${shellQuote(command.path)} branch --track -- ${shellQuote(command.localBranch)} ${shellQuote(command.remoteRef)}`,
+        command.path,
+        command.localBranch,
+        command.remoteRef,
+      )
     case 'gitFetchBranch':
       return `git -C ${shellQuote(command.path)} fetch -- ${shellQuote(command.remote)} ${shellQuote(
         `${command.remoteBranch}:${command.branch}`,
@@ -507,8 +524,26 @@ function scriptForCommand(command: RemoteCommandKind): string {
       )}`
     case 'gitTagPush':
       return `git -C ${shellQuote(command.path)} push -- ${shellQuote(command.remote)} ${shellQuote(`refs/tags/${command.tag}`)}`
-    case 'gitWorktreeAdd':
-      return `git -C ${shellQuote(command.path)} worktree add ${remoteWorktreeAddArgs(command.input)}`
+    case 'gitWorktreeAdd': {
+      const createScript = `git -C ${shellQuote(command.path)} worktree add ${remoteWorktreeAddArgs(command.input)}`
+      if (command.input.mode.kind === 'newBranch') {
+        return remoteBranchCreationScript(
+          createScript,
+          command.path,
+          command.input.mode.newBranch,
+          command.input.mode.baseRef,
+        )
+      }
+      if (command.input.mode.kind === 'trackRemoteBranch') {
+        return remoteBranchCreationScript(
+          createScript,
+          command.path,
+          command.input.mode.localBranch,
+          command.input.mode.remoteRef,
+        )
+      }
+      return createScript
+    }
     case 'worktreeBootstrapCandidates':
       return remoteWorktreeBootstrapCandidatesScript(command)
     case 'bootstrapRemoteWorktree':
@@ -1374,6 +1409,24 @@ function remoteFileTransferInventoryScript(
     'finish({"ok": True, "entries": entries, "totalBytes": total_bytes})',
     'PY',
   ].join('\n')
+}
+
+function remoteBranchCreationScript(
+  createScript: string,
+  repoPath: string,
+  branch: string,
+  createdFrom: string,
+): string {
+  const configScript = [
+    'git',
+    '-C',
+    shellQuote(repoPath),
+    'config',
+    '--local',
+    shellQuote(branchCreatedFromConfigKey(branch)),
+    shellQuote(createdFrom),
+  ].join(' ')
+  return `${createScript} && { ${configScript} || true; }`
 }
 
 function remoteWorktreeAddArgs(input: CreateWorktreeInput): string {
