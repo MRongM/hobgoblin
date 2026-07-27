@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from 'react'
-import { queryOptions, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { queryOptions, replaceEqualDeep, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import type { BranchWorkspaceReadResult } from '#/shared/branch-workspaces.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 import { readBranchWorkspaces } from '#/web/workspace-client.ts'
@@ -17,6 +17,11 @@ export function branchWorkspaceQueryOptions(rootId: string) {
     enabled: rootId.length > 0,
     staleTime: isRemoteRepoId(rootId) ? REMOTE_BRANCH_WORKSPACE_CACHE_TTL_MS : 0,
     gcTime: 5 * 60_000,
+    structuralSharing: (previous, current) => {
+      const previousResult = previous as BranchWorkspaceReadResult | undefined
+      const currentResult = current as BranchWorkspaceReadResult
+      return previousResult?.ok && !currentResult.ok ? previousResult : replaceEqualDeep(previous, current)
+    },
   })
 }
 

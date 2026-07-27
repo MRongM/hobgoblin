@@ -141,6 +141,17 @@ describe('branch workspace read model', () => {
     expect(deps.readRepositorySnapshot).not.toHaveBeenCalled()
   })
 
+  test('reports a read failure when a referenced repository snapshot read fails', async () => {
+    const current = manifest()
+    const deps = dependencies([current])
+    deps.readRepositorySnapshot.mockRejectedValue(new Error('temporary SSH failure'))
+
+    await expect(readBranchWorkspaceSnapshot(ROOT, undefined, deps)).resolves.toEqual({
+      ok: false,
+      message: 'workspace.branch-workspace.read-failed',
+    })
+  })
+
   test('keeps a missing materialized workspace as needs-repair', async () => {
     const current = manifest()
     const deps = dependencies([current])
@@ -158,6 +169,17 @@ describe('branch workspace read model', () => {
           issues: [{ kind: 'root-missing' }],
         },
       ],
+    })
+  })
+
+  test('reports a read failure when the workspace root inspection fails', async () => {
+    const current = manifest()
+    const deps = dependencies([current])
+    deps.inspectPath.mockRejectedValue(new Error('temporary SSH failure'))
+
+    await expect(readBranchWorkspaceSnapshot(ROOT, undefined, deps)).resolves.toEqual({
+      ok: false,
+      message: 'workspace.branch-workspace.read-failed',
     })
   })
 

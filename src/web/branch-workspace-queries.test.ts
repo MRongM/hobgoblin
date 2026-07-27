@@ -41,6 +41,23 @@ describe('branch workspace query cache', () => {
       vi.useRealTimers()
     }
   })
+
+  test('preserves the last successful snapshot when an automatic refetch reports a failure', async () => {
+    const queryClient = new QueryClient()
+    const current = successfulRead(['docs'])
+    const failure = { ok: false as const, message: 'workspace.branch-workspace.read-failed' }
+    mocks.readBranchWorkspaces.mockResolvedValueOnce(current).mockResolvedValueOnce(failure)
+
+    try {
+      await queryClient.fetchQuery(branchWorkspaceQueryOptions(ROOT))
+      await queryClient.fetchQuery(branchWorkspaceQueryOptions(ROOT))
+
+      expect(mocks.readBranchWorkspaces).toHaveBeenCalledTimes(2)
+      expect(queryClient.getQueryData(branchWorkspaceQueryKey(ROOT))).toBe(current)
+    } finally {
+      queryClient.clear()
+    }
+  })
 })
 
 describe('manual branch workspace query refresh', () => {

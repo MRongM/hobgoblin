@@ -31,6 +31,8 @@ interface BranchWorkspaceReadDependencies {
   ) => BranchWorkspaceActiveOperation | null | Promise<BranchWorkspaceActiveOperation | null>
 }
 
+type RepositorySnapshotRead = { ok: true; snapshot: RepoSnapshot | null } | { ok: false; error: unknown }
+
 export async function readBranchWorkspaceSnapshot(
   rootId: string,
   signal?: AbortSignal,
@@ -85,7 +87,7 @@ function repositorySnapshotCache(
   repositoryNames: string[],
   readRepositorySnapshot: typeof getRepositorySnapshot,
   signal?: AbortSignal,
-): Map<string, Promise<RepoSnapshot | null>> {
+): Map<string, Promise<RepositorySnapshotRead>> {
   return new Map(
     repositoryNames.map((repositoryName) => {
       const repoId = workspaceRepositoryId(rootId, repositoryName)
@@ -93,8 +95,13 @@ function repositorySnapshotCache(
         ? readRepositorySnapshot(repoId, signal, {
             includeWorktreeStatus: false,
             includeRemote: false,
-          }).catch(() => null)
-        : Promise.resolve<RepoSnapshot | null>(null)
+          })
+            .then((value) => {
+              signal?.throwIfAborted()
+              return { ok: true as const, snapshot: value }
+            })
+            .catch((error: unknown) => ({ ok: false as const, error }))
+        : Promise.resolve({ ok: true as const, snapshot: null })
       return [repositoryName, snapshot]
     }),
   )
@@ -103,15 +110,15 @@ function repositorySnapshotCache(
 async function projectBranchWorkspace(
   manifest: BranchWorkspaceManifest,
   configuredRepositories: ReadonlySet<string>,
-  repositorySnapshots: Map<string, Promise<RepoSnapshot | null>>,
+  repositorySnapshots: Map<string, Promise<RepositorySnapshotRead>>,
   signal: AbortSignal | undefined,
   dependencies: BranchWorkspaceReadDependencies,
 ): Promise<BranchWorkspaceSnapshot> {
   const issues: BranchWorkspaceIssue[] = []
   const inspect = dependencies.inspectPath ?? inspectBranchWorkspacePath
-  const rootInspection = await inspect(manifest.rootId, manifest.path, signal).catch(() => null)
-  const rootReady = rootInspection?.exists === true && rootInspection.kind === 'directory'
-  if (!rootInspection || !rootInspection.exists || rootInspection.kind === 'missing') {
+  const rootInspection = await inspect(manifest.rootId, manifest.path, signal)
+  const rootReady = rootInspection.exists && rootInspection.kind === 'directory'
+  if (!rootInspection.exists || rootInspection.kind === 'missing') {
     issues.push({ kind: 'root-missing' })
   } else if (rootInspection.kind !== 'directory') {
     issues.push({ kind: 'root-not-directory' })
@@ -158,7 +165,7 @@ async function reconcileRepositoryMember(
   manifest: BranchWorkspaceManifest,
   member: BranchWorkspaceManifest['repositories'][number],
   configuredRepositories: ReadonlySet<string>,
-  snapshotPromise: Promise<RepoSnapshot | null> | undefined,
+  snapshotPromise: Promise<RepositorySnapshotRead> | undefined,
   issues: BranchWorkspaceIssue[],
 ): Promise<BranchWorkspaceRepositorySnapshot> {
   if (
@@ -184,7 +191,9 @@ async function reconcileRepositoryMember(
     return { ...member, ready: false }
   }
 
-  const snapshot = await snapshotPromise
+  const snapshotRead = await snapshotPromise
+  if (!snapshotRead.ok) throw snapshotRead.error
+  const { snapshot } = snapshotRead
   if (!snapshot) {
     issues.push({ kind: 'repository-unavailable', repositoryName: member.repositoryName })
     return { ...member, ready: false }
