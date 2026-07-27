@@ -1,0 +1,1 @@
+Android에서 SSH 호스트, 원격 Git worktree, 지속 터미널 관리

@@ -33,6 +33,7 @@
     <string name="settings_failed_checks_before_close">关闭前允许的失败检查次数</string>
     <string name="settings_failure_threshold_range">范围：%1$d–%2$d。</string>
     <string name="settings_keepalive_strategy">当前策略：SSH keepalive @openssh.com</string>
+    <string name="settings_privacy_policy">隐私政策</string>
     <string name="host_add_title">添加主机</string>
     <string name="host_edit_title">编辑主机</string>
     <string name="host_save">保存主机</string>

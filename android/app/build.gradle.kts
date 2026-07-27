@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "dev.hobgoblin.android"
+    namespace = "com.mrongm.hobgoblin"
     compileSdk = 37
 
     defaultConfig {

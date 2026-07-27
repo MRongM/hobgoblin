@@ -1,6 +1,8 @@
 node_modules
 dist
-release
+release/*
+!release/google-play/
+!release/google-play/**
 .DS_Store
 *.log
 .vscode
