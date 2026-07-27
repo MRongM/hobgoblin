@@ -716,6 +716,87 @@ describe('WorkspaceRepositoryRail', () => {
     expect(container?.textContent).toContain('workspace.branch-workspace.remote-operation-failed')
   })
 
+  test('refreshes a newly drifted branch workspace once per drift episode', async () => {
+    const originalItems = branchWorkspaceState.items
+    const drifted = {
+      ...originalItems[0]!,
+      state: { kind: 'needs-action' as const, action: 'repair' as const, reason: 'drift' as const },
+    }
+    try {
+      branchWorkspaceState.items = [drifted, ...originalItems.slice(1)]
+      renderRail({ currentRepoId: ROOT })
+      await act(async () => Promise.resolve())
+      expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
+
+      renderRail({ currentRepoId: ROOT })
+      await act(async () => Promise.resolve())
+      expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
+
+      branchWorkspaceState.items = originalItems
+      renderRail({ currentRepoId: ROOT })
+      await act(async () => Promise.resolve())
+
+      branchWorkspaceState.items = [drifted, ...originalItems.slice(1)]
+      renderRail({ currentRepoId: ROOT })
+      await act(async () => Promise.resolve())
+      expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(2)
+    } finally {
+      branchWorkspaceState.items = originalItems
+    }
+  })
+
+  test('coalesces new drift and ignores other repair lifecycle states', async () => {
+    const originalItems = branchWorkspaceState.items
+    try {
+      branchWorkspaceState.items = originalItems.map((item) => ({
+        ...item,
+        state: { kind: 'needs-action' as const, action: 'repair' as const, reason: 'drift' as const },
+      }))
+      renderRail({ currentRepoId: ROOT })
+      await act(async () => Promise.resolve())
+      expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
+
+      branchWorkspaceState.refresh.mockClear()
+      branchWorkspaceState.items = [
+        {
+          ...originalItems[0]!,
+          state: {
+            kind: 'needs-action' as const,
+            action: 'repair' as const,
+            reason: 'creation-interrupted' as const,
+          },
+        },
+        { ...originalItems[1]!, state: { kind: 'needs-action' as const, action: 'continue-delete' as const } },
+      ]
+      renderRail({ currentRepoId: ROOT })
+      await act(async () => Promise.resolve())
+      expect(branchWorkspaceState.refresh).not.toHaveBeenCalled()
+    } finally {
+      branchWorkspaceState.items = originalItems
+    }
+  })
+
+  test('does not loop when automatic drift refresh rejects', async () => {
+    const originalItems = branchWorkspaceState.items
+    branchWorkspaceState.refresh.mockRejectedValue(new Error('temporary read failure'))
+    try {
+      branchWorkspaceState.items = [
+        {
+          ...originalItems[0]!,
+          state: { kind: 'needs-action' as const, action: 'repair' as const, reason: 'drift' as const },
+        },
+        ...originalItems.slice(1),
+      ]
+      renderRail({ currentRepoId: ROOT })
+      await act(async () => Promise.resolve())
+      renderRail({ currentRepoId: ROOT })
+      await act(async () => Promise.resolve())
+      expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
+    } finally {
+      branchWorkspaceState.items = originalItems
+    }
+  })
+
   test('confirms and runs registry cleanup only for the branch workspace read failure', async () => {
     branchWorkspaceState.queryResult = { ok: false, message: 'workspace.branch-workspace.read-failed' }
     branchWorkspaceCleanupState.cleanup.mockResolvedValue({ ok: true, outcome: 'repaired', removedRecords: 2 })

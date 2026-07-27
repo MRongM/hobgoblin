@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { arrayMove } from '@dnd-kit/sortable'
 import { Download, Eye, EyeOff, Folder, FolderPlus, LoaderCircle, RefreshCw, Settings2, Terminal } from 'lucide-react'
@@ -111,6 +111,7 @@ export function WorkspaceRepositoryRail({
   const [gitActionTargetId, setGitActionTargetId] = useState<string | null>(null)
   const [branchReloadPending, setBranchReloadPending] = useState(false)
   const [registryCleanupOpen, setRegistryCleanupOpen] = useState(false)
+  const autoRefreshedDriftIds = useRef<Set<string>>(new Set())
   const dialogProgressWorkspace = branchActions.plan
     ? (branchItems.find((item) => item.id === branchActions.plan?.branchWorkspaceId) ?? null)
     : null
@@ -221,6 +222,25 @@ export function WorkspaceRepositoryRail({
     if (member && member.progress !== 'removed') return
     activateBranchWorkspace(workspaceRootId, branchWorkspace.id)
   }, [activeContext, activateBranchWorkspace, branchItems, workspaceRootId])
+
+  useEffect(() => {
+    if (!branchQuery.data?.ok) return
+    const driftedIds = new Set(
+      branchItems.flatMap((item) =>
+        item.state.kind === 'needs-action' && item.state.action === 'repair' && item.state.reason === 'drift'
+          ? [item.id]
+          : [],
+      ),
+    )
+    const attemptedIds = autoRefreshedDriftIds.current
+    for (const id of attemptedIds) {
+      if (!driftedIds.has(id)) attemptedIds.delete(id)
+    }
+    const newIds = [...driftedIds].filter((id) => !attemptedIds.has(id))
+    if (newIds.length === 0) return
+    for (const id of newIds) attemptedIds.add(id)
+    void branchQuery.refresh().catch(() => undefined)
+  }, [branchItems, branchQuery.data, branchQuery.refresh])
 
   if (!workspace) return null
   const resolveMemberTarget = (member: BranchWorkspaceRepositorySnapshot) => {

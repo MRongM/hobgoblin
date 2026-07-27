@@ -112,6 +112,82 @@ describe('BranchWorkspaceDialog', () => {
     expect(document.querySelector('[data-action="confirm"]')?.getAttribute('data-variant')).toBe('destructive')
   })
 
+  test('keeps confirmed removal locked in the progress dialog while execution is pending', () => {
+    const onOpenChange = vi.fn()
+    const onCancel = vi.fn(async () => {})
+    renderDialog({
+      mode: 'remove',
+      workspace: existingWorkspace(),
+      progressWorkspace: existingWorkspace(),
+      plan: removalPlan(),
+      pending: true,
+      onOpenChange,
+      onCancel,
+    })
+
+    const cancel = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent === 'dialog.cancel',
+    )
+    expect(document.querySelector('[data-slot="dialog-close"]')).toBeNull()
+    expect(cancel?.disabled).toBe(true)
+    expect(document.querySelector('[data-branch-workspace-operation-progress]')).not.toBeNull()
+
+    act(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+    expect(onOpenChange).not.toHaveBeenCalled()
+    expect(onCancel).not.toHaveBeenCalled()
+  })
+
+  test('unlocks a failed removal so it can be retried or closed', async () => {
+    const onOpenChange = vi.fn()
+    const onCancel = vi.fn(async () => {})
+    renderDialog({
+      mode: 'remove',
+      workspace: existingWorkspace(),
+      plan: removalPlan(),
+      result: { ok: false, message: 'workspace.branch-workspace.execute-failed' },
+      error: 'workspace.branch-workspace.execute-failed',
+      pending: false,
+      onOpenChange,
+      onCancel,
+    })
+
+    const cancel = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent === 'dialog.cancel',
+    )
+    expect(document.querySelector('[data-slot="dialog-close"]')).not.toBeNull()
+    expect(cancel?.disabled).toBe(false)
+    await act(async () => cancel?.click())
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+    expect(onCancel).not.toHaveBeenCalled()
+  })
+
+  test('closes removal only after its successful execution promise resolves', async () => {
+    const onOpenChange = vi.fn()
+    let finishRemoval: ((result: { ok: true; branchWorkspaceId: string }) => void) | undefined
+    const onConfirm = vi.fn(
+      () =>
+        new Promise<{ ok: true; branchWorkspaceId: string }>((resolve) => {
+          finishRemoval = resolve
+        }),
+    )
+    renderDialog({
+      mode: 'remove',
+      workspace: existingWorkspace(),
+      plan: { ...removalPlan(), requiredApprovals: [] },
+      onOpenChange,
+      onConfirm,
+    })
+
+    await clickAction('confirm')
+    expect(onOpenChange).not.toHaveBeenCalled()
+
+    await act(async () => {
+      finishRemoval?.({ ok: true, branchWorkspaceId: 'branch-1' })
+      await Promise.resolve()
+    })
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
   test('keeps progress hidden during preview and in non-target lifecycle modes', () => {
     renderDialog({ plan: planWithSteps('create', [{ id: 'directory', kind: 'create-directory', label: 'folder' }]) })
     expect(document.querySelector('[data-branch-workspace-operation-progress]')).toBeNull()

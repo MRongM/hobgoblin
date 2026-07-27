@@ -283,7 +283,9 @@ export function BranchWorkspaceDialog({
       alsoDeleteUpstream: alsoDeleteBranch && alsoDeleteUpstream,
     }
   }
+  const removalExecutionLocked = mode === 'remove' && plan !== null && pending
   const close = () => {
+    if (removalExecutionLocked) return
     if (pending) void onCancel()
     onOpenChange(false)
   }
@@ -311,8 +313,24 @@ export function BranchWorkspaceDialog({
   const progressStatusByStepId = new Map(operationProgress?.steps.map((item) => [item.step.id, item.status]))
 
   return (
-    <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && removalExecutionLocked) return
+        if (next) onOpenChange(true)
+        else close()
+      }}
+    >
+      <DialogContent
+        className="max-h-[85vh] overflow-y-auto sm:max-w-2xl"
+        showCloseButton={!removalExecutionLocked}
+        onEscapeKeyDown={(event) => {
+          if (removalExecutionLocked) event.preventDefault()
+        }}
+        onPointerDownOutside={(event) => {
+          if (removalExecutionLocked) event.preventDefault()
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{t(`workspace.branch-workspace.dialog.${mode}.title`)}</DialogTitle>
           <DialogDescription>{t(`workspace.branch-workspace.dialog.${mode}.description`)}</DialogDescription>
@@ -702,7 +720,7 @@ export function BranchWorkspaceDialog({
               {t('error.clear-cache')}
             </Button>
           ) : null}
-          <Button type="button" variant="outline" onClick={close}>
+          <Button type="button" variant="outline" disabled={removalExecutionLocked} onClick={close}>
             {t('dialog.cancel')}
           </Button>
           {!plan ? (
