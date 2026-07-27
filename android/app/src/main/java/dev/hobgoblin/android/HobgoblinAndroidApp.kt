@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import dev.hobgoblin.android.data.HostProfileStore
 import dev.hobgoblin.android.data.ManualItemOrderScope
 import dev.hobgoblin.android.data.ManualItemOrderStore
@@ -52,8 +53,6 @@ import dev.hobgoblin.android.ui.screens.projects.ProjectsScreen
 import dev.hobgoblin.android.ui.screens.settings.SettingsScreen
 import dev.hobgoblin.android.ui.screens.repositories.RepositorySetupScreen
 import dev.hobgoblin.android.ui.screens.repositories.RepositoryWorkspaceScreen
-import dev.hobgoblin.android.ui.screens.terminals.TerminalBackClosesSessionHint
-import dev.hobgoblin.android.ui.screens.terminals.TerminalBackKeepsSessionHint
 import dev.hobgoblin.android.ui.screens.terminals.TerminalScreen
 import dev.hobgoblin.android.ui.screens.terminals.TerminalsScreen
 import dev.hobgoblin.android.ui.screens.terminals.terminalSessionReconnectAvailable
@@ -96,6 +95,8 @@ fun HobgoblinAndroidApp(
     hostPortForwardManager: HostPortForwardManager,
     terminalNavigationRequest: TerminalNavigationRequest? = null,
 ) {
+    val missingTmuxIdentity = stringResource(R.string.terminal_tmux_identity_missing)
+    val missingTmuxProjectRoot = stringResource(R.string.terminal_tmux_project_root_missing)
     val initialRepositories = remember {
         remoteRepositoryStore.loadRepositories()
     }
@@ -515,14 +516,14 @@ fun HobgoblinAndroidApp(
                         val session = terminalSessionManager.session(sessionId)
                         if (closeTmuxSession) {
                             val identity = requireNotNull(session?.tmuxIdentity) {
-                                "This terminal has no current Hobgoblin tmux identity."
+                                missingTmuxIdentity
                             }
                             when (
                                 val result = remoteTmuxSessionService.closeAssociatedSession(
                                     target = RemoteTarget.fromHostProfile(host, session.remotePath),
                                     identity = identity,
                                     projectRoot = requireNotNull(session.repositoryRemotePath) {
-                                        "This tmux terminal has no repository project root."
+                                        missingTmuxProjectRoot
                                     },
                                 )
                             ) {
@@ -597,11 +598,6 @@ fun HobgoblinAndroidApp(
                             session,
                             returnToTerminals = currentRoute.returnToTerminals,
                         )
-                    },
-                    backHint = if (isHostTemporaryTerminal(currentRoute.remotePath, currentRoute.repositoryId)) {
-                        TerminalBackClosesSessionHint
-                    } else {
-                        TerminalBackKeepsSessionHint
                     },
                     terminalSessionManager = terminalSessionManager,
                     terminalForegroundBridge = terminalForegroundBridge,

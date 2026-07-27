@@ -22,7 +22,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import dev.hobgoblin.android.R
 import dev.hobgoblin.android.data.ManualItemOrderPolicy
 import dev.hobgoblin.android.domain.ResourceState
 import dev.hobgoblin.android.domain.ssh.RemoteProjectKind
@@ -94,10 +96,10 @@ internal fun projectTerminalTarget(repository: RemoteRepositoryProfile): Project
         terminalWorkspacePath = repository.remotePath,
     )
 
-internal fun projectActionLabels(): List<String> = listOf("Open", "Terminals", "Delete")
+internal fun projectActionLabelResources(): List<Int> =
+    listOf(R.string.common_open, R.string.common_terminals, R.string.common_delete)
 
-internal fun emptyProjectsDescription(): String =
-    "Add a remote Git repository or Plain workspace to open its terminal."
+internal fun emptyProjectsDescriptionResource(): Int = R.string.projects_empty_description
 
 internal fun projectsForHost(
     repositories: List<RemoteRepositoryProfile>,
@@ -108,14 +110,13 @@ internal fun projectsForHost(
     repositories.filter { it.hostProfileId == hostId }
 }
 
-internal fun filteredProjectsDescription(hostTitle: String): String =
-    "No projects are saved on $hostTitle."
+internal fun filteredProjectsDescriptionResource(): Int = R.string.projects_filtered_empty_description
 
 internal fun projectReorderAvailable(hostFilterId: String?): Boolean = hostFilterId == null
 
-internal fun projectKindLabel(project: RemoteRepositoryProfile): String = when (project.kind) {
-    RemoteProjectKind.GitRepository -> "Git repository"
-    RemoteProjectKind.PlainWorkspace -> "Plain workspace"
+internal fun projectKindLabelResource(project: RemoteRepositoryProfile): Int = when (project.kind) {
+    RemoteProjectKind.GitRepository -> R.string.projects_git_repository
+    RemoteProjectKind.PlainWorkspace -> R.string.projects_plain_workspace
 }
 
 @Composable
@@ -136,7 +137,7 @@ private fun ProjectList(
     val filteredHostTitle = hostFilterId
         ?.let(hostById::get)
         ?.title
-        ?: "Selected host"
+        ?: stringResource(R.string.projects_selected_host)
     val allOrderedRepositories = ManualItemOrderPolicy.apply(repositories, manualOrder, RemoteRepositoryProfile::id)
     val orderedRepositories = projectsForHost(allOrderedRepositories, hostFilterId)
     val reorderState = rememberManualReorderState(
@@ -157,22 +158,26 @@ private fun ProjectList(
             verticalArrangement = Arrangement.Center,
         ) {
             Text(
-                if (hostFilterId == null) "No projects" else "No projects on $filteredHostTitle",
+                if (hostFilterId == null) {
+                    stringResource(R.string.projects_empty_title)
+                } else {
+                    stringResource(R.string.projects_empty_on_host, filteredHostTitle)
+                },
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
             )
             Spacer(Modifier.height(HobgoblinSpacing.Sm))
             Text(
                 if (hostFilterId == null) {
-                    emptyProjectsDescription()
+                    stringResource(emptyProjectsDescriptionResource())
                 } else {
-                    filteredProjectsDescription(filteredHostTitle)
+                    stringResource(filteredProjectsDescriptionResource(), filteredHostTitle)
                 },
             )
             if (hostFilterId != null) {
                 Spacer(Modifier.height(HobgoblinSpacing.Sm))
                 TextButton(onClick = onClearHostFilter) {
-                    Text("Show all projects")
+                    Text(stringResource(R.string.projects_show_all))
                 }
             }
             Spacer(Modifier.height(HobgoblinSpacing.Lg))
@@ -185,13 +190,17 @@ private fun ProjectList(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            if (hostFilterId == null) "Saved projects" else "Projects on $filteredHostTitle",
+            if (hostFilterId == null) {
+                stringResource(R.string.projects_saved_heading)
+            } else {
+                stringResource(R.string.projects_on_host, filteredHostTitle)
+            },
             modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.titleMedium,
         )
         if (hostFilterId != null) {
             TextButton(onClick = onClearHostFilter) {
-                Text("Show all")
+                Text(stringResource(R.string.projects_show_all_short))
             }
         }
     }
@@ -221,8 +230,8 @@ private fun ProjectList(
     deleteTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text("Delete project record?") },
-            text = { Text("This removes ${target.title} from Hobgoblin Android. It does not delete anything on the SSH server.") },
+            title = { Text(stringResource(R.string.projects_delete_title)) },
+            text = { Text(stringResource(R.string.projects_delete_description, target.title)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -230,12 +239,12 @@ private fun ProjectList(
                         deleteTarget = null
                     },
                 ) {
-                    Text("Delete")
+                    Text(stringResource(R.string.common_delete))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { deleteTarget = null }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.common_cancel))
                 }
             }
         )
@@ -245,15 +254,19 @@ private fun ProjectList(
 @Composable
 private fun LoadingProjects() {
     Column(verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm)) {
-        Text("loading", style = MaterialTheme.typography.labelMedium)
-        Text("Loading saved projects.")
+        Text(stringResource(R.string.common_loading), style = MaterialTheme.typography.labelMedium)
+        Text(stringResource(R.string.projects_loading_description))
     }
 }
 
 @Composable
 private fun ErrorProjects(message: String) {
     Column(verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Md)) {
-        Text("error", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium)
+        Text(
+            stringResource(R.string.common_error),
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.labelMedium,
+        )
         Text(message)
     }
 }
@@ -271,7 +284,11 @@ private fun ProjectRow(
     val rootAddress = remember(host?.host) {
         host?.let { "root@${it.host}:${it.port}" }
     }
-    val actionLabels = projectActionLabels()
+    val actionLabels = listOf(
+        stringResource(R.string.common_open),
+        stringResource(R.string.common_terminals),
+        stringResource(R.string.common_delete),
+    )
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -300,7 +317,7 @@ private fun ProjectRow(
                 }
             }
             Text(
-                projectKindLabel(repository),
+                stringResource(projectKindLabelResource(repository)),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

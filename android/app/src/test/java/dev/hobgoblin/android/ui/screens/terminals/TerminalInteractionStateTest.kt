@@ -1,10 +1,12 @@
 package dev.hobgoblin.android.ui.screens.terminals
 
 import android.view.KeyEvent
+import dev.hobgoblin.android.R
 import dev.hobgoblin.android.terminals.TerminalSessionRecord
 import dev.hobgoblin.android.terminals.TerminalSessionState
 import dev.hobgoblin.android.terminals.TerminalSessionStatus
 import dev.hobgoblin.android.terminals.TerminalDisconnectedReason
+import dev.hobgoblin.android.ui.text.LocalizedText
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -72,21 +74,23 @@ class TerminalInteractionStateTest {
     fun `terminal close confirmation explains that the session will stop`() {
         val text = terminalCloseConfirmationText("App - /srv/app")
 
-        assertTrue(text.contains("App - /srv/app"))
-        assertTrue(text.contains("stop"))
-        assertTrue(text.contains("return"))
+        assertEquals(R.string.terminal_close_confirmation, text.resourceId)
+        assertEquals(listOf("App - /srv/app"), text.formatArgs)
     }
 
     @Test
     fun `unavailable input state explains why send is disabled`() {
-        assertEquals("Connecting to terminal...", terminalInputUnavailableMessage(TerminalSessionState.Connecting))
+        assertEquals(LocalizedText(R.string.terminal_connecting_message), terminalInputUnavailableText(TerminalSessionState.Connecting))
         assertEquals(
-            "Terminal disconnected. Reconnect or edit the host.",
-            terminalInputUnavailableMessage(TerminalSessionState.Exited("session-1")),
+            LocalizedText(R.string.terminal_disconnected_general),
+            terminalInputUnavailableText(TerminalSessionState.Exited("session-1")),
         )
         assertEquals(
-            "Terminal disconnected: Android service stopped. Reconnect or edit the host.",
-            terminalInputUnavailableMessage(
+            LocalizedText(
+                R.string.terminal_disconnected_detail,
+                listOf(LocalizedText(R.string.terminal_reason_android_service_stopped)),
+            ),
+            terminalInputUnavailableText(
                 TerminalSessionState.Disconnected(
                     sessionId = "session-1",
                     reason = TerminalDisconnectedReason.AndroidServiceStopped,
@@ -94,8 +98,16 @@ class TerminalInteractionStateTest {
             ),
         )
         assertEquals(
-            "Terminal disconnected: SSH disconnected - connection lost. Reconnect or edit the host.",
-            terminalInputUnavailableMessage(
+            LocalizedText(
+                R.string.terminal_disconnected_detail,
+                listOf(
+                    LocalizedText(
+                        R.string.terminal_status_with_detail,
+                        listOf(LocalizedText(R.string.terminal_reason_ssh_disconnected), "connection lost"),
+                    ),
+                ),
+            ),
+            terminalInputUnavailableText(
                 TerminalSessionState.Disconnected(
                     sessionId = "session-1",
                     reason = TerminalDisconnectedReason.SshDisconnected,
@@ -103,7 +115,7 @@ class TerminalInteractionStateTest {
                 ),
             ),
         )
-        assertNull(terminalInputUnavailableMessage(TerminalSessionState.Connected("session-1", "", 80, 24)))
+        assertNull(terminalInputUnavailableText(TerminalSessionState.Connected("session-1", "", 80, 24)))
     }
 
     @Test
@@ -116,15 +128,18 @@ class TerminalInteractionStateTest {
 
         assertEquals("last output", terminalViewportText(disconnected))
         assertEquals(
-            "Terminal disconnected: Android service stopped. Reconnect or edit the host.",
-            terminalSessionBannerMessage(disconnected),
+            LocalizedText(
+                R.string.terminal_disconnected_detail,
+                listOf(LocalizedText(R.string.terminal_reason_android_service_stopped)),
+            ),
+            terminalSessionBannerText(disconnected),
         )
     }
 
     @Test
     fun `connecting shows banner without replacing viewport buffer`() {
         assertEquals("", terminalViewportText(TerminalSessionState.Connecting))
-        assertEquals("Connecting...", terminalSessionBannerMessage(TerminalSessionState.Connecting))
+        assertEquals(LocalizedText(R.string.terminal_banner_connecting), terminalSessionBannerText(TerminalSessionState.Connecting))
     }
 
     @Test
@@ -135,6 +150,7 @@ class TerminalInteractionStateTest {
                 reason = TerminalDisconnectedReason.AndroidServiceStopped,
                 output = "last output",
             ),
+            "Terminal disconnected: Android service stopped. Reconnect or edit the host.",
         )
 
         assertTrue(text.contains("last output"))
@@ -147,7 +163,7 @@ class TerminalInteractionStateTest {
         assertEquals(
             "Copied.",
             terminalViewportBannerMessage(
-                state = TerminalSessionState.Connected("session-1", "", 80, 24),
+                sessionBanner = null,
                 notice = "Copied.",
             ),
         )
@@ -163,7 +179,7 @@ class TerminalInteractionStateTest {
         assertEquals(
             "Copy failed.\nTerminal disconnected: Android service stopped. Reconnect or edit the host.",
             terminalViewportBannerMessage(
-                state = disconnected,
+                sessionBanner = "Terminal disconnected: Android service stopped. Reconnect or edit the host.",
                 notice = "Copy failed.",
             ),
         )
@@ -175,12 +191,12 @@ class TerminalInteractionStateTest {
             sessionId = "session-1",
             reason = TerminalDisconnectedReason.AndroidServiceStopped,
         )
-        val message = terminalSessionBannerMessage(disconnected)
+        val message = "Terminal disconnected: Android service stopped. Reconnect or edit the host."
 
         assertEquals(
             message,
             terminalViewportBannerMessage(
-                state = disconnected,
+                sessionBanner = message,
                 notice = message,
             ),
         )
@@ -189,8 +205,14 @@ class TerminalInteractionStateTest {
     @Test
     fun `terminal status label includes disconnected reason`() {
         assertEquals(
-            "disconnected: Android service stopped",
-            terminalSessionStatusLabel(
+            LocalizedText(
+                R.string.terminal_status_with_detail,
+                listOf(
+                    LocalizedText(R.string.terminal_status_disconnected),
+                    LocalizedText(R.string.terminal_reason_android_service_stopped),
+                ),
+            ),
+            terminalSessionStatusText(
                 TerminalSessionState.Disconnected(
                     sessionId = "session-1",
                     reason = TerminalDisconnectedReason.AndroidServiceStopped,
@@ -198,8 +220,17 @@ class TerminalInteractionStateTest {
             ),
         )
         assertEquals(
-            "disconnected: SSH disconnected - connection lost",
-            terminalSessionStatusLabel(
+            LocalizedText(
+                R.string.terminal_status_with_detail,
+                listOf(
+                    LocalizedText(R.string.terminal_status_disconnected),
+                    LocalizedText(
+                        R.string.terminal_status_with_detail,
+                        listOf(LocalizedText(R.string.terminal_reason_ssh_disconnected), "connection lost"),
+                    ),
+                ),
+            ),
+            terminalSessionStatusText(
                 TerminalSessionState.Disconnected(
                     sessionId = "session-1",
                     reason = TerminalDisconnectedReason.SshDisconnected,
@@ -207,7 +238,10 @@ class TerminalInteractionStateTest {
                 ),
             ),
         )
-        assertEquals("connected", terminalSessionStatusLabel(TerminalSessionState.Connected("session-1", "", 80, 24)))
+        assertEquals(
+            LocalizedText(R.string.terminal_status_connected),
+            terminalSessionStatusText(TerminalSessionState.Connected("session-1", "", 80, 24)),
+        )
     }
 
     @Test
@@ -226,12 +260,15 @@ class TerminalInteractionStateTest {
     @Test
     fun `command input placeholder explains disabled state`() {
         assertEquals(
-            "Type a command",
-            terminalCommandInputPlaceholder(TerminalSessionState.Connected("session-1", "", 80, 24)),
+            LocalizedText(R.string.terminal_type_command),
+            terminalCommandInputPlaceholderText(TerminalSessionState.Connected("session-1", "", 80, 24)),
         )
         assertEquals(
-            "Terminal disconnected: SSH disconnected. Reconnect or edit the host.",
-            terminalCommandInputPlaceholder(
+            LocalizedText(
+                R.string.terminal_disconnected_detail,
+                listOf(LocalizedText(R.string.terminal_reason_ssh_disconnected)),
+            ),
+            terminalCommandInputPlaceholderText(
                 TerminalSessionState.Disconnected(
                     sessionId = "session-1",
                     reason = TerminalDisconnectedReason.SshDisconnected,
@@ -247,8 +284,14 @@ class TerminalInteractionStateTest {
 
     @Test
     fun `command input visibility menu label reflects state`() {
-        assertEquals("Show command input", terminalCommandInputVisibilityActionLabel(visible = false))
-        assertEquals("Hide command input", terminalCommandInputVisibilityActionLabel(visible = true))
+        assertEquals(
+            LocalizedText(R.string.terminal_show_command_input),
+            terminalCommandInputVisibilityActionText(visible = false),
+        )
+        assertEquals(
+            LocalizedText(R.string.terminal_hide_command_input),
+            terminalCommandInputVisibilityActionText(visible = true),
+        )
     }
 
     @Test
@@ -329,8 +372,15 @@ class TerminalInteractionStateTest {
     @Test
     fun `hobgoblin action row prioritizes reconnect and retains input shortcuts`() {
         assertEquals(
-            listOf("Reconnect", "ENTER", "⌫", "CTRL+C", "CTRL+L", "Paste"),
-            TerminalHobgoblinPrimaryActions.map(::terminalHobgoblinActionLabel),
+            listOf(
+                LocalizedText(R.string.terminal_action_reconnect),
+                LocalizedText(R.string.common_value, listOf("ENTER")),
+                LocalizedText(R.string.common_value, listOf("⌫")),
+                LocalizedText(R.string.common_value, listOf("CTRL+C")),
+                LocalizedText(R.string.common_value, listOf("CTRL+L")),
+                LocalizedText(R.string.terminal_action_paste),
+            ),
+            TerminalHobgoblinPrimaryActions.map(::terminalHobgoblinActionText),
         )
     }
 
@@ -379,8 +429,8 @@ class TerminalInteractionStateTest {
         assertFalse(TerminalDefaultFocusMode)
         assertTrue(terminalChromeVisible(focusMode = false))
         assertFalse(terminalChromeVisible(focusMode = true))
-        assertEquals("Focus", terminalFocusActionLabel(focusMode = false))
-        assertEquals("Exit focus", terminalFocusActionLabel(focusMode = true))
+        assertEquals(LocalizedText(R.string.terminal_focus), terminalFocusActionText(focusMode = false))
+        assertEquals(LocalizedText(R.string.terminal_exit_focus), terminalFocusActionText(focusMode = true))
         assertFalse(terminalFocusExitHandleVisible(focusMode = false))
         assertTrue(terminalFocusExitHandleVisible(focusMode = true))
         assertFalse(terminalBackExitsFocus(focusMode = false))
@@ -406,7 +456,7 @@ class TerminalInteractionStateTest {
         assertTrue(source.contains("private fun TerminalCommandDeck("))
         assertTrue(source.contains("terminalChromeVisible(focusMode)"))
         assertTrue(source.contains("terminalFocusExitHandleVisible(focusMode)"))
-        assertTrue(source.contains("text = \"Exit focus\""))
+        assertTrue(source.contains("text = stringResource(R.string.terminal_exit_focus)"))
     }
 
     @Test

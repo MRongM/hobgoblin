@@ -55,9 +55,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextOverflow
+import dev.hobgoblin.android.R
 import dev.hobgoblin.android.domain.ResourceState
 import dev.hobgoblin.android.data.ManualItemOrderPolicy
 import dev.hobgoblin.android.domain.ssh.RemoteDirectoryEntry
@@ -70,7 +73,7 @@ import dev.hobgoblin.android.domain.ssh.RemoteRepositoryWorktree
 import dev.hobgoblin.android.domain.ssh.SshHostProfile
 import dev.hobgoblin.android.domain.ssh.RemoteTarget
 import dev.hobgoblin.android.ssh.evaluateWorktreeRemoval
-import dev.hobgoblin.android.ssh.worktreeRemovalConfirmationText
+import dev.hobgoblin.android.ssh.WorktreeRemovalBlockReason
 import dev.hobgoblin.android.ssh.WorktreeCreationSource
 import dev.hobgoblin.android.terminals.TerminalDisconnectedReason
 import dev.hobgoblin.android.terminals.TerminalLaunchMode
@@ -90,30 +93,32 @@ import dev.hobgoblin.android.ui.components.ManualReorderState
 import dev.hobgoblin.android.ui.components.manualReorderItem
 import dev.hobgoblin.android.ui.components.rememberManualReorderState
 import dev.hobgoblin.android.ui.theme.HobgoblinSpacing
+import dev.hobgoblin.android.ui.text.LocalizedText
+import dev.hobgoblin.android.ui.text.resolve
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
 
-internal enum class RepositoryWorkspaceTab(val label: String) {
-    Worktrees("Worktrees"),
-    Commits("Commits"),
-    Terminal("Terminals"),
+internal enum class RepositoryWorkspaceTab {
+    Worktrees,
+    Commits,
+    Terminal,
 }
 
-internal enum class RepositoryTerminalMode(val label: String) {
-    RemoteSsh("Remote SSH"),
-    ExternalTermux("External Termux"),
+internal enum class RepositoryTerminalMode {
+    RemoteSsh,
+    ExternalTermux,
 }
 
-internal enum class ExternalTermuxStatus(val label: String) {
-    Ready("ready"),
-    CommandCopied("command copied"),
-    OpenedInTermux("opened in Termux"),
-    TermuxNotInstalled("Termux not installed"),
-    CommandApiUnavailable("Termux command API unavailable"),
-    Failed("failed"),
+internal enum class ExternalTermuxStatus {
+    Ready,
+    CommandCopied,
+    OpenedInTermux,
+    TermuxNotInstalled,
+    CommandApiUnavailable,
+    Failed,
 }
 
 private const val CompactWorkspaceTabLimit = 4
@@ -121,11 +126,31 @@ private const val CompactWorkspaceTabLimit = 4
 internal fun repositoryTerminalModes(): List<RepositoryTerminalMode> =
     RepositoryTerminalMode.entries.toList()
 
+internal fun repositoryWorkspaceTabText(tab: RepositoryWorkspaceTab): LocalizedText =
+    when (tab) {
+        RepositoryWorkspaceTab.Worktrees -> LocalizedText(R.string.repository_tab_worktrees)
+        RepositoryWorkspaceTab.Commits -> LocalizedText(R.string.repository_tab_commits)
+        RepositoryWorkspaceTab.Terminal -> LocalizedText(R.string.common_terminals)
+    }
+
+internal fun repositoryTerminalModeText(mode: RepositoryTerminalMode): LocalizedText =
+    when (mode) {
+        RepositoryTerminalMode.RemoteSsh -> LocalizedText(R.string.repository_terminal_mode_remote_ssh)
+        RepositoryTerminalMode.ExternalTermux -> LocalizedText(R.string.repository_terminal_mode_external_termux)
+    }
+
 internal fun externalTermuxTargetLabel(host: SshHostProfile): String =
     "${host.user}@${host.host}:${host.port}"
 
-internal fun externalTermuxStatusLabel(status: ExternalTermuxStatus): String =
-    status.label
+internal fun externalTermuxStatusText(status: ExternalTermuxStatus): LocalizedText =
+    when (status) {
+        ExternalTermuxStatus.Ready -> LocalizedText(R.string.repository_termux_ready)
+        ExternalTermuxStatus.CommandCopied -> LocalizedText(R.string.repository_termux_command_copied)
+        ExternalTermuxStatus.OpenedInTermux -> LocalizedText(R.string.repository_termux_opened)
+        ExternalTermuxStatus.TermuxNotInstalled -> LocalizedText(R.string.repository_termux_not_installed)
+        ExternalTermuxStatus.CommandApiUnavailable -> LocalizedText(R.string.repository_termux_api_unavailable)
+        ExternalTermuxStatus.Failed -> LocalizedText(R.string.repository_termux_failed)
+    }
 
 internal fun externalTermuxStatusAfterLaunch(result: ExternalTermuxLaunchResult): ExternalTermuxStatus =
     when (result) {
@@ -233,15 +258,14 @@ internal fun repositoryTmuxDiscoveryPaths(
     snapshotState: ResourceState<RemoteRepositorySnapshot>,
 ): List<String>? = repositoryTmuxScope(repository, snapshotState)?.allowedInitialPaths
 
-internal fun tmuxScanButtonLabel(isScanning: Boolean): String =
-    if (isScanning) "Scanning..." else "Scan tmux"
+internal fun tmuxScanButtonText(isScanning: Boolean): LocalizedText =
+    LocalizedText(if (isScanning) R.string.repository_tmux_scanning else R.string.repository_tmux_scan)
 
-internal fun tmuxScanResultMessage(foundCount: Int, sshUser: String): String =
-    if (foundCount == 0) {
-        "No tmux sessions found for SSH user $sshUser. " +
-            "Use the same SSH user that created the tmux session."
-    } else {
-        "Found $foundCount tmux ${if (foundCount == 1) "session" else "sessions"} for SSH user $sshUser."
+internal fun tmuxScanResultText(foundCount: Int, sshUser: String): LocalizedText =
+    when (foundCount) {
+        0 -> LocalizedText(R.string.repository_tmux_none, listOf(sshUser))
+        1 -> LocalizedText(R.string.repository_tmux_found_one, listOf(sshUser))
+        else -> LocalizedText(R.string.repository_tmux_found_many, listOf(foundCount, sshUser))
     }
 
 internal fun canScanTmux(isScanning: Boolean, discoveryPaths: List<String>?): Boolean =
@@ -280,15 +304,18 @@ internal fun canCreateWorktree(branch: String, worktreePath: String): Boolean =
 
 internal data class WorktreeBranchCandidate(
     val ref: String,
-    val kindLabel: String,
+    val kindLabel: LocalizedText,
 )
 
 internal fun worktreeBranchCandidates(
     localBranches: List<RemoteRepositoryBranch>,
     remoteBranches: List<String>,
 ): List<WorktreeBranchCandidate> =
-    localBranches.map { WorktreeBranchCandidate(ref = it.name, kindLabel = "local") } +
-        remoteBranches.distinct().map { WorktreeBranchCandidate(ref = it, kindLabel = "remote") }
+    localBranches.map {
+        WorktreeBranchCandidate(ref = it.name, kindLabel = LocalizedText(R.string.repository_branch_local))
+    } + remoteBranches.distinct().map {
+        WorktreeBranchCandidate(ref = it, kindLabel = LocalizedText(R.string.repository_branch_remote))
+    }
 
 internal fun worktreePathBranchName(
     selectedRef: String,
@@ -340,15 +367,24 @@ internal fun repositorySnapshotStateAfterRefreshFailure(
     else -> ResourceState.Error(message, cause)
 }
 
-internal fun worktreeBadges(worktree: RemoteRepositoryWorktree): List<String> =
+internal fun worktreeBadges(worktree: RemoteRepositoryWorktree): List<LocalizedText> =
     buildList {
-        if (worktree.isPrimary) add("primary")
-        if (worktree.isLinked) add("linked")
-        if (worktree.isLocked) add("locked")
-        if (worktree.isMissing) add("missing")
-        if (worktree.isDirty) add("dirty ${worktree.changeCount}")
-        if (worktree.isBare) add("bare")
+        if (worktree.isPrimary) add(LocalizedText(R.string.repository_badge_primary))
+        if (worktree.isLinked) add(LocalizedText(R.string.repository_badge_linked))
+        if (worktree.isLocked) add(LocalizedText(R.string.repository_badge_locked))
+        if (worktree.isMissing) add(LocalizedText(R.string.repository_badge_missing))
+        if (worktree.isDirty) add(LocalizedText(R.string.repository_badge_dirty, listOf(worktree.changeCount)))
+        if (worktree.isBare) add(LocalizedText(R.string.repository_badge_bare))
     }
+
+internal fun worktreeRemovalBlockedText(reason: WorktreeRemovalBlockReason?): LocalizedText? = when (reason) {
+    WorktreeRemovalBlockReason.Primary -> LocalizedText(R.string.repository_worktree_primary_blocked)
+    WorktreeRemovalBlockReason.Dirty -> LocalizedText(R.string.repository_worktree_dirty_blocked)
+    WorktreeRemovalBlockReason.Locked -> LocalizedText(R.string.repository_worktree_locked_blocked)
+    WorktreeRemovalBlockReason.Missing -> LocalizedText(R.string.repository_worktree_missing_blocked)
+    WorktreeRemovalBlockReason.ProtectedBranch -> LocalizedText(R.string.repository_worktree_protected_blocked)
+    null -> null
+}
 
 internal fun terminalWorkspaceSessions(
     hostId: String,
@@ -370,90 +406,97 @@ internal fun terminalWorkspaceOptionLabel(path: String): String =
         .substringAfterLast('/', missingDelimiterValue = path)
         .ifBlank { path }
 
-internal fun terminalWorkspaceCountLabel(count: Int): String =
-    if (count == 1) "1 terminal" else "$count terminals"
+internal fun terminalWorkspaceCountText(count: Int): LocalizedText =
+    when (count) {
+        0 -> LocalizedText(R.string.terminal_count_zero)
+        1 -> LocalizedText(R.string.terminal_count_one)
+        else -> LocalizedText(R.string.terminal_count_many, listOf(count))
+    }
 
 internal fun terminalSessionDefaultLabel(index: Int): String = terminalSessionDisplayName(index)
 
 internal fun terminalSessionDefaultLabel(session: TerminalSessionRecord, index: Int): String =
     session.displayName.ifBlank { terminalSessionDisplayName(index) }
 
-internal fun terminalSessionStatusLabel(session: TerminalSessionRecord): String {
-    val base = when (session.status) {
-        TerminalSessionStatus.Starting -> "starting"
-        TerminalSessionStatus.Running -> "running"
-        TerminalSessionStatus.Exited -> "exited"
-        TerminalSessionStatus.Failed -> "failed"
-        TerminalSessionStatus.Disconnected -> "disconnected"
-    }
+internal fun terminalSessionStatusText(session: TerminalSessionRecord): LocalizedText {
+    val base = LocalizedText(when (session.status) {
+        TerminalSessionStatus.Starting -> R.string.terminal_status_starting
+        TerminalSessionStatus.Running -> R.string.terminal_status_running
+        TerminalSessionStatus.Exited -> R.string.terminal_status_exited
+        TerminalSessionStatus.Failed -> R.string.terminal_status_failed
+        TerminalSessionStatus.Disconnected -> R.string.terminal_status_disconnected
+    })
     if (session.status == TerminalSessionStatus.Running && session.foregroundServiceOwned) {
-        return "$base - foreground"
+        return LocalizedText(R.string.terminal_status_foreground, listOf(base))
     }
     val reason = session.disconnectedReason ?: return base
     return when (session.status) {
         TerminalSessionStatus.Exited,
         TerminalSessionStatus.Failed,
         TerminalSessionStatus.Disconnected,
-        -> "$base - ${terminalDisconnectedReasonLabel(reason)}"
+        -> LocalizedText(R.string.terminal_status_with_detail, listOf(base, terminalDisconnectedReasonText(reason)))
         TerminalSessionStatus.Starting,
         TerminalSessionStatus.Running,
         -> base
     }
 }
 
-private fun terminalDisconnectedReasonLabel(reason: TerminalDisconnectedReason): String =
+private fun terminalDisconnectedReasonText(reason: TerminalDisconnectedReason): LocalizedText =
     when (reason) {
-        TerminalDisconnectedReason.UserClosed -> "user closed"
-        TerminalDisconnectedReason.RemoteExited -> "remote exited"
-        TerminalDisconnectedReason.SshDisconnected -> "ssh disconnected"
-        TerminalDisconnectedReason.AndroidServiceStopped -> "android service stopped"
-        TerminalDisconnectedReason.TerminalWriteTimeout -> "terminal write timeout"
-        TerminalDisconnectedReason.TerminalFailure -> "terminal failure"
+        TerminalDisconnectedReason.UserClosed -> LocalizedText(R.string.terminal_reason_user_closed)
+        TerminalDisconnectedReason.RemoteExited -> LocalizedText(R.string.terminal_reason_remote_exited)
+        TerminalDisconnectedReason.SshDisconnected -> LocalizedText(R.string.terminal_reason_ssh_disconnected)
+        TerminalDisconnectedReason.AndroidServiceStopped -> LocalizedText(R.string.terminal_reason_android_service_stopped)
+        TerminalDisconnectedReason.TerminalWriteTimeout -> LocalizedText(R.string.terminal_reason_write_timeout)
+        TerminalDisconnectedReason.TerminalFailure -> LocalizedText(R.string.terminal_reason_failure)
     }
 
-internal fun terminalSessionActivityText(session: TerminalSessionRecord): String =
-    DateUtils.getRelativeTimeSpanString(
+internal fun terminalSessionActivityText(session: TerminalSessionRecord): LocalizedText =
+    LocalizedText(R.string.repository_terminal_last_activated, listOf(DateUtils.getRelativeTimeSpanString(
         session.lastActivityAt ?: session.openedAt,
         System.currentTimeMillis(),
         DateUtils.MINUTE_IN_MILLIS,
-    ).let { "last activated $it" }
+    )))
 
 internal fun requiresTerminalDeleteConfirmation(session: TerminalSessionRecord): Boolean =
     session.status == TerminalSessionStatus.Starting || session.status == TerminalSessionStatus.Running
 
-internal fun terminalDeleteConfirmationText(label: String, session: TerminalSessionRecord): String =
-    if (requiresTerminalDeleteConfirmation(session)) {
-        "$label at ${session.remotePath} is still active. This will stop the terminal process and remove the terminal record."
-    } else {
-        "$label at ${session.remotePath} will be removed from the terminal list."
-    }
+internal fun terminalDeleteConfirmationText(label: String, session: TerminalSessionRecord): LocalizedText =
+    LocalizedText(
+        resourceId = if (requiresTerminalDeleteConfirmation(session)) {
+            R.string.repository_terminal_delete_active
+        } else {
+            R.string.repository_terminal_delete_inactive
+        },
+        formatArgs = listOf(label, session.remotePath),
+    )
 
 internal fun repositoryTerminalCloseConfirmationText(
     label: String,
     session: TerminalSessionRecord,
-): String {
-    return if (session.tmuxIdentity != null) {
-        "This closes the Android connection for $label at ${session.remotePath} but keeps it in the terminal list " +
-            "so you can reconnect later. The remote tmux session keeps running."
+): LocalizedText = LocalizedText(
+    resourceId = if (session.tmuxIdentity != null) {
+        R.string.repository_terminal_close_tmux
     } else {
-        "This stops $label at ${session.remotePath} but keeps it in the terminal list so you can reconnect later."
-    }
-}
+        R.string.repository_terminal_close_native
+    },
+    formatArgs = listOf(label, session.remotePath),
+)
 
 internal data class RepositoryTerminalCreationAction(
-    val label: String,
+    val label: LocalizedText,
     val launchMode: TerminalLaunchMode,
     val primary: Boolean,
 )
 
 internal fun repositoryTerminalCreationActions(): List<RepositoryTerminalCreationAction> = listOf(
     RepositoryTerminalCreationAction(
-        label = "New terminal",
+        label = LocalizedText(R.string.repository_new_terminal),
         launchMode = TerminalLaunchMode.Native,
         primary = true,
     ),
     RepositoryTerminalCreationAction(
-        label = "New terminal with tmux",
+        label = LocalizedText(R.string.repository_new_tmux_terminal),
         launchMode = TerminalLaunchMode.TmuxIfAvailable,
         primary = false,
     ),
@@ -462,8 +505,8 @@ internal fun repositoryTerminalCreationActions(): List<RepositoryTerminalCreatio
 internal fun canCloseTerminalTmuxSession(session: TerminalSessionRecord): Boolean =
     session.tmuxIdentity != null
 
-internal fun terminalTmuxCloseWarning(): String =
-    "Also close the tmux session. This ends its running processes and disconnects other clients."
+internal fun terminalTmuxCloseWarningText(): LocalizedText =
+    LocalizedText(R.string.repository_tmux_close_warning)
 
 private data class TerminalActionTarget(
     val session: TerminalSessionRecord,
@@ -478,10 +521,11 @@ private data class TerminalWorkspaceOption(
 private fun repositoryTerminalWorkspaceOptions(
     repository: RemoteRepositoryProfile,
     snapshotState: ResourceState<RemoteRepositorySnapshot>,
+    repositoryRootLabel: String,
 ): List<TerminalWorkspaceOption> {
     val root = TerminalWorkspaceOption(
         path = repositoryTerminalPath(repository),
-        label = repository.title.ifBlank { "Repository root" },
+        label = repository.title.ifBlank { repositoryRootLabel },
     )
     val worktrees = when (snapshotState) {
         is ResourceState.Loaded -> snapshotState.value.worktrees
@@ -513,6 +557,8 @@ fun RepositorySetupScreen(
         RemoteProjectInspection(path, path, RemoteProjectKind.GitRepository, null, null)
     },
 ) {
+    val directoryBrowseFailed = stringResource(R.string.repository_directory_browse_failed)
+    val validationFailed = stringResource(R.string.repository_validation_failed)
     val authenticated = authenticatedHosts(hosts)
     var selectedHostId by remember(authenticated) { mutableStateOf(defaultAuthenticatedHost(authenticated)?.id) }
     var menuExpanded by remember { mutableStateOf(false) }
@@ -543,7 +589,9 @@ fun RepositorySetupScreen(
                 withContext(Dispatchers.IO) { onBrowseDirectories(host, normalizedPath) }
             }.fold(
                 onSuccess = { ResourceState.Loaded(it) },
-                onFailure = { ResourceState.Error(it.message ?: "Remote directory browse failed", it) },
+                onFailure = {
+                    ResourceState.Error(it.message ?: directoryBrowseFailed, it)
+                },
             )
             if (selectedHostId != requestHostId || directoryBrowserPath != normalizedPath) return@launch
             directoryEntriesState = nextState
@@ -583,7 +631,7 @@ fun RepositorySetupScreen(
                 clearDirectoryBrowser()
                 error = null
             }.onFailure {
-                error = it.message ?: "Project validation failed"
+                error = it.message ?: validationFailed
             }
             saving = false
         }
@@ -592,10 +640,10 @@ fun RepositorySetupScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Add project") },
+                title = { Text(stringResource(R.string.repository_add_project)) },
                 navigationIcon = {
                     TextButton(onClick = onBack) {
-                        Text("Back")
+                        Text(stringResource(R.string.common_back))
                     }
                 },
             )
@@ -610,7 +658,7 @@ fun RepositorySetupScreen(
             verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Md),
         ) {
             if (authenticated.isEmpty()) {
-                Text("Initialize SSH access on a server before adding projects.")
+                Text(stringResource(R.string.repository_initialize_ssh_first))
                 return@Column
             }
 
@@ -619,10 +667,10 @@ fun RepositorySetupScreen(
                     modifier = Modifier.padding(HobgoblinSpacing.Md),
                     verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm),
                 ) {
-                    Text("Project source", style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.repository_project_source), style = MaterialTheme.typography.titleMedium)
                     Box {
                         OutlinedButton(onClick = { menuExpanded = true }) {
-                            Text(selectedHost?.title ?: "Select server")
+                            Text(selectedHost?.title ?: stringResource(R.string.repository_select_server))
                         }
                         DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                             authenticated.forEach { host ->
@@ -641,7 +689,7 @@ fun RepositorySetupScreen(
                         modifier = Modifier.fillMaxWidth(),
                         value = alias,
                         onValueChange = { alias = it },
-                        label = { Text("Alias") },
+                        label = { Text(stringResource(R.string.repository_alias)) },
                         singleLine = true,
                     )
                     OutlinedTextField(
@@ -651,7 +699,7 @@ fun RepositorySetupScreen(
                             remotePath = it
                             clearDirectoryBrowser()
                         },
-                        label = { Text("Remote path") },
+                        label = { Text(stringResource(R.string.repository_remote_path)) },
                         singleLine = true,
                         isError = error != null,
                     )
@@ -660,7 +708,7 @@ fun RepositorySetupScreen(
                             enabled = selectedHost != null,
                             onClick = { browseDirectories() },
                         ) {
-                            Text("Browse")
+                            Text(stringResource(R.string.repository_browse))
                         }
                     }
                     directoryBrowserPath?.let { currentPath ->
@@ -676,15 +724,19 @@ fun RepositorySetupScreen(
                         enabled = canSaveRepository(selectedHost, remotePath) && !saving,
                         onClick = { validateAndSaveRepository() },
                     ) {
-                        Text(if (saving) "Validating..." else "Save project")
+                        Text(
+                            stringResource(
+                                if (saving) R.string.repository_validating else R.string.repository_save_project,
+                            ),
+                        )
                     }
                     if (error != null) Text(error.orEmpty(), color = MaterialTheme.colorScheme.error)
                 }
             }
 
-            Text("Saved projects", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.repository_saved_projects), style = MaterialTheme.typography.titleMedium)
             if (repositories.isEmpty()) {
-                Text("No saved projects.")
+                Text(stringResource(R.string.repository_no_saved_projects))
             } else {
                 repositories.forEach { repository ->
                     RepositoryRow(
@@ -718,7 +770,7 @@ private fun DirectoryPagePicker(
     onSelect: (String) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs)) {
-        Text("Remote directories", style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.repository_remote_directories), style = MaterialTheme.typography.titleSmall)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
@@ -731,15 +783,18 @@ private fun DirectoryPagePicker(
                 enabled = directoryBrowserParentPath(currentPath) != null,
                 onClick = onOpenParent,
             ) {
-                Text("Up")
+                Text(stringResource(R.string.repository_up))
             }
             TextButton(onClick = { onSelect(currentPath) }) {
-                Text("Select")
+                Text(stringResource(R.string.common_select))
             }
         }
         when (state) {
-            ResourceState.Idle -> Text("Not loaded.", style = MaterialTheme.typography.bodySmall)
-            ResourceState.Loading -> Text("Loading directories.", style = MaterialTheme.typography.bodySmall)
+            ResourceState.Idle -> Text(stringResource(R.string.repository_not_loaded), style = MaterialTheme.typography.bodySmall)
+            ResourceState.Loading -> Text(
+                stringResource(R.string.repository_loading_directories),
+                style = MaterialTheme.typography.bodySmall,
+            )
             is ResourceState.Error -> Text(
                 state.message,
                 color = MaterialTheme.colorScheme.error,
@@ -766,7 +821,7 @@ private fun DirectoryPageEntries(
     onSelect: (String) -> Unit,
 ) {
     if (entries.isEmpty()) {
-        Text("No child directories.", style = MaterialTheme.typography.bodySmall)
+        Text(stringResource(R.string.repository_no_child_directories), style = MaterialTheme.typography.bodySmall)
         return
     }
     val listState = rememberLazyListState()
@@ -814,10 +869,10 @@ private fun DirectoryPageEntryRow(
             Text(entry.path, style = MaterialTheme.typography.bodySmall)
         }
         TextButton(onClick = { onOpenDirectory(entry.path) }) {
-            Text("Open")
+            Text(stringResource(R.string.common_open))
         }
         TextButton(onClick = { onSelect(entry.path) }) {
-            Text("Select")
+            Text(stringResource(R.string.common_select))
         }
     }
 }
@@ -872,10 +927,10 @@ private fun RepositoryRow(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs)) {
                 TextButton(onClick = { onOpenRepository(repository.id) }) {
-                    Text("Open")
+                    Text(stringResource(R.string.common_open))
                 }
                 TextButton(onClick = onDeleteRepository) {
-                    Text("Delete")
+                    Text(stringResource(R.string.common_delete))
                 }
             }
         }
@@ -894,7 +949,7 @@ fun RepositoryWorkspaceScreen(
     onProjectRootResolved: (String) -> Unit = {},
     onDiscoverTmuxTerminals: (RepositoryTmuxScope) -> Int = { 0 },
     onCreateTerminalAtPath: (String, String, TerminalLaunchMode) -> TerminalSessionRecord = { _, _, _ ->
-        throw UnsupportedOperationException("Terminal sessions are not available")
+        throw UnsupportedOperationException()
     },
     onOpenExternalTermuxAtPath: (RemoteTarget) -> ExternalTermuxLaunchResult = {
         ExternalTermuxLaunchResult.Unavailable(copiedCommand = false)
@@ -910,6 +965,8 @@ fun RepositoryWorkspaceScreen(
     initialWorktreeOrder: List<String> = emptyList(),
     onSaveWorktreeOrder: (List<String>) -> Unit = {},
 ) {
+    val resources = LocalResources.current
+    val repositoryRootLabel = stringResource(R.string.repository_root)
     var selectedTab by remember(repository.id) {
         mutableStateOf(initialRepositoryWorkspaceTab(repository, initialTerminalWorkspacePath))
     }
@@ -933,8 +990,12 @@ fun RepositoryWorkspaceScreen(
     val workspaceTabs = remember(repository.id, repository.remotePath, repository.kind) {
         repositoryWorkspaceTabs(repository)
     }
-    val terminalWorkspaceOptions = remember(repository, snapshotState) {
-        repositoryTerminalWorkspaceOptions(repository = repository, snapshotState = snapshotState)
+    val terminalWorkspaceOptions = remember(repository, snapshotState, repositoryRootLabel) {
+        repositoryTerminalWorkspaceOptions(
+            repository = repository,
+            snapshotState = snapshotState,
+            repositoryRootLabel = repositoryRootLabel,
+        )
     }
     val tmuxScope = remember(repository, snapshotState) {
         repositoryTmuxScope(repository = repository, snapshotState = snapshotState)
@@ -959,7 +1020,7 @@ fun RepositoryWorkspaceScreen(
                 onFailure = {
                     repositorySnapshotStateAfterRefreshFailure(
                         previous = previous,
-                        message = it.message ?: "Repository snapshot failed",
+                        message = it.message ?: resources.getString(R.string.repository_snapshot_failed),
                         cause = it,
                     )
                 },
@@ -975,7 +1036,7 @@ fun RepositoryWorkspaceScreen(
             }.onSuccess {
                 refreshSnapshot()
             }.onFailure {
-                actionError = it.message ?: "Remote worktree create failed"
+                actionError = it.message ?: resources.getString(R.string.repository_worktree_create_failed)
             }
         }
     }
@@ -989,7 +1050,7 @@ fun RepositoryWorkspaceScreen(
                 removeTarget = null
                 refreshSnapshot()
             }.onFailure {
-                actionError = it.message ?: "Remote worktree remove failed"
+                actionError = it.message ?: resources.getString(R.string.repository_worktree_remove_failed)
             }
         }
     }
@@ -1005,13 +1066,13 @@ fun RepositoryWorkspaceScreen(
             runCatching {
                 val projectRoot = tmuxScope?.projectRoot
                     ?: requireNotNull(TmuxSessionProtocol.normalizePath(repository.remotePath)) {
-                        "Terminal project root is invalid"
+                        resources.getString(R.string.repository_terminal_root_invalid)
                     }
                 withContext(Dispatchers.IO) { onCreateTerminalAtPath(path, projectRoot, launchMode) }
             }.onSuccess { session ->
                 onOpenTerminalSession(session)
             }.onFailure {
-                actionError = it.message ?: "Terminal create failed"
+                actionError = it.message ?: resources.getString(R.string.repository_terminal_create_failed)
             }
         }
     }
@@ -1027,12 +1088,13 @@ fun RepositoryWorkspaceScreen(
                 actionError = externalTermuxActionError(result)
                 onResult(result)
             }.onFailure {
-                actionError = it.message ?: "External Termux launch failed"
+                val fallbackMessage = resources.getString(R.string.repository_termux_launch_failed)
+                actionError = it.message ?: fallbackMessage
                 onResult(
                     ExternalTermuxLaunchResult.Failed(
                         copiedCommand = false,
                         openedTermux = false,
-                        message = it.message ?: "External Termux launch failed",
+                        message = it.message ?: fallbackMessage,
                     ),
                 )
             }
@@ -1048,9 +1110,9 @@ fun RepositoryWorkspaceScreen(
                 }
             }.onSuccess { copied ->
                 onCopied(copied)
-                if (!copied) actionError = "External Termux command copy failed"
+                if (!copied) actionError = resources.getString(R.string.repository_termux_copy_failed)
             }.onFailure {
-                actionError = it.message ?: "External Termux command copy failed"
+                actionError = it.message ?: resources.getString(R.string.repository_termux_copy_failed)
                 onCopied(false)
             }
         }
@@ -1069,7 +1131,7 @@ fun RepositoryWorkspaceScreen(
                 terminalDeleteTarget = null
                 closeTmuxSessionOnDelete = false
             }.onFailure {
-                actionError = it.message ?: "Terminal delete failed"
+                actionError = it.message ?: resources.getString(R.string.repository_terminal_delete_failed)
             }
             terminalDeletePending = false
         }
@@ -1085,7 +1147,7 @@ fun RepositoryWorkspaceScreen(
             }.onSuccess {
                 terminalCloseTarget = null
             }.onFailure {
-                actionError = it.message ?: "Terminal close failed"
+                actionError = it.message ?: resources.getString(R.string.repository_terminal_close_failed)
             }
             terminalClosePending = false
         }
@@ -1120,9 +1182,9 @@ fun RepositoryWorkspaceScreen(
             runCatching {
                 withContext(Dispatchers.IO) { onDiscoverTmuxTerminals(discoveryScope) }
             }.onSuccess { foundCount ->
-                actionMessage = tmuxScanResultMessage(foundCount = foundCount, sshUser = host.user)
+                actionMessage = resources.resolve(tmuxScanResultText(foundCount = foundCount, sshUser = host.user))
             }.onFailure {
-                actionError = it.message ?: "Tmux terminal discovery failed"
+                actionError = it.message ?: resources.getString(R.string.repository_tmux_discovery_failed)
             }
         } finally {
             tmuxDiscoveryPending = false
@@ -1195,17 +1257,17 @@ fun RepositoryWorkspaceScreen(
                 },
                 navigationIcon = {
                     TextButton(onClick = onBack) {
-                        Text("Back")
+                        Text(stringResource(R.string.common_back))
                     }
                 },
                 actions = {
                     if (shouldLoadRepositorySnapshot(repository)) {
                         TextButton(onClick = { refreshSnapshot() }) {
-                            Text("Refresh")
+                            Text(stringResource(R.string.common_refresh))
                         }
                     }
                     TextButton(onClick = { confirmDelete = true }) {
-                        Text("Delete")
+                        Text(stringResource(R.string.common_delete))
                     }
                 },
             )
@@ -1302,16 +1364,18 @@ fun RepositoryWorkspaceScreen(
     removeTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { removeTarget = null },
-            title = { Text("Remove remote worktree?") },
-            text = { Text(worktreeRemovalConfirmationText(target)) },
+            title = { Text(stringResource(R.string.repository_remove_worktree_title)) },
+            text = {
+                Text(stringResource(R.string.repository_remove_worktree_description, target.path))
+            },
             confirmButton = {
                 TextButton(onClick = { removeWorktree(target) }) {
-                    Text("Remove")
+                    Text(stringResource(R.string.common_remove))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { removeTarget = null }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.common_cancel))
                 }
             },
         )
@@ -1320,19 +1384,19 @@ fun RepositoryWorkspaceScreen(
     terminalCloseTarget?.let { target ->
         AlertDialog(
             onDismissRequest = ::dismissTerminalClose,
-            title = { Text("Close terminal?") },
-            text = { Text(repositoryTerminalCloseConfirmationText(target.label, target.session)) },
+            title = { Text(stringResource(R.string.repository_close_terminal_title)) },
+            text = { Text(repositoryTerminalCloseConfirmationText(target.label, target.session).resolve()) },
             confirmButton = {
                 TextButton(
                     onClick = { closeTerminalSession(target.session) },
                     enabled = !terminalClosePending,
                 ) {
-                    Text("Close terminal")
+                    Text(stringResource(R.string.repository_close_terminal))
                 }
             },
             dismissButton = {
                 TextButton(onClick = ::dismissTerminalClose, enabled = !terminalClosePending) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.common_cancel))
                 }
             },
         )
@@ -1341,10 +1405,10 @@ fun RepositoryWorkspaceScreen(
     terminalDeleteTarget?.let { target ->
         AlertDialog(
             onDismissRequest = ::dismissTerminalDelete,
-            title = { Text("Delete terminal?") },
+            title = { Text(stringResource(R.string.repository_delete_terminal_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm)) {
-                    Text(terminalDeleteConfirmationText(target.label, target.session))
+                    Text(terminalDeleteConfirmationText(target.label, target.session).resolve())
                     if (canCloseTerminalTmuxSession(target.session)) {
                         Row(
                             modifier = Modifier
@@ -1359,7 +1423,7 @@ fun RepositoryWorkspaceScreen(
                                 onCheckedChange = { closeTmuxSessionOnDelete = it },
                                 enabled = !terminalDeletePending,
                             )
-                            Text(terminalTmuxCloseWarning(), style = MaterialTheme.typography.bodySmall)
+                            Text(terminalTmuxCloseWarningText().resolve(), style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
@@ -1369,12 +1433,20 @@ fun RepositoryWorkspaceScreen(
                     onClick = { deleteTerminalSession(target.session) },
                     enabled = !terminalDeletePending,
                 ) {
-                    Text(if (requiresTerminalDeleteConfirmation(target.session)) "Stop and delete" else "Delete")
+                    Text(
+                        stringResource(
+                            if (requiresTerminalDeleteConfirmation(target.session)) {
+                                R.string.repository_stop_and_delete
+                            } else {
+                                R.string.common_delete
+                            },
+                        ),
+                    )
                 }
             },
             dismissButton = {
                 TextButton(onClick = ::dismissTerminalDelete, enabled = !terminalDeletePending) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.common_cancel))
                 }
             },
         )
@@ -1430,7 +1502,7 @@ private fun RepositoryWorkspaceTabStrip(
                     Tab(
                         selected = tab == selectedTab,
                         onClick = { onSelectTab(tab) },
-                        text = { Text(tab.label) },
+                        text = { Text(repositoryWorkspaceTabText(tab).resolve()) },
                     )
                 }
             }
@@ -1441,7 +1513,7 @@ private fun RepositoryWorkspaceTabStrip(
             ) {
                 tabs.forEach { tab ->
                     TextButton(onClick = { onSelectTab(tab) }) {
-                        Text(tab.label)
+                        Text(repositoryWorkspaceTabText(tab).resolve())
                     }
                 }
             }
@@ -1457,18 +1529,18 @@ private fun DeleteRepositoryDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Delete project record?") },
+        title = { Text(stringResource(R.string.repository_delete_project_title)) },
         text = {
-            Text("This removes ${repository.title} from Hobgoblin Android. It does not delete anything on the SSH server.")
+            Text(stringResource(R.string.repository_delete_project_description, repository.title))
         },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text("Delete")
+                Text(stringResource(R.string.common_delete))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(stringResource(R.string.common_cancel))
             }
         },
     )
@@ -1533,7 +1605,7 @@ private fun RepositoryWorktreesPanel(
                     modifier = Modifier.padding(HobgoblinSpacing.Md),
                     verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm),
                 ) {
-                    Text("Create worktree", style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.repository_create_worktree), style = MaterialTheme.typography.titleMedium)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
@@ -1543,12 +1615,12 @@ private fun RepositoryWorktreesPanel(
                             modifier = Modifier.weight(1f),
                             value = branch,
                             onValueChange = { updateBranch(it) },
-                            label = { Text("Base branch") },
+                            label = { Text(stringResource(R.string.repository_base_branch)) },
                             singleLine = true,
                         )
                         if (branchCandidates.isNotEmpty()) {
                             TextButton(onClick = { branchMenuExpanded = true }) {
-                                Text("Select branch")
+                                Text(stringResource(R.string.repository_select_branch))
                             }
                             DropdownMenu(
                                 expanded = branchMenuExpanded,
@@ -1560,7 +1632,7 @@ private fun RepositoryWorktreesPanel(
                                             Column {
                                                 Text(candidate.ref)
                                                 Text(
-                                                    candidate.kindLabel,
+                                                    candidate.kindLabel.resolve(),
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 )
@@ -1582,7 +1654,7 @@ private fun RepositoryWorktreesPanel(
                         modifier = Modifier.fillMaxWidth(),
                         value = worktreePath,
                         onValueChange = { worktreePath = it },
-                        label = { Text("Worktree path") },
+                        label = { Text(stringResource(R.string.repository_worktree_path)) },
                         singleLine = true,
                     )
                     Button(
@@ -1594,12 +1666,12 @@ private fun RepositoryWorktreesPanel(
                             )
                         },
                     ) {
-                        Text("Create worktree")
+                        Text(stringResource(R.string.repository_create_worktree))
                     }
                 }
             }
             if (orderedWorktrees.isEmpty()) {
-                Text("No worktrees found.")
+                Text(stringResource(R.string.repository_no_worktrees))
             } else {
                 orderedWorktrees.forEach { worktree ->
                     WorktreeRow(
@@ -1629,10 +1701,14 @@ private fun WorktreeRow(
         .trimEnd('/')
         .substringAfterLast('/', missingDelimiterValue = worktree.path)
         .ifBlank { worktree.path }
+    val badgeTexts = mutableListOf<String>()
+    for (badge in worktreeBadges(worktree)) {
+        badgeTexts += badge.resolve()
+    }
     val workspaceSummary = run {
-        val badges = worktreeBadges(worktree).joinToString(" ")
+        val badges = badgeTexts.joinToString(" ")
         buildString {
-            append(worktree.branch ?: "detached")
+            append(worktree.branch ?: stringResource(R.string.repository_detached))
             if (badges.isNotBlank()) {
                 append(" · ")
                 append(badges)
@@ -1689,7 +1765,7 @@ private fun WorktreeRow(
             )
             if (!removalSafety.allowed) {
                 Text(
-                    removalSafety.reason.orEmpty(),
+                    worktreeRemovalBlockedText(removalSafety.blockReason)?.resolve().orEmpty(),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -1706,14 +1782,14 @@ private fun WorktreeRow(
                     onClick = { onSelectTerminalWorkspace(worktreeTerminalPath(worktree)) },
                     contentPadding = actionButtonPadding,
                 ) {
-                    Text("Terminals", style = MaterialTheme.typography.labelMedium)
+                    Text(stringResource(R.string.common_terminals), style = MaterialTheme.typography.labelMedium)
                 }
                 if (removalSafety.allowed) {
                     TextButton(
                         onClick = { onRemoveWorktree(worktree) },
                         contentPadding = actionButtonPadding,
                     ) {
-                        Text("Remove", style = MaterialTheme.typography.labelMedium)
+                        Text(stringResource(R.string.common_remove), style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
@@ -1816,7 +1892,7 @@ private fun RepositoryTerminalModeSelector(
                 onClick = { onSelectMode(mode) },
                 shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
             ) {
-                Text(mode.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(repositoryTerminalModeText(mode).resolve(), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -1857,7 +1933,7 @@ private fun ExternalTermuxPanel(
                     )
                 }
                 Text(
-                    externalTermuxStatusLabel(status),
+                    externalTermuxStatusText(status).resolve(),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1877,7 +1953,7 @@ private fun ExternalTermuxPanel(
                         }
                     },
                 ) {
-                    Text("Copy command", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(stringResource(R.string.repository_copy_command), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Button(
                     modifier = Modifier.weight(1f),
@@ -1887,7 +1963,7 @@ private fun ExternalTermuxPanel(
                         }
                     },
                 ) {
-                    Text("Open in Termux", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(stringResource(R.string.repository_open_in_termux), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
@@ -1943,7 +2019,7 @@ private fun RemoteSshTerminalPanelContent(
                     )
                 }
                 Text(
-                    terminalWorkspaceCountLabel(activeWorktreeCount),
+                    terminalWorkspaceCountText(activeWorktreeCount).resolve(),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1958,7 +2034,7 @@ private fun RemoteSshTerminalPanelContent(
                     onClick = { onWorkspaceMenuExpandedChange(true) },
                 ) {
                     Text(
-                        "Switch workspace",
+                        stringResource(R.string.repository_switch_workspace),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -1968,7 +2044,7 @@ private fun RemoteSshTerminalPanelContent(
                         onCreateTerminalAtPath(selectedWorkspaceOption.path, nativeCreationAction.launchMode)
                     },
                 ) {
-                    Text(nativeCreationAction.label, maxLines = 1)
+                    Text(nativeCreationAction.label.resolve(), maxLines = 1)
                 }
             }
             OutlinedButton(
@@ -1977,7 +2053,7 @@ private fun RemoteSshTerminalPanelContent(
                     onCreateTerminalAtPath(selectedWorkspaceOption.path, tmuxCreationAction.launchMode)
                 },
             ) {
-                Text(tmuxCreationAction.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(tmuxCreationAction.label.resolve(), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             OutlinedButton(
                 modifier = Modifier.fillMaxWidth(),
@@ -1985,7 +2061,7 @@ private fun RemoteSshTerminalPanelContent(
                 enabled = tmuxScanEnabled,
             ) {
                 Text(
-                    tmuxScanButtonLabel(tmuxScanPending),
+                    tmuxScanButtonText(tmuxScanPending).resolve(),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -2002,7 +2078,11 @@ private fun RemoteSshTerminalPanelContent(
                             Column {
                                 Text(option.label)
                                 Text(
-                                    "${option.path} · ${terminalWorkspaceCountLabel(count)}",
+                                    stringResource(
+                                        R.string.repository_workspace_with_count,
+                                        option.path,
+                                        terminalWorkspaceCountText(count).resolve(),
+                                    ),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
@@ -2021,7 +2101,7 @@ private fun RemoteSshTerminalPanelContent(
         }
     }
     if (workspaceSessions.isEmpty()) {
-        Text("No terminals for this worktree.")
+        Text(stringResource(R.string.repository_no_terminals_for_worktree))
     } else {
         Column(
             verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm),
@@ -2067,7 +2147,7 @@ private fun SwipeDeleteTerminalSessionRow(
             contentAlignment = Alignment.CenterEnd,
         ) {
             TextButton(onClick = onDelete) {
-                Text("Delete")
+                Text(stringResource(R.string.common_delete))
             }
         }
         Box(
@@ -2132,13 +2212,13 @@ private fun TerminalSessionRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    terminalSessionStatusLabel(session),
+                    terminalSessionStatusText(session).resolve(),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Text(
-                terminalSessionActivityText(session),
+                terminalSessionActivityText(session).resolve(),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -2152,16 +2232,16 @@ private fun TerminalSessionRow(
                     enabled = terminalSessionReconnectAvailable(session),
                     onClick = { onReconnectTerminalSession(session) },
                 ) {
-                    Text("Reconnect")
+                    Text(stringResource(R.string.repository_terminal_reconnect))
                 }
                 TextButton(onClick = { onCloseTerminalSession(session, label) }) {
-                    Text("Close")
+                    Text(stringResource(R.string.repository_terminal_close))
                 }
                 TextButton(onClick = { onOpenTerminalSession(session) }) {
-                    Text("Open")
+                    Text(stringResource(R.string.common_open))
                 }
                 TextButton(onClick = { onDeleteTerminalSession(session, label) }) {
-                    Text("Delete")
+                    Text(stringResource(R.string.common_delete))
                 }
             }
         }
@@ -2177,23 +2257,30 @@ private fun SnapshotContent(
     when (snapshotState) {
         ResourceState.Idle,
         ResourceState.Loading,
-        -> Text("Loading repository data.")
+        -> Text(stringResource(R.string.repository_loading_data))
 
         is ResourceState.Error -> Card(Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier.padding(HobgoblinSpacing.Md),
                 verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm),
             ) {
-                Text("failed", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium)
+                Text(
+                    stringResource(R.string.terminal_status_failed),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.labelMedium,
+                )
                 Text(snapshotState.message)
                 Button(onClick = onRefresh) {
-                    Text("Retry")
+                    Text(stringResource(R.string.common_retry))
                 }
             }
         }
 
         is ResourceState.Stale -> {
-            Text("stale - ${snapshotState.reason}", color = MaterialTheme.colorScheme.error)
+            Text(
+                stringResource(R.string.repository_stale, snapshotState.reason),
+                color = MaterialTheme.colorScheme.error,
+            )
             content(snapshotState.value)
         }
         is ResourceState.Loaded -> content(snapshotState.value)

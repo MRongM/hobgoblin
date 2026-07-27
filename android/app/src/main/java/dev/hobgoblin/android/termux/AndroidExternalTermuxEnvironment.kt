@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
+import dev.hobgoblin.android.R
 
 internal object TermuxRunCommandContract {
     const val PackageName = "com.termux"
@@ -58,10 +59,13 @@ class AndroidExternalTermuxEnvironment(
                     TermuxRunCommandContract.ExtraSessionAction,
                     TermuxRunCommandContract.SessionActionSwitchToNewSession,
                 )
-                .putExtra(TermuxRunCommandContract.ExtraCommandLabel, "Hobgoblin workspace SSH")
+                .putExtra(
+                    TermuxRunCommandContract.ExtraCommandLabel,
+                    appContext.getString(R.string.termux_workspace_ssh_label),
+                )
                 .putExtra(
                     TermuxRunCommandContract.ExtraCommandDescription,
-                    "Open the selected Hobgoblin workspace over SSH.",
+                    appContext.getString(R.string.termux_workspace_ssh_description),
                 )
             if (stdin != null) {
                 intent.putExtra(TermuxRunCommandContract.ExtraStdin, stdin)
@@ -73,7 +77,9 @@ class AndroidExternalTermuxEnvironment(
         runCatching {
             val clipboard = ContextCompat.getSystemService(appContext, ClipboardManager::class.java)
                 ?: return false
-            clipboard.setPrimaryClip(ClipData.newPlainText("Hobgoblin Termux SSH command", command))
+            clipboard.setPrimaryClip(
+                ClipData.newPlainText(appContext.getString(R.string.termux_clipboard_command_label), command),
+            )
             true
         }.getOrDefault(false)
 

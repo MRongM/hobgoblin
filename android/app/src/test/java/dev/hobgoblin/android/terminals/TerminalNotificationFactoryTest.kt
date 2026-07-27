@@ -1,5 +1,6 @@
 package dev.hobgoblin.android.terminals
 
+import dev.hobgoblin.android.R
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -11,8 +12,8 @@ class TerminalNotificationFactoryTest {
             listOf(record(id = "terminal-1", label = "App - /srv/app", lastActivityAt = 200L)),
         )
 
-        assertTrue(content.title.contains("1 terminal running"))
-        assertTrue(content.text.contains("App - /srv/app"))
+        assertEquals(TerminalNotificationText(R.string.notification_terminals_running_one), content.title)
+        assertEquals(TerminalNotificationText(R.string.common_value, listOf("App - /srv/app")), content.text)
         assertEquals("terminal-1", content.terminalSessionId)
     }
 
@@ -25,7 +26,10 @@ class TerminalNotificationFactoryTest {
             ),
         )
 
-        assertTrue(content.title.contains("2 terminals running"))
+        assertEquals(
+            TerminalNotificationText(R.string.notification_terminals_running_many, listOf(2)),
+            content.title,
+        )
     }
 
     @Test
@@ -37,7 +41,7 @@ class TerminalNotificationFactoryTest {
             ),
         )
 
-        assertTrue(content.text.contains("App - /srv/app"))
+        assertEquals(TerminalNotificationText(R.string.common_value, listOf("App - /srv/app")), content.text)
         assertEquals("terminal-1", content.terminalSessionId)
     }
 
@@ -50,7 +54,7 @@ class TerminalNotificationFactoryTest {
             ),
         )
 
-        assertTrue(content.text.contains("App - /srv/app"))
+        assertEquals(TerminalNotificationText(R.string.common_value, listOf("App - /srv/app")), content.text)
         assertEquals("terminal-1", content.terminalSessionId)
     }
 

@@ -34,10 +34,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import dev.hobgoblin.android.R
 import dev.hobgoblin.android.domain.ResourceState
 import dev.hobgoblin.android.domain.ssh.DiagnosticsResult
 import dev.hobgoblin.android.domain.ssh.HOST_DIAGNOSTIC_STATUS_UNHEALTHY
@@ -88,6 +90,14 @@ fun AddHostScreen(
     onSaveHost: (SshHostProfile) -> Unit,
 ) {
     val context = LocalContext.current
+    val identityReadFailed = stringResource(R.string.host_identity_read_failed)
+    val sshIdentity = stringResource(R.string.host_ssh_identity)
+    val identityImportFailed = stringResource(R.string.host_identity_import_failed)
+    val initializationCheckFailed = stringResource(R.string.host_ssh_initialization_check_failed)
+    val hostKeyTrustFailed = stringResource(R.string.host_key_trust_failed)
+    val initializationFailed = stringResource(R.string.host_ssh_initialization_failed)
+    val validationError = stringResource(R.string.host_validation_error)
+    val connectionTestFailed = stringResource(R.string.host_connection_test_failed)
     val scope = rememberCoroutineScope()
     var alias by remember(initialHost) { mutableStateOf(initialHost?.alias.orEmpty()) }
     var host by remember(initialHost) { mutableStateOf(initialHost?.host.orEmpty()) }
@@ -123,15 +133,16 @@ fun AddHostScreen(
         if (uri == null) return@rememberLauncherForActivityResult
         runCatching {
             val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                ?: throw IllegalArgumentException("Unable to read selected identity")
-            val displayName = uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: "SSH identity"
+                ?: throw IllegalArgumentException(identityReadFailed)
+            val displayName = uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+                ?: sshIdentity
             onImportPrivateKey(displayName, bytes)
         }.onSuccess {
             selectedIdentity = it
             clearInitializationState()
             error = null
         }.onFailure {
-            error = it.message ?: "Identity import failed"
+            error = it.message ?: identityImportFailed
         }
     }
 
@@ -162,7 +173,7 @@ fun AddHostScreen(
                 error = null
             }.onFailure {
                 initializationCheck = null
-                initializationError = it.message ?: "SSH initialization check failed"
+                initializationError = it.message ?: initializationCheckFailed
             }
         }
     }
@@ -178,7 +189,7 @@ fun AddHostScreen(
                 initializationCheck = it
                 error = null
             }.onFailure {
-                initializationError = it.message ?: "Host key trust failed"
+                initializationError = it.message ?: hostKeyTrustFailed
             }
         }
     }
@@ -199,7 +210,7 @@ fun AddHostScreen(
                 error = null
             }.onFailure {
                 initializationPassword = ""
-                initializationError = it.message ?: "SSH initialization failed"
+                initializationError = it.message ?: initializationFailed
             }
         }
     }
@@ -213,13 +224,13 @@ fun AddHostScreen(
         initializationError = null
         scope.launch {
             val profile = runCatching { currentDraftProfile() }.getOrElse {
-                initializationError = it.message ?: "Validation error"
+                initializationError = it.message ?: validationError
                 return@launch
             }
             val check = runCatching {
                 withContext(Dispatchers.IO) { onCheckSshInitialization(profile) }
             }.getOrElse {
-                initializationError = it.message ?: "SSH initialization check failed"
+                initializationError = it.message ?: initializationCheckFailed
                 return@launch
             }
             when (check) {
@@ -246,7 +257,10 @@ fun AddHostScreen(
 
     fun testConnection(trustFingerprint: String? = null) {
         val profile = runCatching { currentDraftProfile() }.getOrElse {
-            connectionTestState = ResourceState.Error(it.message ?: "Validation error", it)
+            connectionTestState = ResourceState.Error(
+                it.message ?: validationError,
+                it,
+            )
             lastDiagnosticStatus = HOST_DIAGNOSTIC_STATUS_UNHEALTHY
             return
         }
@@ -272,7 +286,10 @@ fun AddHostScreen(
                 },
                 onFailure = {
                     lastDiagnosticStatus = HOST_DIAGNOSTIC_STATUS_UNHEALTHY
-                    ResourceState.Error(it.message ?: "Connection test failed", it)
+                    ResourceState.Error(
+                        it.message ?: connectionTestFailed,
+                        it,
+                    )
                 },
             )
         }
@@ -281,10 +298,12 @@ fun AddHostScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (initialHost == null) "Add host" else "Edit host") },
+                title = {
+                    Text(stringResource(if (initialHost == null) R.string.host_add_title else R.string.host_edit_title))
+                },
                 navigationIcon = {
                     TextButton(onClick = onBack) {
-                        Text("Back")
+                        Text(stringResource(R.string.common_back))
                     }
                 },
             )
@@ -299,7 +318,7 @@ fun AddHostScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     TextButton(onClick = onBack) {
-                        Text("Cancel")
+                        Text(stringResource(R.string.common_cancel))
                     }
                     Button(
                         onClick = {
@@ -309,11 +328,15 @@ fun AddHostScreen(
                                 error = null
                                 onSaveHost(it)
                             }.onFailure {
-                                error = it.message ?: "Validation error"
+                                error = it.message ?: validationError
                             }
                         },
                     ) {
-                        Text(if (initialHost == null) "Save host" else "Save changes")
+                        Text(
+                            stringResource(
+                                if (initialHost == null) R.string.host_save else R.string.host_save_changes,
+                            ),
+                        )
                     }
                 }
             }
@@ -331,7 +354,7 @@ fun AddHostScreen(
                 modifier = Modifier.fillMaxWidth(),
                 value = alias,
                 onValueChange = { alias = it },
-                label = { Text("Alias") },
+                label = { Text(stringResource(R.string.host_alias)) },
                 singleLine = true,
             )
             OutlinedTextField(
@@ -341,7 +364,7 @@ fun AddHostScreen(
                     host = it
                     clearInitializationState()
                 },
-                label = { Text("Host") },
+                label = { Text(stringResource(R.string.host_host)) },
                 singleLine = true,
                 isError = error != null && host.isBlank(),
             )
@@ -352,7 +375,7 @@ fun AddHostScreen(
                     user = it
                     clearInitializationState()
                 },
-                label = { Text("User") },
+                label = { Text(stringResource(R.string.host_user)) },
                 singleLine = true,
                 isError = error != null && user.isBlank(),
             )
@@ -363,17 +386,20 @@ fun AddHostScreen(
                     port = it
                     clearInitializationState()
                 },
-                label = { Text("Port") },
+                label = { Text(stringResource(R.string.host_port)) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             )
             OutlinedButton(onClick = { importPrivateKey.launch(arrayOf("*/*")) }) {
-                Text("Import private key")
+                Text(stringResource(R.string.host_import_private_key))
             }
             val identityLabel = when {
-                selectedIdentity != null -> "Identity selected: ${selectedIdentity?.displayName}"
-                initializedIdentityRefId != null -> "Generated identity will be saved with this host."
-                initialHost?.identityRefId != null -> "Existing identity selected"
+                selectedIdentity != null -> stringResource(
+                    R.string.host_identity_selected,
+                    selectedIdentity?.displayName.orEmpty(),
+                )
+                initializedIdentityRefId != null -> stringResource(R.string.host_generated_identity_saved)
+                initialHost?.identityRefId != null -> stringResource(R.string.host_existing_identity_selected)
                 else -> null
             }
             if (identityLabel != null) {
@@ -408,9 +434,9 @@ fun AddHostScreen(
                         modifier = Modifier.padding(HobgoblinSpacing.Md),
                         verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Md),
                     ) {
-                        Text("Host diagnostics", style = MaterialTheme.typography.titleMedium)
+                        Text(stringResource(R.string.host_diagnostics), style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "Check SSH access and the remote shell using the current host fields.",
+                            stringResource(R.string.host_diagnostics_description),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -466,13 +492,15 @@ private fun SshInitializationSection(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 StatusGlyph(
-                    label = if (success) "OK" else "Key",
+                    label = stringResource(
+                        if (success) R.string.host_identity_ready_ok else R.string.host_identity_ready_key,
+                    ),
                     background = if (success) HobgoblinColors.Success.copy(alpha = 0.14f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
                     content = if (success) HobgoblinColors.Success else MaterialTheme.colorScheme.primary,
                 )
                 Text(
                     modifier = Modifier.weight(1f),
-                    text = "SSH key setup (optional)",
+                    text = stringResource(R.string.host_ssh_key_setup_optional),
                     style = MaterialTheme.typography.titleMedium,
                 )
                 OptionalBadge()
@@ -480,7 +508,7 @@ private fun SshInitializationSection(
             when (check) {
                 null -> {
                     Text(
-                        text = "Use the temporary server password once, then connect with the saved private key.",
+                        text = stringResource(R.string.host_temporary_password_explanation),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -497,26 +525,26 @@ private fun SshInitializationSection(
                             enabled = false,
                             onClick = onStartCheck,
                         ) {
-                            Text("Set up SSH key")
+                            Text(stringResource(R.string.host_setup_ssh_key))
                         }
                     }
                 }
 
                 SshInitializationCheck.Ready -> {
                     Text(
-                        text = "SSH access is initialized.",
+                        text = stringResource(R.string.host_ssh_access_initialized),
                         style = MaterialTheme.typography.titleSmall,
                         color = HobgoblinColors.Success,
                     )
                     Text(
-                        text = "Future connections will use the saved private key.",
+                        text = stringResource(R.string.host_future_connections_saved_key),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     val identityText = if (initializedIdentityRefId != null) {
-                        "Generated identity will be saved with this host."
+                        stringResource(R.string.host_generated_identity_saved)
                     } else {
-                        "Saved identity is available for this host."
+                        stringResource(R.string.host_saved_identity_available)
                     }
                     Text(identityText, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (initializedIdentityRefId != null) {
@@ -527,34 +555,34 @@ private fun SshInitializationSection(
                         ) {
                             Text(
                                 if (connectionTestState is ResourceState.Loading) {
-                                    "Testing connection…"
+                                    stringResource(R.string.host_testing_connection)
                                 } else {
-                                    "Test connection"
+                                    stringResource(R.string.host_test_connection)
                                 },
                             )
                         }
                         ConnectionTestFeedback(connectionTestState)
                     }
                     TextButton(onClick = onReset) {
-                        Text("Set up again")
+                        Text(stringResource(R.string.host_setup_again))
                     }
                 }
 
                 is SshInitializationCheck.NeedsHostKeyTrust -> {
                     Text(
-                        text = "Trust this host key before initializing SSH access.",
+                        text = stringResource(R.string.host_trust_before_initializing),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(check.fingerprint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Button(onClick = { onTrustHostKey(check.fingerprint) }) {
-                        Text("Trust host key")
+                        Text(stringResource(R.string.host_trust_host_key))
                     }
                 }
 
                 SshInitializationCheck.NeedsServerPassword -> {
                     Text(
-                        text = "Install Hobgoblin Android's public key using the temporary server password.",
+                        text = stringResource(R.string.host_install_public_key),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -568,16 +596,22 @@ private fun SshInitializationSection(
 
                 is SshInitializationCheck.HostKeyChanged -> {
                     Text(
-                        "Host key changed. Review this server before trusting it again.",
+                        stringResource(R.string.host_key_changed),
                         color = MaterialTheme.colorScheme.error,
                     )
-                    Text("Previous: ${check.previousFingerprint}", style = MaterialTheme.typography.bodySmall)
-                    Text("Current: ${check.currentFingerprint}", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        stringResource(R.string.host_previous_fingerprint, check.previousFingerprint),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        stringResource(R.string.host_current_fingerprint, check.currentFingerprint),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
             }
             if (!enabled) {
                 Text(
-                    "Enter host, user, and a valid port to enable setup.",
+                    stringResource(R.string.host_setup_fields_required),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -598,7 +632,7 @@ private fun ConnectionTestFeedback(state: ResourceState<DiagnosticsResult>) {
 
         is ResourceState.Error -> {
             Text(
-                text = "offline",
+                text = stringResource(R.string.common_status_offline),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.error,
             )
@@ -612,14 +646,15 @@ private fun ConnectionTestFeedback(state: ResourceState<DiagnosticsResult>) {
 
 @Composable
 private fun ConnectionTestResultFeedback(result: DiagnosticsResult) {
+    val connectionTestFailed = stringResource(R.string.host_connection_test_failed)
     if (result.ok) {
         Text(
-            text = "online",
+            text = stringResource(R.string.common_status_online),
             style = MaterialTheme.typography.labelLarge,
             color = HobgoblinColors.Success,
         )
         Text(
-            text = "Private-key connection succeeded. Save this host to keep its online status.",
+            text = stringResource(R.string.host_private_key_connection_succeeded),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -627,12 +662,12 @@ private fun ConnectionTestResultFeedback(result: DiagnosticsResult) {
     }
 
     Text(
-        text = "offline",
+        text = stringResource(R.string.common_status_offline),
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.error,
     )
     Text(
-        text = result.message.ifBlank { result.category?.label ?: "Connection test failed" },
+        text = result.message.ifBlank { result.category?.label ?: connectionTestFailed },
         color = MaterialTheme.colorScheme.error,
     )
 }
@@ -649,7 +684,7 @@ private fun TemporaryPasswordSetup(
         value = password,
         onValueChange = onPasswordChange,
         enabled = enabled,
-        label = { Text("Temporary password") },
+        label = { Text(stringResource(R.string.host_temporary_password)) },
         singleLine = true,
         visualTransformation = PasswordVisualTransformation(),
     )
@@ -658,10 +693,10 @@ private fun TemporaryPasswordSetup(
         enabled = enabled && password.isNotEmpty(),
         onClick = onInitialize,
     ) {
-        Text("Initialize SSH access")
+        Text(stringResource(R.string.host_initialize_ssh_access))
     }
     Text(
-        text = "After setup, this host will use the saved private key.",
+        text = stringResource(R.string.host_after_setup_saved_key),
         style = MaterialTheme.typography.labelMedium,
         color = HobgoblinColors.Success,
     )
@@ -700,7 +735,7 @@ private fun OptionalBadge() {
     ) {
         Text(
             modifier = Modifier.padding(horizontal = HobgoblinSpacing.Sm, vertical = HobgoblinSpacing.Xs),
-            text = "Optional",
+            text = stringResource(R.string.host_optional),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

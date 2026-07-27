@@ -14,8 +14,8 @@ class AndroidIdentityContractTest {
 
         assertTrue(settings.contains("""rootProject.name = "HobgoblinAndroid""""))
         assertTrue(appBuild.contains("""namespace = "dev.hobgoblin.android""""))
-        assertTrue(appBuild.contains("""applicationId = "dev.hobgoblin.android""""))
-        assertTrue(manifest.contains("""android:label="Hobgoblin""""))
+        assertTrue(appBuild.contains("""applicationId = "com.mrongm.hobgoblin""""))
+        assertTrue(manifest.contains("""android:label="@string/app_name""""))
     }
 
     @Test

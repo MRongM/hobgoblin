@@ -24,6 +24,7 @@ import dev.hobgoblin.android.data.TerminalAppearance
 import dev.hobgoblin.android.terminals.TerminalSessionState
 import dev.hobgoblin.android.terminals.emulator.RemoteTerminalEmulatorController
 import dev.hobgoblin.android.ui.theme.HobgoblinSpacing
+import dev.hobgoblin.android.ui.text.resolve
 
 internal val TerminalOriginalViewportWidth = 720.dp
 
@@ -46,7 +47,7 @@ internal fun AndroidTerminalViewport(
     onCopyText: (String) -> Boolean,
     onOpenSelectedText: (String) -> Boolean,
 ) {
-    val banner = terminalViewportBannerMessage(state, notice)
+    val banner = terminalViewportBannerMessage(terminalSessionBannerText(state)?.resolve(), notice)
     val palette = terminalPalette(appearance)
     val background = Color(palette.backgroundArgb)
     val foreground = Color(palette.foregroundArgb)
@@ -78,7 +79,7 @@ internal fun AndroidTerminalViewport(
                 Text(
                     modifier = viewportContentModifier
                         .padding(HobgoblinSpacing.Sm),
-                    text = terminalDisplayText(state),
+                    text = terminalDisplayText(state, banner),
                     color = foreground,
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = fontSizeSp.sp),
                 )

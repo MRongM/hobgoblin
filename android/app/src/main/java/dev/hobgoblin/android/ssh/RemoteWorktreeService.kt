@@ -61,14 +61,43 @@ sealed interface WorktreeCreationSource {
 data class WorktreeRemovalSafety(
     val allowed: Boolean,
     val reason: String?,
+    val blockReason: WorktreeRemovalBlockReason? = null,
 )
 
+enum class WorktreeRemovalBlockReason {
+    Primary,
+    Dirty,
+    Locked,
+    Missing,
+    ProtectedBranch,
+}
+
 fun evaluateWorktreeRemoval(worktree: RemoteRepositoryWorktree): WorktreeRemovalSafety = when {
-    worktree.isPrimary -> WorktreeRemovalSafety(false, "Primary worktree cannot be removed.")
-    worktree.isDirty -> WorktreeRemovalSafety(false, "Dirty worktree cannot be removed.")
-    worktree.isLocked -> WorktreeRemovalSafety(false, "Locked worktree cannot be removed.")
-    worktree.isMissing -> WorktreeRemovalSafety(false, "Missing worktree cleanup is not supported here.")
-    isProtectedBranch(worktree.branch) -> WorktreeRemovalSafety(false, "Protected branch worktree cannot be removed.")
+    worktree.isPrimary -> WorktreeRemovalSafety(
+        false,
+        "Primary worktree cannot be removed.",
+        WorktreeRemovalBlockReason.Primary,
+    )
+    worktree.isDirty -> WorktreeRemovalSafety(
+        false,
+        "Dirty worktree cannot be removed.",
+        WorktreeRemovalBlockReason.Dirty,
+    )
+    worktree.isLocked -> WorktreeRemovalSafety(
+        false,
+        "Locked worktree cannot be removed.",
+        WorktreeRemovalBlockReason.Locked,
+    )
+    worktree.isMissing -> WorktreeRemovalSafety(
+        false,
+        "Missing worktree cleanup is not supported here.",
+        WorktreeRemovalBlockReason.Missing,
+    )
+    isProtectedBranch(worktree.branch) -> WorktreeRemovalSafety(
+        false,
+        "Protected branch worktree cannot be removed.",
+        WorktreeRemovalBlockReason.ProtectedBranch,
+    )
     else -> WorktreeRemovalSafety(true, null)
 }
 

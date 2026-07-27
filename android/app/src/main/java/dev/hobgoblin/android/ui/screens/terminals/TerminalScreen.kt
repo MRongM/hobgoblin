@@ -60,6 +60,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
@@ -68,6 +72,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import dev.hobgoblin.android.R
 import dev.hobgoblin.android.domain.ssh.RemoteTarget
 import dev.hobgoblin.android.domain.ssh.SshHostProfile
 import dev.hobgoblin.android.data.TerminalAppearance
@@ -80,6 +85,7 @@ import dev.hobgoblin.android.terminals.TerminalSessionStatus
 import dev.hobgoblin.android.ui.screens.terminals.terminalWorkspaceCreatedSessions
 import dev.hobgoblin.android.terminals.toTerminalSessionState
 import dev.hobgoblin.android.ui.theme.HobgoblinSpacing
+import dev.hobgoblin.android.ui.text.resolve
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -101,7 +107,6 @@ fun TerminalScreen(
     repositoryId: String? = null,
     repositoryRemotePath: String? = null,
     targetLabel: String = terminalTargetLabel(host.title, remotePath),
-    backHint: String = TerminalBackKeepsSessionHint,
     terminalSessionId: String? = null,
     terminalSessionManager: TerminalSessionManager,
     terminalForegroundBridge: TerminalForegroundBridge,
@@ -131,6 +136,7 @@ fun TerminalScreen(
     var closeConfirmationVisible by remember { mutableStateOf(false) }
     val clipboard = LocalClipboard.current
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val target = remember(host, remotePath) { RemoteTarget.fromHostProfile(host, remotePath) }
     val workspaceHostId = target.id
@@ -148,7 +154,7 @@ fun TerminalScreen(
     fun openTerminalUrl(url: String): Boolean {
         val safeUrl = terminalSafeExternalUrl(url)
         if (safeUrl == null) {
-            inputNotice = "URL is not supported."
+            inputNotice = resources.getString(R.string.terminal_url_unsupported)
             return false
         }
         return try {
@@ -156,17 +162,17 @@ fun TerminalScreen(
             inputNotice = null
             true
         } catch (_: ActivityNotFoundException) {
-            inputNotice = "No browser available."
+            inputNotice = resources.getString(R.string.terminal_browser_unavailable)
             false
         } catch (_: Exception) {
-            inputNotice = "Could not open browser."
+            inputNotice = resources.getString(R.string.terminal_browser_open_failed)
             false
         }
     }
 
     fun searchTerminalText(query: String): Boolean {
         if (query.isBlank()) {
-            inputNotice = "Selection is empty."
+            inputNotice = resources.getString(R.string.terminal_selection_empty)
             return false
         }
         return try {
@@ -177,10 +183,10 @@ fun TerminalScreen(
             inputNotice = null
             true
         } catch (_: ActivityNotFoundException) {
-            inputNotice = "No browser available."
+            inputNotice = resources.getString(R.string.terminal_browser_unavailable)
             false
         } catch (_: Exception) {
-            inputNotice = "Could not open browser."
+            inputNotice = resources.getString(R.string.terminal_browser_open_failed)
             false
         }
     }
@@ -188,7 +194,7 @@ fun TerminalScreen(
     fun openSelectedTerminalText(text: String): Boolean {
         val action = terminalSelectedTextBrowserAction(text)
         if (action == null) {
-            inputNotice = "Selection is empty."
+            inputNotice = resources.getString(R.string.terminal_selection_empty)
             return false
         }
         return when (action) {
@@ -199,21 +205,23 @@ fun TerminalScreen(
 
     fun copyTerminalSelection(text: String): Boolean {
         if (text.isBlank()) {
-            inputNotice = "Selection is empty."
+            inputNotice = resources.getString(R.string.terminal_selection_empty)
             return false
         }
         return try {
             val manager = ContextCompat.getSystemService(context, ClipboardManager::class.java)
             if (manager == null) {
-                inputNotice = "Copy failed."
+                inputNotice = resources.getString(R.string.terminal_copy_failed)
                 false
             } else {
-                manager.setPrimaryClip(ClipData.newPlainText("Hobgoblin terminal selection", text))
-                inputNotice = "Copied."
+                manager.setPrimaryClip(
+                    ClipData.newPlainText(resources.getString(R.string.terminal_clipboard_selection_label), text),
+                )
+                inputNotice = resources.getString(R.string.terminal_copied)
                 true
             }
         } catch (_: Exception) {
-            inputNotice = "Copy failed."
+            inputNotice = resources.getString(R.string.terminal_copy_failed)
             false
         }
     }
@@ -302,7 +310,10 @@ fun TerminalScreen(
                 commandInput = ""
                 inputNotice = null
             } else {
-                inputNotice = terminalInputUnavailableMessage(terminalState) ?: "Terminal is not connected."
+                inputNotice = resources.resolve(
+                    terminalInputUnavailableText(terminalState)
+                        ?: dev.hobgoblin.android.ui.text.LocalizedText(R.string.terminal_not_connected),
+                )
             }
         }
     }
@@ -328,7 +339,7 @@ fun TerminalScreen(
             isSending = false,
             setSending = { _ -> },
         ) { sent ->
-            inputNotice = if (sent) null else "Terminal is not connected."
+            inputNotice = if (sent) null else resources.getString(R.string.terminal_not_connected)
         }
         ctrlModifierActive = false
         altModifierActive = false
@@ -472,7 +483,11 @@ fun TerminalScreen(
     val globalProjectSessions = terminalGlobalProjectCreatedSessions(terminalSessions)
     val hasGlobalSwitchTargets = globalProjectSessions.size > 1
     val inlineActions = terminalDetailInlineActions(terminalState)
-    val topBarInfo = terminalStatusLine(host = host, remotePath = remotePath, state = terminalState)
+    val topBarInfo = terminalStatusLine(
+        host = host,
+        remotePath = remotePath,
+        status = terminalSessionStatusText(terminalState).resolve(),
+    )
     val emulatorController = activeSessionId?.let { terminalSessionManager.emulatorController(it) }
     val commandInputEnabled = terminalCommandInputEnabled(terminalState) && !isSendingCommandInput
     val palette = terminalPalette(appearance)
@@ -512,13 +527,18 @@ fun TerminalScreen(
                 },
                 navigationIcon = {
                     TextButton(onClick = { navigateBack() }) {
-                        Text("Back")
+                        Text(stringResource(R.string.common_back))
                     }
                 },
                 actions = {
                     Box {
                         TextButton(onClick = { terminalActionMenuExpanded = true }) {
-                            Text("⋮")
+                            Text(
+                                "⋮",
+                                modifier = Modifier.semantics {
+                                    contentDescription = resources.getString(R.string.terminal_more_actions)
+                                },
+                            )
                         }
                         DropdownMenu(
                             expanded = terminalActionMenuExpanded,
@@ -527,7 +547,13 @@ fun TerminalScreen(
                             DropdownMenuItem(
                                 text = {
                                     Text(
-                                        if (fitToScreen) "Original width" else "Fit to screen width",
+                                        stringResource(
+                                            if (fitToScreen) {
+                                                R.string.terminal_original_width
+                                            } else {
+                                                R.string.terminal_fit_screen_width
+                                            },
+                                        ),
                                     )
                                 },
                                 onClick = {
@@ -537,7 +563,12 @@ fun TerminalScreen(
                             )
                             DropdownMenuItem(
                                 text = {
-                                    Text("Use ${terminalAppearanceToggleLabel(appearance).lowercase()} appearance")
+                                    Text(
+                                        stringResource(
+                                            R.string.terminal_use_appearance,
+                                            terminalAppearanceToggleText(appearance).resolve(),
+                                        ),
+                                    )
                                 },
                                 onClick = {
                                     onAppearanceChange(nextTerminalAppearance(appearance))
@@ -545,26 +576,26 @@ fun TerminalScreen(
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text(terminalFocusActionLabel(focusMode)) },
+                                text = { Text(terminalFocusActionText(focusMode).resolve()) },
                                 onClick = {
                                     focusMode = !focusMode
                                     terminalActionMenuExpanded = false
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text(terminalCommandInputVisibilityActionLabel(commandInputVisible)) },
+                                text = { Text(terminalCommandInputVisibilityActionText(commandInputVisible).resolve()) },
                                 onClick = {
                                     commandInputVisible = !commandInputVisible
                                     terminalActionMenuExpanded = false
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text("Font size: ${terminalFontSizeSp}sp") },
+                                text = { Text(stringResource(R.string.terminal_font_size, terminalFontSizeSp)) },
                                 enabled = false,
                                 onClick = {},
                             )
                             DropdownMenuItem(
-                                text = { Text("Font smaller") },
+                                text = { Text(stringResource(R.string.terminal_font_smaller)) },
                                 enabled = terminalFontSizeSp > TerminalMinFontSizeSp,
                                 onClick = {
                                     terminalFontSizeSp = terminalAdjustedFontSize(terminalFontSizeSp, -1)
@@ -572,7 +603,7 @@ fun TerminalScreen(
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text("Font larger") },
+                                text = { Text(stringResource(R.string.terminal_font_larger)) },
                                 enabled = terminalFontSizeSp < TerminalMaxFontSizeSp,
                                 onClick = {
                                     terminalFontSizeSp = terminalAdjustedFontSize(terminalFontSizeSp, 1)
@@ -580,7 +611,7 @@ fun TerminalScreen(
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text("Reset font size") },
+                                text = { Text(stringResource(R.string.terminal_font_reset)) },
                                 enabled = terminalFontSizeSp != TerminalDefaultFontSizeSp,
                                 onClick = {
                                     terminalFontSizeSp = TerminalDefaultFontSizeSp
@@ -588,7 +619,7 @@ fun TerminalScreen(
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text("Reconnect terminal") },
+                                text = { Text(stringResource(R.string.terminal_reconnect_terminal)) },
                                 enabled = terminalReconnectAvailable(terminalState),
                                 onClick = {
                                     terminalActionMenuExpanded = false
@@ -598,14 +629,14 @@ fun TerminalScreen(
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text("Close terminal") },
+                                text = { Text(stringResource(R.string.terminal_close_terminal)) },
                                 onClick = {
                                     terminalActionMenuExpanded = false
                                     requestCloseTerminal()
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text("Back") },
+                                text = { Text(stringResource(R.string.common_back)) },
                                 onClick = {
                                     terminalActionMenuExpanded = false
                                     navigateBack()
@@ -664,7 +695,7 @@ fun TerminalScreen(
                                 onEnter = { sendTerminalInputLocked("\r", false, { _ -> }) },
                                 onBackspace = { sendTerminalInputLocked("\u007F", false, { _ -> }) },
                                 onPaste = {
-                                    val unavailable = terminalInputUnavailableMessage(terminalState)
+                                    val unavailable = terminalInputUnavailableText(terminalState)?.let(resources::resolve)
                                     if (unavailable != null) {
                                         inputNotice = unavailable
                                     } else {
@@ -679,7 +710,7 @@ fun TerminalScreen(
                                                 activeSessionId?.let { terminalSessionManager.paste(it, text) } ?: false
                                             }
                                             syncTerminalForeground()
-                                            inputNotice = if (pasted) null else "Terminal is not connected."
+                                            inputNotice = if (pasted) null else resources.getString(R.string.terminal_not_connected)
                                         }
                                     }
                                 },
@@ -687,7 +718,7 @@ fun TerminalScreen(
                                 commandInput = commandInput,
                                 onCommandInputChange = { commandInput = it },
                                 commandInputEnabled = commandInputEnabled,
-                                commandInputPlaceholder = terminalCommandInputPlaceholder(terminalState),
+                                commandInputPlaceholder = terminalCommandInputPlaceholderText(terminalState).resolve(),
                                 onSendCommand = { sendCommandInput() },
                                 fitToScreen = fitToScreen,
                                 onFitToScreenChange = onFitToScreenChange,
@@ -706,7 +737,7 @@ fun TerminalScreen(
                     }
                     if (terminalFocusExitHandleVisible(focusMode)) {
                         TerminalTextButton(
-                            text = "Exit focus",
+                            text = stringResource(R.string.terminal_exit_focus),
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
                                 .padding(HobgoblinSpacing.Sm)
@@ -726,8 +757,8 @@ fun TerminalScreen(
     if (closeConfirmationVisible) {
         AlertDialog(
             onDismissRequest = { closeConfirmationVisible = false },
-            title = { Text("Close terminal?") },
-            text = { Text(terminalCloseConfirmationText(screenTitle)) },
+            title = { Text(stringResource(R.string.repository_close_terminal_title)) },
+            text = { Text(terminalCloseConfirmationText(screenTitle).resolve()) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -735,12 +766,12 @@ fun TerminalScreen(
                         closeTerminal()
                     },
                 ) {
-                    Text("Stop and close")
+                    Text(stringResource(R.string.terminal_stop_and_close))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { closeConfirmationVisible = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.common_cancel))
                 }
             },
         )
@@ -780,9 +811,8 @@ private fun BoxScope.TerminalBackgroundSwipeEdge(onBackground: () -> Unit) {
 private fun terminalStatusLine(
     host: SshHostProfile,
     remotePath: String,
-    state: TerminalSessionState,
+    status: String,
 ): String {
-    val status = terminalSessionStatusLabel(state)
     return "${host.title} - ${remotePath.ifBlank { "/" }} - $status"
 }
 
@@ -844,7 +874,7 @@ private fun TerminalCommandDeck(
                     else -> inputAvailable
                 }
                 TerminalTextButton(
-                    text = terminalHobgoblinActionLabel(action),
+                    text = terminalHobgoblinActionText(action).resolve(),
                     enabled = actionEnabled,
                     onClick = {
                         when (action) {
@@ -867,18 +897,22 @@ private fun TerminalCommandDeck(
                 TerminalSwitchArrowButton(text = "↓", onClick = { onCycleWorkspaceTerminal(1) })
             }
             TerminalTextButton(
-                text = if (commandInputVisible) "Hide command" else "Command",
+                text = stringResource(
+                    if (commandInputVisible) R.string.terminal_hide_command else R.string.terminal_command,
+                ),
                 onClick = onToggleCommandInput,
             )
             TerminalTextButton(
-                text = if (fitToScreen) "Original width" else "Fit width",
+                text = stringResource(
+                    if (fitToScreen) R.string.terminal_original_width else R.string.terminal_fit_width,
+                ),
                 onClick = { onFitToScreenChange(!fitToScreen) },
             )
             TerminalTextButton(
-                text = terminalAppearanceToggleLabel(appearance),
+                text = terminalAppearanceToggleText(appearance).resolve(),
                 onClick = { onAppearanceChange(nextTerminalAppearance(appearance)) },
             )
-            TerminalTextButton(text = "Focus", onClick = onEnterFocus)
+            TerminalTextButton(text = stringResource(R.string.terminal_focus), onClick = onEnterFocus)
         }
         if (commandInputVisible) {
             Row(
@@ -895,7 +929,7 @@ private fun TerminalCommandDeck(
                     onSend = onSendCommand,
                 )
                 TerminalTextButton(
-                    text = "Send",
+                    text = stringResource(R.string.terminal_send),
                     enabled = commandInputEnabled && commandInput.isNotEmpty(),
                     onClick = onSendCommand,
                 )

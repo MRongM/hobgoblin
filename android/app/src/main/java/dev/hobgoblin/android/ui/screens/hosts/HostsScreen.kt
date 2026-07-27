@@ -29,8 +29,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.hobgoblin.android.R
 import dev.hobgoblin.android.data.ManualItemOrderPolicy
 import dev.hobgoblin.android.domain.ResourceState
 import dev.hobgoblin.android.domain.ssh.SshHostProfile
@@ -60,10 +62,10 @@ internal fun hostHealth(host: SshHostProfile): HostHealth =
         else -> HostHealth.Offline
     }
 
-internal fun hostHealthLabel(health: HostHealth): String =
+internal fun hostHealthLabelResource(health: HostHealth): Int =
     when (health) {
-        HostHealth.Online -> "online"
-        HostHealth.Offline -> "offline"
+        HostHealth.Online -> R.string.common_status_online
+        HostHealth.Offline -> R.string.common_status_offline
     }
 
 internal fun hostHealthIndicatorColor(health: HostHealth): Color =
@@ -123,15 +125,19 @@ fun HostsScreen(
 @Composable
 private fun LoadingHosts() {
     Column(verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm)) {
-        Text("loading", style = MaterialTheme.typography.labelMedium)
-        Text("Loading saved SSH hosts.")
+        Text(stringResource(R.string.common_loading), style = MaterialTheme.typography.labelMedium)
+        Text(stringResource(R.string.hosts_loading_description))
     }
 }
 
 @Composable
 private fun ErrorHosts(message: String) {
     Column(verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Md)) {
-        Text("error", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium)
+        Text(
+            stringResource(R.string.common_error),
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.labelMedium,
+        )
         Text(message)
     }
 }
@@ -163,15 +169,19 @@ private fun HostList(
             horizontalAlignment = Alignment.Start,
             verticalArrangement = Arrangement.Center,
         ) {
-            Text("No SSH hosts", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+            Text(
+                stringResource(R.string.hosts_empty_title),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
             Spacer(Modifier.height(HobgoblinSpacing.Sm))
-            Text("Add a remote development machine to start diagnostics and terminal access.")
+            Text(stringResource(R.string.hosts_empty_description))
             Spacer(Modifier.height(HobgoblinSpacing.Lg))
         }
         return
     }
 
-    Text("Saved hosts", style = MaterialTheme.typography.titleMedium)
+    Text(stringResource(R.string.hosts_saved_heading), style = MaterialTheme.typography.titleMedium)
     Spacer(Modifier.height(HobgoblinSpacing.Md))
     LazyColumn(verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm)) {
         items(orderedHosts, key = { it.id }) { host ->
@@ -193,8 +203,8 @@ private fun HostList(
     deleteTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text("Delete host profile?") },
-            text = { Text("This removes ${target.title} from Hobgoblin Android. It does not delete anything on the SSH server.") },
+            title = { Text(stringResource(R.string.hosts_delete_title)) },
+            text = { Text(stringResource(R.string.hosts_delete_description, target.title)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -202,12 +212,12 @@ private fun HostList(
                         deleteTarget = null
                     },
                 ) {
-                    Text("Delete")
+                    Text(stringResource(R.string.common_delete))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { deleteTarget = null }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.common_cancel))
                 }
             },
         )
@@ -254,19 +264,19 @@ private fun HostRow(
                     enabled = canOpenTerminal,
                     onClick = onOpenTerminal,
                 ) {
-                    Text("Terminal")
+                    Text(stringResource(R.string.hosts_terminal))
                 }
                 TextButton(onClick = onEditHost) {
-                    Text("Edit")
+                    Text(stringResource(R.string.common_edit))
                 }
                 TextButton(
                     enabled = canOpenHostPorts(host),
                     onClick = onOpenPorts,
                 ) {
-                    Text("Ports")
+                    Text(stringResource(R.string.hosts_ports))
                 }
                 TextButton(onClick = onDeleteHost) {
-                    Text("Delete")
+                    Text(stringResource(R.string.common_delete))
                 }
             }
         }
@@ -275,7 +285,8 @@ private fun HostRow(
 
 @Composable
 private fun HostStatusIndicator(health: HostHealth) {
-    val label = hostHealthLabel(health)
+    val label = stringResource(hostHealthLabelResource(health))
+    val statusDescription = stringResource(R.string.hosts_status_description, label)
     Row(
         horizontalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
         verticalAlignment = Alignment.CenterVertically,
@@ -284,7 +295,7 @@ private fun HostStatusIndicator(health: HostHealth) {
             modifier = Modifier
                 .size(8.dp)
                 .background(hostHealthIndicatorColor(health), CircleShape)
-                .semantics { contentDescription = "Host status $label" },
+                .semantics { contentDescription = statusDescription },
         )
         Text(label, style = MaterialTheme.typography.labelMedium)
     }

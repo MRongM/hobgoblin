@@ -22,6 +22,7 @@ import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
 import com.termux.view.TerminalRenderer
 import com.termux.terminal.TextStyle
+import dev.hobgoblin.android.R
 import dev.hobgoblin.android.data.TerminalAppearance
 import dev.hobgoblin.android.terminals.emulator.RemoteTerminalEmulatorController
 import kotlin.math.abs
@@ -762,8 +763,10 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
 
     private inner class TerminalSelectionActionMode : ActionMode.Callback {
         override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
-            menu.add(0, CopyMenuItemId, 0, "Copy").setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-            menu.add(0, OpenBrowserMenuItemId, 1, "Open in browser").setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            menu.add(0, CopyMenuItemId, 0, context.getString(R.string.terminal_copy))
+                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            menu.add(0, OpenBrowserMenuItemId, 1, context.getString(R.string.terminal_open_in_browser))
+                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
             return true
         }
 
