@@ -537,6 +537,28 @@ describe('BranchWorkspaceDialog', () => {
     expect(preview?.disabled).toBe(true)
   })
 
+  test('locks a member-scoped reduction to its preselected repository', async () => {
+    const onPreview = vi.fn(async () => true)
+    renderDialog({
+      mode: 'reduce',
+      workspace: workspaceWithTwoMembers(),
+      fixedReduceRepositoryName: 'api',
+      onPreview,
+    })
+
+    const checkboxes = Array.from(document.querySelectorAll<HTMLInputElement>('[data-branch-workspace-reduce-member]'))
+    expect(checkboxes.map((checkbox) => checkbox.checked)).toEqual([true, false])
+    expect(checkboxes.every((checkbox) => checkbox.disabled)).toBe(true)
+    expect(document.querySelector<HTMLButtonElement>('[data-action="preview"]')?.disabled).toBe(false)
+
+    await clickAction('preview')
+    expect(onPreview).toHaveBeenCalledWith({
+      operation: 'reduce',
+      branchWorkspaceId: 'branch-1',
+      repositories: ['api'],
+    })
+  })
+
   test('requires explicit dirty and terminal approvals for member reduction', async () => {
     const onConfirm = vi.fn(async () => ({ ok: true as const, branchWorkspaceId: 'branch-1' }))
     renderDialog({ mode: 'reduce', workspace: workspaceWithTwoMembers(), plan: reductionPlan(), onConfirm })

@@ -246,6 +246,7 @@ describe('BranchWorkspacePane', () => {
             repositoryId: '/workspace/api',
             repositoryName: 'api',
             targetBranch: 'feature/auth',
+            checkedOutBranch: 'feature/auth',
             worktreePath: '/workspace/goblin-feature-auth/api',
           }}
           layout="left-right"
@@ -294,6 +295,7 @@ describe('BranchWorkspacePane', () => {
         repositoryId: '/workspace/api',
         repositoryName: 'api',
         targetBranch: 'feature/auth',
+        checkedOutBranch: 'feature/auth',
         worktreePath: '/workspace/goblin-feature-auth/api',
       },
       layout: 'left-right' as const,
@@ -323,6 +325,7 @@ describe('BranchWorkspacePane', () => {
             repositoryId: '/workspace/api',
             repositoryName: 'api',
             targetBranch: 'feature/auth',
+            checkedOutBranch: 'feature/auth',
             worktreePath: '/workspace/goblin-feature-auth/api',
           }}
           layout="left-right"
@@ -375,6 +378,7 @@ describe('BranchWorkspacePane', () => {
         repositoryId: '/workspace/api',
         repositoryName: 'api',
         targetBranch: 'feature/auth',
+        checkedOutBranch: 'feature/auth',
         worktreePath: '/workspace/goblin-feature-auth/api',
       },
       layout: 'left-right' as const,

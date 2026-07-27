@@ -122,6 +122,8 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.member-not-ready': 'このメンバーのワークツリーはまだ準備できていません。',
   'workspace.branch-workspace.member-branch-missing': 'このメンバーのブランチが見つかりません。',
   'workspace.branch-workspace.member-worktree-mismatch': 'このメンバーのワークツリーは別のパスにあります。',
+  'workspace.branch-workspace.member-branch-drift':
+    'この worktree でチェックアウト中のブランチはワークスペースの想定と異なります。',
   'workspace.branch-workspace.member-fallback':
     '選択したメンバーのワークツリーを利用できないため、ブランチワークスペースの概要を表示します。',
   'workspace.branch-workspace.deep-link-fallback':
@@ -312,6 +314,7 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.base-unavailable': '選択したベースブランチを利用できません。',
   'workspace.branch-workspace.repository-unavailable': '選択したリポジトリを利用できません。',
   'workspace.branch-workspace.member-required': '少なくとも 1 つのメンバー worktree を残す必要があります。',
+  'workspace.branch-workspace.member-path-not-worktree': 'メンバーのパスは登録済み worktree ではありません。',
   'workspace.branch-workspace.invalid-entry': '選択した追加項目が無効です。',
   'workspace.branch-workspace.invalid-root': 'ワークスペースルートが無効です。',
   'workspace.branch-workspace.invalid-path': 'ブランチワークスペースのパスが無効です。',

@@ -833,10 +833,10 @@ describe('branch workspace remove planner', () => {
   ])('blocks unsafe worktrees', async (worktreeState, message) => {
     const current = existingManifest()
     const unsafeBranch = {
-      ...branch(BRANCH, current.repositories[0]!.worktreePath),
+      ...branch('release/previous', current.repositories[0]!.worktreePath),
       worktree: { path: current.repositories[0]!.worktreePath, ...worktreeState },
     }
-    const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch('main'), unsafeBranch) })
+    const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch(BRANCH), unsafeBranch) })
     deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
     deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
     deps.inspectPath.mockImplementation(async (_rootId, candidatePath) =>
@@ -857,6 +857,91 @@ describe('branch workspace remove planner', () => {
         deps,
       ),
     ).resolves.toEqual({ ok: false, message })
+  })
+
+  test('removes the registered worktree at the member path even when its branch drifted', async () => {
+    const current = existingManifest()
+    const actualBranch = {
+      ...branch('release/previous', current.repositories[0]!.worktreePath),
+      worktree: {
+        path: current.repositories[0]!.worktreePath,
+        summary: { dirty: false, changeCount: 0 },
+      },
+    }
+    const deps = dependencies({
+      [path.join(ROOT, 'api')]: snapshot(
+        branch(BRANCH, path.join(ROOT, 'elsewhere')),
+        actualBranch,
+      ),
+    })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
+    deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+    deps.inspectPath.mockImplementation(async (_rootId, candidatePath) => ({
+      ...missing(candidatePath),
+      exists: candidatePath === current.path,
+      kind: candidatePath === current.path ? 'directory' : 'missing',
+      ...(candidatePath === current.path ? { resolvedPath: candidatePath } : {}),
+    }))
+
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      {
+        operation: 'remove',
+        branchWorkspaceId: current.id,
+        alsoDeleteBranch: true,
+        alsoDeleteUpstream: false,
+      },
+      { ...deps, listChildren: vi.fn(async () => ['api']) },
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        repositories: [
+          {
+            repositoryName: 'api',
+            targetBranch: BRANCH,
+            checkedOutBranch: 'release/previous',
+            action: 'remove-worktree',
+            worktreePresent: true,
+            deleteBranch: false,
+          },
+        ],
+      },
+    })
+  })
+
+  test('treats non-worktree content at a declared member path as unmanaged content', async () => {
+    const current = existingManifest()
+    const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch(BRANCH)) })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
+    deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+    deps.inspectPath.mockImplementation(async (_rootId, candidatePath) => ({
+      ...missing(candidatePath),
+      exists: true,
+      kind: candidatePath === current.path ? 'directory' : 'file',
+      resolvedPath: candidatePath,
+    }))
+
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      {
+        operation: 'remove',
+        branchWorkspaceId: current.id,
+        alsoDeleteBranch: false,
+        alsoDeleteUpstream: false,
+      },
+      { ...deps, listChildren: vi.fn(async () => ['api']) },
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        repositories: [{ repositoryName: 'api', action: 'satisfied', worktreePresent: false }],
+        unmanagedEntries: ['api'],
+        requiredApprovals: ['unmanaged-content'],
+      },
+    })
   })
 
   test('plans removal for a dirty worktree without reading repository status', async () => {
@@ -1180,6 +1265,153 @@ describe('branch workspace reduce planner', () => {
         deps,
       ),
     ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.member-unavailable' })
+  })
+
+  test('removes a selected member by its registered path when its branch drifted', async () => {
+    const current = manifestForReduction()
+    const worktreeBranch = (index: number, name = BRANCH) => ({
+      ...branch(name, current.repositories[index]!.worktreePath),
+      worktree: {
+        path: current.repositories[index]!.worktreePath,
+        summary: { dirty: false, changeCount: 0 },
+      },
+    })
+    const deps = dependencies({
+      [path.join(ROOT, 'api')]: snapshot(branch(BRANCH), worktreeBranch(0, 'release/previous')),
+      [path.join(ROOT, 'web')]: snapshot(worktreeBranch(1)),
+      [path.join(ROOT, 'worker')]: snapshot(worktreeBranch(2)),
+    })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api', 'web', 'worker'] } })
+    deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+    deps.inspectPath.mockImplementation(async (_rootId, candidatePath) => ({
+      ...missing(candidatePath),
+      exists: candidatePath === current.path,
+      kind: candidatePath === current.path ? 'directory' : 'missing',
+    }))
+
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      { operation: 'reduce', branchWorkspaceId: current.id, repositories: ['api'] },
+      deps,
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        repositories: [
+          {
+            repositoryName: 'api',
+            targetBranch: BRANCH,
+            checkedOutBranch: 'release/previous',
+            action: 'remove-worktree',
+            dirty: false,
+          },
+        ],
+      },
+    })
+  })
+
+  test('treats a missing selected member path as satisfied without touching its target branch elsewhere', async () => {
+    const current = manifestForReduction()
+    const worktreeBranch = (index: number) => ({
+      ...branch(BRANCH, current.repositories[index]!.worktreePath),
+      worktree: {
+        path: current.repositories[index]!.worktreePath,
+        summary: { dirty: false, changeCount: 0 },
+      },
+    })
+    const deps = dependencies({
+      [path.join(ROOT, 'api')]: snapshot(branch(BRANCH, path.join(ROOT, 'elsewhere'))),
+      [path.join(ROOT, 'web')]: snapshot(worktreeBranch(1)),
+      [path.join(ROOT, 'worker')]: snapshot(worktreeBranch(2)),
+    })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api', 'web', 'worker'] } })
+    deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+    deps.inspectPath.mockImplementation(async (_rootId, candidatePath) => ({
+      ...missing(candidatePath),
+      exists: candidatePath === current.path,
+      kind: candidatePath === current.path ? 'directory' : 'missing',
+    }))
+
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      { operation: 'reduce', branchWorkspaceId: current.id, repositories: ['api'] },
+      deps,
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        repositories: [{ repositoryName: 'api', action: 'satisfied', worktreePresent: false }],
+        steps: [],
+      },
+    })
+  })
+
+  test('rejects a selected member path occupied by non-worktree content', async () => {
+    const current = manifestForReduction()
+    const worktreeBranch = (index: number) => ({
+      ...branch(BRANCH, current.repositories[index]!.worktreePath),
+      worktree: {
+        path: current.repositories[index]!.worktreePath,
+        summary: { dirty: false, changeCount: 0 },
+      },
+    })
+    const deps = dependencies({
+      [path.join(ROOT, 'api')]: snapshot(branch(BRANCH)),
+      [path.join(ROOT, 'web')]: snapshot(worktreeBranch(1)),
+      [path.join(ROOT, 'worker')]: snapshot(worktreeBranch(2)),
+    })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api', 'web', 'worker'] } })
+    deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+    deps.inspectPath.mockImplementation(async (_rootId, candidatePath) => ({
+      ...missing(candidatePath),
+      exists: candidatePath === current.path || candidatePath === current.repositories[0]!.worktreePath,
+      kind: candidatePath === current.path ? 'directory' : 'file',
+    }))
+
+    await expect(
+      buildBranchWorkspacePlan(
+        ROOT,
+        { operation: 'reduce', branchWorkspaceId: current.id, repositories: ['api'] },
+        deps,
+      ),
+    ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.member-path-not-worktree' })
+  })
+
+  test.each([
+    [{ isPrimary: true }, 'workspace.branch-workspace.primary-worktree'],
+    [{ isLocked: true }, 'workspace.branch-workspace.locked-worktree'],
+  ])('blocks a drifted selected member when its worktree is unsafe', async (worktreeState, message) => {
+    const current = manifestForReduction()
+    const worktreeBranch = (index: number, name = BRANCH) => ({
+      ...branch(name, current.repositories[index]!.worktreePath),
+      worktree: {
+        path: current.repositories[index]!.worktreePath,
+        summary: { dirty: false, changeCount: 0 },
+        ...(index === 0 ? worktreeState : {}),
+      },
+    })
+    const deps = dependencies({
+      [path.join(ROOT, 'api')]: snapshot(branch(BRANCH), worktreeBranch(0, 'release/previous')),
+      [path.join(ROOT, 'web')]: snapshot(worktreeBranch(1)),
+      [path.join(ROOT, 'worker')]: snapshot(worktreeBranch(2)),
+    })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api', 'web', 'worker'] } })
+    deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+    deps.inspectPath.mockImplementation(async (_rootId, candidatePath) => ({
+      ...missing(candidatePath),
+      exists: candidatePath === current.path,
+      kind: candidatePath === current.path ? 'directory' : 'missing',
+    }))
+
+    await expect(
+      buildBranchWorkspacePlan(
+        ROOT,
+        { operation: 'reduce', branchWorkspaceId: current.id, repositories: ['api'] },
+        deps,
+      ),
+    ).resolves.toEqual({ ok: false, message })
   })
 
   test('rejects a new reduction when an unselected member has drifted', async () => {

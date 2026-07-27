@@ -220,6 +220,7 @@ export interface BranchWorkspaceRepositoryPlan {
   repositoryName: string
   repoId: string
   targetBranch: string
+  checkedOutBranch?: string
   baseBranch: string
   branchOrigin: BranchWorkspaceBranchOrigin
   worktreePath: string

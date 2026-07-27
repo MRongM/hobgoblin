@@ -115,6 +115,8 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.member-not-ready': '이 구성원 작업 트리는 아직 준비되지 않았습니다.',
   'workspace.branch-workspace.member-branch-missing': '이 구성원의 브랜치를 찾을 수 없습니다.',
   'workspace.branch-workspace.member-worktree-mismatch': '이 구성원 작업 트리는 다른 경로에 체크아웃되어 있습니다.',
+  'workspace.branch-workspace.member-branch-drift':
+    '이 작업 트리에 체크아웃된 브랜치가 워크스페이스에서 예상한 브랜치와 다릅니다.',
   'workspace.branch-workspace.member-fallback':
     '선택한 구성원 작업 트리를 사용할 수 없어 브랜치 워크스페이스 개요를 표시합니다.',
   'workspace.branch-workspace.deep-link-fallback':
@@ -300,6 +302,7 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.base-unavailable': '선택한 기준 브랜치를 사용할 수 없습니다.',
   'workspace.branch-workspace.repository-unavailable': '선택한 저장소를 사용할 수 없습니다.',
   'workspace.branch-workspace.member-required': '구성원 작업 트리를 하나 이상 유지해야 합니다.',
+  'workspace.branch-workspace.member-path-not-worktree': '구성원 경로가 등록된 작업 트리가 아닙니다.',
   'workspace.branch-workspace.invalid-entry': '선택한 추가 항목이 잘못되었습니다.',
   'workspace.branch-workspace.invalid-root': '워크스페이스 루트가 잘못되었습니다.',
   'workspace.branch-workspace.invalid-path': '브랜치 워크스페이스 경로가 잘못되었습니다.',

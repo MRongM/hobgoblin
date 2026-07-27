@@ -127,6 +127,13 @@ export function branchStatusClipboardText(detail: SelectedBranchDetail, repoName
     [t('branch-status.signal.folder'), folderName],
     [t('branch-status.signal.project'), repoName],
     [t('branch-status.signal.branch'), branch.name],
+  ]
+
+  if (!branch.isDefault) {
+    rows.push([t('branch-status.signal.created-from'), createdFromClipboardValue(branch, t)])
+  }
+
+  rows.push(
     [t('branch-status.signal.worktree'), branch.worktree?.path ?? t('branch-status.worktree.none')],
     [t('branch-status.signal.upstream'), branch.tracking ?? t('branches.no-upstream')],
     [t('branch-status.signal.sync'), syncClipboardValue(branch, t)],
@@ -134,11 +141,8 @@ export function branchStatusClipboardText(detail: SelectedBranchDetail, repoName
     [t('branch-status.signal.commit-message'), branch.lastCommitMessage],
     [t('branch-status.signal.commit-author'), branch.lastCommitAuthor],
     [t('branch-status.signal.commit-time'), branch.lastCommitDate],
-  ]
+  )
 
-  if (!branch.isDefault) {
-    rows.push([t('branch-status.signal.created-from'), createdFromClipboardValue(branch, t)])
-  }
   return rows.map(([label, value]) => `${label}: ${emptyClipboardValue(value)}`).join('\n')
 }
 
@@ -270,6 +274,23 @@ export function BranchStatus({ detail, repoName, repoId }: Props) {
         valueLayout="inline"
         tone={branch.isCurrent ? 'success' : branch.isDefault ? 'brand' : 'neutral'}
       />
+      {showCreatedFrom && (
+        <StatusRow
+          icon={<GitFork size={14} />}
+          label={t('branch-status.signal.created-from')}
+          value={
+            branch.createdFrom ? (
+              <MonoValue title={branch.createdFrom} truncate>
+                {branch.createdFrom}
+              </MonoValue>
+            ) : (
+              <StatusChip>{t('branch-status.created-from-unknown')}</StatusChip>
+            )
+          }
+          valueLayout="inline"
+          tone="neutral"
+        />
+      )}
       <StatusRow
         icon={<FolderTree size={14} />}
         label={t('branch-status.signal.worktree')}
@@ -352,23 +373,6 @@ export function BranchStatus({ detail, repoName, repoId }: Props) {
         }
         valueLayout="fill"
       />
-      {showCreatedFrom && (
-        <StatusRow
-          icon={<GitFork size={14} />}
-          label={t('branch-status.signal.created-from')}
-          value={
-            branch.createdFrom ? (
-              <MonoValue title={branch.createdFrom} truncate>
-                {branch.createdFrom}
-              </MonoValue>
-            ) : (
-              <StatusChip>{t('branch-status.created-from-unknown')}</StatusChip>
-            )
-          }
-          valueLayout="inline"
-          tone="neutral"
-        />
-      )}
     </StatusRows>
   )
 }

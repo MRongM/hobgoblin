@@ -99,6 +99,7 @@ export function WorkspaceRepositoryRail({
     'create',
   )
   const [dialogWorkspace, setDialogWorkspace] = useState<BranchWorkspaceSnapshot | null>(null)
+  const [fixedReduceRepositoryName, setFixedReduceRepositoryName] = useState<string | null>(null)
   const [dependencyDialogOpen, setDependencyDialogOpen] = useState(false)
   const [dependencyDialogMode, setDependencyDialogMode] = useState<'add' | 'remove'>('add')
   const [dependencyBranchWorkspaceId, setDependencyBranchWorkspaceId] = useState('')
@@ -228,11 +229,15 @@ export function WorkspaceRepositoryRail({
     })
     if (!resolution.ok) return resolution
     const repo = repos[resolution.target.repositoryId]
-    const branch = repo?.data.branches.find((candidate) => candidate.name === resolution.target.targetBranch)
+    const branch = repo?.data.branches.find((candidate) => candidate.name === resolution.target.checkedOutBranch)
     if (!repo || !branch) {
       return { ok: false as const, reason: 'workspace.branch-workspace.member-branch-missing' }
     }
-    return { ok: true as const, target: { ...resolution.target, repo, branch } }
+    return {
+      ok: true as const,
+      target: { ...resolution.target, repo, branch },
+      ...(resolution.warning ? { warning: resolution.warning } : {}),
+    }
   }
   const getMemberPresentation = (member: BranchWorkspaceRepositorySnapshot): BranchWorkspaceMemberPresentation => {
     const candidate = workspace.candidates.find(
@@ -256,20 +261,21 @@ export function WorkspaceRepositoryRail({
       navigable: true,
       repositoryId: resolution.target.repositoryId,
       worktreePath: resolution.target.worktreePath,
+      ...(resolution.warning ? { warning: resolution.warning } : {}),
       actionTarget: { repo: resolution.target.repo, branch: resolution.target.branch },
     }
   }
   const openRepositoryMember = (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => {
     const resolution = resolveMemberTarget(member)
     if (!resolution.ok) return
-    selectBranch(resolution.target.repositoryId, member.targetBranch)
+    selectBranch(resolution.target.repositoryId, resolution.target.checkedOutBranch)
     onOpenFileArea?.()
     activateBranchWorkspace(workspaceRootId, item.id, member.repositoryName)
   }
   const openRepositoryMemberTerminal = (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => {
     const resolution = resolveMemberTarget(member)
     if (!resolution.ok) return
-    selectBranch(resolution.target.repositoryId, member.targetBranch)
+    selectBranch(resolution.target.repositoryId, resolution.target.checkedOutBranch)
     setDetailTab(resolution.target.repositoryId, 'terminal')
     onOpenDetailArea?.()
     activateBranchWorkspace(workspaceRootId, item.id, member.repositoryName)
@@ -380,10 +386,12 @@ export function WorkspaceRepositoryRail({
     mode: 'create' | 'extend' | 'reduce' | 'repair' | 'remove',
     item: BranchWorkspaceSnapshot | null,
     requestPlan = false,
+    reduceRepositoryName: string | null = null,
   ) => {
     branchActions.reset()
     setBranchDialogMode(mode)
     setDialogWorkspace(item)
+    setFixedReduceRepositoryName(reduceRepositoryName)
     setBranchDialogOpen(true)
     if (requestPlan && item) {
       void branchActions.requestPlan(
@@ -560,6 +568,9 @@ export function WorkspaceRepositoryRail({
                 }
                 onExtend={(item) => openBranchDialog('extend', item)}
                 onReduce={(item, resume = false) => openBranchDialog('reduce', item, resume)}
+                onReduceMember={(item, member) =>
+                  openBranchDialog('reduce', item, false, member.repositoryName)
+                }
                 onAddDependencies={(item) => openDependencyDialog('add', item)}
                 onRemoveDependencies={(item) => openDependencyDialog('remove', item)}
                 onRepair={(item) => openBranchDialog('repair', item, true)}
@@ -608,6 +619,7 @@ export function WorkspaceRepositoryRail({
         repositories={repositoryOptions}
         auxiliaryCandidates={auxiliaryCandidates}
         workspace={dialogWorkspace}
+        fixedReduceRepositoryName={fixedReduceRepositoryName}
         plan={branchActions.plan}
         result={branchActions.result}
         pending={branchActions.pending}
@@ -615,7 +627,10 @@ export function WorkspaceRepositoryRail({
         onRefreshAuxiliaryCandidates={branchQuery.refresh}
         onOpenChange={(open) => {
           setBranchDialogOpen(open)
-          if (!open && !branchActions.pending) branchActions.reset()
+          if (!open) {
+            setFixedReduceRepositoryName(null)
+            if (!branchActions.pending) branchActions.reset()
+          }
         }}
         onPreview={branchActions.requestPlan}
         onConfirm={branchActions.confirm}

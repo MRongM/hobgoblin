@@ -610,12 +610,14 @@ describe('branch workspace write service', () => {
     expect(events[0]).toBe('close-terminals')
     expect(removeWorktree.mock.calls.map(([repoId]) => repoId)).toEqual(['/workspace/api', '/workspace/web'])
     expect(removeWorktree.mock.calls[0]?.[1]).toMatchObject({
+      branch: 'release/previous',
       alsoDeleteBranch: false,
       alsoDeleteUpstream: false,
       forceRemoveWorktree: true,
       forceDeleteBranch: false,
     })
     expect(removeWorktree.mock.calls[1]?.[1]).toMatchObject({
+      branch: 'feature/auth',
       alsoDeleteBranch: false,
       alsoDeleteUpstream: false,
       forceRemoveWorktree: true,
@@ -706,7 +708,7 @@ describe('branch workspace write service', () => {
     expect(removeWorktree).toHaveBeenCalledWith(
       '/workspace/api',
       {
-        branch: 'feature/auth',
+        branch: 'release/previous',
         worktreePath: `${plan.path}/api`,
         alsoDeleteBranch: false,
         forceRemoveWorktree: true,
@@ -719,6 +721,40 @@ describe('branch workspace write service', () => {
     expect(source.manifests[0]?.operation).toBeUndefined()
     expect(deleteBranch).not.toHaveBeenCalled()
     expect(deleteRemoteBranch).not.toHaveBeenCalled()
+  })
+
+  test('removes an already-absent member from the manifest without invoking Git removal', async () => {
+    const plan = reducePlanned()
+    plan.repositories[0] = {
+      ...plan.repositories[0]!,
+      action: 'satisfied',
+      worktreePresent: false,
+      dirty: false,
+      satisfied: true,
+    }
+    plan.steps = []
+    plan.requiredApprovals = []
+    plan.terminalSessionIds = []
+    const source = inMemorySource([plan.manifest])
+    const removeWorktree = vi.fn()
+    const service = createBranchWorkspaceWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      readManifests: source.readManifests,
+      updateManifests: source.updateManifests,
+      removeWorktree,
+    })
+    await service.plan(ROOT, {
+      operation: 'reduce',
+      branchWorkspaceId: plan.branchWorkspaceId,
+      repositories: ['api'],
+    })
+
+    await expect(service.execute(ROOT, { planToken: plan.token, approvals: [] })).resolves.toEqual({
+      ok: true,
+      branchWorkspaceId: plan.branchWorkspaceId,
+    })
+    expect(removeWorktree).not.toHaveBeenCalled()
+    expect(source.manifests[0]?.repositories.map((member) => member.repositoryName)).toEqual(['web'])
   })
 
   test('persists partial reduction progress and retries only remaining members', async () => {
@@ -814,6 +850,7 @@ function removePlanned(): BranchWorkspacePlan {
   const plan = planned()
   const repositories = plan.repositories.map((repository, index) => ({
     ...repository,
+    ...(index === 0 ? { checkedOutBranch: 'release/previous' } : {}),
     branchOrigin: index === 0 ? ('created' as const) : ('pre-existing' as const),
     action: 'remove-worktree' as const,
     worktreePresent: true,
@@ -896,6 +933,7 @@ function reducePlanned(selectedNames: string[] = ['api']): BranchWorkspacePlan {
     .filter((repository) => selected.has(repository.repositoryName))
     .map((repository, index) => ({
       ...repository,
+      ...(index === 0 ? { checkedOutBranch: 'release/previous' } : {}),
       action: 'remove-worktree' as const,
       worktreePresent: true,
       dirty: index === 0,

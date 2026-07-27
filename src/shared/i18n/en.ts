@@ -122,6 +122,8 @@ export const en = {
   'workspace.branch-workspace.member-not-ready': 'This member worktree is not ready yet.',
   'workspace.branch-workspace.member-branch-missing': 'The member branch could not be found.',
   'workspace.branch-workspace.member-worktree-mismatch': 'The member worktree is checked out at a different path.',
+  'workspace.branch-workspace.member-branch-drift':
+    'This worktree has a different branch checked out than the branch workspace expects.',
   'workspace.branch-workspace.member-fallback':
     'The selected member worktree is unavailable. Showing the branch workspace overview instead.',
   'workspace.branch-workspace.deep-link-fallback':
@@ -313,6 +315,7 @@ export const en = {
   'workspace.branch-workspace.base-unavailable': 'A selected base branch is unavailable.',
   'workspace.branch-workspace.repository-unavailable': 'A selected workspace repository is unavailable.',
   'workspace.branch-workspace.member-required': 'At least one member worktree must remain.',
+  'workspace.branch-workspace.member-path-not-worktree': 'The member path is not a registered worktree.',
   'workspace.branch-workspace.invalid-entry': 'A selected additional entry is invalid.',
   'workspace.branch-workspace.invalid-root': 'The workspace root is invalid.',
   'workspace.branch-workspace.invalid-path': 'A branch workspace path is invalid.',

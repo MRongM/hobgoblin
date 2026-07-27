@@ -6,11 +6,12 @@ export interface BranchWorkspaceMemberTarget {
   repositoryId: string
   repositoryName: string
   targetBranch: string
+  checkedOutBranch: string
   worktreePath: string
 }
 
 export type BranchWorkspaceMemberResolution =
-  | { ok: true; target: BranchWorkspaceMemberTarget }
+  | { ok: true; target: BranchWorkspaceMemberTarget; warning?: string }
   | { ok: false; reason: string }
 
 interface ResolveBranchWorkspaceMemberTargetInput {
@@ -35,9 +36,29 @@ export function resolveBranchWorkspaceMemberTarget({
   if (!repository || repository.availability.phase !== 'available') {
     return { ok: false, reason: 'workspace.branch-workspace.member-unavailable' }
   }
-  if (!member.ready) {
-    return { ok: false, reason: 'workspace.branch-workspace.member-not-ready' }
+  const branchAtMemberPath = repository.data.branches.find(
+    (entry) => entry.worktree?.path === member.worktreePath,
+  )
+  if (branchAtMemberPath) {
+    const warning =
+      branchAtMemberPath.name !== member.targetBranch
+        ? 'workspace.branch-workspace.member-branch-drift'
+        : !member.ready
+          ? 'workspace.branch-workspace.member-not-ready'
+          : null
+    return {
+      ok: true,
+      target: {
+        repositoryId: candidate.id,
+        repositoryName: member.repositoryName,
+        targetBranch: member.targetBranch,
+        checkedOutBranch: branchAtMemberPath.name,
+        worktreePath: member.worktreePath,
+      },
+      ...(warning ? { warning } : {}),
+    }
   }
+  if (!member.ready) return { ok: false, reason: 'workspace.branch-workspace.member-not-ready' }
 
   const branch = repository.data.branches.find((entry) => entry.name === member.targetBranch)
   if (!branch?.worktree?.path) {
@@ -53,6 +74,7 @@ export function resolveBranchWorkspaceMemberTarget({
       repositoryId: candidate.id,
       repositoryName: member.repositoryName,
       targetBranch: member.targetBranch,
+      checkedOutBranch: member.targetBranch,
       worktreePath: member.worktreePath,
     },
   }

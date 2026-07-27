@@ -114,6 +114,7 @@ const branchWorkspaceState = vi.hoisted(() => ({
     open: boolean
     mode: string
     workspace: BranchWorkspaceSnapshot | null
+    fixedReduceRepositoryName?: string | null
   },
 }))
 
@@ -181,6 +182,7 @@ const branchWorkspaceListState = vi.hoisted(() => ({
       repositoryId?: string
       worktreePath?: string
       reason?: string
+      warning?: string
       actionTarget?: unknown
     }
     onOpenRepositoryMember?: (
@@ -197,6 +199,10 @@ const branchWorkspaceListState = vi.hoisted(() => ({
     onCancel?: (item: BranchWorkspaceSnapshot) => void | Promise<void>
     onExtend?: (item: BranchWorkspaceSnapshot) => void
     onReduce?: (item: BranchWorkspaceSnapshot, resume?: boolean) => void
+    onReduceMember?: (
+      item: BranchWorkspaceSnapshot,
+      member: BranchWorkspaceSnapshot['repositories'][number],
+    ) => void
     onAddDependencies?: (item: BranchWorkspaceSnapshot) => void
     onRemoveDependencies?: (item: BranchWorkspaceSnapshot) => void
   },
@@ -270,14 +276,16 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspaceDialog.tsx', () => ({
     open,
     mode,
     workspace,
+    fixedReduceRepositoryName,
     onRefreshAuxiliaryCandidates,
   }: {
     open: boolean
     mode: string
     workspace: BranchWorkspaceSnapshot | null
+    fixedReduceRepositoryName?: string | null
     onRefreshAuxiliaryCandidates?: () => Promise<unknown>
   }) => {
-    branchWorkspaceState.dialogProps = { open, mode, workspace }
+    branchWorkspaceState.dialogProps = { open, mode, workspace, fixedReduceRepositoryName }
     branchWorkspaceState.dialogRefresh = onRefreshAuxiliaryCandidates ?? null
     return null
   },
@@ -903,6 +911,32 @@ describe('WorkspaceRepositoryRail', () => {
     expect(useReposStore.getState().activeId).toBe(ROOT)
   })
 
+  test('uses the checked-out branch for a repairable drifted member', () => {
+    const state = useReposStore.getState()
+    const api = replaceRepo(state.repos[API]!, (repo) => {
+      repo.data.branches = [
+        ...repo.data.branches.filter((branch) => branch.name !== 'release/previous'),
+        createRepoBranch('release/previous', { worktree: { path: '/workspace/goblin-feature-auth/api' } }),
+      ]
+    })
+    useReposStore.setState({ repos: { ...state.repos, [API]: api } })
+    const item = branchWorkspaceState.items[0]!
+    const member = { ...item.repositories[0]!, ready: false }
+    renderRail({ currentRepoId: ROOT })
+
+    expect(branchWorkspaceListState.props?.getMemberPresentation?.(item, member)).toMatchObject({
+      navigable: true,
+      warning: 'workspace.branch-workspace.member-branch-drift',
+      actionTarget: {
+        repo: api,
+        branch: expect.objectContaining({ name: 'release/previous' }),
+      },
+    })
+
+    act(() => branchWorkspaceListState.props?.onOpenRepositoryMember?.(item, member))
+    expect(selectBranch).toHaveBeenCalledWith(API, 'release/previous')
+  })
+
   test('forwards branch workspace item file area toggles to the owning pane', () => {
     const onToggleFileArea = vi.fn()
     renderRail({ currentRepoId: ROOT, onToggleFileArea })
@@ -940,6 +974,14 @@ describe('WorkspaceRepositoryRail', () => {
 
     act(() => branchWorkspaceListState.props?.onReduce?.(item))
     expect(branchWorkspaceState.dialogProps).toMatchObject({ open: true, mode: 'reduce', workspace: item })
+
+    act(() => branchWorkspaceListState.props?.onReduceMember?.(item, item.repositories[0]!))
+    expect(branchWorkspaceState.dialogProps).toMatchObject({
+      open: true,
+      mode: 'reduce',
+      workspace: item,
+      fixedReduceRepositoryName: 'api',
+    })
 
     const interrupted: BranchWorkspaceSnapshot = {
       ...item,

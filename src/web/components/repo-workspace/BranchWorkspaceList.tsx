@@ -97,6 +97,7 @@ export interface BranchWorkspaceListProps {
   onRemove: (item: BranchWorkspaceSnapshot) => void
   onExtend?: (item: BranchWorkspaceSnapshot) => void
   onReduce?: (item: BranchWorkspaceSnapshot, resume?: boolean) => void
+  onReduceMember?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
   onAddDependencies?: (item: BranchWorkspaceSnapshot) => void
   onRemoveDependencies?: (item: BranchWorkspaceSnapshot) => void
   onCancel: (item: BranchWorkspaceSnapshot) => void | Promise<void>
@@ -129,6 +130,7 @@ export function BranchWorkspaceList({
   onRemove,
   onExtend,
   onReduce,
+  onReduceMember,
   onAddDependencies,
   onRemoveDependencies,
   onCancel,
@@ -195,6 +197,7 @@ export function BranchWorkspaceList({
               onRemove={onRemove}
               onExtend={onExtend}
               onReduce={onReduce}
+              onReduceMember={onReduceMember}
               onAddDependencies={onAddDependencies}
               onRemoveDependencies={onRemoveDependencies}
               onCancel={onCancel}
@@ -231,6 +234,7 @@ function BranchWorkspaceRow({
   onRemove,
   onExtend,
   onReduce,
+  onReduceMember,
   onAddDependencies,
   onRemoveDependencies,
   onCancel,
@@ -536,6 +540,15 @@ function BranchWorkspaceRow({
             }
             onOpenRepositoryMember={onOpenRepositoryMember}
             onOpenInternalTerminal={onOpenRepositoryMemberTerminal}
+            onRemoveMember={
+              isRepairableDrift(item) &&
+              !member.ready &&
+              member.progress !== 'removed' &&
+              item.repositories.length > 1 &&
+              onReduceMember
+                ? onReduceMember
+                : undefined
+            }
           />
         ))}
       </ul>

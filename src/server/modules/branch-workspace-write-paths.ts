@@ -220,18 +220,20 @@ export function createBranchWorkspaceWriteService(
             if (controller.signal.aborted) {
               return failOperation(plan.branchWorkspaceId, 'cancelled')
             }
-            const result = await removeWorktree(
-              repository.repoId,
-              {
-                branch: repository.targetBranch,
-                worktreePath: repository.worktreePath,
-                alsoDeleteBranch: false,
-                forceRemoveWorktree: repository.dirty === true,
-                forceDeleteBranch: false,
-                alsoDeleteUpstream: false,
-              },
-              controller.signal,
-            ).catch((error) => ({ ok: false, message: operationMessage(error) }))
+            const result = repository.satisfied
+              ? { ok: true, message: 'satisfied' }
+              : await removeWorktree(
+                  repository.repoId,
+                  {
+                    branch: repository.checkedOutBranch ?? repository.targetBranch,
+                    worktreePath: repository.worktreePath,
+                    alsoDeleteBranch: false,
+                    forceRemoveWorktree: repository.dirty === true,
+                    forceDeleteBranch: false,
+                    alsoDeleteUpstream: false,
+                  },
+                  controller.signal,
+                ).catch((error) => ({ ok: false, message: operationMessage(error) }))
             if (!result.ok) {
               await persistMemberProgress(
                 persistExecution,
@@ -285,7 +287,7 @@ export function createBranchWorkspaceWriteService(
                   result = await removeWorktree(
                     repository.repoId,
                     {
-                      branch: repository.targetBranch,
+                      branch: repository.checkedOutBranch ?? repository.targetBranch,
                       worktreePath: repository.worktreePath,
                       alsoDeleteBranch: false,
                       forceRemoveWorktree: true,

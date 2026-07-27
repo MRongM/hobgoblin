@@ -676,21 +676,32 @@ describe('BranchWorkspaceList', () => {
 
   test('keeps a non-navigable repository member disabled while retaining tmux cleanup', async () => {
     const member = repositoryMember({ ready: false })
+    const otherMember = repositoryMember({
+      repositoryName: 'web',
+      worktreePath: '/workspace/goblin-feature-auth/web',
+    })
+    const item = { ...workspace('needs-repair'), repositories: [member, otherMember] }
+    const onReduceMember = vi.fn()
     act(() =>
       root.render(
         withTerminalContexts(
           <BranchWorkspaceList
             rootId="/workspace"
-            items={[{ ...workspace('needs-repair'), repositories: [member] }]}
+            items={[item]}
             activeId="branch-1"
-            getMemberPresentation={() => ({
-              dirty: false,
-              changeCount: null,
-              navigable: false,
-              repositoryId: '/workspace/api',
-              worktreePath: member.worktreePath,
-            })}
+            getMemberPresentation={(_item, candidate) =>
+              candidate.repositoryName === member.repositoryName
+                ? {
+                    dirty: false,
+                    changeCount: null,
+                    navigable: false,
+                    repositoryId: '/workspace/api',
+                    worktreePath: member.worktreePath,
+                  }
+                : { dirty: false, changeCount: null, navigable: true }
+            }
             onOpenRepositoryMember={() => {}}
+            onReduceMember={onReduceMember}
             onActivate={() => {}}
             onReorder={() => {}}
             onInspect={() => {}}
@@ -710,10 +721,51 @@ describe('BranchWorkspaceList', () => {
       .querySelector('[data-testid="branch-workspace-member-api"]')
       ?.closest<HTMLElement>('[data-workspace-list-item]')
     if (!memberRow) throw new Error('missing unavailable member row')
+    const removeMemberItem = (await openMemberMenu(memberRow)).find(
+      (entry) => entry.textContent?.trim() === 'workspace.branch-workspace.remove-members',
+    )
+    expect(removeMemberItem?.hasAttribute('data-disabled')).toBe(false)
+    await act(async () => {
+      removeMemberItem?.click()
+      await Promise.resolve()
+    })
+    expect(onReduceMember).toHaveBeenCalledWith(item, member)
     const cleanupItem = (await openContextMenu(memberRow)).find(
       (entry) => entry.textContent?.trim() === 'tmux.cleanup.action',
     )
     expect(cleanupItem?.hasAttribute('data-disabled')).toBe(false)
+  })
+
+  test('does not expose member removal for the final member', async () => {
+    const member = repositoryMember({ ready: false })
+    act(() =>
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[{ ...workspace('needs-repair'), repositories: [member] }]}
+            activeId="branch-1"
+            getMemberPresentation={() => ({ dirty: false, changeCount: null, navigable: false })}
+            onReduceMember={() => {}}
+            onActivate={() => {}}
+            onReorder={() => {}}
+            onInspect={() => {}}
+            onRepair={() => {}}
+            onRemove={() => {}}
+            onCancel={() => {}}
+          />,
+        ),
+      ),
+    )
+
+    act(() => container.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.expand"]')?.click())
+    const memberRow = container
+      .querySelector('[data-testid="branch-workspace-member-api"]')
+      ?.closest<HTMLElement>('[data-workspace-list-item]')
+    if (!memberRow) throw new Error('missing unavailable member row')
+    expect((await openMemberMenu(memberRow)).map((entry) => entry.textContent?.trim())).not.toContain(
+      'workspace.branch-workspace.remove-members',
+    )
   })
 
   test.each([
@@ -983,6 +1035,16 @@ async function openMenuItems(row: Element | null): Promise<HTMLElement[]> {
 
 async function openMenuLabels(row: Element | null): Promise<string[]> {
   return (await openMenuItems(row)).map((entry) => entry.textContent?.trim() ?? '')
+}
+
+async function openMemberMenu(row: Element): Promise<HTMLElement[]> {
+  const trigger = row.querySelector<HTMLButtonElement>('[aria-label="action.menu"]')
+  if (!trigger) return []
+  await act(async () => {
+    trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+    await Promise.resolve()
+  })
+  return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
 }
 
 function withTerminalContexts(

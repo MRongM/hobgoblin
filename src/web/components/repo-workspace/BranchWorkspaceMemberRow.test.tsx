@@ -296,6 +296,42 @@ describe('BranchWorkspaceMemberRow', () => {
     expect(menuItems.every((entry) => entry.hasAttribute('data-disabled'))).toBe(true)
   })
 
+  test('keeps a drifted registered worktree actionable with a weak repair hint', async () => {
+    const item = workspace()
+    const member = { ...repositoryMember(), ready: false }
+    const branch = createRepoBranch('release/previous', { worktree: { path: member.worktreePath } })
+    const repo = emptyRepo('/workspace/api', 'api')
+    repo.data.branches = [branch]
+
+    render(
+      <BranchWorkspaceMemberRow
+        item={item}
+        member={member}
+        selected={false}
+        disabled={false}
+        presentation={{
+          dirty: false,
+          changeCount: null,
+          navigable: true,
+          warning: 'workspace.branch-workspace.member-branch-drift',
+          repositoryId: repo.id,
+          worktreePath: member.worktreePath,
+          actionTarget: { repo, branch },
+        }}
+        onOpenRepositoryMember={vi.fn()}
+        onOpenInternalTerminal={vi.fn()}
+      />,
+    )
+
+    expect(container.querySelector<HTMLButtonElement>('[data-testid="branch-workspace-member-api"]')?.disabled).toBe(
+      false,
+    )
+    const hint = container.querySelector('[data-testid="branch-workspace-member-repair-hint"]')
+    expect(hint?.textContent).toBe('workspace.branch-workspace.lifecycle.needs-repair')
+    expect(hint?.className).toContain('text-muted-foreground')
+    expect((await openMenu()).some((entry) => !entry.hasAttribute('data-disabled'))).toBe(true)
+  })
+
   test('reuses the member worktree target for scoped context actions', async () => {
     const item = workspace()
     const member = repositoryMember()

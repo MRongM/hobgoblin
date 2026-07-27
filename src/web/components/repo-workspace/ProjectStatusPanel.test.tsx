@@ -98,6 +98,16 @@ describe('ProjectStatusPanel', () => {
     expect(container?.textContent).toContain('develop')
     expect(container?.textContent).toContain('2026')
     const statusRows = container?.querySelector<HTMLElement>('[role="list"]')
+    const statusRowLabels = Array.from(statusRows?.querySelectorAll('[role="listitem"]') ?? [], (row) =>
+      row.children.item(1)?.textContent,
+    )
+    expect(statusRowLabels.slice(0, 5)).toEqual([
+      'branch-status.signal.folder',
+      'branch-status.signal.project',
+      'branch-status.signal.branch',
+      'branch-status.signal.created-from',
+      'branch-status.signal.worktree',
+    ])
     const statusToolbar = container?.querySelector<HTMLElement>('[data-testid="project-status-toolbar"]')
     expect(statusToolbar?.classList.contains('border-b')).toBe(false)
     expect(statusToolbar?.classList.contains('border-toolbar-border')).toBe(false)
@@ -132,6 +142,7 @@ describe('ProjectStatusPanel', () => {
         'branch-status.signal.folder: gbl-project-status-repo',
         'branch-status.signal.project: Status Project',
         'branch-status.signal.branch: feature/worktree',
+        'branch-status.signal.created-from: develop',
         `branch-status.signal.worktree: ${WORKTREE_PATH}`,
         'branch-status.signal.upstream: branches.no-upstream',
         'branch-status.signal.sync: branches.no-upstream',
@@ -139,7 +150,6 @@ describe('ProjectStatusPanel', () => {
         'branch-status.signal.commit-message: feat: expose commit metadata',
         'branch-status.signal.commit-author: Test Author',
         'branch-status.signal.commit-time: 2026-06-26T09:30:00.000Z',
-        'branch-status.signal.created-from: develop',
       ].join('\n'),
     )
   })

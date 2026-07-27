@@ -53,6 +53,7 @@ interface BranchWorkspaceDialogProps {
   repositories: BranchWorkspaceRepositoryOption[]
   auxiliaryCandidates: BranchWorkspaceAuxiliaryCandidate[]
   workspace: BranchWorkspaceSnapshot | null
+  fixedReduceRepositoryName?: string | null
   plan: BranchWorkspacePlan | null
   result: BranchWorkspaceExecuteResult | null
   pending: boolean
@@ -71,6 +72,7 @@ export function BranchWorkspaceDialog({
   repositories,
   auxiliaryCandidates,
   workspace,
+  fixedReduceRepositoryName = null,
   plan,
   result,
   pending,
@@ -117,7 +119,9 @@ export function BranchWorkspaceDialog({
       Object.fromEntries(
         initial.repositories.map((repository) => [
           repository.name,
-          mode === 'reduce' ? false : initial.fixedRepositories.has(repository.name),
+          mode === 'reduce'
+            ? repository.name === fixedReduceRepositoryName
+            : initial.fixedRepositories.has(repository.name),
         ]),
       ),
     )
@@ -142,7 +146,7 @@ export function BranchWorkspaceDialog({
     setAlsoDeleteBranch(mode === 'remove')
     setAlsoDeleteUpstream(false)
     setApprovals([])
-  }, [mode, open, workspace?.id])
+  }, [fixedReduceRepositoryName, mode, open, workspace?.id])
 
   useEffect(() => {
     if (!open) return
@@ -491,7 +495,7 @@ export function BranchWorkspaceDialog({
                     data-branch-workspace-reduce-member={member.repositoryName}
                     aria-label={t('workspace.branch-workspace.repository-named', { name: member.repositoryName })}
                     checked={selectedRepositories[member.repositoryName] === true}
-                    disabled={pending}
+                    disabled={pending || fixedReduceRepositoryName !== null}
                     onChange={(event) =>
                       setSelectedRepositories((current) => ({
                         ...current,

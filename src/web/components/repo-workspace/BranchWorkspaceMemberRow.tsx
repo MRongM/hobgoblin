@@ -13,6 +13,7 @@ import {
   SendHorizontal,
   Tag,
   Terminal,
+  Trash2,
   X,
 } from 'lucide-react'
 import type { BranchWorkspaceRepositorySnapshot, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
@@ -31,6 +32,7 @@ import {
   WorkspaceListItemActionDock,
   WorkspaceListItemFrame,
   WorkspaceListItemMenu,
+  type WorkspaceListItemAction,
 } from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
 import { projectWorktreeListItemActions } from '#/web/components/branch-list/worktree-list-item-actions.ts'
 import { useBranchActionItems, type BranchActionItemGroups } from '#/web/hooks/useBranchActionItems.tsx'
@@ -53,6 +55,7 @@ export interface BranchWorkspaceMemberPresentation {
   repositoryId?: string
   worktreePath?: string
   reason?: string
+  warning?: string
   actionTarget?: BranchWorkspaceMemberActionTarget
 }
 
@@ -64,6 +67,7 @@ interface BranchWorkspaceMemberRowProps {
   presentation: BranchWorkspaceMemberPresentation
   onOpenRepositoryMember?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
   onOpenInternalTerminal?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
+  onRemoveMember?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
 }
 
 export function BranchWorkspaceMemberRow(props: BranchWorkspaceMemberRowProps) {
@@ -109,6 +113,7 @@ function BranchWorkspaceMemberRowFrame({
   actions,
   onOpenRepositoryMember,
   onOpenInternalTerminal,
+  onRemoveMember,
 }: BranchWorkspaceMemberRowProps & { actions: BranchActionItemGroups }) {
   const t = useT()
   const terminalKey =
@@ -125,6 +130,7 @@ function BranchWorkspaceMemberRowFrame({
       : t('branch-status.worktree-dirty', { n: presentation.changeCount })
     : null
   const unavailableLabel = presentation.reason ? t(presentation.reason) : null
+  const warningLabel = presentation.warning ? t(presentation.warning) : null
   const commitHashTag = formatShortCommitHashTag(presentation.actionTarget?.branch.lastCommitHash ?? '')
   const forceDisabled = disabled || !presentation.navigable
   const tmuxCleanup = useAssociatedTmuxCleanup({
@@ -134,6 +140,16 @@ function BranchWorkspaceMemberRowFrame({
       disabled ||
       (presentation.actionTarget ? presentation.actionTarget.repo.operations.branchAction.phase !== 'idle' : false),
   })
+  const removeMemberAction: WorkspaceListItemAction | undefined = onRemoveMember
+    ? {
+        id: 'removeBranchWorkspaceMember',
+        label: t('workspace.branch-workspace.remove-members'),
+        icon: <Trash2 aria-hidden="true" />,
+        disabled,
+        destructive: true,
+        onSelect: () => onRemoveMember(item, member),
+      }
+    : undefined
   const actionProjection = projectWorktreeListItemActions(actions, {
     policy: 'branch-workspace-member',
     hasWorktree: true,
@@ -170,9 +186,9 @@ function BranchWorkspaceMemberRowFrame({
         'data-testid': `branch-workspace-member-${member.repositoryName}`,
         disabled: disabled || !presentation.navigable,
         'aria-current': selected ? 'page' : undefined,
-        'aria-label': [member.repositoryName, dirtyLabel, unavailableLabel].filter(Boolean).join('. '),
+        'aria-label': [member.repositoryName, dirtyLabel, warningLabel, unavailableLabel].filter(Boolean).join('. '),
         title: presentation.navigable
-          ? t('workspace.branch-workspace.member.open-worktree')
+          ? (warningLabel ?? t('workspace.branch-workspace.member.open-worktree'))
           : (unavailableLabel ?? undefined),
         className: presentation.navigable && !disabled ? undefined : 'cursor-default',
         onClick: () => onOpenRepositoryMember?.(item, member),
@@ -186,8 +202,12 @@ function BranchWorkspaceMemberRowFrame({
               label={t('action.menu')}
               groups={
                 tmuxCleanup.visible
-                  ? [...actionProjection.menuGroups, [tmuxCleanup.action]]
-                  : actionProjection.menuGroups
+                  ? [
+                      ...actionProjection.menuGroups,
+                      ...(removeMemberAction ? [[removeMemberAction]] : []),
+                      [tmuxCleanup.action],
+                    ]
+                  : [...actionProjection.menuGroups, ...(removeMemberAction ? [[removeMemberAction]] : [])]
               }
             />
           }
@@ -246,6 +266,15 @@ function BranchWorkspaceMemberRowFrame({
           </Badge>
         ) : null}
       </span>
+      {warningLabel ? (
+        <span
+          data-testid="branch-workspace-member-repair-hint"
+          title={warningLabel}
+          className="ml-auto shrink-0 text-[9px] text-muted-foreground"
+        >
+          {t('workspace.branch-workspace.lifecycle.needs-repair')}
+        </span>
+      ) : null}
       {hasTerminalBell ? <TerminalBellDot label={t('terminal.bell-unread')} /> : null}
     </WorkspaceListItemFrame>
   )

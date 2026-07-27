@@ -52,6 +52,7 @@ describe('resolveBranchWorkspaceMemberTarget', () => {
         repositoryId,
         repositoryName: 'api',
         targetBranch: 'feature/auth',
+        checkedOutBranch: 'feature/auth',
         worktreePath,
       },
     })
@@ -72,20 +73,37 @@ describe('resolveBranchWorkspaceMemberTarget', () => {
   })
 
   test('rejects a member whose observed worktree is not ready', () => {
-    expect(resolve(member({ ready: false }))).toEqual({
-      ok: false,
-      reason: 'workspace.branch-workspace.member-not-ready',
-    })
+    expect(
+      resolve(member({ ready: false }), { repo: repository({ path: '/workspace/other/api' }) }),
+    ).toEqual({ ok: false, reason: 'workspace.branch-workspace.member-not-ready' })
   })
 
   test('distinguishes a missing target branch from a mismatched worktree path', () => {
-    expect(resolve(member(), { repo: repository({ branch: 'main' }) })).toEqual({
+    expect(resolve(member(), { repo: repository({ branch: 'main', path: '/workspace/other/api' }) })).toEqual({
       ok: false,
       reason: 'workspace.branch-workspace.member-branch-missing',
     })
     expect(resolve(member(), { repo: repository({ path: '/workspace/other/api' }) })).toEqual({
       ok: false,
       reason: 'workspace.branch-workspace.member-worktree-mismatch',
+    })
+  })
+
+  test('uses the branch registered at the member path as a repairable drift target', () => {
+    expect(
+      resolve(member({ ready: false }), {
+        repo: repository({ branch: 'release/previous' }),
+      }),
+    ).toEqual({
+      ok: true,
+      warning: 'workspace.branch-workspace.member-branch-drift',
+      target: {
+        repositoryId,
+        repositoryName: 'api',
+        targetBranch: 'feature/auth',
+        checkedOutBranch: 'release/previous',
+        worktreePath,
+      },
     })
   })
 })
