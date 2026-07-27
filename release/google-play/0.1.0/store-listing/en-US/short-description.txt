@@ -1,0 +1,1 @@
+Manage SSH hosts, remote Git worktrees, and persistent terminals from Android.

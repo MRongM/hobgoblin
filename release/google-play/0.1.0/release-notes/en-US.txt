@@ -1,0 +1,1 @@
+Initial Android release: connect to your SSH hosts, inspect remote Git worktrees, keep terminal sessions organized, reconnect retained terminals, and manage SSH port forwards from your phone or tablet.

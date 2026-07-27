@@ -1,0 +1,28 @@
+Hobgoblin is an Android workspace for developers who need secure access to their own remote development machines.
+
+Connect directly to SSH hosts you control, keep remote Git projects and worktrees organized, and return to retained terminal sessions without losing their project context.
+
+Remote development at a glance
+
+• Save multiple SSH hosts and verify host-key fingerprints before trusting them.
+• Import an existing SSH private key or initialize access with a one-time server password.
+• Add remote Git repositories or plain workspaces by absolute path.
+• Inspect worktrees, branches, and recent commits on the selected host.
+
+Terminals that keep their context
+
+• Open native SSH terminals for a host, project, or worktree.
+• Create or reattach deterministic tmux-backed project terminals when tmux is available.
+• Keep terminal records organized, reconnect disconnected sessions, or close and delete them explicitly.
+• Use an ongoing Android notification while interactive terminal sessions remain active.
+
+Practical SSH tools
+
+• Save local SSH port forwards and choose device-only or LAN binding.
+• Run connection diagnostics before opening a project.
+• Optionally open a workspace session in the separately installed Termux app.
+• Choose terminal colors, text size, fit behavior, and extra keys for mobile input.
+
+Hobgoblin does not provide an SSH server, cloud account, hosted Git service, or remote machine. You need your own reachable SSH host, credentials, and remote project paths. Git is required for repository features; tmux and Termux integrations are optional.
+
+No ads. No analytics SDK. No Hobgoblin account.

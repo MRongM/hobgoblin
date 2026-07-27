@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Privacy policy for Hobgoblin Android by MRongM." />
+    <title>Hobgoblin Android Privacy Policy</title>
+    <link rel="stylesheet" href="privacy.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#policy">Skip to policy</a>
+    <div class="shell">
+      <header>
+        <div class="mark"><span class="prompt">&gt;_</span> Hobgoblin Android · MRongM</div>
+        <h1>Privacy policy</h1>
+        <p class="summary">Hobgoblin connects your Android device directly to SSH hosts you choose. MRongM does not operate a Hobgoblin account or application backend.</p>
+        <nav aria-label="Policy language">
+          <a href="./" aria-current="page">English</a>
+          <a href="zh-cn.html" lang="zh-Hans">简体中文</a>
+          <a href="ja.html" lang="ja">日本語</a>
+          <a href="ko.html" lang="ko">한국어</a>
+        </nav>
+      </header>
+      <main id="policy">
+        <p class="meta"><strong>Effective date:</strong> 2026-07-27 · <strong>Developer:</strong> MRongM</p>
+        <section><h2>1. Scope</h2><p>This policy applies to the Hobgoblin Android application published by MRongM. It does not control an SSH server, Git host, network provider, Android system service, or third-party application that you choose to use with Hobgoblin.</p></section>
+        <section><h2>2. Data MRongM does not collect</h2><p>Hobgoblin has no MRongM-operated application backend and includes no advertising, analytics, or crash-reporting SDK. MRongM does not receive app account data, telemetry, advertising identifiers, terminal contents, repository contents, SSH credentials, or device information from the app.</p></section>
+        <section><h2>3. Information stored on your device</h2><p>To provide features you request, Hobgoblin stores host aliases, host addresses, usernames, ports, remote paths, trusted host-key fingerprints, port-forward rules, display preferences, manual ordering, retained terminal metadata, and a bounded recent terminal-output snapshot in private app storage. Imported or generated SSH private keys are encrypted with AES-GCM using a key held by Android Keystore. A temporary server password used to install a public key is handled in memory for that attempt, cleared afterwards, and not saved by Hobgoblin.</p></section>
+        <section><h2>4. Direct SSH connections</h2><p>When you connect, commands, terminal input and output, repository metadata, remote paths, and related responses travel directly between your device and the SSH server you selected. SSH encrypts this traffic in transit. MRongM is not an intermediary and cannot read or retrieve it. The server owner and network provider may process data under their own policies.</p></section>
+        <section><h2>5. Termux and clipboard</h2><p>Termux integration is optional and only runs after your explicit action. When direct Termux command access is available, Hobgoblin may send an SSH command and the selected private-key material to the separately installed Termux app so it can start that session. If you choose Copy command, the SSH command is placed on the Android clipboard. Termux and other clipboard readers are governed by their own behavior and policies.</p></section>
+        <section><h2>6. Notifications</h2><p>While an interactive SSH terminal remains active, Hobgoblin uses an ongoing Android notification. It may show a terminal label and connection state. Visibility on the lock screen is controlled by your device notification settings.</p></section>
+        <section><h2>7. Sharing</h2><p>MRongM does not sell or share data received from the app because MRongM does not receive such data. Data reaches a user-selected SSH server, Termux, or the clipboard only as described above and only to perform an action you initiate. Information may also be disclosed if MRongM is legally required to respond to a valid request, but MRongM cannot disclose app data it does not possess.</p></section>
+        <section><h2>8. Retention and deletion</h2><p>Local records remain until you delete them with available in-app controls, clear Hobgoblin storage in Android settings, or uninstall the app. Clearing storage or uninstalling removes Hobgoblin's remaining local application data. Ending or deleting a Hobgoblin record does not delete files, Git repositories, shell history, authorized keys, or tmux sessions on your SSH server unless the app explicitly previews and you approve that separate remote operation. MRongM keeps no server-side Hobgoblin account data and therefore has no server-side user record to delete.</p></section>
+        <section><h2>9. Security</h2><p>Hobgoblin uses Android private app storage, Android Keystore-backed encryption for stored private keys, SSH transport encryption, and explicit host-key trust. No system can guarantee absolute security. You are responsible for securing your device, SSH server, credentials, Termux installation, and network.</p></section>
+        <section><h2>10. Children</h2><p>Hobgoblin is a professional development tool intended for adults aged 18 and over. It is not designed for children and MRongM does not knowingly collect personal information from children through the app.</p></section>
+        <section><h2>11. International use</h2><p>Your device and chosen SSH server may be in different countries. You are responsible for ensuring that your use of SSH, cryptography, repositories, and remote systems complies with laws and organizational rules that apply to you.</p></section>
+        <section><h2>12. Changes</h2><p>This policy may be updated when Hobgoblin's behavior or legal obligations change. The effective date above will be revised, and material changes will be reflected on this page and in the app or store listing when required.</p></section>
+        <section><h2>13. Contact</h2><p>For privacy questions, contact MRongM at <a href="mailto:jiangisright@gmail.com">jiangisright@gmail.com</a>.</p></section>
+      </main>
+      <footer>Hobgoblin Android privacy policy · MRongM</footer>
+    </div>
+  </body>
+</html>
