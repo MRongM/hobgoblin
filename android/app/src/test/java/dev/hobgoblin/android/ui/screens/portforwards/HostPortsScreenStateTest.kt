@@ -1,5 +1,6 @@
 package dev.hobgoblin.android.ui.screens.portforwards
 
+import dev.hobgoblin.android.R
 import dev.hobgoblin.android.domain.ssh.HostPortForwardBindAddress
 import dev.hobgoblin.android.domain.ssh.HostPortForwardRule
 import dev.hobgoblin.android.ssh.HostPortForwardStatus
@@ -46,14 +47,19 @@ class HostPortsScreenStateTest {
             editingRuleId = null,
         )
 
-        assertEquals(PortForwardDraftValidation.Invalid("Local port 127.0.0.1:8080 is already saved for this host"), result)
+        assertEquals(
+            PortForwardDraftValidation.Invalid(
+                PortForwardDraftError.DuplicateLocalEndpoint("127.0.0.1", 8080),
+            ),
+            result,
+        )
     }
 
     @Test
     fun `status label maps runtime states`() {
-        assertEquals("Stopped", portForwardStatusLabel(HostPortForwardStatus.Stopped))
-        assertEquals("Starting", portForwardStatusLabel(HostPortForwardStatus.Starting))
-        assertEquals("Running", portForwardStatusLabel(HostPortForwardStatus.Running(1L)))
-        assertEquals("Failed: denied", portForwardStatusLabel(HostPortForwardStatus.Failed("denied")))
+        assertEquals(R.string.ports_status_stopped, portForwardStatusLabelResource(HostPortForwardStatus.Stopped))
+        assertEquals(R.string.ports_status_starting, portForwardStatusLabelResource(HostPortForwardStatus.Starting))
+        assertEquals(R.string.ports_status_running, portForwardStatusLabelResource(HostPortForwardStatus.Running(1L)))
+        assertEquals(R.string.ports_status_failed, portForwardStatusLabelResource(HostPortForwardStatus.Failed("denied")))
     }
 }

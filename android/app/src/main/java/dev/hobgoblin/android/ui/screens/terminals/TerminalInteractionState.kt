@@ -1,17 +1,13 @@
 package dev.hobgoblin.android.ui.screens.terminals
 
 import android.view.KeyEvent
+import dev.hobgoblin.android.R
 import dev.hobgoblin.android.terminals.TerminalDisconnectedReason
 import dev.hobgoblin.android.terminals.TerminalSessionRecord
 import dev.hobgoblin.android.terminals.TerminalSessionState
 import dev.hobgoblin.android.terminals.TerminalSessionStatus
+import dev.hobgoblin.android.ui.text.LocalizedText
 import java.net.URI
-
-internal const val TerminalDisconnectedMessage = "Terminal disconnected. Reconnect or edit the host."
-
-internal const val TerminalBackKeepsSessionHint = "Back leaves the session running in the background."
-
-internal const val TerminalBackClosesSessionHint = "Back stops this temporary terminal."
 
 internal const val TerminalQuickConfirmInput = "YES"
 internal const val TerminalQuickCancelInput = "NO"
@@ -101,19 +97,19 @@ internal val TerminalHobgoblinPrimaryActions = listOf(
     TerminalHobgoblinAction.Paste,
 )
 
-internal fun terminalHobgoblinActionLabel(action: TerminalHobgoblinAction): String = when (action) {
-    TerminalHobgoblinAction.Reconnect -> "Reconnect"
-    TerminalHobgoblinAction.Enter -> "ENTER"
-    TerminalHobgoblinAction.Backspace -> "⌫"
-    TerminalHobgoblinAction.ControlC -> "CTRL+C"
-    TerminalHobgoblinAction.ControlL -> "CTRL+L"
-    TerminalHobgoblinAction.Paste -> "Paste"
+internal fun terminalHobgoblinActionText(action: TerminalHobgoblinAction): LocalizedText = when (action) {
+    TerminalHobgoblinAction.Reconnect -> LocalizedText(R.string.terminal_action_reconnect)
+    TerminalHobgoblinAction.Enter -> LocalizedText(R.string.common_value, listOf("ENTER"))
+    TerminalHobgoblinAction.Backspace -> LocalizedText(R.string.common_value, listOf("⌫"))
+    TerminalHobgoblinAction.ControlC -> LocalizedText(R.string.common_value, listOf("CTRL+C"))
+    TerminalHobgoblinAction.ControlL -> LocalizedText(R.string.common_value, listOf("CTRL+L"))
+    TerminalHobgoblinAction.Paste -> LocalizedText(R.string.terminal_action_paste)
 }
 
 internal fun terminalChromeVisible(focusMode: Boolean): Boolean = !focusMode
 
-internal fun terminalFocusActionLabel(focusMode: Boolean): String =
-    if (focusMode) "Exit focus" else "Focus"
+internal fun terminalFocusActionText(focusMode: Boolean): LocalizedText =
+    LocalizedText(if (focusMode) R.string.terminal_exit_focus else R.string.terminal_focus)
 
 internal fun terminalFocusExitHandleVisible(focusMode: Boolean): Boolean = focusMode
 
@@ -270,17 +266,17 @@ internal fun terminalInputAvailable(state: TerminalSessionState): Boolean =
 internal fun terminalCommandInputEnabled(state: TerminalSessionState): Boolean =
     terminalInputAvailable(state)
 
-internal fun terminalCommandInputPlaceholder(state: TerminalSessionState): String =
+internal fun terminalCommandInputPlaceholderText(state: TerminalSessionState): LocalizedText =
     if (terminalCommandInputEnabled(state)) {
-        "Type a command"
+        LocalizedText(R.string.terminal_type_command)
     } else {
-        terminalInputUnavailableMessage(state) ?: "Terminal is not connected."
+        terminalInputUnavailableText(state) ?: LocalizedText(R.string.terminal_not_connected)
     }
 
 internal const val TerminalCommandInputDefaultVisible = false
 
-internal fun terminalCommandInputVisibilityActionLabel(visible: Boolean): String =
-    if (visible) "Hide command input" else "Show command input"
+internal fun terminalCommandInputVisibilityActionText(visible: Boolean): LocalizedText =
+    LocalizedText(if (visible) R.string.terminal_hide_command_input else R.string.terminal_show_command_input)
 
 internal fun terminalReconnectAvailable(state: TerminalSessionState): Boolean = when (state) {
     TerminalSessionState.Idle,
@@ -315,17 +311,17 @@ internal fun terminalDetailInlineActions(state: TerminalSessionState): TerminalD
         closeEnabled = true,
     )
 
-internal fun terminalCloseConfirmationText(targetLabel: String): String =
-    "This will stop $targetLabel and return to the previous screen. You can reconnect it later from the terminal list."
+internal fun terminalCloseConfirmationText(targetLabel: String): LocalizedText =
+    LocalizedText(R.string.terminal_close_confirmation, listOf(targetLabel))
 
-internal fun terminalInputUnavailableMessage(state: TerminalSessionState): String? = when (state) {
-    TerminalSessionState.Idle -> "Terminal is not connected."
-    TerminalSessionState.Connecting -> "Connecting to terminal..."
+internal fun terminalInputUnavailableText(state: TerminalSessionState): LocalizedText? = when (state) {
+    TerminalSessionState.Idle -> LocalizedText(R.string.terminal_not_connected)
+    TerminalSessionState.Connecting -> LocalizedText(R.string.terminal_connecting_message)
     is TerminalSessionState.Connected -> null
-    is TerminalSessionState.Resizing -> "Terminal is resizing..."
-    is TerminalSessionState.Exited -> TerminalDisconnectedMessage
-    is TerminalSessionState.Failed -> TerminalDisconnectedMessage
-    is TerminalSessionState.Disconnected -> terminalDisconnectedMessage(state.reason, state.message)
+    is TerminalSessionState.Resizing -> LocalizedText(R.string.terminal_resizing_message)
+    is TerminalSessionState.Exited -> LocalizedText(R.string.terminal_disconnected_general)
+    is TerminalSessionState.Failed -> LocalizedText(R.string.terminal_disconnected_general)
+    is TerminalSessionState.Disconnected -> terminalDisconnectedText(state.reason, state.message)
 }
 
 internal fun terminalLineInput(value: String): String = "$value\r"
@@ -395,59 +391,86 @@ internal fun terminalViewportText(state: TerminalSessionState): String = when (s
 internal fun terminalFallbackVisible(hasEmulatorController: Boolean): Boolean =
     !hasEmulatorController
 
-internal fun terminalSessionBannerMessage(state: TerminalSessionState): String? = when (state) {
-    TerminalSessionState.Connecting -> "Connecting..."
-    is TerminalSessionState.Resizing -> "Resizing..."
-    is TerminalSessionState.Failed -> "$TerminalDisconnectedMessage\n${state.message}"
-    is TerminalSessionState.Exited -> "Terminal exited: ${terminalReasonLabel(state.reason)}"
-    is TerminalSessionState.Disconnected -> terminalDisconnectedMessage(state.reason, state.message)
+internal fun terminalSessionBannerText(state: TerminalSessionState): LocalizedText? = when (state) {
+    TerminalSessionState.Connecting -> LocalizedText(R.string.terminal_banner_connecting)
+    is TerminalSessionState.Resizing -> LocalizedText(R.string.terminal_banner_resizing)
+    is TerminalSessionState.Failed -> LocalizedText(
+        R.string.terminal_failed_with_message,
+        listOf(LocalizedText(R.string.terminal_disconnected_general), state.message),
+    )
+    is TerminalSessionState.Exited -> LocalizedText(
+        R.string.terminal_exited_with_reason,
+        listOf(terminalReasonText(state.reason)),
+    )
+    is TerminalSessionState.Disconnected -> terminalDisconnectedText(state.reason, state.message)
     TerminalSessionState.Idle,
     is TerminalSessionState.Connected,
     -> null
 }
 
-internal fun terminalViewportBannerMessage(state: TerminalSessionState, notice: String? = null): String? {
+internal fun terminalViewportBannerMessage(sessionBanner: String?, notice: String? = null): String? {
     val cleanedNotice = notice?.trim()?.takeIf { it.isNotEmpty() }
-    val sessionBanner = terminalSessionBannerMessage(state)
     return listOfNotNull(cleanedNotice, sessionBanner)
         .distinct()
         .joinToString("\n")
         .takeIf { it.isNotEmpty() }
 }
 
-internal fun terminalSessionStatusLabel(state: TerminalSessionState): String = when (state) {
-    TerminalSessionState.Idle -> "idle"
-    TerminalSessionState.Connecting -> "connecting"
-    is TerminalSessionState.Connected -> "connected"
-    is TerminalSessionState.Resizing -> "resizing"
-    is TerminalSessionState.Exited -> "exited: ${terminalReasonLabel(state.reason)}"
-    is TerminalSessionState.Failed -> "failed: ${terminalReasonLabel(state.reason)}"
-    is TerminalSessionState.Disconnected -> "disconnected: ${terminalReasonWithDetail(state.reason, state.message)}"
+internal fun terminalSessionStatusText(state: TerminalSessionState): LocalizedText = when (state) {
+    TerminalSessionState.Idle -> LocalizedText(R.string.terminal_status_idle)
+    TerminalSessionState.Connecting -> LocalizedText(R.string.terminal_status_connecting)
+    is TerminalSessionState.Connected -> LocalizedText(R.string.terminal_status_connected)
+    is TerminalSessionState.Resizing -> LocalizedText(R.string.terminal_status_resizing)
+    is TerminalSessionState.Exited -> LocalizedText(
+        R.string.terminal_status_with_detail,
+        listOf(LocalizedText(R.string.terminal_status_exited), terminalReasonText(state.reason)),
+    )
+    is TerminalSessionState.Failed -> LocalizedText(
+        R.string.terminal_status_with_detail,
+        listOf(LocalizedText(R.string.terminal_status_failed), terminalReasonText(state.reason)),
+    )
+    is TerminalSessionState.Disconnected -> LocalizedText(
+        R.string.terminal_status_with_detail,
+        listOf(LocalizedText(R.string.terminal_status_disconnected), terminalReasonWithDetailText(state.reason, state.message)),
+    )
 }
 
-internal fun terminalDisplayText(state: TerminalSessionState): String {
+internal fun terminalDisplayText(state: TerminalSessionState, sessionBanner: String?): String {
     val viewport = terminalViewportText(state)
-    val banner = terminalSessionBannerMessage(state) ?: return viewport
+    val banner = sessionBanner ?: return viewport
     return if (viewport.isBlank()) banner else "$viewport\n$banner"
 }
 
-private fun terminalDisconnectedMessage(reason: TerminalDisconnectedReason, detail: String? = null): String =
-    "Terminal disconnected: ${terminalReasonWithDetail(reason, detail)}. Reconnect or edit the host."
+private fun terminalDisconnectedText(
+    reason: TerminalDisconnectedReason,
+    detail: String? = null,
+): LocalizedText = LocalizedText(
+    R.string.terminal_disconnected_detail,
+    listOf(terminalReasonWithDetailText(reason, detail)),
+)
 
-private fun terminalReasonWithDetail(reason: TerminalDisconnectedReason, detail: String? = null): String {
+private fun terminalReasonWithDetailText(
+    reason: TerminalDisconnectedReason,
+    detail: String? = null,
+): LocalizedText {
     val cleanDetail = detail
         ?.trim()
         ?.takeIf { it.isNotBlank() && it != "disconnected" }
-    return listOfNotNull(terminalReasonLabel(reason), cleanDetail).joinToString(" - ")
+    val reasonText = terminalReasonText(reason)
+    return if (cleanDetail == null) {
+        reasonText
+    } else {
+        LocalizedText(R.string.terminal_status_with_detail, listOf(reasonText, cleanDetail))
+    }
 }
 
-private fun terminalReasonLabel(reason: TerminalDisconnectedReason): String = when (reason) {
-    TerminalDisconnectedReason.UserClosed -> "User closed"
-    TerminalDisconnectedReason.RemoteExited -> "Remote exited"
-    TerminalDisconnectedReason.SshDisconnected -> "SSH disconnected"
-    TerminalDisconnectedReason.AndroidServiceStopped -> "Android service stopped"
-    TerminalDisconnectedReason.TerminalWriteTimeout -> "Terminal write timeout"
-    TerminalDisconnectedReason.TerminalFailure -> "Terminal failure"
+private fun terminalReasonText(reason: TerminalDisconnectedReason): LocalizedText = when (reason) {
+    TerminalDisconnectedReason.UserClosed -> LocalizedText(R.string.terminal_reason_user_closed)
+    TerminalDisconnectedReason.RemoteExited -> LocalizedText(R.string.terminal_reason_remote_exited)
+    TerminalDisconnectedReason.SshDisconnected -> LocalizedText(R.string.terminal_reason_ssh_disconnected)
+    TerminalDisconnectedReason.AndroidServiceStopped -> LocalizedText(R.string.terminal_reason_android_service_stopped)
+    TerminalDisconnectedReason.TerminalWriteTimeout -> LocalizedText(R.string.terminal_reason_write_timeout)
+    TerminalDisconnectedReason.TerminalFailure -> LocalizedText(R.string.terminal_reason_failure)
 }
 
 internal fun terminalTargetLabel(repositoryTitle: String?, remotePath: String): String {

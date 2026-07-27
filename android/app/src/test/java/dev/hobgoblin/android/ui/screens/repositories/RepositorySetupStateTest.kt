@@ -1,5 +1,6 @@
 package dev.hobgoblin.android.ui.screens.repositories
 
+import dev.hobgoblin.android.R
 import dev.hobgoblin.android.tmuxRecoveryCandidates
 import dev.hobgoblin.android.domain.ResourceState
 import dev.hobgoblin.android.domain.ssh.RemoteDirectoryEntry
@@ -20,7 +21,9 @@ import dev.hobgoblin.android.terminals.TmuxSessionIdentity
 import dev.hobgoblin.android.terminals.TmuxSessionProtocol
 import dev.hobgoblin.android.termux.ExternalTermuxLaunchResult
 import dev.hobgoblin.android.ssh.WorktreeCreationSource
-import dev.hobgoblin.android.ui.screens.placeholders.localTerminalPlaceholderText
+import dev.hobgoblin.android.ssh.WorktreeRemovalBlockReason
+import dev.hobgoblin.android.ui.screens.placeholders.localTerminalPlaceholderTextResource
+import dev.hobgoblin.android.ui.text.LocalizedText
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -186,8 +189,8 @@ class RepositorySetupStateTest {
 
     @Test
     fun `tmux scan action exposes stable ready and pending labels`() {
-        assertEquals("Scan tmux", tmuxScanButtonLabel(isScanning = false))
-        assertEquals("Scanning...", tmuxScanButtonLabel(isScanning = true))
+        assertEquals(LocalizedText(R.string.repository_tmux_scan), tmuxScanButtonText(isScanning = false))
+        assertEquals(LocalizedText(R.string.repository_tmux_scanning), tmuxScanButtonText(isScanning = true))
     }
 
     @Test
@@ -201,12 +204,12 @@ class RepositorySetupStateTest {
     @Test
     fun `tmux scan result explains empty same-user requirement and successful count`() {
         assertEquals(
-            "No tmux sessions found for SSH user dev. Use the same SSH user that created the tmux session.",
-            tmuxScanResultMessage(foundCount = 0, sshUser = "dev"),
+            LocalizedText(R.string.repository_tmux_none, listOf("dev")),
+            tmuxScanResultText(foundCount = 0, sshUser = "dev"),
         )
         assertEquals(
-            "Found 2 tmux sessions for SSH user dev.",
-            tmuxScanResultMessage(foundCount = 2, sshUser = "dev"),
+            LocalizedText(R.string.repository_tmux_found_many, listOf(2, "dev")),
+            tmuxScanResultText(foundCount = 2, sshUser = "dev"),
         )
     }
 
@@ -288,10 +291,7 @@ class RepositorySetupStateTest {
 
     @Test
     fun `local terminal placeholder makes v1 scope explicit`() {
-        assertEquals(
-            "Android-local terminal and local Git are deferred from v1; use SSH terminals for emergency work.",
-            localTerminalPlaceholderText(),
-        )
+        assertEquals(R.string.placeholder_local_terminal_deferred, localTerminalPlaceholderTextResource())
     }
 
     @Test
@@ -378,28 +378,43 @@ class RepositorySetupStateTest {
     fun `terminal workspace labels are stable and lowercase`() {
         assertEquals("terminal-1", terminalSessionDefaultLabel(index = 0))
         assertEquals("terminal-2", terminalSessionDefaultLabel(index = 1))
-        assertEquals("starting", terminalSessionStatusLabel(terminalSession(status = TerminalSessionStatus.Starting)))
-        assertEquals("running", terminalSessionStatusLabel(terminalSession(status = TerminalSessionStatus.Running)))
-        assertEquals("exited", terminalSessionStatusLabel(terminalSession(status = TerminalSessionStatus.Exited)))
-        assertEquals("failed", terminalSessionStatusLabel(terminalSession(status = TerminalSessionStatus.Failed)))
         assertEquals(
-            "disconnected",
-            terminalSessionStatusLabel(terminalSession(status = TerminalSessionStatus.Disconnected)),
+            LocalizedText(R.string.terminal_status_starting),
+            terminalSessionStatusText(terminalSession(status = TerminalSessionStatus.Starting)),
+        )
+        assertEquals(
+            LocalizedText(R.string.terminal_status_running),
+            terminalSessionStatusText(terminalSession(status = TerminalSessionStatus.Running)),
+        )
+        assertEquals(
+            LocalizedText(R.string.terminal_status_exited),
+            terminalSessionStatusText(terminalSession(status = TerminalSessionStatus.Exited)),
+        )
+        assertEquals(
+            LocalizedText(R.string.terminal_status_failed),
+            terminalSessionStatusText(terminalSession(status = TerminalSessionStatus.Failed)),
+        )
+        assertEquals(
+            LocalizedText(R.string.terminal_status_disconnected),
+            terminalSessionStatusText(terminalSession(status = TerminalSessionStatus.Disconnected)),
         )
     }
 
     @Test
     fun `terminal workspace count label handles singular and plural`() {
-        assertEquals("0 terminals", terminalWorkspaceCountLabel(0))
-        assertEquals("1 terminal", terminalWorkspaceCountLabel(1))
-        assertEquals("2 terminals", terminalWorkspaceCountLabel(2))
+        assertEquals(LocalizedText(R.string.terminal_count_zero), terminalWorkspaceCountText(0))
+        assertEquals(LocalizedText(R.string.terminal_count_one), terminalWorkspaceCountText(1))
+        assertEquals(LocalizedText(R.string.terminal_count_many, listOf(2)), terminalWorkspaceCountText(2))
     }
 
     @Test
     fun `terminal workspace status exposes foreground ownership`() {
         assertEquals(
-            "running - foreground",
-            terminalSessionStatusLabel(
+            LocalizedText(
+                R.string.terminal_status_foreground,
+                listOf(LocalizedText(R.string.terminal_status_running)),
+            ),
+            terminalSessionStatusText(
                 terminalSession(
                     status = TerminalSessionStatus.Running,
                     foregroundServiceOwned = true,
@@ -411,8 +426,11 @@ class RepositorySetupStateTest {
     @Test
     fun `terminal modes expose remote ssh and external termux`() {
         assertEquals(
-            listOf("Remote SSH", "External Termux"),
-            repositoryTerminalModes().map { it.label },
+            listOf(
+                LocalizedText(R.string.repository_terminal_mode_remote_ssh),
+                LocalizedText(R.string.repository_terminal_mode_external_termux),
+            ),
+            repositoryTerminalModes().map(::repositoryTerminalModeText),
         )
     }
 
@@ -426,29 +444,32 @@ class RepositorySetupStateTest {
 
     @Test
     fun `external termux launch results map to stable status labels`() {
-        assertEquals("ready", externalTermuxStatusLabel(ExternalTermuxStatus.Ready))
-        assertEquals("command copied", externalTermuxStatusLabel(ExternalTermuxStatus.CommandCopied))
+        assertEquals(LocalizedText(R.string.repository_termux_ready), externalTermuxStatusText(ExternalTermuxStatus.Ready))
         assertEquals(
-            "opened in Termux",
-            externalTermuxStatusLabel(
+            LocalizedText(R.string.repository_termux_command_copied),
+            externalTermuxStatusText(ExternalTermuxStatus.CommandCopied),
+        )
+        assertEquals(
+            LocalizedText(R.string.repository_termux_opened),
+            externalTermuxStatusText(
                 externalTermuxStatusAfterLaunch(ExternalTermuxLaunchResult.Launched),
             ),
         )
         assertEquals(
-            "Termux not installed",
-            externalTermuxStatusLabel(
+            LocalizedText(R.string.repository_termux_not_installed),
+            externalTermuxStatusText(
                 externalTermuxStatusAfterLaunch(ExternalTermuxLaunchResult.Unavailable(copiedCommand = true)),
             ),
         )
         assertEquals(
-            "Termux command API unavailable",
-            externalTermuxStatusLabel(
+            LocalizedText(R.string.repository_termux_api_unavailable),
+            externalTermuxStatusText(
                 externalTermuxStatusAfterLaunch(ExternalTermuxLaunchResult.CopiedFallback(openedTermux = true)),
             ),
         )
         assertEquals(
-            "failed",
-            externalTermuxStatusLabel(
+            LocalizedText(R.string.repository_termux_failed),
+            externalTermuxStatusText(
                 externalTermuxStatusAfterLaunch(
                     ExternalTermuxLaunchResult.Failed(
                         copiedCommand = false,
@@ -474,8 +495,14 @@ class RepositorySetupStateTest {
     @Test
     fun `terminal workspace status includes inactive reason labels`() {
         assertEquals(
-            "disconnected - android service stopped",
-            terminalSessionStatusLabel(
+            LocalizedText(
+                R.string.terminal_status_with_detail,
+                listOf(
+                    LocalizedText(R.string.terminal_status_disconnected),
+                    LocalizedText(R.string.terminal_reason_android_service_stopped),
+                ),
+            ),
+            terminalSessionStatusText(
                 terminalSession(
                     status = TerminalSessionStatus.Disconnected,
                     disconnectedReason = TerminalDisconnectedReason.AndroidServiceStopped,
@@ -483,8 +510,14 @@ class RepositorySetupStateTest {
             ),
         )
         assertEquals(
-            "exited - remote exited",
-            terminalSessionStatusLabel(
+            LocalizedText(
+                R.string.terminal_status_with_detail,
+                listOf(
+                    LocalizedText(R.string.terminal_status_exited),
+                    LocalizedText(R.string.terminal_reason_remote_exited),
+                ),
+            ),
+            terminalSessionStatusText(
                 terminalSession(
                     status = TerminalSessionStatus.Exited,
                     disconnectedReason = TerminalDisconnectedReason.RemoteExited,
@@ -492,8 +525,14 @@ class RepositorySetupStateTest {
             ),
         )
         assertEquals(
-            "failed - terminal failure",
-            terminalSessionStatusLabel(
+            LocalizedText(
+                R.string.terminal_status_with_detail,
+                listOf(
+                    LocalizedText(R.string.terminal_status_failed),
+                    LocalizedText(R.string.terminal_reason_failure),
+                ),
+            ),
+            terminalSessionStatusText(
                 terminalSession(
                     status = TerminalSessionStatus.Failed,
                     disconnectedReason = TerminalDisconnectedReason.TerminalFailure,
@@ -513,12 +552,12 @@ class RepositorySetupStateTest {
         assertEquals(
             listOf(
                 RepositoryTerminalCreationAction(
-                    label = "New terminal",
+                    label = LocalizedText(R.string.repository_new_terminal),
                     launchMode = TerminalLaunchMode.Native,
                     primary = true,
                 ),
                 RepositoryTerminalCreationAction(
-                    label = "New terminal with tmux",
+                    label = LocalizedText(R.string.repository_new_tmux_terminal),
                     launchMode = TerminalLaunchMode.TmuxIfAvailable,
                     primary = false,
                 ),
@@ -541,9 +580,7 @@ class RepositorySetupStateTest {
 
         assertFalse(canCloseTerminalTmuxSession(plain))
         assertTrue(canCloseTerminalTmuxSession(tmux))
-        assertTrue(terminalTmuxCloseWarning().contains("running processes"))
-        assertTrue(terminalTmuxCloseWarning().contains("other clients"))
-        assertFalse(terminalTmuxCloseWarning().contains(tmux.tmuxIdentity!!.sessionName))
+        assertEquals(LocalizedText(R.string.repository_tmux_close_warning), terminalTmuxCloseWarningText())
     }
 
     @Test
@@ -557,10 +594,8 @@ class RepositorySetupStateTest {
     fun `terminal delete confirmation text names terminal and worktree path`() {
         val text = terminalDeleteConfirmationText("Terminal 2", terminalSession(remotePath = "/srv/app-feature"))
 
-        assertTrue(text.contains("Terminal 2"))
-        assertTrue(text.contains("/srv/app-feature"))
-        assertTrue(text.contains("stop"))
-        assertTrue(text.contains("remove"))
+        assertEquals(R.string.repository_terminal_delete_active, text.resourceId)
+        assertEquals(listOf("Terminal 2", "/srv/app-feature"), text.formatArgs)
     }
 
     @Test
@@ -572,12 +607,12 @@ class RepositorySetupStateTest {
         ).firstOrNull(File::isFile)?.readText() ?: error("RepositorySetupScreen.kt not found")
 
         assertTrue(source.contains("onReconnectTerminalSession"))
-        assertTrue(source.contains("Text(\"Reconnect\")"))
+        assertTrue(source.contains("R.string.repository_terminal_reconnect"))
         assertTrue(source.contains("enabled = terminalSessionReconnectAvailable(session)"))
         assertTrue(source.contains("onCloseTerminalSession"))
-        assertTrue(source.contains("Text(\"Close\")"))
-        assertTrue(source.contains("title = { Text(\"Close terminal?\") }"))
-        assertTrue(source.contains("Text(\"Delete\")"))
+        assertTrue(source.contains("R.string.repository_terminal_close"))
+        assertTrue(source.contains("R.string.repository_close_terminal_title"))
+        assertTrue(source.contains("R.string.common_delete"))
         assertTrue(source.contains("SwipeDeleteTerminalSessionRow("))
     }
 
@@ -595,11 +630,8 @@ class RepositorySetupStateTest {
 
         val text = repositoryTerminalCloseConfirmationText("Terminal 2", session)
 
-        assertTrue(text.contains("Terminal 2"))
-        assertTrue(text.contains("/srv/app-feature"))
-        assertTrue(text.contains("reconnect"))
-        assertTrue(text.contains("remote tmux session keeps running"))
-        assertFalse(text.contains("remove"))
+        assertEquals(R.string.repository_terminal_close_tmux, text.resourceId)
+        assertEquals(listOf("Terminal 2", "/srv/app-feature"), text.formatArgs)
     }
 
     @Test
@@ -628,7 +660,15 @@ class RepositorySetupStateTest {
             listOf("main", "feature/local", "origin/main", "origin/feature/remote"),
             candidates.map { it.ref },
         )
-        assertEquals(listOf("local", "local", "remote", "remote"), candidates.map { it.kindLabel })
+        assertEquals(
+            listOf(
+                LocalizedText(R.string.repository_branch_local),
+                LocalizedText(R.string.repository_branch_local),
+                LocalizedText(R.string.repository_branch_remote),
+                LocalizedText(R.string.repository_branch_remote),
+            ),
+            candidates.map { it.kindLabel },
+        )
     }
 
     @Test
@@ -747,9 +787,28 @@ class RepositorySetupStateTest {
         )
 
         assertEquals(
-            listOf("linked", "locked", "missing", "dirty 3", "bare"),
+            listOf(
+                LocalizedText(R.string.repository_badge_linked),
+                LocalizedText(R.string.repository_badge_locked),
+                LocalizedText(R.string.repository_badge_missing),
+                LocalizedText(R.string.repository_badge_dirty, listOf(3)),
+                LocalizedText(R.string.repository_badge_bare),
+            ),
             worktreeBadges(worktree),
         )
+    }
+
+    @Test
+    fun `worktree removal blockers map to localized explanations`() {
+        assertEquals(
+            LocalizedText(R.string.repository_worktree_primary_blocked),
+            worktreeRemovalBlockedText(WorktreeRemovalBlockReason.Primary),
+        )
+        assertEquals(
+            LocalizedText(R.string.repository_worktree_protected_blocked),
+            worktreeRemovalBlockedText(WorktreeRemovalBlockReason.ProtectedBranch),
+        )
+        assertNull(worktreeRemovalBlockedText(null))
     }
 
     private fun host(id: String, identityRefId: String?): SshHostProfile =

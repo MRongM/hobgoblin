@@ -1,6 +1,8 @@
 package dev.hobgoblin.android.ui.screens.terminals
 
+import dev.hobgoblin.android.R
 import dev.hobgoblin.android.data.TerminalAppearance
+import dev.hobgoblin.android.ui.text.LocalizedText
 import dev.hobgoblin.android.data.terminalAppearance
 import java.io.File
 import org.junit.Assert.assertEquals
@@ -18,8 +20,8 @@ class TerminalAppearanceTest {
 
     @Test
     fun `appearance toggle names the destination and alternates`() {
-        assertEquals("Light", terminalAppearanceToggleLabel(TerminalAppearance.Dark))
-        assertEquals("Dark", terminalAppearanceToggleLabel(TerminalAppearance.Light))
+        assertEquals(LocalizedText(R.string.terminal_appearance_light), terminalAppearanceToggleText(TerminalAppearance.Dark))
+        assertEquals(LocalizedText(R.string.terminal_appearance_dark), terminalAppearanceToggleText(TerminalAppearance.Light))
         assertEquals(TerminalAppearance.Light, nextTerminalAppearance(TerminalAppearance.Dark))
         assertEquals(TerminalAppearance.Dark, nextTerminalAppearance(TerminalAppearance.Light))
     }

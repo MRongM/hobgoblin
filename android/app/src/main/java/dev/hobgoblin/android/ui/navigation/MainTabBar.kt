@@ -11,7 +11,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import dev.hobgoblin.android.R
 
 enum class MainTab {
     Hosts,
@@ -51,6 +53,7 @@ fun MainTabBar(
 ) {
     NavigationBar(modifier = modifier) {
         MainTab.entries.forEach { tab ->
+            val label = stringResource(tab.labelResource)
             NavigationBarItem(
                 selected = selected == tab,
                 onClick = {
@@ -61,22 +64,22 @@ fun MainTabBar(
                 icon = {
                     Icon(
                         imageVector = mainTabIcon(tab),
-                        contentDescription = tab.label,
+                        contentDescription = label,
                         modifier = Modifier.size(24.dp),
                     )
                 },
-                label = { Text(tab.label) },
+                label = { Text(label) },
                 alwaysShowLabel = true,
             )
         }
     }
 }
 
-private val MainTab.label: String
+private val MainTab.labelResource: Int
     get() = when (this) {
-        MainTab.Hosts -> "Hosts"
-        MainTab.Projects -> "Projects"
-        MainTab.Terminals -> "Terminals"
+        MainTab.Hosts -> R.string.navigation_hosts
+        MainTab.Projects -> R.string.navigation_projects
+        MainTab.Terminals -> R.string.common_terminals
     }
 
 private fun mainTabIcon(tab: MainTab): ImageVector = when (mainTabIconKind(tab)) {

@@ -8,7 +8,7 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "dev.hobgoblin.android"
+        applicationId = "com.mrongm.hobgoblin"
         minSdk = 26
         targetSdk = 37
         versionCode = 1
@@ -18,6 +18,10 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    androidResources {
+        generateLocaleConfig = true
     }
 
     compileOptions {

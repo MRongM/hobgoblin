@@ -25,6 +25,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import dev.hobgoblin.android.R
 import dev.hobgoblin.android.domain.ResourceState
 import dev.hobgoblin.android.domain.ssh.DiagnosticCategory
 import dev.hobgoblin.android.domain.ssh.DiagnosticStage
@@ -47,6 +49,7 @@ fun DiagnosticsScreen(
     onRunDiagnostics: () -> DiagnosticsResult,
     onTrustHostKey: (String) -> Unit,
 ) {
+    val diagnosticsFailed = stringResource(R.string.diagnostics_failed)
     val scope = rememberCoroutineScope()
     var diagnosticsState: ResourceState<DiagnosticsResult> by remember { mutableStateOf(ResourceState.Idle) }
 
@@ -57,7 +60,9 @@ fun DiagnosticsScreen(
                 withContext(Dispatchers.IO) { onRunDiagnostics() }
             }.fold(
                 onSuccess = { ResourceState.Loaded(it) },
-                onFailure = { ResourceState.Error(it.message ?: "Diagnostics failed", it) },
+                onFailure = {
+                    ResourceState.Error(it.message ?: diagnosticsFailed, it)
+                },
             )
         }
     }
@@ -65,10 +70,10 @@ fun DiagnosticsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Host diagnostics") },
+                title = { Text(stringResource(R.string.diagnostics_title)) },
                 navigationIcon = {
                     TextButton(onClick = onBack) {
-                        Text("Back")
+                        Text(stringResource(R.string.common_back))
                     }
                 },
             )
@@ -105,7 +110,11 @@ internal fun HostDiagnosticsContent(
         enabled = state !is ResourceState.Loading,
         onClick = onRunDiagnostics,
     ) {
-        Text(if (state is ResourceState.Loading) "Running diagnostics…" else "Run diagnostics")
+        Text(
+            stringResource(
+                if (state is ResourceState.Loading) R.string.diagnostics_running else R.string.diagnostics_run,
+            ),
+        )
     }
     when (state) {
         ResourceState.Idle -> DiagnosticStageList(stages = pendingDiagnosticStages())
@@ -113,7 +122,7 @@ internal fun HostDiagnosticsContent(
             stages = pendingDiagnosticStages(running = DiagnosticStage.SSH),
         )
         is ResourceState.Error -> {
-            Text("failed", color = MaterialTheme.colorScheme.error)
+            Text(stringResource(R.string.diagnostics_status_failed), color = MaterialTheme.colorScheme.error)
             Text(state.message)
             DiagnosticStageList(stages = pendingDiagnosticStages())
         }
@@ -157,10 +166,10 @@ private fun DiagnosticResultContent(
                             onRunDiagnostics()
                         },
                     ) {
-                        Text("Trust this host key?")
+                        Text(stringResource(R.string.diagnostics_trust_host_key))
                     }
                     TextButton(onClick = {}) {
-                        Text("Cancel")
+                        Text(stringResource(R.string.common_cancel))
                     }
                 }
             }
@@ -168,7 +177,7 @@ private fun DiagnosticResultContent(
     }
     if (result.ok && onOpenTerminal != null) {
         Button(onClick = onOpenTerminal) {
-            Text("Open terminal")
+            Text(stringResource(R.string.diagnostics_open_terminal))
         }
     }
 }
@@ -184,16 +193,19 @@ private fun DiagnosticStageList(stages: List<DiagnosticStageResult>) {
                     verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
                 ) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(stage.stage.label)
-                        Text(stage.status.label)
+                        Text(stringResource(stage.stage.labelResource()))
+                        Text(stringResource(stage.status.labelResource()))
                     }
                     if (stage.category != null || stage.message.isNotBlank()) {
-                        Text(stage.category?.label ?: stage.message, style = MaterialTheme.typography.labelMedium)
+                        Text(
+                            stage.category?.let { stringResource(it.labelResource()) } ?: stage.message,
+                            style = MaterialTheme.typography.labelMedium,
+                        )
                         if (stage.message.isNotBlank()) Text(stage.message)
                     }
                     if (stage.details.isNotBlank()) {
                         TextButton(onClick = { expanded[stage.stage] = expanded[stage.stage] != true }) {
-                            Text("Details")
+                            Text(stringResource(R.string.diagnostics_details))
                         }
                         AnimatedVisibility(visible = expanded[stage.stage] == true) {
                             Text(stage.details, style = MaterialTheme.typography.bodySmall)
@@ -203,6 +215,36 @@ private fun DiagnosticStageList(stages: List<DiagnosticStageResult>) {
             }
         }
     }
+}
+
+private fun DiagnosticStage.labelResource(): Int = when (this) {
+    DiagnosticStage.SSH -> R.string.diagnostics_stage_ssh
+    DiagnosticStage.Shell -> R.string.diagnostics_stage_shell
+    DiagnosticStage.Git -> R.string.diagnostics_stage_git
+    DiagnosticStage.Path -> R.string.diagnostics_stage_path
+    DiagnosticStage.Repo -> R.string.diagnostics_stage_repo
+}
+
+private fun DiagnosticStatus.labelResource(): Int = when (this) {
+    DiagnosticStatus.Pending -> R.string.diagnostics_status_pending
+    DiagnosticStatus.Running -> R.string.diagnostics_status_running
+    DiagnosticStatus.Passed -> R.string.diagnostics_status_passed
+    DiagnosticStatus.Failed -> R.string.diagnostics_status_failed
+    DiagnosticStatus.Skipped -> R.string.diagnostics_status_skipped
+}
+
+private fun DiagnosticCategory.labelResource(): Int = when (this) {
+    DiagnosticCategory.AuthFailed -> R.string.diagnostics_category_auth_failed
+    DiagnosticCategory.HostKey -> R.string.diagnostics_category_host_key
+    DiagnosticCategory.Unreachable -> R.string.diagnostics_category_unreachable
+    DiagnosticCategory.ShellFailed -> R.string.diagnostics_category_shell_failed
+    DiagnosticCategory.GitMissing -> R.string.diagnostics_category_git_missing
+    DiagnosticCategory.PathMissing -> R.string.diagnostics_category_path_missing
+    DiagnosticCategory.NotARepo -> R.string.diagnostics_category_not_repo
+    DiagnosticCategory.Timeout -> R.string.diagnostics_category_timeout
+    DiagnosticCategory.Cancelled -> R.string.diagnostics_category_cancelled
+    DiagnosticCategory.ConfigChanged -> R.string.diagnostics_category_config_changed
+    DiagnosticCategory.Unknown -> R.string.diagnostics_category_unknown
 }
 
 internal fun pendingDiagnosticStages(running: DiagnosticStage? = null): List<DiagnosticStageResult> =

@@ -27,7 +27,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
+import dev.hobgoblin.android.R
 import dev.hobgoblin.android.domain.ssh.HostPortForwardBindAddress
 import dev.hobgoblin.android.domain.ssh.HostPortForwardRule
 import dev.hobgoblin.android.domain.ssh.SshHostProfile
@@ -43,17 +45,24 @@ data class HostPortForwardDraft(
 
 sealed interface PortForwardDraftValidation {
     data class Valid(val rule: HostPortForwardRule) : PortForwardDraftValidation
-    data class Invalid(val message: String) : PortForwardDraftValidation
+    data class Invalid(val error: PortForwardDraftError) : PortForwardDraftValidation
+}
+
+sealed interface PortForwardDraftError {
+    data object LocalPortNotNumber : PortForwardDraftError
+    data object RemotePortNotNumber : PortForwardDraftError
+    data class InvalidRule(val detail: String?) : PortForwardDraftError
+    data class DuplicateLocalEndpoint(val address: String, val port: Int) : PortForwardDraftError
 }
 
 internal fun shouldShowLanWarning(bindAddress: HostPortForwardBindAddress): Boolean =
     bindAddress == HostPortForwardBindAddress.AllInterfaces
 
-internal fun portForwardStatusLabel(status: HostPortForwardStatus): String = when (status) {
-    HostPortForwardStatus.Stopped -> "Stopped"
-    HostPortForwardStatus.Starting -> "Starting"
-    is HostPortForwardStatus.Running -> "Running"
-    is HostPortForwardStatus.Failed -> "Failed: ${status.message}"
+internal fun portForwardStatusLabelResource(status: HostPortForwardStatus): Int = when (status) {
+    HostPortForwardStatus.Stopped -> R.string.ports_status_stopped
+    HostPortForwardStatus.Starting -> R.string.ports_status_starting
+    is HostPortForwardStatus.Running -> R.string.ports_status_running
+    is HostPortForwardStatus.Failed -> R.string.ports_status_failed
 }
 
 internal fun validatePortForwardDraft(
@@ -62,9 +71,9 @@ internal fun validatePortForwardDraft(
     editingRuleId: String?,
 ): PortForwardDraftValidation {
     val localPort = draft.localPort.trim().toIntOrNull()
-        ?: return PortForwardDraftValidation.Invalid("Local port must be a number")
+        ?: return PortForwardDraftValidation.Invalid(PortForwardDraftError.LocalPortNotNumber)
     val remotePort = draft.remotePort.trim().toIntOrNull()
-        ?: return PortForwardDraftValidation.Invalid("Remote port must be a number")
+        ?: return PortForwardDraftValidation.Invalid(PortForwardDraftError.RemotePortNotNumber)
     val rule = runCatching {
         HostPortForwardRule.create(
             name = draft.name,
@@ -73,13 +82,15 @@ internal fun validatePortForwardDraft(
             remotePort = remotePort,
         )
     }.getOrElse {
-        return PortForwardDraftValidation.Invalid(it.message ?: "Invalid port forward")
+        return PortForwardDraftValidation.Invalid(PortForwardDraftError.InvalidRule(it.message))
     }
     val duplicate = existingRules.any {
         it.id != editingRuleId && it.localBindAddress == rule.localBindAddress && it.localPort == rule.localPort
     }
     if (duplicate) {
-        return PortForwardDraftValidation.Invalid("Local port ${rule.localBindAddress.value}:${rule.localPort} is already saved for this host")
+        return PortForwardDraftValidation.Invalid(
+            PortForwardDraftError.DuplicateLocalEndpoint(rule.localBindAddress.value, rule.localPort),
+        )
     }
     return PortForwardDraftValidation.Valid(if (editingRuleId == null) rule else rule.copy(id = editingRuleId))
 }
@@ -96,15 +107,15 @@ fun HostPortsScreen(
 ) {
     var draft by remember(host.id) { mutableStateOf<HostPortForwardDraft?>(null) }
     var editingRuleId by remember(host.id) { mutableStateOf<String?>(null) }
-    var error by remember(host.id) { mutableStateOf<String?>(null) }
+    var error by remember(host.id) { mutableStateOf<PortForwardDraftError?>(null) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Ports") },
+                title = { Text(stringResource(R.string.ports_title)) },
                 navigationIcon = {
                     TextButton(onClick = onBack) {
-                        Text("Back")
+                        Text(stringResource(R.string.common_back))
                     }
                 },
             )
@@ -118,7 +129,7 @@ fun HostPortsScreen(
             verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Md),
         ) {
             Text(host.title, style = MaterialTheme.typography.titleMedium)
-            Text("Remote target is fixed to 127.0.0.1 on the SSH host.", style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.ports_remote_target_description), style = MaterialTheme.typography.bodyMedium)
             Button(
                 onClick = {
                     draft = HostPortForwardDraft()
@@ -126,10 +137,10 @@ fun HostPortsScreen(
                     error = null
                 },
             ) {
-                Text("Add port")
+                Text(stringResource(R.string.ports_add))
             }
             if (host.portForwards.isEmpty()) {
-                Text("No ports")
+                Text(stringResource(R.string.ports_empty))
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm)) {
                     items(host.portForwards, key = { it.id }) { rule ->
@@ -167,7 +178,7 @@ fun HostPortsScreen(
                     },
                     onSave = {
                         when (val validation = validatePortForwardDraft(currentDraft, host.portForwards, editingRuleId)) {
-                            is PortForwardDraftValidation.Invalid -> error = validation.message
+                            is PortForwardDraftValidation.Invalid -> error = validation.error
                             is PortForwardDraftValidation.Valid -> {
                                 val nextRules = if (editingRuleId == null) {
                                     host.portForwards + validation.rule
@@ -202,17 +213,17 @@ private fun PortForwardRow(
             verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
         ) {
             Text(rule.displayName, style = MaterialTheme.typography.titleMedium)
-            Text("Local: ${rule.localBindAddress.value}:${rule.localPort}")
-            Text("Remote: 127.0.0.1:${rule.remotePort}")
+            Text(stringResource(R.string.ports_local_summary, rule.localBindAddress.value, rule.localPort))
+            Text(stringResource(R.string.ports_remote_summary, rule.remotePort))
             Text(portForwardStatusLabel(status), style = MaterialTheme.typography.labelMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm)) {
                 if (status is HostPortForwardStatus.Running || status == HostPortForwardStatus.Starting) {
-                    TextButton(onClick = onStop) { Text("Stop") }
+                    TextButton(onClick = onStop) { Text(stringResource(R.string.ports_stop)) }
                 } else {
-                    TextButton(onClick = onStart) { Text("Start") }
+                    TextButton(onClick = onStart) { Text(stringResource(R.string.ports_start)) }
                 }
-                TextButton(onClick = onEdit) { Text("Edit") }
-                TextButton(onClick = onDelete) { Text("Delete") }
+                TextButton(onClick = onEdit) { Text(stringResource(R.string.common_edit)) }
+                TextButton(onClick = onDelete) { Text(stringResource(R.string.common_delete)) }
             }
         }
     }
@@ -222,7 +233,7 @@ private fun PortForwardRow(
 @Composable
 private fun PortForwardEditor(
     draft: HostPortForwardDraft,
-    error: String?,
+    error: PortForwardDraftError?,
     onDraftChange: (HostPortForwardDraft) -> Unit,
     onCancel: () -> Unit,
     onSave: () -> Unit,
@@ -236,14 +247,14 @@ private fun PortForwardEditor(
                 modifier = Modifier.fillMaxWidth(),
                 value = draft.name,
                 onValueChange = { onDraftChange(draft.copy(name = it)) },
-                label = { Text("Name") },
+                label = { Text(stringResource(R.string.ports_name)) },
                 singleLine = true,
             )
             OutlinedTextField(
                 modifier = Modifier.fillMaxWidth(),
                 value = draft.localPort,
                 onValueChange = { onDraftChange(draft.copy(localPort = it)) },
-                label = { Text("Local port") },
+                label = { Text(stringResource(R.string.ports_local_port)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true,
             )
@@ -257,13 +268,21 @@ private fun PortForwardEditor(
                             count = HostPortForwardBindAddress.entries.size,
                         ),
                     ) {
-                        Text(address.label)
+                        Text(
+                            stringResource(
+                                if (address == HostPortForwardBindAddress.Loopback) {
+                                    R.string.ports_bind_local_only
+                                } else {
+                                    R.string.ports_bind_lan
+                                },
+                            ),
+                        )
                     }
                 }
             }
             if (shouldShowLanWarning(draft.bindAddress)) {
                 Text(
-                    "LAN mode exposes this phone port to devices that can reach it on the local network.",
+                    stringResource(R.string.ports_lan_warning),
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.labelMedium,
                 )
@@ -272,17 +291,41 @@ private fun PortForwardEditor(
                 modifier = Modifier.fillMaxWidth(),
                 value = draft.remotePort,
                 onValueChange = { onDraftChange(draft.copy(remotePort = it)) },
-                label = { Text("Remote port") },
+                label = { Text(stringResource(R.string.ports_remote_port)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true,
             )
             error?.let {
-                Text(it, color = MaterialTheme.colorScheme.error)
+                Text(portForwardDraftErrorMessage(it), color = MaterialTheme.colorScheme.error)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm)) {
-                TextButton(onClick = onCancel) { Text("Cancel") }
-                Button(onClick = onSave) { Text("Save") }
+                TextButton(onClick = onCancel) { Text(stringResource(R.string.common_cancel)) }
+                Button(onClick = onSave) { Text(stringResource(R.string.common_save)) }
             }
         }
     }
+}
+
+@Composable
+private fun portForwardStatusLabel(status: HostPortForwardStatus): String =
+    if (status is HostPortForwardStatus.Failed) {
+        stringResource(portForwardStatusLabelResource(status), status.message)
+    } else {
+        stringResource(portForwardStatusLabelResource(status))
+    }
+
+@Composable
+private fun portForwardDraftErrorMessage(error: PortForwardDraftError): String = when (error) {
+    PortForwardDraftError.LocalPortNotNumber -> stringResource(R.string.ports_local_number_error)
+    PortForwardDraftError.RemotePortNotNumber -> stringResource(R.string.ports_remote_number_error)
+    is PortForwardDraftError.InvalidRule -> if (error.detail.isNullOrBlank()) {
+        stringResource(R.string.ports_invalid)
+    } else {
+        stringResource(R.string.ports_invalid_detail, error.detail)
+    }
+    is PortForwardDraftError.DuplicateLocalEndpoint -> stringResource(
+        R.string.ports_duplicate,
+        error.address,
+        error.port,
+    )
 }

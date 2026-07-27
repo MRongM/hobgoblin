@@ -25,6 +25,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.stringResource
+import dev.hobgoblin.android.R
 import dev.hobgoblin.android.data.ManualItemOrderPolicy
 import dev.hobgoblin.android.domain.ssh.RemoteRepositoryProfile
 import dev.hobgoblin.android.domain.ssh.SshHostProfile
@@ -34,31 +36,34 @@ import dev.hobgoblin.android.ui.components.ManualReorderState
 import dev.hobgoblin.android.ui.components.manualReorderItem
 import dev.hobgoblin.android.ui.components.rememberManualReorderState
 import dev.hobgoblin.android.ui.theme.HobgoblinSpacing
+import dev.hobgoblin.android.ui.text.LocalizedText
+import dev.hobgoblin.android.ui.text.resolve
 
-internal fun terminalOverviewTitle(session: TerminalSessionRecord): String =
-    session.displayName.ifBlank {
-        session.terminalId?.let { "terminal-$it" } ?: "Host terminal"
-    }
-
-internal fun terminalOverviewStatus(session: TerminalSessionRecord): String = session.status.name.lowercase()
-
-internal fun terminalOverviewCloseConfirmationText(session: TerminalSessionRecord): String {
-    val title = terminalOverviewTitle(session)
-    return if (session.tmuxIdentity != null) {
-        "This closes the Android connection for $title but keeps it in the terminal list so you can reconnect later. " +
-            "The remote tmux session keeps running."
-    } else {
-        "This stops $title but keeps it in the terminal list so you can reconnect later."
-    }
+internal fun terminalOverviewTitleText(session: TerminalSessionRecord): LocalizedText = when {
+    session.displayName.isNotBlank() -> LocalizedText(R.string.common_value, listOf(session.displayName))
+    session.terminalId != null -> LocalizedText(R.string.common_value, listOf("terminal-${session.terminalId}"))
+    else -> LocalizedText(R.string.terminals_host_terminal)
 }
 
-internal fun terminalOverviewDeleteConfirmationText(session: TerminalSessionRecord): String {
-    val title = terminalOverviewTitle(session)
-    val message = "This removes $title from the terminal list and stops its Android connection if active."
-    return if (session.tmuxIdentity != null) {
-        "$message The remote tmux session keeps running."
-    } else message
-}
+internal fun terminalOverviewStatusText(session: TerminalSessionRecord): LocalizedText = LocalizedText(
+    when (session.status) {
+        dev.hobgoblin.android.terminals.TerminalSessionStatus.Starting -> R.string.terminal_status_starting
+        dev.hobgoblin.android.terminals.TerminalSessionStatus.Running -> R.string.terminal_status_running
+        dev.hobgoblin.android.terminals.TerminalSessionStatus.Exited -> R.string.terminal_status_exited
+        dev.hobgoblin.android.terminals.TerminalSessionStatus.Failed -> R.string.terminal_status_failed
+        dev.hobgoblin.android.terminals.TerminalSessionStatus.Disconnected -> R.string.terminal_status_disconnected
+    },
+)
+
+internal fun terminalOverviewCloseConfirmationText(session: TerminalSessionRecord): LocalizedText = LocalizedText(
+    resourceId = if (session.tmuxIdentity != null) R.string.terminals_close_tmux else R.string.terminals_close_native,
+    formatArgs = listOf(terminalOverviewTitleText(session)),
+)
+
+internal fun terminalOverviewDeleteConfirmationText(session: TerminalSessionRecord): LocalizedText = LocalizedText(
+    resourceId = if (session.tmuxIdentity != null) R.string.terminals_delete_tmux else R.string.terminals_delete_native,
+    formatArgs = listOf(terminalOverviewTitleText(session)),
+)
 
 internal fun terminalOverviewOrderAfterDelete(
     orderedIds: List<String>,
@@ -66,8 +71,8 @@ internal fun terminalOverviewOrderAfterDelete(
 ): List<String> = orderedIds.filterNot { it == deletedId }
 
 internal data class TerminalOverviewSource(
-    val contextLabel: String,
-    val locationLabel: String,
+    val contextLabel: LocalizedText,
+    val locationLabel: LocalizedText,
     val path: String,
 )
 
@@ -87,19 +92,22 @@ internal fun terminalOverviewSource(
     val projectRoot = session.repositoryRemotePath
         ?.let(::terminalSessionRemotePath)
         ?: repository?.remotePath?.let(::terminalSessionRemotePath)
-    val projectLabel = when {
-        session.repositoryId == null -> "Host terminal"
+    val projectLabel: Any = when {
+        session.repositoryId == null -> LocalizedText(R.string.terminals_host_terminal)
         repository != null -> repository.title
-        else -> "Project unavailable"
+        else -> LocalizedText(R.string.terminals_project_unavailable)
     }
     val locationLabel = when {
-        session.repositoryId == null -> "Host directory"
-        projectRoot == path -> "Project root"
-        repository?.isGitRepository == true -> "Branch directory"
-        else -> "Workspace directory"
+        session.repositoryId == null -> LocalizedText(R.string.terminals_host_directory)
+        projectRoot == path -> LocalizedText(R.string.terminals_project_root)
+        repository?.isGitRepository == true -> LocalizedText(R.string.terminals_branch_directory)
+        else -> LocalizedText(R.string.terminals_workspace_directory)
     }
+    val hostLabel: Any = host?.title
+        ?: hostReference.takeIf { it.isNotBlank() }
+        ?: LocalizedText(R.string.terminals_host_unavailable)
     return TerminalOverviewSource(
-        contextLabel = "${host?.title ?: hostReference.ifBlank { "Host unavailable" }} · $projectLabel",
+        contextLabel = LocalizedText(R.string.terminals_context, listOf(hostLabel, projectLabel)),
         locationLabel = locationLabel,
         path = path,
     )
@@ -145,12 +153,12 @@ fun TerminalsScreen(
             verticalArrangement = Arrangement.Center,
         ) {
             Text(
-                "No terminals",
+                stringResource(R.string.terminals_empty_title),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                "Existing Host and Project terminal sessions will appear here.",
+                stringResource(R.string.terminals_empty_description),
                 modifier = Modifier.padding(top = HobgoblinSpacing.Sm),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -182,8 +190,8 @@ fun TerminalsScreen(
     if (pendingCloseSession != null) {
         AlertDialog(
             onDismissRequest = { pendingCloseSessionId = null },
-            title = { Text("Close terminal?") },
-            text = { Text(terminalOverviewCloseConfirmationText(pendingCloseSession)) },
+            title = { Text(stringResource(R.string.repository_close_terminal_title)) },
+            text = { Text(terminalOverviewCloseConfirmationText(pendingCloseSession).resolve()) },
             confirmButton = {
                 TextButton(
                     colors = ButtonDefaults.textButtonColors(
@@ -194,12 +202,12 @@ fun TerminalsScreen(
                         onCloseTerminalSession(pendingCloseSession.id)
                     },
                 ) {
-                    Text("Close terminal")
+                    Text(stringResource(R.string.terminal_close_terminal))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { pendingCloseSessionId = null }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.common_cancel))
                 }
             },
         )
@@ -209,8 +217,8 @@ fun TerminalsScreen(
     if (pendingDeleteSession != null) {
         AlertDialog(
             onDismissRequest = { pendingDeleteSessionId = null },
-            title = { Text("Delete terminal?") },
-            text = { Text(terminalOverviewDeleteConfirmationText(pendingDeleteSession)) },
+            title = { Text(stringResource(R.string.repository_delete_terminal_title)) },
+            text = { Text(terminalOverviewDeleteConfirmationText(pendingDeleteSession).resolve()) },
             confirmButton = {
                 TextButton(
                     colors = ButtonDefaults.textButtonColors(
@@ -227,12 +235,12 @@ fun TerminalsScreen(
                         onDeleteTerminalSession(pendingDeleteSession.id)
                     },
                 ) {
-                    Text("Delete terminal")
+                    Text(stringResource(R.string.terminals_delete_terminal))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { pendingDeleteSessionId = null }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.common_cancel))
                 }
             },
         )
@@ -250,6 +258,7 @@ private fun TerminalOverviewRow(
     onRequestClose: () -> Unit,
     onRequestDelete: () -> Unit,
 ) {
+    val title = terminalOverviewTitleText(session).resolve()
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -265,14 +274,14 @@ private fun TerminalOverviewRow(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    terminalOverviewTitle(session),
+                    title,
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    terminalOverviewStatus(session),
+                    terminalOverviewStatusText(session).resolve(),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -281,11 +290,11 @@ private fun TerminalOverviewRow(
                 ManualReorderHandle(
                     state = reorderState,
                     itemKey = session.id,
-                    itemLabel = terminalOverviewTitle(session),
+                    itemLabel = title,
                 )
             }
             Text(
-                source.contextLabel,
+                source.contextLabel.resolve(),
                 modifier = Modifier.fillMaxWidth(),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -298,7 +307,7 @@ private fun TerminalOverviewRow(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "${source.locationLabel} ·",
+                    LocalizedText(R.string.terminals_location, listOf(source.locationLabel)).resolve(),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
                     maxLines = 1,
@@ -322,7 +331,7 @@ private fun TerminalOverviewRow(
                     enabled = terminalSessionReconnectAvailable(session),
                     onClick = onReconnect,
                 ) {
-                    Text("Reconnect")
+                    Text(stringResource(R.string.terminal_action_reconnect))
                 }
                 TextButton(
                     colors = ButtonDefaults.textButtonColors(
@@ -330,7 +339,7 @@ private fun TerminalOverviewRow(
                     ),
                     onClick = onRequestClose,
                 ) {
-                    Text("Close")
+                    Text(stringResource(R.string.repository_terminal_close))
                 }
                 TextButton(
                     colors = ButtonDefaults.textButtonColors(
@@ -338,10 +347,10 @@ private fun TerminalOverviewRow(
                     ),
                     onClick = onRequestDelete,
                 ) {
-                    Text("Delete")
+                    Text(stringResource(R.string.common_delete))
                 }
                 TextButton(onClick = onOpen) {
-                    Text("Open")
+                    Text(stringResource(R.string.common_open))
                 }
             }
         }

@@ -6,12 +6,20 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
+import dev.hobgoblin.android.R
 import dev.hobgoblin.android.terminals.TerminalSessionRecord
+import dev.hobgoblin.android.ui.text.LocalizedText
+import dev.hobgoblin.android.ui.text.resolve
 
-internal fun terminalSessionIdentitySummary(session: TerminalSessionRecord): String {
-    val kind = if (session.tmuxIdentity == null) "native" else "tmux"
-    return "$kind · session ${session.id.take(8)}"
-}
+internal fun terminalSessionIdentityText(session: TerminalSessionRecord): LocalizedText = LocalizedText(
+    R.string.terminal_session_identity,
+    listOf(
+        LocalizedText(
+            if (session.tmuxIdentity == null) R.string.terminal_kind_native else R.string.terminal_kind_tmux,
+        ),
+        session.id.take(8),
+    ),
+)
 
 internal fun terminalSessionTmuxSessionName(session: TerminalSessionRecord): String? =
     session.tmuxIdentity?.sessionName
@@ -19,7 +27,7 @@ internal fun terminalSessionTmuxSessionName(session: TerminalSessionRecord): Str
 @Composable
 internal fun TerminalSessionIdentityDetails(session: TerminalSessionRecord) {
     Text(
-        terminalSessionIdentitySummary(session),
+        terminalSessionIdentityText(session).resolve(),
         modifier = Modifier.fillMaxWidth(),
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -27,7 +35,7 @@ internal fun TerminalSessionIdentityDetails(session: TerminalSessionRecord) {
     )
     terminalSessionTmuxSessionName(session)?.let { sessionName ->
         Text(
-            "tmux session: $sessionName",
+            LocalizedText(R.string.terminal_tmux_session_name, listOf(sessionName)).resolve(),
             modifier = Modifier.fillMaxWidth(),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

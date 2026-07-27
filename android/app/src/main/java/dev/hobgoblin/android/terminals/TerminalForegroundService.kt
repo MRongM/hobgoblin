@@ -25,9 +25,9 @@ class TerminalForegroundService : Service() {
             return START_NOT_STICKY
         }
 
-        val content = TerminalNotificationContent(
-            title = intent?.getStringExtra(ExtraTitle) ?: "Terminal running",
-            text = intent?.getStringExtra(ExtraText) ?: "Terminal session active",
+        val content = ResolvedTerminalNotificationContent(
+            title = intent?.getStringExtra(ExtraTitle) ?: getString(R.string.notification_terminal_running),
+            text = intent?.getStringExtra(ExtraText) ?: getString(R.string.notification_terminal_session_active),
             terminalSessionId = intent?.getStringExtra(TerminalSessionIntentExtra),
         )
         ServiceCompat.startForeground(
@@ -39,7 +39,7 @@ class TerminalForegroundService : Service() {
         return START_STICKY
     }
 
-    private fun buildNotification(content: TerminalNotificationContent): Notification {
+    private fun buildNotification(content: ResolvedTerminalNotificationContent): Notification {
         ensureChannel()
         val openIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -65,7 +65,7 @@ class TerminalForegroundService : Service() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val channel = NotificationChannel(
             TerminalNotificationFactory.ChannelId,
-            TerminalNotificationFactory.ChannelName,
+            getString(R.string.notification_terminal_channel),
             NotificationManager.IMPORTANCE_LOW,
         )
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
@@ -87,8 +87,8 @@ class TerminalForegroundService : Service() {
         fun startIntent(context: Context, content: TerminalNotificationContent): Intent =
             Intent(context, TerminalForegroundService::class.java).apply {
                 action = ActionStartOrUpdate
-                putExtra(ExtraTitle, content.title)
-                putExtra(ExtraText, content.text)
+                putExtra(ExtraTitle, context.resolve(content.title))
+                putExtra(ExtraText, context.resolve(content.text))
                 content.terminalSessionId?.let { putExtra(TerminalSessionIntentExtra, it) }
             }
 
@@ -98,3 +98,12 @@ class TerminalForegroundService : Service() {
             }
     }
 }
+
+private data class ResolvedTerminalNotificationContent(
+    val title: String,
+    val text: String,
+    val terminalSessionId: String?,
+)
+
+private fun Context.resolve(text: TerminalNotificationText): String =
+    getString(text.resourceId, *text.formatArgs.toTypedArray())

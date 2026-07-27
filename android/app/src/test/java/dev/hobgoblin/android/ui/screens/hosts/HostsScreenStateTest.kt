@@ -1,6 +1,7 @@
 package dev.hobgoblin.android.ui.screens.hosts
 
 import androidx.compose.ui.graphics.Color
+import dev.hobgoblin.android.R
 import dev.hobgoblin.android.domain.ssh.SshHostProfile
 import java.io.File
 import org.junit.Assert.assertEquals
@@ -35,7 +36,10 @@ class HostsScreenStateTest {
 
     @Test
     fun `host health only exposes online and offline states`() {
-        assertEquals(listOf("online", "offline"), HostHealth.entries.map(::hostHealthLabel))
+        assertEquals(
+            listOf(R.string.common_status_online, R.string.common_status_offline),
+            HostHealth.entries.map(::hostHealthLabelResource),
+        )
     }
 
     @Test
@@ -43,8 +47,8 @@ class HostsScreenStateTest {
         assertEquals(HostHealth.Online, hostHealth(host(lastDiagnosticStatus = "healthy")))
         assertEquals(HostHealth.Offline, hostHealth(host(lastDiagnosticStatus = "unhealthy")))
         assertEquals(HostHealth.Offline, hostHealth(host(lastDiagnosticStatus = "pending")))
-        assertEquals("online", hostHealthLabel(HostHealth.Online))
-        assertEquals("offline", hostHealthLabel(HostHealth.Offline))
+        assertEquals(R.string.common_status_online, hostHealthLabelResource(HostHealth.Online))
+        assertEquals(R.string.common_status_offline, hostHealthLabelResource(HostHealth.Offline))
     }
 
     @Test

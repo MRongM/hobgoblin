@@ -13,10 +13,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
+import dev.hobgoblin.android.R
 import dev.hobgoblin.android.domain.ResourceState
 import dev.hobgoblin.android.domain.ssh.RemoteRepositoryProfile
 
@@ -33,11 +35,13 @@ fun MainTabShell(
     projectsContent: @Composable () -> Unit,
     terminalsContent: @Composable () -> Unit,
 ) {
-    val topBarTitle = when (selectedTab) {
-        MainTab.Hosts -> "SSH Hosts"
-        MainTab.Projects -> repositoriesState.projectScreenTitle()
-        MainTab.Terminals -> "Terminals"
-    }
+    val topBarTitle = stringResource(
+        when (selectedTab) {
+            MainTab.Hosts -> R.string.navigation_ssh_hosts
+            MainTab.Projects -> repositoriesState.projectScreenTitleResource()
+            MainTab.Terminals -> R.string.common_terminals
+        },
+    )
     val density = LocalDensity.current
     val swipeThresholdPx = with(density) { 72.dp.toPx() }
 
@@ -47,11 +51,15 @@ fun MainTabShell(
                 title = { Text(topBarTitle) },
                 actions = {
                     TextButton(onClick = onOpenSettings) {
-                        Text("Settings")
+                        Text(stringResource(R.string.navigation_settings))
                     }
                     when (selectedTab) {
-                        MainTab.Hosts -> TextButton(onClick = onAddHost) { Text("Add host") }
-                        MainTab.Projects -> TextButton(onClick = onAddProject) { Text("Add project") }
+                        MainTab.Hosts -> TextButton(onClick = onAddHost) {
+                            Text(stringResource(R.string.navigation_add_host))
+                        }
+                        MainTab.Projects -> TextButton(onClick = onAddProject) {
+                            Text(stringResource(R.string.navigation_add_project))
+                        }
                         MainTab.Terminals -> Unit
                     }
                 },
@@ -108,11 +116,11 @@ fun MainTabShell(
     }
 }
 
-private fun ResourceState<List<RemoteRepositoryProfile>>.projectScreenTitle(): String = when (this) {
-    is ResourceState.Loaded -> "Projects"
-    is ResourceState.Stale -> "Projects"
-    is ResourceState.Error -> "Projects"
-    ResourceState.Idle, ResourceState.Loading -> "Projects"
+private fun ResourceState<List<RemoteRepositoryProfile>>.projectScreenTitleResource(): Int = when (this) {
+    is ResourceState.Loaded -> R.string.navigation_projects
+    is ResourceState.Stale -> R.string.navigation_projects
+    is ResourceState.Error -> R.string.navigation_projects
+    ResourceState.Idle, ResourceState.Loading -> R.string.navigation_projects
 }
 
 @Composable

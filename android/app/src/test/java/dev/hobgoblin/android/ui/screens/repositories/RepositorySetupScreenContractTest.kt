@@ -19,7 +19,7 @@ class RepositorySetupScreenContractTest {
 
         assertTrue(source.contains("onClick = onScanTmux"))
         assertTrue(source.contains("enabled = tmuxScanEnabled"))
-        assertTrue(source.contains("tmuxScanButtonLabel(tmuxScanPending)"))
+        assertTrue(source.contains("tmuxScanButtonText(tmuxScanPending).resolve()"))
     }
 
     @Test

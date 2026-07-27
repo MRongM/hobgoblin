@@ -1,6 +1,8 @@
 package dev.hobgoblin.android.ui.screens.terminals
 
+import dev.hobgoblin.android.R
 import dev.hobgoblin.android.data.TerminalAppearance
+import dev.hobgoblin.android.ui.text.LocalizedText
 
 internal data class TerminalPalette(
     val backgroundArgb: Int,
@@ -18,9 +20,9 @@ internal fun nextTerminalAppearance(current: TerminalAppearance): TerminalAppear
     TerminalAppearance.Dark -> TerminalAppearance.Light
 }
 
-internal fun terminalAppearanceToggleLabel(current: TerminalAppearance): String = when (current) {
-    TerminalAppearance.Light -> "Dark"
-    TerminalAppearance.Dark -> "Light"
+internal fun terminalAppearanceToggleText(current: TerminalAppearance): LocalizedText = when (current) {
+    TerminalAppearance.Light -> LocalizedText(R.string.terminal_appearance_dark)
+    TerminalAppearance.Dark -> LocalizedText(R.string.terminal_appearance_light)
 }
 
 internal fun terminalPalette(appearance: TerminalAppearance): TerminalPalette = when (appearance) {

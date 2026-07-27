@@ -12,10 +12,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import dev.hobgoblin.android.R
 import dev.hobgoblin.android.ui.theme.HobgoblinSpacing
 
-fun localTerminalPlaceholderText(): String =
-    "Android-local terminal and local Git are deferred from v1; use SSH terminals for emergency work."
+fun localTerminalPlaceholderTextResource(): Int = R.string.placeholder_local_terminal_deferred
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -27,10 +28,10 @@ fun DiagnosticsPlaceholderScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Host diagnostics") },
+                title = { Text(stringResource(R.string.diagnostics_title)) },
                 navigationIcon = {
                     TextButton(onClick = onBack) {
-                        Text("Back")
+                        Text(stringResource(R.string.common_back))
                     }
                 },
             )
@@ -43,16 +44,16 @@ fun DiagnosticsPlaceholderScreen(
                 .padding(HobgoblinSpacing.Md),
             verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Md),
         ) {
-            Text("Host $hostId")
+            Text(stringResource(R.string.placeholder_host_label, hostId))
             Button(onClick = onOpenTerminal) {
-                Text("Open terminal")
+                Text(stringResource(R.string.diagnostics_open_terminal))
             }
-            Text("Run diagnostics")
-            Text("SSH")
-            Text("Shell")
-            Text("Git")
-            Text("Path")
-            Text("Repo")
+            Text(stringResource(R.string.placeholder_run_diagnostics))
+            Text(stringResource(R.string.placeholder_ssh))
+            Text(stringResource(R.string.placeholder_shell))
+            Text(stringResource(R.string.placeholder_git))
+            Text(stringResource(R.string.placeholder_path))
+            Text(stringResource(R.string.placeholder_repo))
         }
     }
 }
@@ -63,10 +64,10 @@ fun TerminalPlaceholderScreen(hostId: String, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Terminal spike") },
+                title = { Text(stringResource(R.string.placeholder_terminal_spike)) },
                 navigationIcon = {
                     TextButton(onClick = onBack) {
-                        Text("Back")
+                        Text(stringResource(R.string.common_back))
                     }
                 },
             )
@@ -79,8 +80,8 @@ fun TerminalPlaceholderScreen(hostId: String, onBack: () -> Unit) {
                 .padding(HobgoblinSpacing.Md),
             verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Md),
         ) {
-            Text("Host $hostId")
-            Text("Terminal disconnected. Reconnect or return to diagnostics.")
+            Text(stringResource(R.string.placeholder_host_label, hostId))
+            Text(stringResource(R.string.placeholder_terminal_disconnected))
         }
     }
 }
@@ -91,10 +92,10 @@ fun SettingsPlaceholderScreen(onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text(stringResource(R.string.navigation_settings)) },
                 navigationIcon = {
                     TextButton(onClick = onBack) {
-                        Text("Back")
+                        Text(stringResource(R.string.common_back))
                     }
                 },
             )
@@ -107,10 +108,10 @@ fun SettingsPlaceholderScreen(onBack: () -> Unit) {
                 .padding(HobgoblinSpacing.Md),
             verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm),
         ) {
-            Text("Hobgoblin Android")
-            Text("SSH remote-first emergency operations.")
-            Text("Local terminal")
-            Text(localTerminalPlaceholderText())
+            Text(stringResource(R.string.placeholder_product_name))
+            Text(stringResource(R.string.placeholder_product_description))
+            Text(stringResource(R.string.placeholder_local_terminal))
+            Text(stringResource(localTerminalPlaceholderTextResource()))
         }
     }
 }

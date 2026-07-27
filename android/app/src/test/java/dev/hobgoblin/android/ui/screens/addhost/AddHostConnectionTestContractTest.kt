@@ -15,7 +15,7 @@ class AddHostConnectionTestContractTest {
 
         assertTrue(source.contains("onRunDiagnostics: (SshHostProfile) -> DiagnosticsResult"))
         assertTrue(source.contains("initializedIdentityRefId != null"))
-        assertTrue(source.contains("Test connection"))
+        assertTrue(source.contains("R.string.host_test_connection"))
         assertTrue(source.contains("lastDiagnosticStatus"))
     }
 

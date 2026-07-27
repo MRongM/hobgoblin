@@ -36,6 +36,10 @@ _Avoid_: Git worktree order, remote sort order, synchronized order
 A temporary Android presentation that gives the selected retained terminal session the full terminal surface by hiding the terminal top bar and command deck until the user exits focus. It is device-local, never persisted, exits before Back navigates away, and is distinct from desktop Terminal focus mode.
 _Avoid_: Terminal maximization, fullscreen terminal, persisted terminal layout
 
+**Android application language**:
+The locale Android selects for Hobgoblin's native Android-owned interface text and foreground-terminal notifications. It follows the device language by default, may be overridden through Android's per-app language settings on supported devices, and never translates terminal output, repository data, paths, host names, or raw Git and SSH diagnostics.
+_Avoid_: Server language, terminal locale, translated terminal output
+
 **Terminal topbar**:
 The top row of the terminal area, containing terminal tabs and terminal-level actions.
 _Avoid_: Terminal toolbar, detail toolbar

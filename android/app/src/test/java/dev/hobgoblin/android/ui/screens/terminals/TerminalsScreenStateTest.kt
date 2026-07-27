@@ -1,10 +1,12 @@
 package dev.hobgoblin.android.ui.screens.terminals
 
+import dev.hobgoblin.android.R
 import dev.hobgoblin.android.domain.ssh.RemoteRepositoryProfile
 import dev.hobgoblin.android.domain.ssh.SshHostProfile
 import dev.hobgoblin.android.terminals.TerminalSessionRecord
 import dev.hobgoblin.android.terminals.TerminalSessionStatus
 import dev.hobgoblin.android.terminals.TmuxSessionIdentity
+import dev.hobgoblin.android.ui.text.LocalizedText
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -15,24 +17,33 @@ import org.junit.Test
 class TerminalsScreenStateTest {
     @Test
     fun `terminal overview title prefers the retained display name`() {
-        assertEquals("release shell", terminalOverviewTitle(record(displayName = "release shell", terminalId = 3)))
+        assertEquals(
+            LocalizedText(R.string.common_value, listOf("release shell")),
+            terminalOverviewTitleText(record(displayName = "release shell", terminalId = 3)),
+        )
     }
 
     @Test
     fun `terminal overview title falls back to the terminal number`() {
-        assertEquals("terminal-3", terminalOverviewTitle(record(displayName = "", terminalId = 3)))
+        assertEquals(
+            LocalizedText(R.string.common_value, listOf("terminal-3")),
+            terminalOverviewTitleText(record(displayName = "", terminalId = 3)),
+        )
     }
 
     @Test
     fun `host temporary terminal title has a stable fallback`() {
-        assertEquals("Host terminal", terminalOverviewTitle(record(displayName = "", terminalId = null)))
+        assertEquals(
+            LocalizedText(R.string.terminals_host_terminal),
+            terminalOverviewTitleText(record(displayName = "", terminalId = null)),
+        )
     }
 
     @Test
     fun `terminal overview status stays compact`() {
         assertEquals(
-            "disconnected",
-            terminalOverviewStatus(record(status = TerminalSessionStatus.Disconnected)),
+            LocalizedText(R.string.terminal_status_disconnected),
+            terminalOverviewStatusText(record(status = TerminalSessionStatus.Disconnected)),
         )
     }
 
@@ -48,8 +59,11 @@ class TerminalsScreenStateTest {
             repositories = listOf(repository()),
         )
 
-        assertEquals("Build host · Example", source.contextLabel)
-        assertEquals("Branch directory", source.locationLabel)
+        assertEquals(
+            LocalizedText(R.string.terminals_context, listOf("Build host", "Example")),
+            source.contextLabel,
+        )
+        assertEquals(LocalizedText(R.string.terminals_branch_directory), source.locationLabel)
         assertEquals("/srv/example-feature", source.path)
     }
 
@@ -61,8 +75,11 @@ class TerminalsScreenStateTest {
             repositories = listOf(repository()),
         )
 
-        assertEquals("Build host · Example", source.contextLabel)
-        assertEquals("Project root", source.locationLabel)
+        assertEquals(
+            LocalizedText(R.string.terminals_context, listOf("Build host", "Example")),
+            source.contextLabel,
+        )
+        assertEquals(LocalizedText(R.string.terminals_project_root), source.locationLabel)
         assertEquals("/srv/example", source.path)
     }
 
@@ -78,28 +95,43 @@ class TerminalsScreenStateTest {
             repositories = listOf(repository()),
         )
 
-        assertEquals("Build host · Host terminal", source.contextLabel)
-        assertEquals("Host directory", source.locationLabel)
+        assertEquals(
+            LocalizedText(
+                R.string.terminals_context,
+                listOf("Build host", LocalizedText(R.string.terminals_host_terminal)),
+            ),
+            source.contextLabel,
+        )
+        assertEquals(LocalizedText(R.string.terminals_host_directory), source.locationLabel)
         assertEquals("/var/log", source.path)
     }
 
     @Test
     fun `terminal overview identity summary shows native kind and short Android session id`() {
         assertEquals(
-            "native · session 12345678",
-            terminalSessionIdentitySummary(record(id = "12345678-90ab-cdef")),
+            LocalizedText(
+                R.string.terminal_session_identity,
+                listOf(LocalizedText(R.string.terminal_kind_native), "12345678"),
+            ),
+            terminalSessionIdentityText(record(id = "12345678-90ab-cdef")),
         )
         assertEquals(
-            "native · session short",
-            terminalSessionIdentitySummary(record(id = "short")),
+            LocalizedText(
+                R.string.terminal_session_identity,
+                listOf(LocalizedText(R.string.terminal_kind_native), "short"),
+            ),
+            terminalSessionIdentityText(record(id = "short")),
         )
     }
 
     @Test
     fun `terminal overview identity summary classifies retained tmux identity`() {
         assertEquals(
-            "tmux · session abcdef12",
-            terminalSessionIdentitySummary(
+            LocalizedText(
+                R.string.terminal_session_identity,
+                listOf(LocalizedText(R.string.terminal_kind_tmux), "abcdef12"),
+            ),
+            terminalSessionIdentityText(
                 record(id = "abcdef12-3456", tmuxIdentity = tmuxIdentity()),
             ),
         )
@@ -117,19 +149,15 @@ class TerminalsScreenStateTest {
     fun `native terminal close confirmation explains stop and retention`() {
         val text = terminalOverviewCloseConfirmationText(record(displayName = "release shell"))
 
-        assertTrue(text.contains("release shell"))
-        assertTrue(text.contains("stops"))
-        assertTrue(text.contains("reconnect"))
-        assertFalse(text.contains("removes"))
+        assertEquals(R.string.terminals_close_native, text.resourceId)
+        assertEquals(listOf(LocalizedText(R.string.common_value, listOf("release shell"))), text.formatArgs)
     }
 
     @Test
     fun `tmux terminal close confirmation keeps the remote tmux session`() {
         val text = terminalOverviewCloseConfirmationText(record(tmuxIdentity = tmuxIdentity()))
 
-        assertFalse(text.contains("removes"))
-        assertTrue(text.contains("reconnect"))
-        assertTrue(text.contains("remote tmux session keeps running"))
+        assertEquals(R.string.terminals_close_tmux, text.resourceId)
     }
 
     @Test
@@ -137,9 +165,8 @@ class TerminalsScreenStateTest {
         val nativeText = terminalOverviewDeleteConfirmationText(record(displayName = "release shell"))
         val tmuxText = terminalOverviewDeleteConfirmationText(record(tmuxIdentity = tmuxIdentity()))
 
-        assertTrue(nativeText.contains("release shell"))
-        assertTrue(nativeText.contains("removes"))
-        assertTrue(tmuxText.contains("remote tmux session keeps running"))
+        assertEquals(R.string.terminals_delete_native, nativeText.resourceId)
+        assertEquals(R.string.terminals_delete_tmux, tmuxText.resourceId)
     }
 
     @Test
@@ -162,13 +189,13 @@ class TerminalsScreenStateTest {
         ).firstOrNull(File::isFile)?.readText() ?: error("TerminalsScreen.kt not found")
 
         assertTrue(source.contains("onReconnectTerminalSession"))
-        assertTrue(source.contains("Text(\"Reconnect\")"))
+        assertTrue(source.contains("R.string.terminal_action_reconnect"))
         assertTrue(source.contains("enabled = terminalSessionReconnectAvailable(session)"))
         assertTrue(source.contains("onCloseTerminalSession"))
         assertTrue(source.contains("onDeleteTerminalSession"))
-        assertTrue(source.contains("Text(\"Close\")"))
-        assertTrue(source.contains("Text(\"Delete\")"))
-        assertTrue(source.contains("Text(\"Delete terminal?\")"))
+        assertTrue(source.contains("R.string.repository_terminal_close"))
+        assertTrue(source.contains("R.string.common_delete"))
+        assertTrue(source.contains("R.string.repository_delete_terminal_title"))
         assertTrue(source.contains("AlertDialog("))
     }
 

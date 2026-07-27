@@ -26,8 +26,10 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import dev.hobgoblin.android.R
 
 internal data class ManualReorderItemBounds(
     val key: String,
@@ -158,12 +160,13 @@ fun ManualReorderHandle(
     modifier: Modifier = Modifier,
 ) {
     val dotColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val reorderDescription = stringResource(R.string.accessibility_reorder_item, itemLabel)
     Box(
         modifier = modifier
             .size(48.dp)
             .clickable(role = Role.Button, onClick = {})
             .semantics {
-                contentDescription = "Reorder $itemLabel"
+                contentDescription = reorderDescription
             }
             .pointerInput(state, itemKey) {
                 detectDragGesturesAfterLongPress(
