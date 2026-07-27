@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="MRongM が提供する Hobgoblin Android のプライバシーポリシー。" />
+    <title>Hobgoblin Android プライバシーポリシー</title>
+    <link rel="stylesheet" href="privacy.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#policy">ポリシーへ移動</a>
+    <div class="shell">
+      <header>
+        <div class="mark"><span class="prompt">&gt;_</span> Hobgoblin Android · MRongM</div>
+        <h1>プライバシーポリシー</h1>
+        <p class="summary">Hobgoblin は Android 端末を、利用者が選んだ SSH ホストへ直接接続します。MRongM は Hobgoblin アカウントやアプリ用バックエンドを運営しません。</p>
+        <nav aria-label="ポリシーの言語"><a href="./" lang="en">English</a><a href="zh-cn.html" lang="zh-Hans">简体中文</a><a href="ja.html" aria-current="page">日本語</a><a href="ko.html" lang="ko">한국어</a></nav>
+      </header>
+      <main id="policy">
+        <p class="meta"><strong>発効日：</strong>2026-07-27 · <strong>開発者：</strong>MRongM</p>
+        <section><h2>1. 適用範囲</h2><p>本ポリシーは、MRongM が提供する Hobgoblin Android アプリに適用されます。利用者が Hobgoblin とともに使用する SSH サーバー、Git ホスト、ネットワーク事業者、Android システムサービス、第三者アプリには適用されません。</p></section>
+        <section><h2>2. MRongM が収集しないデータ</h2><p>Hobgoblin には MRongM 運営のアプリ用バックエンドがなく、広告、分析、クラッシュ報告 SDK も含まれません。MRongM は、アプリアカウント情報、テレメトリ、広告 ID、端末内容、リポジトリ内容、SSH 認証情報、端末情報をアプリから受信しません。</p></section>
+        <section><h2>3. 端末内に保存される情報</h2><p>利用者が要求した機能を提供するため、ホストの別名・アドレス・ユーザー名・ポート、リモートパス、信頼したホスト鍵フィンガープリント、ポート転送ルール、表示設定、手動順序、保持端末のメタデータ、長さを制限した最近の端末出力スナップショットをアプリの非公開ストレージに保存します。インポートまたは生成した SSH 秘密鍵は、Android Keystore が保持する鍵を使った AES-GCM で暗号化されます。公開鍵の設置に使う一時的なサーバーパスワードは、その処理中だけメモリで扱い、終了後に消去し、保存しません。</p></section>
+        <section><h2>4. 直接 SSH 接続</h2><p>接続時、コマンド、端末の入出力、リポジトリのメタデータ、リモートパスと応答は、端末と利用者が選んだ SSH サーバーの間で直接送受信され、SSH により転送中に暗号化されます。MRongM は中継者ではなく、その内容を読み取ったり取得したりできません。サーバー管理者やネットワーク事業者は、それぞれのポリシーに従ってデータを処理する場合があります。</p></section>
+        <section><h2>5. Termux とクリップボード</h2><p>Termux 連携は任意で、利用者が明示的に操作した場合だけ実行されます。Termux の直接コマンド権限が利用できる場合、要求されたセッションを開始するため、SSH コマンドと選択した秘密鍵素材を別途インストールされた Termux アプリへ送ることがあります。「コマンドをコピー」を選ぶと、SSH コマンドを Android のクリップボードへ置きます。Termux や他のクリップボード読み取り元には、それぞれの動作とポリシーが適用されます。</p></section>
+        <section><h2>6. 通知</h2><p>対話型 SSH 端末が動作している間、Hobgoblin は継続中の Android 通知を使用します。通知には端末ラベルと接続状態が表示される場合があります。ロック画面での表示は端末の通知設定で管理できます。</p></section>
+        <section><h2>7. 共有</h2><p>MRongM はアプリからデータを受信しないため、受信データを販売または共有しません。利用者が開始した操作を実行する場合に限り、前述のとおりデータが選択した SSH サーバー、Termux、またはクリップボードへ渡ります。正当な法的要請がある場合、MRongM は保有情報を開示することがありますが、保有していないアプリデータは開示できません。</p></section>
+        <section><h2>8. 保持と削除</h2><p>ローカル記録は、アプリ内の利用可能な削除操作で削除するか、Android 設定で Hobgoblin のストレージを消去するか、アプリをアンインストールするまで保持されます。ストレージの消去またはアンインストールにより、残っているローカルアプリデータが削除されます。Hobgoblin の記録を終了・削除しても、SSH サーバー上のファイル、Git リポジトリ、Shell 履歴、authorized_keys、tmux セッションは削除されません。別のリモート操作が明示的にプレビューされ、利用者が承認した場合のみ実行されます。MRongM はサーバー側の Hobgoblin アカウントデータを保持しないため、削除対象のサーバー側ユーザー記録はありません。</p></section>
+        <section><h2>9. セキュリティ</h2><p>Hobgoblin は Android の非公開アプリストレージ、Android Keystore による秘密鍵暗号化、SSH 転送暗号化、明示的なホスト鍵信頼を使用します。ただし、絶対的な安全性を保証できるシステムはありません。端末、SSH サーバー、認証情報、Termux、ネットワークの保護は利用者の責任です。</p></section>
+        <section><h2>10. 子ども</h2><p>Hobgoblin は 18 歳以上の成人向け業務用開発ツールであり、子ども向けではありません。MRongM は本アプリを通じて子どもの個人情報を意図的に収集しません。</p></section>
+        <section><h2>11. 国際利用</h2><p>端末と選択した SSH サーバーが異なる国にある場合があります。SSH、暗号技術、リポジトリ、リモートシステムの利用が、適用される法令と組織規則に適合することを利用者自身で確認してください。</p></section>
+        <section><h2>12. 変更</h2><p>Hobgoblin の動作または法的義務が変わった場合、本ポリシーを更新することがあります。上記の発効日を更新し、必要に応じて重要な変更を本ページ、アプリ、またはストア掲載情報に反映します。</p></section>
+        <section><h2>13. 連絡先</h2><p>プライバシーに関するお問い合わせは、MRongM の <a href="mailto:jiangisright@gmail.com">jiangisright@gmail.com</a> までご連絡ください。</p></section>
+      </main>
+      <footer>Hobgoblin Android プライバシーポリシー · MRongM</footer>
+    </div>
+  </body>
+</html>

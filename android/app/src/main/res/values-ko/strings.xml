@@ -33,6 +33,7 @@
     <string name="settings_failed_checks_before_close">종료 전 실패 검사 횟수</string>
     <string name="settings_failure_threshold_range">범위: %1$d~%2$d.</string>
     <string name="settings_keepalive_strategy">현재 방식: SSH keepalive @openssh.com</string>
+    <string name="settings_privacy_policy">개인정보 처리방침</string>
     <string name="host_add_title">호스트 추가</string>
     <string name="host_edit_title">호스트 편집</string>
     <string name="host_save">호스트 저장</string>
