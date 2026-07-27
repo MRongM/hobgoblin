@@ -128,7 +128,7 @@ describe('desktop build scripts', () => {
     expect(buildScript).toContain("await timeStep('cleanup release'")
   })
 
-  test('manual release workflow builds macOS and Windows artifacts then publishes release assets', () => {
+  test('manual release workflow builds macOS, Windows, and Android artifacts then publishes release assets', () => {
     const workflowPath = path.join(repoRoot, '.github/workflows/release.yml')
 
     expect(existsSync(workflowPath)).toBe(true)
@@ -141,6 +141,7 @@ describe('desktop build scripts', () => {
     expect(workflow).toContain('contents: write')
     expect(workflow).toContain('build-macos:')
     expect(workflow).toContain('build-windows:')
+    expect(workflow).toContain('build-android:')
     expect(workflow).toContain('publish:')
     expect((workflow.match(/actions\/setup-node@v4/g) ?? []).length).toBe(3)
     expect((workflow.match(/node-version: 24/g) ?? []).length).toBe(3)
@@ -149,8 +150,14 @@ describe('desktop build scripts', () => {
     expect(workflow).toContain('bun run typecheck')
     expect(workflow).toContain('bun scripts/build-release-artifacts.ts --platform macos --arch ${{ matrix.arch }}')
     expect(workflow).toContain('bun scripts/build-release-artifacts.ts --platform windows --arch x64')
+    expect(workflow).toContain('actions/setup-java@v4')
+    expect(workflow).toContain('distribution: temurin')
+    expect(workflow).toContain('java-version: 17')
+    expect(workflow).toContain('./gradlew --no-daemon :app:assembleRelease')
+    expect(workflow).toContain('android/app/build/outputs/apk/release/app-release-unsigned.apk')
     expect(workflow).toContain('actions/upload-artifact@v4')
     expect(workflow).toContain('actions/download-artifact@v4')
+    expect(workflow).toContain('needs: [build-macos, build-windows, build-android]')
     expect(workflow).toContain('GITHUB_SHA')
     expect(workflow).toContain('gh release create "$TAG" --target "$GITHUB_SHA"')
     expect(workflow).toContain('gh release upload "$TAG"')
@@ -158,6 +165,8 @@ describe('desktop build scripts', () => {
     expect(workflow).toContain('Hobgoblin-${VERSION}-arm64.dmg')
     expect(workflow).toContain('Hobgoblin-${VERSION}-x64.dmg')
     expect(workflow).toContain('Hobgoblin-${VERSION}-x64.exe')
+    expect(workflow).toContain('Hobgoblin-${VERSION}-android.apk')
+    expect(workflow).toContain('Android: This APK is unsigned and must be signed before installation.')
   })
 
   test('release artifact script validates platform-specific standard artifact names', () => {

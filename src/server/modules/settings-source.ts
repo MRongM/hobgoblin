@@ -47,7 +47,6 @@ import {
   DEFAULT_EDITOR_APP,
   DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   DEFAULT_FILE_TREE_FONT_SIZE,
-  DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
   DEFAULT_FETCH_INTERVAL_SEC,
   DEFAULT_FONT_FAMILY,
   DEFAULT_GIT_NETWORK_TIMEOUT_SEC,
@@ -62,13 +61,11 @@ import {
   DEFAULT_THEME_PREF,
   MAX_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   MAX_FILE_TREE_FONT_SIZE,
-  MAX_FILE_TREE_TOPBAR_FONT_SIZE,
   MAX_GIT_NETWORK_TIMEOUT_SEC,
   MAX_RECENT_REPOS,
   MAX_TERMINAL_FONT_SIZE,
   MIN_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   MIN_FILE_TREE_FONT_SIZE,
-  MIN_FILE_TREE_TOPBAR_FONT_SIZE,
   MIN_GIT_NETWORK_TIMEOUT_SEC,
   MIN_SERVER_PORT,
   MIN_TERMINAL_FONT_SIZE,
@@ -114,7 +111,6 @@ interface ServerSettingsData {
   topbarHeightPx: number
   toolbarHeightPx: number
   fileTreeFontSize: number
-  fileTreeTopbarFontSize: number
   fileTreeClipboardMaxBytesMb: number
   terminalFontSize: number
   terminalCustomButtonsVisible: boolean
@@ -216,14 +212,6 @@ function normalizeFileTreeFontSize(value: unknown): number {
     min: MIN_FILE_TREE_FONT_SIZE,
     max: MAX_FILE_TREE_FONT_SIZE,
     fallback: DEFAULT_FILE_TREE_FONT_SIZE,
-  })
-}
-
-function normalizeFileTreeTopbarFontSize(value: unknown): number {
-  return normalizeFontSize(value, {
-    min: MIN_FILE_TREE_TOPBAR_FONT_SIZE,
-    max: MAX_FILE_TREE_TOPBAR_FONT_SIZE,
-    fallback: DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
   })
 }
 
@@ -410,7 +398,6 @@ function settingsPrefsFromData(data: ServerSettingsData): SettingsPrefs {
     topbarHeightPx: data.topbarHeightPx,
     toolbarHeightPx: data.toolbarHeightPx,
     fileTreeFontSize: data.fileTreeFontSize,
-    fileTreeTopbarFontSize: data.fileTreeTopbarFontSize,
     fileTreeClipboardMaxBytesMb: data.fileTreeClipboardMaxBytesMb,
     terminalFontSize: data.terminalFontSize,
     terminalCustomButtonsVisible: data.terminalCustomButtonsVisible,
@@ -692,7 +679,6 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       topbarHeightPx: normalizeTopbarHeightPx(parsed.topbarHeightPx),
       toolbarHeightPx: normalizeToolbarHeightPx(parsed.toolbarHeightPx),
       fileTreeFontSize: normalizeFileTreeFontSize(parsed.fileTreeFontSize),
-      fileTreeTopbarFontSize: normalizeFileTreeTopbarFontSize(parsed.fileTreeTopbarFontSize),
       fileTreeClipboardMaxBytesMb: normalizeFileTreeClipboardMaxBytesMb(parsed.fileTreeClipboardMaxBytesMb),
       terminalFontSize: normalizeTerminalFontSize(parsed.terminalFontSize),
       terminalCustomButtonsVisible: normalizeTerminalCustomButtonsVisible(parsed.terminalCustomButtonsVisible),
@@ -954,10 +940,6 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     patch.toolbarHeightPx === undefined ? data.toolbarHeightPx : normalizeToolbarHeightPx(patch.toolbarHeightPx)
   const nextFileTreeFontSize =
     patch.fileTreeFontSize === undefined ? data.fileTreeFontSize : normalizeFileTreeFontSize(patch.fileTreeFontSize)
-  const nextFileTreeTopbarFontSize =
-    patch.fileTreeTopbarFontSize === undefined
-      ? data.fileTreeTopbarFontSize
-      : normalizeFileTreeTopbarFontSize(patch.fileTreeTopbarFontSize)
   const nextFileTreeClipboardMaxBytesMb =
     patch.fileTreeClipboardMaxBytesMb === undefined
       ? data.fileTreeClipboardMaxBytesMb
@@ -999,7 +981,6 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     data.topbarHeightPx !== nextTopbarHeightPx ||
     data.toolbarHeightPx !== nextToolbarHeightPx ||
     data.fileTreeFontSize !== nextFileTreeFontSize ||
-    data.fileTreeTopbarFontSize !== nextFileTreeTopbarFontSize ||
     data.fileTreeClipboardMaxBytesMb !== nextFileTreeClipboardMaxBytesMb ||
     data.terminalFontSize !== nextTerminalFontSize ||
     data.terminalCustomButtonsVisible !== nextTerminalCustomButtonsVisible ||
@@ -1027,7 +1008,6 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   data.topbarHeightPx = nextTopbarHeightPx
   data.toolbarHeightPx = nextToolbarHeightPx
   data.fileTreeFontSize = nextFileTreeFontSize
-  data.fileTreeTopbarFontSize = nextFileTreeTopbarFontSize
   data.fileTreeClipboardMaxBytesMb = nextFileTreeClipboardMaxBytesMb
   data.terminalFontSize = nextTerminalFontSize
   data.terminalCustomButtonsVisible = nextTerminalCustomButtonsVisible

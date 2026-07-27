@@ -57,10 +57,7 @@ import {
   type CreateWorktreeInput,
 } from '#/shared/worktree-create.ts'
 import { isRepoWorktreeBootstrapConfigTrusted } from '#/shared/repo-settings.ts'
-import type {
-  WorktreeBootstrapDecision,
-  WorktreeBootstrapPreviewResult,
-} from '#/shared/worktree-bootstrap-summary.ts'
+import type { WorktreeBootstrapDecision, WorktreeBootstrapPreviewResult } from '#/shared/worktree-bootstrap-summary.ts'
 import {
   DEFAULT_WORKTREE_BOOTSTRAP_CONFIG,
   getWorktreeBootstrapPreview as getLocalWorktreeBootstrapPreview,
@@ -500,11 +497,6 @@ export async function getRepositoryRemoteTags(cwd: string, signal?: AbortSignal)
   const backend = await resolveRepoBackend(cwd)
   const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
   return await backend.getRemoteTags(signal, networkOptions)
-}
-
-export async function getRepositoryLocalTags(cwd: string, signal?: AbortSignal): Promise<string[]> {
-  if (!isValidRepoLocator(cwd)) return []
-  return await runWithRepoBackend(cwd, async (backend) => await backend.getLocalTags(signal))
 }
 
 export async function deleteRepositoryBranch(

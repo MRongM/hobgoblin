@@ -79,26 +79,6 @@ describe('app shell client', () => {
     installWindow()
   })
 
-  test('opens app settings through the renderer bridge shell', async () => {
-    const bridgeModule = await import('#/web/renderer-bridge.ts')
-    const openSettingsWindow = vi.fn(async () => true)
-    bridgeModule.setRendererBridgeForTests(
-      testBridge({
-        shell: () => ({
-          openSettingsWindow,
-          openExternalUrl: vi.fn(),
-          openDirectoryDialog: vi.fn(),
-          consumeExternalOpenPaths: vi.fn(),
-          openInFinder: vi.fn(),
-        }),
-      }),
-    )
-
-    const { openAppSettings } = await import('#/web/app-shell-client.ts')
-    await expect(openAppSettings('about')).resolves.toBe(true)
-    expect(openSettingsWindow).toHaveBeenCalledWith({ page: 'about' })
-  })
-
   test('opens a detached file area window only through the native capability', async () => {
     const bridgeModule = await import('#/web/renderer-bridge.ts')
     const request = {

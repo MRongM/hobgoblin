@@ -178,7 +178,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
 
   writeSession(ownerId: TOwner, sessionId: string, data: string, attachmentId?: string): boolean {
     if (!isValidTerminalSessionId(sessionId) || !isValidTerminalWriteData(data)) return false
-    const session = this.ownedSession(ownerId, sessionId)
+    const session = this.getSession(ownerId, sessionId)
     if (!session?.pty) return false
     if (!attachmentId) return false
     if (!authorizeTerminalAttachment(session, attachmentId, 'write').ok) return false
@@ -198,7 +198,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
     if (!isValidTerminalSessionId(sessionId)) return { ok: false, message: 'error.invalid-arguments' }
     const size = normalizeTerminalSize(cols, rows)
     if (!size) return { ok: false, message: 'error.invalid-arguments' }
-    const session = this.ownedSession(ownerId, sessionId)
+    const session = this.getSession(ownerId, sessionId)
     if (!session) return { ok: false, message: 'error.invalid-arguments' }
     if (attachmentId) {
       registerTerminalAttachment(session, attachmentId, size.cols, size.rows, attachmentConnected)
@@ -218,7 +218,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
     if (!isValidTerminalSessionId(sessionId)) return false
     const size = normalizeTerminalSize(cols, rows)
     if (!size) return false
-    const session = this.ownedSession(ownerId, sessionId)
+    const session = this.getSession(ownerId, sessionId)
     if (!session) return false
     if (!attachmentId) return false
     registerTerminalAttachment(session, attachmentId, size.cols, size.rows, attachmentConnected)
@@ -237,7 +237,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
     if (!isValidTerminalSessionId(sessionId)) return { ok: false, message: 'error.invalid-arguments' }
     const size = normalizeTerminalSize(cols, rows)
     if (!size) return { ok: false, message: 'error.invalid-arguments' }
-    const session = this.ownedSession(ownerId, sessionId)
+    const session = this.getSession(ownerId, sessionId)
     if (!session) return { ok: false, message: 'error.invalid-arguments' }
     if (attachmentId) {
       registerTerminalAttachment(session, attachmentId, size.cols, size.rows, attachmentConnected)
@@ -260,7 +260,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
     if (!isValidTerminalSessionId(sessionId)) return { ok: false, message: 'error.invalid-arguments' }
     const size = normalizeTerminalSize(cols, rows)
     if (!size) return { ok: false, message: 'error.invalid-arguments' }
-    const session = this.ownedSession(ownerId, sessionId)
+    const session = this.getSession(ownerId, sessionId)
     if (!session) return { ok: false, message: 'error.invalid-arguments' }
     if (attachmentId) {
       registerTerminalAttachment(session, attachmentId, size.cols, size.rows, attachmentConnected)
@@ -279,7 +279,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
   }
 
   closeOwnedSession(ownerId: TOwner, sessionId: string): boolean {
-    if (!this.ownedSession(ownerId, sessionId)) return false
+    if (!this.getSession(ownerId, sessionId)) return false
     this.closeSession(sessionId)
     return true
   }
@@ -362,10 +362,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
     return await readTerminalRenderOutputExcerpt(sessionId, session.render, maxCharacters)
   }
 
-  async screenSnapshot(
-    sessionId: string,
-    input: TerminalScreenSnapshotInput,
-  ): Promise<TerminalScreenSnapshot | null> {
+  async screenSnapshot(sessionId: string, input: TerminalScreenSnapshotInput): Promise<TerminalScreenSnapshot | null> {
     const session = this.sessionsById.get(sessionId)
     if (!session) return null
     return await readTerminalRenderScreenSnapshot(sessionId, session.render, input)
@@ -430,12 +427,6 @@ export class TerminalSessionManager<TOwner extends string | number> {
       }
     }
     return max + 1
-  }
-
-  private ownedSession(ownerId: TOwner, sessionId: string): TerminalSession<TOwner> | undefined {
-    if (!this.isValidOwnerId(ownerId) || !isValidTerminalSessionId(sessionId)) return undefined
-    const session = this.sessionsById.get(sessionId)
-    return session?.ownerId === ownerId ? session : undefined
   }
 
   getSession(ownerId: TOwner, sessionId: string): TerminalSession<TOwner> | undefined {

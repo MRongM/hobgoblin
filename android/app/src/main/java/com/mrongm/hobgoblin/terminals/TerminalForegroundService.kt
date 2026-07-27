@@ -62,7 +62,6 @@ class TerminalForegroundService : Service() {
     }
 
     private fun ensureChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val channel = NotificationChannel(
             TerminalNotificationFactory.ChannelId,
             getString(R.string.notification_terminal_channel),

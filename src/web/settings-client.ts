@@ -273,11 +273,6 @@ export async function setToolbarHeightPx(heightPx: number): Promise<number> {
   return result.settings.toolbarHeightPx
 }
 
-export async function setFileTreeTopbarFontSize(fontSize: number): Promise<number> {
-  const result = await updateSettingsPrefsPatch({ fileTreeTopbarFontSize: fontSize })
-  return result.settings.fileTreeTopbarFontSize
-}
-
 export async function setFileTreeClipboardMaxBytesMb(value: number): Promise<number> {
   const result = await updateSettingsPrefsPatch({ fileTreeClipboardMaxBytesMb: value })
   return result.settings.fileTreeClipboardMaxBytesMb

@@ -55,7 +55,6 @@ describe('native shell projection helpers', () => {
         topbarHeightPx: 39,
         toolbarHeightPx: 41,
         fileTreeFontSize: 12,
-        fileTreeTopbarFontSize: 13,
         fileTreeClipboardMaxBytesMb: 30,
         terminalFontSize: 14,
         terminalCustomButtonsVisible: true,

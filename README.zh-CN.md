@@ -6,13 +6,6 @@ Hobgoblin 不只是一个分支管理工具。它是一个基于 Git worktree �
 
 它的核心模型很简单：**多项目 + 多 worktree / 多分支 + 多终端**。你可以同时打开多个仓库，把并行分支隔离到不同 worktree，把终端绑定到正确上下文，并在其中运行 Codex、Claude 等 AI CLI，而不会丢失当前 Git 状态。它支持本地仓库、Git SSH 远程地址，也支持通过 SSH config alias 和远程路径打开 SSH 远程仓库。
 
-## 截图
-
-<p>
-  <img src="docs/screenshot-20260626-143532.png" alt="Hobgoblin 工作区纵览" width="49%" />
-  <img src="docs/screenshot-20260626-144523.png" alt="Hobgoblin 仓库工作区" width="49%" />
-</p>
-
 ## 生产力公式
 
 ```text

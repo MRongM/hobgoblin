@@ -132,7 +132,6 @@ describe('BranchWorkspaceTerminalPanel', () => {
     const slot = container.querySelector<HTMLElement>('[data-testid="terminal-slot"]')
     expect(JSON.parse(slot?.dataset.props ?? '{}')).toEqual({
       repoRoot: ROOT,
-      branch: 'feature/auth',
       worktreePath: PATH,
     })
   })
@@ -145,7 +144,6 @@ describe('BranchWorkspaceTerminalPanel', () => {
     const slot = container.querySelector<HTMLElement>('[data-testid="terminal-slot"]')
     expect(JSON.parse(slot?.dataset.props ?? '{}')).toEqual({
       repoRoot: ROOT,
-      branch: 'feature/auth',
       worktreePath: PATH,
     })
   })

@@ -107,7 +107,6 @@
     <string name="diagnostics_category_cancelled">キャンセル済み</string>
     <string name="diagnostics_category_config_changed">設定変更</string>
     <string name="diagnostics_category_unknown">不明</string>
-    <string name="hosts_status_healthy">正常</string>
     <string name="hosts_loading_description">保存済み SSH ホストを読み込んでいます。</string>
     <string name="hosts_empty_title">SSH ホストがありません</string>
     <string name="hosts_empty_description">リモート開発マシンを追加して、診断とターミナルアクセスを開始します。</string>
@@ -237,7 +236,6 @@
     <string name="repository_not_loaded">未読み込み。</string>
     <string name="repository_loading_directories">ディレクトリを読み込み中。</string>
     <string name="repository_no_child_directories">子ディレクトリはありません。</string>
-    <string name="repository_terminal_unavailable">ターミナルセッションを使用できません</string>
     <string name="repository_snapshot_failed">リポジトリスナップショットの取得に失敗しました</string>
     <string name="repository_worktree_create_failed">リモートワークツリーの作成に失敗しました</string>
     <string name="repository_worktree_remove_failed">リモートワークツリーの削除に失敗しました</string>

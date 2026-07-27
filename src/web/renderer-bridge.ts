@@ -5,6 +5,7 @@ import { readNativeBridge } from '#/web/native-bridge.ts'
 import {
   emptyRendererBridgeBootstrap as emptyBootstrapSnapshot,
   normalizeRendererServerClientId,
+  normalizeRendererSurfaceBootstrap,
   readWebBootstrap,
 } from '#/web/renderer-bootstrap-bridge.ts'
 import {
@@ -12,22 +13,8 @@ import {
   readOrCreateWebTerminalAttachmentId,
   type RendererServerTerminalConfig,
 } from '#/web/renderer-terminal-bridge.ts'
-import { normalizeDetachedFileAreaWindowRequest, type RendererSurfaceBootstrap } from '#/shared/file-area.ts'
 
 const WEB_TERMINAL_CLIENT_ID_STORAGE_KEY = 'goblin:web-terminal-client-id'
-
-function nativeRendererSurface(
-  value: unknown,
-  runtimeKind: RendererBootstrapSnapshot['runtime']['kind'],
-): RendererSurfaceBootstrap {
-  if (runtimeKind !== 'electron') return { kind: 'main' }
-  if (!value || typeof value !== 'object') return { kind: 'main' }
-  const candidate = value as Partial<RendererSurfaceBootstrap>
-  if (candidate.kind === 'main') return { kind: 'main' }
-  if (candidate.kind !== 'detached-file-area') return { kind: 'main' }
-  const request = normalizeDetachedFileAreaWindowRequest(candidate.request)
-  return request ? { kind: 'detached-file-area', request } : { kind: 'main' }
-}
 
 function readServerTerminalConfig(): RendererServerTerminalConfig | null {
   const server = readWebBootstrap(readOrCreateWebTerminalClientId).initialServer
@@ -95,7 +82,7 @@ function electronBridge(): RendererBridge {
         initialI18n: bridge?.initialI18n ?? bootstrap.initialI18n ?? null,
         initialSettings: bridge?.initialSettings ?? bootstrap.initialSettings ?? null,
         initialServer: bridge?.initialServer ?? bootstrap.initialServer ?? null,
-        surface: nativeRendererSurface(bridge?.surface ?? bootstrap.surface, runtime.kind),
+        surface: normalizeRendererSurfaceBootstrap(bridge?.surface ?? bootstrap.surface, runtime.kind),
       }
     },
     invokeRpc(request) {

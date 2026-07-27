@@ -160,7 +160,6 @@ describe('runtime settings hooks', () => {
       defaultSettingsSnapshot({
         fontFamily: 'system',
         fileTreeFontSize: 12,
-        fileTreeTopbarFontSize: 13,
         terminalFontSize: 16,
       }),
     )

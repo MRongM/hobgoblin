@@ -59,7 +59,7 @@ import {
   trackRepositoryRemoteBranch,
 } from '#/server/modules/repo-write-paths.ts'
 import { getServerFetchIntervalSec } from '#/server/modules/settings-source.ts'
-import type { FilePathTarget } from '#/shared/file-path-target.ts'
+import { routeEditorTarget } from '#/server/routes/editor-target.ts'
 import { isWorktreeBootstrapConfigHash } from '#/shared/repo-settings.ts'
 import {
   normalizeWorktreeBootstrapSourcePath,
@@ -86,19 +86,6 @@ export function createRepoRoutes() {
     const parsed = typeof value === 'number' ? Math.floor(value) : Number.NaN
     if (!Number.isFinite(parsed)) return fallback
     return Math.max(min, Math.min(max, parsed))
-  }
-  function routeEditorTarget(value: unknown): FilePathTarget | null {
-    if (!value || typeof value !== 'object') return null
-    const input = value as Record<string, unknown>
-    if (typeof input.path !== 'string') return null
-    const target: FilePathTarget = { path: input.path }
-    if (typeof input.line === 'number' && Number.isSafeInteger(input.line) && input.line > 0) {
-      target.line = input.line
-      if (typeof input.column === 'number' && Number.isSafeInteger(input.column) && input.column > 0) {
-        target.column = input.column
-      }
-    }
-    return target
   }
   function normalizeRouteWorktreeBootstrapDecision(value: unknown): WorktreeBootstrapDecision | null {
     if (!value || typeof value !== 'object') return null
@@ -194,9 +181,7 @@ export function createRepoRoutes() {
         ? body.candidateScope
         : undefined
     const sourceWorktreePath =
-      body?.sourceWorktreePath === undefined
-        ? undefined
-        : normalizeWorktreeBootstrapSourcePath(body.sourceWorktreePath)
+      body?.sourceWorktreePath === undefined ? undefined : normalizeWorktreeBootstrapSourcePath(body.sourceWorktreePath)
     if (body?.candidateScope !== undefined && candidateScope === undefined) {
       return c.json({ ok: false, message: 'error.invalid-arguments' })
     }
@@ -207,15 +192,10 @@ export function createRepoRoutes() {
       await jsonOr(
         () =>
           sourceWorktreePath
-            ? getRepositoryWorktreeBootstrapPreflight(
-                cwd,
-                c.req.raw.signal,
-                candidateScope,
-                sourceWorktreePath,
-              )
+            ? getRepositoryWorktreeBootstrapPreflight(cwd, c.req.raw.signal, candidateScope, sourceWorktreePath)
             : candidateScope
-            ? getRepositoryWorktreeBootstrapPreflight(cwd, c.req.raw.signal, candidateScope)
-            : getRepositoryWorktreeBootstrapPreflight(cwd, c.req.raw.signal),
+              ? getRepositoryWorktreeBootstrapPreflight(cwd, c.req.raw.signal, candidateScope)
+              : getRepositoryWorktreeBootstrapPreflight(cwd, c.req.raw.signal),
         { ok: false, message: 'error.failed-read-repo' },
         'worktree-bootstrap-preflight',
       ),

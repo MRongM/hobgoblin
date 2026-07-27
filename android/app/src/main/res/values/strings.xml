@@ -108,7 +108,6 @@
     <string name="diagnostics_category_cancelled">cancelled</string>
     <string name="diagnostics_category_config_changed">config changed</string>
     <string name="diagnostics_category_unknown">unknown</string>
-    <string name="hosts_status_healthy">healthy</string>
     <string name="hosts_loading_description">Loading saved SSH hosts.</string>
     <string name="hosts_empty_title">No SSH hosts</string>
     <string name="hosts_empty_description">Add a remote development machine to start diagnostics and terminal access.</string>
@@ -238,7 +237,6 @@
     <string name="repository_not_loaded">Not loaded.</string>
     <string name="repository_loading_directories">Loading directories.</string>
     <string name="repository_no_child_directories">No child directories.</string>
-    <string name="repository_terminal_unavailable">Terminal sessions are not available</string>
     <string name="repository_snapshot_failed">Repository snapshot failed</string>
     <string name="repository_worktree_create_failed">Remote worktree create failed</string>
     <string name="repository_worktree_remove_failed">Remote worktree remove failed</string>

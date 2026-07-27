@@ -58,7 +58,6 @@ describe('renderer bootstrap', () => {
       topbarHeightPx: 34,
       toolbarHeightPx: 34,
       fileTreeFontSize: 12,
-      fileTreeTopbarFontSize: 13,
       fileTreeClipboardMaxBytesMb: 30,
       terminalFontSize: 14,
       terminalCustomButtonsVisible: true,

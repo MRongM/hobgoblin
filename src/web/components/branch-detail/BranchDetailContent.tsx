@@ -76,7 +76,7 @@ function BranchTerminalTab({
   if (!branch.worktree?.path) return null
   return (
     <BranchTabPanel detailId={detailId} tabId="terminal">
-      <TerminalSlot repoRoot={repoId} branch={branch.name} worktreePath={branch.worktree?.path} onRevealPath={onRevealPath} />
+      <TerminalSlot repoRoot={repoId} worktreePath={branch.worktree?.path} onRevealPath={onRevealPath} />
     </BranchTabPanel>
   )
 }
