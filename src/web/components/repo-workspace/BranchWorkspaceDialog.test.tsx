@@ -15,8 +15,13 @@ vi.mock('#/web/repo-client.ts', () => ({
 }))
 
 vi.mock('#/web/stores/i18n.ts', () => ({
-  useT: () => (key: string, values?: Record<string, string>) =>
-    values?.repository ? `${key}:${values.repository}` : key,
+  useT: () => (key: string, values?: Record<string, string | number>) => {
+    if (values?.repository) return `${key}:${values.repository}`
+    if (values?.completed !== undefined && values.total !== undefined) {
+      return `${key}:${values.completed}/${values.total}`
+    }
+    return key
+  },
 }))
 
 let container: HTMLDivElement
@@ -46,6 +51,103 @@ describe('BranchWorkspaceDialog', () => {
 
     expect(document.body.textContent).toContain('dialog.cancel')
     expect(document.body.textContent).not.toContain('common.cancel')
+  })
+
+  test('shows live create progress and the completed step count after confirmation', () => {
+    const workspace = existingWorkspace()
+    const liveWorkspace: BranchWorkspaceSnapshot = {
+      ...workspace,
+      repositories: [
+        workspace.repositories[0]!,
+        {
+          repositoryName: 'web',
+          targetBranch: 'feature/auth',
+          baseBranch: 'trunk',
+          branchOrigin: 'created',
+          worktreePath: '/workspace/goblin-feature-auth/web',
+          progress: 'pending',
+          ready: false,
+        },
+      ],
+    }
+    renderDialog({
+      plan: planWithSteps('create', [
+        { id: 'directory', kind: 'create-directory', label: 'goblin-feature-auth' },
+        { id: 'repository:api', kind: 'create-worktree', label: 'api', repositoryName: 'api' },
+        { id: 'repository:web', kind: 'create-worktree', label: 'web', repositoryName: 'web' },
+      ]),
+      progressWorkspace: liveWorkspace,
+      pending: true,
+    })
+
+    const progress = document.querySelector<HTMLElement>('[data-branch-workspace-operation-progress]')
+    expect(progress?.getAttribute('role')).toBe('status')
+    expect(progress?.textContent).toContain('workspace.branch-workspace.progress.create')
+    expect(progress?.textContent).toContain('workspace.branch-workspace.progress.summary:2/3')
+    expect(stepProgress('directory')).toBe('complete')
+    expect(stepProgress('repository:api')).toBe('complete')
+    expect(stepProgress('repository:web')).toBe('active')
+    expect(document.querySelector('[data-action="confirm"] .lucide-loader-circle')).not.toBeNull()
+  })
+
+  test('shows live remove progress without changing the destructive confirmation style', () => {
+    const workspace = existingWorkspace()
+    const liveWorkspace = existingWorkspace()
+    liveWorkspace.repositories[0]!.progress = 'removed'
+    liveWorkspace.repositories[0]!.ready = false
+    liveWorkspace.repositories[0]!.branchCleanupProgress = 'complete'
+    renderDialog({
+      mode: 'remove',
+      workspace,
+      progressWorkspace: liveWorkspace,
+      plan: removalPlan(),
+      pending: true,
+    })
+
+    const progress = document.querySelector<HTMLElement>('[data-branch-workspace-operation-progress]')
+    expect(progress?.textContent).toContain('workspace.branch-workspace.progress.remove')
+    expect(progress?.textContent).toContain('workspace.branch-workspace.progress.summary:1/2')
+    expect(stepProgress('branch:api')).toBe('complete')
+    expect(stepProgress('upstream:api')).toBe('active')
+    expect(document.querySelector('[data-action="confirm"]')?.getAttribute('data-variant')).toBe('destructive')
+  })
+
+  test('keeps progress hidden during preview and in non-target lifecycle modes', () => {
+    renderDialog({ plan: planWithSteps('create', [{ id: 'directory', kind: 'create-directory', label: 'folder' }]) })
+    expect(document.querySelector('[data-branch-workspace-operation-progress]')).toBeNull()
+
+    renderDialog({
+      mode: 'reduce',
+      workspace: workspaceWithTwoMembers(),
+      plan: reductionPlan(),
+      progressWorkspace: workspaceWithTwoMembers(),
+      pending: true,
+    })
+    expect(document.querySelector('[data-branch-workspace-operation-progress]')).toBeNull()
+  })
+
+  test('marks the first unresolved step failed after an execution error', () => {
+    renderDialog({
+      plan: planWithSteps('create', [
+        { id: 'directory', kind: 'create-directory', label: 'folder' },
+        { id: 'repository:api', kind: 'create-worktree', label: 'api', repositoryName: 'api' },
+      ]),
+      result: { ok: false, message: 'workspace.branch-workspace.execute-failed' },
+      error: 'workspace.branch-workspace.execute-failed',
+    })
+
+    expect(stepProgress('directory')).toBe('failed')
+    expect(stepProgress('repository:api')).toBe('pending')
+  })
+
+  test('returns the failed step to active while retrying', () => {
+    renderDialog({
+      plan: planWithSteps('create', [{ id: 'directory', kind: 'create-directory', label: 'folder' }]),
+      result: { ok: false, message: 'workspace.branch-workspace.execute-failed' },
+      pending: true,
+    })
+
+    expect(stepProgress('directory')).toBe('active')
   })
 
   test('shows a folder affordance for a directory auxiliary candidate without rendering its raw kind', () => {
@@ -605,6 +707,7 @@ function renderDialog(overrides: Partial<React.ComponentProps<typeof BranchWorks
         ]}
         auxiliaryCandidates={[{ name: 'docs', path: '/workspace/docs', kind: 'directory', outsideRoot: false }]}
         workspace={null}
+        progressWorkspace={null}
         plan={null}
         result={null}
         pending={false}
@@ -676,6 +779,14 @@ function choiceState(item: string, choice: string): string | null | undefined {
   return document
     .querySelector(`[data-materialization-item="${item}"] [data-materialization-choice="${choice}"]`)
     ?.getAttribute('data-state')
+}
+
+function stepProgress(id: string): string | undefined {
+  return (
+    document
+      .querySelector<HTMLElement>(`[data-branch-workspace-progress-step="${id}"]`)
+      ?.getAttribute('data-progress-status') ?? undefined
+  )
 }
 
 async function flushAsyncWork() {

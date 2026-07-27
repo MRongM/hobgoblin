@@ -161,7 +161,6 @@ describe('useBranchWorkspaceActions', () => {
     expect(mocks.execute).toHaveBeenCalledWith('/workspace', {
       planToken: plan.token,
       approvals: ['worktree-bootstrap'],
-      sourceToken: expect.stringMatching(/^repo_workspace_/),
     })
     expect(queryClient.getQueryData(branchWorkspaceQueryKey('/workspace'))).toMatchObject({
       ok: true,
@@ -197,7 +196,6 @@ describe('useBranchWorkspaceActions', () => {
     expect(mocks.execute).toHaveBeenCalledWith('/workspace', {
       planToken: plan.token,
       approvals: ['worktree-bootstrap'],
-      sourceToken: expect.stringMatching(/^repo_workspace_/),
     })
     expect(invalidate).toHaveBeenCalledWith({ queryKey: branchWorkspaceQueryKey('/workspace'), exact: true })
     await act(async () => state!.cancel())

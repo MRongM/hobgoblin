@@ -112,6 +112,23 @@ describe('i18n dictionaries', () => {
     expect(ko['workspace.branch-workspace.delete-warning']).toContain('커밋하지 않은 변경 사항')
   })
 
+  test('includes branch workspace lifecycle progress copy in every locale', () => {
+    const keys = [
+      'workspace.branch-workspace.progress.create',
+      'workspace.branch-workspace.progress.remove',
+      'workspace.branch-workspace.progress.summary',
+      'workspace.branch-workspace.progress.pending',
+      'workspace.branch-workspace.progress.active',
+      'workspace.branch-workspace.progress.complete',
+      'workspace.branch-workspace.progress.failed',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['workspace.branch-workspace.progress.summary']).toBe('已完成 {completed}/{total}')
+  })
+
   test('includes branch workspace member management copy in every locale', () => {
     const keys = [
       'workspace.branch-workspace.add-members',

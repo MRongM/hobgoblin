@@ -111,6 +111,9 @@ export function WorkspaceRepositoryRail({
   const [gitActionTargetId, setGitActionTargetId] = useState<string | null>(null)
   const [branchReloadPending, setBranchReloadPending] = useState(false)
   const [registryCleanupOpen, setRegistryCleanupOpen] = useState(false)
+  const dialogProgressWorkspace = branchActions.plan
+    ? (branchItems.find((item) => item.id === branchActions.plan?.branchWorkspaceId) ?? null)
+    : null
 
   const overviewRootPath = repoPlainWorkspacePath(repos[workspaceRootId]) ?? workspaceRootId
   const overviewName = lastPathSegment(overviewRootPath) || repos[workspaceRootId]?.name || workspaceRootId
@@ -643,6 +646,7 @@ export function WorkspaceRepositoryRail({
         repositories={repositoryOptions}
         auxiliaryCandidates={auxiliaryCandidates}
         workspace={dialogWorkspace}
+        progressWorkspace={dialogProgressWorkspace}
         fixedReduceRepositoryName={fixedReduceRepositoryName}
         plan={branchActions.plan}
         result={branchActions.result}

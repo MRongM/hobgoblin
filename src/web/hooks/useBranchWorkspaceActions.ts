@@ -15,7 +15,6 @@ import {
   planBranchWorkspace,
   reorderBranchWorkspaces,
 } from '#/web/workspace-client.ts'
-import { runWithRepoInvalidationSource } from '#/web/stores/repos/invalidation-sources.ts'
 import { useT } from '#/web/stores/i18n.ts'
 
 export function useBranchWorkspaceActions(rootId: string | null) {
@@ -60,13 +59,11 @@ export function useBranchWorkspaceActions(rootId: string | null) {
       if (!rootId || !plan) return null
       setPending(true)
       setError(null)
-      const response = await runWithRepoInvalidationSource('workspace', async (sourceToken) =>
-        executeBranchWorkspace(rootId, { planToken: plan.token, approvals, sourceToken }).catch(() => ({
-          ok: false as const,
-          message: 'workspace.branch-workspace.execute-failed',
-          branchWorkspaceId: plan.branchWorkspaceId,
-        })),
-      )
+      const response = await executeBranchWorkspace(rootId, { planToken: plan.token, approvals }).catch(() => ({
+        ok: false as const,
+        message: 'workspace.branch-workspace.execute-failed',
+        branchWorkspaceId: plan.branchWorkspaceId,
+      }))
       setPending(false)
       if (!response.ok && response.message === 'workspace.branch-workspace.plan-stale' && request) {
         await requestPlan(request)
@@ -75,11 +72,14 @@ export function useBranchWorkspaceActions(rootId: string | null) {
       setResult(response)
       if (!response.ok) setError(response.message)
       if (response.ok && response.warnings?.length) {
-        toast.warning(t('workspace.branch-workspace.repository-dependency-warning', { count: response.warnings.length }), {
-          description: response.warnings
-            .map((warning) => `${warning.repositoryName}: ${t(warning.message)}`)
-            .join('\n'),
-        })
+        toast.warning(
+          t('workspace.branch-workspace.repository-dependency-warning', { count: response.warnings.length }),
+          {
+            description: response.warnings
+              .map((warning) => `${warning.repositoryName}: ${t(warning.message)}`)
+              .join('\n'),
+          },
+        )
       }
       if (response.ok && response.snapshot) {
         const snapshot = response.snapshot

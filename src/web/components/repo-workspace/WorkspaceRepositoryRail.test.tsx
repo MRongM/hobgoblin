@@ -11,7 +11,11 @@ import { createRepoBranch, resetReposStore } from '#/web/stores/repos/test-utils
 import type { WorkspaceConfig } from '#/shared/workspace.ts'
 import type { WorkspacePullResult } from '#/shared/workspace-pull.ts'
 import type { TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
-import type { BranchWorkspaceReadResult, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
+import type {
+  BranchWorkspacePlan,
+  BranchWorkspaceReadResult,
+  BranchWorkspaceSnapshot,
+} from '#/shared/branch-workspaces.ts'
 import type { BranchWorkspaceGitActionKind } from '#/shared/branch-workspace-git-actions.ts'
 
 let compactUi = false
@@ -108,12 +112,15 @@ const branchWorkspaceState = vi.hoisted(() => ({
   reorder: vi.fn(async () => true),
   cancel: vi.fn(async () => {}),
   requestPlan: vi.fn(async () => true),
+  plan: null as BranchWorkspacePlan | null,
+  pending: false,
   refresh: vi.fn(),
   dialogRefresh: null as null | (() => Promise<unknown>),
   dialogProps: null as null | {
     open: boolean
     mode: string
     workspace: BranchWorkspaceSnapshot | null
+    progressWorkspace: BranchWorkspaceSnapshot | null
     fixedReduceRepositoryName?: string | null
   },
 }))
@@ -200,6 +207,7 @@ const branchWorkspaceListState = vi.hoisted(() => ({
     onExtend?: (item: BranchWorkspaceSnapshot) => void
     onReduce?: (item: BranchWorkspaceSnapshot, resume?: boolean) => void
     onReduceMember?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceSnapshot['repositories'][number]) => void
+    onRemove?: (item: BranchWorkspaceSnapshot) => void
     onAddDependencies?: (item: BranchWorkspaceSnapshot) => void
     onRemoveDependencies?: (item: BranchWorkspaceSnapshot) => void
   },
@@ -224,9 +232,9 @@ vi.mock('#/web/workspace-client.ts', () => ({
 
 vi.mock('#/web/hooks/useBranchWorkspaceActions.ts', () => ({
   useBranchWorkspaceActions: () => ({
-    plan: null,
+    plan: branchWorkspaceState.plan,
     result: null,
-    pending: false,
+    pending: branchWorkspaceState.pending,
     error: null,
     requestPlan: branchWorkspaceState.requestPlan,
     confirm: vi.fn(async () => null),
@@ -273,16 +281,18 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspaceDialog.tsx', () => ({
     open,
     mode,
     workspace,
+    progressWorkspace,
     fixedReduceRepositoryName,
     onRefreshAuxiliaryCandidates,
   }: {
     open: boolean
     mode: string
     workspace: BranchWorkspaceSnapshot | null
+    progressWorkspace: BranchWorkspaceSnapshot | null
     fixedReduceRepositoryName?: string | null
     onRefreshAuxiliaryCandidates?: () => Promise<unknown>
   }) => {
-    branchWorkspaceState.dialogProps = { open, mode, workspace, fixedReduceRepositoryName }
+    branchWorkspaceState.dialogProps = { open, mode, workspace, progressWorkspace, fixedReduceRepositoryName }
     branchWorkspaceState.dialogRefresh = onRefreshAuxiliaryCandidates ?? null
     return null
   },
@@ -393,6 +403,8 @@ beforeEach(() => {
   branchWorkspaceState.cancel.mockResolvedValue(undefined)
   branchWorkspaceState.requestPlan.mockReset()
   branchWorkspaceState.requestPlan.mockResolvedValue(true)
+  branchWorkspaceState.plan = null
+  branchWorkspaceState.pending = false
   branchWorkspaceState.dialogProps = null
   branchGitActionState.requestPlan.mockReset()
   branchGitActionState.requestPlan.mockResolvedValue(true)
@@ -1087,6 +1099,30 @@ describe('WorkspaceRepositoryRail', () => {
     })
   })
 
+  test('passes the latest operation snapshot separately from the stable dialog workspace', async () => {
+    const originalItems = branchWorkspaceState.items
+    const stableWorkspace = originalItems[0]!
+    branchWorkspaceState.plan = removalPlan(stableWorkspace)
+    branchWorkspaceState.pending = true
+    renderRail({ currentRepoId: ROOT })
+
+    act(() => branchWorkspaceListState.props?.onRemove?.(stableWorkspace))
+
+    const liveWorkspace = {
+      ...stableWorkspace,
+      repositories: stableWorkspace.repositories.map((member, index) =>
+        index === 0 ? { ...member, progress: 'removed' as const, ready: false } : member,
+      ),
+    }
+    branchWorkspaceState.items = [liveWorkspace, ...originalItems.slice(1)]
+    renderRail({ currentRepoId: ROOT })
+
+    expect(branchWorkspaceState.dialogProps?.workspace).toBe(stableWorkspace)
+    expect(branchWorkspaceState.dialogProps?.progressWorkspace).toBe(liveWorkspace)
+
+    branchWorkspaceState.items = originalItems
+  })
+
   test('falls back to the branch workspace root when the selected member is removed', () => {
     const originalItems = branchWorkspaceState.items
     const current = originalItems[0]!
@@ -1414,6 +1450,33 @@ describe('WorkspaceRepositoryRail', () => {
     expect(api?.terminalWorktreePaths).toEqual([API, '/worktrees/api-feature'])
   })
 })
+
+function removalPlan(workspace: BranchWorkspaceSnapshot): BranchWorkspacePlan {
+  return {
+    token: 'sha256:remove-plan',
+    rootId: workspace.rootId,
+    operation: 'remove',
+    branchWorkspaceId: workspace.id,
+    branch: workspace.branch,
+    directoryName: workspace.directoryName,
+    path: workspace.path,
+    manifest: {
+      id: workspace.id,
+      rootId: workspace.rootId,
+      branch: workspace.branch,
+      directoryName: workspace.directoryName,
+      path: workspace.path,
+      repositories: workspace.repositories,
+      auxiliaryEntries: workspace.auxiliaryEntries,
+    },
+    repositories: [],
+    auxiliaryEntries: [],
+    requiredApprovals: [],
+    steps: [],
+    terminalSessionIds: [],
+    removalOptions: { alsoDeleteBranch: false, alsoDeleteUpstream: false },
+  }
+}
 
 function overviewButton(): HTMLButtonElement | null | undefined {
   return Array.from(container?.querySelectorAll<HTMLButtonElement>('button') ?? []).find((button) =>

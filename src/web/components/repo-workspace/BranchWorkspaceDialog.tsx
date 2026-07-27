@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowRight, FolderKanban, LoaderCircle, RefreshCw } from 'lucide-react'
+import { ArrowRight, Check, Circle, FolderKanban, LoaderCircle, RefreshCw, X } from 'lucide-react'
 import type {
   BranchWorkspaceApproval,
   BranchWorkspaceAuxiliaryCandidate,
@@ -32,6 +32,10 @@ import { Input } from '#/web/components/ui/input.tsx'
 import { cn } from '#/web/lib/cn.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { getRepositoryWorktreeBootstrapPreflight } from '#/web/repo-client.ts'
+import {
+  projectBranchWorkspaceOperationProgress,
+  type BranchWorkspaceStepProgressStatus,
+} from '#/web/components/repo-workspace/branch-workspace-operation-progress.ts'
 
 export interface BranchWorkspaceRepositoryOption {
   id: string
@@ -53,6 +57,7 @@ interface BranchWorkspaceDialogProps {
   repositories: BranchWorkspaceRepositoryOption[]
   auxiliaryCandidates: BranchWorkspaceAuxiliaryCandidate[]
   workspace: BranchWorkspaceSnapshot | null
+  progressWorkspace: BranchWorkspaceSnapshot | null
   fixedReduceRepositoryName?: string | null
   plan: BranchWorkspacePlan | null
   result: BranchWorkspaceExecuteResult | null
@@ -72,6 +77,7 @@ export function BranchWorkspaceDialog({
   repositories,
   auxiliaryCandidates,
   workspace,
+  progressWorkspace,
   fixedReduceRepositoryName = null,
   plan,
   result,
@@ -295,6 +301,14 @@ export function BranchWorkspaceDialog({
       !fixedRepositories.has(repository.name) &&
       repositoryBootstraps[repository.name]?.status !== 'ready',
   )
+  const operationProgress =
+    plan && plan.steps.length > 0 && (mode === 'create' || mode === 'remove') && (pending || result !== null)
+      ? projectBranchWorkspaceOperationProgress(plan, progressWorkspace, {
+          executing: pending,
+          failed: !pending && result?.ok === false,
+        })
+      : null
+  const progressStatusByStepId = new Map(operationProgress?.steps.map((item) => [item.step.id, item.status]))
 
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
@@ -542,6 +556,31 @@ export function BranchWorkspaceDialog({
         {workspace ? <WorkspaceSummary workspace={workspace} /> : null}
         {plan ? (
           <div className="grid gap-3">
+            {operationProgress ? (
+              <div
+                data-branch-workspace-operation-progress
+                role="status"
+                aria-live="polite"
+                className="flex items-center gap-2 rounded-md border border-separator bg-muted/20 px-3 py-2 text-xs"
+              >
+                {pending ? (
+                  <LoaderCircle className="size-4 shrink-0 animate-spin text-foreground" aria-hidden="true" />
+                ) : result?.ok === false ? (
+                  <X className="size-4 shrink-0 text-danger" aria-hidden="true" />
+                ) : (
+                  <Check className="size-4 shrink-0 text-success" aria-hidden="true" />
+                )}
+                <span className="font-medium">
+                  {t(`workspace.branch-workspace.progress.${mode === 'create' ? 'create' : 'remove'}`)}
+                </span>
+                <span className="ml-auto tabular-nums text-muted-foreground">
+                  {t('workspace.branch-workspace.progress.summary', {
+                    completed: operationProgress.completedCount,
+                    total: operationProgress.totalCount,
+                  })}
+                </span>
+              </div>
+            ) : null}
             <div className="rounded-md border border-separator">
               {plan.steps.length === 0 ? (
                 <p className="p-3 text-xs text-muted-foreground">{t('workspace.branch-workspace.no-pending-steps')}</p>
@@ -570,7 +609,16 @@ export function BranchWorkspaceDialog({
                                   aria-hidden="true"
                                 />
                               ) : null}
-                              <BranchCleanupStepLabel step={step} />
+                              <div
+                                data-branch-workspace-progress-step={step.id}
+                                data-progress-status={progressStatusByStepId.get(step.id)}
+                                className="grid min-w-0 gap-1"
+                              >
+                                <BranchCleanupStepLabel step={step} />
+                                {progressStatusByStepId.get(step.id) ? (
+                                  <PlanStepProgressStatus status={progressStatusByStepId.get(step.id)!} />
+                                ) : null}
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -583,8 +631,10 @@ export function BranchWorkspaceDialog({
                     <div
                       key={step.id}
                       data-branch-workspace-plan-step={step.kind}
+                      data-branch-workspace-progress-step={step.id}
+                      data-progress-status={progressStatusByStepId.get(step.id)}
                       className={cn(
-                        'border-b border-separator/60 px-3 py-2 text-xs last:border-b-0',
+                        'flex items-center justify-between gap-3 border-b border-separator/60 px-3 py-2 text-xs last:border-b-0',
                         mode === 'create' &&
                           step.kind === 'create-directory' &&
                           'bg-success-surface font-semibold text-success',
@@ -593,7 +643,10 @@ export function BranchWorkspaceDialog({
                           'bg-danger-surface font-semibold text-danger',
                       )}
                     >
-                      {step.label}
+                      <span>{step.label}</span>
+                      {progressStatusByStepId.get(step.id) ? (
+                        <PlanStepProgressStatus status={progressStatusByStepId.get(step.id)!} />
+                      ) : null}
                     </div>
                   )
                 })
@@ -673,6 +726,9 @@ export function BranchWorkspaceDialog({
               disabled={pending || !requiredApprovalsSatisfied}
               onClick={() => void run(onConfirm)}
             >
+              {operationProgress && pending && result === null ? (
+                <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+              ) : null}
               {t(`workspace.branch-workspace.dialog.${mode}.confirm`)}
             </Button>
           ) : null}
@@ -684,12 +740,43 @@ export function BranchWorkspaceDialog({
               disabled={pending || !requiredApprovalsSatisfied}
               onClick={() => void run(onRetry)}
             >
+              {operationProgress && pending ? (
+                <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+              ) : null}
               {t('workspace.branch-workspace.retry')}
             </Button>
           ) : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function PlanStepProgressStatus({ status }: { status: BranchWorkspaceStepProgressStatus }) {
+  const t = useT()
+  const icon =
+    status === 'active' ? (
+      <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
+    ) : status === 'complete' ? (
+      <Check className="size-3.5" aria-hidden="true" />
+    ) : status === 'failed' ? (
+      <X className="size-3.5" aria-hidden="true" />
+    ) : (
+      <Circle className="size-3.5" aria-hidden="true" />
+    )
+  return (
+    <span
+      className={cn(
+        'flex shrink-0 items-center gap-1 text-[10px] font-medium',
+        status === 'active' && 'text-foreground',
+        status === 'complete' && 'text-success',
+        status === 'failed' && 'text-danger',
+        status === 'pending' && 'text-muted-foreground',
+      )}
+    >
+      {icon}
+      {t(`workspace.branch-workspace.progress.${status}`)}
+    </span>
   )
 }
 
