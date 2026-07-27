@@ -71,8 +71,7 @@ export function WorkspaceRepositoryRail({
   )
   const repositoryListVisible = useReposStore((state) => workspaceRepositoryListExpanded(state, workspaceRootId))
   const repositoryListHeight = useReposStore(
-    (state) =>
-      state.workspaceRepositoryListHeightByRoot[workspaceRootId] ?? DEFAULT_WORKSPACE_REPOSITORY_LIST_HEIGHT,
+    (state) => state.workspaceRepositoryListHeightByRoot[workspaceRootId] ?? DEFAULT_WORKSPACE_REPOSITORY_LIST_HEIGHT,
   )
   const toggleRepositoryList = useReposStore((state) => state.toggleWorkspaceRepositoryList)
   const setRepositoryListHeight = useReposStore((state) => state.setWorkspaceRepositoryListHeight)
@@ -110,6 +109,7 @@ export function WorkspaceRepositoryRail({
   const [gitActionOpen, setGitActionOpen] = useState(false)
   const [gitActionKind, setGitActionKind] = useState<BranchWorkspaceGitActionKind>('batch-commit')
   const [gitActionTargetId, setGitActionTargetId] = useState<string | null>(null)
+  const [branchReloadPending, setBranchReloadPending] = useState(false)
   const [registryCleanupOpen, setRegistryCleanupOpen] = useState(false)
 
   const overviewRootPath = repoPlainWorkspacePath(repos[workspaceRootId]) ?? workspaceRootId
@@ -313,6 +313,17 @@ export function WorkspaceRepositoryRail({
     setGitActionKind(kind)
     setGitActionOpen(true)
     void branchGitActions.requestPlan(kind, item.id)
+  }
+  const reloadBranchWorkspaces = async () => {
+    if (branchReloadPending) return
+    setBranchReloadPending(true)
+    try {
+      await branchQuery.refresh()
+    } catch {
+      // The current read error remains visible and retryable.
+    } finally {
+      setBranchReloadPending(false)
+    }
   }
   const cleanupRegistry = async () => {
     const result = await cleanupBranchWorkspaceRegistry(workspaceRootId).catch(() => ({
@@ -528,6 +539,21 @@ export function WorkspaceRepositoryRail({
             ) : branchQuery.data && !branchQuery.data.ok ? (
               <div className="flex items-center gap-2 px-2 py-2 text-xs text-danger" role="alert">
                 <span className="min-w-0 flex-1">{t(branchQuery.data.message)}</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={branchReloadPending}
+                  aria-label={t('workspace.branch-workspace.reload')}
+                  onClick={() => void reloadBranchWorkspaces()}
+                >
+                  {branchReloadPending ? (
+                    <LoaderCircle className="animate-spin" aria-hidden="true" />
+                  ) : (
+                    <RefreshCw aria-hidden="true" />
+                  )}
+                  {t('workspace.branch-workspace.reload')}
+                </Button>
                 {branchQuery.data.message === 'workspace.branch-workspace.read-failed' ? (
                   <Button
                     type="button"
@@ -568,9 +594,7 @@ export function WorkspaceRepositoryRail({
                 }
                 onExtend={(item) => openBranchDialog('extend', item)}
                 onReduce={(item, resume = false) => openBranchDialog('reduce', item, resume)}
-                onReduceMember={(item, member) =>
-                  openBranchDialog('reduce', item, false, member.repositoryName)
-                }
+                onReduceMember={(item, member) => openBranchDialog('reduce', item, false, member.repositoryName)}
                 onAddDependencies={(item) => openDependencyDialog('add', item)}
                 onRemoveDependencies={(item) => openDependencyDialog('remove', item)}
                 onRepair={(item) => openBranchDialog('repair', item, true)}

@@ -923,7 +923,7 @@ describe('BranchWorkspaceList', () => {
     expect(menuItems.every((item) => item.hasAttribute('data-disabled'))).toBe(true)
   })
 
-  test('offers root-scoped actions and restores an existing internal terminal', async () => {
+  test('offers root-scoped actions and creates an internal terminal on every dock click', async () => {
     const item = workspace('ready')
     const terminalKey = `/workspace\0${item.path}`
     const session = terminalSession(terminalKey)
@@ -968,13 +968,26 @@ describe('BranchWorkspaceList', () => {
 
     await clickContextMenuItem(row, 'worktrees.open-in-editor-label')
     await clickContextMenuItem(row, 'terminal.external')
-    await clickContextMenuItem(row, 'terminal.internal')
+    const internalTerminalButton = row.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="terminal"]')
+    if (!internalTerminalButton) throw new Error('missing internal terminal action')
+    await act(async () => {
+      internalTerminalButton.click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      row.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="terminal"]')?.click()
+      await Promise.resolve()
+    })
 
     expect(folderActionState.editorOnSelect).toHaveBeenCalledTimes(1)
     expect(folderActionState.externalTerminalOnSelect).toHaveBeenCalledTimes(1)
-    expect(onActivate).toHaveBeenCalledWith(item.id)
-    expect(selectTerminal).toHaveBeenCalledWith(terminalKey, session.key)
-    expect(createTerminal).not.toHaveBeenCalled()
+    expect(onActivate).toHaveBeenCalledTimes(2)
+    expect(onActivate).toHaveBeenNthCalledWith(1, item.id)
+    expect(onActivate).toHaveBeenNthCalledWith(2, item.id)
+    expect(selectTerminal).not.toHaveBeenCalled()
+    expect(createTerminal).toHaveBeenCalledTimes(2)
+    expect(createTerminal).toHaveBeenNthCalledWith(1, expect.objectContaining({ worktreePath: item.path }), 'native')
+    expect(createTerminal).toHaveBeenNthCalledWith(2, expect.objectContaining({ worktreePath: item.path }), 'native')
 
     await clickContextMenuItem(row, 'terminal.new-with-tmux')
     expect(createTerminal).toHaveBeenCalledWith(

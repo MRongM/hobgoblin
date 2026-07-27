@@ -151,7 +151,8 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.dependency.add.description':
     'ワークスペース直下の項目をコピーまたはシンボリックリンクで追加します。同名の既存内容は確認後に置き換えます。',
   'workspace.branch-workspace.dependency.add.available': '追加可能な依存項目',
-  'workspace.branch-workspace.dependency.add.available-description': '依存項目の配置方法を選びます。同名の対象は置き換えます。',
+  'workspace.branch-workspace.dependency.add.available-description':
+    '依存項目の配置方法を選びます。同名の対象は置き換えます。',
   'workspace.branch-workspace.dependency.add.empty': '追加できる依存項目はありません。',
   'workspace.branch-workspace.dependency.add.confirm': '依存項目を追加',
   'workspace.branch-workspace.dependency.add.replaces-target': '既存内容を置換',
@@ -168,8 +169,7 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.dependency.operation.add': '追加',
   'workspace.branch-workspace.dependency.operation.replace': '置換',
   'workspace.branch-workspace.dependency.operation.remove': '削除',
-  'workspace.branch-workspace.dependency.approval.outside-root-source':
-    'ワークスペース外を参照する選択元を許可する',
+  'workspace.branch-workspace.dependency.approval.outside-root-source': 'ワークスペース外を参照する選択元を許可する',
   'workspace.branch-workspace.dependency.planning': 'ブランチワークスペース依存項目を確認中…',
   'workspace.branch-workspace.dependency.not-ready': '依存項目を変更するにはブランチワークスペースの準備が必要です。',
   'workspace.branch-workspace.dependency.read-failed': 'ブランチワークスペース依存項目を読み込めませんでした。',
@@ -335,6 +335,11 @@ export const ja: Record<DictKey, string> = {
     '{count} 件のリポジトリ依存関係を準備できませんでしたが、worktree は作成されました。',
   'workspace.branch-workspace.approval-required': '必要な確認をすべて完了してください。',
   'workspace.branch-workspace.read-failed': 'ブランチワークスペースを読み取れませんでした。',
+  'workspace.branch-workspace.reload': 'ブランチワークスペースを再読み込み',
+  'workspace.branch-workspace.remote-operation-failed':
+    'リモートホストからブランチワークスペースを読み取れませんでした。',
+  'workspace.branch-workspace.remote-invalid-response':
+    'リモートホストから無効なブランチワークスペースデータが返されました。',
   'workspace.branch-workspace.cleanup': 'レコードをクリーンアップ',
   'workspace.branch-workspace.cleanup-title': 'ブランチワークスペースのレコードをクリーンアップしますか？',
   'workspace.branch-workspace.cleanup-description':

@@ -144,7 +144,8 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.dependency.add.description':
     '작업공간 루트의 항목을 복사하거나 심볼릭 링크로 추가합니다. 같은 이름의 기존 내용은 확인 후 대체합니다.',
   'workspace.branch-workspace.dependency.add.available': '추가 가능한 의존 항목',
-  'workspace.branch-workspace.dependency.add.available-description': '의존 항목의 배치 방식을 선택하세요. 같은 이름의 대상은 대체됩니다.',
+  'workspace.branch-workspace.dependency.add.available-description':
+    '의존 항목의 배치 방식을 선택하세요. 같은 이름의 대상은 대체됩니다.',
   'workspace.branch-workspace.dependency.add.empty': '추가할 수 있는 의존 항목이 없습니다.',
   'workspace.branch-workspace.dependency.add.confirm': '의존 항목 추가',
   'workspace.branch-workspace.dependency.add.replaces-target': '기존 내용 대체',
@@ -161,8 +162,7 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.dependency.operation.add': '추가',
   'workspace.branch-workspace.dependency.operation.replace': '대체',
   'workspace.branch-workspace.dependency.operation.remove': '제거',
-  'workspace.branch-workspace.dependency.approval.outside-root-source':
-    '작업공간 외부를 가리키는 선택 원본 허용',
+  'workspace.branch-workspace.dependency.approval.outside-root-source': '작업공간 외부를 가리키는 선택 원본 허용',
   'workspace.branch-workspace.dependency.planning': '브랜치 작업공간 의존 항목 확인 중…',
   'workspace.branch-workspace.dependency.not-ready': '의존 항목을 변경하려면 브랜치 작업공간이 준비되어야 합니다.',
   'workspace.branch-workspace.dependency.read-failed': '브랜치 작업공간 의존 항목을 읽지 못했습니다.',
@@ -323,6 +323,10 @@ export const ko: Record<DictKey, string> = {
     '{count}개 저장소 의존성을 준비하지 못했지만 작업 트리는 생성되었습니다.',
   'workspace.branch-workspace.approval-required': '필요한 확인을 모두 완료하세요.',
   'workspace.branch-workspace.read-failed': '브랜치 워크스페이스를 읽을 수 없습니다.',
+  'workspace.branch-workspace.reload': '브랜치 워크스페이스 다시 불러오기',
+  'workspace.branch-workspace.remote-operation-failed': '원격 호스트에서 브랜치 워크스페이스를 읽을 수 없습니다.',
+  'workspace.branch-workspace.remote-invalid-response':
+    '원격 호스트가 잘못된 브랜치 워크스페이스 데이터를 반환했습니다.',
   'workspace.branch-workspace.cleanup': '레코드 정리',
   'workspace.branch-workspace.cleanup-title': '브랜치 워크스페이스 레코드를 정리할까요?',
   'workspace.branch-workspace.cleanup-description':
@@ -1118,7 +1122,8 @@ export const ko: Record<DictKey, string> = {
   'settings.telegram.enabled': 'Telegram 알림',
   'settings.telegram.enabled-hint': '터미널 벨 알림이 켜져 있을 때 저장된 Bot과 Chat을 사용합니다.',
   'settings.telegram.proxy-enabled': '프록시 사용',
-  'settings.telegram.proxy-enabled-hint': '프록시 설정의 공유 프록시 URL을 사용합니다. 사용할 수 없으면 직접 연결합니다.',
+  'settings.telegram.proxy-enabled-hint':
+    '프록시 설정의 공유 프록시 URL을 사용합니다. 사용할 수 없으면 직접 연결합니다.',
   'settings.telegram.bell-enabled': '읽지 않은 벨',
   'settings.telegram.bell-enabled-hint': '백그라운드 터미널 벨이 읽지 않은 상태가 되면 전송합니다.',
   'settings.telegram.output-completion-enabled': '터미널 실행 종료',

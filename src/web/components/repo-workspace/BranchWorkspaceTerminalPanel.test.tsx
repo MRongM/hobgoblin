@@ -176,6 +176,19 @@ describe('BranchWorkspaceTerminalPanel', () => {
     expect(toolbar?.className).toContain('[-webkit-app-region:drag]')
   })
 
+  test('lets terminal tabs use the available width before the drag spacer', async () => {
+    await renderPanel()
+
+    const toolbar = container.querySelector<HTMLElement>('[data-testid="branch-workspace-terminal-toolbar"]')
+    const dragSpacer = Array.from(toolbar?.children ?? []).find(
+      (child) => child.getAttribute('aria-hidden') === 'true',
+    )
+
+    expect(dragSpacer?.classList.contains('w-2')).toBe(true)
+    expect(dragSpacer?.classList.contains('shrink-0')).toBe(true)
+    expect(dragSpacer?.classList.contains('flex-1')).toBe(false)
+  })
+
   test('exits terminal focus through the focused toolbar control', async () => {
     const onExitTerminalFocus = vi.fn()
     await renderPanel({ terminalFocusMode: true, onExitTerminalFocus })
@@ -198,37 +211,27 @@ describe('BranchWorkspaceTerminalPanel', () => {
 })
 
 describe('openBranchWorkspaceInternalTerminal', () => {
-  test('restores the selected root session without creating another terminal', async () => {
+  test('creates a new native terminal on every root action', async () => {
     const activate = vi.fn()
-    const selectedKey = `${WORKTREE_KEY}\0terminal-2`
-    await openBranchWorkspaceInternalTerminal(branchWorkspaceContext(), {
+    const dependencies = {
       activate,
-      worktreeSnapshot: () => ({
-        worktreeTerminalKey: WORKTREE_KEY,
-        count: 1,
-        sessions: [{ key: selectedKey, selected: true } as any],
-        selectedDescriptor: { key: selectedKey } as any,
-      }),
-      selectTerminal,
       createTerminal,
-    })
+    }
 
-    expect(activate).toHaveBeenCalledTimes(1)
-    expect(selectTerminal).toHaveBeenCalledWith(WORKTREE_KEY, selectedKey)
-    expect(createTerminal).not.toHaveBeenCalled()
+    await openBranchWorkspaceInternalTerminal(branchWorkspaceContext(), dependencies)
+    await openBranchWorkspaceInternalTerminal(branchWorkspaceContext(), dependencies)
+
+    expect(activate).toHaveBeenCalledTimes(2)
+    expect(selectTerminal).not.toHaveBeenCalled()
+    expect(createTerminal).toHaveBeenCalledTimes(2)
+    expect(createTerminal).toHaveBeenNthCalledWith(1, expect.any(Object), 'native')
+    expect(createTerminal).toHaveBeenNthCalledWith(2, expect.any(Object), 'native')
   })
 
-  test('creates a terminal only when the root-scoped group is empty', async () => {
+  test('creates a native terminal when the root-scoped group is empty', async () => {
     const activate = vi.fn()
     await openBranchWorkspaceInternalTerminal(branchWorkspaceContext(), {
       activate,
-      worktreeSnapshot: () => ({
-        worktreeTerminalKey: WORKTREE_KEY,
-        count: 0,
-        sessions: [],
-        selectedDescriptor: null,
-      }),
-      selectTerminal,
       createTerminal,
     })
 
@@ -243,13 +246,6 @@ describe('openBranchWorkspaceInternalTerminal', () => {
       branchWorkspaceContext(),
       {
         activate,
-        worktreeSnapshot: () => ({
-          worktreeTerminalKey: WORKTREE_KEY,
-          count: 1,
-          sessions: [{ key: `${WORKTREE_KEY}\0terminal-1`, selected: true } as any],
-          selectedDescriptor: { key: `${WORKTREE_KEY}\0terminal-1` } as any,
-        }),
-        selectTerminal,
         createTerminal,
       },
       'tmux-if-available',

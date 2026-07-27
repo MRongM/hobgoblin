@@ -171,6 +171,19 @@ describe('i18n dictionaries', () => {
     expect(zh['workspace.branch-workspace.cleanup-description']).toContain('分支')
   })
 
+  test('localizes branch workspace reload and remote read failures in every locale', () => {
+    const keys = [
+      'workspace.branch-workspace.reload',
+      'workspace.branch-workspace.remote-operation-failed',
+      'workspace.branch-workspace.remote-invalid-response',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['workspace.branch-workspace.reload']).toBe('重新加载子工作区')
+  })
+
   test('uses branch workspace dependency copy and includes member sync actions in every locale', () => {
     expect(zh['workspace.branch-workspace.auxiliary']).toBe('子工作区依赖')
     expect(zh['workspace.branch-workspace.auxiliary-refresh']).toBe('刷新子工作区依赖')

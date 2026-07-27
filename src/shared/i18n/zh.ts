@@ -127,8 +127,7 @@ export const zh: Record<DictKey, string> = {
   'workspace.branch-workspace.repository-dependencies-loading': '正在读取仓库依赖…',
   'workspace.branch-workspace.repository-dependencies-error': '无法读取仓库依赖；请取消选择后重新选择此仓库。',
   'workspace.branch-workspace.repository-dependencies-empty': '所选基准分支工作树没有可选的未跟踪项。',
-  'workspace.branch-workspace.repository-dependencies-configured':
-    '此仓库将使用所选基准分支工作树中的 goblin.toml。',
+  'workspace.branch-workspace.repository-dependencies-configured': '此仓库将使用所选基准分支工作树中的 goblin.toml。',
   'workspace.branch-workspace.auxiliary': '子工作区依赖',
   'workspace.branch-workspace.auxiliary-refresh': '刷新子工作区依赖',
   'workspace.branch-workspace.auxiliary-named': '包含子工作区依赖 {name}',
@@ -300,10 +299,12 @@ export const zh: Record<DictKey, string> = {
   'workspace.branch-workspace.plan-failed': '无法创建子工作区计划。',
   'workspace.branch-workspace.plan-stale': '工作区状态已变化，请检查刷新后的计划。',
   'workspace.branch-workspace.execute-failed': '无法完成子工作区操作。',
-  'workspace.branch-workspace.repository-dependency-warning':
-    '{count} 个仓库的依赖未能准备完成，但工作树已成功创建。',
+  'workspace.branch-workspace.repository-dependency-warning': '{count} 个仓库的依赖未能准备完成，但工作树已成功创建。',
   'workspace.branch-workspace.approval-required': '请完成所有必要确认。',
   'workspace.branch-workspace.read-failed': '无法读取子工作区。',
+  'workspace.branch-workspace.reload': '重新加载子工作区',
+  'workspace.branch-workspace.remote-operation-failed': '远程读取子工作区失败。',
+  'workspace.branch-workspace.remote-invalid-response': '远程主机返回了无效的子工作区数据。',
   'workspace.branch-workspace.cleanup': '清理子工作区记录',
   'workspace.branch-workspace.cleanup-title': '清理子工作区记录？',
   'workspace.branch-workspace.cleanup-description':

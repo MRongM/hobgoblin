@@ -13,11 +13,7 @@ import { useWorktreeTerminalSnapshot } from '#/web/components/terminal/terminal-
 import { useFocusRegistry } from '#/web/components/tab-strip/useFocusRegistry.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { cn } from '#/web/lib/cn.ts'
-import type {
-  TerminalSessionBase,
-  TerminalSessionContextValue,
-  TerminalSessionReadContextValue,
-} from '#/web/components/terminal/types.ts'
+import type { TerminalSessionBase, TerminalSessionContextValue } from '#/web/components/terminal/types.ts'
 import type { TerminalLaunchMode } from '#/shared/terminal.ts'
 
 interface BranchWorkspaceTerminalPanelProps {
@@ -28,9 +24,7 @@ interface BranchWorkspaceTerminalPanelProps {
 }
 
 interface OpenBranchWorkspaceInternalTerminalDependencies
-  extends
-    Pick<TerminalSessionReadContextValue, 'worktreeSnapshot'>,
-    Pick<TerminalSessionContextValue, 'selectTerminal' | 'createTerminal'> {
+  extends Pick<TerminalSessionContextValue, 'createTerminal'> {
   activate(): void
 }
 
@@ -118,7 +112,7 @@ export function BranchWorkspaceTerminalPanel({
           onClose={handleCloseTerminal}
           onReorder={handleReorderTerminals}
         />
-        <div aria-hidden="true" className="min-w-2 flex-1 self-stretch" />
+        <div aria-hidden="true" className="w-2 shrink-0 self-stretch" />
       </Toolbar>
       <div className="flex min-h-0 flex-1 flex-col">
         {snapshot.selectedDescriptor || snapshot.creating === true ? (
@@ -136,21 +130,7 @@ export async function openBranchWorkspaceInternalTerminal(
 ): Promise<boolean> {
   if (!context.available || context.busy) return false
   dependencies.activate()
-  if (launchMode === 'tmux-if-available') {
-    await dependencies.createTerminal(branchWorkspaceTerminalBase(context), launchMode)
-    return true
-  }
-  const terminalWorktreeKey = worktreeTerminalKey(context.rootId, context.path)
-  const snapshot = dependencies.worktreeSnapshot(terminalWorktreeKey)
-  const selectedKey =
-    snapshot.selectedDescriptor?.key ??
-    snapshot.sessions.find((session) => session.selected)?.key ??
-    snapshot.sessions[0]?.key
-  if (selectedKey) {
-    dependencies.selectTerminal(terminalWorktreeKey, selectedKey)
-    return true
-  }
-  await dependencies.createTerminal(branchWorkspaceTerminalBase(context), 'native')
+  await dependencies.createTerminal(branchWorkspaceTerminalBase(context), launchMode)
   return true
 }
 

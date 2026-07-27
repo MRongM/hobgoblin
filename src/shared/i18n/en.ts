@@ -336,6 +336,9 @@ export const en = {
     '{count} repository dependencies could not be prepared. The worktrees were still created.',
   'workspace.branch-workspace.approval-required': 'Complete every required confirmation.',
   'workspace.branch-workspace.read-failed': 'Could not read branch workspaces.',
+  'workspace.branch-workspace.reload': 'Reload branch workspaces',
+  'workspace.branch-workspace.remote-operation-failed': 'Could not read branch workspaces from the remote host.',
+  'workspace.branch-workspace.remote-invalid-response': 'The remote host returned invalid branch workspace data.',
   'workspace.branch-workspace.cleanup': 'Clean up records',
   'workspace.branch-workspace.cleanup-title': 'Clean up branch workspace records?',
   'workspace.branch-workspace.cleanup-description':
@@ -1184,7 +1187,8 @@ export const en = {
   'settings.nav.proxy': 'Proxy',
   'settings.proxy.title': 'Proxy',
   'settings.proxy.url': 'Proxy URL',
-  'settings.proxy.url-hint': 'Shared by features that have their proxy switch enabled. Supports HTTP, HTTPS, and SOCKS5.',
+  'settings.proxy.url-hint':
+    'Shared by features that have their proxy switch enabled. Supports HTTP, HTTPS, and SOCKS5.',
   'settings.proxy.git-title': 'Git network',
   'settings.proxy.git-body': 'Configure network behavior for local Git operations.',
   'settings.proxy.git-proxy': 'Use proxy for Git',

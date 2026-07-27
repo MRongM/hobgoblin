@@ -93,6 +93,19 @@ test('initializes server-settings.json with defaults when no persisted settings 
   expect(await reloaded.getServerFetchIntervalSec()).toBe(120)
 })
 
+test('retains the 30 most recently opened repositories', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  for (let index = 0; index <= 30; index += 1) {
+    await mod.addServerRecentRepo({ kind: 'local', id: `/repo-${index}` })
+  }
+
+  expect(await mod.getServerRecentRepos()).toEqual(
+    Array.from({ length: 30 }, (_, index) => ({ kind: 'local', id: `/repo-${30 - index}` })),
+  )
+})
+
 test('defaults a missing terminal notification preference on and preserves explicit off', async () => {
   useTempServerSettingsDir()
   writeSettingsFile({})

@@ -199,10 +199,7 @@ const branchWorkspaceListState = vi.hoisted(() => ({
     onCancel?: (item: BranchWorkspaceSnapshot) => void | Promise<void>
     onExtend?: (item: BranchWorkspaceSnapshot) => void
     onReduce?: (item: BranchWorkspaceSnapshot, resume?: boolean) => void
-    onReduceMember?: (
-      item: BranchWorkspaceSnapshot,
-      member: BranchWorkspaceSnapshot['repositories'][number],
-    ) => void
+    onReduceMember?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceSnapshot['repositories'][number]) => void
     onAddDependencies?: (item: BranchWorkspaceSnapshot) => void
     onRemoveDependencies?: (item: BranchWorkspaceSnapshot) => void
   },
@@ -647,6 +644,64 @@ describe('WorkspaceRepositoryRail', () => {
     expect(upperList.style.height).toBe('4096px')
     expect(resizeHandle.getAttribute('aria-valuemax')).toBe('4096')
     expect(useReposStore.getState().workspaceRepositoryListHeightByRoot).toEqual({ [ROOT]: 4096 })
+  })
+
+  test('reloads branch workspaces after a remote read failure without offering registry cleanup', async () => {
+    let finishRefresh: (() => void) | undefined
+    branchWorkspaceState.queryResult = {
+      ok: false,
+      message: 'workspace.branch-workspace.remote-operation-failed',
+    }
+    branchWorkspaceState.refresh.mockReturnValue(
+      new Promise((resolve) => {
+        finishRefresh = () =>
+          resolve({
+            ok: true,
+            rootId: ROOT,
+            items: branchWorkspaceState.items,
+            auxiliaryCandidates: [],
+          })
+      }),
+    )
+    renderRail({ currentRepoId: ROOT })
+
+    const reload = container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.branch-workspace.reload"]')
+    expect(reload).not.toBeNull()
+    expect(container?.textContent).toContain('workspace.branch-workspace.remote-operation-failed')
+    expect(
+      container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.branch-workspace.cleanup"]'),
+    ).toBeNull()
+
+    act(() => reload?.click())
+    expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
+    expect(reload?.disabled).toBe(true)
+
+    act(() => reload?.click())
+    expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      finishRefresh?.()
+      await Promise.resolve()
+    })
+    expect(reload?.disabled).toBe(false)
+  })
+
+  test('keeps the remote read failure retryable when reloading rejects', async () => {
+    branchWorkspaceState.queryResult = {
+      ok: false,
+      message: 'workspace.branch-workspace.remote-operation-failed',
+    }
+    branchWorkspaceState.refresh.mockRejectedValue(new Error('temporary network failure'))
+    renderRail({ currentRepoId: ROOT })
+
+    const reload = container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.branch-workspace.reload"]')
+    await act(async () => {
+      reload?.click()
+      await Promise.resolve()
+    })
+
+    expect(reload?.disabled).toBe(false)
+    expect(container?.textContent).toContain('workspace.branch-workspace.remote-operation-failed')
   })
 
   test('confirms and runs registry cleanup only for the branch workspace read failure', async () => {

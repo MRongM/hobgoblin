@@ -45,10 +45,7 @@ import { Badge } from '#/web/components/ui/badge.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { TerminalBellDot } from '#/web/components/terminal/TerminalBellDot.tsx'
 import { TerminalOutputActivityIndicator } from '#/web/components/terminal/TerminalOutputActivityIndicator.tsx'
-import {
-  TerminalSessionContext,
-  TerminalSessionReadContext,
-} from '#/web/components/terminal/terminal-session-context.ts'
+import { TerminalSessionContext } from '#/web/components/terminal/terminal-session-context.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import {
   useWorktreeTerminalCount,
@@ -265,7 +262,6 @@ function BranchWorkspaceRow({
   const context = branchWorkspaceFolderContext(rootId, item)
   const externalActions = useFolderExternalOpenActions({ repoId: rootId, path: item.path, available: folderAvailable })
   const terminalContext = useContext(TerminalSessionContext)
-  const terminalReadContext = useContext(TerminalSessionReadContext)
   const terminalKey = worktreeTerminalKey(rootId, item.path)
   const terminalKeys = useMemo(() => [terminalKey], [terminalKey])
   const terminalCount = useWorktreeTerminalCount(terminalKey)
@@ -284,12 +280,10 @@ function BranchWorkspaceRow({
   }
   const openInternal = async (launchMode: TerminalLaunchMode = 'native') => {
     if (onOpenInternalTerminal) return await onOpenInternalTerminal(item, launchMode)
-    if (!terminalContext || !terminalReadContext) return
+    if (!terminalContext) return
     await openBranchWorkspaceInternalTerminal(
       context,
       {
-        worktreeSnapshot: terminalReadContext.worktreeSnapshot,
-        selectTerminal: terminalContext.selectTerminal,
         createTerminal: terminalContext.createTerminal,
         activate,
       },
