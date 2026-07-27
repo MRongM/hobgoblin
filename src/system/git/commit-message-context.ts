@@ -1,5 +1,6 @@
 import path from 'node:path'
 import { lstat, readFile } from 'node:fs/promises'
+import { resolveDiffBaseAfterHeadFailure } from '#/system/git/diff-base.ts'
 import { git } from '#/system/git/helper.ts'
 import { parseStatus } from '#/system/git/parsers.ts'
 
@@ -29,8 +30,15 @@ export async function getWorktreeCommitMessageContext(
     return entry.originalPath ? `${code} ${entry.originalPath} -> ${entry.path}` : `${code} ${entry.path}`
   })
 
-  const stat = await git(worktreePath, ['diff', '--stat', 'HEAD', '--'], { signal })
-  const trackedDiff = await git(worktreePath, ['diff', 'HEAD', '--'], { signal })
+  let diffBase = 'HEAD'
+  let stat: string
+  try {
+    stat = await git(worktreePath, ['diff', '--stat', diffBase, '--'], { signal })
+  } catch (error) {
+    diffBase = await resolveDiffBaseAfterHeadFailure(worktreePath, error, signal)
+    stat = await git(worktreePath, ['diff', '--stat', diffBase, '--'], { signal })
+  }
+  const trackedDiff = await git(worktreePath, ['diff', diffBase, '--'], { signal })
   const cappedDiff = capText(trackedDiff, MAX_TRACKED_DIFF_LENGTH)
   const untrackedPaths = statusEntries.filter((entry) => entry.x === '?' && entry.y === '?').map((entry) => entry.path)
   const untracked = await collectUntrackedExcerpts(worktreePath, untrackedPaths, signal)
@@ -90,7 +98,9 @@ async function collectUntrackedExcerpts(
   for (let index = 0; index < untrackedPaths.length; index += 1) {
     if (signal?.aborted) throw new Error('cancelled')
     if (index >= MAX_UNTRACKED_FILES_WITH_CONTENT) {
-      omitted.push(`${untrackedPaths.length - index} untracked files omitted after limit ${MAX_UNTRACKED_FILES_WITH_CONTENT}`)
+      omitted.push(
+        `${untrackedPaths.length - index} untracked files omitted after limit ${MAX_UNTRACKED_FILES_WITH_CONTENT}`,
+      )
       break
     }
 

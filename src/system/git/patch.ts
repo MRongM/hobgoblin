@@ -1,5 +1,6 @@
 // Build an "apply-equivalent" patch for a worktree — the on-disk
-// state vs HEAD, plus untracked files, in a format `git apply --binary`
+// state vs HEAD (or the empty tree before the first commit), plus untracked
+// files, in a format `git apply --binary`
 // can replay on another machine. Roughly equivalent to:
 //   (cd <worktree> && git diff HEAD --binary && \
 //     <for each untracked file>: git diff --binary --no-index /dev/null <file>)
@@ -23,6 +24,7 @@
 // caller's IPC timeout bound the whole thing.
 
 import { execa } from 'execa'
+import { resolveDiffBaseAfterHeadFailure } from '#/system/git/diff-base.ts'
 import { git } from '#/system/git/helper.ts'
 import { parseStatus } from '#/system/git/parsers.ts'
 import { mapWithConcurrency } from '#/system/git/concurrency.ts'
@@ -40,7 +42,13 @@ const UNTRACKED_DIFF_CONCURRENCY = 16
 export async function getWorktreePatch(worktreePath: string, options?: { signal?: AbortSignal }): Promise<string> {
   const signal = options?.signal
   // Tracked: staged + unstaged in a single pass.
-  const trackedPatch = await git(worktreePath, ['diff', 'HEAD', '--binary'], { signal })
+  let trackedPatch: string
+  try {
+    trackedPatch = await git(worktreePath, ['diff', 'HEAD', '--binary'], { signal })
+  } catch (error) {
+    const diffBase = await resolveDiffBaseAfterHeadFailure(worktreePath, error, signal)
+    trackedPatch = await git(worktreePath, ['diff', diffBase, '--binary'], { signal })
+  }
 
   // Untracked: -uall expands untracked directories into their member
   // files. Without it, an untracked `subdir/` is reported as a single
