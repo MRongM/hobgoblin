@@ -3,6 +3,7 @@ package com.mrongm.hobgoblin.ui.screens.terminals
 import com.mrongm.hobgoblin.R
 import com.mrongm.hobgoblin.data.TerminalAppearance
 import com.mrongm.hobgoblin.ui.text.LocalizedText
+import com.termux.terminal.TextStyle
 
 internal data class TerminalPalette(
     val backgroundArgb: Int,
@@ -12,6 +13,8 @@ internal data class TerminalPalette(
     val actionArgb: Int,
     val mutedArgb: Int,
     val selectionArgb: Int,
+    val inputBackgroundArgb: Int,
+    val inputForegroundArgb: Int,
     val ansiArgb: List<Int>,
 )
 
@@ -30,6 +33,16 @@ internal fun terminalPalette(appearance: TerminalAppearance): TerminalPalette = 
     TerminalAppearance.Light -> LightTerminalPalette
 }
 
+internal fun applyTerminalPalette(colors: IntArray, palette: TerminalPalette) {
+    require(colors.size > TextStyle.COLOR_INDEX_CURSOR) { "Complete terminal color table is required" }
+    palette.ansiArgb.forEachIndexed { index, color ->
+        colors[index] = color
+    }
+    colors[TextStyle.COLOR_INDEX_FOREGROUND] = palette.foregroundArgb
+    colors[TextStyle.COLOR_INDEX_BACKGROUND] = palette.backgroundArgb
+    colors[TextStyle.COLOR_INDEX_CURSOR] = palette.actionArgb
+}
+
 private val DarkTerminalPalette = TerminalPalette(
     backgroundArgb = 0xFF0A0E12.toInt(),
     foregroundArgb = 0xFFE7EDF3.toInt(),
@@ -38,6 +51,8 @@ private val DarkTerminalPalette = TerminalPalette(
     actionArgb = 0xFF65B9FF.toInt(),
     mutedArgb = 0xFF91A0AE.toInt(),
     selectionArgb = 0x665CA9E6,
+    inputBackgroundArgb = 0xFF223044.toInt(),
+    inputForegroundArgb = 0xFFF7FAFC.toInt(),
     ansiArgb = listOf(
         0xFF0A0E12.toInt(),
         0xFFFF6B72.toInt(),
@@ -66,6 +81,8 @@ private val LightTerminalPalette = TerminalPalette(
     actionArgb = 0xFF246EA8.toInt(),
     mutedArgb = 0xFF60717F.toInt(),
     selectionArgb = 0x664C91C6,
+    inputBackgroundArgb = 0xFFFFFFFF.toInt(),
+    inputForegroundArgb = 0xFF111820.toInt(),
     ansiArgb = listOf(
         0xFF1B2733.toInt(),
         0xFFA52D38.toInt(),

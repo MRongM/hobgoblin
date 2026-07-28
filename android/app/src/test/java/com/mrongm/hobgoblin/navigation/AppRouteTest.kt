@@ -55,6 +55,61 @@ class AppRouteTest {
     }
 
     @Test
+    fun `host tmux terminal returns to the same host tmux tab`() {
+        val hostDetailReturn = HostDetailReturn("host-1", HostDetailTab.Tmux)
+        val route = AppRoute.Terminal(
+            hostId = "host-1",
+            remotePath = "/srv/product/hobgoblin-feature-auth/api",
+            terminalSessionId = "session-1",
+            hostDetailReturn = hostDetailReturn,
+        )
+
+        assertEquals(
+            AppRoute.HostDetail(hostId = "host-1", selectedTab = HostDetailTab.Tmux),
+            terminalReturnRoute(route, resolvedHostId = "host-1", temporary = false),
+        )
+    }
+
+    @Test
+    fun `terminals return takes priority over a host detail return`() {
+        val route = AppRoute.Terminal(
+            hostId = "host-1",
+            remotePath = "/srv/product/hobgoblin-feature-auth",
+            returnToTerminals = true,
+            hostDetailReturn = HostDetailReturn("host-1", HostDetailTab.Tmux),
+        )
+
+        assertEquals(AppRoute.Terminals, terminalReturnRoute(route, resolvedHostId = "host-1", temporary = false))
+    }
+
+    @Test
+    fun `notification terminal without a local repository returns to terminals`() {
+        val record = TerminalSessionRecord(
+            id = "session-1",
+            hostId = "host-1",
+            repositoryId = null,
+            remotePath = "/srv/product/hobgoblin-feature-auth",
+            targetLabel = "product · feature auth",
+            terminalId = 1,
+            repositoryRemotePath = "/srv/product",
+            tmuxIdentity = com.mrongm.hobgoblin.terminals.TmuxSessionProtocol.identity(
+                com.mrongm.hobgoblin.terminals.TmuxSessionDescriptor(
+                    "/srv/product",
+                    "/srv/product/hobgoblin-feature-auth",
+                    1,
+                ),
+            ),
+            status = TerminalSessionStatus.Disconnected,
+            openedAt = 100,
+        )
+
+        val route = terminalNotificationRoute(record)
+
+        assertEquals(true, route.returnToTerminals)
+        assertEquals(AppRoute.Terminals, terminalReturnRoute(route, "host-1", temporary = false))
+    }
+
+    @Test
     fun `terminal opened from overview returns to terminals regardless of source`() {
         val temporary = AppRoute.Terminal(
             hostId = "host-1",
@@ -89,6 +144,26 @@ class AppRouteTest {
         assertEquals(
             AppRoute.EditHost("host-1"),
             terminalReturnRoute(hostTerminal, resolvedHostId = "host-1", temporary = false),
+        )
+    }
+
+    @Test
+    fun `project opened from host detail preserves its parent through terminal return`() {
+        val parent = HostDetailReturn("host-1", HostDetailTab.Projects)
+        val terminal = AppRoute.Terminal(
+            hostId = "host-1",
+            remotePath = "/srv/app-feature",
+            repositoryId = "repo-1",
+            hostDetailReturn = parent,
+        )
+
+        assertEquals(
+            AppRoute.Repository(
+                repositoryId = "repo-1",
+                terminalWorkspacePath = "/srv/app-feature",
+                hostDetailReturn = parent,
+            ),
+            terminalReturnRoute(terminal, resolvedHostId = "host-1", temporary = false),
         )
     }
 

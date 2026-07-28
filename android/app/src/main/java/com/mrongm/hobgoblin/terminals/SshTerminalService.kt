@@ -116,11 +116,28 @@ internal object SshTerminalStartupCommand {
         val loginShellCommand = "exec \"${'$'}{SHELL:-/bin/sh}\" -l"
         val script = if (tmuxIdentity != null) {
             val tmuxCommand = requireNotNull(
-                TmuxSessionProtocol.attachOrCreateCommand(
-                    tmuxIdentity,
-                    startupContext.terminalId,
-                    startupContext.repositoryRemotePath,
-                ),
+                when (startupContext.tmuxStartupPolicy) {
+                    TmuxStartupPolicy.AttachOrCreate -> TmuxSessionProtocol.attachOrCreateCommand(
+                        tmuxIdentity,
+                        startupContext.terminalId,
+                        requireNotNull(startupContext.repositoryRemotePath) {
+                            "Repository path is required to create a tmux session"
+                        },
+                    )
+                    TmuxStartupPolicy.AttachExisting -> startupContext.tmuxServerTarget?.let { server ->
+                        TmuxSessionProtocol.attachExistingCommand(
+                            tmuxIdentity,
+                            startupContext.terminalId,
+                            server,
+                        )
+                    } ?: TmuxSessionProtocol.attachExistingCommand(
+                        tmuxIdentity,
+                        startupContext.terminalId,
+                        requireNotNull(startupContext.repositoryRemotePath) {
+                            "Repository path or explicit server target is required to attach tmux"
+                        },
+                    )
+                },
             ) { "Tmux terminal number must be positive" }
             listOf(
                 "cd ${shellQuote(normalizedPath)} || exit",

@@ -8,6 +8,7 @@ import com.mrongm.hobgoblin.terminals.TerminalSessionRecord
 import com.mrongm.hobgoblin.terminals.TerminalSessionStatus
 import com.mrongm.hobgoblin.terminals.TmuxSessionIdentity
 import com.mrongm.hobgoblin.terminals.TmuxSessionProtocol
+import com.mrongm.hobgoblin.terminals.TmuxServerTarget
 import com.mrongm.hobgoblin.terminals.terminalDisconnectedMessageSnapshot
 import com.mrongm.hobgoblin.terminals.terminalOutputSnapshot
 import java.nio.charset.StandardCharsets
@@ -77,6 +78,8 @@ object TerminalSessionCodec {
     private const val DisconnectMessageRecordFieldCount = 13
     private const val ProjectTerminalIdentityRecordFieldCount = 15
     private const val TmuxIdentityRecordFieldCount = 17
+    private const val TmuxServerTargetRecordFieldCount = 18
+    private const val DefaultTmuxServerMarker = "legacy-default"
 
     fun encode(sessions: List<TerminalSessionRecord>): String =
         sessions.joinToString(RecordSeparator) { session ->
@@ -98,6 +101,11 @@ object TerminalSessionCodec {
                 session.repositoryRemotePath.orEmpty(),
                 session.tmuxIdentity?.sessionName.orEmpty(),
                 session.tmuxIdentity?.initialPath.orEmpty(),
+                when (val server = session.tmuxServerTarget) {
+                    null -> ""
+                    TmuxServerTarget.Default -> DefaultTmuxServerMarker
+                    is TmuxServerTarget.Named -> server.serverName
+                },
             ).joinToString(FieldSeparator) { it.encodeField() }
         }
 
@@ -118,13 +126,14 @@ object TerminalSessionCodec {
                 DisconnectMessageRecordFieldCount,
                 ProjectTerminalIdentityRecordFieldCount,
                 TmuxIdentityRecordFieldCount,
+                TmuxServerTargetRecordFieldCount,
             )
         ) return null
         return runCatching {
             val hasDisplayName = fields.size >= DisplayNameRecordFieldCount
             val hasDisconnectMessage = fields.size >= DisconnectMessageRecordFieldCount
             val hasProjectTerminalIdentity = fields.size >= ProjectTerminalIdentityRecordFieldCount
-            val hasTmuxIdentity = fields.size == TmuxIdentityRecordFieldCount
+            val hasTmuxIdentity = fields.size >= TmuxIdentityRecordFieldCount
             val tmuxIdentity = if (hasTmuxIdentity) {
                 val sessionName = fields.getOrNull(15).orEmpty()
                 val initialPath = fields.getOrNull(16).orEmpty()
@@ -141,6 +150,14 @@ object TerminalSessionCodec {
             } else {
                 null
             }
+            val tmuxServerTarget = fields.getOrNull(17)
+                ?.takeIf { fields.size == TmuxServerTargetRecordFieldCount && it.isNotBlank() }
+                ?.let { marker ->
+                    when (marker) {
+                        DefaultTmuxServerMarker -> TmuxServerTarget.Default
+                        else -> TmuxServerTarget.Named(marker)
+                    }
+                }
             TerminalSessionRecord(
                 id = fields[0],
                 hostId = fields[1],
@@ -154,6 +171,7 @@ object TerminalSessionCodec {
                 repositoryRemotePath = fields.getOrNull(14)
                     ?.takeIf { hasProjectTerminalIdentity && it.isNotBlank() },
                 tmuxIdentity = tmuxIdentity,
+                tmuxServerTarget = tmuxServerTarget,
                 status = TerminalSessionStatus.valueOf(if (hasDisplayName) fields[6] else fields[5]),
                 lastOutputSnapshot = terminalOutputSnapshot(if (hasDisplayName) fields[7] else fields[6]),
                 lastActivityAt = (if (hasDisplayName) fields[8] else fields[7]).takeIf { it.isNotBlank() }?.toLong(),

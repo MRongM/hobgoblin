@@ -1,8 +1,8 @@
 package com.mrongm.hobgoblin
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.mutableStateOf
 import com.mrongm.hobgoblin.data.HostProfileStore
 import com.mrongm.hobgoblin.data.ManualItemOrderStore
@@ -30,7 +30,7 @@ import com.mrongm.hobgoblin.termux.AndroidExternalTermuxEnvironment
 import com.mrongm.hobgoblin.termux.ExternalTermuxLauncher
 import com.mrongm.hobgoblin.ui.theme.HobgoblinTheme
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
     private val terminalNavigationRequest = mutableStateOf<TerminalNavigationRequest?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {

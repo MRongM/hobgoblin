@@ -22,6 +22,12 @@
     <string name="navigation_add_host">ホストを追加</string>
     <string name="navigation_add_project">プロジェクトを追加</string>
     <string name="accessibility_reorder_item">%1$sを並べ替え</string>
+    <string name="settings_language">言語</string>
+    <string name="settings_language_follow_system">システムに従う</string>
+    <string name="settings_language_english">English</string>
+    <string name="settings_language_simplified_chinese">中文</string>
+    <string name="settings_language_japanese">日本語</string>
+    <string name="settings_language_korean">한국어</string>
     <string name="settings_enter_value">値を入力してください。</string>
     <string name="settings_numbers_only">数字のみ入力できます。</string>
     <string name="settings_interval_error">間隔は %1$d～%2$d 秒にしてください。</string>
@@ -154,6 +160,7 @@
     <string name="projects_delete_title">プロジェクト記録を削除しますか？</string>
     <string name="projects_delete_description">%1$s を Hobgoblin Android から削除します。SSH サーバー上のデータは削除されません。</string>
     <string name="projects_loading_description">保存済みプロジェクトを読み込んでいます。</string>
+    <string name="workspace_title">ワークスペース</string>
     <string name="placeholder_local_terminal_deferred">Android ローカルターミナルとローカル Git は v1 では未対応です。緊急作業には SSH ターミナルを使用してください。</string>
     <string name="placeholder_host_label">ホスト %1$s</string>
     <string name="placeholder_run_diagnostics">診断を実行</string>
@@ -352,4 +359,22 @@
     <string name="termux_workspace_ssh_label">Hobgoblin ワークスペース SSH</string>
     <string name="termux_workspace_ssh_description">選択した Hobgoblin ワークスペースを SSH で開きます。</string>
     <string name="termux_clipboard_command_label">Hobgoblin Termux SSH コマンド</string>
+    <string name="host_detail_projects">プロジェクト</string>
+    <string name="host_detail_tmux">tmux</string>
+    <string name="host_tmux_loading">このホストの Hobgoblin tmux セッションをスキャンしています…</string>
+    <string name="host_tmux_empty_title">Hobgoblin tmux セッションがありません</string>
+    <string name="host_tmux_empty_description">Hobgoblin メタデータを持つ実行中のセッションが見つかりませんでした。</string>
+    <string name="host_tmux_stale">前回成功したスキャン結果を表示しています：%1$s</string>
+    <string name="host_tmux_default_server">デフォルト server</string>
+    <string name="host_tmux_project_server">プロジェクト server · %1$s</string>
+    <string name="host_tmux_session_name">session · %1$s</string>
+    <string name="host_tmux_idle">アイドル</string>
+    <string name="host_tmux_attached_clients">%1$d クライアント接続中</string>
+    <string name="host_tmux_terminal_label">terminal-%1$d</string>
+    <string name="host_tmux_close_description">terminal-%1$d の Android 接続を閉じ、後で再接続できるようローカル記録を残します。リモート tmux セッションは実行を続けます。</string>
+    <string name="host_tmux_delete_title">tmux ターミナルを削除しますか？</string>
+    <string name="host_tmux_delete_local_description">terminal-%1$d を Android のターミナル一覧から削除し、アクティブな接続を停止します。下の項目を選択しない限り、リモート tmux セッションは実行を続けます。</string>
+    <string name="host_tmux_close_remote_on_delete">リモート tmux セッションも閉じる</string>
+    <string name="host_tmux_close_remote_warning">セッション内のプロセスを終了し、他のクライアントも切断します。この操作は元に戻せません。</string>
+    <string name="host_tmux_delete_failed">tmux ターミナルを削除できませんでした</string>
 </resources>

@@ -21,7 +21,6 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
 import com.termux.view.TerminalRenderer
-import com.termux.terminal.TextStyle
 import com.mrongm.hobgoblin.R
 import com.mrongm.hobgoblin.data.TerminalAppearance
 import com.mrongm.hobgoblin.terminals.emulator.RemoteTerminalEmulatorController
@@ -227,12 +226,7 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
         setBackgroundColor(palette.backgroundArgb)
         selectionPaint.color = palette.selectionArgb
         val colors = controller?.emulator?.mColors?.mCurrentColors ?: return
-        palette.ansiArgb.forEachIndexed { index, color ->
-            colors[index] = color
-        }
-        colors[TextStyle.COLOR_INDEX_FOREGROUND] = palette.foregroundArgb
-        colors[TextStyle.COLOR_INDEX_BACKGROUND] = palette.backgroundArgb
-        colors[TextStyle.COLOR_INDEX_CURSOR] = palette.actionArgb
+        applyTerminalPalette(colors, palette)
     }
 
     override fun onDetachedFromWindow() {

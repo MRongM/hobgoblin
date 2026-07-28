@@ -14,6 +14,146 @@ import org.junit.Test
 
 class RemoteTmuxSessionServiceTest {
     @Test
+    fun `host discovery trusts once and runs one versioned scan command`() {
+        val sessionName = "hobgoblin-v1-111111111111111111111111"
+        val client = FakeSshClient(
+            SshCommandResult(
+                ok = true,
+                stdout = listOf(
+                    TmuxSessionProtocol.HostDiscoveryHeader,
+                    "legacy-default\t$sessionName\t/srv/project\t1\t0",
+                ).joinToString("\n"),
+            ),
+        )
+
+        val result = service(client).discoverHostSessions(target())
+
+        assertEquals(
+            RemoteHostTmuxDiscoveryResult.Loaded(
+                listOf(
+                    HostDiscoveredTmuxSession(
+                        server = TmuxServerTarget.Default,
+                        identity = TmuxSessionIdentity(sessionName, "/srv/project"),
+                        terminalNumber = 1,
+                        attachedClients = 0,
+                    ),
+                ),
+            ),
+            result,
+        )
+        assertEquals(1, client.fingerprintReads)
+        assertEquals(listOf(TmuxSessionProtocol.hostSessionDiscoveryCommand()), client.scripts)
+    }
+
+    @Test
+    fun `host discovery distinguishes empty catalog protocol failure and SSH failure`() {
+        val empty = service(
+            FakeSshClient(SshCommandResult(ok = true, stdout = TmuxSessionProtocol.HostDiscoveryHeader)),
+        ).discoverHostSessions(target())
+        val invalid = service(
+            FakeSshClient(SshCommandResult(ok = true, stdout = "unexpected-output")),
+        ).discoverHostSessions(target())
+        val failed = service(
+            FakeSshClient(SshCommandResult(ok = false, stderr = "permission denied")),
+        ).discoverHostSessions(target())
+
+        assertEquals(RemoteHostTmuxDiscoveryResult.Loaded(emptyList()), empty)
+        assertEquals(RemoteHostTmuxDiscoveryResult.Failed("tmux returned an invalid host session list"), invalid)
+        assertEquals(RemoteHostTmuxDiscoveryResult.Failed("permission denied"), failed)
+    }
+
+    @Test
+    fun `untrusted host fails host discovery before SSH command`() {
+        val client = FakeSshClient()
+        val service = RemoteTmuxSessionService(client, FakeHostKeyTrustStore(trusted = false))
+
+        val result = service.discoverHostSessions(target())
+
+        assertTrue(result is RemoteHostTmuxDiscoveryResult.Failed)
+        assertTrue(client.scripts.isEmpty())
+    }
+
+    @Test
+    fun `host close revalidates exact metadata and ignores attached client drift before killing`() {
+        val discovery = hostDiscovery(attachedClients = 0)
+        val client = FakeSshClient(
+            SshCommandResult(
+                ok = true,
+                stdout = listOf(
+                    TmuxSessionProtocol.HostDiscoveryHeader,
+                    "$ProjectServerName\t$SessionName\t$FeaturePath\t1\t3",
+                ).joinToString("\n"),
+            ),
+            SshCommandResult(ok = true),
+        )
+
+        val result = service(client).closeHostSession(target(), discovery)
+
+        assertEquals(RemoteTmuxCloseResult.Closed, result)
+        assertEquals(
+            listOf(
+                TmuxSessionProtocol.hostServerSessionListCommand(discovery.server),
+                TmuxSessionProtocol.hostSessionKillCommand(discovery.server, SessionName),
+            ),
+            client.scripts,
+        )
+        assertTrue(client.secrets.all { it.acceptedHostFingerprint == "SHA256:trusted" })
+    }
+
+    @Test
+    fun `host close treats missing or changed exact metadata as missing without killing`() {
+        val discovery = hostDiscovery()
+        val missing = service(
+            FakeSshClient(
+                SshCommandResult(ok = true, stdout = TmuxSessionProtocol.HostDiscoveryHeader),
+            ),
+        ).closeHostSession(target(), discovery)
+        val changedClient = FakeSshClient(
+            SshCommandResult(
+                ok = true,
+                stdout = listOf(
+                    TmuxSessionProtocol.HostDiscoveryHeader,
+                    "$ProjectServerName\t$SessionName\t$FeaturePath\t2\t0",
+                ).joinToString("\n"),
+            ),
+        )
+
+        val changed = service(changedClient).closeHostSession(target(), discovery)
+
+        assertEquals(RemoteTmuxCloseResult.Missing, missing)
+        assertEquals(RemoteTmuxCloseResult.Missing, changed)
+        assertEquals(1, changedClient.scripts.size)
+    }
+
+    @Test
+    fun `host close reports kill failure and rejects an untrusted host before SSH commands`() {
+        val discovery = hostDiscovery()
+        val trustedClient = FakeSshClient(
+            SshCommandResult(
+                ok = true,
+                stdout = listOf(
+                    TmuxSessionProtocol.HostDiscoveryHeader,
+                    "$ProjectServerName\t$SessionName\t$FeaturePath\t1\t0",
+                ).joinToString("\n"),
+            ),
+            SshCommandResult(ok = false, stderr = "permission denied"),
+        )
+
+        assertEquals(
+            RemoteTmuxCloseResult.Failed("permission denied"),
+            service(trustedClient).closeHostSession(target(), discovery),
+        )
+
+        val untrustedClient = FakeSshClient()
+        val untrustedService = RemoteTmuxSessionService(
+            untrustedClient,
+            FakeHostKeyTrustStore(trusted = false),
+        )
+        assertTrue(untrustedService.closeHostSession(target(), discovery) is RemoteTmuxCloseResult.Failed)
+        assertTrue(untrustedClient.scripts.isEmpty())
+    }
+
+    @Test
     fun `trusted discovery returns only descriptor verified sessions`() {
         val discoveryIdentity = requireNotNull(
             TmuxSessionProtocol.identity(
@@ -24,8 +164,8 @@ class RemoteTmuxSessionServiceTest {
             SshCommandResult(
                 ok = true,
                 stdout = listOf(
-                    "${discoveryIdentity.sessionName}\t$FeaturePath\t1\t$ProjectServerName",
-                    "user-session\t$FeaturePath\t1\tlegacy-default",
+                    "${discoveryIdentity.sessionName}\t$FeaturePath\t1\t$ProjectServerName\t0",
+                    "user-session\t$FeaturePath\t1\tlegacy-default\tlegacy",
                 ).joinToString("\n"),
             ),
         )
@@ -42,7 +182,14 @@ class RemoteTmuxSessionServiceTest {
             ),
             result,
         )
-        assertEquals(listOf(TmuxSessionProtocol.listDiscoverableSessionsScript(ProjectRoot)), client.scripts)
+        assertEquals(
+            listOf(
+                TmuxSessionProtocol.listDiscoverableSessionsScript(
+                    listOf(TmuxDiscoveryScope(ProjectRoot, setOf(FeaturePath))),
+                ),
+            ),
+            client.scripts,
+        )
         assertTrue(client.secrets.all { it.acceptedHostFingerprint == "SHA256:trusted" })
     }
 
@@ -93,6 +240,61 @@ class RemoteTmuxSessionServiceTest {
 
         assertTrue(result is RemoteTmuxDiscoveryResult.Failed)
         assertEquals(emptyList<String>(), client.scripts)
+    }
+
+    @Test
+    fun `batch discovery uses one trust decision and one SSH command for every scope`() {
+        val secondRoot = "/srv/projects/other"
+        val secondPath = "/srv/projects/other/worktrees/feature"
+        val firstIdentity = requireNotNull(
+            TmuxSessionProtocol.identity(TmuxSessionDescriptor(ProjectRoot, FeaturePath, 1)),
+        )
+        val secondIdentity = requireNotNull(
+            TmuxSessionProtocol.identity(TmuxSessionDescriptor(secondRoot, secondPath, 2)),
+        )
+        val client = FakeSshClient(
+            SshCommandResult(
+                ok = true,
+                stdout = listOf(
+                    "${firstIdentity.sessionName}\t$FeaturePath\t1\t$ProjectServerName\t0",
+                    "${secondIdentity.sessionName}\t$secondPath\t2\t${TmuxSessionProtocol.serverName(secondRoot)}\t1",
+                ).joinToString("\n"),
+            ),
+        )
+
+        val result = service(client).discoverAssociatedSessions(
+            target = target(),
+            scopes = listOf(
+                TmuxDiscoveryScope(ProjectRoot, setOf(FeaturePath)),
+                TmuxDiscoveryScope(secondRoot, setOf(secondPath)),
+            ),
+        )
+
+        assertEquals(
+            RemoteTmuxBatchDiscoveryResult.Found(
+                listOf(
+                    ScopedDiscoveredTmuxSession(ProjectRoot, DiscoveredTmuxSession(firstIdentity, 1)),
+                    ScopedDiscoveredTmuxSession(secondRoot, DiscoveredTmuxSession(secondIdentity, 2)),
+                ),
+            ),
+            result,
+        )
+        assertEquals(1, client.fingerprintReads)
+        assertEquals(1, client.scripts.size)
+    }
+
+    @Test
+    fun `invalid batch scope fails before host trust or SSH command`() {
+        val client = FakeSshClient()
+
+        val result = service(client).discoverAssociatedSessions(
+            target = target(),
+            scopes = listOf(TmuxDiscoveryScope("relative", setOf(FeaturePath))),
+        )
+
+        assertTrue(result is RemoteTmuxBatchDiscoveryResult.Failed)
+        assertEquals(0, client.fingerprintReads)
+        assertTrue(client.scripts.isEmpty())
     }
 
     @Test
@@ -219,6 +421,14 @@ class RemoteTmuxSessionServiceTest {
     private fun identity(): TmuxSessionIdentity =
         TmuxSessionIdentity(sessionName = SessionName, initialPath = "/srv/feature")
 
+    private fun hostDiscovery(attachedClients: Int = 0): HostDiscoveredTmuxSession =
+        HostDiscoveredTmuxSession(
+            server = TmuxServerTarget.Named(ProjectServerName),
+            identity = TmuxSessionIdentity(sessionName = SessionName, initialPath = FeaturePath),
+            terminalNumber = 1,
+            attachedClients = attachedClients,
+        )
+
     private fun target(): RemoteTarget = RemoteTarget(
         id = "lee@example.com:22/srv/feature",
         alias = "Dev",
@@ -235,8 +445,12 @@ class RemoteTmuxSessionServiceTest {
         private val remaining = ArrayDeque(results.toList())
         val scripts = mutableListOf<String>()
         val secrets = mutableListOf<SshConnectionSecrets>()
+        var fingerprintReads = 0
 
-        override fun fetchHostFingerprint(target: RemoteTarget): String = "SHA256:trusted"
+        override fun fetchHostFingerprint(target: RemoteTarget): String {
+            fingerprintReads += 1
+            return "SHA256:trusted"
+        }
 
         override fun runCommand(
             target: RemoteTarget,

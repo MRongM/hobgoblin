@@ -13,6 +13,7 @@ class RemoteTerminalEmulatorController(
     sendInputBytes: (ByteArray) -> Boolean,
     private val resizeRemote: (Int, Int) -> Boolean,
 ) {
+    private val observers = linkedMapOf<String, () -> Unit>()
     val output: RemoteTerminalOutput = RemoteTerminalOutput(sendInputBytes = sendInputBytes)
     private val client = TerminalEmulatorSessionClient()
     val emulator: TerminalEmulator = TerminalEmulator(
@@ -22,7 +23,6 @@ class RemoteTerminalEmulatorController(
         TerminalEmulator.DEFAULT_TERMINAL_TRANSCRIPT_ROWS,
         client,
     )
-    private val observers = linkedMapOf<String, () -> Unit>()
 
     fun appendOutput(bytes: ByteArray) {
         val frame = bytes.copyOf()

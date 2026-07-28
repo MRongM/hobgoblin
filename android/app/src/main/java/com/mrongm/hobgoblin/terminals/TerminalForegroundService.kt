@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
 import com.mrongm.hobgoblin.MainActivity
 import com.mrongm.hobgoblin.R
 
@@ -25,22 +26,28 @@ class TerminalForegroundService : Service() {
             return START_NOT_STICKY
         }
 
+        val applicationLanguageContext = forApplicationLanguage()
         val content = ResolvedTerminalNotificationContent(
-            title = intent?.getStringExtra(ExtraTitle) ?: getString(R.string.notification_terminal_running),
-            text = intent?.getStringExtra(ExtraText) ?: getString(R.string.notification_terminal_session_active),
+            title = intent?.getStringExtra(ExtraTitle)
+                ?: applicationLanguageContext.getString(R.string.notification_terminal_running),
+            text = intent?.getStringExtra(ExtraText)
+                ?: applicationLanguageContext.getString(R.string.notification_terminal_session_active),
             terminalSessionId = intent?.getStringExtra(TerminalSessionIntentExtra),
         )
         ServiceCompat.startForeground(
             this,
             TerminalNotificationFactory.NotificationId,
-            buildNotification(content),
+            buildNotification(content, applicationLanguageContext),
             foregroundServiceType(),
         )
         return START_STICKY
     }
 
-    private fun buildNotification(content: ResolvedTerminalNotificationContent): Notification {
-        ensureChannel()
+    private fun buildNotification(
+        content: ResolvedTerminalNotificationContent,
+        applicationLanguageContext: Context,
+    ): Notification {
+        ensureChannel(applicationLanguageContext)
         val openIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             content.terminalSessionId?.let { putExtra(TerminalSessionIntentExtra, it) }
@@ -61,11 +68,11 @@ class TerminalForegroundService : Service() {
             .build()
     }
 
-    private fun ensureChannel() {
+    private fun ensureChannel(applicationLanguageContext: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val channel = NotificationChannel(
             TerminalNotificationFactory.ChannelId,
-            getString(R.string.notification_terminal_channel),
+            applicationLanguageContext.getString(R.string.notification_terminal_channel),
             NotificationManager.IMPORTANCE_LOW,
         )
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
@@ -106,4 +113,7 @@ private data class ResolvedTerminalNotificationContent(
 )
 
 private fun Context.resolve(text: TerminalNotificationText): String =
-    getString(text.resourceId, *text.formatArgs.toTypedArray())
+    forApplicationLanguage().getString(text.resourceId, *text.formatArgs.toTypedArray())
+
+private fun Context.forApplicationLanguage(): Context =
+    ContextCompat.getContextForLanguage(this)

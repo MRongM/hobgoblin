@@ -151,6 +151,119 @@ class TerminalSessionManagerTest {
     }
 
     @Test
+    fun `catalog recovery reuses its deterministic record with nullable local repository ownership`() {
+        val service = FakeTerminalSessionFactory()
+        val manager = terminalSessionManager(service = service, now = { 500L })
+        val candidate = recoveryCandidate().copy(repositoryId = null)
+
+        val first = manager.recoverOrGetTmuxSession(candidate)
+        val beforeRepeat = manager.sessions().map { it.id }
+        val repeated = manager.recoverOrGetTmuxSession(candidate)
+
+        assertEquals(first?.id, repeated?.id)
+        assertNull(first?.repositoryId)
+        assertEquals("/srv/repo", first?.repositoryRemotePath)
+        assertEquals(FeaturePath, first?.remotePath)
+        assertEquals(beforeRepeat, manager.sessions().map { it.id })
+        assertEquals(1, manager.sessions().size)
+        assertEquals(0, service.openCount)
+    }
+
+    @Test
+    fun `host recovery keeps default and named servers as distinct repository independent terminals`() {
+        val manager = terminalSessionManager(service = FakeTerminalSessionFactory(), now = { 500L })
+        val namedServer = TmuxServerTarget.Named("hobgoblin-project-v1-222222222222222222222222")
+        val defaultCandidate = hostRecoveryCandidate(TmuxServerTarget.Default)
+        val namedCandidate = hostRecoveryCandidate(namedServer)
+
+        val defaultRecord = manager.recoverOrGetHostTmuxSession(defaultCandidate)
+        val namedRecord = manager.recoverOrGetHostTmuxSession(namedCandidate)
+        val repeated = manager.recoverOrGetHostTmuxSession(defaultCandidate)
+
+        assertNotEquals(defaultRecord?.id, namedRecord?.id)
+        assertEquals(defaultRecord?.id, repeated?.id)
+        assertNull(defaultRecord?.repositoryId)
+        assertNull(defaultRecord?.repositoryRemotePath)
+        assertEquals(TmuxServerTarget.Default, defaultRecord?.tmuxServerTarget)
+        assertEquals(namedServer, namedRecord?.tmuxServerTarget)
+        assertEquals(2, manager.sessions().size)
+    }
+
+    @Test
+    fun `host tmux retained lookup is read only and requires the exact recovered identity`() {
+        val store = RecordingTerminalSessionStore()
+        val manager = terminalSessionManager(
+            service = FakeTerminalSessionFactory(),
+            store = store,
+            now = { 500L },
+        )
+        val candidate = hostRecoveryCandidate(TmuxServerTarget.Default)
+
+        assertNull(manager.retainedHostTmuxSession(candidate))
+        assertTrue(manager.sessions().isEmpty())
+        assertEquals(0, store.saveCount)
+
+        val recovered = requireNotNull(manager.recoverOrGetHostTmuxSession(candidate))
+
+        assertEquals(recovered, manager.retainedHostTmuxSession(candidate))
+        assertNull(
+            manager.retainedHostTmuxSession(
+                candidate.copy(
+                    discovery = candidate.discovery.copy(terminalNumber = 2),
+                ),
+            ),
+        )
+        assertNull(
+            manager.retainedHostTmuxSession(
+                candidate.copy(
+                    target = candidate.target.copy(
+                        id = "lee@other.example.com:22$FeaturePath",
+                        host = "other.example.com",
+                    ),
+                ),
+            ),
+        )
+        assertEquals(1, manager.sessions().size)
+        assertEquals(1, store.saveCount)
+    }
+
+    @Test
+    fun `host tmux recovery never overwrites a deterministic id with conflicting metadata`() {
+        val manager = terminalSessionManager(service = FakeTerminalSessionFactory(), now = { 500L })
+        val candidate = hostRecoveryCandidate(TmuxServerTarget.Default)
+        val recovered = requireNotNull(manager.recoverOrGetHostTmuxSession(candidate))
+        val conflictingCandidate = candidate.copy(
+            discovery = candidate.discovery.copy(terminalNumber = 2),
+        )
+
+        assertNull(manager.recoverOrGetHostTmuxSession(conflictingCandidate))
+        assertEquals(recovered, manager.session(recovered.id))
+        assertEquals(listOf(recovered), manager.sessions())
+    }
+
+    @Test
+    fun `reconnect of host recovered terminal preserves exact server target and attach existing policy`() {
+        val service = FakeTerminalSessionFactory()
+        val manager = terminalSessionManager(service = service)
+        val server = TmuxServerTarget.Named("hobgoblin-project-v1-222222222222222222222222")
+        val candidate = hostRecoveryCandidate(server)
+        val record = requireNotNull(manager.recoverOrGetHostTmuxSession(candidate))
+
+        val reconnected = manager.reconnect(
+            sessionId = record.id,
+            target = candidate.target,
+            repositoryId = null,
+            repositoryRemotePath = null,
+            targetLabel = record.targetLabel,
+        )
+
+        assertEquals(server, reconnected?.tmuxServerTarget)
+        assertEquals(record.tmuxIdentity, reconnected?.tmuxIdentity)
+        assertEquals(server, service.startupContext()?.tmuxServerTarget)
+        assertEquals(TmuxStartupPolicy.AttachExisting, service.startupContext()?.tmuxStartupPolicy)
+    }
+
+    @Test
     fun `tmux recovery does not overwrite an existing native or exact tmux slot`() {
         val service = FakeTerminalSessionFactory()
         val manager = terminalSessionManager(service = service, ids = terminalIds())
@@ -411,6 +524,7 @@ class TerminalSessionManagerTest {
 
         assertEquals(record.tmuxIdentity, reconnected?.tmuxIdentity)
         assertEquals(record.tmuxIdentity, service.startupContext(index = 1)?.tmuxIdentity)
+        assertEquals(TmuxStartupPolicy.AttachExisting, service.startupContext(index = 1)?.tmuxStartupPolicy)
     }
 
     @Test
@@ -939,6 +1053,31 @@ class TerminalSessionManagerTest {
             repositoryRemotePath = "/srv/repo",
             targetLabel = "App - $FeaturePath",
             discovery = DiscoveredTmuxSession(identity = identity, terminalNumber = terminalNumber),
+        )
+    }
+
+    private fun hostRecoveryCandidate(server: TmuxServerTarget): HostTmuxRecoveryCandidate {
+        val identity = TmuxSessionIdentity(
+            sessionName = "hobgoblin-v1-111111111111111111111111",
+            initialPath = FeaturePath,
+        )
+        return HostTmuxRecoveryCandidate(
+            target = RemoteTarget(
+                id = "lee@example.com:22$FeaturePath",
+                alias = "Dev",
+                host = "example.com",
+                user = "lee",
+                port = 22,
+                remotePath = FeaturePath,
+                identityRefId = null,
+            ),
+            targetLabel = "Feature - $FeaturePath",
+            discovery = HostDiscoveredTmuxSession(
+                server = server,
+                identity = identity,
+                terminalNumber = 1,
+                attachedClients = 0,
+            ),
         )
     }
 

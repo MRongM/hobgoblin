@@ -44,7 +44,7 @@ fun ProjectsScreen(
     onOpenProjectTerminals: (String, String) -> Unit,
     onDeleteProject: (String) -> Unit,
     hostFilterId: String? = null,
-    onClearHostFilter: () -> Unit = {},
+    onClearHostFilter: (() -> Unit)? = null,
     initialManualOrder: List<String> = emptyList(),
     onSaveManualOrder: (List<String>) -> Unit = {},
 ) {
@@ -114,6 +114,9 @@ internal fun filteredProjectsDescriptionResource(): Int = R.string.projects_filt
 
 internal fun projectReorderAvailable(hostFilterId: String?): Boolean = hostFilterId == null
 
+internal fun localProjectReorderIds(projects: List<RemoteRepositoryProfile>): List<String> =
+    projects.map(RemoteRepositoryProfile::id)
+
 internal fun projectKindLabelResource(project: RemoteRepositoryProfile): Int = when (project.kind) {
     RemoteProjectKind.GitRepository -> R.string.projects_git_repository
     RemoteProjectKind.PlainWorkspace -> R.string.projects_plain_workspace
@@ -127,7 +130,7 @@ private fun ProjectList(
     onOpenProjectTerminals: (String, String) -> Unit,
     onDeleteProject: (String) -> Unit,
     hostFilterId: String?,
-    onClearHostFilter: () -> Unit,
+    onClearHostFilter: (() -> Unit)?,
     initialManualOrder: List<String>,
     onSaveManualOrder: (List<String>) -> Unit,
 ) {
@@ -174,7 +177,7 @@ private fun ProjectList(
                     stringResource(filteredProjectsDescriptionResource(), filteredHostTitle)
                 },
             )
-            if (hostFilterId != null) {
+            if (hostFilterId != null && onClearHostFilter != null) {
                 Spacer(Modifier.height(HobgoblinSpacing.Sm))
                 TextButton(onClick = onClearHostFilter) {
                     Text(stringResource(R.string.projects_show_all))
@@ -198,7 +201,7 @@ private fun ProjectList(
             modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.titleMedium,
         )
-        if (hostFilterId != null) {
+        if (hostFilterId != null && onClearHostFilter != null) {
             TextButton(onClick = onClearHostFilter) {
                 Text(stringResource(R.string.projects_show_all_short))
             }

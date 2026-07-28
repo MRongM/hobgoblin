@@ -23,6 +23,12 @@
     <string name="navigation_add_host">Add host</string>
     <string name="navigation_add_project">Add project</string>
     <string name="accessibility_reorder_item">Reorder %1$s</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_language_follow_system">Follow system</string>
+    <string name="settings_language_english">English</string>
+    <string name="settings_language_simplified_chinese">中文</string>
+    <string name="settings_language_japanese">日本語</string>
+    <string name="settings_language_korean">한국어</string>
     <string name="settings_enter_value">Enter a value.</string>
     <string name="settings_numbers_only">Only numbers are allowed.</string>
     <string name="settings_interval_error">Interval must be between %1$d and %2$d seconds.</string>
@@ -155,6 +161,7 @@
     <string name="projects_delete_title">Delete project record?</string>
     <string name="projects_delete_description">This removes %1$s from Hobgoblin Android. It does not delete anything on the SSH server.</string>
     <string name="projects_loading_description">Loading saved projects.</string>
+    <string name="workspace_title">Workspace</string>
     <string name="placeholder_local_terminal_deferred">Android-local terminal and local Git are deferred from v1; use SSH terminals for emergency work.</string>
     <string name="placeholder_host_label">Host %1$s</string>
     <string name="placeholder_run_diagnostics">Run diagnostics</string>
@@ -353,4 +360,22 @@
     <string name="termux_workspace_ssh_label">Hobgoblin workspace SSH</string>
     <string name="termux_workspace_ssh_description">Open the selected Hobgoblin workspace over SSH.</string>
     <string name="termux_clipboard_command_label">Hobgoblin Termux SSH command</string>
+    <string name="host_detail_projects">Projects</string>
+    <string name="host_detail_tmux">tmux</string>
+    <string name="host_tmux_loading">Scanning this host for Hobgoblin tmux sessions…</string>
+    <string name="host_tmux_empty_title">No Hobgoblin tmux sessions</string>
+    <string name="host_tmux_empty_description">No live session with Hobgoblin metadata was found on this host.</string>
+    <string name="host_tmux_stale">Showing the last successful scan: %1$s</string>
+    <string name="host_tmux_default_server">default server</string>
+    <string name="host_tmux_project_server">project server · %1$s</string>
+    <string name="host_tmux_session_name">session · %1$s</string>
+    <string name="host_tmux_idle">Idle</string>
+    <string name="host_tmux_attached_clients">%1$d attached clients</string>
+    <string name="host_tmux_terminal_label">terminal-%1$d</string>
+    <string name="host_tmux_close_description">Close the Android connection for terminal-%1$d and keep its local record for reconnecting later. The remote tmux session keeps running.</string>
+    <string name="host_tmux_delete_title">Delete tmux terminal?</string>
+    <string name="host_tmux_delete_local_description">Remove terminal-%1$d from the Android terminal list and stop its active connection. The remote tmux session keeps running unless you select the option below.</string>
+    <string name="host_tmux_close_remote_on_delete">Also close the remote tmux session</string>
+    <string name="host_tmux_close_remote_warning">This ends processes in the session and disconnects other clients. It cannot be undone.</string>
+    <string name="host_tmux_delete_failed">Unable to delete the tmux terminal</string>
 </resources>

@@ -4,6 +4,7 @@ import com.mrongm.hobgoblin.terminals.TerminalDisconnectedReason
 import com.mrongm.hobgoblin.terminals.TerminalSessionRecord
 import com.mrongm.hobgoblin.terminals.TerminalSessionStatus
 import com.mrongm.hobgoblin.terminals.TmuxSessionIdentity
+import com.mrongm.hobgoblin.terminals.TmuxServerTarget
 import com.mrongm.hobgoblin.terminals.terminalOutputSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -87,6 +88,37 @@ class TerminalSessionStoreTest {
         assertEquals(2, decoded.terminalId)
         assertEquals("/srv/repo", decoded.repositoryRemotePath)
         assertEquals(null, decoded.tmuxIdentity)
+    }
+
+    @Test
+    fun `server aware host tmux record round trips while seventeen field records remain compatible`() {
+        val server = TmuxServerTarget.Named("hobgoblin-project-v1-222222222222222222222222")
+        val hostRecord = TerminalSessionRecord(
+            id = "host-tmux-1",
+            hostId = "lee@example.com:22/srv/recovered",
+            repositoryId = null,
+            remotePath = "/srv/recovered",
+            targetLabel = "Recovered - /srv/recovered",
+            displayName = "terminal-3",
+            terminalId = 3,
+            repositoryRemotePath = null,
+            tmuxIdentity = TmuxSessionIdentity(
+                sessionName = "hobgoblin-v1-111111111111111111111111",
+                initialPath = "/srv/recovered",
+            ),
+            tmuxServerTarget = server,
+            status = TerminalSessionStatus.Disconnected,
+            openedAt = 100L,
+        )
+
+        val roundTripped = TerminalSessionCodec.decode(TerminalSessionCodec.encode(listOf(hostRecord))).single()
+        val oldPayload = TerminalSessionCodec.encode(listOf(terminalRecord())).split('.').take(17).joinToString(".")
+        val oldRecord = TerminalSessionCodec.decode(oldPayload).single()
+
+        assertEquals(hostRecord, roundTripped)
+        assertEquals(server, roundTripped.tmuxServerTarget)
+        assertEquals(null, oldRecord.tmuxServerTarget)
+        assertEquals(terminalRecord().tmuxIdentity, oldRecord.tmuxIdentity)
     }
 
     @Test

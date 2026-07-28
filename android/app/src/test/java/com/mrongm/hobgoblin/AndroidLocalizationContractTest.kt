@@ -34,6 +34,75 @@ class AndroidLocalizationContractTest {
         assertTrue(appBuild.contains("generateLocaleConfig = true"))
     }
 
+    @Test
+    fun `in-app language picker uses AppCompat locale storage across Android versions`() {
+        val projectRoot = androidProjectRoot()
+        val versionCatalog = File(projectRoot, "gradle/libs.versions.toml").readText()
+        val appBuild = File(projectRoot, "app/build.gradle.kts").readText()
+        val manifest = File(projectRoot, "app/src/main/AndroidManifest.xml").readText()
+        val styles = File(projectRoot, "app/src/main/res/values/styles.xml").readText()
+        val mainActivity = File(
+            projectRoot,
+            "app/src/main/java/com/mrongm/hobgoblin/MainActivity.kt",
+        ).readText()
+
+        assertTrue(versionCatalog.contains("appcompat = \"1.7.1\""))
+        assertTrue(versionCatalog.contains("androidx-appcompat = { module = \"androidx.appcompat:appcompat\""))
+        assertTrue(appBuild.contains("implementation(libs.androidx.appcompat)"))
+        assertTrue(manifest.contains("androidx.appcompat.app.AppLocalesMetadataHolderService"))
+        assertTrue(manifest.contains("android:name=\"autoStoreLocales\""))
+        assertTrue(manifest.contains("android:value=\"true\""))
+        assertTrue(styles.contains("Theme.AppCompat.DayNight.NoActionBar"))
+        assertTrue(mainActivity.contains("class MainActivity : AppCompatActivity()"))
+    }
+
+    @Test
+    fun `settings screen stages and saves the Android application language`() {
+        val projectRoot = androidProjectRoot()
+        val settingsScreen = File(
+            projectRoot,
+            "app/src/main/java/com/mrongm/hobgoblin/ui/screens/settings/SettingsScreen.kt",
+        ).readText()
+        val application = File(
+            projectRoot,
+            "app/src/main/java/com/mrongm/hobgoblin/HobgoblinAndroidApp.kt",
+        ).readText()
+        val resourceKeys = resourceEntries(File(projectRoot, "app/src/main/res/values/strings.xml"))
+            .map(ResourceEntry::key)
+            .toSet()
+
+        assertTrue(
+            resourceKeys.containsAll(
+                setOf(
+                    "string:settings_language",
+                    "string:settings_language_follow_system",
+                    "string:settings_language_english",
+                    "string:settings_language_simplified_chinese",
+                    "string:settings_language_japanese",
+                    "string:settings_language_korean",
+                ),
+            ),
+        )
+        assertTrue(settingsScreen.contains("initialApplicationLanguage: AndroidApplicationLanguageSetting"))
+        assertTrue(settingsScreen.contains("onSave: (Long, Int, AndroidApplicationLanguagePreference) -> Unit"))
+        assertTrue(settingsScreen.contains("ExposedDropdownMenuBox("))
+        assertTrue(settingsScreen.contains("selectedApplicationLanguage"))
+        assertTrue(settingsScreen.contains("verticalScroll(rememberScrollState())"))
+        assertTrue(application.contains("currentAndroidApplicationLanguageSetting()"))
+        assertTrue(application.contains("setAndroidApplicationLanguagePreference(applicationLanguage)"))
+    }
+
+    @Test
+    fun `foreground terminal notifications resolve from the Android application language`() {
+        val service = File(
+            androidProjectRoot(),
+            "app/src/main/java/com/mrongm/hobgoblin/terminals/TerminalForegroundService.kt",
+        ).readText()
+
+        assertTrue(service.contains("import androidx.core.content.ContextCompat"))
+        assertTrue(service.contains("ContextCompat.getContextForLanguage(this)"))
+    }
+
     private fun resourceEntries(file: File): List<ResourceEntry> {
         assertTrue("Missing resource catalog: ${file.path}", file.isFile)
         val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(file)

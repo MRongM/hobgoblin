@@ -1,5 +1,6 @@
 package com.mrongm.hobgoblin.terminals
 
+import java.nio.file.Files
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -99,6 +100,19 @@ class TmuxSessionProtocolTest {
         assertTrue(command.orEmpty().contains("\"\$hobgoblin_tmux_bin\" -L '$serverName' new-session -d"))
         assertTrue(command.orEmpty().contains("else \"\$hobgoblin_tmux_bin\" -L '$serverName' new-session -d"))
         assertFalse(command.orEmpty().contains('\n'))
+    }
+
+    @Test
+    fun `attach existing command never creates a replacement session`() {
+        val identity = requireNotNull(TmuxSessionProtocol.identity(descriptor()))
+        val command = TmuxSessionProtocol.attachExistingCommand(identity, 1, "/srv/projects/example").orEmpty()
+        val serverName = "hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0"
+
+        assertTrue(command.contains("\"\$hobgoblin_tmux_bin\" -L '$serverName' has-session"))
+        assertTrue(command.contains("elif \"\$hobgoblin_tmux_bin\" has-session"))
+        assertTrue(command.contains("Hobgoblin tmux session no longer exists"))
+        assertFalse(command.contains("new-session"))
+        assertNull(TmuxSessionProtocol.attachExistingCommand(identity, 0, "/srv/projects/example"))
     }
 
     @Test
@@ -228,6 +242,124 @@ class TmuxSessionProtocolTest {
     }
 
     @Test
+    fun `batch discovery validates scope identity and prefers project scoped rows`() {
+        val firstRoot = "/srv/product/api"
+        val secondRoot = "/srv/product/web"
+        val firstPath = "/srv/product/hobgoblin-feature-auth/api"
+        val secondPath = "/srv/product/hobgoblin-feature-auth/web"
+        val firstIdentity = requireNotNull(
+            TmuxSessionProtocol.identity(TmuxSessionDescriptor(firstRoot, firstPath, terminalNumber = 2)),
+        )
+        val secondIdentity = requireNotNull(
+            TmuxSessionProtocol.identity(TmuxSessionDescriptor(secondRoot, secondPath, terminalNumber = 1)),
+        )
+        val output = listOf(
+            "${firstIdentity.sessionName}\t$firstPath\t2\tlegacy-default\tlegacy",
+            "${secondIdentity.sessionName}\t$secondPath\t1\t${TmuxSessionProtocol.serverName(secondRoot)}\t1",
+            "${firstIdentity.sessionName}\t$firstPath\t2\t${TmuxSessionProtocol.serverName(firstRoot)}\t0",
+            "user-session\t$firstPath\t1\t${TmuxSessionProtocol.serverName(firstRoot)}\t0",
+            "${firstIdentity.sessionName}\t$firstPath\t2\t${TmuxSessionProtocol.serverName(secondRoot)}\t1",
+        ).joinToString("\n")
+
+        val sessions = TmuxSessionProtocol.parseDiscoverableSessions(
+            output = output,
+            scopes = listOf(
+                TmuxDiscoveryScope("/srv/product//api/.", setOf("$firstPath/")),
+                TmuxDiscoveryScope(secondRoot, setOf(secondPath)),
+                TmuxDiscoveryScope(firstRoot, setOf(firstPath)),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                ScopedDiscoveredTmuxSession(firstRoot, DiscoveredTmuxSession(firstIdentity, 2)),
+                ScopedDiscoveredTmuxSession(secondRoot, DiscoveredTmuxSession(secondIdentity, 1)),
+            ),
+            sessions,
+        )
+    }
+
+    @Test
+    fun `batch discovery script deduplicates normalized scopes and lists legacy default once`() {
+        val script = TmuxSessionProtocol.listDiscoverableSessionsScript(
+            listOf(
+                TmuxDiscoveryScope("/srv/product/api", setOf("/srv/product/feature/api")),
+                TmuxDiscoveryScope("/srv/product//api/.", setOf("/srv/product/feature/api/")),
+                TmuxDiscoveryScope("/srv/product/web", setOf("/srv/product/feature/web")),
+            ),
+        )
+
+        assertEquals(1, Regex("\\tlegacy-default\\tlegacy").findAll(script).count())
+        assertEquals(1, Regex(" -u list-sessions ").findAll(script).count())
+        assertTrue(script.contains("\t${TmuxSessionProtocol.serverName("/srv/product/api")}\t0"))
+        assertTrue(script.contains("\t${TmuxSessionProtocol.serverName("/srv/product/web")}\t1"))
+    }
+
+    @Test
+    fun `batch discovery continues to legacy server when macOS reports a missing project socket`() {
+        val projectRoot = "/srv/product/api"
+        val projectServer = requireNotNull(TmuxSessionProtocol.serverName(projectRoot))
+        val script = TmuxSessionProtocol.listDiscoverableSessionsScript(
+            listOf(TmuxDiscoveryScope(projectRoot, setOf("/srv/product/feature/api"))),
+        )
+        val tempDirectory = Files.createTempDirectory("hobgoblin-tmux-protocol-test")
+        val tmuxExecutable = tempDirectory.resolve("tmux")
+        val callLog = tempDirectory.resolve("calls.log")
+
+        try {
+            Files.writeString(
+                tmuxExecutable,
+                """#!/bin/sh
+                    printf '%s\n' "${'$'}*" >> "${'$'}HOBGOBLIN_TMUX_TEST_LOG"
+                    case "${'$'}*" in
+                      *" -L $projectServer "*)
+                        printf '%s\n' 'error connecting to /private/tmp/tmux-501/$projectServer (No such file or directory)' >&2
+                        exit 1
+                        ;;
+                      *) exit 0 ;;
+                    esac
+                """.trimIndent(),
+            )
+            assertTrue(tmuxExecutable.toFile().setExecutable(true))
+
+            val process = ProcessBuilder("/bin/sh", "-c", script)
+                .redirectErrorStream(true)
+                .apply {
+                    environment()["PATH"] = "${tempDirectory}:${environment()["PATH"].orEmpty()}"
+                    environment()["HOBGOBLIN_TMUX_TEST_LOG"] = callLog.toString()
+                }
+                .start()
+            val output = process.inputStream.bufferedReader().use { reader -> reader.readText() }
+            val exitCode = process.waitFor()
+
+            assertEquals(output, 0, exitCode)
+            assertTrue(
+                Files.readAllLines(callLog).any { arguments ->
+                    arguments.startsWith("-u list-sessions -F ")
+                },
+            )
+        } finally {
+            tempDirectory.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `batch discovery rejects invalid scope and sorts by scope path and terminal`() {
+        assertNull(
+            TmuxSessionProtocol.parseDiscoverableSessions(
+                output = "",
+                scopes = listOf(TmuxDiscoveryScope("relative", setOf("/srv/path"))),
+            ),
+        )
+        assertNull(
+            TmuxSessionProtocol.parseDiscoverableSessions(
+                output = "",
+                scopes = listOf(TmuxDiscoveryScope("/srv/project", setOf("relative"))),
+            ),
+        )
+    }
+
+    @Test
     fun `association requires both exact name and normalized initial path`() {
         val identity = requireNotNull(TmuxSessionProtocol.identity(descriptor()))
 
@@ -295,6 +427,117 @@ class TmuxSessionProtocolTest {
                     "kill-session -t '=hobgoblin-v1-aebf050981ac829e36100020'",
             ),
         )
+    }
+
+    @Test
+    fun `host tmux administration targets the exact discovered default or named socket`() {
+        val sessionName = "hobgoblin-v1-aebf050981ac829e36100020"
+        val namedServer = TmuxServerTarget.Named("hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0")
+        val defaultList = TmuxSessionProtocol.hostServerSessionListCommand(TmuxServerTarget.Default)
+        val namedList = TmuxSessionProtocol.hostServerSessionListCommand(namedServer)
+        val namedKill = TmuxSessionProtocol.hostSessionKillCommand(namedServer, sessionName)
+
+        assertTrue(defaultList.contains("printf '%s\\n' '${TmuxSessionProtocol.HostDiscoveryHeader}'"))
+        assertTrue(defaultList.contains("hobgoblin_tmux_socket_name='default'"))
+        assertTrue(defaultList.contains("legacy-default\t#{session_name}"))
+        assertTrue(namedList.contains("hobgoblin_tmux_socket_name='${namedServer.serverName}'"))
+        assertTrue(namedList.contains("${namedServer.serverName}\t#{session_name}"))
+        assertTrue(defaultList.contains("case \"\${TMUX_TMPDIR:-}\" in"))
+        assertTrue(defaultList.contains("/tmp/tmux-\$hobgoblin_remote_uid"))
+        assertTrue(defaultList.contains("-S \"\$hobgoblin_tmux_socket\" list-sessions"))
+        assertTrue(namedKill.orEmpty().contains("-S \"\$hobgoblin_tmux_socket\" kill-session"))
+        assertTrue(namedKill.orEmpty().endsWith("-t '=$sessionName'"))
+        assertNull(TmuxSessionProtocol.hostSessionKillCommand(TmuxServerTarget.Default, "user-session"))
+    }
+
+    @Test
+    fun `host discovery parses default and named servers and groups by initial path`() {
+        val namedServer = "hobgoblin-project-v1-222222222222222222222222"
+        val output = listOf(
+            TmuxSessionProtocol.HostDiscoveryHeader,
+            "legacy-default\thobgoblin-v1-111111111111111111111111\t/srv/project\t2\t0",
+            "$namedServer\thobgoblin-v1-333333333333333333333333\t/srv/project\t1\t2",
+            "legacy-default\thobgoblin-v1-444444444444444444444444\t/srv/other\t3\t1",
+        ).joinToString("\n")
+
+        val sessions = requireNotNull(TmuxSessionProtocol.parseHostSessionDiscoveryOutput(output))
+        val groups = HostTmuxPathGroup.from(sessions)
+
+        assertEquals(3, sessions.size)
+        assertEquals(listOf("/srv/other", "/srv/project"), groups.map(HostTmuxPathGroup::initialPath))
+        assertEquals(listOf(1, 2), groups[1].sessions.map(HostDiscoveredTmuxSession::terminalNumber))
+        assertEquals(TmuxServerTarget.Named(namedServer), groups[1].sessions[0].server)
+        assertEquals(TmuxServerTarget.Default, groups[1].sessions[1].server)
+        assertEquals(2, groups[1].sessions.first().attachedClients)
+    }
+
+    @Test
+    fun `host discovery requires its envelope and ignores malformed or duplicate session rows`() {
+        val sessionName = "hobgoblin-v1-111111111111111111111111"
+        val validRow = "legacy-default\t$sessionName\t/srv/project\t1\t0"
+        val output = listOf(
+            TmuxSessionProtocol.HostDiscoveryHeader,
+            validRow,
+            validRow,
+            "arbitrary-server\t$sessionName\t/srv/project\t1\t0",
+            "legacy-default\tuser-session\t/srv/project\t1\t0",
+            "legacy-default\t$sessionName\trelative\t1\t0",
+            "legacy-default\t$sessionName\t/srv/project\t01\t0",
+            "legacy-default\t$sessionName\t/srv/project\t1\t-1",
+            "missing-fields",
+        ).joinToString("\n")
+
+        assertEquals(
+            listOf(
+                HostDiscoveredTmuxSession(
+                    server = TmuxServerTarget.Default,
+                    identity = TmuxSessionIdentity(sessionName, "/srv/project"),
+                    terminalNumber = 1,
+                    attachedClients = 0,
+                ),
+            ),
+            TmuxSessionProtocol.parseHostSessionDiscoveryOutput(output),
+        )
+        assertNull(TmuxSessionProtocol.parseHostSessionDiscoveryOutput(validRow))
+        assertNull(TmuxSessionProtocol.parseHostSessionDiscoveryOutput("unexpected\n$validRow"))
+    }
+
+    @Test
+    fun `host discovery script enumerates exact default and protocol server sockets`() {
+        val script = TmuxSessionProtocol.hostSessionDiscoveryCommand()
+
+        assertTrue(script.contains(TmuxSessionProtocol.HostDiscoveryHeader))
+        assertTrue(script.contains("TMUX_TMPDIR"))
+        assertTrue(script.contains("/tmp/tmux-\$hobgoblin_remote_uid"))
+        assertTrue(script.contains("[ -S \"\$hobgoblin_socket\" ]"))
+        assertTrue(script.contains(" -u -S \"\$hobgoblin_socket\" list-sessions "))
+        assertTrue(script.contains("hobgoblin-project-v1-"))
+        assertFalse(script.contains("workspace-configs.json"))
+        assertFalse(script.contains("branch-workspaces.json"))
+    }
+
+    @Test
+    fun `host recovery attaches only the scanned server and never creates a session`() {
+        val identity = TmuxSessionIdentity(
+            sessionName = "hobgoblin-v1-111111111111111111111111",
+            initialPath = "/srv/project",
+        )
+        val namedServer = "hobgoblin-project-v1-222222222222222222222222"
+
+        val defaultCommand = TmuxSessionProtocol.attachExistingCommand(identity, 1, TmuxServerTarget.Default)
+        val namedCommand = TmuxSessionProtocol.attachExistingCommand(
+            identity,
+            1,
+            TmuxServerTarget.Named(namedServer),
+        )
+
+        assertTrue(defaultCommand.orEmpty().contains("\"\$hobgoblin_tmux_bin\" has-session"))
+        assertFalse(defaultCommand.orEmpty().contains(" -L "))
+        assertTrue(namedCommand.orEmpty().contains("\"\$hobgoblin_tmux_bin\" -L '$namedServer' has-session"))
+        assertFalse(namedCommand.orEmpty().contains("legacy-default"))
+        assertFalse(defaultCommand.orEmpty().contains("new-session"))
+        assertFalse(namedCommand.orEmpty().contains("new-session"))
+        assertNull(TmuxSessionProtocol.attachExistingCommand(identity, 0, TmuxServerTarget.Default))
     }
 
     private fun descriptor(terminalNumber: Int = 1): TmuxSessionDescriptor =

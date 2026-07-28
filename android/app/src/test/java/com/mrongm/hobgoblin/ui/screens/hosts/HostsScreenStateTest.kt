@@ -15,6 +15,7 @@ class HostsScreenStateTest {
     fun `host temporary terminal opens at home directory without a project`() {
         assertEquals("/", HOST_TEMPORARY_TERMINAL_REMOTE_PATH)
         assertTrue(isHostTemporaryTerminal("/", repositoryId = null))
+        assertFalse(isHostTemporaryTerminal("/", repositoryId = null, returnsToHostDetail = true))
         assertFalse(isHostTemporaryTerminal("~", repositoryId = null))
         assertFalse(isHostTemporaryTerminal("/", repositoryId = "repo-1"))
     }
@@ -63,15 +64,15 @@ class HostsScreenStateTest {
     }
 
     @Test
-    fun `host card primary action opens filtered projects`() {
+    fun `host card primary action opens host detail`() {
         val source = listOf(
             File("src/main/java/com/mrongm/hobgoblin/ui/screens/hosts/HostsScreen.kt"),
             File("app/src/main/java/com/mrongm/hobgoblin/ui/screens/hosts/HostsScreen.kt"),
             File("android/app/src/main/java/com/mrongm/hobgoblin/ui/screens/hosts/HostsScreen.kt"),
         ).firstOrNull(File::isFile)?.readText() ?: error("HostsScreen.kt not found")
 
-        assertTrue(source.contains("onOpenProjects: (String) -> Unit"))
-        assertTrue(source.contains("onClick = onOpenProjects"))
+        assertTrue(source.contains("onOpenHostDetail: (String) -> Unit"))
+        assertTrue(source.contains("onClick = onOpenHostDetail"))
     }
 
     private fun host(lastDiagnosticStatus: String?): SshHostProfile =

@@ -77,6 +77,13 @@ class ProjectsScreenStateTest {
         assertEquals(false, projectReorderAvailable(hostFilterId = "host-1"))
     }
 
+    @Test
+    fun `only local projects enter local reorder inputs`() {
+        val projects = listOf(project(id = "repo-1", hostId = "host-1"))
+
+        assertEquals(listOf("repo-1"), localProjectReorderIds(projects))
+    }
+
     private fun project(id: String, hostId: String): RemoteRepositoryProfile =
         RemoteRepositoryProfile.create(
             hostProfileId = hostId,
