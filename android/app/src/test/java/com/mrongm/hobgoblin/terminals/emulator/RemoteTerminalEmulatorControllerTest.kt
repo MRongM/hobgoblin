@@ -72,22 +72,15 @@ class RemoteTerminalEmulatorControllerTest {
     }
 
     @Test
-    fun `remote OSC color change reasserts the selected dark terminal palette`() {
+    fun `remote OSC color change preserves the terminal requested foreground`() {
         val controller = controller()
         val palette = terminalPalette(TerminalAppearance.Dark)
         val colors = controller.emulator.mColors.mCurrentColors
         applyTerminalPalette(colors, palette)
-        var reapplyCount = 0
-        controller.observeColorChanges {
-            reapplyCount += 1
-            applyTerminalPalette(colors, palette)
-        }
 
-        controller.appendOutput("\u001B]11;#ffffff\u0007".toByteArray(Charsets.UTF_8))
+        controller.appendOutput("\u001B]10;#d97757\u0007".toByteArray(Charsets.UTF_8))
 
-        assertEquals(1, reapplyCount)
-        assertEquals(palette.foregroundArgb, colors[TextStyle.COLOR_INDEX_FOREGROUND])
-        assertEquals(palette.backgroundArgb, colors[TextStyle.COLOR_INDEX_BACKGROUND])
+        assertEquals(0xFFD97757.toInt(), colors[TextStyle.COLOR_INDEX_FOREGROUND])
     }
 
     private fun controller(

@@ -106,7 +106,6 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
 ) : View(context, attrs) {
     private var controller: RemoteTerminalEmulatorController? = null
     private var observer: AutoCloseable? = null
-    private var colorObserver: AutoCloseable? = null
     private var currentFontSizeSp = TerminalDefaultFontSizeSp
     private var terminalAppearance = TerminalAppearance.Dark
     private var fitToScreen = true
@@ -147,8 +146,6 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
         if (controller === nextController && observer != null) return
         observer?.close()
         observer = null
-        colorObserver?.close()
-        colorObserver = null
         clearSelection()
         cancelInertia()
         velocityTracker?.recycle()
@@ -164,10 +161,6 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
         touchScrolled = false
         if (nextController != null) {
             observer = nextController.observe { onTerminalScreenUpdated() }
-            colorObserver = nextController.observeColorChanges {
-                applyTerminalAppearance()
-                invalidate()
-            }
             applyTerminalAppearance()
             updateGrid(width, height)
         }
@@ -239,8 +232,6 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         observer?.close()
         observer = null
-        colorObserver?.close()
-        colorObserver = null
         clearSelection()
         cancelInertia()
         velocityTracker?.recycle()

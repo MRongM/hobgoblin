@@ -9,6 +9,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -58,12 +59,12 @@ class TerminalAppearanceTest {
     }
 
     @Test
-    fun `terminal view applies appearance to termux indexed and special colors`() {
+    fun `terminal view applies appearance without overriding remote color changes`() {
         val viewSource = sourceFile("ui/screens/terminals/HobgoblinTerminalView.kt")
         val paletteSource = sourceFile("ui/screens/terminals/TerminalAppearance.kt")
 
         assertTrue(viewSource.contains("fun setTerminalAppearance("))
-        assertTrue(viewSource.contains("observeColorChanges"))
+        assertFalse(viewSource.contains("observeColorChanges"))
         assertTrue(paletteSource.contains("TextStyle.COLOR_INDEX_FOREGROUND"))
         assertTrue(paletteSource.contains("TextStyle.COLOR_INDEX_BACKGROUND"))
         assertTrue(paletteSource.contains("TextStyle.COLOR_INDEX_CURSOR"))
