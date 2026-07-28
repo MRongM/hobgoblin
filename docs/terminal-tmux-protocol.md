@@ -99,7 +99,7 @@ Every Hobgoblin v1 attach-or-create invocation writes three exact session-scoped
 
 The project root and initial path record descriptor identity and do not change when a shell later changes directory. The terminal number is positive base-10 ASCII without a sign or leading zeroes. These values are discoverable protocol metadata, not authentication claims; another tmux client may change them, in which case the session no longer passes discovery validation.
 
-Project-known discovery and exact cleanup retain compatibility with sessions created before `@hobgoblin_project_root` was introduced because those paths already supply the descriptor project root. Host-wide inventory cannot reverse the project-server hash, so it requires all three options. Reattaching through any current Hobgoblin launch adapter repairs the missing project-root option and makes an older session host-discoverable.
+Project-known discovery and exact cleanup retain compatibility with sessions created before `@hobgoblin_project_root` was introduced because those paths already supply the descriptor project root. Host-wide inventory is an explicit manual-management surface and does not require the project-root option; it relies on exact server origin plus the established initial-path and terminal-number metadata.
 
 ## Reference vector
 
@@ -162,7 +162,7 @@ tmux -L 'hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0' -u list-sessions \
 
 Do not supply a tmux `session_id` or add a forced-detach option. Tmux allocates the session ID, while Hobgoblin and external tmux clients intentionally have concurrent shared control. The exact target enables mouse support and identity metadata only on the selected session.
 
-All current Hobgoblin launch adapters set the three identity options after creating or attaching. Reattaching through a known descriptor therefore adds or repairs missing metadata idempotently. A third-party creator that wants host discovery must write the same options with the same exact target-pane syntax.
+Desktop launch adapters set all three identity options after creating or attaching. Android and older adapters may set only initial path and terminal number; those two operational options remain sufficient for host inventory. A third-party creator must use the same exact target-pane syntax for any options it writes.
 
 ## Desktop directory recovery
 
@@ -206,18 +206,18 @@ Removing only the Android record leaves tmux alive, so a later scan may recover 
 
 The project context menu may use one selected project only as a local or SSH host locator. A host inventory is not project-scoped: it resolves the authenticated operating-system user's UID inside that login context, enumerates every socket in that user's effective tmux socket directory whose name matches the exact `hobgoblin-project-v1-<24 lowercase hex>` protocol, and scans each server through that exact derived socket before inspecting the same user's default socket for upgrade compatibility. It never scans another Unix user's socket directory or accepts an arbitrary `-S` socket path from the renderer.
 
-Each host-inventory row includes the three session options, `session_attached`, the session name, and an internal server-origin marker. A row is eligible only when:
+Each host-inventory row includes initial path, terminal number, `session_attached`, the session name, and an internal server-origin marker. A row is eligible only when:
 
-- the project root and initial directory are normalized absolute POSIX paths;
+- the initial directory is a normalized absolute POSIX path;
 - the terminal number and attached-client count are canonical non-negative integers, with the terminal number greater than zero;
-- recomputing the v1 name from project root, initial directory, and terminal number reproduces the exact session name; and
-- a project-server origin equals the server name recomputed from the recorded project root, or the origin is the explicit `legacy-default` marker.
+- the session name matches the exact current `hobgoblin-v1-<24 lowercase hex>` protocol; and
+- the origin is an exact Hobgoblin project-server name or the explicit `legacy-default` marker.
 
-A current-looking name without all three options is not host-discoverable. This is why an older live session may still be available through project-known recovery and cleanup but remain absent from host inventory until a current client reattaches and repairs `@hobgoblin_project_root`.
+A name alone is insufficient: missing or malformed initial-path, terminal-number, attachment-count, or server-origin data still excludes the row. Project-root metadata may be present but is neither returned nor validated by host inventory.
 
 The inventory displays attached and detached sessions. Selection starts empty. Closing selected sessions sends exact session-name and server-origin pairs back to the server; the server re-enumerates and revalidates the live rows immediately before sequential `kill-session` commands. A newly created row, a same-named row on another server, or a row whose metadata changed after preview never inherits approval. Sessions that already disappeared are reported separately, and one close failure does not roll back successful closes.
 
-Like the rest of the v1 metadata, host discoverability is not authentication against another process running as the same operating-system user. Its safety purpose is to prevent prefix-only, malformed, stale-origin, and arbitrary-server rows from entering the destructive selection surface.
+Like the rest of the v1 metadata, host manageability is not authentication against another process running as the same operating-system user. Its safety purpose is to prevent name-only, malformed, stale-origin, and arbitrary-server rows from entering the destructive selection surface while keeping orphaned current-protocol sessions manually removable.
 
 ## Runtime association and exact close
 

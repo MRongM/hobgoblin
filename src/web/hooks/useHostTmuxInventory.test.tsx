@@ -93,6 +93,7 @@ describe('useHostTmuxInventory', () => {
     expect(document.body.textContent).toContain('tmux.host-inventory.attached:2')
     expect(document.body.textContent).toContain('tmux.host-inventory.detached')
     expect(document.body.textContent).toContain('tmux.host-inventory.warning')
+    expect(document.body.textContent).not.toContain('tmux.host-inventory.project-root')
     const checkboxes = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[data-host-tmux-session]'))
     expect(checkboxes).toHaveLength(3)
     expect(checkboxes.every((checkbox) => checkbox.dataset.state === 'unchecked')).toBe(true)
@@ -185,7 +186,6 @@ function inventorySessions() {
   return [
     {
       sessionName: 'hobgoblin-v1-0123456789abcdef01234567',
-      projectRoot: '/work/repo',
       initialPath: '/work/feature',
       terminalNumber: 1,
       attachedClients: 2,
@@ -193,14 +193,12 @@ function inventorySessions() {
     },
     {
       sessionName: 'hobgoblin-v1-89abcdef0123456789abcdef',
-      projectRoot: '/work/repo',
       initialPath: '/work/feature',
       terminalNumber: 2,
       attachedClients: 0,
     },
     {
       sessionName: 'hobgoblin-v1-fedcba9876543210fedcba98',
-      projectRoot: '/other/repo',
       initialPath: '/other/worktree',
       terminalNumber: 3,
       attachedClients: 0,

@@ -76,7 +76,7 @@ describe('remote command scripts', () => {
     expect(hostList.script).toContain('tmux_socket_base=${TMUX_TMPDIR:-/tmp}')
     expect(hostList.script).toContain('"$tmux_socket_dir"/hobgoblin-project-v1-*')
     expect(hostList.script).toContain('tmux -S "$tmux_socket" -u list-sessions')
-    expect(hostList.script).toContain('#{@hobgoblin_project_root}')
+    expect(hostList.script).not.toContain('#{@hobgoblin_project_root}')
     expect(hostList.script).toContain('"$tmux_server"')
     expect(hostList.script).toContain('tmux_default_socket="$tmux_socket_dir/default"')
     expect(hostList.script).toContain('tmux -S "$tmux_default_socket" -u list-sessions')

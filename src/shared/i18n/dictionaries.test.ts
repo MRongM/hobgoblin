@@ -94,7 +94,6 @@ describe('i18n dictionaries', () => {
       'tmux.host-inventory.description',
       'tmux.host-inventory.select-session',
       'tmux.host-inventory.terminal-number',
-      'tmux.host-inventory.project-root',
       'tmux.host-inventory.detached',
       'tmux.host-inventory.attached',
       'tmux.host-inventory.warning',

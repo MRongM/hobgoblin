@@ -194,14 +194,6 @@ export function useHostTmuxInventory({
                                 : t('tmux.host-inventory.detached')}
                             </span>
                           </span>
-                          {session.projectRoot !== session.initialPath ? (
-                            <span
-                              className="block truncate text-[10px] text-muted-foreground"
-                              title={session.projectRoot}
-                            >
-                              {t('tmux.host-inventory.project-root')}: {session.projectRoot}
-                            </span>
-                          ) : null}
                         </span>
                       </label>
                     )

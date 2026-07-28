@@ -28,8 +28,6 @@ import {
   type TmuxListResult,
 } from '#/system/tmux-cleanup.ts'
 import {
-  buildTmuxServerName,
-  buildTmuxSessionName,
   isHobgoblinTmuxSessionName,
   isHobgoblinTmuxServerName,
   normalizeTmuxSessionPath,
@@ -157,7 +155,7 @@ export async function previewHostTmuxSessions(
   const resolved = await resolveTmuxHostRuntime(input, dependencies, signal)
   if (!resolved.ok) return resolved
   const listed = await safelyListHost(resolved.runtime)
-  return listed.ok ? { ok: true, sessions: verifiedHostTmuxSessions(listed.sessions) } : listed
+  return listed.ok ? { ok: true, sessions: manageableHostTmuxSessions(listed.sessions) } : listed
 }
 
 export async function closeHostTmuxSessions(
@@ -173,7 +171,7 @@ export async function closeHostTmuxSessions(
   if (!listed.ok) return listed
 
   const liveByIdentity = new Map(
-    verifiedHostTmuxSessions(listed.sessions).map((session) => [tmuxSessionIdentityKey(session), session]),
+    manageableHostTmuxSessions(listed.sessions).map((session) => [tmuxSessionIdentityKey(session), session]),
   )
   const closed: TmuxHostSessionRecord[] = []
   const missing: TmuxSessionIdentity[] = []
@@ -383,38 +381,35 @@ function associatedSessions(
   return [...preferredByName.values()]
 }
 
-function verifiedHostTmuxSessions(sessions: readonly TmuxHostSessionRecord[]): TmuxHostSessionRecord[] {
-  const preferredByName = new Map<string, TmuxHostSessionRecord>()
+function manageableHostTmuxSessions(sessions: readonly TmuxHostSessionRecord[]): TmuxHostSessionRecord[] {
+  const sessionsByIdentity = new Map<string, TmuxHostSessionRecord>()
   for (const session of sessions) {
-    const projectRoot = normalizeTmuxSessionPath(session.projectRoot)
     const initialPath = normalizeTmuxSessionPath(session.initialPath)
-    if (!projectRoot || !initialPath) continue
-    const expectedSessionName = buildTmuxSessionName({
-      projectRoot,
-      workingDirectory: initialPath,
-      terminalNumber: session.terminalNumber,
-    })
-    const expectedServerName = buildTmuxServerName(projectRoot)
     if (
-      expectedSessionName !== session.sessionName ||
-      !expectedServerName ||
-      (session.serverName !== undefined && session.serverName !== expectedServerName)
+      !initialPath ||
+      initialPath !== session.initialPath ||
+      !isHobgoblinTmuxSessionName(session.sessionName) ||
+      (session.serverName !== undefined && !isHobgoblinTmuxServerName(session.serverName)) ||
+      !Number.isSafeInteger(session.terminalNumber) ||
+      session.terminalNumber < 1 ||
+      !Number.isSafeInteger(session.attachedClients) ||
+      session.attachedClients < 0
     ) {
       continue
     }
-    const normalized = { ...session, projectRoot, initialPath }
-    const existing = preferredByName.get(session.sessionName)
-    if (!existing || (!existing.serverName && normalized.serverName === expectedServerName)) {
-      preferredByName.set(session.sessionName, normalized)
-    }
+    const normalized = { ...session, initialPath }
+    const identity = tmuxSessionIdentityKey(normalized)
+    if (!sessionsByIdentity.has(identity)) sessionsByIdentity.set(identity, normalized)
   }
-  return [...preferredByName.values()].sort(compareHostTmuxSessions)
+  return [...sessionsByIdentity.values()].sort(compareHostTmuxSessions)
 }
 
 function compareHostTmuxSessions(a: TmuxHostSessionRecord, b: TmuxHostSessionRecord): number {
   const byPath = compareText(a.initialPath, b.initialPath)
   if (byPath !== 0) return byPath
   if (a.terminalNumber !== b.terminalNumber) return a.terminalNumber - b.terminalNumber
+  const byServer = compareText(a.serverName ?? '', b.serverName ?? '')
+  if (byServer !== 0) return byServer
   return compareText(a.sessionName, b.sessionName)
 }
 

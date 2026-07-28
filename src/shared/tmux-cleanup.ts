@@ -7,9 +7,7 @@ export interface TmuxSessionRecord {
   serverName?: string
 }
 
-export interface TmuxHostSessionRecord extends TmuxSessionRecord {
-  projectRoot: string
-}
+export type TmuxHostSessionRecord = TmuxSessionRecord
 
 export interface TmuxSessionIdentity {
   sessionName: string

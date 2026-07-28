@@ -120,12 +120,12 @@ _Avoid_: Application persistence map, current pane path, name-only ownership
 A current-protocol tmux session whose fixed initial-path and positive terminal-number metadata reproduce its exact tmux session name and associate it with a recognized project terminal path. It is eligible for Android recovery but is not authenticated by that metadata.
 _Avoid_: Any Hobgoblin-prefixed session, arbitrary tmux session, authenticated tmux session
 
-**Host-discoverable Hobgoblin tmux session**:
-A discoverable Hobgoblin tmux session that also records its normalized project root as session-owned metadata, allowing a host-wide scan to reproduce both its project-scoped tmux server name and exact tmux session name without relying on Hobgoblin application persistence. Sessions created before project-root metadata was introduced become host-discoverable after a current client reattaches and repairs their metadata; name-only or partially described sessions remain excluded.
-_Avoid_: Any Hobgoblin-prefixed session, known-project session, authenticated tmux session
+**Host-manageable Hobgoblin tmux session**:
+A current-protocol tmux session found in the selected operating-system user's compatibility default server or an exact Hobgoblin project-server namespace, with a current Hobgoblin session name, normalized fixed initial directory, positive terminal number, and valid attached-client count. It is eligible for explicit host-level inspection and close even when no project root can be recovered; this classification does not authenticate project ownership.
+_Avoid_: Any tmux session, project-verified session, authenticated tmux session
 
 **Host tmux session inventory**:
-An explicit project-menu action that uses the selected project's local or SSH host only as a host locator, enumerates Hobgoblin project-scoped tmux servers plus the compatibility default server for that operating-system user, and lists every host-discoverable Hobgoblin tmux session with its fixed directory. The user may select none or several sessions and explicitly close only those selections after the server revalidates their metadata and exact server origins.
+An explicit project-menu action that uses the selected project's local or SSH host only as a host locator, enumerates Hobgoblin project-scoped tmux servers plus the compatibility default server for that operating-system user, and lists every host-manageable Hobgoblin tmux session with its fixed directory. The user may select none or several sessions and explicitly close only those selections after the server revalidates their operational metadata and exact server origins.
 _Avoid_: Project tmux sessions, background tmux scan, automatic tmux cleanup
 
 **Recovered Android tmux terminal**:

@@ -8,30 +8,26 @@ The selected project locates a host; it does not scope results to that project. 
 
 ## Domain and safety boundary
 
-A **host-discoverable Hobgoblin tmux session** must provide all three normalized descriptor fields as session-owned tmux options:
+A **host-manageable Hobgoblin tmux session** must be found in the authenticated user's compatibility default server or an exact Hobgoblin project-server socket and provide the operational fields needed for manual management:
 
-- project root;
-- fixed initial directory; and
-- positive terminal number.
+- a current-protocol Hobgoblin session name;
+- fixed initial directory;
+- positive terminal number; and
+- non-negative attached-client count.
 
-The scanner accepts a row only when:
+The scanner accepts a row only when the server origin, current session-name shape, normalized initial directory, terminal number, and attached-client count all pass their exact protocol checks. It does not require `@hobgoblin_project_root` and does not attempt to prove project ownership from a host-wide scan.
 
-1. the project root and initial directory are valid normalized absolute POSIX paths;
-2. the terminal number is canonical and positive;
-3. the session name is exactly the deterministic v1 name recomputed from those fields; and
-4. a project-scoped origin is exactly the deterministic server name recomputed from the project root, or the origin is the explicit compatibility default server.
+Ordinary user sessions, legacy `goblin-*` names, malformed operational metadata, and arbitrary tmux servers are excluded. The classification is an operational safety boundary for manual management, not authentication against another process running as the same operating-system user.
 
-Name-only `hobgoblin-*` or `goblin-*` sessions, malformed metadata, arbitrary tmux servers, and mismatched server origins are excluded. The metadata is a safety classification, not authentication against another process running as the same operating-system user.
-
-Current v1 sessions do not yet record their project root, and the hashed project-server name cannot be reversed. Every current attach-or-create command will therefore write `@hobgoblin_project_root` in addition to the existing initial-path and terminal-number options. Existing sessions become host-discoverable after a current Hobgoblin client reattaches and repairs their metadata. Existing directory recovery and associated cleanup continue to accept their established two-field metadata when a project root is already known.
+Desktop sessions may record `@hobgoblin_project_root`, but host inventory deliberately does not depend on it. This keeps Android-created, older, closed-project, and otherwise orphaned current-protocol sessions visible for manual cleanup.
 
 ## Considered approaches
 
-### 1. Enumerate Hobgoblin servers and validate self-describing sessions — selected
+### 1. Enumerate Hobgoblin servers and validate operational session metadata — selected
 
-Enumerate only tmux sockets whose names match the project-server protocol, also inspect the current user's default tmux server for compatibility, and require project-root metadata before showing a row.
+Enumerate only tmux sockets whose names match the project-server protocol, also inspect the current user's default tmux server for compatibility, and apply the same operational row checks as Android host discovery.
 
-This is the only approach that finds sessions for closed or forgotten projects while preserving full descriptor validation. It keeps host truth in tmux and needs no new persistence.
+This finds sessions for closed or forgotten projects without requiring reversible project ownership. It keeps host truth in tmux and needs no new persistence.
 
 ### 2. Scan only open and recent projects
 
@@ -39,11 +35,11 @@ Derive server names from Hobgoblin's open and recent project records, then reuse
 
 This misses orphaned sessions after a project leaves application history, so it does not meet the host-wide requirement.
 
-### 3. Trust the session-name prefix and fixed directory
+### 3. Scan every tmux server or accept name-only rows
 
-Enumerate sockets and show any `hobgoblin-v1-*` row with an initial directory.
+Enumerate arbitrary sockets or show any name-shaped row without operational metadata.
 
-This cannot reproduce the deterministic identity and could close a user-created or corrupted session. It violates the confirmed safety boundary.
+This would include ordinary user servers or rows that cannot be presented and closed safely, so it remains excluded.
 
 ## Architecture
 
@@ -61,18 +57,17 @@ Host kill accepts only a validated v1 session name and either a validated Hobgob
 
 Host inventory uses the selected `projectRoot` locator only to resolve local versus SSH execution. Returned rows include:
 
-- `projectRoot` from verified session metadata;
 - `initialPath`;
 - `terminalNumber`;
 - `attachedClients`;
 - `sessionName`; and
 - server origin.
 
-Selection approval binds both session name and server origin. This distinguishes an exact preview row and prevents a same-named session created on another server after preview from inheriting approval.
+Selection approval binds both session name and server origin. This distinguishes an exact preview row and prevents a same-named session created on another server after preview from inheriting approval. Project root is not part of the host inventory contract.
 
 ### Server orchestration
 
-Preview resolves the selected project's host, performs one host inventory, validates every descriptor and origin, deduplicates exact name duplicates by preferring the matching project-scoped server over the default server, and returns stable ordering by directory, terminal number, then session name.
+Preview resolves the selected project's host, performs one host inventory, validates every operational row and origin, deduplicates only identical name-and-origin rows, and returns stable ordering by directory, terminal number, server origin, then session name. Same-named sessions on different sockets remain independently manageable.
 
 Close receives one or more approved `{sessionName, serverOrigin}` identities and:
 
@@ -94,8 +89,7 @@ Selecting the action scans first. An empty result shows an informational toast; 
 
 - an unchecked destructive checkbox;
 - session name and terminal number;
-- detached state or attached-client count; and
-- project root when it differs from the directory.
+- detached state or attached-client count.
 
 No item is selected by default. The destructive `Close selected sessions` button is disabled until at least one row is selected and includes the selected count. The dialog warns that running processes end and attached clients disconnect. Cancel and Escape make no changes.
 
@@ -106,7 +100,7 @@ After execution, closed and already-missing rows leave the dialog, failed rows r
 - Missing tmux, SSH failure, unsafe socket directory metadata, malformed output, and non-missing server command failures fail closed.
 - A server socket disappearing during enumeration is treated as an empty server; a server appearing after enumeration waits for the next explicit scan.
 - A selected row that disappears before close is reported as already missing.
-- A selected row whose metadata or origin changes before close is treated as missing approval, not killed.
+- A selected row whose operational metadata or origin changes before close is treated as missing approval, not killed.
 - One kill failure does not prevent later approved rows from being attempted.
 - Attached and detached sessions are both eligible, but the dialog makes attached-client impact visible before selection.
 
@@ -124,4 +118,4 @@ Repository verification runs `bun run typecheck`, `bun run test`, and `bun run c
 
 ## Documentation impact
 
-`CONTEXT.md` records host-discoverable sessions and host inventory. `docs/terminal-tmux-protocol.md` documents project-root metadata and host inventory compatibility. No ADR is added: socket enumeration is a reversible read adapter required by an explicit feature and does not change project-scoped server ownership.
+`CONTEXT.md` records host-manageable sessions and host inventory. `docs/terminal-tmux-protocol.md` documents the Android-compatible operational boundary. No ADR is added: this manual-management policy is localized and reversible.

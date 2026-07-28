@@ -403,7 +403,7 @@ describe('host tmux session inventory', () => {
     return module
   }
 
-  test('previews verified sessions across projects and prefers each deterministic project server', async () => {
+  test('previews Android-compatible sessions without project roots and keeps distinct server origins', async () => {
     const module = hostFunctions()
     if (!module.previewHostTmuxSessions) return
     const listLocalHost = vi.fn(async () => ({
@@ -411,22 +411,19 @@ describe('host tmux session inventory', () => {
       sessions: [
         {
           sessionName: FIRST_NAME,
-          projectRoot: LOCAL_PROJECT_ROOT,
           initialPath: LOCAL_PATH,
           terminalNumber: 1,
           attachedClients: 0,
         },
         {
           sessionName: FIRST_NAME,
-          projectRoot: LOCAL_PROJECT_ROOT,
-          initialPath: `${LOCAL_PATH}/`,
+          initialPath: LOCAL_PATH,
           terminalNumber: 1,
           attachedClients: 2,
           serverName: LOCAL_SERVER_NAME,
         },
         {
           sessionName: OTHER_NAME,
-          projectRoot: OTHER_PROJECT_ROOT,
           initialPath: OTHER_PATH,
           terminalNumber: 3,
           attachedClients: 1,
@@ -434,15 +431,13 @@ describe('host tmux session inventory', () => {
         },
         {
           sessionName: SECOND_NAME,
-          projectRoot: LOCAL_PROJECT_ROOT,
           initialPath: LOCAL_PATH,
           terminalNumber: 2,
           attachedClients: 0,
           serverName: OTHER_SERVER_NAME,
         },
         {
-          sessionName: 'hobgoblin-v1-0123456789abcdef01234567',
-          projectRoot: LOCAL_PROJECT_ROOT,
+          sessionName: 'user-session',
           initialPath: LOCAL_PATH,
           terminalNumber: 9,
           attachedClients: 0,
@@ -457,7 +452,6 @@ describe('host tmux session inventory', () => {
       sessions: [
         {
           sessionName: OTHER_NAME,
-          projectRoot: OTHER_PROJECT_ROOT,
           initialPath: OTHER_PATH,
           terminalNumber: 3,
           attachedClients: 1,
@@ -465,11 +459,23 @@ describe('host tmux session inventory', () => {
         },
         {
           sessionName: FIRST_NAME,
-          projectRoot: LOCAL_PROJECT_ROOT,
+          initialPath: LOCAL_PATH,
+          terminalNumber: 1,
+          attachedClients: 0,
+        },
+        {
+          sessionName: FIRST_NAME,
           initialPath: LOCAL_PATH,
           terminalNumber: 1,
           attachedClients: 2,
           serverName: LOCAL_SERVER_NAME,
+        },
+        {
+          sessionName: SECOND_NAME,
+          initialPath: LOCAL_PATH,
+          terminalNumber: 2,
+          attachedClients: 0,
+          serverName: OTHER_SERVER_NAME,
         },
       ],
     })
@@ -484,7 +490,6 @@ describe('host tmux session inventory', () => {
       sessions: [
         {
           sessionName: FIRST_NAME,
-          projectRoot: LOCAL_PROJECT_ROOT,
           initialPath: LOCAL_PATH,
           terminalNumber: 1,
           attachedClients: 0,
@@ -492,14 +497,12 @@ describe('host tmux session inventory', () => {
         },
         {
           sessionName: SECOND_NAME,
-          projectRoot: LOCAL_PROJECT_ROOT,
           initialPath: LOCAL_PATH,
           terminalNumber: 2,
           attachedClients: 0,
         },
         {
           sessionName: OTHER_NAME,
-          projectRoot: OTHER_PROJECT_ROOT,
           initialPath: OTHER_PATH,
           terminalNumber: 3,
           attachedClients: 0,
@@ -530,7 +533,6 @@ describe('host tmux session inventory', () => {
       closed: [
         {
           sessionName: FIRST_NAME,
-          projectRoot: LOCAL_PROJECT_ROOT,
           initialPath: LOCAL_PATH,
           terminalNumber: 1,
           attachedClients: 0,
@@ -542,7 +544,6 @@ describe('host tmux session inventory', () => {
         {
           session: {
             sessionName: SECOND_NAME,
-            projectRoot: LOCAL_PROJECT_ROOT,
             initialPath: LOCAL_PATH,
             terminalNumber: 2,
             attachedClients: 0,
@@ -565,12 +566,12 @@ describe('host tmux session inventory', () => {
       .fn()
       .mockResolvedValueOnce({
         ok: true,
-        stdout: `/srv/feature\t1\t0\t${REMOTE_FIRST_NAME}\t${REMOTE_TARGET.remotePath}\t${REMOTE_SERVER_NAME}`,
+        stdout: `/srv/feature\t1\t0\t${REMOTE_FIRST_NAME}\t${REMOTE_SERVER_NAME}`,
         stderr: '',
       })
       .mockResolvedValueOnce({
         ok: true,
-        stdout: `/srv/feature\t1\t0\t${REMOTE_FIRST_NAME}\t${REMOTE_TARGET.remotePath}\t${REMOTE_SERVER_NAME}`,
+        stdout: `/srv/feature\t1\t0\t${REMOTE_FIRST_NAME}\t${REMOTE_SERVER_NAME}`,
         stderr: '',
       })
       .mockResolvedValueOnce({ ok: true, stdout: '', stderr: '' })
@@ -581,7 +582,6 @@ describe('host tmux session inventory', () => {
       sessions: [
         {
           sessionName: REMOTE_FIRST_NAME,
-          projectRoot: REMOTE_TARGET.remotePath,
           initialPath: '/srv/feature',
           terminalNumber: 1,
           attachedClients: 0,

@@ -1,5 +1,10 @@
 # Host tmux Session Inventory Implementation Plan
 
+> Compatibility note (2026-07-28): the host inventory contract described here originally required
+> `@hobgoblin_project_root`. That requirement was superseded by
+> `2026-07-28-host-tmux-manual-management-compatibility.md` so Android-created and older operationally valid
+> Hobgoblin sessions remain manually manageable.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a project context-menu action that inventories every fully verified Hobgoblin tmux session on the selected project's local or SSH host and closes only explicitly selected sessions.

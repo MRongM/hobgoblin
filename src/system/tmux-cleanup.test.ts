@@ -353,14 +353,14 @@ describe('local tmux commands', () => {
 })
 
 describe('local host tmux inventory', () => {
-  test('preserves an empty trailing project-root field from the local tmux process', async () => {
+  test('keeps Android-compatible host rows without project-root metadata from the local tmux process', async () => {
     vi.resetModules()
     mocks.execa.mockReset()
     mocks.execa.mockImplementation(async (_executable, args: string[]) => {
       if (args[0] === '-L') {
         return {
           exitCode: 0,
-          stdout: '/srv/legacy\t1\t0\thobgoblin-v1-aebf050981ac829e36100020\t\n',
+          stdout: '/srv/legacy\t1\t0\thobgoblin-v1-aebf050981ac829e36100020\n',
           stderr: '',
         }
       }
@@ -374,11 +374,22 @@ describe('local host tmux inventory', () => {
 
     await expect(
       listHost({ listServerNames: async () => ({ ok: true, serverNames: [PROJECT_SERVER_NAME] }) }),
-    ).resolves.toEqual({ ok: true, sessions: [] })
+    ).resolves.toEqual({
+      ok: true,
+      sessions: [
+        {
+          sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+          initialPath: '/srv/legacy',
+          terminalNumber: 1,
+          attachedClients: 0,
+          serverName: PROJECT_SERVER_NAME,
+        },
+      ],
+    })
     expect(mocks.execa).toHaveBeenCalledTimes(2)
   })
 
-  test('parses self-describing rows with an exact project or legacy server origin', () => {
+  test('parses Android-compatible operational rows with an exact project or legacy server origin', () => {
     const parseHostList = (
       tmuxCleanup as typeof tmuxCleanup & {
         parseTmuxHostSessionList?: (output: string) => unknown
@@ -390,14 +401,13 @@ describe('local host tmux inventory', () => {
     expect(
       parseHostList(
         [
-          `/srv/projects/example/worktrees/feature\t1\t2\thobgoblin-v1-aebf050981ac829e36100020\t${PROJECT_ROOT}\t${PROJECT_SERVER_NAME}`,
-          `/srv/projects/example\t2\t0\thobgoblin-v1-0123456789abcdef01234567\t${PROJECT_ROOT}\tlegacy-default`,
+          `/srv/projects/example/worktrees/feature\t1\t2\thobgoblin-v1-aebf050981ac829e36100020\t${PROJECT_SERVER_NAME}`,
+          '/srv/projects/example\t2\t0\thobgoblin-v1-0123456789abcdef01234567\tlegacy-default',
         ].join('\n'),
       ),
     ).toEqual([
       {
         sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
-        projectRoot: PROJECT_ROOT,
         initialPath: '/srv/projects/example/worktrees/feature',
         terminalNumber: 1,
         attachedClients: 2,
@@ -405,20 +415,18 @@ describe('local host tmux inventory', () => {
       },
       {
         sessionName: 'hobgoblin-v1-0123456789abcdef01234567',
-        projectRoot: PROJECT_ROOT,
         initialPath: '/srv/projects/example',
         terminalNumber: 2,
         attachedClients: 0,
       },
     ])
     expect(
-      parseHostList(
-        `/srv/projects/example\t1\t0\thobgoblin-v1-aebf050981ac829e36100020\t${PROJECT_ROOT}\tunknown-server`,
-      ),
+      parseHostList('/srv/projects/example\t1\t0\thobgoblin-v1-aebf050981ac829e36100020\tunknown-server'),
     ).toBeNull()
     expect(
-      parseHostList(`/srv/projects/example\t1\t0\thobgoblin-v1-aebf050981ac829e36100020\trelative\tlegacy-default`),
+      parseHostList('/srv/projects/example/../other\t1\t0\thobgoblin-v1-aebf050981ac829e36100020\tlegacy-default'),
     ).toEqual([])
+    expect(parseHostList('/srv/projects/example\t1\t0\tuser-session\tlegacy-default')).toEqual([])
   })
 
   test('discovers only sorted Hobgoblin socket names for the current tmux user directory', async () => {
@@ -499,7 +507,7 @@ describe('local host tmux inventory', () => {
       }
       return {
         ok: true,
-        stdout: `/srv/projects/example/worktrees/feature\t1\t0\thobgoblin-v1-aebf050981ac829e36100020\t${PROJECT_ROOT}`,
+        stdout: '/srv/projects/example/worktrees/feature\t1\t0\thobgoblin-v1-aebf050981ac829e36100020',
         stderr: '',
       }
     })
@@ -514,7 +522,6 @@ describe('local host tmux inventory', () => {
       sessions: [
         {
           sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
-          projectRoot: PROJECT_ROOT,
           initialPath: '/srv/projects/example/worktrees/feature',
           terminalNumber: 1,
           attachedClients: 0,
@@ -522,7 +529,6 @@ describe('local host tmux inventory', () => {
         },
         {
           sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
-          projectRoot: PROJECT_ROOT,
           initialPath: '/srv/projects/example/worktrees/feature',
           terminalNumber: 1,
           attachedClients: 0,

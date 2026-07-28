@@ -8,7 +8,6 @@ import {
   isHobgoblinTmuxServerName,
   normalizeTmuxSessionPath,
   TMUX_INIT_PATH_OPTION,
-  TMUX_PROJECT_ROOT_OPTION,
   TMUX_TERMINAL_NUMBER_OPTION,
 } from '#/system/tmux-session.ts'
 
@@ -20,7 +19,7 @@ const MISSING_TMUX_SESSION_RE =
 let localTmuxExecutable = TMUX_COMMAND
 
 export const TMUX_SESSION_LIST_FORMAT = `#{${TMUX_INIT_PATH_OPTION}}\t#{${TMUX_TERMINAL_NUMBER_OPTION}}\t#{session_attached}\t#{session_name}`
-export const TMUX_HOST_SESSION_LIST_FORMAT = `${TMUX_SESSION_LIST_FORMAT}\t#{${TMUX_PROJECT_ROOT_OPTION}}`
+export const TMUX_HOST_SESSION_LIST_FORMAT = TMUX_SESSION_LIST_FORMAT
 
 export type TmuxProcessResult =
   | { ok: true; stdout: string; stderr: string }
@@ -104,19 +103,26 @@ export function parseTmuxHostSessionList(output: string, fixedServerOrigin?: str
     const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
     if (!line) continue
     const fields = line.split('\t')
-    const expectedFieldCount = fixedServerOrigin === undefined ? 6 : 5
+    const expectedFieldCount = fixedServerOrigin === undefined ? 5 : 4
     if (fields.length !== expectedFieldCount) return null
-    const [rawInitialPath, rawTerminalNumber, rawAttachedClients, sessionName, rawProjectRoot, rowOrigin] = fields
+    const [rawInitialPath, rawTerminalNumber, rawAttachedClients, sessionName, rowOrigin] = fields
     const serverOrigin = fixedServerOrigin ?? rowOrigin
     if (serverOrigin !== 'legacy-default' && !isHobgoblinTmuxServerName(serverOrigin)) return null
     const initialPath = normalizeTmuxSessionPath(rawInitialPath ?? '')
-    const projectRoot = normalizeTmuxSessionPath(rawProjectRoot ?? '')
     const terminalNumber = parseRecordedTerminalNumber(rawTerminalNumber)
     const attachedClients = parseAttachedClientCount(rawAttachedClients)
-    if (!sessionName || !projectRoot || !initialPath || terminalNumber === null || attachedClients === null) continue
+    if (
+      !sessionName ||
+      !isHobgoblinTmuxSessionName(sessionName) ||
+      !initialPath ||
+      initialPath !== rawInitialPath ||
+      terminalNumber === null ||
+      attachedClients === null
+    ) {
+      continue
+    }
     sessions.push({
       sessionName,
-      projectRoot,
       initialPath,
       terminalNumber,
       attachedClients,

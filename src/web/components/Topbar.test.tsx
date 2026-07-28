@@ -35,7 +35,7 @@ afterEach(() => {
 })
 
 describe('Topbar', () => {
-  test('keeps every topbar function in the shared mobile horizontal scroll container', () => {
+  test('keeps every topbar function in the shared mobile horizontal scroll container with project tabs last', () => {
     act(() => {
       root!.render(
         <Topbar actions={<button type="button">action</button>}>
@@ -51,6 +51,7 @@ describe('Topbar', () => {
     expect(topbar?.classList.contains('mobile-topbar-scroll')).toBe(true)
     expect(tabs?.parentElement).toBe(topbar)
     expect(actions?.parentElement).toBe(topbar)
+    expect(actions?.nextElementSibling).toBe(tabs)
   })
 
   test('uses runtime topbar height', () => {
