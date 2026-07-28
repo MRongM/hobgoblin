@@ -70,6 +70,46 @@ describe('repo-client', () => {
     setRendererBridgeForTests(null)
   })
 
+  test('serializes merge-out plan and execute requests with their abort signals', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, plan: { token: 'sha256:plan', destinations: [] } }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const signal = new AbortController().signal
+    const { getRepositoryBranchMergeOutPlan, mergeRepositoryBranchOut } = await import('#/web/repo-client.ts')
+    const request = {
+      repoId: '/repo',
+      sourceBranch: 'feature/source',
+      sourceWorktreePath: '/repo-feature',
+    }
+    const executeInput = {
+      ...request,
+      planToken: 'sha256:plan',
+      destinationBranch: 'main',
+      mode: 'merge' as const,
+    }
+
+    await getRepositoryBranchMergeOutPlan(request, signal)
+    await mergeRepositoryBranchOut(executeInput, signal, 'client_123')
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'http://127.0.0.1:32100/api/repo/merge-out-plan',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify(request), signal }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'http://127.0.0.1:32100/api/repo/merge-out',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ ...executeInput, sourceToken: 'client_123' }),
+        signal,
+      }),
+    )
+  })
+
   test('requests bootstrap preflight from an explicit source worktree', async () => {
     installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
     const fetchMock = vi.fn(async () => ({

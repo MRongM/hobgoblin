@@ -1,7 +1,8 @@
 import { useCallback, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type {
-  BranchWorkspaceBatchMergeTargetInput,
+  BranchWorkspaceBatchMergeInSourceInput,
+  BranchWorkspaceBatchMergeOutTargetInput,
   BranchWorkspaceCommitMessageInput,
   BranchWorkspaceGitActionExecuteInput,
   BranchWorkspaceGitActionKind,
@@ -83,10 +84,18 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
     [execute, plan],
   )
 
-  const executeBatchMerge = useCallback(
-    async (mode: BranchWorkspaceMergeMode, targets: BranchWorkspaceBatchMergeTargetInput[]) => {
-      if (!plan || plan.kind !== 'batch-merge') return null
-      return await execute({ kind: 'batch-merge', planToken: plan.token, mode, targets })
+  const executeBatchMergeIn = useCallback(
+    async (mode: BranchWorkspaceMergeMode, sources: BranchWorkspaceBatchMergeInSourceInput[]) => {
+      if (!plan || plan.kind !== 'batch-merge-in') return null
+      return await execute({ kind: 'batch-merge-in', planToken: plan.token, mode, sources })
+    },
+    [execute, plan],
+  )
+
+  const executeBatchMergeOut = useCallback(
+    async (mode: BranchWorkspaceMergeMode, targets: BranchWorkspaceBatchMergeOutTargetInput[]) => {
+      if (!plan || plan.kind !== 'batch-merge-out') return null
+      return await execute({ kind: 'batch-merge-out', planToken: plan.token, mode, targets })
     },
     [execute, plan],
   )
@@ -117,10 +126,12 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
     error,
     requestPlan,
     executeBatchCommit,
-    executeBatchMerge,
+    executeBatchMergeIn,
+    executeBatchMergeOut,
     executeSync,
     retryBatchCommit: executeBatchCommit,
-    retryBatchMerge: executeBatchMerge,
+    retryBatchMergeIn: executeBatchMergeIn,
+    retryBatchMergeOut: executeBatchMergeOut,
     retrySync: executeSync,
     cancel,
     reset,

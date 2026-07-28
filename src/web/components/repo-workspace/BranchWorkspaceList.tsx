@@ -385,10 +385,16 @@ function BranchWorkspaceRow({
             onSelect: () => onGitAction(item, 'push'),
           },
           {
-            label: 'workspace.branch-workspace.git-action.batch-merge',
+            label: 'workspace.branch-workspace.git-action.batch-merge-in',
             icon: <GitMerge aria-hidden="true" />,
             disabled: disabled || gitActionsDisabled,
-            onSelect: () => onGitAction(item, 'batch-merge'),
+            onSelect: () => onGitAction(item, 'batch-merge-in'),
+          },
+          {
+            label: 'workspace.branch-workspace.git-action.batch-merge-out',
+            icon: <GitCompareArrows aria-hidden="true" />,
+            disabled: disabled || gitActionsDisabled,
+            onSelect: () => onGitAction(item, 'batch-merge-out'),
           },
         ]
       : []

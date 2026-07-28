@@ -318,7 +318,8 @@ function disabledMemberActionGroups(t: ReturnType<typeof useT>): BranchActionIte
       disabledAction('push', 'action.push', <ArrowUp aria-hidden="true" />),
       disabledAction('createBranch', 'action.create-branch', <GitBranch aria-hidden="true" />),
       disabledAction('pullRemoteBranch', 'action.pull-remote-branch', <RadioTower aria-hidden="true" />),
-      disabledAction('merge', 'action.merge', <GitMerge aria-hidden="true" />),
+      disabledAction('merge', 'action.merge-in', <GitMerge aria-hidden="true" />),
+      disabledAction('mergeOut', 'action.merge-out', <GitMerge aria-hidden="true" />),
       disabledAction('commit', 'action.commit', <SendHorizontal aria-hidden="true" />),
       disabledAction('copyPatch', 'status.copy-patch', <ClipboardCopy aria-hidden="true" />),
     ],
@@ -347,6 +348,7 @@ function createDisabledAction(
     | 'createBranch'
     | 'pullRemoteBranch'
     | 'merge'
+    | 'mergeOut'
     | 'commit'
     | 'copyPatch'
     | 'createTag'

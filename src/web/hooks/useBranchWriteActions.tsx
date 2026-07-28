@@ -8,7 +8,8 @@ import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import {
   CheckoutToDialog,
   CreateBranchDialog,
-  MergeDialog,
+  MergeInDialog,
+  MergeOutDialog,
   PullRemoteBranchDialog,
 } from '#/web/components/branch-list/BranchWriteDialogs.tsx'
 import { InlineCommitForm } from '#/web/components/branch-list/InlineCommitForm.tsx'
@@ -21,6 +22,7 @@ import {
   checkoutBranchInWorktree,
   commitRepositoryChanges,
   mergeRepositoryBranch,
+  mergeRepositoryBranchOut,
   pullRepositoryBranch,
   resetRepositoryHard,
 } from '#/web/repo-client.ts'
@@ -29,6 +31,7 @@ import { toast } from 'sonner'
 import type { BranchActionItem } from '#/web/hooks/useBranchActionItems.tsx'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
+import type { RepositoryBranchMergeOutExecuteInput } from '#/shared/repository-branch-merge.ts'
 
 interface BranchWriteActions {
   mainItems: BranchActionItem[]
@@ -58,9 +61,12 @@ export function useBranchWriteActions(
   const inlineCommitDraft = useInlineCommitDraft(repo.id, worktreePath)
   const inlineCommitDraftActions = useInlineCommitDraftActions()
   const availableCommitMessageProviders = useInlineCommitMessageProviders()
+  const sourceStatus = worktreePath ? repo.data.status.find((status) => status.path === worktreePath) : undefined
+  const mergeOutSourceReady = Boolean(sourceStatus && sourceStatus.entries.length === 0)
 
   const checkoutToDialog = useRetainedDialogState<string>()
-  const mergeDialog = useRetainedDialogState<string>()
+  const mergeInDialog = useRetainedDialogState<string>()
+  const mergeOutDialog = useRetainedDialogState<string>()
   const createBranchDialog = useRetainedDialogState<string>()
   const pullRemoteBranchDialog = useRetainedDialogState<string>()
   const resetDialog = useRetainedDialogState<string>()
@@ -86,6 +92,20 @@ export function useBranchWriteActions(
     const result = await mergeRepositoryBranch(repo.id, worktreePath, sourceBranch)
     setLastResult(repo.id, result, repo.instanceToken, {
       action: { kind: 'merge', branch: branch.name, sourceBranch, worktreePath },
+    })
+    return result
+  }
+
+  async function handleMergeOut(input: RepositoryBranchMergeOutExecuteInput) {
+    if (!worktreePath) return { ok: false, message: 'error.invalid-arguments' }
+    const result = await mergeRepositoryBranchOut(input)
+    setLastResult(repo.id, result, repo.instanceToken, {
+      action: {
+        kind: 'mergeOut',
+        branch: branch.name,
+        destinationBranch: input.destinationBranch,
+        worktreePath,
+      },
     })
     return result
   }
@@ -165,12 +185,23 @@ export function useBranchWriteActions(
     },
     {
       id: 'merge',
-      label: t('action.merge'),
-      title: t('action.merge-title'),
+      label: t('action.merge-in'),
+      title: t('action.merge-in-title', { branch: branch.name }),
       disabled: !hasWorktree || branchActionBusy,
       visible: true,
       icon: createElement(GitMerge),
-      onSelect: () => mergeDialog.openWith(''),
+      onSelect: () => mergeInDialog.openWith(''),
+    },
+    {
+      id: 'mergeOut',
+      label: t('action.merge-out'),
+      title: mergeOutSourceReady
+        ? t('action.merge-out-title', { branch: branch.name })
+        : t('action.merge-out-source-dirty'),
+      disabled: !hasWorktree || !mergeOutSourceReady || branchActionBusy,
+      visible: true,
+      icon: createElement(GitMerge),
+      onSelect: () => mergeOutDialog.openWith(''),
     },
     {
       id: 'commit',
@@ -228,16 +259,24 @@ export function useBranchWriteActions(
         onClose={checkoutToDialog.close}
         onCheckout={handleCheckoutTo}
       />
-      <MergeDialog
-        open={mergeDialog.open}
+      <MergeInDialog
+        open={mergeInDialog.open}
         repoId={repo.id}
         worktreePath={worktreePath ?? ''}
         branch={branch}
         allBranches={allBranches}
-        onClose={mergeDialog.close}
+        onClose={mergeInDialog.close}
         onPull={options.canPush ? handlePull : undefined}
         onMerge={handleMerge}
         onPush={options.canPush ? options.onPush : undefined}
+      />
+      <MergeOutDialog
+        open={mergeOutDialog.open}
+        repoId={repo.id}
+        sourceBranch={branch.name}
+        sourceWorktreePath={worktreePath ?? ''}
+        onClose={mergeOutDialog.close}
+        onMergeOut={handleMergeOut}
       />
       <ConfirmDialog
         open={resetDialog.open}

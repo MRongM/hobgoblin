@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, FolderTree, GitBranch, GitCompareArrows, Terminal } from 'lucide-react'
+import { ArrowDown, ArrowUp, FolderKanban, FolderTree, GitBranch, GitCompareArrows, Terminal } from 'lucide-react'
 import { useT } from '#/web/stores/i18n.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import { Badge } from '#/web/components/ui/badge.tsx'
@@ -133,9 +133,11 @@ export function BranchSummaryInline({
             <Badge
               data-testid="branch-workspace-member-badge"
               variant="outline"
-              className="h-4 px-1 text-[10px] font-normal text-muted-foreground"
+              aria-label={branchWorkspaceMemberLabel}
+              title={branchWorkspaceMemberLabel}
+              className="h-4 px-1 text-muted-foreground"
             >
-              {branchWorkspaceMemberLabel}
+              <FolderKanban size={10} aria-hidden="true" />
             </Badge>
           ) : null}
           {terminalCount > 0 && (

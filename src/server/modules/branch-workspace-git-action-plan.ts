@@ -7,11 +7,13 @@ import { getRepositoryPatch, getRepositorySnapshot, getRepositoryStatus } from '
 import {
   normalizeBranchWorkspaceGitActionPlanRequest,
   type BranchWorkspaceBatchCommitMemberPlan,
+  type BranchWorkspaceBatchMergeInMemberPlan,
+  type BranchWorkspaceBatchMergeInSourcePlan,
+  type BranchWorkspaceBatchMergeOutDestinationPlan,
+  type BranchWorkspaceBatchMergeOutMemberPlan,
   type BranchWorkspaceGitActionPlan,
   type BranchWorkspaceGitActionPlanRequest,
   type BranchWorkspaceGitActionPlanResult,
-  type BranchWorkspaceBatchMergeDestinationPlan,
-  type BranchWorkspaceBatchMergeMemberPlan,
   type BranchWorkspaceSyncMemberPlan,
 } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceManifest } from '#/shared/branch-workspaces.ts'
@@ -51,8 +53,11 @@ export async function buildBranchWorkspaceGitActionPlan(
     if (normalized.request.kind === 'batch-commit') {
       return await buildBatchCommitPlan(normalizedRootId, manifest, dependencies, signal)
     }
-    if (normalized.request.kind === 'batch-merge') {
-      return await buildBatchMergePlan(normalizedRootId, manifest, dependencies, signal)
+    if (normalized.request.kind === 'batch-merge-in') {
+      return await buildBatchMergeInPlan(normalizedRootId, manifest, dependencies, signal)
+    }
+    if (normalized.request.kind === 'batch-merge-out') {
+      return await buildBatchMergeOutPlan(normalizedRootId, manifest, dependencies, signal)
     }
     return await buildSyncPlan(normalizedRootId, manifest, normalized.request.kind, dependencies, signal)
   } catch (error) {
@@ -152,13 +157,74 @@ async function buildBatchCommitPlan(
   return { ok: true, plan: { token: fingerprint(planWithoutToken), ...planWithoutToken } }
 }
 
-async function buildBatchMergePlan(
+async function buildBatchMergeInPlan(
   rootId: string,
   manifest: BranchWorkspaceManifest,
   dependencies: BranchWorkspaceGitActionPlanDependencies,
   signal?: AbortSignal,
 ): Promise<BranchWorkspaceGitActionPlanResult> {
-  const members: BranchWorkspaceBatchMergeMemberPlan[] = []
+  const members: BranchWorkspaceBatchMergeInMemberPlan[] = []
+  for (const member of manifest.repositories) {
+    signal?.throwIfAborted()
+    const facts = await readMemberFacts(
+      rootId,
+      member.repositoryName,
+      member.targetBranch,
+      member.worktreePath,
+      dependencies,
+      signal,
+    )
+    if (!facts.ok) return facts
+    const targetEntries = normalizedEntries(facts.status.entries)
+    const targetBranch = facts.snapshot.branches.find((branch) => branch.name === member.targetBranch)!
+    const sourceBranches = facts.snapshot.branches
+      .filter((branch) => branch.name !== member.targetBranch)
+      .map(
+        (branch): BranchWorkspaceBatchMergeInSourcePlan => ({
+          branch: branch.name,
+          head: branch.worktree?.head ?? branch.lastCommitHash,
+        }),
+      )
+    const ready = targetEntries.length === 0 && sourceBranches.length > 0
+    const message =
+      targetEntries.length > 0
+        ? 'workspace.branch-workspace.git-action.target-worktree-dirty'
+        : sourceBranches.length === 0
+          ? 'workspace.branch-workspace.git-action.source-branch-required'
+          : undefined
+    members.push({
+      repositoryName: member.repositoryName,
+      repoId: facts.repoId,
+      targetBranch: member.targetBranch,
+      targetWorktreePath: member.worktreePath,
+      targetHead: facts.head,
+      ready,
+      pullMergePushReady: Boolean(targetBranch.tracking && !targetBranch.trackingGone),
+      ...(message ? { message } : {}),
+      sourceBranches,
+      fingerprint: fingerprint({
+        targetHead: facts.head,
+        targetStatus: targetEntries,
+        sourceBranches,
+      }),
+    })
+  }
+  const planWithoutToken = {
+    kind: 'batch-merge-in' as const,
+    rootId,
+    branchWorkspaceId: manifest.id,
+    members,
+  }
+  return { ok: true, plan: { token: fingerprint(planWithoutToken), ...planWithoutToken } }
+}
+
+async function buildBatchMergeOutPlan(
+  rootId: string,
+  manifest: BranchWorkspaceManifest,
+  dependencies: BranchWorkspaceGitActionPlanDependencies,
+  signal?: AbortSignal,
+): Promise<BranchWorkspaceGitActionPlanResult> {
+  const members: BranchWorkspaceBatchMergeOutMemberPlan[] = []
   for (const member of manifest.repositories) {
     signal?.throwIfAborted()
     const facts = await readMemberFacts(
@@ -173,7 +239,7 @@ async function buildBatchMergePlan(
     const targetEntries = normalizedEntries(facts.status.entries)
     const destinationBranches = facts.snapshot.branches
       .filter((branch) => branch.name !== member.targetBranch)
-      .map((branch): BranchWorkspaceBatchMergeDestinationPlan => {
+      .map((branch): BranchWorkspaceBatchMergeOutDestinationPlan => {
         const worktreePath = branch.worktree?.path
         const destinationStatus = worktreePath ? findStatus(facts.repoId, facts.statuses, worktreePath) : undefined
         const ownedTemporaryWorktree = Boolean(
@@ -224,7 +290,7 @@ async function buildBatchMergePlan(
     })
   }
   const planWithoutToken = {
-    kind: 'batch-merge' as const,
+    kind: 'batch-merge-out' as const,
     rootId,
     branchWorkspaceId: manifest.id,
     members,

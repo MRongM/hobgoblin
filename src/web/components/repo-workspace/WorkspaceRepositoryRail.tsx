@@ -412,7 +412,8 @@ export function WorkspaceRepositoryRail({
                 }
               }}
               onBatchCommit={branchGitActions.executeBatchCommit}
-              onBatchMerge={branchGitActions.executeBatchMerge}
+              onBatchMergeIn={branchGitActions.executeBatchMergeIn}
+              onBatchMergeOut={branchGitActions.executeBatchMergeOut}
               onSync={branchGitActions.executeSync}
               onCancel={branchGitActions.cancel}
             />

@@ -290,7 +290,7 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
     })
     const result = await buildBranchWorkspaceGitActionPlan(
       ROOT,
-      { kind: 'batch-merge', branchWorkspaceId: WORKSPACE_ID },
+      { kind: 'batch-merge-out', branchWorkspaceId: WORKSPACE_ID },
       dependencies({
         getStatus: cleanStatuses,
         getSnapshot: vi.fn(async (repoId: string) =>
@@ -302,7 +302,7 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
     expect(result).toMatchObject({
       ok: true,
       plan: {
-        kind: 'batch-merge',
+        kind: 'batch-merge-out',
         members: [
           {
             repositoryName: 'api',
@@ -336,7 +336,7 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
   test('excludes the member target and marks a dirty destination worktree unavailable', async () => {
     const result = await buildBranchWorkspaceGitActionPlan(
       ROOT,
-      { kind: 'batch-merge', branchWorkspaceId: WORKSPACE_ID },
+      { kind: 'batch-merge-out', branchWorkspaceId: WORKSPACE_ID },
       dependencies({
         getStatus: vi.fn(async (repoId: string) => {
           const repositoryName = repoId.endsWith('/api') ? 'api' : 'web'
@@ -352,7 +352,7 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
       }),
     )
 
-    expect(result.ok && result.plan.kind === 'batch-merge' && result.plan.members[0]?.destinationBranches).toEqual([
+    expect(result.ok && result.plan.kind === 'batch-merge-out' && result.plan.members[0]?.destinationBranches).toEqual([
       expect.objectContaining({ branch: 'main', ready: true, requiresTemporaryWorktree: false }),
       expect.objectContaining({
         branch: 'release/v2',
@@ -361,6 +361,69 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
         message: 'workspace.branch-workspace.git-action.destination-worktree-dirty',
       }),
     ])
+  })
+
+  test('lists local source refs for batch merge-in and projects target upstream readiness', async () => {
+    const result = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'batch-merge-in', branchWorkspaceId: WORKSPACE_ID },
+      dependencies({
+        getStatus: vi.fn(async (repoId: string) => {
+          const repositoryName = repoId.endsWith('/api') ? 'api' : 'web'
+          return [
+            status(`/workspace/${repositoryName}`, [{ x: 'M', y: ' ', path: 'src/uncommitted.ts' }]),
+            status(`/workspace/goblin-feature-a/${repositoryName}`),
+          ]
+        }),
+        getSnapshot: vi.fn(async (repoId: string) =>
+          snapshot(repoId.endsWith('/api') ? 'api' : 'web', { targetTracking: 'origin/feature/a' }),
+        ),
+      }),
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        kind: 'batch-merge-in',
+        members: [
+          {
+            repositoryName: 'api',
+            targetBranch: 'feature/a',
+            ready: true,
+            pullMergePushReady: true,
+            sourceBranches: [
+              { branch: 'main', head: 'base-head' },
+              { branch: 'release/v2', head: 'release-head' },
+            ],
+          },
+          { repositoryName: 'web', ready: true, pullMergePushReady: true },
+        ],
+      },
+    })
+  })
+
+  test('keeps a dirty merge-in target visible but unavailable', async () => {
+    const result = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'batch-merge-in', branchWorkspaceId: WORKSPACE_ID },
+      dependencies(),
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        kind: 'batch-merge-in',
+        members: [
+          {
+            repositoryName: 'api',
+            ready: false,
+            message: 'workspace.branch-workspace.git-action.target-worktree-dirty',
+            sourceBranches: [{ branch: 'main', head: 'base-head' }, { branch: 'release/v2' }],
+          },
+          { repositoryName: 'web', ready: true },
+        ],
+      },
+    })
   })
 
   test('revalidates every unfinished member while ignoring completed members', async () => {

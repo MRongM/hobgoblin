@@ -348,7 +348,10 @@ describe('BranchList worktree drag ordering', () => {
     const memberRow = rows.find((row) => row.textContent?.includes('feature/member'))
     const otherRow = rows.find((row) => row.textContent?.includes('feature/other'))
     expect(branchWorkspaceQueryState.rootId).toBe(WORKSPACE_ROOT_ID)
-    expect(memberRow?.querySelector('[data-testid="branch-workspace-member-badge"]')?.textContent).toBe('子工作区')
+    const memberBadge = memberRow?.querySelector('[data-testid="branch-workspace-member-badge"]')
+    expect(memberBadge?.textContent).toBe('')
+    expect(memberBadge?.getAttribute('aria-label')).toBe('子工作区')
+    expect(memberBadge?.querySelector('.lucide-folder-kanban')).not.toBeNull()
     expect(otherRow?.querySelector('[data-testid="branch-workspace-member-badge"]')).toBeNull()
   })
 

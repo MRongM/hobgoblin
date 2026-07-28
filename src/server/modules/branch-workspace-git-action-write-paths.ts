@@ -16,9 +16,12 @@ import {
 import { workspaceRootId } from '#/server/modules/workspace-paths.ts'
 import {
   normalizeBranchWorkspaceGitActionExecuteInput,
-  type BranchWorkspaceBatchMergeDestinationPlan,
-  type BranchWorkspaceBatchMergeMemberPlan,
-  type BranchWorkspaceBatchMergeTargetInput,
+  type BranchWorkspaceBatchMergeInMemberPlan,
+  type BranchWorkspaceBatchMergeInSourceInput,
+  type BranchWorkspaceBatchMergeInSourcePlan,
+  type BranchWorkspaceBatchMergeOutDestinationPlan,
+  type BranchWorkspaceBatchMergeOutMemberPlan,
+  type BranchWorkspaceBatchMergeOutTargetInput,
   type BranchWorkspaceGitActionExecuteInput,
   type BranchWorkspaceGitActionMemberResult,
   type BranchWorkspaceGitActionPlan,
@@ -35,14 +38,25 @@ interface PendingAction {
   completed: Set<string>
   mergeProgress: Map<string, 'pulled' | 'merged' | 'pushed'>
   mergeTemporaryWorktrees: Map<string, string>
-  mergeExecution?: {
-    mode: BranchWorkspaceMergeMode
-    targets: BranchWorkspaceBatchMergeTargetInput[]
-  }
+  mergeExecution?:
+    | {
+        kind: 'batch-merge-in'
+        mode: BranchWorkspaceMergeMode
+        sources: BranchWorkspaceBatchMergeInSourceInput[]
+      }
+    | {
+        kind: 'batch-merge-out'
+        mode: BranchWorkspaceMergeMode
+        targets: BranchWorkspaceBatchMergeOutTargetInput[]
+      }
 }
 
-type BranchWorkspaceBatchMergeExecutionMember = BranchWorkspaceBatchMergeMemberPlan & {
-  destination: BranchWorkspaceBatchMergeDestinationPlan
+type BranchWorkspaceBatchMergeInExecutionMember = BranchWorkspaceBatchMergeInMemberPlan & {
+  source: BranchWorkspaceBatchMergeInSourcePlan
+}
+
+type BranchWorkspaceBatchMergeOutExecutionMember = BranchWorkspaceBatchMergeOutMemberPlan & {
+  destination: BranchWorkspaceBatchMergeOutDestinationPlan
 }
 
 interface ActiveAction {
@@ -126,23 +140,48 @@ export function createBranchWorkspaceGitActionWriteService(
       if (input.kind === 'batch-commit' && !validBatchMessages(state.plan, input)) {
         return { ok: false, message: 'error.invalid-arguments' }
       }
-      const mergeSelection = input.kind === 'batch-merge' ? selectedBatchMergeMembers(state.plan, input.targets) : null
-      if (input.kind === 'batch-merge' && (!mergeSelection || !mergeSelection.ok)) {
-        return { ok: false, message: mergeSelection?.message ?? 'error.invalid-arguments' }
+      const mergeInSelection =
+        input.kind === 'batch-merge-in' ? selectedBatchMergeInMembers(state.plan, input.sources) : null
+      if (input.kind === 'batch-merge-in' && (!mergeInSelection || !mergeInSelection.ok)) {
+        return { ok: false, message: mergeInSelection?.message ?? 'error.invalid-arguments' }
       }
-      const mergeMembers = mergeSelection?.ok ? mergeSelection.members : null
-      if (input.kind === 'batch-merge' && mergeMembers) {
-        const targets = mergeMembers.map((member) => ({
+      const mergeOutSelection =
+        input.kind === 'batch-merge-out' ? selectedBatchMergeOutMembers(state.plan, input.targets) : null
+      if (input.kind === 'batch-merge-out' && (!mergeOutSelection || !mergeOutSelection.ok)) {
+        return { ok: false, message: mergeOutSelection?.message ?? 'error.invalid-arguments' }
+      }
+      const mergeInMembers = mergeInSelection?.ok ? mergeInSelection.members : null
+      const mergeOutMembers = mergeOutSelection?.ok ? mergeOutSelection.members : null
+      const mergeMembers = mergeInMembers ?? mergeOutMembers
+      if (input.kind === 'batch-merge-in' && mergeInMembers) {
+        const sources = mergeInMembers.map((member) => ({
+          repositoryName: member.repositoryName,
+          sourceBranch: member.source.branch,
+        }))
+        if (
+          state.mergeExecution &&
+          (state.mergeExecution.kind !== input.kind ||
+            state.mergeExecution.mode !== input.mode ||
+            !sameBatchMergeInSources(state.mergeExecution.sources, sources))
+        ) {
+          return { ok: false, message: 'error.invalid-arguments' }
+        }
+        state.mergeExecution ??= { kind: input.kind, mode: input.mode, sources }
+      }
+      if (input.kind === 'batch-merge-out' && mergeOutMembers) {
+        const targets = mergeOutMembers.map((member) => ({
           repositoryName: member.repositoryName,
           destinationBranch: member.destination.branch,
         }))
         if (
           state.mergeExecution &&
-          (state.mergeExecution.mode !== input.mode || !sameBatchMergeTargets(state.mergeExecution.targets, targets))
+          (state.mergeExecution.kind !== input.kind ||
+            state.mergeExecution.mode !== input.mode ||
+            !sameBatchMergeOutTargets(state.mergeExecution.targets, targets))
         ) {
           return { ok: false, message: 'error.invalid-arguments' }
         }
-        state.mergeExecution ??= { mode: input.mode, targets }
+        state.mergeExecution ??= { kind: input.kind, mode: input.mode, targets }
       }
 
       const controller = new AbortController()
@@ -183,8 +222,43 @@ export function createBranchWorkspaceGitActionWriteService(
             active,
           )
         }
-        if (input.kind === 'batch-merge') {
-          const refreshedSelection = selectedBatchMergeMembers(validation.plan, state.mergeExecution!.targets)
+        if (input.kind === 'batch-merge-in') {
+          const execution = state.mergeExecution
+          if (!execution || execution.kind !== input.kind) {
+            return { ok: false, message: 'error.invalid-arguments' }
+          }
+          const refreshedSelection = selectedBatchMergeInMembers(validation.plan, execution.sources)
+          if (!refreshedSelection.ok) return { ok: false, message: refreshedSelection.message }
+          if (
+            input.mode === 'pull-merge-push' &&
+            refreshedSelection.members.some((member) => !member.pullMergePushReady)
+          ) {
+            return { ok: false, message: 'workspace.branch-workspace.git-action.target-upstream-required' }
+          }
+          return await executeBatchMergeIn(
+            normalizedRootId,
+            state,
+            refreshedSelection.members,
+            input.mode,
+            controller.signal,
+            { pull, merge, push },
+            async (refreshSignal) =>
+              await buildPlan(
+                state.plan.rootId,
+                { kind: 'batch-merge-in', branchWorkspaceId: state.plan.branchWorkspaceId },
+                dependencies.planDependencies,
+                refreshSignal,
+              ),
+            publishInvalidation,
+            active,
+          )
+        }
+        if (input.kind === 'batch-merge-out') {
+          const execution = state.mergeExecution
+          if (!execution || execution.kind !== input.kind) {
+            return { ok: false, message: 'error.invalid-arguments' }
+          }
+          const refreshedSelection = selectedBatchMergeOutMembers(validation.plan, execution.targets)
           if (!refreshedSelection.ok) return { ok: false, message: refreshedSelection.message }
           if (
             input.mode === 'pull-merge-push' &&
@@ -192,7 +266,7 @@ export function createBranchWorkspaceGitActionWriteService(
           ) {
             return { ok: false, message: 'workspace.branch-workspace.git-action.destination-upstream-required' }
           }
-          return await executeBatchMerge(
+          return await executeBatchMergeOut(
             normalizedRootId,
             state,
             refreshedSelection.members,
@@ -202,7 +276,7 @@ export function createBranchWorkspaceGitActionWriteService(
             async (refreshSignal) =>
               await buildPlan(
                 state.plan.rootId,
-                { kind: 'batch-merge', branchWorkspaceId: state.plan.branchWorkspaceId },
+                { kind: 'batch-merge-out', branchWorkspaceId: state.plan.branchWorkspaceId },
                 dependencies.planDependencies,
                 refreshSignal,
               ),
@@ -241,9 +315,22 @@ export function createBranchWorkspaceGitActionWriteService(
   }
 }
 
-function sameBatchMergeTargets(
-  left: BranchWorkspaceBatchMergeTargetInput[],
-  right: BranchWorkspaceBatchMergeTargetInput[],
+function sameBatchMergeInSources(
+  left: BranchWorkspaceBatchMergeInSourceInput[],
+  right: BranchWorkspaceBatchMergeInSourceInput[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every(
+      (source, index) =>
+        source.repositoryName === right[index]?.repositoryName && source.sourceBranch === right[index]?.sourceBranch,
+    )
+  )
+}
+
+function sameBatchMergeOutTargets(
+  left: BranchWorkspaceBatchMergeOutTargetInput[],
+  right: BranchWorkspaceBatchMergeOutTargetInput[],
 ): boolean {
   return (
     left.length === right.length &&
@@ -255,13 +342,35 @@ function sameBatchMergeTargets(
   )
 }
 
-function selectedBatchMergeMembers(
+function selectedBatchMergeInMembers(
   plan: BranchWorkspaceGitActionPlan,
-  targets: BranchWorkspaceBatchMergeTargetInput[],
-): { ok: true; members: BranchWorkspaceBatchMergeExecutionMember[] } | { ok: false; message: string } {
-  if (plan.kind !== 'batch-merge') return { ok: false, message: 'error.invalid-arguments' }
+  sources: BranchWorkspaceBatchMergeInSourceInput[],
+): { ok: true; members: BranchWorkspaceBatchMergeInExecutionMember[] } | { ok: false; message: string } {
+  if (plan.kind !== 'batch-merge-in') return { ok: false, message: 'error.invalid-arguments' }
+  const selected = new Map(sources.map((source) => [source.repositoryName, source.sourceBranch]))
+  const members: BranchWorkspaceBatchMergeInExecutionMember[] = []
+  for (const member of plan.members) {
+    const sourceBranch = selected.get(member.repositoryName)
+    if (!sourceBranch) continue
+    if (!member.ready || sourceBranch === member.targetBranch) {
+      return { ok: false, message: member.message ?? 'error.invalid-arguments' }
+    }
+    const source = member.sourceBranches.find((candidate) => candidate.branch === sourceBranch)
+    if (!source) return { ok: false, message: 'error.invalid-arguments' }
+    members.push({ ...member, source })
+  }
+  return members.length === selected.size && members.length > 0
+    ? { ok: true, members }
+    : { ok: false, message: 'error.invalid-arguments' }
+}
+
+function selectedBatchMergeOutMembers(
+  plan: BranchWorkspaceGitActionPlan,
+  targets: BranchWorkspaceBatchMergeOutTargetInput[],
+): { ok: true; members: BranchWorkspaceBatchMergeOutExecutionMember[] } | { ok: false; message: string } {
+  if (plan.kind !== 'batch-merge-out') return { ok: false, message: 'error.invalid-arguments' }
   const selected = new Map(targets.map((target) => [target.repositoryName, target.destinationBranch]))
-  const members: BranchWorkspaceBatchMergeExecutionMember[] = []
+  const members: BranchWorkspaceBatchMergeOutExecutionMember[] = []
   for (const member of plan.members) {
     const destinationBranch = selected.get(member.repositoryName)
     if (!destinationBranch) continue
@@ -315,10 +424,93 @@ async function executeBatchCommit(
   return successResult(state.plan, state.completed)
 }
 
-async function executeBatchMerge(
+async function executeBatchMergeIn(
   rootId: string,
   state: PendingAction,
-  members: BranchWorkspaceBatchMergeExecutionMember[],
+  members: BranchWorkspaceBatchMergeInExecutionMember[],
+  mode: BranchWorkspaceMergeMode,
+  signal: AbortSignal,
+  operations: {
+    pull: typeof pullRepositoryBranch
+    merge: typeof mergeRepositoryBranch
+    push: typeof pushRepositoryBranch
+  },
+  refreshPlan: (signal: AbortSignal) => Promise<BranchWorkspaceGitActionPlanResult>,
+  publishInvalidation: typeof publishWorkspaceInvalidation,
+  active: Map<string, ActiveAction>,
+): Promise<BranchWorkspaceGitActionResult> {
+  if (state.plan.kind !== 'batch-merge-in') {
+    return failureResult(state.plan, state.completed, 'error.invalid-arguments')
+  }
+  for (let index = 0; index < members.length; index += 1) {
+    const member = members[index]!
+    if (state.completed.has(member.repositoryName)) continue
+    if (signal.aborted) return failureResult(state.plan, state.completed, 'cancelled')
+
+    let progress = state.mergeProgress.get(member.repositoryName)
+    if (mode === 'pull-merge-push' && !progress) {
+      updateActive(active.get(rootId), index + 1, state.completed.size, member.repositoryName, 'pull')
+      publishInvalidation(rootId)
+      const pulled = await operations.pull(member.repoId, member.targetBranch, member.targetWorktreePath, signal)
+      if (!pulled.ok) return actionFailure(state.plan, state.completed, member.repositoryName, 'pull', pulled)
+      progress = 'pulled'
+      state.mergeProgress.set(member.repositoryName, progress)
+    }
+    if (progress === 'pulled') {
+      const refreshed = await refreshPlan(signal)
+      if (!refreshed.ok) {
+        return actionFailure(state.plan, state.completed, member.repositoryName, 'merge', {
+          ok: false,
+          message: refreshed.message,
+        })
+      }
+      const refreshedMember =
+        refreshed.plan.kind === 'batch-merge-in'
+          ? refreshed.plan.members.find((candidate) => candidate.repositoryName === member.repositoryName)
+          : undefined
+      const refreshedSource = refreshedMember?.sourceBranches.find(
+        (candidate) => candidate.branch === member.source.branch,
+      )
+      if (
+        !refreshedMember?.ready ||
+        refreshedMember.targetWorktreePath !== member.targetWorktreePath ||
+        refreshedSource?.head !== member.source.head
+      ) {
+        return actionFailure(state.plan, state.completed, member.repositoryName, 'merge', {
+          ok: false,
+          message: 'workspace.branch-workspace.git-action.repository-changed',
+        })
+      }
+    }
+    if (progress !== 'merged' && progress !== 'pushed') {
+      updateActive(active.get(rootId), index + 1, state.completed.size, member.repositoryName, 'merge')
+      publishInvalidation(rootId)
+      const merged = await operations.merge(member.repoId, member.targetWorktreePath, member.source.branch, signal)
+      if (!merged.ok) return actionFailure(state.plan, state.completed, member.repositoryName, 'merge', merged)
+      progress = 'merged'
+      state.mergeProgress.set(member.repositoryName, progress)
+    }
+    if (mode === 'pull-merge-push' && progress !== 'pushed') {
+      updateActive(active.get(rootId), index + 1, state.completed.size, member.repositoryName, 'push')
+      publishInvalidation(rootId)
+      const pushed = await operations.push(member.repoId, member.targetBranch, signal)
+      if (!pushed.ok) return actionFailure(state.plan, state.completed, member.repositoryName, 'push', pushed)
+      progress = 'pushed'
+      state.mergeProgress.set(member.repositoryName, progress)
+    }
+
+    state.mergeProgress.delete(member.repositoryName)
+    state.completed.add(member.repositoryName)
+    updateActive(active.get(rootId), index + 1, state.completed.size)
+    publishInvalidation(rootId)
+  }
+  return successResult(state.plan, state.completed)
+}
+
+async function executeBatchMergeOut(
+  rootId: string,
+  state: PendingAction,
+  members: BranchWorkspaceBatchMergeOutExecutionMember[],
   mode: 'merge' | 'pull-merge-push',
   signal: AbortSignal,
   operations: {
@@ -332,7 +524,7 @@ async function executeBatchMerge(
   publishInvalidation: typeof publishWorkspaceInvalidation,
   active: Map<string, ActiveAction>,
 ): Promise<BranchWorkspaceGitActionResult> {
-  if (state.plan.kind !== 'batch-merge') {
+  if (state.plan.kind !== 'batch-merge-out') {
     return failureResult(state.plan, state.completed, 'error.invalid-arguments')
   }
   for (let index = 0; index < members.length; index += 1) {
@@ -391,7 +583,7 @@ async function executeBatchMerge(
         )
       }
       const refreshedMember =
-        refreshed.plan.kind === 'batch-merge'
+        refreshed.plan.kind === 'batch-merge-out'
           ? refreshed.plan.members.find((candidate) => candidate.repositoryName === member.repositoryName)
           : undefined
       const refreshedDestination = refreshedMember?.destinationBranches.find(
@@ -479,7 +671,7 @@ async function executeBatchMerge(
 
 async function prepareBatchMergeDestination(
   state: PendingAction,
-  member: BranchWorkspaceBatchMergeExecutionMember,
+  member: BranchWorkspaceBatchMergeOutExecutionMember,
   signal: AbortSignal,
   operations: {
     createWorktree: typeof createRepositoryWorktree
@@ -522,7 +714,7 @@ async function prepareBatchMergeDestination(
 async function batchMergeFailureAfterCleanup(
   rootId: string,
   state: PendingAction,
-  member: BranchWorkspaceBatchMergeExecutionMember,
+  member: BranchWorkspaceBatchMergeOutExecutionMember,
   index: number,
   step: BranchWorkspaceGitActionMemberResult['step'],
   result: ExecResult,
@@ -547,7 +739,7 @@ async function batchMergeFailureAfterCleanup(
 async function cleanupBatchMergeTemporaryWorktree(
   rootId: string,
   state: PendingAction,
-  member: BranchWorkspaceBatchMergeExecutionMember,
+  member: BranchWorkspaceBatchMergeOutExecutionMember,
   index: number,
   removeWorktree: typeof removeRepositoryWorktree,
   publishInvalidation: typeof publishWorkspaceInvalidation,
@@ -563,7 +755,7 @@ async function cleanupBatchMergeTemporaryWorktree(
 }
 
 async function removeBatchMergeTemporaryWorktree(
-  member: BranchWorkspaceBatchMergeExecutionMember,
+  member: BranchWorkspaceBatchMergeOutExecutionMember,
   worktreePath: string,
   removeWorktree: typeof removeRepositoryWorktree,
 ): Promise<ExecResult> {

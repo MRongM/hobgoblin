@@ -6,7 +6,8 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
   CreateBranchDialog,
-  MergeDialog,
+  MergeInDialog,
+  MergeOutDialog,
   PullRemoteBranchDialog,
 } from '#/web/components/branch-list/BranchWriteDialogs.tsx'
 import { InlineCommitForm } from '#/web/components/branch-list/InlineCommitForm.tsx'
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   getCommitMessageProviders: vi.fn(),
   generateRepositoryCommitMessage: vi.fn(),
   getRepositoryRemoteBranches: vi.fn(),
+  getRepositoryBranchMergeOutPlan: vi.fn(),
 }))
 
 const mergeAiMocks = vi.hoisted(() => ({
@@ -38,16 +40,21 @@ const mergeAiMocks = vi.hoisted(() => ({
     },
   ],
   error: null as string | null,
+  input: null as unknown,
 }))
 
 vi.mock('#/web/repo-client.ts', () => ({
   getCommitMessageProviders: mocks.getCommitMessageProviders,
   generateRepositoryCommitMessage: mocks.generateRepositoryCommitMessage,
   getRepositoryRemoteBranches: mocks.getRepositoryRemoteBranches,
+  getRepositoryBranchMergeOutPlan: mocks.getRepositoryBranchMergeOutPlan,
 }))
 
 vi.mock('#/web/hooks/useMergeConflictAiActions.ts', () => ({
-  useMergeConflictAiActions: () => mergeAiMocks,
+  useMergeConflictAiActions: (input: unknown) => {
+    mergeAiMocks.input = input
+    return mergeAiMocks
+  },
 }))
 
 let container: HTMLDivElement | null = null
@@ -60,6 +67,27 @@ beforeEach(() => {
   mocks.getCommitMessageProviders.mockResolvedValue({ codex: false, claude: false })
   mocks.generateRepositoryCommitMessage.mockResolvedValue({ ok: true, message: 'feat: generated message' })
   mocks.getRepositoryRemoteBranches.mockResolvedValue([])
+  mocks.getRepositoryBranchMergeOutPlan.mockResolvedValue({
+    ok: true,
+    plan: {
+      token: 'sha256:plan',
+      repoId: '/repo',
+      sourceBranch: 'feature/current',
+      sourceWorktreePath: '/repo-feature',
+      sourceHead: 'source-head',
+      ready: true,
+      destinations: [
+        {
+          branch: 'main',
+          head: 'main-head',
+          ready: true,
+          worktreePath: '/repo-main',
+          requiresTemporaryWorktree: false,
+          pullMergePushReady: true,
+        },
+      ],
+    },
+  })
 })
 
 afterEach(() => {
@@ -177,10 +205,10 @@ describe('InlineCommitForm', () => {
   })
 })
 
-describe('MergeDialog', () => {
+describe('MergeInDialog', () => {
   test('does not show AI buttons for ordinary merge errors', async () => {
     render(
-      <MergeDialog
+      <MergeInDialog
         open
         repoId="/repo"
         worktreePath="/repo"
@@ -192,7 +220,7 @@ describe('MergeDialog', () => {
     )
 
     selectFirstMergeCandidate()
-    clickButtonByText('action.merge-confirm')
+    clickButtonByText('action.merge-in-confirm')
     await flush()
 
     expect(document.body.textContent).toContain('fatal: bad revision')
@@ -201,7 +229,7 @@ describe('MergeDialog', () => {
 
   test('shows AI buttons for merge conflict errors', async () => {
     render(
-      <MergeDialog
+      <MergeInDialog
         open
         repoId="/repo"
         worktreePath="/repo"
@@ -213,7 +241,7 @@ describe('MergeDialog', () => {
     )
 
     selectFirstMergeCandidate()
-    clickButtonByText('action.merge-confirm')
+    clickButtonByText('action.merge-in-confirm')
     await flush()
 
     expect(document.body.textContent).toContain('CONFLICT (content)')
@@ -237,7 +265,7 @@ describe('MergeDialog', () => {
     })
 
     render(
-      <MergeDialog
+      <MergeInDialog
         open
         repoId="/repo"
         worktreePath="/repo"
@@ -251,7 +279,7 @@ describe('MergeDialog', () => {
     )
 
     selectFirstMergeCandidate()
-    clickButtonByText('action.merge-and-push-confirm')
+    clickButtonByText('action.merge-in-and-push-confirm')
     await flush()
 
     expect(onPull).toHaveBeenCalled()
@@ -264,7 +292,7 @@ describe('MergeDialog', () => {
     const longError = Array.from({ length: 30 }, (_, index) => `CONFLICT (content): file-${index}.ts`).join('\n')
 
     render(
-      <MergeDialog
+      <MergeInDialog
         open
         repoId="/repo"
         worktreePath="/repo"
@@ -276,7 +304,7 @@ describe('MergeDialog', () => {
     )
 
     selectFirstMergeCandidate()
-    clickButtonByText('action.merge-confirm')
+    clickButtonByText('action.merge-in-confirm')
     await flush()
 
     const scrollArea = document.body.querySelector('[data-slot="merge-dialog-error-scroll"]')
@@ -299,7 +327,7 @@ describe('MergeDialog', () => {
     const onClose = vi.fn()
 
     render(
-      <MergeDialog
+      <MergeInDialog
         open
         repoId="/repo"
         worktreePath="/repo"
@@ -311,13 +339,210 @@ describe('MergeDialog', () => {
     )
 
     selectFirstMergeCandidate()
-    clickButtonByText('action.merge-confirm')
+    clickButtonByText('action.merge-in-confirm')
     await flush()
     clickButtonByText('Codex')
     await flush()
 
     expect(mergeAiMocks.actions[0]!.onSelect).toHaveBeenCalled()
     expect(onClose).toHaveBeenCalled()
+  })
+})
+
+describe('MergeOutDialog', () => {
+  test('loads server-planned destinations and keeps the source read-only', async () => {
+    mocks.getRepositoryBranchMergeOutPlan.mockResolvedValueOnce({
+      ok: true,
+      plan: {
+        token: 'sha256:plan',
+        repoId: '/repo',
+        sourceBranch: 'feature/current',
+        sourceWorktreePath: '/repo-feature',
+        sourceHead: 'source-head',
+        ready: true,
+        destinations: [
+          {
+            branch: 'dirty',
+            head: 'dirty-head',
+            ready: false,
+            worktreePath: '/repo-dirty',
+            requiresTemporaryWorktree: false,
+            pullMergePushReady: true,
+            blockReason: 'dirty-worktree',
+          },
+          {
+            branch: 'main',
+            head: 'main-head',
+            ready: true,
+            requiresTemporaryWorktree: true,
+            pullMergePushReady: false,
+          },
+        ],
+      },
+    })
+
+    render(
+      <MergeOutDialog
+        open
+        repoId="/repo"
+        sourceBranch="feature/current"
+        sourceWorktreePath="/repo-feature"
+        onClose={vi.fn()}
+        onMergeOut={vi.fn()}
+      />,
+    )
+    await flush()
+
+    expect(input('#merge-out-source')).toMatchObject({ value: 'feature/current', readOnly: true })
+    openSelect('#merge-out-select')
+    const options = [...document.body.querySelectorAll<HTMLElement>('[role="option"]')]
+    expect(options.map((option) => option.textContent)).toEqual([
+      expect.stringContaining('dirty'),
+      expect.stringContaining('main'),
+    ])
+    expect(options[0]?.getAttribute('aria-disabled')).toBe('true')
+    expect(options[0]?.textContent).toContain('action.merge-out-destination-dirty')
+    expect(options.some((option) => option.textContent?.includes('feature/current'))).toBe(false)
+  })
+
+  test('submits the exact merge-only source and destination identity', async () => {
+    const onMergeOut = vi.fn(async () => ({ ok: true, message: 'merged' }))
+    const onClose = vi.fn()
+    render(
+      <MergeOutDialog
+        open
+        repoId="/repo"
+        sourceBranch="feature/current"
+        sourceWorktreePath="/repo-feature"
+        onClose={onClose}
+        onMergeOut={onMergeOut}
+      />,
+    )
+    await flush()
+
+    expect(buttonByText('action.merge-out-confirm').disabled).toBe(true)
+    selectFirstMergeOutCandidate()
+    clickButtonByText('action.merge-out-confirm')
+    await flush()
+
+    expect(onMergeOut).toHaveBeenCalledWith({
+      repoId: '/repo',
+      planToken: 'sha256:plan',
+      sourceBranch: 'feature/current',
+      sourceWorktreePath: '/repo-feature',
+      destinationBranch: 'main',
+      mode: 'merge',
+    })
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  test('keeps remote mode visible and gates it by destination upstream', async () => {
+    mocks.getRepositoryBranchMergeOutPlan.mockResolvedValueOnce({
+      ok: true,
+      plan: {
+        token: 'sha256:plan',
+        repoId: '/repo',
+        sourceBranch: 'feature/current',
+        sourceWorktreePath: '/repo-feature',
+        sourceHead: 'source-head',
+        ready: true,
+        destinations: [
+          {
+            branch: 'main',
+            head: 'main-head',
+            ready: true,
+            requiresTemporaryWorktree: true,
+            pullMergePushReady: false,
+          },
+        ],
+      },
+    })
+    render(
+      <MergeOutDialog
+        open
+        repoId="/repo"
+        sourceBranch="feature/current"
+        sourceWorktreePath="/repo-feature"
+        onClose={vi.fn()}
+        onMergeOut={vi.fn()}
+      />,
+    )
+    await flush()
+
+    selectFirstMergeOutCandidate()
+    expect(buttonByText('action.merge-out-pull-merge-push-confirm').disabled).toBe(true)
+  })
+
+  test('refreshes an expired plan without executing again', async () => {
+    const onMergeOut = vi.fn(async () => ({ ok: false, message: 'error.merge-out-plan-changed' }))
+    render(
+      <MergeOutDialog
+        open
+        repoId="/repo"
+        sourceBranch="feature/current"
+        sourceWorktreePath="/repo-feature"
+        onClose={vi.fn()}
+        onMergeOut={onMergeOut}
+      />,
+    )
+    await flush()
+    selectFirstMergeOutCandidate()
+    clickButtonByText('action.merge-out-confirm')
+    await flush()
+    await flush()
+
+    expect(onMergeOut).toHaveBeenCalledTimes(1)
+    expect(mocks.getRepositoryBranchMergeOutPlan).toHaveBeenCalledTimes(2)
+    expect(document.body.textContent).toContain('error.merge-out-plan-changed')
+  })
+
+  test('uses only the returned conflict worktree for AI takeover', async () => {
+    const onMergeOut = vi.fn(async () => ({
+      ok: false,
+      message: 'conflict',
+      reason: 'merge-conflict' as const,
+      conflictWorktree: { branch: 'main', path: '/repo-main' },
+    }))
+    render(
+      <MergeOutDialog
+        open
+        repoId="/repo"
+        sourceBranch="feature/current"
+        sourceWorktreePath="/repo-feature"
+        onClose={vi.fn()}
+        onMergeOut={onMergeOut}
+      />,
+    )
+    await flush()
+    selectFirstMergeOutCandidate()
+    clickButtonByText('action.merge-out-confirm')
+    await flush()
+
+    expect(buttonByText('Codex')).not.toBeNull()
+    expect(mergeAiMocks.input).toMatchObject({ repoId: '/repo', branch: 'main', worktreePath: '/repo-main' })
+  })
+
+  test('aborts plan loading when closed', async () => {
+    let requestSignal: AbortSignal | undefined
+    mocks.getRepositoryBranchMergeOutPlan.mockImplementationOnce(async (_request, signal) => {
+      requestSignal = signal
+      return await new Promise(() => {})
+    })
+    render(
+      <MergeOutDialog
+        open
+        repoId="/repo"
+        sourceBranch="feature/current"
+        sourceWorktreePath="/repo-feature"
+        onClose={vi.fn()}
+        onMergeOut={vi.fn()}
+      />,
+    )
+    await flush()
+
+    act(() => root?.unmount())
+    root = null
+    expect(requestSignal?.aborted).toBe(true)
   })
 })
 
@@ -610,6 +835,15 @@ function selectFirstMergeCandidate() {
   openSelect('#merge-select')
   const item = document.body.querySelector<HTMLElement>('[role="option"]')
   if (!item) throw new Error('Missing merge candidate option')
+  act(() => {
+    item.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
+}
+
+function selectFirstMergeOutCandidate() {
+  openSelect('#merge-out-select')
+  const item = document.body.querySelector<HTMLElement>('[role="option"]:not([aria-disabled="true"])')
+  if (!item) throw new Error('Missing merge-out candidate option')
   act(() => {
     item.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   })

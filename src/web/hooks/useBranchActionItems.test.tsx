@@ -453,6 +453,7 @@ describe('useBranchActionItems', () => {
       'pullRemoteBranch',
       'checkoutTo',
       'merge',
+      'mergeOut',
       'commit',
       'copyPatch',
     ])
@@ -518,6 +519,7 @@ describe('useBranchActionItems', () => {
       'pullRemoteBranch',
       'checkoutTo',
       'merge',
+      'mergeOut',
       'commit',
       'copyPatch',
     ])
@@ -545,6 +547,7 @@ describe('useBranchActionItems', () => {
     expect(disabledById.get('pullRemoteBranch')).toBe(true)
     expect(disabledById.get('checkoutTo')).toBe(true)
     expect(disabledById.get('merge')).toBe(true)
+    expect(disabledById.get('mergeOut')).toBe(true)
     expect(disabledById.get('commit')).toBe(true)
     expect(disabledById.get('terminal')).toBe(true)
     expect(disabledById.get('terminalTmux')).toBe(true)

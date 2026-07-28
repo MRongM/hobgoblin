@@ -10,6 +10,7 @@ export function extractWorktreePathFromAction(action: RepoEventAction): string |
     case 'pull':
     case 'commit':
     case 'merge':
+    case 'mergeOut':
     case 'createWorktree':
     case 'cleanupWorktree':
     case 'removeWorktree':

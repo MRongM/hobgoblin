@@ -23,6 +23,7 @@ export type BranchActionItemId =
   | 'cleanupWorktree'
   | 'checkoutTo'
   | 'merge'
+  | 'mergeOut'
   | 'commit'
   | 'resetHard'
 

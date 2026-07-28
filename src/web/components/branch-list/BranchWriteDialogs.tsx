@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import type { ExecResult } from '#/shared/git-types.ts'
 import { Button } from '#/web/components/ui/button.tsx'
@@ -10,13 +10,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#
 import { ScrollArea } from '#/web/components/ui/scroll-area.tsx'
 import { DialogError } from '#/web/components/ui/dialog-error.tsx'
 import { RemoteBranchSearchInput } from '#/web/components/branch-list/RemoteBranchSearchInput.tsx'
-import { getRepositoryRemoteBranches } from '#/web/repo-client.ts'
+import { getRepositoryBranchMergeOutPlan, getRepositoryRemoteBranches } from '#/web/repo-client.ts'
 import { useMergeConflictAiActions } from '#/web/hooks/useMergeConflictAiActions.ts'
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import { useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useAsyncPending } from '#/web/hooks/useAsyncPending.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
+import type {
+  RepositoryBranchMergeOutExecuteInput,
+  RepositoryBranchMergeOutPlan,
+  RepositoryBranchMergeOutResult,
+} from '#/shared/repository-branch-merge.ts'
 import {
   branchNameValidationKey,
   remoteRefMatchesQuery,
@@ -107,7 +112,7 @@ export function CheckoutToDialog({ open, branch, allBranches, onClose, onCheckou
 
 // ── Merge dialog ──────────────────────────────────────────────────────────────
 
-interface MergeDialogProps {
+interface MergeInDialogProps {
   open: boolean
   repoId: string
   worktreePath: string
@@ -119,7 +124,7 @@ interface MergeDialogProps {
   onPush?: () => void | Promise<void>
 }
 
-export function MergeDialog({
+export function MergeInDialog({
   open,
   repoId,
   worktreePath,
@@ -129,7 +134,7 @@ export function MergeDialog({
   onPull,
   onMerge,
   onPush,
-}: MergeDialogProps) {
+}: MergeInDialogProps) {
   const t = useT()
   const [selected, setSelected] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -181,7 +186,7 @@ export function MergeDialog({
       onOpenChange={(o) => {
         if (!o && !isPending) onClose()
       }}
-      title={t('action.merge-title')}
+      title={t('action.merge-in-title')}
     >
       <form
         data-slot="merge-dialog-form"
@@ -192,10 +197,10 @@ export function MergeDialog({
         className="min-w-0 space-y-4"
       >
         <Field data-slot="merge-dialog-branch-field" className="min-w-0">
-          <FieldLabel htmlFor="merge-select">{t('action.merge-label')}</FieldLabel>
+          <FieldLabel htmlFor="merge-select">{t('action.merge-in-label')}</FieldLabel>
           <Select value={selected} onValueChange={setSelected}>
             <SelectTrigger id="merge-select" className="min-w-0 w-full">
-              <SelectValue placeholder={t('action.merge-placeholder')} />
+              <SelectValue placeholder={t('action.merge-in-placeholder')} />
             </SelectTrigger>
             <SelectContent>
               {candidates.map((b) => (
@@ -206,7 +211,7 @@ export function MergeDialog({
             </SelectContent>
           </Select>
         </Field>
-        {error && <MergeDialogError>{error}</MergeDialogError>}
+        {error && <MergeDialogError>{error.startsWith('error.merge-out') ? t(error) : error}</MergeDialogError>}
         {errorReason === 'merge-conflict' && (
           <MergeConflictAiActions repoId={repoId} branch={branch.name} worktreePath={worktreePath} onClose={onClose} />
         )}
@@ -223,12 +228,204 @@ export function MergeDialog({
               onClick={() => void handleConfirm('pullMergePush')}
             >
               {pending === 'pullMergePush' && <Loader2 className="animate-spin" />}
-              {t('action.merge-and-push-confirm')}
+              {t('action.merge-in-and-push-confirm')}
             </Button>
           )}
           <Button type="submit" size="sm" disabled={!selected || isPending}>
             {pending === 'merge' && <Loader2 className="animate-spin" />}
-            {t('action.merge-confirm')}
+            {t('action.merge-in-confirm')}
+          </Button>
+        </DialogFooter>
+      </form>
+    </FormDialog>
+  )
+}
+
+interface MergeOutDialogProps {
+  open: boolean
+  repoId: string
+  sourceBranch: string
+  sourceWorktreePath: string
+  onClose: () => void
+  onMergeOut: (input: RepositoryBranchMergeOutExecuteInput) => Promise<RepositoryBranchMergeOutResult>
+}
+
+export function MergeOutDialog({
+  open,
+  repoId,
+  sourceBranch,
+  sourceWorktreePath,
+  onClose,
+  onMergeOut,
+}: MergeOutDialogProps) {
+  const t = useT()
+  const [plan, setPlan] = useState<RepositoryBranchMergeOutPlan | null>(null)
+  const [selected, setSelected] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [conflictWorktree, setConflictWorktree] = useState<{ branch: string; path: string } | null>(null)
+  const planAbortRef = useRef<AbortController | null>(null)
+  const { pending, isPending, run } = useAsyncPending<'merge' | 'pullMergePush'>()
+
+  async function loadPlan(preserveError = false) {
+    planAbortRef.current?.abort()
+    const controller = new AbortController()
+    planAbortRef.current = controller
+    setLoading(true)
+    setPlan(null)
+    setSelected('')
+    if (!preserveError) setError(null)
+    setConflictWorktree(null)
+    try {
+      const result = await getRepositoryBranchMergeOutPlan(
+        { repoId, sourceBranch, sourceWorktreePath },
+        controller.signal,
+      )
+      if (controller.signal.aborted) return
+      if (!result.ok) {
+        setError(result.message)
+        return
+      }
+      setPlan(result.plan)
+      if (!result.plan.ready && result.plan.message) setError(result.plan.message)
+    } catch (err) {
+      if (!controller.signal.aborted) setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      if (planAbortRef.current === controller) {
+        planAbortRef.current = null
+        setLoading(false)
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (open) void loadPlan()
+    else {
+      planAbortRef.current?.abort()
+      planAbortRef.current = null
+      setPlan(null)
+      setSelected('')
+      setLoading(false)
+      setError(null)
+      setConflictWorktree(null)
+    }
+    return () => {
+      planAbortRef.current?.abort()
+      planAbortRef.current = null
+    }
+  }, [open, repoId, sourceBranch, sourceWorktreePath])
+
+  const destination = plan?.destinations.find((candidate) => candidate.branch === selected)
+
+  async function handleConfirm(mode: 'merge' | 'pullMergePush') {
+    if (!plan || !destination?.ready) return
+    setError(null)
+    setConflictWorktree(null)
+    await run(mode, async () => {
+      try {
+        const result = await onMergeOut({
+          repoId: plan.repoId,
+          planToken: plan.token,
+          sourceBranch: plan.sourceBranch,
+          sourceWorktreePath: plan.sourceWorktreePath,
+          destinationBranch: destination.branch,
+          mode: mode === 'merge' ? 'merge' : 'pull-merge-push',
+        })
+        if (!result.ok) {
+          setError(result.message)
+          setConflictWorktree(result.conflictWorktree ?? null)
+          if (result.message === 'error.merge-out-plan-changed') await loadPlan(true)
+          return
+        }
+        onClose()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err))
+      }
+    })
+  }
+
+  return (
+    <FormDialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && !isPending) onClose()
+      }}
+      title={t('action.merge-out-title', { branch: sourceBranch })}
+    >
+      <form
+        data-slot="merge-out-dialog-form"
+        className="min-w-0 space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault()
+          void handleConfirm('merge')
+        }}
+      >
+        <Field>
+          <FieldLabel htmlFor="merge-out-source">{t('action.merge-out-source-label')}</FieldLabel>
+          <Input id="merge-out-source" value={sourceBranch} readOnly />
+        </Field>
+        <Field data-slot="merge-out-dialog-branch-field" className="min-w-0">
+          <FieldLabel htmlFor="merge-out-select">{t('action.merge-out-destination-label')}</FieldLabel>
+          <Select value={selected} onValueChange={setSelected} disabled={loading || !plan}>
+            <SelectTrigger id="merge-out-select" className="min-w-0 w-full">
+              <SelectValue
+                placeholder={loading ? t('action.merge-out-loading') : t('action.merge-out-destination-placeholder')}
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {plan?.destinations.map((candidate) => (
+                <SelectItem
+                  key={candidate.branch}
+                  value={candidate.branch}
+                  textValue={candidate.branch}
+                  disabled={!candidate.ready}
+                >
+                  <span className="flex min-w-0 items-center justify-between gap-3">
+                    <span className="truncate">{candidate.branch}</span>
+                    {candidate.blockReason ? (
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {t(
+                          candidate.blockReason === 'dirty-worktree'
+                            ? 'action.merge-out-destination-dirty'
+                            : 'action.merge-out-destination-unavailable',
+                        )}
+                      </span>
+                    ) : null}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {destination && !destination.pullMergePushReady ? (
+            <FieldDescription>{t('action.merge-out-destination-upstream-required')}</FieldDescription>
+          ) : null}
+        </Field>
+        {error && <MergeDialogError>{error.startsWith('error.merge-out') ? t(error) : error}</MergeDialogError>}
+        {conflictWorktree && (
+          <MergeConflictAiActions
+            repoId={repoId}
+            branch={conflictWorktree.branch}
+            worktreePath={conflictWorktree.path}
+            onClose={onClose}
+          />
+        )}
+        <DialogFooter>
+          <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={onClose}>
+            {t('dialog.cancel')}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!destination?.ready || !destination.pullMergePushReady || isPending}
+            onClick={() => void handleConfirm('pullMergePush')}
+          >
+            {pending === 'pullMergePush' && <Loader2 className="animate-spin" />}
+            {t('action.merge-out-pull-merge-push-confirm')}
+          </Button>
+          <Button type="submit" size="sm" disabled={!destination?.ready || isPending}>
+            {pending === 'merge' && <Loader2 className="animate-spin" />}
+            {t('action.merge-out-confirm')}
           </Button>
         </DialogFooter>
       </form>

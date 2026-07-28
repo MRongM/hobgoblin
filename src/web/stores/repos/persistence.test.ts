@@ -32,6 +32,26 @@ beforeEach(() => {
 })
 
 describe('normalizeRestorableRepoCache', () => {
+  test('preserves merge-out history under the initiating source worktree', () => {
+    const raw = cachedRepo(Date.now())
+    raw.ui.worktreeActionHistories = {
+      '/repo-feature': [
+        {
+          kind: 'mergeOut',
+          branch: 'feature/source',
+          destinationBranch: 'main',
+          worktreePath: '/repo-feature',
+        },
+      ],
+    }
+
+    const normalized = normalizeRestorableRepoCache({ repo: raw })
+
+    expect(normalized.repo?.ui.worktreeActionHistories?.['/repo-feature']).toEqual(
+      raw.ui.worktreeActionHistories['/repo-feature'],
+    )
+  })
+
   test('keeps only the newest 50 valid cache entries', () => {
     const now = Date.now()
     const raw = Object.fromEntries(

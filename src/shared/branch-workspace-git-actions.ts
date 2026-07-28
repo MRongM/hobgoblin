@@ -1,7 +1,7 @@
 import type { GitFailureReason } from '#/shared/git-types.ts'
 import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
 
-export type BranchWorkspaceGitActionKind = 'batch-commit' | 'batch-merge' | 'pull' | 'push'
+export type BranchWorkspaceGitActionKind = 'batch-commit' | 'batch-merge-in' | 'batch-merge-out' | 'pull' | 'push'
 export type BranchWorkspaceMergeMode = 'merge' | 'pull-merge-push'
 export type BranchWorkspaceGitActionStep = 'commit' | 'prepare' | 'pull' | 'merge' | 'push' | 'cleanup'
 export type BranchWorkspaceGitActionMemberPhase = 'ready' | 'satisfied' | 'succeeded' | 'failed' | 'not-started'
@@ -16,7 +16,25 @@ export interface BranchWorkspaceBatchCommitMemberPlan {
   fingerprint: string
 }
 
-export interface BranchWorkspaceBatchMergeDestinationPlan {
+export interface BranchWorkspaceBatchMergeInSourcePlan {
+  branch: string
+  head: string
+}
+
+export interface BranchWorkspaceBatchMergeInMemberPlan {
+  repositoryName: string
+  repoId: string
+  targetBranch: string
+  targetWorktreePath: string
+  targetHead: string
+  ready: boolean
+  pullMergePushReady: boolean
+  message?: string
+  sourceBranches: BranchWorkspaceBatchMergeInSourcePlan[]
+  fingerprint: string
+}
+
+export interface BranchWorkspaceBatchMergeOutDestinationPlan {
   branch: string
   head: string
   ready: boolean
@@ -26,7 +44,7 @@ export interface BranchWorkspaceBatchMergeDestinationPlan {
   message?: string
 }
 
-export interface BranchWorkspaceBatchMergeMemberPlan {
+export interface BranchWorkspaceBatchMergeOutMemberPlan {
   repositoryName: string
   repoId: string
   targetBranch: string
@@ -34,7 +52,7 @@ export interface BranchWorkspaceBatchMergeMemberPlan {
   targetHead: string
   ready: boolean
   message?: string
-  destinationBranches: BranchWorkspaceBatchMergeDestinationPlan[]
+  destinationBranches: BranchWorkspaceBatchMergeOutDestinationPlan[]
   fingerprint: string
 }
 
@@ -60,9 +78,14 @@ export interface BranchWorkspaceBatchCommitPlan extends BranchWorkspaceGitAction
   members: BranchWorkspaceBatchCommitMemberPlan[]
 }
 
-export interface BranchWorkspaceBatchMergePlan extends BranchWorkspaceGitActionPlanBase {
-  kind: 'batch-merge'
-  members: BranchWorkspaceBatchMergeMemberPlan[]
+export interface BranchWorkspaceBatchMergeInPlan extends BranchWorkspaceGitActionPlanBase {
+  kind: 'batch-merge-in'
+  members: BranchWorkspaceBatchMergeInMemberPlan[]
+}
+
+export interface BranchWorkspaceBatchMergeOutPlan extends BranchWorkspaceGitActionPlanBase {
+  kind: 'batch-merge-out'
+  members: BranchWorkspaceBatchMergeOutMemberPlan[]
 }
 
 export interface BranchWorkspaceSyncPlan extends BranchWorkspaceGitActionPlanBase {
@@ -73,7 +96,8 @@ export interface BranchWorkspaceSyncPlan extends BranchWorkspaceGitActionPlanBas
 
 export type BranchWorkspaceGitActionPlan =
   | BranchWorkspaceBatchCommitPlan
-  | BranchWorkspaceBatchMergePlan
+  | BranchWorkspaceBatchMergeInPlan
+  | BranchWorkspaceBatchMergeOutPlan
   | BranchWorkspaceSyncPlan
 
 export type BranchWorkspaceGitActionPlanResult =
@@ -94,7 +118,12 @@ export interface BranchWorkspaceCommitMessageInput {
   message: string
 }
 
-export interface BranchWorkspaceBatchMergeTargetInput {
+export interface BranchWorkspaceBatchMergeInSourceInput {
+  repositoryName: string
+  sourceBranch: string
+}
+
+export interface BranchWorkspaceBatchMergeOutTargetInput {
   repositoryName: string
   destinationBranch: string
 }
@@ -106,10 +135,16 @@ export type BranchWorkspaceGitActionExecuteInput =
       messages: BranchWorkspaceCommitMessageInput[]
     }
   | {
-      kind: 'batch-merge'
+      kind: 'batch-merge-in'
       planToken: string
       mode: BranchWorkspaceMergeMode
-      targets: BranchWorkspaceBatchMergeTargetInput[]
+      sources: BranchWorkspaceBatchMergeInSourceInput[]
+    }
+  | {
+      kind: 'batch-merge-out'
+      planToken: string
+      mode: BranchWorkspaceMergeMode
+      targets: BranchWorkspaceBatchMergeOutTargetInput[]
     }
   | {
       kind: 'pull' | 'push'
@@ -145,7 +180,8 @@ export function normalizeBranchWorkspaceGitActionPlanRequest(
   if (
     !branchWorkspaceId ||
     (input?.kind !== 'batch-commit' &&
-      input?.kind !== 'batch-merge' &&
+      input?.kind !== 'batch-merge-in' &&
+      input?.kind !== 'batch-merge-out' &&
       input?.kind !== 'pull' &&
       input?.kind !== 'push')
   ) {
@@ -161,11 +197,17 @@ export function normalizeBranchWorkspaceGitActionExecuteInput(
   const planToken = normalizedText(input?.planToken)
   if (!planToken) return invalidArguments()
 
-  if (input?.kind === 'batch-merge') {
+  if (input?.kind === 'batch-merge-in') {
+    if (input.mode !== 'merge' && input.mode !== 'pull-merge-push') return invalidArguments()
+    const sources = normalizedBatchMergeInSources(input.sources)
+    if (!sources) return invalidArguments()
+    return { ok: true, input: { kind: 'batch-merge-in', planToken, mode: input.mode, sources } }
+  }
+  if (input?.kind === 'batch-merge-out') {
     if (input.mode !== 'merge' && input.mode !== 'pull-merge-push') return invalidArguments()
     const targets = normalizedBatchMergeTargets(input.targets)
     if (!targets) return invalidArguments()
-    return { ok: true, input: { kind: 'batch-merge', planToken, mode: input.mode, targets } }
+    return { ok: true, input: { kind: 'batch-merge-out', planToken, mode: input.mode, targets } }
   }
   if (input?.kind === 'pull' || input?.kind === 'push') {
     return { ok: true, input: { kind: input.kind, planToken } }
@@ -210,19 +252,32 @@ function normalizedMessage(value: unknown): string | null {
   return message ? message : null
 }
 
-function normalizedBatchMergeTargets(value: unknown): BranchWorkspaceBatchMergeTargetInput[] | null {
+function normalizedBatchMergeInSources(value: unknown): BranchWorkspaceBatchMergeInSourceInput[] | null {
+  const mappings = normalizedBatchMergeMappings(value, 'sourceBranch')
+  return mappings?.map(({ repositoryName, branch }) => ({ repositoryName, sourceBranch: branch })) ?? null
+}
+
+function normalizedBatchMergeTargets(value: unknown): BranchWorkspaceBatchMergeOutTargetInput[] | null {
+  const mappings = normalizedBatchMergeMappings(value, 'destinationBranch')
+  return mappings?.map(({ repositoryName, branch }) => ({ repositoryName, destinationBranch: branch })) ?? null
+}
+
+function normalizedBatchMergeMappings(
+  value: unknown,
+  branchKey: 'sourceBranch' | 'destinationBranch',
+): Array<{ repositoryName: string; branch: string }> | null {
   if (!Array.isArray(value) || value.length === 0) return null
   const names = new Set<string>()
-  const targets: BranchWorkspaceBatchMergeTargetInput[] = []
+  const mappings: Array<{ repositoryName: string; branch: string }> = []
   for (const candidate of value) {
     const input = asRecord(candidate)
     const name = normalizedText(input?.repositoryName)
-    const destinationBranch = normalizedText(input?.destinationBranch)
-    if (!name || !destinationBranch || !isWorkspaceRepositoryName(name) || names.has(name)) return null
+    const branch = normalizedText(input?.[branchKey])
+    if (!name || !branch || !isWorkspaceRepositoryName(name) || names.has(name)) return null
     names.add(name)
-    targets.push({ repositoryName: name, destinationBranch })
+    mappings.push({ repositoryName: name, branch })
   }
-  return targets
+  return mappings
 }
 
 function invalidArguments(): { ok: false; message: string } {

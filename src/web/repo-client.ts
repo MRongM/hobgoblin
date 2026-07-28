@@ -22,6 +22,12 @@ import type { CommitDetail, CommitHistoryEntry, ExecResult, WorktreeStatus } fro
 import type { ProbeResult } from '#/shared/rpc.ts'
 import type { CreateWorktreeInput } from '#/shared/worktree-create.ts'
 import type {
+  RepositoryBranchMergeOutExecuteInput,
+  RepositoryBranchMergeOutPlanRequest,
+  RepositoryBranchMergeOutPlanResult,
+  RepositoryBranchMergeOutResult,
+} from '#/shared/repository-branch-merge.ts'
+import type {
   WorktreeBootstrapCandidateScope,
   WorktreeBootstrapDecision,
   WorktreeBootstrapPreflightResult,
@@ -453,6 +459,21 @@ export async function commitRepositoryChanges(
 
 export async function mergeRepositoryBranch(repoId: string, worktreePath: string, branch: string): Promise<ExecResult> {
   return postServerJson('/api/repo/merge', { repoId, worktreePath, branch })
+}
+
+export async function getRepositoryBranchMergeOutPlan(
+  request: RepositoryBranchMergeOutPlanRequest,
+  signal?: AbortSignal,
+): Promise<RepositoryBranchMergeOutPlanResult> {
+  return await postServerJson('/api/repo/merge-out-plan', request, { signal })
+}
+
+export async function mergeRepositoryBranchOut(
+  input: RepositoryBranchMergeOutExecuteInput,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<RepositoryBranchMergeOutResult> {
+  return await postServerJson('/api/repo/merge-out', { ...input, sourceToken }, { signal })
 }
 
 export async function resetRepositoryHard(repoId: string, worktreePath: string): Promise<ExecResult> {

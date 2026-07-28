@@ -173,7 +173,7 @@ The modal surface for changing application preferences while keeping the current
 _Avoid_: Settings screen, full-page settings
 
 **AI handoff command**:
-A provider-specific CLI command placed into an internal terminal for review, without being executed, so the user can start an AI task in the selected worktree context.
+A provider-specific CLI command placed into an internal terminal for review, without being executed, so the user can start an AI task in the targeted worktree context. The handoff selects an existing open terminal for that worktree or creates one when no open terminal exists before filling the command text.
 _Avoid_: AI command, automatic AI action
 
 **Worktree bootstrap**:
@@ -216,6 +216,26 @@ _Avoid_: File area focus mode, moved file tab, generic secondary window
 The branch or worktree explicitly targeted by an action. It may differ from the selected branch context, and targeting it does not imply navigating to it unless the action opens branch-specific application content.
 _Avoid_: Active branch, implicitly selected branch
 
+**Branch merge-in**:
+A repository branch action that integrates a user-selected local source branch into the branch action target's checked-out branch. The branch action target is the merge destination.
+_Avoid_: Generic merge, merge current branch, source-branch merge
+
+**Branch merge-out**:
+A repository branch action that integrates the branch action target's checked-out branch into a user-selected local destination branch. A clean existing destination worktree is used when available, an unchecked-out destination may use an application temporary worktree, and a dirty destination worktree is ineligible.
+_Avoid_: Generic merge, merge-back, merge current branch
+
+**Branch merge-out source**:
+The clean branch action target worktree whose checked-out branch supplies committed history to a merge-out. Uncommitted worktree content is never treated as part of that source and makes the action ineligible until committed or stashed.
+_Avoid_: Working tree contents, selected branch context, inferred source branch
+
+**Branch merge-out conflict site**:
+The existing destination worktree in which a merge-out conflict remains for resolution. A conflict in an application temporary worktree is reported and discarded during cleanup, so neither the source worktree nor a hidden temporary directory becomes a retained conflict site.
+_Avoid_: Source worktree conflict, hidden temporary conflict
+
+**Branch merge-out remote pipeline**:
+An optional destination-owned sequence that pulls the selected destination branch, merges the branch action target into it, and pushes that destination branch. Its eligibility depends only on the destination branch's usable upstream; the source branch's upstream is irrelevant.
+_Avoid_: Source pull, source push, merge-in remote pipeline
+
 **Project list**:
 The inline list of open projects shown beneath the sidebar project switcher.
 _Avoid_: Repo dropdown, project expanded list
@@ -249,7 +269,7 @@ The linked worktree contributed by one repository member to a branch workspace w
 _Avoid_: Subrepository, child repository worktree, nested workspace
 
 **Branch workspace base branch**:
-The repository-specific local branch used as the creation base when a branch workspace member's target branch must be created. When it is already checked out, it may also guide worktree bootstrap source selection, with the primary worktree as fallback. It records creation and materialization intent only; it is not a batch-merge destination, upstream, or inferred provenance.
+The repository-specific local branch used as the creation base when a branch workspace member's target branch must be created. When it is already checked out, it may also guide worktree bootstrap source selection, with the primary worktree as fallback. It records creation and materialization intent only; it is not a batch merge-in source, batch merge-out destination, upstream, or inferred provenance.
 _Avoid_: Merge destination, source branch, upstream, current branch
 
 **Workspace overview**:
@@ -257,7 +277,7 @@ The parent-level workspace view that lists its branch workspaces in the same con
 _Avoid_: All branch workspace, workspace repository
 
 **Branch workspace item**:
-The workspace overview representation of one branch workspace, labelled by the common branch name rather than its directory name and identified with the branch-workspace icon. Its expanded repository members use the ordinary worktree icon. Items have a durable manual order within the parent workspace; new items append without repair, extension, or reduction changing existing order. Single-clicking the main item selects its root context without changing member-summary expansion; when a member is selected, that selection first returns to the root context. Double-clicking the main item selects the root through the normal click sequence and toggles the desktop file area without changing member-summary expansion, while the separate Chevron toggles those summaries without changing selection. A separate control reorders the item. Its editor and external-terminal actions open the branch workspace root, while each internal-terminal action creates and selects a new root-scoped session. The item menu owns whole-branch-workspace batch Git actions and membership changes without narrowing to a selected member; batch merge opens a foreground member-selection dialog, while the other batch Git actions open inline beneath the item. Ready items expose all folder and membership actions; drifted items with an available root retain folder, terminal, reordering, and healthy-member actions while whole-workspace Git, membership, and dependency actions remain restricted; creation-incomplete items remain inspectable and repairable, active operations expose only cancellation, and deletion- or reduction-incomplete items expose their corresponding continuation path. The first observation of a drifted item in one visible drift episode triggers one authoritative state reread; continued drift remains explicit and is never automatically repaired. Its item-level badges represent internal terminal sessions scoped to that root directory and the summed Git change count of its repository member worktrees.
+The workspace overview representation of one branch workspace, labelled by the common branch name rather than its directory name and identified with the branch-workspace icon. Its expanded repository members use the ordinary worktree icon. Items have a durable manual order within the parent workspace; new items append without repair, extension, or reduction changing existing order. Single-clicking the main item selects its root context without changing member-summary expansion; when a member is selected, that selection first returns to the root context. Double-clicking the main item selects the root through the normal click sequence and toggles the desktop file area without changing member-summary expansion, while the separate Chevron toggles those summaries without changing selection. A separate control reorders the item. Its editor and external-terminal actions open the branch workspace root, while each internal-terminal action creates and selects a new root-scoped session. The item menu owns whole-branch-workspace batch Git actions and membership changes without narrowing to a selected member; batch merge-in and batch merge-out each open a foreground member-selection dialog, while the other batch Git actions open inline beneath the item. Ready items expose all folder and membership actions; drifted items with an available root retain folder, terminal, reordering, and healthy-member actions while whole-workspace Git, membership, and dependency actions remain restricted; creation-incomplete items remain inspectable and repairable, active operations expose only cancellation, and deletion- or reduction-incomplete items expose their corresponding continuation path. The first observation of a drifted item in one visible drift episode triggers one authoritative state reread; continued drift remains explicit and is never automatically repaired. Its item-level badges represent internal terminal sessions scoped to that root directory and the summed Git change count of its repository member worktrees.
 _Avoid_: Project item, repository row, worktree row
 
 **Branch workspace member summary**:
@@ -301,9 +321,13 @@ _Avoid_: Workspace pull-all, base-branch pull, atomic batch pull
 An application-coordinated action that pushes every repository member's target branch to its resolved push target sequentially, stops at the first failure, and never rolls back completed pushes.
 _Avoid_: Merge-back push, base-branch push, atomic batch push
 
-**Branch workspace batch merge**:
-An application-coordinated action that integrates a user-selected, non-empty subset of repository members' target branches into one explicitly selected local destination branch per member. A destination is never inferred from the member base branch, creation source, default branch, or upstream, and the selection is not persisted. A clean existing destination worktree is reused; an unchecked-out destination uses an application-owned temporary worktree that is cleaned after success, failure, or cancellation without deleting the branch. Selected member pipelines retain manifest order, run sequentially, stop at the first failed step, and never roll back completed Git or remote writes; a retry retains the original member-to-destination mapping and pipeline mode while skipping completed work.
-_Avoid_: Merge-back, fixed base-branch merge, source-branch merge, atomic batch merge
+**Branch workspace batch merge-in**:
+An application-coordinated action that integrates one explicitly selected local source branch per selected repository member into that member's checked-out target branch. The clean member worktree is the merge destination and conflict site; selected member pipelines retain manifest order, stop at the first failure, and never roll back completed Git or remote writes.
+_Avoid_: Batch merge-out, source worktree merge, atomic batch merge
+
+**Branch workspace batch merge-out**:
+An application-coordinated action that integrates each selected repository member's target branch into one explicitly selected local destination branch per member. A clean existing destination worktree is reused; an unchecked-out destination uses an application-owned temporary worktree that is always cleaned without deleting the branch, and selected member pipelines retain manifest order, stop at the first failure, and never roll back completed Git or remote writes.
+_Avoid_: Batch merge-in, merge-back, fixed base-branch merge, atomic batch merge
 
 **Plain workspace**:
 A readable directory opened as a workspace without requiring Git metadata.

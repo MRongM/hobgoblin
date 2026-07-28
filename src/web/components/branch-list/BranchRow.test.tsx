@@ -499,7 +499,7 @@ describe('BranchRow', () => {
     expect(document.body.textContent).not.toContain('工作树')
   })
 
-  test('shows a neutral branch workspace badge for a flagged member worktree', () => {
+  test('shows an icon-only branch workspace badge for a flagged member worktree', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     const branch = createRepoBranch('feature/member', {
       worktree: { path: '/tmp/member-worktree' },
@@ -520,8 +520,11 @@ describe('BranchRow', () => {
     )
 
     const badge = document.querySelector('[data-testid="branch-workspace-member-badge"]')
-    expect(badge?.textContent).toBe('子工作区')
+    expect(badge?.textContent).toBe('')
     expect(badge?.getAttribute('data-variant')).toBe('outline')
+    expect(badge?.getAttribute('aria-label')).toBe('子工作区')
+    expect(badge?.getAttribute('title')).toBe('子工作区')
+    expect(badge?.querySelector('.lucide-folder-kanban')).not.toBeNull()
     expect(document.querySelector('[title*="子工作区"]')).not.toBeNull()
   })
 

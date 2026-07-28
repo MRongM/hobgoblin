@@ -136,7 +136,8 @@ const branchGitActionState = vi.hoisted(() => ({
   error: null as string | null,
   requestPlan: vi.fn(async () => true),
   executeBatchCommit: vi.fn(async () => null),
-  executeBatchMerge: vi.fn(async () => null),
+  executeBatchMergeIn: vi.fn(async () => null),
+  executeBatchMergeOut: vi.fn(async () => null),
   executeSync: vi.fn(async () => null),
   cancel: vi.fn(async () => {}),
   reset: vi.fn(),
@@ -415,7 +416,8 @@ beforeEach(() => {
   branchGitActionState.requestPlan.mockReset()
   branchGitActionState.requestPlan.mockResolvedValue(true)
   branchGitActionState.executeBatchCommit.mockReset()
-  branchGitActionState.executeBatchMerge.mockReset()
+  branchGitActionState.executeBatchMergeIn.mockReset()
+  branchGitActionState.executeBatchMergeOut.mockReset()
   branchGitActionState.executeSync.mockReset()
   branchGitActionState.cancel.mockReset()
   branchGitActionState.cancel.mockResolvedValue(undefined)

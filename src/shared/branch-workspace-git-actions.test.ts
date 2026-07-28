@@ -40,20 +40,51 @@ describe('branch workspace Git action inputs', () => {
     })
   })
 
-  test('normalizes both batch-merge execution modes with explicit destination branches', () => {
+  test('normalizes both batch merge directions and execution modes with explicit branches', () => {
     for (const mode of ['merge', 'pull-merge-push'] as const) {
       expect(
         normalizeBranchWorkspaceGitActionPlanRequest({
-          kind: 'batch-merge',
+          kind: 'batch-merge-in',
           branchWorkspaceId: ' branch-1 ',
         }),
       ).toEqual({
         ok: true,
-        request: { kind: 'batch-merge', branchWorkspaceId: 'branch-1' },
+        request: { kind: 'batch-merge-in', branchWorkspaceId: 'branch-1' },
       })
       expect(
         normalizeBranchWorkspaceGitActionExecuteInput({
-          kind: 'batch-merge',
+          kind: 'batch-merge-in',
+          planToken: 'sha256:plan',
+          mode,
+          sources: [
+            { repositoryName: ' web ', sourceBranch: ' release/web ' },
+            { repositoryName: 'api', sourceBranch: 'main' },
+          ],
+        }),
+      ).toEqual({
+        ok: true,
+        input: {
+          kind: 'batch-merge-in',
+          planToken: 'sha256:plan',
+          mode,
+          sources: [
+            { repositoryName: 'web', sourceBranch: 'release/web' },
+            { repositoryName: 'api', sourceBranch: 'main' },
+          ],
+        },
+      })
+      expect(
+        normalizeBranchWorkspaceGitActionPlanRequest({
+          kind: 'batch-merge-out',
+          branchWorkspaceId: ' branch-1 ',
+        }),
+      ).toEqual({
+        ok: true,
+        request: { kind: 'batch-merge-out', branchWorkspaceId: 'branch-1' },
+      })
+      expect(
+        normalizeBranchWorkspaceGitActionExecuteInput({
+          kind: 'batch-merge-out',
           planToken: 'sha256:plan',
           mode,
           targets: [
@@ -64,7 +95,7 @@ describe('branch workspace Git action inputs', () => {
       ).toEqual({
         ok: true,
         input: {
-          kind: 'batch-merge',
+          kind: 'batch-merge-out',
           planToken: 'sha256:plan',
           mode,
           targets: [
@@ -128,10 +159,30 @@ describe('branch workspace Git action inputs', () => {
       planToken: 'sha256:plan',
       messages: [{ repositoryName: 'api', message: ' ' }],
     },
-    { kind: 'batch-merge', planToken: 'sha256:plan', mode: 'squash', targets: [] },
     { kind: 'batch-merge', planToken: 'sha256:plan', mode: 'merge', targets: [] },
+    { kind: 'batch-merge-in', planToken: 'sha256:plan', mode: 'squash', sources: [] },
+    { kind: 'batch-merge-in', planToken: 'sha256:plan', mode: 'merge', sources: [] },
+    { kind: 'batch-merge-in', planToken: 'sha256:plan', mode: 'merge', targets: [] },
+    { kind: 'batch-merge-out', planToken: 'sha256:plan', mode: 'squash', targets: [] },
+    { kind: 'batch-merge-out', planToken: 'sha256:plan', mode: 'merge', targets: [] },
+    { kind: 'batch-merge-out', planToken: 'sha256:plan', mode: 'merge', sources: [] },
     {
-      kind: 'batch-merge',
+      kind: 'batch-merge-in',
+      planToken: 'sha256:plan',
+      mode: 'merge',
+      sources: [
+        { repositoryName: 'api', sourceBranch: 'main' },
+        { repositoryName: 'api', sourceBranch: 'release' },
+      ],
+    },
+    {
+      kind: 'batch-merge-in',
+      planToken: 'sha256:plan',
+      mode: 'merge',
+      sources: [{ repositoryName: 'api', sourceBranch: 'main\nrelease' }],
+    },
+    {
+      kind: 'batch-merge-out',
       planToken: 'sha256:plan',
       mode: 'merge',
       targets: [
@@ -140,25 +191,25 @@ describe('branch workspace Git action inputs', () => {
       ],
     },
     {
-      kind: 'batch-merge',
+      kind: 'batch-merge-out',
       planToken: 'sha256:plan',
       mode: 'merge',
       targets: [{ repositoryName: '../api', destinationBranch: 'main' }],
     },
     {
-      kind: 'batch-merge',
+      kind: 'batch-merge-out',
       planToken: 'sha256:plan',
       mode: 'merge',
       targets: [{ repositoryName: 'api\nweb', destinationBranch: 'main' }],
     },
     {
-      kind: 'batch-merge',
+      kind: 'batch-merge-out',
       planToken: 'sha256:plan',
       mode: 'merge',
       targets: [{ repositoryName: 'api', destinationBranch: ' ' }],
     },
     {
-      kind: 'batch-merge',
+      kind: 'batch-merge-out',
       planToken: 'sha256:plan',
       mode: 'merge',
       targets: [{ repositoryName: 'api', destinationBranch: 'main\u0000release' }],

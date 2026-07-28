@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   getCommitMessageProviders: vi.fn(),
   generateRepositoryCommitMessage: vi.fn(),
   mergeRepositoryBranch: vi.fn(),
+  getRepositoryBranchMergeOutPlan: vi.fn(),
+  mergeRepositoryBranchOut: vi.fn(),
   pullRepositoryBranch: vi.fn(),
   resetRepositoryHard: vi.fn(),
 }))
@@ -23,6 +25,8 @@ vi.mock('#/web/repo-client.ts', () => ({
   getCommitMessageProviders: mocks.getCommitMessageProviders,
   generateRepositoryCommitMessage: mocks.generateRepositoryCommitMessage,
   mergeRepositoryBranch: mocks.mergeRepositoryBranch,
+  getRepositoryBranchMergeOutPlan: mocks.getRepositoryBranchMergeOutPlan,
+  mergeRepositoryBranchOut: mocks.mergeRepositoryBranchOut,
   pullRepositoryBranch: mocks.pullRepositoryBranch,
   resetRepositoryHard: mocks.resetRepositoryHard,
 }))
@@ -56,6 +60,27 @@ describe('useBranchWriteActions', () => {
     reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
     resetReposStore()
     vi.clearAllMocks()
+    mocks.getRepositoryBranchMergeOutPlan.mockResolvedValue({
+      ok: true,
+      plan: {
+        token: 'sha256:plan',
+        repoId: REPO_ID,
+        sourceBranch: 'feature/current',
+        sourceWorktreePath: '/tmp/repo-feature',
+        sourceHead: 'source-head',
+        ready: true,
+        destinations: [
+          {
+            branch: 'main',
+            head: 'main-head',
+            ready: true,
+            requiresTemporaryWorktree: true,
+            pullMergePushReady: true,
+          },
+        ],
+      },
+    })
+    mocks.mergeRepositoryBranchOut.mockResolvedValue({ ok: true, message: 'merged out' })
     container = document.createElement('div')
     document.body.appendChild(container)
   })
@@ -149,13 +174,68 @@ describe('useBranchWriteActions', () => {
       actions?.mainItems.find((item) => item.id === 'merge')?.onSelect()
     })
     selectFirstMergeCandidate()
-    clickButtonByText('action.merge-and-push-confirm')
+    clickButtonByText('action.merge-in-and-push-confirm')
     await flush()
 
     expect(mocks.pullRepositoryBranch).toHaveBeenCalledWith(REPO_ID, 'feature/current', '/tmp/repo-feature')
     expect(mocks.mergeRepositoryBranch).toHaveBeenCalledWith(REPO_ID, '/tmp/repo-feature', 'main')
     expect(onPush).toHaveBeenCalled()
     expect(calls).toEqual(['pull', 'merge', 'push'])
+  })
+
+  test('keeps merge-in identity and exposes adjacent merge-out only for a clean source', async () => {
+    const repo = seedRepoState({
+      id: REPO_ID,
+      branches: [
+        createRepoBranch('feature/current', { worktree: { path: '/tmp/repo-feature' } }),
+        createRepoBranch('main'),
+      ],
+      currentBranch: 'feature/current',
+      status: [{ path: '/tmp/repo-feature', isMain: false, entries: [] }],
+    })
+    const captured: { current: ReturnType<typeof useBranchWriteActions> | null } = { current: null }
+
+    root = createRoot(container)
+    await act(async () => {
+      root!.render(
+        <BranchWriteActionsHarness repo={repo} onPush={vi.fn()} onReady={(value) => (captured.current = value)} />,
+      )
+    })
+
+    if (!captured.current) throw new Error('actions not ready')
+    const ids = captured.current.mainItems.map((item) => item.id)
+    expect(ids.indexOf('mergeOut')).toBe(ids.indexOf('merge') + 1)
+    expect(captured.current.mainItems.find((item) => item.id === 'merge')).toMatchObject({
+      label: 'action.merge-in',
+      disabled: false,
+    })
+    expect(captured.current.mainItems.find((item) => item.id === 'mergeOut')).toMatchObject({
+      label: 'action.merge-out',
+      disabled: false,
+    })
+  })
+
+  test('keeps merge-out visible but disabled when the exact source status is dirty or missing', async () => {
+    const repo = seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/current', { worktree: { path: '/tmp/repo-feature' } })],
+      currentBranch: 'feature/current',
+      status: [{ path: '/tmp/repo-feature', isMain: false, entries: [{ path: 'src/a.ts', x: 'M', y: ' ' }] }],
+    })
+    const captured: { current: ReturnType<typeof useBranchWriteActions> | null } = { current: null }
+    root = createRoot(container)
+    await act(async () => {
+      root!.render(
+        <BranchWriteActionsHarness repo={repo} onPush={vi.fn()} onReady={(value) => (captured.current = value)} />,
+      )
+    })
+
+    if (!captured.current) throw new Error('actions not ready')
+    expect(captured.current.mainItems.find((item) => item.id === 'mergeOut')).toMatchObject({
+      visible: true,
+      disabled: true,
+      title: 'action.merge-out-source-dirty',
+    })
   })
 })
 

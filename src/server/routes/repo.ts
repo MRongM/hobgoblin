@@ -59,6 +59,8 @@ import {
   trackRepositoryRemoteBranch,
 } from '#/server/modules/repo-write-paths.ts'
 import { getServerFetchIntervalSec } from '#/server/modules/settings-source.ts'
+import { buildRepositoryBranchMergeOutPlan } from '#/server/modules/repository-branch-merge-plan.ts'
+import { executeRepositoryBranchMergeOut } from '#/server/modules/repository-branch-merge-write-paths.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
 import { isWorktreeBootstrapConfigHash } from '#/shared/repo-settings.ts'
 import {
@@ -799,6 +801,27 @@ export function createRepoRoutes() {
         () => mergeRepositoryBranch(repoId, worktreePath, branch, c.req.raw.signal, sourceToken),
         { ok: false, message: 'error.failed-read-repo' },
         'merge',
+      ),
+    )
+  })
+  app.post('/merge-out-plan', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    return c.json(
+      await jsonOr(
+        () => buildRepositoryBranchMergeOutPlan(body ?? {}, {}, c.req.raw.signal),
+        { ok: false, message: 'error.failed-read-repo' },
+        'merge-out-plan',
+      ),
+    )
+  })
+  app.post('/merge-out', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => executeRepositoryBranchMergeOut(body ?? {}, {}, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'merge-out',
       ),
     )
   })

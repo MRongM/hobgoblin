@@ -27,6 +27,16 @@ describe('extractWorktreePathFromAction', () => {
     expect(extractWorktreePathFromAction(action)).toBe('/repo')
   })
 
+  test('returns the initiating source worktree for merge-out action', () => {
+    const action: RepoEventAction = {
+      kind: 'mergeOut',
+      branch: 'feature/source',
+      destinationBranch: 'main',
+      worktreePath: '/repo-feature',
+    }
+    expect(extractWorktreePathFromAction(action)).toBe('/repo-feature')
+  })
+
   test('returns undefined for createBranch action', () => {
     const action: RepoEventAction = { kind: 'createBranch', branch: 'feat', baseBranch: 'main' }
     expect(extractWorktreePathFromAction(action)).toBeUndefined()

@@ -72,7 +72,44 @@ describe('i18n dictionaries', () => {
     expect(zh['action.create-branch-title']).toBe('从本地新建分支')
     expect(zh['action.pull-remote-branch']).toBe('从远程新建分支')
     expect(zh['action.pull-remote-branch-title']).toBe('从远程分支创建本地分支')
-    expect(zh['action.merge-and-push-confirm']).toBe('拉合推')
+    expect(zh['action.merge-in-and-push-confirm']).toBe('拉取、合并入并推送')
+  })
+
+  test('uses direction-specific repository merge copy in every locale', () => {
+    const keys = [
+      'action.merge-in',
+      'action.merge-in-title',
+      'action.merge-in-label',
+      'action.merge-in-placeholder',
+      'action.merge-in-confirm',
+      'action.merge-in-and-push-confirm',
+      'action.merge-out',
+      'action.merge-out-title',
+      'action.merge-out-source-label',
+      'action.merge-out-destination-label',
+      'action.merge-out-destination-placeholder',
+      'action.merge-out-destination-dirty',
+      'action.merge-out-destination-unavailable',
+      'action.merge-out-destination-upstream-required',
+      'action.merge-out-loading',
+      'action.merge-out-confirm',
+      'action.merge-out-pull-merge-push-confirm',
+      'error.merge-out-source-dirty',
+      'error.merge-out-source-worktree-unavailable',
+      'error.merge-out-destination-dirty',
+      'error.merge-out-destination-worktree-unavailable',
+      'error.merge-out-destination-upstream-required',
+      'error.merge-out-plan-changed',
+      'error.merge-out-temporary-worktree-unavailable',
+    ] as const satisfies readonly DictKey[]
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['action.merge-in']).toBe('合并入')
+    expect(zh['action.merge-out']).toBe('合并出')
+    expect(en['action.merge-in']).toContain('into this branch')
+    expect(en['action.merge-out']).toContain('this branch into')
   })
 
   test('uses detection copy for local branch and status refreshes', () => {
@@ -195,14 +232,19 @@ describe('i18n dictionaries', () => {
     expect(ko['workspace.branch-workspace.member-badge']).toBe('브랜치 워크스페이스')
   })
 
-  test('localizes selectable branch workspace batch merge in every locale', () => {
+  test('localizes selectable branch workspace batch merge directions in every locale', () => {
     const keys = [
-      'workspace.branch-workspace.git-action.batch-merge',
-      'workspace.branch-workspace.git-action.batch-merge-description',
+      'workspace.branch-workspace.git-action.batch-merge-in',
+      'workspace.branch-workspace.git-action.batch-merge-in-description',
+      'workspace.branch-workspace.git-action.batch-merge-out',
+      'workspace.branch-workspace.git-action.batch-merge-out-description',
       'workspace.branch-workspace.git-action.selected-count',
       'workspace.branch-workspace.git-action.select-member',
       'workspace.branch-workspace.git-action.not-selected',
       'workspace.branch-workspace.git-action.progress',
+      'workspace.branch-workspace.git-action.source-branch',
+      'workspace.branch-workspace.git-action.select-source',
+      'workspace.branch-workspace.git-action.source-branch-required',
       'workspace.branch-workspace.git-action.destination-branch',
       'workspace.branch-workspace.git-action.select-destination',
       'workspace.branch-workspace.git-action.destination-branch-required',
@@ -210,6 +252,10 @@ describe('i18n dictionaries', () => {
       'workspace.branch-workspace.git-action.destination-worktree-dirty',
       'workspace.branch-workspace.git-action.destination-worktree-unavailable',
       'workspace.branch-workspace.git-action.destination-upstream-required',
+      'workspace.branch-workspace.git-action.merge-in',
+      'workspace.branch-workspace.git-action.pull-merge-in-push',
+      'workspace.branch-workspace.git-action.merge-out',
+      'workspace.branch-workspace.git-action.pull-merge-out-push',
       'workspace.branch-workspace.git-action.step.prepare',
       'workspace.branch-workspace.git-action.step.cleanup',
     ] as const
@@ -217,11 +263,14 @@ describe('i18n dictionaries', () => {
     for (const [lang, dict] of Object.entries(dicts)) {
       for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
     }
-    expect(en['workspace.branch-workspace.git-action.batch-merge']).toBe('Batch merge')
-    expect(zh['workspace.branch-workspace.git-action.batch-merge']).toBe('批量合并')
-    expect(zh['workspace.branch-workspace.git-action.batch-merge-description']).toContain('成员工作树')
-    expect(zh['workspace.branch-workspace.git-action.batch-merge-description']).toContain('目标分支')
-    expect(zh['workspace.branch-workspace.git-action.batch-merge-description']).not.toContain('基准分支')
+    expect(en['workspace.branch-workspace.git-action.batch-merge-in']).toBe('Batch merge in')
+    expect(en['workspace.branch-workspace.git-action.batch-merge-out']).toBe('Batch merge out')
+    expect(zh['workspace.branch-workspace.git-action.batch-merge-in']).toBe('批量合入')
+    expect(zh['workspace.branch-workspace.git-action.batch-merge-out']).toBe('批量合出')
+    expect(zh['workspace.branch-workspace.git-action.batch-merge-in-description']).toContain('成员工作树')
+    expect(zh['workspace.branch-workspace.git-action.batch-merge-in-description']).toContain('来源分支')
+    expect(zh['workspace.branch-workspace.git-action.batch-merge-out-description']).toContain('目标分支')
+    expect(zh['workspace.branch-workspace.git-action.batch-merge-out-description']).not.toContain('基准分支')
   })
 
   test('describes branch workspace registry cleanup without claiming filesystem deletion', () => {

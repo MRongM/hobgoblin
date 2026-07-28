@@ -23,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   deleteRepositoryLocalTag: vi.fn(),
   getRepositoryRemoteTags: vi.fn(),
   deleteRepositoryRemoteTag: vi.fn(),
+  buildRepositoryBranchMergeOutPlan: vi.fn(),
+  executeRepositoryBranchMergeOut: vi.fn(),
 }))
 
 vi.mock('#/server/modules/repo-read-paths.ts', () => ({
@@ -86,6 +88,14 @@ vi.mock('#/server/modules/repo-file-transfer.ts', () => ({
 
 vi.mock('#/server/modules/repo-file-export.ts', () => ({
   exportRepositoryFilesToLocalDirectory: mocks.exportRepositoryFilesToLocalDirectory,
+}))
+
+vi.mock('#/server/modules/repository-branch-merge-plan.ts', () => ({
+  buildRepositoryBranchMergeOutPlan: mocks.buildRepositoryBranchMergeOutPlan,
+}))
+
+vi.mock('#/server/modules/repository-branch-merge-write-paths.ts', () => ({
+  executeRepositoryBranchMergeOut: mocks.executeRepositoryBranchMergeOut,
 }))
 
 vi.mock('#/server/modules/background-sync.ts', () => ({
@@ -166,6 +176,68 @@ describe('repo routes', () => {
     mocks.deleteRepositoryRemoteTag.mockResolvedValue({ ok: true, message: 'deleted' })
     mocks.removeRepositoryWorktree.mockResolvedValue({ ok: true, message: 'removed' })
     mocks.cleanupRepositoryWorktree.mockResolvedValue({ ok: true, message: 'pruned' })
+    mocks.buildRepositoryBranchMergeOutPlan.mockResolvedValue({
+      ok: true,
+      plan: {
+        token: 'sha256:plan',
+        repoId: '/repo',
+        sourceBranch: 'feature/source',
+        sourceWorktreePath: '/repo-feature',
+        sourceHead: 'source-head',
+        ready: true,
+        destinations: [],
+      },
+    })
+    mocks.executeRepositoryBranchMergeOut.mockResolvedValue({ ok: true, message: 'merged' })
+  })
+
+  test('passes the raw merge-out plan request and abort signal to the authoritative planner', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+    const body = {
+      repoId: '/repo',
+      sourceBranch: 'feature/source',
+      sourceWorktreePath: '/repo-feature',
+    }
+
+    const response = await app.request('http://localhost/merge-out-plan', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ ok: true })
+    expect(mocks.buildRepositoryBranchMergeOutPlan).toHaveBeenCalledWith(body, {}, expect.any(AbortSignal))
+  })
+
+  test('passes merge-out execution and source token to the authoritative write path', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+    const body = {
+      repoId: '/repo',
+      planToken: 'sha256:plan',
+      sourceBranch: 'feature/source',
+      sourceWorktreePath: '/repo-feature',
+      destinationBranch: 'main',
+      mode: 'merge',
+      sourceToken: 'client_123',
+    }
+
+    const response = await app.request('http://localhost/merge-out', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true, message: 'merged' })
+    expect(mocks.executeRepositoryBranchMergeOut).toHaveBeenCalledWith(
+      body,
+      {},
+      expect.any(AbortSignal),
+      'client_123',
+    )
   })
 
   test('passes local project identity separately from the requested terminal directory', async () => {

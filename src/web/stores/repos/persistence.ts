@@ -44,6 +44,12 @@ const RepoEventActionSchema = v.union([
   v.object({ kind: v.literal('push'), branch: v.string(), worktreePath: v.optional(v.string()) }),
   v.object({ kind: v.literal('commit'), branch: v.string(), message: v.string(), worktreePath: v.string() }),
   v.object({ kind: v.literal('merge'), branch: v.string(), sourceBranch: v.string(), worktreePath: v.string() }),
+  v.object({
+    kind: v.literal('mergeOut'),
+    branch: v.string(),
+    destinationBranch: v.string(),
+    worktreePath: v.string(),
+  }),
   v.object({ kind: v.literal('createWorktree'), branch: v.string(), worktreePath: v.string() }),
   v.object({ kind: v.literal('createBranch'), branch: v.string(), baseBranch: v.string() }),
   v.object({ kind: v.literal('trackRemoteBranch'), branch: v.string(), remoteRef: v.string() }),

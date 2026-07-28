@@ -1,17 +1,22 @@
 import { describe, expect, test } from 'vitest'
 import type {
-  BranchWorkspaceBatchMergePlan,
-  BranchWorkspaceBatchMergeTargetInput,
+  BranchWorkspaceBatchMergeInPlan,
+  BranchWorkspaceBatchMergeInSourceInput,
+  BranchWorkspaceBatchMergeOutPlan,
+  BranchWorkspaceBatchMergeOutTargetInput,
   BranchWorkspaceGitActionResult,
 } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceActiveOperation } from '#/shared/branch-workspaces.ts'
-import { projectBranchWorkspaceBatchMergeProgress } from '#/web/components/repo-workspace/branch-workspace-batch-merge-progress.ts'
+import {
+  projectBranchWorkspaceBatchMergeInProgress,
+  projectBranchWorkspaceBatchMergeOutProgress,
+} from '#/web/components/repo-workspace/branch-workspace-batch-merge-progress.ts'
 
 describe('branch workspace batch merge progress', () => {
   test('excludes unselected members from local merge totals', () => {
-    const progress = projectBranchWorkspaceBatchMergeProgress(
-      mergePlan(),
-      targets([['web', 'release/v2']]),
+    const progress = projectBranchWorkspaceBatchMergeOutProgress(
+      mergeOutPlan(),
+      mergeOutTargets([['web', 'release/v2']]),
       'merge',
       null,
       null,
@@ -34,9 +39,9 @@ describe('branch workspace batch merge progress', () => {
   })
 
   test('projects completed members and the active merge pipeline from server progress', () => {
-    const progress = projectBranchWorkspaceBatchMergeProgress(
-      mergePlan(),
-      targets([
+    const progress = projectBranchWorkspaceBatchMergeOutProgress(
+      mergeOutPlan(),
+      mergeOutTargets([
         ['api', 'main'],
         ['web', 'staging'],
       ]),
@@ -78,9 +83,9 @@ describe('branch workspace batch merge progress', () => {
   })
 
   test('marks pull and merge complete while push is active', () => {
-    const progress = projectBranchWorkspaceBatchMergeProgress(
-      mergePlan(),
-      targets([['api', 'main']]),
+    const progress = projectBranchWorkspaceBatchMergeOutProgress(
+      mergeOutPlan(),
+      mergeOutTargets([['api', 'main']]),
       'pull-merge-push',
       activeOperation({ repositoryName: 'api', step: 'push' }),
       null,
@@ -99,10 +104,10 @@ describe('branch workspace batch merge progress', () => {
   })
 
   test('uses the final result to retain a failed step and pending later members', () => {
-    const plan = mergePlan()
+    const plan = mergeOutPlan()
     const result: BranchWorkspaceGitActionResult = {
       ok: false,
-      kind: 'batch-merge',
+      kind: 'batch-merge-out',
       planToken: plan.token,
       branchWorkspaceId: plan.branchWorkspaceId,
       message: 'merge failed',
@@ -112,9 +117,9 @@ describe('branch workspace batch merge progress', () => {
         { repositoryName: 'docs', phase: 'not-started' },
       ],
     }
-    const progress = projectBranchWorkspaceBatchMergeProgress(
+    const progress = projectBranchWorkspaceBatchMergeOutProgress(
       plan,
-      targets([
+      mergeOutTargets([
         ['api', 'staging'],
         ['web', 'main'],
       ]),
@@ -148,11 +153,140 @@ describe('branch workspace batch merge progress', () => {
       ['docs', 'unselected', []],
     ])
   })
+
+  test('projects merge-in without prepare or cleanup steps', () => {
+    const progress = projectBranchWorkspaceBatchMergeInProgress(
+      mergeInPlan(),
+      mergeInSources([['web', 'release/v2']]),
+      'merge',
+      null,
+      null,
+    )
+
+    expect(progress.completedCount).toBe(0)
+    expect(progress.totalCount).toBe(1)
+    expect(memberStates(progress)).toEqual([
+      ['api', 'unselected', []],
+      ['web', 'pending', [['merge', 'pending']]],
+      ['docs', 'unselected', []],
+    ])
+  })
+
+  test('projects completed and active target-owned merge-in remote steps', () => {
+    const progress = projectBranchWorkspaceBatchMergeInProgress(
+      mergeInPlan(),
+      mergeInSources([
+        ['api', 'main'],
+        ['web', 'release/v2'],
+      ]),
+      'pull-merge-push',
+      activeOperation({
+        kind: 'batch-merge-in',
+        currentStep: 2,
+        completedCount: 1,
+        repositoryName: 'web',
+        step: 'merge',
+      }),
+      null,
+    )
+
+    expect(memberStates(progress)).toEqual([
+      [
+        'api',
+        'complete',
+        [
+          ['pull', 'complete'],
+          ['merge', 'complete'],
+          ['push', 'complete'],
+        ],
+      ],
+      [
+        'web',
+        'active',
+        [
+          ['pull', 'complete'],
+          ['merge', 'active'],
+          ['push', 'pending'],
+        ],
+      ],
+      ['docs', 'unselected', []],
+    ])
+  })
+
+  test('retains a failed merge-in step and leaves later members pending', () => {
+    const plan = mergeInPlan()
+    const result: BranchWorkspaceGitActionResult = {
+      ok: false,
+      kind: 'batch-merge-in',
+      planToken: plan.token,
+      branchWorkspaceId: plan.branchWorkspaceId,
+      members: [
+        { repositoryName: 'api', phase: 'failed', step: 'merge', message: 'conflict' },
+        { repositoryName: 'web', phase: 'not-started' },
+        { repositoryName: 'docs', phase: 'not-started' },
+      ],
+    }
+    const progress = projectBranchWorkspaceBatchMergeInProgress(
+      plan,
+      mergeInSources([
+        ['api', 'main'],
+        ['web', 'release/v2'],
+      ]),
+      'pull-merge-push',
+      null,
+      result,
+    )
+
+    expect(memberStates(progress)).toEqual([
+      [
+        'api',
+        'failed',
+        [
+          ['pull', 'complete'],
+          ['merge', 'failed'],
+          ['push', 'pending'],
+        ],
+      ],
+      [
+        'web',
+        'pending',
+        [
+          ['pull', 'pending'],
+          ['merge', 'pending'],
+          ['push', 'pending'],
+        ],
+      ],
+      ['docs', 'unselected', []],
+    ])
+  })
 })
 
-function mergePlan(): BranchWorkspaceBatchMergePlan {
+function mergeInPlan(): BranchWorkspaceBatchMergeInPlan {
   return {
-    kind: 'batch-merge',
+    kind: 'batch-merge-in',
+    token: 'sha256:merge-in',
+    rootId: '/workspace',
+    branchWorkspaceId: 'ws-1',
+    members: ['api', 'web', 'docs'].map((repositoryName) => ({
+      repositoryName,
+      repoId: `/workspace/${repositoryName}`,
+      targetBranch: 'feature/a',
+      targetWorktreePath: `/workspace/feature-a/${repositoryName}`,
+      targetHead: `${repositoryName}-target`,
+      ready: true,
+      pullMergePushReady: true,
+      sourceBranches: [
+        { branch: 'main', head: 'main-head' },
+        { branch: 'release/v2', head: 'release-head' },
+      ],
+      fingerprint: `sha256:${repositoryName}`,
+    })),
+  }
+}
+
+function mergeOutPlan(): BranchWorkspaceBatchMergeOutPlan {
+  return {
+    kind: 'batch-merge-out',
     token: 'sha256:merge',
     rootId: '/workspace',
     branchWorkspaceId: 'ws-1',
@@ -195,7 +329,7 @@ function mergePlan(): BranchWorkspaceBatchMergePlan {
 
 function activeOperation(fields: Partial<BranchWorkspaceActiveOperation>): BranchWorkspaceActiveOperation {
   return {
-    kind: 'batch-merge',
+    kind: 'batch-merge-out',
     currentStep: 1,
     completedCount: 0,
     totalCount: 2,
@@ -204,11 +338,15 @@ function activeOperation(fields: Partial<BranchWorkspaceActiveOperation>): Branc
   }
 }
 
-function targets(entries: Array<[string, string]>): BranchWorkspaceBatchMergeTargetInput[] {
+function mergeOutTargets(entries: Array<[string, string]>): BranchWorkspaceBatchMergeOutTargetInput[] {
   return entries.map(([repositoryName, destinationBranch]) => ({ repositoryName, destinationBranch }))
 }
 
-function memberStates(progress: ReturnType<typeof projectBranchWorkspaceBatchMergeProgress>) {
+function mergeInSources(entries: Array<[string, string]>): BranchWorkspaceBatchMergeInSourceInput[] {
+  return entries.map(([repositoryName, sourceBranch]) => ({ repositoryName, sourceBranch }))
+}
+
+function memberStates(progress: ReturnType<typeof projectBranchWorkspaceBatchMergeOutProgress>) {
   return progress.members.map((member) => [
     member.repositoryName,
     member.status,
