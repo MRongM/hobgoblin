@@ -473,6 +473,20 @@ class TerminalInteractionStateTest {
     }
 
     @Test
+    fun `terminal screen switches the connection action between reconnect and close`() {
+        val source = listOf(
+            File("src/main/java/com/mrongm/hobgoblin/ui/screens/terminals/TerminalScreen.kt"),
+            File("app/src/main/java/com/mrongm/hobgoblin/ui/screens/terminals/TerminalScreen.kt"),
+            File("android/app/src/main/java/com/mrongm/hobgoblin/ui/screens/terminals/TerminalScreen.kt"),
+        ).firstOrNull(File::isFile)?.readText() ?: error("TerminalScreen.kt not found")
+
+        assertTrue(source.contains("closeEnabled = inlineActions.closeEnabled"))
+        assertTrue(source.contains("onClose = ::requestCloseTerminal"))
+        assertTrue(source.contains("TerminalHobgoblinAction.Close -> closeEnabled"))
+        assertTrue(source.contains("TerminalHobgoblinAction.Close -> onClose()"))
+    }
+
+    @Test
     fun `terminal screen keeps background swipe separate from back navigation`() {
         val source = listOf(
             File("src/main/java/com/mrongm/hobgoblin/ui/screens/terminals/TerminalScreen.kt"),

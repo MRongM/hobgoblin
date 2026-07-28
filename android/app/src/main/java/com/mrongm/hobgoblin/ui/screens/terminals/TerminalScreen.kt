@@ -729,7 +729,9 @@ fun TerminalScreen(
                                 hasWorkspaceSwitchTargets = hasWorkspaceSwitchTargets,
                                 onCycleWorkspaceTerminal = ::cycleWorkspaceTerminal,
                                 reconnectEnabled = inlineActions.reconnectEnabled,
+                                closeEnabled = inlineActions.closeEnabled,
                                 onReconnect = { connect() },
+                                onClose = ::requestCloseTerminal,
                                 onToggleCommandInput = { commandInputVisible = !commandInputVisible },
                                 onEnterFocus = { focusMode = true },
                             )
@@ -842,7 +844,9 @@ private fun TerminalCommandDeck(
     hasWorkspaceSwitchTargets: Boolean,
     onCycleWorkspaceTerminal: (Int) -> Unit,
     reconnectEnabled: Boolean,
+    closeEnabled: Boolean,
     onReconnect: () -> Unit,
+    onClose: () -> Unit,
     onToggleCommandInput: () -> Unit,
     onEnterFocus: () -> Unit,
 ) {
@@ -869,16 +873,25 @@ private fun TerminalCommandDeck(
             horizontalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
         ) {
             TerminalHobgoblinPrimaryActions.forEach { action ->
-                val actionEnabled = when (action) {
+                val visibleAction = if (
+                    action == TerminalHobgoblinAction.Reconnect && !reconnectEnabled
+                ) {
+                    TerminalHobgoblinAction.Close
+                } else {
+                    action
+                }
+                val actionEnabled = when (visibleAction) {
                     TerminalHobgoblinAction.Reconnect -> reconnectEnabled
+                    TerminalHobgoblinAction.Close -> closeEnabled
                     else -> inputAvailable
                 }
                 TerminalTextButton(
-                    text = terminalHobgoblinActionText(action).resolve(),
+                    text = terminalHobgoblinActionText(visibleAction).resolve(),
                     enabled = actionEnabled,
                     onClick = {
-                        when (action) {
+                        when (visibleAction) {
                             TerminalHobgoblinAction.Reconnect -> onReconnect()
+                            TerminalHobgoblinAction.Close -> onClose()
                             TerminalHobgoblinAction.Enter -> onEnter()
                             TerminalHobgoblinAction.Backspace -> onBackspace()
                             TerminalHobgoblinAction.ControlC -> onCtrlC()
