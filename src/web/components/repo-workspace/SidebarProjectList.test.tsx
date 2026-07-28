@@ -51,6 +51,12 @@ const tmuxCleanupState = vi.hoisted(() => ({
   visible: true,
 }))
 
+const hostTmuxInventoryState = vi.hoisted(() => ({
+  calls: [] as Array<{ projectRoot?: string; disabled?: boolean }>,
+  onSelect: vi.fn(),
+  visible: true,
+}))
+
 vi.mock('@dnd-kit/core', async () => {
   const actual = await vi.importActual<typeof import('@dnd-kit/core')>('@dnd-kit/core')
   return {
@@ -161,6 +167,24 @@ vi.mock('#/web/hooks/useAssociatedTmuxCleanup.tsx', () => ({
   },
 }))
 
+vi.mock('#/web/hooks/useHostTmuxInventory.tsx', () => ({
+  useHostTmuxInventory: (options: { projectRoot?: string; disabled?: boolean }) => {
+    hostTmuxInventoryState.calls.push(options)
+    return {
+      visible: hostTmuxInventoryState.visible,
+      contextAction: {
+        label: 'tmux.host-inventory.action',
+        icon: null,
+        disabled: false,
+        busy: false,
+        destructive: false,
+        onSelect: hostTmuxInventoryState.onSelect,
+      },
+      dialog: <div data-testid="project-host-tmux-inventory-dialog" />,
+    }
+  },
+}))
+
 vi.mock('#/web/components/ExternalAppIcon/index.tsx', () => ({
   EditorAppIcon: ({ pref }: { pref: string }) => <span data-testid="mock-editor-app-icon" data-pref={pref} />,
   TerminalAppIcon: ({ pref }: { pref: string }) => <span data-testid="mock-terminal-app-icon" data-pref={pref} />,
@@ -219,6 +243,9 @@ beforeEach(() => {
   tmuxCleanupState.calls = []
   tmuxCleanupState.onSelect.mockReset()
   tmuxCleanupState.visible = true
+  hostTmuxInventoryState.calls = []
+  hostTmuxInventoryState.onSelect.mockReset()
+  hostTmuxInventoryState.visible = true
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -516,7 +543,7 @@ describe('SidebarProjectList', () => {
     ])
   })
 
-  test('offers the four scoped project actions from the row context menu', async () => {
+  test('offers host inventory only from the row context menu without activating the project', async () => {
     renderList()
     const row = projectRow('/repo-a')
 
@@ -526,18 +553,28 @@ describe('SidebarProjectList', () => {
       'terminal.internal',
       'terminal.new-with-tmux',
       'terminal.close-all',
+      'tmux.host-inventory.action',
       'tmux.cleanup.action',
     ])
 
     await clickContextMenuItem(row, 'worktrees.open-in-editor-label')
     await clickContextMenuItem(row, 'terminal.external')
     await clickContextMenuItem(row, 'terminal.internal')
+    await clickContextMenuItem(row, 'tmux.host-inventory.action')
     await clickContextMenuItem(row, 'tmux.cleanup.action')
 
     expect(projectExternalActionState.editorOnSelect).toHaveBeenCalledWith('/repo-a')
     expect(projectExternalActionState.terminalOnSelect).toHaveBeenCalledWith('/repo-a')
     expect(projectExternalActionState.internalTerminalOnSelect).toHaveBeenCalledWith('/repo-a')
+    expect(hostTmuxInventoryState.onSelect).toHaveBeenCalledTimes(1)
     expect(tmuxCleanupState.onSelect).toHaveBeenCalledTimes(1)
+    expect(hostTmuxInventoryState.calls).toEqual([
+      { projectRoot: '/repo-a', disabled: false },
+      { projectRoot: '/repo-b', disabled: false },
+    ])
+    expect((await openProjectMenu('/repo-a')).map((item) => item.textContent?.trim())).not.toContain(
+      'tmux.host-inventory.action',
+    )
   })
 
   test('reorders when dropped over a different project', () => {

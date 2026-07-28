@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   previewAssociatedTmuxSessions: vi.fn(),
   cleanupAssociatedTmuxSessions: vi.fn(),
+  previewHostTmuxSessions: vi.fn(),
+  closeHostTmuxSessions: vi.fn(),
 }))
 
 vi.mock('#/server/modules/tmux-cleanup.ts', () => mocks)
@@ -75,5 +77,56 @@ describe('tmux cleanup routes', () => {
     })
 
     await expect(response.json()).resolves.toEqual({ ok: false, message: 'error.tmux-command-failed' })
+  })
+
+  test('forwards host preview and typed exact-origin close approvals', async () => {
+    mocks.previewHostTmuxSessions.mockResolvedValue({ ok: true, sessions: [] })
+    mocks.closeHostTmuxSessions.mockResolvedValue({ ok: true, closed: [], missing: [], failed: [] })
+    const { createTmuxCleanupRoutes } = await import('#/server/routes/tmux-cleanup.ts')
+    const app = createTmuxCleanupRoutes()
+
+    const previewResponse = await app.request('http://localhost/host-preview', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ projectRoot: 'ssh-config://prod/srv/repo', ignored: true }),
+    })
+    const closeResponse = await app.request('http://localhost/host-execute', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectRoot: 'ssh-config://prod/srv/repo',
+        approvedSessions: [
+          {
+            sessionName: 'hobgoblin-v1-0123456789abcdef01234567',
+            serverName: 'hobgoblin-project-v1-0123456789abcdef01234567',
+            ignored: true,
+          },
+          { sessionName: 'hobgoblin-v1-89abcdef0123456789abcdef' },
+          { sessionName: 7 },
+        ],
+      }),
+    })
+
+    expect(previewResponse.status).toBe(200)
+    expect(closeResponse.status).toBe(200)
+    expect(mocks.previewHostTmuxSessions).toHaveBeenCalledWith(
+      { projectRoot: 'ssh-config://prod/srv/repo' },
+      undefined,
+      expect.any(AbortSignal),
+    )
+    expect(mocks.closeHostTmuxSessions).toHaveBeenCalledWith(
+      {
+        projectRoot: 'ssh-config://prod/srv/repo',
+        approvedSessions: [
+          {
+            sessionName: 'hobgoblin-v1-0123456789abcdef01234567',
+            serverName: 'hobgoblin-project-v1-0123456789abcdef01234567',
+          },
+          { sessionName: 'hobgoblin-v1-89abcdef0123456789abcdef' },
+        ],
+      },
+      undefined,
+      expect.any(AbortSignal),
+    )
   })
 })

@@ -7,14 +7,11 @@ import {
   FILE_TREE_TEXT_FILE_MAX_BYTES,
 } from '#/shared/file-tree.ts'
 import { BRANCH_WORKSPACE_DIRECTORY_PREFIXES } from '#/shared/branch-workspaces.ts'
-import { buildTmuxServerName, isHobgoblinTmuxSessionName } from '#/system/tmux-session.ts'
+import { buildTmuxServerName, isHobgoblinTmuxSessionName, isHobgoblinTmuxServerName } from '#/system/tmux-session.ts'
 import { FIELD_SEP } from '#/system/git/parsers.ts'
-import {
-  BRANCH_CREATED_FROM_CONFIG_PATTERN,
-  branchCreatedFromConfigKey,
-} from '#/system/git/branches.ts'
+import { BRANCH_CREATED_FROM_CONFIG_PATTERN, branchCreatedFromConfigKey } from '#/system/git/branches.ts'
 import { buildManagedRemoteTerminalInvocation } from '#/system/remote-terminal.ts'
-import { TMUX_SESSION_LIST_FORMAT } from '#/system/tmux-cleanup.ts'
+import { TMUX_HOST_SESSION_LIST_FORMAT, TMUX_SESSION_LIST_FORMAT } from '#/system/tmux-cleanup.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import type { CreateWorktreeInput } from '#/shared/worktree-create.ts'
 import type {
@@ -39,6 +36,8 @@ export type RemoteCommandKind =
   | { type: 'checkGit' }
   | { type: 'tmuxListSessions'; projectRoot: string }
   | { type: 'tmuxKillSessionByName'; projectRoot: string; sessionName: string; serverName?: string }
+  | { type: 'tmuxListHostSessions' }
+  | { type: 'tmuxKillHostSessionByName'; sessionName: string; serverName?: string }
   | { type: 'testDirectory'; path: string }
   | { type: 'listDirectories'; path: string; limit?: number }
   | { type: 'listWorkspaceGitDirectories'; rootPath: string }
@@ -239,12 +238,26 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return 'command -v git'
     case 'tmuxListSessions':
       return tmuxListSessionsScript(command.projectRoot)
+    case 'tmuxListHostSessions':
+      return tmuxListHostSessionsScript()
     case 'tmuxKillSessionByName': {
       const serverName = buildTmuxServerName(command.projectRoot)
       if (
         !serverName ||
         !isHobgoblinTmuxSessionName(command.sessionName) ||
         (command.serverName !== undefined && command.serverName !== serverName)
+      ) {
+        throw new TypeError('error.invalid-arguments')
+      }
+      return [
+        'command -v tmux >/dev/null 2>&1 || exit 127',
+        `tmux${command.serverName ? ` -L ${shellQuote(command.serverName)}` : ''} kill-session -t ${shellQuote(`=${command.sessionName}`)}`,
+      ].join('\n')
+    }
+    case 'tmuxKillHostSessionByName': {
+      if (
+        !isHobgoblinTmuxSessionName(command.sessionName) ||
+        (command.serverName !== undefined && !isHobgoblinTmuxServerName(command.serverName))
       ) {
         throw new TypeError('error.invalid-arguments')
       }
@@ -587,6 +600,45 @@ function tmuxListSessionsScript(projectRoot: string): string {
     '}',
     `run_tmux_list tmux -L ${shellQuote(serverName)} -u list-sessions -F ${shellQuote(`${TMUX_SESSION_LIST_FORMAT}\t${serverName}`)} || exit $?`,
     `run_tmux_list tmux -u list-sessions -F ${shellQuote(`${TMUX_SESSION_LIST_FORMAT}\tlegacy-default`)} || exit $?`,
+  ].join('\n')
+}
+
+function tmuxListHostSessionsScript(): string {
+  const serverSuffixPattern = '[0-9a-f]'.repeat(24)
+  return [
+    'command -v tmux >/dev/null 2>&1 || exit 127',
+    'LC_ALL=C',
+    'export LC_ALL',
+    'run_tmux_list() {',
+    '  tmux_output=$("$@" 2>&1)',
+    '  tmux_status=$?',
+    '  if [ "$tmux_status" -eq 0 ]; then',
+    '    [ -z "$tmux_output" ] || printf \'%s\\n\' "$tmux_output"',
+    '    return 0',
+    '  fi',
+    '  case "$tmux_output" in',
+    '    *"no server running"*|*"failed to connect to server"*|*"no sessions"*) return 0 ;;',
+    '  esac',
+    '  printf \'%s\\n\' "$tmux_output" >&2',
+    '  return "$tmux_status"',
+    '}',
+    'tmux_uid=$(id -u) || exit $?',
+    'case "$tmux_uid" in ""|*[!0-9]*) exit 1 ;; esac',
+    'tmux_socket_base=${TMUX_TMPDIR:-/tmp}',
+    'case "$tmux_socket_base" in /*) ;; *) exit 1 ;; esac',
+    'tmux_socket_dir="${tmux_socket_base%/}/tmux-$tmux_uid"',
+    'if [ -d "$tmux_socket_dir" ]; then',
+    '  for tmux_socket in "$tmux_socket_dir"/hobgoblin-project-v1-*; do',
+    '    [ -S "$tmux_socket" ] || continue',
+    '    tmux_server=${tmux_socket##*/}',
+    '    case "$tmux_server" in',
+    `      hobgoblin-project-v1-${serverSuffixPattern}) ;;`,
+    '      *) continue ;;',
+    '    esac',
+    `    run_tmux_list tmux -L "$tmux_server" -u list-sessions -F ${shellQuote(`${TMUX_HOST_SESSION_LIST_FORMAT}\t`)}"$tmux_server" || exit $?`,
+    '  done',
+    'fi',
+    `run_tmux_list tmux -u list-sessions -F ${shellQuote(`${TMUX_HOST_SESSION_LIST_FORMAT}\tlegacy-default`)} || exit $?`,
   ].join('\n')
 }
 

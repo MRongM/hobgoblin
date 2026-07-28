@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from 'vitest'
+import * as tmuxCleanupModule from '#/server/modules/tmux-cleanup.ts'
 import {
   cleanupAssociatedTmuxSessions,
   closeAssociatedTmuxSessionByName,
@@ -369,3 +370,270 @@ function dependencies(overrides: Partial<TmuxCleanupDependencies> = {}): TmuxCle
     ...overrides,
   }
 }
+
+describe('host tmux session inventory', () => {
+  const OTHER_PROJECT_ROOT = '/other/repo'
+  const OTHER_PATH = '/other/worktree'
+  const OTHER_SERVER_NAME = buildTmuxServerName(OTHER_PROJECT_ROOT)!
+  const OTHER_NAME = buildTmuxSessionName({
+    projectRoot: OTHER_PROJECT_ROOT,
+    workingDirectory: OTHER_PATH,
+    terminalNumber: 3,
+  })!
+
+  type HostDependencies = Record<string, unknown>
+  const hostFunctions = () => {
+    const module = tmuxCleanupModule as typeof tmuxCleanupModule & {
+      previewHostTmuxSessions?: (
+        input: { projectRoot: string },
+        dependencies?: HostDependencies,
+        signal?: AbortSignal,
+      ) => Promise<unknown>
+      closeHostTmuxSessions?: (
+        input: {
+          projectRoot: string
+          approvedSessions: Array<{ sessionName: string; serverName?: string }>
+        },
+        dependencies?: HostDependencies,
+        signal?: AbortSignal,
+      ) => Promise<unknown>
+    }
+    expect(module.previewHostTmuxSessions).toBeTypeOf('function')
+    expect(module.closeHostTmuxSessions).toBeTypeOf('function')
+    return module
+  }
+
+  test('previews verified sessions across projects and prefers each deterministic project server', async () => {
+    const module = hostFunctions()
+    if (!module.previewHostTmuxSessions) return
+    const listLocalHost = vi.fn(async () => ({
+      ok: true as const,
+      sessions: [
+        {
+          sessionName: FIRST_NAME,
+          projectRoot: LOCAL_PROJECT_ROOT,
+          initialPath: LOCAL_PATH,
+          terminalNumber: 1,
+          attachedClients: 0,
+        },
+        {
+          sessionName: FIRST_NAME,
+          projectRoot: LOCAL_PROJECT_ROOT,
+          initialPath: `${LOCAL_PATH}/`,
+          terminalNumber: 1,
+          attachedClients: 2,
+          serverName: LOCAL_SERVER_NAME,
+        },
+        {
+          sessionName: OTHER_NAME,
+          projectRoot: OTHER_PROJECT_ROOT,
+          initialPath: OTHER_PATH,
+          terminalNumber: 3,
+          attachedClients: 1,
+          serverName: OTHER_SERVER_NAME,
+        },
+        {
+          sessionName: SECOND_NAME,
+          projectRoot: LOCAL_PROJECT_ROOT,
+          initialPath: LOCAL_PATH,
+          terminalNumber: 2,
+          attachedClients: 0,
+          serverName: OTHER_SERVER_NAME,
+        },
+        {
+          sessionName: 'hobgoblin-v1-0123456789abcdef01234567',
+          projectRoot: LOCAL_PROJECT_ROOT,
+          initialPath: LOCAL_PATH,
+          terminalNumber: 9,
+          attachedClients: 0,
+        },
+      ],
+    }))
+
+    await expect(
+      module.previewHostTmuxSessions({ projectRoot: LOCAL_PROJECT_ROOT }, { platform: 'linux', listLocalHost }),
+    ).resolves.toEqual({
+      ok: true,
+      sessions: [
+        {
+          sessionName: OTHER_NAME,
+          projectRoot: OTHER_PROJECT_ROOT,
+          initialPath: OTHER_PATH,
+          terminalNumber: 3,
+          attachedClients: 1,
+          serverName: OTHER_SERVER_NAME,
+        },
+        {
+          sessionName: FIRST_NAME,
+          projectRoot: LOCAL_PROJECT_ROOT,
+          initialPath: LOCAL_PATH,
+          terminalNumber: 1,
+          attachedClients: 2,
+          serverName: LOCAL_SERVER_NAME,
+        },
+      ],
+    })
+    expect(listLocalHost).toHaveBeenCalledWith({ signal: undefined })
+  })
+
+  test('revalidates exact name and origin approvals before sequential close', async () => {
+    const module = hostFunctions()
+    if (!module.closeHostTmuxSessions) return
+    const listLocalHost = vi.fn(async () => ({
+      ok: true as const,
+      sessions: [
+        {
+          sessionName: FIRST_NAME,
+          projectRoot: LOCAL_PROJECT_ROOT,
+          initialPath: LOCAL_PATH,
+          terminalNumber: 1,
+          attachedClients: 0,
+          serverName: LOCAL_SERVER_NAME,
+        },
+        {
+          sessionName: SECOND_NAME,
+          projectRoot: LOCAL_PROJECT_ROOT,
+          initialPath: LOCAL_PATH,
+          terminalNumber: 2,
+          attachedClients: 0,
+        },
+        {
+          sessionName: OTHER_NAME,
+          projectRoot: OTHER_PROJECT_ROOT,
+          initialPath: OTHER_PATH,
+          terminalNumber: 3,
+          attachedClients: 0,
+          serverName: OTHER_SERVER_NAME,
+        },
+      ],
+    }))
+    const killLocalHostByName = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, message: '' })
+      .mockResolvedValueOnce({ ok: false, message: 'permission denied' })
+    const missing = { sessionName: MISSING_NAME, serverName: LOCAL_SERVER_NAME }
+
+    await expect(
+      module.closeHostTmuxSessions(
+        {
+          projectRoot: LOCAL_PROJECT_ROOT,
+          approvedSessions: [
+            { sessionName: FIRST_NAME, serverName: LOCAL_SERVER_NAME },
+            missing,
+            { sessionName: SECOND_NAME },
+          ],
+        },
+        { platform: 'linux', listLocalHost, killLocalHostByName },
+      ),
+    ).resolves.toEqual({
+      ok: true,
+      closed: [
+        {
+          sessionName: FIRST_NAME,
+          projectRoot: LOCAL_PROJECT_ROOT,
+          initialPath: LOCAL_PATH,
+          terminalNumber: 1,
+          attachedClients: 0,
+          serverName: LOCAL_SERVER_NAME,
+        },
+      ],
+      missing: [missing],
+      failed: [
+        {
+          session: {
+            sessionName: SECOND_NAME,
+            projectRoot: LOCAL_PROJECT_ROOT,
+            initialPath: LOCAL_PATH,
+            terminalNumber: 2,
+            attachedClients: 0,
+          },
+          message: 'permission denied',
+        },
+      ],
+    })
+    expect(killLocalHostByName.mock.calls).toEqual([
+      [FIRST_NAME, { serverName: LOCAL_SERVER_NAME, signal: undefined }],
+      [SECOND_NAME, { serverName: undefined, signal: undefined }],
+    ])
+  })
+
+  test('lists and closes host sessions through the selected SSH host locator', async () => {
+    const module = hostFunctions()
+    if (!module.previewHostTmuxSessions || !module.closeHostTmuxSessions) return
+    const resolveRemote = vi.fn(async () => REMOTE_TARGET)
+    const runRemote = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        stdout: `/srv/feature\t1\t0\t${REMOTE_FIRST_NAME}\t${REMOTE_TARGET.remotePath}\t${REMOTE_SERVER_NAME}`,
+        stderr: '',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        stdout: `/srv/feature\t1\t0\t${REMOTE_FIRST_NAME}\t${REMOTE_TARGET.remotePath}\t${REMOTE_SERVER_NAME}`,
+        stderr: '',
+      })
+      .mockResolvedValueOnce({ ok: true, stdout: '', stderr: '' })
+    const hostDependencies = { platform: 'linux', resolveRemote, runRemote }
+
+    await expect(module.previewHostTmuxSessions({ projectRoot: REMOTE_REPO }, hostDependencies)).resolves.toEqual({
+      ok: true,
+      sessions: [
+        {
+          sessionName: REMOTE_FIRST_NAME,
+          projectRoot: REMOTE_TARGET.remotePath,
+          initialPath: '/srv/feature',
+          terminalNumber: 1,
+          attachedClients: 0,
+          serverName: REMOTE_SERVER_NAME,
+        },
+      ],
+    })
+    await expect(
+      module.closeHostTmuxSessions(
+        {
+          projectRoot: REMOTE_REPO,
+          approvedSessions: [{ sessionName: REMOTE_FIRST_NAME, serverName: REMOTE_SERVER_NAME }],
+        },
+        hostDependencies,
+      ),
+    ).resolves.toMatchObject({ ok: true, missing: [], failed: [] })
+    expect(runRemote).toHaveBeenNthCalledWith(1, REMOTE_TARGET, { type: 'tmuxListHostSessions' }, { signal: undefined })
+    expect(runRemote).toHaveBeenNthCalledWith(
+      3,
+      REMOTE_TARGET,
+      {
+        type: 'tmuxKillHostSessionByName',
+        sessionName: REMOTE_FIRST_NAME,
+        serverName: REMOTE_SERVER_NAME,
+      },
+      { signal: undefined },
+    )
+  })
+
+  test('rejects local Windows and malformed or empty approvals without touching tmux', async () => {
+    const module = hostFunctions()
+    if (!module.previewHostTmuxSessions || !module.closeHostTmuxSessions) return
+    const listLocalHost = vi.fn()
+
+    await expect(
+      module.previewHostTmuxSessions({ projectRoot: 'C:\\repo' }, { platform: 'win32', listLocalHost }),
+    ).resolves.toEqual({ ok: false, message: 'error.tmux-unsupported' })
+    await expect(
+      module.closeHostTmuxSessions(
+        { projectRoot: LOCAL_PROJECT_ROOT, approvedSessions: [] },
+        { platform: 'linux', listLocalHost },
+      ),
+    ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+    await expect(
+      module.closeHostTmuxSessions(
+        {
+          projectRoot: LOCAL_PROJECT_ROOT,
+          approvedSessions: [{ sessionName: FIRST_NAME, serverName: 'user-server' }],
+        },
+        { platform: 'linux', listLocalHost },
+      ),
+    ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+    expect(listLocalHost).not.toHaveBeenCalled()
+  })
+})

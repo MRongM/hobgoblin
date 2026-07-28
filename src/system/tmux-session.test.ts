@@ -29,6 +29,19 @@ describe('buildTmuxServerName', () => {
     expect(buildServerName?.('/srv//projects/example/./')).toBe('hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0')
     expect(buildServerName?.('srv/projects/example')).toBeNull()
   })
+
+  test('accepts only current Hobgoblin project server names', () => {
+    const isServerName = (
+      tmuxSession as typeof tmuxSession & { isHobgoblinTmuxServerName?: (value: unknown) => boolean }
+    ).isHobgoblinTmuxServerName
+
+    expect(isServerName).toBeTypeOf('function')
+    expect(isServerName?.('hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0')).toBe(true)
+    expect(isServerName?.('hobgoblin-project-v1-BFD9F8D97E0D5A8F0EB819D0')).toBe(false)
+    expect(isServerName?.('hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d')).toBe(false)
+    expect(isServerName?.('user-project-v1-bfd9f8d97e0d5a8f0eb819d0')).toBe(false)
+    expect(isServerName?.(null)).toBe(false)
+  })
 })
 
 describe('buildTmuxSessionName', () => {
@@ -120,6 +133,9 @@ describe('buildTmuxAttachShellCommand', () => {
     expect(invocation?.command).toContain(
       "set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' @hobgoblin_terminal_number '1'",
     )
+    expect(invocation?.command).toContain(
+      "set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' @hobgoblin_project_root '/srv/projects/example'",
+    )
   })
 
   test('prefers the project server and falls back only to an existing legacy default session', () => {
@@ -160,10 +176,7 @@ describe('buildTmuxAttachShellCommand', () => {
       const configuredProjectTmux = `${projectTmux} -f /dev/null`
       const detachedCommand = invocation.command
         .replaceAll(projectTmux, configuredProjectTmux)
-        .replaceAll(
-          `${configuredProjectTmux} attach-session -t '=${invocation.sessionName}'`,
-          'true',
-        )
+        .replaceAll(`${configuredProjectTmux} attach-session -t '=${invocation.sessionName}'`, 'true')
       execFileSync('/bin/sh', ['-lc', detachedCommand], { env: environment, stdio: 'pipe' })
       const listed = execFileSync(
         'tmux',
@@ -175,12 +188,12 @@ describe('buildTmuxAttachShellCommand', () => {
           '-u',
           'list-sessions',
           '-F',
-          '#{session_name}\t#{@hobgoblin_init_path}\t#{@hobgoblin_terminal_number}\t#{session_attached}',
+          '#{session_name}\t#{@hobgoblin_project_root}\t#{@hobgoblin_init_path}\t#{@hobgoblin_terminal_number}\t#{session_attached}',
         ],
         { encoding: 'utf8', env: environment },
       ).trim()
 
-      expect(listed).toBe(`${invocation.sessionName}\t${testRoot}\t1\t0`)
+      expect(listed).toBe(`${invocation.sessionName}\t${testRoot}\t${testRoot}\t1\t0`)
     } finally {
       spawnSync('tmux', ['-L', serverName, '-f', '/dev/null', 'kill-server'], { env: environment, stdio: 'ignore' })
       rmSync(testRoot, { force: true, recursive: true })

@@ -26,6 +26,7 @@ import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon
 import { useProjectExternalOpenActions } from '#/web/hooks/useProjectExternalOpenActions.ts'
 import { useProjectInternalTerminalAction } from '#/web/hooks/useProjectInternalTerminalAction.ts'
 import { useAssociatedTmuxCleanup } from '#/web/hooks/useAssociatedTmuxCleanup.tsx'
+import { useHostTmuxInventory } from '#/web/hooks/useHostTmuxInventory.tsx'
 import { WorkspaceItemContextMenu } from '#/web/components/repo-workspace/WorkspaceItemContextMenu.tsx'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import {
@@ -118,6 +119,7 @@ function SortableProjectRow({
     itemPath: remote?.remotePath ?? project.id,
     disabled: false,
   })
+  const hostTmuxInventory = useHostTmuxInventory({ projectRoot: project.id, disabled: false })
   const changeCountLabel =
     project.changeCount > 0 ? t('branch-status.worktree-dirty', { n: project.changeCount }) : null
   const editorAction: WorkspaceListItemAction | undefined = projectExternalActions.visible
@@ -182,7 +184,10 @@ function SortableProjectRow({
           onSelect: () => projectInternalTerminalAction.onSelect('tmux-if-available'),
         }}
         worktreeTerminalKeys={project.terminalWorktreeKeys}
-        additionalActions={tmuxCleanup.visible ? [tmuxCleanup.contextAction] : []}
+        additionalActions={[
+          ...(hostTmuxInventory.visible ? [hostTmuxInventory.contextAction] : []),
+          ...(tmuxCleanup.visible ? [tmuxCleanup.contextAction] : []),
+        ]}
       >
         <WorkspaceListItemFrame
           size="project"
@@ -246,6 +251,7 @@ function SortableProjectRow({
           </span>
         </WorkspaceListItemFrame>
       </WorkspaceItemContextMenu>
+      {hostTmuxInventory.dialog}
       {tmuxCleanup.dialog}
     </>
   )

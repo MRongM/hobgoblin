@@ -1,5 +1,10 @@
 import { Hono } from 'hono'
-import { cleanupAssociatedTmuxSessions, previewAssociatedTmuxSessions } from '#/server/modules/tmux-cleanup.ts'
+import {
+  cleanupAssociatedTmuxSessions,
+  closeHostTmuxSessions,
+  previewAssociatedTmuxSessions,
+  previewHostTmuxSessions,
+} from '#/server/modules/tmux-cleanup.ts'
 
 export function createTmuxCleanupRoutes(): Hono {
   const app = new Hono()
@@ -22,7 +27,55 @@ export function createTmuxCleanupRoutes(): Hono {
     )
   })
 
+  app.post('/host-preview', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    return c.json(
+      await jsonOr(() => previewHostTmuxSessions(hostTargetInput(body), undefined, c.req.raw.signal), 'host-preview'),
+    )
+  })
+
+  app.post('/host-execute', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    return c.json(
+      await jsonOr(
+        () =>
+          closeHostTmuxSessions(
+            { ...hostTargetInput(body), approvedSessions: sessionIdentityInputs(body) },
+            undefined,
+            c.req.raw.signal,
+          ),
+        'host-execute',
+      ),
+    )
+  })
+
   return app
+}
+
+function hostTargetInput(body: unknown): { projectRoot: string } {
+  const input = body && typeof body === 'object' ? (body as Record<string, unknown>) : {}
+  return { projectRoot: typeof input.projectRoot === 'string' ? input.projectRoot : '' }
+}
+
+function sessionIdentityInputs(body: unknown): Array<{ sessionName: string; serverName?: string }> {
+  const input = body && typeof body === 'object' ? (body as Record<string, unknown>) : {}
+  if (!Array.isArray(input.approvedSessions)) return []
+  return input.approvedSessions.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== 'object') return []
+    const identity = candidate as Record<string, unknown>
+    if (
+      typeof identity.sessionName !== 'string' ||
+      (identity.serverName !== undefined && typeof identity.serverName !== 'string')
+    ) {
+      return []
+    }
+    return [
+      {
+        sessionName: identity.sessionName,
+        ...(identity.serverName === undefined ? {} : { serverName: identity.serverName }),
+      },
+    ]
+  })
 }
 
 function targetInput(body: unknown): { projectRoot: string; itemPath: string } {

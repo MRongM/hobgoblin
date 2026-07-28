@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from 'vitest'
+import * as tmuxCleanup from '#/system/tmux-cleanup.ts'
 import {
   isTmuxSessionMissingMessage,
   killLocalTmuxSessionByName,
@@ -348,5 +349,211 @@ describe('local tmux commands', () => {
     expect(isTmuxSessionMissingMessage("can't find session: hobgoblin-v1-example")).toBe(true)
     expect(isTmuxSessionMissingMessage('no server running on /tmp/tmux-501/default')).toBe(true)
     expect(isTmuxSessionMissingMessage('permission denied')).toBe(false)
+  })
+})
+
+describe('local host tmux inventory', () => {
+  test('parses self-describing rows with an exact project or legacy server origin', () => {
+    const parseHostList = (
+      tmuxCleanup as typeof tmuxCleanup & {
+        parseTmuxHostSessionList?: (output: string) => unknown
+      }
+    ).parseTmuxHostSessionList
+    expect(parseHostList).toBeTypeOf('function')
+    if (!parseHostList) return
+
+    expect(
+      parseHostList(
+        [
+          `/srv/projects/example/worktrees/feature\t1\t2\thobgoblin-v1-aebf050981ac829e36100020\t${PROJECT_ROOT}\t${PROJECT_SERVER_NAME}`,
+          `/srv/projects/example\t2\t0\thobgoblin-v1-0123456789abcdef01234567\t${PROJECT_ROOT}\tlegacy-default`,
+        ].join('\n'),
+      ),
+    ).toEqual([
+      {
+        sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+        projectRoot: PROJECT_ROOT,
+        initialPath: '/srv/projects/example/worktrees/feature',
+        terminalNumber: 1,
+        attachedClients: 2,
+        serverName: PROJECT_SERVER_NAME,
+      },
+      {
+        sessionName: 'hobgoblin-v1-0123456789abcdef01234567',
+        projectRoot: PROJECT_ROOT,
+        initialPath: '/srv/projects/example',
+        terminalNumber: 2,
+        attachedClients: 0,
+      },
+    ])
+    expect(
+      parseHostList(
+        `/srv/projects/example\t1\t0\thobgoblin-v1-aebf050981ac829e36100020\t${PROJECT_ROOT}\tunknown-server`,
+      ),
+    ).toBeNull()
+    expect(
+      parseHostList(`/srv/projects/example\t1\t0\thobgoblin-v1-aebf050981ac829e36100020\trelative\tlegacy-default`),
+    ).toEqual([])
+  })
+
+  test('discovers only sorted Hobgoblin socket names for the current tmux user directory', async () => {
+    const discoverServerNames = (
+      tmuxCleanup as typeof tmuxCleanup & {
+        listLocalHobgoblinTmuxServerNames?: (options: {
+          environment: NodeJS.ProcessEnv
+          uid: number
+          readDirectory: (directory: string, options: { withFileTypes: true }) => Promise<unknown[]>
+        }) => Promise<unknown>
+      }
+    ).listLocalHobgoblinTmuxServerNames
+    expect(discoverServerNames).toBeTypeOf('function')
+    if (!discoverServerNames) return
+
+    const serverB = 'hobgoblin-project-v1-ffffffffffffffffffffffff'
+    const readDirectory = vi.fn(async () => [
+      { name: serverB, isSocket: () => true },
+      { name: 'default', isSocket: () => true },
+      { name: PROJECT_SERVER_NAME, isSocket: () => true },
+      { name: 'hobgoblin-project-v1-000000000000000000000000', isSocket: () => false },
+    ])
+
+    await expect(
+      discoverServerNames({ environment: { TMUX_TMPDIR: '/var/run/example' }, uid: 501, readDirectory }),
+    ).resolves.toEqual({ ok: true, serverNames: [PROJECT_SERVER_NAME, serverB] })
+    expect(readDirectory).toHaveBeenCalledWith('/var/run/example/tmux-501', { withFileTypes: true })
+    await expect(
+      discoverServerNames({ environment: { TMUX_TMPDIR: 'relative' }, uid: 501, readDirectory }),
+    ).resolves.toEqual({ ok: false, message: 'error.tmux-invalid-socket-directory' })
+  })
+
+  test('treats a missing current-user socket directory as an empty inventory', async () => {
+    const discoverServerNames = (
+      tmuxCleanup as typeof tmuxCleanup & {
+        listLocalHobgoblinTmuxServerNames?: (options: {
+          environment: NodeJS.ProcessEnv
+          uid: number
+          readDirectory: () => Promise<never>
+        }) => Promise<unknown>
+      }
+    ).listLocalHobgoblinTmuxServerNames
+    expect(discoverServerNames).toBeTypeOf('function')
+    if (!discoverServerNames) return
+
+    const missingDirectory = Object.assign(new Error('missing'), { code: 'ENOENT' })
+    await expect(
+      discoverServerNames({
+        environment: {},
+        uid: 501,
+        readDirectory: async () => await Promise.reject(missingDirectory),
+      }),
+    ).resolves.toEqual({ ok: true, serverNames: [] })
+  })
+
+  test('lists every discovered project server before the legacy default server', async () => {
+    const listHost = (
+      tmuxCleanup as typeof tmuxCleanup & {
+        listLocalHostTmuxSessions?: (options: {
+          listServerNames: () => Promise<{ ok: true; serverNames: string[] }>
+          run: TmuxProcessRunner
+        }) => Promise<unknown>
+      }
+    ).listLocalHostTmuxSessions
+    expect(listHost).toBeTypeOf('function')
+    if (!listHost) return
+
+    const serverB = 'hobgoblin-project-v1-ffffffffffffffffffffffff'
+    const run = vi.fn<TmuxProcessRunner>(async (args) => {
+      const origin = args[0] === '-L' ? args[1] : 'legacy-default'
+      if (origin === serverB) {
+        return {
+          ok: false,
+          stdout: '',
+          stderr: 'no server running on socket',
+          message: 'no server running on socket',
+        }
+      }
+      return {
+        ok: true,
+        stdout: `/srv/projects/example/worktrees/feature\t1\t0\thobgoblin-v1-aebf050981ac829e36100020\t${PROJECT_ROOT}`,
+        stderr: '',
+      }
+    })
+
+    await expect(
+      listHost({
+        listServerNames: async () => ({ ok: true, serverNames: [serverB, PROJECT_SERVER_NAME] }),
+        run,
+      }),
+    ).resolves.toEqual({
+      ok: true,
+      sessions: [
+        {
+          sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+          projectRoot: PROJECT_ROOT,
+          initialPath: '/srv/projects/example/worktrees/feature',
+          terminalNumber: 1,
+          attachedClients: 0,
+          serverName: PROJECT_SERVER_NAME,
+        },
+        {
+          sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+          projectRoot: PROJECT_ROOT,
+          initialPath: '/srv/projects/example/worktrees/feature',
+          terminalNumber: 1,
+          attachedClients: 0,
+        },
+      ],
+    })
+    expect(run.mock.calls.map(([args]) => args.slice(0, 2))).toEqual([
+      ['-L', PROJECT_SERVER_NAME],
+      ['-L', serverB],
+      ['-u', 'list-sessions'],
+    ])
+  })
+
+  test('fails host inventory when a live server returns malformed output', async () => {
+    const listHost = (
+      tmuxCleanup as typeof tmuxCleanup & {
+        listLocalHostTmuxSessions?: (options: {
+          listServerNames: () => Promise<{ ok: true; serverNames: string[] }>
+          run: TmuxProcessRunner
+        }) => Promise<unknown>
+      }
+    ).listLocalHostTmuxSessions
+    expect(listHost).toBeTypeOf('function')
+    if (!listHost) return
+
+    await expect(
+      listHost({
+        listServerNames: async () => ({ ok: true, serverNames: [PROJECT_SERVER_NAME] }),
+        run: async () => ({ ok: true, stdout: 'malformed', stderr: '' }),
+      }),
+    ).resolves.toEqual({ ok: false, message: 'error.tmux-invalid-output' })
+  })
+
+  test('kills only a current session at a validated exact host server origin', async () => {
+    const killHost = (
+      tmuxCleanup as typeof tmuxCleanup & {
+        killLocalHostTmuxSessionByName?: (
+          sessionName: string,
+          options: { serverName?: string; run: TmuxProcessRunner },
+        ) => Promise<unknown>
+      }
+    ).killLocalHostTmuxSessionByName
+    expect(killHost).toBeTypeOf('function')
+    if (!killHost) return
+
+    const run = vi.fn<TmuxProcessRunner>(async () => ({ ok: true, stdout: '', stderr: '' }))
+    const sessionName = 'hobgoblin-v1-aebf050981ac829e36100020'
+    await expect(killHost(sessionName, { serverName: PROJECT_SERVER_NAME, run })).resolves.toEqual({
+      ok: true,
+      message: '',
+    })
+    expect(run).toHaveBeenCalledWith(['-L', PROJECT_SERVER_NAME, 'kill-session', '-t', `=${sessionName}`], undefined)
+    await expect(killHost(sessionName, { serverName: 'user-server', run })).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+    expect(run).toHaveBeenCalledTimes(1)
   })
 })

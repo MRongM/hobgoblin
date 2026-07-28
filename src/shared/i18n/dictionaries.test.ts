@@ -84,6 +84,34 @@ describe('i18n dictionaries', () => {
     expect(zh['action.delete-branch']).toBe('删除分支')
   })
 
+  test('includes host tmux inventory and selected-close copy in every locale', () => {
+    const keys = [
+      'tmux.host-inventory.action',
+      'tmux.host-inventory.none',
+      'tmux.host-inventory.preview-failed',
+      'tmux.host-inventory.execute-failed',
+      'tmux.host-inventory.title',
+      'tmux.host-inventory.description',
+      'tmux.host-inventory.select-session',
+      'tmux.host-inventory.terminal-number',
+      'tmux.host-inventory.project-root',
+      'tmux.host-inventory.detached',
+      'tmux.host-inventory.attached',
+      'tmux.host-inventory.warning',
+      'tmux.host-inventory.close-selected',
+      'tmux.host-inventory.partial',
+      'tmux.host-inventory.success',
+      'tmux.host-inventory.missing',
+      'error.tmux-invalid-socket-directory',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['tmux.host-inventory.action']).toBe('扫描主机 tmux 会话')
+    expect(zh['tmux.host-inventory.close-selected']).toContain('关闭所选会话')
+  })
+
   test('includes invalid worktree cleanup copy in every locale', () => {
     const keys = [
       'action.cleanup-invalid-worktree',

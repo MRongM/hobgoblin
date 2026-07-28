@@ -57,6 +57,46 @@ describe('remote command scripts', () => {
     )
   })
 
+  test('builds a fixed host-wide tmux inventory and exact-origin kill command', () => {
+    const serverName = 'hobgoblin-project-v1-44159cd9e973adba7b472e6f'
+    const hostList = buildRemoteCommandInvocation(TARGET, { type: 'tmuxListHostSessions' } as Parameters<
+      typeof buildRemoteCommandInvocation
+    >[1])
+    const hostKill = buildRemoteCommandInvocation(TARGET, {
+      type: 'tmuxKillHostSessionByName',
+      sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+      serverName,
+    } as Parameters<typeof buildRemoteCommandInvocation>[1])
+
+    expect(hostList.script).toContain('tmux_uid=$(id -u)')
+    expect(hostList.script).toContain('tmux_socket_base=${TMUX_TMPDIR:-/tmp}')
+    expect(hostList.script).toContain('"$tmux_socket_dir"/hobgoblin-project-v1-*')
+    expect(hostList.script).toContain('tmux -L "$tmux_server" -u list-sessions')
+    expect(hostList.script).toContain('#{@hobgoblin_project_root}')
+    expect(hostList.script).toContain('"$tmux_server"')
+    expect(hostList.script).toContain('tmux -u list-sessions')
+    expect(hostList.script).toContain('legacy-default')
+    expect(hostKill.script).toBe(
+      "command -v tmux >/dev/null 2>&1 || exit 127\ntmux -L 'hobgoblin-project-v1-44159cd9e973adba7b472e6f' kill-session -t '=hobgoblin-v1-aebf050981ac829e36100020'",
+    )
+  })
+
+  test('rejects unsafe host-wide tmux kill targets before building an SSH invocation', () => {
+    expect(() =>
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'tmuxKillHostSessionByName',
+        sessionName: 'hobgoblin-v1-bad; touch /tmp/example',
+      } as Parameters<typeof buildRemoteCommandInvocation>[1]),
+    ).toThrow('error.invalid-arguments')
+    expect(() =>
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'tmuxKillHostSessionByName',
+        sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+        serverName: 'user-server',
+      } as Parameters<typeof buildRemoteCommandInvocation>[1]),
+    ).toThrow('error.invalid-arguments')
+  })
+
   testPosix('treats absent tmux servers as empty without masking project server failures', async () => {
     const directory = path.join(os.tmpdir(), `hobgoblin-tmux-list-${Date.now()}-${process.pid}`)
     const fakeBin = path.join(directory, 'bin')

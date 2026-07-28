@@ -6,11 +6,13 @@ const TMUX_SESSION_PREFIX = 'hobgoblin-v1-'
 const TMUX_SERVER_PROTOCOL = 'hobgoblin-tmux-server-v1'
 const TMUX_SERVER_PREFIX = 'hobgoblin-project-v1-'
 const HOBGOBLIN_TMUX_SESSION_NAME_RE = /^hobgoblin-v1-[a-f0-9]{24}$/u
+const HOBGOBLIN_TMUX_SERVER_NAME_RE = /^hobgoblin-project-v1-[a-f0-9]{24}$/u
 const MAX_TMUX_SESSION_PATH_CHARS = 4096
 const UNSAFE_PATH_CHARS_RE = /[\0-\x1f\x7f]/
 
 export const TMUX_TERMINAL_NUMBER_OPTION = '@hobgoblin_terminal_number'
 export const TMUX_INIT_PATH_OPTION = '@hobgoblin_init_path'
+export const TMUX_PROJECT_ROOT_OPTION = '@hobgoblin_project_root'
 
 const TMUX_UNAVAILABLE_MESSAGE = 'Tmux is unavailable. Use New terminal (Native).'
 const TMUX_START_FAILED_MESSAGE = 'Tmux failed to start. Use New terminal (Native).'
@@ -68,12 +70,7 @@ export function buildTmuxAttachShellCommand(
     sessionTarget,
     paneTarget,
   )
-  const projectAttachCommand = buildConfigureAndAttachCommand(
-    projectTmux,
-    descriptor,
-    sessionTarget,
-    paneTarget,
-  )
+  const projectAttachCommand = buildConfigureAndAttachCommand(projectTmux, descriptor, sessionTarget, paneTarget)
   const legacyAttachCommand = buildConfigureAndAttachCommand('tmux', descriptor, sessionTarget, paneTarget)
   return {
     sessionName,
@@ -128,6 +125,7 @@ function buildConfigureAndAttachCommand(
 ): string {
   return [
     `${tmuxCommand} set-option -t ${shellQuote(paneTarget)} mouse on`,
+    `${tmuxCommand} set-option -t ${shellQuote(paneTarget)} ${TMUX_PROJECT_ROOT_OPTION} ${shellQuote(descriptor.projectRoot)}`,
     `${tmuxCommand} set-option -t ${shellQuote(paneTarget)} ${TMUX_INIT_PATH_OPTION} ${shellQuote(descriptor.workingDirectory)}`,
     `${tmuxCommand} set-option -t ${shellQuote(paneTarget)} ${TMUX_TERMINAL_NUMBER_OPTION} ${shellQuote(String(descriptor.terminalNumber))}`,
     `${tmuxCommand} attach-session -t ${shellQuote(sessionTarget)}`,
@@ -157,6 +155,10 @@ export function normalizeTmuxSessionPath(value: string): string | null {
 
 export function isHobgoblinTmuxSessionName(value: unknown): value is string {
   return typeof value === 'string' && HOBGOBLIN_TMUX_SESSION_NAME_RE.test(value)
+}
+
+export function isHobgoblinTmuxServerName(value: unknown): value is string {
+  return typeof value === 'string' && HOBGOBLIN_TMUX_SERVER_NAME_RE.test(value)
 }
 
 export function resolveTmuxSessionTerminalNumbers(
