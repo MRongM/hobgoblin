@@ -41,7 +41,7 @@ The locale Android selects for Hobgoblin's native Android-owned interface text a
 _Avoid_: Server language, terminal locale, translated terminal output
 
 **Android host tmux catalog**:
-The read-only Android projection of current-protocol Hobgoblin tmux sessions discovered across one directly connected SSH host's default and project-scoped tmux servers. It is derived from live server sockets and session metadata rather than saved Projects or workspace configuration, and opening an item recovers and attaches that exact existing server/session without creating or ending a remote session.
+The Android projection of current-protocol Hobgoblin tmux sessions discovered across one directly connected SSH host's default and project-scoped tmux servers. It is derived from live server sockets and session metadata rather than saved Projects or workspace configuration. An item may open, reconnect, or close its retained Android terminal; deleting that retained terminal keeps the remote session by default and may end the exact remote tmux session only through a separate unchecked confirmation option.
 _Avoid_: Android workspace catalog, filesystem workspace scan, arbitrary tmux list, tmux session creator
 
 **Tmux server target**:

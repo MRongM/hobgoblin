@@ -190,6 +190,58 @@ class TerminalSessionManagerTest {
     }
 
     @Test
+    fun `host tmux retained lookup is read only and requires the exact recovered identity`() {
+        val store = RecordingTerminalSessionStore()
+        val manager = terminalSessionManager(
+            service = FakeTerminalSessionFactory(),
+            store = store,
+            now = { 500L },
+        )
+        val candidate = hostRecoveryCandidate(TmuxServerTarget.Default)
+
+        assertNull(manager.retainedHostTmuxSession(candidate))
+        assertTrue(manager.sessions().isEmpty())
+        assertEquals(0, store.saveCount)
+
+        val recovered = requireNotNull(manager.recoverOrGetHostTmuxSession(candidate))
+
+        assertEquals(recovered, manager.retainedHostTmuxSession(candidate))
+        assertNull(
+            manager.retainedHostTmuxSession(
+                candidate.copy(
+                    discovery = candidate.discovery.copy(terminalNumber = 2),
+                ),
+            ),
+        )
+        assertNull(
+            manager.retainedHostTmuxSession(
+                candidate.copy(
+                    target = candidate.target.copy(
+                        id = "lee@other.example.com:22$FeaturePath",
+                        host = "other.example.com",
+                    ),
+                ),
+            ),
+        )
+        assertEquals(1, manager.sessions().size)
+        assertEquals(1, store.saveCount)
+    }
+
+    @Test
+    fun `host tmux recovery never overwrites a deterministic id with conflicting metadata`() {
+        val manager = terminalSessionManager(service = FakeTerminalSessionFactory(), now = { 500L })
+        val candidate = hostRecoveryCandidate(TmuxServerTarget.Default)
+        val recovered = requireNotNull(manager.recoverOrGetHostTmuxSession(candidate))
+        val conflictingCandidate = candidate.copy(
+            discovery = candidate.discovery.copy(terminalNumber = 2),
+        )
+
+        assertNull(manager.recoverOrGetHostTmuxSession(conflictingCandidate))
+        assertEquals(recovered, manager.session(recovered.id))
+        assertEquals(listOf(recovered), manager.sessions())
+    }
+
+    @Test
     fun `reconnect of host recovered terminal preserves exact server target and attach existing policy`() {
         val service = FakeTerminalSessionFactory()
         val manager = terminalSessionManager(service = service)

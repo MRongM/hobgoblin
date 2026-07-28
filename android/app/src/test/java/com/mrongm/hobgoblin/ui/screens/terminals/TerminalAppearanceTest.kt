@@ -59,12 +59,14 @@ class TerminalAppearanceTest {
 
     @Test
     fun `terminal view applies appearance to termux indexed and special colors`() {
-        val source = sourceFile("ui/screens/terminals/HobgoblinTerminalView.kt")
+        val viewSource = sourceFile("ui/screens/terminals/HobgoblinTerminalView.kt")
+        val paletteSource = sourceFile("ui/screens/terminals/TerminalAppearance.kt")
 
-        assertTrue(source.contains("fun setTerminalAppearance("))
-        assertTrue(source.contains("TextStyle.COLOR_INDEX_FOREGROUND"))
-        assertTrue(source.contains("TextStyle.COLOR_INDEX_BACKGROUND"))
-        assertTrue(source.contains("TextStyle.COLOR_INDEX_CURSOR"))
+        assertTrue(viewSource.contains("fun setTerminalAppearance("))
+        assertTrue(viewSource.contains("observeColorChanges"))
+        assertTrue(paletteSource.contains("TextStyle.COLOR_INDEX_FOREGROUND"))
+        assertTrue(paletteSource.contains("TextStyle.COLOR_INDEX_BACKGROUND"))
+        assertTrue(paletteSource.contains("TextStyle.COLOR_INDEX_CURSOR"))
     }
 
     @Test

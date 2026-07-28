@@ -16,6 +16,7 @@ Android 在用户打开一个已保存 SSH Host 后显示“项目 / tmux”两�
 4. 页面按 `@hobgoblin_init_path` 分组显示每个可识别 session 的 terminal slot、附着状态和实际 server 来源。
 5. 用户点击 session；Android 创建或复用一个设备本地 retained terminal，并严格附着扫描到的原 server/session。
 6. 从终端返回时回到同一主机的 tmux Tab；从全局 Terminals 页再次打开时仍返回 Terminals。
+7. 用户可在已留存的 session 卡片上重连、关闭或删除 Android 终端记录；删除时可额外勾选关闭精确远端 tmux session，默认不勾选。
 
 ## 范围
 
@@ -23,6 +24,8 @@ Android 在用户打开一个已保存 SSH Host 后显示“项目 / tmux”两�
 - tmux Tab 扫描远端当前用户的默认 tmux server 与所有严格命名的 Hobgoblin project-scoped server。
 - 读取 session name、`@hobgoblin_init_path`、`@hobgoblin_terminal_number`、`session_attached`。
 - 恢复默认 server 和 project-scoped server 中已有的 Hobgoblin session。
+- 对已有 retained terminal 提供打开、重连、关闭和删除操作。
+- 删除确认框提供默认关闭的“同时关闭远程 tmux 会话”选项；勾选后重新校验精确 server/session 元数据，再执行远端 `kill-session`。
 - 首次进入或重新进入 tmux Tab、终端返回、手动刷新和下拉刷新时重新扫描。
 - 刷新失败且已有结果时保留陈旧快照。
 
@@ -30,7 +33,7 @@ Android 在用户打开一个已保存 SSH Host 后显示“项目 / tmux”两�
 
 - 不读取 `workspace-configs.json` 或 `branch-workspaces.json`。
 - 不扫描工作区、Git 仓库、worktree 或普通目录来推断 tmux session。
-- 不创建、重命名、结束或迁移远端 tmux server/session。
+- 不创建、重命名或迁移远端 tmux server/session；未显式勾选删除确认框时绝不结束远端 session。
 - 不显示缺少 Hobgoblin 名称或必要元数据的任意 tmux session。
 - 不轮询，不持久化远端扫描快照，不要求远端 Hobgoblin 进程运行。
 - 不改变桌面/Web 创建新 tmux session 的 v1 名称算法。
@@ -107,6 +110,16 @@ socket 目录不存在、候选在扫描期间消失、server 没有 session 都
 
 持久化 codec 新增向后兼容字段。旧记录继续可读；新记录的确定性 ID 加入 server target，避免默认 server 与命名 server 中同名 session 冲突。
 
+## 终端操作与删除安全
+
+目录卡片把远端扫描结果与可选的设备本地 retained terminal 投影关联起来，不为展示操作而创建或持久化记录：
+
+- 未留存：仅提供“打开”；打开会创建 retained terminal 并附着精确远端 session。
+- `Starting` / `Running`：提供“关闭 / 删除 / 打开”；关闭只停止 Android controller，远端 tmux 继续运行。
+- `Exited` / `Failed` / `Disconnected`：提供“重连 / 删除 / 打开”；重连复用原记录与精确 server target。
+
+删除始终先显示确认框。确认框说明默认行为只删除 Android 本地记录，并提供默认不勾选的“同时关闭远程 tmux 会话”。勾选后，Android 必须重新列出扫描到的精确 server，确认 session name、初始路径与 terminal number 仍一致，再对该 server 执行精确 `kill-session`；校验或关闭失败时保留本地记录并显示错误。成功或远端 session 已不存在时才删除本地记录并刷新目录。attached client 数变化不阻止关闭。
+
 ## 导航与状态
 
 新增 `AppRoute.HostDetail(hostId, selectedTab)`，Tab 选择是路由返回上下文，不写入长期设置。Hosts 卡片不再直接跳到全局 Projects 过滤页。
@@ -146,7 +159,9 @@ feature-auth
 
 - 路径是主要分组依据，basename 是组标题，完整路径是次文本。
 - 每个 session 使用实色 Card；整行可点击。
+- 卡片底部按 retained terminal 状态显示适用的“重连 / 关闭 / 删除 / 打开”文字操作；未留存时只显示“打开”。
 - 显示 `terminal-N`、attached client 状态、server 来源及 server/session hash 后缀；accessibility description 保留完整 server/session 值。
+- 删除使用 Material 确认框；远程关闭勾选项默认关闭，并用危险色提示会结束进程及断开其他客户端。
 - 空状态明确说明“未发现带 Hobgoblin 元数据的 tmux 会话”，不提供创建按钮。
 - 不显示工作区、仓库成员或子工作区术语。
 
@@ -155,13 +170,15 @@ feature-auth
 - 协议：socket 候选过滤、`TMUX_TMPDIR`、默认/命名 server、消失 socket、macOS missing-socket 文案、malformed 行和稳定排序。
 - 服务：一次 host trust、一次 SSH 命令、空/失败/成功/陈旧结果。
 - 恢复：server target 参与去重、默认与命名 server 精确附着、旧 record codec 兼容、缺失 session 不创建。
+- 操作投影：远端 session 与 retained terminal 精确匹配、未留存仅打开、活动状态关闭、非活动状态重连、删除确认默认不关闭远端。
+- 远端删除：精确 server/session 元数据复核、默认/命名 socket、session 消失幂等、元数据不匹配失败关闭、kill 失败保留本地记录。
 - 导航：Hosts → HostDetail、两个 Tab、项目过滤、tmux 终端返回 HostDetail tmux、通知返回 Terminals。
-- UI：加载、空、错误、陈旧、按路径分组、attached 状态、无创建/删除操作、四语言资源完整。
+- UI：加载、空、错误、陈旧、按路径分组、attached 状态、状态感知操作、安全删除确认、四语言资源完整。
 - 全量验证：Android unit/assemble、root typecheck/test、architecture check、diff check。
 
 ## 原则检查
 
-- **KISS**：一个主机详情、一个只读 SSH 扫描、一个精确附着入口。
+- **KISS**：复用 retained terminal 生命周期与现有删除确认模式，只新增一个精确远端关闭边界。
 - **YAGNI**：删除工作区契约、路径检查、工作区层级和 Git 推断。
 - **DRY**：复用 tmux executable 解析、session name/path 校验、retained terminal 与 SSH trust。
 - **SOLID**：socket 扫描协议、SSH 边界、恢复持久化、导航状态和 Compose 展示各自单一职责。

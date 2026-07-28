@@ -100,6 +100,15 @@ internal fun hostTmuxRecoveryCandidate(
     )
 }
 
+internal fun requireHostTmuxRemoteCloseSuccess(result: RemoteTmuxCloseResult) {
+    when (result) {
+        RemoteTmuxCloseResult.Closed,
+        RemoteTmuxCloseResult.Missing,
+        -> Unit
+        is RemoteTmuxCloseResult.Failed -> error(result.message)
+    }
+}
+
 @Composable
 fun HobgoblinAndroidApp(
     hostProfileStore: HostProfileStore,
@@ -730,15 +739,55 @@ fun HobgoblinAndroidApp(
                 route = AppRoute.Hosts
             } else {
                 val parent = HostDetailReturn(host.id, HostDetailTab.Projects)
+                val visibleTmuxState = hostTmuxState.takeIf {
+                    hostTmuxStateHostId == host.id
+                } ?: ResourceState.Idle
+                val discoveredTmuxSessions = when (visibleTmuxState) {
+                    is ResourceState.Loaded -> visibleTmuxState.value.flatMap(HostTmuxPathGroup::sessions)
+                    is ResourceState.Stale -> visibleTmuxState.value.flatMap(HostTmuxPathGroup::sessions)
+                    ResourceState.Idle,
+                    ResourceState.Loading,
+                    is ResourceState.Error,
+                    -> emptyList()
+                }
+                val retainedSessionIds = terminalSessions.mapTo(mutableSetOf(), TerminalSessionRecord::id)
+                val retainedTmuxSessions = discoveredTmuxSessions.mapNotNull { discovery ->
+                    terminalSessionManager
+                        .retainedHostTmuxSession(hostTmuxRecoveryCandidate(host, discovery))
+                        ?.takeIf { retained -> retained.id in retainedSessionIds }
+                        ?.let { retained -> discovery to retained }
+                }.toMap()
                 HostDetailScreen(
                     host = host,
                     selectedTab = currentRoute.selectedTab,
-                    tmuxState = hostTmuxState.takeIf { hostTmuxStateHostId == host.id } ?: ResourceState.Idle,
+                    tmuxState = visibleTmuxState,
                     tmuxRefreshing = hostTmuxRefreshInFlight,
                     onSelectTab = { selectedTab -> route = currentRoute.copy(selectedTab = selectedTab) },
                     onBack = { route = AppRoute.Hosts },
                     onRefreshTmux = { hostTmuxRefreshNonce += 1 },
                     onOpenTmuxSession = { discovery -> openHostTmuxSession(host, discovery) },
+                    retainedTmuxSessions = retainedTmuxSessions,
+                    onReconnectTmuxSession = ::reconnectRetainedTerminal,
+                    onCloseTmuxSession = ::closeRetainedTerminal,
+                    onDeleteTmuxSession = { discovery, session, closeRemote ->
+                        val candidate = hostTmuxRecoveryCandidate(host, discovery)
+                        val retained = terminalSessionManager.retainedHostTmuxSession(candidate)
+                        require(retained?.id == session.id) {
+                            "The retained tmux terminal is no longer available."
+                        }
+                        if (closeRemote) {
+                            requireHostTmuxRemoteCloseSuccess(
+                                withContext(Dispatchers.IO) {
+                                    remoteTmuxSessionService.closeHostSession(
+                                        target = candidate.target,
+                                        discovery = discovery,
+                                    )
+                                },
+                            )
+                        }
+                        deleteRetainedTerminal(session.id)
+                        hostTmuxRefreshNonce += 1
+                    },
                     projectsContent = {
                         ProjectsScreen(
                             repositoriesState = repositoriesState,

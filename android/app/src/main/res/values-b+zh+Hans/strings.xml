@@ -371,4 +371,10 @@
     <string name="host_tmux_idle">空闲</string>
     <string name="host_tmux_attached_clients">%1$d 个客户端已连接</string>
     <string name="host_tmux_terminal_label">terminal-%1$d</string>
+    <string name="host_tmux_close_description">关闭 terminal-%1$d 的 Android 连接并保留本地记录，以便稍后重连。远程 tmux 会话会继续运行。</string>
+    <string name="host_tmux_delete_title">删除 tmux 终端？</string>
+    <string name="host_tmux_delete_local_description">从 Android 终端列表删除 terminal-%1$d，并停止其活动连接。除非勾选下方选项，否则远程 tmux 会话将继续运行。</string>
+    <string name="host_tmux_close_remote_on_delete">同时关闭远程 tmux 会话</string>
+    <string name="host_tmux_close_remote_warning">这会结束会话中的进程并断开其他客户端，且无法撤销。</string>
+    <string name="host_tmux_delete_failed">无法删除 tmux 终端</string>
 </resources>

@@ -3,6 +3,7 @@ package com.mrongm.hobgoblin.ui.screens.terminals
 import com.mrongm.hobgoblin.R
 import com.mrongm.hobgoblin.data.TerminalAppearance
 import com.mrongm.hobgoblin.ui.text.LocalizedText
+import com.termux.terminal.TextStyle
 
 internal data class TerminalPalette(
     val backgroundArgb: Int,
@@ -30,6 +31,16 @@ internal fun terminalAppearanceToggleText(current: TerminalAppearance): Localize
 internal fun terminalPalette(appearance: TerminalAppearance): TerminalPalette = when (appearance) {
     TerminalAppearance.Dark -> DarkTerminalPalette
     TerminalAppearance.Light -> LightTerminalPalette
+}
+
+internal fun applyTerminalPalette(colors: IntArray, palette: TerminalPalette) {
+    require(colors.size > TextStyle.COLOR_INDEX_CURSOR) { "Complete terminal color table is required" }
+    palette.ansiArgb.forEachIndexed { index, color ->
+        colors[index] = color
+    }
+    colors[TextStyle.COLOR_INDEX_FOREGROUND] = palette.foregroundArgb
+    colors[TextStyle.COLOR_INDEX_BACKGROUND] = palette.backgroundArgb
+    colors[TextStyle.COLOR_INDEX_CURSOR] = palette.actionArgb
 }
 
 private val DarkTerminalPalette = TerminalPalette(

@@ -371,4 +371,10 @@
     <string name="host_tmux_idle">アイドル</string>
     <string name="host_tmux_attached_clients">%1$d クライアント接続中</string>
     <string name="host_tmux_terminal_label">terminal-%1$d</string>
+    <string name="host_tmux_close_description">terminal-%1$d の Android 接続を閉じ、後で再接続できるようローカル記録を残します。リモート tmux セッションは実行を続けます。</string>
+    <string name="host_tmux_delete_title">tmux ターミナルを削除しますか？</string>
+    <string name="host_tmux_delete_local_description">terminal-%1$d を Android のターミナル一覧から削除し、アクティブな接続を停止します。下の項目を選択しない限り、リモート tmux セッションは実行を続けます。</string>
+    <string name="host_tmux_close_remote_on_delete">リモート tmux セッションも閉じる</string>
+    <string name="host_tmux_close_remote_warning">セッション内のプロセスを終了し、他のクライアントも切断します。この操作は元に戻せません。</string>
+    <string name="host_tmux_delete_failed">tmux ターミナルを削除できませんでした</string>
 </resources>

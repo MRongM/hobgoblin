@@ -1,5 +1,9 @@
 package com.mrongm.hobgoblin.terminals.emulator
 
+import com.mrongm.hobgoblin.data.TerminalAppearance
+import com.mrongm.hobgoblin.ui.screens.terminals.applyTerminalPalette
+import com.mrongm.hobgoblin.ui.screens.terminals.terminalPalette
+import com.termux.terminal.TextStyle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -65,6 +69,25 @@ class RemoteTerminalEmulatorControllerTest {
 
         assertEquals(0, notifyCount)
         assertFalse(controller.output.isDetached)
+    }
+
+    @Test
+    fun `remote OSC color change reasserts the selected dark terminal palette`() {
+        val controller = controller()
+        val palette = terminalPalette(TerminalAppearance.Dark)
+        val colors = controller.emulator.mColors.mCurrentColors
+        applyTerminalPalette(colors, palette)
+        var reapplyCount = 0
+        controller.observeColorChanges {
+            reapplyCount += 1
+            applyTerminalPalette(colors, palette)
+        }
+
+        controller.appendOutput("\u001B]11;#ffffff\u0007".toByteArray(Charsets.UTF_8))
+
+        assertEquals(1, reapplyCount)
+        assertEquals(palette.foregroundArgb, colors[TextStyle.COLOR_INDEX_FOREGROUND])
+        assertEquals(palette.backgroundArgb, colors[TextStyle.COLOR_INDEX_BACKGROUND])
     }
 
     private fun controller(

@@ -124,6 +124,12 @@ class TerminalSessionManager(
         return result.record
     }
 
+    fun retainedHostTmuxSession(
+        candidate: HostTmuxRecoveryCandidate,
+    ): TerminalSessionRecord? = synchronized(lock) {
+        retainedHostTmuxSessionLocked(candidate)
+    }
+
     fun session(sessionId: String): TerminalSessionRecord? = synchronized(lock) {
         sessions[sessionId]
     }
@@ -915,35 +921,19 @@ class TerminalSessionManager(
     private fun recoverOrGetHostTmuxSessionLocked(
         candidate: HostTmuxRecoveryCandidate,
     ): TmuxRecoveryResult? {
-        val remotePath = TmuxSessionProtocol.normalizePath(candidate.target.remotePath) ?: return null
+        val key = hostTmuxSessionKey(candidate) ?: return null
         val discovery = candidate.discovery
-        if (
-            candidate.target.id.isBlank() ||
-            candidate.targetLabel.isBlank() ||
-            remotePath != discovery.identity.initialPath
-        ) {
-            return null
-        }
-
-        val sessionId = recoveredHostTmuxSessionId(
-            target = candidate.target,
-            server = discovery.server,
-            sessionName = discovery.identity.sessionName,
-        )
-        sessions[sessionId]?.let { existing ->
+        sessions[key.sessionId]?.let { existing ->
             return existing.takeIf { record ->
-                record.tmuxIdentity == discovery.identity &&
-                    record.tmuxServerTarget == discovery.server &&
-                    record.terminalId == discovery.terminalNumber &&
-                    terminalSessionRemotePath(record.remotePath) == remotePath
+                record.matchesHostTmuxCandidate(candidate, key)
             }?.let { record -> TmuxRecoveryResult(record, created = false) }
         }
 
         val record = TerminalSessionRecord(
-            id = sessionId,
+            id = key.sessionId,
             hostId = candidate.target.id,
             repositoryId = null,
-            remotePath = remotePath,
+            remotePath = key.remotePath,
             targetLabel = candidate.targetLabel,
             displayName = terminalSessionDisplayNameFromIndex(discovery.terminalNumber),
             terminalId = discovery.terminalNumber,
@@ -955,6 +945,47 @@ class TerminalSessionManager(
         )
         sessions[record.id] = record
         return TmuxRecoveryResult(record, created = true)
+    }
+
+    private fun retainedHostTmuxSessionLocked(
+        candidate: HostTmuxRecoveryCandidate,
+    ): TerminalSessionRecord? {
+        val key = hostTmuxSessionKey(candidate) ?: return null
+        return sessions[key.sessionId]?.takeIf { record ->
+            record.matchesHostTmuxCandidate(candidate, key)
+        }
+    }
+
+    private fun TerminalSessionRecord.matchesHostTmuxCandidate(
+        candidate: HostTmuxRecoveryCandidate,
+        key: HostTmuxSessionKey,
+    ): Boolean {
+        val discovery = candidate.discovery
+        return hostId == candidate.target.id &&
+            tmuxIdentity == discovery.identity &&
+            tmuxServerTarget == discovery.server &&
+            terminalId == discovery.terminalNumber &&
+            terminalSessionRemotePath(remotePath) == key.remotePath
+    }
+
+    private fun hostTmuxSessionKey(candidate: HostTmuxRecoveryCandidate): HostTmuxSessionKey? {
+        val remotePath = TmuxSessionProtocol.normalizePath(candidate.target.remotePath) ?: return null
+        val discovery = candidate.discovery
+        if (
+            candidate.target.id.isBlank() ||
+            candidate.targetLabel.isBlank() ||
+            remotePath != discovery.identity.initialPath
+        ) {
+            return null
+        }
+        return HostTmuxSessionKey(
+            sessionId = recoveredHostTmuxSessionId(
+                target = candidate.target,
+                server = discovery.server,
+                sessionName = discovery.identity.sessionName,
+            ),
+            remotePath = remotePath,
+        )
     }
 
     private fun terminalSessionRemotePath(remotePath: String): String =
@@ -986,6 +1017,11 @@ class TerminalSessionManager(
     private data class TmuxRecoveryResult(
         val record: TerminalSessionRecord,
         val created: Boolean,
+    )
+
+    private data class HostTmuxSessionKey(
+        val sessionId: String,
+        val remotePath: String,
     )
 
     private data class ExpiredTerminalWrite(

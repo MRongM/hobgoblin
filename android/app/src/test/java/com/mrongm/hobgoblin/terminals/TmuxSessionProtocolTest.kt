@@ -430,6 +430,27 @@ class TmuxSessionProtocolTest {
     }
 
     @Test
+    fun `host tmux administration targets the exact discovered default or named socket`() {
+        val sessionName = "hobgoblin-v1-aebf050981ac829e36100020"
+        val namedServer = TmuxServerTarget.Named("hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0")
+        val defaultList = TmuxSessionProtocol.hostServerSessionListCommand(TmuxServerTarget.Default)
+        val namedList = TmuxSessionProtocol.hostServerSessionListCommand(namedServer)
+        val namedKill = TmuxSessionProtocol.hostSessionKillCommand(namedServer, sessionName)
+
+        assertTrue(defaultList.contains("printf '%s\\n' '${TmuxSessionProtocol.HostDiscoveryHeader}'"))
+        assertTrue(defaultList.contains("hobgoblin_tmux_socket_name='default'"))
+        assertTrue(defaultList.contains("legacy-default\t#{session_name}"))
+        assertTrue(namedList.contains("hobgoblin_tmux_socket_name='${namedServer.serverName}'"))
+        assertTrue(namedList.contains("${namedServer.serverName}\t#{session_name}"))
+        assertTrue(defaultList.contains("case \"\${TMUX_TMPDIR:-}\" in"))
+        assertTrue(defaultList.contains("/tmp/tmux-\$hobgoblin_remote_uid"))
+        assertTrue(defaultList.contains("-S \"\$hobgoblin_tmux_socket\" list-sessions"))
+        assertTrue(namedKill.orEmpty().contains("-S \"\$hobgoblin_tmux_socket\" kill-session"))
+        assertTrue(namedKill.orEmpty().endsWith("-t '=$sessionName'"))
+        assertNull(TmuxSessionProtocol.hostSessionKillCommand(TmuxServerTarget.Default, "user-session"))
+    }
+
+    @Test
     fun `host discovery parses default and named servers and groups by initial path`() {
         val namedServer = "hobgoblin-project-v1-222222222222222222222222"
         val output = listOf(

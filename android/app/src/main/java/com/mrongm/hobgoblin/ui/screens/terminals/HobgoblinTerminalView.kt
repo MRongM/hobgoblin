@@ -21,7 +21,6 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
 import com.termux.view.TerminalRenderer
-import com.termux.terminal.TextStyle
 import com.mrongm.hobgoblin.R
 import com.mrongm.hobgoblin.data.TerminalAppearance
 import com.mrongm.hobgoblin.terminals.emulator.RemoteTerminalEmulatorController
@@ -107,6 +106,7 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
 ) : View(context, attrs) {
     private var controller: RemoteTerminalEmulatorController? = null
     private var observer: AutoCloseable? = null
+    private var colorObserver: AutoCloseable? = null
     private var currentFontSizeSp = TerminalDefaultFontSizeSp
     private var terminalAppearance = TerminalAppearance.Dark
     private var fitToScreen = true
@@ -147,6 +147,8 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
         if (controller === nextController && observer != null) return
         observer?.close()
         observer = null
+        colorObserver?.close()
+        colorObserver = null
         clearSelection()
         cancelInertia()
         velocityTracker?.recycle()
@@ -162,6 +164,10 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
         touchScrolled = false
         if (nextController != null) {
             observer = nextController.observe { onTerminalScreenUpdated() }
+            colorObserver = nextController.observeColorChanges {
+                applyTerminalAppearance()
+                invalidate()
+            }
             applyTerminalAppearance()
             updateGrid(width, height)
         }
@@ -227,17 +233,14 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
         setBackgroundColor(palette.backgroundArgb)
         selectionPaint.color = palette.selectionArgb
         val colors = controller?.emulator?.mColors?.mCurrentColors ?: return
-        palette.ansiArgb.forEachIndexed { index, color ->
-            colors[index] = color
-        }
-        colors[TextStyle.COLOR_INDEX_FOREGROUND] = palette.foregroundArgb
-        colors[TextStyle.COLOR_INDEX_BACKGROUND] = palette.backgroundArgb
-        colors[TextStyle.COLOR_INDEX_CURSOR] = palette.actionArgb
+        applyTerminalPalette(colors, palette)
     }
 
     override fun onDetachedFromWindow() {
         observer?.close()
         observer = null
+        colorObserver?.close()
+        colorObserver = null
         clearSelection()
         cancelInertia()
         velocityTracker?.recycle()

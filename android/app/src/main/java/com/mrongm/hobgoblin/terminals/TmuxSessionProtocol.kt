@@ -485,13 +485,7 @@ object TmuxSessionProtocol {
         return listOf(
             tmuxExecutableResolverScript(),
             "$TmuxResolverFunction || exit 127",
-            "hobgoblin_remote_uid=${'$'}(id -u 2>/dev/null) || exit ${'$'}?",
-            "case \"${'$'}hobgoblin_remote_uid\" in ''|*[!0-9]*) " +
-                "printf '%s\\n' 'Unable to resolve remote uid for tmux discovery' >&2; exit 1 ;; esac",
-            "case \"${'$'}{TMUX_TMPDIR:-}\" in",
-            "  /*) hobgoblin_tmux_socket_dir=\"${'$'}{TMUX_TMPDIR%/}/tmux-${'$'}hobgoblin_remote_uid\" ;;",
-            "  *) hobgoblin_tmux_socket_dir=\"/tmp/tmux-${'$'}hobgoblin_remote_uid\" ;;",
-            "esac",
+            hostTmuxSocketDirectorySetup("discovery"),
             "printf '%s\\n' ${shellQuote(HostDiscoveryHeader)}",
             "if [ ! -e \"${'$'}hobgoblin_tmux_socket_dir\" ]; then exit 0; fi",
             "if [ ! -d \"${'$'}hobgoblin_tmux_socket_dir\" ] || " +
@@ -573,6 +567,65 @@ object TmuxSessionProtocol {
                 "kill-session -t ${shellQuote("=$sessionName")}",
         ).joinToString("\n")
     }
+
+    fun hostServerSessionListCommand(server: TmuxServerTarget): String {
+        val (serverMarker, socketName) = hostServerMarkers(server)
+        val format = listOf(
+            serverMarker,
+            "#{session_name}",
+            "#{@hobgoblin_init_path}",
+            "#{@hobgoblin_terminal_number}",
+            "#{session_attached}",
+        ).joinToString("\t")
+        return listOf(
+            tmuxExecutableResolverScript(),
+            "$TmuxResolverFunction || exit 127",
+            hostServerSocketSetup(socketName),
+            "printf '%s\\n' ${shellQuote(HostDiscoveryHeader)}",
+            "[ -S \"${'$'}hobgoblin_tmux_socket\" ] || exit 0",
+            batchListFunction(),
+            "run_tmux_list $TmuxExecutableReference -u -S \"${'$'}hobgoblin_tmux_socket\" " +
+                "list-sessions -F ${shellQuote(format)} || exit ${'$'}?",
+        ).joinToString("\n")
+    }
+
+    fun hostSessionKillCommand(
+        server: TmuxServerTarget,
+        sessionName: String,
+    ): String? {
+        if (!isCurrentSessionName(sessionName)) return null
+        val (_, socketName) = hostServerMarkers(server)
+        return listOf(
+            tmuxExecutableResolverScript(),
+            "$TmuxResolverFunction || exit 127",
+            hostServerSocketSetup(socketName),
+            "if [ ! -S \"${'$'}hobgoblin_tmux_socket\" ]; then " +
+                "printf '%s\\n' 'no server running for exact Hobgoblin tmux target' >&2; exit 1; fi",
+            "$TmuxExecutableReference -u -S \"${'$'}hobgoblin_tmux_socket\" " +
+                "kill-session -t ${shellQuote("=$sessionName")}",
+        ).joinToString("\n")
+    }
+
+    private fun hostServerMarkers(server: TmuxServerTarget): Pair<String, String> = when (server) {
+        TmuxServerTarget.Default -> LegacyDefaultServerMarker to "default"
+        is TmuxServerTarget.Named -> server.serverName to server.serverName
+    }
+
+    private fun hostServerSocketSetup(socketName: String): String = listOf(
+        "hobgoblin_tmux_socket_name=${shellQuote(socketName)}",
+        hostTmuxSocketDirectorySetup("operation"),
+        "hobgoblin_tmux_socket=\"${'$'}hobgoblin_tmux_socket_dir/${'$'}hobgoblin_tmux_socket_name\"",
+    ).joinToString("\n")
+
+    private fun hostTmuxSocketDirectorySetup(operation: String): String = listOf(
+        "hobgoblin_remote_uid=${'$'}(id -u 2>/dev/null) || exit ${'$'}?",
+        "case \"${'$'}hobgoblin_remote_uid\" in ''|*[!0-9]*) " +
+            "printf '%s\\n' 'Unable to resolve remote uid for tmux $operation' >&2; exit 1 ;; esac",
+        "case \"${'$'}{TMUX_TMPDIR:-}\" in",
+        "  /*) hobgoblin_tmux_socket_dir=\"${'$'}{TMUX_TMPDIR%/}/tmux-${'$'}hobgoblin_remote_uid\" ;;",
+        "  *) hobgoblin_tmux_socket_dir=\"/tmp/tmux-${'$'}hobgoblin_remote_uid\" ;;",
+        "esac",
+    ).joinToString("\n")
 
     private fun combinedListScript(projectRoot: String, format: String): String {
         val serverName = requireNotNull(serverName(projectRoot)) { "Normalized absolute tmux project root is required" }

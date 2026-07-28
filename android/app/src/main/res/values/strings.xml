@@ -372,4 +372,10 @@
     <string name="host_tmux_idle">Idle</string>
     <string name="host_tmux_attached_clients">%1$d attached clients</string>
     <string name="host_tmux_terminal_label">terminal-%1$d</string>
+    <string name="host_tmux_close_description">Close the Android connection for terminal-%1$d and keep its local record for reconnecting later. The remote tmux session keeps running.</string>
+    <string name="host_tmux_delete_title">Delete tmux terminal?</string>
+    <string name="host_tmux_delete_local_description">Remove terminal-%1$d from the Android terminal list and stop its active connection. The remote tmux session keeps running unless you select the option below.</string>
+    <string name="host_tmux_close_remote_on_delete">Also close the remote tmux session</string>
+    <string name="host_tmux_close_remote_warning">This ends processes in the session and disconnects other clients. It cannot be undone.</string>
+    <string name="host_tmux_delete_failed">Unable to delete the tmux terminal</string>
 </resources>

@@ -72,6 +72,56 @@ class RemoteTmuxSessionService(
         )
     }
 
+    fun closeHostSession(
+        target: RemoteTarget,
+        discovery: HostDiscoveredTmuxSession,
+    ): RemoteTmuxCloseResult = try {
+        val fingerprint = client.fetchHostFingerprint(target)
+        require(hostKeyStore.evaluate(target, fingerprint) is HostKeyTrust.Trusted) {
+            "Trust this host key before closing the tmux session."
+        }
+        val secrets = SshConnectionSecrets(acceptedHostFingerprint = fingerprint)
+        val listed = client.runCommand(
+            target = target,
+            script = TmuxSessionProtocol.hostServerSessionListCommand(discovery.server),
+            secrets = secrets,
+        )
+        if (!listed.ok) {
+            val message = listed.failureMessage()
+            return if (isMissingTmuxMessage(message)) {
+                RemoteTmuxCloseResult.Missing
+            } else {
+                RemoteTmuxCloseResult.Failed(message)
+            }
+        }
+        val sessions = TmuxSessionProtocol.parseHostSessionDiscoveryOutput(listed.stdout)
+            ?: return RemoteTmuxCloseResult.Failed("tmux returned an invalid host session list")
+        val exactSession = sessions.firstOrNull { current ->
+            current.server == discovery.server &&
+                current.identity == discovery.identity &&
+                current.terminalNumber == discovery.terminalNumber
+        } ?: return RemoteTmuxCloseResult.Missing
+        val killScript = TmuxSessionProtocol.hostSessionKillCommand(
+            server = exactSession.server,
+            sessionName = exactSession.identity.sessionName,
+        ) ?: return RemoteTmuxCloseResult.Failed("Invalid Hobgoblin tmux session name")
+        val killed = client.runCommand(target = target, script = killScript, secrets = secrets)
+        if (killed.ok) {
+            RemoteTmuxCloseResult.Closed
+        } else {
+            val message = killed.failureMessage()
+            if (isMissingTmuxMessage(message)) {
+                RemoteTmuxCloseResult.Missing
+            } else {
+                RemoteTmuxCloseResult.Failed(message)
+            }
+        }
+    } catch (error: Throwable) {
+        RemoteTmuxCloseResult.Failed(
+            error.message?.takeIf { it.isNotBlank() } ?: error::class.java.simpleName,
+        )
+    }
+
     fun discoverAssociatedSessions(
         target: RemoteTarget,
         projectRoot: String,

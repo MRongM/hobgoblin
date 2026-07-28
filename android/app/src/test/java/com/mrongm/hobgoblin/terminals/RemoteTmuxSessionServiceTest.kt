@@ -74,6 +74,86 @@ class RemoteTmuxSessionServiceTest {
     }
 
     @Test
+    fun `host close revalidates exact metadata and ignores attached client drift before killing`() {
+        val discovery = hostDiscovery(attachedClients = 0)
+        val client = FakeSshClient(
+            SshCommandResult(
+                ok = true,
+                stdout = listOf(
+                    TmuxSessionProtocol.HostDiscoveryHeader,
+                    "$ProjectServerName\t$SessionName\t$FeaturePath\t1\t3",
+                ).joinToString("\n"),
+            ),
+            SshCommandResult(ok = true),
+        )
+
+        val result = service(client).closeHostSession(target(), discovery)
+
+        assertEquals(RemoteTmuxCloseResult.Closed, result)
+        assertEquals(
+            listOf(
+                TmuxSessionProtocol.hostServerSessionListCommand(discovery.server),
+                TmuxSessionProtocol.hostSessionKillCommand(discovery.server, SessionName),
+            ),
+            client.scripts,
+        )
+        assertTrue(client.secrets.all { it.acceptedHostFingerprint == "SHA256:trusted" })
+    }
+
+    @Test
+    fun `host close treats missing or changed exact metadata as missing without killing`() {
+        val discovery = hostDiscovery()
+        val missing = service(
+            FakeSshClient(
+                SshCommandResult(ok = true, stdout = TmuxSessionProtocol.HostDiscoveryHeader),
+            ),
+        ).closeHostSession(target(), discovery)
+        val changedClient = FakeSshClient(
+            SshCommandResult(
+                ok = true,
+                stdout = listOf(
+                    TmuxSessionProtocol.HostDiscoveryHeader,
+                    "$ProjectServerName\t$SessionName\t$FeaturePath\t2\t0",
+                ).joinToString("\n"),
+            ),
+        )
+
+        val changed = service(changedClient).closeHostSession(target(), discovery)
+
+        assertEquals(RemoteTmuxCloseResult.Missing, missing)
+        assertEquals(RemoteTmuxCloseResult.Missing, changed)
+        assertEquals(1, changedClient.scripts.size)
+    }
+
+    @Test
+    fun `host close reports kill failure and rejects an untrusted host before SSH commands`() {
+        val discovery = hostDiscovery()
+        val trustedClient = FakeSshClient(
+            SshCommandResult(
+                ok = true,
+                stdout = listOf(
+                    TmuxSessionProtocol.HostDiscoveryHeader,
+                    "$ProjectServerName\t$SessionName\t$FeaturePath\t1\t0",
+                ).joinToString("\n"),
+            ),
+            SshCommandResult(ok = false, stderr = "permission denied"),
+        )
+
+        assertEquals(
+            RemoteTmuxCloseResult.Failed("permission denied"),
+            service(trustedClient).closeHostSession(target(), discovery),
+        )
+
+        val untrustedClient = FakeSshClient()
+        val untrustedService = RemoteTmuxSessionService(
+            untrustedClient,
+            FakeHostKeyTrustStore(trusted = false),
+        )
+        assertTrue(untrustedService.closeHostSession(target(), discovery) is RemoteTmuxCloseResult.Failed)
+        assertTrue(untrustedClient.scripts.isEmpty())
+    }
+
+    @Test
     fun `trusted discovery returns only descriptor verified sessions`() {
         val discoveryIdentity = requireNotNull(
             TmuxSessionProtocol.identity(
@@ -340,6 +420,14 @@ class RemoteTmuxSessionServiceTest {
 
     private fun identity(): TmuxSessionIdentity =
         TmuxSessionIdentity(sessionName = SessionName, initialPath = "/srv/feature")
+
+    private fun hostDiscovery(attachedClients: Int = 0): HostDiscoveredTmuxSession =
+        HostDiscoveredTmuxSession(
+            server = TmuxServerTarget.Named(ProjectServerName),
+            identity = TmuxSessionIdentity(sessionName = SessionName, initialPath = FeaturePath),
+            terminalNumber = 1,
+            attachedClients = attachedClients,
+        )
 
     private fun target(): RemoteTarget = RemoteTarget(
         id = "lee@example.com:22/srv/feature",
