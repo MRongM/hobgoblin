@@ -45,7 +45,7 @@ The read-only Android presentation of every configured workspace rooted at an ab
 _Avoid_: Android project list, filesystem workspace scan, nested SSH workspace, workspace editor
 
 **Android branch workspace tmux catalog**:
-The read-only Android projection of discoverable Hobgoblin tmux sessions associated with one branch workspace. It groups exact sessions at the branch workspace root separately from sessions at each repository member worktree, and opening an item recovers and attaches that existing session through the retained-terminal lifecycle. It never lists name-only or arbitrary tmux sessions, creates a new terminal, or ends a remote tmux session; deleting the recovered device-local record remains independent of the remote session.
+The read-only Android projection of discoverable Hobgoblin tmux sessions associated with one branch workspace. It groups exact sessions at the branch workspace root separately from sessions at each repository member worktree, and opening an item recovers and attaches that existing session through the retained-terminal lifecycle. A session remains visible and attachable when its branch workspace is drifted or has an incomplete lifecycle operation, provided the session still passes exact protocol verification; Android presents the workspace issue without offering a repair or continuation action. The catalog never lists name-only or arbitrary tmux sessions, creates a new terminal, or ends a remote tmux session; deleting the recovered device-local record remains independent of the remote session.
 _Avoid_: Tmux session creator, remote tmux manager, unverified tmux list
 
 **Terminal topbar**:

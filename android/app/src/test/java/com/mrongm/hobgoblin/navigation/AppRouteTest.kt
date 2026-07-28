@@ -55,6 +55,69 @@ class AppRouteTest {
     }
 
     @Test
+    fun `workspace route and terminal return preserve the expanded branch workspace`() {
+        val workspaceReturn = WorkspaceCatalogReturn(
+            hostId = "host-1",
+            rootPath = "/srv/product",
+            expandedBranchWorkspaceId = "branch-auth",
+        )
+        val route = AppRoute.Terminal(
+            hostId = "host-1",
+            remotePath = "/srv/product/hobgoblin-feature-auth/api",
+            terminalSessionId = "session-1",
+            workspaceReturn = workspaceReturn,
+        )
+
+        assertEquals(
+            AppRoute.WorkspaceCatalog(
+                hostId = "host-1",
+                rootPath = "/srv/product",
+                expandedBranchWorkspaceId = "branch-auth",
+            ),
+            terminalReturnRoute(route, resolvedHostId = "host-1", temporary = false),
+        )
+    }
+
+    @Test
+    fun `terminals return takes priority over a workspace return`() {
+        val route = AppRoute.Terminal(
+            hostId = "host-1",
+            remotePath = "/srv/product/hobgoblin-feature-auth",
+            returnToTerminals = true,
+            workspaceReturn = WorkspaceCatalogReturn("host-1", "/srv/product", "branch-auth"),
+        )
+
+        assertEquals(AppRoute.Terminals, terminalReturnRoute(route, resolvedHostId = "host-1", temporary = false))
+    }
+
+    @Test
+    fun `notification terminal without a local repository returns to terminals`() {
+        val record = TerminalSessionRecord(
+            id = "session-1",
+            hostId = "host-1",
+            repositoryId = null,
+            remotePath = "/srv/product/hobgoblin-feature-auth",
+            targetLabel = "product · feature auth",
+            terminalId = 1,
+            repositoryRemotePath = "/srv/product",
+            tmuxIdentity = com.mrongm.hobgoblin.terminals.TmuxSessionProtocol.identity(
+                com.mrongm.hobgoblin.terminals.TmuxSessionDescriptor(
+                    "/srv/product",
+                    "/srv/product/hobgoblin-feature-auth",
+                    1,
+                ),
+            ),
+            status = TerminalSessionStatus.Disconnected,
+            openedAt = 100,
+        )
+
+        val route = terminalNotificationRoute(record)
+
+        assertEquals(true, route.returnToTerminals)
+        assertEquals(AppRoute.Terminals, terminalReturnRoute(route, "host-1", temporary = false))
+    }
+
+    @Test
     fun `terminal opened from overview returns to terminals regardless of source`() {
         val temporary = AppRoute.Terminal(
             hostId = "host-1",

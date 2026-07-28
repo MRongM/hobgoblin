@@ -30,6 +30,8 @@ import com.mrongm.hobgoblin.domain.ResourceState
 import com.mrongm.hobgoblin.domain.ssh.RemoteProjectKind
 import com.mrongm.hobgoblin.domain.ssh.RemoteRepositoryProfile
 import com.mrongm.hobgoblin.domain.ssh.SshHostProfile
+import com.mrongm.hobgoblin.domain.workspace.RemoteConfiguredWorkspaceSnapshot
+import com.mrongm.hobgoblin.domain.workspace.RemoteWorkspaceCatalogSnapshot
 import com.mrongm.hobgoblin.ui.components.ManualReorderHandle
 import com.mrongm.hobgoblin.ui.components.ManualReorderState
 import com.mrongm.hobgoblin.ui.components.manualReorderItem
@@ -43,6 +45,9 @@ fun ProjectsScreen(
     onOpenProject: (String) -> Unit,
     onOpenProjectTerminals: (String, String) -> Unit,
     onDeleteProject: (String) -> Unit,
+    workspaceCatalogState: ResourceState<RemoteWorkspaceCatalogSnapshot> = ResourceState.Idle,
+    onOpenWorkspace: (String) -> Unit = {},
+    onRefreshWorkspaceCatalog: () -> Unit = {},
     hostFilterId: String? = null,
     onClearHostFilter: () -> Unit = {},
     initialManualOrder: List<String> = emptyList(),
@@ -53,6 +58,14 @@ fun ProjectsScreen(
             .fillMaxSize()
             .padding(HobgoblinSpacing.Md),
     ) {
+        if (workspaceCatalogVisible(hostFilterId)) {
+            WorkspaceCatalogSection(
+                state = workspaceCatalogState,
+                onOpenWorkspace = onOpenWorkspace,
+                onRefresh = onRefreshWorkspaceCatalog,
+            )
+            Spacer(Modifier.height(HobgoblinSpacing.Md))
+        }
         when (repositoriesState) {
             ResourceState.Idle,
             ResourceState.Loading,
@@ -113,6 +126,17 @@ internal fun projectsForHost(
 internal fun filteredProjectsDescriptionResource(): Int = R.string.projects_filtered_empty_description
 
 internal fun projectReorderAvailable(hostFilterId: String?): Boolean = hostFilterId == null
+
+internal fun workspaceCatalogVisible(hostFilterId: String?): Boolean = hostFilterId != null
+
+internal fun orderedWorkspaceRoots(workspaces: List<RemoteConfiguredWorkspaceSnapshot>): List<String> =
+    workspaces.map(RemoteConfiguredWorkspaceSnapshot::rootPath)
+
+internal fun localProjectReorderIds(projects: List<RemoteRepositoryProfile>): List<String> =
+    projects.map(RemoteRepositoryProfile::id)
+
+internal fun filteredPageIsEmpty(localProjects: Int, remoteWorkspaces: Int): Boolean =
+    localProjects == 0 && remoteWorkspaces == 0
 
 internal fun projectKindLabelResource(project: RemoteRepositoryProfile): Int = when (project.kind) {
     RemoteProjectKind.GitRepository -> R.string.projects_git_repository
@@ -256,6 +280,89 @@ private fun LoadingProjects() {
     Column(verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm)) {
         Text(stringResource(R.string.common_loading), style = MaterialTheme.typography.labelMedium)
         Text(stringResource(R.string.projects_loading_description))
+    }
+}
+
+@Composable
+private fun WorkspaceCatalogSection(
+    state: ResourceState<RemoteWorkspaceCatalogSnapshot>,
+    onOpenWorkspace: (String) -> Unit,
+    onRefresh: () -> Unit,
+) {
+    if (state is ResourceState.Loaded && state.value.workspaces.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                stringResource(R.string.projects_workspaces_heading),
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            TextButton(onClick = onRefresh) {
+                Text(stringResource(R.string.common_refresh))
+            }
+        }
+        when (state) {
+            ResourceState.Idle,
+            ResourceState.Loading,
+            -> Text(
+                stringResource(R.string.projects_workspace_loading),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            is ResourceState.Error -> Text(
+                stringResource(R.string.projects_workspace_error, state.message),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            is ResourceState.Loaded -> WorkspaceCards(state.value.workspaces, onOpenWorkspace)
+            is ResourceState.Stale -> {
+                Text(
+                    stringResource(R.string.workspace_stale, state.reason),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                WorkspaceCards(state.value.workspaces, onOpenWorkspace)
+            }
+        }
+    }
+}
+
+@Composable
+private fun WorkspaceCards(
+    workspaces: List<RemoteConfiguredWorkspaceSnapshot>,
+    onOpenWorkspace: (String) -> Unit,
+) {
+    workspaces.forEach { workspace ->
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            onClick = { onOpenWorkspace(workspace.rootPath) },
+        ) {
+            Column(
+                modifier = Modifier.padding(HobgoblinSpacing.Md),
+                verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
+            ) {
+                Text(
+                    workspace.rootPath.substringAfterLast('/').ifBlank { "/" },
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(workspace.rootPath, style = MaterialTheme.typography.bodySmall)
+                Text(
+                    stringResource(
+                        R.string.projects_workspace_summary,
+                        workspace.repositories.size,
+                        workspace.branchWorkspaces.size,
+                    ),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Spacer(Modifier.height(HobgoblinSpacing.Sm))
     }
 }
 

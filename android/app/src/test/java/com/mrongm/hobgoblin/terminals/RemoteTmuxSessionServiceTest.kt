@@ -24,8 +24,8 @@ class RemoteTmuxSessionServiceTest {
             SshCommandResult(
                 ok = true,
                 stdout = listOf(
-                    "${discoveryIdentity.sessionName}\t$FeaturePath\t1\t$ProjectServerName",
-                    "user-session\t$FeaturePath\t1\tlegacy-default",
+                    "${discoveryIdentity.sessionName}\t$FeaturePath\t1\t$ProjectServerName\t0",
+                    "user-session\t$FeaturePath\t1\tlegacy-default\tlegacy",
                 ).joinToString("\n"),
             ),
         )
@@ -42,7 +42,14 @@ class RemoteTmuxSessionServiceTest {
             ),
             result,
         )
-        assertEquals(listOf(TmuxSessionProtocol.listDiscoverableSessionsScript(ProjectRoot)), client.scripts)
+        assertEquals(
+            listOf(
+                TmuxSessionProtocol.listDiscoverableSessionsScript(
+                    listOf(TmuxDiscoveryScope(ProjectRoot, setOf(FeaturePath))),
+                ),
+            ),
+            client.scripts,
+        )
         assertTrue(client.secrets.all { it.acceptedHostFingerprint == "SHA256:trusted" })
     }
 
@@ -93,6 +100,61 @@ class RemoteTmuxSessionServiceTest {
 
         assertTrue(result is RemoteTmuxDiscoveryResult.Failed)
         assertEquals(emptyList<String>(), client.scripts)
+    }
+
+    @Test
+    fun `batch discovery uses one trust decision and one SSH command for every scope`() {
+        val secondRoot = "/srv/projects/other"
+        val secondPath = "/srv/projects/other/worktrees/feature"
+        val firstIdentity = requireNotNull(
+            TmuxSessionProtocol.identity(TmuxSessionDescriptor(ProjectRoot, FeaturePath, 1)),
+        )
+        val secondIdentity = requireNotNull(
+            TmuxSessionProtocol.identity(TmuxSessionDescriptor(secondRoot, secondPath, 2)),
+        )
+        val client = FakeSshClient(
+            SshCommandResult(
+                ok = true,
+                stdout = listOf(
+                    "${firstIdentity.sessionName}\t$FeaturePath\t1\t$ProjectServerName\t0",
+                    "${secondIdentity.sessionName}\t$secondPath\t2\t${TmuxSessionProtocol.serverName(secondRoot)}\t1",
+                ).joinToString("\n"),
+            ),
+        )
+
+        val result = service(client).discoverAssociatedSessions(
+            target = target(),
+            scopes = listOf(
+                TmuxDiscoveryScope(ProjectRoot, setOf(FeaturePath)),
+                TmuxDiscoveryScope(secondRoot, setOf(secondPath)),
+            ),
+        )
+
+        assertEquals(
+            RemoteTmuxBatchDiscoveryResult.Found(
+                listOf(
+                    ScopedDiscoveredTmuxSession(ProjectRoot, DiscoveredTmuxSession(firstIdentity, 1)),
+                    ScopedDiscoveredTmuxSession(secondRoot, DiscoveredTmuxSession(secondIdentity, 2)),
+                ),
+            ),
+            result,
+        )
+        assertEquals(1, client.fingerprintReads)
+        assertEquals(1, client.scripts.size)
+    }
+
+    @Test
+    fun `invalid batch scope fails before host trust or SSH command`() {
+        val client = FakeSshClient()
+
+        val result = service(client).discoverAssociatedSessions(
+            target = target(),
+            scopes = listOf(TmuxDiscoveryScope("relative", setOf(FeaturePath))),
+        )
+
+        assertTrue(result is RemoteTmuxBatchDiscoveryResult.Failed)
+        assertEquals(0, client.fingerprintReads)
+        assertTrue(client.scripts.isEmpty())
     }
 
     @Test
@@ -235,8 +297,12 @@ class RemoteTmuxSessionServiceTest {
         private val remaining = ArrayDeque(results.toList())
         val scripts = mutableListOf<String>()
         val secrets = mutableListOf<SshConnectionSecrets>()
+        var fingerprintReads = 0
 
-        override fun fetchHostFingerprint(target: RemoteTarget): String = "SHA256:trusted"
+        override fun fetchHostFingerprint(target: RemoteTarget): String {
+            fingerprintReads += 1
+            return "SHA256:trusted"
+        }
 
         override fun runCommand(
             target: RemoteTarget,

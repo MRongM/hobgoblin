@@ -57,6 +57,29 @@ afterEach(async () => {
 })
 
 describe('branch workspace source', () => {
+  test('accepts the shared Android v1 read-contract fixture', async () => {
+    const { dataFile } = await createFixture()
+    const fixture = await readFile(
+      new URL('../../../fixtures/workspace-catalog/v1/branch-workspaces.json', import.meta.url),
+      'utf8',
+    )
+    await mkdir(path.dirname(dataFile), { recursive: true })
+    await writeFile(dataFile, fixture)
+
+    await expect(readBranchWorkspaceManifests('/srv/workspace', { dataFile })).resolves.toMatchObject({
+      kind: 'ready',
+      manifests: [
+        {
+          branch: 'feature/auth',
+          repositories: [
+            { repositoryName: 'api', worktreePath: '/srv/workspace/hobgoblin-feature-auth/api' },
+            { repositoryName: 'web', worktreePath: '/srv/workspace/hobgoblin-feature-auth/web' },
+          ],
+        },
+      ],
+    })
+  })
+
   test('reports an unregistered workspace as missing', async () => {
     const { dataFile, root } = await createFixture()
 

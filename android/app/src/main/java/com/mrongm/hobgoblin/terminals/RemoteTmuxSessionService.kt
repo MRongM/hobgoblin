@@ -21,6 +21,16 @@ sealed interface RemoteTmuxDiscoveryResult {
     data class Failed(val message: String) : RemoteTmuxDiscoveryResult
 }
 
+sealed interface RemoteTmuxBatchDiscoveryResult {
+    data class Found(
+        val sessions: List<ScopedDiscoveredTmuxSession>,
+    ) : RemoteTmuxBatchDiscoveryResult
+
+    data class Failed(
+        val message: String,
+    ) : RemoteTmuxBatchDiscoveryResult
+}
+
 class RemoteTmuxSessionService(
     private val client: SshClientFacade,
     private val hostKeyStore: HostKeyTrustStore,
@@ -29,10 +39,25 @@ class RemoteTmuxSessionService(
         target: RemoteTarget,
         projectRoot: String,
         allowedInitialPaths: Set<String>,
-    ): RemoteTmuxDiscoveryResult = try {
-        if (TmuxSessionProtocol.normalizePath(projectRoot) == null) {
-            return RemoteTmuxDiscoveryResult.Failed("Invalid tmux discovery project root")
-        }
+    ): RemoteTmuxDiscoveryResult = when (
+        val result = discoverAssociatedSessions(
+            target = target,
+            scopes = listOf(TmuxDiscoveryScope(projectRoot, allowedInitialPaths)),
+        )
+    ) {
+        is RemoteTmuxBatchDiscoveryResult.Found -> RemoteTmuxDiscoveryResult.Found(
+            result.sessions.map { scoped -> scoped.discovery },
+        )
+        is RemoteTmuxBatchDiscoveryResult.Failed -> RemoteTmuxDiscoveryResult.Failed(result.message)
+    }
+
+    fun discoverAssociatedSessions(
+        target: RemoteTarget,
+        scopes: List<TmuxDiscoveryScope>,
+    ): RemoteTmuxBatchDiscoveryResult = try {
+        val normalizedScopes = TmuxSessionProtocol.normalizeDiscoveryScopes(scopes)
+            ?: return RemoteTmuxBatchDiscoveryResult.Failed("Invalid tmux discovery scope")
+        if (normalizedScopes.isEmpty()) return RemoteTmuxBatchDiscoveryResult.Found(emptyList())
         val fingerprint = client.fetchHostFingerprint(target)
         require(hostKeyStore.evaluate(target, fingerprint) is HostKeyTrust.Trusted) {
             "Trust this host key before discovering tmux sessions."
@@ -40,25 +65,26 @@ class RemoteTmuxSessionService(
         val secrets = SshConnectionSecrets(acceptedHostFingerprint = fingerprint)
         val listed = client.runCommand(
             target = target,
-            script = TmuxSessionProtocol.listDiscoverableSessionsScript(projectRoot),
+            script = TmuxSessionProtocol.listDiscoverableSessionsScript(normalizedScopes),
             secrets = secrets,
         )
         if (!listed.ok) {
             val message = listed.failureMessage()
             return if (isEmptyDiscoveryMessage(message)) {
-                RemoteTmuxDiscoveryResult.Found(emptyList())
+                RemoteTmuxBatchDiscoveryResult.Found(emptyList())
             } else {
-                RemoteTmuxDiscoveryResult.Failed(message)
+                RemoteTmuxBatchDiscoveryResult.Failed(message)
             }
         }
         val sessions = TmuxSessionProtocol.parseDiscoverableSessions(
             output = listed.stdout,
-            projectRoot = projectRoot,
-            allowedInitialPaths = allowedInitialPaths,
-        ) ?: return RemoteTmuxDiscoveryResult.Failed("Invalid tmux discovery scope")
-        RemoteTmuxDiscoveryResult.Found(sessions)
+            scopes = normalizedScopes,
+        ) ?: return RemoteTmuxBatchDiscoveryResult.Failed("Invalid tmux discovery scope")
+        RemoteTmuxBatchDiscoveryResult.Found(sessions)
     } catch (error: Throwable) {
-        RemoteTmuxDiscoveryResult.Failed(error.message?.takeIf { it.isNotBlank() } ?: error::class.java.simpleName)
+        RemoteTmuxBatchDiscoveryResult.Failed(
+            error.message?.takeIf { it.isNotBlank() } ?: error::class.java.simpleName,
+        )
     }
 
     fun closeAssociatedSession(

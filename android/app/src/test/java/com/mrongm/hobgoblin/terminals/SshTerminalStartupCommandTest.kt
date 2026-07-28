@@ -91,6 +91,31 @@ class SshTerminalStartupCommandTest {
     }
 
     @Test
+    fun `recovered tmux startup only attaches an existing session`() {
+        val identity = requireNotNull(
+            TmuxSessionProtocol.identity(
+                TmuxSessionDescriptor(
+                    projectRoot = "/srv/repo",
+                    workingDirectory = "/srv/repo-feature",
+                    terminalNumber = 2,
+                ),
+            ),
+        )
+        val command = SshTerminalStartupCommand.remoteCommandForTarget(
+            target(remotePath = "/srv/repo-feature"),
+            startupContext(
+                terminalId = 2,
+                tmuxIdentity = identity,
+                tmuxStartupPolicy = TmuxStartupPolicy.AttachExisting,
+            ),
+        ).orEmpty()
+        val output = unwrapProjectStartupScript(command)
+
+        assertTrue(output.contains("Hobgoblin tmux session no longer exists"))
+        assertFalse(output.contains("new-session"))
+    }
+
+    @Test
     fun `workspace shell quotes paths with spaces and single quotes`() {
         val command = SshTerminalStartupCommand.remoteCommandForTarget(
             target(remotePath = "/srv/app's worktree"),
@@ -147,12 +172,14 @@ class SshTerminalStartupCommandTest {
         repositoryRemotePath: String = "/srv/repo",
         worktreeRemotePath: String = "/srv/repo-feature",
         tmuxIdentity: TmuxSessionIdentity? = null,
+        tmuxStartupPolicy: TmuxStartupPolicy = TmuxStartupPolicy.AttachOrCreate,
     ): TerminalStartupContext =
         TerminalStartupContext(
             repositoryRemotePath = repositoryRemotePath,
             worktreeRemotePath = worktreeRemotePath,
             terminalId = terminalId,
             tmuxIdentity = tmuxIdentity,
+            tmuxStartupPolicy = tmuxStartupPolicy,
         )
 
     private fun target(

@@ -39,6 +39,16 @@ data class DiscoveredTmuxSession(
     val terminalNumber: Int,
 )
 
+data class TmuxDiscoveryScope(
+    val projectRoot: String,
+    val allowedInitialPaths: Set<String>,
+)
+
+data class ScopedDiscoveredTmuxSession(
+    val projectRoot: String,
+    val discovery: DiscoveredTmuxSession,
+)
+
 object TmuxSessionProtocol {
     fun serverName(projectRoot: String): String? {
         val normalizedProjectRoot = normalizePath(projectRoot) ?: return null
@@ -82,6 +92,37 @@ object TmuxSessionProtocol {
             "elif $TmuxExecutableReference has-session -t ${shellQuote(sessionTarget)} 2>/dev/null; then " +
             "$legacyAttachCommand; " +
             "else $projectCreateCommand; fi"
+    }
+
+    fun attachExistingCommand(
+        identity: TmuxSessionIdentity,
+        terminalNumber: Int,
+        projectRoot: String,
+    ): String? {
+        if (terminalNumber < 1) return null
+        val serverName = serverName(projectRoot) ?: return null
+        val sessionTarget = "=${identity.sessionName}"
+        val paneTarget = "$sessionTarget:"
+        val projectTmux = "$TmuxExecutableReference -L ${shellQuote(serverName)}"
+        val projectAttachCommand = configureAndAttachCommandForTmux(
+            projectTmux,
+            identity,
+            terminalNumber,
+            sessionTarget,
+            paneTarget,
+        )
+        val legacyAttachCommand = configureAndAttachCommandForTmux(
+            TmuxExecutableReference,
+            identity,
+            terminalNumber,
+            sessionTarget,
+            paneTarget,
+        )
+        return "if $projectTmux has-session -t ${shellQuote(sessionTarget)} 2>/dev/null; then " +
+            "$projectAttachCommand; " +
+            "elif $TmuxExecutableReference has-session -t ${shellQuote(sessionTarget)} 2>/dev/null; then " +
+            "$legacyAttachCommand; " +
+            "else printf '%s\\n' 'Hobgoblin tmux session no longer exists. Refresh the workspace.' >&2; exit 44; fi"
     }
 
     private fun createAndAttachCommandForTmux(
@@ -240,6 +281,44 @@ object TmuxSessionProtocol {
         )
     }
 
+    fun parseDiscoverableSessions(
+        output: String,
+        scopes: List<TmuxDiscoveryScope>,
+    ): List<ScopedDiscoveredTmuxSession>? {
+        val normalizedScopes = normalizeDiscoveryScopes(scopes) ?: return null
+        if (normalizedScopes.isEmpty()) return emptyList()
+        val rows = output.lineSequence().mapNotNull(::parseBatchDiscoveryRow).toList()
+        val sessionsByName = linkedMapOf<String, ScopedDiscoveredTmuxSession>()
+
+        rows.filter { row -> row.scopeMarker != LegacyScopeMarker }.forEach { row ->
+            val scopeIndex = row.scopeMarker.toIntOrNull() ?: return@forEach
+            val scope = normalizedScopes.getOrNull(scopeIndex) ?: return@forEach
+            val expectedServerName = serverName(scope.projectRoot) ?: return@forEach
+            if (row.serverMarker != expectedServerName) return@forEach
+            val discovery = validateDiscoveryRow(row, scope) ?: return@forEach
+            sessionsByName.putIfAbsent(
+                discovery.identity.sessionName,
+                ScopedDiscoveredTmuxSession(scope.projectRoot, discovery),
+            )
+        }
+
+        rows.filter { row -> row.scopeMarker == LegacyScopeMarker }.forEach { row ->
+            if (row.serverMarker != LegacyDefaultServerMarker) return@forEach
+            normalizedScopes.firstNotNullOfOrNull { scope ->
+                validateDiscoveryRow(row, scope)?.let { discovery ->
+                    ScopedDiscoveredTmuxSession(scope.projectRoot, discovery)
+                }
+            }?.let { scoped -> sessionsByName.putIfAbsent(scoped.discovery.identity.sessionName, scoped) }
+        }
+
+        val scopeOrder = normalizedScopes.mapIndexed { index, scope -> scope.projectRoot to index }.toMap()
+        return sessionsByName.values.sortedWith(
+            compareBy<ScopedDiscoveredTmuxSession> { scoped -> scopeOrder.getValue(scoped.projectRoot) }
+                .thenBy { scoped -> scoped.discovery.identity.initialPath }
+                .thenBy { scoped -> scoped.discovery.terminalNumber },
+        )
+    }
+
     fun matches(identity: TmuxSessionIdentity, session: RemoteTmuxSession): Boolean =
         isCurrentSessionName(identity.sessionName) &&
             session.sessionName == identity.sessionName &&
@@ -254,6 +333,37 @@ object TmuxSessionProtocol {
         projectRoot = projectRoot,
         format = "#{session_name}\t#{${InitPathOption}}\t#{${TerminalNumberOption}}",
     )
+
+    fun listDiscoverableSessionsScript(scopes: List<TmuxDiscoveryScope>): String {
+        val normalizedScopes = requireNotNull(normalizeDiscoveryScopes(scopes)) { "Invalid tmux discovery scope" }
+        require(normalizedScopes.isNotEmpty()) { "At least one tmux discovery scope is required" }
+        val format = "#{session_name}\t#{${InitPathOption}}\t#{${TerminalNumberOption}}"
+        val projectListings = normalizedScopes.mapIndexed { index, scope ->
+            val serverName = requireNotNull(serverName(scope.projectRoot))
+            "run_tmux_list $TmuxExecutableReference -u -L ${shellQuote(serverName)} list-sessions " +
+                "-F ${shellQuote("$format\t$serverName\t$index")} || exit ${'$'}?"
+        }
+        return listOf(
+            tmuxExecutableResolverScript(),
+            "$TmuxResolverFunction || exit 127",
+            batchListFunction(),
+            *projectListings.toTypedArray(),
+            "run_tmux_list $TmuxExecutableReference -u list-sessions " +
+                "-F ${shellQuote("$format\t$LegacyDefaultServerMarker\t$LegacyScopeMarker")} || exit ${'$'}?",
+        ).joinToString("\n")
+    }
+
+    internal fun normalizeDiscoveryScopes(scopes: List<TmuxDiscoveryScope>): List<TmuxDiscoveryScope>? {
+        val pathsByProjectRoot = linkedMapOf<String, LinkedHashSet<String>>()
+        scopes.forEach { scope ->
+            val projectRoot = normalizePath(scope.projectRoot) ?: return null
+            val allowedPaths = scope.allowedInitialPaths.map { path -> normalizePath(path) ?: return null }
+            pathsByProjectRoot.getOrPut(projectRoot, ::linkedSetOf).addAll(allowedPaths)
+        }
+        return pathsByProjectRoot.map { (projectRoot, paths) ->
+            TmuxDiscoveryScope(projectRoot = projectRoot, allowedInitialPaths = paths)
+        }
+    }
 
     internal fun tmuxExecutableResolverScript(): String = listOf(
         "$TmuxResolverFunction() {",
@@ -323,6 +433,55 @@ object TmuxSessionProtocol {
         ).joinToString("\n")
     }
 
+    private fun batchListFunction(): String = listOf(
+        "run_tmux_list() {",
+        "  tmux_output=${'$'}(\"${'$'}@\" 2>&1)",
+        "  tmux_status=${'$'}?",
+        "  if [ \"${'$'}tmux_status\" -eq 0 ]; then",
+        "    [ -z \"${'$'}tmux_output\" ] || printf '%s\\n' \"${'$'}tmux_output\"",
+        "    return 0",
+        "  fi",
+        "  case \"${'$'}tmux_output\" in",
+        "    *\"no server running\"*|*\"failed to connect to server\"*|*\"no sessions\"*) return 0 ;;",
+        "  esac",
+        "  printf '%s\\n' \"${'$'}tmux_output\" >&2",
+        "  return \"${'$'}tmux_status\"",
+        "}",
+    ).joinToString("\n")
+
+    private fun parseBatchDiscoveryRow(rawLine: String): BatchDiscoveryRow? {
+        val line = rawLine.removeSuffix("\r")
+        if (line.isEmpty()) return null
+        val fields = line.split('\t')
+        if (fields.size != 5) return null
+        return BatchDiscoveryRow(
+            sessionName = fields[0],
+            initialPath = fields[1],
+            terminalNumber = fields[2],
+            serverMarker = fields[3],
+            scopeMarker = fields[4],
+        )
+    }
+
+    private fun validateDiscoveryRow(
+        row: BatchDiscoveryRow,
+        scope: TmuxDiscoveryScope,
+    ): DiscoveredTmuxSession? {
+        if (!isCurrentSessionName(row.sessionName)) return null
+        if (normalizePath(row.initialPath) != row.initialPath || row.initialPath !in scope.allowedInitialPaths) return null
+        if (!CanonicalTerminalNumberPattern.matches(row.terminalNumber)) return null
+        val terminalNumber = row.terminalNumber.toIntOrNull() ?: return null
+        val identity = identity(
+            TmuxSessionDescriptor(
+                projectRoot = scope.projectRoot,
+                workingDirectory = row.initialPath,
+                terminalNumber = terminalNumber,
+            ),
+        ) ?: return null
+        if (identity.sessionName != row.sessionName) return null
+        return DiscoveredTmuxSession(identity = identity, terminalNumber = terminalNumber)
+    }
+
     private fun shellQuote(value: String): String = "'${value.replace("'", "'\"'\"'")}'"
 
     private const val SessionProtocol = "hobgoblin-terminal-session-v1"
@@ -330,6 +489,7 @@ object TmuxSessionProtocol {
     private const val ServerProtocol = "hobgoblin-tmux-server-v1"
     private const val ServerNamePrefix = "hobgoblin-project-v1-"
     private const val LegacyDefaultServerMarker = "legacy-default"
+    private const val LegacyScopeMarker = "legacy"
     private const val TmuxResolverFunction = "resolve_hobgoblin_tmux"
     private const val TmuxExecutableReference = "\"${'$'}hobgoblin_tmux_bin\""
     private const val InitPathOption = "@hobgoblin_init_path"
@@ -339,4 +499,12 @@ object TmuxSessionProtocol {
     private val CurrentSessionNamePattern = Regex("^hobgoblin-v1-[a-f0-9]{24}$")
     private val CanonicalTerminalNumberPattern = Regex("^[1-9][0-9]*$")
     private val HexChars = "0123456789abcdef".toCharArray()
+
+    private data class BatchDiscoveryRow(
+        val sessionName: String,
+        val initialPath: String,
+        val terminalNumber: String,
+        val serverMarker: String,
+        val scopeMarker: String,
+    )
 }

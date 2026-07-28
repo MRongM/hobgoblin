@@ -56,7 +56,7 @@ data class TerminalSessionRecord(
 
 data class TmuxTerminalRecoveryCandidate(
     val target: RemoteTarget,
-    val repositoryId: String,
+    val repositoryId: String?,
     val repositoryRemotePath: String,
     val targetLabel: String,
     val discovery: DiscoveredTmuxSession,

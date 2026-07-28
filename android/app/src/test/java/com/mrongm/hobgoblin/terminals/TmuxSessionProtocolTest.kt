@@ -102,6 +102,19 @@ class TmuxSessionProtocolTest {
     }
 
     @Test
+    fun `attach existing command never creates a replacement session`() {
+        val identity = requireNotNull(TmuxSessionProtocol.identity(descriptor()))
+        val command = TmuxSessionProtocol.attachExistingCommand(identity, 1, "/srv/projects/example").orEmpty()
+        val serverName = "hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0"
+
+        assertTrue(command.contains("\"\$hobgoblin_tmux_bin\" -L '$serverName' has-session"))
+        assertTrue(command.contains("elif \"\$hobgoblin_tmux_bin\" has-session"))
+        assertTrue(command.contains("Hobgoblin tmux session no longer exists"))
+        assertFalse(command.contains("new-session"))
+        assertNull(TmuxSessionProtocol.attachExistingCommand(identity, 0, "/srv/projects/example"))
+    }
+
+    @Test
     fun `current protocol name validator excludes legacy and malformed names`() {
         assertTrue(TmuxSessionProtocol.isCurrentSessionName("hobgoblin-v1-aebf050981ac829e36100020"))
         assertFalse(TmuxSessionProtocol.isCurrentSessionName("hobgoblin-aebf050981ac829e3610"))
@@ -225,6 +238,76 @@ class TmuxSessionProtocolTest {
         assertTrue(script.contains("/tmp/tmux-\$hobgoblin_remote_uid/"))
         assertTrue(script.contains("-S \"\$hobgoblin_project_socket\""))
         assertFalse(script.contains("\\t"))
+    }
+
+    @Test
+    fun `batch discovery validates scope identity and prefers project scoped rows`() {
+        val firstRoot = "/srv/product/api"
+        val secondRoot = "/srv/product/web"
+        val firstPath = "/srv/product/hobgoblin-feature-auth/api"
+        val secondPath = "/srv/product/hobgoblin-feature-auth/web"
+        val firstIdentity = requireNotNull(
+            TmuxSessionProtocol.identity(TmuxSessionDescriptor(firstRoot, firstPath, terminalNumber = 2)),
+        )
+        val secondIdentity = requireNotNull(
+            TmuxSessionProtocol.identity(TmuxSessionDescriptor(secondRoot, secondPath, terminalNumber = 1)),
+        )
+        val output = listOf(
+            "${firstIdentity.sessionName}\t$firstPath\t2\tlegacy-default\tlegacy",
+            "${secondIdentity.sessionName}\t$secondPath\t1\t${TmuxSessionProtocol.serverName(secondRoot)}\t1",
+            "${firstIdentity.sessionName}\t$firstPath\t2\t${TmuxSessionProtocol.serverName(firstRoot)}\t0",
+            "user-session\t$firstPath\t1\t${TmuxSessionProtocol.serverName(firstRoot)}\t0",
+            "${firstIdentity.sessionName}\t$firstPath\t2\t${TmuxSessionProtocol.serverName(secondRoot)}\t1",
+        ).joinToString("\n")
+
+        val sessions = TmuxSessionProtocol.parseDiscoverableSessions(
+            output = output,
+            scopes = listOf(
+                TmuxDiscoveryScope("/srv/product//api/.", setOf("$firstPath/")),
+                TmuxDiscoveryScope(secondRoot, setOf(secondPath)),
+                TmuxDiscoveryScope(firstRoot, setOf(firstPath)),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                ScopedDiscoveredTmuxSession(firstRoot, DiscoveredTmuxSession(firstIdentity, 2)),
+                ScopedDiscoveredTmuxSession(secondRoot, DiscoveredTmuxSession(secondIdentity, 1)),
+            ),
+            sessions,
+        )
+    }
+
+    @Test
+    fun `batch discovery script deduplicates normalized scopes and lists legacy default once`() {
+        val script = TmuxSessionProtocol.listDiscoverableSessionsScript(
+            listOf(
+                TmuxDiscoveryScope("/srv/product/api", setOf("/srv/product/feature/api")),
+                TmuxDiscoveryScope("/srv/product//api/.", setOf("/srv/product/feature/api/")),
+                TmuxDiscoveryScope("/srv/product/web", setOf("/srv/product/feature/web")),
+            ),
+        )
+
+        assertEquals(1, Regex("\\tlegacy-default\\tlegacy").findAll(script).count())
+        assertEquals(1, Regex(" -u list-sessions ").findAll(script).count())
+        assertTrue(script.contains("\t${TmuxSessionProtocol.serverName("/srv/product/api")}\t0"))
+        assertTrue(script.contains("\t${TmuxSessionProtocol.serverName("/srv/product/web")}\t1"))
+    }
+
+    @Test
+    fun `batch discovery rejects invalid scope and sorts by scope path and terminal`() {
+        assertNull(
+            TmuxSessionProtocol.parseDiscoverableSessions(
+                output = "",
+                scopes = listOf(TmuxDiscoveryScope("relative", setOf("/srv/path"))),
+            ),
+        )
+        assertNull(
+            TmuxSessionProtocol.parseDiscoverableSessions(
+                output = "",
+                scopes = listOf(TmuxDiscoveryScope("/srv/project", setOf("relative"))),
+            ),
+        )
     }
 
     @Test

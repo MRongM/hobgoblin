@@ -33,6 +33,10 @@ android {
         unitTests.isReturnDefaultValues = true
     }
 
+    sourceSets {
+        getByName("test").resources.directories.add("../../fixtures")
+    }
+
     packaging {
         jniLibs {
             excludes += setOf(

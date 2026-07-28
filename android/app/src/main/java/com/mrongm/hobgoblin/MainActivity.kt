@@ -18,6 +18,7 @@ import com.mrongm.hobgoblin.ssh.SshLocalPortForwardService
 import com.mrongm.hobgoblin.ssh.SshjInitializationClient
 import com.mrongm.hobgoblin.ssh.SshjClientFacade
 import com.mrongm.hobgoblin.ssh.RemoteRepositoryGitService
+import com.mrongm.hobgoblin.ssh.RemoteWorkspaceCatalogService
 import com.mrongm.hobgoblin.ssh.RemoteWorktreeService
 import com.mrongm.hobgoblin.terminals.AndroidTerminalForegroundOwner
 import com.mrongm.hobgoblin.terminals.RemoteTmuxSessionService
@@ -54,6 +55,10 @@ class MainActivity : ComponentActivity() {
             hostKeyStore = hostKeyStore,
         )
         val remoteRepositoryGitService = RemoteRepositoryGitService(
+            client = SshjClientFacade(identityStore = secureIdentityStore),
+            hostKeyStore = hostKeyStore,
+        )
+        val remoteWorkspaceCatalogService = RemoteWorkspaceCatalogService(
             client = SshjClientFacade(identityStore = secureIdentityStore),
             hostKeyStore = hostKeyStore,
         )
@@ -97,6 +102,7 @@ class MainActivity : ComponentActivity() {
                     secureIdentityStore = secureIdentityStore,
                     diagnosticsService = diagnosticsService,
                     remoteRepositoryGitService = remoteRepositoryGitService,
+                    remoteWorkspaceCatalogService = remoteWorkspaceCatalogService,
                     remoteWorktreeService = remoteWorktreeService,
                     terminalSettingsStore = terminalSettingsStore,
                     initializationService = initializationService,

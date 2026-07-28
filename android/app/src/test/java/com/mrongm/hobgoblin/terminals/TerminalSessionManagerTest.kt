@@ -151,6 +151,25 @@ class TerminalSessionManagerTest {
     }
 
     @Test
+    fun `catalog recovery reuses its deterministic record with nullable local repository ownership`() {
+        val service = FakeTerminalSessionFactory()
+        val manager = terminalSessionManager(service = service, now = { 500L })
+        val candidate = recoveryCandidate().copy(repositoryId = null)
+
+        val first = manager.recoverOrGetTmuxSession(candidate)
+        val beforeRepeat = manager.sessions().map { it.id }
+        val repeated = manager.recoverOrGetTmuxSession(candidate)
+
+        assertEquals(first?.id, repeated?.id)
+        assertNull(first?.repositoryId)
+        assertEquals("/srv/repo", first?.repositoryRemotePath)
+        assertEquals(FeaturePath, first?.remotePath)
+        assertEquals(beforeRepeat, manager.sessions().map { it.id })
+        assertEquals(1, manager.sessions().size)
+        assertEquals(0, service.openCount)
+    }
+
+    @Test
     fun `tmux recovery does not overwrite an existing native or exact tmux slot`() {
         val service = FakeTerminalSessionFactory()
         val manager = terminalSessionManager(service = service, ids = terminalIds())
@@ -411,6 +430,7 @@ class TerminalSessionManagerTest {
 
         assertEquals(record.tmuxIdentity, reconnected?.tmuxIdentity)
         assertEquals(record.tmuxIdentity, service.startupContext(index = 1)?.tmuxIdentity)
+        assertEquals(TmuxStartupPolicy.AttachExisting, service.startupContext(index = 1)?.tmuxStartupPolicy)
     }
 
     @Test

@@ -81,50 +81,8 @@ class TerminalSessionManager(
         val recovered = mutableListOf<TerminalSessionRecord>()
         val snapshot = synchronized(lock) {
             candidates.forEach { candidate ->
-                val repositoryPath = TmuxSessionProtocol.normalizePath(candidate.repositoryRemotePath)
-                    ?: return@forEach
-                val remotePath = TmuxSessionProtocol.normalizePath(candidate.target.remotePath)
-                    ?: return@forEach
-                if (
-                    candidate.repositoryId.isBlank() ||
-                    candidate.target.id.isBlank() ||
-                    candidate.targetLabel.isBlank() ||
-                    remotePath != candidate.discovery.identity.initialPath
-                ) {
-                    return@forEach
-                }
-                val expectedIdentity = TmuxSessionProtocol.identity(
-                    TmuxSessionDescriptor(
-                        projectRoot = repositoryPath,
-                        workingDirectory = remotePath,
-                        terminalNumber = candidate.discovery.terminalNumber,
-                    ),
-                ) ?: return@forEach
-                if (expectedIdentity != candidate.discovery.identity) return@forEach
-                val slotOccupied = sessions.values.any { session ->
-                    session.hostId == candidate.target.id &&
-                        session.repositoryRemotePath == repositoryPath &&
-                        terminalSessionRemotePath(session.remotePath) == remotePath &&
-                        session.terminalId == candidate.discovery.terminalNumber
-                }
-                if (slotOccupied) return@forEach
-                val sessionId = recoveredTmuxSessionId(candidate.target, expectedIdentity.sessionName)
-                if (sessionId in sessions) return@forEach
-                val record = TerminalSessionRecord(
-                    id = sessionId,
-                    hostId = candidate.target.id,
-                    repositoryId = candidate.repositoryId,
-                    remotePath = remotePath,
-                    targetLabel = candidate.targetLabel,
-                    displayName = terminalSessionDisplayNameFromIndex(candidate.discovery.terminalNumber),
-                    terminalId = candidate.discovery.terminalNumber,
-                    repositoryRemotePath = repositoryPath,
-                    tmuxIdentity = expectedIdentity,
-                    status = TerminalSessionStatus.Disconnected,
-                    openedAt = clock(),
-                )
-                sessions[record.id] = record
-                recovered += record
+                val result = recoverOrGetTmuxSessionLocked(candidate) ?: return@forEach
+                if (result.created) recovered += result.record
             }
             sortedSessionsLocked()
         }
@@ -132,6 +90,22 @@ class TerminalSessionManager(
         sessionStore?.saveSessions(snapshot)
         notifyCollectionObservers()
         return recovered
+    }
+
+    fun recoverOrGetTmuxSession(
+        candidate: TmuxTerminalRecoveryCandidate,
+    ): TerminalSessionRecord? {
+        val result: TmuxRecoveryResult
+        val snapshot: List<TerminalSessionRecord>
+        synchronized(lock) {
+            result = recoverOrGetTmuxSessionLocked(candidate) ?: return null
+            snapshot = sortedSessionsLocked()
+        }
+        if (result.created) {
+            sessionStore?.saveSessions(snapshot)
+            notifyCollectionObservers()
+        }
+        return result.record
     }
 
     fun session(sessionId: String): TerminalSessionRecord? = synchronized(lock) {
@@ -309,7 +283,11 @@ class TerminalSessionManager(
         persist(starting)
         notifyObservers(starting)
 
-        controller.open(target = target, secrets = secrets, startupContext = projectStartupContext(starting))
+        controller.open(
+            target = target,
+            secrets = secrets,
+            startupContext = projectStartupContext(starting, TmuxStartupPolicy.AttachExisting),
+        )
         return session(sessionId)
     }
 
@@ -820,7 +798,10 @@ class TerminalSessionManager(
         return candidate
     }
 
-    private fun projectStartupContext(record: TerminalSessionRecord): TerminalStartupContext? {
+    private fun projectStartupContext(
+        record: TerminalSessionRecord,
+        tmuxStartupPolicy: TmuxStartupPolicy = TmuxStartupPolicy.AttachOrCreate,
+    ): TerminalStartupContext? {
         val terminalId = record.terminalId ?: return null
         val repositoryPath = record.repositoryRemotePath ?: return null
         return TerminalStartupContext(
@@ -828,7 +809,65 @@ class TerminalSessionManager(
             worktreeRemotePath = record.remotePath,
             terminalId = terminalId,
             tmuxIdentity = record.tmuxIdentity,
+            tmuxStartupPolicy = tmuxStartupPolicy,
         )
+    }
+
+    private fun recoverOrGetTmuxSessionLocked(
+        candidate: TmuxTerminalRecoveryCandidate,
+    ): TmuxRecoveryResult? {
+        val repositoryPath = TmuxSessionProtocol.normalizePath(candidate.repositoryRemotePath) ?: return null
+        val remotePath = TmuxSessionProtocol.normalizePath(candidate.target.remotePath) ?: return null
+        if (
+            candidate.repositoryId?.isBlank() == true ||
+            candidate.target.id.isBlank() ||
+            candidate.targetLabel.isBlank() ||
+            remotePath != candidate.discovery.identity.initialPath
+        ) {
+            return null
+        }
+        val expectedIdentity = TmuxSessionProtocol.identity(
+            TmuxSessionDescriptor(
+                projectRoot = repositoryPath,
+                workingDirectory = remotePath,
+                terminalNumber = candidate.discovery.terminalNumber,
+            ),
+        ) ?: return null
+        if (expectedIdentity != candidate.discovery.identity) return null
+
+        val sessionId = recoveredTmuxSessionId(candidate.target, expectedIdentity.sessionName)
+        sessions[sessionId]?.let { existing ->
+            return existing.takeIf { record ->
+                record.tmuxIdentity == expectedIdentity &&
+                    record.repositoryRemotePath == repositoryPath &&
+                    terminalSessionRemotePath(record.remotePath) == remotePath
+            }?.let { record -> TmuxRecoveryResult(record, created = false) }
+        }
+        val occupied = sessions.values.firstOrNull { session ->
+            session.hostId == candidate.target.id &&
+                session.repositoryRemotePath == repositoryPath &&
+                terminalSessionRemotePath(session.remotePath) == remotePath &&
+                session.terminalId == candidate.discovery.terminalNumber
+        }
+        if (occupied != null) {
+            return occupied.takeIf { record -> record.tmuxIdentity == expectedIdentity }
+                ?.let { record -> TmuxRecoveryResult(record, created = false) }
+        }
+        val record = TerminalSessionRecord(
+            id = sessionId,
+            hostId = candidate.target.id,
+            repositoryId = candidate.repositoryId,
+            remotePath = remotePath,
+            targetLabel = candidate.targetLabel,
+            displayName = terminalSessionDisplayNameFromIndex(candidate.discovery.terminalNumber),
+            terminalId = candidate.discovery.terminalNumber,
+            repositoryRemotePath = repositoryPath,
+            tmuxIdentity = expectedIdentity,
+            status = TerminalSessionStatus.Disconnected,
+            openedAt = clock(),
+        )
+        sessions[record.id] = record
+        return TmuxRecoveryResult(record, created = true)
     }
 
     private fun terminalSessionRemotePath(remotePath: String): String =
@@ -855,6 +894,11 @@ class TerminalSessionManager(
         val id: Long,
         val deadlineAt: Long,
         val operation: TerminalWriteOperation,
+    )
+
+    private data class TmuxRecoveryResult(
+        val record: TerminalSessionRecord,
+        val created: Boolean,
     )
 
     private data class ExpiredTerminalWrite(

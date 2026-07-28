@@ -1,10 +1,16 @@
 package com.mrongm.hobgoblin.terminals
 
+enum class TmuxStartupPolicy {
+    AttachOrCreate,
+    AttachExisting,
+}
+
 data class TerminalStartupContext(
     val repositoryRemotePath: String,
     val worktreeRemotePath: String,
     val terminalId: Int,
     val tmuxIdentity: TmuxSessionIdentity? = null,
+    val tmuxStartupPolicy: TmuxStartupPolicy = TmuxStartupPolicy.AttachOrCreate,
 ) {
     init {
         require(repositoryRemotePath.startsWith("/")) { "Repository path must be absolute" }
