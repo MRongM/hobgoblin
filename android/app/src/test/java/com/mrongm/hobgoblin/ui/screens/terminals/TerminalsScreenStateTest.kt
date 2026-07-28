@@ -48,6 +48,51 @@ class TerminalsScreenStateTest {
     }
 
     @Test
+    fun `terminal overview card tone follows connection status`() {
+        assertEquals(TerminalOverviewTone.Neutral, terminalOverviewTone(TerminalSessionStatus.Starting))
+        assertEquals(TerminalOverviewTone.Running, terminalOverviewTone(TerminalSessionStatus.Running))
+        assertEquals(TerminalOverviewTone.Exited, terminalOverviewTone(TerminalSessionStatus.Exited))
+        assertEquals(TerminalOverviewTone.Exited, terminalOverviewTone(TerminalSessionStatus.Failed))
+        assertEquals(
+            TerminalOverviewTone.Disconnected,
+            terminalOverviewTone(TerminalSessionStatus.Disconnected),
+        )
+    }
+
+    @Test
+    fun `terminal overview connection action switches with retained status`() {
+        assertEquals(
+            TerminalOverviewConnectionAction.Close,
+            terminalOverviewConnectionAction(record(status = TerminalSessionStatus.Starting)),
+        )
+        assertEquals(
+            TerminalOverviewConnectionAction.Close,
+            terminalOverviewConnectionAction(record(status = TerminalSessionStatus.Running)),
+        )
+        listOf(
+            TerminalSessionStatus.Exited,
+            TerminalSessionStatus.Failed,
+            TerminalSessionStatus.Disconnected,
+        ).forEach { status ->
+            assertEquals(
+                TerminalOverviewConnectionAction.Reconnect,
+                terminalOverviewConnectionAction(record(status = status)),
+            )
+        }
+    }
+
+    @Test
+    fun `terminal overview uses state background without manual reordering`() {
+        val source = terminalsScreenSource()
+
+        assertTrue(source.contains("containerColor = terminalOverviewContainerColor("))
+        assertFalse(source.contains("ManualReorderHandle"))
+        assertFalse(source.contains("manualReorderItem"))
+        assertFalse(source.contains("initialManualOrder"))
+        assertFalse(source.contains("onSaveManualOrder"))
+    }
+
+    @Test
     fun `project terminal source resolves host project and branch directory`() {
         val source = terminalOverviewSource(
             session = record(
@@ -60,7 +105,14 @@ class TerminalsScreenStateTest {
         )
 
         assertEquals(
-            LocalizedText(R.string.terminals_context, listOf("Build host", "Example")),
+            LocalizedText(R.string.common_value, listOf("Build host")),
+            source.hostTitle,
+        )
+        assertEquals(
+            LocalizedText(
+                R.string.terminals_context,
+                listOf(LocalizedText(R.string.common_value, listOf("terminal-1")), "Example"),
+            ),
             source.contextLabel,
         )
         assertEquals(LocalizedText(R.string.terminals_branch_directory), source.locationLabel)
@@ -76,7 +128,14 @@ class TerminalsScreenStateTest {
         )
 
         assertEquals(
-            LocalizedText(R.string.terminals_context, listOf("Build host", "Example")),
+            LocalizedText(R.string.common_value, listOf("Build host")),
+            source.hostTitle,
+        )
+        assertEquals(
+            LocalizedText(
+                R.string.terminals_context,
+                listOf(LocalizedText(R.string.common_value, listOf("terminal-1")), "Example"),
+            ),
             source.contextLabel,
         )
         assertEquals(LocalizedText(R.string.terminals_project_root), source.locationLabel)
@@ -96,14 +155,45 @@ class TerminalsScreenStateTest {
         )
 
         assertEquals(
-            LocalizedText(
-                R.string.terminals_context,
-                listOf("Build host", LocalizedText(R.string.terminals_host_terminal)),
-            ),
+            LocalizedText(R.string.common_value, listOf("Build host")),
+            source.hostTitle,
+        )
+        assertEquals(
+            LocalizedText(R.string.terminals_host_terminal),
             source.contextLabel,
         )
         assertEquals(LocalizedText(R.string.terminals_host_directory), source.locationLabel)
         assertEquals("/var/log", source.path)
+    }
+
+    @Test
+    fun `terminal source falls back to persisted host reference when host is unavailable`() {
+        val source = terminalOverviewSource(
+            session = record(hostId = "developer@example.com:2222/srv/example"),
+            hosts = emptyList(),
+            repositories = listOf(repository()),
+        )
+
+        assertEquals(
+            LocalizedText(R.string.common_value, listOf("developer@example.com:2222")),
+            source.hostTitle,
+        )
+    }
+
+    @Test
+    fun `terminal overview preserves the full path by allowing wrapping`() {
+        val source = terminalsScreenSource()
+        val pathText = source
+            .substringAfter("Text(\n                    source.path,")
+            .substringBefore("\n                )")
+
+        assertTrue(pathText.contains("softWrap = true"))
+        assertTrue(pathText.contains("color = MaterialTheme.colorScheme.primary"))
+        assertTrue(pathText.contains("fontFamily = FontFamily.Monospace"))
+        assertTrue(pathText.contains("fontWeight = FontWeight.SemiBold"))
+        assertFalse(pathText.contains("maxLines = 1"))
+        assertFalse(pathText.contains("TextOverflow.Ellipsis"))
+        assertTrue(source.contains("val title = source.hostTitle.resolve()"))
     }
 
     @Test
@@ -170,27 +260,18 @@ class TerminalsScreenStateTest {
     }
 
     @Test
-    fun `deleting a terminal removes only its id from manual order`() {
-        assertEquals(
-            listOf("session-1", "session-3"),
-            terminalOverviewOrderAfterDelete(
-                orderedIds = listOf("session-1", "session-2", "session-3"),
-                deletedId = "session-2",
-            ),
-        )
+    fun `deleting a terminal no longer maintains manual order`() {
+        assertFalse(terminalsScreenSource().contains("terminalOverviewOrderAfterDelete"))
     }
 
     @Test
-    fun `terminal overview exposes distinct confirmed close and delete actions`() {
-        val source = listOf(
-            File("src/main/java/com/mrongm/hobgoblin/ui/screens/terminals/TerminalsScreen.kt"),
-            File("app/src/main/java/com/mrongm/hobgoblin/ui/screens/terminals/TerminalsScreen.kt"),
-            File("android/app/src/main/java/com/mrongm/hobgoblin/ui/screens/terminals/TerminalsScreen.kt"),
-        ).firstOrNull(File::isFile)?.readText() ?: error("TerminalsScreen.kt not found")
+    fun `terminal overview switches reconnect and confirmed close in one action slot`() {
+        val source = terminalsScreenSource()
 
         assertTrue(source.contains("onReconnectTerminalSession"))
         assertTrue(source.contains("R.string.terminal_action_reconnect"))
-        assertTrue(source.contains("enabled = terminalSessionReconnectAvailable(session)"))
+        assertTrue(source.contains("when (terminalOverviewConnectionAction(session))"))
+        assertFalse(source.contains("enabled = terminalSessionReconnectAvailable(session)"))
         assertTrue(source.contains("onCloseTerminalSession"))
         assertTrue(source.contains("onDeleteTerminalSession"))
         assertTrue(source.contains("R.string.repository_terminal_close"))
@@ -271,4 +352,10 @@ class TerminalsScreenStateTest {
         sessionName = "hobgoblin-v1-aebf050981ac829e36100020",
         initialPath = "/srv/example",
     )
+
+    private fun terminalsScreenSource(): String = listOf(
+        File("src/main/java/com/mrongm/hobgoblin/ui/screens/terminals/TerminalsScreen.kt"),
+        File("app/src/main/java/com/mrongm/hobgoblin/ui/screens/terminals/TerminalsScreen.kt"),
+        File("android/app/src/main/java/com/mrongm/hobgoblin/ui/screens/terminals/TerminalsScreen.kt"),
+    ).firstOrNull(File::isFile)?.readText() ?: error("TerminalsScreen.kt not found")
 }

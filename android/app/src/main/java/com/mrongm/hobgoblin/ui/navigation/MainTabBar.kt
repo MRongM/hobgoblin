@@ -17,13 +17,15 @@ import com.mrongm.hobgoblin.R
 
 enum class MainTab {
     Hosts,
-    Projects,
+    Tmux,
     Terminals,
+    Projects,
 }
 
 internal enum class MainTabIconKind {
     Host,
     Folder,
+    Multiplexer,
     Terminal,
 }
 
@@ -37,6 +39,7 @@ internal fun shouldSwitchMainTab(current: MainTab, target: MainTab): Boolean = c
 internal fun mainTabIconKind(tab: MainTab): MainTabIconKind = when (tab) {
     MainTab.Hosts -> MainTabIconKind.Host
     MainTab.Projects -> MainTabIconKind.Folder
+    MainTab.Tmux -> MainTabIconKind.Multiplexer
     MainTab.Terminals -> MainTabIconKind.Terminal
 }
 
@@ -79,12 +82,14 @@ private val MainTab.labelResource: Int
     get() = when (this) {
         MainTab.Hosts -> R.string.navigation_hosts
         MainTab.Projects -> R.string.navigation_projects
+        MainTab.Tmux -> R.string.navigation_tmux
         MainTab.Terminals -> R.string.common_terminals
     }
 
 private fun mainTabIcon(tab: MainTab): ImageVector = when (mainTabIconKind(tab)) {
     MainTabIconKind.Host -> HostTabIcon
     MainTabIconKind.Folder -> FolderTabIcon
+    MainTabIconKind.Multiplexer -> MultiplexerTabIcon
     MainTabIconKind.Terminal -> TerminalTabIcon
 }
 
@@ -151,6 +156,44 @@ private val FolderTabIcon: ImageVector by lazy {
             verticalLineTo(7f)
             horizontalLineTo(11.2f)
             lineTo(9.2f, 5f)
+            close()
+        }
+    }.build()
+}
+
+private val MultiplexerTabIcon: ImageVector by lazy {
+    ImageVector.Builder(
+        name = "MultiplexerTab",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f,
+    ).apply {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(3f, 4f)
+            horizontalLineTo(10f)
+            verticalLineTo(10f)
+            horizontalLineTo(3f)
+            close()
+            moveTo(14f, 4f)
+            horizontalLineTo(21f)
+            verticalLineTo(10f)
+            horizontalLineTo(14f)
+            close()
+            moveTo(3f, 14f)
+            horizontalLineTo(10f)
+            verticalLineTo(20f)
+            horizontalLineTo(3f)
+            close()
+            moveTo(14f, 14f)
+            horizontalLineTo(21f)
+            verticalLineTo(20f)
+            horizontalLineTo(14f)
+            close()
+            moveTo(11f, 6f)
+            horizontalLineTo(13f)
+            verticalLineTo(18f)
+            horizontalLineTo(11f)
             close()
         }
     }.build()

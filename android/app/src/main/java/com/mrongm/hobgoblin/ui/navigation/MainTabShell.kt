@@ -22,6 +22,8 @@ import com.mrongm.hobgoblin.R
 import com.mrongm.hobgoblin.domain.ResourceState
 import com.mrongm.hobgoblin.domain.ssh.RemoteRepositoryProfile
 
+private val MainTopAppBarHeight = 48.dp
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainTabShell(
@@ -33,12 +35,14 @@ fun MainTabShell(
     repositoriesState: ResourceState<List<RemoteRepositoryProfile>>,
     hostsContent: @Composable () -> Unit,
     projectsContent: @Composable () -> Unit,
+    tmuxContent: @Composable () -> Unit,
     terminalsContent: @Composable () -> Unit,
 ) {
     val topBarTitle = stringResource(
         when (selectedTab) {
             MainTab.Hosts -> R.string.navigation_ssh_hosts
             MainTab.Projects -> repositoriesState.projectScreenTitleResource()
+            MainTab.Tmux -> R.string.navigation_tmux
             MainTab.Terminals -> R.string.common_terminals
         },
     )
@@ -49,10 +53,8 @@ fun MainTabShell(
         topBar = {
             TopAppBar(
                 title = { Text(topBarTitle) },
+                expandedHeight = MainTopAppBarHeight,
                 actions = {
-                    TextButton(onClick = onOpenSettings) {
-                        Text(stringResource(R.string.navigation_settings))
-                    }
                     when (selectedTab) {
                         MainTab.Hosts -> TextButton(onClick = onAddHost) {
                             Text(stringResource(R.string.navigation_add_host))
@@ -60,7 +62,11 @@ fun MainTabShell(
                         MainTab.Projects -> TextButton(onClick = onAddProject) {
                             Text(stringResource(R.string.navigation_add_project))
                         }
+                        MainTab.Tmux,
                         MainTab.Terminals -> Unit
+                    }
+                    TextButton(onClick = onOpenSettings) {
+                        Text(stringResource(R.string.navigation_settings))
                     }
                 },
             )
@@ -107,6 +113,10 @@ fun MainTabShell(
             MainTabPane(
                 visible = selectedTab == MainTab.Projects,
                 content = projectsContent,
+            )
+            MainTabPane(
+                visible = selectedTab == MainTab.Tmux,
+                content = tmuxContent,
             )
             MainTabPane(
                 visible = selectedTab == MainTab.Terminals,

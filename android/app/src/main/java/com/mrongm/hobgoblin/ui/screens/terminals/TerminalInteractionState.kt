@@ -189,7 +189,7 @@ internal fun terminalGlobalProjectCreatedSessions(
 
 internal fun terminalOverviewOrderedSessions(
     sessions: List<TerminalSessionRecord>,
-): List<TerminalSessionRecord> = sessions.sortedWith(terminalWorkspaceSessionComparator.thenBy { it.id })
+): List<TerminalSessionRecord> = sessions.sortedWith(terminalWorkspaceCreatedSessionComparator)
 
 internal fun terminalCycleSessionId(
     sessions: List<TerminalSessionRecord>,

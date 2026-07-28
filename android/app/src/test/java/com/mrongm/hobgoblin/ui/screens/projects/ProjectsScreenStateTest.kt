@@ -3,7 +3,11 @@ package com.mrongm.hobgoblin.ui.screens.projects
 import com.mrongm.hobgoblin.R
 import com.mrongm.hobgoblin.domain.ssh.RemoteProjectKind
 import com.mrongm.hobgoblin.domain.ssh.RemoteRepositoryProfile
+import com.mrongm.hobgoblin.domain.ssh.SshHostProfile
+import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -84,10 +88,92 @@ class ProjectsScreenStateTest {
         assertEquals(listOf("repo-1"), localProjectReorderIds(projects))
     }
 
+    @Test
+    fun `unfiltered project list omits saved heading but filtered scope remains visible`() {
+        val source = projectsScreenSource()
+
+        assertFalse(source.contains("R.string.projects_saved_heading"))
+        assertTrue(source.contains("R.string.projects_on_host"))
+        assertTrue(source.contains("R.string.projects_show_all_short"))
+    }
+
+    @Test
+    fun `project cards show localized terminal counts including zero`() {
+        val source = projectsScreenSource()
+
+        assertTrue(source.contains("terminalCountByProjectId: Map<String, Int> = emptyMap()"))
+        assertTrue(source.contains("terminalCount = terminalCountByProjectId[repository.id] ?: 0"))
+        assertTrue(source.contains("R.plurals.projects_terminal_count"))
+    }
+
+    @Test
+    fun `project card title prefers saved host and falls back to host id`() {
+        val project = project(id = "repo-1", hostId = "host-1")
+
+        assertEquals("Build host", projectHostTitle(project, host()))
+        assertEquals("host-1", projectHostTitle(project, host = null))
+    }
+
+    @Test
+    fun `project secondary title keeps only a non-blank alias`() {
+        assertEquals(
+            "Application",
+            projectSecondaryTitle(
+                RemoteRepositoryProfile(
+                    id = "repo-1",
+                    hostProfileId = "host-1",
+                    alias = "Application",
+                    remotePath = "/srv/application",
+                ),
+            ),
+        )
+        assertNull(
+            projectSecondaryTitle(
+                RemoteRepositoryProfile(
+                    id = "repo-2",
+                    hostProfileId = "host-1",
+                    alias = " ",
+                    remotePath = "/srv/scripts",
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `project card highlights the full root directory`() {
+        val source = projectsScreenSource()
+        val pathText = source
+            .substringAfter("Text(\n                repository.remotePath,")
+            .substringBefore("\n            )")
+
+        assertTrue(source.contains("projectHostTitle(repository, host)"))
+        assertTrue(source.contains("projectSecondaryTitle(repository)?.let"))
+        assertTrue(pathText.contains("color = MaterialTheme.colorScheme.primary"))
+        assertTrue(pathText.contains("fontFamily = FontFamily.Monospace"))
+        assertTrue(pathText.contains("fontWeight = FontWeight.SemiBold"))
+        assertTrue(pathText.contains("softWrap = true"))
+        assertFalse(pathText.contains("maxLines = 1"))
+        assertFalse(pathText.contains("TextOverflow.Ellipsis"))
+    }
+
     private fun project(id: String, hostId: String): RemoteRepositoryProfile =
         RemoteRepositoryProfile.create(
             hostProfileId = hostId,
             alias = id,
             remotePath = "/srv/$id",
         ).copy(id = id)
+
+    private fun host(): SshHostProfile = SshHostProfile(
+        id = "host-1",
+        alias = "Build host",
+        host = "example.com",
+        user = "developer",
+        port = 22,
+    )
+
+    private fun projectsScreenSource(): String = listOf(
+        File("src/main/java/com/mrongm/hobgoblin/ui/screens/projects/ProjectsScreen.kt"),
+        File("app/src/main/java/com/mrongm/hobgoblin/ui/screens/projects/ProjectsScreen.kt"),
+        File("android/app/src/main/java/com/mrongm/hobgoblin/ui/screens/projects/ProjectsScreen.kt"),
+    ).firstOrNull(File::isFile)?.readText() ?: error("ProjectsScreen.kt not found")
 }

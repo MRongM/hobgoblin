@@ -55,28 +55,34 @@ class AppRouteTest {
     }
 
     @Test
-    fun `host tmux terminal returns to the same host tmux tab`() {
-        val hostDetailReturn = HostDetailReturn("host-1", HostDetailTab.Tmux)
+    fun `tmux main route starts without a selected host`() {
+        assertEquals(null, AppRoute.Tmux().selectedHostId)
+        assertEquals("host-1", AppRoute.Tmux(selectedHostId = "host-1").selectedHostId)
+    }
+
+    @Test
+    fun `tmux terminal returns to the same visit host`() {
+        val tmuxReturn = TmuxReturn("host-1")
         val route = AppRoute.Terminal(
             hostId = "host-1",
             remotePath = "/srv/product/hobgoblin-feature-auth/api",
             terminalSessionId = "session-1",
-            hostDetailReturn = hostDetailReturn,
+            tmuxReturn = tmuxReturn,
         )
 
         assertEquals(
-            AppRoute.HostDetail(hostId = "host-1", selectedTab = HostDetailTab.Tmux),
+            AppRoute.Tmux(selectedHostId = "host-1"),
             terminalReturnRoute(route, resolvedHostId = "host-1", temporary = false),
         )
     }
 
     @Test
-    fun `terminals return takes priority over a host detail return`() {
+    fun `terminals return takes priority over a tmux return`() {
         val route = AppRoute.Terminal(
             hostId = "host-1",
             remotePath = "/srv/product/hobgoblin-feature-auth",
             returnToTerminals = true,
-            hostDetailReturn = HostDetailReturn("host-1", HostDetailTab.Tmux),
+            tmuxReturn = TmuxReturn("host-1"),
         )
 
         assertEquals(AppRoute.Terminals, terminalReturnRoute(route, resolvedHostId = "host-1", temporary = false))
@@ -149,7 +155,7 @@ class AppRouteTest {
 
     @Test
     fun `project opened from host detail preserves its parent through terminal return`() {
-        val parent = HostDetailReturn("host-1", HostDetailTab.Projects)
+        val parent = HostDetailReturn("host-1")
         val terminal = AppRoute.Terminal(
             hostId = "host-1",
             remotePath = "/srv/app-feature",

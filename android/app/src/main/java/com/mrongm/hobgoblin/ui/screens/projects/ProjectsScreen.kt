@@ -22,7 +22,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import com.mrongm.hobgoblin.R
 import com.mrongm.hobgoblin.data.ManualItemOrderPolicy
@@ -45,6 +47,7 @@ fun ProjectsScreen(
     onDeleteProject: (String) -> Unit,
     hostFilterId: String? = null,
     onClearHostFilter: (() -> Unit)? = null,
+    terminalCountByProjectId: Map<String, Int> = emptyMap(),
     initialManualOrder: List<String> = emptyList(),
     onSaveManualOrder: (List<String>) -> Unit = {},
 ) {
@@ -67,6 +70,7 @@ fun ProjectsScreen(
                 onDeleteProject = onDeleteProject,
                 hostFilterId = hostFilterId,
                 onClearHostFilter = onClearHostFilter,
+                terminalCountByProjectId = terminalCountByProjectId,
                 initialManualOrder = initialManualOrder,
                 onSaveManualOrder = onSaveManualOrder,
             )
@@ -78,6 +82,7 @@ fun ProjectsScreen(
                 onDeleteProject = onDeleteProject,
                 hostFilterId = hostFilterId,
                 onClearHostFilter = onClearHostFilter,
+                terminalCountByProjectId = terminalCountByProjectId,
                 initialManualOrder = initialManualOrder,
                 onSaveManualOrder = onSaveManualOrder,
             )
@@ -122,6 +127,14 @@ internal fun projectKindLabelResource(project: RemoteRepositoryProfile): Int = w
     RemoteProjectKind.PlainWorkspace -> R.string.projects_plain_workspace
 }
 
+internal fun projectHostTitle(
+    repository: RemoteRepositoryProfile,
+    host: SshHostProfile?,
+): String = host?.title ?: repository.hostProfileId
+
+internal fun projectSecondaryTitle(repository: RemoteRepositoryProfile): String? =
+    repository.alias?.trim()?.takeIf(String::isNotEmpty)
+
 @Composable
 private fun ProjectList(
     repositories: List<RemoteRepositoryProfile>,
@@ -131,6 +144,7 @@ private fun ProjectList(
     onDeleteProject: (String) -> Unit,
     hostFilterId: String?,
     onClearHostFilter: (() -> Unit)?,
+    terminalCountByProjectId: Map<String, Int>,
     initialManualOrder: List<String>,
     onSaveManualOrder: (List<String>) -> Unit,
 ) {
@@ -188,26 +202,24 @@ private fun ProjectList(
         return
     }
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            if (hostFilterId == null) {
-                stringResource(R.string.projects_saved_heading)
-            } else {
-                stringResource(R.string.projects_on_host, filteredHostTitle)
-            },
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.titleMedium,
-        )
-        if (hostFilterId != null && onClearHostFilter != null) {
-            TextButton(onClick = onClearHostFilter) {
-                Text(stringResource(R.string.projects_show_all_short))
+    if (hostFilterId != null) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                stringResource(R.string.projects_on_host, filteredHostTitle),
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            if (onClearHostFilter != null) {
+                TextButton(onClick = onClearHostFilter) {
+                    Text(stringResource(R.string.projects_show_all_short))
+                }
             }
         }
+        Spacer(Modifier.height(HobgoblinSpacing.Md))
     }
-    Spacer(Modifier.height(HobgoblinSpacing.Md))
     LazyColumn(verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm)) {
         items(orderedRepositories, key = { it.id }) { repository ->
             val reorderAvailable = projectReorderAvailable(hostFilterId)
@@ -218,6 +230,7 @@ private fun ProjectList(
                     Modifier
                 },
                 repository = repository,
+                terminalCount = terminalCountByProjectId[repository.id] ?: 0,
                 reorderState = reorderState.takeIf { reorderAvailable },
                 host = hostById[repository.hostProfileId],
                 onOpenProject = { onOpenProject(repository.id) },
@@ -278,6 +291,7 @@ private fun ErrorProjects(message: String) {
 private fun ProjectRow(
     modifier: Modifier,
     repository: RemoteRepositoryProfile,
+    terminalCount: Int,
     reorderState: ManualReorderState?,
     host: SshHostProfile?,
     onOpenProject: () -> Unit,
@@ -307,9 +321,14 @@ private fun ProjectRow(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "${repository.title}: ${repository.remotePath}",
+                    projectHostTitle(repository, host),
                     modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    pluralStringResource(R.plurals.projects_terminal_count, terminalCount, terminalCount),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 reorderState?.let { state ->
                     ManualReorderHandle(
@@ -319,6 +338,22 @@ private fun ProjectRow(
                     )
                 }
             }
+            projectSecondaryTitle(repository)?.let { secondaryTitle ->
+                Text(
+                    secondaryTitle,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                repository.remotePath,
+                modifier = Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.SemiBold,
+                softWrap = true,
+            )
             Text(
                 stringResource(projectKindLabelResource(repository)),
                 style = MaterialTheme.typography.labelMedium,

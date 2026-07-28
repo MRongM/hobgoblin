@@ -65,14 +65,24 @@ class HostsScreenStateTest {
 
     @Test
     fun `host card primary action opens host detail`() {
-        val source = listOf(
-            File("src/main/java/com/mrongm/hobgoblin/ui/screens/hosts/HostsScreen.kt"),
-            File("app/src/main/java/com/mrongm/hobgoblin/ui/screens/hosts/HostsScreen.kt"),
-            File("android/app/src/main/java/com/mrongm/hobgoblin/ui/screens/hosts/HostsScreen.kt"),
-        ).firstOrNull(File::isFile)?.readText() ?: error("HostsScreen.kt not found")
+        val source = hostsScreenSource()
 
         assertTrue(source.contains("onOpenHostDetail: (String) -> Unit"))
         assertTrue(source.contains("onClick = onOpenHostDetail"))
+    }
+
+    @Test
+    fun `non-empty host list starts directly with host cards`() {
+        assertFalse(hostsScreenSource().contains("R.string.hosts_saved_heading"))
+    }
+
+    @Test
+    fun `host cards show localized project counts including zero`() {
+        val source = hostsScreenSource()
+
+        assertTrue(source.contains("projectCountByHostId: Map<String, Int> = emptyMap()"))
+        assertTrue(source.contains("projectCount = projectCountByHostId[host.id] ?: 0"))
+        assertTrue(source.contains("R.plurals.hosts_project_count"))
     }
 
     private fun host(lastDiagnosticStatus: String?): SshHostProfile =
@@ -82,4 +92,10 @@ class HostsScreenStateTest {
             user = "lee",
             identityRefId = "identity-1",
         ).copy(lastDiagnosticStatus = lastDiagnosticStatus)
+
+    private fun hostsScreenSource(): String = listOf(
+        File("src/main/java/com/mrongm/hobgoblin/ui/screens/hosts/HostsScreen.kt"),
+        File("app/src/main/java/com/mrongm/hobgoblin/ui/screens/hosts/HostsScreen.kt"),
+        File("android/app/src/main/java/com/mrongm/hobgoblin/ui/screens/hosts/HostsScreen.kt"),
+    ).firstOrNull(File::isFile)?.readText() ?: error("HostsScreen.kt not found")
 }

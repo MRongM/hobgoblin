@@ -2,17 +2,21 @@ package com.mrongm.hobgoblin.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 object HobgoblinColors {
-    const val AccentHex = "#2563EB"
-    const val SuccessHex = "#16A34A"
+    const val RelayTealHex = "#2E6F6A"
+    const val MuxCopperHex = "#B86A3B"
+    const val LiveMossHex = "#507A61"
+    const val FrostCanvasHex = "#F3F7F6"
+    const val NightInkHex = "#132027"
+    const val FaultRedHex = "#C44949"
+    const val AccentHex = RelayTealHex
+    const val SuccessHex = LiveMossHex
     const val WarningHex = "#D97706"
-    const val DestructiveHex = "#DC2626"
+    const val DestructiveHex = FaultRedHex
     const val TerminalBackgroundHex = "#0B0F14"
     const val TerminalForegroundHex = "#E5E7EB"
     const val TerminalOverlayBackgroundHex = "#111827"
@@ -24,10 +28,16 @@ object HobgoblinColors {
     const val TerminalActionForegroundHex = "#60A5FA"
     const val TerminalDisabledForegroundHex = "#94A3B8"
 
-    val Accent = Color(0xFF2563EB)
-    val Success = Color(0xFF16A34A)
+    val RelayTeal = Color(0xFF2E6F6A)
+    val MuxCopper = Color(0xFFB86A3B)
+    val LiveMoss = Color(0xFF507A61)
+    val FrostCanvas = Color(0xFFF3F7F6)
+    val NightInk = Color(0xFF132027)
+    val FaultRed = Color(0xFFC44949)
+    val Accent = RelayTeal
+    val Success = LiveMoss
     val Warning = Color(0xFFD97706)
-    val Destructive = Color(0xFFDC2626)
+    val Destructive = FaultRed
     val TerminalBackground = Color(0xFF0B0F14)
     val TerminalForeground = Color(0xFFE5E7EB)
     val TerminalOverlayBackground = Color(0xFF111827)
@@ -50,31 +60,15 @@ object HobgoblinSpacing {
     val ThreeXl = 64.dp
 }
 
-private val LightScheme = lightColorScheme(
-    primary = HobgoblinColors.Accent,
-    error = HobgoblinColors.Destructive,
-    background = Color(0xFFF8FAFC),
-    surface = Color(0xFFFFFFFF),
-    onBackground = Color(0xFF111827),
-    onSurface = Color(0xFF111827),
-)
-
-private val DarkScheme = darkColorScheme(
-    primary = HobgoblinColors.Accent,
-    error = HobgoblinColors.Destructive,
-    background = Color(0xFF101214),
-    surface = Color(0xFF1A1D21),
-    onBackground = Color(0xFFE5E7EB),
-    onSurface = Color(0xFFE5E7EB),
-)
-
 @Composable
 fun HobgoblinTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    applicationTheme: AndroidApplicationTheme = AndroidApplicationTheme(),
+    systemDarkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
+    val darkTheme = resolveDarkTheme(applicationTheme.appearance, systemDarkTheme)
     MaterialTheme(
-        colorScheme = if (darkTheme) DarkScheme else LightScheme,
+        colorScheme = androidColorScheme(applicationTheme.colorTheme, darkTheme),
         typography = MaterialTheme.typography,
         content = content,
     )

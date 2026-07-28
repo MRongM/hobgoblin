@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -88,6 +89,7 @@ fun HostsScreen(
     onDeleteHost: (String) -> Unit,
     onOpenTerminal: (String) -> Unit,
     onOpenPorts: (String) -> Unit,
+    projectCountByHostId: Map<String, Int> = emptyMap(),
     initialManualOrder: List<String> = emptyList(),
     onSaveManualOrder: (List<String>) -> Unit = {},
 ) {
@@ -109,6 +111,7 @@ fun HostsScreen(
                 onDeleteHost = onDeleteHost,
                 onOpenTerminal = onOpenTerminal,
                 onOpenPorts = onOpenPorts,
+                projectCountByHostId = projectCountByHostId,
                 initialManualOrder = initialManualOrder,
                 onSaveManualOrder = onSaveManualOrder,
             )
@@ -119,6 +122,7 @@ fun HostsScreen(
                 onDeleteHost = onDeleteHost,
                 onOpenTerminal = onOpenTerminal,
                 onOpenPorts = onOpenPorts,
+                projectCountByHostId = projectCountByHostId,
                 initialManualOrder = initialManualOrder,
                 onSaveManualOrder = onSaveManualOrder,
             )
@@ -154,6 +158,7 @@ private fun HostList(
     onDeleteHost: (String) -> Unit,
     onOpenTerminal: (String) -> Unit,
     onOpenPorts: (String) -> Unit,
+    projectCountByHostId: Map<String, Int>,
     initialManualOrder: List<String>,
     onSaveManualOrder: (List<String>) -> Unit,
 ) {
@@ -185,14 +190,13 @@ private fun HostList(
         return
     }
 
-    Text(stringResource(R.string.hosts_saved_heading), style = MaterialTheme.typography.titleMedium)
-    Spacer(Modifier.height(HobgoblinSpacing.Md))
     LazyColumn(verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm)) {
         items(orderedHosts, key = { it.id }) { host ->
             val health = hostHealth(host)
             HostRow(
                 modifier = Modifier.manualReorderItem(reorderState, host.id),
                 host = host,
+                projectCount = projectCountByHostId[host.id] ?: 0,
                 reorderState = reorderState,
                 canOpenTerminal = health == HostHealth.Online,
                 onOpenHostDetail = { onOpenHostDetail(host.id) },
@@ -232,6 +236,7 @@ private fun HostList(
 private fun HostRow(
     modifier: Modifier,
     host: SshHostProfile,
+    projectCount: Int,
     reorderState: ManualReorderState,
     canOpenTerminal: Boolean,
     onOpenHostDetail: () -> Unit,
@@ -255,6 +260,11 @@ private fun HostRow(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(host.title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    pluralStringResource(R.plurals.hosts_project_count, projectCount, projectCount),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 ManualReorderHandle(
                     state = reorderState,
                     itemKey = host.id,

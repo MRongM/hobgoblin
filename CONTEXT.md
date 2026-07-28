@@ -9,19 +9,19 @@ Core model: **multi-project × multi-worktree/branch × multi-terminal**. Users 
 ## Language
 
 **Android terminals tab**:
-The Android main-navigation destination that lists every retained Host temporary terminal and Project terminal so an existing session can be reopened quickly. It is distinct from the terminal tabs inside the desktop/web terminal topbar, does not create sessions, and may explicitly close or delete one retained terminal after confirmation.
+The Android main-navigation destination that lists every retained Host temporary terminal and Project terminal in stable creation order so an existing session can be reopened quickly. Its item backgrounds distinguish running (green), disconnected (yellow), exited/failed (red), and starting (neutral) states. It is distinct from the terminal tabs inside the desktop/web terminal topbar, does not create or manually reorder sessions, and may explicitly close or delete one retained terminal after confirmation.
 _Avoid_: Terminal manager, terminal creator, internal terminal tab
 
 **Android retained terminal close**:
-An explicit, confirmed Android terminal action that stops its active Android controller while retaining the device-local session record and list item for later reconnection. For a tmux-backed terminal it detaches the Android client without ending the remote tmux session. It is distinct from terminal backgrounding, retained terminal deletion, associated tmux session cleanup, or deleting a Host or Project.
+An explicit, confirmed Android terminal action that stops its active Android controller while retaining the device-local session record and list item for later reconnection. The Terminals-tab item offers it only while the retained session is starting or running, in the same action position later occupied by reconnect. For a tmux-backed terminal it detaches the Android client without ending the remote tmux session. It is distinct from terminal backgrounding, retained terminal deletion, associated tmux session cleanup, or deleting a Host or Project.
 _Avoid_: Terminal backgrounding, terminal deletion, tmux session cleanup
 
 **Android retained terminal delete**:
-An explicit, confirmed Android terminal-list action that stops an active Android controller, removes its retained device-local session record, and removes the item from the list and its manual order. A Terminals-tab delete never ends a remote tmux session; the Project terminal list may separately offer its existing opt-in exact tmux-session cleanup during deletion.
+An explicit, confirmed Android terminal-list action that stops an active Android controller and removes its retained device-local session record and list item. A Terminals-tab delete never ends a remote tmux session; the Project terminal list may separately offer its existing opt-in exact tmux-session cleanup during deletion.
 _Avoid_: Terminal close, terminal backgrounding, automatic tmux cleanup
 
 **Android retained terminal reconnect**:
-A direct Android terminal-item action that restarts an inactive retained terminal in place while preserving its session identity, list position, and terminal slot. It is visible on every terminal item, enabled only when the session is exited, failed, or disconnected, and reattaches an eligible tmux-backed terminal to its exact retained tmux identity.
+A direct Android terminal-item action that restarts an inactive retained terminal in place while preserving its session identity, list position, and terminal slot. The Terminals-tab item offers it only when the session is exited, failed, or disconnected, in the same action position otherwise occupied by close, and reattaches an eligible tmux-backed terminal to its exact retained tmux identity.
 _Avoid_: New terminal, open terminal, automatic retry
 
 **Android terminal background navigation**:
@@ -29,7 +29,7 @@ A non-destructive navigation from an Android terminal screen to the Android term
 _Avoid_: Application backgrounding, terminal close, terminal disconnect
 
 **Android manual item order**:
-The restorable, device-local order chosen by dragging Android Host, Project, Terminal, or Project Worktree items from their dedicated drag handles. Host, Project, and Terminal orders are global to their respective lists; Worktree order is scoped to one Project. It changes only Android presentation, never Git worktree enumeration or remote repository state, and newly discovered items append after retained ordered items.
+The restorable, device-local order chosen by dragging Android Host, Project, or Project Worktree items from their dedicated drag handles. Host and Project orders are global to their respective lists; Worktree order is scoped to one Project. The Android Terminals tab instead uses stable creation order. Manual order changes only Android presentation, never Git worktree enumeration or remote repository state, and newly discovered items append after retained ordered items.
 _Avoid_: Git worktree order, remote sort order, synchronized order
 
 **Android terminal focus mode**:
@@ -40,9 +40,13 @@ _Avoid_: Terminal maximization, fullscreen terminal, persisted terminal layout
 The locale Android selects for Hobgoblin's native Android-owned interface text and foreground-terminal notifications. It follows the device language by default, may be overridden from Hobgoblin's Android Settings or Android's per-app language settings, remains device-local, and never translates terminal output, repository data, paths, host names, or raw Git and SSH diagnostics.
 _Avoid_: Server language, terminal locale, translated terminal output
 
-**Android host tmux catalog**:
-The Android projection of current-protocol Hobgoblin tmux sessions discovered across one directly connected SSH host's default and project-scoped tmux servers. It is derived from live server sockets and session metadata rather than saved Projects or workspace configuration. An item may open, reconnect, or close its retained Android terminal; deleting that retained terminal keeps the remote session by default and may end the exact remote tmux session only through a separate unchecked confirmation option.
-_Avoid_: Android workspace catalog, filesystem workspace scan, arbitrary tmux list, tmux session creator
+**Android application theme**:
+The device-local combination of an Android appearance preference (follow system, light, or dark) and one Hobgoblin color preset used by Android-owned application surfaces. It persists across relaunches and remains independent from Web/Desktop settings and the Android terminal appearance.
+_Avoid_: Web theme, terminal appearance, synchronized theme
+
+**Android tmux tab**:
+The Android main-navigation destination where the user explicitly selects one saved SSH Host and scans that host's default and project-scoped tmux servers for current-protocol Hobgoblin sessions. Its catalog is derived from live server sockets and session metadata rather than saved Projects or workspace configuration; leaving the destination clears the selected Host, while returning from an opened terminal preserves the current visit.
+_Avoid_: Host-detail tmux tab, Android workspace catalog, remembered Host selection, arbitrary tmux list, tmux session creator
 
 **Tmux server target**:
 The exact default or strictly named project-scoped tmux server on which one discovered session was observed and to which Android must later attach it. It is part of host-level recovery identity because a session name may exist on more than one server and a project-root hash cannot be reversed.
@@ -344,6 +348,10 @@ _Avoid_: Host diagnostic, password login, saved server password
 **Android host connectivity diagnostic**:
 An explicit SSH reachability and shell probe that authenticates with the private key already associated with an Android SSH host profile. It never creates or installs an identity and never requests a server password.
 _Avoid_: SSH access initialization, realtime presence check
+
+**Android private key export**:
+An explicit Android Host-edit action that writes the currently associated SSH private-key material to a user-selected document after a disclosure warning. The exported document is outside Hobgoblin's encrypted private app storage and is the user's responsibility to protect.
+_Avoid_: Public-key export, automatic key backup, identity sharing
 
 **Android host online state**:
 The persisted outcome of the most recent Android host connectivity diagnostic. `online` means that diagnostic passed; `offline` means it failed or no successful diagnostic has been recorded. It is not a continuously monitored presence signal.

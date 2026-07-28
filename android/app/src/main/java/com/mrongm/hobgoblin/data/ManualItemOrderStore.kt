@@ -9,7 +9,6 @@ import java.util.Base64
 sealed interface ManualItemOrderScope {
     data object Hosts : ManualItemOrderScope
     data object Projects : ManualItemOrderScope
-    data object Terminals : ManualItemOrderScope
     data class Worktrees(val repositoryId: String) : ManualItemOrderScope
 }
 
@@ -17,7 +16,6 @@ internal val ManualItemOrderScope.storageKey: String
     get() = when (this) {
         ManualItemOrderScope.Hosts -> "hosts"
         ManualItemOrderScope.Projects -> "projects"
-        ManualItemOrderScope.Terminals -> "terminals"
         is ManualItemOrderScope.Worktrees -> "worktrees:${repositoryId.encodeOrderField()}"
     }
 

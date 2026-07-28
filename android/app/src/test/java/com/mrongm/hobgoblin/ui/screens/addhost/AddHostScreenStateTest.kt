@@ -81,14 +81,74 @@ class AddHostScreenStateTest {
     }
 
     @Test
+    fun `private key export is available only while editing with an effective identity`() {
+        assertFalse(
+            canExportPrivateKey(
+                initialHost = null,
+                identityRefId = "identity-1",
+                exportAvailable = true,
+            ),
+        )
+        assertFalse(
+            canExportPrivateKey(
+                initialHost = host(identityRefId = null),
+                identityRefId = null,
+                exportAvailable = true,
+            ),
+        )
+        assertFalse(
+            canExportPrivateKey(
+                initialHost = host(identityRefId = "identity-1"),
+                identityRefId = "identity-1",
+                exportAvailable = false,
+            ),
+        )
+        assertTrue(
+            canExportPrivateKey(
+                initialHost = host(identityRefId = "identity-1"),
+                identityRefId = "imported-identity",
+                exportAvailable = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `private key export filename is host-derived and path-safe`() {
+        assertEquals(
+            "hobgoblin-Dev_staging-private-key",
+            privateKeyExportFileName(host(identityRefId = "identity-1", alias = " Dev / staging ")),
+        )
+    }
+
+    @Test
     fun `connection test result is applied only to the latest draft generation`() {
         assertTrue(isLatestConnectionTest(requestGeneration = 3, currentGeneration = 3))
         assertFalse(isLatestConnectionTest(requestGeneration = 2, currentGeneration = 3))
     }
 
-    private fun host(identityRefId: String?): SshHostProfile =
+    @Test
+    fun `ssh initialization submission rejects repeated starts until completion`() {
+        val submission = SshInitializationSubmission()
+
+        assertTrue(submission.tryStart())
+        assertTrue(submission.inProgress)
+        assertFalse(submission.tryStart())
+    }
+
+    @Test
+    fun `ssh initialization submission allows retry after completion`() {
+        val submission = SshInitializationSubmission()
+        assertTrue(submission.tryStart())
+
+        submission.finish()
+
+        assertFalse(submission.inProgress)
+        assertTrue(submission.tryStart())
+    }
+
+    private fun host(identityRefId: String?, alias: String = "Dev"): SshHostProfile =
         SshHostProfile.create(
-            alias = "Dev",
+            alias = alias,
             host = "example.test",
             user = "dev",
             identityRefId = identityRefId,

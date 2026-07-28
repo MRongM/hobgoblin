@@ -2,29 +2,23 @@ package com.mrongm.hobgoblin.navigation
 
 import com.mrongm.hobgoblin.terminals.TerminalSessionRecord
 
-enum class HostDetailTab {
-    Projects,
-    Tmux,
-}
-
 data class HostDetailReturn(
     val hostId: String,
-    val selectedTab: HostDetailTab,
 )
+
+data class TmuxReturn(val hostId: String)
 
 sealed interface AppRoute {
     data object Hosts : AppRoute
     data object Projects : AppRoute
+    data class Tmux(val selectedHostId: String? = null) : AppRoute
     data object Terminals : AppRoute
     data object AddHost : AppRoute
     data object AddRepository : AppRoute
     data object Settings : AppRoute
     data class EditHost(val hostId: String) : AppRoute
     data class HostPorts(val hostId: String) : AppRoute
-    data class HostDetail(
-        val hostId: String,
-        val selectedTab: HostDetailTab = HostDetailTab.Projects,
-    ) : AppRoute
+    data class HostDetail(val hostId: String) : AppRoute
     data class Repository(
         val repositoryId: String,
         val terminalWorkspacePath: String? = null,
@@ -37,6 +31,7 @@ sealed interface AppRoute {
         val terminalSessionId: String? = null,
         val returnToTerminals: Boolean = false,
         val hostDetailReturn: HostDetailReturn? = null,
+        val tmuxReturn: TmuxReturn? = null,
     ) : AppRoute
 
     companion object {
@@ -44,6 +39,7 @@ sealed interface AppRoute {
             session: TerminalSessionRecord,
             returnToTerminals: Boolean = false,
             hostDetailReturn: HostDetailReturn? = null,
+            tmuxReturn: TmuxReturn? = null,
         ): Terminal =
             Terminal(
                 hostId = session.hostId,
@@ -52,6 +48,7 @@ sealed interface AppRoute {
                 terminalSessionId = session.id,
                 returnToTerminals = returnToTerminals,
                 hostDetailReturn = hostDetailReturn,
+                tmuxReturn = tmuxReturn,
             )
     }
 }
@@ -74,9 +71,9 @@ internal fun terminalReturnRoute(
         terminalWorkspacePath = route.remotePath,
         hostDetailReturn = route.hostDetailReturn,
     )
+    route.tmuxReturn != null -> AppRoute.Tmux(selectedHostId = route.tmuxReturn.hostId)
     route.hostDetailReturn != null -> AppRoute.HostDetail(
         hostId = route.hostDetailReturn.hostId,
-        selectedTab = route.hostDetailReturn.selectedTab,
     )
     temporary -> AppRoute.Hosts
     else -> AppRoute.EditHost(resolvedHostId)

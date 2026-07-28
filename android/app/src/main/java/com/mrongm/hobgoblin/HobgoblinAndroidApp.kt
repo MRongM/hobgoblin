@@ -22,7 +22,7 @@ import com.mrongm.hobgoblin.domain.ssh.RemoteTarget
 import com.mrongm.hobgoblin.domain.ssh.SshHostProfile
 import com.mrongm.hobgoblin.navigation.AppRoute
 import com.mrongm.hobgoblin.navigation.HostDetailReturn
-import com.mrongm.hobgoblin.navigation.HostDetailTab
+import com.mrongm.hobgoblin.navigation.TmuxReturn
 import com.mrongm.hobgoblin.navigation.initialMainRoute
 import com.mrongm.hobgoblin.navigation.terminalBackgroundRoute
 import com.mrongm.hobgoblin.navigation.terminalNotificationRoute
@@ -51,10 +51,10 @@ import com.mrongm.hobgoblin.termux.externalTermuxLaunchRequest
 import com.mrongm.hobgoblin.ui.screens.addhost.AddHostScreen
 import com.mrongm.hobgoblin.ui.navigation.MainTab
 import com.mrongm.hobgoblin.ui.navigation.MainTabShell
+import com.mrongm.hobgoblin.ui.navigation.projectCountsByHostId
+import com.mrongm.hobgoblin.ui.navigation.terminalCountsByProjectId
 import com.mrongm.hobgoblin.ui.screens.hosts.HostsScreen
 import com.mrongm.hobgoblin.ui.screens.hosts.HostDetailScreen
-import com.mrongm.hobgoblin.ui.screens.hosts.hostDetailNeedsTmuxScan
-import com.mrongm.hobgoblin.ui.screens.hosts.hostDetailRoute
 import com.mrongm.hobgoblin.ui.screens.hosts.hostTemporaryTerminalRoute
 import com.mrongm.hobgoblin.ui.screens.hosts.isHostTemporaryTerminal
 import com.mrongm.hobgoblin.ui.screens.portforwards.HostPortsScreen
@@ -66,9 +66,17 @@ import com.mrongm.hobgoblin.ui.screens.terminals.TerminalScreen
 import com.mrongm.hobgoblin.ui.screens.terminals.TerminalsScreen
 import com.mrongm.hobgoblin.ui.screens.terminals.terminalSessionReconnectAvailable
 import com.mrongm.hobgoblin.ui.screens.terminals.terminalTargetLabel
+import com.mrongm.hobgoblin.ui.screens.tmux.TmuxScreen
+import com.mrongm.hobgoblin.ui.screens.tmux.selectTmuxHost
+import com.mrongm.hobgoblin.ui.screens.tmux.tmuxNeedsScan
+import com.mrongm.hobgoblin.ui.screens.tmux.tmuxRoute
+import com.mrongm.hobgoblin.ui.screens.tmux.tmuxScanOwnsRefreshIndicator
+import com.mrongm.hobgoblin.ui.screens.tmux.tmuxStateForHost
+import com.mrongm.hobgoblin.ui.theme.AndroidApplicationTheme
 import com.mrongm.hobgoblin.ui.text.currentAndroidApplicationLanguageSetting
 import com.mrongm.hobgoblin.ui.text.setAndroidApplicationLanguagePreference
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -125,6 +133,8 @@ fun HobgoblinAndroidApp(
     terminalForegroundBridge: TerminalForegroundBridge,
     externalTermuxLauncher: ExternalTermuxLauncher,
     hostPortForwardManager: HostPortForwardManager,
+    applicationTheme: AndroidApplicationTheme,
+    onApplicationThemeChange: (AndroidApplicationTheme) -> Unit,
     terminalNavigationRequest: TerminalNavigationRequest? = null,
 ) {
     val missingTmuxIdentity = stringResource(R.string.terminal_tmux_identity_missing)
@@ -230,37 +240,48 @@ fun HobgoblinAndroidApp(
     }
 
     LaunchedEffect(route, hostTmuxRefreshNonce) {
-        val hostDetailRoute = route as? AppRoute.HostDetail ?: return@LaunchedEffect
-        if (!hostDetailNeedsTmuxScan(hostDetailRoute)) return@LaunchedEffect
-        val host = currentHosts().firstOrNull { it.id == hostDetailRoute.hostId }
+        val activeTmuxRoute = route as? AppRoute.Tmux ?: return@LaunchedEffect
+        if (!tmuxNeedsScan(activeTmuxRoute)) return@LaunchedEffect
+        val requestedHostId = requireNotNull(activeTmuxRoute.selectedHostId)
+        val host = currentHosts().firstOrNull { it.id == requestedHostId }
         if (host == null) {
-            hostTmuxState = ResourceState.Error("Host is unavailable.")
+            hostTmuxState = ResourceState.Idle
+            hostTmuxStateHostId = null
+            route = tmuxRoute()
             return@LaunchedEffect
         }
-        val previous = hostTmuxState.takeIf { hostTmuxStateHostId == host.id } ?: ResourceState.Idle
+        val previous = tmuxStateForHost(
+            selectedHostId = requestedHostId,
+            stateHostId = hostTmuxStateHostId,
+            state = hostTmuxState,
+        )
         hostTmuxStateHostId = host.id
         if (previous !is ResourceState.Loaded && previous !is ResourceState.Stale) {
             hostTmuxState = ResourceState.Loading
         }
         hostTmuxRefreshInFlight = true
         try {
-            val loaded = withContext(Dispatchers.IO) {
-                runCatching {
-                    remoteTmuxSessionService.discoverHostSessions(RemoteTarget.fromHostProfile(host))
-                }
+            val result = withContext(Dispatchers.IO) {
+                remoteTmuxSessionService.discoverHostSessions(RemoteTarget.fromHostProfile(host))
             }
-            hostTmuxState = loaded.fold(
-                onSuccess = { result ->
-                    when (result) {
-                        is RemoteHostTmuxDiscoveryResult.Loaded ->
-                            ResourceState.Loaded(HostTmuxPathGroup.from(result.sessions))
-                        is RemoteHostTmuxDiscoveryResult.Failed -> failedRefresh(previous, result.message)
-                    }
-                },
-                onFailure = { error -> failedRefresh(previous, error.message ?: "tmux scan failed.") },
-            )
+            val nextState = when (result) {
+                is RemoteHostTmuxDiscoveryResult.Loaded ->
+                    ResourceState.Loaded(HostTmuxPathGroup.from(result.sessions))
+                is RemoteHostTmuxDiscoveryResult.Failed -> failedRefresh(previous, result.message)
+            }
+            if ((route as? AppRoute.Tmux)?.selectedHostId == requestedHostId) {
+                hostTmuxState = nextState
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if ((route as? AppRoute.Tmux)?.selectedHostId == requestedHostId) {
+                hostTmuxState = failedRefresh(previous, error.message ?: "tmux scan failed.")
+            }
         } finally {
-            hostTmuxRefreshInFlight = false
+            if (tmuxScanOwnsRefreshIndicator(route, requestedHostId)) {
+                hostTmuxRefreshInFlight = false
+            }
         }
     }
 
@@ -274,6 +295,7 @@ fun HobgoblinAndroidApp(
         route = when (tab) {
             MainTab.Hosts -> AppRoute.Hosts
             MainTab.Projects -> AppRoute.Projects
+            MainTab.Tmux -> AppRoute.Tmux()
             MainTab.Terminals -> AppRoute.Terminals
         }
     }
@@ -281,6 +303,7 @@ fun HobgoblinAndroidApp(
     fun mainTabForRoute(currentRoute: AppRoute): MainTab? = when (currentRoute) {
         AppRoute.Hosts -> MainTab.Hosts
         AppRoute.Projects -> MainTab.Projects
+        is AppRoute.Tmux -> MainTab.Tmux
         AppRoute.Terminals -> MainTab.Terminals
         else -> null
     }
@@ -328,7 +351,7 @@ fun HobgoblinAndroidApp(
         host: SshHostProfile,
         discovery: HostDiscoveredTmuxSession,
     ) {
-        val hostDetailReturn = HostDetailReturn(hostId = host.id, selectedTab = HostDetailTab.Tmux)
+        val tmuxReturn = TmuxReturn(host.id)
         scope.launch {
             val record = withContext(Dispatchers.IO) {
                 val candidate = hostTmuxRecoveryCandidate(host, discovery)
@@ -346,7 +369,7 @@ fun HobgoblinAndroidApp(
                 }
             } ?: return@launch
             terminalForegroundBridge.sync()
-            route = AppRoute.terminal(record, hostDetailReturn = hostDetailReturn)
+            route = AppRoute.terminal(record, tmuxReturn = tmuxReturn)
         }
     }
 
@@ -354,8 +377,37 @@ fun HobgoblinAndroidApp(
         AppRoute.Hosts,
         AppRoute.Projects,
         AppRoute.Terminals,
+        is AppRoute.Tmux,
         -> {
             val selectedTab = mainTabForRoute(currentRoute) ?: MainTab.Hosts
+            val tmuxVisit = currentRoute as? AppRoute.Tmux ?: tmuxRoute()
+            val selectedTmuxHost = tmuxVisit.selectedHostId?.let { selectedHostId ->
+                currentHosts().firstOrNull { host -> host.id == selectedHostId }
+            }
+            val visibleTmuxState = tmuxStateForHost(
+                selectedHostId = tmuxVisit.selectedHostId,
+                stateHostId = hostTmuxStateHostId,
+                state = hostTmuxState,
+            )
+            val discoveredTmuxSessions = when (visibleTmuxState) {
+                is ResourceState.Loaded -> visibleTmuxState.value.flatMap(HostTmuxPathGroup::sessions)
+                is ResourceState.Stale -> visibleTmuxState.value.flatMap(HostTmuxPathGroup::sessions)
+                ResourceState.Idle,
+                ResourceState.Loading,
+                is ResourceState.Error,
+                -> emptyList()
+            }
+            val retainedSessionIds = terminalSessions.mapTo(mutableSetOf(), TerminalSessionRecord::id)
+            val retainedTmuxSessions = selectedTmuxHost?.let { host ->
+                discoveredTmuxSessions.mapNotNull { discovery ->
+                    terminalSessionManager
+                        .retainedHostTmuxSession(hostTmuxRecoveryCandidate(host, discovery))
+                        ?.takeIf { retained -> retained.id in retainedSessionIds }
+                        ?.let { retained -> discovery to retained }
+                }.toMap()
+            } ?: emptyMap()
+            val projectCountByHostId = projectCountsByHostId(currentRepositories())
+            val terminalCountByProjectId = terminalCountsByProjectId(terminalSessions)
             MainTabShell(
                 selectedTab = selectedTab,
                 onSelectTab = ::selectMainTab,
@@ -366,7 +418,7 @@ fun HobgoblinAndroidApp(
                 hostsContent = {
                     HostsScreen(
                         hostsState = hostsState,
-                        onOpenHostDetail = { hostId -> route = hostDetailRoute(hostId) },
+                        onOpenHostDetail = { hostId -> route = AppRoute.HostDetail(hostId) },
                         onEditHost = { hostId -> route = AppRoute.EditHost(hostId) },
                         onDeleteHost = { hostId ->
                             currentRepositories()
@@ -380,6 +432,7 @@ fun HobgoblinAndroidApp(
                         },
                         onOpenTerminal = ::openHostTemporaryTerminal,
                         onOpenPorts = { hostId -> route = AppRoute.HostPorts(hostId) },
+                        projectCountByHostId = projectCountByHostId,
                         initialManualOrder = manualItemOrderStore.load(ManualItemOrderScope.Hosts),
                         onSaveManualOrder = { ids ->
                             manualItemOrderStore.save(ManualItemOrderScope.Hosts, ids)
@@ -400,10 +453,60 @@ fun HobgoblinAndroidApp(
                         onDeleteProject = { repositoryId ->
                             deleteRepositoryRecord(repositoryId)
                         },
+                        terminalCountByProjectId = terminalCountByProjectId,
                         initialManualOrder = manualItemOrderStore.load(ManualItemOrderScope.Projects),
                         onSaveManualOrder = { ids ->
                             manualItemOrderStore.save(ManualItemOrderScope.Projects, ids)
                         },
+                    )
+                },
+                tmuxContent = {
+                    TmuxScreen(
+                        hosts = currentHosts(),
+                        selectedHost = selectedTmuxHost,
+                        tmuxState = visibleTmuxState,
+                        tmuxRefreshing = hostTmuxRefreshInFlight,
+                        onSelectHost = { hostId ->
+                            hostTmuxState = ResourceState.Idle
+                            hostTmuxStateHostId = null
+                            route = selectTmuxHost(hostId)
+                        },
+                        onChangeHost = {
+                            hostTmuxState = ResourceState.Idle
+                            hostTmuxStateHostId = null
+                            route = tmuxRoute()
+                        },
+                        onAddHost = { route = AppRoute.AddHost },
+                        onRefreshTmux = { hostTmuxRefreshNonce += 1 },
+                        onOpenTmuxSession = { discovery ->
+                            selectedTmuxHost?.let { host -> openHostTmuxSession(host, discovery) }
+                        },
+                        retainedTmuxSessions = retainedTmuxSessions,
+                        onReconnectTmuxSession = ::reconnectRetainedTerminal,
+                        onCloseTmuxSession = ::closeRetainedTerminal,
+                        onDeleteTmuxSession = { discovery, session, closeRemote ->
+                            val host = requireNotNull(selectedTmuxHost) {
+                                "The selected tmux host is no longer available."
+                            }
+                            val candidate = hostTmuxRecoveryCandidate(host, discovery)
+                            val retained = terminalSessionManager.retainedHostTmuxSession(candidate)
+                            require(retained?.id == session.id) {
+                                "The retained tmux terminal is no longer available."
+                            }
+                            if (closeRemote) {
+                                requireHostTmuxRemoteCloseSuccess(
+                                    withContext(Dispatchers.IO) {
+                                        remoteTmuxSessionService.closeHostSession(
+                                            target = candidate.target,
+                                            discovery = discovery,
+                                        )
+                                    },
+                                )
+                            }
+                            deleteRetainedTerminal(session.id)
+                            hostTmuxRefreshNonce += 1
+                        },
+                        hostOrder = manualItemOrderStore.load(ManualItemOrderScope.Hosts),
                     )
                 },
                 terminalsContent = {
@@ -421,10 +524,6 @@ fun HobgoblinAndroidApp(
                         onReconnectTerminalSession = ::reconnectRetainedTerminal,
                         onCloseTerminalSession = ::closeRetainedTerminal,
                         onDeleteTerminalSession = ::deleteRetainedTerminal,
-                        initialManualOrder = manualItemOrderStore.load(ManualItemOrderScope.Terminals),
-                        onSaveManualOrder = { ids ->
-                            manualItemOrderStore.save(ManualItemOrderScope.Terminals, ids)
-                        },
                     )
                 },
             )
@@ -461,6 +560,9 @@ fun HobgoblinAndroidApp(
                     initialHost = host,
                     onBack = { route = AppRoute.Hosts },
                     onImportPrivateKey = { displayName, bytes -> secureIdentityStore.importPrivateKey(displayName, bytes) },
+                    onExportPrivateKey = { identityId, output ->
+                        secureIdentityStore.exportPrivateKey(identityId, output)
+                    },
                     onCheckSshInitialization = { input -> initializationService.check(input) },
                     onTrustHostKey = { input, fingerprint ->
                         initializationService.trustHostKey(input, fingerprint)
@@ -533,7 +635,7 @@ fun HobgoblinAndroidApp(
             val host = repository?.let { repo -> currentHosts().firstOrNull { it.id == repo.hostProfileId } }
             if (repository == null || host == null) {
                 route = currentRoute.hostDetailReturn?.let { parent ->
-                    AppRoute.HostDetail(parent.hostId, parent.selectedTab)
+                    AppRoute.HostDetail(parent.hostId)
                 } ?: AppRoute.Projects
             } else {
                 RepositoryWorkspaceScreen(
@@ -541,7 +643,7 @@ fun HobgoblinAndroidApp(
                     repository = repository,
                     onBack = {
                         route = currentRoute.hostDetailReturn?.let { parent ->
-                            AppRoute.HostDetail(parent.hostId, parent.selectedTab)
+                            AppRoute.HostDetail(parent.hostId)
                         } ?: AppRoute.Projects
                     },
                     onLoadSnapshot = {
@@ -640,7 +742,7 @@ fun HobgoblinAndroidApp(
                     onDeleteRepository = {
                         deleteRepositoryRecord(repository.id)
                         route = currentRoute.hostDetailReturn?.let { parent ->
-                            AppRoute.HostDetail(parent.hostId, parent.selectedTab)
+                            AppRoute.HostDetail(parent.hostId)
                         } ?: AppRoute.Projects
                     },
                     onCreateWorktree = { source, worktreePath ->
@@ -706,6 +808,7 @@ fun HobgoblinAndroidApp(
                             session,
                             returnToTerminals = currentRoute.returnToTerminals,
                             hostDetailReturn = currentRoute.hostDetailReturn,
+                            tmuxReturn = currentRoute.tmuxReturn,
                         )
                     },
                     terminalSessionManager = terminalSessionManager,
@@ -718,7 +821,7 @@ fun HobgoblinAndroidApp(
                         val temporary = isHostTemporaryTerminal(
                             remotePath = currentRoute.remotePath,
                             repositoryId = currentRoute.repositoryId,
-                            returnsToHostDetail = currentRoute.hostDetailReturn != null,
+                            returnsToHostDetail = currentRoute.hostDetailReturn != null || currentRoute.tmuxReturn != null,
                         )
                         if (temporary) {
                             closeHostTemporaryTerminal(activeSessionId ?: currentRoute.terminalSessionId)
@@ -738,56 +841,10 @@ fun HobgoblinAndroidApp(
             if (host == null) {
                 route = AppRoute.Hosts
             } else {
-                val parent = HostDetailReturn(host.id, HostDetailTab.Projects)
-                val visibleTmuxState = hostTmuxState.takeIf {
-                    hostTmuxStateHostId == host.id
-                } ?: ResourceState.Idle
-                val discoveredTmuxSessions = when (visibleTmuxState) {
-                    is ResourceState.Loaded -> visibleTmuxState.value.flatMap(HostTmuxPathGroup::sessions)
-                    is ResourceState.Stale -> visibleTmuxState.value.flatMap(HostTmuxPathGroup::sessions)
-                    ResourceState.Idle,
-                    ResourceState.Loading,
-                    is ResourceState.Error,
-                    -> emptyList()
-                }
-                val retainedSessionIds = terminalSessions.mapTo(mutableSetOf(), TerminalSessionRecord::id)
-                val retainedTmuxSessions = discoveredTmuxSessions.mapNotNull { discovery ->
-                    terminalSessionManager
-                        .retainedHostTmuxSession(hostTmuxRecoveryCandidate(host, discovery))
-                        ?.takeIf { retained -> retained.id in retainedSessionIds }
-                        ?.let { retained -> discovery to retained }
-                }.toMap()
+                val parent = HostDetailReturn(host.id)
                 HostDetailScreen(
                     host = host,
-                    selectedTab = currentRoute.selectedTab,
-                    tmuxState = visibleTmuxState,
-                    tmuxRefreshing = hostTmuxRefreshInFlight,
-                    onSelectTab = { selectedTab -> route = currentRoute.copy(selectedTab = selectedTab) },
                     onBack = { route = AppRoute.Hosts },
-                    onRefreshTmux = { hostTmuxRefreshNonce += 1 },
-                    onOpenTmuxSession = { discovery -> openHostTmuxSession(host, discovery) },
-                    retainedTmuxSessions = retainedTmuxSessions,
-                    onReconnectTmuxSession = ::reconnectRetainedTerminal,
-                    onCloseTmuxSession = ::closeRetainedTerminal,
-                    onDeleteTmuxSession = { discovery, session, closeRemote ->
-                        val candidate = hostTmuxRecoveryCandidate(host, discovery)
-                        val retained = terminalSessionManager.retainedHostTmuxSession(candidate)
-                        require(retained?.id == session.id) {
-                            "The retained tmux terminal is no longer available."
-                        }
-                        if (closeRemote) {
-                            requireHostTmuxRemoteCloseSuccess(
-                                withContext(Dispatchers.IO) {
-                                    remoteTmuxSessionService.closeHostSession(
-                                        target = candidate.target,
-                                        discovery = discovery,
-                                    )
-                                },
-                            )
-                        }
-                        deleteRetainedTerminal(session.id)
-                        hostTmuxRefreshNonce += 1
-                    },
                     projectsContent = {
                         ProjectsScreen(
                             repositoriesState = repositoriesState,
@@ -822,10 +879,17 @@ fun HobgoblinAndroidApp(
             initialKeepAliveIntervalSeconds = terminalSettingsStore.loadKeepAliveIntervalSeconds(),
             initialHeartbeatFailureThreshold = terminalSettingsStore.loadHeartbeatFailureThreshold(),
             initialApplicationLanguage = currentAndroidApplicationLanguageSetting(),
+            initialApplicationTheme = applicationTheme,
             onBack = { route = AppRoute.Hosts },
-            onSave = { keepAliveIntervalSeconds, heartbeatFailureThreshold, applicationLanguage ->
+            onSave = {
+                    keepAliveIntervalSeconds,
+                    heartbeatFailureThreshold,
+                    applicationLanguage,
+                    updatedApplicationTheme,
+                ->
                 terminalSettingsStore.setKeepAliveIntervalSeconds(keepAliveIntervalSeconds)
                 terminalSettingsStore.setHeartbeatFailureThreshold(heartbeatFailureThreshold)
+                onApplicationThemeChange(updatedApplicationTheme)
                 route = AppRoute.Hosts
                 setAndroidApplicationLanguagePreference(applicationLanguage)
             },

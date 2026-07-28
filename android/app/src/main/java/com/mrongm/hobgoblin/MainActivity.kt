@@ -3,7 +3,11 @@ package com.mrongm.hobgoblin
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.mrongm.hobgoblin.data.AndroidApplicationThemeStore
 import com.mrongm.hobgoblin.data.HostProfileStore
 import com.mrongm.hobgoblin.data.ManualItemOrderStore
 import com.mrongm.hobgoblin.data.TerminalSettingsStore
@@ -41,6 +45,7 @@ class MainActivity : AppCompatActivity() {
         val remoteRepositoryStore = RemoteRepositoryStore.create(this)
         val terminalSessionStore = TerminalSessionStore.create(this)
         val terminalSettingsStore = TerminalSettingsStore.create(this)
+        val applicationThemeStore = AndroidApplicationThemeStore.create(this)
         val secureIdentityStore = SecureIdentityStore.create(this)
         val hostKeyStore = HostKeyStore.create(this)
         val hostPortForwardManager = HostPortForwardManager(
@@ -89,7 +94,8 @@ class MainActivity : AppCompatActivity() {
             AndroidExternalTermuxEnvironment(this),
         )
         setContent {
-            HobgoblinTheme {
+            var applicationTheme by remember { mutableStateOf(applicationThemeStore.load()) }
+            HobgoblinTheme(applicationTheme = applicationTheme) {
                 HobgoblinAndroidApp(
                     hostProfileStore = hostProfileStore,
                     manualItemOrderStore = manualItemOrderStore,
@@ -106,6 +112,11 @@ class MainActivity : AppCompatActivity() {
                     externalTermuxLauncher = externalTermuxLauncher,
                     hostPortForwardManager = hostPortForwardManager,
                     terminalNavigationRequest = terminalNavigationRequest.value,
+                    applicationTheme = applicationTheme,
+                    onApplicationThemeChange = { theme ->
+                        applicationThemeStore.save(theme)
+                        applicationTheme = theme
+                    },
                 )
             }
         }

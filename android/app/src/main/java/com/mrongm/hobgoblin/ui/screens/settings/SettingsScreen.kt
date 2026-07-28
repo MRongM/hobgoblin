@@ -33,6 +33,9 @@ import com.mrongm.hobgoblin.terminals.MaxTerminalHeartbeatIntervalSeconds
 import com.mrongm.hobgoblin.terminals.MaxTerminalHeartbeatFailureThreshold
 import com.mrongm.hobgoblin.terminals.MinTerminalHeartbeatIntervalSeconds
 import com.mrongm.hobgoblin.terminals.MinTerminalHeartbeatFailureThreshold
+import com.mrongm.hobgoblin.ui.theme.AndroidAppearancePreference
+import com.mrongm.hobgoblin.ui.theme.AndroidApplicationTheme
+import com.mrongm.hobgoblin.ui.theme.AndroidColorTheme
 import com.mrongm.hobgoblin.ui.theme.HobgoblinSpacing
 import com.mrongm.hobgoblin.ui.text.AndroidApplicationLanguagePreference
 import com.mrongm.hobgoblin.ui.text.AndroidApplicationLanguageSetting
@@ -44,8 +47,9 @@ fun SettingsScreen(
     initialKeepAliveIntervalSeconds: Long,
     initialHeartbeatFailureThreshold: Int,
     initialApplicationLanguage: AndroidApplicationLanguageSetting,
+    initialApplicationTheme: AndroidApplicationTheme,
     onBack: () -> Unit,
-    onSave: (Long, Int, AndroidApplicationLanguagePreference) -> Unit,
+    onSave: (Long, Int, AndroidApplicationLanguagePreference, AndroidApplicationTheme) -> Unit,
 ) {
     val uriHandler = LocalUriHandler.current
     var keepAliveText by remember(initialKeepAliveIntervalSeconds) {
@@ -57,6 +61,14 @@ fun SettingsScreen(
     var selectedApplicationLanguage by remember(initialApplicationLanguage) {
         mutableStateOf(initialApplicationLanguage.preference)
     }
+    var selectedAppearance by remember(initialApplicationTheme) {
+        mutableStateOf(initialApplicationTheme.appearance)
+    }
+    var selectedColorTheme by remember(initialApplicationTheme) {
+        mutableStateOf(initialApplicationTheme.colorTheme)
+    }
+    var themeMenuExpanded by remember { mutableStateOf(false) }
+    var appearanceMenuExpanded by remember { mutableStateOf(false) }
     var languageMenuExpanded by remember { mutableStateOf(false) }
     val parsedKeepAlive = keepAliveText.toLongOrNull()
     val parsedHeartbeatFailureThreshold = heartbeatFailureThresholdText.toIntOrNull()
@@ -89,6 +101,8 @@ fun SettingsScreen(
 
     val hasChanges = parsedKeepAlive != initialKeepAliveIntervalSeconds ||
         parsedHeartbeatFailureThreshold != initialHeartbeatFailureThreshold ||
+        selectedAppearance != initialApplicationTheme.appearance ||
+        selectedColorTheme != initialApplicationTheme.colorTheme ||
         applicationLanguageChangeRequired(
             currentLanguageTags = initialApplicationLanguage.languageTags,
             targetPreference = selectedApplicationLanguage,
@@ -119,6 +133,72 @@ fun SettingsScreen(
                 .padding(HobgoblinSpacing.Md),
             verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Md),
         ) {
+            ExposedDropdownMenuBox(
+                expanded = themeMenuExpanded,
+                onExpandedChange = { themeMenuExpanded = it },
+            ) {
+                OutlinedTextField(
+                    value = stringResource(selectedColorTheme.labelResourceId),
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text(stringResource(R.string.settings_theme)) },
+                    trailingIcon = {
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = themeMenuExpanded)
+                    },
+                    singleLine = true,
+                    modifier = Modifier
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                        .fillMaxWidth(),
+                )
+                ExposedDropdownMenu(
+                    expanded = themeMenuExpanded,
+                    onDismissRequest = { themeMenuExpanded = false },
+                ) {
+                    AndroidColorTheme.entries.forEach { colorTheme ->
+                        DropdownMenuItem(
+                            text = { Text(stringResource(colorTheme.labelResourceId)) },
+                            onClick = {
+                                selectedColorTheme = colorTheme
+                                themeMenuExpanded = false
+                            },
+                            contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                        )
+                    }
+                }
+            }
+            ExposedDropdownMenuBox(
+                expanded = appearanceMenuExpanded,
+                onExpandedChange = { appearanceMenuExpanded = it },
+            ) {
+                OutlinedTextField(
+                    value = stringResource(selectedAppearance.labelResourceId),
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text(stringResource(R.string.settings_appearance)) },
+                    trailingIcon = {
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = appearanceMenuExpanded)
+                    },
+                    singleLine = true,
+                    modifier = Modifier
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                        .fillMaxWidth(),
+                )
+                ExposedDropdownMenu(
+                    expanded = appearanceMenuExpanded,
+                    onDismissRequest = { appearanceMenuExpanded = false },
+                ) {
+                    AndroidAppearancePreference.entries.forEach { appearance ->
+                        DropdownMenuItem(
+                            text = { Text(stringResource(appearance.labelResourceId)) },
+                            onClick = {
+                                selectedAppearance = appearance
+                                appearanceMenuExpanded = false
+                            },
+                            contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                        )
+                    }
+                }
+            }
             ExposedDropdownMenuBox(
                 expanded = languageMenuExpanded,
                 onExpandedChange = { languageMenuExpanded = it },
@@ -202,7 +282,15 @@ fun SettingsScreen(
                 onClick = {
                     val keepAlive = parsedKeepAlive ?: return@Button
                     val heartbeatFailureThreshold = parsedHeartbeatFailureThreshold ?: return@Button
-                    onSave(keepAlive, heartbeatFailureThreshold, selectedApplicationLanguage)
+                    onSave(
+                        keepAlive,
+                        heartbeatFailureThreshold,
+                        selectedApplicationLanguage,
+                        AndroidApplicationTheme(
+                            appearance = selectedAppearance,
+                            colorTheme = selectedColorTheme,
+                        ),
+                    )
                 },
                 enabled = canSave,
             ) {
@@ -215,6 +303,29 @@ fun SettingsScreen(
         }
     }
 }
+
+private val AndroidAppearancePreference.labelResourceId: Int
+    get() = when (this) {
+        AndroidAppearancePreference.System -> R.string.settings_appearance_system
+        AndroidAppearancePreference.Light -> R.string.settings_appearance_light
+        AndroidAppearancePreference.Dark -> R.string.settings_appearance_dark
+    }
+
+private val AndroidColorTheme.labelResourceId: Int
+    get() = when (this) {
+        AndroidColorTheme.Macos -> R.string.settings_theme_macos
+        AndroidColorTheme.Mono -> R.string.settings_theme_mono
+        AndroidColorTheme.Github -> R.string.settings_theme_github
+        AndroidColorTheme.Claude -> R.string.settings_theme_claude
+        AndroidColorTheme.Cursor -> R.string.settings_theme_cursor
+        AndroidColorTheme.Airbnb -> R.string.settings_theme_airbnb
+        AndroidColorTheme.Bmw -> R.string.settings_theme_bmw
+        AndroidColorTheme.Signal -> R.string.settings_theme_signal
+        AndroidColorTheme.Forge -> R.string.settings_theme_forge
+        AndroidColorTheme.Catppuccin -> R.string.settings_theme_catppuccin
+        AndroidColorTheme.Solarized -> R.string.settings_theme_solarized
+        AndroidColorTheme.TokyoNight -> R.string.settings_theme_tokyo_night
+    }
 
 private val AndroidApplicationLanguagePreference.labelResourceId: Int
     get() = when (this) {
