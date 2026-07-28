@@ -81,6 +81,7 @@ internal fun terminalExtraKeyLabel(
 
 internal enum class TerminalHobgoblinAction {
     Reconnect,
+    Close,
     Enter,
     Backspace,
     ControlC,
@@ -99,6 +100,7 @@ internal val TerminalHobgoblinPrimaryActions = listOf(
 
 internal fun terminalHobgoblinActionText(action: TerminalHobgoblinAction): LocalizedText = when (action) {
     TerminalHobgoblinAction.Reconnect -> LocalizedText(R.string.terminal_action_reconnect)
+    TerminalHobgoblinAction.Close -> LocalizedText(R.string.repository_terminal_close)
     TerminalHobgoblinAction.Enter -> LocalizedText(R.string.common_value, listOf("ENTER"))
     TerminalHobgoblinAction.Backspace -> LocalizedText(R.string.common_value, listOf("⌫"))
     TerminalHobgoblinAction.ControlC -> LocalizedText(R.string.common_value, listOf("CTRL+C"))
