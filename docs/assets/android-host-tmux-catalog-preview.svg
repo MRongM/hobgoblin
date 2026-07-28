@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="860" viewBox="0 0 980 860" role="img" aria-labelledby="title desc">
+  <title id="title">Android host Projects and tmux tabs</title>
+  <desc id="desc">Two mobile screens showing a host project list and a grouped Hobgoblin tmux session catalog.</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#172033" flood-opacity="0.14"/>
+    </filter>
+    <style>
+      .ui { font-family: Inter, Roboto, Arial, sans-serif; fill: #172033; }
+      .title { font-size: 20px; font-weight: 700; }
+      .label { font-size: 15px; font-weight: 650; }
+      .body { font-size: 14px; }
+      .meta { font-size: 12px; fill: #657087; }
+      .action { font-size: 14px; font-weight: 650; fill: #315ACD; }
+    </style>
+  </defs>
+
+  <rect width="980" height="860" fill="#E9EEF6"/>
+  <text x="490" y="48" class="ui title" text-anchor="middle">Host 详情 · Projects / tmux</text>
+  <text x="490" y="74" class="ui meta" text-anchor="middle">实色页面、主机级扫描、精确 server/session 恢复</text>
+
+  <g transform="translate(70 105)" filter="url(#shadow)">
+    <rect width="380" height="700" rx="30" fill="#F8FAFD" stroke="#CDD5E3"/>
+    <rect x="0" y="0" width="380" height="78" rx="30" fill="#FFFFFF"/>
+    <rect x="0" y="48" width="380" height="30" fill="#FFFFFF"/>
+    <text x="24" y="48" class="ui action">返回</text>
+    <text x="190" y="48" class="ui title" text-anchor="middle">开发服务器</text>
+
+    <rect x="0" y="78" width="380" height="54" fill="#FFFFFF"/>
+    <text x="95" y="110" class="ui label" text-anchor="middle">项目</text>
+    <text x="285" y="110" class="ui body" text-anchor="middle" fill="#657087">tmux</text>
+    <rect x="28" y="128" width="134" height="4" rx="2" fill="#315ACD"/>
+
+    <text x="24" y="174" class="ui label">此主机上的项目</text>
+    <text x="24" y="196" class="ui meta">只显示 Android 已保存项目</text>
+
+    <g transform="translate(20 220)">
+      <rect width="340" height="142" rx="16" fill="#FFFFFF" stroke="#DCE2EC"/>
+      <text x="18" y="32" class="ui label">Hobgoblin</text>
+      <text x="18" y="56" class="ui meta">/srv/projects/hobgoblin</text>
+      <rect x="18" y="76" width="90" height="24" rx="12" fill="#E8EEFF"/>
+      <text x="63" y="93" class="ui meta" text-anchor="middle" fill="#315ACD">Git 仓库</text>
+      <text x="18" y="126" class="ui action">打开</text>
+      <text x="76" y="126" class="ui action">终端</text>
+      <text x="138" y="126" class="ui action">删除</text>
+    </g>
+
+    <g transform="translate(20 378)">
+      <rect width="340" height="142" rx="16" fill="#FFFFFF" stroke="#DCE2EC"/>
+      <text x="18" y="32" class="ui label">Deploy scripts</text>
+      <text x="18" y="56" class="ui meta">/srv/tools/deploy</text>
+      <rect x="18" y="76" width="98" height="24" rx="12" fill="#EEF0F5"/>
+      <text x="67" y="93" class="ui meta" text-anchor="middle">普通目录</text>
+      <text x="18" y="126" class="ui action">打开</text>
+      <text x="76" y="126" class="ui action">终端</text>
+      <text x="138" y="126" class="ui action">删除</text>
+    </g>
+  </g>
+
+  <g transform="translate(530 105)" filter="url(#shadow)">
+    <rect width="380" height="700" rx="30" fill="#F8FAFD" stroke="#CDD5E3"/>
+    <rect x="0" y="0" width="380" height="78" rx="30" fill="#FFFFFF"/>
+    <rect x="0" y="48" width="380" height="30" fill="#FFFFFF"/>
+    <text x="24" y="48" class="ui action">返回</text>
+    <text x="190" y="48" class="ui title" text-anchor="middle">开发服务器</text>
+    <text x="350" y="48" class="ui action" text-anchor="end">刷新</text>
+
+    <rect x="0" y="78" width="380" height="54" fill="#FFFFFF"/>
+    <text x="95" y="110" class="ui body" text-anchor="middle" fill="#657087">项目</text>
+    <text x="285" y="110" class="ui label" text-anchor="middle">tmux</text>
+    <rect x="218" y="128" width="134" height="4" rx="2" fill="#315ACD"/>
+
+    <text x="24" y="174" class="ui label">hobgoblin</text>
+    <text x="24" y="196" class="ui meta">/srv/projects/hobgoblin</text>
+
+    <g transform="translate(20 218)">
+      <rect width="340" height="112" rx="16" fill="#FFFFFF" stroke="#DCE2EC"/>
+      <rect x="16" y="24" width="4" height="64" rx="2" fill="#315ACD"/>
+      <text x="36" y="42" class="ui label">terminal-1</text>
+      <text x="320" y="42" class="ui meta" text-anchor="end" fill="#19764B">1 个客户端</text>
+      <text x="36" y="70" class="ui meta">项目 server · …22222222</text>
+      <text x="36" y="92" class="ui meta">session · …11111111</text>
+    </g>
+
+    <g transform="translate(20 346)">
+      <rect width="340" height="112" rx="16" fill="#FFFFFF" stroke="#DCE2EC"/>
+      <rect x="16" y="24" width="4" height="64" rx="2" fill="#7657C4"/>
+      <text x="36" y="42" class="ui label">terminal-2</text>
+      <text x="320" y="42" class="ui meta" text-anchor="end">空闲</text>
+      <text x="36" y="70" class="ui meta">默认 server</text>
+      <text x="36" y="92" class="ui meta">session · …33333333</text>
+    </g>
+
+    <text x="24" y="502" class="ui label">feature-auth</text>
+    <text x="24" y="524" class="ui meta">/srv/projects/hobgoblin-feature-auth</text>
+    <g transform="translate(20 546)">
+      <rect width="340" height="100" rx="16" fill="#FFFFFF" stroke="#DCE2EC"/>
+      <rect x="16" y="20" width="4" height="60" rx="2" fill="#315ACD"/>
+      <text x="36" y="40" class="ui label">terminal-1</text>
+      <text x="320" y="40" class="ui meta" text-anchor="end">空闲</text>
+      <text x="36" y="66" class="ui meta">项目 server · …44444444</text>
+      <text x="36" y="86" class="ui meta">session · …55555555</text>
+    </g>
+  </g>
+
+  <g transform="translate(210 827)">
+    <rect width="12" height="4" rx="2" fill="#315ACD"/>
+    <text x="20" y="5" class="ui meta">项目 server</text>
+    <rect x="168" width="12" height="4" rx="2" fill="#7657C4"/>
+    <text x="188" y="5" class="ui meta">默认 server</text>
+    <text x="360" y="5" class="ui meta">· 路径分组 · 无新增/删除入口</text>
+  </g>
+</svg>

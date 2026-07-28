@@ -55,36 +55,28 @@ class AppRouteTest {
     }
 
     @Test
-    fun `workspace route and terminal return preserve the expanded branch workspace`() {
-        val workspaceReturn = WorkspaceCatalogReturn(
-            hostId = "host-1",
-            rootPath = "/srv/product",
-            expandedBranchWorkspaceId = "branch-auth",
-        )
+    fun `host tmux terminal returns to the same host tmux tab`() {
+        val hostDetailReturn = HostDetailReturn("host-1", HostDetailTab.Tmux)
         val route = AppRoute.Terminal(
             hostId = "host-1",
             remotePath = "/srv/product/hobgoblin-feature-auth/api",
             terminalSessionId = "session-1",
-            workspaceReturn = workspaceReturn,
+            hostDetailReturn = hostDetailReturn,
         )
 
         assertEquals(
-            AppRoute.WorkspaceCatalog(
-                hostId = "host-1",
-                rootPath = "/srv/product",
-                expandedBranchWorkspaceId = "branch-auth",
-            ),
+            AppRoute.HostDetail(hostId = "host-1", selectedTab = HostDetailTab.Tmux),
             terminalReturnRoute(route, resolvedHostId = "host-1", temporary = false),
         )
     }
 
     @Test
-    fun `terminals return takes priority over a workspace return`() {
+    fun `terminals return takes priority over a host detail return`() {
         val route = AppRoute.Terminal(
             hostId = "host-1",
             remotePath = "/srv/product/hobgoblin-feature-auth",
             returnToTerminals = true,
-            workspaceReturn = WorkspaceCatalogReturn("host-1", "/srv/product", "branch-auth"),
+            hostDetailReturn = HostDetailReturn("host-1", HostDetailTab.Tmux),
         )
 
         assertEquals(AppRoute.Terminals, terminalReturnRoute(route, resolvedHostId = "host-1", temporary = false))
@@ -152,6 +144,26 @@ class AppRouteTest {
         assertEquals(
             AppRoute.EditHost("host-1"),
             terminalReturnRoute(hostTerminal, resolvedHostId = "host-1", temporary = false),
+        )
+    }
+
+    @Test
+    fun `project opened from host detail preserves its parent through terminal return`() {
+        val parent = HostDetailReturn("host-1", HostDetailTab.Projects)
+        val terminal = AppRoute.Terminal(
+            hostId = "host-1",
+            remotePath = "/srv/app-feature",
+            repositoryId = "repo-1",
+            hostDetailReturn = parent,
+        )
+
+        assertEquals(
+            AppRoute.Repository(
+                repositoryId = "repo-1",
+                terminalWorkspacePath = "/srv/app-feature",
+                hostDetailReturn = parent,
+            ),
+            terminalReturnRoute(terminal, resolvedHostId = "host-1", temporary = false),
         )
     }
 

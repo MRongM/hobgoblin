@@ -3,7 +3,6 @@ package com.mrongm.hobgoblin.ui.screens.projects
 import com.mrongm.hobgoblin.R
 import com.mrongm.hobgoblin.domain.ssh.RemoteProjectKind
 import com.mrongm.hobgoblin.domain.ssh.RemoteRepositoryProfile
-import com.mrongm.hobgoblin.domain.workspace.RemoteConfiguredWorkspaceSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -79,27 +78,10 @@ class ProjectsScreenStateTest {
     }
 
     @Test
-    fun `remote workspace catalog is visible only for a selected host`() {
-        assertEquals(false, workspaceCatalogVisible(hostFilterId = null))
-        assertTrue(workspaceCatalogVisible(hostFilterId = "host-1"))
-    }
-
-    @Test
-    fun `workspace order remains remote owned and never enters local reorder inputs`() {
-        val workspaces = listOf(
-            RemoteConfiguredWorkspaceSnapshot("/srv/b", emptyList(), emptyList()),
-            RemoteConfiguredWorkspaceSnapshot("/srv/a", emptyList(), emptyList()),
-        )
+    fun `only local projects enter local reorder inputs`() {
         val projects = listOf(project(id = "repo-1", hostId = "host-1"))
 
-        assertEquals(listOf("/srv/b", "/srv/a"), orderedWorkspaceRoots(workspaces))
         assertEquals(listOf("repo-1"), localProjectReorderIds(projects))
-    }
-
-    @Test
-    fun `non empty workspace section prevents a full page filtered empty state`() {
-        assertEquals(false, filteredPageIsEmpty(localProjects = 0, remoteWorkspaces = 1))
-        assertTrue(filteredPageIsEmpty(localProjects = 0, remoteWorkspaces = 0))
     }
 
     private fun project(id: String, hostId: String): RemoteRepositoryProfile =

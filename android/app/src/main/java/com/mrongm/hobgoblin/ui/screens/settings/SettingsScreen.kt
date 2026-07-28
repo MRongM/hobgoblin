@@ -5,9 +5,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -28,14 +34,18 @@ import com.mrongm.hobgoblin.terminals.MaxTerminalHeartbeatFailureThreshold
 import com.mrongm.hobgoblin.terminals.MinTerminalHeartbeatIntervalSeconds
 import com.mrongm.hobgoblin.terminals.MinTerminalHeartbeatFailureThreshold
 import com.mrongm.hobgoblin.ui.theme.HobgoblinSpacing
+import com.mrongm.hobgoblin.ui.text.AndroidApplicationLanguagePreference
+import com.mrongm.hobgoblin.ui.text.AndroidApplicationLanguageSetting
+import com.mrongm.hobgoblin.ui.text.applicationLanguageChangeRequired
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     initialKeepAliveIntervalSeconds: Long,
     initialHeartbeatFailureThreshold: Int,
+    initialApplicationLanguage: AndroidApplicationLanguageSetting,
     onBack: () -> Unit,
-    onSave: (Long, Int) -> Unit,
+    onSave: (Long, Int, AndroidApplicationLanguagePreference) -> Unit,
 ) {
     val uriHandler = LocalUriHandler.current
     var keepAliveText by remember(initialKeepAliveIntervalSeconds) {
@@ -44,6 +54,10 @@ fun SettingsScreen(
     var heartbeatFailureThresholdText by remember(initialHeartbeatFailureThreshold) {
         mutableStateOf(initialHeartbeatFailureThreshold.toString())
     }
+    var selectedApplicationLanguage by remember(initialApplicationLanguage) {
+        mutableStateOf(initialApplicationLanguage.preference)
+    }
+    var languageMenuExpanded by remember { mutableStateOf(false) }
     val parsedKeepAlive = keepAliveText.toLongOrNull()
     val parsedHeartbeatFailureThreshold = heartbeatFailureThresholdText.toIntOrNull()
 
@@ -73,11 +87,17 @@ fun SettingsScreen(
         else -> null
     }
 
+    val hasChanges = parsedKeepAlive != initialKeepAliveIntervalSeconds ||
+        parsedHeartbeatFailureThreshold != initialHeartbeatFailureThreshold ||
+        applicationLanguageChangeRequired(
+            currentLanguageTags = initialApplicationLanguage.languageTags,
+            targetPreference = selectedApplicationLanguage,
+        )
     val canSave = parsedKeepAlive != null &&
         parsedHeartbeatFailureThreshold != null &&
         keepAliveError == null &&
         heartbeatFailureThresholdError == null &&
-        (parsedKeepAlive != initialKeepAliveIntervalSeconds || parsedHeartbeatFailureThreshold != initialHeartbeatFailureThreshold)
+        hasChanges
 
     Scaffold(
         topBar = {
@@ -95,9 +115,43 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .verticalScroll(rememberScrollState())
                 .padding(HobgoblinSpacing.Md),
             verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Md),
         ) {
+            ExposedDropdownMenuBox(
+                expanded = languageMenuExpanded,
+                onExpandedChange = { languageMenuExpanded = it },
+            ) {
+                OutlinedTextField(
+                    value = stringResource(selectedApplicationLanguage.labelResourceId),
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text(stringResource(R.string.settings_language)) },
+                    trailingIcon = {
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = languageMenuExpanded)
+                    },
+                    singleLine = true,
+                    modifier = Modifier
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                        .fillMaxWidth(),
+                )
+                ExposedDropdownMenu(
+                    expanded = languageMenuExpanded,
+                    onDismissRequest = { languageMenuExpanded = false },
+                ) {
+                    AndroidApplicationLanguagePreference.entries.forEach { language ->
+                        DropdownMenuItem(
+                            text = { Text(stringResource(language.labelResourceId)) },
+                            onClick = {
+                                selectedApplicationLanguage = language
+                                languageMenuExpanded = false
+                            },
+                            contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                        )
+                    }
+                }
+            }
             Text(stringResource(R.string.settings_keepalive_heading))
             OutlinedTextField(
                 value = keepAliveText,
@@ -148,7 +202,7 @@ fun SettingsScreen(
                 onClick = {
                     val keepAlive = parsedKeepAlive ?: return@Button
                     val heartbeatFailureThreshold = parsedHeartbeatFailureThreshold ?: return@Button
-                    onSave(keepAlive, heartbeatFailureThreshold)
+                    onSave(keepAlive, heartbeatFailureThreshold, selectedApplicationLanguage)
                 },
                 enabled = canSave,
             ) {
@@ -161,3 +215,12 @@ fun SettingsScreen(
         }
     }
 }
+
+private val AndroidApplicationLanguagePreference.labelResourceId: Int
+    get() = when (this) {
+        AndroidApplicationLanguagePreference.FollowSystem -> R.string.settings_language_follow_system
+        AndroidApplicationLanguagePreference.English -> R.string.settings_language_english
+        AndroidApplicationLanguagePreference.SimplifiedChinese -> R.string.settings_language_simplified_chinese
+        AndroidApplicationLanguagePreference.Japanese -> R.string.settings_language_japanese
+        AndroidApplicationLanguagePreference.Korean -> R.string.settings_language_korean
+    }

@@ -45,8 +45,12 @@ import com.mrongm.hobgoblin.ui.theme.HobgoblinSpacing
 
 internal const val HOST_TEMPORARY_TERMINAL_REMOTE_PATH = "/"
 
-internal fun isHostTemporaryTerminal(remotePath: String, repositoryId: String?): Boolean =
-    repositoryId == null && remotePath == HOST_TEMPORARY_TERMINAL_REMOTE_PATH
+internal fun isHostTemporaryTerminal(
+    remotePath: String,
+    repositoryId: String?,
+    returnsToHostDetail: Boolean = false,
+): Boolean =
+    !returnsToHostDetail && repositoryId == null && remotePath == HOST_TEMPORARY_TERMINAL_REMOTE_PATH
 
 internal fun hostTemporaryTerminalRoute(hostId: String): AppRoute.Terminal =
     AppRoute.Terminal(hostId = hostId, remotePath = HOST_TEMPORARY_TERMINAL_REMOTE_PATH)
@@ -79,7 +83,7 @@ internal fun canOpenHostPorts(host: SshHostProfile): Boolean = host.id.isNotBlan
 @Composable
 fun HostsScreen(
     hostsState: ResourceState<List<SshHostProfile>>,
-    onOpenProjects: (String) -> Unit,
+    onOpenHostDetail: (String) -> Unit,
     onEditHost: (String) -> Unit,
     onDeleteHost: (String) -> Unit,
     onOpenTerminal: (String) -> Unit,
@@ -100,7 +104,7 @@ fun HostsScreen(
             is ResourceState.Error -> ErrorHosts(message = hostsState.message)
             is ResourceState.Stale -> HostList(
                 hosts = hostsState.value,
-                onOpenProjects = onOpenProjects,
+                onOpenHostDetail = onOpenHostDetail,
                 onEditHost = onEditHost,
                 onDeleteHost = onDeleteHost,
                 onOpenTerminal = onOpenTerminal,
@@ -110,7 +114,7 @@ fun HostsScreen(
             )
             is ResourceState.Loaded -> HostList(
                 hosts = hostsState.value,
-                onOpenProjects = onOpenProjects,
+                onOpenHostDetail = onOpenHostDetail,
                 onEditHost = onEditHost,
                 onDeleteHost = onDeleteHost,
                 onOpenTerminal = onOpenTerminal,
@@ -145,7 +149,7 @@ private fun ErrorHosts(message: String) {
 @Composable
 private fun HostList(
     hosts: List<SshHostProfile>,
-    onOpenProjects: (String) -> Unit,
+    onOpenHostDetail: (String) -> Unit,
     onEditHost: (String) -> Unit,
     onDeleteHost: (String) -> Unit,
     onOpenTerminal: (String) -> Unit,
@@ -191,7 +195,7 @@ private fun HostList(
                 host = host,
                 reorderState = reorderState,
                 canOpenTerminal = health == HostHealth.Online,
-                onOpenProjects = { onOpenProjects(host.id) },
+                onOpenHostDetail = { onOpenHostDetail(host.id) },
                 onOpenTerminal = { onOpenTerminal(host.id) },
                 onOpenPorts = { onOpenPorts(host.id) },
                 onEditHost = { onEditHost(host.id) },
@@ -230,7 +234,7 @@ private fun HostRow(
     host: SshHostProfile,
     reorderState: ManualReorderState,
     canOpenTerminal: Boolean,
-    onOpenProjects: () -> Unit,
+    onOpenHostDetail: () -> Unit,
     onOpenTerminal: () -> Unit,
     onOpenPorts: () -> Unit,
     onEditHost: () -> Unit,
@@ -239,7 +243,7 @@ private fun HostRow(
     val health = hostHealth(host)
     Card(
         modifier = modifier.fillMaxWidth(),
-        onClick = onOpenProjects,
+        onClick = onOpenHostDetail,
     ) {
         Column(
             modifier = Modifier.padding(HobgoblinSpacing.Md),

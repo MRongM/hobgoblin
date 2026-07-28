@@ -1,7 +1,7 @@
 # Android 工作区 tmux 目录设计
 
 **日期**：2026-07-28  
-**状态**：已确认，自主 inline 实施
+**状态**：已被 `2026-07-28-android-host-tmux-catalog-design.md` 取代
 
 ## 目标
 

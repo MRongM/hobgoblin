@@ -14,6 +14,66 @@ import org.junit.Test
 
 class RemoteTmuxSessionServiceTest {
     @Test
+    fun `host discovery trusts once and runs one versioned scan command`() {
+        val sessionName = "hobgoblin-v1-111111111111111111111111"
+        val client = FakeSshClient(
+            SshCommandResult(
+                ok = true,
+                stdout = listOf(
+                    TmuxSessionProtocol.HostDiscoveryHeader,
+                    "legacy-default\t$sessionName\t/srv/project\t1\t0",
+                ).joinToString("\n"),
+            ),
+        )
+
+        val result = service(client).discoverHostSessions(target())
+
+        assertEquals(
+            RemoteHostTmuxDiscoveryResult.Loaded(
+                listOf(
+                    HostDiscoveredTmuxSession(
+                        server = TmuxServerTarget.Default,
+                        identity = TmuxSessionIdentity(sessionName, "/srv/project"),
+                        terminalNumber = 1,
+                        attachedClients = 0,
+                    ),
+                ),
+            ),
+            result,
+        )
+        assertEquals(1, client.fingerprintReads)
+        assertEquals(listOf(TmuxSessionProtocol.hostSessionDiscoveryCommand()), client.scripts)
+    }
+
+    @Test
+    fun `host discovery distinguishes empty catalog protocol failure and SSH failure`() {
+        val empty = service(
+            FakeSshClient(SshCommandResult(ok = true, stdout = TmuxSessionProtocol.HostDiscoveryHeader)),
+        ).discoverHostSessions(target())
+        val invalid = service(
+            FakeSshClient(SshCommandResult(ok = true, stdout = "unexpected-output")),
+        ).discoverHostSessions(target())
+        val failed = service(
+            FakeSshClient(SshCommandResult(ok = false, stderr = "permission denied")),
+        ).discoverHostSessions(target())
+
+        assertEquals(RemoteHostTmuxDiscoveryResult.Loaded(emptyList()), empty)
+        assertEquals(RemoteHostTmuxDiscoveryResult.Failed("tmux returned an invalid host session list"), invalid)
+        assertEquals(RemoteHostTmuxDiscoveryResult.Failed("permission denied"), failed)
+    }
+
+    @Test
+    fun `untrusted host fails host discovery before SSH command`() {
+        val client = FakeSshClient()
+        val service = RemoteTmuxSessionService(client, FakeHostKeyTrustStore(trusted = false))
+
+        val result = service.discoverHostSessions(target())
+
+        assertTrue(result is RemoteHostTmuxDiscoveryResult.Failed)
+        assertTrue(client.scripts.isEmpty())
+    }
+
+    @Test
     fun `trusted discovery returns only descriptor verified sessions`() {
         val discoveryIdentity = requireNotNull(
             TmuxSessionProtocol.identity(

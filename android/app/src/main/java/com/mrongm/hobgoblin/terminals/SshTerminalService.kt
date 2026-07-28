@@ -120,12 +120,22 @@ internal object SshTerminalStartupCommand {
                     TmuxStartupPolicy.AttachOrCreate -> TmuxSessionProtocol.attachOrCreateCommand(
                         tmuxIdentity,
                         startupContext.terminalId,
-                        startupContext.repositoryRemotePath,
+                        requireNotNull(startupContext.repositoryRemotePath) {
+                            "Repository path is required to create a tmux session"
+                        },
                     )
-                    TmuxStartupPolicy.AttachExisting -> TmuxSessionProtocol.attachExistingCommand(
+                    TmuxStartupPolicy.AttachExisting -> startupContext.tmuxServerTarget?.let { server ->
+                        TmuxSessionProtocol.attachExistingCommand(
+                            tmuxIdentity,
+                            startupContext.terminalId,
+                            server,
+                        )
+                    } ?: TmuxSessionProtocol.attachExistingCommand(
                         tmuxIdentity,
                         startupContext.terminalId,
-                        startupContext.repositoryRemotePath,
+                        requireNotNull(startupContext.repositoryRemotePath) {
+                            "Repository path or explicit server target is required to attach tmux"
+                        },
                     )
                 },
             ) { "Tmux terminal number must be positive" }

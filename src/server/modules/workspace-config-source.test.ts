@@ -24,21 +24,6 @@ afterEach(async () => {
 })
 
 describe('workspace config source', () => {
-  test('accepts the shared Android v1 read-contract fixture', async () => {
-    const { dataFile } = await createFixture()
-    const fixture = await readFile(
-      new URL('../../../fixtures/workspace-catalog/v1/workspace-configs.json', import.meta.url),
-      'utf8',
-    )
-    await mkdir(path.dirname(dataFile), { recursive: true })
-    await writeFile(dataFile, fixture)
-
-    await expect(readWorkspaceConfig('/srv/workspace', { dataFile })).resolves.toEqual({
-      kind: 'ready',
-      config: { repo: ['api', 'web'] },
-    })
-  })
-
   test('reports an unregistered workspace as missing', async () => {
     const { dataFile, root } = await createFixture()
 

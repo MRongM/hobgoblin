@@ -2,10 +2,14 @@ package com.mrongm.hobgoblin.navigation
 
 import com.mrongm.hobgoblin.terminals.TerminalSessionRecord
 
-data class WorkspaceCatalogReturn(
+enum class HostDetailTab {
+    Projects,
+    Tmux,
+}
+
+data class HostDetailReturn(
     val hostId: String,
-    val rootPath: String,
-    val expandedBranchWorkspaceId: String?,
+    val selectedTab: HostDetailTab,
 )
 
 sealed interface AppRoute {
@@ -17,14 +21,14 @@ sealed interface AppRoute {
     data object Settings : AppRoute
     data class EditHost(val hostId: String) : AppRoute
     data class HostPorts(val hostId: String) : AppRoute
+    data class HostDetail(
+        val hostId: String,
+        val selectedTab: HostDetailTab = HostDetailTab.Projects,
+    ) : AppRoute
     data class Repository(
         val repositoryId: String,
         val terminalWorkspacePath: String? = null,
-    ) : AppRoute
-    data class WorkspaceCatalog(
-        val hostId: String,
-        val rootPath: String,
-        val expandedBranchWorkspaceId: String? = null,
+        val hostDetailReturn: HostDetailReturn? = null,
     ) : AppRoute
     data class Terminal(
         val hostId: String,
@@ -32,14 +36,14 @@ sealed interface AppRoute {
         val repositoryId: String? = null,
         val terminalSessionId: String? = null,
         val returnToTerminals: Boolean = false,
-        val workspaceReturn: WorkspaceCatalogReturn? = null,
+        val hostDetailReturn: HostDetailReturn? = null,
     ) : AppRoute
 
     companion object {
         fun terminal(
             session: TerminalSessionRecord,
             returnToTerminals: Boolean = false,
-            workspaceReturn: WorkspaceCatalogReturn? = null,
+            hostDetailReturn: HostDetailReturn? = null,
         ): Terminal =
             Terminal(
                 hostId = session.hostId,
@@ -47,7 +51,7 @@ sealed interface AppRoute {
                 repositoryId = session.repositoryId,
                 terminalSessionId = session.id,
                 returnToTerminals = returnToTerminals,
-                workspaceReturn = workspaceReturn,
+                hostDetailReturn = hostDetailReturn,
             )
     }
 }
@@ -65,15 +69,15 @@ internal fun terminalReturnRoute(
     temporary: Boolean,
 ): AppRoute = when {
     route.returnToTerminals -> AppRoute.Terminals
-    route.workspaceReturn != null -> AppRoute.WorkspaceCatalog(
-        hostId = route.workspaceReturn.hostId,
-        rootPath = route.workspaceReturn.rootPath,
-        expandedBranchWorkspaceId = route.workspaceReturn.expandedBranchWorkspaceId,
-    )
-    temporary -> AppRoute.Hosts
     route.repositoryId != null -> AppRoute.Repository(
         repositoryId = route.repositoryId,
         terminalWorkspacePath = route.remotePath,
+        hostDetailReturn = route.hostDetailReturn,
     )
+    route.hostDetailReturn != null -> AppRoute.HostDetail(
+        hostId = route.hostDetailReturn.hostId,
+        selectedTab = route.hostDetailReturn.selectedTab,
+    )
+    temporary -> AppRoute.Hosts
     else -> AppRoute.EditHost(resolvedHostId)
 }

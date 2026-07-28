@@ -1,8 +1,8 @@
 package com.mrongm.hobgoblin
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.mutableStateOf
 import com.mrongm.hobgoblin.data.HostProfileStore
 import com.mrongm.hobgoblin.data.ManualItemOrderStore
@@ -18,7 +18,6 @@ import com.mrongm.hobgoblin.ssh.SshLocalPortForwardService
 import com.mrongm.hobgoblin.ssh.SshjInitializationClient
 import com.mrongm.hobgoblin.ssh.SshjClientFacade
 import com.mrongm.hobgoblin.ssh.RemoteRepositoryGitService
-import com.mrongm.hobgoblin.ssh.RemoteWorkspaceCatalogService
 import com.mrongm.hobgoblin.ssh.RemoteWorktreeService
 import com.mrongm.hobgoblin.terminals.AndroidTerminalForegroundOwner
 import com.mrongm.hobgoblin.terminals.RemoteTmuxSessionService
@@ -31,7 +30,7 @@ import com.mrongm.hobgoblin.termux.AndroidExternalTermuxEnvironment
 import com.mrongm.hobgoblin.termux.ExternalTermuxLauncher
 import com.mrongm.hobgoblin.ui.theme.HobgoblinTheme
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
     private val terminalNavigationRequest = mutableStateOf<TerminalNavigationRequest?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -55,10 +54,6 @@ class MainActivity : ComponentActivity() {
             hostKeyStore = hostKeyStore,
         )
         val remoteRepositoryGitService = RemoteRepositoryGitService(
-            client = SshjClientFacade(identityStore = secureIdentityStore),
-            hostKeyStore = hostKeyStore,
-        )
-        val remoteWorkspaceCatalogService = RemoteWorkspaceCatalogService(
             client = SshjClientFacade(identityStore = secureIdentityStore),
             hostKeyStore = hostKeyStore,
         )
@@ -102,7 +97,6 @@ class MainActivity : ComponentActivity() {
                     secureIdentityStore = secureIdentityStore,
                     diagnosticsService = diagnosticsService,
                     remoteRepositoryGitService = remoteRepositoryGitService,
-                    remoteWorkspaceCatalogService = remoteWorkspaceCatalogService,
                     remoteWorktreeService = remoteWorktreeService,
                     terminalSettingsStore = terminalSettingsStore,
                     initializationService = initializationService,

@@ -31,10 +31,47 @@ sealed interface RemoteTmuxBatchDiscoveryResult {
     ) : RemoteTmuxBatchDiscoveryResult
 }
 
+sealed interface RemoteHostTmuxDiscoveryResult {
+    data class Loaded(
+        val sessions: List<HostDiscoveredTmuxSession>,
+    ) : RemoteHostTmuxDiscoveryResult
+
+    data class Failed(
+        val message: String,
+    ) : RemoteHostTmuxDiscoveryResult
+}
+
 class RemoteTmuxSessionService(
     private val client: SshClientFacade,
     private val hostKeyStore: HostKeyTrustStore,
 ) {
+    fun discoverHostSessions(target: RemoteTarget): RemoteHostTmuxDiscoveryResult = try {
+        val fingerprint = client.fetchHostFingerprint(target)
+        require(hostKeyStore.evaluate(target, fingerprint) is HostKeyTrust.Trusted) {
+            "Trust this host key before discovering tmux sessions."
+        }
+        val secrets = SshConnectionSecrets(acceptedHostFingerprint = fingerprint)
+        val listed = client.runCommand(
+            target = target,
+            script = TmuxSessionProtocol.hostSessionDiscoveryCommand(),
+            secrets = secrets,
+        )
+        if (!listed.ok) {
+            RemoteHostTmuxDiscoveryResult.Failed(listed.failureMessage())
+        } else {
+            val sessions = TmuxSessionProtocol.parseHostSessionDiscoveryOutput(listed.stdout)
+            if (sessions == null) {
+                RemoteHostTmuxDiscoveryResult.Failed("tmux returned an invalid host session list")
+            } else {
+                RemoteHostTmuxDiscoveryResult.Loaded(sessions)
+            }
+        }
+    } catch (error: Throwable) {
+        RemoteHostTmuxDiscoveryResult.Failed(
+            error.message?.takeIf { it.isNotBlank() } ?: error::class.java.simpleName,
+        )
+    }
+
     fun discoverAssociatedSessions(
         target: RemoteTarget,
         projectRoot: String,

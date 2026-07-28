@@ -1,3 +1,7 @@
+---
+status: superseded by ADR-0003
+---
+
 # Version workspace registries as cross-client read contracts
 
 Hobgoblin treats the versioned JSON shapes in `workspace-configs.json` and `branch-workspaces.json` as cross-client read contracts so Android can present the server-owned workspace catalog over SSH even when no Hobgoblin server process is running. The server remains the only writer; Android reads version 1, ignores unknown additive fields, strictly validates required identities, paths, and relationships, and fails closed without guessing, repairing, or writing when a version or record is invalid.

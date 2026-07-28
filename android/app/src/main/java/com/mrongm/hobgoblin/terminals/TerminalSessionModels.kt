@@ -12,6 +12,7 @@ data class TerminalSessionRecord(
     val terminalId: Int? = null,
     val repositoryRemotePath: String? = null,
     val tmuxIdentity: TmuxSessionIdentity? = null,
+    val tmuxServerTarget: TmuxServerTarget? = null,
     val status: TerminalSessionStatus,
     val lastOutputSnapshot: String = "",
     val lastActivityAt: Long? = null,
@@ -34,8 +35,14 @@ data class TerminalSessionRecord(
         require(repositoryRemotePath == null || terminalId != null) {
             "Project terminal records require a terminal id"
         }
-        require(tmuxIdentity == null || repositoryRemotePath != null) {
-            "Tmux-backed terminals require a repository path"
+        require(tmuxIdentity == null || repositoryRemotePath != null || tmuxServerTarget != null) {
+            "Tmux-backed terminals require a repository path or explicit server target"
+        }
+        require(tmuxServerTarget == null || tmuxIdentity != null) {
+            "Tmux server target requires a tmux identity"
+        }
+        require(tmuxServerTarget == null || terminalId != null) {
+            "Tmux server target requires a terminal id"
         }
         require(tmuxIdentity == null || TmuxSessionProtocol.normalizePath(remotePath) == tmuxIdentity.initialPath) {
             "Tmux initial path must match the terminal remote path"
@@ -60,6 +67,12 @@ data class TmuxTerminalRecoveryCandidate(
     val repositoryRemotePath: String,
     val targetLabel: String,
     val discovery: DiscoveredTmuxSession,
+)
+
+data class HostTmuxRecoveryCandidate(
+    val target: RemoteTarget,
+    val targetLabel: String,
+    val discovery: HostDiscoveredTmuxSession,
 )
 
 enum class TerminalSessionStatus {

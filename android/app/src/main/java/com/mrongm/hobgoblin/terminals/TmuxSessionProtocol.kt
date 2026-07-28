@@ -39,6 +39,60 @@ data class DiscoveredTmuxSession(
     val terminalNumber: Int,
 )
 
+sealed interface TmuxServerTarget {
+    data object Default : TmuxServerTarget
+
+    data class Named(
+        val serverName: String,
+    ) : TmuxServerTarget {
+        init {
+            require(TmuxSessionProtocol.isCurrentServerName(serverName)) {
+                "Current Hobgoblin tmux server name is required"
+            }
+        }
+    }
+}
+
+data class HostDiscoveredTmuxSession(
+    val server: TmuxServerTarget,
+    val identity: TmuxSessionIdentity,
+    val terminalNumber: Int,
+    val attachedClients: Int,
+) {
+    init {
+        require(terminalNumber > 0) { "Positive tmux terminal number is required" }
+        require(attachedClients >= 0) { "Non-negative tmux attached client count is required" }
+    }
+}
+
+data class HostTmuxPathGroup(
+    val initialPath: String,
+    val sessions: List<HostDiscoveredTmuxSession>,
+) {
+    companion object {
+        fun from(sessions: List<HostDiscoveredTmuxSession>): List<HostTmuxPathGroup> =
+            sessions
+                .groupBy { session -> session.identity.initialPath }
+                .toSortedMap()
+                .map { (initialPath, pathSessions) ->
+                    HostTmuxPathGroup(
+                        initialPath = initialPath,
+                        sessions = pathSessions.sortedWith(HostSessionComparator),
+                    )
+                }
+
+        private val HostSessionComparator =
+            compareBy<HostDiscoveredTmuxSession> { session -> session.terminalNumber }
+                .thenBy { session ->
+                    when (session.server) {
+                        TmuxServerTarget.Default -> ""
+                        is TmuxServerTarget.Named -> session.server.serverName
+                    }
+                }
+                .thenBy { session -> session.identity.sessionName }
+    }
+}
+
 data class TmuxDiscoveryScope(
     val projectRoot: String,
     val allowedInitialPaths: Set<String>,
@@ -125,6 +179,31 @@ object TmuxSessionProtocol {
             "else printf '%s\\n' 'Hobgoblin tmux session no longer exists. Refresh the workspace.' >&2; exit 44; fi"
     }
 
+    fun attachExistingCommand(
+        identity: TmuxSessionIdentity,
+        terminalNumber: Int,
+        server: TmuxServerTarget,
+    ): String? {
+        if (terminalNumber < 1) return null
+        val sessionTarget = "=${identity.sessionName}"
+        val paneTarget = "$sessionTarget:"
+        val tmuxCommand = when (server) {
+            TmuxServerTarget.Default -> TmuxExecutableReference
+            is TmuxServerTarget.Named -> "$TmuxExecutableReference -L ${shellQuote(server.serverName)}"
+        }
+        val attachCommand = configureAndAttachCommandForTmux(
+            tmuxCommand = tmuxCommand,
+            identity = identity,
+            terminalNumber = terminalNumber,
+            sessionTarget = sessionTarget,
+            target = paneTarget,
+        )
+        return "if $tmuxCommand has-session -t ${shellQuote(sessionTarget)} 2>/dev/null; then " +
+            "$attachCommand; " +
+            "else printf '%s\\n' 'Hobgoblin tmux session no longer exists. Refresh the host tmux list.' " +
+            ">&2; exit 44; fi"
+    }
+
     private fun createAndAttachCommandForTmux(
         tmuxCommand: String,
         identity: TmuxSessionIdentity,
@@ -208,6 +287,53 @@ object TmuxSessionProtocol {
             .take(HashHexChars)
 
     fun isCurrentSessionName(value: String): Boolean = CurrentSessionNamePattern.matches(value)
+
+    fun isCurrentServerName(value: String): Boolean = CurrentServerNamePattern.matches(value)
+
+    fun parseHostSessionDiscoveryOutput(output: String): List<HostDiscoveredTmuxSession>? {
+        val lines = output.lineSequence().map { line -> line.removeSuffix("\r") }.iterator()
+        if (!lines.hasNext() || lines.next() != HostDiscoveryHeader) return null
+        val sessionsByTarget = linkedMapOf<Pair<TmuxServerTarget, String>, HostDiscoveredTmuxSession>()
+
+        lines.forEachRemaining { line ->
+            if (line.isEmpty()) return@forEachRemaining
+            val fields = line.split('\t')
+            if (fields.size != HostDiscoveryFieldCount) return@forEachRemaining
+            val server = when (val marker = fields[0]) {
+                LegacyDefaultServerMarker -> TmuxServerTarget.Default
+                else -> if (isCurrentServerName(marker)) TmuxServerTarget.Named(marker) else return@forEachRemaining
+            }
+            val sessionName = fields[1]
+            if (!isCurrentSessionName(sessionName)) return@forEachRemaining
+            val initialPath = fields[2]
+            if (normalizePath(initialPath) != initialPath) return@forEachRemaining
+            val terminalNumberText = fields[3]
+            if (!CanonicalTerminalNumberPattern.matches(terminalNumberText)) return@forEachRemaining
+            val terminalNumber = terminalNumberText.toIntOrNull() ?: return@forEachRemaining
+            val attachedClientsText = fields[4]
+            if (!CanonicalNonNegativeNumberPattern.matches(attachedClientsText)) return@forEachRemaining
+            val attachedClients = attachedClientsText.toIntOrNull() ?: return@forEachRemaining
+            val session = HostDiscoveredTmuxSession(
+                server = server,
+                identity = TmuxSessionIdentity(sessionName, initialPath),
+                terminalNumber = terminalNumber,
+                attachedClients = attachedClients,
+            )
+            sessionsByTarget.putIfAbsent(server to sessionName, session)
+        }
+
+        return sessionsByTarget.values.sortedWith(
+            compareBy<HostDiscoveredTmuxSession> { session -> session.identity.initialPath }
+                .thenBy { session -> session.terminalNumber }
+                .thenBy { session ->
+                    when (session.server) {
+                        TmuxServerTarget.Default -> ""
+                        is TmuxServerTarget.Named -> session.server.serverName
+                    }
+                }
+                .thenBy { session -> session.identity.sessionName },
+        )
+    }
 
     fun parseSessionList(output: String, projectRoot: String? = null): List<RemoteTmuxSession>? {
         if (output.isEmpty()) return emptyList()
@@ -353,6 +479,59 @@ object TmuxSessionProtocol {
         ).joinToString("\n")
     }
 
+    fun hostSessionDiscoveryCommand(): String {
+        val format = "${'$'}hobgoblin_server_marker\t#{session_name}\t#{${InitPathOption}}\t" +
+            "#{${TerminalNumberOption}}\t#{session_attached}"
+        return listOf(
+            tmuxExecutableResolverScript(),
+            "$TmuxResolverFunction || exit 127",
+            "hobgoblin_remote_uid=${'$'}(id -u 2>/dev/null) || exit ${'$'}?",
+            "case \"${'$'}hobgoblin_remote_uid\" in ''|*[!0-9]*) " +
+                "printf '%s\\n' 'Unable to resolve remote uid for tmux discovery' >&2; exit 1 ;; esac",
+            "case \"${'$'}{TMUX_TMPDIR:-}\" in",
+            "  /*) hobgoblin_tmux_socket_dir=\"${'$'}{TMUX_TMPDIR%/}/tmux-${'$'}hobgoblin_remote_uid\" ;;",
+            "  *) hobgoblin_tmux_socket_dir=\"/tmp/tmux-${'$'}hobgoblin_remote_uid\" ;;",
+            "esac",
+            "printf '%s\\n' ${shellQuote(HostDiscoveryHeader)}",
+            "if [ ! -e \"${'$'}hobgoblin_tmux_socket_dir\" ]; then exit 0; fi",
+            "if [ ! -d \"${'$'}hobgoblin_tmux_socket_dir\" ] || " +
+                "[ ! -r \"${'$'}hobgoblin_tmux_socket_dir\" ]; then",
+            "  printf '%s\\n' 'Unable to read tmux socket directory' >&2; exit 1",
+            "fi",
+            "list_hobgoblin_tmux_socket() {",
+            "  hobgoblin_server_marker=${'$'}1",
+            "  hobgoblin_socket=${'$'}2",
+            "  hobgoblin_tmux_output=${'$'}(\"${'$'}hobgoblin_tmux_bin\" -u -S \"${'$'}hobgoblin_socket\" " +
+                "list-sessions -F \"$format\" 2>&1)",
+            "  hobgoblin_tmux_status=${'$'}?",
+            "  if [ \"${'$'}hobgoblin_tmux_status\" -eq 0 ]; then",
+            "    [ -z \"${'$'}hobgoblin_tmux_output\" ] || printf '%s\\n' \"${'$'}hobgoblin_tmux_output\"",
+            "    return 0",
+            "  fi",
+            "  case \"${'$'}hobgoblin_tmux_output\" in",
+            "    *\"no server running\"*|*\"failed to connect to server\"*|*\"no sessions\"*|" +
+                "*\"error connecting to \"*\"(No such file or directory)\"*) return 0 ;;",
+            "  esac",
+            "  printf '%s\\n' \"${'$'}hobgoblin_tmux_output\" >&2",
+            "  return \"${'$'}hobgoblin_tmux_status\"",
+            "}",
+            "hobgoblin_socket=\"${'$'}hobgoblin_tmux_socket_dir/default\"",
+            "if [ -S \"${'$'}hobgoblin_socket\" ]; then",
+            "  list_hobgoblin_tmux_socket ${shellQuote(LegacyDefaultServerMarker)} " +
+                "\"${'$'}hobgoblin_socket\" || exit ${'$'}?",
+            "fi",
+            "for hobgoblin_socket in \"${'$'}hobgoblin_tmux_socket_dir\"/${ServerNamePrefix}*; do",
+            "  [ -S \"${'$'}hobgoblin_socket\" ] || continue",
+            "  hobgoblin_server_name=${'$'}{hobgoblin_socket##*/}",
+            "  hobgoblin_server_suffix=${'$'}{hobgoblin_server_name#${ServerNamePrefix}}",
+            "  [ \"${'$'}{#hobgoblin_server_suffix}\" -eq $HashHexChars ] || continue",
+            "  case \"${'$'}hobgoblin_server_suffix\" in *[!a-f0-9]*) continue ;; esac",
+            "  list_hobgoblin_tmux_socket \"${'$'}hobgoblin_server_name\" " +
+                "\"${'$'}hobgoblin_socket\" || exit ${'$'}?",
+            "done",
+        ).joinToString("\n")
+    }
+
     internal fun normalizeDiscoveryScopes(scopes: List<TmuxDiscoveryScope>): List<TmuxDiscoveryScope>? {
         val pathsByProjectRoot = linkedMapOf<String, LinkedHashSet<String>>()
         scopes.forEach { scope ->
@@ -413,7 +592,8 @@ object TmuxSessionProtocol {
             "    return 0",
             "  fi",
             "  case \"${'$'}tmux_output\" in",
-            "    *\"no server running\"*|*\"failed to connect to server\"*|*\"no sessions\"*) return 0 ;;",
+            "    *\"no server running\"*|*\"failed to connect to server\"*|*\"no sessions\"*|" +
+                "*\"error connecting to \"*\"(No such file or directory)\"*) return 0 ;;",
             "  esac",
             "  printf '%s\\n' \"${'$'}tmux_output\" >&2",
             "  return \"${'$'}tmux_status\"",
@@ -442,7 +622,8 @@ object TmuxSessionProtocol {
         "    return 0",
         "  fi",
         "  case \"${'$'}tmux_output\" in",
-        "    *\"no server running\"*|*\"failed to connect to server\"*|*\"no sessions\"*) return 0 ;;",
+        "    *\"no server running\"*|*\"failed to connect to server\"*|*\"no sessions\"*|" +
+            "*\"error connecting to \"*\"(No such file or directory)\"*) return 0 ;;",
         "  esac",
         "  printf '%s\\n' \"${'$'}tmux_output\" >&2",
         "  return \"${'$'}tmux_status\"",
@@ -488,6 +669,7 @@ object TmuxSessionProtocol {
     private const val SessionNamePrefix = "hobgoblin-v1-"
     private const val ServerProtocol = "hobgoblin-tmux-server-v1"
     private const val ServerNamePrefix = "hobgoblin-project-v1-"
+    const val HostDiscoveryHeader = "HOBGOBLIN_ANDROID_TMUX_V1"
     private const val LegacyDefaultServerMarker = "legacy-default"
     private const val LegacyScopeMarker = "legacy"
     private const val TmuxResolverFunction = "resolve_hobgoblin_tmux"
@@ -495,9 +677,12 @@ object TmuxSessionProtocol {
     private const val InitPathOption = "@hobgoblin_init_path"
     private const val TerminalNumberOption = "@hobgoblin_terminal_number"
     private const val HashHexChars = 24
+    private const val HostDiscoveryFieldCount = 5
     private const val MaxPathChars = 4_096
     private val CurrentSessionNamePattern = Regex("^hobgoblin-v1-[a-f0-9]{24}$")
+    private val CurrentServerNamePattern = Regex("^hobgoblin-project-v1-[a-f0-9]{24}$")
     private val CanonicalTerminalNumberPattern = Regex("^[1-9][0-9]*$")
+    private val CanonicalNonNegativeNumberPattern = Regex("^(?:0|[1-9][0-9]*)$")
     private val HexChars = "0123456789abcdef".toCharArray()
 
     private data class BatchDiscoveryRow(

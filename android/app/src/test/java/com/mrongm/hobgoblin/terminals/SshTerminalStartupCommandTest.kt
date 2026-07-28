@@ -116,6 +116,31 @@ class SshTerminalStartupCommandTest {
     }
 
     @Test
+    fun `host recovered tmux startup attaches only its exact named server without repository root`() {
+        val identity = TmuxSessionIdentity(
+            sessionName = "hobgoblin-v1-111111111111111111111111",
+            initialPath = "/srv/recovered",
+        )
+        val server = TmuxServerTarget.Named("hobgoblin-project-v1-222222222222222222222222")
+        val command = SshTerminalStartupCommand.remoteCommandForTarget(
+            target(remotePath = identity.initialPath),
+            startupContext(
+                terminalId = 3,
+                repositoryRemotePath = null,
+                worktreeRemotePath = identity.initialPath,
+                tmuxIdentity = identity,
+                tmuxStartupPolicy = TmuxStartupPolicy.AttachExisting,
+                tmuxServerTarget = server,
+            ),
+        ).orEmpty()
+        val output = unwrapProjectStartupScript(command)
+
+        assertTrue(output.contains("-L '${server.serverName}' has-session -t '=${identity.sessionName}'"))
+        assertFalse(output.contains("legacy-default"))
+        assertFalse(output.contains("new-session"))
+    }
+
+    @Test
     fun `workspace shell quotes paths with spaces and single quotes`() {
         val command = SshTerminalStartupCommand.remoteCommandForTarget(
             target(remotePath = "/srv/app's worktree"),
@@ -169,10 +194,11 @@ class SshTerminalStartupCommandTest {
 
     private fun startupContext(
         terminalId: Int,
-        repositoryRemotePath: String = "/srv/repo",
+        repositoryRemotePath: String? = "/srv/repo",
         worktreeRemotePath: String = "/srv/repo-feature",
         tmuxIdentity: TmuxSessionIdentity? = null,
         tmuxStartupPolicy: TmuxStartupPolicy = TmuxStartupPolicy.AttachOrCreate,
+        tmuxServerTarget: TmuxServerTarget? = null,
     ): TerminalStartupContext =
         TerminalStartupContext(
             repositoryRemotePath = repositoryRemotePath,
@@ -180,6 +206,7 @@ class SshTerminalStartupCommandTest {
             terminalId = terminalId,
             tmuxIdentity = tmuxIdentity,
             tmuxStartupPolicy = tmuxStartupPolicy,
+            tmuxServerTarget = tmuxServerTarget,
         )
 
     private fun target(

@@ -37,16 +37,16 @@ A temporary Android presentation that gives the selected retained terminal sessi
 _Avoid_: Terminal maximization, fullscreen terminal, persisted terminal layout
 
 **Android application language**:
-The locale Android selects for Hobgoblin's native Android-owned interface text and foreground-terminal notifications. It follows the device language by default, may be overridden through Android's per-app language settings on supported devices, and never translates terminal output, repository data, paths, host names, or raw Git and SSH diagnostics.
+The locale Android selects for Hobgoblin's native Android-owned interface text and foreground-terminal notifications. It follows the device language by default, may be overridden from Hobgoblin's Android Settings or Android's per-app language settings, remains device-local, and never translates terminal output, repository data, paths, host names, or raw Git and SSH diagnostics.
 _Avoid_: Server language, terminal locale, translated terminal output
 
-**Android workspace catalog**:
-The read-only Android presentation of every configured workspace rooted at an absolute path on one directly connected SSH host, including each workspace's durable repository membership and existing branch workspaces. Catalog entries represent remote Hobgoblin state, do not require a device-local Project record, and cannot be used to create or remove configured workspaces, change workspace repository membership, or create or remove branch workspaces. Workspaces reached by that host's own SSH configuration are outside the catalog because they are not the direct Android SSH target.
-_Avoid_: Android project list, filesystem workspace scan, nested SSH workspace, workspace editor
+**Android host tmux catalog**:
+The read-only Android projection of current-protocol Hobgoblin tmux sessions discovered across one directly connected SSH host's default and project-scoped tmux servers. It is derived from live server sockets and session metadata rather than saved Projects or workspace configuration, and opening an item recovers and attaches that exact existing server/session without creating or ending a remote session.
+_Avoid_: Android workspace catalog, filesystem workspace scan, arbitrary tmux list, tmux session creator
 
-**Android branch workspace tmux catalog**:
-The read-only Android projection of discoverable Hobgoblin tmux sessions associated with one branch workspace. It groups exact sessions at the branch workspace root separately from sessions at each repository member worktree, and opening an item recovers and attaches that existing session through the retained-terminal lifecycle. A session remains visible and attachable when its branch workspace is drifted or has an incomplete lifecycle operation, provided the session still passes exact protocol verification; Android presents the workspace issue without offering a repair or continuation action. The catalog never lists name-only or arbitrary tmux sessions, creates a new terminal, or ends a remote tmux session; deleting the recovered device-local record remains independent of the remote session.
-_Avoid_: Tmux session creator, remote tmux manager, unverified tmux list
+**Tmux server target**:
+The exact default or strictly named project-scoped tmux server on which one discovered session was observed and to which Android must later attach it. It is part of host-level recovery identity because a session name may exist on more than one server and a project-root hash cannot be reversed.
+_Avoid_: Project root, socket scan result, tmux session name
 
 **Terminal topbar**:
 The top row of the terminal area, containing terminal tabs and terminal-level actions.
