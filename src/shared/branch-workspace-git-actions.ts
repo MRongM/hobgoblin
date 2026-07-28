@@ -98,6 +98,7 @@ export type BranchWorkspaceGitActionExecuteInput =
       kind: 'merge-back'
       planToken: string
       mode: BranchWorkspaceMergeMode
+      repositoryNames: string[]
     }
   | {
       kind: 'pull' | 'push'
@@ -148,7 +149,9 @@ export function normalizeBranchWorkspaceGitActionExecuteInput(
 
   if (input?.kind === 'merge-back') {
     if (input.mode !== 'merge' && input.mode !== 'pull-merge-push') return invalidArguments()
-    return { ok: true, input: { kind: 'merge-back', planToken, mode: input.mode } }
+    const repositoryNames = normalizedRepositoryNames(input.repositoryNames)
+    if (!repositoryNames) return invalidArguments()
+    return { ok: true, input: { kind: 'merge-back', planToken, mode: input.mode, repositoryNames } }
   }
   if (input?.kind === 'pull' || input?.kind === 'push') {
     return { ok: true, input: { kind: input.kind, planToken } }
@@ -191,6 +194,17 @@ function normalizedMessage(value: unknown): string | null {
   if (typeof value !== 'string' || value.includes('\0')) return null
   const message = value.trim()
   return message ? message : null
+}
+
+function normalizedRepositoryNames(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null
+  const names = new Set<string>()
+  for (const candidate of value) {
+    const name = normalizedText(candidate)
+    if (!name || !isWorkspaceRepositoryName(name) || names.has(name)) return null
+    names.add(name)
+  }
+  return [...names]
 }
 
 function invalidArguments(): { ok: false; message: string } {

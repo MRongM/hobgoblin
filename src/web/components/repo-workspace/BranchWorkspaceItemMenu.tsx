@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode } from 'react'
-import { MoreHorizontal } from 'lucide-react'
+import { Loader2, MoreHorizontal } from 'lucide-react'
 import { Button } from '#/web/components/ui/button.tsx'
 import {
   DropdownMenu,
@@ -46,7 +46,7 @@ export function BranchWorkspaceItemMenu({ actions }: { actions: readonly BranchW
               variant={action.destructive ? 'destructive' : 'default'}
               onSelect={() => void action.onSelect()}
             >
-              {action.icon}
+              {action.busy ? <Loader2 className="animate-spin" aria-hidden="true" /> : action.icon}
               {t(action.label)}
             </DropdownMenuItem>
           </Fragment>

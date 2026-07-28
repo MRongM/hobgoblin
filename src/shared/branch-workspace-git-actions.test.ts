@@ -47,10 +47,11 @@ describe('branch workspace Git action inputs', () => {
           kind: 'merge-back',
           planToken: 'sha256:plan',
           mode,
+          repositoryNames: [' web ', 'api'],
         }),
       ).toEqual({
         ok: true,
-        input: { kind: 'merge-back', planToken: 'sha256:plan', mode },
+        input: { kind: 'merge-back', planToken: 'sha256:plan', mode, repositoryNames: ['web', 'api'] },
       })
     }
   })
@@ -108,6 +109,25 @@ describe('branch workspace Git action inputs', () => {
       messages: [{ repositoryName: 'api', message: ' ' }],
     },
     { kind: 'merge-back', planToken: 'sha256:plan', mode: 'squash' },
+    { kind: 'merge-back', planToken: 'sha256:plan', mode: 'merge', repositoryNames: [] },
+    {
+      kind: 'merge-back',
+      planToken: 'sha256:plan',
+      mode: 'merge',
+      repositoryNames: ['api', 'api'],
+    },
+    {
+      kind: 'merge-back',
+      planToken: 'sha256:plan',
+      mode: 'merge',
+      repositoryNames: ['../api'],
+    },
+    {
+      kind: 'merge-back',
+      planToken: 'sha256:plan',
+      mode: 'merge',
+      repositoryNames: ['api\nweb'],
+    },
   ])('rejects invalid execution input: %j', (value) => {
     expect(normalizeBranchWorkspaceGitActionExecuteInput(value)).toEqual({
       ok: false,

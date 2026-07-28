@@ -110,6 +110,7 @@ describe('BranchWorkspaceList', () => {
     const onReduce = vi.fn()
     const onAddDependencies = vi.fn()
     const onRemoveDependencies = vi.fn()
+    const onRefreshChanges = vi.fn()
     const item = { ...workspace('ready'), repositories: [repositoryMember()] }
     act(() =>
       root.render(
@@ -124,6 +125,7 @@ describe('BranchWorkspaceList', () => {
             onReduce={onReduce}
             onAddDependencies={onAddDependencies}
             onRemoveDependencies={onRemoveDependencies}
+            onRefreshChanges={onRefreshChanges}
             gitActionPanel={{ itemId: item.id, content: <div data-testid="mock-branch-git-panel" /> }}
             onReorder={() => {}}
             onInspect={() => {}}
@@ -164,6 +166,7 @@ describe('BranchWorkspaceList', () => {
       'terminal.new-with-tmux',
       'terminal.restore-directory-tmux',
       'terminal.external',
+      'workspace.branch-workspace.refresh-changes',
       'workspace.branch-workspace.add-members',
       'workspace.branch-workspace.remove-members',
       'workspace.branch-workspace.dependency.add.action',
@@ -175,7 +178,15 @@ describe('BranchWorkspaceList', () => {
       'workspace.branch-workspace.delete',
       'tmux.cleanup.action',
     ])
-    const addMembersItem = menuItems.find(
+    const refreshChangesItem = menuItems.find(
+      (entry) => entry.textContent?.trim() === 'workspace.branch-workspace.refresh-changes',
+    )
+    await act(async () => {
+      refreshChangesItem?.click()
+      await Promise.resolve()
+    })
+    expect(onRefreshChanges).toHaveBeenCalledWith(item)
+    const addMembersItem = (await openMenuItems(branchWorkspaceItem)).find(
       (entry) => entry.textContent?.trim() === 'workspace.branch-workspace.add-members',
     )
     await act(async () => {
@@ -601,6 +612,36 @@ describe('BranchWorkspaceList', () => {
     expect(onActivate).not.toHaveBeenCalled()
   })
 
+  test('disables the change refresh action while that branch workspace is refreshing', async () => {
+    const item = workspace('ready')
+    act(() =>
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[item]}
+            activeId={null}
+            refreshingChangeIds={new Set([item.id])}
+            onRefreshChanges={() => {}}
+            onActivate={() => {}}
+            onReorder={() => {}}
+            onInspect={() => {}}
+            onRepair={() => {}}
+            onRemove={() => {}}
+            onCancel={() => {}}
+          />,
+        ),
+      ),
+    )
+
+    const row = container.querySelector('[data-branch-workspace-id="branch-1"]')
+    const refreshChangesItem = (await openMenuItems(row)).find(
+      (entry) => entry.textContent?.trim() === 'workspace.branch-workspace.refresh-changes',
+    )
+    expect(refreshChangesItem?.hasAttribute('data-disabled')).toBe(true)
+    expect(refreshChangesItem?.querySelector('.lucide-loader-circle.animate-spin')).not.toBeNull()
+  })
+
   test('requests a file area toggle without expanding members when the branch workspace item is double-clicked', () => {
     const activeWorkspace = { ...workspace('ready'), repositories: [repositoryMember()] }
     const onActivate = vi.fn()
@@ -861,6 +902,7 @@ describe('BranchWorkspaceList', () => {
             onReduce={() => {}}
             onAddDependencies={() => {}}
             onRemoveDependencies={() => {}}
+            onRefreshChanges={() => {}}
             onCancel={() => {}}
             onGitAction={() => {}}
           />,
@@ -879,6 +921,7 @@ describe('BranchWorkspaceList', () => {
       'terminal.new-with-tmux',
       'terminal.restore-directory-tmux',
       'terminal.external',
+      'workspace.branch-workspace.refresh-changes',
       'workspace.branch-workspace.inspect',
       'workspace.branch-workspace.delete',
       'tmux.cleanup.action',

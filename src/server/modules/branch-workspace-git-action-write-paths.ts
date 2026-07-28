@@ -19,6 +19,8 @@ import {
   type BranchWorkspaceGitActionPlanRequest,
   type BranchWorkspaceGitActionPlanResult,
   type BranchWorkspaceGitActionResult,
+  type BranchWorkspaceMergeBackMemberPlan,
+  type BranchWorkspaceMergeMode,
 } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceActiveOperation } from '#/shared/branch-workspaces.ts'
 import type { ExecResult } from '#/shared/git-types.ts'
@@ -27,6 +29,10 @@ interface PendingAction {
   plan: BranchWorkspaceGitActionPlan
   completed: Set<string>
   mergeProgress: Map<string, 'pulled' | 'merged'>
+  mergeExecution?: {
+    mode: BranchWorkspaceMergeMode
+    repositoryNames: string[]
+  }
 }
 
 interface ActiveAction {
@@ -105,17 +111,31 @@ export function createBranchWorkspaceGitActionWriteService(
       if (input.kind === 'batch-commit' && !validBatchMessages(state.plan, input)) {
         return { ok: false, message: 'error.invalid-arguments' }
       }
+      const mergeMembers = input.kind === 'merge-back' ? selectedMergeMembers(state.plan, input.repositoryNames) : null
+      if (input.kind === 'merge-back' && !mergeMembers) {
+        return { ok: false, message: 'error.invalid-arguments' }
+      }
       if (
         input.kind === 'merge-back' &&
-        state.plan.kind === 'merge-back' &&
         input.mode === 'pull-merge-push' &&
-        !state.plan.pullMergePushReady
+        mergeMembers?.some((member) => !member.pullMergePushReady)
       ) {
         return { ok: false, message: 'workspace.branch-workspace.git-action.base-upstream-required' }
       }
+      if (input.kind === 'merge-back' && mergeMembers) {
+        const repositoryNames = mergeMembers.map((member) => member.repositoryName)
+        if (
+          state.mergeExecution &&
+          (state.mergeExecution.mode !== input.mode ||
+            !sameRepositoryNames(state.mergeExecution.repositoryNames, repositoryNames))
+        ) {
+          return { ok: false, message: 'error.invalid-arguments' }
+        }
+        state.mergeExecution ??= { mode: input.mode, repositoryNames }
+      }
 
       const controller = new AbortController()
-      const totalCount = state.plan.members.length
+      const totalCount = mergeMembers?.length ?? state.plan.members.length
       active.set(normalizedRootId, {
         branchWorkspaceId: state.plan.branchWorkspaceId,
         controller,
@@ -130,7 +150,15 @@ export function createBranchWorkspaceGitActionWriteService(
       publishInvalidation(normalizedRootId)
 
       try {
-        const ignored = new Set([...state.completed, ...state.mergeProgress.keys()])
+        const ignored = new Set([
+          ...state.completed,
+          ...state.mergeProgress.keys(),
+          ...(mergeMembers
+            ? state.plan.members
+                .filter((member) => !mergeMembers.some((selected) => selected.repositoryName === member.repositoryName))
+                .map((member) => member.repositoryName)
+            : []),
+        ])
         const validation = await validatePlan(state.plan, ignored, dependencies.planDependencies, controller.signal)
         if (!validation.ok) return validation
         if (input.kind === 'batch-commit') {
@@ -148,6 +176,7 @@ export function createBranchWorkspaceGitActionWriteService(
           return await executeMergeBack(
             normalizedRootId,
             state,
+            mergeMembers!,
             input.mode,
             controller.signal,
             { pull, merge, push },
@@ -193,6 +222,21 @@ export function createBranchWorkspaceGitActionWriteService(
   }
 }
 
+function sameRepositoryNames(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((name, index) => name === right[index])
+}
+
+function selectedMergeMembers(
+  plan: BranchWorkspaceGitActionPlan,
+  repositoryNames: string[],
+): BranchWorkspaceMergeBackMemberPlan[] | null {
+  if (plan.kind !== 'merge-back') return null
+  const selected = new Set(repositoryNames)
+  const members = plan.members.filter((member) => selected.has(member.repositoryName))
+  if (members.length !== selected.size || members.some((member) => member.mergeSatisfied)) return null
+  return members
+}
+
 function validBatchMessages(
   plan: BranchWorkspaceGitActionPlan,
   input: Extract<BranchWorkspaceGitActionExecuteInput, { kind: 'batch-commit' }>,
@@ -232,6 +276,7 @@ async function executeBatchCommit(
 async function executeMergeBack(
   rootId: string,
   state: PendingAction,
+  members: BranchWorkspaceMergeBackMemberPlan[],
   mode: 'merge' | 'pull-merge-push',
   signal: AbortSignal,
   operations: {
@@ -244,8 +289,8 @@ async function executeMergeBack(
   active: Map<string, ActiveAction>,
 ): Promise<BranchWorkspaceGitActionResult> {
   if (state.plan.kind !== 'merge-back') return failureResult(state.plan, state.completed, 'error.invalid-arguments')
-  for (let index = 0; index < state.plan.members.length; index += 1) {
-    const member = state.plan.members[index]!
+  for (let index = 0; index < members.length; index += 1) {
+    const member = members[index]!
     if (state.completed.has(member.repositoryName)) continue
     if (mode === 'merge' && member.mergeSatisfied) {
       state.completed.add(member.repositoryName)

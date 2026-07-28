@@ -168,6 +168,24 @@ describe('i18n dictionaries', () => {
     expect(ko['workspace.branch-workspace.member-badge']).toBe('브랜치 워크스페이스')
   })
 
+  test('localizes selectable branch workspace batch merge in every locale', () => {
+    const keys = [
+      'workspace.branch-workspace.git-action.merge-back',
+      'workspace.branch-workspace.git-action.merge-back-description',
+      'workspace.branch-workspace.git-action.selected-count',
+      'workspace.branch-workspace.git-action.select-member',
+      'workspace.branch-workspace.git-action.not-selected',
+      'workspace.branch-workspace.git-action.progress',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(en['workspace.branch-workspace.git-action.merge-back']).toBe('Batch merge')
+    expect(zh['workspace.branch-workspace.git-action.merge-back']).toBe('批量合并')
+    expect(zh['workspace.branch-workspace.git-action.merge-back-description']).toContain('成员工作树')
+  })
+
   test('describes branch workspace registry cleanup without claiming filesystem deletion', () => {
     const keys = [
       'workspace.branch-workspace.cleanup',
@@ -199,6 +217,14 @@ describe('i18n dictionaries', () => {
       for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
     }
     expect(zh['workspace.branch-workspace.reload']).toBe('重新加载子工作区')
+  })
+
+  test('localizes branch workspace change refresh in every locale', () => {
+    const key = 'workspace.branch-workspace.refresh-changes' as const
+    for (const [lang, dict] of Object.entries(dicts)) {
+      expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh[key]).toBe('刷新改动')
   })
 
   test('uses branch workspace dependency copy and includes member sync actions in every locale', () => {

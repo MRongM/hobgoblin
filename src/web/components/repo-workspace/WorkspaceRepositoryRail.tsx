@@ -110,6 +110,8 @@ export function WorkspaceRepositoryRail({
   const [gitActionKind, setGitActionKind] = useState<BranchWorkspaceGitActionKind>('batch-commit')
   const [gitActionTargetId, setGitActionTargetId] = useState<string | null>(null)
   const [branchReloadPending, setBranchReloadPending] = useState(false)
+  const refreshingBranchChangesRef = useRef<Set<string>>(new Set())
+  const [refreshingBranchChanges, setRefreshingBranchChanges] = useState<ReadonlySet<string>>(() => new Set())
   const [registryCleanupOpen, setRegistryCleanupOpen] = useState(false)
   const autoRefreshedDriftIds = useRef<Set<string>>(new Set())
   const dialogProgressWorkspace = branchActions.plan
@@ -346,6 +348,34 @@ export function WorkspaceRepositoryRail({
       // The current read error remains visible and retryable.
     } finally {
       setBranchReloadPending(false)
+    }
+  }
+  const refreshBranchWorkspaceChanges = async (item: BranchWorkspaceSnapshot) => {
+    const inFlight = refreshingBranchChangesRef.current
+    if (inFlight.has(item.id)) return
+    inFlight.add(item.id)
+    setRefreshingBranchChanges(new Set(inFlight))
+    try {
+      const repositoryIds = Array.from(
+        new Set(
+          item.repositories.flatMap((member) => {
+            if (member.progress === 'removed') return []
+            const repositoryId = repositoryIdByName.get(member.repositoryName)
+            return repositoryId ? [repositoryId] : []
+          }),
+        ),
+      )
+      await Promise.allSettled(
+        repositoryIds.map(async (repositoryId) => {
+          const state = useReposStore.getState()
+          const repository = state.repos[repositoryId]
+          if (!repository || repository.availability.phase !== 'available') return
+          await state.refreshStatus(repositoryId, { token: repository.instanceToken })
+        }),
+      )
+    } finally {
+      inFlight.delete(item.id)
+      setRefreshingBranchChanges(new Set(inFlight))
     }
   }
   const cleanupRegistry = async () => {
@@ -602,6 +632,8 @@ export function WorkspaceRepositoryRail({
                 onGitAction={openGitAction}
                 gitActionPanel={gitActionPanel}
                 changeCountById={branchWorkspaceChangeCountById}
+                refreshingChangeIds={refreshingBranchChanges}
+                onRefreshChanges={refreshBranchWorkspaceChanges}
                 onActivate={(id) => activateBranchWorkspace(workspaceRootId, id)}
                 onToggleFileArea={onToggleFileArea ? () => onToggleFileArea() : undefined}
                 onReorder={(orderedIds) => void branchActions.reorder(orderedIds)}

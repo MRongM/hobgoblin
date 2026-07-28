@@ -83,9 +83,9 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
   )
 
   const executeMergeBack = useCallback(
-    async (mode: BranchWorkspaceMergeMode) => {
+    async (mode: BranchWorkspaceMergeMode, repositoryNames: string[]) => {
       if (!plan || plan.kind !== 'merge-back') return null
-      return await execute({ kind: 'merge-back', planToken: plan.token, mode })
+      return await execute({ kind: 'merge-back', planToken: plan.token, mode, repositoryNames })
     },
     [execute, plan],
   )

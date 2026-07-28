@@ -216,9 +216,13 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.push': '一括プッシュ',
   'workspace.branch-workspace.git-action.push-description':
     '各対象ブランチを解決済みのリモート送信先へリポジトリ順にプッシュします。',
-  'workspace.branch-workspace.git-action.merge-back': 'ベースブランチへマージ',
+  'workspace.branch-workspace.git-action.merge-back': '一括マージ',
   'workspace.branch-workspace.git-action.merge-back-description':
-    '各ブランチワークスペースの対象ブランチを、記録済みのベースブランチへ順番にマージします。',
+    '処理するメンバーのワークツリーを選択し、対象ブランチを記録済みのベースブランチへ一覧順にマージします。',
+  'workspace.branch-workspace.git-action.selected-count': '{selected}/{total} 件のメンバーを選択',
+  'workspace.branch-workspace.git-action.select-member': '{repository} を一括マージ対象に選択',
+  'workspace.branch-workspace.git-action.not-selected': '未選択',
+  'workspace.branch-workspace.git-action.progress': '一括マージの進行状況',
   'workspace.branch-workspace.git-action.merge': 'マージ',
   'workspace.branch-workspace.git-action.pull-merge-push': 'プル、マージ、プッシュ',
   'workspace.branch-workspace.git-action.planning': 'すべてのリポジトリを確認中…',
@@ -343,6 +347,7 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.approval-required': '必要な確認をすべて完了してください。',
   'workspace.branch-workspace.read-failed': 'ブランチワークスペースを読み取れませんでした。',
   'workspace.branch-workspace.reload': 'ブランチワークスペースを再読み込み',
+  'workspace.branch-workspace.refresh-changes': '変更を更新',
   'workspace.branch-workspace.remote-operation-failed':
     'リモートホストからブランチワークスペースを読み取れませんでした。',
   'workspace.branch-workspace.remote-invalid-response':

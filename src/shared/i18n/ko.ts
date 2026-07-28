@@ -209,9 +209,13 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.push': '일괄 푸시',
   'workspace.branch-workspace.git-action.push-description':
     '각 대상 브랜치를 확인된 원격 대상으로 저장소 순서대로 푸시합니다.',
-  'workspace.branch-workspace.git-action.merge-back': '기준 브랜치로 병합',
+  'workspace.branch-workspace.git-action.merge-back': '일괄 병합',
   'workspace.branch-workspace.git-action.merge-back-description':
-    '각 브랜치 워크스페이스 대상 브랜치를 기록된 기준 브랜치로 순서대로 병합합니다.',
+    '처리할 멤버 워크트리를 선택한 다음 대상 브랜치를 기록된 기준 브랜치에 목록 순서대로 병합합니다.',
+  'workspace.branch-workspace.git-action.selected-count': '멤버 {selected}/{total}개 선택됨',
+  'workspace.branch-workspace.git-action.select-member': '{repository} 멤버 워크트리를 일괄 병합 대상으로 선택',
+  'workspace.branch-workspace.git-action.not-selected': '선택 안 함',
+  'workspace.branch-workspace.git-action.progress': '일괄 병합 진행률',
   'workspace.branch-workspace.git-action.merge': '병합',
   'workspace.branch-workspace.git-action.pull-merge-push': '가져오기, 병합 및 푸시',
   'workspace.branch-workspace.git-action.planning': '모든 저장소 확인 중…',
@@ -331,6 +335,7 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.approval-required': '필요한 확인을 모두 완료하세요.',
   'workspace.branch-workspace.read-failed': '브랜치 워크스페이스를 읽을 수 없습니다.',
   'workspace.branch-workspace.reload': '브랜치 워크스페이스 다시 불러오기',
+  'workspace.branch-workspace.refresh-changes': '변경 사항 새로 고침',
   'workspace.branch-workspace.remote-operation-failed': '원격 호스트에서 브랜치 워크스페이스를 읽을 수 없습니다.',
   'workspace.branch-workspace.remote-invalid-response':
     '원격 호스트가 잘못된 브랜치 워크스페이스 데이터를 반환했습니다.',

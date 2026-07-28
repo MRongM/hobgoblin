@@ -218,9 +218,13 @@ export const en = {
   'workspace.branch-workspace.git-action.push': 'Batch push',
   'workspace.branch-workspace.git-action.push-description':
     'Push each target branch to its resolved remote destination in repository order.',
-  'workspace.branch-workspace.git-action.merge-back': 'Merge back to base branches',
+  'workspace.branch-workspace.git-action.merge-back': 'Batch merge',
   'workspace.branch-workspace.git-action.merge-back-description':
-    'Merge each branch workspace target branch into its recorded base branch in manifest order.',
+    'Select member worktrees, then merge each target branch into its recorded base branch in order.',
+  'workspace.branch-workspace.git-action.selected-count': '{selected} of {total} members selected',
+  'workspace.branch-workspace.git-action.select-member': 'Select {repository} for batch merge',
+  'workspace.branch-workspace.git-action.not-selected': 'not selected',
+  'workspace.branch-workspace.git-action.progress': 'Batch merge progress',
   'workspace.branch-workspace.git-action.merge': 'Merge',
   'workspace.branch-workspace.git-action.pull-merge-push': 'Pull, merge & push',
   'workspace.branch-workspace.git-action.planning': 'Checking all repositories…',
@@ -344,6 +348,7 @@ export const en = {
   'workspace.branch-workspace.approval-required': 'Complete every required confirmation.',
   'workspace.branch-workspace.read-failed': 'Could not read branch workspaces.',
   'workspace.branch-workspace.reload': 'Reload branch workspaces',
+  'workspace.branch-workspace.refresh-changes': 'Refresh changes',
   'workspace.branch-workspace.remote-operation-failed': 'Could not read branch workspaces from the remote host.',
   'workspace.branch-workspace.remote-invalid-response': 'The remote host returned invalid branch workspace data.',
   'workspace.branch-workspace.cleanup': 'Clean up records',

@@ -22,14 +22,14 @@ function batchPlan(): BranchWorkspaceGitActionPlan {
   }
 }
 
-function mergePlan(): BranchWorkspaceGitActionPlan {
+function mergePlan(repositoryNames = ['api', 'web']): BranchWorkspaceGitActionPlan {
   return {
     kind: 'merge-back',
     token: 'sha256:merge',
     rootId: ROOT,
     branchWorkspaceId: 'ws-1',
     pullMergePushReady: true,
-    members: ['api', 'web'].map((repositoryName) => ({
+    members: repositoryNames.map((repositoryName) => ({
       repositoryName,
       repoId: `${ROOT}/${repositoryName}`,
       targetBranch: 'feature/a',
@@ -130,7 +130,12 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
     await service.plan(ROOT, { kind: 'merge-back', branchWorkspaceId: 'ws-1' })
 
     await expect(
-      service.execute(ROOT, { kind: 'merge-back', planToken: plan.token, mode: 'pull-merge-push' }),
+      service.execute(ROOT, {
+        kind: 'merge-back',
+        planToken: plan.token,
+        mode: 'pull-merge-push',
+        repositoryNames: ['api', 'web'],
+      }),
     ).resolves.toMatchObject({ ok: true })
     expect(calls).toEqual([
       'pull:main:/workspace/api',
@@ -140,6 +145,171 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
       'merge:feature/a:/workspace/web',
       'push:main',
     ])
+  })
+
+  test('merges only selected repositories in plan order and reports selected progress', async () => {
+    const plan = mergePlan(['api', 'web', 'docs'])
+    const calls: string[] = []
+    const operations: Array<
+      ReturnType<ReturnType<typeof createBranchWorkspaceGitActionWriteService>['activeOperation']>
+    > = []
+    let service: ReturnType<typeof createBranchWorkspaceGitActionWriteService>
+    service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan })),
+      merge: vi.fn(async (repoId) => {
+        calls.push(repoId)
+        operations.push(service.activeOperation(ROOT, 'ws-1'))
+        return { ok: true, message: 'merged' }
+      }),
+      publishInvalidation: vi.fn(),
+    })
+    await service.plan(ROOT, { kind: 'merge-back', branchWorkspaceId: 'ws-1' })
+
+    await expect(
+      service.execute(ROOT, {
+        kind: 'merge-back',
+        planToken: plan.token,
+        mode: 'merge',
+        repositoryNames: ['web', 'api'],
+      }),
+    ).resolves.toMatchObject({ ok: true })
+    expect(calls).toEqual(['/workspace/api', '/workspace/web'])
+    expect(operations).toEqual([
+      {
+        kind: 'merge-back',
+        currentStep: 1,
+        completedCount: 0,
+        totalCount: 2,
+        cancellable: true,
+        repositoryName: 'api',
+        step: 'merge',
+      },
+      {
+        kind: 'merge-back',
+        currentStep: 2,
+        completedCount: 1,
+        totalCount: 2,
+        cancellable: true,
+        repositoryName: 'web',
+        step: 'merge',
+      },
+    ])
+  })
+
+  test('validates readiness and fingerprints only for selected merge members', async () => {
+    const plan = mergePlan(['api', 'web', 'docs'])
+    if (plan.kind !== 'merge-back') throw new Error('expected merge plan')
+    plan.members[2]!.pullMergePushReady = false
+    plan.pullMergePushReady = false
+    const ignoredSets: string[][] = []
+    const service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async (_plan, ignored) => {
+        ignoredSets.push([...ignored].sort())
+        return { ok: true as const, plan }
+      }),
+      pull: vi.fn(async () => ({ ok: true, message: 'pulled' })),
+      merge: vi.fn(async () => ({ ok: true, message: 'merged' })),
+      push: vi.fn(async () => ({ ok: true, message: 'pushed' })),
+      publishInvalidation: vi.fn(),
+    })
+    await service.plan(ROOT, { kind: 'merge-back', branchWorkspaceId: 'ws-1' })
+
+    await expect(
+      service.execute(ROOT, {
+        kind: 'merge-back',
+        planToken: plan.token,
+        mode: 'pull-merge-push',
+        repositoryNames: ['api', 'web'],
+      }),
+    ).resolves.toMatchObject({ ok: true })
+    expect(ignoredSets).toEqual([['docs']])
+  })
+
+  test('rejects unknown and selected already-merged repositories before Git writes', async () => {
+    const plan = mergePlan()
+    if (plan.kind !== 'merge-back') throw new Error('expected merge plan')
+    plan.members[1]!.mergeSatisfied = true
+    const merge = vi.fn()
+    const service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan })),
+      merge,
+      publishInvalidation: vi.fn(),
+    })
+    await service.plan(ROOT, { kind: 'merge-back', branchWorkspaceId: 'ws-1' })
+
+    for (const repositoryNames of [['missing'], ['web']]) {
+      await expect(
+        service.execute(ROOT, {
+          kind: 'merge-back',
+          planToken: plan.token,
+          mode: 'merge',
+          repositoryNames,
+        }),
+      ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+    }
+    expect(merge).not.toHaveBeenCalled()
+  })
+
+  test('binds failed merge retries to the original selected members', async () => {
+    const plan = mergePlan()
+    const merge = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, message: 'api merged' })
+      .mockResolvedValueOnce({ ok: false, message: 'web failed' })
+    const service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan })),
+      merge,
+      publishInvalidation: vi.fn(),
+    })
+    await service.plan(ROOT, { kind: 'merge-back', branchWorkspaceId: 'ws-1' })
+    const original = {
+      kind: 'merge-back' as const,
+      planToken: plan.token,
+      mode: 'merge' as const,
+      repositoryNames: ['api', 'web'],
+    }
+    await expect(service.execute(ROOT, original)).resolves.toMatchObject({ ok: false })
+
+    await expect(service.execute(ROOT, { ...original, repositoryNames: ['web'] })).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+    expect(merge).toHaveBeenCalledTimes(2)
+  })
+
+  test('binds failed merge retries to the original pipeline mode', async () => {
+    const plan = mergePlan()
+    const merge = vi.fn().mockResolvedValueOnce({ ok: false, message: 'merge failed' })
+    const pull = vi.fn()
+    const push = vi.fn()
+    const service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan })),
+      pull,
+      merge,
+      push,
+      publishInvalidation: vi.fn(),
+    })
+    await service.plan(ROOT, { kind: 'merge-back', branchWorkspaceId: 'ws-1' })
+    const original = {
+      kind: 'merge-back' as const,
+      planToken: plan.token,
+      mode: 'merge' as const,
+      repositoryNames: ['api', 'web'],
+    }
+    await expect(service.execute(ROOT, original)).resolves.toMatchObject({ ok: false })
+
+    await expect(service.execute(ROOT, { ...original, mode: 'pull-merge-push' })).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+    expect(pull).not.toHaveBeenCalled()
+    expect(push).not.toHaveBeenCalled()
+    expect(merge).toHaveBeenCalledTimes(1)
   })
 
   test('pulls target branches serially, stops at the first failure, and retries only remaining members', async () => {
@@ -256,7 +426,12 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
     await service.plan(ROOT, { kind: 'merge-back', branchWorkspaceId: 'ws-1' })
 
     await expect(
-      service.execute(ROOT, { kind: 'merge-back', planToken: plan.token, mode: 'pull-merge-push' }),
+      service.execute(ROOT, {
+        kind: 'merge-back',
+        planToken: plan.token,
+        mode: 'pull-merge-push',
+        repositoryNames: ['api', 'web'],
+      }),
     ).resolves.toMatchObject({ ok: true })
     expect(merge).toHaveBeenCalledTimes(2)
     expect(push).toHaveBeenCalledTimes(2)
@@ -282,7 +457,12 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
     await service.plan(ROOT, { kind: 'merge-back', branchWorkspaceId: 'ws-1' })
 
     await expect(
-      service.execute(ROOT, { kind: 'merge-back', planToken: plan.token, mode: 'pull-merge-push' }),
+      service.execute(ROOT, {
+        kind: 'merge-back',
+        planToken: plan.token,
+        mode: 'pull-merge-push',
+        repositoryNames: ['api', 'web'],
+      }),
     ).resolves.toMatchObject({
       ok: false,
       members: [
