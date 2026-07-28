@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type {
+  BranchWorkspaceBatchMergeTargetInput,
   BranchWorkspaceCommitMessageInput,
   BranchWorkspaceGitActionExecuteInput,
   BranchWorkspaceGitActionKind,
@@ -82,10 +83,10 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
     [execute, plan],
   )
 
-  const executeMergeBack = useCallback(
-    async (mode: BranchWorkspaceMergeMode, repositoryNames: string[]) => {
-      if (!plan || plan.kind !== 'merge-back') return null
-      return await execute({ kind: 'merge-back', planToken: plan.token, mode, repositoryNames })
+  const executeBatchMerge = useCallback(
+    async (mode: BranchWorkspaceMergeMode, targets: BranchWorkspaceBatchMergeTargetInput[]) => {
+      if (!plan || plan.kind !== 'batch-merge') return null
+      return await execute({ kind: 'batch-merge', planToken: plan.token, mode, targets })
     },
     [execute, plan],
   )
@@ -116,10 +117,10 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
     error,
     requestPlan,
     executeBatchCommit,
-    executeMergeBack,
+    executeBatchMerge,
     executeSync,
     retryBatchCommit: executeBatchCommit,
-    retryMergeBack: executeMergeBack,
+    retryBatchMerge: executeBatchMerge,
     retrySync: executeSync,
     cancel,
     reset,

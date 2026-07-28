@@ -1,20 +1,17 @@
 import { createHash } from 'node:crypto'
 import path from 'node:path'
+import { isBranchWorkspaceBatchMergeTemporaryWorktreePath } from '#/server/modules/branch-workspace-batch-merge-worktree.ts'
 import { readBranchWorkspaceManifests } from '#/server/modules/branch-workspace-source.ts'
 import { workspaceRepositoryId, workspaceRootId } from '#/server/modules/workspace-paths.ts'
-import {
-  getRepositoryPatch,
-  getRepositorySnapshot,
-  getRepositoryStatus,
-  isRepositoryAncestor,
-} from '#/server/modules/repo-read-paths.ts'
+import { getRepositoryPatch, getRepositorySnapshot, getRepositoryStatus } from '#/server/modules/repo-read-paths.ts'
 import {
   normalizeBranchWorkspaceGitActionPlanRequest,
   type BranchWorkspaceBatchCommitMemberPlan,
   type BranchWorkspaceGitActionPlan,
   type BranchWorkspaceGitActionPlanRequest,
   type BranchWorkspaceGitActionPlanResult,
-  type BranchWorkspaceMergeBackMemberPlan,
+  type BranchWorkspaceBatchMergeDestinationPlan,
+  type BranchWorkspaceBatchMergeMemberPlan,
   type BranchWorkspaceSyncMemberPlan,
 } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceManifest } from '#/shared/branch-workspaces.ts'
@@ -27,7 +24,6 @@ export interface BranchWorkspaceGitActionPlanDependencies {
   getSnapshot?: (repoId: string, signal?: AbortSignal) => Promise<RepoSnapshot | null>
   getStatus?: (repoId: string, signal?: AbortSignal) => Promise<WorktreeStatus[]>
   getPatch?: (repoId: string, worktreePath: string, signal?: AbortSignal) => Promise<ExecResult>
-  isAncestor?: (repoId: string, ancestor: string, descendant: string, signal?: AbortSignal) => Promise<boolean>
 }
 
 export async function buildBranchWorkspaceGitActionPlan(
@@ -55,8 +51,8 @@ export async function buildBranchWorkspaceGitActionPlan(
     if (normalized.request.kind === 'batch-commit') {
       return await buildBatchCommitPlan(normalizedRootId, manifest, dependencies, signal)
     }
-    if (normalized.request.kind === 'merge-back') {
-      return await buildMergeBackPlan(normalizedRootId, manifest, dependencies, signal)
+    if (normalized.request.kind === 'batch-merge') {
+      return await buildBatchMergePlan(normalizedRootId, manifest, dependencies, signal)
     }
     return await buildSyncPlan(normalizedRootId, manifest, normalized.request.kind, dependencies, signal)
   } catch (error) {
@@ -156,13 +152,13 @@ async function buildBatchCommitPlan(
   return { ok: true, plan: { token: fingerprint(planWithoutToken), ...planWithoutToken } }
 }
 
-async function buildMergeBackPlan(
+async function buildBatchMergePlan(
   rootId: string,
   manifest: BranchWorkspaceManifest,
   dependencies: BranchWorkspaceGitActionPlanDependencies,
   signal?: AbortSignal,
 ): Promise<BranchWorkspaceGitActionPlanResult> {
-  const members: BranchWorkspaceMergeBackMemberPlan[] = []
+  const members: BranchWorkspaceBatchMergeMemberPlan[] = []
   for (const member of manifest.repositories) {
     signal?.throwIfAborted()
     const facts = await readMemberFacts(
@@ -174,78 +170,64 @@ async function buildMergeBackPlan(
       signal,
     )
     if (!facts.ok) return facts
-    if (facts.status.entries.length > 0) {
-      return {
-        ok: false,
-        message: 'workspace.branch-workspace.git-action.target-worktree-dirty',
-        repositoryName: member.repositoryName,
-      }
-    }
-
-    const baseBranch = facts.snapshot.branches.find((branch) => branch.name === member.baseBranch)
-    const baseWorktreePath = baseBranch?.worktree?.path
-    if (!baseBranch || !baseWorktreePath) {
-      return {
-        ok: false,
-        message: 'workspace.branch-workspace.git-action.base-worktree-required',
-        repositoryName: member.repositoryName,
-      }
-    }
-    const baseStatus = findStatus(facts.repoId, facts.statuses, baseWorktreePath)
-    if (!baseStatus) {
-      return {
-        ok: false,
-        message: 'workspace.branch-workspace.git-action.base-worktree-unavailable',
-        repositoryName: member.repositoryName,
-      }
-    }
-    if (baseStatus.entries.length > 0) {
-      return {
-        ok: false,
-        message: 'workspace.branch-workspace.git-action.base-worktree-dirty',
-        repositoryName: member.repositoryName,
-      }
-    }
-
-    const mergeSatisfied = await (dependencies.isAncestor ?? isRepositoryAncestor)(
-      facts.repoId,
-      member.targetBranch,
-      member.baseBranch,
-      signal,
-    )
-    const pullMergePushReady = Boolean(baseBranch.tracking && !baseBranch.trackingGone)
     const targetEntries = normalizedEntries(facts.status.entries)
-    const baseEntries = normalizedEntries(baseStatus.entries)
+    const destinationBranches = facts.snapshot.branches
+      .filter((branch) => branch.name !== member.targetBranch)
+      .map((branch): BranchWorkspaceBatchMergeDestinationPlan => {
+        const worktreePath = branch.worktree?.path
+        const destinationStatus = worktreePath ? findStatus(facts.repoId, facts.statuses, worktreePath) : undefined
+        const ownedTemporaryWorktree = Boolean(
+          worktreePath && isBranchWorkspaceBatchMergeTemporaryWorktreePath(facts.repoId, worktreePath),
+        )
+        const unavailable = Boolean(worktreePath && !destinationStatus && !ownedTemporaryWorktree)
+        const dirty = Boolean(destinationStatus && destinationStatus.entries.length > 0 && !ownedTemporaryWorktree)
+        const lockedTemporaryWorktree = ownedTemporaryWorktree && branch.worktree?.isLocked === true
+        const ready = !unavailable && !dirty && !lockedTemporaryWorktree
+        const message = dirty
+          ? 'workspace.branch-workspace.git-action.destination-worktree-dirty'
+          : unavailable || lockedTemporaryWorktree
+            ? 'workspace.branch-workspace.git-action.destination-worktree-unavailable'
+            : undefined
+        return {
+          branch: branch.name,
+          head: branch.worktree?.head ?? destinationStatus?.head ?? branch.lastCommitHash,
+          ready,
+          ...(worktreePath ? { worktreePath } : {}),
+          requiresTemporaryWorktree: !worktreePath || ownedTemporaryWorktree,
+          pullMergePushReady: Boolean(branch.tracking && !branch.trackingGone),
+          ...(message ? { message } : {}),
+        }
+      })
+    const ready = targetEntries.length === 0 && destinationBranches.some((branch) => branch.ready)
+    const message =
+      targetEntries.length > 0
+        ? 'workspace.branch-workspace.git-action.target-worktree-dirty'
+        : destinationBranches.length === 0
+          ? 'workspace.branch-workspace.git-action.destination-branch-required'
+          : destinationBranches.some((branch) => branch.ready)
+            ? undefined
+            : 'workspace.branch-workspace.git-action.destination-worktree-unavailable'
     members.push({
       repositoryName: member.repositoryName,
       repoId: facts.repoId,
       targetBranch: member.targetBranch,
       targetWorktreePath: member.worktreePath,
       targetHead: facts.head,
-      baseBranch: member.baseBranch,
-      baseWorktreePath,
-      baseHead: baseBranch.worktree?.head ?? baseStatus.head ?? baseBranch.lastCommitHash,
-      mergeSatisfied,
-      pullMergePushReady,
-      ...(!pullMergePushReady
-        ? { pullMergePushMessage: 'workspace.branch-workspace.git-action.base-upstream-required' }
-        : {}),
+      ready,
+      ...(message ? { message } : {}),
+      destinationBranches,
       fingerprint: fingerprint({
         targetHead: facts.head,
         targetStatus: targetEntries,
-        baseHead: baseBranch.worktree?.head ?? baseStatus.head ?? baseBranch.lastCommitHash,
-        baseStatus: baseEntries,
-        upstream: baseBranch.tracking ?? null,
-        trackingGone: baseBranch.trackingGone === true,
+        destinationBranches: destinationBranches.map((branch) => branch.branch),
       }),
     })
   }
   const planWithoutToken = {
-    kind: 'merge-back' as const,
+    kind: 'batch-merge' as const,
     rootId,
     branchWorkspaceId: manifest.id,
     members,
-    pullMergePushReady: members.every((member) => member.pullMergePushReady),
   }
   return { ok: true, plan: { token: fingerprint(planWithoutToken), ...planWithoutToken } }
 }

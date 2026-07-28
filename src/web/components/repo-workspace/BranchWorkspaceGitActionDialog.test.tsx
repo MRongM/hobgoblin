@@ -60,39 +60,67 @@ function syncPlan(kind: 'pull' | 'push', ready = true): BranchWorkspaceGitAction
   }
 }
 
-function mergePlan(): Extract<BranchWorkspaceGitActionPlan, { kind: 'merge-back' }> {
+function mergePlan(): Extract<BranchWorkspaceGitActionPlan, { kind: 'batch-merge' }> {
   return {
-    kind: 'merge-back',
+    kind: 'batch-merge',
     token: 'sha256:merge',
     rootId: '/workspace',
     branchWorkspaceId: 'ws-1',
-    pullMergePushReady: false,
     members: [
       mergeMember('api'),
-      mergeMember('web', { pullMergePushReady: false }),
-      mergeMember('docs', { mergeSatisfied: true }),
+      mergeMember('web', {
+        destinationBranches: mergeDestinations('web').map((destination) =>
+          destination.branch === 'main' ? { ...destination, pullMergePushReady: false } : destination,
+        ),
+      }),
+      mergeMember('docs', { ready: false, message: 'destination unavailable', destinationBranches: [] }),
     ],
   }
 }
 
 function mergeMember(
   repositoryName: string,
-  fields: Partial<Extract<BranchWorkspaceGitActionPlan, { kind: 'merge-back' }>['members'][number]> = {},
-): Extract<BranchWorkspaceGitActionPlan, { kind: 'merge-back' }>['members'][number] {
+  fields: Partial<Extract<BranchWorkspaceGitActionPlan, { kind: 'batch-merge' }>['members'][number]> = {},
+): Extract<BranchWorkspaceGitActionPlan, { kind: 'batch-merge' }>['members'][number] {
   return {
     repositoryName,
     repoId: `/workspace/${repositoryName}`,
     targetBranch: 'feature/a',
     targetWorktreePath: `/workspace/goblin-feature-a/${repositoryName}`,
     targetHead: `${repositoryName}-target-head`,
-    baseBranch: 'main',
-    baseWorktreePath: `/workspace/${repositoryName}`,
-    baseHead: `${repositoryName}-base-head`,
-    mergeSatisfied: false,
-    pullMergePushReady: true,
+    ready: true,
+    destinationBranches: mergeDestinations(repositoryName),
     fingerprint: `sha256:${repositoryName}`,
     ...fields,
   }
+}
+
+function mergeDestinations(repositoryName: string) {
+  return [
+    {
+      branch: 'main',
+      head: 'main-head',
+      ready: true,
+      worktreePath: `/workspace/${repositoryName}`,
+      requiresTemporaryWorktree: false,
+      pullMergePushReady: true,
+    },
+    {
+      branch: 'release/v2',
+      head: 'release-head',
+      ready: true,
+      worktreePath: `/workspace/${repositoryName}-release`,
+      requiresTemporaryWorktree: false,
+      pullMergePushReady: true,
+    },
+    {
+      branch: 'staging',
+      head: 'staging-head',
+      ready: true,
+      requiresTemporaryWorktree: true,
+      pullMergePushReady: true,
+    },
+  ]
 }
 
 let container: HTMLDivElement
@@ -105,6 +133,9 @@ beforeEach(() => {
   mocks.generate
     .mockResolvedValueOnce({ ok: true, message: 'feat: api' })
     .mockResolvedValueOnce({ ok: true, message: 'feat: web' })
+  if (!Element.prototype.scrollIntoView) {
+    Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() })
+  }
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
@@ -118,15 +149,15 @@ afterEach(() => {
 })
 
 describe('BranchWorkspaceGitActionPanel', () => {
-  test('keeps the merge-back identity while its plan is loading', async () => {
-    render({ kind: 'merge-back', plan: null })
+  test('keeps the batch-merge identity while its plan is loading', async () => {
+    render({ kind: 'batch-merge', plan: null })
     await flush()
 
     const dialog = document.querySelector('[data-testid="branch-workspace-batch-merge-dialog"]')
     expect(dialog).not.toBeNull()
     expect(container.contains(dialog)).toBe(false)
     expect(document.querySelector('[data-testid="branch-workspace-git-action-panel"]')).toBeNull()
-    expect(dialog?.textContent).toContain('workspace.branch-workspace.git-action.merge-back')
+    expect(dialog?.textContent).toContain('workspace.branch-workspace.git-action.batch-merge')
     expect(dialog?.textContent).not.toContain('workspace.branch-workspace.git-action.batch-commit')
   })
 
@@ -182,14 +213,43 @@ describe('BranchWorkspaceGitActionPanel', () => {
   })
 
   test('offers local merge and pull-merge-push as distinct actions', () => {
-    render({ kind: 'merge-back', plan: mergePlan() })
+    render({ kind: 'batch-merge', plan: mergePlan() })
 
     expect(document.querySelector('[data-action="merge"]')).not.toBeNull()
     expect(document.querySelector('[data-action="pull-merge-push"]')).not.toBeNull()
   })
 
-  test('selects unmerged members by default and disables already merged members', () => {
-    render({ kind: 'merge-back', plan: mergePlan() })
+  test('widens destination selection and shows only the complete branch name', async () => {
+    const plan = mergePlan()
+    const longBranch = 'release/customer-facing/complete-branch-name'
+    plan.members[0]!.destinationBranches.push({
+      branch: longBranch,
+      head: 'long-branch-head',
+      ready: true,
+      requiresTemporaryWorktree: true,
+      pullMergePushReady: true,
+    })
+    render({ kind: 'batch-merge', plan })
+
+    const dialog = document.querySelector<HTMLElement>('[data-testid="branch-workspace-batch-merge-dialog"]')
+    const trigger = document.querySelector<HTMLButtonElement>('[data-merge-destination="api"]')
+    expect(dialog?.className).toContain('sm:max-w-[72rem]')
+    expect(dialog?.className).toContain('w-[calc(100vw-0.5rem)]')
+    expect(trigger?.parentElement?.className).toContain('minmax(20rem,2fr)')
+    expect(trigger?.className).toContain('min-w-80')
+
+    await act(async () => {
+      trigger?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+      await Promise.resolve()
+    })
+    const option = document.querySelector<HTMLElement>(`[data-merge-destination-option="api:${longBranch}"]`)
+    expect(option?.className).toContain('break-all')
+    expect(option?.textContent).toBe(longBranch)
+    expect(document.body.textContent).not.toContain('workspace.branch-workspace.git-action.temporary-worktree')
+  })
+
+  test('selects ready members by default and disables unavailable members', () => {
+    render({ kind: 'batch-merge', plan: mergePlan() })
 
     expect(mergeCheckbox('api')?.dataset.state).toBe('checked')
     expect(mergeCheckbox('web')?.dataset.state).toBe('checked')
@@ -197,11 +257,16 @@ describe('BranchWorkspaceGitActionPanel', () => {
     expect(mergeCheckbox('docs')?.disabled).toBe(true)
   })
 
-  test('requires a selection and computes remote readiness from selected members only', async () => {
-    render({ kind: 'merge-back', plan: mergePlan() })
+  test('requires a destination for every selected member and computes readiness from those destinations', async () => {
+    render({ kind: 'batch-merge', plan: mergePlan() })
     const local = document.querySelector<HTMLButtonElement>('[data-action="merge"]')
     const remote = document.querySelector<HTMLButtonElement>('[data-action="pull-merge-push"]')
 
+    expect(local?.disabled).toBe(true)
+    expect(remote?.disabled).toBe(true)
+
+    await selectMergeDestination('api', 'main')
+    await selectMergeDestination('web', 'main')
     expect(local?.disabled).toBe(false)
     expect(remote?.disabled).toBe(true)
 
@@ -213,27 +278,28 @@ describe('BranchWorkspaceGitActionPanel', () => {
     expect(remote?.disabled).toBe(true)
   })
 
-  test('submits the selected repositories in plan order', async () => {
+  test('submits the selected member-to-destination mappings in plan order', async () => {
     const plan = mergePlan()
     const onOpenChange = vi.fn()
-    const onMergeBack = vi.fn(
+    const onBatchMerge = vi.fn(
       async (): Promise<BranchWorkspaceGitActionResult> => ({
         ok: true,
-        kind: 'merge-back',
+        kind: 'batch-merge',
         planToken: plan.token,
         branchWorkspaceId: plan.branchWorkspaceId,
         members: [],
       }),
     )
-    render({ kind: 'merge-back', plan, onOpenChange, onMergeBack })
+    render({ kind: 'batch-merge', plan, onOpenChange, onBatchMerge })
 
     await act(async () => mergeCheckbox('web')?.click())
+    await selectMergeDestination('api', 'release/v2')
     await act(async () => {
       document.querySelector<HTMLButtonElement>('[data-action="merge"]')?.click()
       await Promise.resolve()
     })
 
-    expect(onMergeBack).toHaveBeenCalledWith('merge', ['api'])
+    expect(onBatchMerge).toHaveBeenCalledWith('merge', [{ repositoryName: 'api', destinationBranch: 'release/v2' }])
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
@@ -243,20 +309,22 @@ describe('BranchWorkspaceGitActionPanel', () => {
     const pendingResult = new Promise<BranchWorkspaceGitActionResult>((resolve) => {
       finish = resolve
     })
-    const onMergeBack = vi.fn(() => pendingResult)
-    render({ kind: 'merge-back', plan, onMergeBack })
+    const onBatchMerge = vi.fn(() => pendingResult)
+    render({ kind: 'batch-merge', plan, onBatchMerge })
+    await selectMergeDestination('api', 'main')
+    await selectMergeDestination('web', 'staging')
     await act(async () => {
       document.querySelector<HTMLButtonElement>('[data-action="merge"]')?.click()
       await Promise.resolve()
     })
 
     render({
-      kind: 'merge-back',
+      kind: 'batch-merge',
       plan,
       pending: true,
-      onMergeBack,
+      onBatchMerge,
       activeOperation: {
-        kind: 'merge-back',
+        kind: 'batch-merge',
         currentStep: 2,
         completedCount: 1,
         totalCount: 2,
@@ -275,18 +343,18 @@ describe('BranchWorkspaceGitActionPanel', () => {
 
     finish?.({
       ok: true,
-      kind: 'merge-back',
+      kind: 'batch-merge',
       planToken: plan.token,
       branchWorkspaceId: plan.branchWorkspaceId,
       members: [],
     })
   })
 
-  test('keeps a failed batch locked to its original mode and selection for retry', async () => {
+  test('keeps a failed batch locked to its original mode and destinations for retry', async () => {
     const plan = mergePlan()
     const failure: BranchWorkspaceGitActionResult = {
       ok: false,
-      kind: 'merge-back',
+      kind: 'batch-merge',
       planToken: plan.token,
       branchWorkspaceId: plan.branchWorkspaceId,
       message: 'merge failed',
@@ -296,14 +364,16 @@ describe('BranchWorkspaceGitActionPanel', () => {
         { repositoryName: 'docs', phase: 'not-started' },
       ],
     }
-    const onMergeBack = vi.fn(async () => failure)
-    render({ kind: 'merge-back', plan, onMergeBack })
+    const onBatchMerge = vi.fn(async () => failure)
+    render({ kind: 'batch-merge', plan, onBatchMerge })
+    await selectMergeDestination('api', 'main')
+    await selectMergeDestination('web', 'staging')
 
     await act(async () => {
       document.querySelector<HTMLButtonElement>('[data-action="merge"]')?.click()
       await Promise.resolve()
     })
-    render({ kind: 'merge-back', plan, result: failure, onMergeBack })
+    render({ kind: 'batch-merge', plan, result: failure, onBatchMerge })
 
     expect(document.querySelector('[data-action="pull-merge-push"]')).toBeNull()
     expect(document.querySelector('[data-action="merge"]')?.textContent).toContain('workspace.branch-workspace.retry')
@@ -313,8 +383,12 @@ describe('BranchWorkspaceGitActionPanel', () => {
       document.querySelector<HTMLButtonElement>('[data-action="merge"]')?.click()
       await Promise.resolve()
     })
-    expect(onMergeBack).toHaveBeenNthCalledWith(1, 'merge', ['api', 'web'])
-    expect(onMergeBack).toHaveBeenNthCalledWith(2, 'merge', ['api', 'web'])
+    const expectedTargets = [
+      { repositoryName: 'api', destinationBranch: 'main' },
+      { repositoryName: 'web', destinationBranch: 'staging' },
+    ]
+    expect(onBatchMerge).toHaveBeenNthCalledWith(1, 'merge', expectedTargets)
+    expect(onBatchMerge).toHaveBeenNthCalledWith(2, 'merge', expectedTargets)
   })
 
   test.each([
@@ -371,7 +445,7 @@ function render(overrides: Partial<React.ComponentProps<typeof BranchWorkspaceGi
         error={null}
         onOpenChange={() => {}}
         onBatchCommit={async () => null}
-        onMergeBack={async () => null}
+        onBatchMerge={async () => null}
         onSync={async () => null}
         onCancel={async () => {}}
         {...overrides}
@@ -382,6 +456,23 @@ function render(overrides: Partial<React.ComponentProps<typeof BranchWorkspaceGi
 
 function mergeCheckbox(repositoryName: string): HTMLButtonElement | null {
   return document.querySelector<HTMLButtonElement>(`[data-merge-repository="${repositoryName}"]`)
+}
+
+async function selectMergeDestination(repositoryName: string, destinationBranch: string) {
+  const trigger = document.querySelector<HTMLButtonElement>(`[data-merge-destination="${repositoryName}"]`)
+  if (!trigger) throw new Error(`Missing destination trigger for ${repositoryName}`)
+  await act(async () => {
+    trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    await Promise.resolve()
+  })
+  const option = document.querySelector<HTMLElement>(
+    `[data-merge-destination-option="${repositoryName}:${destinationBranch}"]`,
+  )
+  if (!option) throw new Error(`Missing destination option ${repositoryName}:${destinationBranch}`)
+  await act(async () => {
+    option.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await Promise.resolve()
+  })
 }
 
 async function flush() {

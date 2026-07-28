@@ -1,27 +1,27 @@
-# Branch Workspace Batch Merge Implementation Plan
+# Branch Workspace User-Selected Batch Merge Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. This repository explicitly requires inline execution for this task; do not dispatch subagents.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. This task must be executed inline; do not dispatch subagents.
 
-**Goal:** Replace the branch-workspace “merge back” action with a selectable batch-merge dialog that executes chosen members sequentially and shows member/step progress.
+**Goal:** Merge each selected branch-workspace member into a user-selected local branch, independently of member base or creation-source metadata.
 
-**Architecture:** Extend the existing shared execute contract with selected repository names, then filter and bind that selection inside the existing server write path. Keep selection local to the dialog, keep authoritative activity in the existing server snapshot, and add one pure Renderer projection for deterministic progress rendering.
+**Architecture:** The plan exposes repository-local destination candidates while the execute contract carries an explicit member-to-destination mapping. The existing server write path validates that mapping, executes it in manifest order, and uses a narrowly owned temporary worktree only when the selected branch has no worktree. Renderer state remains ephemeral and progress remains a pure projection of server activity.
 
-**Tech Stack:** TypeScript 6 strip-only mode, React 19, Radix/shadcn UI primitives, TanStack Query, Hono, Vitest, Bun.
+**Tech Stack:** TypeScript 6 strip-only mode, React 19, Radix/shadcn UI, TanStack Query, Hono, Vitest, Bun.
 
 ## Global Constraints
 
 - Do not use enums, runtime namespaces, parameter properties, or import aliases.
 - Use repo-alias imports with explicit `.ts`/`.tsx` extensions.
-- Preserve repository member order; never trust client-provided order.
-- Execute selected members sequentially, stop at first failure, and never roll back completed Git or remote writes.
-- Keep dialog selection and selected mode local and ephemeral; keep plans and active operation state server-owned.
-- Reuse WebSocket invalidation plus targeted refetch; add no polling or streaming protocol.
-- Use “成员工作树” in Chinese UI copy and sentence case for actions/headings.
-- Do not create branches, commits, or use subagents for this task.
+- Never infer a batch-merge destination from `baseBranch`, creation provenance, default branch, or upstream.
+- Accept only existing local destination branches and reject the member target branch itself.
+- Preserve manifest order, execute sequentially, stop at first failure, and do not roll back completed Git or remote writes.
+- Never remove an ordinary user worktree; force cleanup is limited to a repository-scoped `.hobgoblin-batch-merge-` temporary path.
+- Keep dialog choices local and ephemeral; keep plans and activity server-owned.
+- Do not create Git branches, commits, or subagents while implementing this plan.
 
 ---
 
-### Task 1: Add the selected-member execute contract
+### Task 1: Replace merge-back protocol with explicit batch targets
 
 **Files:**
 
@@ -30,41 +30,36 @@
 
 **Interfaces:**
 
-- Produces: `Extract<BranchWorkspaceGitActionExecuteInput, { kind: 'merge-back' }>` with `repositoryNames: string[]`.
-- Consumes: existing `isWorkspaceRepositoryName()` validation.
+- Produce `BranchWorkspaceBatchMergeTargetInput { repositoryName: string; destinationBranch: string }`.
+- Produce batch-merge member plans with `ready`, optional `message`, and `destinationBranches`.
+- Change the action kind from `merge-back` to `batch-merge`.
 
-- [ ] **Step 1: Write failing normalization tests**
+- [x] Add failing tests accepting a non-empty target mapping and rejecting empty arrays, duplicate repositories, invalid repository names, empty destinations, and control characters.
+- [x] Run `bun run test src/shared/branch-workspace-git-actions.test.ts` and verify RED because the old contract only accepts repository names.
+- [x] Implement the minimal types and normalizer, preserving client target order at the boundary.
+- [x] Re-run the focused test and verify GREEN.
 
-Add cases proving that merge-back accepts `repositoryNames: ['web', 'api']` without reordering, and rejects an empty array, duplicate names, control characters, and non-workspace repository names.
+### Task 2: Plan selectable local destinations without base-branch coupling
 
-- [ ] **Step 2: Run the focused test and verify RED**
+**Files:**
 
-Run: `bun run test src/shared/branch-workspace-git-actions.test.ts`
+- Create: `src/server/modules/branch-workspace-batch-merge-worktree.test.ts`
+- Create: `src/server/modules/branch-workspace-batch-merge-worktree.ts`
+- Modify: `src/server/modules/branch-workspace-git-action-plan.test.ts`
+- Modify: `src/server/modules/branch-workspace-git-action-plan.ts`
 
-Expected: the accepted result lacks `repositoryNames`, and invalid-selection cases are not rejected for the intended reason.
+**Interfaces:**
 
-- [ ] **Step 3: Implement the minimal shared contract**
+- Produce deterministic repository-sibling temporary worktree paths under `.hobgoblin-batch-merge-`.
+- Project every local branch except the member target as a candidate with readiness, worktree path, temporary ownership, and upstream readiness.
 
-Change the merge input to:
+- [x] Add failing pure path tests proving local/SSH path handling and rejecting lookalike paths outside the repository parent.
+- [x] Add failing planner tests proving an unchecked-out `baseBranch` no longer blocks planning, candidates exclude the source branch, unchecked-out branches are ready, and dirty ordinary worktrees are disabled.
+- [x] Run both focused suites and verify RED against the old fixed-base plan.
+- [x] Implement the path helper and candidate projection. Keep source dirtiness as member readiness instead of failing the whole plan.
+- [x] Re-run both suites and verify GREEN.
 
-```ts
-{
-  kind: 'merge-back'
-  planToken: string
-  mode: BranchWorkspaceMergeMode
-  repositoryNames: string[]
-}
-```
-
-Normalize with a focused helper that requires a non-empty array, validates every trimmed name with `isWorkspaceRepositoryName`, and rejects duplicates while preserving request order.
-
-- [ ] **Step 4: Run the focused test and verify GREEN**
-
-Run: `bun run test src/shared/branch-workspace-git-actions.test.ts`
-
-Expected: all shared action contract tests pass.
-
-### Task 2: Scope and bind server batch-merge execution
+### Task 3: Execute and retry the selected destinations safely
 
 **Files:**
 
@@ -73,238 +68,76 @@ Expected: all shared action contract tests pass.
 
 **Interfaces:**
 
-- Consumes: merge execute input `{ mode, repositoryNames }` from Task 1.
-- Produces: selected-member execution in manifest order, selected `totalCount/currentStep`, and retry binding to the first selection/mode.
+- Consume `{ mode, targets }`, reorder by the plan, and bind the full mapping for retry.
+- Use existing `createRepositoryWorktree` / `removeRepositoryWorktree` with bootstrap skipped.
+- Publish `prepare | pull | merge | push | cleanup` activity steps.
 
-- [ ] **Step 1: Write a failing selected-order test**
+- [x] Add failing tests for distinct per-member destinations, plan-order execution, target-specific upstream validation, retry binding, and rejection before Git writes.
+- [x] Add failing tests for unchecked-out destination creation, successful cleanup, merge-conflict cleanup, cancellation cleanup, and preservation of ordinary destination worktrees.
+- [x] Run the focused write-path suite and verify RED.
+- [x] Implement selection resolution against the refreshed plan, temporary worktree preparation/cleanup, and step-aware retry state.
+- [x] Re-run write-path and planner suites and verify GREEN.
 
-Submit `repositoryNames: ['web', 'api']` and assert Git calls occur as `api`, then `web`, because plan order is authoritative. Assert `activeOperation.totalCount === 2`; add a third unselected plan member and assert it is never written.
-
-- [ ] **Step 2: Run the focused server test and verify RED**
-
-Run: `bun run test src/server/modules/branch-workspace-git-action-write-paths.test.ts`
-
-Expected: TypeScript/test failures show that merge input has no selection and all members execute.
-
-- [ ] **Step 3: Implement selection validation and filtering**
-
-Add a pending merge binding:
-
-```ts
-interface MergeExecutionBinding {
-  mode: BranchWorkspaceMergeMode
-  repositoryNames: string[]
-}
-```
-
-Before creating the active operation:
-
-- map requested names to plan members;
-- reject unknown names and selections containing only `mergeSatisfied` members;
-- reject `pull-merge-push` only when a selected member lacks a usable base upstream;
-- bind the first selection/mode and require exact equality on retry;
-- derive active `totalCount` from the selected list.
-
-Filter plan members by the selected set while preserving plan order. Pass unselected names into the existing fingerprint-validation ignore set, and calculate `currentStep` from the filtered index.
-
-- [ ] **Step 4: Run the selected-order test and verify GREEN**
-
-Run: `bun run test src/server/modules/branch-workspace-git-action-write-paths.test.ts`
-
-Expected: the selected subset executes once in plan order.
-
-- [ ] **Step 5: Write failing safety/retry tests**
-
-Cover these independent cases:
-
-- unknown name rejects before Git writes;
-- selected no-upstream member blocks only `pull-merge-push`, while an unselected no-upstream member does not;
-- a changed unselected member fingerprint is ignored by validation;
-- retry with the original selection/mode skips completed work;
-- retry with another selection or mode rejects before new writes.
-
-- [ ] **Step 6: Run the focused server test and verify RED**
-
-Run: `bun run test src/server/modules/branch-workspace-git-action-write-paths.test.ts`
-
-Expected: at least the binding and selected-readiness assertions fail before implementation completion.
-
-- [ ] **Step 7: Complete the minimal server safeguards**
-
-Use exact array comparison against the plan-ordered selected names. Keep the existing `completed` and `mergeProgress` maps as the only retry progress state. Return `error.invalid-arguments` for malformed/changed batches and the existing base-upstream message for selected readiness failures.
-
-- [ ] **Step 8: Run the server module tests and verify GREEN**
-
-Run: `bun run test src/server/modules/branch-workspace-git-action-write-paths.test.ts src/server/modules/branch-workspace-git-action-plan.test.ts`
-
-Expected: both suites pass.
-
-### Task 3: Project selected member and step progress
-
-**Files:**
-
-- Create: `src/web/components/repo-workspace/branch-workspace-batch-merge-progress.test.ts`
-- Create: `src/web/components/repo-workspace/branch-workspace-batch-merge-progress.ts`
-
-**Interfaces:**
-
-- Consumes: `BranchWorkspaceMergeBackPlan`, selected names, started mode, `BranchWorkspaceActiveOperation | null`, and `BranchWorkspaceGitActionResult | null`.
-- Produces: `{ members, completedCount, totalCount }`, where each member has ordered step statuses of `pending | active | complete | failed`.
-
-- [ ] **Step 1: Write failing pure projection tests**
-
-Test local merge and pull/merge/push separately. Prove that:
-
-- unselected members are marked unselected and excluded from totals;
-- `completedCount` marks earlier selected members complete;
-- active `merge` implies pull complete and merge active;
-- active `push` implies pull and merge complete;
-- a final failed result marks its exact step failed and keeps later steps pending.
-
-- [ ] **Step 2: Run the focused projection test and verify RED**
-
-Run: `bun run test src/web/components/repo-workspace/branch-workspace-batch-merge-progress.test.ts`
-
-Expected: FAIL because the projection module does not exist.
-
-- [ ] **Step 3: Implement the pure projection**
-
-Define narrow output types and derive all states from plan order plus existing server facts. Do not store progress or mutate inputs. For remote mode use `['pull', 'merge', 'push']`; for local mode use `['merge']`.
-
-- [ ] **Step 4: Run the focused projection test and verify GREEN**
-
-Run: `bun run test src/web/components/repo-workspace/branch-workspace-batch-merge-progress.test.ts`
-
-Expected: all projection cases pass.
-
-### Task 4: Build the batch-merge dialog and submit selection
+### Task 4: Require destination selection in the batch dialog
 
 **Files:**
 
 - Modify: `src/web/hooks/useBranchWorkspaceGitActions.ts`
+- Modify: `src/web/components/repo-workspace/branch-workspace-batch-merge-progress.test.ts`
+- Modify: `src/web/components/repo-workspace/branch-workspace-batch-merge-progress.ts`
 - Modify: `src/web/components/repo-workspace/BranchWorkspaceGitActionDialog.test.tsx`
 - Modify: `src/web/components/repo-workspace/BranchWorkspaceGitActionDialog.tsx`
-- Modify: `src/web/components/repo-workspace/WorkspaceRepositoryRail.test.tsx`
+- Modify action-kind call sites and their tests under `src/web/components/repo-workspace/`.
 
 **Interfaces:**
 
-- Changes: `executeMergeBack(mode, repositoryNames)`.
-- Consumes: progress projection from Task 3.
-- Produces: Radix `Dialog` for merge-back; all other action kinds retain the current inline panel.
+- Submit `BranchWorkspaceBatchMergeTargetInput[]` from the hook.
+- Render one shadcn/Radix `Select` per selected member.
+- Project steps from selected target worktree facts and mode.
 
-- [ ] **Step 1: Write failing hook/component tests**
+- [x] Add failing projection and component tests for required targets, per-repository choices, dirty-option disabling, selected-target upstream readiness, submission, lock/retry, and prepare/cleanup progress.
+- [x] Run focused Renderer suites and verify RED.
+- [x] Implement the hook, pure projection, dialog controls, and `batch-merge` call sites without changing other Git action panels.
+- [x] Re-run focused Renderer suites and verify GREEN without React warnings.
 
-Assert that:
-
-- merge-back renders a `dialog-portal`, while batch commit stays inline;
-- every unmerged member starts checked and every merged member is disabled;
-- clearing all eligible checks disables both actions;
-- remote readiness is computed from selected members only;
-- clicking an action submits its mode and selected repository names;
-- pending/result states lock selection and retain only the started mode for retry;
-- active snapshots render `completed/total` and pull/merge/push step states.
-
-- [ ] **Step 2: Run the focused Renderer tests and verify RED**
-
-Run: `bun run test src/web/components/repo-workspace/BranchWorkspaceGitActionDialog.test.tsx src/web/components/repo-workspace/WorkspaceRepositoryRail.test.tsx`
-
-Expected: dialog, checkbox, selection payload, and progress assertions fail.
-
-- [ ] **Step 3: Extend the hook execute signature**
-
-Implement:
-
-```ts
-const executeMergeBack = useCallback(
-  async (mode: BranchWorkspaceMergeMode, repositoryNames: string[]) => {
-    if (!plan || plan.kind !== 'merge-back') return null
-    return await execute({ kind: 'merge-back', planToken: plan.token, mode, repositoryNames })
-  },
-  [execute, plan],
-)
-```
-
-- [ ] **Step 4: Implement the dedicated merge dialog**
-
-At the top-level component, route `kind === 'merge-back'` or `plan?.kind === 'merge-back'` to a controlled Radix `Dialog`; leave the existing inline JSX unchanged for other kinds.
-
-Inside the merge dialog:
-
-- initialize local selection from `!member.mergeSatisfied` whenever the plan token changes;
-- render `Checkbox` rows and disable satisfied members;
-- capture `startedMode` before execution and lock checkboxes while pending or after a result;
-- use the Task 3 projection for summary and step chips;
-- call the existing abort path whenever an executing dialog closes;
-- close only after a successful response;
-- after failure, show only a same-mode retry action.
-
-- [ ] **Step 5: Run focused Renderer tests and verify GREEN**
-
-Run: `bun run test src/web/components/repo-workspace/BranchWorkspaceGitActionDialog.test.tsx src/web/components/repo-workspace/WorkspaceRepositoryRail.test.tsx`
-
-Expected: all focused Renderer tests pass without React act warnings.
-
-### Task 5: Update product copy, domain docs, and full verification
+### Task 5: Align copy and domain documentation
 
 **Files:**
 
 - Modify: `src/shared/i18n/dictionaries.test.ts`
-- Modify: `src/shared/i18n/en.ts`
-- Modify: `src/shared/i18n/zh.ts`
-- Modify: `src/shared/i18n/ja.ts`
-- Modify: `src/shared/i18n/ko.ts`
+- Modify: `src/shared/i18n/{en,zh,ja,ko}.ts`
 - Modify: `CONTEXT.md`
 - Update: `docs/superpowers/specs/2026-07-28-branch-workspace-batch-merge-design.md`
 
+- [x] Add failing dictionary assertions for batch-merge destination, preparation, cleanup, dirty/unavailable destination, and upstream copy.
+- [x] Run `bun run test src/shared/i18n/dictionaries.test.ts` and verify RED.
+- [x] Update all locales and redefine base branch plus batch merge in the glossary.
+- [x] Re-run dictionary tests and verify GREEN.
+
+### Task 6: Full verification and requirements audit
+
+- [x] Run focused changed suites once more (9 files, 180 tests passed).
+- [x] Run the three TypeScript projects used by `bun run typecheck` (all passed; the workspace's external `node_modules` symlink did not contain the required tool binaries).
+- [x] Run the full test suite (368/370 files and 3465/3469 tests passed; the four remaining failures are unchanged tmux permission/SSH mock environment cases).
+- [x] Run `bun run check:architecture`.
+- [x] Run `git diff --check` and inspect the complete diff for accidental base/source coupling or unrelated edits.
+- [x] Re-read the design goals and change its status to `已实施` only when every required behavior has fresh passing evidence.
+
+### Task 7: Widen destination selection and hide internal worktree details
+
+**Files:**
+
+- Modify: `src/web/components/repo-workspace/BranchWorkspaceGitActionDialog.test.tsx`
+- Modify: `src/web/components/repo-workspace/BranchWorkspaceGitActionDialog.tsx`
+
 **Interfaces:**
 
-- Produces: complete localized batch-merge labels, selection copy, progress copy, and finalized domain terminology.
+- Keep the existing `BranchWorkspaceBatchMergeDestinationPlan` and submission payload unchanged.
+- Render only `candidate.branch` in each target option.
+- Use `sm:max-w-4xl`, a `minmax(16rem,2fr)` destination column, and content that can show the full branch name.
 
-- [ ] **Step 1: Write failing dictionary assertions**
-
-Require the batch-merge keys in every locale and assert:
-
-```ts
-expect(zh['workspace.branch-workspace.git-action.merge-back']).toBe('批量合并')
-expect(en['workspace.branch-workspace.git-action.merge-back']).toBe('Batch merge')
-```
-
-Include keys for selected count, unselected state, member checkbox accessible label, and progress step status.
-
-- [ ] **Step 2: Run dictionary tests and verify RED**
-
-Run: `bun run test src/shared/i18n/dictionaries.test.ts`
-
-Expected: old merge-back label and missing batch-merge copy fail assertions.
-
-- [ ] **Step 3: Add concise localized copy**
-
-Update all four dictionaries with aligned placeholders. Preserve raw branch names and use existing phase/step copy where possible instead of duplicating translations.
-
-- [ ] **Step 4: Run dictionary tests and verify GREEN**
-
-Run: `bun run test src/shared/i18n/dictionaries.test.ts`
-
-Expected: dictionaries remain structurally aligned and new label assertions pass.
-
-- [ ] **Step 5: Run formatting and inspect only task-owned changes**
-
-Run: `bun run format`
-
-Then inspect `git diff --check` and `git diff --` for every file listed in this plan. Preserve the user's pre-existing change-count-refresh edits in overlapping dictionary/list files.
-
-- [ ] **Step 6: Run full verification**
-
-Run in this order:
-
-```text
-bun run typecheck
-bun run test
-bun run check:architecture
-```
-
-Expected: all commands exit 0 with no failed tests or architecture violations.
-
-- [ ] **Step 7: Final requirements audit**
-
-Re-read the design and verify each goal/non-goal against the diff and fresh test output. Change the design status to `已实施` only after all checks pass. Do not commit or create a branch.
+- [x] Add a failing component test that asserts the `4xl` dialog width, `16rem` destination column, and absence of the temporary-worktree label for the `staging` option.
+- [x] Run `bun run test src/web/components/repo-workspace/BranchWorkspaceGitActionDialog.test.tsx` and verify RED.
+- [x] Apply the confirmed layout classes, remove the temporary-worktree suffix, and allow long option text to wrap without changing selection behavior.
+- [x] Re-run the focused component test and verify GREEN.
+- [x] Run `bun run typecheck`, `bun run check:architecture`, and `git diff --check` without starting Electron.

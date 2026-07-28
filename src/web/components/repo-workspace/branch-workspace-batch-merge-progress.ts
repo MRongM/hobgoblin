@@ -1,13 +1,14 @@
 import type {
   BranchWorkspaceGitActionResult,
   BranchWorkspaceGitActionStep,
-  BranchWorkspaceMergeBackPlan,
+  BranchWorkspaceBatchMergePlan,
+  BranchWorkspaceBatchMergeTargetInput,
   BranchWorkspaceMergeMode,
 } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceActiveOperation } from '#/shared/branch-workspaces.ts'
 
 export type BranchWorkspaceBatchMergeStepStatus = 'pending' | 'active' | 'complete' | 'failed'
-export type BranchWorkspaceBatchMergeMemberStatus = 'unselected' | 'satisfied' | BranchWorkspaceBatchMergeStepStatus
+export type BranchWorkspaceBatchMergeMemberStatus = 'unselected' | BranchWorkspaceBatchMergeStepStatus
 
 export interface BranchWorkspaceBatchMergeStepProgress {
   step: Exclude<BranchWorkspaceGitActionStep, 'commit'>
@@ -28,15 +29,14 @@ export interface BranchWorkspaceBatchMergeProgress {
 }
 
 export function projectBranchWorkspaceBatchMergeProgress(
-  plan: BranchWorkspaceMergeBackPlan,
-  repositoryNames: string[],
+  plan: BranchWorkspaceBatchMergePlan,
+  targets: BranchWorkspaceBatchMergeTargetInput[],
   mode: BranchWorkspaceMergeMode,
   activeOperation: BranchWorkspaceActiveOperation | null,
   result: BranchWorkspaceGitActionResult | null,
 ): BranchWorkspaceBatchMergeProgress {
-  const selected = new Set(repositoryNames)
+  const selected = new Map(targets.map((target) => [target.repositoryName, target.destinationBranch]))
   const selectedMembers = plan.members.filter((member) => selected.has(member.repositoryName))
-  const steps = mode === 'merge' ? (['merge'] as const) : (['pull', 'merge', 'push'] as const)
   const completedCount = result
     ? selectedMembers.filter(
         (member) =>
@@ -46,15 +46,20 @@ export function projectBranchWorkspaceBatchMergeProgress(
 
   return {
     members: plan.members.map((member) => {
-      if (member.mergeSatisfied) {
-        return { repositoryName: member.repositoryName, selected: false, status: 'satisfied', steps: [] }
-      }
       if (!selected.has(member.repositoryName)) {
         return { repositoryName: member.repositoryName, selected: false, status: 'unselected', steps: [] }
       }
 
       const selectedIndex = selectedMembers.findIndex((candidate) => candidate.repositoryName === member.repositoryName)
       const memberResult = result?.members.find((candidate) => candidate.repositoryName === member.repositoryName)
+      const destination = member.destinationBranches.find(
+        (candidate) => candidate.branch === selected.get(member.repositoryName),
+      )
+      const steps: Array<Exclude<BranchWorkspaceGitActionStep, 'commit'>> = [
+        'prepare',
+        ...(mode === 'merge' ? (['merge'] as const) : (['pull', 'merge', 'push'] as const)),
+        ...(destination?.requiresTemporaryWorktree ? (['cleanup'] as const) : []),
+      ]
       const stepProgress = steps.map((step) => ({
         step,
         status: projectStepStatus(

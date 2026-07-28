@@ -218,13 +218,17 @@ export const en = {
   'workspace.branch-workspace.git-action.push': 'Batch push',
   'workspace.branch-workspace.git-action.push-description':
     'Push each target branch to its resolved remote destination in repository order.',
-  'workspace.branch-workspace.git-action.merge-back': 'Batch merge',
-  'workspace.branch-workspace.git-action.merge-back-description':
-    'Select member worktrees, then merge each target branch into its recorded base branch in order.',
+  'workspace.branch-workspace.git-action.batch-merge': 'Batch merge',
+  'workspace.branch-workspace.git-action.batch-merge-description':
+    'Select member worktrees and a destination branch for each, then merge them in repository order.',
   'workspace.branch-workspace.git-action.selected-count': '{selected} of {total} members selected',
   'workspace.branch-workspace.git-action.select-member': 'Select {repository} for batch merge',
   'workspace.branch-workspace.git-action.not-selected': 'not selected',
   'workspace.branch-workspace.git-action.progress': 'Batch merge progress',
+  'workspace.branch-workspace.git-action.destination-branch': 'Destination branch for {repository}',
+  'workspace.branch-workspace.git-action.select-destination': 'Select destination',
+  'workspace.branch-workspace.git-action.destination-branch-required': 'Select a destination branch.',
+  'workspace.branch-workspace.git-action.temporary-worktree': 'temporary worktree',
   'workspace.branch-workspace.git-action.merge': 'Merge',
   'workspace.branch-workspace.git-action.pull-merge-push': 'Pull, merge & push',
   'workspace.branch-workspace.git-action.planning': 'Checking all repositories…',
@@ -245,9 +249,11 @@ export const en = {
   'workspace.branch-workspace.git-action.phase.failed': 'failed',
   'workspace.branch-workspace.git-action.phase.not-started': 'not started',
   'workspace.branch-workspace.git-action.step.commit': 'committing',
+  'workspace.branch-workspace.git-action.step.prepare': 'preparing',
   'workspace.branch-workspace.git-action.step.pull': 'pulling',
   'workspace.branch-workspace.git-action.step.merge': 'merging',
   'workspace.branch-workspace.git-action.step.push': 'pushing',
+  'workspace.branch-workspace.git-action.step.cleanup': 'cleaning up',
   'workspace.branch-workspace.git-action.not-ready': 'The branch workspace is not ready.',
   'workspace.branch-workspace.git-action.no-repositories': 'The branch workspace has no repositories to process.',
   'workspace.branch-workspace.git-action.operation-active': 'Another branch workspace Git action is running.',
@@ -265,13 +271,12 @@ export const en = {
   'workspace.branch-workspace.git-action.target-upstream-required':
     'Every target branch needs a usable upstream before batch pull.',
   'workspace.branch-workspace.git-action.remote-required': 'Every repository needs a remote before batch push.',
-  'workspace.branch-workspace.git-action.base-worktree-required':
-    'The base branch must be checked out in an existing worktree.',
-  'workspace.branch-workspace.git-action.base-worktree-unavailable': 'Could not read the base branch worktree status.',
-  'workspace.branch-workspace.git-action.base-worktree-dirty':
-    'Commit or clean the base branch worktree before merging.',
-  'workspace.branch-workspace.git-action.base-upstream-required':
-    'Pull, merge & push requires a usable upstream for every base branch.',
+  'workspace.branch-workspace.git-action.destination-worktree-unavailable':
+    'Could not use the destination branch worktree.',
+  'workspace.branch-workspace.git-action.destination-worktree-dirty':
+    'Commit or clean the destination branch worktree before merging.',
+  'workspace.branch-workspace.git-action.destination-upstream-required':
+    'Pull, merge & push requires a usable upstream for every selected destination branch.',
   'workspace.branch-workspace.delete': 'Delete branch workspace',
   'workspace.branch-workspace.cancel': 'Cancel operation',
   'workspace.branch-workspace.inspect': 'Inspect branch workspace',

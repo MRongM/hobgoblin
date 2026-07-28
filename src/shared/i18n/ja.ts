@@ -216,13 +216,17 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.push': '一括プッシュ',
   'workspace.branch-workspace.git-action.push-description':
     '各対象ブランチを解決済みのリモート送信先へリポジトリ順にプッシュします。',
-  'workspace.branch-workspace.git-action.merge-back': '一括マージ',
-  'workspace.branch-workspace.git-action.merge-back-description':
-    '処理するメンバーのワークツリーを選択し、対象ブランチを記録済みのベースブランチへ一覧順にマージします。',
+  'workspace.branch-workspace.git-action.batch-merge': '一括マージ',
+  'workspace.branch-workspace.git-action.batch-merge-description':
+    '選択した各メンバー worktree のマージ先ブランチを選び、リポジトリ順にマージします。',
   'workspace.branch-workspace.git-action.selected-count': '{selected}/{total} 件のメンバーを選択',
   'workspace.branch-workspace.git-action.select-member': '{repository} を一括マージ対象に選択',
   'workspace.branch-workspace.git-action.not-selected': '未選択',
   'workspace.branch-workspace.git-action.progress': '一括マージの進行状況',
+  'workspace.branch-workspace.git-action.destination-branch': '{repository} のマージ先ブランチ',
+  'workspace.branch-workspace.git-action.select-destination': 'マージ先を選択',
+  'workspace.branch-workspace.git-action.destination-branch-required': 'マージ先ブランチを選択してください。',
+  'workspace.branch-workspace.git-action.temporary-worktree': '一時 worktree',
   'workspace.branch-workspace.git-action.merge': 'マージ',
   'workspace.branch-workspace.git-action.pull-merge-push': 'プル、マージ、プッシュ',
   'workspace.branch-workspace.git-action.planning': 'すべてのリポジトリを確認中…',
@@ -243,9 +247,11 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.phase.failed': '失敗',
   'workspace.branch-workspace.git-action.phase.not-started': '未開始',
   'workspace.branch-workspace.git-action.step.commit': 'コミット中',
+  'workspace.branch-workspace.git-action.step.prepare': '準備中',
   'workspace.branch-workspace.git-action.step.pull': 'プル中',
   'workspace.branch-workspace.git-action.step.merge': 'マージ中',
   'workspace.branch-workspace.git-action.step.push': 'プッシュ中',
+  'workspace.branch-workspace.git-action.step.cleanup': 'クリーンアップ中',
   'workspace.branch-workspace.git-action.not-ready': 'ブランチワークスペースはまだ準備できていません。',
   'workspace.branch-workspace.git-action.no-repositories': '処理対象のリポジトリがありません。',
   'workspace.branch-workspace.git-action.operation-active': '別のGit操作が実行中です。',
@@ -264,14 +270,12 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.target-upstream-required':
     '一括プルには各対象ブランチの利用可能なアップストリームが必要です。',
   'workspace.branch-workspace.git-action.remote-required': '一括プッシュには各リポジトリのリモートが必要です。',
-  'workspace.branch-workspace.git-action.base-worktree-required':
-    'ベースブランチは既存ワークツリーにチェックアウトされている必要があります。',
-  'workspace.branch-workspace.git-action.base-worktree-unavailable':
-    'ベースブランチのワークツリー状態を読み取れません。',
-  'workspace.branch-workspace.git-action.base-worktree-dirty':
-    'マージ前にベースブランチの変更をコミットまたは整理してください。',
-  'workspace.branch-workspace.git-action.base-upstream-required':
-    'プル、マージ、プッシュには各ベースブランチのアップストリームが必要です。',
+  'workspace.branch-workspace.git-action.destination-worktree-unavailable':
+    'マージ先ブランチの worktree を利用できません。',
+  'workspace.branch-workspace.git-action.destination-worktree-dirty':
+    'マージ前にマージ先ブランチの worktree をコミットまたは整理してください。',
+  'workspace.branch-workspace.git-action.destination-upstream-required':
+    'プル、マージ、プッシュには選択した各マージ先ブランチのアップストリームが必要です。',
   'workspace.branch-workspace.delete': 'ブランチワークスペースを削除',
   'workspace.branch-workspace.cancel': '操作をキャンセル',
   'workspace.branch-workspace.inspect': '内容を確認',

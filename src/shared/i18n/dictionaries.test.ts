@@ -170,20 +170,31 @@ describe('i18n dictionaries', () => {
 
   test('localizes selectable branch workspace batch merge in every locale', () => {
     const keys = [
-      'workspace.branch-workspace.git-action.merge-back',
-      'workspace.branch-workspace.git-action.merge-back-description',
+      'workspace.branch-workspace.git-action.batch-merge',
+      'workspace.branch-workspace.git-action.batch-merge-description',
       'workspace.branch-workspace.git-action.selected-count',
       'workspace.branch-workspace.git-action.select-member',
       'workspace.branch-workspace.git-action.not-selected',
       'workspace.branch-workspace.git-action.progress',
+      'workspace.branch-workspace.git-action.destination-branch',
+      'workspace.branch-workspace.git-action.select-destination',
+      'workspace.branch-workspace.git-action.destination-branch-required',
+      'workspace.branch-workspace.git-action.temporary-worktree',
+      'workspace.branch-workspace.git-action.destination-worktree-dirty',
+      'workspace.branch-workspace.git-action.destination-worktree-unavailable',
+      'workspace.branch-workspace.git-action.destination-upstream-required',
+      'workspace.branch-workspace.git-action.step.prepare',
+      'workspace.branch-workspace.git-action.step.cleanup',
     ] as const
 
     for (const [lang, dict] of Object.entries(dicts)) {
       for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
     }
-    expect(en['workspace.branch-workspace.git-action.merge-back']).toBe('Batch merge')
-    expect(zh['workspace.branch-workspace.git-action.merge-back']).toBe('批量合并')
-    expect(zh['workspace.branch-workspace.git-action.merge-back-description']).toContain('成员工作树')
+    expect(en['workspace.branch-workspace.git-action.batch-merge']).toBe('Batch merge')
+    expect(zh['workspace.branch-workspace.git-action.batch-merge']).toBe('批量合并')
+    expect(zh['workspace.branch-workspace.git-action.batch-merge-description']).toContain('成员工作树')
+    expect(zh['workspace.branch-workspace.git-action.batch-merge-description']).toContain('目标分支')
+    expect(zh['workspace.branch-workspace.git-action.batch-merge-description']).not.toContain('基准分支')
   })
 
   test('describes branch workspace registry cleanup without claiming filesystem deletion', () => {

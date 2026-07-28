@@ -209,13 +209,17 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.push': '일괄 푸시',
   'workspace.branch-workspace.git-action.push-description':
     '각 대상 브랜치를 확인된 원격 대상으로 저장소 순서대로 푸시합니다.',
-  'workspace.branch-workspace.git-action.merge-back': '일괄 병합',
-  'workspace.branch-workspace.git-action.merge-back-description':
-    '처리할 멤버 워크트리를 선택한 다음 대상 브랜치를 기록된 기준 브랜치에 목록 순서대로 병합합니다.',
+  'workspace.branch-workspace.git-action.batch-merge': '일괄 병합',
+  'workspace.branch-workspace.git-action.batch-merge-description':
+    '선택한 각 멤버 워크트리의 대상 브랜치를 선택한 뒤 저장소 순서대로 병합합니다.',
   'workspace.branch-workspace.git-action.selected-count': '멤버 {selected}/{total}개 선택됨',
   'workspace.branch-workspace.git-action.select-member': '{repository} 멤버 워크트리를 일괄 병합 대상으로 선택',
   'workspace.branch-workspace.git-action.not-selected': '선택 안 함',
   'workspace.branch-workspace.git-action.progress': '일괄 병합 진행률',
+  'workspace.branch-workspace.git-action.destination-branch': '{repository}의 대상 브랜치',
+  'workspace.branch-workspace.git-action.select-destination': '대상 선택',
+  'workspace.branch-workspace.git-action.destination-branch-required': '대상 브랜치를 선택하세요.',
+  'workspace.branch-workspace.git-action.temporary-worktree': '임시 워크트리',
   'workspace.branch-workspace.git-action.merge': '병합',
   'workspace.branch-workspace.git-action.pull-merge-push': '가져오기, 병합 및 푸시',
   'workspace.branch-workspace.git-action.planning': '모든 저장소 확인 중…',
@@ -236,9 +240,11 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.phase.failed': '실패',
   'workspace.branch-workspace.git-action.phase.not-started': '시작 안 함',
   'workspace.branch-workspace.git-action.step.commit': '커밋 중',
+  'workspace.branch-workspace.git-action.step.prepare': '준비 중',
   'workspace.branch-workspace.git-action.step.pull': '가져오는 중',
   'workspace.branch-workspace.git-action.step.merge': '병합 중',
   'workspace.branch-workspace.git-action.step.push': '푸시 중',
+  'workspace.branch-workspace.git-action.step.cleanup': '정리 중',
   'workspace.branch-workspace.git-action.not-ready': '브랜치 작업 공간이 아직 준비되지 않았습니다.',
   'workspace.branch-workspace.git-action.no-repositories': '처리할 저장소가 없습니다.',
   'workspace.branch-workspace.git-action.operation-active': '다른 Git 작업이 실행 중입니다.',
@@ -254,12 +260,12 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.target-upstream-required':
     '일괄 가져오기에는 각 대상 브랜치의 사용 가능한 업스트림이 필요합니다.',
   'workspace.branch-workspace.git-action.remote-required': '일괄 푸시에는 각 저장소의 원격이 필요합니다.',
-  'workspace.branch-workspace.git-action.base-worktree-required':
-    '기준 브랜치는 기존 작업 트리에 체크아웃되어 있어야 합니다.',
-  'workspace.branch-workspace.git-action.base-worktree-unavailable': '기준 브랜치 작업 트리 상태를 읽을 수 없습니다.',
-  'workspace.branch-workspace.git-action.base-worktree-dirty': '병합 전에 기준 브랜치 변경을 커밋하거나 정리하세요.',
-  'workspace.branch-workspace.git-action.base-upstream-required':
-    '가져오기, 병합 및 푸시에는 각 기준 브랜치의 업스트림이 필요합니다.',
+  'workspace.branch-workspace.git-action.destination-worktree-unavailable':
+    '대상 브랜치 워크트리를 사용할 수 없습니다.',
+  'workspace.branch-workspace.git-action.destination-worktree-dirty':
+    '병합 전에 대상 브랜치 워크트리를 커밋하거나 정리하세요.',
+  'workspace.branch-workspace.git-action.destination-upstream-required':
+    '가져오기, 병합 및 푸시에는 선택한 각 대상 브랜치의 업스트림이 필요합니다.',
   'workspace.branch-workspace.delete': '브랜치 워크스페이스 삭제',
   'workspace.branch-workspace.cancel': '작업 취소',
   'workspace.branch-workspace.inspect': '브랜치 워크스페이스 검사',

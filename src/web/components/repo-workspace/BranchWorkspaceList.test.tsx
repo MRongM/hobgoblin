@@ -174,7 +174,7 @@ describe('BranchWorkspaceList', () => {
       'workspace.branch-workspace.git-action.batch-commit',
       'workspace.branch-workspace.git-action.pull',
       'workspace.branch-workspace.git-action.push',
-      'workspace.branch-workspace.git-action.merge-back',
+      'workspace.branch-workspace.git-action.batch-merge',
       'workspace.branch-workspace.delete',
       'tmux.cleanup.action',
     ])

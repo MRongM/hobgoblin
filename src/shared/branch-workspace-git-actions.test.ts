@@ -40,18 +40,38 @@ describe('branch workspace Git action inputs', () => {
     })
   })
 
-  test('normalizes both merge-back execution modes', () => {
+  test('normalizes both batch-merge execution modes with explicit destination branches', () => {
     for (const mode of ['merge', 'pull-merge-push'] as const) {
       expect(
-        normalizeBranchWorkspaceGitActionExecuteInput({
-          kind: 'merge-back',
-          planToken: 'sha256:plan',
-          mode,
-          repositoryNames: [' web ', 'api'],
+        normalizeBranchWorkspaceGitActionPlanRequest({
+          kind: 'batch-merge',
+          branchWorkspaceId: ' branch-1 ',
         }),
       ).toEqual({
         ok: true,
-        input: { kind: 'merge-back', planToken: 'sha256:plan', mode, repositoryNames: ['web', 'api'] },
+        request: { kind: 'batch-merge', branchWorkspaceId: 'branch-1' },
+      })
+      expect(
+        normalizeBranchWorkspaceGitActionExecuteInput({
+          kind: 'batch-merge',
+          planToken: 'sha256:plan',
+          mode,
+          targets: [
+            { repositoryName: ' web ', destinationBranch: ' release/web ' },
+            { repositoryName: 'api', destinationBranch: 'main' },
+          ],
+        }),
+      ).toEqual({
+        ok: true,
+        input: {
+          kind: 'batch-merge',
+          planToken: 'sha256:plan',
+          mode,
+          targets: [
+            { repositoryName: 'web', destinationBranch: 'release/web' },
+            { repositoryName: 'api', destinationBranch: 'main' },
+          ],
+        },
       })
     }
   })
@@ -108,25 +128,40 @@ describe('branch workspace Git action inputs', () => {
       planToken: 'sha256:plan',
       messages: [{ repositoryName: 'api', message: ' ' }],
     },
-    { kind: 'merge-back', planToken: 'sha256:plan', mode: 'squash' },
-    { kind: 'merge-back', planToken: 'sha256:plan', mode: 'merge', repositoryNames: [] },
+    { kind: 'batch-merge', planToken: 'sha256:plan', mode: 'squash', targets: [] },
+    { kind: 'batch-merge', planToken: 'sha256:plan', mode: 'merge', targets: [] },
     {
-      kind: 'merge-back',
+      kind: 'batch-merge',
       planToken: 'sha256:plan',
       mode: 'merge',
-      repositoryNames: ['api', 'api'],
+      targets: [
+        { repositoryName: 'api', destinationBranch: 'main' },
+        { repositoryName: 'api', destinationBranch: 'release' },
+      ],
     },
     {
-      kind: 'merge-back',
+      kind: 'batch-merge',
       planToken: 'sha256:plan',
       mode: 'merge',
-      repositoryNames: ['../api'],
+      targets: [{ repositoryName: '../api', destinationBranch: 'main' }],
     },
     {
-      kind: 'merge-back',
+      kind: 'batch-merge',
       planToken: 'sha256:plan',
       mode: 'merge',
-      repositoryNames: ['api\nweb'],
+      targets: [{ repositoryName: 'api\nweb', destinationBranch: 'main' }],
+    },
+    {
+      kind: 'batch-merge',
+      planToken: 'sha256:plan',
+      mode: 'merge',
+      targets: [{ repositoryName: 'api', destinationBranch: ' ' }],
+    },
+    {
+      kind: 'batch-merge',
+      planToken: 'sha256:plan',
+      mode: 'merge',
+      targets: [{ repositoryName: 'api', destinationBranch: 'main\u0000release' }],
     },
   ])('rejects invalid execution input: %j', (value) => {
     expect(normalizeBranchWorkspaceGitActionExecuteInput(value)).toEqual({

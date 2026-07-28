@@ -233,8 +233,8 @@ The linked worktree contributed by one repository member to a branch workspace w
 _Avoid_: Subrepository, child repository worktree, nested workspace
 
 **Branch workspace base branch**:
-The repository-specific destination branch that one branch workspace member is intended to merge back into. Different members may have different base branches, and the destination remains fixed rather than being inferred from the repository's current default or selected branch.
-_Avoid_: Source branch, current branch, default branch
+The repository-specific local branch used as the creation base when a branch workspace member's target branch must be created. When it is already checked out, it may also guide worktree bootstrap source selection, with the primary worktree as fallback. It records creation and materialization intent only; it is not a batch-merge destination, upstream, or inferred provenance.
+_Avoid_: Merge destination, source branch, upstream, current branch
 
 **Workspace overview**:
 The parent-level workspace view that lists its branch workspaces in the same contextual list position used for repository worktrees, while retaining the workspace root's file and terminal context. Selecting it does not select a branch workspace.
@@ -285,9 +285,9 @@ _Avoid_: Workspace pull-all, base-branch pull, atomic batch pull
 An application-coordinated action that pushes every repository member's target branch to its resolved push target sequentially, stops at the first failure, and never rolls back completed pushes.
 _Avoid_: Merge-back push, base-branch push, atomic batch push
 
-**Branch workspace merge-back**:
-An application-coordinated action that integrates a user-selected, non-empty subset of repository members' target branches into their fixed branch workspace base branches, either locally or through a pipeline that pulls the base branch, merges the target branch in the base worktree, and pushes the base branch. Members already merged into their base branches are visible but not selectable. Selected member pipelines retain manifest order, run sequentially, stop at the first failed step, and never roll back completed Git or remote writes; a retry retains the original selection and pipeline mode while skipping completed work.
-_Avoid_: Source-branch merge, current-branch merge, atomic batch merge
+**Branch workspace batch merge**:
+An application-coordinated action that integrates a user-selected, non-empty subset of repository members' target branches into one explicitly selected local destination branch per member. A destination is never inferred from the member base branch, creation source, default branch, or upstream, and the selection is not persisted. A clean existing destination worktree is reused; an unchecked-out destination uses an application-owned temporary worktree that is cleaned after success, failure, or cancellation without deleting the branch. Selected member pipelines retain manifest order, run sequentially, stop at the first failed step, and never roll back completed Git or remote writes; a retry retains the original member-to-destination mapping and pipeline mode while skipping completed work.
+_Avoid_: Merge-back, fixed base-branch merge, source-branch merge, atomic batch merge
 
 **Plain workspace**:
 A readable directory opened as a workspace without requiring Git metadata.
