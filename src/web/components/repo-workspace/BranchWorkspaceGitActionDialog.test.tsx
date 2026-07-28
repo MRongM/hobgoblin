@@ -233,10 +233,10 @@ describe('BranchWorkspaceGitActionPanel', () => {
 
     const dialog = document.querySelector<HTMLElement>('[data-testid="branch-workspace-batch-merge-dialog"]')
     const trigger = document.querySelector<HTMLButtonElement>('[data-merge-destination="api"]')
-    expect(dialog?.className).toContain('sm:max-w-[72rem]')
-    expect(dialog?.className).toContain('w-[calc(100vw-0.5rem)]')
-    expect(trigger?.parentElement?.className).toContain('minmax(20rem,2fr)')
-    expect(trigger?.className).toContain('min-w-80')
+    expect(dialog?.className).toContain('sm:max-w-[64rem]')
+    expect(dialog?.className).toContain('w-[calc(100vw-1rem)]')
+    expect(trigger?.parentElement?.className).toContain('minmax(18rem,2fr)')
+    expect(trigger?.className).toContain('min-w-72')
 
     await act(async () => {
       trigger?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
