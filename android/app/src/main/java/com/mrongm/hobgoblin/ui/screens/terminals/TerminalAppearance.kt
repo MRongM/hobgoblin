@@ -12,6 +12,8 @@ internal data class TerminalPalette(
     val actionArgb: Int,
     val mutedArgb: Int,
     val selectionArgb: Int,
+    val inputBackgroundArgb: Int,
+    val inputForegroundArgb: Int,
     val ansiArgb: List<Int>,
 )
 
@@ -38,6 +40,8 @@ private val DarkTerminalPalette = TerminalPalette(
     actionArgb = 0xFF65B9FF.toInt(),
     mutedArgb = 0xFF91A0AE.toInt(),
     selectionArgb = 0x665CA9E6,
+    inputBackgroundArgb = 0xFF223044.toInt(),
+    inputForegroundArgb = 0xFFF7FAFC.toInt(),
     ansiArgb = listOf(
         0xFF0A0E12.toInt(),
         0xFFFF6B72.toInt(),
@@ -66,6 +70,8 @@ private val LightTerminalPalette = TerminalPalette(
     actionArgb = 0xFF246EA8.toInt(),
     mutedArgb = 0xFF60717F.toInt(),
     selectionArgb = 0x664C91C6,
+    inputBackgroundArgb = 0xFFFFFFFF.toInt(),
+    inputForegroundArgb = 0xFF111820.toInt(),
     ansiArgb = listOf(
         0xFF1B2733.toInt(),
         0xFFA52D38.toInt(),

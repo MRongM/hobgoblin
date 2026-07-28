@@ -949,7 +949,7 @@ private fun CompactCommandInput(
 ) {
     val palette = LocalTerminalPalette.current
     val textColor = if (enabled) {
-        Color(palette.foregroundArgb)
+        Color(palette.inputForegroundArgb)
     } else {
         Color(palette.mutedArgb)
     }
@@ -977,8 +977,8 @@ private fun CompactCommandInput(
         keyboardActions = KeyboardActions(onSend = { onSend() }),
         modifier = modifier
             .height(TerminalCommandInputHeight)
-            .background(Color(palette.surfaceArgb), TerminalCommandInputShape)
-            .border(1.dp, Color(palette.dividerArgb), TerminalCommandInputShape),
+            .background(Color(palette.inputBackgroundArgb), TerminalCommandInputShape)
+            .border(2.dp, Color(palette.actionArgb), TerminalCommandInputShape),
         decorationBox = { innerTextField ->
             Box(
                 modifier = Modifier
