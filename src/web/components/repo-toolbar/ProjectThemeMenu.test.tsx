@@ -1,9 +1,18 @@
 // @vitest-environment jsdom
 
 import { act } from 'react'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { ProjectThemeMenu } from '#/web/components/repo-toolbar/ProjectThemeMenu.tsx'
+import { defaultSettingsSnapshot } from '#/shared/settings-defaults.ts'
+import {
+  ProjectThemeMenu,
+  ProjectThemeMenuConnected,
+} from '#/web/components/repo-toolbar/ProjectThemeMenu.tsx'
+import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
+import { settingsSnapshotQueryKey } from '#/web/settings-query-cache.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
+import { resetReposStore } from '#/web/stores/repos/test-utils.ts'
 
 const writeMocks = vi.hoisted(() => ({
   runSettingsControllerAction: vi.fn(async (_label: string, task: () => Promise<void>) => await task()),
@@ -41,6 +50,8 @@ const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENV
 
 beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
+  mainWindowQueryClient.clear()
+  resetReposStore()
   writeMocks.runSettingsControllerAction.mockClear()
   writeMocks.setProjectColorThemePreference.mockClear()
 })
@@ -52,6 +63,7 @@ afterEach(() => {
   container?.remove()
   root = null
   container = null
+  mainWindowQueryClient.clear()
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
 })
 
@@ -135,6 +147,42 @@ describe('ProjectThemeMenu', () => {
     })
 
     expect(writeMocks.setProjectColorThemePreference).toHaveBeenCalledWith('/repo-a', colorTheme)
+  })
+
+  test('binds a visible workspace member theme menu to its active project', async () => {
+    const workspaceId = 'ssh-config://demo/srv/workspace'
+    const memberId = `${workspaceId}/repo`
+    mainWindowQueryClient.setQueryData(
+      settingsSnapshotQueryKey(),
+      defaultSettingsSnapshot({
+        repoSettings: [
+          { repoId: workspaceId, colorTheme: 'cursor' },
+          { repoId: memberId, colorTheme: 'github' },
+        ],
+      }),
+    )
+    useReposStore.setState({ activeId: memberId, activeProjectId: workspaceId })
+
+    await render(
+      <QueryClientProvider client={mainWindowQueryClient}>
+        <ProjectThemeMenuConnected repoId={memberId} />
+      </QueryClientProvider>,
+    )
+
+    await act(async () => {
+      openProjectThemeMenu()
+      await Promise.resolve()
+    })
+
+    const items = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]'))
+    expect(items.find((item) => item.textContent?.includes('Cursor'))?.getAttribute('aria-checked')).toBe('true')
+
+    await act(async () => {
+      items.find((item) => item.textContent?.includes('Solarized'))?.click()
+      await Promise.resolve()
+    })
+
+    expect(writeMocks.setProjectColorThemePreference).toHaveBeenCalledWith(workspaceId, 'solarized')
   })
 })
 
