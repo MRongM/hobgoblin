@@ -40,9 +40,9 @@ _Avoid_: Terminal maximization, fullscreen terminal, persisted terminal layout
 The locale Android selects for Hobgoblin's native Android-owned interface text and foreground-terminal notifications. It follows the device language by default, may be overridden from Hobgoblin's Android Settings or Android's per-app language settings, remains device-local, and never translates terminal output, repository data, paths, host names, or raw Git and SSH diagnostics.
 _Avoid_: Server language, terminal locale, translated terminal output
 
-**Android host tmux catalog**:
-The Android projection of current-protocol Hobgoblin tmux sessions discovered across one directly connected SSH host's default and project-scoped tmux servers. It is derived from live server sockets and session metadata rather than saved Projects or workspace configuration. An item may open, reconnect, or close its retained Android terminal; deleting that retained terminal keeps the remote session by default and may end the exact remote tmux session only through a separate unchecked confirmation option.
-_Avoid_: Android workspace catalog, filesystem workspace scan, arbitrary tmux list, tmux session creator
+**Android tmux tab**:
+The Android main-navigation destination where the user explicitly selects one saved SSH Host and scans that host's default and project-scoped tmux servers for current-protocol Hobgoblin sessions. Its catalog is derived from live server sockets and session metadata rather than saved Projects or workspace configuration; leaving the destination clears the selected Host, while returning from an opened terminal preserves the current visit.
+_Avoid_: Host-detail tmux tab, Android workspace catalog, remembered Host selection, arbitrary tmux list, tmux session creator
 
 **Tmux server target**:
 The exact default or strictly named project-scoped tmux server on which one discovered session was observed and to which Android must later attach it. It is part of host-level recovery identity because a session name may exist on more than one server and a project-root hash cannot be reversed.

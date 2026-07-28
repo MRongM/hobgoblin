@@ -1,10 +1,8 @@
-package com.mrongm.hobgoblin.ui.screens.hosts
+package com.mrongm.hobgoblin.ui.screens.tmux
 
 import com.mrongm.hobgoblin.domain.ssh.SshHostProfile
 import com.mrongm.hobgoblin.hostTmuxRecoveryCandidate
 import com.mrongm.hobgoblin.requireHostTmuxRemoteCloseSuccess
-import com.mrongm.hobgoblin.navigation.AppRoute
-import com.mrongm.hobgoblin.navigation.HostDetailTab
 import com.mrongm.hobgoblin.terminals.HostDiscoveredTmuxSession
 import com.mrongm.hobgoblin.terminals.RemoteTmuxCloseResult
 import com.mrongm.hobgoblin.terminals.TerminalSessionRecord
@@ -17,17 +15,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class HostDetailScreenStateTest {
-    @Test
-    fun `host card opens host detail on projects and only tmux tab requests a scan`() {
-        val projects = hostDetailRoute("host-1")
-        val tmux = AppRoute.HostDetail("host-1", HostDetailTab.Tmux)
-
-        assertEquals(AppRoute.HostDetail("host-1", HostDetailTab.Projects), projects)
-        assertFalse(hostDetailNeedsTmuxScan(projects))
-        assertTrue(hostDetailNeedsTmuxScan(tmux))
-    }
-
+class TmuxCatalogPresentationTest {
     @Test
     fun `tmux group title uses basename while root remains readable`() {
         assertEquals("hobgoblin", hostTmuxPathTitle("/srv/projects/hobgoblin"))
@@ -98,10 +86,10 @@ class HostDetailScreenStateTest {
         assertFalse(HostTmuxCloseRemoteOnDeleteDefault)
 
         val source = listOf(
-            File("src/main/java/com/mrongm/hobgoblin/ui/screens/hosts/HostDetailScreen.kt"),
-            File("app/src/main/java/com/mrongm/hobgoblin/ui/screens/hosts/HostDetailScreen.kt"),
-            File("android/app/src/main/java/com/mrongm/hobgoblin/ui/screens/hosts/HostDetailScreen.kt"),
-        ).firstOrNull(File::isFile)?.readText() ?: error("HostDetailScreen.kt not found")
+            File("src/main/java/com/mrongm/hobgoblin/ui/screens/tmux/TmuxScreen.kt"),
+            File("app/src/main/java/com/mrongm/hobgoblin/ui/screens/tmux/TmuxScreen.kt"),
+            File("android/app/src/main/java/com/mrongm/hobgoblin/ui/screens/tmux/TmuxScreen.kt"),
+        ).firstOrNull(File::isFile)?.readText() ?: error("TmuxScreen.kt not found")
 
         assertTrue(source.contains("onReconnectTmuxSession"))
         assertTrue(source.contains("onCloseTmuxSession"))

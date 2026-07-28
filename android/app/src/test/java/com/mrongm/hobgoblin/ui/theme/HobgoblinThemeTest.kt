@@ -6,6 +6,16 @@ import org.junit.Test
 
 class HobgoblinThemeTest {
     @Test
+    fun `field console palette gives tmux and host state distinct semantic roles`() {
+        assertEquals("#2E6F6A", HobgoblinColors.RelayTealHex)
+        assertEquals("#B86A3B", HobgoblinColors.MuxCopperHex)
+        assertEquals("#507A61", HobgoblinColors.LiveMossHex)
+        assertEquals("#F3F7F6", HobgoblinColors.FrostCanvasHex)
+        assertEquals("#132027", HobgoblinColors.NightInkHex)
+        assertEquals("#C44949", HobgoblinColors.FaultRedHex)
+    }
+
+    @Test
     fun `terminal banner colors use dark terminal contrast`() {
         assertEquals("#111827", HobgoblinColors.TerminalOverlayBackgroundHex)
         assertEquals(HobgoblinColors.TerminalForegroundHex, HobgoblinColors.TerminalOverlayForegroundHex)

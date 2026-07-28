@@ -318,8 +318,7 @@ private fun TerminalOverviewRow(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontFamily = FontFamily.Monospace,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    softWrap = true,
                 )
             }
             TerminalSessionIdentityDetails(session = session)

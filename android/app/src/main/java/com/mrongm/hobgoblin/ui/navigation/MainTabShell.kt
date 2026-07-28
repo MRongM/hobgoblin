@@ -33,12 +33,14 @@ fun MainTabShell(
     repositoriesState: ResourceState<List<RemoteRepositoryProfile>>,
     hostsContent: @Composable () -> Unit,
     projectsContent: @Composable () -> Unit,
+    tmuxContent: @Composable () -> Unit,
     terminalsContent: @Composable () -> Unit,
 ) {
     val topBarTitle = stringResource(
         when (selectedTab) {
             MainTab.Hosts -> R.string.navigation_ssh_hosts
             MainTab.Projects -> repositoriesState.projectScreenTitleResource()
+            MainTab.Tmux -> R.string.navigation_tmux
             MainTab.Terminals -> R.string.common_terminals
         },
     )
@@ -60,6 +62,7 @@ fun MainTabShell(
                         MainTab.Projects -> TextButton(onClick = onAddProject) {
                             Text(stringResource(R.string.navigation_add_project))
                         }
+                        MainTab.Tmux,
                         MainTab.Terminals -> Unit
                     }
                 },
@@ -107,6 +110,10 @@ fun MainTabShell(
             MainTabPane(
                 visible = selectedTab == MainTab.Projects,
                 content = projectsContent,
+            )
+            MainTabPane(
+                visible = selectedTab == MainTab.Tmux,
+                content = tmuxContent,
             )
             MainTabPane(
                 visible = selectedTab == MainTab.Terminals,

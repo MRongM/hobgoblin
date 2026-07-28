@@ -1,7 +1,5 @@
-package com.mrongm.hobgoblin.ui.screens.hosts
+package com.mrongm.hobgoblin.ui.screens.tmux
 
-import com.mrongm.hobgoblin.navigation.AppRoute
-import com.mrongm.hobgoblin.navigation.HostDetailTab
 import com.mrongm.hobgoblin.terminals.HostDiscoveredTmuxSession
 import com.mrongm.hobgoblin.terminals.TerminalSessionRecord
 import com.mrongm.hobgoblin.terminals.TerminalSessionStatus
@@ -20,12 +18,6 @@ internal enum class HostTmuxSessionAction {
 }
 
 internal const val HostTmuxCloseRemoteOnDeleteDefault = false
-
-internal fun hostDetailRoute(hostId: String): AppRoute.HostDetail =
-    AppRoute.HostDetail(hostId = hostId, selectedTab = HostDetailTab.Projects)
-
-internal fun hostDetailNeedsTmuxScan(route: AppRoute): Boolean =
-    route is AppRoute.HostDetail && route.selectedTab == HostDetailTab.Tmux
 
 internal fun hostTmuxPathTitle(initialPath: String): String =
     initialPath.substringAfterLast('/').ifBlank { "/" }

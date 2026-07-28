@@ -25,6 +25,33 @@ class AndroidLocalizationContractTest {
     }
 
     @Test
+    fun `tmux main tab copy covers host selection and every scan feedback state`() {
+        val keys = resourceEntries(
+            File(androidProjectRoot(), "app/src/main/res/values/strings.xml"),
+        ).map(ResourceEntry::key).toSet()
+
+        assertTrue(
+            keys.containsAll(
+                setOf(
+                    "string:navigation_tmux",
+                    "string:tmux_choose_host_title",
+                    "string:tmux_choose_host_description",
+                    "string:tmux_scan_host",
+                    "string:tmux_no_hosts_title",
+                    "string:tmux_no_hosts_description",
+                    "string:tmux_selected_host_label",
+                    "string:tmux_change_host",
+                    "string:tmux_scanning_host",
+                    "string:tmux_empty_title",
+                    "string:tmux_empty_description",
+                    "string:tmux_stale",
+                    "string:tmux_scan_failed",
+                ),
+            ),
+        )
+    }
+
+    @Test
     fun `English is the fallback and Android generates per-app locale config`() {
         val projectRoot = androidProjectRoot()
         val resourceProperties = File(projectRoot, "app/src/main/res/resources.properties").readText()

@@ -220,20 +220,6 @@ class SshjInitializationClient : SshInitializationClient {
         }
     }
 
-    private fun authorizedKeysInstallScript(publicKeyLine: String): String {
-        val quotedKey = shellQuote(publicKeyLine)
-        return """
-            umask 077
-            mkdir -p "${'$'}HOME/.ssh"
-            touch "${'$'}HOME/.ssh/authorized_keys"
-            grep -qxF $quotedKey "${'$'}HOME/.ssh/authorized_keys" || printf '%s\n' $quotedKey >> "${'$'}HOME/.ssh/authorized_keys"
-            chmod 700 "${'$'}HOME/.ssh"
-            chmod 600 "${'$'}HOME/.ssh/authorized_keys"
-        """.trimIndent()
-    }
-
-    private fun shellQuote(value: String): String = "'${value.replace("'", "'\\''")}'"
-
     private fun capturingVerifier(onFingerprint: (String) -> Unit): HostKeyVerifier =
         object : HostKeyVerifier {
             override fun verify(hostname: String, port: Int, key: PublicKey): Boolean {
@@ -256,5 +242,30 @@ class SshjInitializationClient : SshInitializationClient {
         private const val CommandTimeoutSeconds = 15L
     }
 }
+
+internal fun authorizedKeysInstallScript(publicKeyLine: String): String {
+    val tokens = publicKeyLine.trim().split(Regex("\\s+"), limit = 3)
+    require(tokens.size >= 2) { "Invalid SSH public key" }
+    val quotedKey = shellQuote(publicKeyLine)
+    val quotedType = shellQuote(tokens[0])
+    val quotedBody = shellQuote(tokens[1])
+    return """
+        umask 077
+        mkdir -p "${'$'}HOME/.ssh"
+        touch "${'$'}HOME/.ssh/authorized_keys"
+        awk -v key_type=$quotedType -v key_body=$quotedBody '
+            {
+                for (field = 1; field < NF; field++) {
+                    if (${'$'}field == key_type && ${'$'}(field + 1) == key_body) found = 1
+                }
+            }
+            END { exit(found ? 0 : 1) }
+        ' "${'$'}HOME/.ssh/authorized_keys" || printf '%s\n' $quotedKey >> "${'$'}HOME/.ssh/authorized_keys"
+        chmod 700 "${'$'}HOME/.ssh"
+        chmod 600 "${'$'}HOME/.ssh/authorized_keys"
+    """.trimIndent()
+}
+
+private fun shellQuote(value: String): String = "'${value.replace("'", "'\\''")}'"
 
 class SshInitializationException(message: String) : RuntimeException(message)

@@ -86,6 +86,26 @@ class AddHostScreenStateTest {
         assertFalse(isLatestConnectionTest(requestGeneration = 2, currentGeneration = 3))
     }
 
+    @Test
+    fun `ssh initialization submission rejects repeated starts until completion`() {
+        val submission = SshInitializationSubmission()
+
+        assertTrue(submission.tryStart())
+        assertTrue(submission.inProgress)
+        assertFalse(submission.tryStart())
+    }
+
+    @Test
+    fun `ssh initialization submission allows retry after completion`() {
+        val submission = SshInitializationSubmission()
+        assertTrue(submission.tryStart())
+
+        submission.finish()
+
+        assertFalse(submission.inProgress)
+        assertTrue(submission.tryStart())
+    }
+
     private fun host(identityRefId: String?): SshHostProfile =
         SshHostProfile.create(
             alias = "Dev",

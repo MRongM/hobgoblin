@@ -77,6 +77,21 @@ internal fun isLatestConnectionTest(
     currentGeneration: Int,
 ): Boolean = requestGeneration == currentGeneration
 
+internal class SshInitializationSubmission {
+    var inProgress by mutableStateOf(false)
+        private set
+
+    fun tryStart(): Boolean {
+        if (inProgress) return false
+        inProgress = true
+        return true
+    }
+
+    fun finish() {
+        inProgress = false
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddHostScreen(
@@ -109,6 +124,7 @@ fun AddHostScreen(
     var initializationPassword by remember(initialHost) { mutableStateOf("") }
     var initializationError by remember(initialHost) { mutableStateOf<String?>(null) }
     var initializedIdentityRefId by remember(initialHost) { mutableStateOf<String?>(null) }
+    val initializationSubmission = remember(initialHost) { SshInitializationSubmission() }
     var connectionTestState: ResourceState<DiagnosticsResult> by remember(initialHost) {
         mutableStateOf(ResourceState.Idle)
     }
@@ -194,63 +210,62 @@ fun AddHostScreen(
         }
     }
 
-    fun initializeSshAccess(profile: SshHostProfile = currentDraftProfile()) {
-        val password = initializationPassword.toCharArray()
-        initializationError = null
-        scope.launch {
-            val result = runCatching {
-                withContext(Dispatchers.IO) { onInitializeSshAccess(profile, password) }
-            }
-            password.fill('\u0000')
-            result.onSuccess { initializedProfile ->
-                initializationPassword = ""
-                initializedIdentityRefId = initializedProfile.identityRefId
-                initializationCheck = SshInitializationCheck.Ready
-                resetConnectionTestState()
-                error = null
-            }.onFailure {
-                initializationPassword = ""
-                initializationError = it.message ?: initializationFailed
-            }
-        }
-    }
-
     fun prepareOrInitializeSshAccess() {
-        if (initializationCheck == SshInitializationCheck.NeedsServerPassword) {
-            initializeSshAccess()
-            return
-        }
-
+        if (!initializationSubmission.tryStart()) return
         initializationError = null
         scope.launch {
-            val profile = runCatching { currentDraftProfile() }.getOrElse {
-                initializationError = it.message ?: validationError
-                return@launch
-            }
-            val check = runCatching {
-                withContext(Dispatchers.IO) { onCheckSshInitialization(profile) }
-            }.getOrElse {
-                initializationError = it.message ?: initializationCheckFailed
-                return@launch
-            }
-            when (check) {
-                SshInitializationCheck.Ready -> {
-                    initializationPassword = ""
-                    initializationCheck = SshInitializationCheck.Ready
-                    error = null
+            try {
+                val profile = runCatching { currentDraftProfile() }.getOrElse {
+                    initializationError = it.message ?: validationError
+                    return@launch
                 }
+                val check = if (initializationCheck == SshInitializationCheck.NeedsServerPassword) {
+                    SshInitializationCheck.NeedsServerPassword
+                } else {
+                    runCatching {
+                        withContext(Dispatchers.IO) { onCheckSshInitialization(profile) }
+                    }.getOrElse {
+                        initializationError = it.message ?: initializationCheckFailed
+                        return@launch
+                    }
+                }
+                when (check) {
+                    SshInitializationCheck.Ready -> {
+                        initializationPassword = ""
+                        initializationCheck = SshInitializationCheck.Ready
+                        error = null
+                    }
 
-                SshInitializationCheck.NeedsServerPassword -> {
-                    initializationCheck = check
-                    initializeSshAccess(profile)
-                }
+                    SshInitializationCheck.NeedsServerPassword -> {
+                        val password = initializationPassword.toCharArray()
+                        val result = try {
+                            runCatching {
+                                withContext(Dispatchers.IO) { onInitializeSshAccess(profile, password) }
+                            }
+                        } finally {
+                            password.fill('\u0000')
+                        }
+                        result.onSuccess { initializedProfile ->
+                            initializationPassword = ""
+                            initializedIdentityRefId = initializedProfile.identityRefId
+                            initializationCheck = SshInitializationCheck.Ready
+                            resetConnectionTestState()
+                            error = null
+                        }.onFailure {
+                            initializationPassword = ""
+                            initializationError = it.message ?: initializationFailed
+                        }
+                    }
 
-                is SshInitializationCheck.NeedsHostKeyTrust,
-                is SshInitializationCheck.HostKeyChanged,
-                -> {
-                    initializationCheck = check
-                    error = null
+                    is SshInitializationCheck.NeedsHostKeyTrust,
+                    is SshInitializationCheck.HostKeyChanged,
+                    -> {
+                        initializationCheck = check
+                        error = null
+                    }
                 }
+            } finally {
+                initializationSubmission.finish()
             }
         }
     }
@@ -415,6 +430,7 @@ fun AddHostScreen(
                 password = initializationPassword,
                 error = initializationError,
                 initializedIdentityRefId = initializedIdentityRefId,
+                initializationInProgress = initializationSubmission.inProgress,
                 connectionTestState = connectionTestState,
                 onStartCheck = { runInitializationCheck() },
                 onPasswordChange = { initializationPassword = it },
@@ -462,6 +478,7 @@ private fun SshInitializationSection(
     password: String,
     error: String?,
     initializedIdentityRefId: String?,
+    initializationInProgress: Boolean,
     connectionTestState: ResourceState<DiagnosticsResult>,
     onStartCheck: () -> Unit,
     onPasswordChange: (String) -> Unit,
@@ -516,6 +533,7 @@ private fun SshInitializationSection(
                         TemporaryPasswordSetup(
                             password = password,
                             enabled = enabled,
+                            initializationInProgress = initializationInProgress,
                             onPasswordChange = onPasswordChange,
                             onInitialize = onInitialize,
                         )
@@ -589,6 +607,7 @@ private fun SshInitializationSection(
                     TemporaryPasswordSetup(
                         password = password,
                         enabled = enabled,
+                        initializationInProgress = initializationInProgress,
                         onPasswordChange = onPasswordChange,
                         onInitialize = onInitialize,
                     )
@@ -676,6 +695,7 @@ private fun ConnectionTestResultFeedback(result: DiagnosticsResult) {
 private fun TemporaryPasswordSetup(
     password: String,
     enabled: Boolean,
+    initializationInProgress: Boolean,
     onPasswordChange: (String) -> Unit,
     onInitialize: () -> Unit,
 ) {
@@ -690,10 +710,18 @@ private fun TemporaryPasswordSetup(
     )
     Button(
         modifier = Modifier.fillMaxWidth(),
-        enabled = enabled && password.isNotEmpty(),
+        enabled = enabled && password.isNotEmpty() && !initializationInProgress,
         onClick = onInitialize,
     ) {
-        Text(stringResource(R.string.host_initialize_ssh_access))
+        Text(
+            stringResource(
+                if (initializationInProgress) {
+                    R.string.host_initializing_ssh_access
+                } else {
+                    R.string.host_initialize_ssh_access
+                },
+            ),
+        )
     }
     Text(
         text = stringResource(R.string.host_after_setup_saved_key),

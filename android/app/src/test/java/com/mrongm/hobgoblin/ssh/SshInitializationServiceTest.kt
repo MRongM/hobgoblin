@@ -7,6 +7,8 @@ import com.mrongm.hobgoblin.domain.ssh.HostKeyTrust
 import com.mrongm.hobgoblin.domain.ssh.RemoteTarget
 import com.mrongm.hobgoblin.domain.ssh.SshHostProfile
 import com.mrongm.hobgoblin.domain.ssh.SshIdentityRef
+import java.nio.file.Files
+import java.nio.file.Path
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -150,6 +152,69 @@ class SshInitializationServiceTest {
         val publicKeyLine = SshjPublicKeyReader().publicKeyLine(generated.privateKeyBytes)
 
         assertTrue(publicKeyLine.startsWith("ssh-rsa "))
+    }
+
+    @Test
+    fun `authorized keys installation ignores comment differences for the same key material`() {
+        withAuthorizedKeys("ssh-rsa AAAATEST previous-comment\n") { home, authorizedKeys ->
+            runInstallScript(home, "ssh-rsa AAAATEST imported")
+
+            assertEquals(
+                listOf("ssh-rsa AAAATEST previous-comment"),
+                Files.readAllLines(authorizedKeys),
+            )
+        }
+    }
+
+    @Test
+    fun `authorized keys installation preserves options on matching key material`() {
+        withAuthorizedKeys("from=\"192.0.2.10\" ssh-rsa AAAATEST restricted\n") { home, authorizedKeys ->
+            runInstallScript(home, "ssh-rsa AAAATEST imported")
+
+            assertEquals(
+                listOf("from=\"192.0.2.10\" ssh-rsa AAAATEST restricted"),
+                Files.readAllLines(authorizedKeys),
+            )
+        }
+    }
+
+    @Test
+    fun `authorized keys installation appends different key material`() {
+        withAuthorizedKeys("ssh-rsa AAAAOLD existing\n") { home, authorizedKeys ->
+            runInstallScript(home, "ssh-rsa AAAANEW hobgoblin-android")
+
+            assertEquals(
+                listOf(
+                    "ssh-rsa AAAAOLD existing",
+                    "ssh-rsa AAAANEW hobgoblin-android",
+                ),
+                Files.readAllLines(authorizedKeys),
+            )
+        }
+    }
+
+    private inline fun withAuthorizedKeys(
+        initialContent: String,
+        block: (home: Path, authorizedKeys: Path) -> Unit,
+    ) {
+        val home = Files.createTempDirectory("hobgoblin-authorized-keys-test")
+        val authorizedKeys = Files.createDirectories(home.resolve(".ssh")).resolve("authorized_keys")
+        Files.writeString(authorizedKeys, initialContent)
+        try {
+            block(home, authorizedKeys)
+        } finally {
+            home.toFile().deleteRecursively()
+        }
+    }
+
+    private fun runInstallScript(home: Path, publicKeyLine: String) {
+        val process = ProcessBuilder("/bin/sh", "-c", authorizedKeysInstallScript(publicKeyLine))
+            .redirectErrorStream(true)
+            .apply { environment()["HOME"] = home.toString() }
+            .start()
+        val output = process.inputStream.bufferedReader().use { it.readText() }
+
+        assertEquals(output, 0, process.waitFor())
     }
 
     private fun service(

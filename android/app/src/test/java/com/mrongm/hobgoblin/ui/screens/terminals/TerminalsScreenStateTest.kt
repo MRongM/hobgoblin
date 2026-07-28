@@ -107,6 +107,22 @@ class TerminalsScreenStateTest {
     }
 
     @Test
+    fun `terminal overview preserves the full path by allowing wrapping`() {
+        val source = listOf(
+            File("src/main/java/com/mrongm/hobgoblin/ui/screens/terminals/TerminalsScreen.kt"),
+            File("app/src/main/java/com/mrongm/hobgoblin/ui/screens/terminals/TerminalsScreen.kt"),
+            File("android/app/src/main/java/com/mrongm/hobgoblin/ui/screens/terminals/TerminalsScreen.kt"),
+        ).firstOrNull(File::isFile)?.readText() ?: error("TerminalsScreen.kt not found")
+        val pathText = source
+            .substringAfter("Text(\n                    source.path,")
+            .substringBefore("\n                )")
+
+        assertTrue(pathText.contains("softWrap = true"))
+        assertFalse(pathText.contains("maxLines = 1"))
+        assertFalse(pathText.contains("TextOverflow.Ellipsis"))
+    }
+
+    @Test
     fun `terminal overview identity summary shows native kind and short Android session id`() {
         assertEquals(
             LocalizedText(
