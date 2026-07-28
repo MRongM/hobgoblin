@@ -127,22 +127,6 @@ private fun TmuxHostChooser(
         contentPadding = PaddingValues(HobgoblinSpacing.Md),
         verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm),
     ) {
-        item(key = "chooser-heading") {
-            Column(
-                modifier = Modifier.padding(bottom = HobgoblinSpacing.Sm),
-                verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
-            ) {
-                Text(
-                    stringResource(R.string.tmux_choose_host_title),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    stringResource(R.string.tmux_choose_host_description),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
         items(hosts, key = SshHostProfile::id) { host ->
             Card(
                 modifier = Modifier

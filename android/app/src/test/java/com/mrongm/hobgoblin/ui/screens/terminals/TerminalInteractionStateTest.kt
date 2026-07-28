@@ -508,7 +508,7 @@ class TerminalInteractionStateTest {
     }
 
     @Test
-    fun `terminal overview includes host and project sessions across every status`() {
+    fun `terminal overview keeps host and project sessions in stable creation order`() {
         val sessions = listOf(
             terminalRecord(
                 id = "exited",
@@ -553,9 +553,45 @@ class TerminalInteractionStateTest {
         )
 
         assertEquals(
-            listOf("temporary-running", "starting", "disconnected", "failed", "exited"),
+            listOf("exited", "temporary-running", "failed", "starting", "disconnected"),
             terminalOverviewOrderedSessions(sessions).map { it.id },
         )
+    }
+
+    @Test
+    fun `terminal overview order does not change when statuses change`() {
+        val sessions = listOf(
+            terminalRecord(
+                id = "session-b",
+                repositoryId = "repo-1",
+                remotePath = "/srv/app",
+                openedAt = 200L,
+                status = TerminalSessionStatus.Running,
+            ),
+            terminalRecord(
+                id = "session-a",
+                repositoryId = "repo-1",
+                remotePath = "/srv/app",
+                openedAt = 100L,
+                status = TerminalSessionStatus.Disconnected,
+            ),
+        )
+
+        val initialOrder = terminalOverviewOrderedSessions(sessions).map { it.id }
+        val changedOrder = terminalOverviewOrderedSessions(
+            sessions.map { session ->
+                session.copy(
+                    status = if (session.status == TerminalSessionStatus.Running) {
+                        TerminalSessionStatus.Exited
+                    } else {
+                        TerminalSessionStatus.Running
+                    },
+                )
+            },
+        ).map { it.id }
+
+        assertEquals(listOf("session-a", "session-b"), initialOrder)
+        assertEquals(initialOrder, changedOrder)
     }
 
     @Test

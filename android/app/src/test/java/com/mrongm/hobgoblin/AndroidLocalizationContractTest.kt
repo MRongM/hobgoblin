@@ -34,8 +34,6 @@ class AndroidLocalizationContractTest {
             keys.containsAll(
                 setOf(
                     "string:navigation_tmux",
-                    "string:tmux_choose_host_title",
-                    "string:tmux_choose_host_description",
                     "string:tmux_scan_host",
                     "string:tmux_no_hosts_title",
                     "string:tmux_no_hosts_description",
@@ -49,6 +47,16 @@ class AndroidLocalizationContractTest {
                 ),
             ),
         )
+    }
+
+    @Test
+    fun `main list count copy is pluralized`() {
+        val keys = resourceEntries(
+            File(androidProjectRoot(), "app/src/main/res/values/strings.xml"),
+        ).map(ResourceEntry::key).toSet()
+
+        assertTrue(keys.contains("plurals:hosts_project_count"))
+        assertTrue(keys.contains("plurals:projects_terminal_count"))
     }
 
     @Test
@@ -111,7 +119,11 @@ class AndroidLocalizationContractTest {
             ),
         )
         assertTrue(settingsScreen.contains("initialApplicationLanguage: AndroidApplicationLanguageSetting"))
-        assertTrue(settingsScreen.contains("onSave: (Long, Int, AndroidApplicationLanguagePreference) -> Unit"))
+        assertTrue(
+            settingsScreen.contains(
+                "onSave: (Long, Int, AndroidApplicationLanguagePreference, AndroidApplicationTheme) -> Unit",
+            ),
+        )
         assertTrue(settingsScreen.contains("ExposedDropdownMenuBox("))
         assertTrue(settingsScreen.contains("selectedApplicationLanguage"))
         assertTrue(settingsScreen.contains("verticalScroll(rememberScrollState())"))

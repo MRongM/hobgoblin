@@ -29,6 +29,31 @@ class MainTabShellContractTest {
         assertFalse(source.contains("HostDetailTab"))
     }
 
+    @Test
+    fun `settings remains the rightmost top bar action`() {
+        val source = source("ui/navigation/MainTabShell.kt")
+        val actions = source
+            .substringAfter("actions = {")
+            .substringBefore("bottomBar = {")
+
+        assertTrue(
+            actions.indexOf("R.string.navigation_add_host") <
+                actions.indexOf("R.string.navigation_settings"),
+        )
+        assertTrue(
+            actions.indexOf("R.string.navigation_add_project") <
+                actions.indexOf("R.string.navigation_settings"),
+        )
+    }
+
+    @Test
+    fun `main top app bar uses an explicit compact height`() {
+        val source = source("ui/navigation/MainTabShell.kt")
+
+        assertTrue(source.contains("private val MainTopAppBarHeight = 48.dp"))
+        assertTrue(source.contains("expandedHeight = MainTopAppBarHeight"))
+    }
+
     private fun source(relativePath: String): String = listOf(
         File("src/main/java/com/mrongm/hobgoblin/$relativePath"),
         File("app/src/main/java/com/mrongm/hobgoblin/$relativePath"),

@@ -5,6 +5,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import com.mrongm.hobgoblin.domain.ssh.SshIdentityRef
 import java.io.File
+import java.io.OutputStream
 import java.security.KeyStore
 import java.util.Base64
 import java.util.UUID
@@ -43,6 +44,10 @@ class SecureIdentityStore private constructor(
     override fun loadProtectedBytesById(identityId: String): ByteArray {
         val record = EncryptedIdentityRecord.deserialize(File(filesDir, "$identityId.identity").readText())
         return decrypt(record)
+    }
+
+    fun exportPrivateKey(identityId: String, outputStream: OutputStream) {
+        writePrivateKey(outputStream) { loadProtectedBytesById(identityId) }
     }
 
     private fun encrypt(value: ByteArray): EncryptedIdentityRecord {
@@ -86,6 +91,19 @@ class SecureIdentityStore private constructor(
 
         fun create(context: Context): SecureIdentityStore =
             SecureIdentityStore(File(context.filesDir, "ssh-identities").apply { mkdirs() })
+    }
+}
+
+internal fun writePrivateKey(
+    outputStream: OutputStream,
+    loadPrivateKey: () -> ByteArray,
+) {
+    val privateKey = loadPrivateKey()
+    try {
+        outputStream.write(privateKey)
+        outputStream.flush()
+    } finally {
+        privateKey.fill(0)
     }
 }
 

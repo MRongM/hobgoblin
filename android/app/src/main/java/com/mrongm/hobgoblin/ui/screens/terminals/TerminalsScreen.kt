@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -22,19 +23,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.res.stringResource
 import com.mrongm.hobgoblin.R
-import com.mrongm.hobgoblin.data.ManualItemOrderPolicy
 import com.mrongm.hobgoblin.domain.ssh.RemoteRepositoryProfile
 import com.mrongm.hobgoblin.domain.ssh.SshHostProfile
 import com.mrongm.hobgoblin.terminals.TerminalSessionRecord
-import com.mrongm.hobgoblin.ui.components.ManualReorderHandle
-import com.mrongm.hobgoblin.ui.components.ManualReorderState
-import com.mrongm.hobgoblin.ui.components.manualReorderItem
-import com.mrongm.hobgoblin.ui.components.rememberManualReorderState
+import com.mrongm.hobgoblin.terminals.TerminalSessionStatus
+import com.mrongm.hobgoblin.ui.theme.HobgoblinColors
 import com.mrongm.hobgoblin.ui.theme.HobgoblinSpacing
 import com.mrongm.hobgoblin.ui.text.LocalizedText
 import com.mrongm.hobgoblin.ui.text.resolve
@@ -47,13 +47,55 @@ internal fun terminalOverviewTitleText(session: TerminalSessionRecord): Localize
 
 internal fun terminalOverviewStatusText(session: TerminalSessionRecord): LocalizedText = LocalizedText(
     when (session.status) {
-        com.mrongm.hobgoblin.terminals.TerminalSessionStatus.Starting -> R.string.terminal_status_starting
-        com.mrongm.hobgoblin.terminals.TerminalSessionStatus.Running -> R.string.terminal_status_running
-        com.mrongm.hobgoblin.terminals.TerminalSessionStatus.Exited -> R.string.terminal_status_exited
-        com.mrongm.hobgoblin.terminals.TerminalSessionStatus.Failed -> R.string.terminal_status_failed
-        com.mrongm.hobgoblin.terminals.TerminalSessionStatus.Disconnected -> R.string.terminal_status_disconnected
+        TerminalSessionStatus.Starting -> R.string.terminal_status_starting
+        TerminalSessionStatus.Running -> R.string.terminal_status_running
+        TerminalSessionStatus.Exited -> R.string.terminal_status_exited
+        TerminalSessionStatus.Failed -> R.string.terminal_status_failed
+        TerminalSessionStatus.Disconnected -> R.string.terminal_status_disconnected
     },
 )
+
+internal enum class TerminalOverviewTone {
+    Neutral,
+    Running,
+    Disconnected,
+    Exited,
+}
+
+internal fun terminalOverviewTone(status: TerminalSessionStatus): TerminalOverviewTone = when (status) {
+    TerminalSessionStatus.Starting -> TerminalOverviewTone.Neutral
+    TerminalSessionStatus.Running -> TerminalOverviewTone.Running
+    TerminalSessionStatus.Disconnected -> TerminalOverviewTone.Disconnected
+    TerminalSessionStatus.Exited,
+    TerminalSessionStatus.Failed,
+    -> TerminalOverviewTone.Exited
+}
+
+internal enum class TerminalOverviewConnectionAction {
+    Reconnect,
+    Close,
+}
+
+internal fun terminalOverviewConnectionAction(
+    session: TerminalSessionRecord,
+): TerminalOverviewConnectionAction = if (terminalSessionReconnectAvailable(session)) {
+    TerminalOverviewConnectionAction.Reconnect
+} else {
+    TerminalOverviewConnectionAction.Close
+}
+
+@Composable
+private fun terminalOverviewContainerColor(status: TerminalSessionStatus): Color =
+    when (terminalOverviewTone(status)) {
+        TerminalOverviewTone.Neutral -> MaterialTheme.colorScheme.surface
+        TerminalOverviewTone.Running -> HobgoblinColors.Success
+            .copy(alpha = 0.16f)
+            .compositeOver(MaterialTheme.colorScheme.surface)
+        TerminalOverviewTone.Disconnected -> HobgoblinColors.Warning
+            .copy(alpha = 0.18f)
+            .compositeOver(MaterialTheme.colorScheme.surface)
+        TerminalOverviewTone.Exited -> MaterialTheme.colorScheme.errorContainer
+    }
 
 internal fun terminalOverviewCloseConfirmationText(session: TerminalSessionRecord): LocalizedText = LocalizedText(
     resourceId = if (session.tmuxIdentity != null) R.string.terminals_close_tmux else R.string.terminals_close_native,
@@ -65,12 +107,8 @@ internal fun terminalOverviewDeleteConfirmationText(session: TerminalSessionReco
     formatArgs = listOf(terminalOverviewTitleText(session)),
 )
 
-internal fun terminalOverviewOrderAfterDelete(
-    orderedIds: List<String>,
-    deletedId: String,
-): List<String> = orderedIds.filterNot { it == deletedId }
-
 internal data class TerminalOverviewSource(
+    val hostTitle: LocalizedText,
     val contextLabel: LocalizedText,
     val locationLabel: LocalizedText,
     val path: String,
@@ -103,11 +141,22 @@ internal fun terminalOverviewSource(
         repository?.isGitRepository == true -> LocalizedText(R.string.terminals_branch_directory)
         else -> LocalizedText(R.string.terminals_workspace_directory)
     }
-    val hostLabel: Any = host?.title
-        ?: hostReference.takeIf { it.isNotBlank() }
-        ?: LocalizedText(R.string.terminals_host_unavailable)
+    val hostTitle = when {
+        host != null -> LocalizedText(R.string.common_value, listOf(host.title))
+        hostReference.isNotBlank() -> LocalizedText(R.string.common_value, listOf(hostReference))
+        else -> LocalizedText(R.string.terminals_host_unavailable)
+    }
+    val contextLabel = if (session.repositoryId == null) {
+        terminalOverviewTitleText(session)
+    } else {
+        LocalizedText(
+            R.string.terminals_context,
+            listOf(terminalOverviewTitleText(session), projectLabel),
+        )
+    }
     return TerminalOverviewSource(
-        contextLabel = LocalizedText(R.string.terminals_context, listOf(hostLabel, projectLabel)),
+        hostTitle = hostTitle,
+        contextLabel = contextLabel,
         locationLabel = locationLabel,
         path = path,
     )
@@ -122,28 +171,10 @@ fun TerminalsScreen(
     onReconnectTerminalSession: (TerminalSessionRecord) -> Unit,
     onCloseTerminalSession: (String) -> Unit,
     onDeleteTerminalSession: (String) -> Unit,
-    initialManualOrder: List<String> = emptyList(),
-    onSaveManualOrder: (List<String>) -> Unit = {},
 ) {
-    var manualOrder by remember(initialManualOrder) { mutableStateOf(initialManualOrder) }
     var pendingCloseSessionId by remember { mutableStateOf<String?>(null) }
     var pendingDeleteSessionId by remember { mutableStateOf<String?>(null) }
-    val defaultOrderedSessions = terminalOverviewOrderedSessions(sessions)
-    val orderedSessions = ManualItemOrderPolicy.apply(
-        defaultOrderedSessions,
-        manualOrder,
-        TerminalSessionRecord::id,
-    )
-    val reorderState = rememberManualReorderState(
-        onMove = { draggedId, targetId ->
-            manualOrder = ManualItemOrderPolicy.move(
-                orderedSessions.map(TerminalSessionRecord::id),
-                draggedId,
-                targetId,
-            )
-        },
-        onFinished = { onSaveManualOrder(manualOrder) },
-    )
+    val orderedSessions = terminalOverviewOrderedSessions(sessions)
     if (orderedSessions.isEmpty()) {
         Column(
             modifier = Modifier
@@ -174,10 +205,9 @@ fun TerminalsScreen(
     ) {
         items(orderedSessions, key = { it.id }) { session ->
             TerminalOverviewRow(
-                modifier = Modifier.manualReorderItem(reorderState, session.id),
+                modifier = Modifier,
                 session = session,
                 source = terminalOverviewSource(session, hosts, repositories),
-                reorderState = reorderState,
                 onOpen = { onOpenTerminalSession(session) },
                 onReconnect = { onReconnectTerminalSession(session) },
                 onRequestClose = { pendingCloseSessionId = session.id },
@@ -225,12 +255,6 @@ fun TerminalsScreen(
                         contentColor = MaterialTheme.colorScheme.error,
                     ),
                     onClick = {
-                        val nextOrder = terminalOverviewOrderAfterDelete(
-                            orderedIds = orderedSessions.map(TerminalSessionRecord::id),
-                            deletedId = pendingDeleteSession.id,
-                        )
-                        manualOrder = nextOrder
-                        onSaveManualOrder(nextOrder)
                         pendingDeleteSessionId = null
                         onDeleteTerminalSession(pendingDeleteSession.id)
                     },
@@ -252,17 +276,20 @@ private fun TerminalOverviewRow(
     modifier: Modifier,
     session: TerminalSessionRecord,
     source: TerminalOverviewSource,
-    reorderState: ManualReorderState,
     onOpen: () -> Unit,
     onReconnect: () -> Unit,
     onRequestClose: () -> Unit,
     onRequestDelete: () -> Unit,
 ) {
-    val title = terminalOverviewTitleText(session).resolve()
+    val title = source.hostTitle.resolve()
     Card(
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onOpen),
+        colors = CardDefaults.cardColors(
+            containerColor = terminalOverviewContainerColor(session.status),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ),
     ) {
         Column(
             modifier = Modifier.padding(HobgoblinSpacing.Md),
@@ -287,11 +314,6 @@ private fun TerminalOverviewRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                ManualReorderHandle(
-                    state = reorderState,
-                    itemKey = session.id,
-                    itemLabel = title,
-                )
             }
             Text(
                 source.contextLabel.resolve(),
@@ -309,15 +331,16 @@ private fun TerminalOverviewRow(
                 Text(
                     LocalizedText(R.string.terminals_location, listOf(source.locationLabel)).resolve(),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                 )
                 Text(
                     source.path,
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.primary,
                     fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.SemiBold,
                     softWrap = true,
                 )
             }
@@ -326,19 +349,18 @@ private fun TerminalOverviewRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
             ) {
-                TextButton(
-                    enabled = terminalSessionReconnectAvailable(session),
-                    onClick = onReconnect,
-                ) {
-                    Text(stringResource(R.string.terminal_action_reconnect))
-                }
-                TextButton(
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error,
-                    ),
-                    onClick = onRequestClose,
-                ) {
-                    Text(stringResource(R.string.repository_terminal_close))
+                when (terminalOverviewConnectionAction(session)) {
+                    TerminalOverviewConnectionAction.Reconnect -> TextButton(onClick = onReconnect) {
+                        Text(stringResource(R.string.terminal_action_reconnect))
+                    }
+                    TerminalOverviewConnectionAction.Close -> TextButton(
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                        onClick = onRequestClose,
+                    ) {
+                        Text(stringResource(R.string.repository_terminal_close))
+                    }
                 }
                 TextButton(
                     colors = ButtonDefaults.textButtonColors(

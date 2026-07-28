@@ -17,10 +17,10 @@
         <nav aria-label="隐私政策语言"><a href="./" lang="en">English</a><a href="zh-cn.html" aria-current="page">简体中文</a><a href="ja.html" lang="ja">日本語</a><a href="ko.html" lang="ko">한국어</a></nav>
       </header>
       <main id="policy">
-        <p class="meta"><strong>生效日期：</strong>2026-07-27 · <strong>开发者：</strong>MRongM</p>
+        <p class="meta"><strong>生效日期：</strong>2026-07-28 · <strong>开发者：</strong>MRongM</p>
         <section><h2>1. 适用范围</h2><p>本政策适用于 MRongM 发布的 Hobgoblin Android 应用。本政策不控制您选择配合 Hobgoblin 使用的 SSH 服务器、Git 托管服务、网络提供商、Android 系统服务或第三方应用。</p></section>
         <section><h2>2. MRongM 不收集的数据</h2><p>Hobgoblin 没有由 MRongM 运营的应用后端，也不包含广告、分析或崩溃报告 SDK。MRongM 不会从应用接收账户数据、遥测数据、广告标识符、终端内容、仓库内容、SSH 凭据或设备信息。</p></section>
-        <section><h2>3. 存储在设备上的信息</h2><p>为了提供您主动使用的功能，Hobgoblin 会在应用私有存储中保存主机别名、主机地址、用户名、端口、远程路径、可信主机密钥指纹、端口转发规则、显示偏好、手动顺序、保留终端元数据，以及有长度上限的近期终端输出快照。导入或生成的 SSH 私钥使用 AES-GCM 加密，密钥由 Android Keystore 保管。用于安装公钥的临时服务器密码只在该次操作期间于内存中处理，之后会被清除，Hobgoblin 不会保存该密码。</p></section>
+        <section><h2>3. 存储在设备上的信息</h2><p>为了提供您主动使用的功能，Hobgoblin 会在应用私有存储中保存主机别名、主机地址、用户名、端口、远程路径、可信主机密钥指纹、端口转发规则、显示偏好、手动顺序、保留终端元数据，以及有长度上限的近期终端输出快照。导入或生成的 SSH 私钥使用 AES-GCM 加密，密钥由 Android Keystore 保管。当您明确导出私钥时，原始私钥字节会发送到您选择的文档提供方，导出的文档不再受 Hobgoblin 应用内加密私有存储保护。用于安装公钥的临时服务器密码只在该次操作期间于内存中处理，之后会被清除，Hobgoblin 不会保存该密码。</p></section>
         <section><h2>4. 直接 SSH 连接</h2><p>连接时，命令、终端输入与输出、仓库元数据、远程路径及相关响应会在您的设备与您选择的 SSH 服务器之间直接传输，并由 SSH 进行传输加密。MRongM 不是中间方，无法读取或获取这些内容。服务器所有者和网络提供商可能依据其自身政策处理数据。</p></section>
         <section><h2>5. Termux 与剪贴板</h2><p>Termux 集成是可选功能，只有在您明确操作后才会运行。具备直接 Termux 命令权限时，Hobgoblin 可能将 SSH 命令和所选私钥材料发送给单独安装的 Termux 应用，以启动您要求的会话。如果选择“复制命令”，SSH 命令会被放入 Android 剪贴板。Termux 和其他剪贴板读取方受其自身行为与政策约束。</p></section>
         <section><h2>6. 通知</h2><p>交互式 SSH 终端保持活动时，Hobgoblin 会使用持续显示的 Android 通知。通知可能显示终端标签和连接状态；锁屏可见性由您的设备通知设置控制。</p></section>

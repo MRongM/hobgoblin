@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -50,6 +51,7 @@ import com.mrongm.hobgoblin.ssh.SshInitializationCheck
 import com.mrongm.hobgoblin.ui.screens.diagnostics.HostDiagnosticsContent
 import com.mrongm.hobgoblin.ui.theme.HobgoblinColors
 import com.mrongm.hobgoblin.ui.theme.HobgoblinSpacing
+import java.io.OutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -71,6 +73,22 @@ internal fun resolveHostIdentityRefId(
     initializedIdentityRefId: String?,
     existingIdentityRefId: String?,
 ): String? = selectedIdentityId ?: initializedIdentityRefId ?: existingIdentityRefId
+
+internal fun canExportPrivateKey(
+    initialHost: SshHostProfile?,
+    identityRefId: String?,
+    exportAvailable: Boolean,
+): Boolean = initialHost != null && !identityRefId.isNullOrBlank() && exportAvailable
+
+internal fun privateKeyExportFileName(initialHost: SshHostProfile): String {
+    val safeHostName = (initialHost.alias ?: initialHost.host)
+        .trim()
+        .replace(Regex("[^\\p{L}\\p{N}._-]+"), "_")
+        .trim('.', '_', '-')
+        .take(64)
+        .ifBlank { "host" }
+    return "hobgoblin-$safeHostName-private-key"
+}
 
 internal fun isLatestConnectionTest(
     requestGeneration: Int,
@@ -98,6 +116,7 @@ fun AddHostScreen(
     initialHost: SshHostProfile? = null,
     onBack: () -> Unit,
     onImportPrivateKey: (displayName: String, bytes: ByteArray) -> SshIdentityRef,
+    onExportPrivateKey: ((String, OutputStream) -> Unit)? = null,
     onCheckSshInitialization: (SshHostProfile) -> SshInitializationCheck = { SshInitializationCheck.Ready },
     onTrustHostKey: (SshHostProfile, String) -> Unit = { _, _ -> },
     onInitializeSshAccess: (SshHostProfile, CharArray) -> SshHostProfile = { profile, _ -> profile },
@@ -108,6 +127,8 @@ fun AddHostScreen(
     val identityReadFailed = stringResource(R.string.host_identity_read_failed)
     val sshIdentity = stringResource(R.string.host_ssh_identity)
     val identityImportFailed = stringResource(R.string.host_identity_import_failed)
+    val privateKeyExportOpenFailed = stringResource(R.string.host_private_key_export_open_failed)
+    val privateKeyExportFailed = stringResource(R.string.host_private_key_export_failed)
     val initializationCheckFailed = stringResource(R.string.host_ssh_initialization_check_failed)
     val hostKeyTrustFailed = stringResource(R.string.host_key_trust_failed)
     val initializationFailed = stringResource(R.string.host_ssh_initialization_failed)
@@ -120,6 +141,10 @@ fun AddHostScreen(
     var port by remember(initialHost) { mutableStateOf(initialHost?.port?.toString() ?: "22") }
     var error by remember { mutableStateOf<String?>(null) }
     var selectedIdentity by remember { mutableStateOf<SshIdentityRef?>(null) }
+    var privateKeyExportConfirmationIdentityId by remember(initialHost) { mutableStateOf<String?>(null) }
+    var pendingPrivateKeyExportIdentityId by remember(initialHost) { mutableStateOf<String?>(null) }
+    var privateKeyExportSucceeded by remember(initialHost) { mutableStateOf(false) }
+    var privateKeyExportError by remember(initialHost) { mutableStateOf<String?>(null) }
     var initializationCheck by remember(initialHost) { mutableStateOf<SshInitializationCheck?>(null) }
     var initializationPassword by remember(initialHost) { mutableStateOf("") }
     var initializationError by remember(initialHost) { mutableStateOf<String?>(null) }
@@ -157,8 +182,36 @@ fun AddHostScreen(
             selectedIdentity = it
             clearInitializationState()
             error = null
+            privateKeyExportSucceeded = false
+            privateKeyExportError = null
         }.onFailure {
             error = it.message ?: identityImportFailed
+        }
+    }
+
+    val exportPrivateKey = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream"),
+    ) { uri ->
+        val identityId = pendingPrivateKeyExportIdentityId
+        if (uri == null || identityId == null) {
+            pendingPrivateKeyExportIdentityId = null
+            return@rememberLauncherForActivityResult
+        }
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri, "wt")?.use { output ->
+                        requireNotNull(onExportPrivateKey)(identityId, output)
+                    } ?: throw IllegalArgumentException(privateKeyExportOpenFailed)
+                }
+            }.onSuccess {
+                privateKeyExportSucceeded = true
+                privateKeyExportError = null
+            }.onFailure {
+                privateKeyExportSucceeded = false
+                privateKeyExportError = it.message ?: privateKeyExportFailed
+            }
+            pendingPrivateKeyExportIdentityId = null
         }
     }
 
@@ -405,8 +458,36 @@ fun AddHostScreen(
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             )
-            OutlinedButton(onClick = { importPrivateKey.launch(arrayOf("*/*")) }) {
-                Text(stringResource(R.string.host_import_private_key))
+            val effectiveIdentityRefId = currentIdentityRefId()
+            val exportAvailable = canExportPrivateKey(
+                initialHost = initialHost,
+                identityRefId = effectiveIdentityRefId,
+                exportAvailable = onExportPrivateKey != null,
+            )
+            PrivateKeyActions(
+                canExport = exportAvailable,
+                exportPending = pendingPrivateKeyExportIdentityId != null,
+                onImport = { importPrivateKey.launch(arrayOf("*/*")) },
+                onExport = {
+                    effectiveIdentityRefId?.let { identityId ->
+                        privateKeyExportSucceeded = false
+                        privateKeyExportError = null
+                        privateKeyExportConfirmationIdentityId = identityId
+                    }
+                },
+            )
+            if (privateKeyExportSucceeded) {
+                Text(
+                    stringResource(R.string.host_private_key_export_succeeded),
+                    color = HobgoblinColors.Success,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+            if (privateKeyExportError != null) {
+                Text(
+                    privateKeyExportError.orEmpty(),
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
             val identityLabel = when {
                 selectedIdentity != null -> stringResource(
@@ -466,6 +547,61 @@ fun AddHostScreen(
             }
             if (error != null) {
                 Text(error.orEmpty(), color = MaterialTheme.colorScheme.error)
+            }
+        }
+    }
+
+    privateKeyExportConfirmationIdentityId?.let { identityId ->
+        AlertDialog(
+            onDismissRequest = { privateKeyExportConfirmationIdentityId = null },
+            title = { Text(stringResource(R.string.host_export_private_key_confirmation_title)) },
+            text = { Text(stringResource(R.string.host_export_private_key_warning)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        privateKeyExportConfirmationIdentityId = null
+                        pendingPrivateKeyExportIdentityId = identityId
+                        exportPrivateKey.launch(
+                            initialHost?.let(::privateKeyExportFileName) ?: "hobgoblin-private-key",
+                        )
+                    },
+                ) {
+                    Text(stringResource(R.string.host_export_private_key))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { privateKeyExportConfirmationIdentityId = null }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun PrivateKeyActions(
+    canExport: Boolean,
+    exportPending: Boolean,
+    onImport: () -> Unit,
+    onExport: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm),
+    ) {
+        OutlinedButton(
+            modifier = Modifier.weight(1f),
+            onClick = onImport,
+        ) {
+            Text(stringResource(R.string.host_import_private_key))
+        }
+        if (canExport) {
+            OutlinedButton(
+                modifier = Modifier.weight(1f),
+                enabled = !exportPending,
+                onClick = onExport,
+            ) {
+                Text(stringResource(R.string.host_export_private_key))
             }
         }
     }

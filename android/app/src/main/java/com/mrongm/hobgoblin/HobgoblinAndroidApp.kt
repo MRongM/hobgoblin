@@ -51,6 +51,8 @@ import com.mrongm.hobgoblin.termux.externalTermuxLaunchRequest
 import com.mrongm.hobgoblin.ui.screens.addhost.AddHostScreen
 import com.mrongm.hobgoblin.ui.navigation.MainTab
 import com.mrongm.hobgoblin.ui.navigation.MainTabShell
+import com.mrongm.hobgoblin.ui.navigation.projectCountsByHostId
+import com.mrongm.hobgoblin.ui.navigation.terminalCountsByProjectId
 import com.mrongm.hobgoblin.ui.screens.hosts.HostsScreen
 import com.mrongm.hobgoblin.ui.screens.hosts.HostDetailScreen
 import com.mrongm.hobgoblin.ui.screens.hosts.hostTemporaryTerminalRoute
@@ -70,6 +72,7 @@ import com.mrongm.hobgoblin.ui.screens.tmux.tmuxNeedsScan
 import com.mrongm.hobgoblin.ui.screens.tmux.tmuxRoute
 import com.mrongm.hobgoblin.ui.screens.tmux.tmuxScanOwnsRefreshIndicator
 import com.mrongm.hobgoblin.ui.screens.tmux.tmuxStateForHost
+import com.mrongm.hobgoblin.ui.theme.AndroidApplicationTheme
 import com.mrongm.hobgoblin.ui.text.currentAndroidApplicationLanguageSetting
 import com.mrongm.hobgoblin.ui.text.setAndroidApplicationLanguagePreference
 import kotlinx.coroutines.Dispatchers
@@ -130,6 +133,8 @@ fun HobgoblinAndroidApp(
     terminalForegroundBridge: TerminalForegroundBridge,
     externalTermuxLauncher: ExternalTermuxLauncher,
     hostPortForwardManager: HostPortForwardManager,
+    applicationTheme: AndroidApplicationTheme,
+    onApplicationThemeChange: (AndroidApplicationTheme) -> Unit,
     terminalNavigationRequest: TerminalNavigationRequest? = null,
 ) {
     val missingTmuxIdentity = stringResource(R.string.terminal_tmux_identity_missing)
@@ -401,6 +406,8 @@ fun HobgoblinAndroidApp(
                         ?.let { retained -> discovery to retained }
                 }.toMap()
             } ?: emptyMap()
+            val projectCountByHostId = projectCountsByHostId(currentRepositories())
+            val terminalCountByProjectId = terminalCountsByProjectId(terminalSessions)
             MainTabShell(
                 selectedTab = selectedTab,
                 onSelectTab = ::selectMainTab,
@@ -425,6 +432,7 @@ fun HobgoblinAndroidApp(
                         },
                         onOpenTerminal = ::openHostTemporaryTerminal,
                         onOpenPorts = { hostId -> route = AppRoute.HostPorts(hostId) },
+                        projectCountByHostId = projectCountByHostId,
                         initialManualOrder = manualItemOrderStore.load(ManualItemOrderScope.Hosts),
                         onSaveManualOrder = { ids ->
                             manualItemOrderStore.save(ManualItemOrderScope.Hosts, ids)
@@ -445,6 +453,7 @@ fun HobgoblinAndroidApp(
                         onDeleteProject = { repositoryId ->
                             deleteRepositoryRecord(repositoryId)
                         },
+                        terminalCountByProjectId = terminalCountByProjectId,
                         initialManualOrder = manualItemOrderStore.load(ManualItemOrderScope.Projects),
                         onSaveManualOrder = { ids ->
                             manualItemOrderStore.save(ManualItemOrderScope.Projects, ids)
@@ -515,10 +524,6 @@ fun HobgoblinAndroidApp(
                         onReconnectTerminalSession = ::reconnectRetainedTerminal,
                         onCloseTerminalSession = ::closeRetainedTerminal,
                         onDeleteTerminalSession = ::deleteRetainedTerminal,
-                        initialManualOrder = manualItemOrderStore.load(ManualItemOrderScope.Terminals),
-                        onSaveManualOrder = { ids ->
-                            manualItemOrderStore.save(ManualItemOrderScope.Terminals, ids)
-                        },
                     )
                 },
             )
@@ -555,6 +560,9 @@ fun HobgoblinAndroidApp(
                     initialHost = host,
                     onBack = { route = AppRoute.Hosts },
                     onImportPrivateKey = { displayName, bytes -> secureIdentityStore.importPrivateKey(displayName, bytes) },
+                    onExportPrivateKey = { identityId, output ->
+                        secureIdentityStore.exportPrivateKey(identityId, output)
+                    },
                     onCheckSshInitialization = { input -> initializationService.check(input) },
                     onTrustHostKey = { input, fingerprint ->
                         initializationService.trustHostKey(input, fingerprint)
@@ -871,10 +879,17 @@ fun HobgoblinAndroidApp(
             initialKeepAliveIntervalSeconds = terminalSettingsStore.loadKeepAliveIntervalSeconds(),
             initialHeartbeatFailureThreshold = terminalSettingsStore.loadHeartbeatFailureThreshold(),
             initialApplicationLanguage = currentAndroidApplicationLanguageSetting(),
+            initialApplicationTheme = applicationTheme,
             onBack = { route = AppRoute.Hosts },
-            onSave = { keepAliveIntervalSeconds, heartbeatFailureThreshold, applicationLanguage ->
+            onSave = {
+                    keepAliveIntervalSeconds,
+                    heartbeatFailureThreshold,
+                    applicationLanguage,
+                    updatedApplicationTheme,
+                ->
                 terminalSettingsStore.setKeepAliveIntervalSeconds(keepAliveIntervalSeconds)
                 terminalSettingsStore.setHeartbeatFailureThreshold(heartbeatFailureThreshold)
+                onApplicationThemeChange(updatedApplicationTheme)
                 route = AppRoute.Hosts
                 setAndroidApplicationLanguagePreference(applicationLanguage)
             },

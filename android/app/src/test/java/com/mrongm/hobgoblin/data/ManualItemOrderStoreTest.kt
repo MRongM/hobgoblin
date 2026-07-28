@@ -62,7 +62,6 @@ class ManualItemOrderStoreTest {
     fun `manual order scope keys isolate every list and project worktrees`() {
         assertEquals("hosts", ManualItemOrderScope.Hosts.storageKey)
         assertEquals("projects", ManualItemOrderScope.Projects.storageKey)
-        assertEquals("terminals", ManualItemOrderScope.Terminals.storageKey)
         assertEquals(
             "worktrees:cHJvamVjdC0x",
             ManualItemOrderScope.Worktrees("project-1").storageKey,

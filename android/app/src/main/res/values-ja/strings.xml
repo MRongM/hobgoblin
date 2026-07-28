@@ -23,6 +23,23 @@
     <string name="navigation_add_host">ホストを追加</string>
     <string name="navigation_add_project">プロジェクトを追加</string>
     <string name="accessibility_reorder_item">%1$sを並べ替え</string>
+    <string name="settings_theme">テーマ</string>
+    <string name="settings_appearance">外観</string>
+    <string name="settings_appearance_system">システムに合わせる</string>
+    <string name="settings_appearance_light">ライト</string>
+    <string name="settings_appearance_dark">ダーク</string>
+    <string name="settings_theme_macos">macOS</string>
+    <string name="settings_theme_mono">Mono</string>
+    <string name="settings_theme_github">GitHub</string>
+    <string name="settings_theme_claude">Claude</string>
+    <string name="settings_theme_cursor">Cursor</string>
+    <string name="settings_theme_airbnb">Airbnb</string>
+    <string name="settings_theme_bmw">BMW</string>
+    <string name="settings_theme_signal">Signal</string>
+    <string name="settings_theme_forge">Forge</string>
+    <string name="settings_theme_catppuccin">Catppuccin</string>
+    <string name="settings_theme_solarized">Solarized</string>
+    <string name="settings_theme_tokyo_night">Tokyo Night</string>
     <string name="settings_language">言語</string>
     <string name="settings_language_follow_system">システムに従う</string>
     <string name="settings_language_english">English</string>
@@ -50,6 +67,12 @@
     <string name="host_user">ユーザー</string>
     <string name="host_port">ポート</string>
     <string name="host_import_private_key">秘密鍵をインポート</string>
+    <string name="host_export_private_key">秘密鍵をエクスポート</string>
+    <string name="host_export_private_key_confirmation_title">秘密鍵をエクスポートしますか？</string>
+    <string name="host_export_private_key_warning">元の秘密鍵をエクスポートします。このファイルによって SSH アクセスが可能になり、Hobgoblin の暗号化されたアプリストレージでは保護されなくなります。安全に保管してください。</string>
+    <string name="host_private_key_export_succeeded">秘密鍵をエクスポートしました。</string>
+    <string name="host_private_key_export_failed">秘密鍵のエクスポートに失敗しました</string>
+    <string name="host_private_key_export_open_failed">選択したエクスポートファイルを作成できません</string>
     <string name="host_identity_selected">選択した ID：%1$s</string>
     <string name="host_generated_identity_saved">生成した ID はこのホストと共に保存されます。</string>
     <string name="host_existing_identity_selected">既存の ID を選択済み</string>
@@ -119,7 +142,10 @@
     <string name="hosts_loading_description">保存済み SSH ホストを読み込んでいます。</string>
     <string name="hosts_empty_title">SSH ホストがありません</string>
     <string name="hosts_empty_description">リモート開発マシンを追加して、診断とターミナルアクセスを開始します。</string>
-    <string name="hosts_saved_heading">保存済みホスト</string>
+    <plurals name="hosts_project_count">
+        <item quantity="one">%1$d 件のプロジェクト</item>
+        <item quantity="other">%1$d 件のプロジェクト</item>
+    </plurals>
     <string name="hosts_delete_title">ホストプロファイルを削除しますか？</string>
     <string name="hosts_delete_description">%1$s を Hobgoblin Android から削除します。SSH サーバー上のデータは削除されません。</string>
     <string name="hosts_terminal">ターミナル</string>
@@ -155,8 +181,11 @@
     <string name="projects_selected_host">選択中のホスト</string>
     <string name="projects_empty_title">プロジェクトがありません</string>
     <string name="projects_empty_on_host">%1$s にプロジェクトはありません</string>
+    <plurals name="projects_terminal_count">
+        <item quantity="one">%1$d 件のターミナル</item>
+        <item quantity="other">%1$d 件のターミナル</item>
+    </plurals>
     <string name="projects_show_all">すべてのプロジェクトを表示</string>
-    <string name="projects_saved_heading">保存済みプロジェクト</string>
     <string name="projects_on_host">%1$s のプロジェクト</string>
     <string name="projects_show_all_short">すべて表示</string>
     <string name="projects_delete_title">プロジェクト記録を削除しますか？</string>
@@ -361,8 +390,6 @@
     <string name="termux_workspace_ssh_label">Hobgoblin ワークスペース SSH</string>
     <string name="termux_workspace_ssh_description">選択した Hobgoblin ワークスペースを SSH で開きます。</string>
     <string name="termux_clipboard_command_label">Hobgoblin Termux SSH コマンド</string>
-    <string name="tmux_choose_host_title">スキャンするホストを選択</string>
-    <string name="tmux_choose_host_description">保存済みの SSH ホストを選択し、実行中の Hobgoblin tmux セッションをスキャンします。</string>
     <string name="tmux_scan_host">スキャン</string>
     <string name="tmux_no_hosts_title">SSH ホストがありません</string>
     <string name="tmux_no_hosts_description">tmux セッションをスキャンする前に SSH ホストを追加してください。</string>

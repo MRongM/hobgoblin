@@ -3,8 +3,12 @@ package com.mrongm.hobgoblin.data.ssh
 import com.mrongm.hobgoblin.data.HostProfileCodec
 import com.mrongm.hobgoblin.domain.ssh.SshHostProfile
 import com.mrongm.hobgoblin.domain.ssh.SshIdentityRef
+import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.io.OutputStream
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -50,5 +54,31 @@ class SecureIdentityStoreTest {
         assertFalse(payload.contains("rawKey", ignoreCase = true))
         assertTrue(payload.isNotBlank())
     }
-}
 
+    @Test
+    fun `private key export writes original bytes and clears plaintext`() {
+        val privateKey = "generic-private-key".toByteArray()
+        val output = ByteArrayOutputStream()
+
+        writePrivateKey(output) { privateKey }
+
+        assertEquals("generic-private-key", output.toString(Charsets.UTF_8.name()))
+        assertTrue(privateKey.all { it == 0.toByte() })
+    }
+
+    @Test
+    fun `private key export clears plaintext when writing fails`() {
+        val privateKey = "generic-private-key".toByteArray()
+        val failingOutput = object : OutputStream() {
+            override fun write(value: Int) {
+                throw IOException("write failed")
+            }
+        }
+
+        assertThrows(IOException::class.java) {
+            writePrivateKey(failingOutput) { privateKey }
+        }
+
+        assertTrue(privateKey.all { it == 0.toByte() })
+    }
+}

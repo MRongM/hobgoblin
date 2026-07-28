@@ -2,8 +2,6 @@ package com.mrongm.hobgoblin.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -62,35 +60,15 @@ object HobgoblinSpacing {
     val ThreeXl = 64.dp
 }
 
-private val LightScheme = lightColorScheme(
-    primary = HobgoblinColors.Accent,
-    secondary = HobgoblinColors.MuxCopper,
-    tertiary = HobgoblinColors.LiveMoss,
-    error = HobgoblinColors.Destructive,
-    background = HobgoblinColors.FrostCanvas,
-    surface = Color(0xFFFFFFFF),
-    onBackground = HobgoblinColors.NightInk,
-    onSurface = HobgoblinColors.NightInk,
-)
-
-private val DarkScheme = darkColorScheme(
-    primary = Color(0xFF82B9B3),
-    secondary = Color(0xFFE3A16F),
-    tertiary = Color(0xFF91B79A),
-    error = HobgoblinColors.Destructive,
-    background = HobgoblinColors.NightInk,
-    surface = Color(0xFF1A292F),
-    onBackground = Color(0xFFE5E7EB),
-    onSurface = Color(0xFFE5E7EB),
-)
-
 @Composable
 fun HobgoblinTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    applicationTheme: AndroidApplicationTheme = AndroidApplicationTheme(),
+    systemDarkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
+    val darkTheme = resolveDarkTheme(applicationTheme.appearance, systemDarkTheme)
     MaterialTheme(
-        colorScheme = if (darkTheme) DarkScheme else LightScheme,
+        colorScheme = androidColorScheme(applicationTheme.colorTheme, darkTheme),
         typography = MaterialTheme.typography,
         content = content,
     )

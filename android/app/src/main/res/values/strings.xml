@@ -24,6 +24,23 @@
     <string name="navigation_add_host">Add host</string>
     <string name="navigation_add_project">Add project</string>
     <string name="accessibility_reorder_item">Reorder %1$s</string>
+    <string name="settings_theme">Theme</string>
+    <string name="settings_appearance">Appearance</string>
+    <string name="settings_appearance_system">Follow system</string>
+    <string name="settings_appearance_light">Light</string>
+    <string name="settings_appearance_dark">Dark</string>
+    <string name="settings_theme_macos">macOS</string>
+    <string name="settings_theme_mono">Mono</string>
+    <string name="settings_theme_github">GitHub</string>
+    <string name="settings_theme_claude">Claude</string>
+    <string name="settings_theme_cursor">Cursor</string>
+    <string name="settings_theme_airbnb">Airbnb</string>
+    <string name="settings_theme_bmw">BMW</string>
+    <string name="settings_theme_signal">Signal</string>
+    <string name="settings_theme_forge">Forge</string>
+    <string name="settings_theme_catppuccin">Catppuccin</string>
+    <string name="settings_theme_solarized">Solarized</string>
+    <string name="settings_theme_tokyo_night">Tokyo Night</string>
     <string name="settings_language">Language</string>
     <string name="settings_language_follow_system">Follow system</string>
     <string name="settings_language_english">English</string>
@@ -51,6 +68,12 @@
     <string name="host_user">User</string>
     <string name="host_port">Port</string>
     <string name="host_import_private_key">Import private key</string>
+    <string name="host_export_private_key">Export private key</string>
+    <string name="host_export_private_key_confirmation_title">Export private key?</string>
+    <string name="host_export_private_key_warning">This exports the original private key. The file can grant SSH access and will no longer be protected by Hobgoblin\'s encrypted app storage. Store it securely.</string>
+    <string name="host_private_key_export_succeeded">Private key exported.</string>
+    <string name="host_private_key_export_failed">Private key export failed</string>
+    <string name="host_private_key_export_open_failed">Unable to create the selected export file</string>
     <string name="host_identity_selected">Identity selected: %1$s</string>
     <string name="host_generated_identity_saved">Generated identity will be saved with this host.</string>
     <string name="host_existing_identity_selected">Existing identity selected</string>
@@ -120,7 +143,10 @@
     <string name="hosts_loading_description">Loading saved SSH hosts.</string>
     <string name="hosts_empty_title">No SSH hosts</string>
     <string name="hosts_empty_description">Add a remote development machine to start diagnostics and terminal access.</string>
-    <string name="hosts_saved_heading">Saved hosts</string>
+    <plurals name="hosts_project_count">
+        <item quantity="one">%1$d project</item>
+        <item quantity="other">%1$d projects</item>
+    </plurals>
     <string name="hosts_delete_title">Delete host profile?</string>
     <string name="hosts_delete_description">This removes %1$s from Hobgoblin Android. It does not delete anything on the SSH server.</string>
     <string name="hosts_terminal">Terminal</string>
@@ -156,8 +182,11 @@
     <string name="projects_selected_host">Selected host</string>
     <string name="projects_empty_title">No projects</string>
     <string name="projects_empty_on_host">No projects on %1$s</string>
+    <plurals name="projects_terminal_count">
+        <item quantity="one">%1$d terminal</item>
+        <item quantity="other">%1$d terminals</item>
+    </plurals>
     <string name="projects_show_all">Show all projects</string>
-    <string name="projects_saved_heading">Saved projects</string>
     <string name="projects_on_host">Projects on %1$s</string>
     <string name="projects_show_all_short">Show all</string>
     <string name="projects_delete_title">Delete project record?</string>
@@ -362,8 +391,6 @@
     <string name="termux_workspace_ssh_label">Hobgoblin workspace SSH</string>
     <string name="termux_workspace_ssh_description">Open the selected Hobgoblin workspace over SSH.</string>
     <string name="termux_clipboard_command_label">Hobgoblin Termux SSH command</string>
-    <string name="tmux_choose_host_title">Choose a host</string>
-    <string name="tmux_choose_host_description">Select a saved SSH host to scan its live Hobgoblin tmux sessions.</string>
     <string name="tmux_scan_host">Scan</string>
     <string name="tmux_no_hosts_title">No SSH hosts</string>
     <string name="tmux_no_hosts_description">Add an SSH host before scanning for tmux sessions.</string>

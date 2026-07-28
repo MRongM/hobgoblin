@@ -22,6 +22,8 @@ import com.mrongm.hobgoblin.R
 import com.mrongm.hobgoblin.domain.ResourceState
 import com.mrongm.hobgoblin.domain.ssh.RemoteRepositoryProfile
 
+private val MainTopAppBarHeight = 48.dp
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainTabShell(
@@ -51,10 +53,8 @@ fun MainTabShell(
         topBar = {
             TopAppBar(
                 title = { Text(topBarTitle) },
+                expandedHeight = MainTopAppBarHeight,
                 actions = {
-                    TextButton(onClick = onOpenSettings) {
-                        Text(stringResource(R.string.navigation_settings))
-                    }
                     when (selectedTab) {
                         MainTab.Hosts -> TextButton(onClick = onAddHost) {
                             Text(stringResource(R.string.navigation_add_host))
@@ -64,6 +64,9 @@ fun MainTabShell(
                         }
                         MainTab.Tmux,
                         MainTab.Terminals -> Unit
+                    }
+                    TextButton(onClick = onOpenSettings) {
+                        Text(stringResource(R.string.navigation_settings))
                     }
                 },
             )
