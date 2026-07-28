@@ -53,7 +53,7 @@ The tmux system module adds host inventory operations alongside existing project
 
 Local inventory inspects the current user's tmux socket directory, selects socket names matching `^hobgoblin-project-v1-[a-f0-9]{24}$`, lists each server in stable name order, and lists the default server with an internal `legacy-default` origin. A missing socket directory, a disappeared socket, or no default server contributes no rows. Other command or parse failures fail the scan rather than return incomplete authoritative data.
 
-SSH inventory extends the typed remote-command boundary with a fixed host-list command. Its script resolves tmux through the existing executable-resolution path, resolves the authenticated user's UID, enumerates only matching socket names under tmux's effective socket directory, and emits the same origin-tagged rows. No renderer input is interpolated into a shell loop or command target.
+SSH inventory extends the typed remote-command boundary with a fixed host-list command. Its script resolves tmux through the existing executable-resolution path, resolves the authenticated user's UID, enumerates only matching socket names under tmux's effective socket directory, connects through each exact derived socket, and emits the same origin-tagged rows. No renderer input is interpolated into a shell loop, socket path, or command target.
 
 Host kill accepts only a validated v1 session name and either a validated Hobgoblin server name or the explicit default-server origin. It does not accept arbitrary socket paths.
 

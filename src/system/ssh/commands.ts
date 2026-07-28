@@ -261,9 +261,13 @@ function scriptForCommand(command: RemoteCommandKind): string {
       ) {
         throw new TypeError('error.invalid-arguments')
       }
+      const serverName = command.serverName ?? 'default'
       return [
         'command -v tmux >/dev/null 2>&1 || exit 127',
-        `tmux${command.serverName ? ` -L ${shellQuote(command.serverName)}` : ''} kill-session -t ${shellQuote(`=${command.sessionName}`)}`,
+        ...tmuxSocketDirectoryScript(),
+        `tmux_socket="$tmux_socket_dir/${serverName}"`,
+        "[ -S \"$tmux_socket\" ] || { printf '%s\\n' 'no server running on selected socket' >&2; exit 1; }",
+        `tmux -S "$tmux_socket" kill-session -t ${shellQuote(`=${command.sessionName}`)}`,
       ].join('\n')
     }
     case 'testDirectory':
@@ -622,11 +626,7 @@ function tmuxListHostSessionsScript(): string {
     '  printf \'%s\\n\' "$tmux_output" >&2',
     '  return "$tmux_status"',
     '}',
-    'tmux_uid=$(id -u) || exit $?',
-    'case "$tmux_uid" in ""|*[!0-9]*) exit 1 ;; esac',
-    'tmux_socket_base=${TMUX_TMPDIR:-/tmp}',
-    'case "$tmux_socket_base" in /*) ;; *) exit 1 ;; esac',
-    'tmux_socket_dir="${tmux_socket_base%/}/tmux-$tmux_uid"',
+    ...tmuxSocketDirectoryScript(),
     'if [ -d "$tmux_socket_dir" ]; then',
     '  for tmux_socket in "$tmux_socket_dir"/hobgoblin-project-v1-*; do',
     '    [ -S "$tmux_socket" ] || continue',
@@ -635,11 +635,24 @@ function tmuxListHostSessionsScript(): string {
     `      hobgoblin-project-v1-${serverSuffixPattern}) ;;`,
     '      *) continue ;;',
     '    esac',
-    `    run_tmux_list tmux -L "$tmux_server" -u list-sessions -F ${shellQuote(`${TMUX_HOST_SESSION_LIST_FORMAT}\t`)}"$tmux_server" || exit $?`,
+    `    run_tmux_list tmux -S "$tmux_socket" -u list-sessions -F ${shellQuote(`${TMUX_HOST_SESSION_LIST_FORMAT}\t`)}"$tmux_server" || exit $?`,
     '  done',
     'fi',
-    `run_tmux_list tmux -u list-sessions -F ${shellQuote(`${TMUX_HOST_SESSION_LIST_FORMAT}\tlegacy-default`)} || exit $?`,
+    'tmux_default_socket="$tmux_socket_dir/default"',
+    'if [ -S "$tmux_default_socket" ]; then',
+    `  run_tmux_list tmux -S "$tmux_default_socket" -u list-sessions -F ${shellQuote(`${TMUX_HOST_SESSION_LIST_FORMAT}\tlegacy-default`)} || exit $?`,
+    'fi',
   ].join('\n')
+}
+
+function tmuxSocketDirectoryScript(): string[] {
+  return [
+    'tmux_uid=$(id -u) || exit $?',
+    'case "$tmux_uid" in ""|*[!0-9]*) exit 1 ;; esac',
+    'tmux_socket_base=${TMUX_TMPDIR:-/tmp}',
+    'case "$tmux_socket_base" in /*) ;; *) exit 1 ;; esac',
+    'tmux_socket_dir="${tmux_socket_base%/}/tmux-$tmux_uid"',
+  ]
 }
 
 type RemoteBranchWorkspaceCommand = Extract<

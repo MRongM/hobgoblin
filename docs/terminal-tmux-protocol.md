@@ -204,7 +204,7 @@ Removing only the Android record leaves tmux alive, so a later scan may recover 
 
 ## Host-wide inventory and selected close
 
-The project context menu may use one selected project only as a local or SSH host locator. A host inventory is not project-scoped: it enumerates every socket in the authenticated operating-system user's effective tmux socket directory whose name matches the exact `hobgoblin-project-v1-<24 lowercase hex>` protocol, then also inspects that user's default tmux server for upgrade compatibility. It never scans another Unix user's socket directory or an arbitrary `-S` socket path.
+The project context menu may use one selected project only as a local or SSH host locator. A host inventory is not project-scoped: it resolves the authenticated operating-system user's UID inside that login context, enumerates every socket in that user's effective tmux socket directory whose name matches the exact `hobgoblin-project-v1-<24 lowercase hex>` protocol, and scans each server through that exact derived socket before inspecting the same user's default socket for upgrade compatibility. It never scans another Unix user's socket directory or accepts an arbitrary `-S` socket path from the renderer.
 
 Each host-inventory row includes the three session options, `session_attached`, the session name, and an internal server-origin marker. A row is eligible only when:
 

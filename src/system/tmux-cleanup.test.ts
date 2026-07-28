@@ -353,6 +353,31 @@ describe('local tmux commands', () => {
 })
 
 describe('local host tmux inventory', () => {
+  test('preserves an empty trailing project-root field from the local tmux process', async () => {
+    vi.resetModules()
+    mocks.execa.mockReset()
+    mocks.execa.mockImplementation(async (_executable, args: string[]) => {
+      if (args[0] === '-L') {
+        return {
+          exitCode: 0,
+          stdout: '/srv/legacy\t1\t0\thobgoblin-v1-aebf050981ac829e36100020\t\n',
+          stderr: '',
+        }
+      }
+      return {
+        exitCode: 1,
+        stdout: '',
+        stderr: 'no server running on the default socket',
+      }
+    })
+    const { listLocalHostTmuxSessions: listHost } = await import('#/system/tmux-cleanup.ts')
+
+    await expect(
+      listHost({ listServerNames: async () => ({ ok: true, serverNames: [PROJECT_SERVER_NAME] }) }),
+    ).resolves.toEqual({ ok: true, sessions: [] })
+    expect(mocks.execa).toHaveBeenCalledTimes(2)
+  })
+
   test('parses self-describing rows with an exact project or legacy server origin', () => {
     const parseHostList = (
       tmuxCleanup as typeof tmuxCleanup & {

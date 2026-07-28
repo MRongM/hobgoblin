@@ -320,7 +320,7 @@ async function runLocalTmuxCommand(args: string[], signal?: AbortSignal): Promis
       if (!refreshed.ok) return { ...refreshed, stdout: '', stderr: '' }
       result = await runLocalTmuxExecutable(localTmuxExecutable, args, signal)
     }
-    const stdout = result.stdout.trimEnd()
+    const stdout = result.stdout
     const stderr = result.stderr.trimEnd()
     if (isExecutableMissing(result)) {
       return { ok: false, stdout, stderr, message: 'error.tmux-unavailable' }

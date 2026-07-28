@@ -478,7 +478,7 @@ function BranchWorkspaceBatchMergeDialog({
     <Dialog open onOpenChange={(next) => !next && onClose()}>
       <DialogContent
         data-testid="branch-workspace-batch-merge-dialog"
-        className="max-h-[85vh] w-[calc(100vw-1rem)] max-w-[64rem] overflow-y-auto sm:max-w-[64rem]"
+        className="max-h-[85vh] w-[calc(100vw-1rem)] max-w-[42.667rem] overflow-y-auto sm:w-[66.667vw] sm:max-w-[42.667rem]"
       >
         <DialogHeader>
           <DialogTitle>{t('workspace.branch-workspace.git-action.batch-merge')}</DialogTitle>
@@ -533,7 +533,7 @@ function BranchWorkspaceBatchMergeDialog({
                     key={member.repositoryName}
                     className="grid gap-2 border-b border-separator/60 px-3 py-3 text-xs last:border-b-0"
                   >
-                    <div className="grid grid-cols-[1rem_2rem_minmax(0,0.8fr)_minmax(0,1fr)_auto_minmax(18rem,2fr)] items-center gap-2">
+                    <div className="grid grid-cols-[1rem_2rem_minmax(0,0.8fr)_minmax(0,1fr)_auto_minmax(12rem,2fr)] items-center gap-2">
                       <Checkbox
                         data-merge-repository={member.repositoryName}
                         checked={selected}
@@ -563,11 +563,11 @@ function BranchWorkspaceBatchMergeDialog({
                             repository: member.repositoryName,
                           })}
                           title={destinations[member.repositoryName]}
-                          className="min-w-72 w-full max-w-none font-mono text-[10px] *:data-[slot=select-value]:line-clamp-none"
+                          className="min-w-48 w-full max-w-none font-mono text-[10px] *:data-[slot=select-value]:line-clamp-none"
                         >
                           <SelectValue placeholder={t('workspace.branch-workspace.git-action.select-destination')} />
                         </SelectTrigger>
-                        <SelectContent className="min-w-[var(--radix-select-trigger-width)] w-max max-w-[min(94vw,56rem)]">
+                        <SelectContent className="min-w-[var(--radix-select-trigger-width)] w-max max-w-[min(94vw,37.333rem)]">
                           {member.destinationBranches.map((candidate) => (
                             <SelectItem
                               key={candidate.branch}

@@ -67,18 +67,26 @@ describe('remote command scripts', () => {
       sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
       serverName,
     } as Parameters<typeof buildRemoteCommandInvocation>[1])
+    const defaultHostKill = buildRemoteCommandInvocation(TARGET, {
+      type: 'tmuxKillHostSessionByName',
+      sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+    } as Parameters<typeof buildRemoteCommandInvocation>[1])
 
     expect(hostList.script).toContain('tmux_uid=$(id -u)')
     expect(hostList.script).toContain('tmux_socket_base=${TMUX_TMPDIR:-/tmp}')
     expect(hostList.script).toContain('"$tmux_socket_dir"/hobgoblin-project-v1-*')
-    expect(hostList.script).toContain('tmux -L "$tmux_server" -u list-sessions')
+    expect(hostList.script).toContain('tmux -S "$tmux_socket" -u list-sessions')
     expect(hostList.script).toContain('#{@hobgoblin_project_root}')
     expect(hostList.script).toContain('"$tmux_server"')
-    expect(hostList.script).toContain('tmux -u list-sessions')
+    expect(hostList.script).toContain('tmux_default_socket="$tmux_socket_dir/default"')
+    expect(hostList.script).toContain('tmux -S "$tmux_default_socket" -u list-sessions')
     expect(hostList.script).toContain('legacy-default')
-    expect(hostKill.script).toBe(
-      "command -v tmux >/dev/null 2>&1 || exit 127\ntmux -L 'hobgoblin-project-v1-44159cd9e973adba7b472e6f' kill-session -t '=hobgoblin-v1-aebf050981ac829e36100020'",
+    expect(hostKill.script).toContain('tmux_uid=$(id -u)')
+    expect(hostKill.script).toContain('tmux_socket="$tmux_socket_dir/hobgoblin-project-v1-44159cd9e973adba7b472e6f"')
+    expect(hostKill.script).toContain(
+      'tmux -S "$tmux_socket" kill-session -t \'=hobgoblin-v1-aebf050981ac829e36100020\'',
     )
+    expect(defaultHostKill.script).toContain('tmux_socket="$tmux_socket_dir/default"')
   })
 
   test('rejects unsafe host-wide tmux kill targets before building an SSH invocation', () => {
