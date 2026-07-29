@@ -400,6 +400,8 @@
     <string name="tmux_empty_description">このホストで Hobgoblin メタデータを持つ実行中のセッションが見つかりませんでした。</string>
     <string name="tmux_stale">前回成功したスキャン結果を表示しています：%1$s</string>
     <string name="tmux_scan_failed">tmux セッションをスキャンできません</string>
+    <string name="tmux_import_project">プロジェクトをインポート</string>
+    <string name="tmux_project_imported">インポート済み</string>
     <string name="host_tmux_default_server">デフォルト server</string>
     <string name="host_tmux_project_server">プロジェクト server · %1$s</string>
     <string name="host_tmux_session_name">session · %1$s</string>

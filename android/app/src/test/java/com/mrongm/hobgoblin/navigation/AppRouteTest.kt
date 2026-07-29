@@ -61,6 +61,24 @@ class AppRouteTest {
     }
 
     @Test
+    fun `ordinary project setup has no import context`() {
+        assertEquals(AppRoute.Projects, projectSetupReturnRoute(AppRoute.AddRepository()))
+    }
+
+    @Test
+    fun `tmux directory import retains prefill and return context`() {
+        val route = AppRoute.AddRepository(
+            initialHostId = "host-1",
+            initialRemotePath = "/srv/app",
+            tmuxReturn = TmuxReturn("host-1"),
+        )
+
+        assertEquals("host-1", route.initialHostId)
+        assertEquals("/srv/app", route.initialRemotePath)
+        assertEquals(AppRoute.Tmux("host-1"), projectSetupReturnRoute(route))
+    }
+
+    @Test
     fun `tmux terminal returns to the same visit host`() {
         val tmuxReturn = TmuxReturn("host-1")
         val route = AppRoute.Terminal(

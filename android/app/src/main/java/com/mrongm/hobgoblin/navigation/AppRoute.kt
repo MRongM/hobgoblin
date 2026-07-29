@@ -14,7 +14,11 @@ sealed interface AppRoute {
     data class Tmux(val selectedHostId: String? = null) : AppRoute
     data object Terminals : AppRoute
     data object AddHost : AppRoute
-    data object AddRepository : AppRoute
+    data class AddRepository(
+        val initialHostId: String? = null,
+        val initialRemotePath: String? = null,
+        val tmuxReturn: TmuxReturn? = null,
+    ) : AppRoute
     data object Settings : AppRoute
     data class EditHost(val hostId: String) : AppRoute
     data class HostPorts(val hostId: String) : AppRoute
@@ -59,6 +63,9 @@ internal fun terminalBackgroundRoute(): AppRoute = AppRoute.Terminals
 
 internal fun terminalNotificationRoute(session: TerminalSessionRecord): AppRoute.Terminal =
     AppRoute.terminal(session, returnToTerminals = true)
+
+internal fun projectSetupReturnRoute(route: AppRoute.AddRepository): AppRoute =
+    route.tmuxReturn?.let { AppRoute.Tmux(selectedHostId = it.hostId) } ?: AppRoute.Projects
 
 internal fun terminalReturnRoute(
     route: AppRoute.Terminal,

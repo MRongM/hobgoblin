@@ -1,5 +1,6 @@
 package com.mrongm.hobgoblin.ui.screens.tmux
 
+import com.mrongm.hobgoblin.domain.ssh.RemoteRepositoryProfile
 import com.mrongm.hobgoblin.domain.ssh.SshHostProfile
 import com.mrongm.hobgoblin.hostTmuxRecoveryCandidate
 import com.mrongm.hobgoblin.requireHostTmuxRemoteCloseSuccess
@@ -20,6 +21,29 @@ class TmuxCatalogPresentationTest {
     fun `tmux group title uses basename while root remains readable`() {
         assertEquals("hobgoblin", hostTmuxPathTitle("/srv/projects/hobgoblin"))
         assertEquals("/", hostTmuxPathTitle("/"))
+    }
+
+    @Test
+    fun `tmux path is imported for the same host and normalized project path`() {
+        val project = RemoteRepositoryProfile.create(
+            hostProfileId = "host-1",
+            alias = "App",
+            remotePath = "/srv/app",
+        )
+
+        assertTrue(hostTmuxPathIsImported("host-1", "/srv/app/", listOf(project)))
+    }
+
+    @Test
+    fun `tmux path import state does not cross host or path boundaries`() {
+        val project = RemoteRepositoryProfile.create(
+            hostProfileId = "host-1",
+            alias = "App",
+            remotePath = "/srv/app",
+        )
+
+        assertFalse(hostTmuxPathIsImported("host-2", "/srv/app", listOf(project)))
+        assertFalse(hostTmuxPathIsImported("host-1", "/srv/api", listOf(project)))
     }
 
     @Test

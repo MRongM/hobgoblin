@@ -20,6 +20,7 @@ import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
+import com.termux.terminal.TerminalEmulator
 import com.termux.view.TerminalRenderer
 import com.mrongm.hobgoblin.R
 import com.mrongm.hobgoblin.data.TerminalAppearance
@@ -133,6 +134,7 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
     private var inertiaVelocity = TerminalInertiaVelocity.Zero
     private var inertiaFramePosted = false
     private var lastInertiaFrameMs = 0L
+    private var mouseScrollCell: TerminalCell? = null
     private var selectionRange: TerminalSelectionRange? = null
     private var selectionActionMode: ActionMode? = null
 
@@ -330,7 +332,7 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
                 val deltaRows = (deltaPx / renderer.fontLineSpacing.coerceAtLeast(1)).toInt()
                 if (deltaRows != 0) {
                     scrollRemainderPx = deltaPx - (deltaRows * renderer.fontLineSpacing)
-                    setScrollbackOffset(scrollbackOffset(deltaRows))
+                    scrollVertically(event, deltaRows)
                     touchScrolled = true
                 } else {
                     scrollRemainderPx = deltaPx
@@ -392,7 +394,7 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
         val verticalScroll = event.getAxisValue(MotionEvent.AXIS_VSCROLL)
         if (verticalScroll == 0f) return super.onGenericMotionEvent(event)
         val rows = if (verticalScroll > 0f) MouseWheelRows else -MouseWheelRows
-        setScrollbackOffset(scrollbackOffset(rows))
+        scrollVertically(event, rows)
         return true
     }
 
@@ -507,10 +509,46 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
         if (!awakenScrollBars()) invalidate()
     }
 
+    private fun scrollVertically(event: MotionEvent, deltaRows: Int) {
+        if (deltaRows == 0) return
+        val emulator = controller?.emulator ?: return
+        if (emulator.isMouseTrackingActive) {
+            setScrollbackOffset(0)
+            val cell = terminalCellForEvent(event) ?: return
+            mouseScrollCell = cell
+            scrollVertically(cell, deltaRows)
+            return
+        }
+        mouseScrollCell = null
+        scrollVertically(mouseCell = null, deltaRows = deltaRows)
+    }
+
+    private fun scrollVertically(mouseCell: TerminalCell?, deltaRows: Int): Boolean {
+        if (deltaRows == 0) return false
+        val emulator = controller?.emulator ?: return false
+        if (emulator.isMouseTrackingActive) {
+            val cell = mouseCell ?: return false
+            val button = if (deltaRows > 0) {
+                TerminalEmulator.MOUSE_WHEELUP_BUTTON
+            } else {
+                TerminalEmulator.MOUSE_WHEELDOWN_BUTTON
+            }
+            repeat(abs(deltaRows)) {
+                emulator.sendMouseEvent(button, cell.column + 1, cell.row + 1, true)
+            }
+            return true
+        }
+        if (mouseCell != null) return false
+        val previous = scrollbackOffsetRows
+        setScrollbackOffset(scrollbackOffset(deltaRows))
+        return previous != scrollbackOffsetRows
+    }
+
     private fun cancelInertia() {
         inertiaVelocity = TerminalInertiaVelocity.Zero
         inertiaFramePosted = false
         lastInertiaFrameMs = 0L
+        mouseScrollCell = null
     }
 
     private fun startInertia(verticalPxPerSecond: Float, horizontalPxPerSecond: Float) {
@@ -528,7 +566,11 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
             verticalPxPerSecond = vertical,
             horizontalPxPerSecond = horizontal,
         )
-        if (inertiaVelocity != TerminalInertiaVelocity.Zero) scheduleInertiaFrame()
+        if (inertiaVelocity != TerminalInertiaVelocity.Zero) {
+            scheduleInertiaFrame()
+        } else {
+            mouseScrollCell = null
+        }
     }
 
     private fun scheduleInertiaFrame() {
@@ -551,9 +593,7 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
 
         val verticalRows = ((inertiaVelocity.verticalPxPerSecond * elapsedSeconds) / renderer.fontLineSpacing.coerceAtLeast(1)).toInt()
         if (verticalRows != 0) {
-            val previous = scrollbackOffsetRows
-            setScrollbackOffset(scrollbackOffset(verticalRows))
-            if (previous == scrollbackOffsetRows) {
+            if (!scrollVertically(mouseScrollCell, verticalRows)) {
                 inertiaVelocity = inertiaVelocity.copy(verticalPxPerSecond = 0f)
             }
         }
@@ -572,7 +612,11 @@ internal class HobgoblinTerminalView @JvmOverloads constructor(
             decay = InertiaDecay,
             minVelocityPxPerSecond = InertiaMinVelocityPxPerSecond,
         )
-        if (inertiaVelocity != TerminalInertiaVelocity.Zero) scheduleInertiaFrame()
+        if (inertiaVelocity != TerminalInertiaVelocity.Zero) {
+            scheduleInertiaFrame()
+        } else {
+            mouseScrollCell = null
+        }
     }
 
     private fun clearSelection() {

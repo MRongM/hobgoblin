@@ -44,6 +44,8 @@ class AndroidLocalizationContractTest {
                     "string:tmux_empty_description",
                     "string:tmux_stale",
                     "string:tmux_scan_failed",
+                    "string:tmux_import_project",
+                    "string:tmux_project_imported",
                 ),
             ),
         )

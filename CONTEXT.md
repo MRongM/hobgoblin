@@ -48,6 +48,10 @@ _Avoid_: Web theme, terminal appearance, synchronized theme
 The Android main-navigation destination where the user explicitly selects one saved SSH Host and scans that host's default and project-scoped tmux servers for current-protocol Hobgoblin sessions. Its catalog is derived from live server sockets and session metadata rather than saved Projects or workspace configuration; leaving the destination clears the selected Host, while returning from an opened terminal preserves the current visit.
 _Avoid_: Host-detail tmux tab, Android workspace catalog, remembered Host selection, arbitrary tmux list, tmux session creator
 
+**Android tmux directory project import**:
+An explicit Android action that takes one directory from the current tmux scan into the Project setup flow, where it is validated and saved as a device-local Project. It is distinct from tmux discovery, terminal recovery, and automatic or batch project import.
+_Avoid_: Automatic project discovery, tmux project synchronization, session import
+
 **Tmux server target**:
 The exact default or strictly named project-scoped tmux server on which one discovered session was observed and to which Android must later attach it. It is part of host-level recovery identity because a session name may exist on more than one server and a project-root hash cannot be reversed.
 _Avoid_: Project root, socket scan result, tmux session name

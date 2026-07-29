@@ -401,6 +401,8 @@
     <string name="tmux_empty_description">No live session with Hobgoblin metadata was found on this host.</string>
     <string name="tmux_stale">Showing the last successful scan: %1$s</string>
     <string name="tmux_scan_failed">Unable to scan tmux sessions</string>
+    <string name="tmux_import_project">Import project</string>
+    <string name="tmux_project_imported">Imported</string>
     <string name="host_tmux_default_server">default server</string>
     <string name="host_tmux_project_server">project server · %1$s</string>
     <string name="host_tmux_session_name">session · %1$s</string>

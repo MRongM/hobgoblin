@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import com.mrongm.hobgoblin.R
 import com.mrongm.hobgoblin.data.ManualItemOrderPolicy
 import com.mrongm.hobgoblin.domain.ResourceState
+import com.mrongm.hobgoblin.domain.ssh.RemoteRepositoryProfile
 import com.mrongm.hobgoblin.domain.ssh.SshHostProfile
 import com.mrongm.hobgoblin.terminals.HostDiscoveredTmuxSession
 import com.mrongm.hobgoblin.terminals.HostTmuxPathGroup
@@ -60,12 +61,14 @@ import kotlinx.coroutines.launch
 fun TmuxScreen(
     hosts: List<SshHostProfile>,
     selectedHost: SshHostProfile?,
+    repositories: List<RemoteRepositoryProfile>,
     tmuxState: ResourceState<List<HostTmuxPathGroup>>,
     tmuxRefreshing: Boolean,
     onSelectHost: (String) -> Unit,
     onChangeHost: () -> Unit,
     onAddHost: () -> Unit,
     onRefreshTmux: () -> Unit,
+    onImportDirectory: (String) -> Unit,
     onOpenTmuxSession: (HostDiscoveredTmuxSession) -> Unit,
     retainedTmuxSessions: Map<HostDiscoveredTmuxSession, TerminalSessionRecord>,
     onReconnectTmuxSession: (TerminalSessionRecord) -> Unit,
@@ -91,11 +94,14 @@ fun TmuxScreen(
         )
         Box(modifier = Modifier.weight(1f)) {
             HostTmuxCatalog(
+                hostId = selectedHost.id,
                 hostTitle = selectedHost.title,
+                repositories = repositories,
                 state = tmuxState,
                 isRefreshing = tmuxRefreshing,
                 onRefresh = onRefreshTmux,
                 onChangeHost = onChangeHost,
+                onImportDirectory = onImportDirectory,
                 onOpenSession = onOpenTmuxSession,
                 retainedSessions = retainedTmuxSessions,
                 onReconnectSession = onReconnectTmuxSession,
@@ -237,11 +243,14 @@ private data class HostTmuxActionTarget(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HostTmuxCatalog(
+    hostId: String,
     hostTitle: String,
+    repositories: List<RemoteRepositoryProfile>,
     state: ResourceState<List<HostTmuxPathGroup>>,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
     onChangeHost: () -> Unit,
+    onImportDirectory: (String) -> Unit,
     onOpenSession: (HostDiscoveredTmuxSession) -> Unit,
     retainedSessions: Map<HostDiscoveredTmuxSession, TerminalSessionRecord>,
     onReconnectSession: (TerminalSessionRecord) -> Unit,
@@ -271,11 +280,14 @@ private fun HostTmuxCatalog(
                 onChangeHost = onChangeHost,
             )
             is ResourceState.Loaded -> HostTmuxGroups(
+                hostId = hostId,
                 groups = state.value,
+                repositories = repositories,
                 staleReason = null,
                 actionError = actionError,
                 onRefresh = onRefresh,
                 onChangeHost = onChangeHost,
+                onImportDirectory = onImportDirectory,
                 onOpenSession = onOpenSession,
                 retainedSessions = retainedSessions,
                 onReconnectSession = onReconnectSession,
@@ -288,11 +300,14 @@ private fun HostTmuxCatalog(
                 },
             )
             is ResourceState.Stale -> HostTmuxGroups(
+                hostId = hostId,
                 groups = state.value,
+                repositories = repositories,
                 staleReason = state.reason,
                 actionError = actionError,
                 onRefresh = onRefresh,
                 onChangeHost = onChangeHost,
+                onImportDirectory = onImportDirectory,
                 onOpenSession = onOpenSession,
                 retainedSessions = retainedSessions,
                 onReconnectSession = onReconnectSession,
@@ -533,11 +548,14 @@ private fun CatalogNotice(message: String) {
 
 @Composable
 private fun HostTmuxGroups(
+    hostId: String,
     groups: List<HostTmuxPathGroup>,
+    repositories: List<RemoteRepositoryProfile>,
     staleReason: String?,
     actionError: String?,
     onRefresh: () -> Unit,
     onChangeHost: () -> Unit,
+    onImportDirectory: (String) -> Unit,
     onOpenSession: (HostDiscoveredTmuxSession) -> Unit,
     retainedSessions: Map<HostDiscoveredTmuxSession, TerminalSessionRecord>,
     onReconnectSession: (TerminalSessionRecord) -> Unit,
@@ -573,18 +591,37 @@ private fun HostTmuxGroups(
         }
         groups.forEach { group ->
             item(key = "heading:${group.initialPath}") {
-                Column(verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs)) {
-                    Text(
-                        hostTmuxPathTitle(group.initialPath),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        group.initialPath,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                val imported = hostTmuxPathIsImported(hostId, group.initialPath, repositories)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs),
+                    ) {
+                        Text(
+                            hostTmuxPathTitle(group.initialPath),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            group.initialPath,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    TextButton(
+                        enabled = !imported,
+                        onClick = { onImportDirectory(group.initialPath) },
+                    ) {
+                        Text(
+                            stringResource(
+                                if (imported) R.string.tmux_project_imported else R.string.tmux_import_project,
+                            ),
+                        )
+                    }
                 }
             }
             items(
