@@ -472,6 +472,96 @@ describe('branch workspace create planner', () => {
     )
   })
 
+  test('plans repository dependencies from another known non-base worktree', async () => {
+    const repoId = path.join(ROOT, 'api')
+    const alternativeSourcePath = path.join(ROOT, 'api-feature')
+    const deps = dependencies({
+      [repoId]: snapshot(
+        branch('main', repoId),
+        branch('develop', path.join(ROOT, 'api-develop')),
+        branch('feature/source', alternativeSourcePath),
+      ),
+    })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
+    deps.getBootstrapPreflight.mockResolvedValue({
+      ok: true,
+      preflight: {
+        kind: 'candidates',
+        candidates: [{ path: '.env', kind: 'file' }],
+      },
+    })
+
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      {
+        operation: 'create',
+        branch: BRANCH,
+        repositories: [
+          {
+            repositoryName: 'api',
+            baseBranch: 'develop',
+            worktreeBootstrap: {
+              kind: 'materialize',
+              candidateScope: 'all-untracked',
+              selections: [{ path: '.env', mode: 'copy' }],
+              sourceWorktreePath: alternativeSourcePath,
+            },
+          },
+        ],
+        auxiliaryEntries: [],
+      },
+      deps,
+    )
+
+    expect(deps.getBootstrapPreflight).toHaveBeenCalledWith(repoId, undefined, 'all-untracked', alternativeSourcePath)
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        repositories: [
+          {
+            worktreeBootstrap: {
+              kind: 'materialize',
+              sourceWorktreePath: alternativeSourcePath,
+            },
+          },
+        ],
+      },
+    })
+  })
+
+  test('rejects a repository dependency source that is not a known worktree', async () => {
+    const repoId = path.join(ROOT, 'api')
+    const deps = dependencies({
+      [repoId]: snapshot(branch('main', repoId), branch('develop', path.join(ROOT, 'api-develop'))),
+    })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
+
+    await expect(
+      buildBranchWorkspacePlan(
+        ROOT,
+        {
+          operation: 'create',
+          branch: BRANCH,
+          repositories: [
+            {
+              repositoryName: 'api',
+              baseBranch: 'develop',
+              worktreeBootstrap: {
+                kind: 'materialize',
+                candidateScope: 'all-untracked',
+                selections: [{ path: '.env', mode: 'copy' }],
+                sourceWorktreePath: path.join(ROOT, 'unknown-source'),
+              },
+            },
+          ],
+          auxiliaryEntries: [],
+        },
+        deps,
+      ),
+    ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+    expect(deps.getBootstrapPreflight).not.toHaveBeenCalled()
+  })
+
   test('rejects a repository dependency that is no longer untracked', async () => {
     const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch('main')) })
     deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })

@@ -134,12 +134,16 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.base-named': '{name} のベースブランチ',
   'workspace.branch-workspace.repository-dependencies': 'リポジトリ依存項目',
   'workspace.branch-workspace.repository-dependencies-description':
-    '選択したベースブランチの worktree から新しい worktree にコピーまたはリンクする未追跡項目を選択します。',
+    '現在の依存元から新しい worktree にコピーまたはリンクする未追跡項目を選択します。',
   'workspace.branch-workspace.repository-dependencies-loading': 'リポジトリ依存項目を読み込み中…',
   'workspace.branch-workspace.repository-dependencies-error':
     'リポジトリ依存項目を読み込めませんでした。このリポジトリを選択解除して再選択してください。',
-  'workspace.branch-workspace.repository-dependencies-empty':
-    '選択したベースブランチの worktree に選択可能な未追跡項目はありません。',
+  'workspace.branch-workspace.repository-dependencies-empty': '現在の依存元に選択可能な未追跡項目はありません。',
+  'workspace.branch-workspace.repository-dependencies-source-primary':
+    'プライマリ worktree の依存項目を使用しています。',
+  'workspace.branch-workspace.repository-dependencies-source-branch': '{branch} worktree の依存項目を使用しています。',
+  'workspace.branch-workspace.repository-dependencies-source-select': '別の worktree の依存項目を使用',
+  'workspace.branch-workspace.repository-dependencies-source-primary-option': 'プライマリ worktree',
   'workspace.branch-workspace.auxiliary': 'ブランチワークスペースの依存項目',
   'workspace.branch-workspace.auxiliary-refresh': 'ブランチワークスペースの依存項目を更新',
   'workspace.branch-workspace.auxiliary-named': 'ブランチワークスペース依存項目 {name} を含める',

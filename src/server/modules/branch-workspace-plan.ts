@@ -266,9 +266,7 @@ async function buildReducePlan(
     if (!sameStringSet(requestedNames, persistedNames)) {
       return { ok: false, message: 'workspace.branch-workspace.operation-incomplete' }
     }
-  } else if (
-    manifest.repositories.some((member) => member.progress !== 'complete')
-  ) {
+  } else if (manifest.repositories.some((member) => member.progress !== 'complete')) {
     return { ok: false, message: 'workspace.branch-workspace.needs-repair' }
   }
 
@@ -1018,7 +1016,26 @@ async function planRepository(
     return { ok: false, message: safePlanMessage(error, 'workspace.branch-workspace.repository-unavailable') }
   }
 
-  const sourceWorktreePath = snapshot.branches.find((candidate) => candidate.name === baseBranch)?.worktree?.path
+  const decision = requestedBootstrap ?? { kind: 'skip' }
+  const baseSourceWorktreePath = snapshot.branches.find((candidate) => candidate.name === baseBranch)?.worktree?.path
+  let sourceWorktreePath = baseSourceWorktreePath
+  if (decision.kind === 'materialize') {
+    sourceWorktreePath = undefined
+    const requestedSourceWorktreePath = decision.sourceWorktreePath
+    if (requestedSourceWorktreePath) {
+      const primaryWorktreePath = workspaceRepositoryPath(repoId)
+      const knownSourceWorktreePath = [
+        primaryWorktreePath,
+        ...snapshot.branches.flatMap((candidate) => (candidate.worktree?.path ? [candidate.worktree.path] : [])),
+      ].find(
+        (candidate): candidate is string => !!candidate && sameHostPath(repoId, candidate, requestedSourceWorktreePath),
+      )
+      if (!knownSourceWorktreePath) return { ok: false, message: 'error.invalid-arguments' }
+      if (!primaryWorktreePath || !sameHostPath(repoId, knownSourceWorktreePath, primaryWorktreePath)) {
+        sourceWorktreePath = knownSourceWorktreePath
+      }
+    }
+  }
 
   const bootstrap = await (dependencies.getBootstrapPreflight ?? getRepositoryWorktreeBootstrapPreflight)(
     repoId,
@@ -1027,7 +1044,6 @@ async function planRepository(
     sourceWorktreePath,
   )
   if (!bootstrap.ok) return bootstrap
-  const decision = requestedBootstrap ?? { kind: 'skip' }
   if (decision.kind === 'materialize') {
     const candidates = new Set(bootstrap.preflight.candidates.map((candidate) => candidate.path))
     if (decision.selections.some((selection) => !candidates.has(selection.path))) {

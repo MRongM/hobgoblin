@@ -185,7 +185,7 @@ A user-selected process that copies or symlinks immediate untracked entries from
 _Avoid_: Worktree setup script, post-create hook
 
 **Worktree bootstrap source**:
-The existing repository worktree whose current untracked entries supply one worktree bootstrap decision. It is the worktree attached to the selected branch context or base branch when available, with the repository primary worktree as the fallback when that branch has no worktree, and remains fixed from candidate discovery through the corresponding create execution.
+The existing repository worktree whose current untracked entries supply one worktree bootstrap decision. It starts with the worktree attached to the selected branch context or base branch, falls back to the repository primary worktree when that source has no candidates or no worktree, may be changed to another existing worktree outside the selected branch, and remains fixed from candidate selection through the corresponding create execution.
 _Avoid_: Source branch, repository root, bootstrap template
 
 **Worktree bootstrap candidate**:

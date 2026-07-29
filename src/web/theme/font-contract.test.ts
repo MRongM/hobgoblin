@@ -49,7 +49,7 @@ describe('font contract', () => {
 
   test('uses icon-sm for project titlebar actions', () => {
     const sources = [
-      [new URL('../components/repo-workspace/WorkspaceRepositoryRail.tsx', import.meta.url), 5],
+      [new URL('../components/repo-workspace/WorkspaceRepositoryRail.tsx', import.meta.url), 6],
       [new URL('../components/repo-workspace/RepoExplorerPane.tsx', import.meta.url), 3],
     ] as const
 

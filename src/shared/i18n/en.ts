@@ -134,12 +134,16 @@ export const en = {
   'workspace.branch-workspace.base-named': 'Base branch for {name}',
   'workspace.branch-workspace.repository-dependencies': 'Repository dependencies',
   'workspace.branch-workspace.repository-dependencies-description':
-    'Choose untracked entries to copy or link from the selected base branch worktree into the new worktree.',
+    'Choose untracked entries to copy or link from the current dependency source into the new worktree.',
   'workspace.branch-workspace.repository-dependencies-loading': 'Loading repository dependencies…',
   'workspace.branch-workspace.repository-dependencies-error':
     'Repository dependencies could not be loaded; deselect and select this repository to retry.',
   'workspace.branch-workspace.repository-dependencies-empty':
-    'The selected base branch worktree has no selectable untracked entries.',
+    'The current dependency source has no selectable untracked entries.',
+  'workspace.branch-workspace.repository-dependencies-source-primary': 'Using dependencies from the primary worktree.',
+  'workspace.branch-workspace.repository-dependencies-source-branch': 'Using dependencies from {branch}.',
+  'workspace.branch-workspace.repository-dependencies-source-select': 'Use dependencies from another worktree',
+  'workspace.branch-workspace.repository-dependencies-source-primary-option': 'Primary worktree',
   'workspace.branch-workspace.auxiliary': 'Branch workspace dependencies',
   'workspace.branch-workspace.auxiliary-refresh': 'Refresh branch workspace dependencies',
   'workspace.branch-workspace.auxiliary-named': 'Include branch workspace dependency {name}',

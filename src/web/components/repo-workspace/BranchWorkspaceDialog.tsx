@@ -36,6 +36,10 @@ import {
   projectBranchWorkspaceOperationProgress,
   type BranchWorkspaceStepProgressStatus,
 } from '#/web/components/repo-workspace/branch-workspace-operation-progress.ts'
+import {
+  repositoryDependencySources,
+  type RepositoryDependencySource,
+} from '#/web/components/repo-workspace/branch-workspace-repository-dependency-source.ts'
 
 export interface BranchWorkspaceRepositoryOption {
   id: string
@@ -43,12 +47,19 @@ export interface BranchWorkspaceRepositoryOption {
   available: boolean
   branches: string[]
   defaultBranch: string
+  primaryWorktreePath?: string
   sourceWorktreeByBranch?: Record<string, string>
 }
 
 type RepositoryBootstrapState =
   | { status: 'loading' }
-  | { status: 'ready'; preflight: WorktreeBootstrapPreflight }
+  | {
+      status: 'ready'
+      preflight: WorktreeBootstrapPreflight
+      source: RepositoryDependencySource
+      sourceOptions: RepositoryDependencySource[]
+      sourceSelectionEnabled: boolean
+    }
   | { status: 'error' }
 
 interface BranchWorkspaceDialogProps {
@@ -194,22 +205,61 @@ export function BranchWorkspaceDialog({
   const loadRepositoryBootstrap = async (
     repository: BranchWorkspaceRepositoryOption,
     baseBranch = baseBranches[repository.name] || repository.defaultBranch,
+    requestedSource?: RepositoryDependencySource,
   ) => {
     bootstrapControllers.current[repository.name]?.abort()
     const controller = new AbortController()
     bootstrapControllers.current[repository.name] = controller
     setRepositoryBootstraps((current) => ({ ...current, [repository.name]: { status: 'loading' } }))
     try {
-      const result = await getRepositoryWorktreeBootstrapPreflight(
-        repository.id,
-        controller.signal,
-        'all-untracked',
-        repository.sourceWorktreeByBranch?.[baseBranch],
+      const sources = repositoryDependencySources({
+        baseBranch,
+        primaryWorktreePath: repository.primaryWorktreePath,
+        sourceWorktreeByBranch: repository.sourceWorktreeByBranch,
+      })
+      const readSource = async (source: RepositoryDependencySource, sourcePathOverride?: string) =>
+        await getRepositoryWorktreeBootstrapPreflight(
+          repository.id,
+          controller.signal,
+          'all-untracked',
+          sourcePathOverride ?? (source.kind === 'branch' ? source.worktreePath : undefined),
+        )
+      let source = requestedSource ?? sources.initial
+      let result = await readSource(
+        source,
+        requestedSource === undefined ? repository.sourceWorktreeByBranch?.[baseBranch] : undefined,
       )
       if (controller.signal.aborted) return
+      if (!result.ok) {
+        setRepositoryBootstraps((current) => ({ ...current, [repository.name]: { status: 'error' } }))
+        return
+      }
+      const initialEmpty = requestedSource === undefined && result.preflight.candidates.length === 0
+      if (initialEmpty && source.kind === 'branch') {
+        source = sources.primary
+        result = await readSource(source)
+        if (controller.signal.aborted) return
+        if (!result.ok) {
+          setRepositoryBootstraps((current) => ({ ...current, [repository.name]: { status: 'error' } }))
+          return
+        }
+      }
+      const baseWorktreePath = repository.sourceWorktreeByBranch?.[baseBranch]
+      const primaryMayBeSelected =
+        !baseWorktreePath || !repository.primaryWorktreePath || baseWorktreePath !== repository.primaryWorktreePath
+      const sourceOptions = uniqueRepositoryDependencySources([
+        ...(primaryMayBeSelected ? [sources.primary] : []),
+        ...sources.alternatives.filter((candidate) => candidate.kind === 'branch'),
+      ])
       setRepositoryBootstraps((current) => ({
         ...current,
-        [repository.name]: result.ok ? { status: 'ready', preflight: result.preflight } : { status: 'error' },
+        [repository.name]: {
+          status: 'ready',
+          preflight: result.preflight,
+          source,
+          sourceOptions,
+          sourceSelectionEnabled: requestedSource !== undefined || initialEmpty || sources.initial.kind === 'primary',
+        },
       }))
     } catch {
       if (!controller.signal.aborted) {
@@ -253,6 +303,9 @@ export function BranchWorkspaceDialog({
               kind: 'materialize' as const,
               candidateScope: 'all-untracked' as const,
               selections,
+              ...(state?.status === 'ready' && state.source.kind === 'branch'
+                ? { sourceWorktreePath: state.source.worktreePath }
+                : {}),
             },
           }
         : {}),
@@ -413,6 +466,55 @@ export function BranchWorkspaceDialog({
                             <p className="text-xs text-muted-foreground" role="status">
                               {t('workspace.branch-workspace.repository-dependencies-error')}
                             </p>
+                          ) : null}
+                          {bootstrap?.status === 'ready' && bootstrap.sourceSelectionEnabled ? (
+                            <div className="mb-2 grid gap-1.5 rounded-md border border-separator bg-muted/20 p-2">
+                              <p className="text-xs text-muted-foreground">
+                                {bootstrap.source.kind === 'primary'
+                                  ? t('workspace.branch-workspace.repository-dependencies-source-primary')
+                                  : t('workspace.branch-workspace.repository-dependencies-source-branch', {
+                                      branch: bootstrap.source.branch,
+                                    })}
+                              </p>
+                              {bootstrap.sourceOptions.some((source) => source.id !== bootstrap.source.id) ? (
+                                <select
+                                  aria-label={t('workspace.branch-workspace.repository-dependencies-source-select')}
+                                  value=""
+                                  disabled={pending}
+                                  className="h-8 rounded-md border border-input bg-background px-2 font-mono text-xs"
+                                  onChange={(event) => {
+                                    const source = bootstrap.sourceOptions.find(
+                                      (candidate) => candidate.id === event.target.value,
+                                    )
+                                    if (!source) return
+                                    setRepositoryBootstrapChoices((current) => ({
+                                      ...current,
+                                      [repository.name]: {},
+                                    }))
+                                    void loadRepositoryBootstrap(
+                                      repository,
+                                      baseBranches[repository.name] || repository.defaultBranch,
+                                      source,
+                                    )
+                                  }}
+                                >
+                                  <option value="">
+                                    {t('workspace.branch-workspace.repository-dependencies-source-select')}
+                                  </option>
+                                  {bootstrap.sourceOptions
+                                    .filter((source) => source.id !== bootstrap.source.id)
+                                    .map((source) => (
+                                      <option key={source.id} value={source.id}>
+                                        {source.kind === 'primary'
+                                          ? t(
+                                              'workspace.branch-workspace.repository-dependencies-source-primary-option',
+                                            )
+                                          : source.branch}
+                                      </option>
+                                    ))}
+                                </select>
+                              ) : null}
+                            </div>
                           ) : null}
                           {bootstrap?.status === 'ready' && bootstrap.preflight.candidates.length === 0 ? (
                             <p className="text-xs text-muted-foreground">
@@ -759,6 +861,17 @@ export function BranchWorkspaceDialog({
       </DialogContent>
     </Dialog>
   )
+}
+
+function uniqueRepositoryDependencySources(
+  sources: readonly RepositoryDependencySource[],
+): RepositoryDependencySource[] {
+  const seen = new Set<string>()
+  return sources.filter((source) => {
+    if (seen.has(source.id)) return false
+    seen.add(source.id)
+    return true
+  })
 }
 
 function PlanStepProgressStatus({ status }: { status: BranchWorkspaceStepProgressStatus }) {

@@ -5,6 +5,7 @@ import type {
 } from '#/shared/branch-workspace-git-actions.ts'
 import type { CreateWorktreeMode } from '#/shared/worktree-create.ts'
 import {
+  normalizeWorktreeBootstrapSourcePath,
   normalizeWorktreeBootstrapSelections,
   type WorktreeBootstrapDecision,
 } from '#/shared/worktree-bootstrap-summary.ts'
@@ -425,7 +426,17 @@ function normalizeRepositoryWorktreeBootstrap(value: unknown): WorktreeBootstrap
   if (decision.kind === 'skip') return { kind: 'skip' }
   if (decision.kind !== 'materialize') return null
   const selections = normalizeWorktreeBootstrapSelections(decision.selections)
-  return selections ? { kind: 'materialize', selections, candidateScope: 'all-untracked' } : null
+  const sourceWorktreePath =
+    decision.sourceWorktreePath === undefined
+      ? undefined
+      : normalizeWorktreeBootstrapSourcePath(decision.sourceWorktreePath)
+  if (!selections || (decision.sourceWorktreePath !== undefined && !sourceWorktreePath)) return null
+  return {
+    kind: 'materialize',
+    selections,
+    candidateScope: 'all-untracked',
+    ...(sourceWorktreePath ? { sourceWorktreePath } : {}),
+  }
 }
 
 function invalidRequest(): BranchWorkspacePlanRequestResult {

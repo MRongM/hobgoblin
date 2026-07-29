@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
 import { arrayMove } from '@dnd-kit/sortable'
 import { Download, Eye, EyeOff, Folder, FolderPlus, LoaderCircle, RefreshCw, Settings2, Terminal } from 'lucide-react'
@@ -53,6 +54,7 @@ interface Props {
   onOpenFileArea?: () => void
   onToggleFileArea?: () => void
   onOpenDetailArea?: () => void
+  statusBarActionHost?: HTMLDivElement | null
 }
 
 export function WorkspaceRepositoryRail({
@@ -62,6 +64,7 @@ export function WorkspaceRepositoryRail({
   onOpenFileArea,
   onToggleFileArea,
   onOpenDetailArea,
+  statusBarActionHost,
 }: Props) {
   const t = useT()
   const workspace = useReposStore((state) => state.workspaceProjects[workspaceRootId])
@@ -110,6 +113,7 @@ export function WorkspaceRepositoryRail({
   const [gitActionKind, setGitActionKind] = useState<BranchWorkspaceGitActionKind>('batch-commit')
   const [gitActionTargetId, setGitActionTargetId] = useState<string | null>(null)
   const [branchReloadPending, setBranchReloadPending] = useState(false)
+  const branchReloadPendingRef = useRef(false)
   const refreshingBranchChangesRef = useRef<Set<string>>(new Set())
   const [refreshingBranchChanges, setRefreshingBranchChanges] = useState<ReadonlySet<string>>(() => new Set())
   const [registryCleanupOpen, setRegistryCleanupOpen] = useState(false)
@@ -191,6 +195,7 @@ export function WorkspaceRepositoryRail({
             available: repo.availability.phase === 'available',
             branches: repo.data.branches.map((branch) => branch.name),
             defaultBranch,
+            primaryWorktreePath: Object.values(repo.data.worktreesByPath).find((worktree) => worktree.isMain)?.path,
             sourceWorktreeByBranch: Object.fromEntries(
               repo.data.branches.flatMap((branch) =>
                 branch.worktree?.path ? [[branch.name, branch.worktree.path]] : [],
@@ -340,13 +345,15 @@ export function WorkspaceRepositoryRail({
     void branchGitActions.requestPlan(kind, item.id)
   }
   const reloadBranchWorkspaces = async () => {
-    if (branchReloadPending) return
+    if (branchReloadPendingRef.current) return
+    branchReloadPendingRef.current = true
     setBranchReloadPending(true)
     try {
       await branchQuery.refresh()
     } catch {
       // The current read error remains visible and retryable.
     } finally {
+      branchReloadPendingRef.current = false
       setBranchReloadPending(false)
     }
   }
@@ -491,7 +498,7 @@ export function WorkspaceRepositoryRail({
     setDependencyDialogOpen(true)
     void branchDependencyActions.read(item.id)
   }
-  const headerActions = (
+  const branchWorkspacePrimaryActions = (
     <>
       <Button
         type="button"
@@ -515,6 +522,10 @@ export function WorkspaceRepositoryRail({
       >
         <Download aria-hidden="true" />
       </Button>
+    </>
+  )
+  const workspaceRepositoryOnlyActions = (
+    <>
       <Button
         type="button"
         variant="ghost"
@@ -537,17 +548,49 @@ export function WorkspaceRepositoryRail({
       >
         {scanning ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />}
       </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        aria-label={t(repositoryListVisible ? 'workspace.repositories.hide' : 'workspace.repositories.show')}
-        title={t(repositoryListVisible ? 'workspace.repositories.hide' : 'workspace.repositories.show')}
-        onClick={() => toggleRepositoryList(workspaceRootId)}
-      >
-        {repositoryListVisible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
-      </Button>
     </>
+  )
+  const repositoryListToggleAction = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      aria-label={t(repositoryListVisible ? 'workspace.repositories.hide' : 'workspace.repositories.show')}
+      title={t(repositoryListVisible ? 'workspace.repositories.hide' : 'workspace.repositories.show')}
+      onClick={() => toggleRepositoryList(workspaceRootId)}
+    >
+      {repositoryListVisible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+    </Button>
+  )
+  const repositoryHeaderActions = (
+    <>
+      {branchWorkspacePrimaryActions}
+      {workspaceRepositoryOnlyActions}
+      {repositoryListToggleAction}
+    </>
+  )
+  const hiddenRepositoryActions = (
+    <>
+      {branchWorkspacePrimaryActions}
+      {repositoryListToggleAction}
+    </>
+  )
+  const branchListRefreshAction = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      disabled={branchReloadPending}
+      aria-label={t('workspace.branch-workspace.reload')}
+      title={t('workspace.branch-workspace.reload')}
+      onClick={() => void reloadBranchWorkspaces()}
+    >
+      {branchReloadPending ? (
+        <LoaderCircle className="animate-spin" aria-hidden="true" />
+      ) : (
+        <RefreshCw aria-hidden="true" />
+      )}
+    </Button>
   )
 
   return (
@@ -556,7 +599,7 @@ export function WorkspaceRepositoryRail({
         {repositoryListVisible ? (
           <WorkspaceRepositoryListPane
             label={t('workspace.repositories')}
-            actions={headerActions}
+            actions={repositoryHeaderActions}
             height={repositoryListHeight}
             onHeightChange={handleRepositoryListHeightChange}
           >
@@ -586,7 +629,8 @@ export function WorkspaceRepositoryRail({
               <span className="min-w-0 flex-1 text-[length:var(--goblin-project-titlebar-font-size)] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
                 {t('workspace.branch-workspace.list')}
               </span>
-              {!repositoryListVisible ? headerActions : null}
+              {branchListRefreshAction}
+              {!repositoryListVisible && !statusBarActionHost ? hiddenRepositoryActions : null}
             </div>
             {branchQuery.isPending ? (
               <div className="px-2 py-2 text-xs text-muted-foreground">{t('workspace.branch-workspace.loading')}</div>
@@ -686,6 +730,9 @@ export function WorkspaceRepositoryRail({
           </div>
         )}
       </div>
+      {!repositoryListVisible && statusBarActionHost
+        ? createPortal(hiddenRepositoryActions, statusBarActionHost)
+        : null}
       <WorkspaceConfigurationDialog
         open={configurationOpen}
         onOpenChange={setConfigurationOpen}

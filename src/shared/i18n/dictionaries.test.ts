@@ -385,6 +385,21 @@ describe('i18n dictionaries', () => {
     expect(zh[key]).toContain('子工作区已成功创建')
   })
 
+  test('identifies repository dependency sources in every locale', () => {
+    const keys = [
+      'workspace.branch-workspace.repository-dependencies-source-primary',
+      'workspace.branch-workspace.repository-dependencies-source-branch',
+      'workspace.branch-workspace.repository-dependencies-source-select',
+      'workspace.branch-workspace.repository-dependencies-source-primary-option',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(en['workspace.branch-workspace.repository-dependencies-source-branch']).toContain('{branch}')
+    expect(zh['workspace.branch-workspace.repository-dependencies-source-primary']).toContain('主工作树')
+  })
+
   test('distinguishes internal and external terminal actions in every dictionary', () => {
     expect(en['terminal.internal']).toBe('Internal terminal')
     expect(en['terminal.external']).toBe('External terminal')
