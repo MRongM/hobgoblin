@@ -473,11 +473,6 @@ fun HobgoblinAndroidApp(
                             hostTmuxStateHostId = null
                             route = selectTmuxHost(hostId)
                         },
-                        onChangeHost = {
-                            hostTmuxState = ResourceState.Idle
-                            hostTmuxStateHostId = null
-                            route = tmuxRoute()
-                        },
                         onAddHost = { route = AppRoute.AddHost },
                         onRefreshTmux = { hostTmuxRefreshNonce += 1 },
                         onImportDirectory = { initialPath ->

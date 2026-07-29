@@ -21,6 +21,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -65,7 +67,6 @@ fun TmuxScreen(
     tmuxState: ResourceState<List<HostTmuxPathGroup>>,
     tmuxRefreshing: Boolean,
     onSelectHost: (String) -> Unit,
-    onChangeHost: () -> Unit,
     onAddHost: () -> Unit,
     onRefreshTmux: () -> Unit,
     onImportDirectory: (String) -> Unit,
@@ -76,9 +77,10 @@ fun TmuxScreen(
     onDeleteTmuxSession: suspend (HostDiscoveredTmuxSession, TerminalSessionRecord, Boolean) -> Unit,
     hostOrder: List<String> = emptyList(),
 ) {
+    val orderedHosts = ManualItemOrderPolicy.apply(hosts, hostOrder, SshHostProfile::id)
     if (selectedHost == null) {
         TmuxHostChooser(
-            hosts = ManualItemOrderPolicy.apply(hosts, hostOrder, SshHostProfile::id),
+            hosts = orderedHosts,
             onSelectHost = onSelectHost,
             onAddHost = onAddHost,
         )
@@ -87,10 +89,11 @@ fun TmuxScreen(
 
     Column(modifier = Modifier.fillMaxSize()) {
         SelectedTmuxHost(
-            host = selectedHost,
+            selectedHost = selectedHost,
+            hosts = orderedHosts,
             isRefreshing = tmuxRefreshing,
             onRefresh = onRefreshTmux,
-            onChangeHost = onChangeHost,
+            onSelectHost = onSelectHost,
         )
         Box(modifier = Modifier.weight(1f)) {
             HostTmuxCatalog(
@@ -100,7 +103,6 @@ fun TmuxScreen(
                 state = tmuxState,
                 isRefreshing = tmuxRefreshing,
                 onRefresh = onRefreshTmux,
-                onChangeHost = onChangeHost,
                 onImportDirectory = onImportDirectory,
                 onOpenSession = onOpenTmuxSession,
                 retainedSessions = retainedTmuxSessions,
@@ -177,11 +179,14 @@ private fun TmuxHostChooser(
 
 @Composable
 private fun SelectedTmuxHost(
-    host: SshHostProfile,
+    selectedHost: SshHostProfile,
+    hosts: List<SshHostProfile>,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
-    onChangeHost: () -> Unit,
+    onSelectHost: (String) -> Unit,
 ) {
+    var hostMenuExpanded by remember(selectedHost.id) { mutableStateOf(false) }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -209,19 +214,49 @@ private fun SelectedTmuxHost(
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
                     Text(
-                        host.title,
+                        selectedHost.title,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        host.subtitle,
+                        selectedHost.subtitle,
                         style = MaterialTheme.typography.bodySmall,
                         fontFamily = FontFamily.Monospace,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                TextButton(onClick = onChangeHost) {
-                    Text(stringResource(R.string.tmux_change_host))
+                Box {
+                    TextButton(
+                        enabled = hosts.any { host -> host.id != selectedHost.id },
+                        onClick = { hostMenuExpanded = true },
+                    ) {
+                        Text(stringResource(R.string.tmux_change_host))
+                    }
+                    DropdownMenu(
+                        expanded = hostMenuExpanded,
+                        onDismissRequest = { hostMenuExpanded = false },
+                    ) {
+                        hosts.forEach { host ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column(verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Xs)) {
+                                        Text(host.title, fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            host.subtitle,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                },
+                                enabled = host.id != selectedHost.id,
+                                onClick = {
+                                    hostMenuExpanded = false
+                                    onSelectHost(host.id)
+                                },
+                            )
+                        }
+                    }
                 }
             }
             TextButton(
@@ -249,7 +284,6 @@ private fun HostTmuxCatalog(
     state: ResourceState<List<HostTmuxPathGroup>>,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
-    onChangeHost: () -> Unit,
     onImportDirectory: (String) -> Unit,
     onOpenSession: (HostDiscoveredTmuxSession) -> Unit,
     retainedSessions: Map<HostDiscoveredTmuxSession, TerminalSessionRecord>,
@@ -277,7 +311,6 @@ private fun HostTmuxCatalog(
             is ResourceState.Error -> TmuxErrorState(
                 message = state.message,
                 onRetry = onRefresh,
-                onChangeHost = onChangeHost,
             )
             is ResourceState.Loaded -> HostTmuxGroups(
                 hostId = hostId,
@@ -286,7 +319,6 @@ private fun HostTmuxCatalog(
                 staleReason = null,
                 actionError = actionError,
                 onRefresh = onRefresh,
-                onChangeHost = onChangeHost,
                 onImportDirectory = onImportDirectory,
                 onOpenSession = onOpenSession,
                 retainedSessions = retainedSessions,
@@ -306,7 +338,6 @@ private fun HostTmuxCatalog(
                 staleReason = state.reason,
                 actionError = actionError,
                 onRefresh = onRefresh,
-                onChangeHost = onChangeHost,
                 onImportDirectory = onImportDirectory,
                 onOpenSession = onOpenSession,
                 retainedSessions = retainedSessions,
@@ -468,15 +499,12 @@ private fun CenteredMessage(message: String) {
 private fun TmuxErrorState(
     message: String,
     onRetry: () -> Unit,
-    onChangeHost: () -> Unit,
 ) {
     FeedbackState(
         title = stringResource(R.string.tmux_scan_failed),
         description = message,
         primaryLabel = stringResource(R.string.common_retry),
         onPrimary = onRetry,
-        secondaryLabel = stringResource(R.string.tmux_change_host),
-        onSecondary = onChangeHost,
         isError = true,
     )
 }
@@ -554,7 +582,6 @@ private fun HostTmuxGroups(
     staleReason: String?,
     actionError: String?,
     onRefresh: () -> Unit,
-    onChangeHost: () -> Unit,
     onImportDirectory: (String) -> Unit,
     onOpenSession: (HostDiscoveredTmuxSession) -> Unit,
     retainedSessions: Map<HostDiscoveredTmuxSession, TerminalSessionRecord>,
@@ -568,8 +595,6 @@ private fun HostTmuxGroups(
             description = stringResource(R.string.tmux_empty_description),
             primaryLabel = stringResource(R.string.common_refresh),
             onPrimary = onRefresh,
-            secondaryLabel = stringResource(R.string.tmux_change_host),
-            onSecondary = onChangeHost,
         )
         return
     }

@@ -7,16 +7,20 @@ import org.junit.Test
 
 class TmuxScreenContractTest {
     @Test
-    fun `tmux is a select first main screen with actionable feedback states`() {
+    fun `tmux is a select first main screen with an inline host switcher`() {
         val source = source("ui/screens/tmux/TmuxScreen.kt")
 
         assertTrue(source.contains("fun TmuxScreen("))
         assertTrue(source.contains("onSelectHost"))
-        assertTrue(source.contains("onChangeHost"))
         assertTrue(source.contains("onAddHost"))
         assertFalse(source.contains("R.string.tmux_choose_host_title"))
         assertFalse(source.contains("R.string.tmux_choose_host_description"))
         assertTrue(source.contains("R.string.tmux_change_host"))
+        assertTrue(source.contains("DropdownMenu("))
+        assertTrue(source.contains("DropdownMenuItem("))
+        assertTrue(source.contains("enabled = host.id != selectedHost.id"))
+        assertTrue(source.contains("onSelectHost(host.id)"))
+        assertFalse(source.contains("onChangeHost"))
         assertTrue(source.contains("R.string.common_retry"))
         assertTrue(source.contains("PullToRefreshBox("))
     }
