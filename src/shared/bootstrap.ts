@@ -61,7 +61,6 @@ export interface InitialSettingsSnapshot {
   topbarHeightPx: number
   toolbarHeightPx: number
   fileTreeFontSize: number
-  fileTreeTopbarFontSize: number
   fileTreeClipboardMaxBytesMb: number
   terminalFontSize: number
   terminalCustomButtonsVisible: boolean

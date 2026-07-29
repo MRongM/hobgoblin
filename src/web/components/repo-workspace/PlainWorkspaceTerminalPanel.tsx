@@ -153,11 +153,7 @@ export function PlainWorkspaceTerminalPanel({
       </Toolbar>
       <div className="flex min-h-0 flex-1 flex-col">
         {snapshot.selectedDescriptor || snapshot.creating === true ? (
-          <TerminalSlot
-            repoRoot={repoId}
-            branch={snapshot.selectedDescriptor?.branch ?? NON_GIT_WORKSPACE_TERMINAL_BRANCH}
-            worktreePath={workspacePath}
-          />
+          <TerminalSlot repoRoot={repoId} worktreePath={workspacePath} />
         ) : null}
       </div>
     </section>

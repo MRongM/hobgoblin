@@ -6,14 +6,11 @@ import type {
   CommitMessageProviderAvailability,
 } from '#/shared/commit-message-ai.ts'
 import type {
-  RepoFileSearchResult,
   RepoFileTransferRequest,
   RepoFileTransferResult,
   RepoFileTreeBinaryFileReadResult,
   RepoFileTreeBinaryFileReplaceResult,
   RepoFileTreeResult,
-  RepoFileTreeTextFileReadResult,
-  RepoFileTreeTextFileReplaceResult,
 } from '#/shared/file-tree.ts'
 import type { RepoFileExportRequest, RepoFileExportResult } from '#/shared/file-tree-export.ts'
 import type { EditorOpenTarget } from '#/shared/file-path-target.ts'
@@ -284,16 +281,6 @@ export async function getRepositoryFileTree(
   return await postServerJson('/api/repo/file-tree', { repoId, worktreePath, dirPath }, { signal })
 }
 
-export async function searchRepositoryFileTree(
-  repoId: string,
-  worktreePath: string,
-  query: string,
-  limit?: number,
-  signal?: AbortSignal,
-): Promise<RepoFileSearchResult> {
-  return await postServerJson('/api/repo/file-search', { repoId, worktreePath, query, limit }, { signal })
-}
-
 export async function renameRepositoryFileTreeEntry(
   repoId: string,
   worktreePath: string,
@@ -319,23 +306,6 @@ export async function createRepositoryFileTreeFile(
   name: string,
 ): Promise<ExecResult> {
   return await postServerJson('/api/repo/file-tree/create-file', { repoId, worktreePath, parentDirPath, name })
-}
-
-export async function readRepositoryFileTreeTextFile(
-  repoId: string,
-  worktreePath: string,
-  filePath: string,
-): Promise<RepoFileTreeTextFileReadResult> {
-  return await postServerJson('/api/repo/file-tree/read-text-file', { repoId, worktreePath, filePath })
-}
-
-export async function replaceRepositoryFileTreeTextFile(
-  repoId: string,
-  worktreePath: string,
-  filePath: string,
-  content: string,
-): Promise<RepoFileTreeTextFileReplaceResult> {
-  return await postServerJson('/api/repo/file-tree/replace-text-file', { repoId, worktreePath, filePath, content })
 }
 
 export async function readRepositoryFileTreeBinaryFile(

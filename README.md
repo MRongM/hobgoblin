@@ -6,13 +6,6 @@ Hobgoblin is not just a branch management tool. It is a high-productivity worksp
 
 The core model is simple: **multi-project + multi-worktree / multi-branch + multi-terminal**. Open several repositories, isolate parallel branches in separate worktrees, attach terminals to the right context, and run AI CLI tools such as Codex or Claude without losing track of Git state. Work with local repositories, Git SSH remotes, or repositories reachable through SSH-config aliases.
 
-## Screenshots
-
-<p>
-  <img src="docs/screenshot-20260626-143532.png" alt="Hobgoblin workspace overview" width="49%" />
-  <img src="docs/screenshot-20260626-144523.png" alt="Hobgoblin repository workspace" width="49%" />
-</p>
-
 ## Productivity Formula
 
 ```text

@@ -286,15 +286,6 @@ export function waitForRepoOperationsIdle(
   })
 }
 
-export function pruneRepoBranchLogOperations(repoId: string, validBranches: Set<string>): void {
-  const operations = runtimes.get(repoId)?.operations
-  if (!operations) return
-  for (const key of Object.keys(operations) as RepoOperationKey[]) {
-    if (!key.startsWith('log:')) continue
-    if (!validBranches.has(key.slice('log:'.length))) delete operations[key]
-  }
-}
-
 export function scheduleRepoTask<T>(
   repoId: string,
   lane: RepoTaskLane,

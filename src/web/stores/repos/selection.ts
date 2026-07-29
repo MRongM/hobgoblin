@@ -577,7 +577,7 @@ function createRuntimeCoherentSelectionActions(set: ReposSet, get: ReposGet): Ru
   }
 }
 
-function createRepoMutationSelectionActions(set: ReposSet, get: ReposGet): RepoMutationSelectionActions {
+function createRepoMutationSelectionActions(get: ReposGet): RepoMutationSelectionActions {
   return {
     async checkoutSelectedInRepo(id: string) {
       const state = get()
@@ -605,6 +605,6 @@ export function createSelectionActions(set: ReposSet, get: ReposGet) {
     ...createRestorableWorkspaceSelectionActions(set, get),
     ...createLocalWorkspaceSelectionActions(set),
     ...createRuntimeCoherentSelectionActions(set, get),
-    ...createRepoMutationSelectionActions(set, get),
+    ...createRepoMutationSelectionActions(get),
   }
 }

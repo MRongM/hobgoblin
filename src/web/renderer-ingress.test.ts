@@ -49,45 +49,4 @@ describe('renderer ingress', () => {
     unsubscribe()
     expect(off).toHaveBeenCalled()
   })
-
-  test('subscribes to renderer effect intents without forwarding non-intent payloads', async () => {
-    const off = vi.fn()
-    const onIntent = vi.fn((cb: (event: unknown) => void) => {
-      cb({ type: 'external-open-enqueued' })
-      cb({ type: 'settings-write-error', message: 'failed' })
-      return off
-    })
-    Object.defineProperty(globalThis, 'window', {
-      configurable: true,
-      value: {
-        goblinNative: {
-          runtime: {
-            kind: 'electron',
-            bridgeVersion: RENDERER_BRIDGE_VERSION,
-            capabilities: [...ELECTRON_RENDERER_CAPABILITIES],
-          },
-          homeDir: '/Users/test',
-          invokeRpc: vi.fn(),
-          abortRpc: vi.fn(async () => false),
-          onEvent: vi.fn(() => () => {}),
-          onIntent,
-          pathForFile: () => '',
-        },
-        location: {
-          href: 'http://127.0.0.1:32100/',
-          origin: 'http://127.0.0.1:32100',
-          search: '',
-        },
-      },
-    })
-
-    const { subscribeRendererEffectIntentType } = await import('#/web/renderer-ingress.ts')
-    const cb = vi.fn()
-    const unsubscribe = subscribeRendererEffectIntentType('external-open-enqueued', cb)
-
-    expect(cb).toHaveBeenCalledWith({ type: 'external-open-enqueued' })
-    expect(cb).not.toHaveBeenCalledWith({ type: 'settings-write-error', message: 'failed' })
-    unsubscribe()
-    expect(off).toHaveBeenCalled()
-  })
 })

@@ -38,7 +38,7 @@ afterEach(() => {
 
 describe('RepoWorkspaceSkeleton', () => {
   test('shows branch rows with list actions in the fixed split mode', () => {
-    render(<RepoWorkspaceSkeleton layout="left-right" detailCollapsed={false} detailFocusMode={false} />)
+    render(<RepoWorkspaceSkeleton layout="left-right" detailFocusMode={false} />)
 
     expect(container?.querySelectorAll('li')).toHaveLength(14)
     expect(container?.querySelectorAll('[data-testid="branch-list-skeleton-action"]')).toHaveLength(6)
@@ -50,7 +50,7 @@ describe('RepoWorkspaceSkeleton', () => {
   })
 
   test('renders split workspace with list actions in left-right mode', () => {
-    render(<RepoWorkspaceSkeleton layout="left-right" detailCollapsed={false} detailFocusMode={false} />)
+    render(<RepoWorkspaceSkeleton layout="left-right" detailFocusMode={false} />)
 
     expect(container?.querySelectorAll('li')).toHaveLength(14)
     expect(container?.querySelectorAll('[data-testid="branch-list-skeleton-action"]')).toHaveLength(6)
@@ -62,7 +62,7 @@ describe('RepoWorkspaceSkeleton', () => {
   })
 
   test('renders only the terminal detail placeholder while desktop focus is restored', () => {
-    render(<RepoWorkspaceSkeleton layout="left-right" detailCollapsed={false} detailFocusMode />)
+    render(<RepoWorkspaceSkeleton layout="left-right" detailFocusMode />)
 
     expect(container?.querySelectorAll('li')).toHaveLength(8)
     expect(container?.querySelectorAll('[data-testid="branch-list-skeleton-action"]')).toHaveLength(0)
@@ -72,30 +72,15 @@ describe('RepoWorkspaceSkeleton', () => {
   })
 
   test('keeps only the detail pane when focus preference is true', () => {
-    render(<RepoWorkspaceSkeleton layout="left-right" detailCollapsed={false} detailFocusMode />)
+    render(<RepoWorkspaceSkeleton layout="left-right" detailFocusMode />)
 
     expect(container?.querySelectorAll('li')).toHaveLength(8)
     expect(container?.querySelectorAll('[data-testid="branch-list-skeleton-action"]')).toHaveLength(0)
     expect(container?.querySelector('[data-testid="mock-split-pane"]')).toBeNull()
   })
 
-  test('ignores a restored collapsed preference in the fixed layout', () => {
-    render(<RepoWorkspaceSkeleton layout="left-right" detailCollapsed detailFocusMode={false} />)
-
-    expect(container?.querySelectorAll('li')).toHaveLength(14)
-    expect(container?.querySelectorAll('[data-testid="branch-list-skeleton-action"]')).toHaveLength(6)
-    expect(container?.querySelector('[data-testid="mock-split-pane"]')).not.toBeNull()
-  })
-
   test('renders only the detail pane on small screens when persisted focus is disabled', () => {
-    render(
-      <RepoWorkspaceSkeleton
-        layout="left-right"
-        detailCollapsed={false}
-        detailFocusMode={false}
-        compact
-      />,
-    )
+    render(<RepoWorkspaceSkeleton layout="left-right" detailFocusMode={false} compact />)
 
     expect(container?.querySelectorAll('li')).toHaveLength(8)
     expect(container?.querySelectorAll('[data-testid="branch-list-skeleton-action"]')).toHaveLength(0)

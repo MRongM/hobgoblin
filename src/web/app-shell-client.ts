@@ -1,5 +1,4 @@
 import { getInitialBootstrap } from '#/web/bootstrap.ts'
-import type { SettingsPage } from '#/shared/rpc.ts'
 import type { ExecResult } from '#/shared/git-types.ts'
 import type {
   SaveClipboardBinaryFilesInput,
@@ -146,10 +145,6 @@ async function openExternalUrlWithPolicy(url: string, allowHttp: boolean): Promi
   const shell = nativeShell()
   if (shell?.openExternalUrl) return await shell.openExternalUrl({ url, allowHttp })
   return openExternalUrlInBrowser(url, allowHttp)
-}
-
-export async function openAppSettings(page: SettingsPage = 'general'): Promise<boolean> {
-  return (await nativeShell()?.openSettingsWindow?.({ page })) ?? false
 }
 
 export async function openProjectGitHub(): Promise<ExecResult> {

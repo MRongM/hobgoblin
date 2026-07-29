@@ -116,7 +116,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={terminalContext()}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -153,7 +153,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -196,7 +196,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -244,7 +244,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -287,7 +287,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -363,7 +363,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" onRevealPath={onRevealPath} />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" onRevealPath={onRevealPath} />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -405,7 +405,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -510,7 +510,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -657,7 +657,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -670,7 +670,7 @@ describe('TerminalSlot', () => {
         root.render(
           <TerminalSessionContext.Provider value={context}>
             <TerminalSessionReadContext.Provider value={readContext}>
-              <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+              <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
             </TerminalSessionReadContext.Provider>
           </TerminalSessionContext.Provider>,
         )
@@ -702,11 +702,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot
-              repoRoot={descriptor.repoRoot}
-              branch={descriptor.branch}
-              worktreePath={descriptor.worktreePath}
-            />
+            <TerminalSlot repoRoot={descriptor.repoRoot} worktreePath={descriptor.worktreePath} />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -791,7 +787,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -841,7 +837,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -886,7 +882,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -929,7 +925,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -971,7 +967,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -1034,7 +1030,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -1103,7 +1099,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot={REMOTE_REPO_ID} branch="feature" worktreePath="/srv/repo-feature" />
+            <TerminalSlot repoRoot={REMOTE_REPO_ID} worktreePath="/srv/repo-feature" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -1173,7 +1169,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -1220,7 +1216,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -1305,7 +1301,7 @@ async function renderTerminalSlotFixture(
     root.render(
       <TerminalSessionContext.Provider value={context}>
         <TerminalSessionReadContext.Provider value={readContext}>
-          <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+          <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
         </TerminalSessionReadContext.Provider>
       </TerminalSessionContext.Provider>,
     )

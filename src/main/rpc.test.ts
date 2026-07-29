@@ -41,7 +41,6 @@ function settingsPrefs(overrides: Partial<SettingsPrefs> = {}): SettingsPrefs {
     terminalApp: 'auto',
     editorApp: 'auto',
     fileTreeFontSize: 12,
-    fileTreeTopbarFontSize: overrides.fileTreeTopbarFontSize ?? 13,
     fileTreeClipboardMaxBytesMb: overrides.fileTreeClipboardMaxBytesMb ?? 30,
     terminalFontSize: 14,
     terminalCustomButtonsVisible: true,
@@ -165,7 +164,6 @@ vi.mock('#/main/menu.ts', () => ({
 vi.mock('#/main/i18n/index.ts', () => ({
   applyLangPref: vi.fn(),
   getCurrentLang: vi.fn(() => 'en'),
-  getDictionary: vi.fn(() => ({})),
   resolveLang: vi.fn((pref: string) => (pref === 'auto' ? 'en' : pref)),
   setCurrentLang: vi.fn(),
 }))
@@ -184,7 +182,6 @@ vi.mock('#/system/terminals.ts', () => ({
 }))
 
 vi.mock('#/system/editors.ts', () => ({
-  getResolvedEditorApp: vi.fn(() => null),
   getEditorAppAvailability: vi.fn(() => ({ vscode: false, cursor: false, windsurf: false })),
   openInPreferredEditor: vi.fn(),
   resolveEditorApp: vi.fn((_pref, availability) =>
@@ -194,7 +191,6 @@ vi.mock('#/system/editors.ts', () => ({
 
 vi.mock('#/main/renderer-surface-events.ts', () => ({
   broadcastRpcEvent: vi.fn(),
-  sendRpcEvent: vi.fn(),
 }))
 
 vi.mock('#/main/settings-server-client.ts', () => ({

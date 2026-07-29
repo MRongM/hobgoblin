@@ -22,7 +22,6 @@ import {
   setFileTreeClipboardMaxBytesMb,
   setFontFamily,
   setFileTreeFontSize,
-  setFileTreeTopbarFontSize,
   setGlobalShortcut,
   setGlobalShortcutDisabled,
   setGitNetworkProxyEnabled,
@@ -178,12 +177,6 @@ export async function setToolbarHeightPxPreference(heightPx: number): Promise<nu
   const toolbarHeightPx = await setToolbarHeightPx(heightPx)
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, toolbarHeightPx }))
   return toolbarHeightPx
-}
-
-export async function setFileTreeTopbarFontSizePreference(fontSize: number): Promise<number> {
-  const fileTreeTopbarFontSize = await setFileTreeTopbarFontSize(fontSize)
-  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, fileTreeTopbarFontSize }))
-  return fileTreeTopbarFontSize
 }
 
 export async function setFileTreeClipboardMaxBytesMbPreference(value: number): Promise<number> {

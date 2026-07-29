@@ -11,7 +11,7 @@ const EMPTY_BOOTSTRAP: RendererBootstrapSnapshot = {
   surface: { kind: 'main' },
 }
 
-function normalizeRendererSurfaceBootstrap(
+export function normalizeRendererSurfaceBootstrap(
   value: unknown,
   runtimeKind: RendererRuntimeSnapshot['kind'],
 ): RendererSurfaceBootstrap {

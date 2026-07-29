@@ -22,7 +22,6 @@ interface RowCountProps {
 
 interface WorkspaceSkeletonProps {
   layout?: RepoWorkspaceLayout
-  detailCollapsed?: boolean
   detailFocusMode?: boolean
   compact?: boolean
 }
@@ -44,7 +43,7 @@ export function RepoWorkspaceSkeleton({
 }: WorkspaceSkeletonProps) {
   const detailPane = (
     <RepoWorkspacePane>
-      <BranchDetailSkeleton layout={layout} />
+      <BranchDetailSkeleton />
     </RepoWorkspacePane>
   )
   const workspaceBody =
@@ -66,13 +65,7 @@ export function RepoWorkspaceSkeleton({
   return <section className="flex min-w-0 flex-1 flex-col">{workspaceBody}</section>
 }
 
-export function BranchDetailSkeleton({
-  layout = DEFAULT_WORKSPACE_LAYOUT,
-}: {
-  layout?: RepoWorkspaceLayout
-  collapsed?: boolean
-  detailFocusMode?: boolean
-}) {
+export function BranchDetailSkeleton() {
   return (
     <section className="flex min-h-0 flex-1 flex-col bg-background">
       <Toolbar variant="detail">

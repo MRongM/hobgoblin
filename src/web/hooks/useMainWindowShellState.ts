@@ -21,7 +21,7 @@ export function useMainWindowShellState({
   onRouteSettingsPageChange,
 }: UseMainWindowShellStateOptions) {
   const [closeRepoCandidateId, setCloseRepoCandidateId] = useState<string | null>(null)
-  const { activeId, sessionReady, detailCollapsed, workspaceLayout, order } = useStoreWithEqualityFn(
+  const { activeId, sessionReady, detailCollapsed, workspaceLayout } = useStoreWithEqualityFn(
     useReposStore,
     mainWindowWorkspaceStateFromStore,
     mainWindowWorkspaceStateEqual,
@@ -71,7 +71,6 @@ export function useMainWindowShellState({
     () =>
       createMainWindowNavigationActions({
         activeId,
-        order,
         setActive,
         activateProject,
         closeRepo: requestCloseRepo,
@@ -80,17 +79,7 @@ export function useMainWindowShellState({
         setDetailTab,
         onOpenSettings: openSettings,
       }),
-    [
-      activeId,
-      activateProject,
-      cycleActive,
-      openSettings,
-      order,
-      requestCloseRepo,
-      selectBranch,
-      setActive,
-      setDetailTab,
-    ],
+    [activeId, activateProject, cycleActive, openSettings, requestCloseRepo, selectBranch, setActive, setDetailTab],
   )
   const closeRepoConfirmation = useMemo(
     () => ({

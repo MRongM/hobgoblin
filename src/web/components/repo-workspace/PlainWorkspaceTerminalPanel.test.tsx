@@ -130,7 +130,6 @@ describe('PlainWorkspaceTerminalPanel', () => {
 
     expect(terminalSlotProps).toContainEqual({
       repoRoot: '/repo',
-      branch: NON_GIT_WORKSPACE_TERMINAL_BRANCH,
       worktreePath: '/repo',
     })
   })

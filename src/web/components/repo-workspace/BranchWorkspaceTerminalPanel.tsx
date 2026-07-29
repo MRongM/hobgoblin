@@ -23,8 +23,7 @@ interface BranchWorkspaceTerminalPanelProps {
   onExitTerminalFocus?: () => void
 }
 
-interface OpenBranchWorkspaceInternalTerminalDependencies
-  extends Pick<TerminalSessionContextValue, 'createTerminal'> {
+interface OpenBranchWorkspaceInternalTerminalDependencies extends Pick<TerminalSessionContextValue, 'createTerminal'> {
   activate(): void
 }
 
@@ -116,7 +115,7 @@ export function BranchWorkspaceTerminalPanel({
       </Toolbar>
       <div className="flex min-h-0 flex-1 flex-col">
         {snapshot.selectedDescriptor || snapshot.creating === true ? (
-          <TerminalSlot repoRoot={context.rootId} branch={context.branch} worktreePath={context.path} />
+          <TerminalSlot repoRoot={context.rootId} worktreePath={context.path} />
         ) : null}
       </div>
     </section>

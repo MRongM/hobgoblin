@@ -13,11 +13,7 @@ import {
 } from 'react'
 import { toast } from 'sonner'
 import { Button } from '#/web/components/ui/button.tsx'
-import {
-  GOBLIN_FILE_PATHS_MIME,
-  parseGoblinFilePathDragPayload,
-  type RepoFileTransferUploadedItem,
-} from '#/shared/file-tree.ts'
+import { GOBLIN_FILE_PATHS_MIME, parseGoblinFilePathDragPayload } from '#/shared/file-tree.ts'
 import type { ClipboardBinaryFilePayload } from '#/shared/clipboard-binary-temp-files.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
@@ -40,16 +36,16 @@ import {
 import { MobileTerminalToolbar } from '#/web/components/terminal/mobile-terminal-toolbar.tsx'
 import { isMobileDevice } from '#/web/components/terminal/mobile-detection.ts'
 import { useRuntimeTerminalSettings } from '#/web/runtime-settings-terminal-buttons.ts'
-import { generatedPasteFileName, generatedTimestampedPasteFileName } from '#/web/components/file-tree/model.ts'
+import { generatedTimestampedPasteFileName } from '#/web/components/file-tree/model.ts'
+import { uploadedItemFromFile } from '#/web/components/file-tree/clipboard.ts'
 import { openWorktreeEditorTarget } from '#/web/lib/editor-open-targets.ts'
 interface TerminalSlotProps {
   repoRoot: string
-  branch: string
   worktreePath: string
   onRevealPath?: (relativePath: string) => void
 }
 
-export function TerminalSlot({ repoRoot, branch, worktreePath, onRevealPath }: TerminalSlotProps) {
+export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalSlotProps) {
   const t = useT()
   const hostRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
@@ -605,7 +601,7 @@ async function resolveRemotePastedFilePaths(
     return result.ok ? result.copied.map((entry) => entry.destinationPath) : []
   }
   if (files.length === 0) return []
-  const items = await Promise.all(files.map(fileToUploadedItem))
+  const items = await Promise.all(files.map(uploadedItemFromFile))
   const result = await transferRepositoryFiles({
     repoId: options.repoRoot,
     worktreePath: options.worktreePath,
@@ -629,23 +625,6 @@ async function fileToClipboardPayload(file: File): Promise<ClipboardBinaryFilePa
     type: file.type,
     bytes: await file.arrayBuffer(),
   }
-}
-
-async function fileToUploadedItem(file: File): Promise<RepoFileTransferUploadedItem> {
-  const bytes = new Uint8Array(await file.arrayBuffer())
-  const name = file.name || generatedPasteFileName(file.type)
-  return {
-    name: file.name ? generatedTimestampedPasteFileName(file.name) : name,
-    mimeType: file.type || undefined,
-    bytesBase64: bytesToBase64(bytes),
-    byteLength: bytes.byteLength,
-  }
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary)
 }
 
 function pathForTerminalDrop(path: string, worktreePath: string): string {

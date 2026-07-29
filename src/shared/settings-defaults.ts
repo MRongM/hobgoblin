@@ -22,12 +22,10 @@ import {
 import {
   MAX_FILE_TREE_FONT_SIZE,
   MAX_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
-  MAX_FILE_TREE_TOPBAR_FONT_SIZE,
   MAX_GIT_NETWORK_TIMEOUT_SEC,
   MAX_TERMINAL_FONT_SIZE,
   MIN_FILE_TREE_FONT_SIZE,
   MIN_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
-  MIN_FILE_TREE_TOPBAR_FONT_SIZE,
   MIN_GIT_NETWORK_TIMEOUT_SEC,
   MIN_SERVER_PORT,
   MIN_TERMINAL_FONT_SIZE,
@@ -65,7 +63,6 @@ export const DEFAULT_TERMINAL_APP: TerminalPref = 'auto'
 export const DEFAULT_EDITOR_APP: EditorPref = 'auto'
 export const DEFAULT_FILE_TREE_FONT_SIZE = 14
 export const DEFAULT_APP_FONT_SIZE = DEFAULT_FILE_TREE_FONT_SIZE
-export const DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE = 13
 export const DEFAULT_TERMINAL_FONT_SIZE = 14
 export const DEFAULT_TERMINAL_CUSTOM_BUTTONS_VISIBLE = true
 export const DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE: TerminalCustomButtonSize = 'medium'
@@ -114,7 +111,6 @@ export function defaultSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): Se
     topbarHeightPx: overrides.topbarHeightPx ?? DEFAULT_TOPBAR_HEIGHT_PX,
     toolbarHeightPx: overrides.toolbarHeightPx ?? DEFAULT_TOOLBAR_HEIGHT_PX,
     fileTreeFontSize: overrides.fileTreeFontSize ?? DEFAULT_FILE_TREE_FONT_SIZE,
-    fileTreeTopbarFontSize: overrides.fileTreeTopbarFontSize ?? DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
     fileTreeClipboardMaxBytesMb: overrides.fileTreeClipboardMaxBytesMb ?? DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
     terminalFontSize: overrides.terminalFontSize ?? DEFAULT_TERMINAL_FONT_SIZE,
     terminalCustomButtonsVisible: overrides.terminalCustomButtonsVisible ?? DEFAULT_TERMINAL_CUSTOM_BUTTONS_VISIBLE,
@@ -169,7 +165,6 @@ export function initialSettingsFromSnapshot(
     | 'topbarHeightPx'
     | 'toolbarHeightPx'
     | 'fileTreeFontSize'
-    | 'fileTreeTopbarFontSize'
     | 'fileTreeClipboardMaxBytesMb'
     | 'terminalFontSize'
     | 'terminalCustomButtonsVisible'
@@ -198,7 +193,6 @@ export function initialSettingsFromSnapshot(
     topbarHeightPx: snapshot.topbarHeightPx,
     toolbarHeightPx: snapshot.toolbarHeightPx,
     fileTreeFontSize: snapshot.fileTreeFontSize,
-    fileTreeTopbarFontSize: snapshot.fileTreeTopbarFontSize,
     fileTreeClipboardMaxBytesMb: snapshot.fileTreeClipboardMaxBytesMb,
     terminalFontSize: snapshot.terminalFontSize,
     terminalCustomButtonsVisible: snapshot.terminalCustomButtonsVisible,
@@ -224,12 +218,10 @@ export {
   DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   MAX_FILE_TREE_FONT_SIZE,
   MAX_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
-  MAX_FILE_TREE_TOPBAR_FONT_SIZE,
   MAX_GIT_NETWORK_TIMEOUT_SEC,
   MAX_TERMINAL_FONT_SIZE,
   MIN_FILE_TREE_FONT_SIZE,
   MIN_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
-  MIN_FILE_TREE_TOPBAR_FONT_SIZE,
   MIN_GIT_NETWORK_TIMEOUT_SEC,
   MIN_SERVER_PORT,
   MIN_TERMINAL_FONT_SIZE,

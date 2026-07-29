@@ -138,7 +138,6 @@
     <string name="diagnostics_category_cancelled">已取消</string>
     <string name="diagnostics_category_config_changed">配置已更改</string>
     <string name="diagnostics_category_unknown">未知</string>
-    <string name="hosts_status_healthy">正常</string>
     <string name="hosts_loading_description">正在加载已保存的 SSH 主机。</string>
     <string name="hosts_empty_title">没有 SSH 主机</string>
     <string name="hosts_empty_description">添加远程开发机器以开始诊断和终端访问。</string>
@@ -275,7 +274,6 @@
     <string name="repository_not_loaded">未加载。</string>
     <string name="repository_loading_directories">正在加载目录。</string>
     <string name="repository_no_child_directories">没有子目录。</string>
-    <string name="repository_terminal_unavailable">终端会话不可用</string>
     <string name="repository_snapshot_failed">获取仓库快照失败</string>
     <string name="repository_worktree_create_failed">创建远程工作树失败</string>
     <string name="repository_worktree_remove_failed">移除远程工作树失败</string>

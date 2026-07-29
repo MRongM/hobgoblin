@@ -1,6 +1,5 @@
 import type { RpcEvent } from '#/shared/rpc.ts'
-import { isRendererEffectIntent } from '#/shared/renderer-effect-intents.ts'
-import type { RendererEffectIntent, RendererEffectIntentType } from '#/shared/renderer-effect-intents.ts'
+import type { RendererEffectIntent } from '#/shared/renderer-effect-intents.ts'
 import { getRendererBridge } from '#/web/renderer-bridge.ts'
 
 // Native-host ingress for Electron renderers. Keep this separate from server
@@ -18,14 +17,4 @@ export function subscribeNativeHostEventType<TType extends NativeHostEventType>(
 
 export function subscribeRendererEffectIntent(cb: (event: RendererEffectIntent) => void): () => void {
   return getRendererBridge().onEffectIntent(cb)
-}
-
-export function subscribeRendererEffectIntentType<TType extends RendererEffectIntentType>(
-  type: TType,
-  cb: (event: Extract<RendererEffectIntent, { type: TType }>) => void,
-): () => void {
-  return subscribeRendererEffectIntent((event) => {
-    if (!isRendererEffectIntent(event) || event.type !== type) return
-    cb(event as Extract<RendererEffectIntent, { type: TType }>)
-  })
 }

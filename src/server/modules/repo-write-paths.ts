@@ -407,11 +407,6 @@ export async function getRepositoryRemoteTags(cwd: string, signal?: AbortSignal)
   return await backend.getRemoteTags(signal, networkOptions)
 }
 
-export async function getRepositoryLocalTags(cwd: string, signal?: AbortSignal): Promise<string[]> {
-  if (!isValidRepoLocator(cwd)) return []
-  return await runWithRepoBackend(cwd, async (backend) => await backend.getLocalTags(signal))
-}
-
 export async function deleteRepositoryBranch(
   cwd: string,
   branch: string,

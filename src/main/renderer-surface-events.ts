@@ -10,10 +10,6 @@ export function broadcastRpcEvent(event: RpcEvent): void {
   broadcastToSurfaceCapability('rpcBroadcast', RPC_EVENT_CHANNEL, [event])
 }
 
-export function sendRpcEvent(win: BrowserWindow | null | undefined, event: RpcEvent): void {
-  sendToRegisteredWindow(win, RPC_EVENT_CHANNEL, [event])
-}
-
 export function broadcastRendererEffectIntent(intent: RendererEffectIntent): void {
   broadcastToSurfaceCapability('rpcBroadcast', RENDERER_EFFECT_INTENT_CHANNEL, [intent])
 }

@@ -1507,7 +1507,7 @@ describe('RepoExplorerPane', () => {
   test('does not replay a file reveal request in another repo', async () => {
     const repoA = useReposStore.getState().repos[REPO_ID]
     const repoB = seedRepoState({ id: REPO_B_ID, selectedBranch: 'main', explorerTab: 'changes' })
-    useReposStore.setState((state) => ({
+    useReposStore.setState(() => ({
       repos: { [REPO_ID]: repoA!, [REPO_B_ID]: repoB },
       order: [REPO_ID, REPO_B_ID],
     }))

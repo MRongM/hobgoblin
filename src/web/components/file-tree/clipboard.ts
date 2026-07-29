@@ -45,7 +45,8 @@ export async function sourceFromClipboardEvent(event: ClipboardEvent): Promise<R
   const uploaded: RepoFileTransferUploadedItem[] = []
   let totalBytes = 0
   const reserveBytes = (byteLength: number): boolean => {
-    if (byteLength > FILE_TRANSFER_MAX_FILE_BYTES || totalBytes + byteLength > FILE_TRANSFER_MAX_TOTAL_BYTES) return false
+    if (byteLength > FILE_TRANSFER_MAX_FILE_BYTES || totalBytes + byteLength > FILE_TRANSFER_MAX_TOTAL_BYTES)
+      return false
     totalBytes += byteLength
     return true
   }
@@ -82,7 +83,7 @@ export function sourceFromSystemClipboardPaths(paths: string[]): RepoFileTransfe
   return items.length > 0 ? { kind: 'localPaths', items } : null
 }
 
-async function uploadedItemFromFile(file: File): Promise<RepoFileTransferUploadedItem> {
+export async function uploadedItemFromFile(file: File): Promise<RepoFileTransferUploadedItem> {
   const bytes = new Uint8Array(await file.arrayBuffer())
   const name = file.name || generatedPasteFileName(file.type)
   return {

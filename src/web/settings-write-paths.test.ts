@@ -35,7 +35,6 @@ const appDataClientMocks = vi.hoisted(() => ({
   saveSession: vi.fn(async (session) => session),
   setFontFamily: vi.fn(async (fontFamily: 'mono' | 'maple' | 'system') => fontFamily),
   setFileTreeFontSize: vi.fn(async (fontSize: number) => fontSize),
-  setFileTreeTopbarFontSize: vi.fn(async (fontSize: number) => fontSize),
   setGlobalShortcut: vi.fn(async (accelerator) => ({ accelerator, registered: true })),
   setGlobalShortcutDisabled: vi.fn(async () => {}),
   setGitNetworkProxyEnabled: vi.fn(async () => {}),
@@ -91,7 +90,6 @@ vi.mock('#/web/settings-client.ts', () => ({
   saveSession: appDataClientMocks.saveSession,
   setFontFamily: appDataClientMocks.setFontFamily,
   setFileTreeFontSize: appDataClientMocks.setFileTreeFontSize,
-  setFileTreeTopbarFontSize: appDataClientMocks.setFileTreeTopbarFontSize,
   setGlobalShortcut: appDataClientMocks.setGlobalShortcut,
   setGlobalShortcutDisabled: appDataClientMocks.setGlobalShortcutDisabled,
   setGitNetworkProxyEnabled: appDataClientMocks.setGitNetworkProxyEnabled,
@@ -144,8 +142,6 @@ describe('settings write paths', () => {
     appDataClientMocks.setFontFamily.mockImplementation(async (fontFamily: 'mono' | 'maple' | 'system') => fontFamily)
     appDataClientMocks.setFileTreeFontSize.mockReset()
     appDataClientMocks.setFileTreeFontSize.mockImplementation(async (fontSize: number) => fontSize)
-    appDataClientMocks.setFileTreeTopbarFontSize.mockReset()
-    appDataClientMocks.setFileTreeTopbarFontSize.mockImplementation(async (fontSize: number) => fontSize)
     appDataClientMocks.setGlobalShortcut.mockReset()
     appDataClientMocks.setGlobalShortcut.mockImplementation(async (accelerator) => ({ accelerator, registered: true }))
     appDataClientMocks.setGlobalShortcutDisabled.mockReset()
@@ -470,18 +466,6 @@ describe('settings write paths', () => {
     })
   })
 
-  test('setFileTreeTopbarFontSizePreference updates runtime settings cache', async () => {
-    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
-    const { setFileTreeTopbarFontSizePreference } = await import('#/web/settings-write-paths.ts')
-
-    await setFileTreeTopbarFontSizePreference(12)
-
-    expect(appDataClientMocks.setFileTreeTopbarFontSize).toHaveBeenCalledWith(12)
-    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
-      fileTreeTopbarFontSize: 12,
-    })
-  })
-
   test('setTerminalFontSizePreference updates runtime settings cache', async () => {
     mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
     const { setTerminalFontSizePreference } = await import('#/web/settings-write-paths.ts')
@@ -505,5 +489,4 @@ describe('settings write paths', () => {
       terminalCustomButtonsVisible: false,
     })
   })
-
 })

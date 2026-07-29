@@ -151,7 +151,6 @@ export function App({ routeSettingsPage = null, onRouteSettingsPageChange }: App
                 visibleRepoId={visibleRepoId}
                 sessionReady={sessionReady}
                 workspaceLayout={workspaceLayout}
-                detailCollapsed={workspaceBehavior.detailCollapsed}
                 detailFocusMode={workspaceBehavior.detailFocusMode}
                 overlays={overlays}
                 closeRepoConfirmation={closeRepoConfirmation}
@@ -173,7 +172,6 @@ interface MainWindowViewportProps {
   visibleRepoId: string | null
   sessionReady: boolean
   workspaceLayout: ReturnType<typeof useMainWindowShellState>['workspaceLayout']
-  detailCollapsed: boolean
   detailFocusMode: boolean
   overlays: ReturnType<typeof useMainWindowShellState>['overlays']
   closeRepoConfirmation: ReturnType<typeof useMainWindowShellState>['closeRepoConfirmation']
@@ -186,7 +184,6 @@ interface MainWindowViewportContentProps {
   visibleRepoId: string | null
   sessionReady: boolean
   workspaceLayout: ReturnType<typeof useMainWindowShellState>['workspaceLayout']
-  detailCollapsed: boolean
   detailFocusMode: boolean
   overlays: ReturnType<typeof useMainWindowShellState>['overlays']
 }
@@ -205,7 +202,6 @@ function MainWindowViewport({
   visibleRepoId,
   sessionReady,
   workspaceLayout,
-  detailCollapsed,
   detailFocusMode,
   overlays,
   closeRepoConfirmation,
@@ -230,7 +226,6 @@ function MainWindowViewport({
         visibleRepoId={visibleRepoId}
         sessionReady={sessionReady}
         workspaceLayout={workspaceLayout}
-        detailCollapsed={detailCollapsed}
         detailFocusMode={detailFocusMode}
         overlays={overlays}
       />
@@ -251,7 +246,6 @@ function MainWindowViewportContent({
   visibleRepoId,
   sessionReady,
   workspaceLayout,
-  detailCollapsed,
   detailFocusMode,
   overlays,
 }: MainWindowViewportContentProps) {
@@ -303,12 +297,7 @@ function MainWindowViewportContent({
           {visibleRepoId ? (
             <RepoView repoId={visibleRepoId} />
           ) : !sessionReady ? (
-            <RepoWorkspaceSkeleton
-              layout={workspaceLayout}
-              detailCollapsed={detailCollapsed}
-              detailFocusMode={detailFocusMode}
-              compact={compact}
-            />
+            <RepoWorkspaceSkeleton layout={workspaceLayout} detailFocusMode={detailFocusMode} compact={compact} />
           ) : (
             <EmptyState />
           )}
