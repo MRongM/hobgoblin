@@ -169,6 +169,15 @@ internal fun authenticatedHosts(hosts: List<SshHostProfile>): List<SshHostProfil
 internal fun defaultAuthenticatedHost(hosts: List<SshHostProfile>): SshHostProfile? =
     authenticatedHosts(hosts).firstOrNull()
 
+internal fun initialRepositoryHost(
+    authenticated: List<SshHostProfile>,
+    initialHostId: String?,
+): SshHostProfile? = authenticated.firstOrNull { it.id == initialHostId }
+    ?: defaultAuthenticatedHost(authenticated)
+
+internal fun initialRepositoryPath(initialRemotePath: String?): String =
+    initialRemotePath?.trim().orEmpty()
+
 internal fun canSaveRepository(host: SshHostProfile?, remotePath: String): Boolean =
     host?.identityRefId != null && remotePath.trim().startsWith("/")
 
@@ -548,6 +557,8 @@ private fun repositoryTerminalWorkspaceOptions(
 fun RepositorySetupScreen(
     hosts: List<SshHostProfile>,
     repositories: List<RemoteRepositoryProfile>,
+    initialHostId: String? = null,
+    initialRemotePath: String? = null,
     onBack: () -> Unit,
     onSaveRepository: (RemoteRepositoryProfile) -> Unit,
     onOpenRepository: (String) -> Unit,
@@ -560,10 +571,12 @@ fun RepositorySetupScreen(
     val directoryBrowseFailed = stringResource(R.string.repository_directory_browse_failed)
     val validationFailed = stringResource(R.string.repository_validation_failed)
     val authenticated = authenticatedHosts(hosts)
-    var selectedHostId by remember(authenticated) { mutableStateOf(defaultAuthenticatedHost(authenticated)?.id) }
+    var selectedHostId by remember(authenticated, initialHostId) {
+        mutableStateOf(initialRepositoryHost(authenticated, initialHostId)?.id)
+    }
     var menuExpanded by remember { mutableStateOf(false) }
     var alias by remember { mutableStateOf("") }
-    var remotePath by remember { mutableStateOf("") }
+    var remotePath by remember(initialRemotePath) { mutableStateOf(initialRepositoryPath(initialRemotePath)) }
     var error by remember { mutableStateOf<String?>(null) }
     var deleteTarget by remember { mutableStateOf<RemoteRepositoryProfile?>(null) }
     var directoryBrowserPath by remember { mutableStateOf<String?>(null) }

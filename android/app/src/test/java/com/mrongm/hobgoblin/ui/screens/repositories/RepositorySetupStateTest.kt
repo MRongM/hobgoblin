@@ -42,6 +42,21 @@ class RepositorySetupStateTest {
     }
 
     @Test
+    fun `project setup prefers an authenticated preselected host`() {
+        val first = host(id = "host-1", identityRefId = "identity-1")
+        val selected = host(id = "host-2", identityRefId = "identity-2")
+
+        assertEquals(selected, initialRepositoryHost(listOf(first, selected), "host-2"))
+        assertEquals(first, initialRepositoryHost(listOf(first, selected), "missing"))
+    }
+
+    @Test
+    fun `project setup trims its initial remote path`() {
+        assertEquals("/srv/app", initialRepositoryPath(" /srv/app "))
+        assertEquals("", initialRepositoryPath(null))
+    }
+
+    @Test
     fun `remote project paths must be absolute before saving or opening`() {
         assertFalse(canSaveRepository(host(id = "host-1", identityRefId = "identity-1"), "srv/app"))
         assertTrue(canSaveRepository(host(id = "host-1", identityRefId = "identity-1"), "/srv/app"))

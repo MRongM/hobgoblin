@@ -1,9 +1,11 @@
 package com.mrongm.hobgoblin.ui.screens.tmux
 
+import com.mrongm.hobgoblin.domain.ssh.RemoteRepositoryProfile
 import com.mrongm.hobgoblin.terminals.HostDiscoveredTmuxSession
 import com.mrongm.hobgoblin.terminals.TerminalSessionRecord
 import com.mrongm.hobgoblin.terminals.TerminalSessionStatus
 import com.mrongm.hobgoblin.terminals.TmuxServerTarget
+import com.mrongm.hobgoblin.terminals.TmuxSessionProtocol
 
 internal enum class HostTmuxServerSource {
     Default,
@@ -21,6 +23,18 @@ internal const val HostTmuxCloseRemoteOnDeleteDefault = false
 
 internal fun hostTmuxPathTitle(initialPath: String): String =
     initialPath.substringAfterLast('/').ifBlank { "/" }
+
+internal fun hostTmuxPathIsImported(
+    hostId: String,
+    initialPath: String,
+    repositories: List<RemoteRepositoryProfile>,
+): Boolean {
+    val normalizedPath = TmuxSessionProtocol.normalizePath(initialPath)
+    return repositories.any { repository ->
+        repository.hostProfileId == hostId &&
+            TmuxSessionProtocol.normalizePath(repository.remotePath) == normalizedPath
+    }
+}
 
 internal fun hostTmuxProtocolNameSuffix(value: String): String {
     val suffix = value.takeLast(ProtocolNameSuffixChars)

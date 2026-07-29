@@ -24,6 +24,7 @@ import com.mrongm.hobgoblin.navigation.AppRoute
 import com.mrongm.hobgoblin.navigation.HostDetailReturn
 import com.mrongm.hobgoblin.navigation.TmuxReturn
 import com.mrongm.hobgoblin.navigation.initialMainRoute
+import com.mrongm.hobgoblin.navigation.projectSetupReturnRoute
 import com.mrongm.hobgoblin.navigation.terminalBackgroundRoute
 import com.mrongm.hobgoblin.navigation.terminalNotificationRoute
 import com.mrongm.hobgoblin.navigation.terminalReturnRoute
@@ -413,7 +414,7 @@ fun HobgoblinAndroidApp(
                 onSelectTab = ::selectMainTab,
                 onOpenSettings = { route = AppRoute.Settings },
                 onAddHost = { route = AppRoute.AddHost },
-                onAddProject = { route = AppRoute.AddRepository },
+                onAddProject = { route = AppRoute.AddRepository() },
                 repositoriesState = repositoriesState,
                 hostsContent = {
                     HostsScreen(
@@ -464,6 +465,7 @@ fun HobgoblinAndroidApp(
                     TmuxScreen(
                         hosts = currentHosts(),
                         selectedHost = selectedTmuxHost,
+                        repositories = currentRepositories(),
                         tmuxState = visibleTmuxState,
                         tmuxRefreshing = hostTmuxRefreshInFlight,
                         onSelectHost = { hostId ->
@@ -478,6 +480,14 @@ fun HobgoblinAndroidApp(
                         },
                         onAddHost = { route = AppRoute.AddHost },
                         onRefreshTmux = { hostTmuxRefreshNonce += 1 },
+                        onImportDirectory = { initialPath ->
+                            val hostId = requireNotNull(tmuxVisit.selectedHostId)
+                            route = AppRoute.AddRepository(
+                                initialHostId = hostId,
+                                initialRemotePath = initialPath,
+                                tmuxReturn = TmuxReturn(hostId),
+                            )
+                        },
                         onOpenTmuxSession = { discovery ->
                             selectedTmuxHost?.let { host -> openHostTmuxSession(host, discovery) }
                         },
@@ -610,13 +620,18 @@ fun HobgoblinAndroidApp(
             }
         }
 
-        AppRoute.AddRepository -> RepositorySetupScreen(
+        is AppRoute.AddRepository -> RepositorySetupScreen(
             hosts = currentHosts(),
             repositories = currentRepositories(),
-            onBack = { route = AppRoute.Projects },
+            initialHostId = currentRoute.initialHostId,
+            initialRemotePath = currentRoute.initialRemotePath,
+            onBack = { route = projectSetupReturnRoute(currentRoute) },
             onSaveRepository = { repository ->
                 remoteRepositoryStore.saveRepository(repository)
                 reloadRepositories()
+                if (currentRoute.tmuxReturn != null) {
+                    route = projectSetupReturnRoute(currentRoute)
+                }
             },
             onDeleteRepository = { repositoryId ->
                 deleteRepositoryRecord(repositoryId)

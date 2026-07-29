@@ -22,6 +22,28 @@ class TmuxScreenContractTest {
     }
 
     @Test
+    fun `tmux directory heading exposes an explicit project import action`() {
+        val source = source("ui/screens/tmux/TmuxScreen.kt")
+
+        assertTrue(source.contains("onImportDirectory"))
+        assertTrue(source.contains("hostTmuxPathIsImported"))
+        assertTrue(source.contains("R.string.tmux_import_project"))
+        assertTrue(source.contains("R.string.tmux_project_imported"))
+    }
+
+    @Test
+    fun `tmux directory import reuses project setup with its return context`() {
+        val source = source("HobgoblinAndroidApp.kt")
+
+        assertTrue(source.contains("initialHostId = hostId"))
+        assertTrue(source.contains("initialRemotePath = initialPath"))
+        assertTrue(source.contains("tmuxReturn = TmuxReturn(hostId)"))
+        assertTrue(source.contains("projectSetupReturnRoute(currentRoute)"))
+        assertTrue(source.contains("initialHostId = currentRoute.initialHostId"))
+        assertTrue(source.contains("initialRemotePath = currentRoute.initialRemotePath"))
+    }
+
+    @Test
     fun `tmux technical identity uses monospace and a purposeful mux rail`() {
         val source = source("ui/screens/tmux/TmuxScreen.kt")
 
