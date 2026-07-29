@@ -634,7 +634,7 @@ describe('remote command scripts', () => {
       type: 'createFileTreeTextFile',
       worktreePath: '/srv/repo',
       parentDirPath: "/srv/repo/src with 'quote'",
-      name: 'goblin.toml',
+      name: 'notes.md',
     })
 
     expect(invocation.script).toContain('python3')
@@ -644,7 +644,7 @@ describe('remote command scripts', () => {
     expect(invocation.script).toContain('base64.b64decode')
     expect(invocation.script).toContain('open(target, "xb")')
     expect(invocation.script).toContain('src with')
-    expect(invocation.script).toContain('goblin.toml')
+    expect(invocation.script).toContain('notes.md')
     expect(invocation.args).toContain(TARGET.alias)
   })
 

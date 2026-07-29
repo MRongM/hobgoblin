@@ -60,13 +60,16 @@ describe('local worktree bootstrap candidates', () => {
     expect(mocks.git).toHaveBeenCalledWith(sourceRoot, ['ls-files', '-z'], { signal: undefined })
   })
 
-  test('returns configured preflight whenever goblin.toml exists without operations', async () => {
+  test('does not give a tracked goblin.toml special behavior', async () => {
     await writeFile(path.join(sourceRoot, 'goblin.toml'), '')
+    await writeFile(path.join(sourceRoot, '.env'), 'TOKEN=placeholder\n')
+    mocks.git.mockResolvedValue('goblin.toml\0')
 
-    const result = await getLocalWorktreeBootstrapPreflight(sourceRoot)
-
-    expect(result).toMatchObject({ ok: true, preflight: { kind: 'configured' } })
-    expect(mocks.git).not.toHaveBeenCalled()
+    await expect(getLocalWorktreeBootstrapPreflight(sourceRoot)).resolves.toEqual({
+      ok: true,
+      preflight: { kind: 'candidates', candidates: [{ path: '.env', kind: 'file' }] },
+    })
+    expect(mocks.git).toHaveBeenCalledWith(sourceRoot, ['ls-files', '-z'], { signal: undefined })
   })
 
   test('lists only git-ignored root entries when requested', async () => {
@@ -97,13 +100,15 @@ describe('local worktree bootstrap candidates', () => {
     )
   })
 
-  test('does not fall back to candidates when goblin.toml is invalid', async () => {
+  test('does not parse a tracked goblin.toml while listing candidates', async () => {
     await writeFile(path.join(sourceRoot, 'goblin.toml'), '[worktree\n')
+    mocks.git.mockResolvedValue('goblin.toml\0')
 
-    const result = await getLocalWorktreeBootstrapPreflight(sourceRoot)
-
-    expect(result).toMatchObject({ ok: false })
-    expect(mocks.git).not.toHaveBeenCalled()
+    await expect(getLocalWorktreeBootstrapPreflight(sourceRoot)).resolves.toEqual({
+      ok: true,
+      preflight: { kind: 'candidates', candidates: [] },
+    })
+    expect(mocks.git).toHaveBeenCalledWith(sourceRoot, ['ls-files', '-z'], { signal: undefined })
   })
 
   test('rejects a selected path that became tracked', async () => {

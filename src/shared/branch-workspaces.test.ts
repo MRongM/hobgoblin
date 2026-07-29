@@ -39,7 +39,7 @@ describe('branch workspace contracts', () => {
     })
   })
 
-  test('normalizes repository dependency selections to server-derived all-untracked materialization', () => {
+  test('preserves a normalized repository dependency source for authoritative server validation', () => {
     expect(
       normalizeBranchWorkspacePlanRequest({
         operation: 'create',
@@ -70,12 +70,34 @@ describe('branch workspace contracts', () => {
               kind: 'materialize',
               candidateScope: 'all-untracked',
               selections: [{ path: 'node_modules', mode: 'symlink' }],
+              sourceWorktreePath: '/untrusted/client/path',
             },
           },
         ],
         auxiliaryEntries: [],
       },
     })
+  })
+
+  test('rejects a malformed repository dependency source path', () => {
+    expect(
+      normalizeBranchWorkspacePlanRequest({
+        operation: 'create',
+        branch: 'feature/auth',
+        repositories: [
+          {
+            repositoryName: 'api',
+            baseBranch: 'main',
+            worktreeBootstrap: {
+              kind: 'materialize',
+              sourceWorktreePath: 'relative/path',
+              selections: [{ path: 'node_modules', mode: 'symlink' }],
+            },
+          },
+        ],
+        auxiliaryEntries: [],
+      }),
+    ).toEqual({ ok: false, message: 'error.invalid-arguments' })
   })
 
   test('normalizes repair and remove requests as distinct operations', () => {

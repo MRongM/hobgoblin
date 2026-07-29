@@ -127,14 +127,18 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.base-named': '{name}의 기준 브랜치',
   'workspace.branch-workspace.repository-dependencies': '저장소 의존 항목',
   'workspace.branch-workspace.repository-dependencies-description':
-    '선택한 기준 브랜치 작업 트리에서 새 작업 트리로 복사하거나 링크할 추적되지 않은 항목을 선택합니다.',
+    '현재 의존 항목 원본에서 새 작업 트리로 복사하거나 링크할 추적되지 않은 항목을 선택합니다.',
   'workspace.branch-workspace.repository-dependencies-loading': '저장소 의존 항목 불러오는 중…',
   'workspace.branch-workspace.repository-dependencies-error':
     '저장소 의존 항목을 불러오지 못했습니다. 이 저장소를 선택 해제한 후 다시 선택하세요.',
   'workspace.branch-workspace.repository-dependencies-empty':
-    '선택한 기준 브랜치 작업 트리에 선택할 수 있는 추적되지 않은 항목이 없습니다.',
-  'workspace.branch-workspace.repository-dependencies-configured':
-    '선택한 기준 브랜치 작업 트리의 goblin.toml을 사용합니다.',
+    '현재 의존 항목 원본에 선택할 수 있는 추적되지 않은 항목이 없습니다.',
+  'workspace.branch-workspace.repository-dependencies-source-primary':
+    '기본 작업 트리의 의존 항목을 사용하고 있습니다.',
+  'workspace.branch-workspace.repository-dependencies-source-branch':
+    '{branch} 작업 트리의 의존 항목을 사용하고 있습니다.',
+  'workspace.branch-workspace.repository-dependencies-source-select': '다른 작업 트리의 의존 항목 사용',
+  'workspace.branch-workspace.repository-dependencies-source-primary-option': '기본 작업 트리',
   'workspace.branch-workspace.auxiliary': '브랜치 작업공간 의존 항목',
   'workspace.branch-workspace.auxiliary-refresh': '브랜치 작업공간 의존 항목 새로 고침',
   'workspace.branch-workspace.auxiliary-named': '브랜치 작업공간 의존 항목 {name} 포함',
@@ -344,8 +348,8 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.plan-failed': '계획을 만들 수 없습니다.',
   'workspace.branch-workspace.plan-stale': '상태가 변경되었습니다. 새 계획을 검토하세요.',
   'workspace.branch-workspace.execute-failed': '작업을 완료할 수 없습니다.',
-  'workspace.branch-workspace.repository-dependency-warning':
-    '{count}개 저장소 의존성을 준비하지 못했지만 작업 트리는 생성되었습니다.',
+  'workspace.branch-workspace.dependency-warning':
+    '{count}개 일회성 의존 항목을 준비하지 못했지만 브랜치 작업공간은 생성되었습니다.',
   'workspace.branch-workspace.approval-required': '필요한 확인을 모두 완료하세요.',
   'workspace.branch-workspace.read-failed': '브랜치 워크스페이스를 읽을 수 없습니다.',
   'workspace.branch-workspace.reload': '브랜치 워크스페이스 다시 불러오기',
@@ -659,11 +663,6 @@ export const ko: Record<DictKey, string> = {
   'file-tree.new-folder': '새 폴더',
   'file-tree.refresh': '새로 고침',
   'file-tree.open-local': '로컬에서 열기',
-  'file-tree.init-worktree-bootstrap-config': 'goblin.toml 초기화',
-  'file-tree.init-worktree-bootstrap-config-created': 'goblin.toml이 생성되었습니다',
-  'file-tree.init-worktree-bootstrap-config-failed': 'goblin.toml을 초기화할 수 없습니다',
-  'file-tree.init-worktree-bootstrap-config-ai-command-failed':
-    'goblin.toml을 만들었지만 AI 명령을 터미널에 입력하지 못했습니다.',
   'file-tree.search-label': '파일 검색',
   'file-tree.search-placeholder': '파일 검색',
   'file-tree.search-clear': '검색 지우기',
@@ -990,7 +989,6 @@ export const ko: Record<DictKey, string> = {
   'action.create-worktree-path-label': '워크트리 경로 (선택)',
   'action.create-worktree-path-disabled-hint': '브랜치나 참조를 선택하면 경로가 자동 채워집니다.',
   'action.create-worktree-base-current': '현재',
-  'action.create-worktree-bootstrap-config-trusted': '현재 구성 신뢰',
   'action.create-worktree-bootstrap-candidates-label': '추적되지 않은 콘텐츠 가져오기',
   'action.create-worktree-bootstrap-candidates-description':
     '이 작업 트리로 가져올 내용을 선택하세요. 이 선택은 한 번만 적용됩니다.',

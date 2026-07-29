@@ -351,7 +351,10 @@ export class TerminalSessionRegistry {
         result.sessions,
         attachmentId,
         new Map<string, TerminalSessionSnapshot>([
-          [result.sessionId, { sessionId: result.sessionId, snapshot: result.snapshot, snapshotSeq: result.snapshotSeq }],
+          [
+            result.sessionId,
+            { sessionId: result.sessionId, snapshot: result.snapshot, snapshotSeq: result.snapshotSeq },
+          ],
         ]),
       )
       return result.key
@@ -584,6 +587,23 @@ export class TerminalSessionRegistry {
     this.sessions.get(key)?.clearSearch()
   }
 
+  waitForInputReady = (key: string): Promise<boolean> => {
+    const readiness = this.inputReadiness(key)
+    if (readiness !== null) return Promise.resolve(readiness)
+
+    return new Promise((resolve) => {
+      let unsubscribe = () => {}
+      const settleWhenReady = () => {
+        const next = this.inputReadiness(key)
+        if (next === null) return
+        unsubscribe()
+        resolve(next)
+      }
+      unsubscribe = this.subscribeSnapshot(key, settleWhenReady)
+      settleWhenReady()
+    })
+  }
+
   writeInput = (key: string, data: string): void => {
     this.sessions.get(key)?.writeInput(data)
   }
@@ -747,6 +767,14 @@ export class TerminalSessionRegistry {
       current.delete(listener)
       if (current.size === 0) listenersMap.delete(key)
     }
+  }
+
+  private inputReadiness(key: string): boolean | null {
+    if (!this.sessions.has(key)) return false
+    const snapshot = this.snapshot(key)
+    if (snapshot.phase === 'error' || snapshot.phase === 'closed') return false
+    if (snapshot.phase !== 'open' || snapshot.renderPending === true) return null
+    return snapshot.attachment?.active === true
   }
 
   private syncSessionIdIndex(key: string, sessionId: string | null): void {

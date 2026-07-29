@@ -97,7 +97,7 @@ describe('branch workspace source', () => {
     })
   })
 
-  test('releases completed auxiliary entries while retaining incomplete materialization intent', async () => {
+  test('releases one-time auxiliary intent once every repository member is complete', async () => {
     const { dataFile, root } = await createFixture()
     const item = manifest(root, 'feature/dependencies')
     item.auxiliaryEntries = [auxiliaryEntry(item, 'README.md', 'complete'), auxiliaryEntry(item, 'notes.md', 'failed')]
@@ -105,12 +105,14 @@ describe('branch workspace source', () => {
 
     await replaceBranchWorkspaceManifests(root, [item], { dataFile })
 
-    await expect(readBranchWorkspaceManifests(root, { dataFile })).resolves.toMatchObject({
+    const snapshot = await readBranchWorkspaceManifests(root, { dataFile })
+    expect(snapshot).toMatchObject({
       kind: 'ready',
-      manifests: [{ auxiliaryEntries: [{ name: 'notes.md', progress: 'failed' }] }],
+      manifests: [{ auxiliaryEntries: [] }],
     })
+    if (snapshot.kind === 'ready') expect(snapshot.manifests[0]).not.toHaveProperty('operation')
     expect(JSON.parse(await readFile(dataFile, 'utf8'))).toMatchObject({
-      workspaces: [{ branchWorkspaces: [{ auxiliaryEntries: [{ name: 'notes.md', progress: 'failed' }] }] }],
+      workspaces: [{ branchWorkspaces: [{ auxiliaryEntries: [] }] }],
     })
   })
 
@@ -162,15 +164,17 @@ describe('branch workspace source', () => {
     })
   })
 
-  test('persists compact operation intent and normalizes legacy operation metadata', async () => {
+  test('releases completed create intent and normalizes legacy operation metadata', async () => {
     const { dataFile, root } = await createFixture()
     const compact = manifest(root, 'feature/compact')
     compact.operation = { kind: 'create' }
 
     await replaceBranchWorkspaceManifests(root, [compact], { dataFile })
+    const settled = { ...compact }
+    delete settled.operation
     await expect(readBranchWorkspaceManifests(root, { dataFile })).resolves.toEqual({
       kind: 'ready',
-      manifests: [compact],
+      manifests: [settled],
     })
 
     const legacy = manifest(root, 'feature/legacy')

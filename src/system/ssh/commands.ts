@@ -18,7 +18,6 @@ import type {
   WorktreeBootstrapCandidateScope,
   WorktreeBootstrapTargetEntry,
 } from '#/shared/worktree-bootstrap-summary.ts'
-import type { WorktreeBootstrapConfig } from '#/system/git/worktree-bootstrap.ts'
 
 const SSH_COMMAND_TIMEOUT_MS = 15_000
 const SSH_CONNECT_TIMEOUT_SEC = 10
@@ -113,14 +112,19 @@ export type RemoteCommandKind =
   | { type: 'gitRemoteVerbose'; path: string }
   | { type: 'gitRemoteGetUrl'; path: string }
   | { type: 'worktreeBootstrapCandidates'; sourceRoot: string; candidateScope?: WorktreeBootstrapCandidateScope }
-  | ({
+  | {
       type: 'bootstrapRemoteWorktree'
       sourceRoot: string
       targetRoot: string
       literalPaths?: boolean
       inspectOnly?: boolean
       replaceExisting?: WorktreeBootstrapTargetEntry[]
-    } & WorktreeBootstrapConfig)
+      copy: string[]
+      symlink: string[]
+      hardlink: string[]
+      exclude: string[]
+      setup?: string
+    }
 
 export interface RemoteCommandResult {
   ok: boolean

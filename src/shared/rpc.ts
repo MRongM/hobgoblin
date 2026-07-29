@@ -46,7 +46,7 @@ export type {
   NativeSettingsProjectionState,
   NativeShellProjection,
 } from '#/shared/native-shell-projection.ts'
-export type { RepoSettingsEntry, WorktreeBootstrapTrust } from '#/shared/repo-settings.ts'
+export type { RepoSettingsEntry } from '#/shared/repo-settings.ts'
 export type {
   TelegramBellNotificationContext,
   TelegramNotificationErrorCode,

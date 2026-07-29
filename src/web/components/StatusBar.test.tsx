@@ -125,6 +125,26 @@ describe('StatusBar file area control', () => {
     expect(statusBar?.className).not.toContain('border-topbar-border')
   })
 
+  test('exposes a layout-neutral host for workspace actions', () => {
+    let actionHost: HTMLDivElement | null = null
+
+    act(() =>
+      root!.render(
+        <StatusBar
+          repoId={REPO_ID}
+          workspaceActionsHostRef={(element) => {
+            actionHost = element
+          }}
+        />,
+      ),
+    )
+
+    const renderedHost = container?.querySelector<HTMLDivElement>('[data-testid="statusbar-workspace-actions"]')
+    if (!renderedHost) throw new Error('missing status bar workspace action host')
+    expect(actionHost).toBe(renderedHost)
+    expect(renderedHost.className).toContain('contents')
+  })
+
   test('keeps the active settings trigger above the dialog scrim and toggles it closed', () => {
     const toggleSettings = vi.fn()
     shellOverlayMock.state = {

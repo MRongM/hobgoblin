@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { getRepositorySnapshot, getRepositoryStatus } from '#/server/modules/repo-read-paths.ts'
-import { isValidRepositoryWorktreePath } from '#/server/modules/repo-backend.ts'
+import { isValidRepositoryWorktreePath, type RepoSnapshotOptions } from '#/server/modules/repo-backend.ts'
 import { isRepositoryTemporaryWorktreePath } from '#/server/modules/repository-temporary-worktree.ts'
 import type { BranchSnapshotInfo, StatusEntry, WorktreeStatus } from '#/shared/git-types.ts'
 import { isValidBranch, isValidRepoLocator } from '#/shared/input-validation.ts'
@@ -13,7 +13,7 @@ import {
 import { isRemoteRepoId, type RepoSnapshot } from '#/shared/rpc.ts'
 
 export interface RepositoryBranchMergePlanDependencies {
-  getSnapshot?: (repoId: string, signal?: AbortSignal) => Promise<RepoSnapshot | null>
+  getSnapshot?: (repoId: string, signal?: AbortSignal, options?: RepoSnapshotOptions) => Promise<RepoSnapshot | null>
   getStatus?: (repoId: string, signal?: AbortSignal) => Promise<WorktreeStatus[]>
 }
 
@@ -45,7 +45,10 @@ export async function buildRepositoryBranchMergeOutPlan(
   try {
     signal?.throwIfAborted()
     const [snapshot, statuses] = await Promise.all([
-      (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal),
+      (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal, {
+        includeWorktreeStatus: false,
+        includeRemote: false,
+      }),
       (dependencies.getStatus ?? getRepositoryStatus)(repoId, signal),
     ])
     signal?.throwIfAborted()

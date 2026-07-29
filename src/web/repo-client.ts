@@ -31,7 +31,6 @@ import type {
   WorktreeBootstrapCandidateScope,
   WorktreeBootstrapDecision,
   WorktreeBootstrapPreflightResult,
-  WorktreeBootstrapPreviewResult,
 } from '#/shared/worktree-bootstrap-summary.ts'
 
 export async function probeRepository(cwd: string): Promise<ProbeResult> {
@@ -135,16 +134,6 @@ export async function createRepositoryWorktree(
   )
 }
 
-export async function getRepositoryWorktreeBootstrapPreview(
-  cwd: string,
-  worktreePathOrSignal?: string | AbortSignal,
-  signal?: AbortSignal,
-): Promise<WorktreeBootstrapPreviewResult> {
-  const worktreePath = typeof worktreePathOrSignal === 'string' ? worktreePathOrSignal : undefined
-  const requestSignal = typeof worktreePathOrSignal === 'string' ? signal : worktreePathOrSignal
-  return await postServerJson('/api/repo/worktree-bootstrap-preview', { cwd, worktreePath }, { signal: requestSignal })
-}
-
 export async function getRepositoryWorktreeBootstrapPreflight(
   cwd: string,
   signal?: AbortSignal,
@@ -156,13 +145,6 @@ export async function getRepositoryWorktreeBootstrapPreflight(
     { cwd, candidateScope, sourceWorktreePath },
     { signal },
   )
-}
-
-export async function initializeRepositoryWorktreeBootstrapConfig(
-  repoId: string,
-  worktreePath: string,
-): Promise<ExecResult> {
-  return await postServerJson('/api/repo/worktree-bootstrap-config/init', { repoId, worktreePath })
 }
 
 export async function createRepositoryBranch(

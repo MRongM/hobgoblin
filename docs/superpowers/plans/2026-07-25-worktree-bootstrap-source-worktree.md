@@ -1,5 +1,7 @@
 # Worktree Bootstrap Source Worktree Implementation Plan
 
+> **Amendment (2026-07-29):** All `goblin.toml` configuration behavior in this completed plan has been removed. Source-worktree selection and manual dependency candidates remain current.
+
 > **Amendment (2026-07-26):** Branch-workspace dependency persistence and repair steps in this original plan are superseded by `2026-07-26-branch-workspace-create-only-dependencies.md`. Source selection remains part of transient preflight and create execution only.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

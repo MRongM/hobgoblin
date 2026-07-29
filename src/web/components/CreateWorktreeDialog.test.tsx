@@ -52,6 +52,7 @@ afterEach(() => {
     value: originalResizeObserver,
   })
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
+  vi.useRealTimers()
 })
 
 describe('CreateWorktreeDialog', () => {
@@ -59,6 +60,15 @@ describe('CreateWorktreeDialog', () => {
     render(<CreateWorktreeDialog open repo={createRepo()} onClose={vi.fn()} onCreate={vi.fn(async () => {})} />)
 
     expect(document.activeElement).toBe(input('#cwt-branch'))
+  })
+
+  test('prefills a dated feature branch from the current branch', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 6, 29, 12))
+
+    render(<CreateWorktreeDialog open repo={createRepo()} onClose={vi.fn()} onCreate={vi.fn(async () => {})} />)
+
+    expect(input('#cwt-branch').value).toBe('feat/20260729-main')
   })
 
   test('closes immediately after submitting create', () => {
@@ -326,8 +336,6 @@ describe('CreateWorktreeDialog', () => {
           loading: true,
           preflight: null,
           error: false,
-          configTrusted: false,
-          onConfigTrustedChange: vi.fn(),
         }}
         onClose={vi.fn()}
         onCreate={vi.fn(async () => {})}
@@ -336,40 +344,6 @@ describe('CreateWorktreeDialog', () => {
 
     setInputValue('#cwt-branch', 'feature/new')
     expect(button('button[type="submit"]').disabled).toBe(true)
-  })
-
-  test('renders trust checkbox for runnable bootstrap config', () => {
-    const onConfigTrustedChange = vi.fn()
-    render(
-      <CreateWorktreeDialog
-        open
-        repo={createRepo()}
-        worktreeBootstrap={{
-          loading: false,
-          preflight: {
-            kind: 'configured',
-            preview: {
-              hasConfig: true,
-              hasOperations: true,
-              configHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-              copyCount: 1,
-              symlinkCount: 0,
-              hardlinkCount: 0,
-              excludeCount: 0,
-            },
-          },
-          error: false,
-          configTrusted: true,
-          onConfigTrustedChange,
-        }}
-        onClose={vi.fn()}
-        onCreate={vi.fn(async () => {})}
-      />,
-    )
-
-    const checkbox = document.querySelector('button[role="checkbox"], input[type="checkbox"]')
-    expect(document.body.textContent).toContain('action.create-worktree-bootstrap-config-trusted')
-    expect(checkbox).toBeTruthy()
   })
 
   test('defaults candidates to skip and submits only independent copy or symlink choices', () => {
@@ -388,8 +362,6 @@ describe('CreateWorktreeDialog', () => {
             ],
           },
           error: false,
-          configTrusted: false,
-          onConfigTrustedChange: vi.fn(),
         }}
         onClose={vi.fn()}
         onCreate={onCreate}
@@ -431,8 +403,6 @@ describe('CreateWorktreeDialog', () => {
             ],
           },
           error: false,
-          configTrusted: false,
-          onConfigTrustedChange: vi.fn(),
         }}
         onClose={vi.fn()}
         onCreate={onCreate}
@@ -464,8 +434,6 @@ describe('CreateWorktreeDialog', () => {
         candidates: [{ path: '.env', kind: 'file' as const }],
       },
       error: false,
-      configTrusted: false,
-      onConfigTrustedChange: vi.fn(),
     }
     const dialog = (open: boolean) => (
       <CreateWorktreeDialog
@@ -496,8 +464,6 @@ describe('CreateWorktreeDialog', () => {
           loading: false,
           preflight: { kind: 'candidates', candidates: [] },
           error: true,
-          configTrusted: false,
-          onConfigTrustedChange: vi.fn(),
         }}
         onClose={vi.fn()}
         onCreate={vi.fn(async () => {})}

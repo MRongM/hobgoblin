@@ -1,5 +1,7 @@
 # Worktree Bootstrap Source Worktree Design
 
+> **Partially superseded (2026-07-29):** Source-worktree selection and manual dependency candidates remain current, but all `goblin.toml` configuration behavior described below has been removed. This document is retained as implementation history.
+
 ## Goal
 
 Resolve repository worktree-bootstrap dependencies from the worktree that the user selected as the source context, rather than always reading the repository locator's primary worktree. This applies equally to one-time untracked candidates and repository-owned `goblin.toml` configuration.

@@ -291,7 +291,7 @@ function normalizeManifest(value: unknown, rootId: string): BranchWorkspaceManif
     repositories.push(member)
   }
 
-  const operation = manifest.operation === undefined ? undefined : normalizeOperation(manifest.operation)
+  const persistedOperation = manifest.operation === undefined ? undefined : normalizeOperation(manifest.operation)
   const auxiliaryEntries: BranchWorkspaceAuxiliaryEntry[] = []
   for (const value of manifest.auxiliaryEntries) {
     const entry = normalizeAuxiliaryEntry(value, rootPath, expectedPath, pathApi)
@@ -300,6 +300,17 @@ function normalizeManifest(value: unknown, rootId: string): BranchWorkspaceManif
     if (entry.progress !== 'complete') auxiliaryEntries.push(entry)
   }
 
+  const repositoriesReady = repositories.every((member) => member.progress === 'complete')
+  const operation =
+    repositoriesReady && (persistedOperation?.kind === 'create' || persistedOperation?.kind === 'extend')
+      ? undefined
+      : persistedOperation
+  const retainedAuxiliaryEntries =
+    operation?.kind === 'remove' ||
+    ((operation?.kind === 'create' || operation?.kind === 'extend') && !repositoriesReady)
+      ? auxiliaryEntries
+      : []
+
   return {
     id,
     rootId,
@@ -307,7 +318,7 @@ function normalizeManifest(value: unknown, rootId: string): BranchWorkspaceManif
     directoryName,
     path: expectedPath,
     repositories,
-    auxiliaryEntries,
+    auxiliaryEntries: retainedAuxiliaryEntries,
     ...(operation ? { operation } : {}),
   }
 }

@@ -254,6 +254,47 @@ describe('TerminalSessionRegistry', () => {
       expect((session as any).hydratedSnapshot).toEqual({ snapshot: 'first-frame', snapshotSeq: 7 })
     })
 
+    test('waits for a controller terminal to finish renderer startup before accepting input', async () => {
+      registry.setRepoIndex(makeRepoIndex())
+      registry.reconcileServerSessions(
+        REPO_ROOT,
+        [
+          makeServerSession('session-created', 'terminal-1', {
+            controller: { attachmentId: 'attachment_local', status: 'connected' },
+          }),
+        ],
+        'attachment_local',
+        new Map(),
+      )
+      const key = `${REPO_ROOT}\u0000${WORKTREE_PATH}\u0000terminal-1`
+      const session = (registry as any).sessions.get(key)
+      const initialSnapshot = session.snapshot()
+      let renderPending = true
+      vi.spyOn(session, 'snapshot').mockImplementation(() =>
+        renderPending ? { ...initialSnapshot, renderPending: true } : { ...initialSnapshot, renderPending: undefined },
+      )
+      ;(registry as any).snapshotCache.delete(key)
+      const waitForInputReady = (
+        registry as TerminalSessionRegistry & {
+          waitForInputReady?: (sessionKey: string) => Promise<boolean>
+        }
+      ).waitForInputReady
+
+      expect(waitForInputReady).toBeTypeOf('function')
+      let settled = false
+      const readiness = waitForInputReady!(key).then((ready) => {
+        settled = true
+        return ready
+      })
+      await Promise.resolve()
+      expect(settled).toBe(false)
+
+      renderPending = false
+      ;(registry as any).notifySession(key)
+
+      await expect(readiness).resolves.toBe(true)
+    })
+
     test('rejects malformed successful create responses', async () => {
       registry.setRepoIndex(makeRepoIndex())
       const host = document.createElement('div')
@@ -345,11 +386,7 @@ describe('TerminalSessionRegistry', () => {
 
       const restoreTmuxSessions = (
         registry as TerminalSessionRegistry & {
-          restoreTmuxSessions?: (base: {
-            repoRoot: string
-            branch: string
-            worktreePath: string
-          }) => Promise<number>
+          restoreTmuxSessions?: (base: { repoRoot: string; branch: string; worktreePath: string }) => Promise<number>
         }
       ).restoreTmuxSessions
       expect(restoreTmuxSessions).toBeTypeOf('function')
@@ -378,11 +415,7 @@ describe('TerminalSessionRegistry', () => {
       bridgeMocks.openTmuxSessions.mockResolvedValueOnce({ ok: true, restored: 0, sessions: [] })
       const restoreTmuxSessions = (
         registry as TerminalSessionRegistry & {
-          restoreTmuxSessions?: (base: {
-            repoRoot: string
-            branch: string
-            worktreePath: string
-          }) => Promise<number>
+          restoreTmuxSessions?: (base: { repoRoot: string; branch: string; worktreePath: string }) => Promise<number>
         }
       ).restoreTmuxSessions
       expect(restoreTmuxSessions).toBeTypeOf('function')

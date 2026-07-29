@@ -181,15 +181,7 @@ describe('settings snapshot partitions', () => {
   })
 
   test('settings snapshot builders preserve repo settings', () => {
-    const repoSettings = [
-      {
-        repoId: '/repo',
-        worktreeBootstrapTrust: {
-          configHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-          trustedAt: '2026-07-08T00:00:00.000Z',
-        },
-      },
-    ]
+    const repoSettings = [{ repoId: '/repo', colorTheme: 'github' as const }]
 
     const snapshot = buildSettingsSnapshot({
       prefs: defaultSettingsPrefs(),

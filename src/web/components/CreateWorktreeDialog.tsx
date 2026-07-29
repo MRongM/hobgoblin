@@ -62,8 +62,6 @@ interface WorktreeBootstrapPromptState {
   loading: boolean
   preflight: WorktreeBootstrapPreflight | null
   error: boolean
-  configTrusted: boolean
-  onConfigTrustedChange: (trust: boolean) => void
 }
 
 export function CreateWorktreeDialog({ open, repo, defaultBranch, worktreeBootstrap, onClose, onCreate }: Props) {
@@ -98,7 +96,7 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, worktreeBootst
     const initialBase = initialBaseRef.current
     setMode('newBranch')
     setBase(initialBase)
-    setBranch('')
+    setBranch(defaultNewBranchName(initialBase))
     setExistingBranch(initialBase)
     setRemoteRef('')
     setLocalBranch('')
@@ -504,7 +502,6 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, worktreeBootst
             {t('action.create-worktree-bootstrap-preflight-error')}
           </p>
         )}
-        <WorktreeBootstrapTrustCheckbox state={worktreeBootstrap} />
         <DialogFooter className="pt-4">
           <Button type="button" variant="outline" className={cn(compact && 'w-full')} onClick={onClose}>
             {t('dialog.cancel')}
@@ -518,22 +515,12 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, worktreeBootst
   )
 }
 
-function WorktreeBootstrapTrustCheckbox({ state }: { state: WorktreeBootstrapPromptState | undefined }) {
-  const t = useT()
-  const preview = state?.preflight?.kind === 'configured' ? state.preflight.preview : null
-  const showPrompt = !state?.loading && !state?.error && preview?.hasOperations === true && !!preview.configHash
-  if (!state || !showPrompt) return null
-
-  return (
-    <label className="flex items-center gap-2 pt-0.5 text-sm text-foreground">
-      <input
-        type="checkbox"
-        checked={state.configTrusted}
-        onChange={(event) => state.onConfigTrustedChange(event.currentTarget.checked)}
-      />
-      <span>{t('action.create-worktree-bootstrap-config-trusted')}</span>
-    </label>
-  )
+function defaultNewBranchName(currentBranch: string, now = new Date()): string {
+  if (!currentBranch) return ''
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `feat/${year}${month}${day}-${currentBranch}`
 }
 
 function worktreePathName(input: {

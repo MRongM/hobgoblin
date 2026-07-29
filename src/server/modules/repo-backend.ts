@@ -34,11 +34,7 @@ import {
 import { getWorkingStatus } from '#/system/git/status.ts'
 import { createWorktree, getWorktrees, pruneWorktrees, removeWorktree } from '#/system/git/worktrees.ts'
 import { getWorktreePatch } from '#/system/git/patch.ts'
-import {
-  bootstrapWorktreeAfterCreate,
-  bootstrapWorktreeSelectionsAfterCreate,
-  getWorktreeBootstrapPreview as getLocalWorktreeBootstrapPreview,
-} from '#/system/git/worktree-bootstrap.ts'
+import { bootstrapWorktreeSelectionsAfterCreate } from '#/system/git/worktree-bootstrap.ts'
 import {
   getLocalWorktreeBootstrapPreflight,
   validateLocalWorktreeBootstrapSelections,
@@ -48,11 +44,7 @@ import { commitAllChanges } from '#/system/git/commit.ts'
 import { mergeBranch } from '#/system/git/merge.ts'
 import { discardChangesForPaths, resetHardToCurrentHead } from '#/system/git/reset.ts'
 import { type CommitDetail, type CommitHistoryEntry, type ExecResult, type WorktreeStatus } from '#/shared/git-types.ts'
-import {
-  resolveKnownWorktree,
-  resolvePrunableWorktree,
-  resolveRemovableWorktree,
-} from '#/shared/worktree-guards.ts'
+import { resolveKnownWorktree, resolvePrunableWorktree, resolveRemovableWorktree } from '#/shared/worktree-guards.ts'
 import { isValidCwd, MAX_IPC_PATH_LENGTH } from '#/shared/input-validation.ts'
 import { validateBranchDeletionPolicy, validateRemovableWorktreeState } from '#/shared/repo-action-policy.ts'
 import { resolveRemoteTarget as resolveSshRemoteTarget } from '#/system/ssh/config.ts'
@@ -64,7 +56,6 @@ import {
   createRemoteTrackingBranch,
   createLocalTag as createRemoteLocalTag,
   createRemoteWorktree,
-  bootstrapRemoteWorktreeAfterCreate,
   bootstrapRemoteWorktreeSelectionsAfterCreate,
   deleteRemoteBranch,
   deleteLocalTag as deleteRemoteLocalTag,
@@ -83,7 +74,6 @@ import {
   getLocalTags as getRemoteLocalTags,
   getRemoteTags as getSshRemoteTags,
   getRemoteTrackingBranches as getSshRemoteTrackingBranches,
-  getRemoteWorktreeBootstrapPreview,
   getRemoteWorktreeBootstrapPreflight,
   mergeRemoteBranch,
   pullRemoteBranch,
@@ -105,7 +95,6 @@ import type {
   WorktreeBootstrapDecision,
   WorktreeBootstrapCandidateScope,
   WorktreeBootstrapPreflightResult,
-  WorktreeBootstrapPreviewResult,
 } from '#/shared/worktree-bootstrap-summary.ts'
 
 type ProbeAvailability = { ok: true } | { ok: false; message: string }
@@ -166,7 +155,6 @@ export interface RepoBackend {
   ): Promise<ExecResult>
   deleteLocalTag(name: string, signal?: AbortSignal): Promise<ExecResult>
   pushLocalTag(name: string, signal?: AbortSignal, networkOptions?: GitNetworkOptions): Promise<ExecResult>
-  getWorktreeBootstrapPreview(signal?: AbortSignal): Promise<WorktreeBootstrapPreviewResult>
   getWorktreeBootstrapPreflight(
     signal?: AbortSignal,
     candidateScope?: WorktreeBootstrapCandidateScope,
@@ -452,10 +440,6 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       return await pushLocalGitTag(repoId, name, signal, networkOptions)
     },
-    async getWorktreeBootstrapPreview(signal) {
-      if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
-      return await getLocalWorktreeBootstrapPreview(repoId, { signal })
-    },
     async getWorktreeBootstrapPreflight(signal, candidateScope) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       return await getLocalWorktreeBootstrapPreflight(repoId, {
@@ -478,19 +462,16 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       const created = await createWorktree(repoId, input, signal)
       if (!created.ok) return created
       if (!decision || decision.kind === 'skip') return created
-      const bootstrapped =
-        decision.kind === 'run'
-          ? await bootstrapWorktreeAfterCreate(sourceWorktreePath, input.worktreePath, {
-              signal,
-              expectedConfigHash: decision.configHash,
-            })
-          : await bootstrapWorktreeSelectionsAfterCreate(sourceWorktreePath, input.worktreePath, decision.selections, {
-              signal,
-            })
+      const bootstrapped = await bootstrapWorktreeSelectionsAfterCreate(
+        sourceWorktreePath,
+        input.worktreePath,
+        decision.selections,
+        { signal },
+      )
       if (!bootstrapped.ok) {
         return {
           ok: false,
-          message: decision.kind === 'run' ? normalizeBootstrapFailure(bootstrapped).message : bootstrapped.message,
+          message: bootstrapped.message,
           repoChanged: true,
         }
       }
@@ -668,9 +649,6 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
     async pushLocalTag(name, signal) {
       return await pushRemoteLocalTag(target, { name, signal })
     },
-    async getWorktreeBootstrapPreview(signal) {
-      return await getRemoteWorktreeBootstrapPreview(target, { signal })
-    },
     async getWorktreeBootstrapPreflight(signal, candidateScope) {
       return await getRemoteWorktreeBootstrapPreflight(target, {
         signal,
@@ -691,19 +669,16 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
       const created = await createRemoteWorktree(target, { ...input, signal })
       if (!created.ok) return created
       if (!decision || decision.kind === 'skip') return created
-      const bootstrapped =
-        decision.kind === 'run'
-          ? await bootstrapRemoteWorktreeAfterCreate(sourceTarget, input.worktreePath, {
-              signal,
-              expectedConfigHash: decision.configHash,
-            })
-          : await bootstrapRemoteWorktreeSelectionsAfterCreate(sourceTarget, input.worktreePath, decision.selections, {
-              signal,
-            })
+      const bootstrapped = await bootstrapRemoteWorktreeSelectionsAfterCreate(
+        sourceTarget,
+        input.worktreePath,
+        decision.selections,
+        { signal },
+      )
       if (!bootstrapped.ok) {
         return {
           ok: false,
-          message: decision.kind === 'run' ? normalizeBootstrapFailure(bootstrapped).message : bootstrapped.message,
+          message: bootstrapped.message,
           repoChanged: true,
         }
       }
@@ -741,9 +716,4 @@ function remoteBootstrapSourceTarget(
   return isValidRepositoryWorktreePath(repoId, sourceWorktreePath)
     ? { ...target, remotePath: path.posix.normalize(sourceWorktreePath) }
     : null
-}
-
-function normalizeBootstrapFailure(result: ExecResult): ExecResult {
-  if (result.ok || result.message.startsWith('Worktree bootstrap failed:')) return result
-  return { ...result, message: `Worktree bootstrap failed: ${result.message}` }
 }

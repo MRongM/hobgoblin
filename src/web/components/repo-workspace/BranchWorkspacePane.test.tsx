@@ -10,6 +10,10 @@ import { useReposStore } from '#/web/stores/repos/store.ts'
 
 let compactUi = false
 
+const actionHostState = vi.hoisted(() => ({
+  railHost: undefined as HTMLDivElement | null | undefined,
+}))
+
 vi.mock('#/web/hooks/useResponsiveUiMode.tsx', () => ({ useIsCompactUi: () => compactUi }))
 vi.mock('#/web/components/repo-workspace/SidebarProjectHeader.tsx', () => ({
   SidebarProjectHeader: ({
@@ -49,31 +53,36 @@ vi.mock('#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx', () => ({
     onOpenFileArea,
     onToggleFileArea,
     onOpenDetailArea,
+    statusBarActionHost,
   }: {
     workspaceRootId: string
     onOpenFileArea?: () => void
     onToggleFileArea?: () => void
     onOpenDetailArea?: () => void
-  }) => (
-    <div data-testid="rail">
-      {workspaceRootId}
-      {onOpenFileArea ? (
-        <button type="button" data-testid="rail-files" onClick={onOpenFileArea}>
-          member files
-        </button>
-      ) : null}
-      {onToggleFileArea ? (
-        <button type="button" data-testid="rail-toggle-files" onDoubleClick={onToggleFileArea}>
-          toggle files
-        </button>
-      ) : null}
-      {onOpenDetailArea ? (
-        <button type="button" data-testid="rail-detail" onClick={onOpenDetailArea}>
-          member detail
-        </button>
-      ) : null}
-    </div>
-  ),
+    statusBarActionHost?: HTMLDivElement | null
+  }) => {
+    actionHostState.railHost = statusBarActionHost
+    return (
+      <div data-testid="rail">
+        {workspaceRootId}
+        {onOpenFileArea ? (
+          <button type="button" data-testid="rail-files" onClick={onOpenFileArea}>
+            member files
+          </button>
+        ) : null}
+        {onToggleFileArea ? (
+          <button type="button" data-testid="rail-toggle-files" onDoubleClick={onToggleFileArea}>
+            toggle files
+          </button>
+        ) : null}
+        {onOpenDetailArea ? (
+          <button type="button" data-testid="rail-detail" onClick={onOpenDetailArea}>
+            member detail
+          </button>
+        ) : null}
+      </div>
+    )
+  },
 }))
 vi.mock('#/web/components/repo-workspace/BranchWorkspaceFileTree.tsx', () => ({
   BranchWorkspaceFileTree: ({ context, toolbarLeading }: { context: { path: string }; toolbarLeading?: ReactNode }) => (
@@ -159,9 +168,11 @@ vi.mock('#/web/components/StatusBar.tsx', () => ({
   StatusBar: ({
     fileAreaCollapsed,
     onToggleFileArea,
+    workspaceActionsHostRef,
   }: {
     fileAreaCollapsed?: boolean
     onToggleFileArea?: () => void
+    workspaceActionsHostRef?: React.RefCallback<HTMLDivElement>
   }) => (
     <div
       data-testid="status"
@@ -171,6 +182,9 @@ vi.mock('#/web/components/StatusBar.tsx', () => ({
         <button type="button" data-testid="file-area-toggle" onClick={onToggleFileArea}>
           toggle
         </button>
+      ) : null}
+      {workspaceActionsHostRef ? (
+        <div ref={workspaceActionsHostRef} data-testid="statusbar-workspace-actions" />
       ) : null}
     </div>
   ),
@@ -197,6 +211,7 @@ let root: Root
 
 beforeEach(() => {
   compactUi = false
+  actionHostState.railHost = undefined
   ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   resetReposStore()
   seedRepoState({ id: '/workspace', isGitRepo: false, branches: [], currentBranch: '', selectedBranch: null })
@@ -226,6 +241,14 @@ describe('BranchWorkspacePane', () => {
     )
     expect(container.querySelector('[data-testid="branch-workspace-context-bar"]')).toBeNull()
     expect(container.querySelector('[data-testid="branch-workspace-git-action-panel"]')).toBeNull()
+  })
+
+  test('wires the status bar workspace action host to the repository rail', () => {
+    act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={workspace()} layout="left-right" />))
+
+    const host = container.querySelector<HTMLDivElement>('[data-testid="statusbar-workspace-actions"]')
+    expect(host).not.toBeNull()
+    expect(actionHostState.railHost).toBe(host)
   })
 
   test('renders the ordinary worktree explorer and branch detail for a selected member', () => {
@@ -413,6 +436,26 @@ describe('BranchWorkspacePane', () => {
     act(() => container.querySelector<HTMLButtonElement>('[data-testid="rail-detail"]')?.click())
     expect(container.querySelector('[data-testid="branch-workspace-terminal-panel"]')).not.toBeNull()
     expect(container.querySelector('[data-testid="split-pane"]')).toBeNull()
+  })
+
+  test('rebinds the status bar action host when compact scope is left and reopened', () => {
+    compactUi = true
+    act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={workspace()} layout="left-right" />))
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="show-scope"]')?.click())
+
+    const firstHost = container.querySelector<HTMLDivElement>('[data-testid="statusbar-workspace-actions"]')
+    if (!firstHost) throw new Error('missing compact scope status bar action host')
+    expect(actionHostState.railHost).toBe(firstHost)
+
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="rail-files"]')?.click())
+    expect(firstHost.isConnected).toBe(false)
+    expect(container.querySelector('[data-testid="statusbar-workspace-actions"]')).toBeNull()
+
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="show-scope"]')?.click())
+    const reboundHost = container.querySelector<HTMLDivElement>('[data-testid="statusbar-workspace-actions"]')
+    if (!reboundHost) throw new Error('missing rebound compact scope status bar action host')
+    expect(reboundHost).not.toBe(firstHost)
+    expect(actionHostState.railHost).toBe(reboundHost)
   })
 
   test('starts with the desktop file area collapsed and toggles it from the status bar', () => {

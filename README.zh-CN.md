@@ -44,8 +44,6 @@ Hobgoblin 起源于 [Goblin](https://nano-props.github.io/goblin/)。Goblin 是�
 - **从文件树拖拽到终端：** 将文件树中的文件拖到终端，直接插入 shell 安全的文件路径，避免手动输入。
 - **双击文件树文件：** 双击文件树中的文件，直接用已配置的编辑器打开该文件。
 - **文件内容剪贴板快捷键：** 在 macOS 使用 `Cmd+Shift+C/V`，在 Windows/Linux 使用 `Ctrl+Shift+C/V`。`C` 会将当前聚焦文件的文本或图片内容复制到系统剪贴板，`V` 会用受支持的剪贴板文本或图片内容替换该文件。
-- **worktree bootstrap 配置生成：** 在文件树工具栏初始化缺失的 `goblin.toml`，再用仓库相对路径配置 `copy`、`symlink`、`hardlink`、`exclude` 和 `setup`，作为新 worktree 的自动准备规则。
-- **worktree 依赖跟踪：** 将 `goblin.toml` 作为新 worktree 的依赖清单来跟踪。Hobgoblin 会预览当前配置哈希；如果确认后文件发生变更，会停止 bootstrap；配置未变更时，会为本地和 SSH 远程仓库按规则复制环境文件、链接依赖/缓存路径并运行 setup。
 - **终端 tab 跳转：** 双击当前终端 tab，可将该终端滚动到底部。
 - **终端到文件树导航：** 终端输出中的仓库相对路径可被探测并点击跳转，在文件树中定位对应文件。
 - **终端路径跳转编辑器：** 双击终端输出中识别到的仓库相对路径（支持 `path:line` 和 `path:line:column`），可用已配置的编辑器打开并定位到对应行列。

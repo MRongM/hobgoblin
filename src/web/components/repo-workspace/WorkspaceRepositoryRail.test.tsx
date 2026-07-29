@@ -119,6 +119,7 @@ const branchWorkspaceState = vi.hoisted(() => ({
   dialogProps: null as null | {
     open: boolean
     mode: string
+    repositories: Array<{ id: string; primaryWorktreePath?: string }>
     workspace: BranchWorkspaceSnapshot | null
     progressWorkspace: BranchWorkspaceSnapshot | null
     fixedReduceRepositoryName?: string | null
@@ -283,6 +284,7 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspaceDialog.tsx', () => ({
   BranchWorkspaceDialog: ({
     open,
     mode,
+    repositories,
     workspace,
     progressWorkspace,
     fixedReduceRepositoryName,
@@ -290,12 +292,20 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspaceDialog.tsx', () => ({
   }: {
     open: boolean
     mode: string
+    repositories: Array<{ id: string; primaryWorktreePath?: string }>
     workspace: BranchWorkspaceSnapshot | null
     progressWorkspace: BranchWorkspaceSnapshot | null
     fixedReduceRepositoryName?: string | null
     onRefreshAuxiliaryCandidates?: () => Promise<unknown>
   }) => {
-    branchWorkspaceState.dialogProps = { open, mode, workspace, progressWorkspace, fixedReduceRepositoryName }
+    branchWorkspaceState.dialogProps = {
+      open,
+      mode,
+      repositories,
+      workspace,
+      progressWorkspace,
+      fixedReduceRepositoryName,
+    }
     branchWorkspaceState.dialogRefresh = onRefreshAuxiliaryCandidates ?? null
     return null
   },
@@ -667,6 +677,32 @@ describe('WorkspaceRepositoryRail', () => {
     expect(useReposStore.getState().workspaceRepositoryListHeightByRoot).toEqual({ [ROOT]: 4096 })
   })
 
+  test('manually reloads the branch workspace list and guards duplicate requests', async () => {
+    let finishRefresh: (() => void) | undefined
+    branchWorkspaceState.refresh.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishRefresh = resolve
+      }),
+    )
+    renderRail({ currentRepoId: ROOT })
+
+    const refresh = container?.querySelector<HTMLButtonElement>(
+      'section[aria-label="workspace.branch-workspace.list"] [aria-label="workspace.branch-workspace.reload"]',
+    )
+    expect(refresh).not.toBeNull()
+
+    act(() => {
+      refresh?.click()
+      refresh?.click()
+    })
+    expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
+    expect(rescanWorkspace).not.toHaveBeenCalled()
+    expect(refresh?.disabled).toBe(true)
+
+    await act(async () => finishRefresh?.())
+    expect(refresh?.disabled).toBe(false)
+  })
+
   test('reloads branch workspaces after a remote read failure without offering registry cleanup', async () => {
     let finishRefresh: (() => void) | undefined
     branchWorkspaceState.queryResult = {
@@ -686,25 +722,34 @@ describe('WorkspaceRepositoryRail', () => {
     )
     renderRail({ currentRepoId: ROOT })
 
-    const reload = container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.branch-workspace.reload"]')
-    expect(reload).not.toBeNull()
+    const branchSection = container?.querySelector('section[aria-label="workspace.branch-workspace.list"]')
+    const headerReload = branchSection?.firstElementChild?.querySelector<HTMLButtonElement>(
+      'button[aria-label="workspace.branch-workspace.reload"]',
+    )
+    const errorReload = branchSection?.querySelector<HTMLButtonElement>(
+      '[role="alert"] button[aria-label="workspace.branch-workspace.reload"]',
+    )
+    expect(headerReload).not.toBeNull()
+    expect(errorReload).not.toBeNull()
     expect(container?.textContent).toContain('workspace.branch-workspace.remote-operation-failed')
     expect(
       container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.branch-workspace.cleanup"]'),
     ).toBeNull()
 
-    act(() => reload?.click())
+    act(() => {
+      headerReload?.click()
+      errorReload?.click()
+    })
     expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
-    expect(reload?.disabled).toBe(true)
-
-    act(() => reload?.click())
-    expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
+    expect(headerReload?.disabled).toBe(true)
+    expect(errorReload?.disabled).toBe(true)
 
     await act(async () => {
       finishRefresh?.()
       await Promise.resolve()
     })
-    expect(reload?.disabled).toBe(false)
+    expect(headerReload?.disabled).toBe(false)
+    expect(errorReload?.disabled).toBe(false)
   })
 
   test('keeps the remote read failure retryable when reloading rejects', async () => {
@@ -715,7 +760,9 @@ describe('WorkspaceRepositoryRail', () => {
     branchWorkspaceState.refresh.mockRejectedValue(new Error('temporary network failure'))
     renderRail({ currentRepoId: ROOT })
 
-    const reload = container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.branch-workspace.reload"]')
+    const reload = container?.querySelector<HTMLButtonElement>(
+      '[role="alert"] button[aria-label="workspace.branch-workspace.reload"]',
+    )
     await act(async () => {
       reload?.click()
       await Promise.resolve()
@@ -882,6 +929,22 @@ describe('WorkspaceRepositoryRail', () => {
     expect(container?.querySelector('button[aria-label="workspace.configure"]')).not.toBeNull()
   })
 
+  test('uses the workspace member name when shared repository state keeps a remote project prefix', () => {
+    const state = useReposStore.getState()
+    useReposStore.setState({
+      repos: {
+        ...state.repos,
+        [API]: replaceRepo(state.repos[API]!, (repo) => {
+          repo.name = 'prod:api'
+        }),
+      },
+    })
+
+    renderRail()
+
+    expect(repositoryListState.props?.repositories.find((repository) => repository.id === API)?.name).toBe('api')
+  })
+
   test('renders navigation sections without decorative separators', () => {
     useReposStore.setState({
       activeId: ROOT,
@@ -917,12 +980,15 @@ describe('WorkspaceRepositoryRail', () => {
     expect(overview?.className).toContain('text-[13px]')
   })
 
-  test('hides the entire repository section and moves its actions to the branch workspace header', () => {
+  test('merges branch workspace actions into the status bar when the repository section is hidden', () => {
     useReposStore.setState({
       activeId: ROOT,
       workspaceActiveContextByRoot: { [ROOT]: { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' } },
     })
-    renderRail({ currentRepoId: ROOT })
+    const statusBarActionHost = document.createElement('div')
+    statusBarActionHost.dataset.testid = 'statusbar-workspace-actions'
+    container?.append(statusBarActionHost)
+    renderRail({ currentRepoId: ROOT, statusBarActionHost })
 
     const repositorySection = container?.querySelector('section[aria-label="workspace.repositories"]')
     const branchWorkspaceSection = container?.querySelector('section[aria-label="workspace.branch-workspace.list"]')
@@ -950,15 +1016,39 @@ describe('WorkspaceRepositoryRail', () => {
     expect(container?.querySelector('[data-testid="branch-workspace-list"]')?.getAttribute('data-active-id')).toBe(
       'branch-1',
     )
+    expect(migratedSection?.querySelector('[aria-label="workspace.branch-workspace.reload"]')).not.toBeNull()
     for (const label of [
       'workspace.branch-workspace.create',
       'workspace.pull-all',
       'workspace.configure',
       'workspace.rescan',
     ]) {
-      expect(migratedSection?.querySelector(`[aria-label="${label}"]`)).not.toBeNull()
+      expect(migratedSection?.querySelector(`[aria-label="${label}"]`)).toBeNull()
     }
-    expect(migratedSection?.querySelector('[aria-label="workspace.repositories.show"] .lucide-eye')).not.toBeNull()
+    for (const label of ['workspace.branch-workspace.create', 'workspace.pull-all', 'workspace.repositories.show']) {
+      expect(statusBarActionHost.querySelector(`[aria-label="${label}"]`)).not.toBeNull()
+    }
+    expect(statusBarActionHost.querySelector('[aria-label="workspace.repositories.show"] .lucide-eye')).not.toBeNull()
+    expect(statusBarActionHost.querySelector('[aria-label="workspace.configure"]')).toBeNull()
+    expect(statusBarActionHost.querySelector('[aria-label="workspace.rescan"]')).toBeNull()
+
+    act(() =>
+      statusBarActionHost
+        .querySelector<HTMLButtonElement>('[aria-label="workspace.repositories.show"]')
+        ?.click(),
+    )
+
+    const restoredRepositorySection = container?.querySelector('section[aria-label="workspace.repositories"]')
+    expect(restoredRepositorySection).not.toBeNull()
+    for (const label of [
+      'workspace.branch-workspace.create',
+      'workspace.pull-all',
+      'workspace.configure',
+      'workspace.rescan',
+    ]) {
+      expect(restoredRepositorySection?.querySelector(`[aria-label="${label}"]`)).not.toBeNull()
+    }
+    expect(statusBarActionHost.childElementCount).toBe(0)
   })
 
   test('shows the branch workspace recovery header while repositories are hidden from a member repository', () => {
@@ -1125,6 +1215,10 @@ describe('WorkspaceRepositoryRail', () => {
   test('opens directional member dialogs and resumes durable reduction intent', async () => {
     renderRail({ currentRepoId: ROOT })
     const item = branchWorkspaceState.items[0]!
+
+    expect(
+      branchWorkspaceState.dialogProps?.repositories.find((repository) => repository.id === API)?.primaryWorktreePath,
+    ).toBe(API)
 
     act(() => branchWorkspaceListState.props?.onExtend?.(item))
     expect(branchWorkspaceState.dialogProps).toMatchObject({ open: true, mode: 'extend', workspace: item })
@@ -1686,6 +1780,7 @@ function renderRail({
   currentRepoId = API,
   onOpenFileArea,
   onToggleFileArea,
+  statusBarActionHost,
 }: {
   terminalCount?: number
   outputActive?: boolean
@@ -1694,6 +1789,7 @@ function renderRail({
   currentRepoId?: string
   onOpenFileArea?: () => void
   onToggleFileArea?: () => void
+  statusBarActionHost?: HTMLDivElement | null
 } = {}) {
   const rootTerminalKey = `${ROOT}\0${ROOT}`
   const readContext: TerminalSessionReadContextValue = {
@@ -1733,6 +1829,7 @@ function renderRail({
           currentRepoId={currentRepoId}
           onOpenFileArea={onOpenFileArea}
           onToggleFileArea={onToggleFileArea}
+          statusBarActionHost={statusBarActionHost}
         />
       </TerminalSessionReadContext.Provider>,
     )

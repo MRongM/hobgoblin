@@ -5,9 +5,9 @@ import type {
 } from '#/shared/branch-workspace-git-actions.ts'
 import type { CreateWorktreeMode } from '#/shared/worktree-create.ts'
 import {
+  normalizeWorktreeBootstrapSourcePath,
   normalizeWorktreeBootstrapSelections,
   type WorktreeBootstrapDecision,
-  type WorktreeBootstrapPreview,
 } from '#/shared/worktree-bootstrap-summary.ts'
 
 export const BRANCH_WORKSPACE_DIRECTORY_PREFIX = 'hobgoblin-'
@@ -226,7 +226,6 @@ export interface BranchWorkspaceRepositoryPlan {
   worktreePath: string
   mode: CreateWorktreeMode
   worktreeBootstrap: WorktreeBootstrapDecision
-  bootstrapPreview?: WorktreeBootstrapPreview
   confirmationRequired: boolean
   satisfied: boolean
   action?: 'create-worktree' | 'remove-worktree' | 'delete-branch' | 'satisfied'
@@ -274,11 +273,17 @@ export type BranchWorkspacePlanResult =
   | { ok: true; plan: BranchWorkspacePlan }
   | { ok: false; message: string; detail?: string }
 
-export interface BranchWorkspaceExecutionWarning {
-  kind: 'repository-dependency-failed'
-  repositoryName: string
-  message: string
-}
+export type BranchWorkspaceExecutionWarning =
+  | {
+      kind: 'repository-dependency-failed'
+      repositoryName: string
+      message: string
+    }
+  | {
+      kind: 'workspace-dependency-failed'
+      entryName: string
+      message: string
+    }
 
 export type BranchWorkspaceExecuteResult =
   | {
@@ -421,7 +426,17 @@ function normalizeRepositoryWorktreeBootstrap(value: unknown): WorktreeBootstrap
   if (decision.kind === 'skip') return { kind: 'skip' }
   if (decision.kind !== 'materialize') return null
   const selections = normalizeWorktreeBootstrapSelections(decision.selections)
-  return selections ? { kind: 'materialize', selections, candidateScope: 'all-untracked' } : null
+  const sourceWorktreePath =
+    decision.sourceWorktreePath === undefined
+      ? undefined
+      : normalizeWorktreeBootstrapSourcePath(decision.sourceWorktreePath)
+  if (!selections || (decision.sourceWorktreePath !== undefined && !sourceWorktreePath)) return null
+  return {
+    kind: 'materialize',
+    selections,
+    candidateScope: 'all-untracked',
+    ...(sourceWorktreePath ? { sourceWorktreePath } : {}),
+  }
 }
 
 function invalidRequest(): BranchWorkspacePlanRequestResult {

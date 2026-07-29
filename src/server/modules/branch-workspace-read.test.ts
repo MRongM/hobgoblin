@@ -275,12 +275,52 @@ describe('branch workspace read model', () => {
       ok: true,
       items: [
         {
-          state: { kind: 'needs-action', action: 'repair', reason: 'creation-interrupted' },
+          state: { kind: 'ready' },
           issues: [],
           auxiliaryEntries: [],
         },
       ],
     })
+  })
+
+  test('does not let retained one-time auxiliary intent affect lifecycle readiness', async () => {
+    const current = manifest('feature/auth', {
+      operation: { kind: 'create' },
+    })
+    current.auxiliaryEntries = [
+      {
+        name: '.env',
+        mode: 'symlink',
+        sourcePath: path.join(ROOT, '.env'),
+        targetPath: path.join(current.path, '.env'),
+        progress: 'pending',
+      },
+      {
+        name: 'README.md',
+        mode: 'copy',
+        sourcePath: path.join(ROOT, 'README.md'),
+        targetPath: path.join(current.path, 'README.md'),
+        progress: 'failed',
+        lastError: 'copy failed',
+      },
+    ]
+    const deps = dependencies([current])
+
+    await expect(readBranchWorkspaceSnapshot(ROOT, undefined, deps)).resolves.toMatchObject({
+      ok: true,
+      items: [
+        {
+          state: { kind: 'ready' },
+          issues: [],
+          auxiliaryEntries: [
+            { name: '.env', progress: 'pending', ready: false },
+            { name: 'README.md', progress: 'failed', ready: false },
+          ],
+        },
+      ],
+    })
+    expect(deps.inspectPath).toHaveBeenCalledTimes(1)
+    expect(deps.inspectPath).toHaveBeenCalledWith(ROOT, current.path, undefined)
   })
 
   test('distinguishes unavailable repositories from worktrees checked out elsewhere', async () => {

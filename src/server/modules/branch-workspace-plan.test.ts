@@ -6,7 +6,6 @@ import type { BranchWorkspaceManifest, BranchWorkspacePathInspection } from '#/s
 import type { RepoSnapshot } from '#/shared/rpc.ts'
 import type { BranchSnapshotInfo } from '#/shared/git-types.ts'
 import type { WorkspaceConfigSnapshot } from '#/shared/workspace.ts'
-import type { WorktreeBootstrapPreviewResult } from '#/shared/worktree-bootstrap-summary.ts'
 import type { WorktreeBootstrapPreflightResult } from '#/shared/worktree-bootstrap-summary.ts'
 import type { WorktreeBootstrapTargetPreflightResult } from '#/shared/worktree-bootstrap-summary.ts'
 
@@ -48,20 +47,6 @@ function dependencies(snapshots: Record<string, RepoSnapshot | null>) {
     ),
     readManifests: vi.fn(async (): Promise<BranchWorkspaceManifestSourceSnapshot> => ({ kind: 'missing' })),
     getSnapshot: vi.fn(async (repoId: string) => snapshots[repoId] ?? null),
-    getBootstrapPreview: vi.fn(
-      async (): Promise<WorktreeBootstrapPreviewResult> => ({
-        ok: true,
-        preview: {
-          hasConfig: false,
-          hasOperations: false,
-          configHash: null,
-          copyCount: 0,
-          symlinkCount: 0,
-          hardlinkCount: 0,
-          excludeCount: 0,
-        },
-      }),
-    ),
     getBootstrapPreflight: vi.fn(
       async (): Promise<WorktreeBootstrapPreflightResult> => ({
         ok: true,
@@ -367,23 +352,15 @@ describe('branch workspace create planner', () => {
     ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.member-fixed' })
   })
 
-  test('requires independent outside-root and worktree-bootstrap approvals with a deterministic token', async () => {
+  test('requires only outside-root approval when no repository dependencies are selected', async () => {
     const sourceWorktreePath = path.join(ROOT, 'api-main')
     const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch('main', sourceWorktreePath)) })
     deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
     deps.getBootstrapPreflight.mockResolvedValue({
       ok: true,
       preflight: {
-        kind: 'configured',
-        preview: {
-          hasConfig: true,
-          hasOperations: true,
-          configHash: 'sha256:bootstrap',
-          copyCount: 1,
-          symlinkCount: 0,
-          hardlinkCount: 0,
-          excludeCount: 0,
-        },
+        kind: 'candidates',
+        candidates: [],
       },
     })
     deps.inspectPath.mockImplementation(async (_rootId, candidatePath) => {
@@ -413,13 +390,10 @@ describe('branch workspace create planner', () => {
     expect(first).toMatchObject({
       ok: true,
       plan: {
-        requiredApprovals: ['outside-root-source', 'worktree-bootstrap'],
+        requiredApprovals: ['outside-root-source'],
         repositories: [
           {
-            worktreeBootstrap: {
-              kind: 'run',
-              sourceWorktreePath,
-            },
+            worktreeBootstrap: { kind: 'skip' },
           },
         ],
         auxiliaryEntries: [
@@ -496,6 +470,96 @@ describe('branch workspace create planner', () => {
       'all-untracked',
       sourceWorktreePath,
     )
+  })
+
+  test('plans repository dependencies from another known non-base worktree', async () => {
+    const repoId = path.join(ROOT, 'api')
+    const alternativeSourcePath = path.join(ROOT, 'api-feature')
+    const deps = dependencies({
+      [repoId]: snapshot(
+        branch('main', repoId),
+        branch('develop', path.join(ROOT, 'api-develop')),
+        branch('feature/source', alternativeSourcePath),
+      ),
+    })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
+    deps.getBootstrapPreflight.mockResolvedValue({
+      ok: true,
+      preflight: {
+        kind: 'candidates',
+        candidates: [{ path: '.env', kind: 'file' }],
+      },
+    })
+
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      {
+        operation: 'create',
+        branch: BRANCH,
+        repositories: [
+          {
+            repositoryName: 'api',
+            baseBranch: 'develop',
+            worktreeBootstrap: {
+              kind: 'materialize',
+              candidateScope: 'all-untracked',
+              selections: [{ path: '.env', mode: 'copy' }],
+              sourceWorktreePath: alternativeSourcePath,
+            },
+          },
+        ],
+        auxiliaryEntries: [],
+      },
+      deps,
+    )
+
+    expect(deps.getBootstrapPreflight).toHaveBeenCalledWith(repoId, undefined, 'all-untracked', alternativeSourcePath)
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        repositories: [
+          {
+            worktreeBootstrap: {
+              kind: 'materialize',
+              sourceWorktreePath: alternativeSourcePath,
+            },
+          },
+        ],
+      },
+    })
+  })
+
+  test('rejects a repository dependency source that is not a known worktree', async () => {
+    const repoId = path.join(ROOT, 'api')
+    const deps = dependencies({
+      [repoId]: snapshot(branch('main', repoId), branch('develop', path.join(ROOT, 'api-develop'))),
+    })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
+
+    await expect(
+      buildBranchWorkspacePlan(
+        ROOT,
+        {
+          operation: 'create',
+          branch: BRANCH,
+          repositories: [
+            {
+              repositoryName: 'api',
+              baseBranch: 'develop',
+              worktreeBootstrap: {
+                kind: 'materialize',
+                candidateScope: 'all-untracked',
+                selections: [{ path: '.env', mode: 'copy' }],
+                sourceWorktreePath: path.join(ROOT, 'unknown-source'),
+              },
+            },
+          ],
+          auxiliaryEntries: [],
+        },
+        deps,
+      ),
+    ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+    expect(deps.getBootstrapPreflight).not.toHaveBeenCalled()
   })
 
   test('rejects a repository dependency that is no longer untracked', async () => {
@@ -589,7 +653,6 @@ describe('branch workspace repair planner', () => {
         ? { ...missing(candidatePath), exists: true, kind: 'directory', resolvedPath: candidatePath }
         : missing(candidatePath),
     )
-    deps.getBootstrapPreview.mockRejectedValue(new Error('preview failed'))
 
     await expect(
       buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, deps),
@@ -673,7 +736,6 @@ describe('branch workspace repair planner', () => {
       buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, deps),
     ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.nothing-to-repair' })
     expect(deps.getBootstrapTargetPreflight).not.toHaveBeenCalled()
-    expect(deps.getBootstrapPreview).not.toHaveBeenCalled()
   })
 
   test('recreates a missing legacy member worktree without dependency bootstrap', async () => {
@@ -699,7 +761,6 @@ describe('branch workspace repair planner', () => {
       },
     })
     expect(deps.getBootstrapTargetPreflight).not.toHaveBeenCalled()
-    expect(deps.getBootstrapPreview).not.toHaveBeenCalled()
   })
 
   test('repairs only missing roots and repository worktrees while releasing auxiliary intent', async () => {
@@ -869,10 +930,7 @@ describe('branch workspace remove planner', () => {
       },
     }
     const deps = dependencies({
-      [path.join(ROOT, 'api')]: snapshot(
-        branch(BRANCH, path.join(ROOT, 'elsewhere')),
-        actualBranch,
-      ),
+      [path.join(ROOT, 'api')]: snapshot(branch(BRANCH, path.join(ROOT, 'elsewhere')), actualBranch),
     })
     deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
     deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
@@ -1445,7 +1503,7 @@ describe('branch workspace reduce planner', () => {
     ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.needs-repair' })
   })
 
-  test('rejects a new reduction when an auxiliary entry has drifted', async () => {
+  test('does not inspect one-time auxiliary content before reducing members', async () => {
     const current = manifestForReduction()
     current.auxiliaryEntries = [
       {
@@ -1487,7 +1545,8 @@ describe('branch workspace reduce planner', () => {
         { operation: 'reduce', branchWorkspaceId: current.id, repositories: ['api'] },
         deps,
       ),
-    ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.needs-repair' })
+    ).resolves.toMatchObject({ ok: true, plan: { operation: 'reduce' } })
+    expect(deps.inspectPath).not.toHaveBeenCalledWith(ROOT, current.auxiliaryEntries[0]!.targetPath, undefined)
   })
 })
 

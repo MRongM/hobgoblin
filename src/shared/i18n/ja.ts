@@ -134,14 +134,16 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.base-named': '{name} のベースブランチ',
   'workspace.branch-workspace.repository-dependencies': 'リポジトリ依存項目',
   'workspace.branch-workspace.repository-dependencies-description':
-    '選択したベースブランチの worktree から新しい worktree にコピーまたはリンクする未追跡項目を選択します。',
+    '現在の依存元から新しい worktree にコピーまたはリンクする未追跡項目を選択します。',
   'workspace.branch-workspace.repository-dependencies-loading': 'リポジトリ依存項目を読み込み中…',
   'workspace.branch-workspace.repository-dependencies-error':
     'リポジトリ依存項目を読み込めませんでした。このリポジトリを選択解除して再選択してください。',
-  'workspace.branch-workspace.repository-dependencies-empty':
-    '選択したベースブランチの worktree に選択可能な未追跡項目はありません。',
-  'workspace.branch-workspace.repository-dependencies-configured':
-    '選択したベースブランチの worktree にある goblin.toml を使用します。',
+  'workspace.branch-workspace.repository-dependencies-empty': '現在の依存元に選択可能な未追跡項目はありません。',
+  'workspace.branch-workspace.repository-dependencies-source-primary':
+    'プライマリ worktree の依存項目を使用しています。',
+  'workspace.branch-workspace.repository-dependencies-source-branch': '{branch} worktree の依存項目を使用しています。',
+  'workspace.branch-workspace.repository-dependencies-source-select': '別の worktree の依存項目を使用',
+  'workspace.branch-workspace.repository-dependencies-source-primary-option': 'プライマリ worktree',
   'workspace.branch-workspace.auxiliary': 'ブランチワークスペースの依存項目',
   'workspace.branch-workspace.auxiliary-refresh': 'ブランチワークスペースの依存項目を更新',
   'workspace.branch-workspace.auxiliary-named': 'ブランチワークスペース依存項目 {name} を含める',
@@ -354,8 +356,8 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.plan-failed': '計画を作成できませんでした。',
   'workspace.branch-workspace.plan-stale': '状態が変わりました。更新された計画を確認してください。',
   'workspace.branch-workspace.execute-failed': '操作を完了できませんでした。',
-  'workspace.branch-workspace.repository-dependency-warning':
-    '{count} 件のリポジトリ依存関係を準備できませんでしたが、worktree は作成されました。',
+  'workspace.branch-workspace.dependency-warning':
+    '{count} 件の一時的な依存項目を準備できませんでしたが、ブランチワークスペースは作成されました。',
   'workspace.branch-workspace.approval-required': '必要な確認をすべて完了してください。',
   'workspace.branch-workspace.read-failed': 'ブランチワークスペースを読み取れませんでした。',
   'workspace.branch-workspace.reload': 'ブランチワークスペースを再読み込み',
@@ -672,11 +674,6 @@ export const ja: Record<DictKey, string> = {
   'file-tree.new-folder': '新しいフォルダ',
   'file-tree.refresh': '更新',
   'file-tree.open-local': 'ローカルで開く',
-  'file-tree.init-worktree-bootstrap-config': 'goblin.toml を初期化',
-  'file-tree.init-worktree-bootstrap-config-created': 'goblin.toml を作成しました',
-  'file-tree.init-worktree-bootstrap-config-failed': 'goblin.toml を初期化できません',
-  'file-tree.init-worktree-bootstrap-config-ai-command-failed':
-    'goblin.toml は作成されましたが、AI コマンドをターミナルに入力できませんでした。',
   'file-tree.search-label': 'ファイルを検索',
   'file-tree.search-placeholder': 'ファイルを検索',
   'file-tree.search-clear': '検索をクリア',
@@ -1006,7 +1003,6 @@ export const ja: Record<DictKey, string> = {
   'action.create-worktree-path-label': 'ワークツリーのパス (任意)',
   'action.create-worktree-path-disabled-hint': 'ブランチまたは参照を選ぶとパスが自動入力されます。',
   'action.create-worktree-base-current': '現在',
-  'action.create-worktree-bootstrap-config-trusted': '現在の設定を信頼',
   'action.create-worktree-bootstrap-candidates-label': '未追跡の内容を取り込む',
   'action.create-worktree-bootstrap-candidates-description':
     'このワークツリーに取り込む内容を選択します。この選択は今回のみ適用されます。',
@@ -1030,7 +1026,8 @@ export const ja: Record<DictKey, string> = {
   'error.failed-read-repo': 'リポジトリの読み込みに失敗しました',
   'error.merge-out-repository-unavailable': 'リポジトリを利用できません。',
   'error.merge-out-read-failed': 'マージ条件を確認できませんでした。',
-  'error.merge-out-source-worktree-required': '取り込み元ブランチはこの worktree にチェックアウトされている必要があります。',
+  'error.merge-out-source-worktree-required':
+    '取り込み元ブランチはこの worktree にチェックアウトされている必要があります。',
   'error.merge-out-source-worktree-unavailable': '取り込み元 worktree の状態を取得できません。',
   'error.merge-out-source-unavailable': '取り込み元 worktree を利用できません。',
   'error.merge-out-source-dirty': '送り出す前に、取り込み元 worktree の変更をコミットまたは破棄してください。',

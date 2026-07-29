@@ -10,25 +10,12 @@ import { useReposStore } from '#/web/stores/repos/store.ts'
 import { createRepoBranch, resetReposStore } from '#/web/stores/repos/test-utils.ts'
 import { GOBLIN_FILE_PATHS_MIME, type RepoFileTreeResult } from '#/shared/file-tree.ts'
 import type { ExecResult } from '#/shared/git-types.ts'
-import type { WorktreeBootstrapPreviewResult } from '#/shared/worktree-bootstrap-summary.ts'
 
 type GetRepositoryFileTreeArgs = [repoId: string, worktreePath: string, dirPath: string, signal?: AbortSignal]
-type GetRepositoryWorktreeBootstrapPreviewArgs = [repoId: string, worktreePath: string, signal?: AbortSignal]
-type InitializeRepositoryWorktreeBootstrapConfigArgs = [repoId: string, worktreePath: string]
 
 const toastMocks = vi.hoisted(() => ({
   success: vi.fn(),
   error: vi.fn(),
-}))
-
-const terminalBridgeMocks = vi.hoisted(() => ({
-  available: true,
-  bridge: {
-    worktreeSnapshot: vi.fn(),
-    createTerminal: vi.fn(),
-    selectTerminal: vi.fn(),
-    writeInput: vi.fn(),
-  },
 }))
 
 const getRepositoryFileTree = vi.fn(
@@ -79,27 +66,6 @@ const replaceRepositoryFileTreeBinaryFile = vi.fn(async (..._args: unknown[]) =>
   previousBytesBase64: Buffer.from('old contents\n', 'utf8').toString('base64'),
   previousByteLength: 13,
 }))
-const getRepositoryWorktreeBootstrapPreview = vi.fn(
-  async (..._args: GetRepositoryWorktreeBootstrapPreviewArgs): Promise<WorktreeBootstrapPreviewResult> => ({
-    ok: true,
-    preview: {
-      hasConfig: true,
-      hasOperations: false,
-      configHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      copyCount: 0,
-      symlinkCount: 0,
-      hardlinkCount: 0,
-      excludeCount: 0,
-    },
-  }),
-)
-const initializeRepositoryWorktreeBootstrapConfig = vi.fn(
-  async (..._args: InitializeRepositoryWorktreeBootstrapConfigArgs): Promise<ExecResult> => ({
-    ok: true,
-    message: '',
-  }),
-)
-const getCommitMessageProviders = vi.fn(async () => ({ codex: true, claude: true }))
 const openRepositoryEditor = vi.fn(async (_path: string): Promise<ExecResult> => ({ ok: true, message: '' }))
 const openRepositoryTerminal = vi.fn(async (_target: { projectRoot: string; workingDirectory: string }) => ({
   ok: true as const,
@@ -134,19 +100,10 @@ vi.mock('#/web/repo-client.ts', () => ({
   renameRepositoryFileTreeEntry: (...args: unknown[]) => renameRepositoryFileTreeEntry(...args),
   deleteRepositoryFileTreeEntries: (...args: unknown[]) => deleteRepositoryFileTreeEntries(...args),
   moveRepositoryFileTreeEntries: (...args: unknown[]) => moveRepositoryFileTreeEntries(...args),
-  getRepositoryWorktreeBootstrapPreview: (...args: GetRepositoryWorktreeBootstrapPreviewArgs) =>
-    getRepositoryWorktreeBootstrapPreview(...args),
-  initializeRepositoryWorktreeBootstrapConfig: (...args: InitializeRepositoryWorktreeBootstrapConfigArgs) =>
-    initializeRepositoryWorktreeBootstrapConfig(...args),
-  getCommitMessageProviders: () => getCommitMessageProviders(),
   openRepositoryEditor: (path: string) => openRepositoryEditor(path),
   openRepositoryTerminal: (target: { projectRoot: string; workingDirectory: string }) => openRepositoryTerminal(target),
   transferRepositoryFiles: (input: unknown) => transferRepositoryFiles(input),
   exportRepositoryFilesToLocalDirectory: (input: unknown) => exportRepositoryFilesToLocalDirectory(input),
-}))
-
-vi.mock('#/web/components/terminal/terminal-session-command-bridge.ts', () => ({
-  readTerminalSessionCommandBridge: () => (terminalBridgeMocks.available ? terminalBridgeMocks.bridge : null),
 }))
 
 vi.mock('#/web/app-shell-client.ts', () => ({
@@ -204,35 +161,6 @@ beforeEach(() => {
   createRepositoryFileTreeDirectory.mockClear()
   readRepositoryFileTreeBinaryFile.mockClear()
   replaceRepositoryFileTreeBinaryFile.mockClear()
-  getRepositoryWorktreeBootstrapPreview.mockClear()
-  getRepositoryWorktreeBootstrapPreview.mockResolvedValue({
-    ok: true,
-    preview: {
-      hasConfig: true,
-      hasOperations: false,
-      configHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      copyCount: 0,
-      symlinkCount: 0,
-      hardlinkCount: 0,
-      excludeCount: 0,
-    },
-  })
-  initializeRepositoryWorktreeBootstrapConfig.mockClear()
-  initializeRepositoryWorktreeBootstrapConfig.mockResolvedValue({ ok: true, message: '' })
-  getCommitMessageProviders.mockClear()
-  getCommitMessageProviders.mockResolvedValue({ codex: true, claude: true })
-  terminalBridgeMocks.available = true
-  terminalBridgeMocks.bridge.worktreeSnapshot.mockReset()
-  terminalBridgeMocks.bridge.worktreeSnapshot.mockReturnValue({
-    count: 0,
-    selectedDescriptor: null,
-    sessions: [],
-    worktreeTerminalKey: '/repo\u0000/repo-worktree',
-  })
-  terminalBridgeMocks.bridge.createTerminal.mockReset()
-  terminalBridgeMocks.bridge.createTerminal.mockResolvedValue('/repo\u0000/repo-worktree\u0000terminal-1')
-  terminalBridgeMocks.bridge.selectTerminal.mockReset()
-  terminalBridgeMocks.bridge.writeInput.mockReset()
   openRepositoryEditor.mockClear()
   openRepositoryTerminal.mockClear()
   openInFinder.mockClear()
@@ -357,8 +285,6 @@ describe('ProjectFileTree', () => {
       '/workspace/goblin-feature',
       expect.any(AbortSignal),
     )
-    expect(getRepositoryWorktreeBootstrapPreview).not.toHaveBeenCalled()
-
     const api = treeItemByText('api')
     expect(api.draggable).toBe(false)
     await act(async () => {
@@ -529,157 +455,16 @@ describe('ProjectFileTree', () => {
     expect(toolbar.querySelector('button[aria-label="file-tree.search-label"]')).toBeNull()
   })
 
-  test('initializes missing goblin.toml from the file tree toolbar', async () => {
-    getRepositoryWorktreeBootstrapPreview.mockResolvedValueOnce({
-      ok: true,
-      preview: {
-        hasConfig: false,
-        hasOperations: false,
-        configHash: null,
-        copyCount: 0,
-        symlinkCount: 0,
-        hardlinkCount: 0,
-        excludeCount: 0,
-      },
-    })
+  test('does not render a goblin.toml initializer', async () => {
     seedRepoWithSelectedBranch({ hasWorktree: true, worktreePath: '/repo-worktree' })
     useReposStore.setState({ detailCollapsed: true })
 
     await render(<ProjectFileTree repoId="/repo" />)
-    expect(getRepositoryWorktreeBootstrapPreview).toHaveBeenCalledWith(
-      '/repo',
-      '/repo-worktree',
-      expect.any(AbortSignal),
-    )
 
     const initButton = fileTreeToolbar().querySelector<HTMLButtonElement>(
       'button[aria-label="file-tree.init-worktree-bootstrap-config"]',
     )
-    if (!initButton) throw new Error('missing goblin.toml init button')
-
-    getRepositoryFileTree.mockClear()
-    await act(async () => {
-      initButton.click()
-      await Promise.resolve()
-      await Promise.resolve()
-      await Promise.resolve()
-    })
-
-    expect(initializeRepositoryWorktreeBootstrapConfig).toHaveBeenCalledWith('/repo', '/repo-worktree')
-    expect(toastMocks.success).toHaveBeenCalledWith('file-tree.init-worktree-bootstrap-config-created')
-    expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo-worktree', '/repo-worktree', undefined)
-    expect(getCommitMessageProviders).toHaveBeenCalledTimes(1)
-    expect(terminalBridgeMocks.bridge.createTerminal).toHaveBeenCalledWith({
-      repoRoot: '/repo',
-      branch: 'main',
-      worktreePath: '/repo-worktree',
-    })
-    const command = terminalBridgeMocks.bridge.writeInput.mock.calls[0]![1]
-    expect(command).toContain('codex exec --skip-git-repo-check')
-    expect(command).toContain('.gitignore')
-    expect(command).toContain('dependency manifests')
-    expect(command).toContain('[worktree].symlink')
-    expect(command).toContain('Preserve all existing goblin.toml settings')
-    expect(command).not.toMatch(/[\r\n]/)
-    expect(useReposStore.getState().repos['/repo']?.ui.detailTab).toBe('terminal')
-    expect(useReposStore.getState().detailCollapsed).toBe(false)
-  })
-
-  test('falls back to a Claude handoff command when Codex is unavailable', async () => {
-    getRepositoryWorktreeBootstrapPreview.mockResolvedValueOnce({
-      ok: true,
-      preview: {
-        hasConfig: false,
-        hasOperations: false,
-        configHash: null,
-        copyCount: 0,
-        symlinkCount: 0,
-        hardlinkCount: 0,
-        excludeCount: 0,
-      },
-    })
-    getCommitMessageProviders.mockResolvedValueOnce({ codex: false, claude: true })
-    seedRepoWithSelectedBranch({ hasWorktree: true, worktreePath: '/repo-worktree' })
-
-    await render(<ProjectFileTree repoId="/repo" />)
-    const initButton = fileTreeToolbar().querySelector<HTMLButtonElement>(
-      'button[aria-label="file-tree.init-worktree-bootstrap-config"]',
-    )
-    if (!initButton) throw new Error('missing goblin.toml init button')
-
-    await act(async () => {
-      initButton.click()
-      await Promise.resolve()
-      await Promise.resolve()
-      await Promise.resolve()
-    })
-
-    expect(terminalBridgeMocks.bridge.writeInput.mock.calls[0]![1]).toContain('claude --print')
-  })
-
-  test('does not prepare an AI command when goblin.toml initialization fails', async () => {
-    getRepositoryWorktreeBootstrapPreview.mockResolvedValueOnce({
-      ok: true,
-      preview: {
-        hasConfig: false,
-        hasOperations: false,
-        configHash: null,
-        copyCount: 0,
-        symlinkCount: 0,
-        hardlinkCount: 0,
-        excludeCount: 0,
-      },
-    })
-    initializeRepositoryWorktreeBootstrapConfig.mockResolvedValueOnce({ ok: false, message: 'error.failed-write' })
-    seedRepoWithSelectedBranch({ hasWorktree: true, worktreePath: '/repo-worktree' })
-
-    await render(<ProjectFileTree repoId="/repo" />)
-    const initButton = fileTreeToolbar().querySelector<HTMLButtonElement>(
-      'button[aria-label="file-tree.init-worktree-bootstrap-config"]',
-    )
-    if (!initButton) throw new Error('missing goblin.toml init button')
-
-    await act(async () => {
-      initButton.click()
-      await Promise.resolve()
-      await Promise.resolve()
-    })
-
-    expect(getCommitMessageProviders).not.toHaveBeenCalled()
-    expect(terminalBridgeMocks.bridge.writeInput).not.toHaveBeenCalled()
-  })
-
-  test('keeps the created config and reports when the AI command cannot reach a terminal', async () => {
-    getRepositoryWorktreeBootstrapPreview.mockResolvedValueOnce({
-      ok: true,
-      preview: {
-        hasConfig: false,
-        hasOperations: false,
-        configHash: null,
-        copyCount: 0,
-        symlinkCount: 0,
-        hardlinkCount: 0,
-        excludeCount: 0,
-      },
-    })
-    terminalBridgeMocks.available = false
-    seedRepoWithSelectedBranch({ hasWorktree: true, worktreePath: '/repo-worktree' })
-
-    await render(<ProjectFileTree repoId="/repo" />)
-    const initButton = fileTreeToolbar().querySelector<HTMLButtonElement>(
-      'button[aria-label="file-tree.init-worktree-bootstrap-config"]',
-    )
-    if (!initButton) throw new Error('missing goblin.toml init button')
-
-    await act(async () => {
-      initButton.click()
-      await Promise.resolve()
-      await Promise.resolve()
-      await Promise.resolve()
-    })
-
-    expect(toastMocks.success).toHaveBeenCalledWith('file-tree.init-worktree-bootstrap-config-created')
-    expect(toastMocks.error).toHaveBeenCalledWith('file-tree.init-worktree-bootstrap-config-ai-command-failed')
+    expect(initButton).toBeNull()
   })
 
   test('collapses expanded file tree directories from the toolbar', async () => {
