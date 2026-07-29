@@ -45,8 +45,12 @@ The device-local combination of an Android appearance preference (follow system,
 _Avoid_: Web theme, terminal appearance, synchronized theme
 
 **Android tmux tab**:
-The Android main-navigation destination where the user explicitly selects one saved SSH Host and scans that host's default and project-scoped tmux servers for current-protocol Hobgoblin sessions. Its catalog is derived from live server sockets and session metadata rather than saved Projects or workspace configuration; leaving the destination clears the selected Host, while returning from an opened terminal preserves the current visit.
-_Avoid_: Host-detail tmux tab, Android workspace catalog, remembered Host selection, arbitrary tmux list, tmux session creator
+The Android main-navigation destination where the user explicitly selects one saved SSH Host and scans that host's default and project-scoped tmux servers for current-protocol Hobgoblin sessions together with default tmux sessions. Its catalog is derived from live server sockets and session metadata rather than saved Projects or workspace configuration; leaving the destination clears the selected Host, while returning from an opened terminal preserves the current visit.
+_Avoid_: Host-detail tmux tab, Android workspace catalog, remembered Host selection, tmux session creator
+
+**Default tmux session**:
+An ordinary user-created tmux session found on the selected SSH Host's default tmux server that does not carry a valid current-protocol Hobgoblin tmux identity. It keeps its own tmux session name and is distinct from a Hobgoblin session found on either the default or a project-scoped server.
+_Avoid_: Legacy Hobgoblin tmux session, project-scoped tmux session, native shell
 
 **Android tmux directory project import**:
 An explicit Android action that takes one directory from the current tmux scan into the Project setup flow, where it is validated and saved as a device-local Project. It is distinct from tmux discovery, terminal recovery, and automatic or batch project import.

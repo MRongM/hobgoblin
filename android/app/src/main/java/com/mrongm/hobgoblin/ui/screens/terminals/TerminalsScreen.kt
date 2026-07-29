@@ -98,12 +98,20 @@ private fun terminalOverviewContainerColor(status: TerminalSessionStatus): Color
     }
 
 internal fun terminalOverviewCloseConfirmationText(session: TerminalSessionRecord): LocalizedText = LocalizedText(
-    resourceId = if (session.tmuxIdentity != null) R.string.terminals_close_tmux else R.string.terminals_close_native,
+    resourceId = if (terminalSessionIsTmuxBacked(session)) {
+        R.string.terminals_close_tmux
+    } else {
+        R.string.terminals_close_native
+    },
     formatArgs = listOf(terminalOverviewTitleText(session)),
 )
 
 internal fun terminalOverviewDeleteConfirmationText(session: TerminalSessionRecord): LocalizedText = LocalizedText(
-    resourceId = if (session.tmuxIdentity != null) R.string.terminals_delete_tmux else R.string.terminals_delete_native,
+    resourceId = if (terminalSessionIsTmuxBacked(session)) {
+        R.string.terminals_delete_tmux
+    } else {
+        R.string.terminals_delete_native
+    },
     formatArgs = listOf(terminalOverviewTitleText(session)),
 )
 

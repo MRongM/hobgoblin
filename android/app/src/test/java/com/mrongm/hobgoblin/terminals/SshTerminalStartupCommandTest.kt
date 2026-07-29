@@ -141,6 +141,30 @@ class SshTerminalStartupCommandTest {
     }
 
     @Test
+    fun `ordinary default tmux startup attaches exactly without protocol mutation`() {
+        val sessionTarget = TmuxSessionTarget(TmuxServerTarget.Default, "editor")
+        val command = SshTerminalStartupCommand.remoteCommandForTarget(
+            target(remotePath = "/srv/editor"),
+            TerminalStartupContext(
+                repositoryRemotePath = null,
+                worktreeRemotePath = "/srv/editor",
+                terminalId = null,
+                tmuxIdentity = null,
+                tmuxStartupPolicy = TmuxStartupPolicy.AttachExisting,
+                tmuxSessionTarget = sessionTarget,
+            ),
+        ).orEmpty()
+        val output = unwrapProjectStartupScript(command)
+
+        assertTrue(output.contains("has-session -t '=editor'"))
+        assertTrue(output.contains("attach-session -t '=editor'"))
+        assertFalse(output.contains("new-session"))
+        assertFalse(output.contains("set-option"))
+        assertFalse(output.contains("@hobgoblin_"))
+        assertFalse(output.contains("exec \"\${SHELL:-/bin/sh}\" -l"))
+    }
+
+    @Test
     fun `workspace shell quotes paths with spaces and single quotes`() {
         val command = SshTerminalStartupCommand.remoteCommandForTarget(
             target(remotePath = "/srv/app's worktree"),

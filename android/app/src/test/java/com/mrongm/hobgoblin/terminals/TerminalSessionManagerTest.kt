@@ -264,6 +264,33 @@ class TerminalSessionManagerTest {
     }
 
     @Test
+    fun `ordinary default tmux recovery reuses one retained terminal and reconnects its exact target`() {
+        val service = FakeTerminalSessionFactory()
+        val manager = terminalSessionManager(service = service, now = { 500L })
+        val candidate = ordinaryHostRecoveryCandidate()
+
+        val first = requireNotNull(manager.recoverOrGetHostTmuxSession(candidate))
+        val repeated = requireNotNull(manager.recoverOrGetHostTmuxSession(candidate))
+        val reconnected = manager.reconnect(
+            sessionId = first.id,
+            target = candidate.target,
+            repositoryId = null,
+            repositoryRemotePath = null,
+            targetLabel = candidate.targetLabel,
+        )
+
+        assertEquals(first.id, repeated.id)
+        assertEquals("editor", first.displayName)
+        assertNull(first.terminalId)
+        assertNull(first.tmuxIdentity)
+        assertEquals(TmuxSessionTarget(TmuxServerTarget.Default, "editor"), first.tmuxSessionTarget)
+        assertEquals(first.tmuxSessionTarget, reconnected?.tmuxSessionTarget)
+        assertEquals(first.tmuxSessionTarget, service.startupContext()?.tmuxSessionTarget)
+        assertEquals(TmuxStartupPolicy.AttachExisting, service.startupContext()?.tmuxStartupPolicy)
+        assertEquals(1, manager.sessions().size)
+    }
+
+    @Test
     fun `tmux recovery does not overwrite an existing native or exact tmux slot`() {
         val service = FakeTerminalSessionFactory()
         val manager = terminalSessionManager(service = service, ids = terminalIds())
@@ -982,6 +1009,56 @@ class TerminalSessionManagerTest {
         assertEquals("last output", restored?.lastOutputSnapshot)
     }
 
+    @Test
+    fun `stored ordinary tmux record preserves its original session name on restore`() {
+        val stored = TerminalSessionRecord(
+            id = "default-tmux-editor",
+            hostId = "lee@example.com:22/srv/editor",
+            repositoryId = null,
+            remotePath = "/srv/editor",
+            targetLabel = "Dev - /srv/editor",
+            displayName = "editor",
+            terminalId = null,
+            tmuxSessionTarget = TmuxSessionTarget(TmuxServerTarget.Default, "editor"),
+            status = TerminalSessionStatus.Disconnected,
+            openedAt = 100L,
+        )
+        val store = RecordingTerminalSessionStore(initial = listOf(stored))
+
+        val manager = terminalSessionManager(service = FakeTerminalSessionFactory(), store = store)
+
+        assertEquals("editor", manager.session(stored.id)?.displayName)
+        assertNull(manager.session(stored.id)?.terminalId)
+    }
+
+    @Test
+    fun `ordinary tmux name does not reserve an Android terminal display number`() {
+        val stored = TerminalSessionRecord(
+            id = "default-tmux-terminal-99",
+            hostId = "lee@example.com:22/srv/editor",
+            repositoryId = null,
+            remotePath = "/srv/editor",
+            targetLabel = "Dev - /srv/editor",
+            displayName = "terminal-99",
+            terminalId = null,
+            tmuxSessionTarget = TmuxSessionTarget(TmuxServerTarget.Default, "terminal-99"),
+            status = TerminalSessionStatus.Disconnected,
+            openedAt = 100L,
+        )
+        val manager = terminalSessionManager(
+            service = FakeTerminalSessionFactory(),
+            store = RecordingTerminalSessionStore(initial = listOf(stored)),
+        )
+
+        val native = manager.createOrAttach(
+            target = target(remotePath = "/srv/editor").copy(id = stored.hostId),
+            repositoryId = null,
+            targetLabel = "Dev - /srv/editor",
+        )
+
+        assertEquals("terminal-1", native.displayName)
+    }
+
     private fun terminalSessionManager(
         service: FakeTerminalSessionFactory,
         now: () -> Long = { 100L },
@@ -1080,6 +1157,27 @@ class TerminalSessionManagerTest {
             ),
         )
     }
+
+    private fun ordinaryHostRecoveryCandidate(): HostTmuxRecoveryCandidate = HostTmuxRecoveryCandidate(
+        target = RemoteTarget(
+            id = "lee@example.com:22/srv/editor",
+            alias = "Dev",
+            host = "example.com",
+            user = "lee",
+            port = 22,
+            remotePath = "/srv/editor",
+            identityRefId = null,
+        ),
+        targetLabel = "Dev - /srv/editor",
+        discovery = HostDiscoveredTmuxSession(
+            server = TmuxServerTarget.Default,
+            identity = null,
+            terminalNumber = null,
+            attachedClients = 0,
+            sessionName = "editor",
+            initialPath = "/srv/editor",
+        ),
+    )
 
     private fun TerminalSessionRecord.targetHost(): String = hostId.substringAfter('@').substringBefore(':')
 

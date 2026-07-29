@@ -4,6 +4,7 @@ import com.mrongm.hobgoblin.terminals.TerminalDisconnectedReason
 import com.mrongm.hobgoblin.terminals.TerminalSessionRecord
 import com.mrongm.hobgoblin.terminals.TerminalSessionStatus
 import com.mrongm.hobgoblin.terminals.TmuxSessionIdentity
+import com.mrongm.hobgoblin.terminals.TmuxSessionTarget
 import com.mrongm.hobgoblin.terminals.TmuxServerTarget
 import com.mrongm.hobgoblin.terminals.terminalOutputSnapshot
 import org.junit.Assert.assertEquals
@@ -119,6 +120,32 @@ class TerminalSessionStoreTest {
         assertEquals(server, roundTripped.tmuxServerTarget)
         assertEquals(null, oldRecord.tmuxServerTarget)
         assertEquals(terminalRecord().tmuxIdentity, oldRecord.tmuxIdentity)
+    }
+
+    @Test
+    fun `ordinary default tmux target round trips without a protocol identity or terminal number`() {
+        val target = TmuxSessionTarget(TmuxServerTarget.Default, "editor")
+        val record = TerminalSessionRecord(
+            id = "default-tmux-editor",
+            hostId = "host-1",
+            repositoryId = null,
+            remotePath = "/srv/editor",
+            targetLabel = "Host - /srv/editor",
+            displayName = "editor",
+            terminalId = null,
+            repositoryRemotePath = null,
+            tmuxIdentity = null,
+            tmuxSessionTarget = target,
+            status = TerminalSessionStatus.Disconnected,
+            openedAt = 100L,
+        )
+
+        val decoded = TerminalSessionCodec.decode(TerminalSessionCodec.encode(listOf(record))).single()
+
+        assertEquals(record, decoded)
+        assertEquals(target, decoded.tmuxSessionTarget)
+        assertEquals(null, decoded.tmuxIdentity)
+        assertEquals(null, decoded.terminalId)
     }
 
     @Test

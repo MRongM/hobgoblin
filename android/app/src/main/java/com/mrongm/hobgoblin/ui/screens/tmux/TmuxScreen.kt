@@ -330,7 +330,7 @@ private fun HostTmuxCatalog(
                 Text(
                     stringResource(
                         R.string.host_tmux_close_description,
-                        target.discovery.terminalNumber,
+                        target.retainedSession.displayName,
                     ),
                 )
             },
@@ -376,7 +376,7 @@ private fun HostTmuxCatalog(
                     Text(
                         stringResource(
                             R.string.host_tmux_delete_local_description,
-                            target.discovery.terminalNumber,
+                            target.retainedSession.displayName,
                         ),
                     )
                     Row(
@@ -694,7 +694,7 @@ private fun HostTmuxSessionCard(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            stringResource(R.string.host_tmux_terminal_label, session.terminalNumber),
+                            hostTmuxSessionTitle(session),
                             modifier = Modifier.weight(1f),
                             style = MaterialTheme.typography.titleMedium,
                             fontFamily = FontFamily.Monospace,
@@ -725,7 +725,11 @@ private fun HostTmuxSessionCard(
                     }
                     Text(
                         when (val server = session.server) {
-                            TmuxServerTarget.Default -> stringResource(R.string.host_tmux_default_server)
+                            TmuxServerTarget.Default -> if (session.identity == null) {
+                                stringResource(R.string.host_tmux_default_session)
+                            } else {
+                                stringResource(R.string.host_tmux_default_server)
+                            }
                             is TmuxServerTarget.Named -> stringResource(
                                 R.string.host_tmux_project_server,
                                 hostTmuxProtocolNameSuffix(server.serverName),
@@ -737,17 +741,19 @@ private fun HostTmuxSessionCard(
                         fontFamily = FontFamily.Monospace,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Text(
-                        stringResource(
-                            R.string.host_tmux_session_name,
-                            hostTmuxProtocolNameSuffix(session.identity.sessionName),
-                        ),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    hostTmuxProtocolSessionName(session)?.let { sessionName ->
+                        Text(
+                            stringResource(
+                                R.string.host_tmux_session_name,
+                                hostTmuxProtocolNameSuffix(sessionName),
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
             Row(

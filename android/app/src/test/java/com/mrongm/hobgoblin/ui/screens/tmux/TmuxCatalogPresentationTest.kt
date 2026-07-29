@@ -13,6 +13,7 @@ import com.mrongm.hobgoblin.terminals.TmuxSessionIdentity
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -55,10 +56,26 @@ class TmuxCatalogPresentationTest {
         assertEquals(HostTmuxServerSource.Project, hostTmuxServerSource(named.server))
         assertEquals(HostTmuxServerSource.Default, hostTmuxServerSource(legacy.server))
         assertEquals("…22222222", hostTmuxProtocolNameSuffix(namedServer))
-        assertEquals("…11111111", hostTmuxProtocolNameSuffix(named.identity.sessionName))
+        assertEquals("…11111111", hostTmuxProtocolNameSuffix(named.sessionName))
         assertTrue(hostTmuxSessionAccessibilityLabel(named).contains(namedServer))
-        assertTrue(hostTmuxSessionAccessibilityLabel(named).contains(named.identity.sessionName))
+        assertTrue(hostTmuxSessionAccessibilityLabel(named).contains(named.sessionName))
         assertTrue(hostTmuxSessionAccessibilityLabel(named).contains("2"))
+    }
+
+    @Test
+    fun `ordinary default session uses its original name instead of a terminal number`() {
+        val ordinary = HostDiscoveredTmuxSession(
+            server = TmuxServerTarget.Default,
+            identity = null,
+            terminalNumber = null,
+            attachedClients = 0,
+            sessionName = "editor",
+            initialPath = "/srv/editor",
+        )
+
+        assertEquals("editor", hostTmuxSessionTitle(ordinary))
+        assertNull(hostTmuxProtocolSessionName(ordinary))
+        assertEquals("terminal-1", hostTmuxSessionTitle(session(TmuxServerTarget.Default, 0)))
     }
 
     @Test

@@ -7,6 +7,7 @@ import com.mrongm.hobgoblin.terminals.TerminalDisconnectedReason
 import com.mrongm.hobgoblin.terminals.TerminalSessionRecord
 import com.mrongm.hobgoblin.terminals.TerminalSessionStatus
 import com.mrongm.hobgoblin.terminals.TmuxSessionIdentity
+import com.mrongm.hobgoblin.terminals.TmuxSessionTarget
 import com.mrongm.hobgoblin.terminals.TmuxSessionProtocol
 import com.mrongm.hobgoblin.terminals.TmuxServerTarget
 import com.mrongm.hobgoblin.terminals.terminalDisconnectedMessageSnapshot
@@ -79,6 +80,7 @@ object TerminalSessionCodec {
     private const val ProjectTerminalIdentityRecordFieldCount = 15
     private const val TmuxIdentityRecordFieldCount = 17
     private const val TmuxServerTargetRecordFieldCount = 18
+    private const val ExactTmuxTargetRecordFieldCount = 19
     private const val DefaultTmuxServerMarker = "legacy-default"
 
     fun encode(sessions: List<TerminalSessionRecord>): String =
@@ -102,10 +104,17 @@ object TerminalSessionCodec {
                 session.tmuxIdentity?.sessionName.orEmpty(),
                 session.tmuxIdentity?.initialPath.orEmpty(),
                 when (val server = session.tmuxServerTarget) {
-                    null -> ""
+                    null -> when (val target = session.tmuxSessionTarget) {
+                        null -> ""
+                        else -> when (val server = target.server) {
+                            TmuxServerTarget.Default -> DefaultTmuxServerMarker
+                            is TmuxServerTarget.Named -> server.serverName
+                        }
+                    }
                     TmuxServerTarget.Default -> DefaultTmuxServerMarker
                     is TmuxServerTarget.Named -> server.serverName
                 },
+                session.tmuxSessionTarget?.sessionName.orEmpty(),
             ).joinToString(FieldSeparator) { it.encodeField() }
         }
 
@@ -127,6 +136,7 @@ object TerminalSessionCodec {
                 ProjectTerminalIdentityRecordFieldCount,
                 TmuxIdentityRecordFieldCount,
                 TmuxServerTargetRecordFieldCount,
+                ExactTmuxTargetRecordFieldCount,
             )
         ) return null
         return runCatching {
@@ -150,14 +160,20 @@ object TerminalSessionCodec {
             } else {
                 null
             }
-            val tmuxServerTarget = fields.getOrNull(17)
-                ?.takeIf { fields.size == TmuxServerTargetRecordFieldCount && it.isNotBlank() }
+            val serverTarget = fields.getOrNull(17)
+                ?.takeIf { fields.size >= TmuxServerTargetRecordFieldCount && it.isNotBlank() }
                 ?.let { marker ->
                     when (marker) {
                         DefaultTmuxServerMarker -> TmuxServerTarget.Default
                         else -> TmuxServerTarget.Named(marker)
                     }
                 }
+            val tmuxSessionTarget = fields.getOrNull(18)
+                ?.takeIf { fields.size == ExactTmuxTargetRecordFieldCount && it.isNotBlank() }
+                ?.let { sessionName ->
+                    serverTarget?.let { server -> TmuxSessionTarget(server, sessionName) }
+                }
+            val tmuxServerTarget = serverTarget.takeIf { tmuxSessionTarget == null }
             TerminalSessionRecord(
                 id = fields[0],
                 hostId = fields[1],
@@ -172,6 +188,7 @@ object TerminalSessionCodec {
                     ?.takeIf { hasProjectTerminalIdentity && it.isNotBlank() },
                 tmuxIdentity = tmuxIdentity,
                 tmuxServerTarget = tmuxServerTarget,
+                tmuxSessionTarget = tmuxSessionTarget,
                 status = TerminalSessionStatus.valueOf(if (hasDisplayName) fields[6] else fields[5]),
                 lastOutputSnapshot = terminalOutputSnapshot(if (hasDisplayName) fields[7] else fields[6]),
                 lastActivityAt = (if (hasDisplayName) fields[8] else fields[7]).takeIf { it.isNotBlank() }?.toLong(),

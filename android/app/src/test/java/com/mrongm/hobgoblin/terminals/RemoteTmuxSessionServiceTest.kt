@@ -101,6 +101,32 @@ class RemoteTmuxSessionServiceTest {
     }
 
     @Test
+    fun `ordinary default session close revalidates the exact name before killing`() {
+        val discovery = ordinaryHostDiscovery()
+        val client = FakeSshClient(
+            SshCommandResult(
+                ok = true,
+                stdout = listOf(
+                    TmuxSessionProtocol.HostDiscoveryHeader,
+                    "legacy-default\teditor\t\t\t/srv/editor\t2",
+                ).joinToString("\n"),
+            ),
+            SshCommandResult(ok = true),
+        )
+
+        val result = service(client).closeHostSession(target(), discovery)
+
+        assertEquals(RemoteTmuxCloseResult.Closed, result)
+        assertEquals(
+            listOf(
+                TmuxSessionProtocol.hostServerSessionListCommand(TmuxServerTarget.Default),
+                TmuxSessionProtocol.hostSessionKillCommand(TmuxServerTarget.Default, "editor"),
+            ),
+            client.scripts,
+        )
+    }
+
+    @Test
     fun `host close treats missing or changed exact metadata as missing without killing`() {
         val discovery = hostDiscovery()
         val missing = service(
@@ -428,6 +454,15 @@ class RemoteTmuxSessionServiceTest {
             terminalNumber = 1,
             attachedClients = attachedClients,
         )
+
+    private fun ordinaryHostDiscovery(): HostDiscoveredTmuxSession = HostDiscoveredTmuxSession(
+        server = TmuxServerTarget.Default,
+        identity = null,
+        terminalNumber = null,
+        attachedClients = 0,
+        sessionName = "editor",
+        initialPath = "/srv/editor",
+    )
 
     private fun target(): RemoteTarget = RemoteTarget(
         id = "lee@example.com:22/srv/feature",

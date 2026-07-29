@@ -6,6 +6,8 @@ import com.mrongm.hobgoblin.domain.ssh.SshHostProfile
 import com.mrongm.hobgoblin.terminals.TerminalSessionRecord
 import com.mrongm.hobgoblin.terminals.TerminalSessionStatus
 import com.mrongm.hobgoblin.terminals.TmuxSessionIdentity
+import com.mrongm.hobgoblin.terminals.TmuxSessionTarget
+import com.mrongm.hobgoblin.terminals.TmuxServerTarget
 import com.mrongm.hobgoblin.ui.text.LocalizedText
 import java.io.File
 import org.junit.Assert.assertEquals
@@ -236,6 +238,29 @@ class TerminalsScreenStateTest {
     }
 
     @Test
+    fun `ordinary default target is presented as tmux across identity and confirmations`() {
+        val target = TmuxSessionTarget(TmuxServerTarget.Default, "editor")
+        val record = record(
+            displayName = "editor",
+            terminalId = null,
+            remotePath = "/srv/editor",
+            repositoryRemotePath = null,
+            tmuxSessionTarget = target,
+        )
+
+        assertEquals(
+            LocalizedText(
+                R.string.terminal_session_identity,
+                listOf(LocalizedText(R.string.terminal_kind_tmux), "session-"),
+            ),
+            terminalSessionIdentityText(record),
+        )
+        assertEquals("editor", terminalSessionTmuxSessionName(record))
+        assertEquals(R.string.terminals_close_tmux, terminalOverviewCloseConfirmationText(record).resourceId)
+        assertEquals(R.string.terminals_delete_tmux, terminalOverviewDeleteConfirmationText(record).resourceId)
+    }
+
+    @Test
     fun `native terminal close confirmation explains stop and retention`() {
         val text = terminalOverviewCloseConfirmationText(record(displayName = "release shell"))
 
@@ -319,6 +344,7 @@ class TerminalsScreenStateTest {
         repositoryRemotePath: String? = terminalId?.let { "/srv/example" },
         status: TerminalSessionStatus = TerminalSessionStatus.Running,
         tmuxIdentity: TmuxSessionIdentity? = null,
+        tmuxSessionTarget: TmuxSessionTarget? = null,
     ): TerminalSessionRecord = TerminalSessionRecord(
         id = id,
         hostId = hostId,
@@ -329,6 +355,7 @@ class TerminalsScreenStateTest {
         terminalId = terminalId,
         repositoryRemotePath = repositoryRemotePath,
         tmuxIdentity = tmuxIdentity,
+        tmuxSessionTarget = tmuxSessionTarget,
         status = status,
         openedAt = 100L,
     )

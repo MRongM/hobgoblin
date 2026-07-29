@@ -98,13 +98,18 @@ class RemoteTmuxSessionService(
             ?: return RemoteTmuxCloseResult.Failed("tmux returned an invalid host session list")
         val exactSession = sessions.firstOrNull { current ->
             current.server == discovery.server &&
-                current.identity == discovery.identity &&
-                current.terminalNumber == discovery.terminalNumber
+                current.sessionName == discovery.sessionName &&
+                if (discovery.identity == null) {
+                    current.identity == null
+                } else {
+                    current.identity == discovery.identity &&
+                        current.terminalNumber == discovery.terminalNumber
+                }
         } ?: return RemoteTmuxCloseResult.Missing
         val killScript = TmuxSessionProtocol.hostSessionKillCommand(
             server = exactSession.server,
-            sessionName = exactSession.identity.sessionName,
-        ) ?: return RemoteTmuxCloseResult.Failed("Invalid Hobgoblin tmux session name")
+            sessionName = exactSession.sessionName,
+        ) ?: return RemoteTmuxCloseResult.Failed("Invalid tmux session name")
         val killed = client.runCommand(target = target, script = killScript, secrets = secrets)
         if (killed.ok) {
             RemoteTmuxCloseResult.Closed

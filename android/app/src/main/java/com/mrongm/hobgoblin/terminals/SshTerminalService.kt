@@ -113,26 +113,29 @@ internal object SshTerminalStartupCommand {
         val normalizedPath = normalizeRemotePath(target.remotePath)
 
         val tmuxIdentity = startupContext.tmuxIdentity
+        val tmuxSessionTarget = startupContext.tmuxSessionTarget
         val loginShellCommand = "exec \"${'$'}{SHELL:-/bin/sh}\" -l"
-        val script = if (tmuxIdentity != null) {
+        val script = if (tmuxIdentity != null || tmuxSessionTarget != null) {
             val tmuxCommand = requireNotNull(
-                when (startupContext.tmuxStartupPolicy) {
+                if (tmuxSessionTarget != null) {
+                    TmuxSessionProtocol.attachExistingCommand(tmuxSessionTarget)
+                } else when (startupContext.tmuxStartupPolicy) {
                     TmuxStartupPolicy.AttachOrCreate -> TmuxSessionProtocol.attachOrCreateCommand(
-                        tmuxIdentity,
-                        startupContext.terminalId,
+                        requireNotNull(tmuxIdentity),
+                        requireNotNull(startupContext.terminalId),
                         requireNotNull(startupContext.repositoryRemotePath) {
                             "Repository path is required to create a tmux session"
                         },
                     )
                     TmuxStartupPolicy.AttachExisting -> startupContext.tmuxServerTarget?.let { server ->
                         TmuxSessionProtocol.attachExistingCommand(
-                            tmuxIdentity,
-                            startupContext.terminalId,
+                            requireNotNull(tmuxIdentity),
+                            requireNotNull(startupContext.terminalId),
                             server,
                         )
                     } ?: TmuxSessionProtocol.attachExistingCommand(
-                        tmuxIdentity,
-                        startupContext.terminalId,
+                        requireNotNull(tmuxIdentity),
+                        requireNotNull(startupContext.terminalId),
                         requireNotNull(startupContext.repositoryRemotePath) {
                             "Repository path or explicit server target is required to attach tmux"
                         },
