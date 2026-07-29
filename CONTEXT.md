@@ -260,6 +260,10 @@ _Avoid_: Using project as a synonym for every repository inside a multi-reposito
 One Git operation boundary. Branches, worktrees, status, history, and Git writes always belong to exactly one repository, even when several repositories share a project. The same repository may appear simultaneously as its own project and as a multi-repository workspace member; both contexts share one repository state.
 _Avoid_: Workspace repository, subproject
 
+**Repository primary worktree**:
+The original Git worktree whose normalized path is the repository project path and whose identity is confirmed by Git worktree metadata. It is independent of the branch currently checked out there and is never synonymous with a branch named `main`.
+_Avoid_: Main branch, default branch, protected branch
+
 **Multi-repository workspace**:
 A project rooted at a readable non-Git directory, either local or reached through one SSH target, whose immediate child entries are directories or directory symlinks resolving to Git repository primary worktree top levels. Linked worktrees are not repository candidates. A symlink keeps its immediate-child name and logical path as the workspace member identity. The root provides project-level files and terminals; its repositories remain independent Git operation boundaries. Every repository in an SSH multi-repository workspace uses the same SSH target as the workspace root.
 _Avoid_: Monorepo, repository group, nested repository

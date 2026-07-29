@@ -71,14 +71,14 @@ class RemoteWorktreeServiceTest {
     }
 
     @Test
-    fun `allowed clean linked worktree removal runs quoted git worktree remove command`() {
+    fun `allowed clean linked main worktree removal runs quoted git worktree remove command`() {
         val client = FakeSshClient()
         val service = RemoteWorktreeService(
             client = client,
             hostKeyStore = FakeHostKeyTrustStore("SHA256:test"),
         )
 
-        service.removeWorktree(target(), safeWorktree())
+        service.removeWorktree(target(), safeWorktree().copy(branch = "main"))
 
         assertTrue(client.lastScript.contains("git -C '/srv/app' worktree remove '/srv/app-feature'"))
     }
@@ -101,12 +101,36 @@ class RemoteWorktreeServiceTest {
 
     @Test
     fun `removal safety blocks unsafe worktrees`() {
-        assertEquals("Primary worktree cannot be removed.", evaluateWorktreeRemoval(safeWorktree().copy(isPrimary = true)).reason)
-        assertEquals("Dirty worktree cannot be removed.", evaluateWorktreeRemoval(safeWorktree().copy(isDirty = true, changeCount = 1)).reason)
-        assertEquals("Locked worktree cannot be removed.", evaluateWorktreeRemoval(safeWorktree().copy(isLocked = true)).reason)
-        assertEquals("Missing worktree cleanup is not supported here.", evaluateWorktreeRemoval(safeWorktree().copy(isMissing = true)).reason)
-        assertEquals("Protected branch worktree cannot be removed.", evaluateWorktreeRemoval(safeWorktree().copy(branch = "main")).reason)
-        assertTrue(evaluateWorktreeRemoval(safeWorktree()).allowed)
+        val primary = safeWorktree().copy(path = "/srv/app", isPrimary = true, isLinked = false)
+        assertEquals(
+            WorktreeRemovalBlockReason.Primary,
+            evaluateWorktreeRemoval("/srv/app/", primary).blockReason,
+        )
+        assertEquals(
+            WorktreeRemovalBlockReason.Dirty,
+            evaluateWorktreeRemoval("/srv/app", safeWorktree().copy(isDirty = true, changeCount = 1)).blockReason,
+        )
+        assertEquals(
+            WorktreeRemovalBlockReason.Locked,
+            evaluateWorktreeRemoval("/srv/app", safeWorktree().copy(isLocked = true)).blockReason,
+        )
+        assertEquals(
+            WorktreeRemovalBlockReason.Missing,
+            evaluateWorktreeRemoval("/srv/app", safeWorktree().copy(isMissing = true)).blockReason,
+        )
+        assertTrue(evaluateWorktreeRemoval("/srv/app", safeWorktree().copy(branch = "main")).allowed)
+    }
+
+    @Test
+    fun `removal safety blocks inconsistent project path and git primary identities`() {
+        assertEquals(
+            WorktreeRemovalBlockReason.IdentityChanged,
+            evaluateWorktreeRemoval("/srv/app", safeWorktree().copy(path = "/srv/app")).blockReason,
+        )
+        assertEquals(
+            WorktreeRemovalBlockReason.IdentityChanged,
+            evaluateWorktreeRemoval("/srv/app", safeWorktree().copy(isPrimary = true)).blockReason,
+        )
     }
 
     @Test

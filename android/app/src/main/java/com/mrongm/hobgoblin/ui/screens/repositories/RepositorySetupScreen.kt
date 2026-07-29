@@ -73,6 +73,9 @@ import com.mrongm.hobgoblin.domain.ssh.RemoteRepositoryWorktree
 import com.mrongm.hobgoblin.domain.ssh.SshHostProfile
 import com.mrongm.hobgoblin.domain.ssh.RemoteTarget
 import com.mrongm.hobgoblin.ssh.evaluateWorktreeRemoval
+import com.mrongm.hobgoblin.ssh.evaluateMergeDestination
+import com.mrongm.hobgoblin.ssh.evaluateMergeOutSource
+import com.mrongm.hobgoblin.ssh.mergeOutDestinationWorktrees
 import com.mrongm.hobgoblin.ssh.WorktreeRemovalBlockReason
 import com.mrongm.hobgoblin.ssh.WorktreeCreationSource
 import com.mrongm.hobgoblin.terminals.TerminalDisconnectedReason
@@ -391,7 +394,7 @@ internal fun worktreeRemovalBlockedText(reason: WorktreeRemovalBlockReason?): Lo
     WorktreeRemovalBlockReason.Dirty -> LocalizedText(R.string.repository_worktree_dirty_blocked)
     WorktreeRemovalBlockReason.Locked -> LocalizedText(R.string.repository_worktree_locked_blocked)
     WorktreeRemovalBlockReason.Missing -> LocalizedText(R.string.repository_worktree_missing_blocked)
-    WorktreeRemovalBlockReason.ProtectedBranch -> LocalizedText(R.string.repository_worktree_protected_blocked)
+    WorktreeRemovalBlockReason.IdentityChanged -> LocalizedText(R.string.repository_worktree_identity_changed)
     null -> null
 }
 
@@ -975,6 +978,8 @@ fun RepositoryWorkspaceScreen(
     onDeleteRepository: () -> Unit,
     onCreateWorktree: (WorktreeCreationSource, String) -> Unit = { _, _ -> },
     onRemoveWorktree: (RemoteRepositoryWorktree) -> Unit = {},
+    onMergeInto: (RemoteRepositoryWorktree, String) -> Unit = { _, _ -> },
+    onMergeOut: (RemoteRepositoryWorktree, RemoteRepositoryWorktree) -> Unit = { _, _ -> },
     initialWorktreeOrder: List<String> = emptyList(),
     onSaveWorktreeOrder: (List<String>) -> Unit = {},
 ) {
@@ -991,6 +996,9 @@ fun RepositoryWorkspaceScreen(
     }
     var confirmDelete by remember(repository.id) { mutableStateOf(false) }
     var removeTarget by remember(repository.id) { mutableStateOf<RemoteRepositoryWorktree?>(null) }
+    var mergeRequest by remember(repository.id) { mutableStateOf<WorktreeMergeRequest?>(null) }
+    var mergePending by remember(repository.id) { mutableStateOf(false) }
+    var mergeError by remember(repository.id) { mutableStateOf<String?>(null) }
     var terminalCloseTarget by remember(repository.id) { mutableStateOf<TerminalActionTarget?>(null) }
     var terminalDeleteTarget by remember(repository.id) { mutableStateOf<TerminalActionTarget?>(null) }
     var terminalClosePending by remember(repository.id) { mutableStateOf(false) }
@@ -1014,6 +1022,15 @@ fun RepositoryWorkspaceScreen(
         repositoryTmuxScope(repository = repository, snapshotState = snapshotState)
     }
 
+    fun loadedSnapshotState(snapshot: RemoteRepositorySnapshot): ResourceState.Loaded<RemoteRepositorySnapshot> {
+        val loaded = ResourceState.Loaded(snapshot)
+        repositoryTmuxScope(repository, loaded)
+            ?.projectRoot
+            ?.takeIf { it != TmuxSessionProtocol.normalizePath(repository.remotePath) }
+            ?.let(onProjectRootResolved)
+        return loaded
+    }
+
     fun refreshSnapshot() {
         if (!shouldLoadRepositorySnapshot(repository)) return
         val previous = snapshotState
@@ -1022,14 +1039,7 @@ fun RepositoryWorkspaceScreen(
             snapshotState = runCatching {
                 withContext(Dispatchers.IO) { onLoadSnapshot() }
             }.fold(
-                onSuccess = { snapshot ->
-                    val loaded = ResourceState.Loaded(snapshot)
-                    repositoryTmuxScope(repository, loaded)
-                        ?.projectRoot
-                        ?.takeIf { it != TmuxSessionProtocol.normalizePath(repository.remotePath) }
-                        ?.let(onProjectRootResolved)
-                    loaded
-                },
+                onSuccess = ::loadedSnapshotState,
                 onFailure = {
                     repositorySnapshotStateAfterRefreshFailure(
                         previous = previous,
@@ -1039,6 +1049,31 @@ fun RepositoryWorkspaceScreen(
                 },
             )
         }
+    }
+
+    suspend fun refreshMergeSnapshotAfterFailure(
+        request: WorktreeMergeRequest,
+        mergeFailureMessage: String,
+    ) {
+        val previous = snapshotState
+        runCatching {
+            withContext(Dispatchers.IO) { onLoadSnapshot() }
+        }.fold(
+            onSuccess = { snapshot ->
+                snapshotState = loadedSnapshotState(snapshot)
+                mergeRequest = reprojectWorktreeMergeRequest(request, snapshot)
+                if (mergeRequest == null) {
+                    actionError = mergeFailureMessage
+                }
+            },
+            onFailure = {
+                snapshotState = repositorySnapshotStateAfterRefreshFailure(
+                    previous = previous,
+                    message = it.message ?: resources.getString(R.string.repository_snapshot_failed),
+                    cause = it,
+                )
+            },
+        )
     }
 
     fun createWorktree(source: WorktreeCreationSource, worktreePath: String) {
@@ -1065,6 +1100,44 @@ fun RepositoryWorkspaceScreen(
             }.onFailure {
                 actionError = it.message ?: resources.getString(R.string.repository_worktree_remove_failed)
             }
+        }
+    }
+
+    fun runWorktreeMerge(request: WorktreeMergeRequest, operation: () -> Unit) {
+        if (mergePending) return
+        actionError = null
+        mergeError = null
+        mergePending = true
+        scope.launch {
+            val result = runCatching {
+                withContext(Dispatchers.IO) { operation() }
+            }
+            result.onSuccess {
+                mergeRequest = null
+                refreshSnapshot()
+            }.onFailure { failure ->
+                val message = worktreeMergeFailureText(failure)?.let(resources::resolve)
+                    ?: failure.message
+                    ?: resources.getString(R.string.repository_worktree_merge_failed)
+                mergeError = message
+                refreshMergeSnapshotAfterFailure(request, message)
+            }
+            mergePending = false
+        }
+    }
+
+    fun mergeIntoWorktree(destination: RemoteRepositoryWorktree, sourceBranch: String) {
+        runWorktreeMerge(WorktreeMergeRequest.MergeInto(destination)) {
+            onMergeInto(destination, sourceBranch)
+        }
+    }
+
+    fun mergeOutOfWorktree(
+        source: RemoteRepositoryWorktree,
+        destination: RemoteRepositoryWorktree,
+    ) {
+        runWorktreeMerge(WorktreeMergeRequest.MergeOut(source)) {
+            onMergeOut(source, destination)
         }
     }
 
@@ -1332,6 +1405,14 @@ fun RepositoryWorkspaceScreen(
                     onSelectTerminalWorkspace = ::selectTerminalWorkspace,
                     onCreateWorktree = ::createWorktree,
                     onRemoveWorktree = { removeTarget = it },
+                    onRequestMergeInto = {
+                        mergeError = null
+                        mergeRequest = WorktreeMergeRequest.MergeInto(it)
+                    },
+                    onRequestMergeOut = {
+                        mergeError = null
+                        mergeRequest = WorktreeMergeRequest.MergeOut(it)
+                    },
                     initialManualOrder = initialWorktreeOrder,
                     onSaveManualOrder = onSaveWorktreeOrder,
                 )
@@ -1392,6 +1473,30 @@ fun RepositoryWorkspaceScreen(
                 }
             },
         )
+    }
+
+    val mergeSnapshot = when (val state = snapshotState) {
+        is ResourceState.Loaded -> state.value
+        is ResourceState.Stale -> state.value
+        else -> null
+    }
+    mergeRequest?.let { request ->
+        mergeSnapshot?.let { snapshot ->
+            WorktreeMergeDialog(
+                request = request,
+                snapshot = snapshot,
+                pending = mergePending,
+                error = mergeError,
+                onMergeInto = ::mergeIntoWorktree,
+                onMergeOut = ::mergeOutOfWorktree,
+                onDismiss = {
+                    if (!mergePending) {
+                        mergeRequest = null
+                        mergeError = null
+                    }
+                },
+            )
+        }
     }
 
     terminalCloseTarget?.let { target ->
@@ -1567,6 +1672,8 @@ private fun RepositoryWorktreesPanel(
     onSelectTerminalWorkspace: (String) -> Unit,
     onCreateWorktree: (WorktreeCreationSource, String) -> Unit,
     onRemoveWorktree: (RemoteRepositoryWorktree) -> Unit,
+    onRequestMergeInto: (RemoteRepositoryWorktree) -> Unit,
+    onRequestMergeOut: (RemoteRepositoryWorktree) -> Unit,
     initialManualOrder: List<String>,
     onSaveManualOrder: (List<String>) -> Unit,
 ) {
@@ -1689,10 +1796,16 @@ private fun RepositoryWorktreesPanel(
                 orderedWorktrees.forEach { worktree ->
                     WorktreeRow(
                         modifier = Modifier.manualReorderItem(reorderState, worktree.path),
+                        repositoryPath = repository.remotePath,
                         worktree = worktree,
                         reorderState = reorderState,
+                        canMergeInto = evaluateMergeDestination(worktree).allowed,
+                        canMergeOut = evaluateMergeOutSource(worktree).allowed &&
+                            mergeOutDestinationWorktrees(snapshot, worktree).isNotEmpty(),
                         onSelectTerminalWorkspace = onSelectTerminalWorkspace,
                         onRemoveWorktree = onRemoveWorktree,
+                        onRequestMergeInto = onRequestMergeInto,
+                        onRequestMergeOut = onRequestMergeOut,
                     )
                 }
             }
@@ -1703,12 +1816,18 @@ private fun RepositoryWorktreesPanel(
 @Composable
 private fun WorktreeRow(
     modifier: Modifier,
+    repositoryPath: String,
     worktree: RemoteRepositoryWorktree,
     reorderState: ManualReorderState,
+    canMergeInto: Boolean,
+    canMergeOut: Boolean,
     onSelectTerminalWorkspace: (String) -> Unit,
     onRemoveWorktree: (RemoteRepositoryWorktree) -> Unit,
+    onRequestMergeInto: (RemoteRepositoryWorktree) -> Unit,
+    onRequestMergeOut: (RemoteRepositoryWorktree) -> Unit,
 ) {
-    val removalSafety = evaluateWorktreeRemoval(worktree)
+    val removalSafety = evaluateWorktreeRemoval(repositoryPath, worktree)
+    var actionMenuExpanded by remember(worktree.path) { mutableStateOf(false) }
     val worktreeTitle = worktree.path
         .trim()
         .trimEnd('/')
@@ -1797,12 +1916,46 @@ private fun WorktreeRow(
                 ) {
                     Text(stringResource(R.string.common_terminals), style = MaterialTheme.typography.labelMedium)
                 }
-                if (removalSafety.allowed) {
-                    TextButton(
-                        onClick = { onRemoveWorktree(worktree) },
-                        contentPadding = actionButtonPadding,
-                    ) {
-                        Text(stringResource(R.string.common_remove), style = MaterialTheme.typography.labelMedium)
+                if (canMergeInto || canMergeOut || removalSafety.allowed) {
+                    Box {
+                        TextButton(
+                            onClick = { actionMenuExpanded = true },
+                            contentPadding = actionButtonPadding,
+                        ) {
+                            Text(stringResource(R.string.repository_worktree_actions), style = MaterialTheme.typography.labelMedium)
+                        }
+                        DropdownMenu(
+                            expanded = actionMenuExpanded,
+                            onDismissRequest = { actionMenuExpanded = false },
+                        ) {
+                            if (canMergeInto) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.repository_worktree_merge_in)) },
+                                    onClick = {
+                                        actionMenuExpanded = false
+                                        onRequestMergeInto(worktree)
+                                    },
+                                )
+                            }
+                            if (canMergeOut) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.repository_worktree_merge_out)) },
+                                    onClick = {
+                                        actionMenuExpanded = false
+                                        onRequestMergeOut(worktree)
+                                    },
+                                )
+                            }
+                            if (removalSafety.allowed) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.common_remove)) },
+                                    onClick = {
+                                        actionMenuExpanded = false
+                                        onRemoveWorktree(worktree)
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
             }

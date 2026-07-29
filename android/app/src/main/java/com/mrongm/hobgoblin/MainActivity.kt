@@ -23,6 +23,7 @@ import com.mrongm.hobgoblin.ssh.SshjInitializationClient
 import com.mrongm.hobgoblin.ssh.SshjClientFacade
 import com.mrongm.hobgoblin.ssh.RemoteRepositoryGitService
 import com.mrongm.hobgoblin.ssh.RemoteWorktreeService
+import com.mrongm.hobgoblin.ssh.RemoteWorktreeMergeService
 import com.mrongm.hobgoblin.terminals.AndroidTerminalForegroundOwner
 import com.mrongm.hobgoblin.terminals.RemoteTmuxSessionService
 import com.mrongm.hobgoblin.terminals.SshTerminalService
@@ -66,6 +67,10 @@ class MainActivity : AppCompatActivity() {
             client = SshjClientFacade(identityStore = secureIdentityStore),
             hostKeyStore = hostKeyStore,
         )
+        val remoteWorktreeMergeService = RemoteWorktreeMergeService(
+            client = SshjClientFacade(identityStore = secureIdentityStore),
+            hostKeyStore = hostKeyStore,
+        )
         val initializationService = SshInitializationService(
             identityStore = secureIdentityStore,
             hostKeyStore = hostKeyStore,
@@ -104,6 +109,7 @@ class MainActivity : AppCompatActivity() {
                     diagnosticsService = diagnosticsService,
                     remoteRepositoryGitService = remoteRepositoryGitService,
                     remoteWorktreeService = remoteWorktreeService,
+                    remoteWorktreeMergeService = remoteWorktreeMergeService,
                     terminalSettingsStore = terminalSettingsStore,
                     initializationService = initializationService,
                     terminalSessionManager = terminalManager,
