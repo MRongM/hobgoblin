@@ -62,6 +62,36 @@ class AndroidLocalizationContractTest {
     }
 
     @Test
+    fun `worktree merge copy covers both directions and every blocked state`() {
+        val keys = resourceEntries(
+            File(androidProjectRoot(), "app/src/main/res/values/strings.xml"),
+        ).map(ResourceEntry::key).toSet()
+
+        assertTrue(
+            keys.containsAll(
+                setOf(
+                    "string:repository_worktree_actions",
+                    "string:repository_worktree_merge_in",
+                    "string:repository_worktree_merge_out",
+                    "string:repository_worktree_merge_in_title",
+                    "string:repository_worktree_merge_out_title",
+                    "string:repository_worktree_merge_select_source",
+                    "string:repository_worktree_merge_select_destination",
+                    "string:repository_worktree_merge_no_sources",
+                    "string:repository_worktree_merge_no_destinations",
+                    "string:repository_worktree_merge_in_confirm",
+                    "string:repository_worktree_merge_out_confirm",
+                    "string:repository_worktree_merge_failed",
+                    "string:repository_worktree_merge_detached",
+                    "string:repository_worktree_merge_dirty",
+                    "string:repository_worktree_merge_missing",
+                    "string:repository_worktree_merge_bare",
+                ),
+            ),
+        )
+    }
+
+    @Test
     fun `English is the fallback and Android generates per-app locale config`() {
         val projectRoot = androidProjectRoot()
         val resourceProperties = File(projectRoot, "app/src/main/res/resources.properties").readText()
