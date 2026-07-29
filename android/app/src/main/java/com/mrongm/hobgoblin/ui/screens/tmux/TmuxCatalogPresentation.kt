@@ -41,6 +41,13 @@ internal fun hostTmuxProtocolNameSuffix(value: String): String {
     return if (suffix.length == value.length) suffix else "…$suffix"
 }
 
+internal fun hostTmuxSessionTitle(session: HostDiscoveredTmuxSession): String =
+    session.terminalNumber?.let { terminalNumber -> "terminal-$terminalNumber" }
+        ?: session.sessionName
+
+internal fun hostTmuxProtocolSessionName(session: HostDiscoveredTmuxSession): String? =
+    session.identity?.sessionName
+
 internal fun hostTmuxServerSource(server: TmuxServerTarget): HostTmuxServerSource = when (server) {
     TmuxServerTarget.Default -> HostTmuxServerSource.Default
     is TmuxServerTarget.Named -> HostTmuxServerSource.Project
@@ -71,10 +78,10 @@ internal fun hostTmuxSessionAccessibilityLabel(session: HostDiscoveredTmuxSessio
         is TmuxServerTarget.Named -> target.serverName
     }
     return listOf(
-        "terminal-${session.terminalNumber}",
-        session.identity.initialPath,
+        session.terminalNumber?.let { "terminal-$it" } ?: session.sessionName,
+        session.initialPath,
         server,
-        session.identity.sessionName,
+        session.sessionName,
         session.attachedClients.toString(),
     ).joinToString(", ")
 }

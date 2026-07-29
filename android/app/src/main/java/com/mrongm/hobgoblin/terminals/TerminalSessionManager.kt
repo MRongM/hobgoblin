@@ -735,6 +735,7 @@ class TerminalSessionManager(
         val workspaceSessions = sessions.values
             .asSequence()
             .filter { it.hostId == hostId && terminalSessionRemotePath(it.remotePath) == normalizedPath }
+            .filter { it.tmuxSessionTarget == null }
             .toList()
         val maxIndex = workspaceSessions
             .mapNotNull { terminalDisplayNameIndex(it.displayName) }
@@ -759,12 +760,13 @@ class TerminalSessionManager(
         sessionsByWorkspace.values.forEach { workspaceSessions ->
             val orderedSessions = workspaceSessions
                 .sortedWith(compareBy<TerminalSessionRecord> { it.openedAt }.thenBy { it.id })
-            val usedIndices = orderedSessions
+            val numberedSessions = orderedSessions.filter { session -> session.tmuxSessionTarget == null }
+            val usedIndices = numberedSessions
                 .mapNotNull { it.terminalId ?: terminalDisplayNameIndex(it.displayName) }
                 .toMutableSet()
             var nextIndex = 1
 
-            orderedSessions.forEach { session ->
+            numberedSessions.forEach { session ->
                 val parsedIndex = session.terminalId ?: terminalDisplayNameIndex(session.displayName)
                 val assignedIndex = parsedIndex ?: run {
                     while (usedIndices.contains(nextIndex)) {
@@ -848,9 +850,14 @@ class TerminalSessionManager(
         record: TerminalSessionRecord,
         tmuxStartupPolicy: TmuxStartupPolicy = TmuxStartupPolicy.AttachOrCreate,
     ): TerminalStartupContext? {
-        val terminalId = record.terminalId ?: return null
+        val terminalId = record.terminalId
+        if (terminalId == null && record.tmuxSessionTarget == null) return null
         val repositoryPath = record.repositoryRemotePath
-        if (repositoryPath == null && record.tmuxServerTarget == null) return null
+        if (
+            repositoryPath == null &&
+            record.tmuxServerTarget == null &&
+            record.tmuxSessionTarget == null
+        ) return null
         return TerminalStartupContext(
             repositoryRemotePath = repositoryPath,
             worktreeRemotePath = record.remotePath,
@@ -858,6 +865,7 @@ class TerminalSessionManager(
             tmuxIdentity = record.tmuxIdentity,
             tmuxStartupPolicy = tmuxStartupPolicy,
             tmuxServerTarget = record.tmuxServerTarget,
+            tmuxSessionTarget = record.tmuxSessionTarget,
         )
     }
 
@@ -935,11 +943,17 @@ class TerminalSessionManager(
             repositoryId = null,
             remotePath = key.remotePath,
             targetLabel = candidate.targetLabel,
-            displayName = terminalSessionDisplayNameFromIndex(discovery.terminalNumber),
+            displayName = discovery.terminalNumber?.let(::terminalSessionDisplayNameFromIndex)
+                ?: discovery.sessionName,
             terminalId = discovery.terminalNumber,
             repositoryRemotePath = null,
             tmuxIdentity = discovery.identity,
-            tmuxServerTarget = discovery.server,
+            tmuxServerTarget = discovery.server.takeIf { discovery.identity != null },
+            tmuxSessionTarget = if (discovery.identity == null) {
+                TmuxSessionTarget(discovery.server, discovery.sessionName)
+            } else {
+                null
+            },
             status = TerminalSessionStatus.Disconnected,
             openedAt = clock(),
         )
@@ -961,11 +975,17 @@ class TerminalSessionManager(
         key: HostTmuxSessionKey,
     ): Boolean {
         val discovery = candidate.discovery
-        return hostId == candidate.target.id &&
+        if (hostId != candidate.target.id) return false
+        return if (discovery.identity != null) {
             tmuxIdentity == discovery.identity &&
-            tmuxServerTarget == discovery.server &&
-            terminalId == discovery.terminalNumber &&
-            terminalSessionRemotePath(remotePath) == key.remotePath
+                tmuxServerTarget == discovery.server &&
+                terminalId == discovery.terminalNumber &&
+                terminalSessionRemotePath(remotePath) == key.remotePath
+        } else {
+            tmuxIdentity == null &&
+                terminalId == null &&
+                tmuxSessionTarget == TmuxSessionTarget(discovery.server, discovery.sessionName)
+        }
     }
 
     private fun hostTmuxSessionKey(candidate: HostTmuxRecoveryCandidate): HostTmuxSessionKey? {
@@ -974,7 +994,7 @@ class TerminalSessionManager(
         if (
             candidate.target.id.isBlank() ||
             candidate.targetLabel.isBlank() ||
-            remotePath != discovery.identity.initialPath
+            remotePath != discovery.initialPath
         ) {
             return null
         }
@@ -982,7 +1002,7 @@ class TerminalSessionManager(
             sessionId = recoveredHostTmuxSessionId(
                 target = candidate.target,
                 server = discovery.server,
-                sessionName = discovery.identity.sessionName,
+                sessionName = discovery.sessionName,
             ),
             remotePath = remotePath,
         )

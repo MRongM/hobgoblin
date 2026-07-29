@@ -196,6 +196,27 @@ For macOS SSH environments, Android also resolves the remote Unix UID with `id -
 
 Removing only the Android record leaves tmux alive, so a later scan may recover it again. Closing the associated tmux session through the explicit checked close action prevents later recovery.
 
+### Android Host tmux catalog
+
+The Android tmux main tab performs one Host-level scan across the authenticated user's default socket and strictly named `hobgoblin-project-v1-<24 hex>` sockets. Its versioned V2 row format is:
+
+```sh
+<server-origin>\t#{session_name}\t#{@hobgoblin_init_path}\t#{@hobgoblin_terminal_number}\t#{session_path}\t#{session_attached}
+```
+
+Every server first applies the current Hobgoblin identity checks. A valid current-protocol row remains a Hobgoblin session with its fixed metadata path and positive terminal number. A row that does not satisfy that identity is accepted as an ordinary **default tmux session** only when all of the following are true:
+
+- its origin is the exact default server;
+- its opaque session name is non-empty, bounded, and contains no control characters;
+- `session_path` is a lexically normalized absolute path; and
+- `session_attached` is a canonical non-negative integer.
+
+Non-Hobgoblin rows on project-scoped servers remain hidden. Invalid rows are ignored independently, so malformed or overflowing metadata cannot fail an otherwise valid scan. The Host catalog groups both kinds by their live initial path, but a default session's identity is the SSH authority, exact default server, and original session name; its displayed path is not part of that identity.
+
+Opening a default session stores an exact `TmuxSessionTarget` and uses `has-session` followed by `attach-session` against `=<session_name>`. It never runs `new-session`, changes `mouse`, or writes Hobgoblin user options. The retained Android record may therefore have no terminal number and no `TmuxSessionIdentity`, while still being tmux-backed for close, reconnect, delete, and terminal-detail presentation.
+
+Deleting an Android record leaves either kind of remote session running by default. If the user separately approves remote close, Android re-lists the exact server. Hobgoblin sessions must still match their fixed identity metadata; default sessions must still match the exact default server and opaque session name. Only then may Android issue exact `kill-session`.
+
 ## Runtime association and exact close
 
 When Hobgoblin launches an internal terminal through this protocol, it records the calculated session name and normalized working directory on the server-side terminal record. This association is fixed for that terminal's lifetime; changing the tmux preference later does not reclassify an existing terminal.

@@ -15,14 +15,17 @@ internal fun terminalSessionIdentityText(session: TerminalSessionRecord): Locali
     R.string.terminal_session_identity,
     listOf(
         LocalizedText(
-            if (session.tmuxIdentity == null) R.string.terminal_kind_native else R.string.terminal_kind_tmux,
+            if (terminalSessionIsTmuxBacked(session)) R.string.terminal_kind_tmux else R.string.terminal_kind_native,
         ),
         session.id.take(8),
     ),
 )
 
 internal fun terminalSessionTmuxSessionName(session: TerminalSessionRecord): String? =
-    session.tmuxIdentity?.sessionName
+    session.tmuxIdentity?.sessionName ?: session.tmuxSessionTarget?.sessionName
+
+internal fun terminalSessionIsTmuxBacked(session: TerminalSessionRecord): Boolean =
+    session.tmuxIdentity != null || session.tmuxSessionTarget != null
 
 @Composable
 internal fun TerminalSessionIdentityDetails(session: TerminalSessionRecord) {

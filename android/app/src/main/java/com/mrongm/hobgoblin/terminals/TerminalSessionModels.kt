@@ -13,6 +13,7 @@ data class TerminalSessionRecord(
     val repositoryRemotePath: String? = null,
     val tmuxIdentity: TmuxSessionIdentity? = null,
     val tmuxServerTarget: TmuxServerTarget? = null,
+    val tmuxSessionTarget: TmuxSessionTarget? = null,
     val status: TerminalSessionStatus,
     val lastOutputSnapshot: String = "",
     val lastActivityAt: Long? = null,
@@ -35,14 +36,25 @@ data class TerminalSessionRecord(
         require(repositoryRemotePath == null || terminalId != null) {
             "Project terminal records require a terminal id"
         }
-        require(tmuxIdentity == null || repositoryRemotePath != null || tmuxServerTarget != null) {
+        require(
+            tmuxIdentity == null ||
+                repositoryRemotePath != null ||
+                tmuxServerTarget != null ||
+                tmuxSessionTarget != null
+        ) {
             "Tmux-backed terminals require a repository path or explicit server target"
+        }
+        require(tmuxServerTarget == null || tmuxSessionTarget == null) {
+            "Use only one exact tmux target representation"
         }
         require(tmuxServerTarget == null || tmuxIdentity != null) {
             "Tmux server target requires a tmux identity"
         }
         require(tmuxServerTarget == null || terminalId != null) {
             "Tmux server target requires a terminal id"
+        }
+        require(tmuxSessionTarget == null || tmuxIdentity == null) {
+            "Ordinary tmux target must not carry a Hobgoblin identity"
         }
         require(tmuxIdentity == null || TmuxSessionProtocol.normalizePath(remotePath) == tmuxIdentity.initialPath) {
             "Tmux initial path must match the terminal remote path"

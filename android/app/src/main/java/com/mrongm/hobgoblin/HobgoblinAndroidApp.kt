@@ -101,7 +101,7 @@ internal fun hostTmuxRecoveryCandidate(
     host: SshHostProfile,
     discovery: HostDiscoveredTmuxSession,
 ): HostTmuxRecoveryCandidate {
-    val remotePath = discovery.identity.initialPath
+    val remotePath = discovery.initialPath
     return HostTmuxRecoveryCandidate(
         target = RemoteTarget.fromHostProfile(host, remotePath),
         targetLabel = terminalTargetLabel(host.title, remotePath),

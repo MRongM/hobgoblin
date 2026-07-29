@@ -447,7 +447,11 @@ class TmuxSessionProtocolTest {
         assertTrue(defaultList.contains("-S \"\$hobgoblin_tmux_socket\" list-sessions"))
         assertTrue(namedKill.orEmpty().contains("-S \"\$hobgoblin_tmux_socket\" kill-session"))
         assertTrue(namedKill.orEmpty().endsWith("-t '=$sessionName'"))
-        assertNull(TmuxSessionProtocol.hostSessionKillCommand(TmuxServerTarget.Default, "user-session"))
+        assertTrue(
+            TmuxSessionProtocol.hostSessionKillCommand(TmuxServerTarget.Default, "user-session")
+                .orEmpty()
+                .endsWith("-t '=user-session'"),
+        )
     }
 
     @Test
@@ -472,6 +476,38 @@ class TmuxSessionProtocolTest {
     }
 
     @Test
+    fun `host discovery includes ordinary sessions only from the default server`() {
+        val namedServer = "hobgoblin-project-v1-222222222222222222222222"
+        val output = listOf(
+            TmuxSessionProtocol.HostDiscoveryHeader,
+            "legacy-default\teditor\t\t\t/srv/editor\t1",
+            "$namedServer\tforeign\t\t\t/srv/foreign\t0",
+        ).joinToString("\n")
+
+        val sessions = requireNotNull(TmuxSessionProtocol.parseHostSessionDiscoveryOutput(output))
+
+        assertEquals(1, sessions.size)
+        assertEquals(listOf("/srv/editor"), HostTmuxPathGroup.from(sessions).map(HostTmuxPathGroup::initialPath))
+    }
+
+    @Test
+    fun `ordinary default session attach is exact and does not mutate the session`() {
+        val command = TmuxSessionProtocol.attachExistingCommand(
+            TmuxSessionTarget(
+                server = TmuxServerTarget.Default,
+                sessionName = "editor's work",
+            ),
+        ).orEmpty()
+
+        assertTrue(command.contains("has-session -t '=editor'\"'\"'s work'"))
+        assertTrue(command.contains("attach-session -t '=editor'\"'\"'s work'"))
+        assertFalse(command.contains("new-session"))
+        assertFalse(command.contains("set-option"))
+        assertFalse(command.contains("@hobgoblin_"))
+        assertFalse(command.contains(" -L "))
+    }
+
+    @Test
     fun `host discovery requires its envelope and ignores malformed or duplicate session rows`() {
         val sessionName = "hobgoblin-v1-111111111111111111111111"
         val validRow = "legacy-default\t$sessionName\t/srv/project\t1\t0"
@@ -480,7 +516,7 @@ class TmuxSessionProtocolTest {
             validRow,
             validRow,
             "arbitrary-server\t$sessionName\t/srv/project\t1\t0",
-            "legacy-default\tuser-session\t/srv/project\t1\t0",
+            "legacy-default\t\t/srv/project\t1\t0",
             "legacy-default\t$sessionName\trelative\t1\t0",
             "legacy-default\t$sessionName\t/srv/project\t01\t0",
             "legacy-default\t$sessionName\t/srv/project\t1\t-1",
@@ -500,6 +536,24 @@ class TmuxSessionProtocolTest {
         )
         assertNull(TmuxSessionProtocol.parseHostSessionDiscoveryOutput(validRow))
         assertNull(TmuxSessionProtocol.parseHostSessionDiscoveryOutput("unexpected\n$validRow"))
+    }
+
+    @Test
+    fun `host discovery classifies overflowing Hobgoblin metadata as ordinary without failing the scan`() {
+        val output = listOf(
+            TmuxSessionProtocol.HostDiscoveryHeader,
+            "legacy-default\thobgoblin-v1-111111111111111111111111\t/srv/project\t" +
+                "999999999999999999999999\t/srv/project\t0",
+            "legacy-default\teditor\t\t\t/srv/editor\t0",
+        ).joinToString("\n")
+
+        val sessions = requireNotNull(TmuxSessionProtocol.parseHostSessionDiscoveryOutput(output))
+
+        assertEquals(
+            listOf("editor", "hobgoblin-v1-111111111111111111111111"),
+            sessions.map(HostDiscoveredTmuxSession::sessionName),
+        )
+        assertTrue(sessions.all { session -> session.identity == null })
     }
 
     @Test

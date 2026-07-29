@@ -4,6 +4,8 @@
 **状态**：已确认，自主 inline 实施  
 **取代**：`2026-07-28-android-workspace-tmux-catalog-design.md`
 
+> **后续扩展**：默认 server 中普通用户 tmux session 的扫描、附着和留存由 `2026-07-29-android-default-tmux-sessions-design.md` 定义；本文关于“不显示任意 session”的限制只描述最初实现。
+
 ## 目标
 
 Android 在用户打开一个已保存 SSH Host 后显示“项目 / tmux”两个 Tab。tmux Tab 直接枚举该主机当前用户可访问的 Hobgoblin tmux server，读取每个 server 内 session 自带的 Hobgoblin 元数据并构建可恢复终端列表，不读取、不推断也不依赖 Hobgoblin 工作区配置。
