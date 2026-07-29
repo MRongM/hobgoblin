@@ -360,7 +360,6 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.approval-required': '必要な確認をすべて完了してください。',
   'workspace.branch-workspace.read-failed': 'ブランチワークスペースを読み取れませんでした。',
   'workspace.branch-workspace.reload': 'ブランチワークスペースを再読み込み',
-  'workspace.branch-workspace.refresh-changes': '変更を更新',
   'workspace.branch-workspace.remote-operation-failed':
     'リモートホストからブランチワークスペースを読み取れませんでした。',
   'workspace.branch-workspace.remote-invalid-response':
@@ -1248,6 +1247,7 @@ export const ja: Record<DictKey, string> = {
   'settings.group.general': '一般',
   'settings.group.apps': '外部アプリ',
   'settings.group.sync': '同期',
+  'settings.group.status-refresh': '状態更新',
   'settings.nav.integrations': '連携',
   'settings.nav.files': 'ファイル領域',
   'settings.nav.notifications': '通知',
@@ -1372,6 +1372,8 @@ export const ja: Record<DictKey, string> = {
   'settings.apps.status.not-detected': '未検出',
   'settings.fetch': '自動 fetch',
   'settings.fetch-hint': 'アクティブなリポジトリをバックグラウンドで fetch します。',
+  'settings.status-refresh': '変更を定期更新',
+  'settings.status-refresh-hint': '現在のプロジェクトのローカル変更状態を定期的に更新します。',
   'settings.general.open-from-terminal-title': 'Terminal から開く',
   'settings.general.open-from-terminal-body':
     'macOS では、Terminal やスクリプトからローカルリポジトリのパスを Hobgoblin に直接渡して開けます。',

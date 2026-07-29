@@ -351,7 +351,6 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.approval-required': '필요한 확인을 모두 완료하세요.',
   'workspace.branch-workspace.read-failed': '브랜치 워크스페이스를 읽을 수 없습니다.',
   'workspace.branch-workspace.reload': '브랜치 워크스페이스 다시 불러오기',
-  'workspace.branch-workspace.refresh-changes': '변경 사항 새로 고침',
   'workspace.branch-workspace.remote-operation-failed': '원격 호스트에서 브랜치 워크스페이스를 읽을 수 없습니다.',
   'workspace.branch-workspace.remote-invalid-response':
     '원격 호스트가 잘못된 브랜치 워크스페이스 데이터를 반환했습니다.',
@@ -1230,6 +1229,7 @@ export const ko: Record<DictKey, string> = {
   'settings.group.general': '일반',
   'settings.group.apps': '외부 앱',
   'settings.group.sync': '동기화',
+  'settings.group.status-refresh': '상태 새로 고침',
   'settings.nav.integrations': '연동',
   'settings.nav.files': '파일 영역',
   'settings.nav.notifications': '알림',
@@ -1354,6 +1354,8 @@ export const ko: Record<DictKey, string> = {
   'settings.apps.status.not-detected': '감지되지 않음',
   'settings.fetch': '자동 동기화',
   'settings.fetch-hint': '활성 리포지토리를 백그라운드에서 가져옵니다.',
+  'settings.status-refresh': '변경 사항 정기 새로 고침',
+  'settings.status-refresh-hint': '현재 프로젝트의 로컬 변경 상태를 정기적으로 새로 고칩니다.',
   'settings.general.open-from-terminal-title': '터미널에서 열기',
   'settings.general.open-from-terminal-body':
     'macOS에서는 터미널이나 스크립트에서 로컬 리포지토리 경로를 Hobgoblin으로 바로 열 수 있습니다.',

@@ -306,12 +306,13 @@ describe('i18n dictionaries', () => {
     expect(zh['workspace.branch-workspace.reload']).toBe('重新加载子工作区')
   })
 
-  test('localizes branch workspace change refresh in every locale', () => {
-    const key = 'workspace.branch-workspace.refresh-changes' as const
+  test('localizes scheduled status refresh settings in every locale', () => {
+    const keys = ['settings.group.status-refresh', 'settings.status-refresh', 'settings.status-refresh-hint'] as const
     for (const [lang, dict] of Object.entries(dicts)) {
-      expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
     }
-    expect(zh[key]).toBe('刷新改动')
+    expect(zh['settings.group.status-refresh']).toBe('状态刷新')
+    expect(zh['settings.status-refresh']).toBe('定时刷新改动')
   })
 
   test('uses branch workspace dependency copy and includes member sync actions in every locale', () => {

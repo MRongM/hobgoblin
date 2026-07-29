@@ -17,6 +17,7 @@ import {
   DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   DEFAULT_FONT_FAMILY,
   DEFAULT_GIT_NETWORK_TIMEOUT_SEC,
+  DEFAULT_STATUS_REFRESH_INTERVAL_SEC,
   DEFAULT_SERVER_PORT,
   DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
   DEFAULT_TERMINAL_FONT_SIZE,
@@ -74,6 +75,10 @@ export function readRuntimeFetchSettings(data: RuntimeSettingsSnapshot | undefin
   const fallback = fallbackInitialSettings()
   return {
     fetchIntervalSec: data?.fetchIntervalSec ?? fallback?.fetchIntervalSec ?? 120,
+    statusRefreshIntervalSec:
+      data?.statusRefreshIntervalSec ??
+      fallback?.statusRefreshIntervalSec ??
+      DEFAULT_STATUS_REFRESH_INTERVAL_SEC,
     terminalNotificationsEnabled:
       data?.terminalNotificationsEnabled ??
       fallback?.terminalNotificationsEnabled ??

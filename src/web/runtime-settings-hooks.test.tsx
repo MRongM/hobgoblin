@@ -57,6 +57,7 @@ afterEach(() => {
 describe('runtime settings hooks', () => {
   test('defaults terminal notifications on when runtime settings are unavailable', () => {
     expect(readRuntimeFetchSettings(undefined).terminalNotificationsEnabled).toBe(true)
+    expect(readRuntimeFetchSettings(undefined).statusRefreshIntervalSec).toBe(120)
   })
 
   test('reads fetch, shortcut, and lan settings from the runtime settings snapshot', async () => {
@@ -64,6 +65,7 @@ describe('runtime settings hooks', () => {
       settingsSnapshotQueryKey(),
       defaultSettingsSnapshot({
         fetchIntervalSec: 300,
+        statusRefreshIntervalSec: 60,
         terminalNotificationsEnabled: true,
         shortcutsDisabled: true,
         globalShortcutDisabled: true,
@@ -95,6 +97,7 @@ describe('runtime settings hooks', () => {
     expect(result).toMatchObject({
       fetch: {
         fetchIntervalSec: 300,
+        statusRefreshIntervalSec: 60,
         terminalNotificationsEnabled: true,
       },
       shortcuts: {

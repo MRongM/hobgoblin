@@ -18,6 +18,7 @@ describe('settings snapshot partitions', () => {
         colorTheme: 'github',
         fontFamily: 'maple',
         fetchIntervalSec: 300,
+        statusRefreshIntervalSec: 60,
         gitNetworkProxyEnabled: true,
         gitNetworkProxyUrl: 'socks5://127.0.0.1:7890',
         gitNetworkTimeoutSec: 180,
@@ -50,6 +51,7 @@ describe('settings snapshot partitions', () => {
       colorTheme: 'github',
       fontFamily: 'maple',
       fetchIntervalSec: 300,
+      statusRefreshIntervalSec: 60,
       gitNetworkProxyEnabled: true,
       gitNetworkProxyUrl: 'socks5://127.0.0.1:7890',
       gitNetworkTimeoutSec: 180,
@@ -94,6 +96,7 @@ describe('settings snapshot partitions', () => {
         colorTheme: 'macos',
         fontFamily: 'system',
         fetchIntervalSec: 120,
+        statusRefreshIntervalSec: 300,
         gitNetworkProxyEnabled: false,
         gitNetworkProxyUrl: '',
         gitNetworkTimeoutSec: 120,
@@ -147,6 +150,7 @@ describe('settings snapshot partitions', () => {
     const runtime = runtimeSettingsSnapshotFromSettingsSnapshot(snapshot)
 
     expect(runtime).toMatchObject({
+      statusRefreshIntervalSec: 300,
       fontFamily: 'system',
       globalShortcutRegistered: false,
       gitNetworkProxyEnabled: false,

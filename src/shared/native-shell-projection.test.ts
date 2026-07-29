@@ -40,6 +40,7 @@ describe('native shell projection helpers', () => {
         theme: 'dark',
         colorTheme: 'github',
         fetchIntervalSec: 120,
+        statusRefreshIntervalSec: 120,
         gitNetworkProxyEnabled: false,
         gitNetworkProxyUrl: '',
         gitNetworkTimeoutSec: 120,

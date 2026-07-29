@@ -49,6 +49,7 @@ function settingsPrefs(overrides: Partial<SettingsPrefs> = {}): SettingsPrefs {
     lanEnabled: false,
     serverPort: 32200,
     ...overrides,
+    statusRefreshIntervalSec: overrides.statusRefreshIntervalSec ?? 120,
     topbarHeightPx: overrides.topbarHeightPx ?? 34,
     toolbarHeightPx: overrides.toolbarHeightPx ?? 34,
     fontFamily: overrides.fontFamily ?? 'mono',

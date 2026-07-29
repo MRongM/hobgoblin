@@ -38,6 +38,7 @@ function defaultBootstrap(): RendererBootstrapPayload {
     i18n: { lang: 'en', pref: 'ja', dict: { hello: 'world' } },
     settings: {
       fetchIntervalSec: 120,
+      statusRefreshIntervalSec: 120,
       gitNetworkProxyEnabled: false,
       gitNetworkProxyUrl: '',
       gitNetworkTimeoutSec: 120,

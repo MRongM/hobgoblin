@@ -46,6 +46,7 @@ import {
   DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   DEFAULT_FILE_TREE_FONT_SIZE,
   DEFAULT_FETCH_INTERVAL_SEC,
+  DEFAULT_STATUS_REFRESH_INTERVAL_SEC,
   DEFAULT_FONT_FAMILY,
   DEFAULT_GIT_NETWORK_TIMEOUT_SEC,
   DEFAULT_LANG_PREF,
@@ -94,6 +95,7 @@ interface ServerSettingsData {
   colorTheme: ColorTheme
   fontFamily: FontFamilyPref
   fetchIntervalSec: number
+  statusRefreshIntervalSec: number
   gitNetworkProxyEnabled: boolean
   gitNetworkProxyUrl: string
   gitNetworkTimeoutSec: number
@@ -170,10 +172,10 @@ export class TelegramNotificationSettingsError extends Error {
   }
 }
 
-function normalizeFetchInterval(value: unknown): number {
+function normalizeRefreshInterval(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.max(0, Math.min(3600, Math.round(value)))
-    : DEFAULT_FETCH_INTERVAL_SEC
+    : fallback
 }
 
 function normalizeThemePref(value: unknown): ThemePref {
@@ -381,6 +383,7 @@ function settingsPrefsFromData(data: ServerSettingsData): SettingsPrefs {
     colorTheme: data.colorTheme,
     fontFamily: data.fontFamily,
     fetchIntervalSec: data.fetchIntervalSec,
+    statusRefreshIntervalSec: data.statusRefreshIntervalSec,
     gitNetworkProxyEnabled: data.gitNetworkProxyEnabled,
     gitNetworkProxyUrl: data.gitNetworkProxyUrl,
     gitNetworkTimeoutSec: data.gitNetworkTimeoutSec,
@@ -651,7 +654,11 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       theme: normalizeThemePref(parsed.theme),
       colorTheme: normalizeColorTheme(parsed.colorTheme),
       fontFamily: normalizeFontFamilyPref(parsed.fontFamily),
-      fetchIntervalSec: normalizeFetchInterval(parsed.fetchIntervalSec),
+      fetchIntervalSec: normalizeRefreshInterval(parsed.fetchIntervalSec, DEFAULT_FETCH_INTERVAL_SEC),
+      statusRefreshIntervalSec: normalizeRefreshInterval(
+        parsed.statusRefreshIntervalSec,
+        DEFAULT_STATUS_REFRESH_INTERVAL_SEC,
+      ),
       gitNetworkProxyEnabled: normalizeGitNetworkProxyEnabled(parsed.gitNetworkProxyEnabled),
       gitNetworkProxyUrl: normalizeGitNetworkProxyUrl(parsed.gitNetworkProxyUrl),
       gitNetworkTimeoutSec: normalizeGitNetworkTimeoutSec(parsed.gitNetworkTimeoutSec),
@@ -868,7 +875,7 @@ export function subscribeServerFetchInterval(listener: FetchIntervalListener): (
 
 export async function setServerFetchIntervalSec(sec: number): Promise<number> {
   const data = await loadServerSettings()
-  const next = normalizeFetchInterval(sec)
+  const next = normalizeRefreshInterval(sec, DEFAULT_FETCH_INTERVAL_SEC)
   if (data.fetchIntervalSec !== next) {
     data.fetchIntervalSec = next
     await writeServerSettingsFile(data)
@@ -887,7 +894,13 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   const nextColorTheme = patch.colorTheme === undefined ? data.colorTheme : normalizeColorTheme(patch.colorTheme)
   const nextFontFamily = patch.fontFamily === undefined ? data.fontFamily : normalizeFontFamilyPref(patch.fontFamily)
   const nextFetchIntervalSec =
-    patch.fetchIntervalSec === undefined ? data.fetchIntervalSec : normalizeFetchInterval(patch.fetchIntervalSec)
+    patch.fetchIntervalSec === undefined
+      ? data.fetchIntervalSec
+      : normalizeRefreshInterval(patch.fetchIntervalSec, DEFAULT_FETCH_INTERVAL_SEC)
+  const nextStatusRefreshIntervalSec =
+    patch.statusRefreshIntervalSec === undefined
+      ? data.statusRefreshIntervalSec
+      : normalizeRefreshInterval(patch.statusRefreshIntervalSec, DEFAULT_STATUS_REFRESH_INTERVAL_SEC)
   const nextGitNetworkProxyEnabled =
     patch.gitNetworkProxyEnabled === undefined
       ? data.gitNetworkProxyEnabled
@@ -954,6 +967,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     data.colorTheme !== nextColorTheme ||
     data.fontFamily !== nextFontFamily ||
     data.fetchIntervalSec !== nextFetchIntervalSec ||
+    data.statusRefreshIntervalSec !== nextStatusRefreshIntervalSec ||
     data.gitNetworkProxyEnabled !== nextGitNetworkProxyEnabled ||
     data.gitNetworkProxyUrl !== nextGitNetworkProxyUrl ||
     data.gitNetworkTimeoutSec !== nextGitNetworkTimeoutSec ||
@@ -981,6 +995,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   data.colorTheme = nextColorTheme
   data.fontFamily = nextFontFamily
   data.fetchIntervalSec = nextFetchIntervalSec
+  data.statusRefreshIntervalSec = nextStatusRefreshIntervalSec
   data.gitNetworkProxyEnabled = nextGitNetworkProxyEnabled
   data.gitNetworkProxyUrl = nextGitNetworkProxyUrl
   data.gitNetworkTimeoutSec = nextGitNetworkTimeoutSec
