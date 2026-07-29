@@ -181,7 +181,6 @@ const branchWorkspaceListState = vi.hoisted(() => ({
     activeMemberRepositoryName?: string | null
     onToggleFileArea?: (item: BranchWorkspaceSnapshot) => void
     changeCountById?: Readonly<Record<string, number>>
-    refreshingChangeIds?: ReadonlySet<string>
     getMemberPresentation?: (
       item: BranchWorkspaceSnapshot,
       member: BranchWorkspaceSnapshot['repositories'][number],
@@ -213,7 +212,6 @@ const branchWorkspaceListState = vi.hoisted(() => ({
     onRemove?: (item: BranchWorkspaceSnapshot) => void
     onAddDependencies?: (item: BranchWorkspaceSnapshot) => void
     onRemoveDependencies?: (item: BranchWorkspaceSnapshot) => void
-    onRefreshChanges?: (item: BranchWorkspaceSnapshot) => void | Promise<void>
   },
 }))
 
@@ -677,13 +675,43 @@ describe('WorkspaceRepositoryRail', () => {
     expect(useReposStore.getState().workspaceRepositoryListHeightByRoot).toEqual({ [ROOT]: 4096 })
   })
 
-  test('manually reloads the branch workspace list and guards duplicate requests', async () => {
-    let finishRefresh: (() => void) | undefined
+  test('reloads the latest branch workspace list and member change counts while guarding duplicate requests', async () => {
+    let finishListRefresh: (() => void) | undefined
+    let finishStatusRefresh: (() => void) | undefined
+    const source = branchWorkspaceState.items[0]!
+    const apiMember = source.repositories.find((member) => member.repositoryName === 'api')!
+    const webMember = source.repositories.find((member) => member.repositoryName === 'web')!
+    const freshItems: BranchWorkspaceSnapshot[] = [
+      {
+        ...source,
+        repositories: [webMember, { ...apiMember, progress: 'removed', ready: false }],
+      },
+      {
+        ...branchWorkspaceState.items[1]!,
+        repositories: [webMember],
+      },
+    ]
     branchWorkspaceState.refresh.mockReturnValueOnce(
-      new Promise<void>((resolve) => {
-        finishRefresh = resolve
+      new Promise<BranchWorkspaceReadResult>((resolve) => {
+        finishListRefresh = () =>
+          resolve({
+            ok: true,
+            rootId: ROOT,
+            items: freshItems,
+            auxiliaryCandidates: [],
+          })
       }),
     )
+    refreshStatus.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishStatusRefresh = resolve
+      }),
+    )
+    const state = useReposStore.getState()
+    const web = replaceRepo(state.repos[WEB]!, (repo) => {
+      repo.availability = { phase: 'available' }
+    })
+    useReposStore.setState({ repos: { ...state.repos, [WEB]: web } })
     renderRail({ currentRepoId: ROOT })
 
     const refresh = container?.querySelector<HTMLButtonElement>(
@@ -696,10 +724,102 @@ describe('WorkspaceRepositoryRail', () => {
       refresh?.click()
     })
     expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
+    expect(refreshStatus).not.toHaveBeenCalled()
     expect(rescanWorkspace).not.toHaveBeenCalled()
     expect(refresh?.disabled).toBe(true)
 
-    await act(async () => finishRefresh?.())
+    await act(async () => {
+      finishListRefresh?.()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    const repos = useReposStore.getState().repos
+    expect(refreshStatus).toHaveBeenCalledTimes(1)
+    expect(refreshStatus).toHaveBeenCalledWith(WEB, { token: repos[WEB]?.instanceToken })
+    expect(refreshStatus).not.toHaveBeenCalledWith(API, expect.anything())
+    expect(refresh?.disabled).toBe(true)
+    expect(branchWorkspaceListState.props).not.toHaveProperty('onRefreshChanges')
+    expect(branchWorkspaceListState.props).not.toHaveProperty('refreshingChangeIds')
+
+    act(() => refresh?.click())
+    expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
+
+    await act(async () => finishStatusRefresh?.())
+    expect(refresh?.disabled).toBe(false)
+  })
+
+  test('keeps the combined refresh guarded until every member status request settles', async () => {
+    let rejectApi: ((reason?: unknown) => void) | undefined
+    let finishWeb: (() => void) | undefined
+    refreshStatus
+      .mockReturnValueOnce(
+        new Promise<void>((_resolve, reject) => {
+          rejectApi = reject
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          finishWeb = resolve
+        }),
+      )
+    const state = useReposStore.getState()
+    const web = replaceRepo(state.repos[WEB]!, (repo) => {
+      repo.availability = { phase: 'available' }
+    })
+    useReposStore.setState({ repos: { ...state.repos, [WEB]: web } })
+    renderRail({ currentRepoId: ROOT })
+
+    const refresh = container?.querySelector<HTMLButtonElement>(
+      'section[aria-label="workspace.branch-workspace.list"] [aria-label="workspace.branch-workspace.reload"]',
+    )
+    await act(async () => {
+      refresh?.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(refreshStatus).toHaveBeenCalledTimes(2)
+    expect(refresh?.disabled).toBe(true)
+
+    await act(async () => {
+      rejectApi?.(new Error('refresh failed'))
+      await Promise.resolve()
+    })
+    expect(refresh?.disabled).toBe(true)
+
+    act(() => refresh?.click())
+    expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
+
+    await act(async () => finishWeb?.())
+    expect(refresh?.disabled).toBe(false)
+  })
+
+  test('skips removed and unavailable members during the combined refresh', async () => {
+    const source = branchWorkspaceState.items[0]!
+    branchWorkspaceState.refresh.mockResolvedValueOnce({
+      ok: true,
+      rootId: ROOT,
+      items: [
+        {
+          ...source,
+          repositories: source.repositories.map((member) =>
+            member.repositoryName === 'api' ? { ...member, progress: 'removed', ready: false } : member,
+          ),
+        },
+      ],
+      auxiliaryCandidates: [],
+    })
+    renderRail({ currentRepoId: ROOT })
+
+    const refresh = container?.querySelector<HTMLButtonElement>(
+      'section[aria-label="workspace.branch-workspace.list"] [aria-label="workspace.branch-workspace.reload"]',
+    )
+    await act(async () => {
+      refresh?.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(refreshStatus).not.toHaveBeenCalled()
     expect(refresh?.disabled).toBe(false)
   })
 
@@ -1349,110 +1469,6 @@ describe('WorkspaceRepositoryRail', () => {
 
     expect(branchGitActionState.cancel).toHaveBeenCalledTimes(1)
     expect(branchWorkspaceState.cancel).not.toHaveBeenCalled()
-  })
-
-  test('refreshes only the selected branch workspace member statuses and guards duplicate requests', async () => {
-    let finishRefresh: (() => void) | undefined
-    const pendingRefresh = new Promise<void>((resolve) => {
-      finishRefresh = resolve
-    })
-    refreshStatus.mockReturnValue(pendingRefresh)
-    const state = useReposStore.getState()
-    const web = replaceRepo(state.repos[WEB]!, (repo) => {
-      repo.availability = { phase: 'available' }
-    })
-    useReposStore.setState({ repos: { ...state.repos, [WEB]: web } })
-    renderRail({ currentRepoId: ROOT })
-
-    const item = branchWorkspaceState.items[0]!
-    let refreshWork: void | Promise<void>
-    await act(async () => {
-      refreshWork = branchWorkspaceListState.props?.onRefreshChanges?.(item)
-      await Promise.resolve()
-    })
-
-    const repos = useReposStore.getState().repos
-    expect(refreshStatus).toHaveBeenCalledTimes(2)
-    expect(refreshStatus).toHaveBeenCalledWith(API, { token: repos[API]?.instanceToken })
-    expect(refreshStatus).toHaveBeenCalledWith(WEB, { token: repos[WEB]?.instanceToken })
-    expect(branchWorkspaceListState.props?.refreshingChangeIds?.has(item.id)).toBe(true)
-    expect(rescanWorkspace).not.toHaveBeenCalled()
-    expect(branchWorkspaceState.refresh).not.toHaveBeenCalled()
-
-    await act(async () => {
-      void branchWorkspaceListState.props?.onRefreshChanges?.(item)
-      await Promise.resolve()
-    })
-    expect(refreshStatus).toHaveBeenCalledTimes(2)
-
-    await act(async () => {
-      finishRefresh?.()
-      await refreshWork
-    })
-    expect(branchWorkspaceListState.props?.refreshingChangeIds?.has(item.id)).toBe(false)
-  })
-
-  test('keeps a branch workspace refresh guarded until every member request settles', async () => {
-    let rejectApi: ((reason?: unknown) => void) | undefined
-    let finishWeb: (() => void) | undefined
-    const apiRefresh = new Promise<void>((_resolve, reject) => {
-      rejectApi = reject
-    })
-    const webRefresh = new Promise<void>((resolve) => {
-      finishWeb = resolve
-    })
-    refreshStatus.mockReturnValueOnce(apiRefresh).mockReturnValueOnce(webRefresh)
-    const state = useReposStore.getState()
-    const web = replaceRepo(state.repos[WEB]!, (repo) => {
-      repo.availability = { phase: 'available' }
-    })
-    useReposStore.setState({ repos: { ...state.repos, [WEB]: web } })
-    renderRail({ currentRepoId: ROOT })
-
-    const item = branchWorkspaceState.items[0]!
-    let refreshError: unknown
-    let refreshWork: Promise<void> | undefined
-    await act(async () => {
-      refreshWork = Promise.resolve(branchWorkspaceListState.props?.onRefreshChanges?.(item)).catch((error) => {
-        refreshError = error
-      })
-      await Promise.resolve()
-    })
-
-    await act(async () => {
-      rejectApi?.(new Error('refresh failed'))
-      await Promise.resolve()
-      await Promise.resolve()
-    })
-    expect(branchWorkspaceListState.props?.refreshingChangeIds?.has(item.id)).toBe(true)
-
-    await act(async () => {
-      void branchWorkspaceListState.props?.onRefreshChanges?.(item)
-      await Promise.resolve()
-    })
-    expect(refreshStatus).toHaveBeenCalledTimes(2)
-
-    await act(async () => {
-      finishWeb?.()
-      await refreshWork
-    })
-    expect(refreshError).toBeUndefined()
-    expect(branchWorkspaceListState.props?.refreshingChangeIds?.has(item.id)).toBe(false)
-  })
-
-  test('skips removed and unavailable branch workspace members during change refresh', async () => {
-    renderRail({ currentRepoId: ROOT })
-    const source = branchWorkspaceState.items[0]!
-    const item: BranchWorkspaceSnapshot = {
-      ...source,
-      repositories: source.repositories.map((member) =>
-        member.repositoryName === 'api' ? { ...member, progress: 'removed', ready: false } : member,
-      ),
-    }
-
-    await act(async () => await branchWorkspaceListState.props?.onRefreshChanges?.(item))
-
-    expect(refreshStatus).not.toHaveBeenCalled()
   })
 
   test('sums changes from each branch workspace repository member worktree', () => {

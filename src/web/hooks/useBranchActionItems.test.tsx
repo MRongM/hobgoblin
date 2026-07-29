@@ -1017,7 +1017,120 @@ describe('useBranchActionItems', () => {
       { token: repo.instanceToken, refreshOnError: false },
     )
   })
+
+  test('falls back from an empty branch source to the primary worktree', async () => {
+    repoClientMocks.getRepositoryWorktreeBootstrapPreflight
+      .mockResolvedValueOnce({ ok: true, preflight: { kind: 'candidates', candidates: [] } })
+      .mockResolvedValueOnce({
+        ok: true,
+        preflight: { kind: 'candidates', candidates: [{ path: 'node_modules', kind: 'directory' }] },
+      })
+    const submitBranchAction = vi.fn()
+    useReposStore.setState({ submitBranchAction })
+    const current = createRepoBranch('main', { isCurrent: true, worktree: { path: '/tmp/repo' } })
+    const branch = createRepoBranch('feature/base', { worktree: { path: '/tmp/repo-base' } })
+    const other = createRepoBranch('feature/other', { worktree: { path: '/tmp/repo-other' } })
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      branches: [current, branch, other],
+      currentBranch: 'main',
+      selectedBranch: branch.name,
+      worktreesByPath: createSourceWorktrees(),
+    })
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
+    const groups = await renderItemGroups(useItems, repo, branch)
+    const createWorktree = groups.mainItems.find((item) => item.id === 'createWorktree')
+    if (!createWorktree) throw new Error('missing create-worktree action')
+
+    await act(async () => createWorktree.onSelect())
+    await waitForAssertion(() => {
+      expect(document.querySelector('[data-materialization-item="node_modules"]')).not.toBeNull()
+    })
+
+    expect(repoClientMocks.getRepositoryWorktreeBootstrapPreflight.mock.calls).toEqual([
+      ['/tmp/repo', expect.any(AbortSignal), undefined, '/tmp/repo-base'],
+      ['/tmp/repo', expect.any(AbortSignal), undefined, undefined],
+    ])
+    expect(document.body.textContent).toContain('worktree-bootstrap.source-primary')
+    const optionValues = [...sourceSelect().options].map((option) => option.value)
+    expect(optionValues).not.toContain('branch:feature/base')
+    expect(optionValues).toContain('branch:feature/other')
+  })
+
+  test('loads and submits dependencies from another non-context worktree', async () => {
+    repoClientMocks.getRepositoryWorktreeBootstrapPreflight
+      .mockResolvedValueOnce({
+        ok: true,
+        preflight: { kind: 'candidates', candidates: [{ path: '.env.base', kind: 'file' }] },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        preflight: { kind: 'candidates', candidates: [{ path: '.env.other', kind: 'file' }] },
+      })
+    const submitBranchAction = vi.fn()
+    useReposStore.setState({ submitBranchAction })
+    const current = createRepoBranch('main', { isCurrent: true, worktree: { path: '/tmp/repo' } })
+    const branch = createRepoBranch('feature/base', { worktree: { path: '/tmp/repo-base' } })
+    const other = createRepoBranch('feature/other', { worktree: { path: '/tmp/repo-other' } })
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      branches: [current, branch, other],
+      currentBranch: 'main',
+      selectedBranch: branch.name,
+      worktreesByPath: createSourceWorktrees(),
+    })
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
+    const groups = await renderItemGroups(useItems, repo, branch)
+    const createWorktree = groups.mainItems.find((item) => item.id === 'createWorktree')
+    if (!createWorktree) throw new Error('missing create-worktree action')
+
+    await act(async () => createWorktree.onSelect())
+    await waitForAssertion(() => {
+      expect(document.querySelector('[data-materialization-item=".env.base"]')).not.toBeNull()
+    })
+    changeSource('branch:feature/other')
+    await waitForAssertion(() => {
+      expect(document.querySelector('[data-materialization-item=".env.other"]')).not.toBeNull()
+    })
+
+    expect(repoClientMocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenLastCalledWith(
+      '/tmp/repo',
+      expect.any(AbortSignal),
+      undefined,
+      '/tmp/repo-other',
+    )
+    clickButton('[data-materialization-item=".env.other"] [data-materialization-choice="copy"]')
+    setInputValue('#cwt-branch', 'feature/new')
+    clickButton('button[type="submit"]')
+
+    expect(submitBranchAction).toHaveBeenCalledWith(
+      '/tmp/repo',
+      {
+        kind: 'createWorktree',
+        input: {
+          worktreePath: '/tmp/repo-feature-new',
+          mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'feature/base' },
+        },
+        worktreeBootstrap: {
+          kind: 'materialize',
+          selections: [{ path: '.env.other', mode: 'copy' }],
+          sourceWorktreePath: '/tmp/repo-other',
+        },
+      },
+      { token: repo.instanceToken, refreshOnError: false },
+    )
+  })
 })
+
+function createSourceWorktrees() {
+  return {
+    '/tmp/repo': { path: '/tmp/repo', branch: 'main', isMain: true },
+    '/tmp/repo-base': { path: '/tmp/repo-base', branch: 'feature/base', isMain: false },
+    '/tmp/repo-other': { path: '/tmp/repo-other', branch: 'feature/other', isMain: false },
+  }
+}
 
 async function renderItemGroups(
   useItems: typeof useBranchActionItems,
@@ -1131,6 +1244,19 @@ function clickButtonByText(text: string) {
   act(() => {
     element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   })
+}
+
+function sourceSelect(): HTMLSelectElement {
+  const element = document.body.querySelector('[data-worktree-bootstrap-source-select]')
+  if (!(element instanceof HTMLSelectElement)) throw new Error('Missing worktree bootstrap source select')
+  return element
+}
+
+function changeSource(value: string) {
+  const element = sourceSelect()
+  const descriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')
+  descriptor?.set?.call(element, value)
+  act(() => element.dispatchEvent(new Event('change', { bubbles: true })))
 }
 
 function setTerminalSessions(worktreeKey: string, sessions: TerminalSessionSummary[]) {

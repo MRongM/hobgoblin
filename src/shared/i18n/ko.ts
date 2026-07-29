@@ -133,12 +133,10 @@ export const ko: Record<DictKey, string> = {
     '저장소 의존 항목을 불러오지 못했습니다. 이 저장소를 선택 해제한 후 다시 선택하세요.',
   'workspace.branch-workspace.repository-dependencies-empty':
     '현재 의존 항목 원본에 선택할 수 있는 추적되지 않은 항목이 없습니다.',
-  'workspace.branch-workspace.repository-dependencies-source-primary':
-    '기본 작업 트리의 의존 항목을 사용하고 있습니다.',
-  'workspace.branch-workspace.repository-dependencies-source-branch':
-    '{branch} 작업 트리의 의존 항목을 사용하고 있습니다.',
-  'workspace.branch-workspace.repository-dependencies-source-select': '다른 작업 트리의 의존 항목 사용',
-  'workspace.branch-workspace.repository-dependencies-source-primary-option': '기본 작업 트리',
+  'worktree-bootstrap.source-primary': '기본 작업 트리의 의존 항목을 사용하고 있습니다.',
+  'worktree-bootstrap.source-branch': '{branch} 작업 트리의 의존 항목을 사용하고 있습니다.',
+  'worktree-bootstrap.source-select': '다른 작업 트리의 의존 항목 사용',
+  'worktree-bootstrap.source-primary-option': '기본 작업 트리',
   'workspace.branch-workspace.auxiliary': '브랜치 작업공간 의존 항목',
   'workspace.branch-workspace.auxiliary-refresh': '브랜치 작업공간 의존 항목 새로 고침',
   'workspace.branch-workspace.auxiliary-named': '브랜치 작업공간 의존 항목 {name} 포함',

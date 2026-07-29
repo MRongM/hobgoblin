@@ -8,6 +8,7 @@ import { CreateWorktreeDialog } from '#/web/components/CreateWorktreeDialog.tsx'
 import { emptyRepo } from '#/web/stores/repos/helpers.ts'
 import type { RepoState } from '#/web/stores/repos/types.ts'
 import { normalizeRemoteTarget } from '#/shared/remote-repo.ts'
+import type { RepositoryDependencySource } from '#/web/components/repo-workspace/branch-workspace-repository-dependency-source.ts'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -455,6 +456,93 @@ describe('CreateWorktreeDialog', () => {
     expect(document.querySelector('[data-materialization-choice="skip"][data-state="on"]')).not.toBeNull()
   })
 
+  test('reports the active local branch context for dependency source resolution', () => {
+    const onBootstrapContextBranchChange = vi.fn()
+    render(
+      <CreateWorktreeDialog
+        open
+        repo={createRepo()}
+        onBootstrapContextBranchChange={onBootstrapContextBranchChange}
+        onClose={vi.fn()}
+        onCreate={vi.fn(async () => {})}
+      />,
+    )
+
+    expect(onBootstrapContextBranchChange).toHaveBeenLastCalledWith('main')
+    openSelect('#cwt-base')
+    clickOptionByText('feature/base')
+    expect(onBootstrapContextBranchChange).toHaveBeenLastCalledWith('feature/base')
+
+    clickButtonByText('action.create-worktree-mode-existing')
+    expect(onBootstrapContextBranchChange).toHaveBeenLastCalledWith('main')
+
+    clickButtonByText('action.create-worktree-mode-detached')
+    expect(onBootstrapContextBranchChange).toHaveBeenLastCalledWith('main')
+  })
+
+  test('resets candidate choices when the dependency source changes', () => {
+    const base = branchSource('feature/base', '/tmp/repo-base')
+    const alternative = branchSource('feature/other', '/tmp/repo-other')
+    const dialog = (source: RepositoryDependencySource) => (
+      <CreateWorktreeDialog
+        open
+        repo={createRepo()}
+        worktreeBootstrap={{
+          loading: false,
+          preflight: { kind: 'candidates', candidates: [{ path: '.env', kind: 'file' }] },
+          error: false,
+          source,
+          sourceOptions: [alternative],
+        }}
+        onBootstrapSourceChange={vi.fn()}
+        onClose={vi.fn()}
+        onCreate={vi.fn(async () => {})}
+      />
+    )
+    render(dialog(base))
+
+    click('[data-materialization-item=".env"] [data-materialization-choice="copy"]')
+    expect(document.querySelector('[data-materialization-choice="copy"][data-state="on"]')).not.toBeNull()
+
+    act(() => root!.render(dialog(alternative)))
+
+    expect(document.querySelector('[data-materialization-choice="skip"][data-state="on"]')).not.toBeNull()
+  })
+
+  test('submits the exact branch worktree source used for dependency candidates', () => {
+    const onCreate = vi.fn(async () => {})
+    const source = branchSource('feature/base', '/tmp/repo-base')
+    render(
+      <CreateWorktreeDialog
+        open
+        repo={createRepo()}
+        worktreeBootstrap={{
+          loading: false,
+          preflight: { kind: 'candidates', candidates: [{ path: '.env', kind: 'file' }] },
+          error: false,
+          source,
+          sourceOptions: [{ id: 'primary', kind: 'primary' }],
+        }}
+        onBootstrapSourceChange={vi.fn()}
+        onClose={vi.fn()}
+        onCreate={onCreate}
+      />,
+    )
+
+    click('[data-materialization-item=".env"] [data-materialization-choice="copy"]')
+    setInputValue('#cwt-branch', 'feature/new')
+    click('button[type="submit"]')
+
+    expect(onCreate).toHaveBeenCalledWith({
+      input: {
+        worktreePath: '/tmp/goblin-repo-feature-new',
+        mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'main' },
+      },
+      selections: [{ path: '.env', mode: 'copy' }],
+      sourceWorktreePath: '/tmp/repo-base',
+    })
+  })
+
   test('hides empty candidates and keeps preflight errors nonblocking', () => {
     render(
       <CreateWorktreeDialog
@@ -520,6 +608,10 @@ function createRemoteRepo(): RepoState {
   return repo
 }
 
+function branchSource(branch: string, worktreePath: string): RepositoryDependencySource {
+  return { id: `branch:${branch}`, kind: 'branch', branch, worktreePath }
+}
+
 function render(element: ReactNode) {
   container = document.createElement('div')
   document.body.append(container)
@@ -581,6 +673,14 @@ function clickButtonByText(text: string) {
   act(() => {
     element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   })
+}
+
+function clickOptionByText(text: string) {
+  const element = [...document.body.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (candidate) => candidate.textContent?.trim() === text,
+  )
+  if (!element) throw new Error(`Missing option text: ${text}`)
+  act(() => element.dispatchEvent(new MouseEvent('click', { bubbles: true })))
 }
 
 async function flush() {
