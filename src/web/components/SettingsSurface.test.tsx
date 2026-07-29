@@ -27,6 +27,7 @@ function defaultRpcResult(path: string, input?: unknown) {
   if (path === 'settings.get') {
     return {
       fetchIntervalSec: 60,
+      statusRefreshIntervalSec: 60,
       fontFamily: 'mono',
       gitNetworkProxyEnabled: false,
       gitNetworkProxyUrl: '',
@@ -224,6 +225,7 @@ beforeEach(() => {
     initialI18n: null,
     initialSettings: {
       fetchIntervalSec: 60,
+      statusRefreshIntervalSec: 60,
       fontFamily: 'mono',
       gitNetworkProxyEnabled: false,
       gitNetworkProxyUrl: '',
@@ -253,6 +255,7 @@ beforeEach(() => {
     initialI18n: null,
     initialSettings: {
       fetchIntervalSec: 60,
+      statusRefreshIntervalSec: 60,
       fontFamily: 'mono',
       gitNetworkProxyEnabled: false,
       gitNetworkProxyUrl: '',
@@ -313,6 +316,51 @@ afterEach(() => {
 })
 
 describe('SettingsSurface', () => {
+  test('renders and writes scheduled status refresh with the auto-sync interval choices', async () => {
+    await render(<SettingsSurface page="sync" onPageChange={() => {}} />)
+
+    expect(document.body.textContent).toContain('settings.group.status-refresh')
+    expect(document.body.textContent).toContain('settings.status-refresh')
+    expect(document.body.textContent).toContain('settings.status-refresh-hint')
+    const trigger = document.getElementById('settings-status-refresh')
+    if (!(trigger instanceof HTMLButtonElement)) throw new Error('Missing scheduled status refresh select')
+    if (!Element.prototype.scrollIntoView) {
+      Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() })
+    }
+
+    await act(async () => {
+      trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+      await Promise.resolve()
+    })
+
+    const options = Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]'))
+    expect(options.map((option) => option.textContent?.trim())).toEqual([
+      'settings.fetch.off',
+      'settings.fetch.30s',
+      'settings.fetch.1m',
+      'settings.fetch.2m',
+      'settings.fetch.3m',
+      'settings.fetch.5m',
+      'settings.fetch.15m',
+    ])
+    const fiveMinutes = options.find((option) => option.textContent?.trim() === 'settings.fetch.5m')
+    if (!fiveMinutes) throw new Error('Missing five minute status refresh option')
+
+    await act(async () => {
+      fiveMinutes.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [url, request] = call as unknown as [unknown, RequestInit | undefined]
+        if (new URL(String(url)).pathname !== '/api/settings/prefs') return false
+        const body = JSON.parse(String(request?.body ?? '{}')) as { settings?: Record<string, unknown> }
+        return body.settings?.statusRefreshIntervalSec === 300
+      }),
+    ).toBe(true)
+  })
+
   test('can preview every in-app notification style from settings', async () => {
     await render(<SettingsSurface page="notifications" onPageChange={() => {}} />)
 

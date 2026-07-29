@@ -57,6 +57,7 @@ const appDataClientMocks = vi.hoisted(() => ({
   })),
   setProjectColorTheme: vi.fn<() => Promise<RepoSettingsEntry[]>>(async () => []),
   setSettingsFetchInterval: vi.fn(async (sec) => sec),
+  setStatusRefreshInterval: vi.fn(async (sec) => sec),
   setShortcutsDisabled: vi.fn(async () => {}),
   setSwapCloseShortcuts: vi.fn(async () => {}),
   setTemporaryFilesDirectory: vi.fn(async () => {}),
@@ -100,6 +101,7 @@ vi.mock('#/web/settings-client.ts', () => ({
   setPreferredTerminalApp: appDataClientMocks.setPreferredTerminalApp,
   setProjectColorTheme: appDataClientMocks.setProjectColorTheme,
   setSettingsFetchInterval: appDataClientMocks.setSettingsFetchInterval,
+  setStatusRefreshInterval: appDataClientMocks.setStatusRefreshInterval,
   setShortcutsDisabled: appDataClientMocks.setShortcutsDisabled,
   setSwapCloseShortcuts: appDataClientMocks.setSwapCloseShortcuts,
   setTemporaryFilesDirectory: appDataClientMocks.setTemporaryFilesDirectory,
@@ -174,6 +176,8 @@ describe('settings write paths', () => {
     appDataClientMocks.setProjectColorTheme.mockResolvedValue([])
     appDataClientMocks.setSettingsFetchInterval.mockReset()
     appDataClientMocks.setSettingsFetchInterval.mockImplementation(async (sec) => sec)
+    appDataClientMocks.setStatusRefreshInterval.mockReset()
+    appDataClientMocks.setStatusRefreshInterval.mockImplementation(async (sec) => sec)
     appDataClientMocks.setShortcutsDisabled.mockReset()
     appDataClientMocks.setShortcutsDisabled.mockResolvedValue(undefined)
     appDataClientMocks.setSwapCloseShortcuts.mockReset()
@@ -236,6 +240,18 @@ describe('settings write paths', () => {
 
     expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
       recentRepos: [],
+    })
+  })
+
+  test('persists the status refresh interval and updates the runtime settings cache', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    const { setStatusRefreshIntervalPreference } = await import('#/web/settings-write-paths.ts')
+
+    await setStatusRefreshIntervalPreference(300)
+
+    expect(appDataClientMocks.setStatusRefreshInterval).toHaveBeenCalledWith(300)
+    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
+      statusRefreshIntervalSec: 300,
     })
   })
 

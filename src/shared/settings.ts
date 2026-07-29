@@ -48,6 +48,7 @@ export interface SettingsPrefs {
   fontFamily: FontFamilyPref
   lang: LangPref
   fetchIntervalSec: number
+  statusRefreshIntervalSec: number
   gitNetworkProxyEnabled: boolean
   gitNetworkProxyUrl: string
   gitNetworkTimeoutSec: number

@@ -20,6 +20,7 @@ export function buildRuntimeSettingsSnapshot(input: {
     colorTheme: input.prefs.colorTheme,
     fontFamily: input.prefs.fontFamily,
     fetchIntervalSec: input.prefs.fetchIntervalSec,
+    statusRefreshIntervalSec: input.prefs.statusRefreshIntervalSec,
     gitNetworkProxyEnabled: input.prefs.gitNetworkProxyEnabled,
     gitNetworkProxyUrl: input.prefs.gitNetworkProxyUrl,
     gitNetworkTimeoutSec: input.prefs.gitNetworkTimeoutSec,
@@ -82,6 +83,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     | 'colorTheme'
     | 'fontFamily'
     | 'fetchIntervalSec'
+    | 'statusRefreshIntervalSec'
     | 'gitNetworkProxyEnabled'
     | 'gitNetworkProxyUrl'
     | 'gitNetworkTimeoutSec'
@@ -113,6 +115,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     colorTheme: snapshot.colorTheme,
     fontFamily: snapshot.fontFamily,
     fetchIntervalSec: snapshot.fetchIntervalSec,
+    statusRefreshIntervalSec: snapshot.statusRefreshIntervalSec,
     gitNetworkProxyEnabled: snapshot.gitNetworkProxyEnabled,
     gitNetworkProxyUrl: snapshot.gitNetworkProxyUrl,
     gitNetworkTimeoutSec: snapshot.gitNetworkTimeoutSec,

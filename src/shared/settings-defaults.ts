@@ -45,6 +45,7 @@ import {
 } from '#/shared/telegram-notifications.ts'
 
 export const DEFAULT_FETCH_INTERVAL_SEC = 120
+export const DEFAULT_STATUS_REFRESH_INTERVAL_SEC = 120
 export const DEFAULT_GIT_NETWORK_PROXY_ENABLED = false
 export const DEFAULT_GIT_NETWORK_PROXY_URL = ''
 export const DEFAULT_GIT_NETWORK_TIMEOUT_SEC = 120
@@ -96,6 +97,7 @@ export function defaultSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): Se
     colorTheme: overrides.colorTheme ?? DEFAULT_COLOR_THEME,
     fontFamily: overrides.fontFamily ?? DEFAULT_FONT_FAMILY,
     fetchIntervalSec: overrides.fetchIntervalSec ?? DEFAULT_FETCH_INTERVAL_SEC,
+    statusRefreshIntervalSec: overrides.statusRefreshIntervalSec ?? DEFAULT_STATUS_REFRESH_INTERVAL_SEC,
     gitNetworkProxyEnabled: overrides.gitNetworkProxyEnabled ?? DEFAULT_GIT_NETWORK_PROXY_ENABLED,
     gitNetworkProxyUrl: overrides.gitNetworkProxyUrl ?? DEFAULT_GIT_NETWORK_PROXY_URL,
     gitNetworkTimeoutSec: overrides.gitNetworkTimeoutSec ?? DEFAULT_GIT_NETWORK_TIMEOUT_SEC,
@@ -148,6 +150,7 @@ export function initialSettingsFromSnapshot(
   snapshot: Pick<
     SettingsSnapshot,
     | 'fetchIntervalSec'
+    | 'statusRefreshIntervalSec'
     | 'fontFamily'
     | 'gitNetworkProxyEnabled'
     | 'gitNetworkProxyUrl'
@@ -176,6 +179,7 @@ export function initialSettingsFromSnapshot(
 ): InitialSettingsSnapshot {
   return {
     fetchIntervalSec: snapshot.fetchIntervalSec,
+    statusRefreshIntervalSec: snapshot.statusRefreshIntervalSec,
     fontFamily: snapshot.fontFamily,
     gitNetworkProxyEnabled: snapshot.gitNetworkProxyEnabled,
     gitNetworkProxyUrl: snapshot.gitNetworkProxyUrl,

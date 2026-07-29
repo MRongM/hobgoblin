@@ -44,6 +44,7 @@ export const WEB_RENDERER_CAPABILITIES = [] as const satisfies readonly Renderer
 
 export interface InitialSettingsSnapshot {
   fetchIntervalSec: number
+  statusRefreshIntervalSec: number
   fontFamily: FontFamilyPref
   gitNetworkProxyEnabled: boolean
   gitNetworkProxyUrl: string

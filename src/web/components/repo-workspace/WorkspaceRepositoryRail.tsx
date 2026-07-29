@@ -347,29 +347,7 @@ export function WorkspaceRepositoryRail({
     branchReloadPendingRef.current = true
     setBranchReloadPending(true)
     try {
-      const result = await branchQuery.refresh()
-      if (!result.ok) return
-      const state = useReposStore.getState()
-      const repositoryIds = Array.from(
-        new Set(
-          result.items.flatMap((item) =>
-            item.repositories.flatMap((member) => {
-              if (member.progress === 'removed') return []
-              const repositoryId = repositoryIdByName.get(member.repositoryName)
-              if (!repositoryId) return []
-              const repository = state.repos[repositoryId]
-              return repository?.availability.phase === 'available' ? [repositoryId] : []
-            }),
-          ),
-        ),
-      )
-      await Promise.allSettled(
-        repositoryIds.map(async (repositoryId) => {
-          const repository = state.repos[repositoryId]
-          if (!repository || repository.availability.phase !== 'available') return
-          await state.refreshStatus(repositoryId, { token: repository.instanceToken })
-        }),
-      )
+      await branchQuery.refresh()
     } catch {
       // The current read error remains visible and retryable.
     } finally {
