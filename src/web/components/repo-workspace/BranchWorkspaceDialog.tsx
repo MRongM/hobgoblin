@@ -32,6 +32,7 @@ import { Input } from '#/web/components/ui/input.tsx'
 import { cn } from '#/web/lib/cn.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { getRepositoryWorktreeBootstrapPreflight } from '#/web/repo-client.ts'
+import { WorktreeBootstrapSourcePicker } from '#/web/components/WorktreeBootstrapSourcePicker.tsx'
 import {
   projectBranchWorkspaceOperationProgress,
   type BranchWorkspaceStepProgressStatus,
@@ -468,53 +469,22 @@ export function BranchWorkspaceDialog({
                             </p>
                           ) : null}
                           {bootstrap?.status === 'ready' && bootstrap.sourceSelectionEnabled ? (
-                            <div className="mb-2 grid gap-1.5 rounded-md border border-separator bg-muted/20 p-2">
-                              <p className="text-xs text-muted-foreground">
-                                {bootstrap.source.kind === 'primary'
-                                  ? t('workspace.branch-workspace.repository-dependencies-source-primary')
-                                  : t('workspace.branch-workspace.repository-dependencies-source-branch', {
-                                      branch: bootstrap.source.branch,
-                                    })}
-                              </p>
-                              {bootstrap.sourceOptions.some((source) => source.id !== bootstrap.source.id) ? (
-                                <select
-                                  aria-label={t('workspace.branch-workspace.repository-dependencies-source-select')}
-                                  value=""
-                                  disabled={pending}
-                                  className="h-8 rounded-md border border-input bg-background px-2 font-mono text-xs"
-                                  onChange={(event) => {
-                                    const source = bootstrap.sourceOptions.find(
-                                      (candidate) => candidate.id === event.target.value,
-                                    )
-                                    if (!source) return
-                                    setRepositoryBootstrapChoices((current) => ({
-                                      ...current,
-                                      [repository.name]: {},
-                                    }))
-                                    void loadRepositoryBootstrap(
-                                      repository,
-                                      baseBranches[repository.name] || repository.defaultBranch,
-                                      source,
-                                    )
-                                  }}
-                                >
-                                  <option value="">
-                                    {t('workspace.branch-workspace.repository-dependencies-source-select')}
-                                  </option>
-                                  {bootstrap.sourceOptions
-                                    .filter((source) => source.id !== bootstrap.source.id)
-                                    .map((source) => (
-                                      <option key={source.id} value={source.id}>
-                                        {source.kind === 'primary'
-                                          ? t(
-                                              'workspace.branch-workspace.repository-dependencies-source-primary-option',
-                                            )
-                                          : source.branch}
-                                      </option>
-                                    ))}
-                                </select>
-                              ) : null}
-                            </div>
+                            <WorktreeBootstrapSourcePicker
+                              source={bootstrap.source}
+                              options={bootstrap.sourceOptions}
+                              pending={pending}
+                              onSourceChange={(source) => {
+                                setRepositoryBootstrapChoices((current) => ({
+                                  ...current,
+                                  [repository.name]: {},
+                                }))
+                                void loadRepositoryBootstrap(
+                                  repository,
+                                  baseBranches[repository.name] || repository.defaultBranch,
+                                  source,
+                                )
+                              }}
+                            />
                           ) : null}
                           {bootstrap?.status === 'ready' && bootstrap.preflight.candidates.length === 0 ? (
                             <p className="text-xs text-muted-foreground">

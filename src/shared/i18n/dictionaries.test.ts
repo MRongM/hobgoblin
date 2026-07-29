@@ -387,17 +387,17 @@ describe('i18n dictionaries', () => {
 
   test('identifies repository dependency sources in every locale', () => {
     const keys = [
-      'workspace.branch-workspace.repository-dependencies-source-primary',
-      'workspace.branch-workspace.repository-dependencies-source-branch',
-      'workspace.branch-workspace.repository-dependencies-source-select',
-      'workspace.branch-workspace.repository-dependencies-source-primary-option',
+      'worktree-bootstrap.source-primary',
+      'worktree-bootstrap.source-branch',
+      'worktree-bootstrap.source-select',
+      'worktree-bootstrap.source-primary-option',
     ] as const
 
     for (const [lang, dict] of Object.entries(dicts)) {
       for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
     }
-    expect(en['workspace.branch-workspace.repository-dependencies-source-branch']).toContain('{branch}')
-    expect(zh['workspace.branch-workspace.repository-dependencies-source-primary']).toContain('主工作树')
+    expect(en['worktree-bootstrap.source-branch']).toContain('{branch}')
+    expect(zh['worktree-bootstrap.source-primary']).toContain('主工作树')
   })
 
   test('distinguishes internal and external terminal actions in every dictionary', () => {

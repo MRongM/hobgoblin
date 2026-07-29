@@ -346,7 +346,7 @@ describe('BranchWorkspaceDialog', () => {
       ['/workspace/api', expect.any(AbortSignal), 'all-untracked', '/workspace/api-develop'],
       ['/workspace/api', expect.any(AbortSignal), 'all-untracked', undefined],
     ])
-    expect(document.body.textContent).toContain('workspace.branch-workspace.repository-dependencies-source-primary')
+    expect(document.body.textContent).toContain('worktree-bootstrap.source-primary')
     expect(document.querySelector('[data-materialization-item="node_modules"]')).not.toBeNull()
     clickSelector('[data-materialization-item="node_modules"] [data-materialization-choice="symlink"]')
     await clickAction('preview')
@@ -395,13 +395,11 @@ describe('BranchWorkspaceDialog', () => {
     await vi.waitFor(() => expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenCalledTimes(2))
 
     clickSelector('[data-materialization-item="node_modules"] [data-materialization-choice="symlink"]')
-    const sourceSelect = document.querySelector<HTMLSelectElement>(
-      '[aria-label="workspace.branch-workspace.repository-dependencies-source-select"]',
-    )
+    const sourceSelect = document.querySelector<HTMLSelectElement>('[aria-label="worktree-bootstrap.source-select"]')
     expect(Array.from(sourceSelect?.options ?? []).map((option) => option.value)).not.toContain('branch:develop')
     expect(Array.from(sourceSelect?.options ?? []).map((option) => option.value)).toContain('branch:feature/source')
 
-    changeSelect('workspace.branch-workspace.repository-dependencies-source-select', 'branch:feature/source')
+    changeSelect('worktree-bootstrap.source-select', 'branch:feature/source')
     await vi.waitFor(() => expect(document.querySelector('[data-materialization-item=".env"]')).not.toBeNull())
 
     expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenLastCalledWith(

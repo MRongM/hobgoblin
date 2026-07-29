@@ -114,8 +114,6 @@ export function WorkspaceRepositoryRail({
   const [gitActionTargetId, setGitActionTargetId] = useState<string | null>(null)
   const [branchReloadPending, setBranchReloadPending] = useState(false)
   const branchReloadPendingRef = useRef(false)
-  const refreshingBranchChangesRef = useRef<Set<string>>(new Set())
-  const [refreshingBranchChanges, setRefreshingBranchChanges] = useState<ReadonlySet<string>>(() => new Set())
   const [registryCleanupOpen, setRegistryCleanupOpen] = useState(false)
   const autoRefreshedDriftIds = useRef<Set<string>>(new Set())
   const dialogProgressWorkspace = branchActions.plan
@@ -349,40 +347,34 @@ export function WorkspaceRepositoryRail({
     branchReloadPendingRef.current = true
     setBranchReloadPending(true)
     try {
-      await branchQuery.refresh()
-    } catch {
-      // The current read error remains visible and retryable.
-    } finally {
-      branchReloadPendingRef.current = false
-      setBranchReloadPending(false)
-    }
-  }
-  const refreshBranchWorkspaceChanges = async (item: BranchWorkspaceSnapshot) => {
-    const inFlight = refreshingBranchChangesRef.current
-    if (inFlight.has(item.id)) return
-    inFlight.add(item.id)
-    setRefreshingBranchChanges(new Set(inFlight))
-    try {
+      const result = await branchQuery.refresh()
+      if (!result.ok) return
+      const state = useReposStore.getState()
       const repositoryIds = Array.from(
         new Set(
-          item.repositories.flatMap((member) => {
-            if (member.progress === 'removed') return []
-            const repositoryId = repositoryIdByName.get(member.repositoryName)
-            return repositoryId ? [repositoryId] : []
-          }),
+          result.items.flatMap((item) =>
+            item.repositories.flatMap((member) => {
+              if (member.progress === 'removed') return []
+              const repositoryId = repositoryIdByName.get(member.repositoryName)
+              if (!repositoryId) return []
+              const repository = state.repos[repositoryId]
+              return repository?.availability.phase === 'available' ? [repositoryId] : []
+            }),
+          ),
         ),
       )
       await Promise.allSettled(
         repositoryIds.map(async (repositoryId) => {
-          const state = useReposStore.getState()
           const repository = state.repos[repositoryId]
           if (!repository || repository.availability.phase !== 'available') return
           await state.refreshStatus(repositoryId, { token: repository.instanceToken })
         }),
       )
+    } catch {
+      // The current read error remains visible and retryable.
     } finally {
-      inFlight.delete(item.id)
-      setRefreshingBranchChanges(new Set(inFlight))
+      branchReloadPendingRef.current = false
+      setBranchReloadPending(false)
     }
   }
   const cleanupRegistry = async () => {
@@ -677,8 +669,6 @@ export function WorkspaceRepositoryRail({
                 onGitAction={openGitAction}
                 gitActionPanel={gitActionPanel}
                 changeCountById={branchWorkspaceChangeCountById}
-                refreshingChangeIds={refreshingBranchChanges}
-                onRefreshChanges={refreshBranchWorkspaceChanges}
                 onActivate={(id) => activateBranchWorkspace(workspaceRootId, id)}
                 onToggleFileArea={onToggleFileArea ? () => onToggleFileArea() : undefined}
                 onReorder={(orderedIds) => void branchActions.reorder(orderedIds)}
